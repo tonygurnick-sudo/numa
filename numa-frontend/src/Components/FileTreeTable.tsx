@@ -4,6 +4,7 @@
  */
 import React, { useState } from 'react';
 import { Table, Button, Spinner } from 'react-bootstrap';
+import { useTranslation } from 'react-i18next';
 import { TableRow, SortColumn, SortDirection } from '../utils/fileTreeUtils';
 import { downloadFolderAsZip, downloadFileFromS3 } from '../utils/s3Utils';
 
@@ -59,7 +60,7 @@ export interface FileTreeTableProps {
 export function FileTreeTable({
   rows,
   isLoading = false,
-  emptyMessage = 'No files found',
+  emptyMessage,
   expandedFolders,
   onToggleFolder,
   sortColumn,
@@ -81,11 +82,13 @@ export function FileTreeTable({
   maxHeight,
   compact = false,
 }: FileTreeTableProps): React.JSX.Element {
+  const { t } = useTranslation('common');
+  const resolvedEmptyMessage = emptyMessage ?? t('fileTree.empty');
   const [downloadingItems, setDownloadingItems] = useState<Set<string>>(new Set());
 
   const handleDownloadFile = async (row: TableRow): Promise<void> => {
     if (!enableDownload || !s3Bucket || !region || !getCredentials || !getFullS3Key) {
-      console.error('Download not configured properly');
+      console.error(t('fileTree.errors.downloadNotConfigured'));
       return;
     }
 
@@ -106,7 +109,7 @@ export function FileTreeTable({
 
   const handleDownloadFolder = async (row: TableRow): Promise<void> => {
     if (!enableDownload || !s3Bucket || !region || !getCredentials || !getFullS3Key) {
-      console.error('Download not configured properly');
+      console.error(t('fileTree.errors.downloadNotConfigured'));
       return;
     }
 
@@ -145,7 +148,7 @@ export function FileTreeTable({
     return (
       <div className="text-center p-4">
         <Spinner animation="border" variant="primary" />
-        <p className="mt-3 text-muted small mb-0">Loading files...</p>
+        <p className="mt-3 text-muted small mb-0">{t('fileTree.loading')}</p>
       </div>
     );
   }
@@ -153,7 +156,7 @@ export function FileTreeTable({
   if (rows.length === 0) {
     return (
       <div className="text-center bg-light rounded p-4">
-        <p className="text-muted mb-0">{emptyMessage}</p>
+        <p className="text-muted mb-0">{resolvedEmptyMessage}</p>
       </div>
     );
   }
@@ -170,7 +173,7 @@ export function FileTreeTable({
               onClick={() => handleSort('name')}
               style={{ cursor: onSortChange ? 'pointer' : 'default' }}
             >
-              Name {renderSortIcon('name')}
+              {t('fileTree.columns.name')} {renderSortIcon('name')}
             </th>
             {showDateColumn && (
               <th
@@ -178,7 +181,7 @@ export function FileTreeTable({
                 onClick={() => handleSort('date')}
                 style={{ cursor: onSortChange ? 'pointer' : 'default', width: '180px' }}
               >
-                Date {renderSortIcon('date')}
+                {t('fileTree.columns.date')} {renderSortIcon('date')}
               </th>
             )}
             {showSizeColumn && (
@@ -187,12 +190,12 @@ export function FileTreeTable({
                 onClick={() => handleSort('size')}
                 style={{ cursor: onSortChange ? 'pointer' : 'default', width: '120px' }}
               >
-                Size {renderSortIcon('size')}
+                {t('fileTree.columns.size')} {renderSortIcon('size')}
               </th>
             )}
-            {showStatusColumn && <th style={{ width: '100px' }}>Status</th>}
-            {hasActions && <th style={{ width: '120px' }}>Actions</th>}
-            {showSelectColumn && <th style={{ width: '60px' }}>Select</th>}
+            {showStatusColumn && <th style={{ width: '100px' }}>{t('fileTree.columns.status')}</th>}
+            {hasActions && <th style={{ width: '120px' }}>{t('fileTree.columns.actions')}</th>}
+            {showSelectColumn && <th style={{ width: '60px' }}>{t('fileTree.columns.select')}</th>}
           </tr>
         </thead>
         <tbody>
@@ -212,7 +215,7 @@ export function FileTreeTable({
                         onClick={() => onToggleFolder(id)}
                         style={{ cursor: 'pointer' }}
                         role="button"
-                        aria-label={isExpanded ? 'Collapse folder' : 'Expand folder'}
+                        aria-label={isExpanded ? t('fileTree.collapseFolder') : t('fileTree.expandFolder')}
                       />
                     ) : (
                       <span className="file-icon-spacer" style={{ width: '16px', display: 'inline-block' }} />
@@ -226,7 +229,7 @@ export function FileTreeTable({
                       <>
                         <i className="bi bi-file-earmark me-2 file-icon text-secondary" />
                         <span className="text-truncate">{row.displayName || name}</span>
-                        {row.urlTag && <span className="ms-2 badge bg-info">URL</span>}
+                        {row.urlTag && <span className="ms-2 badge bg-info">{t('fileTree.urlTag')}</span>}
                       </>
                     )}
                   </div>
@@ -235,10 +238,12 @@ export function FileTreeTable({
                 {showSizeColumn && <td className="text-muted small">{row.size}</td>}
                 {showStatusColumn && (
                   <td>
-                    {row.kbStatus === 'SUCCESS' && <span className="badge bg-success">SUCCESS</span>}
+                    {row.kbStatus === 'SUCCESS' && (
+                      <span className="badge bg-success">{t('fileTree.status.success')}</span>
+                    )}
                     {row.kbStatus === 'FAILED' && (
                       <span className="badge bg-danger" title={row.errorMessage || undefined}>
-                        FAILED
+                        {t('fileTree.status.failed')}
                       </span>
                     )}
                   </td>
@@ -252,7 +257,7 @@ export function FileTreeTable({
                           size="sm"
                           onClick={() => (isFolder ? handleDownloadFolder(row) : handleDownloadFile(row))}
                           disabled={isDownloading}
-                          title={isFolder ? 'Download folder as ZIP' : 'Download file'}
+                          title={isFolder ? t('fileTree.downloadFolderZip') : t('fileTree.downloadFile')}
                         >
                           {isDownloading ? (
                             <Spinner animation="border" size="sm" />
@@ -287,7 +292,10 @@ export function FileTreeTable({
                       className="form-check-input"
                       checked={selectedItems?.has(id) || false}
                       onChange={(e) => onItemSelect(id, e.target.checked)}
-                      aria-label={`Select ${isFolder ? 'folder' : 'file'}: ${name}`}
+                      aria-label={t('fileTree.selectItem', {
+                        type: isFolder ? t('fileTree.itemType.folder') : t('fileTree.itemType.file'),
+                        name,
+                      })}
                     />
                   </td>
                 )}

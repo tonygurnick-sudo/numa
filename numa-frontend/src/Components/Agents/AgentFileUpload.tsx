@@ -3,6 +3,7 @@ import { Button, Form, Alert, ListGroup } from 'react-bootstrap';
 import { PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import axios from 'axios';
+import { useTranslation } from 'react-i18next';
 import { useAuth } from '../../Providers/AuthProvider';
 import { useNumaRequest } from '../../Providers/NumaRequestContext';
 import { processFile } from '../../utils/fileProcessing';
@@ -24,6 +25,7 @@ export const AgentFileUpload = ({
   disabled = false,
   maxFiles = MAX_FILES_DEFAULT,
 }: AgentFileUploadProps) => {
+  const { t } = useTranslation('agents');
   const [isUploading, setIsUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [bucketName, setBucketName] = useState<string>();
@@ -66,12 +68,12 @@ export const AgentFileUpload = ({
 
     const totalFiles = existingFiles.length + files.length;
     if (totalFiles > maxFiles) {
-      setUploadError(`Maximum ${maxFiles} files allowed per agent.`);
+      setUploadError(t('fileUpload.errors.maxFiles', { max: maxFiles }));
       return;
     }
 
     if (!bucketName || !region) {
-      setUploadError('Configuration still loading. Please try again in a moment.');
+      setUploadError(t('fileUpload.errors.configLoading'));
       return;
     }
 
@@ -81,7 +83,7 @@ export const AgentFileUpload = ({
     try {
       const credentials = await getCredentials();
       if (!credentials) {
-        throw new Error('Unable to obtain AWS credentials');
+        throw new Error(t('fileUpload.errors.credentials'));
       }
 
       const s3Client = withPRM(S3Client, {
@@ -112,7 +114,12 @@ export const AgentFileUpload = ({
           });
         } catch (error) {
           console.error('Agent file upload failed', error);
-          setUploadError(`Failed to upload "${file.name}": ${(error as Error)?.message ?? 'Unknown error'}`);
+          setUploadError(
+            t('fileUpload.errors.fileFailed', {
+              fileName: file.name,
+              message: (error as Error)?.message ?? t('fileUpload.errors.unknown'),
+            }),
+          );
           break;
         }
       }
@@ -122,7 +129,7 @@ export const AgentFileUpload = ({
       }
     } catch (error) {
       console.error('AgentFileUpload error', error);
-      setUploadError((error as Error)?.message ?? 'Upload failed');
+      setUploadError((error as Error)?.message ?? t('fileUpload.errors.uploadFailed'));
     } finally {
       setIsUploading(false);
       if (fileInputRef.current) {
@@ -178,18 +185,15 @@ export const AgentFileUpload = ({
           {isUploading ? (
             <>
               <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
-              Uploading...
+              {t('fileUpload.uploading')}
             </>
           ) : (
             <>
-              <i className="bi bi-upload me-1"></i> Upload Files
+              <i className="bi bi-upload me-1"></i> {t('fileUpload.uploadButton')}
             </>
           )}
         </Button>
-        <Form.Text muted>
-          Supported: Documents (PDF, DOCX, XLSX), Images (PNG, JPG), Text/Code (TXT, MD, JSON, HTML, XML, YAML, Python,
-          JavaScript, etc.), Audio/Video (MP3, MP4, WAV, etc.)
-        </Form.Text>
+        <Form.Text muted>{t('fileUpload.supported')}</Form.Text>
       </div>
 
       {uploadError && (
@@ -207,7 +211,7 @@ export const AgentFileUpload = ({
             >
               <div>
                 <div className="fw-semibold">{file.fileName}</div>
-                <div className="text-muted small">{file.fileType || 'Unknown type'}</div>
+                <div className="text-muted small">{file.fileType || t('fileUpload.unknownType')}</div>
               </div>
               <Button
                 variant="outline-danger"

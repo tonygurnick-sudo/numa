@@ -1,4 +1,5 @@
 import { DEFAULT_CHAT_SETTINGS, type ChatSettings } from './ChatSettingsService';
+import i18n from '../i18n';
 
 export type GlobalChatSettings = ChatSettings & {
   allowUserDefaults: boolean;
@@ -54,7 +55,7 @@ export const AdminChatSettingsService = {
 
     if (!resp.ok) {
       const text = await resp.text();
-      throw new Error(text || 'Failed to update global chat settings');
+      throw new Error(text || i18n.t('errors:adminChatSettings.updateFailed'));
     }
 
     const json = (await resp.json()) as unknown;

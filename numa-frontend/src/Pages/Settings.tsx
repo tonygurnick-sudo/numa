@@ -13,6 +13,7 @@ import {
   Tooltip,
   Form,
 } from 'react-bootstrap';
+import { useTranslation } from 'react-i18next';
 import UserManagement from './UserManagement';
 import { useAuth } from '../Providers/AuthProvider';
 import { AdminIntegrationsService, type GlobalIntegrationSettingsMap } from '../Services/AdminIntegrationsService';
@@ -69,6 +70,7 @@ const useNavigationConfirm = (when: boolean, message: string) => {
 };
 
 export default function SettingsPage() {
+  const { t } = useTranslation('settings');
   const { user } = useAuth();
   const { numaGet, numaPut } = useNumaRequest();
   const [activeKey, setActiveKey] = useState<string>('users');
@@ -158,7 +160,7 @@ export default function SettingsPage() {
       setGlobalSettings(data);
       setError(null);
     } catch (e) {
-      setError((e as Error).message || 'Failed to load settings');
+      setError((e as Error).message || t('errors.loadSettings'));
     } finally {
       setLoadingSettings(false);
     }
@@ -218,10 +220,7 @@ export default function SettingsPage() {
   const [integrationsTabKey, setIntegrationsTabKey] = useState<'connected-apps' | 'data-connectors'>('connected-apps');
   const [isBrandingDirty, setIsBrandingDirty] = useState<boolean>(false);
 
-  useNavigationConfirm(
-    activeKey === 'branding' && isBrandingDirty,
-    'You have unsaved branding changes. Leaving this page will discard them. Continue?',
-  );
+  useNavigationConfirm(activeKey === 'branding' && isBrandingDirty, t('navigation.unsavedBranding'));
 
   // Chat defaults (company-wide)
   const [globalChatSettings, setGlobalChatSettings] = useState<GlobalChatSettings>(DEFAULT_GLOBAL_CHAT_SETTINGS);
@@ -235,10 +234,7 @@ export default function SettingsPage() {
     chatDefaultsDirtyRef.current = chatDefaultsDirty;
   }, [chatDefaultsDirty]);
 
-  useNavigationConfirm(
-    activeKey === 'chat-defaults' && chatDefaultsDirty,
-    'You have unsaved chat default changes. Leaving this tab will discard them. Continue?',
-  );
+  useNavigationConfirm(activeKey === 'chat-defaults' && chatDefaultsDirty, t('navigation.unsavedChatDefaults'));
 
   useEffect(() => {
     let cancelled = false;
@@ -254,7 +250,7 @@ export default function SettingsPage() {
           }
         }
       } catch (e) {
-        if (!cancelled) setChatDefaultsError((e as Error).message || 'Failed to load chat defaults');
+        if (!cancelled) setChatDefaultsError((e as Error).message || t('errors.loadChatDefaults'));
       } finally {
         if (!cancelled) setChatDefaultsLoading(false);
       }
@@ -278,7 +274,7 @@ export default function SettingsPage() {
       setToolList(tools || []);
       setToolToggles(toggles);
     } catch (e) {
-      setToolsError((e as Error).message || 'Failed to load tools');
+      setToolsError((e as Error).message || t('errors.loadTools'));
     } finally {
       setToolsLoading(false);
     }
@@ -301,14 +297,14 @@ export default function SettingsPage() {
       await loadGlobal();
       setManageToolsFor(null);
     } catch (e) {
-      setToolsError((e as Error).message || 'Failed to save');
+      setToolsError((e as Error).message || t('errors.saveFailed'));
     }
   };
 
   const toggleIntegration = async (integrationId: string, nextEnabled: boolean) => {
     try {
       if (!nextEnabled && globalSettings[integrationId]?.status === 'enabled') {
-        const ok = window.confirm(`Disabling ${integrationId} will prevent users from accessing it in Numa. Continue?`);
+        const ok = window.confirm(t('confirm.disableIntegration', { integrationId }));
         if (!ok) return;
       }
       await AdminIntegrationsService.updateWithNuma(
@@ -321,14 +317,14 @@ export default function SettingsPage() {
       );
       await loadGlobal();
     } catch (e) {
-      setError((e as Error).message || 'Failed to update integration');
+      setError((e as Error).message || t('errors.updateIntegration'));
     }
   };
 
   const toggleDataConnector = async (connectorId: string, nextEnabled: boolean) => {
     try {
       if (!nextEnabled && dataConnectorSettings[connectorId]?.status === 'enabled') {
-        const ok = window.confirm(`Disabling ${connectorId} will prevent users from accessing it in Numa. Continue?`);
+        const ok = window.confirm(t('confirm.disableDataConnector', { connectorId }));
         if (!ok) return;
       }
       await AdminDataConnectorsService.updateWithNuma(
@@ -340,7 +336,7 @@ export default function SettingsPage() {
       );
       await loadDataConnectorSettings();
     } catch (e) {
-      setError((e as Error).message || 'Failed to update data connector');
+      setError((e as Error).message || t('errors.updateDataConnector'));
     }
   };
 
@@ -355,9 +351,7 @@ export default function SettingsPage() {
       }
 
       if (activeKey === 'branding' && nextKey !== 'branding' && isBrandingDirty) {
-        const confirmLeave = window.confirm(
-          'You have unsaved branding changes. Leaving this tab will discard them. Continue?',
-        );
+        const confirmLeave = window.confirm(t('navigation.unsavedBranding'));
 
         if (!confirmLeave) {
           return;
@@ -419,22 +413,18 @@ export default function SettingsPage() {
           </div>
           <div className="col-md-6 d-flex justify-content-end gap-2 align-items-center">
             {disabledByPreview ? (
-              <OverlayTrigger
-                placement="top"
-                overlay={
-                  <Tooltip>
-                    Numa Integrations are not enabled in your Numa environment. Contact your account administrator to
-                    request access.
-                  </Tooltip>
-                }
-              >
+              <OverlayTrigger placement="top" overlay={<Tooltip>{t('integrations.previewTooltip')}</Tooltip>}>
                 <div>
                   <Form.Check
                     type="switch"
                     id={`toggle-${id}`}
                     checked={enabled}
                     disabled
-                    label={<span className="small">{enabled ? 'Enabled' : 'Disabled'}</span>}
+                    label={
+                      <span className="small">
+                        {enabled ? t('integrations.status.enabled') : t('integrations.status.disabled')}
+                      </span>
+                    }
                   />
                 </div>
               </OverlayTrigger>
@@ -444,7 +434,11 @@ export default function SettingsPage() {
                 id={`toggle-${id}`}
                 checked={enabled}
                 onChange={() => toggleIntegration(id, !enabled)}
-                label={<span className="small">{enabled ? 'Enabled' : 'Disabled'}</span>}
+                label={
+                  <span className="small">
+                    {enabled ? t('integrations.status.enabled') : t('integrations.status.disabled')}
+                  </span>
+                }
               />
             )}
             <Button
@@ -455,10 +449,10 @@ export default function SettingsPage() {
               className="d-flex align-items-center"
             >
               <i className="bi bi-sliders me-2"></i>
-              Manage Tools{' '}
+              {t('integrations.manageTools')}{' '}
               {deniedCount > 0 && (
                 <span className="ms-1 badge bg-light text-dark" style={{ fontSize: '0.7rem' }}>
-                  {deniedCount} off
+                  {t('integrations.toolsOff', { count: deniedCount })}
                 </span>
               )}
             </Button>
@@ -511,7 +505,11 @@ export default function SettingsPage() {
               id={`toggle-${connector.id}`}
               checked={enabled}
               onChange={() => toggleDataConnector(connector.id, !enabled)}
-              label={<span className="small">{enabled ? 'Enabled' : 'Disabled'}</span>}
+              label={
+                <span className="small">
+                  {enabled ? t('integrations.status.enabled') : t('integrations.status.disabled')}
+                </span>
+              }
             />
           </div>
         </div>
@@ -522,8 +520,8 @@ export default function SettingsPage() {
   const dataConnectors = [
     {
       id: 'synergy',
-      name: 'Synergy',
-      description: 'Data connector for Synergy job data.',
+      name: t('dataConnectors.synergyName'),
+      description: t('dataConnectors.synergyDescription'),
     },
   ];
 
@@ -533,7 +531,7 @@ export default function SettingsPage() {
         <Container fluid>
           <Row>
             <Col>
-              <h1 className="page-title">Admin Settings</h1>
+              <h1 className="page-title">{t('header.title')}</h1>
             </Col>
           </Row>
         </Container>
@@ -554,7 +552,8 @@ export default function SettingsPage() {
                 eventKey="users"
                 title={
                   <span>
-                    <i className="bi bi-people-fill me-2"></i>Users
+                    <i className="bi bi-people-fill me-2"></i>
+                    {t('tabs.users')}
                   </span>
                 }
               >
@@ -565,7 +564,8 @@ export default function SettingsPage() {
                   eventKey="branding"
                   title={
                     <span>
-                      <i className="bi bi-palette-fill me-2"></i>Branding
+                      <i className="bi bi-palette-fill me-2"></i>
+                      {t('tabs.branding')}
                     </span>
                   }
                 >
@@ -577,7 +577,8 @@ export default function SettingsPage() {
                   eventKey="chat-defaults"
                   title={
                     <span>
-                      <i className="bi bi-chat-dots-fill me-2"></i>Chat Defaults
+                      <i className="bi bi-chat-dots-fill me-2"></i>
+                      {t('tabs.chatDefaults')}
                     </span>
                   }
                 >
@@ -586,11 +587,8 @@ export default function SettingsPage() {
                       <div className="d-flex align-items-start">
                         <i className="bi bi-building-gear me-2 mt-1"></i>
                         <div>
-                          <div className="fw-semibold">Company-wide chat defaults</div>
-                          <div className="small text-muted">
-                            These defaults apply when users start a new chat without selecting an agent. If user
-                            defaults are allowed, users can override these for themselves.
-                          </div>
+                          <div className="fw-semibold">{t('chatDefaults.title')}</div>
+                          <div className="small text-muted">{t('chatDefaults.description')}</div>
                         </div>
                       </div>
                     </Alert>
@@ -612,7 +610,7 @@ export default function SettingsPage() {
                             <i className="bi bi-shield-lock-fill text-primary mt-1"></i>
                             <div className="flex-grow-1">
                               <div className="d-flex align-items-center justify-content-between gap-3">
-                                <div className="fw-semibold">Allow users to override company defaults</div>
+                                <div className="fw-semibold">{t('chatDefaults.allowUserOverridesTitle')}</div>
                                 <Form.Check
                                   type="switch"
                                   id="chat-defaults-allow-user-defaults"
@@ -624,15 +622,13 @@ export default function SettingsPage() {
                                   }}
                                 />
                               </div>
-                              <div className="text-muted small">
-                                When this setting is inactive, users will only get the company defaults.
-                              </div>
+                              <div className="text-muted small">{t('chatDefaults.allowUserOverridesHelp')}</div>
                             </div>
                           </div>
                         </div>
 
                         <Form.Group className="mb-3">
-                          <Form.Label className="fw-semibold">Default knowledge bases</Form.Label>
+                          <Form.Label className="fw-semibold">{t('chatDefaults.defaultKnowledgeBases')}</Form.Label>
                           <div className="d-flex align-items-center gap-2">
                             <Form.Check
                               type="switch"
@@ -648,12 +644,9 @@ export default function SettingsPage() {
                                 setChatDefaultsDirty(true);
                               }}
                             />
-                            <div className="fw-semibold">Company Knowledge Base</div>
+                            <div className="fw-semibold">{t('chatDefaults.companyKnowledgeBase')}</div>
                           </div>
-                          <div className="text-muted small ms-5">
-                            Only the company knowledge base can be set as a company default; user KB defaults can be set
-                            by the user only, and only if personal defaults are active.
-                          </div>
+                          <div className="text-muted small ms-5">{t('chatDefaults.companyKnowledgeBaseHelp')}</div>
                         </Form.Group>
 
                         <div className="mb-3">
@@ -683,11 +676,9 @@ export default function SettingsPage() {
                                 setChatDefaultsDirty(true);
                               }}
                             />
-                            <div className="fw-semibold">All Tools</div>
+                            <div className="fw-semibold">{t('chatDefaults.allTools')}</div>
                           </div>
-                          <div className="text-muted small ms-5">
-                            When enabled, all tools are automatically available
-                          </div>
+                          <div className="text-muted small ms-5">{t('chatDefaults.allToolsHelp')}</div>
 
                           <div className="mt-3 ms-4">
                             <div className="d-flex align-items-center gap-2">
@@ -702,9 +693,9 @@ export default function SettingsPage() {
                                   setChatDefaultsDirty(true);
                                 }}
                               />
-                              <div className="fw-semibold">Web Search</div>
+                              <div className="fw-semibold">{t('chatDefaults.webSearch')}</div>
                             </div>
-                            <div className="text-muted small ms-5">Search the web for current information</div>
+                            <div className="text-muted small ms-5">{t('chatDefaults.webSearchHelp')}</div>
                           </div>
 
                           {dataAnalysisAvailable && (
@@ -724,9 +715,9 @@ export default function SettingsPage() {
                                     setChatDefaultsDirty(true);
                                   }}
                                 />
-                                <div className="fw-semibold">Data Analysis</div>
+                                <div className="fw-semibold">{t('chatDefaults.dataAnalysis')}</div>
                               </div>
-                              <div className="text-muted small ms-5">Analyze CSV, Excel, or JSON data files</div>
+                              <div className="text-muted small ms-5">{t('chatDefaults.dataAnalysisHelp')}</div>
                             </div>
                           )}
 
@@ -743,18 +734,16 @@ export default function SettingsPage() {
                                   setChatDefaultsDirty(true);
                                 }}
                               />
-                              <div className="fw-semibold">Agent Creation</div>
+                              <div className="fw-semibold">{t('chatDefaults.agentCreation')}</div>
                             </div>
-                            <div className="text-muted small ms-5">
-                              Allow me to create saved agents when you explicitly ask.
-                            </div>
+                            <div className="text-muted small ms-5">{t('chatDefaults.agentCreationHelp')}</div>
                           </div>
                         </div>
 
                         <Form.Group className="mb-3">
-                          <Form.Label className="fw-semibold">Default integrations</Form.Label>
+                          <Form.Label className="fw-semibold">{t('chatDefaults.defaultIntegrations')}</Form.Label>
                           {previewMode ? (
-                            <div className="text-muted small">Integrations are not enabled in this environment.</div>
+                            <div className="text-muted small">{t('chatDefaults.integrationsDisabled')}</div>
                           ) : (
                             <>
                               <ExpandableOverflowBox className="border rounded-3 p-2 bg-white" maxHeight={240}>
@@ -789,14 +778,10 @@ export default function SettingsPage() {
                                   const id = integration.name_slug;
                                   return globalSettings[id]?.status === 'enabled';
                                 }).length === 0 && (
-                                  <div className="text-muted small">
-                                    No integrations are enabled for this environment.
-                                  </div>
+                                  <div className="text-muted small">{t('chatDefaults.noIntegrations')}</div>
                                 )}
                               </ExpandableOverflowBox>
-                              <div className="text-muted small mt-1">
-                                Select one or more integrations to enable by default.
-                              </div>
+                              <div className="text-muted small mt-1">{t('chatDefaults.defaultIntegrationsHelp')}</div>
                             </>
                           )}
                         </Form.Group>
@@ -824,7 +809,7 @@ export default function SettingsPage() {
                                 setChatDefaultsError(null);
                                 setChatDefaultsDirty(false);
                               } catch (e) {
-                                setChatDefaultsError((e as Error).message || 'Failed to save chat defaults');
+                                setChatDefaultsError((e as Error).message || t('errors.saveChatDefaults'));
                               } finally {
                                 setChatDefaultsSaving(false);
                               }
@@ -833,10 +818,10 @@ export default function SettingsPage() {
                             {chatDefaultsSaving ? (
                               <>
                                 <Spinner as="span" animation="border" size="sm" className="me-2" />
-                                Saving...
+                                {t('actions.saving')}
                               </>
                             ) : (
-                              'Save Changes'
+                              t('actions.saveChanges')
                             )}
                           </Button>
                           <Button
@@ -847,7 +832,7 @@ export default function SettingsPage() {
                               setChatDefaultsDirty(true);
                             }}
                           >
-                            Reset to defaults
+                            {t('actions.resetDefaults')}
                           </Button>
                         </div>
                       </Form>
@@ -860,7 +845,8 @@ export default function SettingsPage() {
                   eventKey="agents"
                   title={
                     <span>
-                      <i className="bi bi-robot me-2"></i>Agents
+                      <i className="bi bi-robot me-2"></i>
+                      {t('tabs.agents')}
                     </span>
                   }
                 >
@@ -869,10 +855,8 @@ export default function SettingsPage() {
                       <div className="d-flex align-items-start">
                         <i className="bi bi-building-gear me-2 mt-1"></i>
                         <div>
-                          <div className="fw-semibold">Company-wide agents policy</div>
-                          <div className="small text-muted">
-                            Choose how agents work across your company. Changes take effect immediately for everyone.
-                          </div>
+                          <div className="fw-semibold">{t('agents.title')}</div>
+                          <div className="small text-muted">{t('agents.description')}</div>
                         </div>
                       </div>
                     </Alert>
@@ -885,18 +869,18 @@ export default function SettingsPage() {
                         {[
                           {
                             key: 'off',
-                            label: 'Agents Off',
-                            desc: 'Agents are disabled for everyone. The Agents UI shows a notice that it is disabled and to contact an admin.',
+                            label: t('agents.options.off.label'),
+                            desc: t('agents.options.off.desc'),
                           },
                           {
                             key: 'personal_only',
-                            label: 'Personal Agents Only',
-                            desc: 'Users can create and use personal agents. Company sharing is disabled and the Company Agent Marketplace is hidden.',
+                            label: t('agents.options.personal.label'),
+                            desc: t('agents.options.personal.desc'),
                           },
                           {
                             key: 'full',
-                            label: 'Agents On (Full)',
-                            desc: 'Users can create and use personal agents and share company agents. The marketplace is available.',
+                            label: t('agents.options.full.label'),
+                            desc: t('agents.options.full.desc'),
                           },
                         ].map((opt) => {
                           const selected = agentsMode === (opt.key as AgentsMode);
@@ -910,13 +894,11 @@ export default function SettingsPage() {
                                 // Confirmation copy per mode transition
                                 let message = '';
                                 if (opt.key === 'off') {
-                                  message =
-                                    'Turn off Agents for everyone? Users will not be able to create or use agents. The Agents UI will display a disabled notice. Continue?';
+                                  message = t('agents.confirm.off');
                                 } else if (opt.key === 'personal_only') {
-                                  message =
-                                    'Disable company agent sharing? The Company Agent Marketplace will be hidden and users can only create and use personal agents. Existing company agents will be hidden. Continue?';
+                                  message = t('agents.confirm.personal');
                                 } else {
-                                  message = 'Enable Agents and company sharing for everyone?';
+                                  message = t('agents.confirm.full');
                                 }
                                 const ok = window.confirm(message);
                                 if (!ok) return;
@@ -925,7 +907,7 @@ export default function SettingsPage() {
                                   await AdminAgentsService.update(opt.key as AgentsMode, numaPut);
                                   setAgentsMode(opt.key as AgentsMode);
                                 } catch (e) {
-                                  alert((e as Error).message || 'Failed to update agents policy');
+                                  alert((e as Error).message || t('errors.updateAgentsPolicy'));
                                 } finally {
                                   setAgentsSaving(false);
                                 }
@@ -953,10 +935,7 @@ export default function SettingsPage() {
                             </div>
                           );
                         })}
-                        <div className="text-muted small mt-2">
-                          Users will still see gentle hints where agents are disabled (e.g., &quot;Agents are disabled.
-                          Contact your admin&quot;).
-                        </div>
+                        <div className="text-muted small mt-2">{t('agents.footerNote')}</div>
                       </div>
                     )}
                   </div>
@@ -966,7 +945,8 @@ export default function SettingsPage() {
                 eventKey="integrations"
                 title={
                   <span>
-                    <i className="bi bi-plug-fill me-2"></i>Integrations
+                    <i className="bi bi-plug-fill me-2"></i>
+                    {t('tabs.integrations')}
                   </span>
                 }
               >
@@ -975,24 +955,19 @@ export default function SettingsPage() {
                   onSelect={(key) => setIntegrationsTabKey((key as typeof integrationsTabKey) || 'connected-apps')}
                   className="mb-3"
                 >
-                  <Tab eventKey="connected-apps" title="Connected Apps">
+                  <Tab eventKey="connected-apps" title={t('tabs.connectedApps')}>
                     <Alert variant="secondary" className="mb-3">
                       <div className="d-flex align-items-start">
                         <i className="bi bi-building-gear me-2 mt-1"></i>
                         <div>
-                          <div className="fw-semibold">Company-wide settings</div>
-                          <div className="small text-muted">
-                            These settings apply to everyone in your Numa environment. Use the toggle to enable/disable
-                            each integration for your company, and use <span className="fw-semibold">Manage Tools</span>{' '}
-                            to turn specific capabilities off globally.
-                          </div>
+                          <div className="fw-semibold">{t('integrations.companySettingsTitle')}</div>
+                          <div className="small text-muted">{t('integrations.companySettingsDescription')}</div>
                         </div>
                       </div>
                     </Alert>
                     {previewMode && (
                       <Alert variant="info" className="mb-3">
-                        Numa Integrations are not enabled in your Numa environment. Contact your account administrator
-                        to request access.
+                        {t('integrations.previewNotice')}
                       </Alert>
                     )}
                     {loadingSettings ? (
@@ -1005,16 +980,13 @@ export default function SettingsPage() {
                       </div>
                     )}
                   </Tab>
-                  <Tab eventKey="data-connectors" title="Data Connectors">
+                  <Tab eventKey="data-connectors" title={t('tabs.dataConnectors')}>
                     <Alert variant="secondary" className="mb-3">
                       <div className="d-flex align-items-start">
                         <i className="bi bi-building-gear me-2 mt-1"></i>
                         <div>
-                          <div className="fw-semibold">Company-wide settings</div>
-                          <div className="small text-muted">
-                            These settings apply to everyone in your Numa environment. Use the toggle to enable or
-                            disable each data connector for your company.
-                          </div>
+                          <div className="fw-semibold">{t('dataConnectors.companySettingsTitle')}</div>
+                          <div className="small text-muted">{t('dataConnectors.companySettingsDescription')}</div>
                         </div>
                       </div>
                     </Alert>
@@ -1032,10 +1004,10 @@ export default function SettingsPage() {
           <Modal.Title>
             <div className="d-flex align-items-center">
               <i className="bi bi-sliders me-2 text-primary"></i>
-              Manage Tools – {manageToolsFor}
+              {t('manageTools.title', { integration: manageToolsFor || '' })}
             </div>
             <div className="small text-muted fw-normal mt-2" style={{ fontSize: '0.85rem' }}>
-              These tool settings are company-wide. Users cannot enable tools you disable here.
+              {t('manageTools.subtitle')}
             </div>
           </Modal.Title>
         </Modal.Header>
@@ -1043,7 +1015,7 @@ export default function SettingsPage() {
           {toolsLoading ? (
             <div className="text-center py-5">
               <Spinner animation="border" variant="primary" />
-              <p className="mt-3 text-muted mb-0">Loading tools...</p>
+              <p className="mt-3 text-muted mb-0">{t('manageTools.loading')}</p>
             </div>
           ) : toolsError ? (
             <Alert variant="danger" className="mb-0">
@@ -1053,7 +1025,7 @@ export default function SettingsPage() {
           ) : toolList.length === 0 ? (
             <div className="text-center py-5">
               <i className="bi bi-info-circle text-muted" style={{ fontSize: '2rem' }}></i>
-              <p className="text-muted mt-2 mb-0">No tools found for this integration.</p>
+              <p className="text-muted mt-2 mb-0">{t('manageTools.empty')}</p>
             </div>
           ) : (
             <div className="d-flex flex-column gap-2">
@@ -1086,7 +1058,9 @@ export default function SettingsPage() {
                     }
 
                     // Replace "See the docs" with "see documentation"
-                    const linkText = match[1].toLowerCase().includes('see') ? 'see documentation' : match[1];
+                    const linkText = match[1].toLowerCase().includes('see')
+                      ? t('manageTools.seeDocumentation')
+                      : match[1];
 
                     // Add the link as JSX
                     parts.push(
@@ -1178,17 +1152,20 @@ export default function SettingsPage() {
               {toolList.length > 0 && (
                 <span>
                   <i className="bi bi-info-circle me-1"></i>
-                  {Object.values(toolToggles).filter(Boolean).length} of {toolList.length} tools enabled
+                  {t('manageTools.enabledCount', {
+                    enabled: Object.values(toolToggles).filter(Boolean).length,
+                    total: toolList.length,
+                  })}
                 </span>
               )}
             </small>
             <div>
               <Button variant="secondary" onClick={() => setManageToolsFor(null)} className="me-2">
-                Cancel
+                {t('actions.cancel')}
               </Button>
               <Button variant="primary" onClick={saveManageTools} disabled={toolsLoading || !!toolsError}>
                 <i className="bi bi-check-lg me-2"></i>
-                Save Changes
+                {t('actions.saveChanges')}
               </Button>
             </div>
           </div>

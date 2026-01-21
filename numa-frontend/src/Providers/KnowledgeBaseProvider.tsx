@@ -5,6 +5,7 @@
 
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { knowledgeBaseService, UserKB } from '../Services/knowledgeBaseService';
+import i18n from '../i18n';
 
 interface KnowledgeBaseContextType {
   // Current selected KB
@@ -29,7 +30,7 @@ const KB_STORAGE_KEY = 'numa_selected_kb';
 
 const DEFAULT_COMPANY_KB: UserKB = {
   kb_id: 'company',
-  kb_name: 'Company Knowledge Base',
+  kb_name: i18n.t('knowledgeBase:selector.companyKbName'),
   role: 'VIEWER',
 };
 
@@ -149,9 +150,9 @@ export function KnowledgeBaseProvider({ children }: { children: React.ReactNode 
       // Check if this might be an auth-related error
       const token = window.localStorage.getItem('idToken');
 
-      let errorMessage = 'Failed to load knowledge bases';
+      let errorMessage = i18n.t('errors:knowledgeBase.listFailed');
       if (!token) {
-        errorMessage = 'Authentication tokens not ready. Please wait or refresh the page.';
+        errorMessage = i18n.t('errors:knowledgeBase.authNotReady');
         console.debug('KB loading failed due to missing auth tokens', { hasToken: !!token });
       } else if (error instanceof Error) {
         errorMessage = error.message;

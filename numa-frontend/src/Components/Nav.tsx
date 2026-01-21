@@ -2,6 +2,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../Providers/AuthProvider';
 import { useState, useEffect, useCallback } from 'react';
 import { Navbar, Button, Dropdown } from 'react-bootstrap';
+import { useTranslation } from 'react-i18next';
 import { FeatureWrapper } from './RequiredFeaturesWrapper';
 import { useBranding } from '../Providers/BrandingContext';
 import DefaultLogo from '../../public/numa-logo.svg';
@@ -18,6 +19,7 @@ const Nav = ({ isCollapsed = false, onToggleCollapse }: NavProps) => {
   const navigate = useNavigate();
   const { logout: authLogout, user } = useAuth();
   const { branding } = useBranding();
+  const { t } = useTranslation('common');
   const rawNavLogo = branding.resolvedAssets?.logoNav || branding.assets?.logoNav || branding.logo || DefaultLogo;
   const navLogo = useBrandingAsset(rawNavLogo, DefaultLogo);
   const navName = branding.name || '';
@@ -38,6 +40,7 @@ const Nav = ({ isCollapsed = false, onToggleCollapse }: NavProps) => {
       const items = mod.ROUTE_CONFIG.filter((r) => r.nav).map((r) => ({
         to: r.path,
         label: r.nav.label,
+        labelKey: r.nav.labelKey,
         icon: r.nav.icon,
         feature: r.requiredFeature,
         footerOnly: r.nav.footerOnly,
@@ -97,14 +100,14 @@ const Nav = ({ isCollapsed = false, onToggleCollapse }: NavProps) => {
               <FeatureWrapper key={item.to} requiredFeature={item.feature}>
                 <Dropdown.Item onClick={() => navigate(item.to)}>
                   <i className={`${item.icon} me-2`}></i>
-                  {item.label}
+                  {item.labelKey ? t(item.labelKey) : item.label}
                 </Dropdown.Item>
               </FeatureWrapper>
             ))}
             <Dropdown.Divider />
             <Dropdown.Item onClick={authLogout}>
               <i className="bi bi-box-arrow-right me-2"></i>
-              Log out
+              {t('nav.logout')}
             </Dropdown.Item>
           </Dropdown.Menu>
         </Dropdown>
@@ -144,8 +147,8 @@ const Nav = ({ isCollapsed = false, onToggleCollapse }: NavProps) => {
           <button
             className="nav-toggle-btn"
             onClick={onToggleCollapse}
-            aria-label={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-            title={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            aria-label={isCollapsed ? t('nav.expandSidebar') : t('nav.collapseSidebar')}
+            title={isCollapsed ? t('nav.expandSidebar') : t('nav.collapseSidebar')}
           >
             <i className={`bi ${isCollapsed ? 'bi-chevron-right' : 'bi-chevron-left'}`}></i>
           </button>
@@ -165,14 +168,14 @@ const Nav = ({ isCollapsed = false, onToggleCollapse }: NavProps) => {
                       e.stopPropagation();
                       navigate(item.to);
                     }}
-                    title={item.label}
+                    title={item.labelKey ? t(item.labelKey) : item.label}
                     role="button"
                   >
                     <div className="nav-icon-container">
                       <i className={`${item.icon} icon`}></i>
                     </div>
                     <span className={`nav-label ${isExpanded ? 'expanded' : ''}`}>
-                      {isExpanded ? getExpandedLabel(item.label) : ''}
+                      {isExpanded ? getExpandedLabel(item, t) : ''}
                     </span>
                   </div>
                 </li>
@@ -195,25 +198,25 @@ const Nav = ({ isCollapsed = false, onToggleCollapse }: NavProps) => {
                         e.stopPropagation();
                         navigate(item.to);
                       }}
-                      title={item.label}
+                      title={item.labelKey ? t(item.labelKey) : item.label}
                       role="button"
                     >
                       <div className="nav-icon-container">
                         <i className={`${item.icon} icon`}></i>
                       </div>
                       <span className={`nav-label ${isExpanded ? 'expanded' : ''}`}>
-                        {isExpanded ? getExpandedLabel(item.label) : ''}
+                        {isExpanded ? getExpandedLabel(item, t) : ''}
                       </span>
                     </div>
                   </li>
                 </FeatureWrapper>
               ))}
             <li>
-              <div className="nav-link nav-item" onClick={authLogout} title="Log out" role="button">
+              <div className="nav-link nav-item" onClick={authLogout} title={t('nav.logout')} role="button">
                 <div className="nav-icon-container">
                   <i className="bi bi-box-arrow-right icon"></i>
                 </div>
-                <span className={`nav-label ${isExpanded ? 'expanded' : ''}`}>{isExpanded ? 'Log out' : ''}</span>
+                <span className={`nav-label ${isExpanded ? 'expanded' : ''}`}>{isExpanded ? t('nav.logout') : ''}</span>
               </div>
             </li>
           </ul>
@@ -236,20 +239,21 @@ const Nav = ({ isCollapsed = false, onToggleCollapse }: NavProps) => {
 };
 
 // Helper function to get more descriptive labels when sidebar is expanded
-function getExpandedLabel(label) {
-  switch (label) {
-    case 'Files':
-      return 'Knowledge Base';
-    case 'Knowledge Base':
-      return 'Knowledge Base Management';
-    case 'Chat':
-      return 'Numa Chat';
-    case 'Apps':
-      return 'Applications';
-    case 'Company':
-      return 'Company Information';
+function getExpandedLabel(item, t) {
+  const labelKey = item.labelKey ?? item.label;
+  switch (labelKey) {
+    case 'nav.items.files':
+      return t('nav.expanded.knowledgeBase');
+    case 'nav.items.knowledgeBase':
+      return t('nav.expanded.knowledgeBaseManagement');
+    case 'nav.items.chat':
+      return t('nav.expanded.numaChat');
+    case 'nav.items.apps':
+      return t('nav.expanded.applications');
+    case 'nav.items.company':
+      return t('nav.expanded.companyInformation');
     default:
-      return label;
+      return item.labelKey ? t(item.labelKey) : item.label;
   }
 }
 

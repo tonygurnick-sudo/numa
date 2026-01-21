@@ -1,4 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import type { TFunction } from 'i18next';
+import { useTranslation } from 'react-i18next';
 import {
   Container,
   Row,
@@ -41,6 +43,7 @@ type PipedreamConnection = ConnectionStatus & {
 };
 
 export const NumaIntegrations = () => {
+  const { t } = useTranslation('integrations');
   const { user } = useAuth();
   const { numaGet } = useNumaRequest();
   const [lambdaClient, setLambdaClient] = useState<LambdaClient | null>(null);
@@ -90,7 +93,7 @@ export const NumaIntegrations = () => {
         const cognitoUserId = user.decoded_tokens?.idToken?.sub;
         if (!roleArn) {
           console.error('No role ARN found for user group:', userGroup);
-          setError('Unable to access AWS resources. Please check your permissions.');
+          setError(t('errors.permissions'));
           return;
         }
         const credentials = fromWebToken({
@@ -107,7 +110,7 @@ export const NumaIntegrations = () => {
         }
       } catch (err) {
         console.error('Error initializing Lambda client:', err);
-        setError('Failed to initialize AWS Lambda client. Please try refreshing the page.');
+        setError(t('errors.initLambda'));
       }
     };
     initializeLambdaClient();
@@ -180,7 +183,7 @@ export const NumaIntegrations = () => {
       } catch (err: unknown) {
         const error = err as Error;
         console.error('Failed to load integration status:', error);
-        setError(`Failed to load integration status: ${error.message}`);
+        setError(t('errors.loadStatus', { message: error.message }));
       } finally {
         setLoading(false);
         setLoadingStatus(false);
@@ -191,7 +194,7 @@ export const NumaIntegrations = () => {
 
   const connectApp = async (appName: string) => {
     if (!lambdaClient || !user) {
-      setError('System not ready. Please refresh the page and try again.');
+      setError(t('errors.systemNotReady'));
       return;
     }
     try {
@@ -277,18 +280,23 @@ export const NumaIntegrations = () => {
         },
         onError: (error: Error | { message?: string }) => {
           console.error(`Connection error for ${appName}:`, error);
-          setError(`Failed to connect ${appName}: ${error.message || 'Unknown error'}`);
+          setError(t('errors.connectFailed', { appName, message: error.message || t('errors.unknownError') }));
         },
       });
     } catch (err: unknown) {
       const error = err as Error;
       console.error(`Error connecting ${appName}:`, error);
       if (error.message?.includes('401')) {
-        setError('Authentication failed. Please refresh the page and try again.');
+        setError(t('errors.authFailed'));
       } else if (error.message?.includes('fetch')) {
-        setError('Network error. Please check your connection and try again.');
+        setError(t('errors.network'));
       } else {
-        setError(`Failed to connect ${appName}. ${error.message || 'Please try again.'}`);
+        setError(
+          t('errors.connectFailedGeneric', {
+            appName,
+            message: error.message || t('errors.tryAgain'),
+          }),
+        );
       }
     } finally {
       setConnectingApp(null);
@@ -303,9 +311,7 @@ export const NumaIntegrations = () => {
     if (!lambdaClient || !user) return;
     try {
       setError(null);
-      const confirmed = window.confirm(
-        `Are you sure you want to disconnect ${appName}? This will revoke access until you reconnect.`,
-      );
+      const confirmed = window.confirm(t('confirm.disconnect', { appName }));
       if (!confirmed) return;
       setDisconnectingApp(appName);
       const externalUserId = PipedreamProxyService.deriveExternalUserId(user);
@@ -337,7 +343,7 @@ export const NumaIntegrations = () => {
     } catch (err) {
       const e = err as Error;
       console.error('Disconnect failed', e);
-      setError(e.message || 'Failed to disconnect integration');
+      setError(e.message || t('errors.disconnectFailed'));
     } finally {
       setDisconnectingApp(null);
     }
@@ -366,7 +372,7 @@ export const NumaIntegrations = () => {
       setInitialToggles(toggles); // Store initial state for comparison
     } catch (e: unknown) {
       const err = e as Error;
-      setSettingsError(err.message || 'Failed to load settings');
+      setSettingsError(err.message || t('errors.loadSettings'));
     } finally {
       setSettingsLoading(false);
     }
@@ -388,7 +394,7 @@ export const NumaIntegrations = () => {
       setSettingsApp(null);
     } catch (e: unknown) {
       const err = e as Error;
-      setSettingsError(err.message || 'Failed to save settings');
+      setSettingsError(err.message || t('errors.saveSettings'));
     }
   };
 
@@ -401,7 +407,7 @@ export const NumaIntegrations = () => {
     return (
       <img
         src={app.img_src}
-        alt={`${app.name} icon`}
+        alt={t('appIconAlt', { name: app.name })}
         style={{ width: '32px', height: '32px', objectFit: 'contain' }}
         onError={(e) => {
           const iconContainer = (e.target as HTMLImageElement).parentElement as HTMLElement;
@@ -461,7 +467,7 @@ export const NumaIntegrations = () => {
                 {isConnected ? (
                   <>
                     <div className="rounded-circle bg-success me-2" style={{ width: '12px', height: '12px' }}></div>
-                    <span className="text-success small fw-semibold">Connected</span>
+                    <span className="text-success small fw-semibold">{t('status.connected')}</span>
                   </>
                 ) : (
                   <>
@@ -469,7 +475,7 @@ export const NumaIntegrations = () => {
                       className="rounded-circle border border-secondary me-2"
                       style={{ width: '12px', height: '12px' }}
                     ></div>
-                    <span className="text-muted small">Not Connected</span>
+                    <span className="text-muted small">{t('status.notConnected')}</span>
                   </>
                 )}
               </div>
@@ -487,15 +493,13 @@ export const NumaIntegrations = () => {
                       className="d-flex align-items-center"
                     >
                       <i className="bi bi-lightning-fill me-2"></i>
-                      Test
+                      {t('actions.test')}
                     </Button>
                     <OverlayTrigger
                       placement="top"
                       overlay={
                         <Tooltip>
-                          {defaultsApplying[integration.name_slug]
-                            ? 'Applying default tool policy...'
-                            : "For better security and performance, review each integration's Settings to enable only the tools you need. Fewer enabled tools means more focused AI responses and enhanced data protection."}
+                          {defaultsApplying[integration.name_slug] ? t('toolPolicy.applying') : t('toolPolicy.tooltip')}
                         </Tooltip>
                       }
                     >
@@ -507,7 +511,7 @@ export const NumaIntegrations = () => {
                           disabled={isConnecting || !!defaultsApplying[integration.name_slug]}
                         >
                           <i className="bi bi-sliders me-2"></i>
-                          {defaultsApplying[integration.name_slug] ? 'Please wait…' : 'Settings'}
+                          {defaultsApplying[integration.name_slug] ? t('actions.pleaseWait') : t('actions.settings')}
                         </Button>
                       </span>
                     </OverlayTrigger>
@@ -520,17 +524,17 @@ export const NumaIntegrations = () => {
                     >
                       {disconnectingApp === integration.name_slug ? (
                         <>
-                          <Spinner size="sm" className="me-2" /> Disconnecting...
+                          <Spinner size="sm" className="me-2" /> {t('actions.disconnecting')}
                         </>
                       ) : (
                         <>
-                          <i className="bi bi-x-circle me-2"></i> Disconnect
+                          <i className="bi bi-x-circle me-2"></i> {t('actions.disconnect')}
                         </>
                       )}
                     </Button>
                   </>
                 ) : adminDisabled ? (
-                  <OverlayTrigger placement="top" overlay={<Tooltip>Disabled by your administrator</Tooltip>}>
+                  <OverlayTrigger placement="top" overlay={<Tooltip>{t('status.disabledByAdmin')}</Tooltip>}>
                     <div>
                       <Button
                         variant="primary"
@@ -540,7 +544,7 @@ export const NumaIntegrations = () => {
                         className="px-4"
                       >
                         <i className="bi bi-plus-circle me-2"></i>
-                        Connect
+                        {t('actions.connect')}
                       </Button>
                     </div>
                   </OverlayTrigger>
@@ -555,12 +559,12 @@ export const NumaIntegrations = () => {
                     {isConnecting ? (
                       <>
                         <Spinner size="sm" className="me-2" />
-                        Connecting...
+                        {t('actions.connecting')}
                       </>
                     ) : (
                       <>
                         <i className="bi bi-plus-circle me-2"></i>
-                        Connect
+                        {t('actions.connect')}
                       </>
                     )}
                   </Button>
@@ -595,17 +599,17 @@ export const NumaIntegrations = () => {
   return (
     <div className="dashboard">
       <PageHeader
-        title="Numa Integrations"
-        subtitle="Connect external tools and services to enhance your Numa experience"
+        title={t('header.title')}
+        subtitle={t('header.subtitle')}
         actions={
           <Button variant="secondary" disabled={loading || loadingStatus || previewMode} onClick={handleRefresh}>
             {loading || loadingStatus ? (
               <>
-                <Spinner size="sm" className="me-2" animation="border" /> Refreshing
+                <Spinner size="sm" className="me-2" animation="border" /> {t('actions.refreshing')}
               </>
             ) : (
               <>
-                <i className="bi bi-arrow-clockwise me-1" /> Refresh
+                <i className="bi bi-arrow-clockwise me-1" /> {t('actions.refresh')}
               </>
             )}
           </Button>
@@ -618,8 +622,7 @@ export const NumaIntegrations = () => {
           <>
             {previewMode && (
               <Alert variant="info" className="mb-3">
-                Numa Integrations are not enabled in your Numa environment. Contact your account administrator to
-                request access.
+                {t('preview.notice')}
               </Alert>
             )}
             {error && (
@@ -637,10 +640,10 @@ export const NumaIntegrations = () => {
           className="mb-4"
         >
           <Nav.Item>
-            <Nav.Link eventKey="connected-apps">Connected Apps</Nav.Link>
+            <Nav.Link eventKey="connected-apps">{t('tabs.connectedApps')}</Nav.Link>
           </Nav.Item>
           <Nav.Item>
-            <Nav.Link eventKey="data-connectors">Data Connectors</Nav.Link>
+            <Nav.Link eventKey="data-connectors">{t('tabs.dataConnectors')}</Nav.Link>
           </Nav.Item>
         </Nav>
 
@@ -652,12 +655,13 @@ export const NumaIntegrations = () => {
                 <div className="d-flex align-items-start">
                   <i className="bi bi-check-circle-fill text-success me-3 mt-1"></i>
                   <div className="flex-grow-1">
-                    <h6 className="mb-1 fw-semibold">Integration Connected Successfully!</h6>
+                    <h6 className="mb-1 fw-semibold">{t('connection.successTitle')}</h6>
                     <p className="mb-2 small">
-                      Your{' '}
-                      {availableApps.find((app) => app.name_slug === recentlyConnectedApp)?.name ||
-                        recentlyConnectedApp}{' '}
-                      integration is now ready to use.
+                      {t('connection.successDescription', {
+                        appName:
+                          availableApps.find((app) => app.name_slug === recentlyConnectedApp)?.name ||
+                          recentlyConnectedApp,
+                      })}
                     </p>
                     <Button
                       variant="success"
@@ -669,7 +673,7 @@ export const NumaIntegrations = () => {
                       className="d-flex align-items-center"
                     >
                       <i className="bi bi-sliders me-2"></i>
-                      Customize Tool Access
+                      {t('connection.customizeTools')}
                     </Button>
                   </div>
                 </div>
@@ -685,9 +689,9 @@ export const NumaIntegrations = () => {
                         <div className="integration-step-circle me-2">
                           <span className="fw-bold">1</span>
                         </div>
-                        <h6 className="text-primary fw-semibold mb-0">Connect Integration</h6>
+                        <h6 className="text-primary fw-semibold mb-0">{t('steps.connect.title')}</h6>
                       </div>
-                      <p className="small text-muted mb-0">Click the connect button on any app below to get started</p>
+                      <p className="small text-muted mb-0">{t('steps.connect.body')}</p>
                     </div>
                   </Col>
                   <Col md={3}>
@@ -696,11 +700,9 @@ export const NumaIntegrations = () => {
                         <div className="integration-step-circle me-2">
                           <span className="fw-bold">2</span>
                         </div>
-                        <h6 className="text-primary fw-semibold mb-0">Sign In Securely</h6>
+                        <h6 className="text-primary fw-semibold mb-0">{t('steps.signIn.title')}</h6>
                       </div>
-                      <p className="small text-muted mb-0">
-                        Follow the secure authentication steps and test your connection was successful
-                      </p>
+                      <p className="small text-muted mb-0">{t('steps.signIn.body')}</p>
                     </div>
                   </Col>
                   <Col md={3}>
@@ -709,11 +711,9 @@ export const NumaIntegrations = () => {
                         <div className="integration-step-circle me-2">
                           <span className="fw-bold">3</span>
                         </div>
-                        <h6 className="text-primary fw-semibold mb-0">Optimize Security</h6>
+                        <h6 className="text-primary fw-semibold mb-0">{t('steps.optimize.title')}</h6>
                       </div>
-                      <p className="small text-muted mb-0">
-                        Use Settings to enable only the tools you need for better security and performance
-                      </p>
+                      <p className="small text-muted mb-0">{t('steps.optimize.body')}</p>
                     </div>
                   </Col>
                   <Col md={3}>
@@ -722,17 +722,17 @@ export const NumaIntegrations = () => {
                         <div className="integration-step-circle me-2">
                           <span className="fw-bold">4</span>
                         </div>
-                        <h6 className="text-primary fw-semibold mb-0">Get Work Done</h6>
+                        <h6 className="text-primary fw-semibold mb-0">{t('steps.work.title')}</h6>
                       </div>
                       <p className="small text-muted mb-0">
-                        Utilise your integrations while getting work done in{' '}
+                        {t('steps.work.bodyPrefix')}{' '}
                         <Button
                           variant="link"
                           size="sm"
                           className="p-0 align-baseline small text-primary fw-semibold"
                           onClick={() => (window.location.href = '/chat')}
                         >
-                          Numa Chat
+                          {t('steps.work.chatLink')}
                         </Button>
                       </p>
                     </div>
@@ -743,14 +743,18 @@ export const NumaIntegrations = () => {
             <div className="mb-4">
               <h4 className="text-primary mb-0 d-flex align-items-center">
                 <i className="bi bi-grid-3x3-gap me-2"></i>
-                <span>Available Integrations {!loading && `(${availableApps.length})`}</span>
+                <span>
+                  {loading
+                    ? t('availableIntegrations')
+                    : t('availableIntegrationsWithCount', { count: availableApps.length })}
+                </span>
               </h4>
             </div>
             <div style={previewMode ? { position: 'relative' } : undefined}>
               {loading ? (
                 <div className="text-center py-5">
                   <Spinner animation="border" variant="primary" />
-                  <p className="mt-3 text-muted">Loading integrations...</p>
+                  <p className="mt-3 text-muted">{t('loadingIntegrations')}</p>
                 </div>
               ) : (
                 <>
@@ -817,7 +821,7 @@ export const NumaIntegrations = () => {
 export default NumaIntegrations;
 
 // Helper function to parse markdown links and make them clickable
-const formatDescriptionWithLinks = (description: string) => {
+const formatDescriptionWithLinks = (description: string, translate: TFunction) => {
   // Match markdown links: [text](url)
   const linkRegex = /\[([^\]]+)\]\(([^)]+)\)/g;
   const parts: (string | React.ReactElement)[] = [];
@@ -831,7 +835,7 @@ const formatDescriptionWithLinks = (description: string) => {
     }
 
     // Replace "See the docs" with "see documentation"
-    const linkText = match[1].toLowerCase().includes('see') ? 'see documentation' : match[1];
+    const linkText = match[1].toLowerCase().includes('see') ? translate('settingsModal.seeDocumentation') : match[1];
 
     // Add the link as JSX
     parts.push(
@@ -884,15 +888,14 @@ export const SettingsModal = ({
   appSlug?: string | null;
   globalDenyTools?: string[];
 }) => {
+  const { t } = useTranslation('integrations');
   // Check if there are unsaved changes
   const hasUnsavedChanges = JSON.stringify(toggles) !== JSON.stringify(initialToggles);
 
   // Custom close handler with confirmation
   const handleClose = () => {
     if (hasUnsavedChanges) {
-      const confirmClose = window.confirm(
-        'Exit will lose the changes made. Cancel and use "Save Changes" if you wish to update the available tools.\n\nExit anyway?',
-      );
+      const confirmClose = window.confirm(t('settingsModal.confirmClose'));
       if (!confirmClose) return;
     }
     onHide();
@@ -906,19 +909,19 @@ export const SettingsModal = ({
             <Modal.Title className="mb-1">
               <div className="d-flex align-items-center">
                 <i className="bi bi-sliders me-2 text-primary"></i>
-                Integration Settings
+                {t('settingsModal.title')}
                 {hasUnsavedChanges && (
                   <span
                     className="ms-2 badge bg-warning text-dark"
                     style={{ fontSize: '0.65rem', fontWeight: 'normal' }}
                   >
-                    Unsaved Changes
+                    {t('settingsModal.unsavedBadge')}
                   </span>
                 )}
               </div>
             </Modal.Title>
             <p className="text-muted mb-0 small" style={{ fontSize: '0.85rem' }}>
-              Toggle on and off the tools that Numa will have access to when using this integration
+              {t('settingsModal.subtitle')}
             </p>
           </div>
         </div>
@@ -927,7 +930,7 @@ export const SettingsModal = ({
         {loading ? (
           <div className="text-center py-5">
             <Spinner animation="border" variant="primary" />
-            <p className="mt-3 text-muted mb-0">Loading available tools...</p>
+            <p className="mt-3 text-muted mb-0">{t('settingsModal.loading')}</p>
           </div>
         ) : error ? (
           <Alert variant="danger" className="mb-0">
@@ -937,7 +940,7 @@ export const SettingsModal = ({
         ) : tools.length === 0 ? (
           <div className="text-center py-5">
             <i className="bi bi-info-circle text-muted" style={{ fontSize: '2rem' }}></i>
-            <p className="text-muted mt-2 mb-0">No tools available for this integration.</p>
+            <p className="text-muted mt-2 mb-0">{t('settingsModal.empty')}</p>
           </div>
         ) : (
           <div className="d-flex flex-column gap-2">
@@ -961,13 +964,13 @@ export const SettingsModal = ({
                 return aLabel.localeCompare(bLabel);
               });
 
-              return sorted.map((t, index) => {
-                const display = toTitle(stripPrefix(t.name, appSlug || undefined));
-                const isEnabled = toggles[t.name] ?? true;
-                const isGloballyDenied = (globalDenyTools || []).includes(t.name);
+              return sorted.map((tool, index) => {
+                const display = toTitle(stripPrefix(tool.name, appSlug || undefined));
+                const isEnabled = toggles[tool.name] ?? true;
+                const isGloballyDenied = (globalDenyTools || []).includes(tool.name);
                 return (
                   <div
-                    key={t.name}
+                    key={tool.name}
                     className={`rounded-3 p-3 border ${index < sorted.length - 1 ? 'mb-2' : ''}
                       ${isEnabled ? 'bg-light bg-opacity-25' : 'bg-light bg-opacity-50'}`}
                     style={{
@@ -984,7 +987,7 @@ export const SettingsModal = ({
                           ></div>
                           <span className={`fw-semibold ${isEnabled ? 'text-dark' : 'text-muted'}`}>{display}</span>
                         </div>
-                        {t.description && (
+                        {tool.description && (
                           <div
                             className={`small text-break ${isEnabled ? 'text-muted' : 'text-secondary'}`}
                             style={{
@@ -994,12 +997,13 @@ export const SettingsModal = ({
                               fontSize: '0.85rem',
                             }}
                           >
-                            {formatDescriptionWithLinks(t.description)}
+                            {formatDescriptionWithLinks(tool.description, t)}
                           </div>
                         )}
                         {isGloballyDenied && (
                           <div className="small text-danger mt-1">
-                            <i className="bi bi-slash-circle me-1"></i>Disabled globally by your administrator
+                            <i className="bi bi-slash-circle me-1"></i>
+                            {t('settingsModal.globallyDisabled')}
                           </div>
                         )}
                       </div>
@@ -1009,7 +1013,7 @@ export const SettingsModal = ({
                           type="checkbox"
                           checked={isEnabled && !isGloballyDenied}
                           disabled={isGloballyDenied}
-                          onChange={(e) => setToggles({ ...toggles, [t.name]: e.target.checked })}
+                          onChange={(e) => setToggles({ ...toggles, [tool.name]: e.target.checked })}
                           style={{
                             accentColor: 'var(--color-primary)',
                             transform: 'scale(1.1)',
@@ -1039,17 +1043,20 @@ export const SettingsModal = ({
             {tools.length > 0 && (
               <span>
                 <i className="bi bi-info-circle me-1"></i>
-                {Object.values(toggles).filter(Boolean).length} of {tools.length} tools enabled
+                {t('settingsModal.toolsEnabledCount', {
+                  enabled: Object.values(toggles).filter(Boolean).length,
+                  total: tools.length,
+                })}
               </span>
             )}
           </small>
           <div>
             <Button variant="secondary" onClick={handleClose} className="me-2">
-              Cancel
+              {t('actions.cancel')}
             </Button>
             <Button variant="primary" onClick={onSave} disabled={loading || !!error}>
               <i className="bi bi-check-lg me-2"></i>
-              Save Changes
+              {t('actions.saveChanges')}
             </Button>
           </div>
         </div>

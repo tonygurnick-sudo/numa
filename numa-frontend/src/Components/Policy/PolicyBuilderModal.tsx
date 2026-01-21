@@ -1,4 +1,5 @@
 import { Button, Modal } from 'react-bootstrap';
+import { useTranslation } from 'react-i18next';
 
 export const CreatePolicyModal = ({
   visible,
@@ -9,18 +10,23 @@ export const CreatePolicyModal = ({
   handleGeneratePolicy,
   isGenerating,
 }) => {
+  const { t } = useTranslation('apps');
   return (
     <Modal show={visible} onHide={onClose} size="xl">
       <Modal.Header closeButton>
         <Modal.Title>
-          Create New Policy
-          {selectedTemplate && <div className="fs-6 fw-normal text-muted">Using {selectedTemplate.name} Scenario</div>}
+          {t('policyBuilder.modal.title')}
+          {selectedTemplate && (
+            <div className="fs-6 fw-normal text-muted">
+              {t('policyBuilder.modal.usingScenario', { name: selectedTemplate.name })}
+            </div>
+          )}
         </Modal.Title>
       </Modal.Header>
       <Modal.Body>
         <form className="d-flex flex-column gap-3">
           <div>
-            <label className="form-label">School Name</label>
+            <label className="form-label">{t('policyBuilder.modal.schoolName.label')}</label>
             <input
               type="text"
               className="form-control"
@@ -31,7 +37,7 @@ export const CreatePolicyModal = ({
                   schoolName: e.target.value,
                 })
               }
-              placeholder="e.g., St Theresa's School (Plimmerton)"
+              placeholder={t('policyBuilder.modal.schoolName.placeholder')}
             />
           </div>
 
@@ -92,7 +98,7 @@ export const CreatePolicyModal = ({
           </div> */}
 
           <div className="flex-grow-1">
-            <label className="form-label">School Context</label>
+            <label className="form-label">{t('policyBuilder.modal.schoolContext.label')}</label>
             <textarea
               className="form-control h-100"
               rows={8}
@@ -103,7 +109,7 @@ export const CreatePolicyModal = ({
                   schoolContext: e.target.value,
                 })
               }
-              placeholder="Describe your school's characteristics, values, and community..."
+              placeholder={t('policyBuilder.modal.schoolContext.placeholder')}
             />
           </div>
 
@@ -128,16 +134,16 @@ export const CreatePolicyModal = ({
       </Modal.Body>
       <Modal.Footer>
         <Button variant="secondary" onClick={onClose}>
-          Cancel
+          {t('policyBuilder.modal.actions.cancel')}
         </Button>
         <Button variant="primary" onClick={handleGeneratePolicy} disabled={isGenerating}>
           {isGenerating ? (
             <>
               <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
-              Generating...
+              {t('policyBuilder.modal.actions.generating')}
             </>
           ) : (
-            'Generate Policy'
+            t('policyBuilder.modal.actions.generate')
           )}
         </Button>
       </Modal.Footer>

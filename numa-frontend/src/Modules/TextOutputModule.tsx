@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import { useNumaApp } from '../Providers/NumaAppContext';
 import { Preloader } from '../Components/Preloader';
 import { MarkdownContent } from '../Components/Renderers/MarkdownContent';
@@ -5,6 +6,7 @@ import { ResultActions } from '../Components/ResultActions';
 
 function TextOutputModule({ task }) {
   const { error, numaTaskResponses, appRunning, selectedTaskId, numaAppData } = useNumaApp();
+  const { t } = useTranslation(['common', 'errors']);
 
   const taskResponse = numaTaskResponses?.find((response) => response?.taskId === task.id);
 
@@ -16,11 +18,15 @@ function TextOutputModule({ task }) {
     <div className={`output-module ${isSelected ? 'selected' : ''}`}>
       <div className="output-text markdown-content">
         {appRunning && !taskResponse?.result && <Preloader smallscreen={true} />}
-        {error && <div className="text-danger">{error instanceof Error ? error.message : 'An error occurred'}</div>}
+        {error && <div className="text-danger">{error instanceof Error ? error.message : t('errors:generic')}</div>}
         {taskResponse?.result && !error && (
           <>
             <MarkdownContent content={taskResponse.result} />
-            <ResultActions content={taskResponse.result} title={task.title || 'Result'} appType={numaAppData?.app_id} />
+            <ResultActions
+              content={taskResponse.result}
+              title={task.title || t('result')}
+              appType={numaAppData?.app_id}
+            />
           </>
         )}
       </div>

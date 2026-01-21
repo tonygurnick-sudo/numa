@@ -9,6 +9,7 @@ import { Pagination } from '../Components/Pagination';
 import { Preloader } from '../Components/Preloader';
 import { StatusDashboard } from '../Components/Status/StatusDashboard';
 import { StarFill } from 'react-bootstrap-icons';
+import { useTranslation } from 'react-i18next';
 
 import { useNumaApp } from '../Providers/NumaAppContext';
 import { useFavorites } from '../hooks/useFavorites';
@@ -19,6 +20,7 @@ import { PageHeader } from '../Components/PageHeader';
 
 export const Dash = ({ showFavorites = false, ...rest }: DashProps) => {
   const niceties = useContext(NicetyContext);
+  const { t } = useTranslation('apps');
   const { error, setError, loading, setLoading, setNumaApps, numaApps } = useNumaApp();
   const [searchTerm, setSearchTerm] = useState('');
   const [activeCategories, setActiveCategories] = useState(() => {
@@ -42,7 +44,7 @@ export const Dash = ({ showFavorites = false, ...rest }: DashProps) => {
         const uniqueCategories = [...new Set(appsData.map((app) => app.category).filter(Boolean))];
         setCategories(uniqueCategories);
       } catch (error) {
-        setError(`Failed to load apps: ${error.message}`);
+        setError(t('dash.errors.loadApps', { message: (error as Error).message }));
         setNumaApps([]);
         setCategories([]);
       } finally {
@@ -148,12 +150,10 @@ export const Dash = ({ showFavorites = false, ...rest }: DashProps) => {
         title={
           <>
             {showFavorites && <StarFill className="text-warning me-2" />}
-            {showFavorites ? 'Favourite Apps' : 'Numa Apps'}
+            {showFavorites ? t('dash.title.favorites') : t('dash.title.all')}
           </>
         }
-        subtitle={
-          showFavorites ? 'Your favorite apps at a glance' : 'Get started uncovering insights from your data with Numa.'
-        }
+        subtitle={showFavorites ? t('dash.subtitle.favorites') : t('dash.subtitle.all')}
       />
       <LayoutDashboard>
         <Container fluid className="px-0">

@@ -2,6 +2,7 @@ import React, { useEffect, useState, type ReactNode } from 'react';
 import { brandingService } from '../Services/BrandingService';
 import { BrandingContext, DEFAULT_BRANDING_THEME } from './BrandingContext';
 import type { BrandingTheme } from './BrandingContext';
+import i18n from '../i18n';
 
 /**
  * Provider component for client branding
@@ -83,7 +84,7 @@ export const BrandingProvider: React.FC<{ children: ReactNode }> = ({ children }
         width: '100%',
       }}
     >
-      Loading…
+      {i18n.t('common:loading.generic')}
     </div>
   );
 

@@ -5,6 +5,7 @@ import { PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { useAuth } from '../Providers/AuthProvider';
 import { withPRM } from '../utils/prmUtils';
+import { useTranslation } from 'react-i18next';
 
 // Type definitions
 interface Config {
@@ -37,6 +38,8 @@ const FileUploader: React.FC<FileUploaderProps> = ({
   kb_id,
   selectedFolder,
 }) => {
+  const { t } = useTranslation('common');
+  const formatKB = (bytes: number, digits = 2) => t('fileSize.kb', { size: (bytes / 1024).toFixed(digits) });
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [files, setFiles] = useState<ExtendedFile[]>([]);
   const [uploadProgress, setUploadProgress] = useState<number>(0);
@@ -95,7 +98,7 @@ const FileUploader: React.FC<FileUploaderProps> = ({
       fileList.map((file) => ({
         name: file.name,
         relativePath: file.webkitRelativePath || file.name,
-        size: `${(file.size / 1024).toFixed(2)} KB`,
+        size: formatKB(file.size),
         type: file.type || 'application/octet-stream',
       })),
     );
@@ -154,7 +157,7 @@ const FileUploader: React.FC<FileUploaderProps> = ({
 
   const handleUpload = async (): Promise<void> => {
     if (!files.length) {
-      setError('Please select files first');
+      setError(t('fileUploader.errors.selectFilesFirst'));
       return;
     }
 
@@ -163,7 +166,7 @@ const FileUploader: React.FC<FileUploaderProps> = ({
       const invalidFiles = files.filter((file) => !validateFile(file));
       if (invalidFiles.length > 0) {
         const invalidFileNames = invalidFiles.map((file) => file.name).join(', ');
-        setError(`Cannot upload invalid files: ${invalidFileNames}`);
+        setError(t('fileUploader.errors.invalidFiles', { files: invalidFileNames }));
         return;
       }
     }
@@ -190,7 +193,7 @@ const FileUploader: React.FC<FileUploaderProps> = ({
           name: file.name,
           relativePath,
           type: file.type || 'application/octet-stream',
-          size: `${(file.size / 1024).toFixed(2)} KB`,
+          size: formatKB(file.size),
           kb_id: resolvedKbId,
         });
 
@@ -317,7 +320,10 @@ const FileUploader: React.FC<FileUploaderProps> = ({
     } catch (err) {
       console.error('Upload error:', err);
       const errorMessage =
-        err.response?.data?.error || err.response?.data?.message || err.message || 'Error uploading files';
+        err.response?.data?.error ||
+        err.response?.data?.message ||
+        err.message ||
+        t('fileUploader.errors.uploadFailed');
 
       setError(errorMessage);
       setDetailedError(`Detailed error: ${JSON.stringify(err.response?.data || err.message, null, 2)}`);
@@ -547,7 +553,7 @@ const FileUploader: React.FC<FileUploaderProps> = ({
               <span className="file-name" title={file.name}>
                 {file.name}
               </span>
-              <span className="file-size">{(file.size / 1024).toFixed(2)} KB</span>
+              <span className="file-size">{formatKB(file.size)}</span>
             </div>
             <button className="remove-btn" onClick={() => removeFile(file)}>
               <i className="bi bi-x"></i>
@@ -581,7 +587,7 @@ const FileUploader: React.FC<FileUploaderProps> = ({
                     </div>
                     <span className="file-name">
                       {folderName}
-                      <span className="folder-count">({files.length} files)</span>
+                      <span className="folder-count">{t('fileUploader.folderCount', { count: files.length })}</span>
                     </span>
                   </div>
                   <button className="toggle-btn">
@@ -600,7 +606,7 @@ const FileUploader: React.FC<FileUploaderProps> = ({
                           <span className="file-name" title={fileName}>
                             {fileName}
                           </span>
-                          <span className="file-size">{(file.size / 1024).toFixed(2)} KB</span>
+                          <span className="file-size">{formatKB(file.size)}</span>
                         </div>
                         <button
                           className="remove-btn"
@@ -645,14 +651,14 @@ const FileUploader: React.FC<FileUploaderProps> = ({
 
         <div className="mb-3">
           <i className="bi bi-cloud-upload" style={{ fontSize: '2rem' }}></i>
-          <p className="mt-2">Drag and drop your files here, or</p>
+          <p className="mt-2">{t('fileUploader.dragAndDrop')}</p>
           <Button
             variant="primary"
             type="button"
             style={{ cursor: 'pointer' }}
             onClick={() => fileInputRef.current?.click()}
           >
-            Select Files
+            {t('fileUploader.selectFiles')}
           </Button>
         </div>
 
@@ -660,10 +666,10 @@ const FileUploader: React.FC<FileUploaderProps> = ({
           <div className="s3-files-section">
             <div className="files-header">
               <span className="files-count-label">
-                {fileStructure.files.length} File{fileStructure.files.length !== 1 ? 's' : ''} Selected
+                {t('fileUploader.filesSelected', { count: fileStructure.files.length })}
               </span>
               <button className="clear-all-btn" onClick={clearAllFiles}>
-                Clear all
+                {t('fileUploader.clearAll')}
               </button>
             </div>
 
@@ -673,9 +679,14 @@ const FileUploader: React.FC<FileUploaderProps> = ({
               {isUploading && (
                 <div className="mb-3">
                   <p className="mb-2">
-                    Uploading file {uploadingFileIndex + 1} of {totalFiles}
+                    {t('fileUploader.uploadingProgress', {
+                      current: uploadingFileIndex + 1,
+                      total: totalFiles,
+                    })}
                   </p>
-                  {currentFileName && <p className="mb-2 text-muted small">Current file: {currentFileName}</p>}
+                  {currentFileName && (
+                    <p className="mb-2 text-muted small">{t('fileUploader.currentFile', { name: currentFileName })}</p>
+                  )}
                   <div className="progress">
                     <div className="progress-bar" style={{ width: `${uploadProgress}%` }} role="progressbar">
                       {uploadProgress}%
@@ -688,12 +699,12 @@ const FileUploader: React.FC<FileUploaderProps> = ({
                 {isUploading ? (
                   <>
                     <span className="spinner-border spinner-border-sm me-2" />
-                    Uploading...
+                    {t('fileUploader.uploading')}
                   </>
                 ) : (
                   <>
                     <i className="bi bi-cloud-upload me-2"></i>
-                    Upload {fileStructure.files.length} Files
+                    {t('fileUploader.uploadButton', { count: fileStructure.files.length })}
                   </>
                 )}
               </Button>
@@ -703,7 +714,7 @@ const FileUploader: React.FC<FileUploaderProps> = ({
       </div>
       {success && (
         <Alert variant="success" className="mt-3">
-          Your files have been uploaded successfully!
+          {t('fileUploader.success')}
         </Alert>
       )}
     </div>

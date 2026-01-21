@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Container, Row, Col, Form, Button, Card, Alert, Spinner } from 'react-bootstrap';
+import { useTranslation } from 'react-i18next';
+import i18n from '../i18n';
 import { useAuth } from '../Providers/AuthProvider';
 import { LayoutDashboard } from '../Layouts/LayoutDashboard';
 import { saveCompanyInfo, fetchCompanyInfo, getProfileText } from '../utils/companyInfoUtils';
@@ -7,6 +9,7 @@ import { FeatureWrapper } from '../Components/RequiredFeaturesWrapper';
 import { PageHeader } from '../Components/PageHeader';
 
 const CompanyInfo = () => {
+  const { t } = useTranslation('settings');
   const { getCredentials, region: authRegion, user } = useAuth();
   // Fallback to session storage if region is not available from auth context
   const region = authRegion || window.sessionStorage.getItem('REGION');
@@ -30,9 +33,9 @@ const CompanyInfo = () => {
 
   // Format the last updated date for display
   const formatLastUpdated = (dateString) => {
-    if (!dateString) return 'Never';
+    if (!dateString) return t('companyInfo.lastUpdated.never');
     const date = new Date(dateString);
-    return date.toLocaleString();
+    return date.toLocaleString(i18n.language);
   };
 
   // Define loadCompanyInfo function with useCallback to prevent unnecessary re-creation
@@ -50,7 +53,7 @@ const CompanyInfo = () => {
         setSaveStatus({
           show: true,
           type: 'info',
-          message: 'No company information exists yet. Enter your company information and click Save.',
+          message: t('companyInfo.status.empty'),
         });
       }
     } catch (error) {
@@ -58,7 +61,7 @@ const CompanyInfo = () => {
       setSaveStatus({
         show: true,
         type: 'danger',
-        message: `Error loading company information: ${error.message}`,
+        message: t('companyInfo.status.loadError', { message: (error as Error).message }),
       });
     } finally {
       setIsLoading(false);
@@ -79,14 +82,14 @@ const CompanyInfo = () => {
       setSaveStatus({
         show: true,
         type: 'success',
-        message: 'Company information saved successfully!',
+        message: t('companyInfo.status.saveSuccess'),
       });
     } catch (error) {
       console.error('Error saving company info:', error);
       setSaveStatus({
         show: true,
         type: 'danger',
-        message: `Error saving company information: ${error.message}`,
+        message: t('companyInfo.status.saveError', { message: (error as Error).message }),
       });
     } finally {
       setIsSaving(false);
@@ -95,7 +98,7 @@ const CompanyInfo = () => {
 
   return (
     <div className="dashboard">
-      <PageHeader title="Company Info" subtitle="Manage your company information and settings" />
+      <PageHeader title={t('companyInfo.title')} subtitle={t('companyInfo.subtitle')} />
 
       <LayoutDashboard className="flex-grow-1">
         <Container fluid className="p-4">
@@ -103,8 +106,8 @@ const CompanyInfo = () => {
             <Col lg={12}>
               <Card>
                 <Card.Body>
-                  <Card.Title>Edit Company Information</Card.Title>
-                  <Card.Text>Enter your company information below. This will be used in chat interactions.</Card.Text>
+                  <Card.Title>{t('companyInfo.editTitle')}</Card.Title>
+                  <Card.Text>{t('companyInfo.editDescription')}</Card.Text>
 
                   {saveStatus.show && (
                     <Alert
@@ -119,13 +122,13 @@ const CompanyInfo = () => {
                   {isLoading ? (
                     <div className="text-center my-4">
                       <Spinner animation="border" role="status">
-                        <span className="visually-hidden">Loading...</span>
+                        <span className="visually-hidden">{t('companyInfo.loading')}</span>
                       </Spinner>
                     </div>
                   ) : (
                     <Form>
                       <Form.Group className="mb-3">
-                        <Form.Label>Company Information</Form.Label>
+                        <Form.Label>{t('companyInfo.form.label')}</Form.Label>
                         <Form.Control
                           as="textarea"
                           disabled={!user?.features?.includes('editCompanyProfile')}
@@ -133,24 +136,21 @@ const CompanyInfo = () => {
                           value={companyProfile}
                           onChange={(e) => setCompanyProfile(e.target.value)}
                           maxLength={10000}
-                          placeholder="Enter a detailed description of your company, including its mission, values, and any other information that would be helpful for users interacting with your AI assistant."
+                          placeholder={t('companyInfo.form.placeholder')}
                         />
                         <Form.Text className="d-block mt-2 mb-1 text-muted">
-                          Character count: {companyProfile.length}/10000
+                          {t('companyInfo.form.characterCount', { count: companyProfile.length })}
                         </Form.Text>
-                        <Form.Text className="d-block mb-1 text-muted">
-                          This information will be available to all users in chat interactions.
-                        </Form.Text>
+                        <Form.Text className="d-block mb-1 text-muted">{t('companyInfo.form.sharedNote')}</Form.Text>
                         {companyProfile.length > 3000 && (
-                          <Form.Text className="d-block mb-1 text-warning">
-                            Note: Only the first ~3000 characters will be used in chat context.
-                          </Form.Text>
+                          <Form.Text className="d-block mb-1 text-warning">{t('companyInfo.form.limitNote')}</Form.Text>
                         )}
                       </Form.Group>
 
                       {lastUpdated && (
                         <p className="text-muted small mb-3">
-                          <i className="bi bi-clock"></i> Last updated: {formatLastUpdated(lastUpdated)}
+                          <i className="bi bi-clock"></i>{' '}
+                          {t('companyInfo.lastUpdated.label', { date: formatLastUpdated(lastUpdated) })}
                         </p>
                       )}
 
@@ -159,10 +159,10 @@ const CompanyInfo = () => {
                           {isSaving ? (
                             <>
                               <Spinner as="span" animation="border" size="sm" role="status" aria-hidden="true" />{' '}
-                              Saving...
+                              {t('companyInfo.actions.saving')}
                             </>
                           ) : (
-                            'Save Information'
+                            t('companyInfo.actions.save')
                           )}
                         </Button>
                       </FeatureWrapper>

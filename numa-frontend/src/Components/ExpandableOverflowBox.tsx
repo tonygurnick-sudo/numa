@@ -1,4 +1,5 @@
 import { type CSSProperties, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 export type ExpandableOverflowBoxProps = {
   children: ReactNode;
@@ -14,9 +15,12 @@ export default function ExpandableOverflowBox({
   className,
   maxHeight = 240,
   style,
-  expandLabel = 'Show all',
-  collapseLabel = 'Show less',
+  expandLabel,
+  collapseLabel,
 }: ExpandableOverflowBoxProps) {
+  const { t } = useTranslation('common');
+  const expandText = expandLabel ?? t('expandable.showAll');
+  const collapseText = collapseLabel ?? t('expandable.showLess');
   const ref = useRef<HTMLDivElement | null>(null);
   const [expanded, setExpanded] = useState<boolean>(false);
   const [canExpand, setCanExpand] = useState<boolean>(false);
@@ -85,12 +89,12 @@ export default function ExpandableOverflowBox({
             {expanded ? (
               <>
                 <i className="bi bi-chevron-up me-1"></i>
-                {collapseLabel}
+                {collapseText}
               </>
             ) : (
               <>
                 <i className="bi bi-chevron-down me-1"></i>
-                {expandLabel}
+                {expandText}
               </>
             )}
           </button>

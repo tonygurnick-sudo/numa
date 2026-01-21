@@ -2,6 +2,8 @@ import type { CSSProperties } from 'react';
 import { useState } from 'react';
 import { Card, Button, Badge, OverlayTrigger, Tooltip } from 'react-bootstrap';
 import { Search, Robot } from 'react-bootstrap-icons';
+import { useTranslation } from 'react-i18next';
+import i18n from '../../i18n';
 import type { AgentSummary } from '../../types/agents';
 import { getConnectionConfig } from '../../config/integrationsConfig';
 import { useKnowledgeBase } from '../../Providers/KnowledgeBaseProvider';
@@ -29,17 +31,17 @@ const DESCRIPTION_CLAMP_STYLE: CSSProperties = {
   WebkitBoxOrient: 'vertical',
 };
 
-const formatTimestamp = (timestamp: number): string => {
+const formatTimestamp = (timestamp: number, labels: { today: string; yesterday: string; daysAgo: string }): string => {
   try {
     const date = new Date(timestamp);
     const now = new Date();
     const diffMs = now.getTime() - date.getTime();
     const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
 
-    if (diffDays === 0) return 'Today';
-    if (diffDays === 1) return 'Yesterday';
-    if (diffDays < 7) return `${diffDays} days ago`;
-    return date.toLocaleDateString();
+    if (diffDays === 0) return labels.today;
+    if (diffDays === 1) return labels.yesterday;
+    if (diffDays < 7) return labels.daysAgo.replace('{{count}}', `${diffDays}`);
+    return date.toLocaleDateString(i18n.language);
   } catch {
     return '';
   }
@@ -88,6 +90,7 @@ export const AgentCard = ({
   disabled = false,
   isInMyAgentsSection = false,
 }: AgentCardProps) => {
+  const { t } = useTranslation('agents');
   // Determine if this agent should be collapsed by default
   // Collapse if explicitly in "My Agents" section
   const [isExpanded, setIsExpanded] = useState(!isInMyAgentsSection);
@@ -97,7 +100,7 @@ export const AgentCard = ({
 
   // Helper to get KB display name
   const getKBDisplayName = (kbId: string): string => {
-    if (kbId === 'company') return 'Company KB';
+    if (kbId === 'company') return t('card.companyKb');
     const kb = availableKBs.find((k) => k.kb_id === kbId);
     return kb?.kb_name || kbId;
   };
@@ -188,18 +191,18 @@ export const AgentCard = ({
                 {agent.visibility === 'public' ? (
                   <span className="text-muted small" style={{ fontSize: '0.7rem', flexShrink: 0 }}>
                     <i className="bi bi-shop me-1"></i>
-                    Company
+                    {t('card.visibility.company')}
                   </span>
                 ) : (
                   <span className="text-muted small" style={{ fontSize: '0.7rem', flexShrink: 0 }}>
                     <i className="bi bi-person-fill me-1"></i>
-                    Personal
+                    {t('card.visibility.personal')}
                   </span>
                 )}
 
                 {timeSavedLabel && (
                   <span className="text-muted small" style={{ fontSize: '0.75rem', flexShrink: 0 }}>
-                    {timeSavedLabel} saved
+                    {t('card.timeSaved', { time: timeSavedLabel })}
                   </span>
                 )}
               </div>
@@ -251,7 +254,7 @@ export const AgentCard = ({
                       {allowedKBs === 'all' ? (
                         <OverlayTrigger
                           placement="top"
-                          overlay={<Tooltip id="kb-all-collapsed">All Knowledge Bases</Tooltip>}
+                          overlay={<Tooltip id="kb-all-collapsed">{t('card.knowledgeBases.all')}</Tooltip>}
                         >
                           <i
                             className="bi bi-folder-fill"
@@ -301,7 +304,7 @@ export const AgentCard = ({
                 style={{ flexShrink: 0 }}
                 onClick={handleFavoriteClick}
                 disabled={disabled}
-                aria-label={agent.isFavorite ? 'Unfavorite agent' : 'Favorite agent'}
+                aria-label={agent.isFavorite ? t('card.favorite.removeAria') : t('card.favorite.addAria')}
               >
                 <i
                   className={agent.isFavorite ? 'bi bi-star-fill' : 'bi bi-star'}
@@ -340,12 +343,12 @@ export const AgentCard = ({
                 {agent.visibility === 'public' ? (
                   <span className="text-muted small" style={{ fontSize: '0.75rem' }}>
                     <i className="bi bi-shop me-1"></i>
-                    Company
+                    {t('card.visibility.company')}
                   </span>
                 ) : (
                   <span className="text-muted small" style={{ fontSize: '0.75rem' }}>
                     <i className="bi bi-person-fill me-1"></i>
-                    Personal
+                    {t('card.visibility.personal')}
                   </span>
                 )}
               </div>
@@ -355,14 +358,18 @@ export const AgentCard = ({
             {canFavorite && (
               <OverlayTrigger
                 placement="top"
-                overlay={<Tooltip id={`fav-${agent.agentId}`}>{agent.isFavorite ? 'Unfavorite' : 'Favorite'}</Tooltip>}
+                overlay={
+                  <Tooltip id={`fav-${agent.agentId}`}>
+                    {agent.isFavorite ? t('card.favorite.remove') : t('card.favorite.add')}
+                  </Tooltip>
+                }
               >
                 <Button
                   variant="link"
                   className="p-0"
                   onClick={handleFavoriteClick}
                   disabled={disabled}
-                  aria-label={agent.isFavorite ? 'Unfavorite agent' : 'Favorite agent'}
+                  aria-label={agent.isFavorite ? t('card.favorite.removeAria') : t('card.favorite.addAria')}
                 >
                   <i
                     className={agent.isFavorite ? 'bi bi-star-fill' : 'bi bi-star'}
@@ -372,13 +379,16 @@ export const AgentCard = ({
               </OverlayTrigger>
             )}
             {isInMyAgentsSection && (
-              <OverlayTrigger placement="top" overlay={<Tooltip id={`collapse-${agent.agentId}`}>Collapse</Tooltip>}>
+              <OverlayTrigger
+                placement="top"
+                overlay={<Tooltip id={`collapse-${agent.agentId}`}>{t('card.collapse')}</Tooltip>}
+              >
                 <Button
                   variant="link"
                   className="p-0"
                   onClick={handleToggle}
                   disabled={disabled}
-                  aria-label="Collapse agent card"
+                  aria-label={t('card.collapseAria')}
                 >
                   <i className="bi bi-chevron-up" style={{ fontSize: '1.25rem', color: '#6c757d' }}></i>
                 </Button>
@@ -390,7 +400,7 @@ export const AgentCard = ({
         {/* Description */}
         <div className="flex-grow-1 mb-3">
           <p className="text-muted mb-0" style={{ ...DESCRIPTION_CLAMP_STYLE, fontSize: '0.9rem', lineHeight: '1.4' }}>
-            {agent.description || 'No description provided.'}
+            {agent.description || t('card.noDescription')}
           </p>
         </div>
 
@@ -404,13 +414,13 @@ export const AgentCard = ({
                   className="text-muted small fw-semibold"
                   style={{ fontSize: '0.75rem', minWidth: 90, flexShrink: 0 }}
                 >
-                  TOOLS
+                  {t('card.labels.tools')}
                 </span>
                 <div className="d-flex align-items-center gap-2 flex-wrap">
                   {hasWeb && (
                     <OverlayTrigger
                       placement="top"
-                      overlay={<Tooltip id={`agent-${agent.agentId}-web`}>Web Search</Tooltip>}
+                      overlay={<Tooltip id={`agent-${agent.agentId}-web`}>{t('card.tools.webSearch')}</Tooltip>}
                     >
                       <div>
                         <Search size={18} style={{ color: 'var(--brand-primary, var(--color-primary))' }} />
@@ -420,7 +430,7 @@ export const AgentCard = ({
                   {hasAgentCreation && (
                     <OverlayTrigger
                       placement="top"
-                      overlay={<Tooltip id={`agent-${agent.agentId}-create`}>Agent Creation</Tooltip>}
+                      overlay={<Tooltip id={`agent-${agent.agentId}-create`}>{t('card.tools.agentCreation')}</Tooltip>}
                     >
                       <div>
                         <Robot size={18} style={{ color: 'var(--brand-primary, var(--color-primary))' }} />
@@ -437,13 +447,13 @@ export const AgentCard = ({
                   className="text-muted small fw-semibold"
                   style={{ fontSize: '0.75rem', minWidth: 90, flexShrink: 0 }}
                 >
-                  KNOWLEDGE BASES
+                  {t('card.labels.knowledgeBases')}
                 </span>
                 <div className="d-flex align-items-center gap-2 flex-wrap">
                   {allowedKBs === 'all' ? (
                     <OverlayTrigger
                       placement="top"
-                      overlay={<Tooltip id={`agent-${agent.agentId}-kb-all`}>All Knowledge Bases</Tooltip>}
+                      overlay={<Tooltip id={`agent-${agent.agentId}-kb-all`}>{t('card.knowledgeBases.all')}</Tooltip>}
                     >
                       <i
                         className="bi bi-folder-fill"
@@ -474,7 +484,7 @@ export const AgentCard = ({
                   className="text-muted small fw-semibold"
                   style={{ fontSize: '0.75rem', minWidth: 90, flexShrink: 0 }}
                 >
-                  INTEGRATIONS
+                  {t('card.labels.integrations')}
                 </span>
                 <div className="d-flex align-items-center flex-wrap gap-2 flex-grow-1">{renderIntegrations(agent)}</div>
               </div>
@@ -486,7 +496,7 @@ export const AgentCard = ({
                   className="text-muted small fw-semibold"
                   style={{ fontSize: '0.75rem', minWidth: 90, flexShrink: 0 }}
                 >
-                  TIME SAVED
+                  {t('card.labels.timeSaved')}
                 </span>
                 <span className="text-muted small">{timeSavedLabel}</span>
               </div>
@@ -498,7 +508,7 @@ export const AgentCard = ({
                   className="text-muted small fw-semibold"
                   style={{ fontSize: '0.75rem', minWidth: 90, flexShrink: 0 }}
                 >
-                  FILES
+                  {t('card.labels.files')}
                 </span>
                 <div className="d-flex align-items-center gap-1 flex-grow-1">
                   <OverlayTrigger
@@ -527,9 +537,9 @@ export const AgentCard = ({
                   className="text-muted small fw-semibold"
                   style={{ fontSize: '0.75rem', minWidth: 90, flexShrink: 0 }}
                 >
-                  CREATED BY
+                  {t('card.labels.createdBy')}
                 </span>
-                <span className="text-muted small">{agent.createdBy?.name || 'Unknown'}</span>
+                <span className="text-muted small">{agent.createdBy?.name || t('card.unknown')}</span>
               </div>
             )}
             {/* Last updated */}
@@ -538,9 +548,15 @@ export const AgentCard = ({
                 className="text-muted small fw-semibold"
                 style={{ fontSize: '0.75rem', minWidth: 90, flexShrink: 0 }}
               >
-                UPDATED
+                {t('card.labels.updated')}
               </span>
-              <span className="text-muted small">{formatTimestamp(agent.updatedAt)}</span>
+              <span className="text-muted small">
+                {formatTimestamp(agent.updatedAt, {
+                  today: t('card.time.today'),
+                  yesterday: t('card.time.yesterday'),
+                  daysAgo: t('card.time.daysAgo'),
+                })}
+              </span>
             </div>
           </div>
         </div>
@@ -556,38 +572,50 @@ export const AgentCard = ({
               className="flex-grow-1"
               style={{ minWidth: 80 }}
             >
-              <i className="bi bi-chat-dots me-1"></i> Chat
+              <i className="bi bi-chat-dots me-1"></i> {t('card.actions.chat')}
             </Button>
           )}
           <div className="d-flex gap-1">
             {onEdit && (
-              <OverlayTrigger placement="top" overlay={<Tooltip id={`edit-${agent.agentId}`}>Edit</Tooltip>}>
+              <OverlayTrigger
+                placement="top"
+                overlay={<Tooltip id={`edit-${agent.agentId}`}>{t('card.actions.edit')}</Tooltip>}
+              >
                 <Button variant="secondary" size="sm" onClick={() => onEdit(agent)} disabled={disabled}>
                   <i className="bi bi-pencil-square"></i>
                 </Button>
               </OverlayTrigger>
             )}
             {onDuplicate && (
-              <OverlayTrigger placement="top" overlay={<Tooltip id={`copy-${agent.agentId}`}>Duplicate</Tooltip>}>
+              <OverlayTrigger
+                placement="top"
+                overlay={<Tooltip id={`copy-${agent.agentId}`}>{t('card.actions.duplicate')}</Tooltip>}
+              >
                 <Button variant="secondary" size="sm" onClick={() => onDuplicate(agent)} disabled={disabled}>
                   <i className="bi bi-files"></i>
                 </Button>
               </OverlayTrigger>
             )}
             {/* Export JSON just to the left of Delete */}
-            <OverlayTrigger placement="top" overlay={<Tooltip id={`export-${agent.agentId}`}>Export JSON</Tooltip>}>
+            <OverlayTrigger
+              placement="top"
+              overlay={<Tooltip id={`export-${agent.agentId}`}>{t('card.actions.export')}</Tooltip>}
+            >
               <Button
                 variant="secondary"
                 size="sm"
                 onClick={handleExportClick}
                 disabled={disabled}
-                aria-label="Export agent as JSON"
+                aria-label={t('card.actions.exportAria')}
               >
                 <i className="bi bi-download"></i>
               </Button>
             </OverlayTrigger>
             {onDelete && (
-              <OverlayTrigger placement="top" overlay={<Tooltip id={`delete-${agent.agentId}`}>Delete</Tooltip>}>
+              <OverlayTrigger
+                placement="top"
+                overlay={<Tooltip id={`delete-${agent.agentId}`}>{t('card.actions.delete')}</Tooltip>}
+              >
                 <Button variant="outline-danger" size="sm" onClick={() => onDelete(agent)} disabled={disabled}>
                   <i className="bi bi-trash"></i>
                 </Button>

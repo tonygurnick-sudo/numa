@@ -1,5 +1,6 @@
 import React from 'react';
 import { Modal, Button } from 'react-bootstrap';
+import { useTranslation } from 'react-i18next';
 
 interface NotificationModalProps {
   type: 'warning' | 'error' | 'success';
@@ -25,11 +26,14 @@ export function NotificationModal({
   show,
   onHide,
   onConfirm,
-  confirmText = 'OK',
-  cancelText = 'Cancel',
+  confirmText,
+  cancelText,
   size = 'lg',
   showCancelButton = false,
 }: NotificationModalProps): React.JSX.Element {
+  const { t } = useTranslation('common');
+  const resolvedConfirmText = confirmText ?? t('common.ok');
+  const resolvedCancelText = cancelText ?? t('common.cancel');
   // Get styling based on type
   const getTypeConfig = () => {
     switch (type) {
@@ -93,11 +97,11 @@ export function NotificationModal({
       <Modal.Footer className="d-flex justify-content-start">
         {showCancelButton && (
           <Button variant="secondary" onClick={onHide} className="me-2">
-            {cancelText}
+            {resolvedCancelText}
           </Button>
         )}
         <Button variant={config.buttonVariant} onClick={handleConfirm}>
-          {confirmText}
+          {resolvedConfirmText}
         </Button>
       </Modal.Footer>
     </Modal>

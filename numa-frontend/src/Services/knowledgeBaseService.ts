@@ -2,6 +2,7 @@
  * Knowledge Base Service
  * Handles API calls for split user knowledge base management
  */
+import i18n from '../i18n';
 
 export interface KnowledgeBase {
   kb_id: string;
@@ -150,9 +151,7 @@ class KnowledgeBaseService {
           trimmed.startsWith('<!DOCTYPE') || trimmed.startsWith('<html') || trimmed.startsWith('<HTML');
 
         if (looksLikeHtml) {
-          throw new Error(
-            'Knowledge base API returned HTML. This usually means the request was routed to the web app instead of the backend API. Check your API proxy or authentication configuration.',
-          );
+          throw new Error(i18n.t('errors:knowledgeBase.htmlResponse'));
         }
 
         throw new Error(trimmed || fallbackError);
@@ -214,7 +213,10 @@ class KnowledgeBaseService {
         headers: this.getHeaders(),
       });
 
-      const data = await this.parseJsonResponse<{ kbs?: UserKB[] }>(response, 'Failed to list knowledge bases');
+      const data = await this.parseJsonResponse<{ kbs?: UserKB[] }>(
+        response,
+        i18n.t('errors:knowledgeBase.listFailed'),
+      );
       return data.kbs || [];
     } catch (error) {
       console.error('Error listing user KBs:', error);
@@ -234,7 +236,7 @@ class KnowledgeBaseService {
 
       const data = await this.parseJsonResponse<{ kb: KnowledgeBase }>(
         response,
-        'Failed to get knowledge base details',
+        i18n.t('errors:knowledgeBase.detailsFailed'),
       );
       return data.kb;
     } catch (error) {
@@ -254,7 +256,10 @@ class KnowledgeBaseService {
         body: JSON.stringify(request),
       });
 
-      const data = await this.parseJsonResponse<{ kb: KnowledgeBase }>(response, 'Failed to create KB');
+      const data = await this.parseJsonResponse<{ kb: KnowledgeBase }>(
+        response,
+        i18n.t('errors:knowledgeBase.createFailed'),
+      );
       return data.kb;
     } catch (error) {
       console.error('Error creating KB:', error);
@@ -273,7 +278,7 @@ class KnowledgeBaseService {
         body: JSON.stringify(request),
       });
 
-      await this.parseJsonResponse<Record<string, unknown>>(response, 'Failed to update KB');
+      await this.parseJsonResponse<Record<string, unknown>>(response, i18n.t('errors:knowledgeBase.updateFailed'));
     } catch (error) {
       console.error('Error updating KB:', error);
       throw error;
@@ -290,7 +295,7 @@ class KnowledgeBaseService {
         headers: this.getHeaders(),
       });
 
-      await this.parseJsonResponse<Record<string, unknown>>(response, 'Failed to delete KB');
+      await this.parseJsonResponse<Record<string, unknown>>(response, i18n.t('errors:knowledgeBase.deleteFailed'));
     } catch (error) {
       console.error('Error deleting KB:', error);
       throw error;
@@ -308,7 +313,7 @@ class KnowledgeBaseService {
         headers: this.getHeaders(),
       });
 
-      return this.parseJsonResponse<ListKBFilesResponse>(response, 'Failed to list KB files');
+      return this.parseJsonResponse<ListKBFilesResponse>(response, i18n.t('errors:knowledgeBase.listFilesFailed'));
     } catch (error) {
       console.error('Error listing KB files:', error);
       throw error;
@@ -326,7 +331,7 @@ class KnowledgeBaseService {
         headers: this.getHeaders(),
       });
 
-      return this.parseJsonResponse<KBState>(response, 'Failed to get KB state');
+      return this.parseJsonResponse<KBState>(response, i18n.t('errors:knowledgeBase.stateFailed'));
     } catch (error) {
       console.error('Error getting KB state:', error);
       throw error;

@@ -3,10 +3,12 @@ import { Breadcrumbs } from '../Components/Breadcrumbs';
 import { Nav } from '../Components/Nav';
 import { LayoutDashboard } from '../Layouts/LayoutDashboard';
 import { useContext } from 'react';
+import { useTranslation } from 'react-i18next';
 import { NicetyContext } from '../Providers/NicetyContext';
 
 export const Ian = () => {
   const niceties = useContext(NicetyContext);
+  const { t } = useTranslation('common');
 
   return (
     <div className="dashboard">
@@ -15,8 +17,8 @@ export const Ian = () => {
         <Container fluid>
           <Row>
             <Col lg={12}>
-              <Breadcrumbs items={[{ label: 'IAN', active: true }]} />
-              <h1 className="mb-0 fs-3">Initialisation of Additional Niceties</h1>
+              <Breadcrumbs items={[{ label: t('ian.breadcrumb'), active: true }]} />
+              <h1 className="mb-0 fs-3">{t('ian.title')}</h1>
             </Col>
           </Row>
         </Container>
@@ -25,7 +27,7 @@ export const Ian = () => {
         <Container fluid className="p-4">
           <h2>
             <Col lg={12}>
-              <p>Available Niceties:</p>
+              <p>{t('ian.available')}</p>
             </Col>
           </h2>
           {niceties.niceties.length > 0 ? (
@@ -52,7 +54,7 @@ export const Ian = () => {
           ) : (
             <Row>
               <Col lg={12}>
-                <p>No niceties available.</p>
+                <p>{t('ian.empty')}</p>
               </Col>
             </Row>
           )}

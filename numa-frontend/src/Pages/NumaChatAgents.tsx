@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useMemo, useCallback, type ReactNode, type
 import { Button, Alert, Modal, Collapse } from 'react-bootstrap';
 import { LambdaClient } from '@aws-sdk/client-lambda';
 import { fromWebToken } from '@aws-sdk/credential-providers';
+import { useTranslation } from 'react-i18next';
 import { useAuth } from '../Providers/AuthProvider';
 import { LayoutDashboard } from '../Layouts/LayoutDashboard';
 import { ChatHistorySidebar } from '../Components/Chat/ChatHistorySidebar';
@@ -74,6 +75,7 @@ const resolveErrorMessage = (error: unknown, fallback: string): string => {
 };
 
 const NumaChatAgents = () => {
+  const { t } = useTranslation(['chat', 'errors']);
   // Basic UI state
   const [messages, setMessages] = useState([]);
   const [inputMessage, setInputMessage] = useState('');
@@ -291,7 +293,7 @@ const NumaChatAgents = () => {
       const dataFiles = (files || [])
         .filter((file) => isDataAnalysisFile(file))
         .map((file) => ({
-          fileName: file.fileName || 'data file',
+          fileName: file.fileName || t('dataAnalysis.fileFallback'),
           fileType: file.fileType,
           s3Key: file.filePath,
         }));
@@ -749,7 +751,7 @@ const NumaChatAgents = () => {
       await startAgentSession(agent);
     } catch (error) {
       console.error('Failed to activate agent', error);
-      setAgentError((error as Error)?.message ?? 'Unable to activate agent');
+      setAgentError((error as Error)?.message ?? t('errors.activateAgentFailed'));
     }
   };
 
@@ -831,7 +833,7 @@ const NumaChatAgents = () => {
     Promise.resolve(startAgentSession(queuedPreselectedAgent))
       .catch((err) => {
         console.error('Failed to activate queued preselected agent', err);
-        setAgentError((err as Error)?.message ?? 'Unable to activate selected agent');
+        setAgentError((err as Error)?.message ?? t('errors.activateSelectedAgentFailed'));
       })
       .finally(() => setQueuedPreselectedAgent(null));
   }, [queuedPreselectedAgent, connectionsLoading]);
@@ -1013,7 +1015,7 @@ const NumaChatAgents = () => {
 
   // Handle renaming a conversation from NewChat view
   const handleRenameConversation = async (conversationId: string, currentName: string) => {
-    const newName = prompt('Enter new name for this conversation:', currentName);
+    const newName = prompt(t('history.renamePrompt'), currentName);
     if (newName === null) return; // user cancelled
     if (!numaChatDynamoUtils) {
       console.error('DynamoDB client not initialized');
@@ -1035,7 +1037,7 @@ const NumaChatAgents = () => {
   const handleDeleteConversation = async (conversationId: string) => {
     if (!numaChatDynamoUtils) return;
     // Confirm deletion with the user
-    if (!window.confirm('Are you sure you want to delete this conversation?')) {
+    if (!window.confirm(t('history.deleteConfirm'))) {
       return;
     }
     try {
@@ -1537,20 +1539,20 @@ const NumaChatAgents = () => {
                   ...updated,
                   {
                     role: 'system',
-                    content: 'Switching to backup model due to high demand. Please try your request again.',
+                    content: t('systemMessages.backupModel'),
                   },
                 ];
               });
             } else {
               // Handle other errors normally
-              const message = resolveErrorMessage(error, 'Unknown error');
+              const message = resolveErrorMessage(error, t('errors:unknown'));
               setMessages((prev) => {
                 const updated = [...prev];
                 const thinkingIndex = updated.findIndex((m) => m.status === 'thinking');
                 if (thinkingIndex >= 0) {
                   updated.splice(thinkingIndex, 1);
                 }
-                return [...updated, { role: 'system', content: `Agent error: ${message}` }];
+                return [...updated, { role: 'system', content: t('systemMessages.agentError', { message }) }];
               });
             }
 
@@ -1625,8 +1627,8 @@ const NumaChatAgents = () => {
           if (thinkingIndex >= 0) {
             updated.splice(thinkingIndex, 1);
           }
-          const message = resolveErrorMessage(agentErr, 'Unknown error');
-          return [...updated, { role: 'system', content: `Agent error: ${message}` }];
+          const message = resolveErrorMessage(agentErr, t('errors:unknown'));
+          return [...updated, { role: 'system', content: t('systemMessages.agentError', { message }) }];
         });
 
         setButtonStatus('idle');
@@ -1640,7 +1642,7 @@ const NumaChatAgents = () => {
       console.error('Full error details:', JSON.stringify(err, null, 2));
       isProcessingRef.current = false; // Reset processing flag on error
       setCurrentAbort(null); // Clear abort reference
-      const message = resolveErrorMessage(err, 'Failed to send message');
+      const message = resolveErrorMessage(err, t('errors.sendFailed'));
       const errorMsg = {
         role: 'system',
         content: `Error: ${message}. Please try again or refresh page.`,
@@ -1688,7 +1690,7 @@ const NumaChatAgents = () => {
           applyAgentConfiguration(agent);
         } catch (err) {
           console.error('Failed to hydrate agent for conversation', err);
-          setAgentError('Unable to load agent configuration for this conversation.');
+          setAgentError(t('errors.loadAgentConfigFailed'));
           resetAgentState();
         }
       } else {
@@ -1705,7 +1707,7 @@ const NumaChatAgents = () => {
       setMessages([
         {
           role: 'system',
-          content: 'Error loading conversation. Please try again or select a different conversation.',
+          content: t('systemMessages.loadConversationFailed'),
         },
       ]);
       resetAgentState();
@@ -1774,18 +1776,18 @@ const NumaChatAgents = () => {
     dataAnalysisAvailable && dataAnalysisBannerFiles && dataAnalysisBannerFiles.length > 0 ? (
       <div className="alert alert-info d-flex align-items-center justify-content-between gap-3 mx-3 mt-3">
         <div>
-          <div className="fw-semibold">Analyze uploaded data?</div>
+          <div className="fw-semibold">{t('dataAnalysisBanner.title')}</div>
           <div className="small text-muted">
-            Run Data Analysis on {dataAnalysisBannerFiles.map((f) => f.fileName).join(', ')}.
+            {t('dataAnalysisBanner.description', { files: dataAnalysisBannerFiles.map((f) => f.fileName).join(', ') })}
           </div>
-          <div className="small text-muted">This may take up to 5 minutes.</div>
+          <div className="small text-muted">{t('dataAnalysisBanner.note')}</div>
         </div>
         <div className="d-flex gap-2">
           <Button size="sm" variant="primary" onClick={handleRunDataAnalysisFromBanner}>
-            Run Data Analysis
+            {t('dataAnalysisBanner.actions.run')}
           </Button>
           <Button size="sm" variant="outline-secondary" onClick={() => setDataAnalysisBannerFiles(null)}>
-            Not now
+            {t('dataAnalysisBanner.actions.notNow')}
           </Button>
         </div>
       </div>
@@ -1872,12 +1874,12 @@ const NumaChatAgents = () => {
           recentConversations={recentConversations}
         />
       )}
-      <Button variant="secondary" onClick={toggleChatHistory} title="Chat History">
+      <Button variant="secondary" onClick={toggleChatHistory} title={t('history.title')}>
         <i className="bi bi-clock-history me-1"></i>
-        History
+        {t('page.historyButton')}
       </Button>
       <Button variant="primary" onClick={handleNewChatClick}>
-        New Chat
+        {t('page.newChat')}
       </Button>
     </>
   );
@@ -1914,7 +1916,7 @@ const NumaChatAgents = () => {
       {/* Desktop header */}
       {!isMobile && (
         <PageHeader
-          title="Numa Chat"
+          title={t('page.title')}
           actions={renderActionButtons()}
           className={shouldShowNewChatView ? 'new-chat-page-header' : ''}
         />
@@ -1929,7 +1931,7 @@ const NumaChatAgents = () => {
             onClick={() => setShowMobileActions((open) => !open)}
             aria-expanded={showMobileActions}
             aria-controls={mobileActionsPanelId}
-            aria-label={showMobileActions ? 'Hide chat actions' : 'Show chat actions'}
+            aria-label={showMobileActions ? t('page.mobileActions.hide') : t('page.mobileActions.show')}
           >
             <span className="toggle-icon">
               <i className="bi bi-plus"></i>
@@ -1973,7 +1975,7 @@ const NumaChatAgents = () => {
                       >
                         {formatAgentDisplayName(currentAgent.title)}
                       </div>
-                      <div className="small text-muted">AI Agent Assistant</div>
+                      <div className="small text-muted">{t('page.agentAssistant')}</div>
                     </div>
                   </div>
                 )}
@@ -1981,12 +1983,10 @@ const NumaChatAgents = () => {
                 {/* Missing integrations confirmation modal */}
                 <Modal show={!!missingConfirm} onHide={() => setMissingConfirm(null)} centered>
                   <Modal.Header closeButton>
-                    <Modal.Title>Missing integrations</Modal.Title>
+                    <Modal.Title>{t('page.missingIntegrations.title')}</Modal.Title>
                   </Modal.Header>
                   <Modal.Body>
-                    <p className="mb-3">
-                      This agent requests access to the following integrations which are not connected for your account:
-                    </p>
+                    <p className="mb-3">{t('page.missingIntegrations.body')}</p>
                     <div className="d-flex flex-column gap-2 mb-3">
                       {missingConfirm?.missing.map((id) => {
                         const config = getConnectionConfig(id);
@@ -2015,19 +2015,16 @@ const NumaChatAgents = () => {
                         );
                       })}
                     </div>
-                    <p className="mb-0 text-muted small">
-                      Continuing may result in limited or unintended behavior. You can connect integrations now from the
-                      Integrations page and try again.
-                    </p>
+                    <p className="mb-0 text-muted small">{t('page.missingIntegrations.note')}</p>
                   </Modal.Body>
                   <Modal.Footer>
                     <Button variant="outline-secondary" onClick={() => setMissingConfirm(null)} className="me-auto">
                       <i className="bi bi-arrow-left me-2"></i>
-                      Back
+                      {t('page.missingIntegrations.back')}
                     </Button>
                     <a className="btn btn-outline-primary" href="/integrations">
                       <i className="bi bi-link-45deg me-2"></i>
-                      Go to Integrations
+                      {t('page.missingIntegrations.goToIntegrations')}
                     </a>
                     <Button
                       variant="primary"
@@ -2037,7 +2034,7 @@ const NumaChatAgents = () => {
                         if (info) await doStartAgentSession(info.agent, info.missing);
                       }}
                     >
-                      Continue without
+                      {t('page.missingIntegrations.continueWithout')}
                     </Button>
                   </Modal.Footer>
                 </Modal>
@@ -2058,9 +2055,9 @@ const NumaChatAgents = () => {
                             <div className="d-flex justify-content-center align-items-center h-100">
                               <div className="text-center">
                                 <div className="spinner-border text-primary" role="status">
-                                  <span className="visually-hidden">Loading...</span>
+                                  <span className="visually-hidden">{t('page.loading')}</span>
                                 </div>
-                                <p className="mt-2 text-muted">Loading conversation...</p>
+                                <p className="mt-2 text-muted">{t('page.loadingConversation')}</p>
                               </div>
                             </div>
                           ) : shouldShowNewChatView ? (
@@ -2197,7 +2194,7 @@ const NumaChatAgents = () => {
         dialogClassName="document-modal"
       >
         <Modal.Header closeButton>
-          <Modal.Title>{inlineDocument?.title || 'Document'}</Modal.Title>
+          <Modal.Title>{inlineDocument?.title || t('page.documentTitle')}</Modal.Title>
         </Modal.Header>
         <Modal.Body>
           <div className="message-content markdown-content">
@@ -2207,7 +2204,7 @@ const NumaChatAgents = () => {
         {inlineDocument?.content ? (
           <Modal.Footer>
             <div className="flex-grow-1">
-              <ResultActions content={inlineDocument.content} title={inlineDocument.title || 'Document'} />
+              <ResultActions content={inlineDocument.content} title={inlineDocument.title || t('page.documentTitle')} />
             </div>
           </Modal.Footer>
         ) : null}

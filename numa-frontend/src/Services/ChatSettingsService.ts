@@ -3,6 +3,7 @@
  *
  * Settings are stored per-user in DynamoDB and loaded when starting a new conversation.
  */
+import i18n from '../i18n';
 
 export type ChatSettings = {
   defaultKBIds: string[];
@@ -128,7 +129,7 @@ export const ChatSettingsService = {
 
     if (!resp.ok) {
       const text = await resp.text();
-      throw new Error(text || 'Failed to update chat settings');
+      throw new Error(text || i18n.t('errors:chatSettings.updateFailed'));
     }
   },
 

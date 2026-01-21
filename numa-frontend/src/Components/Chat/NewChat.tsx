@@ -2,6 +2,8 @@ import type React from 'react'; // for React.DragEvent types
 import { Button, Spinner, OverlayTrigger, Tooltip, Nav } from 'react-bootstrap';
 import { Dispatch, SetStateAction, RefObject, useEffect, useRef, useState } from 'react';
 import type { FormEvent, MouseEvent } from 'react';
+import { useTranslation } from 'react-i18next';
+import i18n from '../../i18n';
 import { ChatInput } from './ChatInput';
 import { ChatSettingsPanel } from './ChatSettingsPanel';
 import type { ConversationMeta } from '../../hooks/useChatInactivity';
@@ -97,6 +99,7 @@ const ConversationAvatar = ({
     agentTitle?: string | null;
   };
 }) => {
+  const { t } = useTranslation('chat');
   const { agent } = useAgentById(convo.agentId || undefined);
   if (convo.isAgentConversation) {
     return (
@@ -105,32 +108,11 @@ const ConversationAvatar = ({
         icon={convo.agentIcon || undefined}
         size={32}
         rounded={true}
-        alt={convo.agentTitle || 'Agent'}
+        alt={convo.agentTitle || t('newChat.agentFallback')}
       />
     );
   }
   return <i className="bi bi-clock-history" style={{ fontSize: '1rem', color: '#6c757d' }} />;
-};
-
-const getTimeBasedGreeting = () => {
-  const hour = new Date().getHours();
-  if (hour < 12) return 'Good morning';
-  if (hour < 18) return 'Good afternoon';
-  return 'Good evening';
-};
-
-const formatRelativeTime = (timestamp: number) => {
-  const now = Date.now();
-  const diff = now - timestamp;
-  const minutes = Math.floor(diff / 60000);
-  const hours = Math.floor(diff / 3600000);
-  const days = Math.floor(diff / 86400000);
-  if (minutes < 1) return 'Just now';
-  if (minutes < 60) return `${minutes}m ago`;
-  if (hours < 24) return `${hours}h ago`;
-  if (days === 1) return 'Yesterday';
-  if (days < 7) return `${days}d ago`;
-  return new Date(timestamp).toLocaleDateString();
 };
 
 const formatUserName = (name?: string) => {
@@ -186,6 +168,7 @@ export const NewChat = ({
   agentsFeatureEnabled = false,
   dataAnalysisBanner,
 }: NewChatProps) => {
+  const { t } = useTranslation('chat');
   // ------- Mobile detection and tab state -------
   const [isMobile, setIsMobile] = useState(() => (typeof window !== 'undefined' ? window.innerWidth <= 768 : false));
   const [activeTab, setActiveTab] = useState<'settings' | 'history'>('settings');
@@ -346,7 +329,7 @@ export const NewChat = ({
   const { branding } = useBranding();
   const rawLogoSrc = branding.resolvedAssets?.logoNav || branding.assets?.logoNav || branding.logo || numaIcon;
   const logoSrc = useBrandingAsset(rawLogoSrc, numaIcon);
-  const logoAlt = branding.name || 'Logo';
+  const logoAlt = branding.name || t('newChat.logoAltFallback');
   const handleContinueClick = (conversationId: string) => {
     hideSuggestions();
     onContinueConversation(conversationId);
@@ -363,7 +346,29 @@ export const NewChat = ({
   };
 
   const formattedName = formatUserName(userName);
-  const greeting = formattedName ? `${getTimeBasedGreeting()}, ${formattedName}` : getTimeBasedGreeting();
+  const getTimeBasedGreeting = () => {
+    const hour = new Date().getHours();
+    if (hour < 12) return t('newChat.greeting.morning');
+    if (hour < 18) return t('newChat.greeting.afternoon');
+    return t('newChat.greeting.evening');
+  };
+  const greetingBase = getTimeBasedGreeting();
+  const greeting = formattedName
+    ? t('newChat.greeting.withName', { greeting: greetingBase, name: formattedName })
+    : greetingBase;
+  const formatRelativeTime = (timestamp: number) => {
+    const now = Date.now();
+    const diff = now - timestamp;
+    const minutes = Math.floor(diff / 60000);
+    const hours = Math.floor(diff / 3600000);
+    const days = Math.floor(diff / 86400000);
+    if (minutes < 1) return t('newChat.relativeTime.justNow');
+    if (minutes < 60) return t('newChat.relativeTime.minutesAgo', { count: minutes });
+    if (hours < 24) return t('newChat.relativeTime.hoursAgo', { count: hours });
+    if (days === 1) return t('newChat.relativeTime.yesterday');
+    if (days < 7) return t('newChat.relativeTime.daysAgo', { count: days });
+    return new Date(timestamp).toLocaleDateString(i18n.language);
+  };
 
   return (
     <div
@@ -407,7 +412,7 @@ export const NewChat = ({
           noToolsActive={noToolsActive}
           externalInputRef={inputRef}
           autoFocus={true}
-          placeholderOverride={'How can I help you today?'}
+          placeholderOverride={t('newChat.placeholder')}
           // Multi‑KB selection forwarded from parent when provided
           enabledKBIds={enabledKBIds || []}
           setEnabledKBIds={setEnabledKBIds}
@@ -431,7 +436,7 @@ export const NewChat = ({
           {_agentsLoading ? (
             <div className="d-flex justify-content-center align-items-center" style={{ minHeight: 80 }}>
               <Spinner animation="border" role="status" size="sm" style={{ color: 'var(--brand-primary, #4b007d)' }}>
-                <span className="visually-hidden">Loading agents...</span>
+                <span className="visually-hidden">{t('newChat.loadingAgents')}</span>
               </Spinner>
             </div>
           ) : (
@@ -523,7 +528,7 @@ export const NewChat = ({
             }}
           >
             <div className="history-inner">
-              <div className="suggestions-header static-header">Continue where you left off</div>
+              <div className="suggestions-header static-header">{t('newChat.continue')}</div>
             </div>
             {suggestionsLoading ? (
               <div
@@ -531,7 +536,7 @@ export const NewChat = ({
                 style={{ minHeight: 100, animation: 'fadeIn 0.3s ease-in-out' }}
               >
                 <Spinner animation="border" role="status" size="sm" style={{ color: 'var(--brand-primary, #4b007d)' }}>
-                  <span className="visually-hidden">Loading recent conversations...</span>
+                  <span className="visually-hidden">{t('newChat.loadingRecent')}</span>
                 </Spinner>
               </div>
             ) : recentConversations.length > 0 ? (
@@ -570,7 +575,7 @@ export const NewChat = ({
                       <ConversationAvatar convo={convo} />
                       <div style={{ flex: 1, overflow: 'hidden' }}>
                         <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {convo.conversationName || 'Untitled Chat'}
+                          {convo.conversationName || t('newChat.untitled')}
                         </div>
                         <div style={{ fontSize: '0.75rem', color: '#6c757d', marginTop: '0.2rem' }}>
                           {convo.isAgentConversation && convo.agentTitle
@@ -586,15 +591,21 @@ export const NewChat = ({
                           {onRenameConversation && (
                             <OverlayTrigger
                               placement="left"
-                              overlay={<Tooltip id={`rename-${convo.conversation_id}`}>Rename</Tooltip>}
+                              overlay={
+                                <Tooltip id={`rename-${convo.conversation_id}`}>{t('newChat.renameTooltip')}</Tooltip>
+                              }
                             >
                               <Button
                                 variant="link"
                                 size="sm"
                                 className="p-0 text-secondary"
-                                aria-label="Rename conversation"
+                                aria-label={t('newChat.renameAria')}
                                 onClick={(e) =>
-                                  handleRename(e, convo.conversation_id, convo.conversationName || 'Untitled Chat')
+                                  handleRename(
+                                    e,
+                                    convo.conversation_id,
+                                    convo.conversationName || t('newChat.untitled'),
+                                  )
                                 }
                                 style={{ lineHeight: 1 }}
                               >
@@ -605,13 +616,15 @@ export const NewChat = ({
                           {onDeleteConversation && (
                             <OverlayTrigger
                               placement="left"
-                              overlay={<Tooltip id={`delete-${convo.conversation_id}`}>Delete</Tooltip>}
+                              overlay={
+                                <Tooltip id={`delete-${convo.conversation_id}`}>{t('newChat.deleteTooltip')}</Tooltip>
+                              }
                             >
                               <Button
                                 variant="link"
                                 size="sm"
                                 className="p-0 text-danger"
-                                aria-label="Delete conversation"
+                                aria-label={t('newChat.deleteAria')}
                                 onClick={(e) => handleDelete(e, convo.conversation_id)}
                                 style={{ lineHeight: 1 }}
                               >
@@ -627,7 +640,7 @@ export const NewChat = ({
               </div>
             ) : (
               <div className="d-flex align-items-center justify-content-center history-scroll">
-                <div className="text-muted text-center py-3">No recent conversations</div>
+                <div className="text-muted text-center py-3">{t('newChat.noRecent')}</div>
               </div>
             )}
           </div>
@@ -647,7 +660,7 @@ export const NewChat = ({
                     onClick={() => setActiveTab('settings')}
                     className="new-chat-tab-link"
                   >
-                    <i className="bi bi-sliders me-1" /> Settings
+                    <i className="bi bi-sliders me-1" /> {t('newChat.tabs.settings')}
                   </Nav.Link>
                 </Nav.Item>
                 <Nav.Item>
@@ -656,7 +669,7 @@ export const NewChat = ({
                     onClick={() => setActiveTab('history')}
                     className="new-chat-tab-link"
                   >
-                    <i className="bi bi-clock-history me-1" /> History
+                    <i className="bi bi-clock-history me-1" /> {t('newChat.tabs.history')}
                     {recentConversations.length > 0 && (
                       <span className="badge bg-secondary ms-1">{recentConversations.length}</span>
                     )}
@@ -684,11 +697,11 @@ export const NewChat = ({
         return (
           <div className="new-chat-desktop-layout">
             <div className="new-chat-desktop-column settings-column">
-              <div className="suggestions-header static-header mb-2">Chat Settings</div>
+              <div className="suggestions-header static-header mb-2">{t('newChat.chatSettings')}</div>
               <div className="new-chat-desktop-scroll">{settingsPanelContent}</div>
             </div>
             <div className="new-chat-desktop-column history-column">
-              <div className="suggestions-header static-header mb-2">Continue where you left off</div>
+              <div className="suggestions-header static-header mb-2">{t('newChat.continue')}</div>
               <div className="new-chat-desktop-scroll conversation-suggestions">
                 {suggestionsLoading ? (
                   <div
@@ -701,7 +714,7 @@ export const NewChat = ({
                       size="sm"
                       style={{ color: 'var(--brand-primary, #4b007d)' }}
                     >
-                      <span className="visually-hidden">Loading recent conversations...</span>
+                      <span className="visually-hidden">{t('newChat.loadingRecent')}</span>
                     </Spinner>
                   </div>
                 ) : recentConversations.length > 0 ? (
@@ -739,7 +752,7 @@ export const NewChat = ({
                         <ConversationAvatar convo={convo} />
                         <div style={{ flex: 1, overflow: 'hidden' }}>
                           <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                            {convo.conversationName || 'Untitled Chat'}
+                            {convo.conversationName || t('newChat.untitled')}
                           </div>
                           <div style={{ fontSize: '0.75rem', color: '#6c757d', marginTop: '0.2rem' }}>
                             {convo.isAgentConversation && convo.agentTitle
@@ -755,15 +768,21 @@ export const NewChat = ({
                             {onRenameConversation && (
                               <OverlayTrigger
                                 placement="left"
-                                overlay={<Tooltip id={`rename-${convo.conversation_id}`}>Rename</Tooltip>}
+                                overlay={
+                                  <Tooltip id={`rename-${convo.conversation_id}`}>{t('newChat.renameTooltip')}</Tooltip>
+                                }
                               >
                                 <Button
                                   variant="link"
                                   size="sm"
                                   className="p-0 text-secondary"
-                                  aria-label="Rename conversation"
+                                  aria-label={t('newChat.renameAria')}
                                   onClick={(e) =>
-                                    handleRename(e, convo.conversation_id, convo.conversationName || 'Untitled Chat')
+                                    handleRename(
+                                      e,
+                                      convo.conversation_id,
+                                      convo.conversationName || t('newChat.untitled'),
+                                    )
                                   }
                                   style={{ lineHeight: 1 }}
                                 >
@@ -774,13 +793,15 @@ export const NewChat = ({
                             {onDeleteConversation && (
                               <OverlayTrigger
                                 placement="left"
-                                overlay={<Tooltip id={`delete-${convo.conversation_id}`}>Delete</Tooltip>}
+                                overlay={
+                                  <Tooltip id={`delete-${convo.conversation_id}`}>{t('newChat.deleteTooltip')}</Tooltip>
+                                }
                               >
                                 <Button
                                   variant="link"
                                   size="sm"
                                   className="p-0 text-danger"
-                                  aria-label="Delete conversation"
+                                  aria-label={t('newChat.deleteAria')}
                                   onClick={(e) => handleDelete(e, convo.conversation_id)}
                                   style={{ lineHeight: 1 }}
                                 >
@@ -794,7 +815,7 @@ export const NewChat = ({
                     ))}
                   </div>
                 ) : (
-                  <div className="text-muted text-center py-3">No recent conversations</div>
+                  <div className="text-muted text-center py-3">{t('newChat.noRecent')}</div>
                 )}
               </div>
             </div>

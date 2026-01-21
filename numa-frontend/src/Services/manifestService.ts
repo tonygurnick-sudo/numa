@@ -1,3 +1,5 @@
+import i18n from '../i18n';
+
 let manifestCache = null;
 let lastFetchTime = 0;
 const CACHE_DURATION = 300000; // 5 minutes
@@ -20,14 +22,14 @@ export const manifestService = {
       });
 
       if (!response.ok) {
-        throw new Error('Failed to fetch manifest');
+        throw new Error(i18n.t('errors:manifest.fetchFailed'));
       }
 
       const data = await response.json();
       const appsData = data.apps;
 
       if (!Array.isArray(appsData)) {
-        throw new Error('Data must be an array');
+        throw new Error(i18n.t('errors:manifest.invalidData'));
       }
 
       // Check if the data has actually changed
@@ -57,7 +59,7 @@ export const manifestService = {
       const apps = await manifestService.fetchAppsFromManifest();
       const app = apps.find((app) => app.id === appId);
       if (!app) {
-        throw new Error(`App with ID ${appId} not found`);
+        throw new Error(i18n.t('errors:manifest.appNotFound', { appId }));
       }
       return app;
     } catch (error) {

@@ -5,6 +5,7 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Dropdown, Badge, Spinner } from 'react-bootstrap';
+import { useTranslation } from 'react-i18next';
 import { useKnowledgeBase } from '../Providers/KnowledgeBaseProvider';
 import { createPortal } from 'react-dom';
 
@@ -17,6 +18,7 @@ export function KnowledgeBaseSelector({
   variant = 'default',
   className = '',
 }: KnowledgeBaseSelectorProps): React.JSX.Element {
+  const { t } = useTranslation('knowledgeBase');
   const { selectedKB, availableKBs, isLoadingKBs, selectKBById, refreshKBs } = useKnowledgeBase();
 
   const handleToggle = useCallback(
@@ -56,7 +58,7 @@ export function KnowledgeBaseSelector({
     return (
       <div className={`kb-selector-loading ${className}`}>
         <Spinner animation="border" size="sm" />
-        <span className="ms-2">Loading KBs...</span>
+        <span className="ms-2">{t('selector.loadingMessage')}</span>
       </div>
     );
   }
@@ -66,7 +68,7 @@ export function KnowledgeBaseSelector({
       {!isCompact && (
         <label className="kb-selector-label">
           <i className="bi bi-database me-1"></i>
-          Knowledge Base:
+          {t('selector.label')}
         </label>
       )}
       <Dropdown className="kb-selector-dropdown" onToggle={handleToggle}>
@@ -78,15 +80,15 @@ export function KnowledgeBaseSelector({
               {selectedKB.kb_name}
               {selectedKB.kb_id === 'company' && (
                 <Badge bg="info" className="ms-2">
-                  Default
+                  {t('selector.defaultBadge')}
                 </Badge>
               )}
               <Badge bg="secondary" className="ms-2">
-                {selectedKB.role}
+                {t(`roles.${selectedKB.role.toLowerCase()}`)}
               </Badge>
             </>
           ) : (
-            <span className="text-muted">Select KB</span>
+            <span className="text-muted">{t('selector.selectPlaceholder')}</span>
           )}
         </Dropdown.Toggle>
 
@@ -99,9 +101,9 @@ export function KnowledgeBaseSelector({
             ],
           }}
         >
-          <Dropdown.Header>Your Knowledge Bases</Dropdown.Header>
+          <Dropdown.Header>{t('selector.header')}</Dropdown.Header>
           {availableKBs.length === 0 ? (
-            <Dropdown.Item disabled>No KBs available</Dropdown.Item>
+            <Dropdown.Item disabled>{t('selector.empty')}</Dropdown.Item>
           ) : (
             availableKBs.map((kb) => (
               <Dropdown.Item
@@ -115,11 +117,11 @@ export function KnowledgeBaseSelector({
                     {kb.kb_name}
                     {kb.kb_id === 'company' && (
                       <Badge bg="info" className="ms-2">
-                        Default
+                        {t('selector.defaultBadge')}
                       </Badge>
                     )}
                   </div>
-                  <Badge bg="secondary">{kb.role}</Badge>
+                  <Badge bg="secondary">{t(`roles.${kb.role.toLowerCase()}`)}</Badge>
                 </div>
               </Dropdown.Item>
             ))
@@ -127,7 +129,7 @@ export function KnowledgeBaseSelector({
           <Dropdown.Divider />
           <Dropdown.Item onClick={() => refreshKBs()}>
             <i className="bi bi-arrow-clockwise me-2"></i>
-            Refresh
+            {t('selector.refresh')}
           </Dropdown.Item>
         </Dropdown.Menu>
       </Dropdown>

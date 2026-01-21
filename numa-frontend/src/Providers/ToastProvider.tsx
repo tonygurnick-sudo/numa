@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Toast, ToastContainer } from 'react-bootstrap';
+import { useTranslation } from 'react-i18next';
 import { ToastContext } from './ToastContext';
 
 export type ToastVariant = 'success' | 'error' | 'info' | 'warning';
@@ -60,17 +61,11 @@ const VARIANT_STYLES: Record<ToastVariant, VariantStyle> = {
   },
 };
 
-const VARIANT_TITLES: Record<ToastVariant, string> = {
-  success: 'Success',
-  info: 'Notice',
-  warning: 'Warning',
-  error: 'Error',
-};
-
 let idCounter = 0;
 
 export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [toasts, setToasts] = useState<ToastRecord[]>([]);
+  const { t } = useTranslation('common');
 
   const dismissToast = useCallback((id: number) => {
     setToasts((prev) => prev.filter((toast) => toast.id !== id));
@@ -132,7 +127,7 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                     borderColor: style.border,
                   }}
                 >
-                  <strong className="me-auto">{toast.title ?? VARIANT_TITLES[toast.variant]}</strong>
+                  <strong className="me-auto">{toast.title ?? t(`toast.titles.${toast.variant}`)}</strong>
                 </Toast.Header>
                 <Toast.Body style={{ color: style.text }}>{toast.message}</Toast.Body>
               </Toast>

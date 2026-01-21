@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
 import { Modal, Button, Alert, Badge, Row, Col, Form } from 'react-bootstrap';
+import { useTranslation } from 'react-i18next';
+import i18n from '../../i18n';
 
 export interface User {
   username: string;
@@ -31,6 +33,7 @@ export function UserDetailsModal({
   onDemoteFromAdmin,
   onDeleteUser,
 }: UserDetailsModalProps): React.JSX.Element {
+  const { t } = useTranslation('userManagement');
   const [view, setView] = useState<ModalView>('details');
   const [isProcessing, setIsProcessing] = useState(false);
 
@@ -85,22 +88,22 @@ export function UserDetailsModal({
   const renderDetailsView = () => (
     <>
       <Modal.Header closeButton={!isProcessing}>
-        <Modal.Title>User Details</Modal.Title>
+        <Modal.Title>{t('details.title')}</Modal.Title>
       </Modal.Header>
       <Modal.Body>
         <div className="mb-4">
           <Row className="mb-3">
             <Col sm={4} className="text-muted">
-              Email
+              {t('details.fields.email')}
             </Col>
             <Col sm={8}>
               <strong>{user.email}</strong>
-              {isSystemUser && <small className="ms-2 text-muted fst-italic">(System)</small>}
+              {isSystemUser && <small className="ms-2 text-muted fst-italic">{t('details.systemBadge')}</small>}
             </Col>
           </Row>
           <Row className="mb-3">
             <Col sm={4} className="text-muted">
-              Status
+              {t('details.fields.status')}
             </Col>
             <Col sm={8}>
               <Badge bg={user.enabled ? (user.status === 'CONFIRMED' ? 'success' : 'warning') : 'danger'}>
@@ -110,18 +113,20 @@ export function UserDetailsModal({
           </Row>
           <Row className="mb-3">
             <Col sm={4} className="text-muted">
-              Account
+              {t('details.fields.account')}
             </Col>
             <Col sm={8}>
-              <Badge bg={user.enabled ? 'success' : 'danger'}>{user.enabled ? 'Enabled' : 'Disabled'}</Badge>
+              <Badge bg={user.enabled ? 'success' : 'danger'}>
+                {user.enabled ? t('details.account.enabled') : t('details.account.disabled')}
+              </Badge>
             </Col>
           </Row>
           <Row className="mb-3">
             <Col sm={4} className="text-muted">
-              Created
+              {t('details.fields.created')}
             </Col>
             <Col sm={8}>
-              {new Date(user.created).toLocaleDateString('en-US', {
+              {new Date(user.created).toLocaleDateString(i18n.language, {
                 year: 'numeric',
                 month: 'long',
                 day: 'numeric',
@@ -133,21 +138,19 @@ export function UserDetailsModal({
         {!isSystemUser && !isCurrentUser && (
           <>
             <hr />
-            <h6 className="mb-3">Permissions</h6>
+            <h6 className="mb-3">{t('details.permissions.title')}</h6>
             <Form.Group className="mb-3">
-              <Form.Label>Role</Form.Label>
+              <Form.Label>{t('details.permissions.roleLabel')}</Form.Label>
               <Form.Select
                 value={isAdmin ? 'admin' : 'standard'}
                 onChange={(e) => handleRoleChange(e.target.value)}
                 disabled={isProcessing}
               >
-                <option value="standard">Standard</option>
-                <option value="admin">Admin</option>
+                <option value="standard">{t('roles.standard')}</option>
+                <option value="admin">{t('roles.admin')}</option>
               </Form.Select>
               <Form.Text className="text-muted">
-                {isAdmin
-                  ? 'Admin users can manage users, upload documents, and configure system settings.'
-                  : 'Standard users can use Numa chat and apps but cannot manage the system.'}
+                {isAdmin ? t('details.permissions.descriptions.admin') : t('details.permissions.descriptions.standard')}
               </Form.Text>
             </Form.Group>
           </>
@@ -155,13 +158,13 @@ export function UserDetailsModal({
 
         {isCurrentUser && (
           <Alert variant="info" className="mb-0">
-            This is your account. You cannot modify your own permissions.
+            {t('details.currentUserNotice')}
           </Alert>
         )}
 
         {isSystemUser && (
           <Alert variant="secondary" className="mb-0">
-            System users cannot be modified.
+            {t('details.systemUserNotice')}
           </Alert>
         )}
       </Modal.Body>
@@ -173,20 +176,20 @@ export function UserDetailsModal({
                 variant="secondary"
                 onClick={() => {
                   // Show admin deletion warning
-                  alert('Administrator accounts cannot be deleted directly. Please demote the user to Standard first.');
+                  alert(t('details.adminDeleteBlocked'));
                 }}
               >
-                Delete User
+                {t('actions.deleteUser')}
               </Button>
             ) : (
               <Button variant="danger" onClick={() => setView('delete')} disabled={isProcessing}>
-                Delete User
+                {t('actions.deleteUser')}
               </Button>
             )}
           </>
         )}
         <Button variant="primary" onClick={handleClose} disabled={isProcessing}>
-          Close
+          {t('actions.close')}
         </Button>
       </Modal.Footer>
     </>
@@ -195,56 +198,54 @@ export function UserDetailsModal({
   const renderPromoteView = () => (
     <>
       <Modal.Header closeButton={!isProcessing}>
-        <Modal.Title>Grant Administrator Privileges</Modal.Title>
+        <Modal.Title>{t('promote.title')}</Modal.Title>
       </Modal.Header>
       <Modal.Body>
         <Alert variant="warning" className="mb-4">
-          <Alert.Heading className="h6">Important: Administrator Access</Alert.Heading>
-          You are about to grant administrator privileges to <strong>{user.email}</strong>. Please review the
-          permissions this will provide before proceeding.
+          <Alert.Heading className="h6">{t('promote.warningTitle')}</Alert.Heading>
+          {t('promote.warningBodyPrefix')} <strong>{user.email}</strong> {t('promote.warningBodySuffix')}
         </Alert>
 
-        <h6 className="mb-3">Administrator privileges include:</h6>
+        <h6 className="mb-3">{t('promote.privilegesTitle')}</h6>
         <Row>
           <Col md={6}>
-            <h6 className="text-primary mb-2">User Management</h6>
+            <h6 className="text-primary mb-2">{t('promote.sections.userManagement')}</h6>
             <ul className="small mb-3">
-              <li>Create new user accounts</li>
-              <li>Delete existing users</li>
-              <li>Promote/demote other users to admin</li>
-              <li>View all user information</li>
+              <li>{t('promote.bullets.userManagement.create')}</li>
+              <li>{t('promote.bullets.userManagement.delete')}</li>
+              <li>{t('promote.bullets.userManagement.roleChanges')}</li>
+              <li>{t('promote.bullets.userManagement.view')}</li>
             </ul>
 
-            <h6 className="text-primary mb-2">Data Management</h6>
+            <h6 className="text-primary mb-2">{t('promote.sections.dataManagement')}</h6>
             <ul className="small mb-3">
-              <li>Upload company documents</li>
-              <li>Delete company files</li>
-              <li>Manage data sources</li>
-              <li>Configure document indexing</li>
+              <li>{t('promote.bullets.dataManagement.upload')}</li>
+              <li>{t('promote.bullets.dataManagement.delete')}</li>
+              <li>{t('promote.bullets.dataManagement.sources')}</li>
+              <li>{t('promote.bullets.dataManagement.indexing')}</li>
             </ul>
           </Col>
           <Col md={6}>
-            <h6 className="text-primary mb-2">System Configuration</h6>
+            <h6 className="text-primary mb-2">{t('promote.sections.systemConfiguration')}</h6>
             <ul className="small mb-3">
-              <li>Modify system settings</li>
-              <li>Configure integrations</li>
-              <li>Access administrative tools</li>
-              <li>View system logs and metrics</li>
+              <li>{t('promote.bullets.systemConfiguration.settings')}</li>
+              <li>{t('promote.bullets.systemConfiguration.integrations')}</li>
+              <li>{t('promote.bullets.systemConfiguration.tools')}</li>
+              <li>{t('promote.bullets.systemConfiguration.logs')}</li>
             </ul>
           </Col>
         </Row>
 
         <Alert variant="info" className="mt-3">
-          <strong>Note:</strong> Administrators have significant control over the system and can access all company
-          data. Only grant these privileges to trusted team members who need administrative access.
+          <strong>{t('promote.noteLabel')}</strong> {t('promote.noteBody')}
         </Alert>
       </Modal.Body>
       <Modal.Footer>
         <Button variant="secondary" onClick={() => setView('details')} disabled={isProcessing}>
-          Cancel
+          {t('actions.cancel')}
         </Button>
         <Button variant="primary" onClick={confirmPromotion} disabled={isProcessing}>
-          {isProcessing ? 'Granting Access...' : 'Yes, Grant Admin Access'}
+          {isProcessing ? t('promote.granting') : t('promote.confirm')}
         </Button>
       </Modal.Footer>
     </>
@@ -253,59 +254,58 @@ export function UserDetailsModal({
   const renderDeleteView = () => (
     <>
       <Modal.Header closeButton={!isProcessing}>
-        <Modal.Title>Delete User Account</Modal.Title>
+        <Modal.Title>{t('delete.title')}</Modal.Title>
       </Modal.Header>
       <Modal.Body>
         <Alert variant="danger" className="mb-4">
-          <Alert.Heading className="h6">Warning: Permanent Account Deletion</Alert.Heading>
-          You are about to permanently delete the user account for <strong>{user.email}</strong>. This action cannot be
-          undone.
+          <Alert.Heading className="h6">{t('delete.warningTitle')}</Alert.Heading>
+          {t('delete.warningBodyPrefix')} <strong>{user.email}</strong> {t('delete.warningBodySuffix')}
         </Alert>
 
-        <h6 className="mb-3">What will happen when you delete this user:</h6>
+        <h6 className="mb-3">{t('delete.effectsTitle')}</h6>
         <Row>
           <Col md={6}>
-            <h6 className="text-danger mb-2">Account Access</h6>
+            <h6 className="text-danger mb-2">{t('delete.sections.accountAccess')}</h6>
             <ul className="small mb-3">
-              <li>User will immediately lose access to Numa</li>
-              <li>All login credentials will be revoked</li>
-              <li>User cannot log in or recover their account</li>
+              <li>{t('delete.bullets.accountAccess.loseAccess')}</li>
+              <li>{t('delete.bullets.accountAccess.credentials')}</li>
+              <li>{t('delete.bullets.accountAccess.recovery')}</li>
             </ul>
 
-            <h6 className="text-danger mb-2">Data Impact</h6>
+            <h6 className="text-danger mb-2">{t('delete.sections.dataImpact')}</h6>
             <ul className="small mb-3">
-              <li>Chat history will be preserved, but inaccessible to the user</li>
-              <li>User activity logs will remain</li>
-              <li>Uploaded documents will not be affected</li>
+              <li>{t('delete.bullets.dataImpact.chatHistory')}</li>
+              <li>{t('delete.bullets.dataImpact.activityLogs')}</li>
+              <li>{t('delete.bullets.dataImpact.uploads')}</li>
             </ul>
           </Col>
           <Col md={6}>
-            <h6 className="text-warning mb-2">Immediate Effects</h6>
+            <h6 className="text-warning mb-2">{t('delete.sections.immediateEffects')}</h6>
             <ul className="small mb-3">
-              <li>User removed from all groups</li>
-              <li>All active sessions terminated</li>
-              <li>Account appears as &quot;deleted&quot; in audit logs</li>
+              <li>{t('delete.bullets.immediateEffects.groups')}</li>
+              <li>{t('delete.bullets.immediateEffects.sessions')}</li>
+              <li>{t('delete.bullets.immediateEffects.audit')}</li>
             </ul>
 
-            <h6 className="text-info mb-2">Recovery Options</h6>
+            <h6 className="text-info mb-2">{t('delete.sections.recoveryOptions')}</h6>
             <ul className="small mb-3">
-              <li>Account cannot be restored</li>
-              <li>Must create a new account with same email</li>
-              <li>Previous permissions will not be restored</li>
+              <li>{t('delete.bullets.recoveryOptions.restore')}</li>
+              <li>{t('delete.bullets.recoveryOptions.newAccount')}</li>
+              <li>{t('delete.bullets.recoveryOptions.permissions')}</li>
             </ul>
           </Col>
         </Row>
 
         <Alert variant="warning" className="mt-3">
-          <strong>Before deleting:</strong> Account deletion is permanent and irreversible.
+          <strong>{t('delete.beforeLabel')}</strong> {t('delete.beforeBody')}
         </Alert>
       </Modal.Body>
       <Modal.Footer>
         <Button variant="secondary" onClick={() => setView('details')} disabled={isProcessing}>
-          Cancel
+          {t('actions.cancel')}
         </Button>
         <Button variant="danger" onClick={confirmDelete} disabled={isProcessing}>
-          {isProcessing ? 'Deleting Account...' : 'Yes, Delete Account'}
+          {isProcessing ? t('delete.deleting') : t('delete.confirm')}
         </Button>
       </Modal.Footer>
     </>

@@ -13,6 +13,7 @@ import { useNumaRequest } from './NumaRequestContext';
 import { GetObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { withPRM } from '../utils/prmUtils';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+import i18n from '../i18n';
 import {
   NumaAppContext,
   createPayloadFromTemplate,
@@ -308,7 +309,7 @@ export const NumaAppProvider = ({ children }) => {
 
     // If the upload is required and we don't have valid files, throw an error
     if (isRequired && !isValidUpload) {
-      throw new Error('No file uploaded');
+      throw new Error(i18n.t('apps:errors.noFileUploaded'));
     }
 
     // For non-required uploads with no file or invalid uploads, handle appropriately
@@ -368,7 +369,7 @@ export const NumaAppProvider = ({ children }) => {
       const response = await numaPost(request_endpoint, requestPayload);
 
       if (!response || !response.job_id) {
-        throw new Error('No job ID received from initial request');
+        throw new Error(i18n.t('apps:errors.noJobId'));
       }
 
       // Poll for results using standardized function
@@ -381,7 +382,7 @@ export const NumaAppProvider = ({ children }) => {
       // Log the technical error for debugging
       console.error('HTTP Request task error:', error);
       // Return a user-friendly error message
-      throw new Error('We encountered an issue processing your request. Please try again.');
+      throw new Error(i18n.t('apps:errors.processFailed'));
     }
   };
 
@@ -400,12 +401,10 @@ export const NumaAppProvider = ({ children }) => {
       }
 
       if (status === 'incomplete') {
-        throw new Error(
-          'The process exceeded the 30-minute timeout limit. Please check again later via the job history tab.',
-        );
+        throw new Error(i18n.t('apps:errors.timeout'));
       }
 
-      throw new Error('Job did not complete successfully');
+      throw new Error(i18n.t('apps:errors.jobIncomplete'));
     } catch (error) {
       console.error('Job polling error:', error);
       throw error;
@@ -512,9 +511,9 @@ export const NumaAppProvider = ({ children }) => {
               state: currentState,
             };
           }
-          throw new Error('No result data in successful response');
+          throw new Error(i18n.t('apps:errors.noResultData'));
         } else if (job.status === 'FAILURE' || job.status === 'error' || job.status === 'failed') {
-          throw new Error(job.error || 'Task failed');
+          throw new Error(job.error || i18n.t('apps:errors.taskFailed'));
         }
 
         // Check if we should continue polling
@@ -566,7 +565,7 @@ export const NumaAppProvider = ({ children }) => {
       // Set UI states to match initial app run
       setAppRunning(true);
       setJobHistorySidebarOpen(false);
-      setProcessingStatus('Processing...');
+      setProcessingStatus(i18n.t('apps:processing.processing'));
       setProcessingProgress(30);
 
       // Load input values and mark tasks as complete
@@ -619,7 +618,7 @@ export const NumaAppProvider = ({ children }) => {
 
       // Update UI same as initial app run
       setProcessingProgress(100);
-      setProcessingStatus('Complete!');
+      setProcessingStatus(i18n.t('apps:processing.complete'));
       setHasRun(true);
 
       // Set task responses
@@ -657,7 +656,7 @@ export const NumaAppProvider = ({ children }) => {
       return { ...jobHistoryItem, status: 'completed', results: result };
     } catch (error) {
       console.error('Error in history job polling:', error);
-      setProcessingStatus('Error');
+      setProcessingStatus(i18n.t('apps:processing.error'));
       setProcessingProgress(0);
       return jobHistoryItem;
     } finally {
@@ -712,7 +711,7 @@ export const NumaAppProvider = ({ children }) => {
           return { ...sessionResponse, progress: 100 };
         } else if (sessionResponse?.status === 'FAILED') {
           polling = false;
-          throw new Error('Q App session failed');
+          throw new Error(i18n.t('apps:errors.qAppSessionFailed'));
         }
 
         // Calculate progress from card statuses
@@ -806,9 +805,9 @@ export const NumaAppProvider = ({ children }) => {
       };
     } catch (error) {
       console.error('Failed to create job:', error);
-      setProcessingStatus('Error');
+      setProcessingStatus(i18n.t('apps:processing.error'));
       setProcessingProgress(0);
-      throw new Error('Unable to start the process. Please try again.');
+      throw new Error(i18n.t('apps:errors.startProcessFailed'));
     }
   };
 
@@ -835,7 +834,7 @@ export const NumaAppProvider = ({ children }) => {
   };
 
   const handleQAppTask = async (task, currentResults, completedWeight, qappWeight, totalWeight) => {
-    setProcessingStatus('Running analysis...');
+    setProcessingStatus(i18n.t('apps:processing.runningAnalysis'));
     setIsPolling(true);
     setAppRunning(true);
 
@@ -926,7 +925,7 @@ export const NumaAppProvider = ({ children }) => {
 
   // Clean title of process-related words
   const cleanTaskTitle = (title) => {
-    if (!title) return 'task';
+    if (!title) return i18n.t('apps:processing.taskFallback');
     return title.replace(/\b(process(ing)?|running)\b/gi, '').trim();
   };
 
@@ -944,13 +943,13 @@ export const NumaAppProvider = ({ children }) => {
 
     // Clear previous run's events
     setJobEvents([]);
-    setProcessingStatus('Starting process...');
+    setProcessingStatus(i18n.t('apps:processing.startingProcess'));
     setProcessingProgress(0);
     setError(null); // Clear any previous errors
 
     // Add initial synthetic event
-    const appName = numaAppData?.manifest?.appName || 'App';
-    addSyntheticEvent(`Starting ${appName}...`);
+    const appName = numaAppData?.manifest?.appName || i18n.t('apps:processing.appFallback');
+    addSyntheticEvent(i18n.t('apps:processing.startingApp', { appName }));
 
     try {
       const { jobId } = await initializeJob(options.runName);
@@ -964,20 +963,23 @@ export const NumaAppProvider = ({ children }) => {
 
       for (const task of orderedTasks) {
         // Determine appropriate prefix based on task type
-        let taskPrefix = 'Processing';
+        let taskPrefix = i18n.t('apps:processing.taskPrefixes.processing');
         if (
           task.type === 'text-input' ||
           task.type === 's3-upload' ||
           task.type === 'dropdown' ||
           task.type === 'dropdown-table'
         ) {
-          taskPrefix = 'Processing Input';
+          taskPrefix = i18n.t('apps:processing.taskPrefixes.processingInput');
         } else if (task.type === 'http-request' || task.type === 'q-app') {
-          taskPrefix = 'Executing';
+          taskPrefix = i18n.t('apps:processing.taskPrefixes.executing');
         } else if (task.type === 'text-output') {
-          taskPrefix = 'Preparing Output';
+          taskPrefix = i18n.t('apps:processing.taskPrefixes.preparingOutput');
         }
-        const taskMessage = `${taskPrefix}: ${cleanTaskTitle(task.title)}...`;
+        const taskMessage = i18n.t('apps:processing.taskMessage', {
+          prefix: taskPrefix,
+          title: cleanTaskTitle(task.title),
+        });
         setProcessingStatus(taskMessage);
         addSyntheticEvent(taskMessage);
         const taskWeight = calculateTaskWeight(task);
@@ -1036,7 +1038,7 @@ export const NumaAppProvider = ({ children }) => {
       }
 
       // Add completion synthetic event
-      addSyntheticEvent('Analysis complete');
+      addSyntheticEvent(i18n.t('apps:processing.analysisComplete'));
 
       // After all tasks complete successfully, reload the job to get proper output processing
       // This reuses the existing loadJobResults logic which handles output tasks correctly
@@ -1045,8 +1047,12 @@ export const NumaAppProvider = ({ children }) => {
       return currentResults;
     } catch (error) {
       console.error('Error running app:', error);
-      addSyntheticEvent(`Error: ${error.message || 'An error occurred'}`);
-      setProcessingStatus('Error');
+      addSyntheticEvent(
+        i18n.t('apps:processing.errorWithMessage', {
+          message: error.message || i18n.t('errors:unknown'),
+        }),
+      );
+      setProcessingStatus(i18n.t('apps:processing.error'));
       setProcessingProgress(0);
       throw error; // Re-throw to be handled by AppWizard
     } finally {
@@ -1061,7 +1067,7 @@ export const NumaAppProvider = ({ children }) => {
     try {
       let job = await jobsApi.getJobById(numaAppId, jobId);
       if (!job) {
-        throw new Error('Job not found');
+        throw new Error(i18n.t('apps:errors.jobNotFound'));
       }
 
       setJob(job);
@@ -1155,7 +1161,7 @@ export const NumaAppProvider = ({ children }) => {
       }
 
       if (!manifestToUse) {
-        throw new Error('No manifest available for job');
+        throw new Error(i18n.t('apps:errors.noManifest'));
       }
 
       // Try to poll for updates if job is incomplete and was actually running
@@ -1294,7 +1300,7 @@ export const NumaAppProvider = ({ children }) => {
 
         // Set final status
         setProcessingProgress(100);
-        setProcessingStatus('Complete!');
+        setProcessingStatus(i18n.t('apps:processing.complete'));
       }
 
       setJob(job);
@@ -1333,21 +1339,21 @@ export const NumaAppProvider = ({ children }) => {
    */
   const startFollowUp = async (jobId: string, prompt: string) => {
     if (!numaAppData) {
-      throw new Error('App not initialized');
+      throw new Error(i18n.t('apps:errors.appNotInitialized'));
     }
 
     // Clear previous results to switch UI to running state
     setNumaTaskResponses([]);
     setJob(null);
     setJobEvents([]);
-    setProcessingStatus('Starting follow-up...');
+    setProcessingStatus(i18n.t('apps:processing.startingFollowUp'));
     setProcessingProgress(0);
     setError(null);
     setAppRunning(true);
     setLoading(true);
 
     // Add synthetic event for immediate feedback
-    addSyntheticEvent('Starting follow-up analysis...');
+    addSyntheticEvent(i18n.t('apps:processing.startingFollowUpAnalysis'));
 
     try {
       // Get current task input values (uploaded files, etc.)
@@ -1363,31 +1369,35 @@ export const NumaAppProvider = ({ children }) => {
 
       // Start the follow-up run
       const request_endpoint = `/api/${numaAppData.id}/main`;
-      addSyntheticEvent('Sending follow-up request...');
+      addSyntheticEvent(i18n.t('apps:processing.sendingFollowUpRequest'));
       const response = await numaPost(request_endpoint, requestPayload);
 
       if (!response || !response.job_id) {
-        throw new Error('No job ID received from follow-up request');
+        throw new Error(i18n.t('apps:errors.followUpNoJobId'));
       }
 
       // Set this as the current job
       setCurrentJobId(response.job_id);
-      addSyntheticEvent('Processing follow-up question...');
+      addSyntheticEvent(i18n.t('apps:processing.processingFollowUpQuestion'));
 
       // Poll for results
       const { result } = await pollJobForCompletion(response.job_id);
 
       // Load the results
       await loadJobResults(response.job_id);
-      addSyntheticEvent('Follow-up analysis complete');
+      addSyntheticEvent(i18n.t('apps:processing.followUpComplete'));
 
       return result;
     } catch (error) {
       console.error('Error starting follow-up:', error);
-      setProcessingStatus('Error');
+      setProcessingStatus(i18n.t('apps:processing.error'));
       setProcessingProgress(0);
-      addSyntheticEvent(`Error: ${error.message || 'An error occurred'}`);
-      throw new Error('Unable to start follow-up. Please try again.');
+      addSyntheticEvent(
+        i18n.t('apps:processing.errorWithMessage', {
+          message: error.message || i18n.t('errors:unknown'),
+        }),
+      );
+      throw new Error(i18n.t('apps:errors.startFollowUpFailed'));
     } finally {
       setLoading(false);
       setAppRunning(false);

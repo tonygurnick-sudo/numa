@@ -4,6 +4,8 @@ import remarkBreaks from 'remark-breaks';
 import remarkGfm from 'remark-gfm';
 import { Spinner, Button, Dropdown, Accordion } from 'react-bootstrap';
 import * as Papa from 'papaparse';
+import { useTranslation } from 'react-i18next';
+import i18n from '../../i18n';
 import { useAuth } from '../../Providers/AuthProvider';
 import { useNumaApp } from '../../Providers/NumaAppContext';
 import { getFileIconClass } from '../../utils/fileUtils';
@@ -56,6 +58,7 @@ interface ConversationMessage {
 }
 
 export const DataAnalysisMarkdown: React.FC<DataAnalysisMarkdownProps> = ({ content, baseS3Key, bucket, region }) => {
+  const { t } = useTranslation('common');
   const { getCredentials } = useAuth();
   const { fetchS3Content, startFollowUp } = useNumaApp();
   const [fileContents, setFileContents] = useState<Record<string, string>>({});
@@ -231,7 +234,9 @@ export const DataAnalysisMarkdown: React.FC<DataAnalysisMarkdownProps> = ({ cont
         [key]: {
           s3Keys: [],
           loading: false,
-          error: `Failed to load folder contents: ${err instanceof Error ? err.message : 'Unknown error'}`,
+          error: t('dataAnalysis.folderLoadFailed', {
+            error: err instanceof Error ? err.message : t('dataAnalysis.unknownError'),
+          }),
         },
       }));
     }
@@ -317,7 +322,9 @@ export const DataAnalysisMarkdown: React.FC<DataAnalysisMarkdownProps> = ({ cont
       console.error(`Error loading file ${filename}:`, err);
       setFileErrors((prev) => ({
         ...prev,
-        [filename]: `Failed to load file: ${err instanceof Error ? err.message : 'Unknown error'}`,
+        [filename]: t('dataAnalysis.fileLoadFailed', {
+          error: err instanceof Error ? err.message : t('dataAnalysis.unknownError'),
+        }),
       }));
     } finally {
       setLoadingFiles((prev) => ({ ...prev, [filename]: false }));
@@ -521,14 +528,14 @@ export const DataAnalysisMarkdown: React.FC<DataAnalysisMarkdownProps> = ({ cont
                   }}
                 >
                   <i className="bi bi-download me-1"></i>
-                  Download
+                  {t('dataAnalysis.download')}
                 </Dropdown.Toggle>
                 <Dropdown.Menu>
                   <Dropdown.Item
                     onClick={() => handleMarkdownDownloadPDF(fileContent, ref.filename.replace(/\.(md|markdown)$/, ''))}
                   >
                     <i className="bi bi-file-pdf me-2"></i>
-                    PDF
+                    {t('dataAnalysis.formats.pdf')}
                   </Dropdown.Item>
                   <Dropdown.Item
                     onClick={() =>
@@ -536,7 +543,7 @@ export const DataAnalysisMarkdown: React.FC<DataAnalysisMarkdownProps> = ({ cont
                     }
                   >
                     <i className="bi bi-file-earmark-word me-2"></i>
-                    DOCX
+                    {t('dataAnalysis.formats.docx')}
                   </Dropdown.Item>
                 </Dropdown.Menu>
               </Dropdown>
@@ -551,7 +558,7 @@ export const DataAnalysisMarkdown: React.FC<DataAnalysisMarkdownProps> = ({ cont
                 }}
               >
                 <i className="bi bi-download me-1"></i>
-                Download
+                {t('dataAnalysis.download')}
               </Button>
             )}
           </div>
@@ -562,7 +569,7 @@ export const DataAnalysisMarkdown: React.FC<DataAnalysisMarkdownProps> = ({ cont
           {isLoading && (
             <div className="text-center py-4">
               <Spinner animation="border" size="sm" />
-              <span className="ms-2">Loading preview...</span>
+              <span className="ms-2">{t('dataAnalysis.loadingPreview')}</span>
             </div>
           )}
 
@@ -610,12 +617,12 @@ export const DataAnalysisMarkdown: React.FC<DataAnalysisMarkdownProps> = ({ cont
                       {isExpanded ? (
                         <>
                           <i className="bi bi-chevron-up me-1"></i>
-                          Show Less
+                          {t('dataAnalysis.showLess')}
                         </>
                       ) : (
                         <>
                           <i className="bi bi-chevron-down me-1"></i>
-                          Show More
+                          {t('dataAnalysis.showMore')}
                         </>
                       )}
                     </Button>
@@ -640,7 +647,7 @@ export const DataAnalysisMarkdown: React.FC<DataAnalysisMarkdownProps> = ({ cont
                       style={{ color: 'var(--color-primary)', fontWeight: 500 }}
                     >
                       <i className="bi bi-arrows-fullscreen me-1"></i>
-                      Open in Full Screen
+                      {t('dataAnalysis.openFullScreen')}
                     </Button>
                   </div>
                 </div>
@@ -691,19 +698,19 @@ export const DataAnalysisMarkdown: React.FC<DataAnalysisMarkdownProps> = ({ cont
               variant="outline-primary"
               size="sm"
               onClick={() => toggleFolderExpansion(ref)}
-              title={isExpanded ? 'Collapse folder' : 'Expand folder'}
+              title={isExpanded ? t('dataAnalysis.collapseFolder') : t('dataAnalysis.expandFolder')}
             >
               <i className={`bi bi-chevron-${isExpanded ? 'up' : 'down'} me-1`}></i>
-              {isExpanded ? 'Collapse' : 'Expand'}
+              {isExpanded ? t('dataAnalysis.collapse') : t('dataAnalysis.expand')}
             </Button>
             <Button
               variant="outline-success"
               size="sm"
               onClick={() => handleFolderDownload(ref)}
-              title="Download as ZIP"
+              title={t('dataAnalysis.downloadZipTitle')}
             >
               <i className="bi bi-file-zip me-1"></i>
-              Download ZIP
+              {t('dataAnalysis.downloadZip')}
             </Button>
           </div>
         </div>
@@ -713,7 +720,7 @@ export const DataAnalysisMarkdown: React.FC<DataAnalysisMarkdownProps> = ({ cont
             {contents?.loading && (
               <div className="folder-loading">
                 <Spinner animation="border" size="sm" />
-                <span className="ms-2">Loading folder contents...</span>
+                <span className="ms-2">{t('dataAnalysis.loadingFolderContents')}</span>
               </div>
             )}
 
@@ -724,7 +731,7 @@ export const DataAnalysisMarkdown: React.FC<DataAnalysisMarkdownProps> = ({ cont
             )}
 
             {!contents?.loading && !contents?.error && displayRows.length === 0 && (
-              <div className="folder-empty">No files found in this folder</div>
+              <div className="folder-empty">{t('dataAnalysis.noFilesInFolder')}</div>
             )}
 
             {!contents?.loading && !contents?.error && displayRows.length > 0 && (
@@ -820,8 +827,8 @@ export const DataAnalysisMarkdown: React.FC<DataAnalysisMarkdownProps> = ({ cont
     return (
       <div key={message.id} className="message user-message mb-3">
         <div className="d-flex align-items-center mb-2">
-          <span className="fw-semibold me-2">You</span>
-          <span className="text-muted small">{new Date(message.ts).toLocaleString()}</span>
+          <span className="fw-semibold me-2">{t('dataAnalysis.you')}</span>
+          <span className="text-muted small">{new Date(message.ts).toLocaleString(i18n.language)}</span>
         </div>
         <div className="user-message-bubble rounded p-3">
           <MarkdownContent content={message.textMd} />
@@ -845,14 +852,14 @@ export const DataAnalysisMarkdown: React.FC<DataAnalysisMarkdownProps> = ({ cont
           <Accordion.Header>
             <div className="d-flex align-items-center w-100">
               <div className="flex-shrink-0 me-2">
-                <img src={numaLogo} alt="Numa" style={{ width: '24px', height: '24px' }} />
+                <img src={numaLogo} alt={t('brand.numaAlt')} style={{ width: '24px', height: '24px' }} />
               </div>
               <div className="flex-grow-1 me-2">
-                <span className="fw-semibold">Numa</span>
-                <span className="text-muted small ms-2">{new Date(message.ts).toLocaleString()}</span>
+                <span className="fw-semibold">{t('brand.numa')}</span>
+                <span className="text-muted small ms-2">{new Date(message.ts).toLocaleString(i18n.language)}</span>
                 <span className="expand-hint text-muted small ms-3">
                   <i className="bi bi-chevron-down me-1"></i>
-                  Click to expand and see full response
+                  {t('dataAnalysis.expandHint')}
                 </span>
               </div>
             </div>
@@ -886,9 +893,9 @@ export const DataAnalysisMarkdown: React.FC<DataAnalysisMarkdownProps> = ({ cont
       {loadingConversation ? (
         <div className="text-center py-5">
           <Spinner animation="border" role="status" variant="primary">
-            <span className="visually-hidden">Loading conversation...</span>
+            <span className="visually-hidden">{t('dataAnalysis.loadingConversation')}</span>
           </Spinner>
-          <p className="text-muted mt-3">Loading conversation history...</p>
+          <p className="text-muted mt-3">{t('dataAnalysis.loadingConversationHistory')}</p>
         </div>
       ) : (
         <>
@@ -921,7 +928,7 @@ export const DataAnalysisMarkdown: React.FC<DataAnalysisMarkdownProps> = ({ cont
             <div className="text-center">
               <h5 className="follow-up-header mb-3">
                 <i className="bi bi-chat-dots me-2"></i>
-                Have more questions about this analysis?
+                {t('dataAnalysis.followUpHeading')}
               </h5>
             </div>
             <Button
@@ -932,14 +939,14 @@ export const DataAnalysisMarkdown: React.FC<DataAnalysisMarkdownProps> = ({ cont
               className="btn-follow-up w-100"
             >
               <i className="bi bi-plus-circle me-2"></i>
-              Ask Follow-Up Question
+              {t('dataAnalysis.followUpButton')}
             </Button>
 
             {/* Document Actions below */}
             <div className="d-flex justify-content-center gap-3 mt-4">
               <ResultActions
                 content={conversationMessages[conversationMessages.length - 1]?.textMd || ''}
-                title="Data Analysis Results"
+                title={t('dataAnalysis.resultsTitle')}
                 appType="data-analysis"
               />
             </div>
@@ -958,7 +965,7 @@ export const DataAnalysisMarkdown: React.FC<DataAnalysisMarkdownProps> = ({ cont
       {/* Generated Files Summary Section */}
       {(fileReferences.length > 0 || folderReferences.length > 0) && (
         <div className="generated-files-section mt-5 pt-4 border-top">
-          <h4 className="mb-3">Generated Files</h4>
+          <h4 className="mb-3">{t('dataAnalysis.generatedFiles')}</h4>
           <div className="vstack gap-2">
             {/* Render folders first */}
             {folderReferences.map((ref) => (
@@ -982,10 +989,14 @@ export const DataAnalysisMarkdown: React.FC<DataAnalysisMarkdownProps> = ({ cont
                       variant="outline-primary"
                       size="sm"
                       onClick={() => toggleFolderExpansion(ref)}
-                      title={expandedFolders.has(ref.fullPath) ? 'Collapse folder' : 'Expand folder'}
+                      title={
+                        expandedFolders.has(ref.fullPath)
+                          ? t('dataAnalysis.collapseFolder')
+                          : t('dataAnalysis.expandFolder')
+                      }
                     >
                       <i className={`bi bi-chevron-${expandedFolders.has(ref.fullPath) ? 'up' : 'down'} me-1`}></i>
-                      {expandedFolders.has(ref.fullPath) ? 'Collapse' : 'Browse'}
+                      {expandedFolders.has(ref.fullPath) ? t('dataAnalysis.collapse') : t('dataAnalysis.browse')}
                     </Button>
                     <Button
                       size="sm"
@@ -997,7 +1008,7 @@ export const DataAnalysisMarkdown: React.FC<DataAnalysisMarkdownProps> = ({ cont
                       }}
                     >
                       <i className="bi bi-file-zip me-1"></i>
-                      Download ZIP
+                      {t('dataAnalysis.downloadZip')}
                     </Button>
                   </div>
                 </div>
@@ -1007,7 +1018,7 @@ export const DataAnalysisMarkdown: React.FC<DataAnalysisMarkdownProps> = ({ cont
                     {folderContents[ref.fullPath]?.loading && (
                       <div className="text-center py-3">
                         <Spinner animation="border" size="sm" />
-                        <span className="ms-2">Loading folder contents...</span>
+                        <span className="ms-2">{t('dataAnalysis.loadingFolderContents')}</span>
                       </div>
                     )}
                     {folderContents[ref.fullPath]?.error && (
@@ -1084,7 +1095,7 @@ export const DataAnalysisMarkdown: React.FC<DataAnalysisMarkdownProps> = ({ cont
                         }}
                       >
                         <i className="bi bi-download me-1"></i>
-                        Download
+                        {t('dataAnalysis.download')}
                       </Button>
                     )}
                   </div>
@@ -1112,6 +1123,7 @@ const constructTraceFilePath = (baseS3Key: string): string => {
 
 // Simple CSV preview table component
 const CsvPreviewTable: React.FC<{ csvContent: string }> = ({ csvContent }) => {
+  const { t } = useTranslation('common');
   const { headers, rows, totalRows } = useMemo(() => {
     // Use papaparse to correctly handle CSV with quoted fields, commas, and newlines
     const result = Papa.parse(csvContent, {
@@ -1134,7 +1146,7 @@ const CsvPreviewTable: React.FC<{ csvContent: string }> = ({ csvContent }) => {
   }, [csvContent]);
 
   if (headers.length === 0) {
-    return <div className="text-muted">No CSV data to preview</div>;
+    return <div className="text-muted">{t('dataAnalysis.noCsvPreview')}</div>;
   }
 
   return (
@@ -1172,7 +1184,7 @@ const CsvPreviewTable: React.FC<{ csvContent: string }> = ({ csvContent }) => {
       {totalRows > 100 && (
         <div className="text-muted small mt-2">
           <i className="bi bi-info-circle me-1"></i>
-          Showing first 100 of {totalRows} rows. Download the file to see all data.
+          {t('dataAnalysis.csvPreviewLimit', { totalRows })}
         </div>
       )}
     </>

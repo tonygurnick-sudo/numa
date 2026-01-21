@@ -1,10 +1,12 @@
 import { useState } from 'react';
 import { Button, Alert } from 'react-bootstrap';
+import { useTranslation } from 'react-i18next';
 
 import { useAuth } from '../../Providers/AuthProvider';
 import { createQApp } from '../../utils/qAppHelper';
 
 const QAppCreate = () => {
+  const { t } = useTranslation('apps');
   const { qAppsClient, loading: authLoading } = useAuth();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -29,7 +31,7 @@ const QAppCreate = () => {
 
       {response && (
         <Alert variant="success" onClose={() => setResponse(null)} dismissible>
-          App created successfully!
+          {t('qApps.createSuccess')}
         </Alert>
       )}
 
@@ -43,12 +45,12 @@ const QAppCreate = () => {
         {loading ? (
           <>
             <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
-            Creating...
+            {t('qApps.creating')}
           </>
         ) : (
           <>
             <i className="bi bi-plus-circle me-2"></i>
-            Create New App (deploy a Q demo)
+            {t('qApps.createButton')}
           </>
         )}
       </Button>

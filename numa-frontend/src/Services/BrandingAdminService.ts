@@ -1,4 +1,5 @@
 import type { BrandingTheme } from '../Providers/BrandingContext';
+import i18n from '../i18n';
 
 export type BrandingVersionSummary = {
   versionId: string;
@@ -92,9 +93,7 @@ const normalizePresignResponse = (raw: unknown): PresignResponse => {
         'Branding presign response returned HTML payload. Check API base URL or auth.',
         trimmed.slice(0, 200),
       );
-      throw new Error(
-        'Branding asset upload endpoint returned HTML instead of JSON. Verify Branding API configuration.',
-      );
+      throw new Error(i18n.t('errors:branding.presignHtml'));
     }
 
     return {};

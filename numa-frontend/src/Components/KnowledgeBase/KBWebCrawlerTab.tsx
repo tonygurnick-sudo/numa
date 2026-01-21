@@ -1,5 +1,6 @@
 import React, { useMemo } from 'react';
 import { Card, Table, Alert, Badge } from 'react-bootstrap';
+import { useTranslation } from 'react-i18next';
 import { WebCrawler } from '../WebCrawler';
 import { useKBState } from '../../Providers/KBStateProvider';
 
@@ -29,6 +30,7 @@ interface KBWebCrawlerTabProps {
  * Displays web crawler UI and existing crawled domains
  */
 export function KBWebCrawlerTab({ kbId, role = 'VIEWER', onUploadSuccess }: KBWebCrawlerTabProps): React.JSX.Element {
+  const { t, i18n } = useTranslation('knowledgeBase');
   // Use KB state from context
   const { kbState, isLoading, error, invalidateCache } = useKBState();
 
@@ -62,21 +64,18 @@ export function KBWebCrawlerTab({ kbId, role = 'VIEWER', onUploadSuccess }: KBWe
           <Card.Header>
             <Card.Title className="mb-0">
               <i className="bi bi-globe2 me-2"></i>
-              Start New Web Crawl
+              {t('webCrawler.startTitle')}
             </Card.Title>
           </Card.Header>
           <Card.Body>
-            <p className="text-muted small mb-3">
-              Enter URLs to crawl and add to your knowledge base. Crawled content is automatically indexed every 30
-              minutes.
-            </p>
+            <p className="text-muted small mb-3">{t('webCrawler.startDescription')}</p>
             <WebCrawler onCrawlerStarted={handleCrawlerStarted} kb_id={kbId} />
           </Card.Body>
         </Card>
       ) : (
         <Alert variant="info">
           <i className="bi bi-info-circle me-2"></i>
-          You need editor permissions to start new web crawls.
+          {t('webCrawler.permissionRequired')}
         </Alert>
       )}
 
@@ -85,37 +84,37 @@ export function KBWebCrawlerTab({ kbId, role = 'VIEWER', onUploadSuccess }: KBWe
         <Card.Header>
           <Card.Title className="mb-0">
             <i className="bi bi-list-ul me-2"></i>
-            Crawled URLs
+            {t('webCrawler.crawledTitle')}
           </Card.Title>
         </Card.Header>
         <Card.Body>
           {error && (
             <Alert variant="warning" className="mb-3">
-              <strong>Error:</strong> {error}
+              <strong>{t('webCrawler.errorLabel')}</strong> {error}
             </Alert>
           )}
 
           {isLoading ? (
             <div className="text-center p-4">
               <div className="spinner-border text-primary">
-                <span className="visually-hidden">Loading...</span>
+                <span className="visually-hidden">{t('webCrawler.loading')}</span>
               </div>
-              <p className="mt-3 text-muted small">Loading crawled URLs...</p>
+              <p className="mt-3 text-muted small">{t('webCrawler.loadingList')}</p>
             </div>
           ) : dataSources.length === 0 ? (
             <div className="text-center p-4 bg-light rounded">
               <i className="bi bi-inbox display-4 text-muted"></i>
-              <p className="mt-3 text-muted mb-0">No web crawls found for this knowledge base</p>
-              {canEdit && <p className="text-muted small">Start a new crawl above to add web content</p>}
+              <p className="mt-3 text-muted mb-0">{t('webCrawler.emptyTitle')}</p>
+              {canEdit && <p className="text-muted small">{t('webCrawler.emptyHint')}</p>}
             </div>
           ) : (
             <Table hover responsive>
               <thead>
                 <tr>
-                  <th>Seed URL</th>
-                  <th>Pages Crawled</th>
-                  <th>Last Crawled</th>
-                  <th>Status</th>
+                  <th>{t('webCrawler.table.seedUrl')}</th>
+                  <th>{t('webCrawler.table.pages')}</th>
+                  <th>{t('webCrawler.table.lastCrawled')}</th>
+                  <th>{t('webCrawler.table.status')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -135,10 +134,14 @@ export function KBWebCrawlerTab({ kbId, role = 'VIEWER', onUploadSuccess }: KBWe
                         </a>
                       </td>
                       <td>{source.pageCount || 0}</td>
-                      <td>{source.lastCrawled ? new Date(source.lastCrawled).toLocaleString('en-NZ') : 'Unknown'}</td>
+                      <td>
+                        {source.lastCrawled
+                          ? new Date(source.lastCrawled).toLocaleString(i18n.language)
+                          : t('webCrawler.unknown')}
+                      </td>
                       <td>
                         <Badge bg={source.status === 'ACTIVE' ? 'success' : 'secondary'}>
-                          {source.status || 'Unknown'}
+                          {source.status || t('webCrawler.unknown')}
                         </Badge>
                       </td>
                     </tr>

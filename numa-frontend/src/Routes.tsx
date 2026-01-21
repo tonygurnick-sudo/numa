@@ -5,6 +5,7 @@ import AppProviders from './Providers/AppProviders';
 import { ProtectedRoute } from './Components/RequiredFeaturesWrapper';
 import { ROUTE_CONFIG } from './utils/routeConfig';
 import AppLayout from './Layouts/AppLayout';
+import { useTranslation } from 'react-i18next';
 
 // Lazy load non-critical pages
 const ResetPassword = lazy(() => import('./Pages/ResetPassword').then((m) => ({ default: m.ResetPassword })));
@@ -33,13 +34,16 @@ const NumaRoutes = () => {
 const AppRoutes = () => {
   const { user, loading, tokenValidationComplete } = useAuth();
   const navigate = useNavigate();
+  const { t } = useTranslation('common');
 
   if (loading || !tokenValidationComplete) {
-    return <div>Loading...</div>;
+    return <div>{t('loading.generic')}</div>;
   }
 
   return (
-    <Suspense fallback={<div className="d-flex justify-content-center align-items-center vh-100">Loading...</div>}>
+    <Suspense
+      fallback={<div className="d-flex justify-content-center align-items-center vh-100">{t('loading.generic')}</div>}
+    >
       <Routes>
         <Route
           path="/"

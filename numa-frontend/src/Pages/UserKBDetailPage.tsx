@@ -6,6 +6,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Button, Alert, Spinner } from 'react-bootstrap';
+import { useTranslation } from 'react-i18next';
 import { LayoutDashboard } from '../Layouts/LayoutDashboard';
 import { PageHeader } from '../Components/PageHeader';
 import { KBTabLayout } from '../Components/KnowledgeBase/KBTabLayout';
@@ -19,6 +20,7 @@ import FolderSelector from '../Components/KnowledgeBase/FolderSelector';
 import { useAuth } from '../Providers/AuthProvider';
 
 export function UserKBDetailPage(): React.JSX.Element {
+  const { t } = useTranslation('knowledgeBase');
   const { kbId } = useParams<{ kbId: string }>();
   const navigate = useNavigate();
   const { availableKBs, fetchKBDetails } = useKnowledgeBase();
@@ -96,9 +98,7 @@ export function UserKBDetailPage(): React.JSX.Element {
 
     if (invalidFiles.length > 0) {
       const invalidFileNames = invalidFiles.map((file) => file.name).join(', ');
-      setFileValidationError(
-        `The following files are not supported: ${invalidFileNames}. Please upload supported file types.`,
-      );
+      setFileValidationError(t('userKnowledgeBase.validation.unsupportedFiles', { files: invalidFileNames }));
       return false;
     }
 
@@ -159,11 +159,11 @@ export function UserKBDetailPage(): React.JSX.Element {
   if (!currentKB) {
     return (
       <div className="user-kb-detail-page">
-        <PageHeader title="Loading..." subtitle="Please wait" />
+        <PageHeader title={t('userKnowledgeBase.loading.title')} subtitle={t('userKnowledgeBase.loading.subtitle')} />
         <LayoutDashboard>
           <div className="text-center p-5">
             <Spinner animation="border" variant="primary" />
-            <p className="mt-3 text-muted">Loading knowledge base...</p>
+            <p className="mt-3 text-muted">{t('userKnowledgeBase.loading.body')}</p>
           </div>
         </LayoutDashboard>
       </div>
@@ -184,17 +184,17 @@ export function UserKBDetailPage(): React.JSX.Element {
             {currentKB.kb_name}
           </>
         }
-        subtitle={isShared ? 'Shared with you' : 'Personal Knowledge Base'}
+        subtitle={isShared ? t('userKnowledgeBase.shared') : t('userKnowledgeBase.personal')}
         actions={
           canEdit ? (
             <div className="d-flex gap-2">
               <Button variant="secondary" onClick={() => fileExplorerRef.current?.openCreateFolder()}>
                 <i className="bi bi-folder-plus me-2"></i>
-                New Folder
+                {t('userKnowledgeBase.actions.newFolder')}
               </Button>
               <Button variant="primary" onClick={() => setShowUploadModal(true)}>
                 <i className="bi bi-upload me-2"></i>
-                Upload Files
+                {t('userKnowledgeBase.actions.uploadFiles')}
               </Button>
             </div>
           ) : null
@@ -205,7 +205,7 @@ export function UserKBDetailPage(): React.JSX.Element {
         {uploadSuccess && (
           <Alert variant="success" dismissible onClose={() => setUploadSuccess(false)} className="mb-4">
             <i className="bi bi-check-circle me-2"></i>
-            Files uploaded successfully!
+            {t('userKnowledgeBase.uploadSuccess')}
           </Alert>
         )}
 
@@ -229,20 +229,21 @@ export function UserKBDetailPage(): React.JSX.Element {
               <div className="modal-header">
                 <h5 className="modal-title">
                   <i className="bi bi-upload me-2"></i>
-                  Upload Files to {currentKB.kb_name}
+                  {t('userKnowledgeBase.uploadModal.title', { name: currentKB.kb_name })}
                 </h5>
                 <button
                   type="button"
                   className="btn-close"
                   onClick={() => setShowUploadModal(false)}
-                  aria-label="Close"
+                  aria-label={t('userKnowledgeBase.uploadModal.close')}
                 ></button>
               </div>
               <div className="modal-body">
                 <p className="text-muted small mb-3">
-                  Files will be automatically indexed every 30 minutes and made available for querying in Numa Chat.
+                  {t('userKnowledgeBase.uploadModal.body')}
                   <br />
-                  <strong>Note:</strong> Maximum file size is 50MB per file.
+                  <strong>{t('userKnowledgeBase.uploadModal.noteLabel')}</strong>{' '}
+                  {t('userKnowledgeBase.uploadModal.note')}
                 </p>
 
                 <FolderSelector
@@ -250,12 +251,12 @@ export function UserKBDetailPage(): React.JSX.Element {
                   onFolderChange={setSelectedFolder}
                   folderOptions={folderOptions}
                   disabled={loadingFolders}
-                  label="Upload to folder"
+                  label={t('userKnowledgeBase.uploadModal.folderLabel')}
                 />
 
                 {fileValidationError && (
                   <Alert variant="danger" className="mb-3">
-                    <strong>File Validation Error:</strong>
+                    <strong>{t('userKnowledgeBase.uploadModal.validationTitle')}</strong>
                     <p className="mb-0 mt-1">{fileValidationError}</p>
                   </Alert>
                 )}
@@ -278,10 +279,10 @@ export function UserKBDetailPage(): React.JSX.Element {
       {showNotificationModal && (
         <NotificationModal
           type="warning"
-          title="Large Raw Data File Detected"
+          title={t('userKnowledgeBase.largeFile.title')}
           message={
             <div>
-              <p>You are about to upload large raw data files that may not be optimal for knowledge base indexing:</p>
+              <p>{t('userKnowledgeBase.largeFile.description')}</p>
               <ul className="mb-3">
                 {pendingLargeFiles.map((file, index) => (
                   <li key={index}>
@@ -289,22 +290,20 @@ export function UserKBDetailPage(): React.JSX.Element {
                   </li>
                 ))}
               </ul>
-              <p className="mb-0">
-                This can incur higher than expected cost, or may fail to index successfully into the knowledge base.
-              </p>
+              <p className="mb-0">{t('userKnowledgeBase.largeFile.warning')}</p>
               <div className="alert alert-info mb-3 mt-3">
                 <i className="bi bi-info-circle me-2"></i>
-                <strong>Recommendation:</strong> For better knowledge base performance, consider breaking large raw data
-                files into smaller chunks.
+                <strong>{t('userKnowledgeBase.largeFile.recommendationLabel')}</strong>{' '}
+                {t('userKnowledgeBase.largeFile.recommendation')}
               </div>
-              <p className="mb-0">Do you want to proceed with uploading these files anyway?</p>
+              <p className="mb-0">{t('userKnowledgeBase.largeFile.confirm')}</p>
             </div>
           }
           show={showNotificationModal}
           onHide={handleCancelUpload}
           onConfirm={handleProceedWithUpload}
-          confirmText="Proceed Anyway"
-          cancelText="Cancel Upload"
+          confirmText={t('userKnowledgeBase.largeFile.confirmButton')}
+          cancelText={t('userKnowledgeBase.largeFile.cancelButton')}
           showCancelButton={true}
           size="lg"
         />

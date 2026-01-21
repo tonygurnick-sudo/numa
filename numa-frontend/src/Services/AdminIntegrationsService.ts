@@ -1,4 +1,5 @@
 import { getAllConnections } from '../config/integrationsConfig';
+import i18n from '../i18n';
 
 export type IntegrationStatus = 'enabled' | 'disabled';
 
@@ -71,7 +72,7 @@ export const AdminIntegrationsService = {
     });
     if (!res.ok) {
       const text = await res.text();
-      throw new Error(text || `Failed to update settings for ${integration}`);
+      throw new Error(text || i18n.t('errors:adminIntegrations.updateFailed', { integration }));
     }
   },
 

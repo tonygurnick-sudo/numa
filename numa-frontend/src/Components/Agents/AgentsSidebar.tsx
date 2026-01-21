@@ -8,6 +8,7 @@ import {
   useRef,
 } from 'react';
 import { Button, Offcanvas, Spinner, Alert } from 'react-bootstrap';
+import { useTranslation } from 'react-i18next';
 import { useNumaRequest } from '../../Providers/NumaRequestContext';
 import { AdminAgentsService, type AgentsMode } from '../../Services/AdminAgentsService';
 import { listAgents } from '../../Services/AgentsService';
@@ -34,6 +35,7 @@ const AgentsSidebarComponent: ForwardRefRenderFunction<AgentsSidebarHandle, Agen
   ref,
 ) => {
   const { numaGet } = useNumaRequest();
+  const { t } = useTranslation('agents');
   const navigate = useNavigate();
   const [show, setShow] = useState(false);
   const [agents, setAgents] = useState<AgentSummary[]>([]);
@@ -77,7 +79,7 @@ const AgentsSidebarComponent: ForwardRefRenderFunction<AgentsSidebarHandle, Agen
       setAgents(sortedAgents);
     } catch (err) {
       console.error('AgentsSidebar: failed to load agents', err);
-      setError((err as Error)?.message ?? 'Failed to load agents');
+      setError((err as Error)?.message ?? t('sidebar.errors.loadAgents'));
     } finally {
       setLoading(false);
     }
@@ -144,28 +146,28 @@ const AgentsSidebarComponent: ForwardRefRenderFunction<AgentsSidebarHandle, Agen
   return (
     <>
       <Button variant="secondary" className="btn" onClick={() => setShow(true)} disabled={agentsMode === 'off'}>
-        <i className="bi bi-robot me-1"></i> Agents
+        <i className="bi bi-robot me-1"></i> {t('sidebar.openButton')}
       </Button>
       <Offcanvas show={show} placement="end" onHide={() => setShow(false)} backdrop scroll style={offcanvasStyle}>
         <Offcanvas.Header closeButton closeVariant="dark">
           <div className="d-flex align-items-center justify-content-between w-100">
-            <Offcanvas.Title className="mb-0">My Agents</Offcanvas.Title>
+            <Offcanvas.Title className="mb-0">{t('sidebar.title')}</Offcanvas.Title>
             <Button variant="secondary" size="sm" onClick={handleManageAgents}>
-              Manage
+              {t('sidebar.manage')}
             </Button>
           </div>
         </Offcanvas.Header>
         <Offcanvas.Body className="d-flex flex-column">
           <div className="d-flex justify-content-between align-items-center mb-3">
             <div>
-              <p className="mb-0 text-muted small">Select an agent to start chatting with their instructions.</p>
+              <p className="mb-0 text-muted small">{t('sidebar.subtitle')}</p>
             </div>
             <Button variant="outline-primary" size="sm" onClick={loadAgents} disabled={loading}>
               <i className="bi bi-arrow-clockwise"></i>
             </Button>
           </div>
           {agentsMode === 'off' ? (
-            <Alert variant="info">Agents are disabled by your administrator.</Alert>
+            <Alert variant="info">{t('sidebar.disabled')}</Alert>
           ) : loading ? (
             <div className="d-flex justify-content-center align-items-center flex-grow-1">
               <Spinner animation="border" />
@@ -177,7 +179,7 @@ const AgentsSidebarComponent: ForwardRefRenderFunction<AgentsSidebarHandle, Agen
           ) : agents.length === 0 ? (
             <div className="text-center text-muted mt-4">
               <i className="bi bi-robot display-6 d-block mb-2"></i>
-              <p>No agents yet. Create one from the Agents page.</p>
+              <p>{t('sidebar.empty')}</p>
             </div>
           ) : (
             <div className="d-flex flex-column gap-3">
@@ -195,17 +197,21 @@ const AgentsSidebarComponent: ForwardRefRenderFunction<AgentsSidebarHandle, Agen
                           <strong>{agent.title}</strong>
                         </div>
                         <div className="text-muted small mt-1">
-                          {agent.visibility === 'public' ? 'Public Agent' : 'Personal Agent'}
+                          {agent.visibility === 'public'
+                            ? t('sidebar.visibility.public')
+                            : t('sidebar.visibility.personal')}
                         </div>
                       </div>
                       <div className="d-flex gap-1">
                         <Button variant="outline-success" size="sm" onClick={() => handleSelectAgent(agent)}>
-                          Use
+                          {t('sidebar.use')}
                         </Button>
                       </div>
                     </div>
                     {agent.requiredIntegrations?.length ? (
-                      <div className="mt-2 text-muted small">Requires: {agent.requiredIntegrations.join(', ')}</div>
+                      <div className="mt-2 text-muted small">
+                        {t('sidebar.requires', { integrations: agent.requiredIntegrations.join(', ') })}
+                      </div>
                     ) : null}
                   </div>
                 );

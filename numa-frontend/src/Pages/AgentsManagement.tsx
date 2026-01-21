@@ -16,10 +16,12 @@ import { getConnectionConfig } from '../config/integrationsConfig';
 import { useBranding } from '../Providers/BrandingContext';
 import { PageHeader } from '../Components/PageHeader';
 import { withPRM } from '../utils/prmUtils';
+import { useTranslation } from 'react-i18next';
 
 type FilterOption = 'all' | 'personal' | 'public';
 
 export const AgentsManagement = () => {
+  const { t } = useTranslation('agents');
   const { numaGet, numaDelete, numaPost, numaPut } = useNumaRequest();
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -81,7 +83,7 @@ export const AgentsManagement = () => {
       }
     } catch (err) {
       console.error('AgentsManagement: failed to load agents', err);
-      setError((err as Error)?.message ?? 'Failed to load agents');
+      setError((err as Error)?.message ?? t('management.errors.load'));
     } finally {
       setLoading(false);
     }
@@ -142,7 +144,7 @@ export const AgentsManagement = () => {
       await loadAgents();
     } catch (err) {
       console.error('AgentsManagement: duplicate failed', err);
-      setError((err as Error)?.message ?? 'Failed to duplicate agent');
+      setError((err as Error)?.message ?? t('management.errors.duplicate'));
     }
   };
 
@@ -157,18 +159,18 @@ export const AgentsManagement = () => {
       await loadAgents();
     } catch (err) {
       console.error('AgentsManagement: toggle favorite failed', err);
-      setError((err as Error)?.message ?? 'Failed to update favorite');
+      setError((err as Error)?.message ?? t('management.errors.favorite'));
     }
   };
 
   const handleDelete = async (agent: AgentSummary) => {
-    if (!window.confirm(`Delete agent "${agent.title}"?`)) return;
+    if (!window.confirm(t('management.confirmDelete', { title: agent.title }))) return;
     try {
       await deleteAgent(numaDelete, agent.agentId);
       await loadAgents();
     } catch (err) {
       console.error('AgentsManagement: delete failed', err);
-      setError((err as Error)?.message ?? 'Failed to delete agent');
+      setError((err as Error)?.message ?? t('management.errors.delete'));
     }
   };
 
@@ -296,16 +298,16 @@ export const AgentsManagement = () => {
   return (
     <div className="dashboard">
       <PageHeader
-        title="AI Agents"
-        subtitle="Design, deploy, and manage your intelligent AI assistants"
+        title={t('management.title')}
+        subtitle={t('management.subtitle')}
         actions={
           <>
             <Button variant="secondary" onClick={loadAgents} disabled={loading}>
-              <i className="bi bi-arrow-clockwise me-1"></i> Refresh
+              <i className="bi bi-arrow-clockwise me-1"></i> {t('management.actions.refresh')}
             </Button>
             {agentsFeatureEnabled && agentsMode !== 'off' && (
               <Button variant="primary" onClick={handleCreate}>
-                <i className="bi bi-plus-circle me-1"></i> Create Agent
+                <i className="bi bi-plus-circle me-1"></i> {t('management.actions.create')}
               </Button>
             )}
           </>
@@ -340,7 +342,7 @@ export const AgentsManagement = () => {
               >
                 <div className="d-flex align-items-center justify-content-between">
                   <div>
-                    <div className="text-muted small mb-1">Total Agents</div>
+                    <div className="text-muted small mb-1">{t('management.stats.total')}</div>
                     <div className="fs-4 fw-bold">{totalAgents}</div>
                   </div>
                   <div
@@ -376,7 +378,7 @@ export const AgentsManagement = () => {
               >
                 <div className="d-flex align-items-center justify-content-between">
                   <div>
-                    <div className="text-muted small mb-1">Personal</div>
+                    <div className="text-muted small mb-1">{t('management.stats.personal')}</div>
                     <div className="fs-4 fw-bold">{personalCount}</div>
                   </div>
                   <div
@@ -412,7 +414,7 @@ export const AgentsManagement = () => {
               >
                 <div className="d-flex align-items-center justify-content-between">
                   <div>
-                    <div className="text-muted small mb-1">Company</div>
+                    <div className="text-muted small mb-1">{t('management.stats.company')}</div>
                     <div className="fs-4 fw-bold">{publicCount}</div>
                   </div>
                   <div
@@ -436,11 +438,8 @@ export const AgentsManagement = () => {
                 <div className="d-flex align-items-start">
                   <i className="bi bi-robot me-2 mt-1"></i>
                   <div>
-                    <div className="fw-semibold">Agents are not enabled for your company</div>
-                    <div className="small text-muted">
-                      Create agents to automate tasks, standardize workflows, and reuse expert setups across your team.
-                      Contact your account administrator to request access.
-                    </div>
+                    <div className="fw-semibold">{t('management.disabled.title')}</div>
+                    <div className="small text-muted">{t('management.disabled.description')}</div>
                   </div>
                 </div>
               </Alert>
@@ -448,10 +447,9 @@ export const AgentsManagement = () => {
                 <div className="mb-4">
                   <i className="bi bi-robot text-muted" style={{ fontSize: '4rem' }}></i>
                 </div>
-                <h3 className="h5 mb-2">Agents are disabled</h3>
+                <h3 className="h5 mb-2">{t('management.disabled.emptyTitle')}</h3>
                 <p className="text-muted mb-0" style={{ maxWidth: 640, margin: '0 auto' }}>
-                  Agents let you define reusable AI assistants with custom instructions, reference files, and tool
-                  access. When enabled, you can create personal agents or share company agents for common tasks.
+                  {t('management.disabled.emptyDescription')}
                 </p>
               </div>
             </>
@@ -490,7 +488,7 @@ export const AgentsManagement = () => {
                         </div>
                         <div className="flex-grow-1">
                           <div className="d-flex justify-content-between align-items-center mb-1">
-                            <h2 className="h4 mb-0 fw-bold">My Agents</h2>
+                            <h2 className="h4 mb-0 fw-bold">{t('management.sections.myAgents.title')}</h2>
                             <span
                               className="badge rounded-pill px-3 py-2"
                               style={{
@@ -503,16 +501,14 @@ export const AgentsManagement = () => {
                             </span>
                           </div>
                           <p className="text-muted mb-0" style={{ fontSize: '0.95rem' }}>
-                            Your personal AI assistants
+                            {t('management.sections.myAgents.subtitle')}
                           </p>
                         </div>
                       </div>
                     </div>
                     {renderAgentsGrid(
                       filteredMyAgents,
-                      filter === 'personal'
-                        ? 'You have not created any personal agents yet. Click "Create Agent" to get started.'
-                        : 'No agents found.',
+                      filter === 'personal' ? t('management.empty.personalOnly') : t('management.empty.none'),
                       true,
                     )}
                   </section>
@@ -535,7 +531,7 @@ export const AgentsManagement = () => {
                         </div>
                         <div className="flex-grow-1">
                           <div className="d-flex justify-content-between align-items-center mb-1">
-                            <h2 className="h4 mb-0 fw-bold">Company Agent Marketplace</h2>
+                            <h2 className="h4 mb-0 fw-bold">{t('management.sections.company.title')}</h2>
                             <span
                               className="badge rounded-pill px-3 py-2"
                               style={{
@@ -548,15 +544,12 @@ export const AgentsManagement = () => {
                             </span>
                           </div>
                           <p className="text-muted mb-0" style={{ fontSize: '0.95rem' }}>
-                            Discover and copy agents shared by other users in your organization
+                            {t('management.sections.company.subtitle')}
                           </p>
                         </div>
                       </div>
                     </div>
-                    {renderAgentsGrid(
-                      filteredWorkspaceAgents,
-                      'No company agents are available in your workspace yet.',
-                    )}
+                    {renderAgentsGrid(filteredWorkspaceAgents, t('management.empty.company'))}
                   </section>
                 )}
 
@@ -565,20 +558,20 @@ export const AgentsManagement = () => {
                     <div className="mb-4">
                       <i className="bi bi-robot text-muted" style={{ fontSize: '4rem' }}></i>
                     </div>
-                    <h3 className="h5 mb-2">No agents found</h3>
+                    <h3 className="h5 mb-2">{t('management.empty.title')}</h3>
                     <p className="text-muted mb-4">
                       {agentsMode === 'off'
-                        ? 'Agents are disabled. Contact your admin to enable Agents.'
+                        ? t('management.empty.modeOff')
                         : filter === 'all'
-                          ? 'Get started by creating your first AI agent'
+                          ? t('management.empty.all')
                           : filter === 'personal'
-                            ? 'You have not created any personal agents yet'
-                            : 'No company agents are available in your workspace'}
+                            ? t('management.empty.personal')
+                            : t('management.empty.company')}
                     </p>
                     {agentsMode !== 'off' && (
                       <Button variant="primary" onClick={handleCreate}>
                         <i className="bi bi-plus-circle me-2"></i>
-                        Create Your First Agent
+                        {t('management.actions.createFirst')}
                       </Button>
                     )}
                   </div>
@@ -595,18 +588,17 @@ export const AgentsManagement = () => {
           {/* Missing integrations confirmation modal (pre-chat) */}
           <Modal show={missingModal.show} onHide={() => setMissingModal((m) => ({ ...m, show: false }))} centered>
             <Modal.Header closeButton>
-              <Modal.Title>Missing integrations</Modal.Title>
+              <Modal.Title>{t('management.missingIntegrations.title')}</Modal.Title>
             </Modal.Header>
             <Modal.Body>
               {missingModal.loading ? (
                 <div className="d-flex align-items-center">
-                  <Spinner animation="border" size="sm" className="me-2" /> Checking your integrations…
+                  <Spinner animation="border" size="sm" className="me-2" />{' '}
+                  {t('management.missingIntegrations.loading')}
                 </div>
               ) : (
                 <>
-                  <p className="mb-3">
-                    This agent requests access to the following integrations which are not connected for your account:
-                  </p>
+                  <p className="mb-3">{t('management.missingIntegrations.description')}</p>
                   <div className="d-flex flex-column gap-2 mb-3">
                     {missingModal.missing.map((id) => {
                       const config = getConnectionConfig(id);
@@ -635,10 +627,7 @@ export const AgentsManagement = () => {
                       );
                     })}
                   </div>
-                  <p className="mb-0 text-muted small">
-                    Continuing may result in limited or unintended behavior. You can connect integrations now from the
-                    Integrations page and try again.
-                  </p>
+                  <p className="mb-0 text-muted small">{t('management.missingIntegrations.note')}</p>
                 </>
               )}
             </Modal.Body>
@@ -650,11 +639,11 @@ export const AgentsManagement = () => {
                   className="me-auto"
                 >
                   <i className="bi bi-arrow-left me-2"></i>
-                  Back
+                  {t('management.missingIntegrations.back')}
                 </Button>
                 <a className="btn btn-outline-primary" href="/integrations">
                   <i className="bi bi-link-45deg me-2"></i>
-                  Go to Integrations
+                  {t('management.missingIntegrations.goToIntegrations')}
                 </a>
                 <Button
                   variant="primary"
@@ -664,7 +653,7 @@ export const AgentsManagement = () => {
                     if (a) proceedToChat(a);
                   }}
                 >
-                  Continue without
+                  {t('management.missingIntegrations.continue')}
                 </Button>
               </Modal.Footer>
             )}

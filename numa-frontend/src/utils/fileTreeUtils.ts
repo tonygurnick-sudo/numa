@@ -204,6 +204,8 @@ export function sortTree(node: TreeNode, sortColumn: SortColumn = 'name', sortDi
   }
 }
 
+import i18n from '../i18n';
+
 /**
  * Options for building table rows from a tree
  */
@@ -223,7 +225,11 @@ export function buildRowsForTree(
   options: BuildRowsOptions = {},
 ): TableRow[] {
   const rows: TableRow[] = [];
-  const { formatDate = (d) => new Date(d).toLocaleString('en-NZ'), formatSize = formatKB, getRowMetadata } = options;
+  const {
+    formatDate = (d) => new Date(d).toLocaleString(i18n.language),
+    formatSize = formatKB,
+    getRowMetadata,
+  } = options;
 
   // Subfolders
   for (const folderName of Object.keys(node.children)) {

@@ -1,7 +1,9 @@
 import React from 'react';
 import { Table, Badge, Button } from 'react-bootstrap';
 import { ChevronDown, ChevronRight, Eye } from 'react-bootstrap-icons';
+import { useTranslation } from 'react-i18next';
 import type { User } from './UserDetailsModal';
+import i18n from '../../i18n';
 
 interface UserTableViewProps {
   adminUsers: User[];
@@ -22,6 +24,7 @@ export function UserTableView({
   onToggleSection,
   visibleSections,
 }: UserTableViewProps): React.JSX.Element {
+  const { t } = useTranslation('userManagement');
   const showAdminSection = visibleSections ? visibleSections.includes('admin') : true;
   const showStandardSection = visibleSections ? visibleSections.includes('standard') : true;
 
@@ -34,15 +37,15 @@ export function UserTableView({
       <tr
         key={user.username}
         className={isSystemUser ? 'text-muted opacity-50' : ''}
-        title={isSystemUser ? 'System user - not editable' : ''}
+        title={isSystemUser ? t('table.systemUserTitle') : ''}
       >
         <td style={{ width: '40%' }}>
           {user.email}
-          {isSystemUser && <small className="ms-2 fst-italic">(System)</small>}
-          {isCurrentUser && <small className="ms-2 fst-italic">(You)</small>}
+          {isSystemUser && <small className="ms-2 fst-italic">{t('table.systemBadge')}</small>}
+          {isCurrentUser && <small className="ms-2 fst-italic">{t('table.youBadge')}</small>}
         </td>
         <td style={{ width: '15%' }}>
-          <Badge bg={isAdmin ? 'primary' : 'secondary'}>{isAdmin ? 'Admin' : 'Standard'}</Badge>
+          <Badge bg={isAdmin ? 'primary' : 'secondary'}>{isAdmin ? t('roles.admin') : t('roles.standard')}</Badge>
         </td>
         <td style={{ width: '15%' }}>
           <Badge
@@ -53,7 +56,7 @@ export function UserTableView({
           </Badge>
         </td>
         <td style={{ width: '15%' }}>
-          {new Date(user.created).toLocaleDateString('en-US', {
+          {new Date(user.created).toLocaleDateString(i18n.language, {
             year: 'numeric',
             month: 'short',
             day: 'numeric',
@@ -62,7 +65,7 @@ export function UserTableView({
         <td style={{ width: '15%' }}>
           <Button variant="outline-primary" size="sm" onClick={() => onViewUser(user)} disabled={isSystemUser}>
             <Eye size={14} className="me-1" />
-            View
+            {t('actions.view')}
           </Button>
         </td>
       </tr>
@@ -97,22 +100,22 @@ export function UserTableView({
               color: 'var(--brand-primaryContrast, white)',
             }}
           >
-            <th style={{ width: '40%' }}>Email</th>
-            <th style={{ width: '15%' }}>Role</th>
-            <th style={{ width: '15%' }}>Status</th>
-            <th style={{ width: '15%' }}>Created</th>
-            <th style={{ width: '15%' }}>Actions</th>
+            <th style={{ width: '40%' }}>{t('table.headers.email')}</th>
+            <th style={{ width: '15%' }}>{t('table.headers.role')}</th>
+            <th style={{ width: '15%' }}>{t('table.headers.status')}</th>
+            <th style={{ width: '15%' }}>{t('table.headers.created')}</th>
+            <th style={{ width: '15%' }}>{t('table.headers.actions')}</th>
           </tr>
         </thead>
         <tbody>
           {showAdminSection && (
             <>
-              {renderSectionHeader('Administrators', adminUsers.length, sectionsExpanded.admin, 'admin', 'primary')}
+              {renderSectionHeader(t('sections.admins'), adminUsers.length, sectionsExpanded.admin, 'admin', 'primary')}
               {sectionsExpanded.admin && adminUsers.length > 0 && adminUsers.map(renderUserRow)}
               {sectionsExpanded.admin && adminUsers.length === 0 && (
                 <tr>
                   <td colSpan={5} className="text-center text-muted py-3">
-                    No administrators
+                    {t('table.empty.admins')}
                   </td>
                 </tr>
               )}
@@ -122,7 +125,7 @@ export function UserTableView({
           {showStandardSection && (
             <>
               {renderSectionHeader(
-                'Standard Users',
+                t('sections.standardUsers'),
                 standardUsers.length,
                 sectionsExpanded.standard,
                 'standard',
@@ -132,7 +135,7 @@ export function UserTableView({
               {sectionsExpanded.standard && standardUsers.length === 0 && (
                 <tr>
                   <td colSpan={5} className="text-center text-muted py-3">
-                    No standard users
+                    {t('table.empty.standard')}
                   </td>
                 </tr>
               )}
@@ -142,7 +145,7 @@ export function UserTableView({
           {!showAdminSection && !showStandardSection && (
             <tr>
               <td colSpan={5} className="text-center text-muted py-3">
-                No users
+                {t('table.empty.none')}
               </td>
             </tr>
           )}

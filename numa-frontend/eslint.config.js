@@ -5,8 +5,9 @@ import reactPlugin from 'eslint-plugin-react';
 import reactHooksPlugin from 'eslint-plugin-react-hooks';
 import reactRefreshPlugin from 'eslint-plugin-react-refresh';
 import importPlugin from 'eslint-plugin-import';
-import tsParser from '@typescript-eslint/parser'; // eslint-disable-line import/no-unresolved
-import tsPlugin from '@typescript-eslint/eslint-plugin'; // eslint-disable-line import/no-unresolved
+import i18nextPlugin from 'eslint-plugin-i18next';
+import tsParser from '@typescript-eslint/parser';
+import tsPlugin from '@typescript-eslint/eslint-plugin';
 import { eslintBase } from '@arcanumai/style';
 
 // ✅ Keep ESLint out of third-party & generated files
@@ -93,9 +94,122 @@ export default [
     },
   },
 
-  // TypeScript/TSX files — only lint app code
+  // TypeScript/TSX files — only lint app code (excluding tests)
   {
     files: ['src/**/*.{ts,tsx}'],
+    ignores: ['src/__tests__/**', 'src/**/*.test.{ts,tsx}', 'src/**/*.spec.{ts,tsx}'],
+    ...sharedConfig,
+    languageOptions: {
+      ...sharedConfig.languageOptions,
+      parser: tsParser,
+    },
+    plugins: {
+      ...sharedConfig.plugins,
+      '@typescript-eslint': tsPlugin,
+      i18next: i18nextPlugin,
+    },
+    rules: {
+      ...sharedConfig.rules,
+      '@typescript-eslint/no-explicit-any': 'error',
+      'no-undef': 'off', // TS does this
+      'react/display-name': 'off',
+      'no-unused-vars': 'off',
+      '@typescript-eslint/no-unused-vars': [
+        'error',
+        { argsIgnorePattern: '^_', varsIgnorePattern: '^_', ignoreRestSiblings: true },
+      ],
+      // i18n: detect hardcoded strings that should use t()
+      'i18next/no-literal-string': [
+        'error',
+        {
+          // JSX attributes that typically don't need translation
+          ignoreAttribute: [
+            'className',
+            'class',
+            'testId',
+            'data-testid',
+            'key',
+            'id',
+            'name',
+            'type',
+            'variant',
+            'size',
+            'as',
+            'href',
+            'src',
+            'alt',
+            'role',
+            'position',
+            'placement',
+            'eventKey',
+            'animation',
+            'htmlFor',
+            'target',
+            'rel',
+            'autoComplete',
+            'inputMode',
+            'pattern',
+            'xmlns',
+            'viewBox',
+            'd',
+            'fill',
+            'stroke',
+            'strokeWidth',
+            'strokeLinecap',
+            'strokeLinejoin',
+          ],
+          // Object properties that typically don't need translation
+          ignoreProperty: [
+            'className',
+            'testId',
+            'key',
+            'id',
+            'auth_type',
+            'name',
+            'type',
+            'variant',
+            'size',
+            'color',
+            'icon',
+            'fallback_icon',
+            'fallback_color',
+            'path',
+            'method',
+            'status',
+            'contentType',
+          ],
+          // Function calls where string arguments don't need translation
+          ignoreCallee: [
+            'console.log',
+            'console.error',
+            'console.warn',
+            'console.info',
+            'console.debug',
+            't',
+            'i18n.t',
+            'connectionText',
+            'require',
+            'import',
+          ],
+          // Regex patterns to ignore (e.g., strings without letters, technical patterns)
+          ignore: [
+            '^[^a-zA-Z]*$', // No letters (numbers, symbols only)
+            '^[A-Z][A-Z0-9_]*$', // CONSTANT_CASE
+            '^[a-z]+[A-Z]', // camelCase identifiers
+            '^bi bi-', // Bootstrap icon classes
+            '^#(?:[0-9a-fA-F]{3}){1,2}$', // Hex colors
+            '^(primary|secondary|success|danger|warning|info|light|dark)$', // Bootstrap variants
+            '^(https?://|mailto:|tel:)', // URLs
+            '\\.(png|jpg|jpeg|gif|svg|ico|webp|css|scss|js|ts|tsx|json)$', // File extensions
+          ],
+        },
+      ],
+    },
+  },
+
+  // Test files — TypeScript rules without i18n checking
+  {
+    files: ['src/__tests__/**/*.{ts,tsx}', 'src/**/*.test.{ts,tsx}', 'src/**/*.spec.{ts,tsx}'],
     ...sharedConfig,
     languageOptions: {
       ...sharedConfig.languageOptions,
@@ -108,7 +222,7 @@ export default [
     rules: {
       ...sharedConfig.rules,
       '@typescript-eslint/no-explicit-any': 'error',
-      'no-undef': 'off', // TS does this
+      'no-undef': 'off',
       'react/display-name': 'off',
       'no-unused-vars': 'off',
       '@typescript-eslint/no-unused-vars': [

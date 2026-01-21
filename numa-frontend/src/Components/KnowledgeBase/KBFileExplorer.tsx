@@ -1,12 +1,14 @@
 import React, { useState, useEffect, useMemo, forwardRef, useImperativeHandle } from 'react';
 import { Table, Button, Form, Badge, Alert, Modal, OverlayTrigger, Tooltip, Spinner } from 'react-bootstrap';
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
+import { useTranslation } from 'react-i18next';
 import { useAuth } from '../../Providers/AuthProvider';
 import { useKBState } from '../../Providers/KBStateProvider';
 import { listObjectsInFolder, deleteMultipleObjectsFromS3 } from '../../utils/s3Utils';
 import { knowledgeBaseService, S3FileInfo, KBDocument } from '../../Services/knowledgeBaseService';
 import '../../assets/styles/components/_knowledge_base_management.scss';
 import { withPRM } from '../../utils/prmUtils';
+import i18n from '../../i18n';
 
 // Type definitions
 interface S3Object {
@@ -81,18 +83,18 @@ function safeDecodeURIComponent(str: string): string {
  * Convert bytes to KB format
  */
 function formatKB(bytes: number): string {
-  return `${(bytes / 1024).toFixed(2)} KB`;
+  return i18n.t('common:fileSize.kb', { size: (bytes / 1024).toFixed(2) });
 }
 
-function formatDateSafe(date: Date | undefined): string {
-  if (!date) return '—';
+function formatDateSafe(date: Date | undefined, emptyLabel: string): string {
+  if (!date) return emptyLabel;
   const parsed = new Date(date);
-  if (Number.isNaN(parsed.getTime())) return '—';
-  return parsed.toLocaleString('en-NZ');
+  if (Number.isNaN(parsed.getTime())) return emptyLabel;
+  return parsed.toLocaleString(i18n.language);
 }
 
-function formatSizeSafe(size: number | undefined): string {
-  if (!size || Number.isNaN(size)) return '—';
+function formatSizeSafe(size: number | undefined, emptyLabel: string): string {
+  if (!size || Number.isNaN(size)) return emptyLabel;
   return formatKB(size);
 }
 
@@ -125,21 +127,32 @@ function resolveStatus(file: S3Object): Status {
 /**
  * Get status display text for a file
  */
-function getStatusDisplayText(file: S3Object, status: Status): string {
-  if (status === 'indexed') return 'Indexed';
-  if (status === 'failed') return 'Failed';
-  if (status === 'warning') return 'Warning';
+function getStatusDisplayText(
+  file: S3Object,
+  status: Status,
+  labels: {
+    indexed: string;
+    failed: string;
+    warning: string;
+    indexing: string;
+    crawling: string;
+    pending: string;
+  },
+): string {
+  if (status === 'indexed') return labels.indexed;
+  if (status === 'failed') return labels.failed;
+  if (status === 'warning') return labels.warning;
 
   // For pending status, check if it's a web crawler file
   if (file.urlTag) {
     const kbStatus = file.kbDoc?.status?.toUpperCase();
     if (kbStatus === 'INDEXING' || kbStatus === 'PROCESSING' || kbStatus === 'SYNCING') {
-      return 'Indexing';
+      return labels.indexing;
     }
-    return 'Crawling';
+    return labels.crawling;
   }
 
-  return 'Pending';
+  return labels.pending;
 }
 
 /**
@@ -342,7 +355,13 @@ function calculateFolderStatus(node: TreeNode): { status: Status; hasWebCrawlerC
 /**
  * Build rows for tree with status
  */
-function buildRowsForTree(node: TreeNode, depth: number, parentPath: string): TableRow[] {
+function buildRowsForTree(
+  node: TreeNode,
+  depth: number,
+  parentPath: string,
+  formatDate: (date: Date | undefined) => string,
+  formatSize: (size: number | undefined) => string,
+): TableRow[] {
   const rows: TableRow[] = [];
 
   for (const folderName of Object.keys(node.children)) {
@@ -367,7 +386,7 @@ function buildRowsForTree(node: TreeNode, depth: number, parentPath: string): Ta
       children: [],
     };
 
-    folderRow.children = buildRowsForTree(childNode, depth + 1, folderId);
+    folderRow.children = buildRowsForTree(childNode, depth + 1, folderId, formatDate, formatSize);
     rows.push(folderRow);
   }
 
@@ -394,8 +413,8 @@ function buildRowsForTree(node: TreeNode, depth: number, parentPath: string): Ta
       displayName: urlTag || fileName,
       originalKey: f.Key,
       depth,
-      uploadDate: formatDateSafe(f.LastModified),
-      size: formatSizeSafe(f.Size),
+      uploadDate: formatDate(f.LastModified),
+      size: formatSize(f.Size),
       status,
       kbStatus,
       errorMessage,
@@ -471,6 +490,7 @@ function adjustChildDepth(children: TableRow[]): TableRow[] {
  */
 export const KBFileExplorer = forwardRef<KBFileExplorerHandle, KBFileExplorerProps>(
   ({ kbId, role = 'VIEWER' }, ref): React.JSX.Element => {
+    const { t } = useTranslation('knowledgeBase');
     // Use KB state from context
     const { kbState, isLoading: kbStateLoading, error: kbStateError, refreshKBState, invalidateCache } = useKBState();
     const kbDocuments = kbState?.documents || [];
@@ -505,6 +525,17 @@ export const KBFileExplorer = forwardRef<KBFileExplorerHandle, KBFileExplorerPro
     const CLIENT_NAME = window.sessionStorage.getItem('CLIENT_NAME');
     const PREFERRED_KNOWLEDGE_BASE = window.sessionStorage.getItem('PREFERRED_KNOWLEDGE_BASE') || 'bedrock';
     const basePrefix = kbId === 'company' ? 'documents/company/' : `documents/kb-${kbId}/`;
+    const emptyValue = t('fileExplorer.emptyValue');
+    const statusLabels = {
+      indexed: t('fileExplorer.status.indexed'),
+      failed: t('fileExplorer.status.failed'),
+      warning: t('fileExplorer.status.warning'),
+      indexing: t('fileExplorer.status.indexing'),
+      crawling: t('fileExplorer.status.crawling'),
+      pending: t('fileExplorer.status.pending'),
+    };
+    const formatDate = (date: Date | undefined) => formatDateSafe(date, emptyValue);
+    const formatSize = (size: number | undefined) => formatSizeSafe(size, emptyValue);
 
     /**
      * Determine if status indicators are ready to show.
@@ -614,16 +645,16 @@ export const KBFileExplorer = forwardRef<KBFileExplorerHandle, KBFileExplorerPro
      */
     async function handleCreateFolder(): Promise<void> {
       if (!CLIENT_NAME) {
-        setCreateFolderError('CLIENT_NAME is not set');
+        setCreateFolderError(t('fileExplorer.errors.clientNameMissing'));
         return;
       }
       const name = newFolderName.trim();
       if (!name) {
-        setCreateFolderError('Folder name is required');
+        setCreateFolderError(t('fileExplorer.errors.folderNameRequired'));
         return;
       }
       if (/[\\/]/.test(name)) {
-        setCreateFolderError('Folder name cannot contain slashes');
+        setCreateFolderError(t('fileExplorer.errors.folderNameSlash'));
         return;
       }
 
@@ -632,7 +663,7 @@ export const KBFileExplorer = forwardRef<KBFileExplorerHandle, KBFileExplorerPro
       const newKey = `${basePrefix}${parentPrefix}${name}/`.replace(/\/{2,}/g, '/');
 
       if (allObjectKeys.has(newKey)) {
-        setCreateFolderError('A folder with that name already exists here');
+        setCreateFolderError(t('fileExplorer.errors.folderExists'));
         return;
       }
 
@@ -658,7 +689,7 @@ export const KBFileExplorer = forwardRef<KBFileExplorerHandle, KBFileExplorerPro
         invalidateCache();
       } catch (err) {
         console.error('Error creating folder', err);
-        setCreateFolderError(err instanceof Error ? err.message : 'Failed to create folder');
+        setCreateFolderError(err instanceof Error ? err.message : t('fileExplorer.errors.createFolder'));
       } finally {
         setIsCreatingFolder(false);
       }
@@ -812,7 +843,10 @@ export const KBFileExplorer = forwardRef<KBFileExplorerHandle, KBFileExplorerPro
     /**
      * Build rows
      */
-    const rowsNested = useMemo((): TableRow[] => unwrapSingleRootFolders(buildRowsForTree(tree, 0, '')), [tree]);
+    const rowsNested = useMemo(
+      (): TableRow[] => unwrapSingleRootFolders(buildRowsForTree(tree, 0, '', formatDate, formatSize)),
+      [tree, formatDate, formatSize],
+    );
     const rows = useMemo((): TableRow[] => flattenRows(rowsNested, expandedFolders), [rowsNested, expandedFolders]);
 
     /**
@@ -985,7 +1019,7 @@ export const KBFileExplorer = forwardRef<KBFileExplorerHandle, KBFileExplorerPro
         setShowBulkDeleteConfirmation(true);
       } catch (error: unknown) {
         console.error('Error preparing bulk delete:', error);
-        setDeleteError('Failed to prepare deletion. Please try again.');
+        setDeleteError(t('fileExplorer.errors.prepareDelete'));
       }
     }
 
@@ -1003,7 +1037,7 @@ export const KBFileExplorer = forwardRef<KBFileExplorerHandle, KBFileExplorerPro
         const { deleteKeys, visibleCount } = await getItemsToDelete(selectedItems, rows);
         setBulkDeleteItemCount(visibleCount);
         if (deleteKeys.length === 0) {
-          setDeleteError('No items found to delete. Please try again.');
+          setDeleteError(t('fileExplorer.errors.noItems'));
           return;
         }
         const deleteKeyTotal = deleteKeys.length;
@@ -1025,7 +1059,10 @@ export const KBFileExplorer = forwardRef<KBFileExplorerHandle, KBFileExplorerPro
 
         if (result.failed.length > 0) {
           setDeleteError(
-            `Partially successful: ${result.successful.length} files deleted, ${result.failed.length} failed.`,
+            t('fileExplorer.errors.partialDelete', {
+              deleted: result.successful.length,
+              failed: result.failed.length,
+            }),
           );
         }
 
@@ -1038,7 +1075,7 @@ export const KBFileExplorer = forwardRef<KBFileExplorerHandle, KBFileExplorerPro
         }
       } catch (error: unknown) {
         console.error('Error in bulk delete:', error);
-        setDeleteError((error as Error).message || 'Failed to delete items. Please try again.');
+        setDeleteError((error as Error).message || t('fileExplorer.errors.deleteItems'));
       } finally {
         setIsDeletingBulk(false);
       }
@@ -1054,7 +1091,7 @@ export const KBFileExplorer = forwardRef<KBFileExplorerHandle, KBFileExplorerPro
       <div className="kb-file-explorer">
         {kbStateError && (
           <Alert variant="warning" className="mb-3">
-            <strong>Error:</strong> {kbStateError}
+            <strong>{t('fileExplorer.errorLabel')}</strong> {kbStateError}
           </Alert>
         )}
 
@@ -1067,7 +1104,7 @@ export const KBFileExplorer = forwardRef<KBFileExplorerHandle, KBFileExplorerPro
               {/* Search */}
               <Form.Control
                 type="text"
-                placeholder="Search files..."
+                placeholder={t('fileExplorer.searchPlaceholder')}
                 value={searchValue}
                 onChange={(e) => setSearchValue(e.target.value)}
                 className="flex-shrink-0"
@@ -1081,11 +1118,11 @@ export const KBFileExplorer = forwardRef<KBFileExplorerHandle, KBFileExplorerPro
                 className="flex-shrink-0"
                 style={{ width: '150px', minWidth: '120px' }}
               >
-                <option value="all">All Files</option>
-                <option value="pending">Pending</option>
-                <option value="indexed">Indexed</option>
-                <option value="warning">Warning</option>
-                <option value="failed">Failed</option>
+                <option value="all">{t('fileExplorer.filters.all')}</option>
+                <option value="pending">{statusLabels.pending}</option>
+                <option value="indexed">{statusLabels.indexed}</option>
+                <option value="warning">{statusLabels.warning}</option>
+                <option value="failed">{statusLabels.failed}</option>
               </Form.Select>
             </div>
 
@@ -1104,7 +1141,7 @@ export const KBFileExplorer = forwardRef<KBFileExplorerHandle, KBFileExplorerPro
                     >
                       <i className="bi bi-x-circle me-1 d-inline d-sm-none"></i>
                       <i className="bi bi-x-circle me-1 d-none d-sm-inline"></i>
-                      <span className="d-none d-sm-inline">Clear</span>
+                      <span className="d-none d-sm-inline">{t('fileExplorer.actions.clear')}</span>
                     </Button>
                     <Button
                       variant="outline-primary"
@@ -1115,7 +1152,7 @@ export const KBFileExplorer = forwardRef<KBFileExplorerHandle, KBFileExplorerPro
                     >
                       <i className="bi bi-check-all me-1 d-inline d-sm-none"></i>
                       <i className="bi bi-check-all me-1 d-none d-sm-inline"></i>
-                      <span className="d-none d-sm-inline">Select All</span>
+                      <span className="d-none d-sm-inline">{t('fileExplorer.actions.selectAll')}</span>
                     </Button>
                     <Button
                       variant="danger"
@@ -1126,7 +1163,7 @@ export const KBFileExplorer = forwardRef<KBFileExplorerHandle, KBFileExplorerPro
                     >
                       <i className="bi bi-trash me-1 d-inline d-sm-none"></i>
                       <i className="bi bi-trash me-1 d-none d-sm-inline"></i>
-                      <span className="d-none d-sm-inline">Delete</span>
+                      <span className="d-none d-sm-inline">{t('fileExplorer.actions.delete')}</span>
                     </Button>
                   </div>
                 </div>
@@ -1143,7 +1180,7 @@ export const KBFileExplorer = forwardRef<KBFileExplorerHandle, KBFileExplorerPro
                   >
                     <i className="bi bi-folder-plus me-1 d-inline d-sm-none"></i>
                     <i className="bi bi-folder-plus me-1 d-none d-sm-inline"></i>
-                    <span className="d-none d-sm-inline">New Folder</span>
+                    <span className="d-none d-sm-inline">{t('fileExplorer.actions.newFolder')}</span>
                   </Button>
                 )}
                 <Button
@@ -1155,7 +1192,7 @@ export const KBFileExplorer = forwardRef<KBFileExplorerHandle, KBFileExplorerPro
                 >
                   <i className="bi bi-arrow-clockwise me-1 d-inline d-sm-none"></i>
                   <i className="bi bi-arrow-clockwise me-1 d-none d-sm-inline"></i>
-                  <span className="d-none d-sm-inline">Refresh</span>
+                  <span className="d-none d-sm-inline">{t('fileExplorer.actions.refresh')}</span>
                 </Button>
               </div>
             </div>
@@ -1166,14 +1203,14 @@ export const KBFileExplorer = forwardRef<KBFileExplorerHandle, KBFileExplorerPro
         {isLoading ? (
           <div className="text-center p-5">
             <div className="spinner-border text-primary">
-              <span className="visually-hidden">Loading...</span>
+              <span className="visually-hidden">{t('fileExplorer.loading')}</span>
             </div>
-            <p className="mt-3 text-muted">Loading files...</p>
+            <p className="mt-3 text-muted">{t('fileExplorer.loadingFiles')}</p>
           </div>
         ) : rows.length === 0 ? (
           <div className="text-center p-5 bg-light rounded">
             <i className="bi bi-inbox display-4 text-muted"></i>
-            <p className="mt-3 text-muted">No files found</p>
+            <p className="mt-3 text-muted">{t('fileExplorer.empty')}</p>
           </div>
         ) : (
           <div className="file-table-container">
@@ -1193,7 +1230,7 @@ export const KBFileExplorer = forwardRef<KBFileExplorerHandle, KBFileExplorerPro
                     }}
                   >
                     <div className="d-flex align-items-center justify-content-between">
-                      <span className="text-truncate">Name</span>
+                      <span className="text-truncate">{t('fileExplorer.table.name')}</span>
                       {sortColumn === 'name' && (
                         <i className={`bi bi-arrow-${sortDirection === 'asc' ? 'up' : 'down'} ms-1 flex-shrink-0`}></i>
                       )}
@@ -1209,7 +1246,7 @@ export const KBFileExplorer = forwardRef<KBFileExplorerHandle, KBFileExplorerPro
                     }}
                   >
                     <div className="d-flex align-items-center justify-content-between">
-                      <span>Status</span>
+                      <span>{t('fileExplorer.table.status')}</span>
                       {sortColumn === 'status' && (
                         <i className={`bi bi-arrow-${sortDirection === 'asc' ? 'up' : 'down'} ms-1 flex-shrink-0`}></i>
                       )}
@@ -1225,7 +1262,7 @@ export const KBFileExplorer = forwardRef<KBFileExplorerHandle, KBFileExplorerPro
                     }}
                   >
                     <div className="d-flex align-items-center justify-content-between">
-                      <span className="text-nowrap">Upload Date</span>
+                      <span className="text-nowrap">{t('fileExplorer.table.uploadDate')}</span>
                       {sortColumn === 'date' && (
                         <i className={`bi bi-arrow-${sortDirection === 'asc' ? 'up' : 'down'} ms-1 flex-shrink-0`}></i>
                       )}
@@ -1241,7 +1278,7 @@ export const KBFileExplorer = forwardRef<KBFileExplorerHandle, KBFileExplorerPro
                     }}
                   >
                     <div className="d-flex align-items-center justify-content-between">
-                      <span>Size</span>
+                      <span>{t('fileExplorer.table.size')}</span>
                       {sortColumn === 'size' && (
                         <i className={`bi bi-arrow-${sortDirection === 'asc' ? 'up' : 'down'} ms-1 flex-shrink-0`}></i>
                       )}
@@ -1249,8 +1286,8 @@ export const KBFileExplorer = forwardRef<KBFileExplorerHandle, KBFileExplorerPro
                   </th>
                   {canEdit && (
                     <th style={{ width: '60px', minWidth: '50px' }}>
-                      <span className="d-none d-sm-inline">Select</span>
-                      <span className="d-inline d-sm-none">Sel</span>
+                      <span className="d-none d-sm-inline">{t('fileExplorer.table.select')}</span>
+                      <span className="d-inline d-sm-none">{t('fileExplorer.table.selectShort')}</span>
                     </th>
                   )}
                 </tr>
@@ -1287,7 +1324,7 @@ export const KBFileExplorer = forwardRef<KBFileExplorerHandle, KBFileExplorerPro
                               <strong className="text-truncate">{row.name}</strong>
                               {row.urlTag === 'web-crawler-folder' && (
                                 <Badge bg="info" className="ms-2 flex-shrink-0 small">
-                                  Web Crawler
+                                  {t('fileExplorer.webCrawlerBadge')}
                                 </Badge>
                               )}
                             </>
@@ -1299,7 +1336,7 @@ export const KBFileExplorer = forwardRef<KBFileExplorerHandle, KBFileExplorerPro
                               </span>
                               {row.urlTag && (
                                 <Badge bg="info" className="ms-2 flex-shrink-0">
-                                  Web Crawler
+                                  {t('fileExplorer.webCrawlerBadge')}
                                 </Badge>
                               )}
                             </>
@@ -1326,12 +1363,12 @@ export const KBFileExplorer = forwardRef<KBFileExplorerHandle, KBFileExplorerPro
                               text={row.status === 'warning' ? 'dark' : undefined}
                             >
                               {row.status === 'indexed'
-                                ? 'Indexed'
+                                ? statusLabels.indexed
                                 : row.status === 'failed'
-                                  ? 'Failed'
+                                  ? statusLabels.failed
                                   : row.status === 'warning'
-                                    ? 'Warning'
-                                    : 'Indexing'}
+                                    ? statusLabels.warning
+                                    : statusLabels.indexing}
                             </Badge>
                           ) : null
                         ) : (
@@ -1346,11 +1383,11 @@ export const KBFileExplorer = forwardRef<KBFileExplorerHandle, KBFileExplorerPro
                                   text={row.status === 'warning' ? 'dark' : undefined}
                                 >
                                   {row.status === 'failed' ? (
-                                    'Failed'
+                                    statusLabels.failed
                                   ) : (
                                     <>
                                       <i className="bi bi-exclamation-triangle me-1"></i>
-                                      Warning
+                                      {statusLabels.warning}
                                     </>
                                   )}
                                 </Badge>
@@ -1382,14 +1419,14 @@ export const KBFileExplorer = forwardRef<KBFileExplorerHandle, KBFileExplorerPro
                                 }
                               >
                                 {row.fileObject
-                                  ? getStatusDisplayText(row.fileObject, row.status)
+                                  ? getStatusDisplayText(row.fileObject, row.status, statusLabels)
                                   : row.status === 'indexed'
-                                    ? 'Indexed'
+                                    ? statusLabels.indexed
                                     : row.status === 'failed'
-                                      ? 'Failed'
+                                      ? statusLabels.failed
                                       : row.status === 'warning'
-                                        ? 'Warning'
-                                        : 'Pending'}
+                                        ? statusLabels.warning
+                                        : statusLabels.pending}
                               </Badge>
                             )}
                           </>
@@ -1418,7 +1455,7 @@ export const KBFileExplorer = forwardRef<KBFileExplorerHandle, KBFileExplorerPro
         {/* Bulk Delete Modal */}
         <Modal show={showBulkDeleteConfirmation} onHide={() => setShowBulkDeleteConfirmation(false)}>
           <Modal.Header closeButton>
-            <Modal.Title>Confirm Deletion</Modal.Title>
+            <Modal.Title>{t('fileExplorer.bulkDelete.title')}</Modal.Title>
           </Modal.Header>
           <Modal.Body>
             {deleteError && (
@@ -1426,19 +1463,21 @@ export const KBFileExplorer = forwardRef<KBFileExplorerHandle, KBFileExplorerPro
                 {deleteError}
               </Alert>
             )}
-            <p>Are you sure you want to delete the selected items?</p>
+            <p>{t('fileExplorer.bulkDelete.confirm')}</p>
             {bulkDeleteItemCount > 0 && (
               <Alert variant="warning" className="mb-3">
                 <i className="bi bi-exclamation-triangle me-2"></i>
-                This will permanently delete <strong>{bulkDeleteItemCount}</strong> file
-                {bulkDeleteItemCount !== 1 ? 's' : ''} and their metadata.
+                {t('fileExplorer.bulkDelete.warning', { count: bulkDeleteItemCount })}
               </Alert>
             )}
             {bulkDeleteProgress && (
               <div className="mb-3">
                 <div className="d-flex justify-content-between small text-muted mb-1">
                   <span>
-                    Progress: {bulkDeleteProgress.processed} / {bulkDeleteProgress.total}
+                    {t('fileExplorer.bulkDelete.progress', {
+                      processed: bulkDeleteProgress.processed,
+                      total: bulkDeleteProgress.total,
+                    })}
                   </span>
                   <span>{Math.round((bulkDeleteProgress.processed / bulkDeleteProgress.total) * 100)}%</span>
                 </div>
@@ -1453,16 +1492,16 @@ export const KBFileExplorer = forwardRef<KBFileExplorerHandle, KBFileExplorerPro
           </Modal.Body>
           <Modal.Footer>
             <Button variant="secondary" onClick={() => setShowBulkDeleteConfirmation(false)} disabled={isDeletingBulk}>
-              Cancel
+              {t('actions.cancel')}
             </Button>
             <Button variant="danger" onClick={handleBulkDelete} disabled={isDeletingBulk}>
               {isDeletingBulk ? (
                 <>
                   <span className="spinner-border spinner-border-sm me-2" />
-                  Deleting...
+                  {t('actions.deleting')}
                 </>
               ) : (
-                `Delete (${bulkDeleteItemCount} files)`
+                t('fileExplorer.bulkDelete.deleteButton', { count: bulkDeleteItemCount })
               )}
             </Button>
           </Modal.Footer>
@@ -1471,7 +1510,7 @@ export const KBFileExplorer = forwardRef<KBFileExplorerHandle, KBFileExplorerPro
         {/* Create Folder Modal */}
         <Modal show={showCreateFolderModal} onHide={() => setShowCreateFolderModal(false)}>
           <Modal.Header closeButton>
-            <Modal.Title>Create Folder</Modal.Title>
+            <Modal.Title>{t('fileExplorer.createFolder.title')}</Modal.Title>
           </Modal.Header>
           <Modal.Body>
             {createFolderError && (
@@ -1480,17 +1519,17 @@ export const KBFileExplorer = forwardRef<KBFileExplorerHandle, KBFileExplorerPro
               </Alert>
             )}
             <Form.Group className="mb-3">
-              <Form.Label>Folder name</Form.Label>
+              <Form.Label>{t('fileExplorer.createFolder.nameLabel')}</Form.Label>
               <Form.Control
                 type="text"
                 value={newFolderName}
                 onChange={(e) => setNewFolderName(e.target.value)}
-                placeholder="e.g., project-a"
+                placeholder={t('fileExplorer.createFolder.namePlaceholder')}
                 disabled={isCreatingFolder}
               />
             </Form.Group>
             <Form.Group>
-              <Form.Label>Parent folder</Form.Label>
+              <Form.Label>{t('fileExplorer.createFolder.parentLabel')}</Form.Label>
               <Form.Select
                 value={newFolderParent}
                 onChange={(e) => setNewFolderParent(e.target.value)}
@@ -1498,7 +1537,7 @@ export const KBFileExplorer = forwardRef<KBFileExplorerHandle, KBFileExplorerPro
               >
                 {folderOptions.map((path) => (
                   <option key={path || 'root'} value={path}>
-                    {path ? `/${path}` : 'Root'}
+                    {path ? `/${path}` : t('fileExplorer.createFolder.root')}
                   </option>
                 ))}
               </Form.Select>
@@ -1506,16 +1545,16 @@ export const KBFileExplorer = forwardRef<KBFileExplorerHandle, KBFileExplorerPro
           </Modal.Body>
           <Modal.Footer>
             <Button variant="secondary" onClick={() => setShowCreateFolderModal(false)} disabled={isCreatingFolder}>
-              Cancel
+              {t('actions.cancel')}
             </Button>
             <Button variant="primary" onClick={handleCreateFolder} disabled={isCreatingFolder}>
               {isCreatingFolder ? (
                 <>
                   <span className="spinner-border spinner-border-sm me-2" />
-                  Creating...
+                  {t('fileExplorer.createFolder.creating')}
                 </>
               ) : (
-                'Create Folder'
+                t('fileExplorer.createFolder.create')
               )}
             </Button>
           </Modal.Footer>

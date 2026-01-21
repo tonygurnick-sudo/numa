@@ -1,0 +1,215 @@
+{
+  "input": {
+    "placeholder": "How can I help you today?",
+    "tooltips": {
+      "upload": "File Upload",
+      "knowledgeBases": "Knowledge Bases",
+      "tools": "Tools",
+      "integrations": "Integrations"
+    },
+    "aria": {
+      "upload": "Upload Files",
+      "knowledgeBase": "Knowledge Base",
+      "toolsSettings": "Tools Settings",
+      "close": "Close"
+    },
+    "kb": {
+      "title": "Knowledge Bases",
+      "available": "Available Knowledge Bases",
+      "empty": "No KBs available",
+      "defaultBadge": "Default",
+      "refresh": "Refresh"
+    },
+    "tools": {
+      "title": "Tools",
+      "allTools": "All Tools",
+      "allToolsDescription": "When enabled, all tools are automatically available",
+      "webSearch": {
+        "title": "Web Search",
+        "description": "Search the web for current information"
+      },
+      "dataAnalysis": {
+        "title": "Data Analysis",
+        "description": "Analyze CSV, Excel, or JSON data files"
+      },
+      "agentCreation": {
+        "title": "Agent Creation",
+        "description": "Allow me to create saved agents when you explicitly ask"
+      },
+      "selectSpecific": "Select specific tools to enable for this conversation"
+    },
+    "integrations": {
+      "toggleAria": "Toggle Integrations",
+      "modalTitle": "Select Integrations",
+      "modalDescription": "Select up to 2 integrations to enable for this chat session.",
+      "loading": "Loading available integrations...",
+      "empty": "No integrations available. Set them up on the Integrations page.",
+      "connected": "Connected",
+      "enabled": "Enabled",
+      "enable": "Enable"
+    }
+  },
+  "messages": {
+    "loadingConversation": "Loading conversation...",
+    "status": {
+      "initializing": "Initializing chat...",
+      "processingFile": "Processing Upload...",
+      "thinking": "Thinking..."
+    },
+    "roles": {
+      "assistant": "Assistant",
+      "you": "You",
+      "system": "System"
+    },
+    "fileUploaded": "File '{{name}}' uploaded successfully.",
+    "openDocument": "Open: {{title}}"
+  },
+  "dataAnalysis": {
+    "fileFallback": "data file"
+  },
+  "dataAnalysisBanner": {
+    "title": "Analyze uploaded data?",
+    "description": "Run Data Analysis on {{files}}.",
+    "note": "This may take up to 5 minutes.",
+    "actions": {
+      "run": "Run Data Analysis",
+      "notNow": "Not now"
+    }
+  },
+  "systemMessages": {
+    "backupModel": "Switching to backup model due to high demand. Please try your request again.",
+    "agentError": "Agent error: {{message}}",
+    "loadConversationFailed": "Error loading conversation. Please try again or select a different conversation."
+  },
+  "errors": {
+    "activateAgentFailed": "Unable to activate agent",
+    "activateSelectedAgentFailed": "Unable to activate selected agent",
+    "loadAgentConfigFailed": "Unable to load agent configuration for this conversation.",
+    "sendFailed": "Failed to send message"
+  },
+  "history": {
+    "title": "Chat History",
+    "closeAria": "Close chat history",
+    "loading": "Loading conversations...",
+    "loadFailed": "Failed to load conversation history",
+    "retry": "Retry",
+    "empty": "No conversations available",
+    "untitled": "Untitled Chat",
+    "agentPrefix": "Agent: {{name}}",
+    "renamePrompt": "Enter new name for this conversation:",
+    "renameFailed": "Failed to rename conversation",
+    "renameAria": "Rename conversation",
+    "deleteConfirm": "Are you sure you want to delete this conversation?",
+    "deleteFailed": "Failed to delete conversation",
+    "deleteAria": "Delete conversation"
+  },
+  "settingsPanel": {
+    "knowledgeBases": "Knowledge Bases",
+    "loadingKnowledgeBases": "Loading knowledge bases...",
+    "noKnowledgeBases": "No knowledge bases available",
+    "selectKnowledgeBases": "Select knowledge bases to query during this chat",
+    "tools": "Tools",
+    "allTools": "All Tools",
+    "allToolsDescription": "When enabled, all tools are automatically available",
+    "webSearch": "Web Search",
+    "webSearchDescription": "Search the web for current information",
+    "dataAnalysis": "Data Analysis",
+    "dataAnalysisDescription": "Analyze CSV, Excel, or JSON data files",
+    "agentCreation": "Agent Creation",
+    "agentCreationDescription": "Allow creating new agents during chat",
+    "integrations": "Integrations",
+    "loadingIntegrations": "Loading integrations...",
+    "noIntegrations": "No integrations connected. Visit the Integrations page to connect apps.",
+    "enableIntegrations": "Enable integrations to use during this chat"
+  },
+  "fileUpload": {
+    "csvWarning": "CSV support is limited when Data Analysis is off. Enable Data Analysis in chat tools to analyze CSV files.",
+    "noFilesSelected": "No files were selected for upload",
+    "processing": "Processing {{count}} file(s)...",
+    "invalidFile": "Invalid file at index {{index}}",
+    "successfullyProcessed": "Successfully processed \"{{name}}\".",
+    "failedToProcess": "Failed to process \"{{name}}\": {{message}}",
+    "errorProcessing": "Error while processing files: {{message}}",
+    "uploadedNames": {
+      "single": "Uploaded {{names}}",
+      "multiple": "Uploaded {{names}} and {{count}} more"
+    },
+    "modalTitle": "Upload Files",
+    "supportedFileTypesTitle": "Supported File Types:",
+    "supportedFileTypes": {
+      "pdf": "PDF (pdf)",
+      "documents": "Documents (docx, txt)",
+      "spreadsheets": "Spreadsheets (csv, xlsx)",
+      "images": "Images (jpg, jpeg, png)",
+      "audioVideo": "Audio/Video (mp3, mp4, wav, flac, ogg, amr, webm, m4a)",
+      "markdown": "Markdown (md)",
+      "other": "Other (json, xml, html, py, js, ts)"
+    }
+  },
+  "references": {
+    "label": "References",
+    "fileFallback": "file",
+    "documentFallback": "Document",
+    "unableToAccess": "(Unable to access file)",
+    "unableToAccessAlert": "Unable to access document: {{message}}",
+    "credentialsError": "Failed to get AWS credentials",
+    "show": "Show {{label}}",
+    "hide": "Hide {{label}}"
+  },
+  "newChat": {
+    "agentFallback": "Agent",
+    "logoAltFallback": "Logo",
+    "greeting": {
+      "morning": "Good morning",
+      "afternoon": "Good afternoon",
+      "evening": "Good evening",
+      "withName": "{{greeting}}, {{name}}"
+    },
+    "placeholder": "How can I help you today?",
+    "loadingAgents": "Loading agents...",
+    "continue": "Continue where you left off",
+    "loadingRecent": "Loading recent conversations...",
+    "untitled": "Untitled Chat",
+    "renameTooltip": "Rename",
+    "deleteTooltip": "Delete",
+    "renameAria": "Rename conversation",
+    "deleteAria": "Delete conversation",
+    "noRecent": "No recent conversations",
+    "tabs": {
+      "settings": "Settings",
+      "history": "History"
+    },
+    "chatSettings": "Chat Settings",
+    "relativeTime": {
+      "justNow": "Just now",
+      "minutesAgo_one": "{{count}}m ago",
+      "minutesAgo_other": "{{count}}m ago",
+      "hoursAgo_one": "{{count}}h ago",
+      "hoursAgo_other": "{{count}}h ago",
+      "yesterday": "Yesterday",
+      "daysAgo_one": "{{count}}d ago",
+      "daysAgo_other": "{{count}}d ago"
+    }
+  },
+  "page": {
+    "title": "Numa Chat",
+    "historyButton": "History",
+    "newChat": "New Chat",
+    "mobileActions": {
+      "show": "Show chat actions",
+      "hide": "Hide chat actions"
+    },
+    "agentAssistant": "AI Agent Assistant",
+    "missingIntegrations": {
+      "title": "Missing integrations",
+      "body": "This agent requests access to the following integrations which are not connected for your account:",
+      "note": "Continuing may result in limited or unintended behavior. You can connect integrations now from the Integrations page and try again.",
+      "back": "Back",
+      "goToIntegrations": "Go to Integrations",
+      "continueWithout": "Continue without"
+    },
+    "loading": "Loading...",
+    "loadingConversation": "Loading conversation...",
+    "documentTitle": "Document"
+  }
+}

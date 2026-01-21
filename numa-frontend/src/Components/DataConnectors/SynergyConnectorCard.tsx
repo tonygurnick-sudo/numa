@@ -1,4 +1,5 @@
 import { Button, Spinner } from 'react-bootstrap';
+import { useTranslation } from 'react-i18next';
 import synergyIconUrl from '../../assets/icons/12d_Synergy-cube.svg';
 
 type SynergyConnectorCardProps = {
@@ -12,9 +13,18 @@ type SynergyConnectorCardProps = {
   adminDisabled?: boolean;
 };
 
-export const SynergyIcon = () => (
-  <img src={synergyIconUrl} alt="Synergy icon" width={32} height={32} style={{ objectFit: 'contain' }} />
-);
+export const SynergyIcon = () => {
+  const { t } = useTranslation('integrations');
+  return (
+    <img
+      src={synergyIconUrl}
+      alt={t('dataConnectors.synergy.iconAlt')}
+      width={32}
+      height={32}
+      style={{ objectFit: 'contain' }}
+    />
+  );
+};
 
 export const SynergyConnectorCard = ({
   status,
@@ -24,6 +34,7 @@ export const SynergyConnectorCard = ({
   isConnecting,
   adminDisabled = false,
 }: SynergyConnectorCardProps) => {
+  const { t } = useTranslation('integrations');
   const isConnected = status?.status === 'connected';
 
   return (
@@ -45,9 +56,9 @@ export const SynergyConnectorCard = ({
               <SynergyIcon />
             </div>
             <div>
-              <h6 className="mb-1 fw-semibold">Synergy</h6>
+              <h6 className="mb-1 fw-semibold">{t('dataConnectors.synergy.name')}</h6>
               <p className="mb-0 small text-muted" style={{ fontSize: '0.85rem', lineHeight: '1.4' }}>
-                Data connector for Synergy job data.
+                {t('dataConnectors.synergy.description')}
               </p>
             </div>
           </div>
@@ -57,7 +68,7 @@ export const SynergyConnectorCard = ({
             {isConnected ? (
               <>
                 <div className="rounded-circle bg-success me-2" style={{ width: '12px', height: '12px' }}></div>
-                <span className="text-success small fw-semibold">Connected</span>
+                <span className="text-success small fw-semibold">{t('status.connected')}</span>
               </>
             ) : (
               <>
@@ -65,7 +76,7 @@ export const SynergyConnectorCard = ({
                   className="rounded-circle border border-secondary me-2"
                   style={{ width: '12px', height: '12px' }}
                 ></div>
-                <span className="text-muted small">Not Connected</span>
+                <span className="text-muted small">{t('status.notConnected')}</span>
               </>
             )}
           </div>
@@ -82,7 +93,7 @@ export const SynergyConnectorCard = ({
                   className="d-flex align-items-center"
                 >
                   <i className="bi bi-lightning-fill me-2"></i>
-                  Test
+                  {t('dataConnectors.actions.test')}
                 </Button>
                 <Button
                   variant="primary"
@@ -92,7 +103,7 @@ export const SynergyConnectorCard = ({
                   className="d-flex align-items-center"
                 >
                   <i className="bi bi-sliders me-2"></i>
-                  Settings
+                  {t('dataConnectors.actions.settings')}
                 </Button>
                 <Button
                   variant="secondary"
@@ -102,7 +113,7 @@ export const SynergyConnectorCard = ({
                   className="d-flex align-items-center"
                 >
                   <i className="bi bi-arrow-repeat me-2"></i>
-                  Reconnect
+                  {t('dataConnectors.actions.reconnect')}
                 </Button>
               </>
             ) : (
@@ -116,12 +127,12 @@ export const SynergyConnectorCard = ({
                 {isConnecting ? (
                   <>
                     <Spinner size="sm" className="me-2" />
-                    Connecting...
+                    {t('dataConnectors.actions.connecting')}
                   </>
                 ) : (
                   <>
                     <i className="bi bi-plus-circle me-2"></i>
-                    Connect
+                    {t('dataConnectors.actions.connect')}
                   </>
                 )}
               </Button>

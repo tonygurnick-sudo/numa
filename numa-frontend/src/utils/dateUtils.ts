@@ -5,9 +5,11 @@
  *   isoDate: string      // ISO format date string for API/storage
  * }}
  */
+import i18n from '../i18n';
+
 export const createFormattedDate = () => {
   const now = new Date();
-  const displayDate = now.toLocaleString('en-NZ', {
+  const displayDate = now.toLocaleString(i18n.language, {
     month: 'short',
     day: 'numeric',
     hour: 'numeric',

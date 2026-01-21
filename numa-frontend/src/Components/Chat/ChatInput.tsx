@@ -1,6 +1,8 @@
 import { useRef, useEffect, useState } from 'react';
 import { Button, Form, Spinner, Modal, Dropdown, Badge, OverlayTrigger, Tooltip } from 'react-bootstrap';
 import { Search, Robot, BarChart } from 'react-bootstrap-icons';
+import { useTranslation } from 'react-i18next';
+import i18n from '../../i18n';
 import { FeatureWrapper } from '../RequiredFeaturesWrapper';
 import {
   getConnectionIcon,
@@ -45,6 +47,7 @@ const ChatInput = ({
   setEnabledKBIds,
   dropdownDirection = 'up',
 }) => {
+  const { t } = useTranslation('chat');
   const internalRef = useRef(null);
   const inputRef = externalInputRef || internalRef;
   const [showConnectionsModal, setShowConnectionsModal] = useState(false);
@@ -98,7 +101,7 @@ const ChatInput = ({
   const isControlsDisabled = buttonStatus === 'streaming' || uploadsInProgress || !!disabled;
 
   // Placeholder: prefer explicit override, otherwise show a friendly default
-  const placeholderText = placeholderOverride ?? 'How can I help you today?';
+  const placeholderText = placeholderOverride ?? t('input.placeholder');
 
   const handleInputChange = (e) => {
     const newValue = e.target.value;
@@ -191,7 +194,7 @@ const ChatInput = ({
               borderRadius: '2px',
             }}
           >
-            {inputMessage.length.toLocaleString()} / {MAX_MESSAGE_LENGTH.toLocaleString()}
+            {inputMessage.length.toLocaleString(i18n.language)} / {MAX_MESSAGE_LENGTH.toLocaleString(i18n.language)}
           </small>
         </div>
 
@@ -201,7 +204,10 @@ const ChatInput = ({
             {/* Attachment Button & Knowledge Base Selector */}
             <FeatureWrapper requiredFeature="useCompanyData">
               <>
-                <OverlayTrigger placement="top" overlay={<Tooltip id="tooltip-file-upload">File Upload</Tooltip>}>
+                <OverlayTrigger
+                  placement="top"
+                  overlay={<Tooltip id="tooltip-file-upload">{t('input.tooltips.upload')}</Tooltip>}
+                >
                   <Button
                     variant="link"
                     className="attachment-icon"
@@ -209,7 +215,7 @@ const ChatInput = ({
                       console.log('Paperclip button clicked');
                       setShowUploadModal(true);
                     }}
-                    aria-label="Upload Files"
+                    aria-label={t('input.aria.upload')}
                     disabled={isControlsDisabled}
                   >
                     <i className="bi bi-paperclip"></i>
@@ -218,7 +224,7 @@ const ChatInput = ({
 
                 <OverlayTrigger
                   placement="top"
-                  overlay={<Tooltip id="tooltip-knowledge-bases">Knowledge Bases</Tooltip>}
+                  overlay={<Tooltip id="tooltip-knowledge-bases">{t('input.tooltips.knowledgeBases')}</Tooltip>}
                 >
                   <Dropdown
                     drop={dropdownDirection}
@@ -230,7 +236,7 @@ const ChatInput = ({
                       variant="link"
                       className={`kb-selector-compact-toggle ${enabledKBIds.length > 0 ? 'active' : ''}`}
                       disabled={isControlsDisabled}
-                      aria-label="Knowledge Base"
+                      aria-label={t('input.aria.knowledgeBase')}
                     >
                       <i className="bi bi-folder2-open"></i>
                       {enabledKBIds.length > 0 && (
@@ -288,7 +294,7 @@ const ChatInput = ({
                     >
                       {/* Mobile Close Button */}
                       <div className="kb-mobile-header d-md-none">
-                        <span className="kb-header-title">Knowledge Bases</span>
+                        <span className="kb-header-title">{t('input.kb.title')}</span>
                         <Button
                           variant="link"
                           className="kb-close-button"
@@ -297,20 +303,20 @@ const ChatInput = ({
                             e.stopPropagation();
                             setShowKBDropdown(false);
                           }}
-                          aria-label="Close"
+                          aria-label={t('input.aria.close')}
                         >
                           <i className="bi bi-x-lg"></i>
                         </Button>
                       </div>
 
                       {/* KB Selection */}
-                      <Dropdown.Header className="d-none d-md-block">Available Knowledge Bases</Dropdown.Header>
+                      <Dropdown.Header className="d-none d-md-block">{t('input.kb.available')}</Dropdown.Header>
                       {isLoadingKBs ? (
                         <div className="text-center py-2">
                           <Spinner animation="border" size="sm" />
                         </div>
                       ) : availableKBs.length === 0 ? (
-                        <div className="px-3 py-2 text-muted">No KBs available</div>
+                        <div className="px-3 py-2 text-muted">{t('input.kb.empty')}</div>
                       ) : (
                         availableKBs.map((kb) => (
                           <div key={kb.kb_id} className="kb-item">
@@ -324,7 +330,7 @@ const ChatInput = ({
                                     <span className="kb-name">{kb.kb_name}</span>
                                     {kb.kb_id === 'company' && (
                                       <Badge bg="" className="badge-outline ms-2" style={{ fontSize: '0.65rem' }}>
-                                        Default
+                                        {t('input.kb.defaultBadge')}
                                       </Badge>
                                     )}
                                   </div>
@@ -353,7 +359,7 @@ const ChatInput = ({
                       <Dropdown.Divider />
                       <Dropdown.Item onClick={() => refreshKBs()}>
                         <i className="bi bi-arrow-clockwise me-2"></i>
-                        Refresh
+                        {t('input.kb.refresh')}
                       </Dropdown.Item>
                     </Dropdown.Menu>
                   </Dropdown>
@@ -364,7 +370,10 @@ const ChatInput = ({
             {/* Tools Settings Dropup */}
             {autoToolsEnabled !== undefined && setAutoToolsEnabled && (
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-                <OverlayTrigger placement="top" overlay={<Tooltip id="tooltip-tools">Tools</Tooltip>}>
+                <OverlayTrigger
+                  placement="top"
+                  overlay={<Tooltip id="tooltip-tools">{t('input.tooltips.tools')}</Tooltip>}
+                >
                   <Dropdown
                     drop={dropdownDirection}
                     className="tools-settings-dropdown"
@@ -382,7 +391,7 @@ const ChatInput = ({
                           : ''
                       }`}
                       disabled={isControlsDisabled}
-                      aria-label="Tools Settings"
+                      aria-label={t('input.aria.toolsSettings')}
                     >
                       <i className="bi bi-tools"></i>
                     </Dropdown.Toggle>
@@ -421,7 +430,7 @@ const ChatInput = ({
                     >
                       {/* Mobile Close Button */}
                       <div className="tools-mobile-header d-md-none">
-                        <span className="tools-header-title">Tools</span>
+                        <span className="tools-header-title">{t('input.tools.title')}</span>
                         <Button
                           variant="link"
                           className="tools-close-button"
@@ -430,7 +439,7 @@ const ChatInput = ({
                             e.stopPropagation();
                             setShowToolsDropdown(false);
                           }}
-                          aria-label="Close"
+                          aria-label={t('input.aria.close')}
                         >
                           <i className="bi bi-x-lg"></i>
                         </Button>
@@ -440,14 +449,12 @@ const ChatInput = ({
                         <Form.Check
                           type="switch"
                           id="auto-tools-switch"
-                          label="All Tools"
+                          label={t('input.tools.allTools')}
                           checked={autoToolsEnabled}
                           onChange={(e) => setAutoToolsEnabled(e.target.checked)}
                           className="mb-2"
                         />
-                        <small className="text-muted d-block mb-3">
-                          When enabled, all tools are automatically available
-                        </small>
+                        <small className="text-muted d-block mb-3">{t('input.tools.allToolsDescription')}</small>
                       </div>
 
                       <hr className="my-2" />
@@ -458,9 +465,9 @@ const ChatInput = ({
                           label={
                             <span className="tool-label">
                               <Search size={16} className="me-2" />
-                              <span className="tool-name">Web Search</span>
+                              <span className="tool-name">{t('input.tools.webSearch.title')}</span>
                               <span className="tool-separator"> - </span>
-                              <span className="tool-description">Search the web for current information</span>
+                              <span className="tool-description">{t('input.tools.webSearch.description')}</span>
                             </span>
                           }
                           checked={autoToolsEnabled || webSearchEnabled}
@@ -476,9 +483,9 @@ const ChatInput = ({
                             label={
                               <span className="tool-label">
                                 <BarChart size={16} className="me-2" />
-                                <span className="tool-name">Data Analysis</span>
+                                <span className="tool-name">{t('input.tools.dataAnalysis.title')}</span>
                                 <span className="tool-separator"> - </span>
-                                <span className="tool-description">Analyze CSV, Excel, or JSON data files</span>
+                                <span className="tool-description">{t('input.tools.dataAnalysis.description')}</span>
                               </span>
                             }
                             checked={autoToolsEnabled || dataAnalysisEnabled}
@@ -495,11 +502,9 @@ const ChatInput = ({
                             label={
                               <span className="tool-label">
                                 <Robot size={16} className="me-2" />
-                                <span className="tool-name">Agent Creation</span>
+                                <span className="tool-name">{t('input.tools.agentCreation.title')}</span>
                                 <span className="tool-separator"> - </span>
-                                <span className="tool-description">
-                                  Allow me to create saved agents when you explicitly ask
-                                </span>
+                                <span className="tool-description">{t('input.tools.agentCreation.description')}</span>
                               </span>
                             }
                             checked={autoToolsEnabled || createAgentEnabled}
@@ -515,7 +520,7 @@ const ChatInput = ({
                         !dataAnalysisActive &&
                         !(agentsFeatureEnabled && createAgentEnabled) && (
                           <div className="mt-2 p-2 bg-light rounded">
-                            <small className="text-muted">Select specific tools to enable for this conversation</small>
+                            <small className="text-muted">{t('input.tools.selectSpecific')}</small>
                           </div>
                         )}
                     </Dropdown.Menu>
@@ -537,12 +542,15 @@ const ChatInput = ({
 
             {/* Integrations Toggle */}
             {hasPipedreamFeature && (
-              <OverlayTrigger placement="top" overlay={<Tooltip id="tooltip-integrations">Integrations</Tooltip>}>
+              <OverlayTrigger
+                placement="top"
+                overlay={<Tooltip id="tooltip-integrations">{t('input.tooltips.integrations')}</Tooltip>}
+              >
                 <Button
                   variant="link"
                   className={`connections-toggle ${enabledConnections.length > 0 ? 'active' : ''}`}
                   onClick={() => setShowConnectionsModal(true)}
-                  aria-label="Toggle Integrations"
+                  aria-label={t('input.integrations.toggleAria')}
                   disabled={isControlsDisabled || connectionsLoading}
                 >
                   {connectionsLoading && (
@@ -629,14 +637,14 @@ const ChatInput = ({
       {/* Integrations Selection Modal */}
       <Modal show={showConnectionsModal} onHide={() => setShowConnectionsModal(false)} centered>
         <Modal.Header closeButton>
-          <Modal.Title>Select Integrations</Modal.Title>
+          <Modal.Title>{t('input.integrations.modalTitle')}</Modal.Title>
         </Modal.Header>
         <Modal.Body>
-          <p className="text-muted mb-3">Select up to 2 integrations to enable for this chat session.</p>
+          <p className="text-muted mb-3">{t('input.integrations.modalDescription')}</p>
           {connectionsLoading ? (
-            <p className="text-muted text-center">Loading available integrations...</p>
+            <p className="text-muted text-center">{t('input.integrations.loading')}</p>
           ) : availableConnections.length === 0 ? (
-            <p className="text-muted text-center">No integrations available. Set them up on the Integrations page.</p>
+            <p className="text-muted text-center">{t('input.integrations.empty')}</p>
           ) : (
             <div className="d-flex flex-column gap-3">
               {availableConnections
@@ -668,7 +676,7 @@ const ChatInput = ({
                         />
                         <div>
                           <div className="fw-bold">{getConnectionDisplayName(connection.id)}</div>
-                          <div className="text-muted small">Connected</div>
+                          <div className="text-muted small">{t('input.integrations.connected')}</div>
                         </div>
                       </div>
                       <Button
@@ -677,7 +685,7 @@ const ChatInput = ({
                         disabled={!canToggle && !isEnabled}
                         onClick={() => handleToggleConnection(connection.id)}
                       >
-                        {isEnabled ? 'Enabled' : 'Enable'}
+                        {isEnabled ? t('input.integrations.enabled') : t('input.integrations.enable')}
                       </Button>
                     </div>
                   );

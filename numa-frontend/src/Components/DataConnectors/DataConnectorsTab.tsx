@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Alert, Button, Col, Form, Modal, Row, Spinner } from 'react-bootstrap';
+import { useTranslation } from 'react-i18next';
 import { DataConnectorsService } from '../../Services/DataConnectorsService';
 import type { DataConnectorStatus } from '../../types/dataConnectors';
 import { useNumaRequest } from '../../Providers/NumaRequestContext';
@@ -11,6 +12,7 @@ type DataConnectorsTabProps = {
 };
 
 export const DataConnectorsTab = ({ adminSettings }: DataConnectorsTabProps) => {
+  const { t } = useTranslation('integrations');
   const { numaGet, numaPost } = useNumaRequest();
   const [statusItems, setStatusItems] = useState<DataConnectorStatus[]>([]);
   const [loading, setLoading] = useState(true);
@@ -29,7 +31,7 @@ export const DataConnectorsTab = ({ adminSettings }: DataConnectorsTabProps) => 
       const items = await DataConnectorsService.listStatus(numaGet);
       setStatusItems(items);
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to load data connectors.';
+      const message = err instanceof Error ? err.message : t('dataConnectors.errors.loadFailed');
       setLoadError(message);
     } finally {
       setLoading(false);
@@ -52,14 +54,14 @@ export const DataConnectorsTab = ({ adminSettings }: DataConnectorsTabProps) => 
       const message =
         response?.test_result?.message ||
         (response?.test_result?.jobs_found !== null && response?.test_result?.jobs_found !== undefined
-          ? `Connected successfully. Found ${response.test_result.jobs_found} jobs.`
-          : 'Connected successfully.');
+          ? t('dataConnectors.successWithJobs', { count: response.test_result.jobs_found })
+          : t('dataConnectors.success'));
       setSuccess(message);
       setModalMode(null);
       setToken('');
       await loadStatus();
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to connect to Synergy.';
+      const message = err instanceof Error ? err.message : t('dataConnectors.errors.connectFailed');
       setConnectError(message);
     } finally {
       setConnecting(false);
@@ -92,7 +94,7 @@ export const DataConnectorsTab = ({ adminSettings }: DataConnectorsTabProps) => 
     return (
       <div className="text-center py-5">
         <Spinner animation="border" variant="primary" />
-        <p className="mt-3 text-muted">Loading data connectors...</p>
+        <p className="mt-3 text-muted">{t('dataConnectors.loading')}</p>
       </div>
     );
   }
@@ -106,13 +108,13 @@ export const DataConnectorsTab = ({ adminSettings }: DataConnectorsTabProps) => 
       )}
       {adminDisabled && (
         <Alert variant="info" className="mb-3">
-          This data connector has been disabled by your administrator.
+          {t('dataConnectors.disabled')}
         </Alert>
       )}
       <div className="mb-4">
         <h4 className="text-primary mb-0 d-flex align-items-center">
           <i className="bi bi-grid-3x3-gap me-2"></i>
-          <span>Available Data Connectors (1)</span>
+          <span>{t('dataConnectors.available', { count: 1 })}</span>
         </h4>
       </div>
       <SynergyConnectorCard
@@ -127,16 +129,16 @@ export const DataConnectorsTab = ({ adminSettings }: DataConnectorsTabProps) => 
       <Modal show={!!modalMode} onHide={() => setModalMode(null)} centered>
         <Modal.Header closeButton>
           <Modal.Title>
-            {modalMode === 'connect' && 'Connect to Synergy'}
-            {modalMode === 'settings' && 'Synergy Settings'}
-            {modalMode === 'test' && 'Test Synergy Connection'}
+            {modalMode === 'connect' && t('dataConnectors.modal.connectTitle')}
+            {modalMode === 'settings' && t('dataConnectors.modal.settingsTitle')}
+            {modalMode === 'test' && t('dataConnectors.modal.testTitle')}
           </Modal.Title>
         </Modal.Header>
         <Form onSubmit={handleSubmit}>
           <Modal.Body>
             {adminDisabled && (
               <Alert variant="warning" className="py-2">
-                This connector is disabled by your administrator.
+                {t('dataConnectors.modal.disabled')}
               </Alert>
             )}
             {connectError && (
@@ -152,10 +154,10 @@ export const DataConnectorsTab = ({ adminSettings }: DataConnectorsTabProps) => 
             <Row className="g-3">
               <Col md={12}>
                 <Form.Group>
-                  <Form.Label className="small fw-semibold">Server</Form.Label>
+                  <Form.Label className="small fw-semibold">{t('dataConnectors.modal.serverLabel')}</Form.Label>
                   <Form.Control
                     type="text"
-                    placeholder="https://synergy.myserver.com:8080"
+                    placeholder={t('dataConnectors.modal.serverPlaceholder')}
                     value={server}
                     onChange={(e) => setServer(e.target.value)}
                     required
@@ -164,10 +166,10 @@ export const DataConnectorsTab = ({ adminSettings }: DataConnectorsTabProps) => 
               </Col>
               <Col md={12}>
                 <Form.Group>
-                  <Form.Label className="small fw-semibold">Personal Access Token</Form.Label>
+                  <Form.Label className="small fw-semibold">{t('dataConnectors.modal.tokenLabel')}</Form.Label>
                   <Form.Control
                     type="password"
-                    placeholder="Paste token"
+                    placeholder={t('dataConnectors.modal.tokenPlaceholder')}
                     value={token}
                     onChange={(e) => setToken(e.target.value)}
                     required
@@ -178,17 +180,21 @@ export const DataConnectorsTab = ({ adminSettings }: DataConnectorsTabProps) => 
           </Modal.Body>
           <Modal.Footer>
             <Button variant="secondary" onClick={() => setModalMode(null)}>
-              Cancel
+              {t('dataConnectors.modal.cancel')}
             </Button>
             <Button type="submit" variant="primary" disabled={connecting || adminDisabled}>
               {connecting ? (
                 <>
-                  <Spinner size="sm" className="me-2" /> Saving...
+                  <Spinner size="sm" className="me-2" /> {t('dataConnectors.modal.saving')}
                 </>
               ) : (
                 <>
                   <i className="bi bi-plug me-2"></i>
-                  {modalMode === 'test' ? 'Test Connection' : isConnected ? 'Save Changes' : 'Connect'}
+                  {modalMode === 'test'
+                    ? t('dataConnectors.modal.testAction')
+                    : isConnected
+                      ? t('dataConnectors.modal.saveAction')
+                      : t('dataConnectors.modal.connectAction')}
                 </>
               )}
             </Button>

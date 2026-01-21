@@ -1,4 +1,5 @@
 import { resolveToolDescriptor, getToolActionSteps } from './ToolConfig';
+import i18n from '../i18n';
 import type {
   AgentEventFrame,
   ToolResult,
@@ -99,7 +100,14 @@ export function createMessageHelpers(setMessages: (updater: (prev: UiMessage[]) 
       const lastIdx = updated.length - 1;
       const lastMsg: UiMessage = { ...updated[lastIdx] };
       const segs: UiSegment[] = [...(lastMsg.segments || [])];
-      segs.push({ kind: 'tool_card', toolName, label, toolUseId, isLoading, steps: ['Initialising tool...'] });
+      segs.push({
+        kind: 'tool_card',
+        toolName,
+        label,
+        toolUseId,
+        isLoading,
+        steps: [i18n.t('common:toolStatus.initializing')],
+      });
       lastMsg.segments = segs;
       updated[lastIdx] = lastMsg;
       return updated;

@@ -5,6 +5,7 @@ import { downloadFileFromS3 } from '../utils/s3Utils';
 import { getFileIconClass } from '../utils/fileUtils';
 import type { AwsCredentialIdentity } from '@aws-sdk/types';
 import { getIntegrationsPayload } from './helpers';
+import { useTranslation } from 'react-i18next';
 import type {
   IntegrationFile as IntegrationDownloadFile,
   IntegrationsFileDownloadPayload,
@@ -44,6 +45,7 @@ const FileDownloadButton = ({
   ) => void;
 }) => {
   const { getCredentials } = useAuth() as { getCredentials: () => Promise<AwsCredentialIdentity> };
+  const { t } = useTranslation('common');
   const [isDownloading, setIsDownloading] = useState(false);
   const [isAddingToChat, setIsAddingToChat] = useState(false);
   const [addedToChat, setAddedToChat] = useState(false);
@@ -138,7 +140,7 @@ const FileDownloadButton = ({
         <span className="file-name">{file.filename}</span>
         {isDownloading ? (
           <div className="spinner-border spinner-border-sm ms-2" role="status">
-            <span className="visually-hidden">Downloading...</span>
+            <span className="visually-hidden">{t('toolRenderers.integrations.downloading')}</span>
           </div>
         ) : (
           <div className="success-indicator">
@@ -157,19 +159,19 @@ const FileDownloadButton = ({
           {addedToChat ? (
             <>
               <i className="bi bi-check-circle-fill" />
-              <span>Added to chat</span>
+              <span>{t('toolRenderers.integrations.addedToChat')}</span>
             </>
           ) : isAddingToChat ? (
             <>
               <div className="spinner-border spinner-border-sm" role="status">
-                <span className="visually-hidden">Adding...</span>
+                <span className="visually-hidden">{t('toolRenderers.integrations.adding')}</span>
               </div>
-              <span>Adding...</span>
+              <span>{t('toolRenderers.integrations.adding')}</span>
             </>
           ) : (
             <>
               <i className="bi bi-upload" />
-              <span>Use in chat</span>
+              <span>{t('toolRenderers.integrations.useInChat')}</span>
             </>
           )}
         </button>
@@ -212,6 +214,7 @@ export const IntegrationsRenderer = ({
   const status = (result && result.status) || 'completed';
   const toolUseId = (result && result.toolUseId) || null;
   const friendlyLabel = resolveToolDescriptor(rawName).label || rawName;
+  const { t } = useTranslation('common');
 
   // Extract payload from content structure
   const payload = getIntegrationsPayload(result) as IntegrationsFileDownloadPayload | null;
@@ -255,7 +258,7 @@ export const IntegrationsRenderer = ({
           </div>
         )}
         <div className="text-muted small mt-2" style={{ fontStyle: 'italic' }}>
-          Click &quot;Use in chat&quot; to upload files to this conversation for AI to reference.
+          {t('toolRenderers.integrations.useInChatHint')}
         </div>
       </div>
     );

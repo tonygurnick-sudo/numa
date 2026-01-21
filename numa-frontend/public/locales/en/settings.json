@@ -1,0 +1,388 @@
+{
+  "header": {
+    "title": "Admin Settings"
+  },
+  "tabs": {
+    "users": "Users",
+    "branding": "Branding",
+    "chatDefaults": "Chat Defaults",
+    "agents": "Agents",
+    "integrations": "Integrations",
+    "connectedApps": "Connected Apps",
+    "dataConnectors": "Data Connectors"
+  },
+  "navigation": {
+    "unsavedBranding": "You have unsaved branding changes. Leaving this page will discard them. Continue?",
+    "unsavedChatDefaults": "You have unsaved chat default changes. Leaving this tab will discard them. Continue?"
+  },
+  "errors": {
+    "loadSettings": "Failed to load settings",
+    "loadChatDefaults": "Failed to load chat defaults",
+    "saveChatDefaults": "Failed to save chat defaults",
+    "loadTools": "Failed to load tools",
+    "saveFailed": "Failed to save",
+    "updateIntegration": "Failed to update integration",
+    "updateDataConnector": "Failed to update data connector",
+    "updateAgentsPolicy": "Failed to update agents policy"
+  },
+  "confirm": {
+    "disableIntegration": "Disabling {{integrationId}} will prevent users from accessing it in Numa. Continue?",
+    "disableDataConnector": "Disabling {{connectorId}} will prevent users from accessing it in Numa. Continue?"
+  },
+  "actions": {
+    "saveChanges": "Save Changes",
+    "resetDefaults": "Reset to defaults",
+    "saving": "Saving...",
+    "cancel": "Cancel"
+  },
+  "chatDefaults": {
+    "title": "Company-wide chat defaults",
+    "description": "These defaults apply when users start a new chat without selecting an agent. If user defaults are allowed, users can override these for themselves.",
+    "allowUserOverridesTitle": "Allow users to override company defaults",
+    "allowUserOverridesHelp": "When this setting is inactive, users will only get the company defaults.",
+    "defaultKnowledgeBases": "Default knowledge bases",
+    "companyKnowledgeBase": "Company Knowledge Base",
+    "companyKnowledgeBaseHelp": "Only the company knowledge base can be set as a company default; user KB defaults can be set by the user only, and only if personal defaults are active.",
+    "allTools": "All Tools",
+    "allToolsHelp": "When enabled, all tools are automatically available",
+    "webSearch": "Web Search",
+    "webSearchHelp": "Search the web for current information",
+    "dataAnalysis": "Data Analysis",
+    "dataAnalysisHelp": "Analyze CSV, Excel, or JSON data files",
+    "agentCreation": "Agent Creation",
+    "agentCreationHelp": "Allow me to create saved agents when you explicitly ask.",
+    "defaultIntegrations": "Default integrations",
+    "integrationsDisabled": "Integrations are not enabled in this environment.",
+    "noIntegrations": "No integrations are enabled for this environment.",
+    "defaultIntegrationsHelp": "Select one or more integrations to enable by default."
+  },
+  "agents": {
+    "title": "Company-wide agents policy",
+    "description": "Choose how agents work across your company. Changes take effect immediately for everyone.",
+    "options": {
+      "off": {
+        "label": "Agents Off",
+        "desc": "Agents are disabled for everyone. The Agents UI shows a notice that it is disabled and to contact an admin."
+      },
+      "personal": {
+        "label": "Personal Agents Only",
+        "desc": "Users can create and use personal agents. Company sharing is disabled and the Company Agent Marketplace is hidden."
+      },
+      "full": {
+        "label": "Agents On (Full)",
+        "desc": "Users can create and use personal agents and share company agents. The marketplace is available."
+      }
+    },
+    "confirm": {
+      "off": "Turn off Agents for everyone? Users will not be able to create or use agents. The Agents UI will display a disabled notice. Continue?",
+      "personal": "Disable company agent sharing? The Company Agent Marketplace will be hidden and users can only create and use personal agents. Existing company agents will be hidden. Continue?",
+      "full": "Enable Agents and company sharing for everyone?"
+    },
+    "footerNote": "Users will still see gentle hints where agents are disabled (e.g., \"Agents are disabled. Contact your admin\")."
+  },
+  "integrations": {
+    "companySettingsTitle": "Company-wide settings",
+    "companySettingsDescription": "These settings apply to everyone in your Numa environment. Use the toggle to enable/disable each integration for your company, and use Manage Tools to turn specific capabilities off globally.",
+    "previewNotice": "Numa Integrations are not enabled in your Numa environment. Contact your account administrator to request access.",
+    "previewTooltip": "Numa Integrations are not enabled in your Numa environment. Contact your account administrator to request access.",
+    "manageTools": "Manage Tools",
+    "toolsOff": "{{count}} off",
+    "status": {
+      "enabled": "Enabled",
+      "disabled": "Disabled"
+    }
+  },
+  "dataConnectors": {
+    "companySettingsTitle": "Company-wide settings",
+    "companySettingsDescription": "These settings apply to everyone in your Numa environment. Use the toggle to enable or disable each data connector for your company.",
+    "synergyName": "Synergy",
+    "synergyDescription": "Data connector for Synergy job data."
+  },
+  "brandingAdmin": {
+    "title": "Branding Controls",
+    "subtitle": "Manage tenant branding, colors, and assets. Changes publish immediately after saving.",
+    "alerts": {
+      "unsavedTitle": "Unsaved changes.",
+      "unsavedMessage": "Your modifications have not been saved yet."
+    },
+    "actions": {
+      "discard": "Discard",
+      "saveNow": "Save Now",
+      "preview": "Preview",
+      "revert": "Revert",
+      "resetDefault": "Reset to Default",
+      "discardChanges": "Discard Changes",
+      "saveChanges": "Save Changes",
+      "saveAsVersion": "Save as New Version",
+      "cancel": "Cancel",
+      "saveVersion": "Save Version"
+    },
+    "toggle": {
+      "enabled": "Branding enabled",
+      "disabled": "Branding disabled"
+    },
+    "history": {
+      "title": "Version History",
+      "loading": "Loading versions...",
+      "empty": "No published versions yet. Save a new version to create a restore point.",
+      "system": "system",
+      "primaryColor": "Primary color: {{color}}",
+      "navigationLogo": "Navigation logo",
+      "logoAlt": "Logo",
+      "defaultLogoAlt": "Default logo"
+    },
+    "disabled": {
+      "title": "Branding is currently disabled.",
+      "message": "Please enable branding above to modify the Numa component colour scheme and login panels."
+    },
+    "sections": {
+      "colors": "Color Palette",
+      "details": "Branding Details",
+      "splash": "Splash Screen"
+    },
+    "colors": {
+      "hexPlaceholder": "#000000",
+      "groups": {
+        "brandPalette": {
+          "title": "Brand Palette",
+          "primary": "Primary",
+          "primaryContrast": "Primary Contrast",
+          "hover": "Hover"
+        },
+        "surfaceBackground": {
+          "title": "Surface & Background",
+          "surface": "Surface",
+          "surfaceContrast": "Surface Contrast",
+          "border": "Border",
+          "background": "Background"
+        },
+        "typography": {
+          "title": "Typography",
+          "text": "Primary Text",
+          "textMuted": "Muted Text"
+        },
+        "primaryButton": {
+          "title": "Primary Button",
+          "fill": "Fill",
+          "text": "Text",
+          "hover": "Hover",
+          "border": "Border"
+        },
+        "secondaryButton": {
+          "title": "Secondary Button",
+          "fill": "Fill",
+          "text": "Text",
+          "hover": "Hover",
+          "hoverText": "Hover Text",
+          "border": "Border"
+        }
+      },
+      "preview": {
+        "primaryLabel": "Primary",
+        "surfaceTitle": "Surface component",
+        "surfaceHint": "Cards and panels inherit these tones.",
+        "pageBackground": "Page background preview",
+        "heading": "Heading preview",
+        "typographyHint": "Supporting copy reflects muted typography. Adjust values to test legibility.",
+        "primaryAction": "Primary Action",
+        "secondaryAction": "Secondary Action",
+        "textLink": "Text Link Example",
+        "fallback": "Adjust colors to see real-time preview here."
+      }
+    },
+    "details": {
+      "brandName": {
+        "label": "Brand Name",
+        "placeholder": "Client brand name"
+      },
+      "loginTitle": {
+        "label": "Login Page Title"
+      },
+      "loginMessage": {
+        "label": "Login Welcome Message"
+      }
+    },
+    "splash": {
+      "title": {
+        "label": "Splash Title",
+        "placeholder": "Main heading on login splash panel"
+      },
+      "description": {
+        "label": "Splash Description",
+        "placeholder": "Description text below the title"
+      },
+      "textColor": {
+        "label": "Splash Text Color",
+        "default": "Default: white"
+      },
+      "showPanel": "Show semi-transparent background panel"
+    },
+    "preview": {
+      "title": "Preview",
+      "brandFallback": "Brand",
+      "brandInitials": "BR",
+      "status": "Active",
+      "primaryAction": "Primary Action",
+      "secondaryAction": "Secondary Action",
+      "sectionTitle": "Section Header",
+      "sectionBody": "Supporting copy uses muted text color for hierarchy and readability.",
+      "chat": {
+        "assistant": "Numa Assistant",
+        "status": "Online",
+        "message": "Hi! I can help you with onboarding, training resources, or account updates. What would you like to do today?",
+        "userMessage": "I'd like the onboarding checklist and the latest adoption metrics.",
+        "placeholder": "Type a message...",
+        "send": "Send",
+        "initials": "N"
+      },
+      "login": {
+        "title": "Login Preview",
+        "signIn": "Sign in"
+      }
+    },
+    "assets": {
+      "logoNav": {
+        "label": "Navigation Logo",
+        "description": "SVG, PNG, JPG, or WebP up to 1.5 MB. Displayed at max-height 48px with auto width."
+      },
+      "logoLoginRight": {
+        "label": "Login Panel Image",
+        "description": "SVG, PNG, JPG, or WebP up to 1.5 MB. Use responsive-friendly dimensions."
+      },
+      "favicon": {
+        "label": "Favicon",
+        "description": "ICO or PNG up to 500 KB. Provide multi-size favicon if available."
+      },
+      "previewAlt": "{{label}} preview",
+      "view": "View asset"
+    },
+    "versionModal": {
+      "title": "Save as New Version",
+      "description": "Create a named version of your current branding settings. You can restore to this version later.",
+      "label": "Version Name",
+      "placeholder": "e.g., Holiday theme, Q4 rebrand",
+      "hint": "Give this version a memorable name to help identify it later."
+    },
+    "revertModal": {
+      "title": "Revert to Previous Version",
+      "confirmPrefix": "Are you sure you want to revert to",
+      "confirmSuffix": "?",
+      "warning": "This will replace your current branding settings with this version. Any unsaved changes will be lost."
+    },
+    "toasts": {
+      "configTitle": "Branding configuration",
+      "resetDefault": "Reset to default branding",
+      "uploadBlockedTitle": "Upload blocked",
+      "uploadSuccess": "Uploaded successfully. Remember to save changes to apply.",
+      "savingChanges": "Saving branding changes...",
+      "saveSuccess": "Branding settings saved successfully.",
+      "loadingPreview": "Loading preview...",
+      "previewOpenedTitle": "Preview opened",
+      "previewOpenedMessage": "A new tab has opened with a preview of this branding version. Close the tab when done.",
+      "restoring": "Restoring branding version...",
+      "restoreSuccess": "Version restored successfully."
+    },
+    "errors": {
+      "loadConfig": "Failed to load branding configuration",
+      "missingS3Config": "Branding S3 configuration is missing. Check REGION and BRANDING_ASSETS_BUCKET values.",
+      "fileTypeUnsupported": "{{label}}: Unsupported file type.",
+      "fileTooLarge": "{{label}}: File exceeds {{size}} KB.",
+      "uploadFailed": "Asset upload failed",
+      "openAssetTitle": "Open asset failed",
+      "openAsset": "Failed to open asset",
+      "saveTitle": "Save failed",
+      "saveFailed": "Failed to save branding settings",
+      "versionNotFound": "Version config not found",
+      "previewTitle": "Preview failed",
+      "previewFailed": "Failed to load version for preview",
+      "historyTitle": "History failed",
+      "historyFailed": "Failed to load version history",
+      "restoreTitle": "Restore failed",
+      "restoreFailed": "Failed to revert version"
+    }
+  },
+  "manageTools": {
+    "title": "Manage Tools - {{integration}}",
+    "subtitle": "These tool settings are company-wide. Users cannot enable tools you disable here.",
+    "loading": "Loading tools...",
+    "empty": "No tools found for this integration.",
+    "seeDocumentation": "see documentation",
+    "enabledCount": "{{enabled}} of {{total}} tools enabled"
+  },
+  "companyInfo": {
+    "title": "Company Info",
+    "subtitle": "Manage your company information and settings",
+    "editTitle": "Edit Company Information",
+    "editDescription": "Enter your company information below. This will be used in chat interactions.",
+    "loading": "Loading...",
+    "form": {
+      "label": "Company Information",
+      "placeholder": "Enter a detailed description of your company, including its mission, values, and any other information that would be helpful for users interacting with your AI assistant.",
+      "characterCount": "Character count: {{count}}/10000",
+      "sharedNote": "This information will be available to all users in chat interactions.",
+      "limitNote": "Note: Only the first ~3000 characters will be used in chat context."
+    },
+    "lastUpdated": {
+      "never": "Never",
+      "label": "Last updated: {{date}}"
+    },
+    "status": {
+      "empty": "No company information exists yet. Enter your company information and click Save.",
+      "loadError": "Error loading company information: {{message}}",
+      "saveSuccess": "Company information saved successfully!",
+      "saveError": "Error saving company information: {{message}}"
+    },
+    "actions": {
+      "saving": "Saving...",
+      "save": "Save Information"
+    }
+  },
+  "userProfile": {
+    "title": "Profile",
+    "adminDisabled": "Your admin has disabled personal defaults. You'll use company defaults when starting new chats.",
+    "tabs": {
+      "defaults": "User Defaults"
+    },
+    "defaults": {
+      "description": "These defaults apply when you start a new chat without selecting an agent.",
+      "enableTitle": "Enable my defaults",
+      "enableHelp": "When off, new chats will use company defaults. Your saved defaults remain available when you turn this back on.",
+      "kbLabel": "Default knowledge bases",
+      "kbLoading": "Loading knowledge bases...",
+      "kbEmpty": "No knowledge bases available.",
+      "kbHelp": "Select one or more knowledge bases to enable by default.",
+      "allTools": {
+        "title": "All Tools",
+        "help": "When enabled, all tools are automatically available"
+      },
+      "webSearch": {
+        "title": "Web Search",
+        "help": "Search the web for current information"
+      },
+      "dataAnalysis": {
+        "title": "Data Analysis",
+        "help": "Analyze CSV, Excel, or JSON data files"
+      },
+      "agentCreation": {
+        "title": "Agent Creation",
+        "help": "Allow me to create saved agents when you explicitly ask."
+      },
+      "integrations": {
+        "label": "Default integrations",
+        "disabled": "Integrations are not enabled in this environment.",
+        "loading": "Loading integrations...",
+        "empty": "No connected integrations available.",
+        "help": "Select one or more integrations to enable by default."
+      }
+    },
+    "actions": {
+      "saving": "Saving...",
+      "save": "Save Changes",
+      "reset": "Reset to company defaults"
+    },
+    "errors": {
+      "loadDefaults": "Failed to load defaults",
+      "saveDefaults": "Failed to save defaults"
+    }
+  }
+}

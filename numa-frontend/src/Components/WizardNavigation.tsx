@@ -2,6 +2,7 @@ import type React from 'react';
 import { Button } from 'react-bootstrap';
 import { CheckCircleFill } from 'react-bootstrap-icons';
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useNumaApp } from '../Providers/NumaAppContext';
 import EventStreamViewer from './EventStreamViewer';
 
@@ -58,6 +59,7 @@ const WizardNavigation: React.FC<WizardNavigationProps> = ({
   hasRun,
   typicalDurationMinutes,
 }) => {
+  const { t } = useTranslation(['apps', 'common']);
   const { resetAppState, jobEvents, appRunning, numaAppData, job } = useNumaApp();
   const { isRunning, disabled, onClick, ...otherRunButtonProps } = runButtonProps;
 
@@ -80,7 +82,7 @@ const WizardNavigation: React.FC<WizardNavigationProps> = ({
     <div className="wizard-navigation">
       <div className="input-section-wrapper">
         <div className="step-section">
-          <div className="section-label">Inputs</div>
+          <div className="section-label">{t('apps:wizardNavigation.inputs')}</div>
           <div className="step-group pre-run">
             {preRunSteps.map((step, index) => (
               <div key={step.id} className="step-container">
@@ -94,8 +96,8 @@ const WizardNavigation: React.FC<WizardNavigationProps> = ({
                   <div className="step-label-container">
                     <span className="step-label">{step.title}</span>
                     {step?.required && !isStepComplete?.(index) && (
-                      <span className="required-label" title="Required item to run">
-                        req
+                      <span className="required-label" title={t('apps:wizardNavigation.requiredTitle')}>
+                        {t('apps:wizardNavigation.requiredShort')}
                       </span>
                     )}
                   </div>
@@ -112,7 +114,7 @@ const WizardNavigation: React.FC<WizardNavigationProps> = ({
         {hasRun ? (
           <Button type="submit" id="reset" className="reset-app-button" onClick={resetAppState}>
             <i className="bi bi-arrow-counterclockwise me-2"></i>
-            Reset App
+            {t('apps:wizardNavigation.reset')}
           </Button>
         ) : (
           <>
@@ -127,11 +129,11 @@ const WizardNavigation: React.FC<WizardNavigationProps> = ({
               {isRunning ? (
                 <>
                   <span className="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
-                  <span className="ms-2">Running...</span>
+                  <span className="ms-2">{t('apps:wizardNavigation.running')}</span>
                 </>
               ) : (
                 <div data-testid="run-app-button">
-                  Run App{' '}
+                  {t('apps:wizardNavigation.run')}{' '}
                   <i
                     style={{ lineHeight: '1px' }}
                     className={`bi bi-arrow-right ${!disabled ? 'bounce-icon' : ''}`}
@@ -144,15 +146,12 @@ const WizardNavigation: React.FC<WizardNavigationProps> = ({
                 <>
                   {disabled && (
                     <>
-                      Complete the required inputs to run.
+                      {t('apps:wizardNavigation.completeRequired')}
                       <br />
                     </>
                   )}
                   {typeof typicalDurationMinutes === 'number' && (
-                    <>
-                      This app typically takes {typicalDurationMinutes} minute
-                      {typicalDurationMinutes > 1 ? 's' : ''}.
-                    </>
+                    <>{t('common:eventStream.typicalDuration', { count: typicalDurationMinutes })}</>
                   )}
                 </>
               )}

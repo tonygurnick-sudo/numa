@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Alert, Button, Form, OverlayTrigger, Popover } from 'react-bootstrap';
+import { useTranslation } from 'react-i18next';
 import { LayoutForm } from '../Layouts/LayoutForm';
 import { useAuth } from '../Providers/AuthProvider';
 
@@ -12,6 +13,7 @@ const ResetPassword = () => {
 
   const navigate = useNavigate();
   const location = useLocation();
+  const { t } = useTranslation('auth');
 
   // Check if we're in create password mode
   const isCreateMode = location.pathname === '/create-password';
@@ -46,11 +48,7 @@ const ResetPassword = () => {
       // Pass 'create' as mode for create password flow, or 'reset' for reset password flow
       await requestPasswordReset(email, isCreateMode ? 'create' : 'reset');
       setIsCodeSent(true);
-      setSuccess(
-        isCreateMode
-          ? 'Activation code sent. Please check your email.'
-          : 'Password reset code sent. Please check your email.',
-      );
+      setSuccess(isCreateMode ? t('reset.success.codeSentCreate') : t('reset.success.codeSentReset'));
     } catch (err) {
       setError(err.message);
     } finally {
@@ -65,18 +63,14 @@ const ResetPassword = () => {
     setLoading(true);
 
     if (newPassword !== confirmPassword) {
-      setError('Passwords do not match.');
+      setError(t('reset.errors.passwordsNoMatch'));
       setLoading(false);
       return;
     }
 
     try {
       await confirmPasswordReset(email, resetCode, newPassword);
-      setSuccess(
-        isCreateMode
-          ? 'Password created successfully. Redirecting to login...'
-          : 'Password reset successfully. Redirecting to login...',
-      );
+      setSuccess(isCreateMode ? t('reset.success.passwordCreated') : t('reset.success.passwordReset'));
       setTimeout(() => navigate('/login'), 3000);
     } catch (err) {
       setError(err.message);
@@ -88,18 +82,24 @@ const ResetPassword = () => {
   const handleNewPasswordOnChange = async (password) => {
     setNewPassword(password);
     setSuccess(null);
-    const errors = [
-      { message: 'at least eight characters', pattern: /.{8,}/ },
-      { message: 'at least one lowercase character', pattern: /[a-z]/ },
-      { message: 'at least one uppercase character', pattern: /[A-Z]/ },
-      { message: 'at least one symbol', pattern: /[\^$*.[\]{}()?"!@#%&\\/\\,><':;|_~`=+-]/ }, // Symbols based on https://docs.aws.amazon.com/cognito/latest/developerguide/managing-users-passwords.html
-      { message: 'at least one number', pattern: /[0-9]/ },
-    ]
+    const requirements = [
+      { key: 'minLength', message: t('reset.passwordRequirementMessages.minLength'), pattern: /.{8,}/ },
+      { key: 'lowercase', message: t('reset.passwordRequirementMessages.lowercase'), pattern: /[a-z]/ },
+      { key: 'uppercase', message: t('reset.passwordRequirementMessages.uppercase'), pattern: /[A-Z]/ },
+      {
+        key: 'symbol',
+        message: t('reset.passwordRequirementMessages.symbol'),
+        pattern: /[\^$*.[\]{}()?"!@#%&\\/\\,><':;|_~`=+-]/,
+      }, // Symbols based on https://docs.aws.amazon.com/cognito/latest/developerguide/managing-users-passwords.html
+      { key: 'number', message: t('reset.passwordRequirementMessages.number'), pattern: /[0-9]/ },
+    ];
+    const errors = requirements
       .map((requirement) => {
         if (!password.match(requirement.pattern)) {
           return (
-            <div key={requirement.message}>
-              Password must contain {requirement.message}.<br />
+            <div key={requirement.key}>
+              {t('reset.passwordValidation.mustContain', { requirement: requirement.message })}
+              <br />
             </div>
           );
         }
@@ -108,18 +108,13 @@ const ResetPassword = () => {
     setError(errors.length > 0 ? errors : null);
   };
 
-  const getFormTitle = () => (isCreateMode ? 'Create Your Password' : 'Password Reset');
-  const getRequestButtonText = () => (isCreateMode ? 'Request Activation Code' : 'Request Password Reset');
-  const getCodeLabel = () => (isCreateMode ? 'Activation Code' : 'Reset Code');
-  const getSubmitButtonText = () => (isCreateMode ? 'Create Password' : 'Reset Password');
-  const getPromptText = () =>
-    isCreateMode
-      ? 'Enter your email to receive an activation code.'
-      : 'Enter your email to receive a password reset code.';
+  const getFormTitle = () => (isCreateMode ? t('reset.formTitleCreate') : t('reset.formTitleReset'));
+  const getRequestButtonText = () => (isCreateMode ? t('reset.requestButtonCreate') : t('reset.requestButtonReset'));
+  const getCodeLabel = () => (isCreateMode ? t('reset.codeLabelCreate') : t('reset.codeLabelReset'));
+  const getSubmitButtonText = () => (isCreateMode ? t('reset.submitButtonCreate') : t('reset.submitButtonReset'));
+  const getPromptText = () => (isCreateMode ? t('reset.promptCreate') : t('reset.promptReset'));
   const getCodeInstructionText = () =>
-    isCreateMode
-      ? 'Enter the activation code you received and choose a new password.'
-      : 'Enter the code you received and your new password.';
+    isCreateMode ? t('reset.codeInstructionCreate') : t('reset.codeInstructionReset');
 
   return (
     <LayoutForm
@@ -134,21 +129,21 @@ const ResetPassword = () => {
               <h2 className="mb-2">{getFormTitle()}</h2>
               <p className="mb-4">{getPromptText()}</p>
               <Form.Group className="mb-3">
-                <Form.Label>Email</Form.Label>
+                <Form.Label>{t('reset.emailLabel')}</Form.Label>
                 <Form.Control
                   type="email"
-                  placeholder="Enter your email"
+                  placeholder={t('reset.emailPlaceholder')}
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required
                 />
               </Form.Group>
               <Button variant="primary" type="submit" disabled={loading}>
-                {loading ? 'Requesting...' : getRequestButtonText()}
+                {loading ? t('reset.requesting') : getRequestButtonText()}
               </Button>
               {!isCreateMode && (
                 <p className="mt-1">
-                  <a href="/login">Back to login</a>
+                  <a href="/login">{t('reset.backToLogin')}</a>
                 </p>
               )}
             </Form>
@@ -158,10 +153,10 @@ const ResetPassword = () => {
               <p className="mb-4">{getCodeInstructionText()}</p>
 
               <Form.Group className="mb-3">
-                <Form.Label>Email</Form.Label>
+                <Form.Label>{t('reset.emailLabel')}</Form.Label>
                 <Form.Control
                   type="email"
-                  placeholder="Enter your email"
+                  placeholder={t('reset.emailPlaceholder')}
                   value={email}
                   readOnly
                   required
@@ -172,7 +167,7 @@ const ResetPassword = () => {
                 <Form.Label>{getCodeLabel()}</Form.Label>
                 <Form.Control
                   type="text"
-                  placeholder="Enter the code"
+                  placeholder={t('reset.codePlaceholder')}
                   value={resetCode}
                   onChange={(e) => setResetCode(e.target.value)}
                   required
@@ -184,20 +179,20 @@ const ResetPassword = () => {
               </Form.Group>
 
               <Form.Group className="mb-3">
-                <Form.Label>New Password</Form.Label>
+                <Form.Label>{t('reset.newPasswordLabel')}</Form.Label>
                 <OverlayTrigger
                   placement="right"
                   overlay={
                     <Popover>
-                      <Popover.Header>Password requirements</Popover.Header>
+                      <Popover.Header>{t('reset.passwordRequirementsTitle')}</Popover.Header>
                       <Popover.Body>
                         <ul>
-                          <li>At least 1 uppercase character.</li>
-                          <li>At least 1 lowercase character.</li>
-                          <li>At least 1 symbol.</li>
-                          <li>At least 1 number.</li>
-                          <li>At least 8 characters.</li>
-                          <li>Cannot have been used before.</li>
+                          <li>{t('reset.passwordRequirements.uppercase')}</li>
+                          <li>{t('reset.passwordRequirements.lowercase')}</li>
+                          <li>{t('reset.passwordRequirements.symbol')}</li>
+                          <li>{t('reset.passwordRequirements.number')}</li>
+                          <li>{t('reset.passwordRequirements.minLength')}</li>
+                          <li>{t('reset.passwordRequirements.noReuse')}</li>
                         </ul>
                       </Popover.Body>
                     </Popover>
@@ -205,7 +200,7 @@ const ResetPassword = () => {
                 >
                   <Form.Control
                     type="password"
-                    placeholder="Enter your new password"
+                    placeholder={t('reset.newPasswordPlaceholder')}
                     value={newPassword}
                     onChange={(e) => handleNewPasswordOnChange(e.target.value)}
                     required
@@ -216,10 +211,10 @@ const ResetPassword = () => {
               </Form.Group>
 
               <Form.Group className="mb-3">
-                <Form.Label>Confirm New Password</Form.Label>
+                <Form.Label>{t('reset.confirmNewPasswordLabel')}</Form.Label>
                 <Form.Control
                   type="password"
-                  placeholder="Confirm your new password"
+                  placeholder={t('reset.confirmNewPasswordPlaceholder')}
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
                   required
@@ -229,7 +224,11 @@ const ResetPassword = () => {
               </Form.Group>
 
               <Button variant="primary" type="submit" disabled={loading}>
-                {loading ? (isCreateMode ? 'Creating...' : 'Resetting...') : getSubmitButtonText()}
+                {loading
+                  ? isCreateMode
+                    ? t('reset.submittingCreate')
+                    : t('reset.submittingReset')
+                  : getSubmitButtonText()}
               </Button>
             </Form>
           )}

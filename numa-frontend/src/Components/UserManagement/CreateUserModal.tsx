@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Modal, Form, Button, Alert } from 'react-bootstrap';
+import { useTranslation } from 'react-i18next';
 import { Preloader } from '../Preloader';
 
 interface CreateUserModalProps {
@@ -9,6 +10,7 @@ interface CreateUserModalProps {
 }
 
 export function CreateUserModal({ show, onHide, onCreateUser }: CreateUserModalProps): React.JSX.Element {
+  const { t } = useTranslation('userManagement');
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -38,7 +40,10 @@ export function CreateUserModal({ show, onHide, onCreateUser }: CreateUserModalP
 
   const handleCopyInstructions = async () => {
     try {
-      const instructions = `Welcome to Numa!\n\nYour account has been created with the following email address: ${createdEmail}\n\nTo set up your password and access the system, please:\n1. Go to ${window.location.origin}/create-password\n2. Enter your email address: ${createdEmail}\n3. Follow the instructions to create your password\n\nIf you have any questions, please contact your administrator.`;
+      const instructions = t('createModal.copyInstructionsText', {
+        origin: window.location.origin,
+        email: createdEmail,
+      });
       await navigator.clipboard.writeText(instructions);
       setCopiedInstructions(true);
       setTimeout(() => setCopiedInstructions(false), 2000);
@@ -60,7 +65,7 @@ export function CreateUserModal({ show, onHide, onCreateUser }: CreateUserModalP
       setSuccess(true);
       setEmail('');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to create user');
+      setError(err instanceof Error ? err.message : t('errors.create'));
     } finally {
       setLoading(false);
     }
@@ -69,7 +74,7 @@ export function CreateUserModal({ show, onHide, onCreateUser }: CreateUserModalP
   return (
     <Modal show={show} onHide={handleClose} backdrop={loading ? 'static' : true} size="lg">
       <Modal.Header closeButton={!loading}>
-        <Modal.Title>Create New User</Modal.Title>
+        <Modal.Title>{t('createModal.title')}</Modal.Title>
       </Modal.Header>
 
       <Form onSubmit={handleSubmit}>
@@ -84,66 +89,68 @@ export function CreateUserModal({ show, onHide, onCreateUser }: CreateUserModalP
 
           {!success ? (
             <>
-              <p className="text-muted mb-3">Create a new user account by entering their email address:</p>
+              <p className="text-muted mb-3">{t('createModal.description')}</p>
               <ul className="text-muted mb-4">
-                <li>The user will need to visit {window.location.origin}/create-password to set their password</li>
-                <li>You&apos;ll receive instructions to share with the user after creation</li>
-                <li>Access to Numa will be based on their assigned permissions</li>
+                <li>{t('createModal.bullets.passwordSetup', { origin: window.location.origin })}</li>
+                <li>{t('createModal.bullets.instructions')}</li>
+                <li>{t('createModal.bullets.permissions')}</li>
               </ul>
 
               <Form.Group className="mb-3" controlId="createUserEmail">
                 <Form.Label>
-                  Email address <span className="text-danger">*</span>
+                  {t('createModal.emailLabel')} <span className="text-danger">*</span>
                 </Form.Label>
                 <Form.Control
                   type="email"
-                  placeholder="Enter email"
+                  placeholder={t('createModal.emailPlaceholder')}
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required
                   disabled={loading}
                   aria-required="true"
                 />
-                <Form.Text className="text-muted">This email will be their username for logging in.</Form.Text>
+                <Form.Text className="text-muted">{t('createModal.emailHelp')}</Form.Text>
               </Form.Group>
             </>
           ) : (
             <Alert variant="success" className="mb-0">
-              <h5 className="alert-heading">User created successfully!</h5>
+              <h5 className="alert-heading">{t('createModal.success.title')}</h5>
               <hr />
               <div className="mb-3">
-                <strong className="d-block mb-2">User Instructions</strong>
+                <strong className="d-block mb-2">{t('createModal.success.instructionsTitle')}</strong>
                 <div className="bg-light p-3 rounded">
                   <div className="user-select-all">
-                    <p className="mb-2">Welcome to Numa!</p>
+                    <p className="mb-2">{t('createModal.success.welcome')}</p>
                     <p className="mb-2">
-                      Your account has been created with the following email address: <strong>{createdEmail}</strong>
+                      {t('createModal.success.createdForLabel')} <strong>{createdEmail}</strong>
                     </p>
-                    <p className="mb-2">To set up your password and access the system, please:</p>
+                    <p className="mb-2">{t('createModal.success.stepsIntro')}</p>
                     <ol className="ps-4 mb-2">
-                      <li>Go to {window.location.origin}/create-password</li>
-                      <li>Enter your email address: {createdEmail}</li>
-                      <li>Follow the instructions to create your password</li>
+                      <li>{t('createModal.success.steps.goTo', { origin: window.location.origin })}</li>
+                      <li>{t('createModal.success.steps.enterEmail', { email: createdEmail })}</li>
+                      <li>{t('createModal.success.steps.follow')}</li>
                     </ol>
-                    <p className="mb-0">If you have any questions, please contact your administrator.</p>
+                    <p className="mb-0">{t('createModal.success.support')}</p>
                   </div>
                   <div className="d-flex justify-content-end mt-3">
                     <Button variant="secondary" size="sm" className="me-2" onClick={handleCopyEmail}>
-                      {copiedEmail ? 'Copied!' : 'Copy Address'}
+                      {copiedEmail ? t('createModal.success.copied') : t('createModal.success.copyAddress')}
                     </Button>
                     <Button variant="outline-primary" size="sm" onClick={handleCopyInstructions}>
-                      {copiedInstructions ? 'Copied!' : 'Copy User Instructions'}
+                      {copiedInstructions ? t('createModal.success.copied') : t('createModal.success.copyInstructions')}
                     </Button>
                   </div>
                 </div>
               </div>
 
               <div>
-                <strong className="d-block mb-2">Next Steps</strong>
+                <strong className="d-block mb-2">{t('createModal.success.nextSteps')}</strong>
                 <ol className="mb-0 ps-3">
-                  <li className="mb-1">Share these instructions with the user securely</li>
-                  <li className="mb-1">They will need to visit {window.location.origin}/create-password</li>
-                  <li>They will be able to set their password there for the first time</li>
+                  <li className="mb-1">{t('createModal.success.nextStepItems.share')}</li>
+                  <li className="mb-1">
+                    {t('createModal.success.nextStepItems.visit', { origin: window.location.origin })}
+                  </li>
+                  <li>{t('createModal.success.nextStepItems.setPassword')}</li>
                 </ol>
               </div>
             </Alert>
@@ -154,15 +161,15 @@ export function CreateUserModal({ show, onHide, onCreateUser }: CreateUserModalP
           {!success ? (
             <>
               <Button variant="secondary" onClick={handleClose} disabled={loading}>
-                Cancel
+                {t('actions.cancel')}
               </Button>
               <Button variant="primary" type="submit" disabled={loading}>
-                {loading ? 'Creating...' : 'Create User'}
+                {loading ? t('createModal.creating') : t('actions.createUser')}
               </Button>
             </>
           ) : (
             <Button variant="primary" onClick={handleClose}>
-              Done
+              {t('actions.done')}
             </Button>
           )}
         </Modal.Footer>

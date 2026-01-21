@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Spinner, Button } from 'react-bootstrap';
+import { useTranslation } from 'react-i18next';
 import { useAuth } from '../../Providers/AuthProvider';
 import { useNumaApp } from '../../Providers/NumaAppContext';
 import { getFileIconClass } from '../../utils/fileUtils';
@@ -42,6 +43,7 @@ interface FolderContents {
 }
 
 export const NoliaMarkdown: React.FC<NoliaMarkdownProps> = ({ content, baseS3Key, bucket, region }) => {
+  const { t } = useTranslation('common');
   const { getCredentials } = useAuth();
   const { fetchS3Content } = useNumaApp();
 
@@ -199,7 +201,9 @@ export const NoliaMarkdown: React.FC<NoliaMarkdownProps> = ({ content, baseS3Key
         [key]: {
           s3Keys: [],
           loading: false,
-          error: `Failed to load folder contents: ${err instanceof Error ? err.message : 'Unknown error'}`,
+          error: t('nolia.errors.loadFolder', {
+            message: err instanceof Error ? err.message : t('nolia.errors.unknown'),
+          }),
         },
       }));
     }
@@ -268,7 +272,7 @@ export const NoliaMarkdown: React.FC<NoliaMarkdownProps> = ({ content, baseS3Key
     try {
       const credentials = await getCredentials();
       if (!credentials) {
-        throw new Error('Failed to get credentials');
+        throw new Error(t('nolia.errors.credentials'));
       }
 
       const content = await fetchS3Content(bucket, filePath, credentials);
@@ -296,7 +300,7 @@ export const NoliaMarkdown: React.FC<NoliaMarkdownProps> = ({ content, baseS3Key
         setLoadingResult(true);
         const credentials = await getCredentials();
         if (!credentials) {
-          throw new Error('Failed to get credentials');
+          throw new Error(t('nolia.errors.credentials'));
         }
 
         const resultData = await fetchS3Content(bucket, baseS3Key, credentials);
@@ -304,7 +308,7 @@ export const NoliaMarkdown: React.FC<NoliaMarkdownProps> = ({ content, baseS3Key
       } catch (err) {
         console.error('Error loading result from S3:', err);
         // Use content prop as fallback
-        setResultContent(content || 'No results available.');
+        setResultContent(content || t('nolia.errors.noResults'));
       } finally {
         setLoadingResult(false);
       }
@@ -313,7 +317,7 @@ export const NoliaMarkdown: React.FC<NoliaMarkdownProps> = ({ content, baseS3Key
     if (baseS3Key) {
       loadResult();
     } else {
-      setResultContent(content || 'No results available.');
+      setResultContent(content || t('nolia.errors.noResults'));
       setLoadingResult(false);
     }
   }, [baseS3Key, bucket, content, fetchS3Content, getCredentials]);
@@ -333,9 +337,9 @@ export const NoliaMarkdown: React.FC<NoliaMarkdownProps> = ({ content, baseS3Key
       {loadingResult ? (
         <div className="text-center py-5">
           <Spinner animation="border" role="status" variant="primary">
-            <span className="visually-hidden">Loading results...</span>
+            <span className="visually-hidden">{t('nolia.loading')}</span>
           </Spinner>
-          <p className="text-muted mt-3">Loading results...</p>
+          <p className="text-muted mt-3">{t('nolia.loading')}</p>
         </div>
       ) : (
         <>
@@ -347,7 +351,7 @@ export const NoliaMarkdown: React.FC<NoliaMarkdownProps> = ({ content, baseS3Key
           {/* Generated Files Summary Section */}
           {(fileReferences.length > 0 || folderReferences.length > 0) && (
             <div className="generated-files-section mt-5 pt-4 border-top">
-              <h4 className="mb-3">Generated Files</h4>
+              <h4 className="mb-3">{t('nolia.generatedFiles')}</h4>
               <div className="vstack gap-2">
                 {/* Render folders first */}
                 {folderReferences.map((ref) => (
@@ -371,10 +375,14 @@ export const NoliaMarkdown: React.FC<NoliaMarkdownProps> = ({ content, baseS3Key
                           variant="outline-primary"
                           size="sm"
                           onClick={() => toggleFolderExpansion(ref)}
-                          title={expandedFolders.has(ref.fullPath) ? 'Collapse folder' : 'Expand folder'}
+                          title={
+                            expandedFolders.has(ref.fullPath)
+                              ? t('nolia.actions.collapseFolder')
+                              : t('nolia.actions.expandFolder')
+                          }
                         >
                           <i className={`bi bi-chevron-${expandedFolders.has(ref.fullPath) ? 'up' : 'down'} me-1`}></i>
-                          {expandedFolders.has(ref.fullPath) ? 'Collapse' : 'Browse'}
+                          {expandedFolders.has(ref.fullPath) ? t('nolia.actions.collapse') : t('nolia.actions.browse')}
                         </Button>
                         <Button
                           size="sm"
@@ -386,7 +394,7 @@ export const NoliaMarkdown: React.FC<NoliaMarkdownProps> = ({ content, baseS3Key
                           }}
                         >
                           <i className="bi bi-file-zip me-1"></i>
-                          Download ZIP
+                          {t('nolia.actions.downloadZip')}
                         </Button>
                       </div>
                     </div>
@@ -396,7 +404,7 @@ export const NoliaMarkdown: React.FC<NoliaMarkdownProps> = ({ content, baseS3Key
                         {folderContents[ref.fullPath]?.loading && (
                           <div className="text-center py-3">
                             <Spinner animation="border" size="sm" />
-                            <span className="ms-2">Loading folder contents...</span>
+                            <span className="ms-2">{t('nolia.loadingFolder')}</span>
                           </div>
                         )}
                         {folderContents[ref.fullPath]?.error && (
@@ -465,7 +473,7 @@ export const NoliaMarkdown: React.FC<NoliaMarkdownProps> = ({ content, baseS3Key
                         }}
                       >
                         <i className="bi bi-download me-1"></i>
-                        Download
+                        {t('nolia.actions.download')}
                       </Button>
                     </div>
                   </div>

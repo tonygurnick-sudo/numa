@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Container, Button, Alert, Pagination } from 'react-bootstrap';
 import { PersonPlus } from 'react-bootstrap-icons';
+import { useTranslation } from 'react-i18next';
 import { Preloader } from '../Components/Preloader';
 import { useAuth } from '../Providers/AuthProvider';
 import { UserManagementUtils } from '../utils/userManagementUtils';
@@ -24,6 +25,7 @@ type UserManagementProps = {
 };
 
 const UserManagement = ({ embedded = false }: UserManagementProps) => {
+  const { t } = useTranslation('userManagement');
   // Auth and API state
   const { getCredentials, user, qBusinessClient, forceTokenValidation } = useAuth();
   const currentUserSub = user?.decoded_tokens?.idToken?.sub;
@@ -75,7 +77,7 @@ const UserManagement = ({ embedded = false }: UserManagementProps) => {
 
       const credentials = await getCredentials();
       if (!credentials) {
-        throw new Error('Failed to get AWS credentials');
+        throw new Error(t('errors.credentials'));
       }
 
       const userManagementUtils = new UserManagementUtils(REGION, credentials);
@@ -104,13 +106,13 @@ const UserManagement = ({ embedded = false }: UserManagementProps) => {
           window.sessionStorage.setItem('ACCOUNT_ID', extractedAccountId);
           ACCOUNT_ID = extractedAccountId;
         } else {
-          throw new Error('Could not determine AWS Account ID');
+          throw new Error(t('errors.accountId'));
         }
       }
 
       const credentials = await getCredentials();
       if (!credentials) {
-        throw new Error('Failed to get AWS credentials');
+        throw new Error(t('errors.credentials'));
       }
 
       const userManagementUtils = new UserManagementUtils(REGION, credentials);
@@ -133,7 +135,7 @@ const UserManagement = ({ embedded = false }: UserManagementProps) => {
       }
     } catch (err) {
       console.error('Error fetching users:', err);
-      setUsersError(err instanceof Error ? err.message : 'Failed to fetch users');
+      setUsersError(err instanceof Error ? err.message : t('errors.fetchUsers'));
     } finally {
       setLoadingUsers(false);
     }
@@ -212,7 +214,7 @@ const UserManagement = ({ embedded = false }: UserManagementProps) => {
   const handleCreateUser = async (email: string) => {
     const isValid = await forceTokenValidation();
     if (!isValid) {
-      throw new Error('Session expired');
+      throw new Error(t('errors.sessionExpired'));
     }
 
     const REGION = window.sessionStorage.getItem('REGION');
@@ -220,7 +222,7 @@ const UserManagement = ({ embedded = false }: UserManagementProps) => {
 
     const credentials = await getCredentials();
     if (!credentials) {
-      throw new Error('Failed to get AWS credentials');
+      throw new Error(t('errors.credentials'));
     }
 
     const userManagementUtils = new UserManagementUtils(REGION, credentials);
@@ -248,7 +250,7 @@ const UserManagement = ({ embedded = false }: UserManagementProps) => {
 
       const credentials = await getCredentials();
       if (!credentials) {
-        throw new Error('Failed to get AWS credentials');
+        throw new Error(t('errors.credentials'));
       }
 
       const userManagementUtils = new UserManagementUtils(REGION, credentials);
@@ -257,7 +259,7 @@ const UserManagement = ({ embedded = false }: UserManagementProps) => {
       await fetchUsers(1);
     } catch (err) {
       console.error('Error promoting user to admin:', err);
-      setUsersError(err instanceof Error ? err.message : 'Failed to promote user to admin');
+      setUsersError(err instanceof Error ? err.message : t('errors.promote'));
     } finally {
       setPromotingUser(null);
     }
@@ -279,22 +281,20 @@ const UserManagement = ({ embedded = false }: UserManagementProps) => {
 
       const credentials = await getCredentials();
       if (!credentials) {
-        throw new Error('Failed to get AWS credentials');
+        throw new Error(t('errors.credentials'));
       }
 
       const userManagementUtils = new UserManagementUtils(REGION, credentials);
       const result = await userManagementUtils.removeUserFromGroup(username, 'admin', USER_POOL_ID);
 
       if (result && !result.signOutSuccess) {
-        setUsersError(
-          `User ${username} was demoted from admin but their session could not be terminated. They may still have admin privileges until they manually log out.`,
-        );
+        setUsersError(t('errors.demoteSession', { name: username }));
       }
 
       await fetchUsers(1);
     } catch (err) {
       console.error('Error demoting user from admin:', err);
-      setUsersError(err instanceof Error ? err.message : 'Failed to demote user from admin');
+      setUsersError(err instanceof Error ? err.message : t('errors.demote'));
     } finally {
       setDemotingUser(null);
     }
@@ -307,11 +307,11 @@ const UserManagement = ({ embedded = false }: UserManagementProps) => {
 
     try {
       if (!qBusinessClient) {
-        throw new Error('Q Business client not found');
+        throw new Error(t('errors.qBusinessClient'));
       }
 
       if (!getCredentials) {
-        throw new Error('Get web token credentials not found');
+        throw new Error(t('errors.webTokenCredentials'));
       }
 
       const REGION = window.sessionStorage.getItem('REGION');
@@ -325,7 +325,7 @@ const UserManagement = ({ embedded = false }: UserManagementProps) => {
       );
     } catch (err) {
       console.error('Error deleting user:', err);
-      setUsersError(err instanceof Error ? err.message : 'Failed to delete user');
+      setUsersError(err instanceof Error ? err.message : t('errors.delete'));
       setDeletingUser(null);
     }
   };
@@ -398,7 +398,7 @@ const UserManagement = ({ embedded = false }: UserManagementProps) => {
   const headerActions = (
     <Button variant="primary" onClick={() => setShowCreateModal(true)} size={embedded ? 'sm' : undefined}>
       <PersonPlus size={16} className="me-2" />
-      Create User
+      {t('actions.createUser')}
     </Button>
   );
 
@@ -450,7 +450,7 @@ const UserManagement = ({ embedded = false }: UserManagementProps) => {
                 <>
                   {(selectedRole === null || selectedRole === 'admin') && (
                     <UserRoleSection
-                      title="Administrators"
+                      title={t('sections.admins')}
                       users={adminUsers}
                       expanded={sectionsExpanded.admin}
                       onToggle={() => setSectionsExpanded((prev) => ({ ...prev, admin: !prev.admin }))}
@@ -463,7 +463,7 @@ const UserManagement = ({ embedded = false }: UserManagementProps) => {
 
                   {(selectedRole === null || selectedRole === 'standard') && (
                     <UserRoleSection
-                      title="Standard Users"
+                      title={t('sections.standardUsers')}
                       users={standardUsers}
                       expanded={sectionsExpanded.standard}
                       onToggle={() => setSectionsExpanded((prev) => ({ ...prev, standard: !prev.standard }))}
@@ -478,7 +478,7 @@ const UserManagement = ({ embedded = false }: UserManagementProps) => {
 
               {filteredAndSortedUsers.length === 0 && (
                 <p className="text-muted text-center py-4">
-                  {users.length === 0 ? 'No users found' : 'No users match the current filters'}
+                  {users.length === 0 ? t('empty.noUsers') : t('empty.noMatches')}
                 </p>
               )}
 
@@ -504,8 +504,8 @@ const UserManagement = ({ embedded = false }: UserManagementProps) => {
         <div className="d-flex flex-column gap-2">
           <div className="d-flex justify-content-between align-items-center mb-3 pt-2">
             <div>
-              <h5 className="mb-1 fw-semibold">User Management</h5>
-              <p className="text-muted mb-0 small">Manage user accounts and permissions.</p>
+              <h5 className="mb-1 fw-semibold">{t('page.title')}</h5>
+              <p className="text-muted mb-0 small">{t('page.subtitle')}</p>
             </div>
             {headerActions}
           </div>
@@ -514,11 +514,7 @@ const UserManagement = ({ embedded = false }: UserManagementProps) => {
       ) : (
         <LayoutDashboard>
           <Container fluid className="pt-2 pb-4 px-4">
-            <PageHeader
-              title="User Management"
-              subtitle="Manage user accounts and permissions"
-              actions={headerActions}
-            />
+            <PageHeader title={t('page.title')} subtitle={t('page.subtitle')} actions={headerActions} />
             {content}
           </Container>
         </LayoutDashboard>

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Tabs, Tab, Card } from 'react-bootstrap';
+import { useTranslation } from 'react-i18next';
 import { KBFileExplorer } from './KBFileExplorer';
 import type { KBFileExplorerHandle } from './KBFileExplorer';
 import { KBWebCrawlerTab } from './KBWebCrawlerTab';
@@ -25,6 +26,7 @@ function KBTabLayoutInner({
   onUploadSuccess,
   fileExplorerRef,
 }: KBTabLayoutProps): React.JSX.Element {
+  const { t } = useTranslation('knowledgeBase');
   const [activeTab, setActiveTab] = useState<string>('knowledge-base');
   const { invalidateCache } = useKBState();
 
@@ -48,7 +50,7 @@ function KBTabLayoutInner({
             title={
               <>
                 <i className="bi bi-folder me-2"></i>
-                Knowledge Base
+                {t('tabs.knowledgeBase')}
               </>
             }
           >
@@ -63,7 +65,7 @@ function KBTabLayoutInner({
             title={
               <>
                 <i className="bi bi-database me-2"></i>
-                Data Sources
+                {t('tabs.dataSources')}
               </>
             }
           >
@@ -78,7 +80,7 @@ function KBTabLayoutInner({
             title={
               <>
                 <i className="bi bi-globe2 me-2"></i>
-                Web Crawler
+                {t('tabs.webCrawler')}
               </>
             }
           >
@@ -93,7 +95,7 @@ function KBTabLayoutInner({
             title={
               <>
                 <i className="bi bi-gear me-2"></i>
-                Settings
+                {t('tabs.settings')}
               </>
             }
           >

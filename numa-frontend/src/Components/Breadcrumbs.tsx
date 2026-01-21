@@ -1,10 +1,13 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 
 function Breadcrumbs({ label, clearStack }) {
   const navigate = useNavigate();
   const location = useLocation();
   const [breadcrumbs, setBreadcrumbs] = useState([]);
+  const { t } = useTranslation('common');
+  const defaultLabel = t('nav.items.apps');
 
   useEffect(() => {
     // Retrieve the navigation stack from sessionStorage
@@ -20,7 +23,7 @@ function Breadcrumbs({ label, clearStack }) {
       // Add the current page to the navigation stack
       stack.push({
         path: location.pathname,
-        label: label || 'Apps',
+        label: label || defaultLabel,
       });
       sessionStorage.setItem('navigation_stack', JSON.stringify(stack));
     }
@@ -34,7 +37,7 @@ function Breadcrumbs({ label, clearStack }) {
       // Only show Home breadcrumb as a link when clearing stack
       sessionStorage.removeItem('navigation_stack');
       updatedBreadcrumbs[0] = {
-        label: 'Apps',
+        label: defaultLabel,
         path: '/dash',
       };
       if (location.pathname !== '/dash') {
@@ -47,7 +50,7 @@ function Breadcrumbs({ label, clearStack }) {
     } else {
       stack.forEach((entry) => {
         const path = entry.path;
-        const label = entry.label || 'Apps'; // Provide fallback for empty labels
+        const label = entry.label || defaultLabel; // Provide fallback for empty labels
         updatedBreadcrumbs.push({
           label: label,
           path: path,

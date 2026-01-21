@@ -1,4 +1,5 @@
 import type { AgentListResponse, AgentPayload, AgentResponse, AgentSummary, AgentUpdatePayload } from '../types/agents';
+import i18n from '../i18n';
 
 type NumaGet = (url: string, params?: Record<string, unknown>) => Promise<unknown>;
 type NumaPost = (url: string, data?: unknown, headers?: Record<string, string>) => Promise<unknown>;
@@ -33,7 +34,7 @@ export const listAgents = async (
 export const getAgent = async (numaGet: NumaGet, agentId: string): Promise<AgentSummary> => {
   const response = (await numaGet(`${BASE_URL}/${encodeURIComponent(agentId)}`)) as AgentResponse;
   if (!response?.agent) {
-    throw new Error('Agent payload missing');
+    throw new Error(i18n.t('errors:agents.payloadMissing'));
   }
   return response.agent;
 };
@@ -42,7 +43,7 @@ export const createAgent = async (numaPost: NumaPost, payload: AgentPayload): Pr
   console.info(`${LOG_PREFIX} create`, { visibility: payload.visibility ?? 'personal' });
   const response = (await numaPost(`${BASE_URL}`, payload)) as AgentResponse;
   if (!response?.agent) {
-    throw new Error('Failed to create agent');
+    throw new Error(i18n.t('errors:agents.createFailed'));
   }
   console.info(`${LOG_PREFIX} create: success`, {
     agentId: response.agent.agentId,
@@ -59,7 +60,7 @@ export const updateAgent = async (
   console.info(`${LOG_PREFIX} update`, { agentId, visibility: payload.visibility ?? 'unchanged' });
   const response = (await numaPut(`${BASE_URL}/${encodeURIComponent(agentId)}`, payload)) as AgentResponse;
   if (!response?.agent) {
-    throw new Error('Failed to update agent');
+    throw new Error(i18n.t('errors:agents.updateFailed'));
   }
   console.info(`${LOG_PREFIX} update: success`, {
     agentId: response.agent.agentId,
@@ -78,7 +79,7 @@ export const duplicateAgent = async (numaPost: NumaPost, agentId: string): Promi
   console.info(`${LOG_PREFIX} duplicate`, { agentId });
   const response = (await numaPost(`${BASE_URL}/${encodeURIComponent(agentId)}/duplicate`)) as AgentResponse;
   if (!response?.agent) {
-    throw new Error('Failed to duplicate agent');
+    throw new Error(i18n.t('errors:agents.duplicateFailed'));
   }
   console.info(`${LOG_PREFIX} duplicate: success`, { sourceAgentId: agentId, newAgentId: response.agent.agentId });
   return response.agent;

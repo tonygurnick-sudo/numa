@@ -2,6 +2,7 @@ import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../Providers/AuthProvider';
 import { Container, Row, Col, Card, Button } from 'react-bootstrap';
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 // Hook to safely use location outside of router context
 const useSafeLocation = () => {
@@ -16,28 +17,31 @@ const useSafeLocation = () => {
 /**
  * Default access denied component that shows when user lacks required feature
  */
-const AccessDeniedFallback = ({ onRedirectToDash }) => (
-  <Container className="mt-5">
-    <Row className="justify-content-center">
-      <Col md={6}>
-        <Card className="text-center">
-          <Card.Body>
-            <div className="mb-3">
-              <i className="bi bi-shield-exclamation text-warning" style={{ fontSize: '3rem' }}></i>
-            </div>
-            <Card.Title>Access Not Available</Card.Title>
-            <Card.Text className="text-muted">You don&apos;t have access to this feature.</Card.Text>
-            <Card.Text className="text-muted">Please contact your administrator to request access.</Card.Text>
-            <Button variant="primary" onClick={onRedirectToDash} className="me-2">
-              <i className="bi bi-house-door me-1"></i>
-              Go to Apps
-            </Button>
-          </Card.Body>
-        </Card>
-      </Col>
-    </Row>
-  </Container>
-);
+const AccessDeniedFallback = ({ onRedirectToDash }) => {
+  const { t } = useTranslation('common');
+  return (
+    <Container className="mt-5">
+      <Row className="justify-content-center">
+        <Col md={6}>
+          <Card className="text-center">
+            <Card.Body>
+              <div className="mb-3">
+                <i className="bi bi-shield-exclamation text-warning" style={{ fontSize: '3rem' }}></i>
+              </div>
+              <Card.Title>{t('features.accessDeniedTitle')}</Card.Title>
+              <Card.Text className="text-muted">{t('features.accessDeniedMessage')}</Card.Text>
+              <Card.Text className="text-muted">{t('features.accessDeniedContact')}</Card.Text>
+              <Button variant="primary" onClick={onRedirectToDash} className="me-2">
+                <i className="bi bi-house-door me-1"></i>
+                {t('features.goToApps')}
+              </Button>
+            </Card.Body>
+          </Card>
+        </Col>
+      </Row>
+    </Container>
+  );
+};
 
 /**
  * A flexible wrapper component for feature-based access control.

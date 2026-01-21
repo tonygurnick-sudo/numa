@@ -2,6 +2,7 @@ import { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { LayoutForm } from '../Layouts/LayoutForm';
 import { Button, Form, Alert, Spinner } from 'react-bootstrap';
+import { useTranslation } from 'react-i18next';
 import { useAuth } from '../Providers/AuthProvider';
 import { useBranding } from '../Providers/BrandingContext';
 
@@ -12,6 +13,7 @@ const NumaLogin = () => {
   const confirmPasswordRef = useRef();
   const navigate = useNavigate();
   const { branding } = useBranding();
+  const { t } = useTranslation('auth');
 
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
@@ -39,13 +41,13 @@ const NumaLogin = () => {
     const enteredPassword = (providedPassword || passwordRef.current?.value || '').trim();
 
     if (!enteredUsername || !enteredPassword) {
-      setError('Username and password are required');
+      setError(t('login.errors.missingCredentials'));
       setLoading(false);
       return;
     }
 
     if (enteredUsername.includes(' ') || enteredPassword.includes(' ')) {
-      setError('Username and password cannot contain spaces');
+      setError(t('login.errors.containsSpaces'));
       setLoading(false);
       return;
     }
@@ -57,16 +59,16 @@ const NumaLogin = () => {
         setIsSettingNewPassword(true);
         setUsername(enteredUsername);
         setPassword(enteredPassword);
-        setSuccess('You need to set a new password. Please enter a new password below.');
+        setSuccess(t('login.messages.needsNewPassword'));
         clearInputs();
       } else {
-        setSuccess('Login successful.');
+        setSuccess(t('login.messages.loginSuccess'));
         navigate('/dash');
         clearInputs();
       }
     } catch (error) {
       console.error('Error during authentication:', error);
-      setError(error.message || 'An error occurred during login');
+      setError(error.message || t('login.errors.loginFailed'));
     } finally {
       setLoading(false);
     }
@@ -82,20 +84,20 @@ const NumaLogin = () => {
     const confirmPassword = confirmPasswordRef.current.value;
 
     if (newPassword !== confirmPassword) {
-      setError("Passwords don't match");
+      setError(t('login.errors.passwordsNoMatch'));
       setLoading(false);
       return;
     }
 
     try {
       await setNewPassword(username, password, newPassword);
-      setSuccess('Password successfully updated. Logging in with new password...');
+      setSuccess(t('login.messages.passwordUpdated'));
       setIsSettingNewPassword(false);
       clearInputs();
       navigate('/dash');
     } catch (error) {
       console.error('Error setting new password:', error);
-      setError(error.message || 'An error occurred while setting the new password');
+      setError(error.message || t('login.errors.setPasswordFailed'));
     } finally {
       setLoading(false);
     }
@@ -115,12 +117,17 @@ const NumaLogin = () => {
       {!isSettingNewPassword ? (
         <Form onSubmit={(e) => handleSubmit(e)}>
           <Form.Group controlId="username">
-            <Form.Label>Username</Form.Label>
-            <Form.Control type="text" ref={usernameRef} placeholder="Enter username" data-testid="username-input" />
+            <Form.Label>{t('login.usernameLabel')}</Form.Label>
+            <Form.Control
+              type="text"
+              ref={usernameRef}
+              placeholder={t('login.usernamePlaceholder')}
+              data-testid="username-input"
+            />
           </Form.Group>
 
           <Form.Group className="mb-3">
-            <Form.Label htmlFor="password">Password</Form.Label>
+            <Form.Label htmlFor="password">{t('login.passwordLabel')}</Form.Label>
             <Form.Control
               id="password"
               name="password"
@@ -129,7 +136,7 @@ const NumaLogin = () => {
               data-testid="password-input"
             />
             <p className="mt-1">
-              <a href="/reset-password">Forgot password</a>
+              <a href="/reset-password">{t('login.forgotPassword')}</a>
             </p>
           </Form.Group>
 
@@ -137,17 +144,17 @@ const NumaLogin = () => {
             {loading ? (
               <>
                 <Spinner as="span" animation="border" size="sm" role="status" aria-hidden="true" className="me-2" />
-                Logging In...
+                {t('login.loggingIn')}
               </>
             ) : (
-              'Login'
+              t('login.loginButton')
             )}
           </Button>
         </Form>
       ) : (
         <Form onSubmit={handleNewPasswordSubmit}>
           <Form.Group className="mb-3">
-            <Form.Label htmlFor="newPassword">New Password</Form.Label>
+            <Form.Label htmlFor="newPassword">{t('login.newPasswordLabel')}</Form.Label>
             <Form.Control
               id="newPassword"
               name="newPassword"
@@ -158,7 +165,7 @@ const NumaLogin = () => {
           </Form.Group>
 
           <Form.Group className="mb-3">
-            <Form.Label htmlFor="confirmPassword">Confirm New Password</Form.Label>
+            <Form.Label htmlFor="confirmPassword">{t('login.confirmNewPasswordLabel')}</Form.Label>
             <Form.Control
               id="confirmPassword"
               name="confirmPassword"
@@ -172,10 +179,10 @@ const NumaLogin = () => {
             {loading ? (
               <>
                 <Spinner as="span" animation="border" size="sm" role="status" aria-hidden="true" className="me-2" />
-                Setting New Password...
+                {t('login.settingNewPassword')}
               </>
             ) : (
-              'Set New Password'
+              t('login.setNewPasswordButton')
             )}
           </Button>
         </Form>

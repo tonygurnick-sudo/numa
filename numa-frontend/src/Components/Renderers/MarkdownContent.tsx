@@ -4,6 +4,8 @@ import remarkBreaks from 'remark-breaks';
 import remarkGfm from 'remark-gfm';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
+import { useTranslation } from 'react-i18next';
+import i18n from '../../i18n';
 
 // Keep TABLE_STYLES for bootstrap classes
 const TABLE_STYLES = {
@@ -12,11 +14,12 @@ const TABLE_STYLES = {
 };
 
 const MarkdownDocument = ({ textContent, copied, handleCopy }) => {
+  const { t } = useTranslation('common');
   return (
     <div className="markdown-document">
       <div className="markdown-document-header">
         <i className="bi bi-file-earmark-text" />
-        Document
+        {t('markdown.document')}
       </div>
 
       <button
@@ -24,7 +27,7 @@ const MarkdownDocument = ({ textContent, copied, handleCopy }) => {
         onClick={() => handleCopy(textContent)}
         style={{ top: '5px', right: '10px', zIndex: 10 }}
       >
-        {copied ? 'Copied!' : 'Copy'}
+        {copied ? t('markdown.copied') : t('markdown.copy')}
         {copied ? <i className="bi bi-check-circle" /> : <i className="bi bi-clipboard" />}
       </button>
 
@@ -73,10 +76,11 @@ const MarkdownDocument = ({ textContent, copied, handleCopy }) => {
 };
 
 const CodeBlock = ({ textContent, language, copied, handleCopy }) => {
+  const { t } = useTranslation('common');
   return (
     <div className="markdown-code-container">
       <button className="markdown-pre-copy-button" onClick={() => handleCopy(textContent)}>
-        {copied ? 'Copied!' : 'Copy'}
+        {copied ? t('markdown.copied') : t('markdown.copy')}
         {copied ? <i className="bi bi-check-circle" /> : <i className="bi bi-clipboard" />}
       </button>
       <SyntaxHighlighter
@@ -108,11 +112,7 @@ class MarkdownErrorBoundary extends React.Component<MarkdownErrorBoundaryProps, 
 
   render() {
     if (this.state.hasError) {
-      return (
-        <div style={{ color: 'red', padding: '1rem' }}>
-          Error rendering markdown content. Please check the markdown syntax.
-        </div>
-      );
+      return <div style={{ color: 'red', padding: '1rem' }}>{i18n.t('common:markdown.renderError')}</div>;
     }
 
     return <>{this.props.children}</>;

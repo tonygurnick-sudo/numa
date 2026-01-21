@@ -3,6 +3,8 @@ import { Dropdown, Button, Modal, Form, Spinner, Badge } from 'react-bootstrap';
 import { saveAs } from 'file-saver';
 import { jsPDF } from 'jspdf';
 import ReactDOMServer from 'react-dom/server';
+import { useTranslation } from 'react-i18next';
+import i18n from '../i18n';
 import { MarkdownContent } from './Renderers/MarkdownContent';
 import { useAuth } from '../Providers/AuthProvider';
 import { useNumaRequest } from '../Providers/NumaRequestContext';
@@ -67,7 +69,9 @@ const buildKbPrefix = (kbId: string | null | undefined): string => {
   return `documents/kb-${normalized}/`;
 };
 
-const ResultActions: React.FC<ResultActionsProps> = ({ content, title = 'Result', appType = null }) => {
+const ResultActions: React.FC<ResultActionsProps> = ({ content, title, appType = null }) => {
+  const { t } = useTranslation('common');
+  const resolvedTitle = title || t('resultActions.defaultTitle');
   const { getCredentials, user } = useAuth();
   const { numaPost } = useNumaRequest();
   const { availableKBs, isLoadingKBs } = useKnowledgeBase();
@@ -77,7 +81,7 @@ const ResultActions: React.FC<ResultActionsProps> = ({ content, title = 'Result'
   // Modal states
   const [showModal, setShowModal] = useState(false);
   const [modalStep, setModalStep] = useState('confirm');
-  const [docName, setDocName] = useState(title);
+  const [docName, setDocName] = useState(resolvedTitle);
   const [successMessage, setSuccessMessage] = useState('');
   const [selectedKB, setSelectedKB] = useState<UserKB | null>(null);
 
@@ -472,12 +476,12 @@ const ResultActions: React.FC<ResultActionsProps> = ({ content, title = 'Result'
       pdf.setFont(FONT_FAMILY, 'normal');
 
       // Left side: Generation date
-      const dateText = `Generated ${new Date().toLocaleDateString()}`;
+      const dateText = t('resultActions.pdfFooter.generated', { date: new Date().toLocaleDateString(i18n.language) });
       pdf.text(dateText, margin, footerY);
 
       // Right side: Page numbers
       if (totalPages > 1) {
-        const pageText = `Page ${i} of ${totalPages}`;
+        const pageText = t('resultActions.pdfFooter.pageCount', { current: i, total: totalPages });
         const pageTextWidth = pdf.getTextWidth(pageText);
         pdf.text(pageText, pageWidth - margin - pageTextWidth, footerY);
       }
@@ -497,21 +501,21 @@ const ResultActions: React.FC<ResultActionsProps> = ({ content, title = 'Result'
 
   // Client-side fallback for PDF generation
   const createPdfClientSide = async (): Promise<void> => {
-    const pdfBlob = await createStyledPdfBlob(content, title);
-    saveAs(pdfBlob, `${title}.pdf`);
+    const pdfBlob = await createStyledPdfBlob(content, resolvedTitle);
+    saveAs(pdfBlob, `${resolvedTitle}.pdf`);
   };
 
   // Client-side fallback for DOCX generation
   const createDocxClientSide = async (): Promise<void> => {
-    const docxBlob = await createDocxBlob(content, title);
-    saveAs(docxBlob, `${title}.docx`);
+    const docxBlob = await createDocxBlob(content, resolvedTitle);
+    saveAs(docxBlob, `${resolvedTitle}.docx`);
   };
 
   const handleDownloadPDF = async () => {
     setIsDownloading(true);
     try {
       // Try server-side conversion first
-      await downloadPdf(numaPost, content, title);
+      await downloadPdf(numaPost, content, resolvedTitle);
     } catch (serverError) {
       console.warn('Server-side PDF conversion failed, falling back to client-side:', serverError);
       try {
@@ -527,24 +531,24 @@ const ResultActions: React.FC<ResultActionsProps> = ({ content, title = 'Result'
   const handleDownloadCSV = () => {
     const plainText = convertMarkdownToPlainText(content);
     const blob = new Blob([plainText], { type: 'text/csv;charset=utf-8' });
-    saveAs(blob, `${title}.csv`);
+    saveAs(blob, `${resolvedTitle}.csv`);
   };
 
   const handleDownloadJSON = () => {
     const data = {
-      title,
+      title: resolvedTitle,
       content: convertMarkdownToPlainText(content),
       timestamp: new Date().toISOString(),
     };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-    saveAs(blob, `${title}.json`);
+    saveAs(blob, `${resolvedTitle}.json`);
   };
 
   const handleDownloadDocx = async () => {
     setIsDownloading(true);
     try {
       // Try server-side conversion first
-      await downloadDocx(numaPost, content, title);
+      await downloadDocx(numaPost, content, resolvedTitle);
     } catch (serverError) {
       console.warn('Server-side DOCX conversion failed, falling back to client-side:', serverError);
       try {
@@ -561,7 +565,7 @@ const ResultActions: React.FC<ResultActionsProps> = ({ content, title = 'Result'
   // KB Selection -> Upload as TEXT file to Knowledge Base
   const handleSelectKBAndShowModal = (kb: UserKB) => {
     setSelectedKB(kb);
-    setDocName(title);
+    setDocName(resolvedTitle);
     setModalStep('confirm');
     setShowModal(true);
   };
@@ -577,8 +581,8 @@ const ResultActions: React.FC<ResultActionsProps> = ({ content, title = 'Result'
       const bucketName = window.sessionStorage.getItem('DATA_BUCKET');
       const clientName = window.sessionStorage.getItem('CLIENT_NAME');
       const currentDate = new Date();
-      const dateStr = currentDate.toLocaleDateString().replace(/\//g, '-');
-      const timeStr = currentDate.toLocaleTimeString();
+      const dateStr = currentDate.toLocaleDateString(i18n.language).replace(/\//g, '-');
+      const timeStr = currentDate.toLocaleTimeString(i18n.language);
       const fileName = `${docName}-${dateStr}-${timeStr}.${extension}`;
       const region = window.sessionStorage.getItem('REGION');
 
@@ -611,12 +615,15 @@ const ResultActions: React.FC<ResultActionsProps> = ({ content, title = 'Result'
       }
 
       setSuccessMessage(
-        `Text file "${fileName}" has been added to "${selectedKB?.kb_name || 'your knowledge base'}" and will be searchable after the next scheduled sync.`,
+        t('resultActions.kbUploadSuccess', {
+          fileName,
+          kbName: selectedKB?.kb_name || t('resultActions.yourKnowledgeBase'),
+        }),
       );
       setModalStep('success');
     } catch (err: unknown) {
       console.error('Failed to upload file:', err);
-      setSuccessMessage(`Failed to upload: ${err instanceof Error ? err.message : String(err)}`);
+      setSuccessMessage(t('resultActions.kbUploadFailed', { error: err instanceof Error ? err.message : String(err) }));
       setModalStep('success');
     }
   };
@@ -633,7 +640,7 @@ const ResultActions: React.FC<ResultActionsProps> = ({ content, title = 'Result'
   // 5) SHARE Handlers (Email, Copy, Print)
   const handleEmailShare = () => {
     const plainText = convertMarkdownToPlainText(content);
-    const emailSubject = encodeURIComponent(title);
+    const emailSubject = encodeURIComponent(resolvedTitle);
     const emailBody = encodeURIComponent(plainText);
     const mailtoUrl = `mailto:?subject=${emailSubject}&body=${emailBody}`;
     window.open(mailtoUrl, '_blank', 'noopener,noreferrer');
@@ -654,7 +661,7 @@ const ResultActions: React.FC<ResultActionsProps> = ({ content, title = 'Result'
     printWindow.document.write(`
       <html>
         <head>
-          <title>${title}</title>
+          <title>${resolvedTitle}</title>
           <style>
             @media print {
               @page {
@@ -713,13 +720,16 @@ const ResultActions: React.FC<ResultActionsProps> = ({ content, title = 'Result'
         </head>
         <body>
           <div class="header">
-            <h1>${title}</h1>
+            <h1>${resolvedTitle}</h1>
           </div>
           <div class="content">
             ${markdownHtml}
           </div>
           <div class="footer">
-            Generated on ${new Date().toLocaleDateString()} at ${new Date().toLocaleTimeString()}
+            ${t('resultActions.print.generatedOn', {
+              date: new Date().toLocaleDateString(i18n.language),
+              time: new Date().toLocaleTimeString(i18n.language),
+            })}
           </div>
           <div class="no-print" style="position: fixed; top: 20px; right: 20px;">
             <button onclick="window.print()" style="
@@ -729,7 +739,7 @@ const ResultActions: React.FC<ResultActionsProps> = ({ content, title = 'Result'
               border: none;
               border-radius: 4px;
               cursor: pointer;
-            ">Print</button>
+            ">${t('resultActions.print.button')}</button>
           </div>
         </body>
       </html>
@@ -746,12 +756,12 @@ const ResultActions: React.FC<ResultActionsProps> = ({ content, title = 'Result'
           {isDownloading ? (
             <>
               <Spinner as="span" animation="border" size="sm" role="status" aria-hidden="true" className="me-2" />
-              Converting...
+              {t('resultActions.converting')}
             </>
           ) : (
             <>
               <i className="bi bi-download me-2"></i>
-              Download
+              {t('resultActions.download')}
             </>
           )}
         </Dropdown.Toggle>
@@ -759,25 +769,25 @@ const ResultActions: React.FC<ResultActionsProps> = ({ content, title = 'Result'
           {exportOptions.pdf && (
             <Dropdown.Item onClick={handleDownloadPDF}>
               <i className="bi bi-file-pdf me-2"></i>
-              PDF
+              {t('resultActions.formats.pdf')}
             </Dropdown.Item>
           )}
           {exportOptions.csv && (
             <Dropdown.Item onClick={handleDownloadCSV}>
               <i className="bi bi-file-spreadsheet me-2"></i>
-              CSV
+              {t('resultActions.formats.csv')}
             </Dropdown.Item>
           )}
           {exportOptions.json && (
             <Dropdown.Item onClick={handleDownloadJSON}>
               <i className="bi bi-file-code me-2"></i>
-              JSON
+              {t('resultActions.formats.json')}
             </Dropdown.Item>
           )}
           {exportOptions.docx && (
             <Dropdown.Item onClick={handleDownloadDocx}>
               <i className="bi bi-file-earmark-word me-2"></i>
-              DOCX
+              {t('resultActions.formats.docx')}
             </Dropdown.Item>
           )}
         </Dropdown.Menu>
@@ -786,20 +796,20 @@ const ResultActions: React.FC<ResultActionsProps> = ({ content, title = 'Result'
       <Dropdown>
         <Dropdown.Toggle variant="btn btn-primary" id="share-dropdown">
           <i className="bi bi-share me-2"></i>
-          Share
+          {t('resultActions.share')}
         </Dropdown.Toggle>
         <Dropdown.Menu>
           <Dropdown.Item onClick={handleEmailShare}>
             <i className="bi bi-envelope me-2"></i>
-            Email
+            {t('resultActions.shareOptions.email')}
           </Dropdown.Item>
           <Dropdown.Item onClick={handleCopyToClipboard}>
             <i className="bi bi-clipboard me-2"></i>
-            Copy to Clipboard
+            {t('resultActions.shareOptions.copy')}
           </Dropdown.Item>
           <Dropdown.Item onClick={handlePrint}>
             <i className="bi bi-printer me-2"></i>
-            Print
+            {t('resultActions.shareOptions.print')}
           </Dropdown.Item>
         </Dropdown.Menu>
       </Dropdown>
@@ -811,7 +821,7 @@ const ResultActions: React.FC<ResultActionsProps> = ({ content, title = 'Result'
           disabled={writableKBs.length === 0 || isLoadingKBs}
         >
           <i className="bi bi-database me-2"></i>
-          Add to Knowledge Base
+          {t('resultActions.addToKnowledgeBase')}
         </Dropdown.Toggle>
         <Dropdown.Menu>
           {writableKBs.map((kb) => (
@@ -819,18 +829,18 @@ const ResultActions: React.FC<ResultActionsProps> = ({ content, title = 'Result'
               {kb.kb_name}
               {kb.kb_id === 'company' && (
                 <Badge bg="secondary" className="ms-2">
-                  Default
+                  {t('resultActions.badges.default')}
                 </Badge>
               )}
               {kb.role && kb.kb_id !== 'company' && (
                 <Badge bg="info" className="ms-2">
-                  {kb.role}
+                  {t('resultActions.badges.role', { role: kb.role })}
                 </Badge>
               )}
             </Dropdown.Item>
           ))}
           {writableKBs.length === 0 && !isLoadingKBs && (
-            <Dropdown.Item disabled>No knowledge bases available</Dropdown.Item>
+            <Dropdown.Item disabled>{t('resultActions.noKnowledgeBases')}</Dropdown.Item>
           )}
         </Dropdown.Menu>
       </Dropdown>
@@ -839,25 +849,30 @@ const ResultActions: React.FC<ResultActionsProps> = ({ content, title = 'Result'
         {modalStep === 'confirm' && (
           <>
             <Modal.Header closeButton>
-              <Modal.Title>Add to {selectedKB?.kb_name || 'Knowledge Base'}</Modal.Title>
+              <Modal.Title>
+                {t('resultActions.modal.addTitle', { kbName: selectedKB?.kb_name || t('resultActions.knowledgeBase') })}
+              </Modal.Title>
             </Modal.Header>
             <Modal.Body>
               <p>
-                You are about to add this to <strong>{selectedKB?.kb_name || 'your knowledge base'}</strong>. It will be
-                searchable after the next scheduled sync.
+                {t('resultActions.modal.addDescriptionPrefix')}
+                <strong>{selectedKB?.kb_name || t('resultActions.yourKnowledgeBase')}</strong>
+                {t('resultActions.modal.addDescriptionSuffix')}
               </p>
-              <p>Please confirm and/or edit the title:</p>
+              <p>{t('resultActions.modal.confirmEdit')}</p>
               <Form.Group className="mb-3">
-                <Form.Label>Document Title</Form.Label>
+                <Form.Label>{t('resultActions.modal.documentTitle')}</Form.Label>
                 <Form.Control type="text" value={docName} onChange={(e) => setDocName(e.target.value)} />
               </Form.Group>
             </Modal.Body>
             <Modal.Footer>
               <Button variant="secondary" onClick={handleModalCancel}>
-                Cancel
+                {t('common.cancel')}
               </Button>
               <Button variant="primary" onClick={handleModalYes}>
-                Add to {selectedKB?.kb_name || 'Knowledge Base'}
+                {t('resultActions.modal.addButton', {
+                  kbName: selectedKB?.kb_name || t('resultActions.knowledgeBase'),
+                })}
               </Button>
             </Modal.Footer>
           </>
@@ -866,14 +881,16 @@ const ResultActions: React.FC<ResultActionsProps> = ({ content, title = 'Result'
         {modalStep === 'uploading' && (
           <>
             <Modal.Header>
-              <Modal.Title>Processing...</Modal.Title>
+              <Modal.Title>{t('resultActions.modal.processing')}</Modal.Title>
             </Modal.Header>
             <Modal.Body className="text-center">
               <Spinner animation="border" role="status">
-                <span className="visually-hidden">Uploading...</span>
+                <span className="visually-hidden">{t('resultActions.modal.uploading')}</span>
               </Spinner>
               <p style={{ marginTop: '1rem' }}>
-                Uploading to {selectedKB?.kb_name || 'your knowledge base'}, please wait...
+                {t('resultActions.modal.uploadingTo', {
+                  kbName: selectedKB?.kb_name || t('resultActions.yourKnowledgeBase'),
+                })}
               </p>
             </Modal.Body>
           </>
@@ -882,22 +899,22 @@ const ResultActions: React.FC<ResultActionsProps> = ({ content, title = 'Result'
         {modalStep === 'success' && (
           <>
             <Modal.Header>
-              <Modal.Title>Success</Modal.Title>
+              <Modal.Title>{t('resultActions.modal.success')}</Modal.Title>
             </Modal.Header>
             <Modal.Body>
               <p>{successMessage}</p>
               <p>
                 <a href="/upload" target="_blank" rel="noreferrer">
-                  Go to File Upload Page
+                  {t('resultActions.modal.goToUpload')}
                 </a>
               </p>
               <p className="text-muted" style={{ fontSize: '0.9rem' }}>
-                * We add a timestamp to the filename to ensure uniqueness
+                {t('resultActions.modal.timestampNote')}
               </p>
             </Modal.Body>
             <Modal.Footer>
               <Button variant="primary" onClick={handleModalCancel}>
-                Close
+                {t('common.close')}
               </Button>
             </Modal.Footer>
           </>

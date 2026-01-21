@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Badge, Button, Form } from 'react-bootstrap';
+import { useTranslation } from 'react-i18next';
 
 interface ChipsInputProps {
   id: string;
@@ -24,8 +25,10 @@ export function ChipsInput({
   chips,
   onChange,
   disabled = false,
-  addButtonLabel = 'Add',
+  addButtonLabel,
 }: ChipsInputProps): React.JSX.Element {
+  const { t } = useTranslation('common');
+  const resolvedAddLabel = addButtonLabel ?? t('chipsInput.add');
   const [inputValue, setInputValue] = useState('');
 
   // Keep a case-insensitive set for de-duping
@@ -77,7 +80,7 @@ export function ChipsInput({
         />
         <Button variant="outline-primary" onClick={() => addChip()} disabled={disabled}>
           <i className="bi bi-plus-lg me-1" />
-          {addButtonLabel}
+          {resolvedAddLabel}
         </Button>
       </div>
       {helperText && <Form.Text className="text-muted">{helperText}</Form.Text>}
@@ -93,7 +96,7 @@ export function ChipsInput({
                 className="p-0 align-baseline text-muted"
                 onClick={() => removeChip(idx)}
                 disabled={disabled}
-                aria-label={`Remove ${chip}`}
+                aria-label={t('chipsInput.remove', { value: chip })}
               >
                 <i className="bi bi-x" />
               </Button>

@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 
 const Notification = ({
   show,
@@ -15,6 +16,8 @@ const Notification = ({
   className = '',
   style = {},
 }) => {
+  const { t } = useTranslation('common');
+
   React.useEffect(() => {
     if (autoDismiss && show) {
       const timer = setTimeout(() => {
@@ -86,7 +89,12 @@ const Notification = ({
           )}
 
           {onDismiss && (
-            <button type="button" className="btn-close ms-2" onClick={onDismiss} aria-label="Close"></button>
+            <button
+              type="button"
+              className="btn-close ms-2"
+              onClick={onDismiss}
+              aria-label={t('common.close')}
+            ></button>
           )}
         </div>
 

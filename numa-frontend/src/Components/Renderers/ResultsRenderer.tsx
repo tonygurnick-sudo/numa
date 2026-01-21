@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import { useAuth } from '../../Providers/AuthProvider';
 import { useNumaApp } from '../../Providers/NumaAppContext';
@@ -43,6 +44,7 @@ const TabNavigation = ({ items, activeIndex, setActiveIndex, getLabel, alwaysSho
 
 // Shared file action buttons component
 const FileActionButtons = ({ filePath, onDownload, onOpen, loadingStates }) => {
+  const { t } = useTranslation('common');
   const isDownloading = loadingStates[filePath + '-download'];
   const isOpening = loadingStates[filePath + '-open'];
 
@@ -51,7 +53,7 @@ const FileActionButtons = ({ filePath, onDownload, onOpen, loadingStates }) => {
       <button
         className="btn btn-sm btn-outline-primary"
         onClick={onDownload}
-        title="Download file"
+        title={t('resultRenderer.actions.downloadFile')}
         disabled={isDownloading || isOpening}
       >
         {isDownloading ? (
@@ -63,7 +65,7 @@ const FileActionButtons = ({ filePath, onDownload, onOpen, loadingStates }) => {
       <button
         className="btn btn-sm btn-outline-secondary"
         onClick={onOpen}
-        title="Open in new tab"
+        title={t('resultRenderer.actions.openInNewTab')}
         disabled={isDownloading || isOpening}
       >
         {isOpening ? (
@@ -78,6 +80,7 @@ const FileActionButtons = ({ filePath, onDownload, onOpen, loadingStates }) => {
 
 // Component for rendering structured data in a user-friendly way
 const JsonRenderer = ({ data }) => {
+  const { t } = useTranslation('common');
   // Parse string data if needed
   const jsonData = typeof data === 'string' ? JSON.parse(data) : data;
   const [activeTab, setActiveTab] = useState(null);
@@ -104,7 +107,7 @@ const JsonRenderer = ({ data }) => {
     } else if (typeof value === 'boolean') {
       return <span className="text-dark">{value.toString()}</span>;
     } else if (value === null) {
-      return <span className="text-muted">-</span>;
+      return <span className="text-muted">{t('resultRenderer.emptyValue')}</span>;
     } else {
       return <span>{String(value)}</span>;
     }
@@ -135,7 +138,7 @@ const JsonRenderer = ({ data }) => {
   const renderObject = (obj, level = 0, path = '', parentKey = null) => {
     // Safety check to prevent infinite recursion
     if (!obj || typeof obj !== 'object') {
-      return <div>Invalid data structure</div>;
+      return <div>{t('resultRenderer.invalidData')}</div>;
     }
 
     // If we're at the top level and have tabs, only show the active tab
@@ -185,7 +188,7 @@ const JsonRenderer = ({ data }) => {
                       {Array.isArray(value) ? (
                         <div className="ms-3">
                           {value.length === 0 ? (
-                            <span className="text-muted">No items</span>
+                            <span className="text-muted">{t('resultRenderer.noItems')}</span>
                           ) : (
                             value.map((item, i) => (
                               <div key={i} className="mb-2 pb-2 border-bottom border-light">
@@ -193,7 +196,8 @@ const JsonRenderer = ({ data }) => {
                                   renderObject(item, level + 1, `${currentPath}[${i}]`, null)
                                 ) : (
                                   <div>
-                                    <strong>Item {i + 1}:</strong> {renderSimpleValue(item)}
+                                    <strong>{t('resultRenderer.itemLabel', { index: i + 1 })}</strong>{' '}
+                                    {renderSimpleValue(item)}
                                   </div>
                                 )}
                               </div>
@@ -249,7 +253,7 @@ const JsonRenderer = ({ data }) => {
             className="btn btn-sm btn-outline-secondary"
             onClick={() => navigator.clipboard.writeText(JSON.stringify(jsonData, null, 2))}
           >
-            Copy Data
+            {t('resultRenderer.actions.copyData')}
           </button>
         </div>
       </div>
@@ -259,6 +263,7 @@ const JsonRenderer = ({ data }) => {
 
 // Component for rendering CSV data in a table format
 const CsvRenderer = ({ data }) => {
+  const { t } = useTranslation('common');
   // Parse CSV string into rows and columns
   const parseCSV = (csvString) => {
     if (!csvString || typeof csvString !== 'string') {
@@ -350,7 +355,7 @@ const CsvRenderer = ({ data }) => {
   const [loadingFiles, setLoadingFiles] = useState({});
 
   if (headers.length === 0) {
-    return <div className="alert alert-warning">No valid CSV data found</div>;
+    return <div className="alert alert-warning">{t('resultRenderer.noValidCsv')}</div>;
   }
 
   // Find the "Full Name" column or a good alternative
@@ -373,7 +378,7 @@ const CsvRenderer = ({ data }) => {
     try {
       const bucketName = window.sessionStorage.getItem('OUTPUTS_BUCKET_NAME');
       if (!bucketName || bucketName === 'undefined') {
-        throw new Error('Outputs bucket not found in session storage');
+        throw new Error(t('resultRenderer.errors.outputsBucketMissing'));
       }
 
       // Set loading state for this file path
@@ -396,7 +401,7 @@ const CsvRenderer = ({ data }) => {
     try {
       const bucketName = window.sessionStorage.getItem('OUTPUTS_BUCKET_NAME');
       if (!bucketName || bucketName === 'undefined') {
-        throw new Error('Outputs bucket not found in session storage');
+        throw new Error(t('resultRenderer.errors.outputsBucketMissing'));
       }
 
       // Set loading state for this file path
@@ -424,7 +429,7 @@ const CsvRenderer = ({ data }) => {
     // New function to detect and render file paths
     const renderValue = (value) => {
       if (value.trim() === '') {
-        return <span className="text-muted fst-italic">Empty</span>;
+        return <span className="text-muted fst-italic">{t('resultRenderer.emptyCell')}</span>;
       } else if (value.includes('\n')) {
         return <MarkdownContent content={value} />;
       } else if (isLikelyFilePath(value)) {
@@ -501,7 +506,7 @@ const CsvRenderer = ({ data }) => {
         activeIndex={activeRowIndex}
         setActiveIndex={setActiveRowIndex}
         getLabel={(row, index) => {
-          const label = row[nameColumnIndex] || `Row ${index + 1}`;
+          const label = row[nameColumnIndex] || t('resultRenderer.rowLabel', { index: index + 1 });
           return label;
         }}
         alwaysShow={true}
@@ -509,7 +514,7 @@ const CsvRenderer = ({ data }) => {
       {renderActiveRow()}
       <div className="mt-3 d-flex justify-content-between align-items-center">
         <p className="text-muted small mb-0">
-          Total: {rows.length} rows and {headers.length} columns
+          {t('resultRenderer.summary', { rows: rows.length, columns: headers.length })}
         </p>
         <div>
           <button
@@ -537,12 +542,12 @@ const CsvRenderer = ({ data }) => {
               const url = URL.createObjectURL(blob);
               const a = document.createElement('a');
               a.href = url;
-              a.download = 'table-view.html';
+              a.download = t('resultRenderer.exportFilename');
               a.click();
               URL.revokeObjectURL(url);
             }}
           >
-            Export Table View
+            {t('resultRenderer.actions.exportTable')}
           </button>
         </div>
       </div>
@@ -588,6 +593,7 @@ const isCSVContent = (content, contentType) => {
 
 // Shared component for file download/open buttons in ResultsRenderer
 const FileDownloadButtons = ({ output, getCredentials, loadingActions, setLoadingActions }) => {
+  const { t } = useTranslation('common');
   return (
     <div className="btn-group">
       <button
@@ -615,12 +621,12 @@ const FileDownloadButtons = ({ output, getCredentials, loadingActions, setLoadin
         {loadingActions[`${output.data.key}-download`] ? (
           <>
             <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
-            Downloading...
+            {t('resultRenderer.actions.downloading')}
           </>
         ) : (
           <>
             <i className="bi bi-download me-1"></i>
-            Download {output.title || 'File'}
+            {t('resultRenderer.actions.downloadLabel', { title: output.title || t('resultRenderer.actions.file') })}
           </>
         )}
       </button>
@@ -638,12 +644,12 @@ const FileDownloadButtons = ({ output, getCredentials, loadingActions, setLoadin
         {loadingActions[`${output.data.key}-open`] ? (
           <>
             <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
-            Opening...
+            {t('resultRenderer.actions.opening')}
           </>
         ) : (
           <>
             <i className="bi bi-box-arrow-up-right me-1"></i>
-            Open in New Tab
+            {t('resultRenderer.actions.openInNewTab')}
           </>
         )}
       </button>
@@ -652,6 +658,7 @@ const FileDownloadButtons = ({ output, getCredentials, loadingActions, setLoadin
 };
 
 export const ResultsRenderer = ({ results }) => {
+  const { t } = useTranslation('common');
   const [contents, setContents] = useState({});
   const [loading, setLoading] = useState({});
   const [errors, setErrors] = useState({});
@@ -786,7 +793,7 @@ export const ResultsRenderer = ({ results }) => {
               console.error('Error fetching S3 content:', err);
               setErrors((prev) => ({
                 ...prev,
-                [key]: `Error loading content: ${err.message}`,
+                [key]: t('resultRenderer.errors.loadingContent', { message: err.message }),
               }));
             } finally {
               setLoading((prev) => ({ ...prev, [key]: false }));
@@ -810,7 +817,7 @@ export const ResultsRenderer = ({ results }) => {
       parsedResults = JSON.parse(results);
     } catch (error) {
       console.error('Error parsing results JSON for rendering:', error);
-      return <div>Error parsing results data</div>;
+      return <div>{t('resultRenderer.errors.parseResults')}</div>;
     }
   }
 
@@ -827,7 +834,7 @@ export const ResultsRenderer = ({ results }) => {
         }
       } catch (error) {
         console.error('Error parsing nested results JSON for rendering:', error);
-        return <div>Error parsing nested results data</div>;
+        return <div>{t('resultRenderer.errors.parseNested')}</div>;
       }
     } else if (Array.isArray(parsedResults.results)) {
       // Handle case where results.results is already an array
@@ -836,13 +843,13 @@ export const ResultsRenderer = ({ results }) => {
   }
 
   if (!actualResults || !Array.isArray(actualResults) || actualResults.length === 0) {
-    return <div>No results to display</div>;
+    return <div>{t('resultRenderer.emptyResults')}</div>;
   }
 
   // Get the first result
   const result = actualResults[0];
   if (!result.outputs || !Array.isArray(result.outputs) || result.outputs.length === 0) {
-    return <div>No outputs found in results</div>;
+    return <div>{t('resultRenderer.emptyOutputs')}</div>;
   }
 
   // The selected output
@@ -868,7 +875,7 @@ export const ResultsRenderer = ({ results }) => {
                 className={`nav-link ${selectedOutputIndex === index ? 'active' : ''}`}
                 onClick={() => setSelectedOutputIndex(index)}
               >
-                {output.title || `Output ${index + 1}`}
+                {output.title || t('resultRenderer.outputLabel', { index: index + 1 })}
               </button>
             </li>
           ))}
@@ -884,13 +891,13 @@ export const ResultsRenderer = ({ results }) => {
       {isLoading ? (
         <div className="text-center mb-3">
           <span className="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
-          <span className="ms-2">Loading content...</span>
+          <span className="ms-2">{t('resultRenderer.loadingContent')}</span>
         </div>
       ) : error ? (
         <div className="mb-3">
           <div className="text-danger">{error}</div>
           <div className="mt-2">
-            <strong>Debug info:</strong>
+            <strong>{t('resultRenderer.debugInfo')}</strong>
             <pre>{JSON.stringify(selectedOutput, null, 2)}</pre>
           </div>
         </div>
@@ -924,7 +931,7 @@ export const ResultsRenderer = ({ results }) => {
           {!isLoading && !error && content && (
             <ResultActions
               content={typeof content === 'string' ? content : JSON.stringify(content, null, 2)}
-              title={selectedOutput.title || `Result ${selectedOutputIndex + 1}`}
+              title={selectedOutput.title || t('resultRenderer.resultLabel', { index: selectedOutputIndex + 1 })}
             />
           )}
         </div>
@@ -936,7 +943,7 @@ export const ResultsRenderer = ({ results }) => {
           {!isLoading && !error && content && (
             <ResultActions
               content={typeof content === 'string' ? content : JSON.stringify(content, null, 2)}
-              title={selectedOutput.title || `Result ${selectedOutputIndex + 1}`}
+              title={selectedOutput.title || t('resultRenderer.resultLabel', { index: selectedOutputIndex + 1 })}
             />
           )}
         </div>
@@ -946,7 +953,7 @@ export const ResultsRenderer = ({ results }) => {
           {!isLoading && !error && content && (
             <ResultActions
               content={typeof content === 'object' ? JSON.stringify(content, null, 2) : content}
-              title={selectedOutput.title || `Result ${selectedOutputIndex + 1}`}
+              title={selectedOutput.title || t('resultRenderer.resultLabel', { index: selectedOutputIndex + 1 })}
             />
           )}
         </div>

@@ -3,6 +3,7 @@ import type { AwsCredentialIdentity } from '@aws-sdk/types';
 import { getContentType } from '../../utils/fileUtils';
 import { getUrlTagFromS3Object } from '../../utils/s3Utils';
 import { Button, Collapse } from 'react-bootstrap';
+import { useTranslation } from 'react-i18next';
 import { withPRM } from '../../utils/prmUtils';
 
 type ChatReferencesDropdownProps = {
@@ -18,15 +19,17 @@ const ChatReferencesDropdown = ({
   references,
   getCredentials,
   showAsDropdown = true,
-  label = 'References',
+  label,
   showLabel = true,
   noIndent = false,
 }: ChatReferencesDropdownProps) => {
+  const { t } = useTranslation('chat');
   const [open, setOpen] = useState(false);
   const [processedRefs, setProcessedRefs] = useState([]);
   const [downloadingIndex, setDownloadingIndex] = useState(null);
   const downloadLinkRef = useRef(null);
   const region = window.sessionStorage.getItem('REGION');
+  const effectiveLabel = label ?? t('references.label');
 
   useEffect(() => {
     // Process references when they change
@@ -51,7 +54,7 @@ const ChatReferencesDropdown = ({
               const key = s3Parts.slice(1).join('/');
 
               // Extract filename for display
-              const fileName = key.split('/').pop() || 'file';
+              const fileName = key.split('/').pop() || t('references.fileFallback');
 
               // Store bucket and key for later pre-signed URL generation
               return {
@@ -86,7 +89,7 @@ const ChatReferencesDropdown = ({
               }
 
               // Extract filename for display and decode it properly
-              let fileName = key.split('/').pop() || 'file';
+              let fileName = key.split('/').pop() || t('references.fileFallback');
               fileName = decodeURIComponent(fileName);
 
               // Store bucket and key for later pre-signed URL generation
@@ -102,7 +105,7 @@ const ChatReferencesDropdown = ({
               return {
                 originalRef: ref,
                 url: ref, // Fall back to the original URL
-                displayName: 'Document',
+                displayName: t('references.documentFallback'),
                 isS3: true,
               };
             }
@@ -123,7 +126,7 @@ const ChatReferencesDropdown = ({
     };
 
     processReferences();
-  }, [references]);
+  }, [references, t]);
 
   // Function to extract the original URL from a web crawler key
   const extractCrawlerUrl = (key) => {
@@ -183,7 +186,8 @@ const ChatReferencesDropdown = ({
       }, 100);
     } catch (error) {
       console.error('Error accessing document:', error);
-      alert(`Unable to access document: ${error.message}`);
+      const message = error instanceof Error ? error.message : String(error);
+      alert(t('references.unableToAccessAlert', { message }));
     } finally {
       setDownloadingIndex(null);
     }
@@ -199,7 +203,7 @@ const ChatReferencesDropdown = ({
 
       const credentials = await getCredentials();
       if (!credentials) {
-        throw new Error('Failed to get AWS credentials');
+        throw new Error(t('references.credentialsError'));
       }
 
       const contentType = getContentType(s3Key);
@@ -254,7 +258,7 @@ const ChatReferencesDropdown = ({
               ref.displayName
             )}
           </Button>
-          {ref.error && <span className="text-danger ms-2">(Unable to access file)</span>}
+          {ref.error && <span className="text-danger ms-2">{t('references.unableToAccess')}</span>}
         </li>
       ))}
     </ul>
@@ -268,7 +272,7 @@ const ChatReferencesDropdown = ({
       <div className={`references-list ${noIndent ? '' : 'mt-2'}`}>
         {/* Invisible link for downloads */}
         <a ref={downloadLinkRef} style={{ display: 'none' }} />
-        {showLabel && <strong>{label}:</strong>}
+        {showLabel && <strong>{effectiveLabel}:</strong>}
         <div className={noIndent ? '' : 'ms-3'}>{renderReferenceItems()}</div>
       </div>
     );
@@ -287,7 +291,7 @@ const ChatReferencesDropdown = ({
         aria-expanded={open}
         style={{ color: '#4b007d' }}
       >
-        {open ? `Hide ${label}` : `Show ${label}`}
+        {open ? t('references.hide', { label: effectiveLabel }) : t('references.show', { label: effectiveLabel })}
       </Button>
       <Collapse in={open}>
         <div id="references-collapse" className="ms-3">

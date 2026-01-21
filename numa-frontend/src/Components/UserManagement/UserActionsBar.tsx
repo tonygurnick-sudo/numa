@@ -1,6 +1,7 @@
 import React from 'react';
 import { Form, InputGroup, ButtonGroup, Button, Dropdown } from 'react-bootstrap';
 import { Search, Grid, List, Funnel, SortDown } from 'react-bootstrap-icons';
+import { useTranslation } from 'react-i18next';
 
 export type ViewMode = 'row' | 'card';
 export type SortField = 'created' | 'email';
@@ -24,16 +25,6 @@ interface UserActionsBarProps {
   userCount?: { filtered: number; total: number };
 }
 
-const ROLE_OPTIONS = [
-  { value: 'admin', label: 'Admin' },
-  { value: 'standard', label: 'Standard' },
-];
-
-const SORT_OPTIONS: { value: SortField; label: string }[] = [
-  { value: 'created', label: 'Created Date' },
-  { value: 'email', label: 'Email' },
-];
-
 export function UserActionsBar({
   searchTerm,
   onSearchChange,
@@ -47,6 +38,15 @@ export function UserActionsBar({
   onSortDirectionChange,
   userCount,
 }: UserActionsBarProps): React.JSX.Element {
+  const { t } = useTranslation('userManagement');
+  const roleOptions = [
+    { value: 'admin', label: t('filters.roles.admin') },
+    { value: 'standard', label: t('filters.roles.standard') },
+  ];
+  const sortOptions: { value: SortField; label: string }[] = [
+    { value: 'created', label: t('sort.created') },
+    { value: 'email', label: t('sort.email') },
+  ];
   const handleRoleToggle = (role: string) => {
     const newRoles = filters.roles.includes(role) ? filters.roles.filter((r) => r !== role) : [...filters.roles, role];
     onFiltersChange({ ...filters, roles: newRoles });
@@ -77,10 +77,10 @@ export function UserActionsBar({
           </InputGroup.Text>
           <Form.Control
             type="text"
-            placeholder="Search by email..."
+            placeholder={t('search.placeholder')}
             value={searchTerm}
             onChange={(e) => onSearchChange(e.target.value)}
-            aria-label="Search users by email"
+            aria-label={t('search.aria')}
           />
         </InputGroup>
 
@@ -89,16 +89,16 @@ export function UserActionsBar({
           <Button
             variant={viewMode === 'row' ? 'primary' : 'outline-secondary'}
             onClick={() => onViewModeChange('row')}
-            title="Table view"
-            aria-label="Table view"
+            title={t('view.table')}
+            aria-label={t('view.table')}
           >
             <List size={16} />
           </Button>
           <Button
             variant={viewMode === 'card' ? 'primary' : 'outline-secondary'}
             onClick={() => onViewModeChange('card')}
-            title="Card view"
-            aria-label="Card view"
+            title={t('view.card')}
+            aria-label={t('view.card')}
           >
             <Grid size={16} />
           </Button>
@@ -108,13 +108,13 @@ export function UserActionsBar({
         <Dropdown autoClose="outside">
           <Dropdown.Toggle variant="outline-secondary" size="sm" id="filter-dropdown">
             <Funnel size={14} className="me-1" />
-            Filter
+            {t('filters.label')}
             {activeFilterCount > 0 && <span className="badge badge-outline-primary ms-1">{activeFilterCount}</span>}
           </Dropdown.Toggle>
           <Dropdown.Menu style={{ minWidth: '250px' }} className="p-3">
             <div className="mb-3">
-              <small className="text-muted fw-semibold d-block mb-2">Role</small>
-              {ROLE_OPTIONS.map((option) => (
+              <small className="text-muted fw-semibold d-block mb-2">{t('filters.roleLabel')}</small>
+              {roleOptions.map((option) => (
                 <Form.Check
                   key={option.value}
                   type="checkbox"
@@ -127,7 +127,7 @@ export function UserActionsBar({
             </div>
             {activeFilterCount > 0 && (
               <Button variant="link" size="sm" className="p-0" onClick={clearFilters}>
-                Clear all filters
+                {t('filters.clearAll')}
               </Button>
             )}
           </Dropdown.Menu>
@@ -137,10 +137,10 @@ export function UserActionsBar({
         <Dropdown>
           <Dropdown.Toggle variant="outline-secondary" size="sm" id="sort-dropdown">
             <SortDown size={14} className="me-1" />
-            Sort
+            {t('sort.label')}
           </Dropdown.Toggle>
           <Dropdown.Menu>
-            {SORT_OPTIONS.map((option) => (
+            {sortOptions.map((option) => (
               <Dropdown.Item
                 key={option.value}
                 onClick={() => handleSortClick(option.value)}
@@ -158,9 +158,7 @@ export function UserActionsBar({
 
       {/* User Count */}
       {userCount && (
-        <small className="text-muted">
-          {userCount.filtered} of {userCount.total} users
-        </small>
+        <small className="text-muted">{t('count', { filtered: userCount.filtered, total: userCount.total })}</small>
       )}
     </div>
   );

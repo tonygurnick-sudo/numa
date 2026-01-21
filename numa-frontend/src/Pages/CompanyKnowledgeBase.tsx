@@ -5,6 +5,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Button, Alert } from 'react-bootstrap';
+import { useTranslation } from 'react-i18next';
 import { LayoutDashboard } from '../Layouts/LayoutDashboard';
 import { PageHeader } from '../Components/PageHeader';
 import { KBTabLayout } from '../Components/KnowledgeBase/KBTabLayout';
@@ -17,6 +18,7 @@ import { listFoldersInKB } from '../utils/s3Utils';
 import FolderSelector from '../Components/KnowledgeBase/FolderSelector';
 
 export function CompanyKnowledgeBase(): React.JSX.Element {
+  const { t } = useTranslation('knowledgeBase');
   const { user, getCredentials, region: authRegion } = useAuth();
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [fileValidationError, setFileValidationError] = useState<string | null>(null);
@@ -80,9 +82,7 @@ export function CompanyKnowledgeBase(): React.JSX.Element {
 
     if (invalidFiles.length > 0) {
       const invalidFileNames = invalidFiles.map((file) => file.name).join(', ');
-      setFileValidationError(
-        `The following files are not supported: ${invalidFileNames}. Please upload supported file types.`,
-      );
+      setFileValidationError(t('companyKnowledgeBase.validation.unsupportedFiles', { files: invalidFileNames }));
       return false;
     }
 
@@ -143,8 +143,8 @@ export function CompanyKnowledgeBase(): React.JSX.Element {
   return (
     <div className="company-knowledge-base">
       <PageHeader
-        title="Company Knowledge Base"
-        subtitle="Shared knowledge across your organization"
+        title={t('companyKnowledgeBase.title')}
+        subtitle={t('companyKnowledgeBase.subtitle')}
         actions={
           canAdd ? (
             <div className="d-flex gap-2 flex-wrap">
@@ -155,12 +155,12 @@ export function CompanyKnowledgeBase(): React.JSX.Element {
               >
                 <i className="bi bi-folder-plus me-2 d-none d-sm-inline"></i>
                 <i className="bi bi-folder-plus me-2 d-inline d-sm-none"></i>
-                <span className="d-none d-sm-inline">New Folder</span>
+                <span className="d-none d-sm-inline">{t('companyKnowledgeBase.actions.newFolder')}</span>
               </Button>
               <Button variant="primary" onClick={() => setShowUploadModal(true)} className="text-nowrap">
                 <i className="bi bi-upload me-2 d-none d-sm-inline"></i>
                 <i className="bi bi-upload me-2 d-inline d-sm-none"></i>
-                <span className="d-none d-sm-inline">Upload Files</span>
+                <span className="d-none d-sm-inline">{t('companyKnowledgeBase.actions.uploadFiles')}</span>
               </Button>
             </div>
           ) : null
@@ -171,14 +171,14 @@ export function CompanyKnowledgeBase(): React.JSX.Element {
         {!canView && (
           <Alert variant="warning" className="mb-4">
             <i className="bi bi-exclamation-triangle me-2"></i>
-            You do not have permission to view the company knowledge base. Contact your administrator for access.
+            {t('companyKnowledgeBase.permissionWarning')}
           </Alert>
         )}
 
         {uploadSuccess && (
           <Alert variant="success" dismissible onClose={() => setUploadSuccess(false)} className="mb-4">
             <i className="bi bi-check-circle me-2"></i>
-            Files uploaded successfully!
+            {t('companyKnowledgeBase.uploadSuccess')}
           </Alert>
         )}
 
@@ -204,20 +204,21 @@ export function CompanyKnowledgeBase(): React.JSX.Element {
               <div className="modal-header">
                 <h5 className="modal-title">
                   <i className="bi bi-upload me-2"></i>
-                  Upload Files to Company Knowledge Base
+                  {t('companyKnowledgeBase.uploadModal.title')}
                 </h5>
                 <button
                   type="button"
                   className="btn-close"
                   onClick={() => setShowUploadModal(false)}
-                  aria-label="Close"
+                  aria-label={t('companyKnowledgeBase.uploadModal.close')}
                 ></button>
               </div>
               <div className="modal-body">
                 <p className="text-muted small mb-3">
-                  Files will be automatically indexed every 30 minutes and made available for querying in Numa Chat.
+                  {t('companyKnowledgeBase.uploadModal.body')}
                   <br />
-                  <strong>Note:</strong> Maximum file size is 50MB per file.
+                  <strong>{t('companyKnowledgeBase.uploadModal.noteLabel')}</strong>{' '}
+                  {t('companyKnowledgeBase.uploadModal.note')}
                 </p>
 
                 <FolderSelector
@@ -225,12 +226,12 @@ export function CompanyKnowledgeBase(): React.JSX.Element {
                   onFolderChange={setSelectedFolder}
                   folderOptions={folderOptions}
                   disabled={loadingFolders}
-                  label="Upload to folder"
+                  label={t('companyKnowledgeBase.uploadModal.folderLabel')}
                 />
 
                 {fileValidationError && (
                   <Alert variant="danger" className="mb-3">
-                    <strong>File Validation Error:</strong>
+                    <strong>{t('companyKnowledgeBase.uploadModal.validationTitle')}</strong>
                     <p className="mb-0 mt-1">{fileValidationError}</p>
                   </Alert>
                 )}
@@ -253,10 +254,10 @@ export function CompanyKnowledgeBase(): React.JSX.Element {
       {showNotificationModal && (
         <NotificationModal
           type="warning"
-          title="Large Raw Data File Detected"
+          title={t('companyKnowledgeBase.largeFile.title')}
           message={
             <div>
-              <p>You are about to upload large raw data files that may not be optimal for knowledge base indexing:</p>
+              <p>{t('companyKnowledgeBase.largeFile.description')}</p>
               <ul className="mb-3">
                 {pendingLargeFiles.map((file, index) => (
                   <li key={index}>
@@ -264,22 +265,20 @@ export function CompanyKnowledgeBase(): React.JSX.Element {
                   </li>
                 ))}
               </ul>
-              <p className="mb-0">
-                This can incur higher than expected cost, or may fail to index successfully into the knowledge base.
-              </p>
+              <p className="mb-0">{t('companyKnowledgeBase.largeFile.warning')}</p>
               <div className="alert alert-info mb-3 mt-3">
                 <i className="bi bi-info-circle me-2"></i>
-                <strong>Recommendation:</strong> For better knowledge base performance, consider breaking large raw data
-                files into smaller chunks.
+                <strong>{t('companyKnowledgeBase.largeFile.recommendationLabel')}</strong>{' '}
+                {t('companyKnowledgeBase.largeFile.recommendation')}
               </div>
-              <p className="mb-0">Do you want to proceed with uploading these files anyway?</p>
+              <p className="mb-0">{t('companyKnowledgeBase.largeFile.confirm')}</p>
             </div>
           }
           show={showNotificationModal}
           onHide={handleCancelUpload}
           onConfirm={handleProceedWithUpload}
-          confirmText="Proceed Anyway"
-          cancelText="Cancel Upload"
+          confirmText={t('companyKnowledgeBase.largeFile.confirmButton')}
+          cancelText={t('companyKnowledgeBase.largeFile.cancelButton')}
           showCancelButton={true}
           size="lg"
         />

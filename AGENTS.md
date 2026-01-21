@@ -38,6 +38,46 @@ Dev commands:
 - `yarn install`, `yarn run dev`, `yarn build`, `yarn test`
 - Lint all workspaces (excluding infra): `yarn workspaces foreach --parallel --all --exclude infra run lint --fix`
 
+### Internationalization (i18n)
+
+**IMPORTANT:** All user-facing text in the frontend MUST use i18n translations. Do not hardcode strings.
+
+The frontend uses `react-i18next` for internationalization:
+
+- **Translation files:** `public/locales/en/*.json` (organized by namespace)
+- **Hook:** `useTranslation('namespace')` returns a `t()` function
+- **Lint enforcement:** ESLint rule `i18next/no-literal-string` will error on hardcoded UI strings
+
+**Common namespaces:**
+- `common` - Shared UI elements (buttons, labels, navigation, tool renderers)
+- `apps` - Apps pages and components
+- `agents` - Agent builder and management
+- `chat` - Chat interface
+- `auth` - Authentication pages
+- `integrations` - Integrations and data connectors
+- `knowledgeBase` - Knowledge base management
+- `errors` - Error messages
+
+**Usage example:**
+```tsx
+import { useTranslation } from 'react-i18next';
+
+const MyComponent = () => {
+  const { t } = useTranslation('common');
+
+  return (
+    <Button>{t('common.save')}</Button>
+    <Alert>{t('errors.loadFailed', { message: error })}</Alert>
+  );
+};
+```
+
+**Adding new translations:**
+1. Add keys to the appropriate namespace in `public/locales/en/<namespace>.json`
+2. Use the `t()` function with the key path (e.g., `t('section.subsection.key')`)
+3. For interpolation, use `{{variable}}` in JSON: `"greeting": "Hello, {{name}}!"`
+4. Run `yarn lint` to verify no hardcoded strings remain
+
 ---
 
 ## Core Chat Agent (lambdas/python/numa-chat-agent)

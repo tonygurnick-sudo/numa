@@ -3,8 +3,10 @@
 import { MarkdownContent } from '../Components/Renderers/MarkdownContent';
 import { getWebSearchPayload } from './helpers';
 import type { WebSearchPayload, ToolResultLike } from './helpers';
+import { useTranslation } from 'react-i18next';
 
 const WebSearchBody = ({ payload }: { payload: WebSearchPayload }) => {
+  const { t } = useTranslation('common');
   if (!payload) return null;
   const { query = '', summarised_content = '', references = [], results = [], error = '' } = payload;
   const hasError = error && error.trim();
@@ -14,7 +16,7 @@ const WebSearchBody = ({ payload }: { payload: WebSearchPayload }) => {
     <>
       {query && (
         <div className="ws-query mb-2">
-          <strong>Query:</strong> <em>{query}</em>
+          <strong>{t('toolRenderers.webSearch.query')}</strong> <em>{query}</em>
         </div>
       )}
       {hasError && (
@@ -22,12 +24,13 @@ const WebSearchBody = ({ payload }: { payload: WebSearchPayload }) => {
           className="ws-error mb-3 p-2"
           style={{ backgroundColor: '#fff3cd', border: '1px solid #ffeaa7', borderRadius: '4px' }}
         >
-          <strong style={{ color: '#856404' }}>⚠️ Error:</strong> <span style={{ color: '#856404' }}>{error}</span>
+          <strong style={{ color: '#856404' }}>{t('toolRenderers.webSearch.error')}</strong>{' '}
+          <span style={{ color: '#856404' }}>{error}</span>
         </div>
       )}
       {!hasError && referencesToShow && referencesToShow.length > 0 && (
         <div className="ws-sources mb-3">
-          <strong>Sources:</strong>
+          <strong>{t('toolRenderers.webSearch.sources')}</strong>
           <ul className="mt-1 mb-0">
             {referencesToShow.map((r: string | { url: string; title?: string }, idx: number) => {
               const url = typeof r === 'string' ? r : r.url;
@@ -45,7 +48,7 @@ const WebSearchBody = ({ payload }: { payload: WebSearchPayload }) => {
       )}
       {hasSummary && !hasError && (
         <div className="ws-summary">
-          <strong>Summary of Relevant Content:</strong>
+          <strong>{t('toolRenderers.webSearch.summary')}</strong>
           <div style={{ marginTop: '0.5rem' }}>
             <MarkdownContent content={summarised_content} />
           </div>

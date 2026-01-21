@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Button, Spinner } from 'react-bootstrap';
+import { useTranslation } from 'react-i18next';
 import axios from 'axios';
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
@@ -27,6 +28,7 @@ const MAX_BYTES = 1 * 1024 * 1024; // 1 MB
 const TARGET_SIZE = 256; // 256x256
 
 export const AgentAvatarSelector = ({ value, onChange, disabled = false, previewAgent }: AgentAvatarSelectorProps) => {
+  const { t } = useTranslation('agents');
   const [activeTab, setActiveTab] = useState<'icons' | 'upload'>('icons');
   const [bucketName, setBucketName] = useState<string | undefined>();
   const [region, setRegion] = useState<string | undefined>();
@@ -55,36 +57,39 @@ export const AgentAvatarSelector = ({ value, onChange, disabled = false, preview
     loadConfig();
   }, []);
 
-  const resizeToCanvas = useCallback(async (file: File): Promise<Blob> => {
-    const url = URL.createObjectURL(file);
-    try {
-      const img = await new Promise<HTMLImageElement>((resolve, reject) => {
-        const image = new Image();
-        image.onload = () => resolve(image);
-        image.onerror = () => reject(new Error('Image load error'));
-        image.src = url;
-      });
-      const canvas = document.createElement('canvas');
-      const ctx = canvas.getContext('2d');
-      if (!ctx) throw new Error('Canvas not supported');
-      canvas.width = TARGET_SIZE;
-      canvas.height = TARGET_SIZE;
+  const resizeToCanvas = useCallback(
+    async (file: File): Promise<Blob> => {
+      const url = URL.createObjectURL(file);
+      try {
+        const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+          const image = new Image();
+          image.onload = () => resolve(image);
+          image.onerror = () => reject(new Error(t('avatarSelector.errors.imageLoad')));
+          image.src = url;
+        });
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        if (!ctx) throw new Error(t('avatarSelector.errors.canvas'));
+        canvas.width = TARGET_SIZE;
+        canvas.height = TARGET_SIZE;
 
-      // cover fit
-      const scale = Math.max(TARGET_SIZE / img.width, TARGET_SIZE / img.height);
-      const w = img.width * scale;
-      const h = img.height * scale;
-      const dx = (TARGET_SIZE - w) / 2;
-      const dy = (TARGET_SIZE - h) / 2;
+        // cover fit
+        const scale = Math.max(TARGET_SIZE / img.width, TARGET_SIZE / img.height);
+        const w = img.width * scale;
+        const h = img.height * scale;
+        const dx = (TARGET_SIZE - w) / 2;
+        const dy = (TARGET_SIZE - h) / 2;
 
-      ctx.fillStyle = '#ffffff';
-      ctx.fillRect(0, 0, TARGET_SIZE, TARGET_SIZE);
-      ctx.drawImage(img, dx, dy, w, h);
-      return await new Promise<Blob>((resolve) => canvas.toBlob((b) => resolve(b || new Blob()), 'image/png'));
-    } finally {
-      URL.revokeObjectURL(url);
-    }
-  }, []);
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, TARGET_SIZE, TARGET_SIZE);
+        ctx.drawImage(img, dx, dy, w, h);
+        return await new Promise<Blob>((resolve) => canvas.toBlob((b) => resolve(b || new Blob()), 'image/png'));
+      } finally {
+        URL.revokeObjectURL(url);
+      }
+    },
+    [t],
+  );
 
   const handleUpload = useCallback(
     async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -92,11 +97,11 @@ export const AgentAvatarSelector = ({ value, onChange, disabled = false, preview
       if (!file) return;
       setError(null);
       if (!bucketName || !region) {
-        setError('Configuration still loading. Please try again.');
+        setError(t('avatarSelector.errors.configLoading'));
         return;
       }
       if (!/^image\/(png|jpe?g)$/i.test(file.type)) {
-        setError('Please select a PNG or JPEG image.');
+        setError(t('avatarSelector.errors.invalidType'));
         return;
       }
       setIsUploading(true);
@@ -112,7 +117,7 @@ export const AgentAvatarSelector = ({ value, onChange, disabled = false, preview
         const s3Key = `numa-chat/agent-icons/${userId}/${Date.now()}_${randomId}.${ext}`;
 
         const credentials = await getCredentials();
-        if (!credentials) throw new Error('Unable to obtain AWS credentials');
+        if (!credentials) throw new Error(t('avatarSelector.errors.credentials'));
         const s3 = withPRM(S3Client, { region, credentials });
         const put = new PutObjectCommand({
           Bucket: bucketName,
@@ -127,12 +132,12 @@ export const AgentAvatarSelector = ({ value, onChange, disabled = false, preview
         setActiveTab('icons');
         if (fileInputRef.current) fileInputRef.current.value = '';
       } catch (e) {
-        setError((e as Error)?.message || 'Failed to upload image');
+        setError((e as Error)?.message || t('avatarSelector.errors.uploadFailed'));
       } finally {
         setIsUploading(false);
       }
     },
-    [bucketName, getCredentials, onChange, region, resizeToCanvas],
+    [bucketName, getCredentials, onChange, region, resizeToCanvas, t],
   );
 
   const clearImage = useCallback(
@@ -153,22 +158,25 @@ export const AgentAvatarSelector = ({ value, onChange, disabled = false, preview
             iconImage={currentValue.iconImage}
             size={56}
             fit="contain"
-            alt="Agent avatar preview"
+            alt={t('avatarSelector.previewAlt')}
           />
           <div>
             <div className="fw-semibold">
               {currentValue.iconImage
-                ? 'Custom Image'
-                : AGENT_ICON_CATALOG.find((i) => i.value === currentValue.icon)?.label || 'Icon'}
+                ? t('avatarSelector.current.customImage')
+                : AGENT_ICON_CATALOG.find((i) => i.value === currentValue.icon)?.label ||
+                  t('avatarSelector.current.icon')}
             </div>
             <small className="text-muted">
-              {currentValue.iconImage ? 'Uploaded custom avatar' : 'Select an icon or upload your own'}
+              {currentValue.iconImage
+                ? t('avatarSelector.current.uploadedCustom')
+                : t('avatarSelector.current.selectOrUpload')}
             </small>
           </div>
         </div>
         {currentValue.iconImage && (
           <Button variant="outline-danger" size="sm" onClick={clearImage} disabled={disabled || isUploading}>
-            <i className="bi bi-trash me-1"></i> Remove
+            <i className="bi bi-trash me-1"></i> {t('avatarSelector.actions.remove')}
           </Button>
         )}
       </div>
@@ -183,7 +191,7 @@ export const AgentAvatarSelector = ({ value, onChange, disabled = false, preview
             onClick={() => setActiveTab('icons')}
           >
             <i className="bi bi-grid-3x3-gap"></i>
-            Choose Icon
+            {t('avatarSelector.tabs.chooseIcon')}
           </Button>
           <Button
             type="button"
@@ -193,7 +201,7 @@ export const AgentAvatarSelector = ({ value, onChange, disabled = false, preview
             onClick={() => setActiveTab('upload')}
           >
             <i className="bi bi-upload"></i>
-            Upload Image
+            {t('avatarSelector.tabs.uploadImage')}
           </Button>
         </div>
 
@@ -227,7 +235,7 @@ export const AgentAvatarSelector = ({ value, onChange, disabled = false, preview
             <div className="mb-3">
               <small className="text-muted d-block">
                 <i className="bi bi-info-circle me-1"></i>
-                Upload a PNG or JPG image (max 1 MB). Images will be resized to 256×256 pixels.
+                {t('avatarSelector.upload.helper')}
               </small>
             </div>
             <input
@@ -249,12 +257,12 @@ export const AgentAvatarSelector = ({ value, onChange, disabled = false, preview
               {isUploading ? (
                 <>
                   <Spinner animation="border" size="sm" style={{ width: '1rem', height: '1rem' }} />
-                  <span style={{ lineHeight: '1' }}>Uploading…</span>
+                  <span style={{ lineHeight: '1' }}>{t('avatarSelector.upload.uploading')}</span>
                 </>
               ) : (
                 <>
                   <i className="bi bi-upload" style={{ fontSize: '1rem' }} />
-                  <span style={{ lineHeight: '1' }}>Choose File</span>
+                  <span style={{ lineHeight: '1' }}>{t('avatarSelector.upload.chooseFile')}</span>
                 </>
               )}
             </Button>

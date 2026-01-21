@@ -1,6 +1,8 @@
 import React, { useState, useMemo } from 'react';
 import { Row, Col, Card, Badge, Form, InputGroup } from 'react-bootstrap';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
+import i18n from '../../i18n';
 
 interface UserKB {
   kb_id: string;
@@ -25,6 +27,7 @@ type FilterType = 'all' | 'shared' | 'personal';
  */
 export function KBSelectorGrid({ kbs, isLoading = false }: KBSelectorGridProps): React.JSX.Element {
   const navigate = useNavigate();
+  const { t } = useTranslation('knowledgeBase');
   const [searchQuery, setSearchQuery] = useState('');
   const [filter, setFilter] = useState<FilterType>('all');
 
@@ -65,9 +68,9 @@ export function KBSelectorGrid({ kbs, isLoading = false }: KBSelectorGridProps):
     return (
       <div className="text-center p-5">
         <div className="spinner-border text-primary">
-          <span className="visually-hidden">Loading...</span>
+          <span className="visually-hidden">{t('selector.loadingLabel')}</span>
         </div>
-        <p className="mt-3 text-muted">Loading your knowledge bases...</p>
+        <p className="mt-3 text-muted">{t('selector.loadingMessage')}</p>
       </div>
     );
   }
@@ -76,8 +79,8 @@ export function KBSelectorGrid({ kbs, isLoading = false }: KBSelectorGridProps):
     return (
       <div className="text-center p-5 bg-light rounded">
         <i className="bi bi-inbox display-1 text-muted"></i>
-        <h4 className="mt-4 text-muted">No Knowledge Bases Yet</h4>
-        <p className="text-muted">Create your first knowledge base to get started</p>
+        <h4 className="mt-4 text-muted">{t('selector.emptyTitle')}</h4>
+        <p className="text-muted">{t('selector.emptyHint')}</p>
       </div>
     );
   }
@@ -95,7 +98,7 @@ export function KBSelectorGrid({ kbs, isLoading = false }: KBSelectorGridProps):
             </InputGroup.Text>
             <Form.Control
               type="text"
-              placeholder="Search knowledge bases..."
+              placeholder={t('selector.searchPlaceholder')}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
             />
@@ -107,15 +110,15 @@ export function KBSelectorGrid({ kbs, isLoading = false }: KBSelectorGridProps):
             value={filter}
             onChange={(e) => setFilter(e.target.value as FilterType)}
           >
-            <option value="all">All KBs</option>
-            <option value="shared">Shared</option>
-            <option value="personal">Personal</option>
+            <option value="all">{t('selector.filters.all')}</option>
+            <option value="shared">{t('selector.filters.shared')}</option>
+            <option value="personal">{t('selector.filters.personal')}</option>
           </Form.Select>
         </div>
 
         {/* Results count - Always tries to stay on same line, drops only when absolutely necessary */}
         <div className="text-muted flex-shrink-0" style={{ whiteSpace: 'nowrap' }}>
-          {filteredKBs.length} {filteredKBs.length === 1 ? 'knowledge base' : 'knowledge bases'}
+          {t('selector.resultsCount', { count: filteredKBs.length })}
         </div>
       </div>
 
@@ -123,8 +126,8 @@ export function KBSelectorGrid({ kbs, isLoading = false }: KBSelectorGridProps):
       {filteredKBs.length === 0 ? (
         <div className="text-center p-5 bg-light rounded">
           <i className="bi bi-search display-4 text-muted"></i>
-          <h5 className="mt-3 text-muted">No knowledge bases found</h5>
-          <p className="text-muted">Try adjusting your search or filter</p>
+          <h5 className="mt-3 text-muted">{t('selector.noResultsTitle')}</h5>
+          <p className="text-muted">{t('selector.noResultsHint')}</p>
         </div>
       ) : (
         <Row className="g-4">
@@ -167,10 +170,10 @@ export function KBSelectorGrid({ kbs, isLoading = false }: KBSelectorGridProps):
                         bg=""
                         className={`text-uppercase ${kb.role === 'OWNER' ? 'badge-outline-primary' : 'badge-outline'}`}
                       >
-                        {kb.role}
+                        {t(`roles.${kb.role.toLowerCase()}`)}
                       </Badge>
                       <Badge bg="" className={isShared ? 'badge-outline' : 'badge-outline-primary'}>
-                        {isShared ? 'Shared' : 'Personal'}
+                        {isShared ? t('selector.badges.shared') : t('selector.badges.personal')}
                       </Badge>
                     </div>
 
@@ -180,7 +183,7 @@ export function KBSelectorGrid({ kbs, isLoading = false }: KBSelectorGridProps):
                         <div className="d-flex justify-content-between align-items-center text-muted small mb-2">
                           <span>
                             <i className="bi bi-file-earmark me-1"></i>
-                            {kb.document_count} {kb.document_count === 1 ? 'document' : 'documents'}
+                            {t('selector.documentCount', { count: kb.document_count })}
                           </span>
                         </div>
                       )}
@@ -188,14 +191,16 @@ export function KBSelectorGrid({ kbs, isLoading = false }: KBSelectorGridProps):
                       {kb.created_at && (
                         <div className="text-muted small">
                           <i className="bi bi-calendar me-1"></i>
-                          Created {new Date(kb.created_at).toLocaleDateString('en-NZ')}
+                          {t('selector.createdAt', {
+                            date: new Date(kb.created_at).toLocaleDateString(i18n.language),
+                          })}
                         </div>
                       )}
 
                       {/* View Details Link */}
                       <div className="mt-3 pt-3 border-top">
                         <span className="text-primary small fw-semibold">
-                          View Details <i className="bi bi-arrow-right ms-1"></i>
+                          {t('selector.viewDetails')} <i className="bi bi-arrow-right ms-1"></i>
                         </span>
                       </div>
                     </div>

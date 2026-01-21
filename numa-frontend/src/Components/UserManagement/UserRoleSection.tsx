@@ -1,6 +1,8 @@
 import React from 'react';
 import { Badge, Collapse, Table, Row, Col, Button } from 'react-bootstrap';
 import { ChevronDown, ChevronRight, Eye } from 'react-bootstrap-icons';
+import { useTranslation } from 'react-i18next';
+import i18n from '../../i18n';
 import { UserCard } from './UserCard';
 import type { User } from './UserDetailsModal';
 import type { ViewMode } from './UserActionsBar';
@@ -26,6 +28,7 @@ export function UserRoleSection({
   onViewUser,
   variant = 'secondary',
 }: UserRoleSectionProps): React.JSX.Element {
+  const { t } = useTranslation('userManagement');
   return (
     <div className="mb-4">
       <div
@@ -49,7 +52,7 @@ export function UserRoleSection({
       <Collapse in={expanded}>
         <div id={`section-${title.toLowerCase().replace(/\s/g, '-')}`} className="mt-3">
           {users.length === 0 ? (
-            <p className="text-muted text-center py-3">No {title.toLowerCase()} users</p>
+            <p className="text-muted text-center py-3">{t('roleSection.empty', { role: title.toLowerCase() })}</p>
           ) : viewMode === 'card' ? (
             <Row xs={1} md={2} lg={3} className="g-3">
               {users.map((user) => (
@@ -63,10 +66,10 @@ export function UserRoleSection({
               <Table hover className="align-middle mb-0">
                 <thead>
                   <tr>
-                    <th>Email</th>
-                    <th>Status</th>
-                    <th>Created</th>
-                    <th>Actions</th>
+                    <th>{t('table.headers.email')}</th>
+                    <th>{t('table.headers.status')}</th>
+                    <th>{t('table.headers.created')}</th>
+                    <th>{t('table.headers.actions')}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -78,12 +81,12 @@ export function UserRoleSection({
                       <tr
                         key={user.username}
                         className={isSystemUser ? 'text-muted opacity-50' : ''}
-                        title={isSystemUser ? 'System user - not editable' : ''}
+                        title={isSystemUser ? t('table.systemUserTitle') : ''}
                       >
                         <td>
                           {user.email}
-                          {isSystemUser && <small className="ms-2 fst-italic">(System)</small>}
-                          {isCurrentUser && <small className="ms-2 fst-italic">(You)</small>}
+                          {isSystemUser && <small className="ms-2 fst-italic">{t('table.systemBadge')}</small>}
+                          {isCurrentUser && <small className="ms-2 fst-italic">{t('table.youBadge')}</small>}
                         </td>
                         <td>
                           <Badge
@@ -94,7 +97,7 @@ export function UserRoleSection({
                           </Badge>
                         </td>
                         <td>
-                          {new Date(user.created).toLocaleDateString('en-US', {
+                          {new Date(user.created).toLocaleDateString(i18n.language, {
                             year: 'numeric',
                             month: 'short',
                             day: 'numeric',
@@ -108,7 +111,7 @@ export function UserRoleSection({
                             disabled={isSystemUser}
                           >
                             <Eye size={14} className="me-1" />
-                            View
+                            {t('actions.view')}
                           </Button>
                         </td>
                       </tr>
