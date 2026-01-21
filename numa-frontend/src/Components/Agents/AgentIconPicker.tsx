@@ -1,28 +1,32 @@
 import { useMemo } from 'react';
 import { Button, OverlayTrigger, Tooltip } from 'react-bootstrap';
+import { useTranslation } from 'react-i18next';
 
 type AgentIconPickerProps = {
   value?: string;
   onChange: (icon: string) => void;
 };
 
-const ICON_OPTIONS: { value: string; label: string }[] = [
-  { value: 'bi bi-robot', label: 'Assistant' },
-  { value: 'bi bi-lightning-charge', label: 'Automation' },
-  { value: 'bi bi-journal-text', label: 'Documentation' },
-  { value: 'bi bi-people', label: 'People Ops' },
-  { value: 'bi bi-briefcase', label: 'Business' },
-  { value: 'bi bi-graph-up', label: 'Analytics' },
-  { value: 'bi bi-shield-check', label: 'Compliance' },
-  { value: 'bi bi-gear', label: 'Operations' },
-];
-
 export const AgentIconPicker = ({ value, onChange }: AgentIconPickerProps) => {
-  const selected = useMemo(() => value ?? ICON_OPTIONS[0].value, [value]);
+  const { t } = useTranslation('agents');
+  const iconOptions = useMemo(
+    () => [
+      { value: 'bi bi-robot', label: t('iconPicker.icons.assistant') },
+      { value: 'bi bi-lightning-charge', label: t('iconPicker.icons.automation') },
+      { value: 'bi bi-journal-text', label: t('iconPicker.icons.documentation') },
+      { value: 'bi bi-people', label: t('iconPicker.icons.peopleOps') },
+      { value: 'bi bi-briefcase', label: t('iconPicker.icons.business') },
+      { value: 'bi bi-graph-up', label: t('iconPicker.icons.analytics') },
+      { value: 'bi bi-shield-check', label: t('iconPicker.icons.compliance') },
+      { value: 'bi bi-gear', label: t('iconPicker.icons.operations') },
+    ],
+    [t],
+  );
+  const selected = useMemo(() => value ?? iconOptions[0].value, [value, iconOptions]);
 
   return (
     <div className="d-flex flex-wrap gap-2">
-      {ICON_OPTIONS.map((icon) => {
+      {iconOptions.map((icon) => {
         const isActive = icon.value === selected;
         const button = (
           <Button

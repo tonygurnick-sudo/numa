@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Button } from 'react-bootstrap';
+import { useTranslation } from 'react-i18next';
 
 import { useNavigate } from 'react-router-dom';
 
@@ -9,6 +10,7 @@ import { StartQAppSessionCommand } from '@aws-sdk/client-qapps';
 import { useNumaApp } from '../../Providers/NumaAppProvider';
 
 const QAppDetailHeader = () => {
+  const { t } = useTranslation('apps');
   const navigate = useNavigate();
   const { runActive, setQSessionId, setIsPolling, qAppData, qCardInputValues, setError } = useNumaApp();
   const qAppId = qAppData.appId;
@@ -79,7 +81,7 @@ const QAppDetailHeader = () => {
     <>
       <div className="d-flex gap-2">
         <Button variant="secondary" className="w-auto" onClick={handleAddAppToLib}>
-          <i className="bi bi-plus-circle me-2"></i> Add to Library
+          <i className="bi bi-plus-circle me-2"></i> {t('qApps.addToLibrary')}
         </Button>
 
         <Button variant="danger" className="w-auto" onClick={handleDeleteApp}>
@@ -94,7 +96,7 @@ const QAppDetailHeader = () => {
         disabled={runActive || loading}
         onClick={handleRunApp}
       >
-        <i className="bi bi-play-fill me-2"></i> Run
+        <i className="bi bi-play-fill me-2"></i> {t('qApps.run')}
       </Button>
     </>
   );

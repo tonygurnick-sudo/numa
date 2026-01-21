@@ -1,6 +1,8 @@
 import { Pagination as BSPagination } from 'react-bootstrap';
+import { useTranslation } from 'react-i18next';
 
 export const Pagination = ({ currentPage, totalPages, onPageChange, maxVisiblePages = 5, className = '' }) => {
+  const { t } = useTranslation('common');
   if (totalPages <= 1) return null;
 
   let items = [];
@@ -47,9 +49,19 @@ export const Pagination = ({ currentPage, totalPages, onPageChange, maxVisiblePa
 
   return (
     <BSPagination className={`justify-content-center mt-4 ${className}`}>
-      <BSPagination.Prev onClick={() => onPageChange(currentPage - 1)} disabled={currentPage === 1} />
+      <BSPagination.Prev
+        onClick={() => onPageChange(currentPage - 1)}
+        disabled={currentPage === 1}
+        aria-label={t('pagination.previous')}
+        title={t('pagination.previous')}
+      />
       {items}
-      <BSPagination.Next onClick={() => onPageChange(currentPage + 1)} disabled={currentPage === totalPages} />
+      <BSPagination.Next
+        onClick={() => onPageChange(currentPage + 1)}
+        disabled={currentPage === totalPages}
+        aria-label={t('pagination.next')}
+        title={t('pagination.next')}
+      />
     </BSPagination>
   );
 };

@@ -1,0 +1,605 @@
+{
+  "common": {
+    "ok": "OK",
+    "cancel": "Cancel",
+    "close": "Close",
+    "delete": "Delete"
+  },
+  "loading": {
+    "generic": "Loading..."
+  },
+  "result": "Result",
+  "toast": {
+    "titles": {
+      "success": "Success",
+      "info": "Notice",
+      "warning": "Warning",
+      "error": "Error"
+    }
+  },
+  "fileSize": {
+    "kb": "{{size}} KB"
+  },
+  "brand": {
+    "numa": "Numa",
+    "numaAlt": "Numa"
+  },
+  "inputs": {
+    "selectOption": "Select an option...",
+    "enterValue": "Enter a value",
+    "enterText": "Enter text",
+    "enterTextArea": "Enter text here..."
+  },
+  "validation": {
+    "required": "This field is required"
+  },
+  "nav": {
+    "items": {
+      "apps": "Apps",
+      "favs": "Favs",
+      "jobHistory": "Job History",
+      "chat": "Chat",
+      "agents": "Agents",
+      "company": "Company",
+      "companyKnowledgeBase": "Company Knowledge Base",
+      "userKnowledgeBase": "User Knowledge Base",
+      "profile": "Profile",
+      "adminSettings": "Admin Settings",
+      "integrations": "Integrations"
+    },
+    "expanded": {
+      "knowledgeBase": "Knowledge Base",
+      "knowledgeBaseManagement": "Knowledge Base Management",
+      "numaChat": "Numa Chat",
+      "applications": "Applications",
+      "companyInformation": "Company Information"
+    },
+    "logout": "Log out",
+    "expandSidebar": "Expand sidebar",
+    "collapseSidebar": "Collapse sidebar"
+  },
+  "pagination": {
+    "previous": "Previous",
+    "next": "Next"
+  },
+  "expandable": {
+    "showAll": "Show all",
+    "showLess": "Show less"
+  },
+  "features": {
+    "accessDeniedTitle": "Access Not Available",
+    "accessDeniedMessage": "You don't have access to this feature.",
+    "accessDeniedContact": "Please contact your administrator to request access.",
+    "goToApps": "Go to Apps"
+  },
+  "version": {
+    "infoUnavailable": "Version info unavailable: {{error}}",
+    "loadFailed": "Failed to load version: {{error}}",
+    "unavailable": "version unavailable",
+    "loadingTitle": "Loading version information",
+    "reloadPrompt": "A new version of Numa is available. Reload to update?",
+    "loadingLabel": "loading...",
+    "details": {
+      "branch": "Branch: {{value}}",
+      "commit": "Commit: {{value}}",
+      "deployed": "Deployed: {{value}}",
+      "version": "Version: {{value}}"
+    }
+  },
+  "fileTree": {
+    "empty": "No files found",
+    "loading": "Loading files...",
+    "columns": {
+      "name": "Name",
+      "date": "Date",
+      "size": "Size",
+      "status": "Status",
+      "actions": "Actions",
+      "select": "Select"
+    },
+    "urlTag": "URL",
+    "status": {
+      "success": "SUCCESS",
+      "failed": "FAILED"
+    },
+    "downloadFolderZip": "Download folder as ZIP",
+    "downloadFile": "Download file",
+    "collapseFolder": "Collapse folder",
+    "expandFolder": "Expand folder",
+    "selectItem": "Select {{type}}: {{name}}",
+    "itemType": {
+      "folder": "folder",
+      "file": "file"
+    },
+    "errors": {
+      "downloadNotConfigured": "Download not configured properly"
+    }
+  },
+  "genericTestConnection": {
+    "title": "Test {{integrationName}} Integration",
+    "subtitle": "Test your integration by using it in NumaChat",
+    "howToTitle": "How to Test Your Connection",
+    "steps": {
+      "goTitle": "Go to NumaChat",
+      "goDescription": "Click the button below to navigate to NumaChat",
+      "enableTitle": "Enable the Integration",
+      "enableDescriptionPrefix": "Click the integrations button",
+      "enableDescriptionSuffix": "in the chat input and enable {{integrationName}}",
+      "sendTitle": "Type and Send Query",
+      "sendDescription": "Type the example query below into the chat input and send it"
+    },
+    "exampleQueryLabel": "Example Query:",
+    "exampleQueryNote": "This is a read-only query that won't modify your data",
+    "goButton": "Go to NumaChat",
+    "reminderPrefix": "Remember to enable the integration using the",
+    "reminderSuffix": "button before sending your query"
+  },
+  "toolCard": {
+    "callingTool": "Calling {{label}} Tool",
+    "querying": "Querying {{kbId}}",
+    "webSearchResults": "Web Search Results ({{summary}})",
+    "loading": "loading",
+    "dataAnalysisWait": "This may take up to 5 minutes.",
+    "showProgress": "\u25bc Show progress",
+    "hideProgress": "\u25b2 Hide progress",
+    "showDetails": "\u25bc Show details",
+    "hideDetails": "\u25b2 Hide details"
+  },
+  "manageKBs": {
+    "title": "Your Knowledge Bases",
+    "loading": "Loading your knowledge bases...",
+    "empty": "You don't have any editable knowledge bases yet. Create one to get started!",
+    "columns": {
+      "name": "Name",
+      "status": "Status",
+      "viewers": "Viewers",
+      "editors": "Editors",
+      "documents": "Documents",
+      "created": "Created",
+      "actions": "Actions"
+    },
+    "badges": {
+      "default": "Default",
+      "allUsers": "All Users"
+    },
+    "status": "{{status}}",
+    "viewersCount_one": "{{count}} user",
+    "viewersCount_other": "{{count}} users",
+    "editorsCount_one": "{{count}} user",
+    "editorsCount_other": "{{count}} users",
+    "errors": {
+      "updateFailed": "Failed to update knowledge base",
+      "loadFailed": "Failed to load knowledge bases",
+      "deleteFailed": "Failed to delete knowledge base"
+    },
+    "editModal": {
+      "title": "Edit Knowledge Base",
+      "defaultNotice": "This is the default company knowledge base. Some settings cannot be changed.",
+      "nameLabel": "Knowledge Base Name",
+      "publicLabel": "Make this KB accessible to all users",
+      "viewersLabel": "Viewers (Emails)",
+      "viewersPlaceholder": "e.g., user1@example.com, user2@example.com",
+      "editorsLabel": "Editors (Emails)",
+      "editorsPlaceholder": "e.g., admin@example.com",
+      "commaSeparated": "Comma-separated list of email addresses",
+      "saving": "Saving...",
+      "saveChanges": "Save Changes"
+    },
+    "deleteModal": {
+      "title": "Confirm Delete",
+      "confirm": "Are you sure you want to archive the knowledge base {{name}}?",
+      "willDo": "This action will:",
+      "steps": {
+        "archive": "Archive the knowledge base (soft delete)",
+        "inaccessible": "Make it inaccessible to all users",
+        "preserve": "Preserve the files in S3 (not deleted)"
+      },
+      "deleting": "Deleting..."
+    }
+  },
+  "fileUploader": {
+    "dragAndDrop": "Drag and drop your files here, or",
+    "selectFiles": "Select Files",
+    "filesSelected_one": "{{count}} File Selected",
+    "filesSelected_other": "{{count}} Files Selected",
+    "folderCount_one": "({{count}} file)",
+    "folderCount_other": "({{count}} files)",
+    "clearAll": "Clear all",
+    "uploadingProgress": "Uploading file {{current}} of {{total}}",
+    "currentFile": "Current file: {{name}}",
+    "uploading": "Uploading...",
+    "uploadButton_one": "Upload {{count}} File",
+    "uploadButton_other": "Upload {{count}} Files",
+    "success": "Your files have been uploaded successfully!",
+    "errors": {
+      "selectFilesFirst": "Please select files first",
+      "invalidFiles": "Cannot upload invalid files: {{files}}",
+      "uploadFailed": "Error uploading files"
+    }
+  },
+  "uploads": {
+    "dragAndDrop": "Drag and drop your file(s) here, or",
+    "selectFiles": "Select Files",
+    "preparingStorage": "Preparing storage…",
+    "clearAll": "Clear all",
+    "filesSelected_one": "{{count}} File Selected",
+    "filesSelected_other": "{{count}} Files Selected",
+    "minFilesRequired_one": "At least {{count}} file required",
+    "minFilesRequired_other": "At least {{count}} files required",
+    "maxFilesAllowed_one": "Maximum of {{count}} file allowed",
+    "maxFilesAllowed_other": "Maximum of {{count}} files allowed",
+    "authRequired": "Authentication required for file uploads",
+    "selectAtLeastOne": "Please select at least one file",
+    "noFileUploaded": "No file uploaded",
+    "storageMissing": "Storage not configured (missing region/bucket). Please refresh or contact support.",
+    "storageMissingConfig": "Storage not configured (region/bucket). Check /config.json or environment.",
+    "storageLoadFailed": "Storage config failed to load (missing REGION/BUCKET). Please refresh or contact support.",
+    "permissionDenied": "Permission denied — check IAM & bucket policy for PUT Object.",
+    "sessionExpired": "Session expired — please log in again.",
+    "serverConfigError": "Server configuration error (presign).",
+    "networkError": "Network error — please check your internet connection.",
+    "uploadError": "Error uploading file",
+    "creatingJob": "Creating job...",
+    "uploadingFiles": "Uploading files...",
+    "uploadingFileProgress": "Uploading file {{current}} of {{total}}: {{name}}",
+    "uploadSuccessful": "Upload successful!",
+    "filesUploaded": "Files uploaded: {{names}}",
+    "unsupportedFormat": "{{name}}: Unsupported file format. Please use PDF, DOCX, XLSX, TXT, or other supported formats.",
+    "invalidFileType": "{{name}}: Invalid file type. Accepted types: {{types}}",
+    "fileTooLarge": "{{name}}: File is too large. Maximum size allowed is {{size}} MB"
+  },
+  "documentPanel": {
+    "noDocumentTitle": "No Document",
+    "noDocumentMessage": "No document to display.",
+    "defaultTitle": "Document"
+  },
+  "chipsInput": {
+    "add": "Add",
+    "remove": "Remove {{value}}"
+  },
+  "createKB": {
+    "title": "Create New Knowledge Base",
+    "nameLabel": "Knowledge Base Name",
+    "namePlaceholder": "e.g., Product Team KB",
+    "nameHelp": "Choose a descriptive name for your knowledge base.",
+    "typeLabel": "Knowledge Base Type",
+    "typePersonal": "Personal",
+    "typeShared": "Shared",
+    "typePersonalHelp": "Only you will have access to this KB.",
+    "typeSharedHelp": "Share this KB with specific users who can view or edit.",
+    "viewersLabel": "Viewers (user IDs or emails)",
+    "viewersPlaceholder": "Type an email or ID and press Add/Enter",
+    "viewersHelp": "Editors are automatically included as viewers.",
+    "editorsLabel": "Editors (user IDs or emails)",
+    "editorsPlaceholder": "Type an email or ID and press Add/Enter",
+    "editorsHelp": "Editors can upload files and modify this KB; they automatically gain viewer access.",
+    "invalidEmails": "These look unusual as emails: {{values}}",
+    "noteTitle": "Note:",
+    "notes": {
+      "creator": "You will be set as the creator and automatically added as an editor.",
+      "personal": "Personal KBs: Only you have access. No need to specify viewers/editors.",
+      "shared": "Shared KBs: Specify viewers (can query) and editors (can upload/modify). Editors automatically have viewer permissions.",
+      "isolation": "Files uploaded to this KB are isolated from other KBs."
+    },
+    "creating": "Creating...",
+    "createButton": "Create Knowledge Base",
+    "errors": {
+      "nameRequired": "Please provide a name for the knowledge base.",
+      "editorsMustBeViewers": "Editors must also be viewers for shared knowledge bases."
+    }
+  },
+  "followUp": {
+    "title": "Ask Follow-Up Question",
+    "promptLabel": "What would you like to explore next?",
+    "shortcutHint": "(Ctrl+Enter to submit)",
+    "placeholder": "E.g., 'Create a visualization of the top 10 products' or 'Can you break down the data by region?'",
+    "helper": "This will continue your analysis with access to all previous work and outputs.",
+    "starting": "Starting...",
+    "continue": "Continue Analysis"
+  },
+  "markdown": {
+    "document": "Document",
+    "copy": "Copy",
+    "copied": "Copied!",
+    "renderError": "Error rendering markdown content. Please check the markdown syntax."
+  },
+  "dataAnalysis": {
+    "unknownError": "Unknown error",
+    "folderLoadFailed": "Failed to load folder contents: {{error}}",
+    "fileLoadFailed": "Failed to load file: {{error}}",
+    "download": "Download",
+    "formats": {
+      "pdf": "PDF",
+      "docx": "DOCX"
+    },
+    "loadingPreview": "Loading preview...",
+    "showLess": "Show Less",
+    "showMore": "Show More",
+    "openFullScreen": "Open in Full Screen",
+    "collapseFolder": "Collapse folder",
+    "expandFolder": "Expand folder",
+    "collapse": "Collapse",
+    "expand": "Expand",
+    "browse": "Browse",
+    "downloadZipTitle": "Download as ZIP",
+    "downloadZip": "Download ZIP",
+    "loadingFolderContents": "Loading folder contents...",
+    "noFilesInFolder": "No files found in this folder",
+    "you": "You",
+    "expandHint": "Click to expand and see full response",
+    "loadingConversation": "Loading conversation...",
+    "loadingConversationHistory": "Loading conversation history...",
+    "followUpHeading": "Have more questions about this analysis?",
+    "followUpButton": "Ask Follow-Up Question",
+    "resultsTitle": "Data Analysis Results",
+    "generatedFiles": "Generated Files",
+    "noCsvPreview": "No CSV data to preview",
+    "csvPreviewLimit": "Showing first 100 of {{totalRows}} rows. Download the file to see all data."
+  },
+  "resultActions": {
+    "defaultTitle": "Result",
+    "download": "Download",
+    "converting": "Converting...",
+    "share": "Share",
+    "shareOptions": {
+      "email": "Email",
+      "copy": "Copy to Clipboard",
+      "print": "Print"
+    },
+    "formats": {
+      "pdf": "PDF",
+      "csv": "CSV",
+      "json": "JSON",
+      "docx": "DOCX"
+    },
+    "addToKnowledgeBase": "Add to Knowledge Base",
+    "badges": {
+      "default": "Default",
+      "role": "{{role}}"
+    },
+    "noKnowledgeBases": "No knowledge bases available",
+    "knowledgeBase": "Knowledge Base",
+    "yourKnowledgeBase": "your knowledge base",
+    "kbUploadSuccess": "Text file \"{{fileName}}\" has been added to \"{{kbName}}\" and will be searchable after the next scheduled sync.",
+    "kbUploadFailed": "Failed to upload: {{error}}",
+    "modal": {
+      "addTitle": "Add to {{kbName}}",
+      "addDescriptionPrefix": "You are about to add this to ",
+      "addDescriptionSuffix": ". It will be searchable after the next scheduled sync.",
+      "confirmEdit": "Please confirm and/or edit the title:",
+      "documentTitle": "Document Title",
+      "addButton": "Add to {{kbName}}",
+      "processing": "Processing...",
+      "uploading": "Uploading...",
+      "uploadingTo": "Uploading to {{kbName}}, please wait...",
+      "success": "Success",
+      "goToUpload": "Go to File Upload Page",
+      "timestampNote": "* We add a timestamp to the filename to ensure uniqueness"
+    },
+    "pdfFooter": {
+      "generated": "Generated {{date}}",
+      "pageCount": "Page {{current}} of {{total}}"
+    },
+    "print": {
+      "generatedOn": "Generated on {{date}} at {{time}}",
+      "button": "Print"
+    }
+  },
+  "resultRenderer": {
+    "actions": {
+      "downloadFile": "Download file",
+      "copyData": "Copy Data",
+      "exportTable": "Export Table View",
+      "downloading": "Downloading...",
+      "downloadLabel": "Download {{title}}",
+      "opening": "Opening...",
+      "file": "File",
+      "openInNewTab": "Open in New Tab"
+    },
+    "invalidData": "Invalid data structure",
+    "emptyValue": "-",
+    "noItems": "No items",
+    "itemLabel": "Item {{index}}:",
+    "noValidCsv": "No valid CSV data found",
+    "emptyCell": "Empty",
+    "rowLabel": "Row {{index}}",
+    "summary": "Total: {{rows}} rows and {{columns}} columns",
+    "exportFilename": "table-view.html",
+    "loadingContent": "Loading content...",
+    "debugInfo": "Debug info:",
+    "outputLabel": "Output {{index}}",
+    "resultLabel": "Result {{index}}",
+    "emptyResults": "No results to display",
+    "emptyOutputs": "No outputs found in results",
+    "errors": {
+      "outputsBucketMissing": "Outputs bucket not found in session storage",
+      "loadingContent": "Error loading content: {{message}}",
+      "parseResults": "Error parsing results data",
+      "parseNested": "Error parsing nested results data"
+    }
+  },
+  "toolLabels": {
+    "webSearch": "Web Search",
+    "knowledgeBase": "Knowledge Base",
+    "agentCreation": "Agent Creation",
+    "dataAnalysis": "Data Analysis",
+    "integration": "Integration",
+    "unknown": "Unknown Tool"
+  },
+  "toolSteps": {
+    "webSearch": {
+      "query": "Search the web for \"{{query}}\"...",
+      "running": "Searching the web..."
+    },
+    "knowledgeBase": {
+      "query": "Running query \"{{query}}\"...",
+      "running": "Running query..."
+    },
+    "dataAnalysis": {
+      "calling": "Making a tool call to Data Analysis...",
+      "analyzingFiles": "Analyzing data file(s): {{files}}...",
+      "running": "Running data analysis..."
+    },
+    "integration": {
+      "actionFallback": "Executing action",
+      "executing": "Executing {{action}} tool"
+    }
+  },
+  "toolStatus": {
+    "initializing": "Initialising tool..."
+  },
+  "toolSummaries": {
+    "integrations": {
+      "integrationFallback": "integration",
+      "downloaded_one": "Downloaded {{count}} file from {{integration}}",
+      "downloaded_other": "Downloaded {{count}} files from {{integration}}",
+      "denied": "{{label}}: Denied - User Confirmation Needed",
+      "success": "{{label}}: Tool call successful",
+      "status": "{{label}}: {{status}}"
+    },
+    "webSearch": {
+      "default": "Web Search results",
+      "failed": "⚠️ Search failed",
+      "sourcesFound": "{{count}} sources found",
+      "referencesFound": "{{count}} web search references"
+    },
+    "knowledgeBase": {
+      "default": "Knowledge Base results",
+      "sourcesFound": "{{count}} sources found ({{provider}})",
+      "entriesFound": "{{count}} knowledge entries found ({{provider}})"
+    },
+    "fallback": {
+      "denied": "{{label}}: Denied - User Confirmation Needed",
+      "success": "{{label}}: Tool call successful",
+      "status": "{{label}}: {{status}}"
+    },
+    "dataAnalysis": {
+      "failed": "{{label}}: Failed",
+      "ready": "Data analysis results ready"
+    },
+    "agentCreation": {
+      "default": "Agent creation",
+      "agentFallback": "agent",
+      "scopeSuffix": " ({{scope}})",
+      "created": "Agent created: {{agent}}{{scope}}",
+      "denied": "Agent creation denied",
+      "failed": "Agent creation failed",
+      "completed": "Agent creation completed"
+    },
+    "statusFallback": "completed"
+  },
+  "toolRenderers": {
+    "agentCreation": {
+      "success": "Agent successfully created",
+      "titleSuffix": ": \"{{title}}\"",
+      "viewAgents": "View in Agents",
+      "statusLabel": "Status:",
+      "warnings": "Warnings:",
+      "unknown": "unknown"
+    },
+    "webSearch": {
+      "query": "Query:",
+      "error": "⚠️ Error:",
+      "sources": "Sources:",
+      "summary": "Summary of Relevant Content:"
+    },
+    "knowledgeBase": {
+      "querying": "Querying:",
+      "query": "Query:",
+      "sources": "Sources:",
+      "summary": "Summary of Relevant Content:",
+      "content": "Content:",
+      "source": "Source:",
+      "unknownSource": "Unknown",
+      "noContent": "No content"
+    },
+    "dataAnalysis": {
+      "outputTitle": "Output {{index}}",
+      "retry": "Retry",
+      "loadingOutput": "Loading analysis output...",
+      "loadFailed": "Failed to load ({{status}})",
+      "unableToLoad": "Unable to load markdown"
+    },
+    "integrations": {
+      "downloading": "Downloading...",
+      "addedToChat": "Added to chat",
+      "adding": "Adding...",
+      "useInChat": "Use in chat",
+      "useInChatHint": "Click \"Use in chat\" to upload files to this conversation for AI to reference."
+    }
+  },
+  "traceViewer": {
+    "executionTitle": "Execution Trace",
+    "showingEvents": "Showing {{count}} events (filtered from {{total}} total lines)",
+    "sessionInitialized": "Session Initialized",
+    "modelLabel": "Model: {{model}}",
+    "toolsLabel": "Tools: {{tools}}",
+    "unknownModel": "Unknown",
+    "notAvailable": "N/A",
+    "none": "None",
+    "thinking": "Thinking",
+    "numa": "Numa",
+    "numaAlt": "Numa",
+    "toolCall": "Tool Call",
+    "toolResult": "Tool Result",
+    "error": "Error",
+    "loading": "Loading execution trace...",
+    "empty": "No trace events found",
+    "toggle": {
+      "show": "Show Trace",
+      "hide": "Hide Trace"
+    },
+    "download": {
+      "title": "Download",
+      "raw": "Raw (JSONL)",
+      "formatted": "Formatted (HTML)",
+      "rawFilename": "trace.jsonl",
+      "formattedFilename": "trace.html"
+    },
+    "errors": {
+      "credentials": "Failed to get credentials",
+      "loadFailed": "Failed to load trace: {{message}}",
+      "unknown": "Unknown error",
+      "parseFailed": "Failed to parse trace file"
+    }
+  },
+  "fileMessage": {
+    "processing": "Processing..."
+  },
+  "nolia": {
+    "loading": "Loading results...",
+    "loadingFolder": "Loading folder contents...",
+    "generatedFiles": "Generated Files",
+    "actions": {
+      "collapseFolder": "Collapse folder",
+      "expandFolder": "Expand folder",
+      "collapse": "Collapse",
+      "browse": "Browse",
+      "downloadZip": "Download ZIP",
+      "download": "Download"
+    },
+    "errors": {
+      "credentials": "Failed to get credentials",
+      "loadFolder": "Failed to load folder contents: {{message}}",
+      "unknown": "Unknown error",
+      "noResults": "No results available."
+    }
+  },
+  "eventStream": {
+    "secondsAgo": "{{count}}s ago",
+    "minutesAgo": "{{count}}m ago",
+    "activityLog": "Activity Log",
+    "appActivityLog": "{{appName}} Activity Log",
+    "typicalDuration_one": "This app typically takes {{count}} minute.",
+    "typicalDuration_other": "This app typically takes {{count}} minutes.",
+    "collapse": "Collapse event log",
+    "expand": "Expand event log",
+    "waiting": "Waiting for activity..."
+  },
+  "ian": {
+    "breadcrumb": "IAN",
+    "title": "Initialisation of Additional Niceties",
+    "available": "Available Niceties:",
+    "empty": "No niceties available."
+  }
+}

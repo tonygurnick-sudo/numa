@@ -1,9 +1,11 @@
 import { useState } from 'react';
 import { useNumaApp } from '../../Providers/NumaAppContext';
 import { Button, Offcanvas } from 'react-bootstrap';
+import { useTranslation } from 'react-i18next';
 
 const JobIdSidebar = () => {
   const { currentJobId, numaAppData } = useNumaApp();
+  const { t } = useTranslation('apps');
   const [jobIdSidebarOpen, setJobIdSidebarOpen] = useState(false);
 
   const handleClose = () => setJobIdSidebarOpen(false);
@@ -19,10 +21,10 @@ const JobIdSidebar = () => {
         className="job-id-toggle"
         variant="primary"
         size="sm"
-        aria-label="Show Job ID Information"
+        aria-label={t('jobIdSidebar.showAria')}
       >
         <i className="bi bi-info-circle me-1"></i>
-        Job ID
+        {t('jobIdSidebar.button')}
       </Button>
 
       <Offcanvas
@@ -36,21 +38,21 @@ const JobIdSidebar = () => {
         <Offcanvas.Header closeButton className="border-bottom bg-light py-3">
           <Offcanvas.Title className="d-flex align-items-center">
             <i className="bi bi-info-circle me-2"></i>
-            Job Information
+            {t('jobIdSidebar.title')}
           </Offcanvas.Title>
         </Offcanvas.Header>
         <Offcanvas.Body className="p-4">
           <div className="alert alert-info mb-4 p-3">
             <small>
-              This information is useful for debugging and tracking your application&apos;s state.
+              {t('jobIdSidebar.info')}
               <br />
               <br />
-              Please provide this when seeking support.
+              {t('jobIdSidebar.support')}
             </small>
           </div>
 
           <div className="mb-4">
-            <h6 className="fw-bold mb-2">Current Job ID</h6>
+            <h6 className="fw-bold mb-2">{t('jobIdSidebar.currentJobId')}</h6>
             <div className="bg-light p-3 rounded border shadow-sm position-relative">
               <code className="d-block text-break">{currentJobId}</code>
               <button
@@ -59,7 +61,7 @@ const JobIdSidebar = () => {
                   navigator.clipboard.writeText(currentJobId);
                   // You could add a toast notification here if desired
                 }}
-                title="Copy to clipboard"
+                title={t('jobIdSidebar.copy')}
               >
                 <i className="bi bi-clipboard"></i>
               </button>
@@ -67,7 +69,7 @@ const JobIdSidebar = () => {
           </div>
 
           <div className="mb-3">
-            <h6 className="fw-bold mb-2">App ID</h6>
+            <h6 className="fw-bold mb-2">{t('jobIdSidebar.appId')}</h6>
             <div className="bg-light p-3 rounded border shadow-sm position-relative">
               <code className="d-block text-break">{numaAppData?.id}</code>
               <button
@@ -76,7 +78,7 @@ const JobIdSidebar = () => {
                   navigator.clipboard.writeText(numaAppData?.id);
                   // You could add a toast notification here if desired
                 }}
-                title="Copy to clipboard"
+                title={t('jobIdSidebar.copy')}
               >
                 <i className="bi bi-clipboard"></i>
               </button>

@@ -1,6 +1,7 @@
 // ChatMessages.tsx
 import type { CSSProperties, RefObject } from 'react';
 import { Spinner, Button } from 'react-bootstrap';
+import { useTranslation } from 'react-i18next';
 import { MarkdownContent } from '../Renderers/MarkdownContent';
 import { ChatReferencesDropdown } from './ChatReferencesDropdown';
 import { useAuth } from '../../Providers/AuthProvider';
@@ -18,7 +19,7 @@ import numaIcon from '/numa-logo.svg?url';
 /**
  * A small helper bubble for opening doc if docTitle/docContent exist
  */
-function DocOpenBubble({ docTitle, docContent, onClick }) {
+function DocOpenBubble({ docTitle, docContent, onClick, openLabel }) {
   if (!docTitle || !docContent) return null;
 
   // Renders a button in the bottom-right corner of the message
@@ -27,7 +28,7 @@ function DocOpenBubble({ docTitle, docContent, onClick }) {
     <div className="doc-open-bubble">
       <Button className="doc-open-bubble-button" onClick={() => onClick(docTitle, docContent)}>
         <i className="bi bi-file-earmark-text" />
-        <span className="open-label">Open: {docTitle}</span>
+        <span className="open-label">{openLabel}</span>
       </Button>
     </div>
   );
@@ -99,6 +100,7 @@ const ChatMessages = ({
   };
   setMessages?: (fn: (prev: ChatMessage[]) => ChatMessage[]) => void;
 }) => {
+  const { t } = useTranslation('chat');
   const { getCredentials } = useAuth();
   const { branding } = useBranding();
   const rawLogoSrc = branding.resolvedAssets?.logoNav || branding.assets?.logoNav || branding.logo || numaIcon;
@@ -115,7 +117,7 @@ const ChatMessages = ({
       >
         <div className="text-center">
           <Spinner animation="border" role="status" className="text-primary">
-            <span className="visually-hidden">Loading conversation...</span>
+            <span className="visually-hidden">{t('messages.loadingConversation')}</span>
           </Spinner>
         </div>
         <div ref={messageEndRef} />
@@ -130,11 +132,11 @@ const ChatMessages = ({
         if (message.role === 'assistant' && message.status) {
           let statusText;
           if (message.status === 'initializing') {
-            statusText = 'Initializing chat...';
+            statusText = t('messages.status.initializing');
           } else if (message.status === 'processingFile') {
-            statusText = 'Processing Upload...';
+            statusText = t('messages.status.processingFile');
           } else if (message.status === 'thinking') {
-            statusText = 'Thinking...';
+            statusText = t('messages.status.thinking');
           }
           if (!statusText) return null; // Skip legacy statuses in agent-only mode
           return (
@@ -149,7 +151,7 @@ const ChatMessages = ({
                   <>
                     <img
                       src={logoSrc}
-                      alt={`${branding.name ?? 'Assistant'} logo`}
+                      alt={`${branding.name ?? t('messages.roles.assistant')} logo`}
                       style={{
                         maxHeight: '20px',
                         maxWidth: '60px',
@@ -159,7 +161,7 @@ const ChatMessages = ({
                         verticalAlign: 'middle',
                       }}
                     />
-                    {branding.name || 'Assistant'}:
+                    {branding.name || t('messages.roles.assistant')}:
                   </>
                 )}
               </strong>
@@ -190,7 +192,7 @@ const ChatMessages = ({
                   <>
                     <img
                       src={logoSrc}
-                      alt={`${branding.name ?? 'Assistant'} logo`}
+                      alt={`${branding.name ?? t('messages.roles.assistant')} logo`}
                       style={{
                         maxHeight: '20px',
                         maxWidth: '60px',
@@ -200,13 +202,13 @@ const ChatMessages = ({
                         verticalAlign: 'middle',
                       }}
                     />
-                    {branding.name || 'Assistant'}:
+                    {branding.name || t('messages.roles.assistant')}:
                   </>
                 )
               ) : message.role === 'user' ? (
-                'You:'
+                `${t('messages.roles.you')}:`
               ) : (
-                'System:'
+                `${t('messages.roles.system')}:`
               )}
             </strong>
             <div className="message-content markdown-content">
@@ -261,7 +263,7 @@ const ChatMessages = ({
 
                     return (
                       <div key={idx} className="file-upload-message">
-                        <div className="file-upload-text">File &apos;{fs.filename}&apos; uploaded successfully.</div>
+                        <div className="file-upload-text">{t('messages.fileUploaded', { name: fs.filename })}</div>
                         <FileMessage
                           filename={fs.filename}
                           type={fs.type || 'success'}
@@ -296,7 +298,12 @@ const ChatMessages = ({
 
               {/* If there's a doc, show the bubble */}
               {message.role === 'assistant' && message.docTitle && message.docContent && (
-                <DocOpenBubble docTitle={message.docTitle} docContent={message.docContent} onClick={onOpenDocument} />
+                <DocOpenBubble
+                  docTitle={message.docTitle}
+                  docContent={message.docContent}
+                  onClick={onOpenDocument}
+                  openLabel={t('messages.openDocument', { title: message.docTitle })}
+                />
               )}
             </div>
           </div>

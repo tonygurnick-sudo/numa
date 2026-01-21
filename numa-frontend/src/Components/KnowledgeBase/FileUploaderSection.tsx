@@ -5,6 +5,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Card, Form, Alert } from 'react-bootstrap';
+import { useTranslation } from 'react-i18next';
 import { FileUploader } from '../FileUploader';
 import { isFileTypeValidForBedrockKB } from '../../utils/fileUtils';
 import { listFoldersInKB } from '../../utils/s3Utils';
@@ -28,7 +29,8 @@ export function FileUploaderSection({
   fileValidationError,
   clearFiles = false,
 }: FileUploaderSectionProps): React.JSX.Element {
-  const displayName = kbName || (kb_id === 'company' ? 'Company Knowledge Base' : kb_id);
+  const { t } = useTranslation('knowledgeBase');
+  const displayName = kbName || (kb_id === 'company' ? t('companyKnowledgeBase.title') : kb_id);
   const { getCredentials, region: authRegion } = useAuth();
 
   const [selectedFolder, setSelectedFolder] = useState<string>('');
@@ -60,20 +62,17 @@ export function FileUploaderSection({
   return (
     <Card>
       <Card.Header>
-        <Card.Title className="mb-0">Upload New Files or Folders</Card.Title>
+        <Card.Title className="mb-0">{t('fileUploaderSection.title')}</Card.Title>
       </Card.Header>
       <Card.Body>
-        <p className="small mt-2">
-          Once uploaded, files are automatically indexed every 30 minutes where they will be available for querying in
-          Numa Chat.
-        </p>
+        <p className="small mt-2">{t('fileUploaderSection.description')}</p>
 
         <Form.Group className="mb-3">
           <Form.Label>
-            <strong>Destination Knowledge Base</strong>
+            <strong>{t('fileUploaderSection.destinationLabel')}</strong>
           </Form.Label>
           <Form.Control type="text" value={displayName} disabled />
-          <Form.Text className="text-muted">Files will be uploaded to this knowledge base.</Form.Text>
+          <Form.Text className="text-muted">{t('fileUploaderSection.destinationHint')}</Form.Text>
         </Form.Group>
 
         <FolderSelector
@@ -81,12 +80,11 @@ export function FileUploaderSection({
           onFolderChange={setSelectedFolder}
           folderOptions={folderOptions}
           disabled={loadingFolders}
-          label="Upload to folder"
         />
 
         {fileValidationError && (
           <Alert variant="danger" className="mb-3">
-            <strong>File Validation Error:</strong>
+            <strong>{t('fileUploaderSection.validationTitle')}</strong>
             <p className="mb-0 mt-1">{fileValidationError}</p>
           </Alert>
         )}

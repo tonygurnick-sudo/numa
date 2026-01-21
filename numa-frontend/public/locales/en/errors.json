@@ -1,0 +1,70 @@
+{
+  "generic": "An error occurred",
+  "unknown": "Unknown error",
+  "auth": {
+    "userNotAuthenticated": "User not authenticated"
+  },
+  "chatSettings": {
+    "updateFailed": "Failed to update chat settings"
+  },
+  "adminChatSettings": {
+    "updateFailed": "Failed to update global chat settings"
+  },
+  "adminAgents": {
+    "updateFailed": "Failed to update agents settings"
+  },
+  "adminIntegrations": {
+    "updateFailed": "Failed to update settings for {{integration}}"
+  },
+  "agents": {
+    "payloadMissing": "Agent payload missing",
+    "createFailed": "Failed to create agent",
+    "updateFailed": "Failed to update agent",
+    "duplicateFailed": "Failed to duplicate agent"
+  },
+  "chatAgent": {
+    "http": "Chat agent HTTP error: {{status}}"
+  },
+  "manifest": {
+    "fetchFailed": "Failed to fetch manifest",
+    "invalidData": "Data must be an array",
+    "appNotFound": "App with ID {{appId}} not found"
+  },
+  "knowledgeBase": {
+    "htmlResponse": "Knowledge base API returned HTML. This usually means the request was routed to the web app instead of the backend API. Check your API proxy or authentication configuration.",
+    "listFailed": "Failed to list knowledge bases",
+    "authNotReady": "Authentication tokens not ready. Please wait or refresh the page.",
+    "detailsFailed": "Failed to get knowledge base details",
+    "createFailed": "Failed to create knowledge base",
+    "updateFailed": "Failed to update knowledge base",
+    "deleteFailed": "Failed to delete knowledge base",
+    "listFilesFailed": "Failed to list knowledge base files",
+    "stateFailed": "Failed to get knowledge base state"
+  },
+  "branding": {
+    "presignHtml": "Branding asset upload endpoint returned HTML instead of JSON. Verify Branding API configuration."
+  },
+  "jobs": {
+    "invalidCreateResponse": "Invalid job creation response from API",
+    "createFailed": "Failed to create job",
+    "createFailedWithMessage": "Failed to create job: {{message}}",
+    "updateFailed": "Failed to update job: {{message}}",
+    "noResponse": "No response received from server"
+  },
+  "pipedream": {
+    "getStatusFailed": "Failed to get integration status",
+    "generateTokenFailed": "Failed to generate connect token",
+    "generateTokenFailedWithMessage": "Failed to generate connect token: {{message}}",
+    "listToolsFailed": "Failed to list MCP tools",
+    "getPolicyFailed": "Failed to get MCP policy",
+    "setPolicyFailed": "Failed to set MCP policy",
+    "disconnectFailed": "Failed to disconnect integration",
+    "unavailable": "Numa Integrations are not available for this account.",
+    "relayExecutionFailed": "Relay lambda execution failed: {{message}}",
+    "relayHttpError": "HTTP {{status}} error",
+    "accessDenied": "Access denied: Please check your permissions for Pipedream relay lambda invocation",
+    "relayNotFound": "Pipedream relay lambda not found: Please check configuration",
+    "timeout": "Request timeout: Pipedream relay is taking too long to respond",
+    "externalUserIdMissing": "Unable to derive external user ID: missing client ID or user ID"
+  }
+}

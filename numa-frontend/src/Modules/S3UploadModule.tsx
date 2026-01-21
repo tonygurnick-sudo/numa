@@ -18,6 +18,7 @@ import { UploadStatusRow } from '../Components/Status/UploadStatusRow';
 import PropTypes from 'prop-types';
 import { useJobsApi } from '../Services/jobsApi';
 import { withPRM } from '../utils/prmUtils';
+import { useTranslation } from 'react-i18next';
 
 // ---------- Types ----------
 type NumaAppWithTasks = { tasks?: Array<{ id: string }> };
@@ -75,6 +76,8 @@ type UploaderHandle = {
   acceptUserSelection?: (files: File[], opts?: { autoStart?: boolean }) => Promise<void> | void;
   startUpload?: () => Promise<void> | void;
 };
+
+type UploadStatusType = 'preparing' | 'creatingJob' | 'uploading' | 'success' | 'filesUploaded' | 'empty' | null;
 
 // Default no-op functions
 const noop: (..._args: unknown[]) => void = () => {};
@@ -199,6 +202,7 @@ const S3UploadModuleInner: ForwardRefRenderFunction<UploaderHandle, S3UploadModu
   } = useNumaApp();
   const jobsApi = useJobsApi();
   const { getCredentials, user } = useAuth();
+  const { t } = useTranslation('common');
   const normalizedRunName = (runName || '').trim();
 
   // ---- Config (region/bucket) with race-proofing ----
@@ -285,6 +289,7 @@ const S3UploadModuleInner: ForwardRefRenderFunction<UploaderHandle, S3UploadModu
 
   const [selectedFiles, setSelectedFiles] = useState<StandardizedFile[]>([]);
   const [uploadStatus, setUploadStatus] = useState<string | null>(null);
+  const [uploadStatusType, setUploadStatusType] = useState<UploadStatusType>(null);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -292,6 +297,11 @@ const S3UploadModuleInner: ForwardRefRenderFunction<UploaderHandle, S3UploadModu
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const jobCreationPromiseRef = useRef<Promise<JobCreateResult> | null>(null);
+
+  const updateUploadStatus = (type: UploadStatusType, message: string | null) => {
+    setUploadStatusType(type);
+    setUploadStatus(message);
+  };
 
   const taskResponse = Array.isArray(numaTaskResponses)
     ? (numaTaskResponses as TaskResponse[]).find((r) => r?.taskId === task.id)
@@ -315,12 +325,12 @@ const S3UploadModuleInner: ForwardRefRenderFunction<UploaderHandle, S3UploadModu
     if (processedFiles && processedFiles.length > 0) {
       setSelectedFiles(processedFiles);
       const fileNames = processedFiles.map((f) => f.name).join(', ');
-      setUploadStatus(`Files uploaded: ${fileNames}`);
+      updateUploadStatus('filesUploaded', t('uploads.filesUploaded', { names: fileNames }));
     } else {
       setSelectedFiles([]);
-      setUploadStatus(null);
+      updateUploadStatus(null, null);
     }
-  }, [value]);
+  }, [value, t]);
 
   useEffect(() => {
     const isChatFileUpload = task?.id === 'chatFileUpload';
@@ -341,7 +351,7 @@ const S3UploadModuleInner: ForwardRefRenderFunction<UploaderHandle, S3UploadModu
 
   const warning =
     minFiles > 0 && selectedFiles.length > 0 && selectedFiles.length < minFiles
-      ? `At least ${minFiles} file${minFiles > 1 ? 's' : ''} required`
+      ? t('uploads.minFilesRequired', { count: minFiles })
       : null;
 
   const validateFile = (file: File) => {
@@ -350,7 +360,7 @@ const S3UploadModuleInner: ForwardRefRenderFunction<UploaderHandle, S3UploadModu
     if (!ext || !SUPPORTED_EXTENSIONS.includes(ext)) {
       return {
         validFile: null as File | null,
-        error: `${file.name}: Unsupported file format. Please use PDF, DOCX, XLSX, TXT, or other supported formats.`,
+        error: t('uploads.unsupportedFormat', { name: file.name }),
       };
     }
 
@@ -359,7 +369,7 @@ const S3UploadModuleInner: ForwardRefRenderFunction<UploaderHandle, S3UploadModu
       if (!acceptedFileTypes.includes(file.type)) {
         return {
           validFile: null as File | null,
-          error: `${file.name}: Invalid file type. Accepted types: ${acceptedFileTypes.join(', ')}`,
+          error: t('uploads.invalidFileType', { name: file.name, types: acceptedFileTypes.join(', ') }),
         };
       }
     }
@@ -367,7 +377,7 @@ const S3UploadModuleInner: ForwardRefRenderFunction<UploaderHandle, S3UploadModu
     if (maxFileSize && file.size > maxFileSize * 1024 * 1024) {
       return {
         validFile: null as File | null,
-        error: `${file.name}: File is too large. Maximum size allowed is ${maxFileSize.toFixed(2)} MB`,
+        error: t('uploads.fileTooLarge', { name: file.name, size: maxFileSize.toFixed(2) }),
       };
     }
 
@@ -391,14 +401,14 @@ const S3UploadModuleInner: ForwardRefRenderFunction<UploaderHandle, S3UploadModu
       try {
         await fetchConfigOnce();
       } catch {
-        setError('Storage config failed to load (missing REGION/BUCKET). Please refresh or contact support.');
+        setError(t('uploads.storageLoadFailed'));
         onNotComplete();
         return;
       }
       if (!isConfigReady) {
         // queue files until config is ready
         pendingUploadsRef.current = Array.from(fileList instanceof FileList ? Array.from(fileList) : fileList);
-        setUploadStatus('Preparing storage…');
+        updateUploadStatus('preparing', t('uploads.preparingStorage'));
         return;
       }
     }
@@ -410,7 +420,7 @@ const S3UploadModuleInner: ForwardRefRenderFunction<UploaderHandle, S3UploadModu
     onSelectFiles(newFiles.filter((f): f is File => f instanceof File));
 
     if (maxFiles && totalFileCount > maxFiles) {
-      setError(`Maximum of ${maxFiles} file${maxFiles > 1 ? 's' : ''} allowed`);
+      setError(t('uploads.maxFilesAllowed', { count: maxFiles }));
       onNotComplete();
       return;
     }
@@ -431,7 +441,7 @@ const S3UploadModuleInner: ForwardRefRenderFunction<UploaderHandle, S3UploadModu
     }
 
     if (validFiles.length > 0) {
-      setUploadStatus(null);
+      updateUploadStatus(null, null);
       setUploadProgress(0);
       setError(null);
       onNotComplete();
@@ -485,7 +495,7 @@ const S3UploadModuleInner: ForwardRefRenderFunction<UploaderHandle, S3UploadModu
     const isChatFileUpload = task?.id === 'chatFileUpload';
 
     if (!userUuid) {
-      setError('Authentication required for file uploads');
+      setError(t('uploads.authRequired'));
       onNotComplete();
       return;
     }
@@ -494,10 +504,10 @@ const S3UploadModuleInner: ForwardRefRenderFunction<UploaderHandle, S3UploadModu
 
     if (!filesToUpload.length) {
       if (isRequired) {
-        setError('Please select at least one file');
+        setError(t('uploads.selectAtLeastOne'));
         return;
       } else {
-        setUploadStatus('No file uploaded');
+        updateUploadStatus('empty', t('uploads.noFileUploaded'));
         onChange('');
         onComplete();
         return;
@@ -505,7 +515,7 @@ const S3UploadModuleInner: ForwardRefRenderFunction<UploaderHandle, S3UploadModu
     }
 
     if (!isConfigReady || !region || !bucketName) {
-      setError('Storage not configured (missing region/bucket). Please refresh or contact support.');
+      setError(t('uploads.storageMissing'));
       onNotComplete();
       return;
     }
@@ -522,7 +532,7 @@ const S3UploadModuleInner: ForwardRefRenderFunction<UploaderHandle, S3UploadModu
         if (!jobId) {
           if (!jobCreationPromiseRef.current) {
             setIsCreatingJob(true);
-            setUploadStatus('Creating job...');
+            updateUploadStatus('creatingJob', t('uploads.creatingJob'));
             const createOptions = normalizedRunName ? { name: normalizedRunName } : undefined;
             jobCreationPromiseRef.current = jobsApi.createJob(
               numaAppData,
@@ -547,7 +557,7 @@ const S3UploadModuleInner: ForwardRefRenderFunction<UploaderHandle, S3UploadModu
             setIsCreatingJob(false);
           }
         }
-        setUploadStatus('Uploading files...');
+        updateUploadStatus('uploading', t('uploads.uploadingFiles'));
       }
 
       const credentials = await getCredentials().catch((e: unknown) => {
@@ -579,7 +589,10 @@ const S3UploadModuleInner: ForwardRefRenderFunction<UploaderHandle, S3UploadModu
 
       for (let i = 0; i < rawFiles.length; i++) {
         const file = rawFiles[i];
-        setUploadStatus(`Uploading file ${i + 1} of ${rawFiles.length}: ${file.name}`);
+        updateUploadStatus(
+          'uploading',
+          t('uploads.uploadingFileProgress', { current: i + 1, total: rawFiles.length, name: file.name }),
+        );
         setUploadProgress(0);
 
         const randomId = Math.random().toString(36).slice(2);
@@ -695,7 +708,7 @@ const S3UploadModuleInner: ForwardRefRenderFunction<UploaderHandle, S3UploadModu
         }
       }
 
-      setUploadStatus('Upload successful!');
+      updateUploadStatus('success', t('uploads.uploadSuccessful'));
       setSelectedFiles((prev) => {
         const updatedFiles = [...prev, ...fileObjects];
         onChange(updatedFiles);
@@ -723,19 +736,19 @@ const S3UploadModuleInner: ForwardRefRenderFunction<UploaderHandle, S3UploadModu
       const code = typeof anyLike.code === 'string' ? anyLike.code : '';
 
       if (message.includes('Missing REGION') || message.includes('region/bucket')) {
-        errorMessage = 'Storage not configured (region/bucket). Check /config.json or environment.';
+        errorMessage = t('uploads.storageMissingConfig');
       } else if (response?.status === 403) {
-        errorMessage = 'Permission denied — check IAM & bucket policy for PUT Object.';
+        errorMessage = t('uploads.permissionDenied');
       } else if (response?.status === 401) {
-        errorMessage = 'Session expired — please log in again.';
+        errorMessage = t('uploads.sessionExpired');
       } else if (message.includes('Authentication error')) {
         errorMessage = message;
       } else if (message.includes('upload URL')) {
-        errorMessage = 'Server configuration error (presign).';
+        errorMessage = t('uploads.serverConfigError');
       } else if (code === 'ERR_NETWORK') {
-        errorMessage = 'Network error — please check your internet connection.';
+        errorMessage = t('uploads.networkError');
       } else {
-        errorMessage = response?.data?.error || response?.data?.message || message || 'Error uploading file';
+        errorMessage = response?.data?.error || response?.data?.message || message || t('uploads.uploadError');
       }
 
       setError(errorMessage);
@@ -748,7 +761,7 @@ const S3UploadModuleInner: ForwardRefRenderFunction<UploaderHandle, S3UploadModu
     acceptUserSelection: async (files: File[]) => {
       if (!isConfigReady) {
         pendingUploadsRef.current = files;
-        setUploadStatus('Preparing storage…');
+        updateUploadStatus('preparing', t('uploads.preparingStorage'));
         try {
           await fetchConfigOnce();
         } catch {
@@ -784,7 +797,7 @@ const S3UploadModuleInner: ForwardRefRenderFunction<UploaderHandle, S3UploadModu
       >
         <div className="text-center">
           <i className="bi bi-cloud-upload" style={{ fontSize: '2rem' }}></i>
-          <p className="mt-2">Drag and drop your file(s) here, or</p>
+          <p className="mt-2">{t('uploads.dragAndDrop')}</p>
           <Button
             variant="primary"
             as="label"
@@ -793,13 +806,13 @@ const S3UploadModuleInner: ForwardRefRenderFunction<UploaderHandle, S3UploadModu
             onClick={(e) => e.stopPropagation()}
             disabled={disabled || isCreatingJob}
           >
-            Select Files
+            {t('uploads.selectFiles')}
           </Button>
 
           {/* Config readiness hint */}
           {!isConfigReady && !error && (
             <div className="mt-3">
-              <UploadStatusRow text="Preparing storage…" showSpinner className="mb-2" />
+              <UploadStatusRow text={t('uploads.preparingStorage')} showSpinner className="mb-2" />
             </div>
           )}
 
@@ -818,13 +831,8 @@ const S3UploadModuleInner: ForwardRefRenderFunction<UploaderHandle, S3UploadModu
             <div className="mt-3">
               <UploadStatusRow
                 text={uploadStatus}
-                showSpinner={
-                  uploadStatus.includes('Uploading') ||
-                  uploadStatus.includes('Finalising') ||
-                  uploadStatus.includes('Creating job') ||
-                  uploadStatus.includes('Preparing storage')
-                }
-                showCheckmark={uploadStatus.includes('successful') || uploadStatus.includes('uploaded:')}
+                showSpinner={['uploading', 'creatingJob', 'preparing'].includes(uploadStatusType || '')}
+                showCheckmark={['success', 'filesUploaded'].includes(uploadStatusType || '')}
                 className="mb-2"
               />
               {uploadProgress > 0 && uploadProgress < 100 && (
@@ -850,9 +858,7 @@ const S3UploadModuleInner: ForwardRefRenderFunction<UploaderHandle, S3UploadModu
         {selectedFiles.length > 0 && (
           <div className="s3-files-section">
             <div className="files-header">
-              <span className="files-count-label">
-                {selectedFiles.length} File{selectedFiles.length !== 1 ? 's' : ''} Selected
-              </span>
+              <span className="files-count-label">{t('uploads.filesSelected', { count: selectedFiles.length })}</span>
               <button
                 className="clear-all-btn"
                 onClick={(e) => {
@@ -864,7 +870,7 @@ const S3UploadModuleInner: ForwardRefRenderFunction<UploaderHandle, S3UploadModu
                   onChange(clearedFiles);
                 }}
               >
-                Clear all
+                {t('uploads.clearAll')}
               </button>
             </div>
 

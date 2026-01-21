@@ -6,6 +6,7 @@ import { DataAnalysisRenderer } from '../toolRenderers/DataAnalysisRenderer';
 import { AgentCreationRenderer } from '../toolRenderers/AgentCreationRenderer';
 import { IntegrationsRenderer } from '../toolRenderers/IntegrationsRenderer';
 import { getConnectionDisplayName, getConnectionIcon, getConnectionFallbackIcon } from '../config/integrationsConfig';
+import i18n from '../i18n';
 
 type ToolRenderer = (props: { result: unknown }) => React.ReactNode;
 
@@ -17,27 +18,27 @@ export type ToolDescriptor = {
 // Static mapping for known core tools
 export const TOOL_CONFIG: Record<string, ToolDescriptor> = {
   web_search: {
-    label: 'Web Search',
+    label: i18n.t('common:toolLabels.webSearch'),
     renderer: WebSearchRenderer,
   },
   query_knowledge_base: {
-    label: 'Knowledge Base',
+    label: i18n.t('common:toolLabels.knowledgeBase'),
     renderer: KnowledgeBaseRenderer,
   },
   create_agent_tool: {
-    label: 'Agent Creation',
+    label: i18n.t('common:toolLabels.agentCreation'),
     renderer: AgentCreationRenderer,
   },
   data_analysis: {
-    label: 'Data Analysis',
+    label: i18n.t('common:toolLabels.dataAnalysis'),
     renderer: DataAnalysisRenderer,
   },
   integrations: {
-    label: 'Integration',
+    label: i18n.t('common:toolLabels.integration'),
     renderer: IntegrationsRenderer,
   },
   _default: {
-    label: 'Unknown Tool',
+    label: i18n.t('common:toolLabels.unknown'),
     renderer: FallbackRenderer,
   },
 };
@@ -103,12 +104,12 @@ export function getToolActionSteps(toolName: string | null | undefined, inputPay
           ? (inputPayload as Record<string, unknown>)['query']
           : undefined;
       if (typeof q === 'string' && q.trim()) {
-        return [`Search the web for "${q.trim()}"...`];
+        return [i18n.t('common:toolSteps.webSearch.query', { query: q.trim() })];
       }
     } catch {
       /* ignore */
     }
-    return ['Searching the web...'];
+    return [i18n.t('common:toolSteps.webSearch.running')];
   }
   // Knowledge base customisation
   if (name === 'query_knowledge_base') {
@@ -118,29 +119,29 @@ export function getToolActionSteps(toolName: string | null | undefined, inputPay
           ? (inputPayload as Record<string, unknown>)['query']
           : undefined;
       if (typeof q === 'string' && q.trim()) {
-        return [`Running query "${q.trim()}"...`];
+        return [i18n.t('common:toolSteps.knowledgeBase.query', { query: q.trim() })];
       }
     } catch {
       /* ignore */
     }
-    return ['Running query...'];
+    return [i18n.t('common:toolSteps.knowledgeBase.running')];
   }
   if (name === 'data_analysis') {
-    const steps: string[] = ['Making a tool call to Data Analysis...'];
+    const steps: string[] = [i18n.t('common:toolSteps.dataAnalysis.calling')];
     try {
       if (inputPayload && typeof inputPayload === 'object') {
         const obj = inputPayload as Record<string, unknown>;
         const names = Array.isArray(obj.file_names) ? obj.file_names : undefined;
         if (Array.isArray(names) && names.length > 0) {
-          steps.push(`Analyzing data file(s): ${names.join(', ')}...`);
+          steps.push(i18n.t('common:toolSteps.dataAnalysis.analyzingFiles', { files: names.join(', ') }));
         } else {
-          steps.push('Running data analysis...');
+          steps.push(i18n.t('common:toolSteps.dataAnalysis.running'));
         }
       } else {
-        steps.push('Running data analysis...');
+        steps.push(i18n.t('common:toolSteps.dataAnalysis.running'));
       }
     } catch {
-      steps.push('Running data analysis...');
+      steps.push(i18n.t('common:toolSteps.dataAnalysis.running'));
     }
     return steps;
   }
@@ -156,8 +157,8 @@ export function getToolActionSteps(toolName: string | null | undefined, inputPay
     } catch {
       /* ignore */
     }
-    const friendly = action ? humanize(action) : 'Executing action';
-    return [`Executing ${friendly} tool`];
+    const friendly = action ? humanize(action) : i18n.t('common:toolSteps.integration.actionFallback');
+    return [i18n.t('common:toolSteps.integration.executing', { action: friendly })];
   }
 
   // Generic default

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Alert, Button, Form, Spinner } from 'react-bootstrap';
+import { useTranslation } from 'react-i18next';
 import type { SynergyFolder, SynergyFolderItemsResponse, SynergyJob } from '../../types/synergySync';
 
 type FolderMap = Record<string, SynergyFolder[]>;
@@ -33,6 +34,7 @@ export const SynergyJobsTree = ({
   loadFolderItems,
   disabled,
 }: SynergyJobsTreeProps) => {
+  const { t } = useTranslation('integrations');
   const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set());
   const [foldersByParent, setFoldersByParent] = useState<FolderMap>({});
   const [loadingByParent, setLoadingByParent] = useState<LoadingMap>({});
@@ -197,7 +199,9 @@ export const SynergyJobsTree = ({
           />
           <span className="small fw-semibold">{folder.name}</span>
           {folder.no_of_subfolders !== undefined && (
-            <span className="text-muted small">{folder.no_of_subfolders} subfolders</span>
+            <span className="text-muted small">
+              {t('synergyJobsTree.subfolders', { count: folder.no_of_subfolders })}
+            </span>
           )}
           {isLoading && <Spinner size="sm" animation="border" className="ms-2" />}
         </div>
@@ -217,7 +221,7 @@ export const SynergyJobsTree = ({
                 connected ? 'brand-status-badge--active' : 'brand-status-badge--inactive'
               }`}
             >
-              {connected ? 'Connected' : 'Available'}
+              {connected ? t('synergyJobsTree.connected') : t('synergyJobsTree.available')}
             </span>
           </div>
           {job.description && <div className="text-muted small">{job.description}</div>}
@@ -229,7 +233,7 @@ export const SynergyJobsTree = ({
           disabled={disabled}
         >
           <i className={`bi ${expandedNodes.has(jobKey) ? 'bi-folder2-open' : 'bi-folder2'}`} />{' '}
-          {expandedNodes.has(jobKey) ? 'Hide folders' : 'Browse folders'}
+          {expandedNodes.has(jobKey) ? t('synergyJobsTree.hideFolders') : t('synergyJobsTree.browseFolders')}
         </Button>
       </div>
 
@@ -252,7 +256,7 @@ export const SynergyJobsTree = ({
               }}
               disabled={disabled}
             >
-              Select all
+              {t('synergyJobsTree.selectAll')}
             </Button>
             <Button
               size="sm"
@@ -264,18 +268,18 @@ export const SynergyJobsTree = ({
               }}
               disabled={disabled}
             >
-              Unselect all
+              {t('synergyJobsTree.unselectAll')}
             </Button>
           </div>
           {(foldersByParent[jobKey] || []).map((folder) => renderFolder(folder, 1))}
           {loadingByParent[jobKey] && (
             <div className="text-muted small d-flex align-items-center gap-2">
               <Spinner size="sm" animation="border" />
-              Loading folders...
+              {t('synergyJobsTree.loadingFolders')}
             </div>
           )}
           {!loadingByParent[jobKey] && (foldersByParent[jobKey] || []).length === 0 && (
-            <div className="text-muted small">No folders found.</div>
+            <div className="text-muted small">{t('synergyJobsTree.noFolders')}</div>
           )}
         </div>
       )}

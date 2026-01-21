@@ -4,18 +4,21 @@ import { JobStatusContext } from '../../Providers/JobStatusContext';
 import { useNavigate } from 'react-router-dom';
 import { useNumaApp } from '../../Providers/NumaAppContext';
 import { NicetyContext } from '../../Providers/NicetyContext';
+import { useTranslation } from 'react-i18next';
+import i18n from '../../i18n';
 
 const JOB_DISPLAY_LIMIT = 5;
 
 export const StatusDashboard = () => {
   const { jobs, loading, hasLoaded, refreshJobs, nextRefreshIn } = useContext(JobStatusContext);
+  const { t } = useTranslation('apps');
 
   return (
     <Row className="g-4">
       <Col xs={12}>
         <Card>
           <Card.Header className="d-flex justify-content-between align-items-center">
-            <Card.Title className="mb-0">Current and recent jobs</Card.Title>
+            <Card.Title className="mb-0">{t('statusDashboard.title')}</Card.Title>
             <div className="d-flex align-items-center">
               <Button
                 variant="primary"
@@ -27,17 +30,19 @@ export const StatusDashboard = () => {
                 {loading && !hasLoaded ? (
                   <div className="d-flex align-items-center">
                     <Spinner animation="border" size="sm" />
-                    <span className="ms-2">Loading...</span>
+                    <span className="ms-2">{t('statusDashboard.loading')}</span>
                   </div>
                 ) : (
                   <>
-                    <span className="ms-1">Refresh</span>
+                    <span className="ms-1">{t('statusDashboard.refresh')}</span>
                   </>
                 )}
               </Button>
               {nextRefreshIn && (
                 <small className="text-muted">
-                  Auto-refresh in {Math.floor(nextRefreshIn / 60)}:{(nextRefreshIn % 60).toString().padStart(2, '0')}
+                  {t('statusDashboard.autoRefresh', {
+                    time: `${Math.floor(nextRefreshIn / 60)}:${(nextRefreshIn % 60).toString().padStart(2, '0')}`,
+                  })}
                 </small>
               )}
             </div>
@@ -45,7 +50,7 @@ export const StatusDashboard = () => {
           <Card.Body>
             {jobs.length === 0 && !loading ? (
               <div className="text-center bg-light rounded empty-state">
-                <p className="mt-2 text-muted mb-0">No recent jobs to display.</p>
+                <p className="mt-2 text-muted mb-0">{t('statusDashboard.empty')}</p>
               </div>
             ) : (
               <div className="file-table-container scrollable">
@@ -53,13 +58,13 @@ export const StatusDashboard = () => {
                   <thead className="sticky-table-header">
                     <tr>
                       <th className="text-start" style={{ width: '40%' }}>
-                        App
+                        {t('statusDashboard.columns.app')}
                       </th>
                       <th className="text-start" style={{ width: '30%' }}>
-                        Started
+                        {t('statusDashboard.columns.started')}
                       </th>
                       <th className="text-start" style={{ width: '30%' }}>
-                        Status
+                        {t('statusDashboard.columns.status')}
                       </th>
                     </tr>
                   </thead>
@@ -84,6 +89,7 @@ const StatusDashboardJob = ({ job }) => {
   const niceties = useContext(NicetyContext);
   const nav = useNavigate();
   const { setNumaAppId } = useNumaApp();
+  const { t } = useTranslation('apps');
 
   const openJob = async (appId, jobId) => {
     setNumaAppId(appId);
@@ -94,7 +100,7 @@ const StatusDashboardJob = ({ job }) => {
 
   const getStatusInfo = (status) => {
     if (!status) {
-      return { variant: 'secondary', text: 'Unknown' };
+      return { variant: 'secondary', text: t('statusDashboard.status.unknown') };
     }
 
     const upperStatus = status.toUpperCase();
@@ -103,29 +109,29 @@ const StatusDashboardJob = ({ job }) => {
       // Success states
       case 'SUCCESS':
       case 'COMPLETED':
-        return { variant: 'success', text: 'Completed' };
+        return { variant: 'success', text: t('statusDashboard.status.completed') };
 
       // Failure states
       case 'FAILURE':
       case 'FAILED':
       case 'ERROR':
-        return { variant: 'danger', text: 'Failed' };
+        return { variant: 'danger', text: t('statusDashboard.status.failed') };
 
       // Processing states
       case 'PROCESSING':
       case 'RUNNING':
       case 'IN-PROGRESS':
-        return { variant: 'primary', text: 'Running' };
+        return { variant: 'primary', text: t('statusDashboard.status.running') };
 
       // Queued states
       case 'QUEUED':
       case 'PENDING':
-        return { variant: 'warning', text: 'Queued' };
+        return { variant: 'warning', text: t('statusDashboard.status.queued') };
 
       // Files uploaded state
       case 'FILES_UPLOADED':
       case 'FILES-UPLOADED':
-        return { variant: 'info', text: 'Files Uploaded' };
+        return { variant: 'info', text: t('statusDashboard.status.filesUploaded') };
 
       default:
         return {
@@ -140,9 +146,9 @@ const StatusDashboardJob = ({ job }) => {
     const diffInHours = (now - date) / (1000 * 60 * 60);
 
     if (diffInHours < 24) {
-      return date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hour12: true });
+      return date.toLocaleTimeString(i18n.language, { hour: 'numeric', minute: '2-digit', hour12: true });
     } else {
-      return `${date.toLocaleDateString([], { month: 'short', day: 'numeric' })} ${date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hour12: true })}`;
+      return `${date.toLocaleDateString(i18n.language, { month: 'short', day: 'numeric' })} ${date.toLocaleTimeString(i18n.language, { hour: 'numeric', minute: '2-digit', hour12: true })}`;
     }
   };
 

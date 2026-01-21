@@ -12,6 +12,7 @@ import type {
   StreamCallbackMessage,
 } from '../types/chat';
 import { getStopReason, isMessageStopFrame, isToolEventFrame, tryGetDeltaText } from '../types/chat';
+import i18n from '../i18n';
 
 class ChatAgentHttpStream {
   private currentOnEvent: OnEvent | null | undefined;
@@ -184,7 +185,7 @@ class ChatAgentHttpStream {
       });
 
       if (!res.ok || !res.body) {
-        throw new Error(`Chat agent HTTP error: ${res.status}`);
+        throw new Error(i18n.t('errors:chatAgent.http', { status: res.status }));
       }
 
       const reader = res.body.getReader();

@@ -3,8 +3,10 @@ import { StarFill, Star } from 'react-bootstrap-icons';
 import { useFavorites } from '../../hooks/useFavorites';
 import { useState } from 'react';
 import { FlyingStarAnimation } from '../FlyingStarAnimation';
+import { useTranslation } from 'react-i18next';
 
 const AppItem = ({ app, onCategoryClick }) => {
+  const { t } = useTranslation('apps');
   // Get first 3 tags for display
   const displayTags = app?.tags?.slice(0, 3) || [];
 
@@ -49,7 +51,7 @@ const AppItem = ({ app, onCategoryClick }) => {
       <div
         className={`card card-apps w-100 ${app.status !== 'Active' ? 'card-disabled' : ''}`}
         data-testid={`app-card-${app.id}`}
-        title={app.status !== 'Active' ? 'This app is unavailable' : ''}
+        title={app.status !== 'Active' ? t('appItem.unavailableTitle') : ''}
         data-tooltip-delay="500"
       >
         <div className="card-header">
@@ -70,7 +72,7 @@ const AppItem = ({ app, onCategoryClick }) => {
                   }
                 }}
                 style={{ cursor: 'pointer' }}
-                title={`Filter by ${app.category} category`}
+                title={t('appItem.filterByCategory', { category: app.category })}
               >
                 {app.category.toLowerCase().replace(/\b\w/g, (l) => l.toUpperCase())}
               </div>
@@ -81,7 +83,7 @@ const AppItem = ({ app, onCategoryClick }) => {
         <div className="card-body">
           <div className="app-info">
             <div className="app-description">
-              {app.appDescription === 'Loading...' ? (
+              {app.appDescription === t('appItem.loading') ? (
                 <Preloader smallscreen={true} />
               ) : (
                 <div className="description-text">{app.appDescription}</div>
@@ -106,7 +108,7 @@ const AppItem = ({ app, onCategoryClick }) => {
                 <div
                   className={`favorite-button ${favorite ? 'fav-active' : ''}`}
                   onClick={handleFavoriteClick}
-                  title={favorite ? 'Remove from favorites' : 'Add to favorites'}
+                  title={favorite ? t('appItem.favorites.remove') : t('appItem.favorites.add')}
                   style={{ cursor: 'pointer' }}
                 >
                   {favorite ? (
@@ -120,7 +122,7 @@ const AppItem = ({ app, onCategoryClick }) => {
                 </div>
                 {app.appVersion && (
                   <div className="version-badge">
-                    <span>v{app.appVersion}</span>
+                    <span>{t('appItem.version', { version: app.appVersion })}</span>
                   </div>
                 )}
               </div>
@@ -128,11 +130,11 @@ const AppItem = ({ app, onCategoryClick }) => {
             <div className="footer-right">
               {app.status === 'Active' ? (
                 <a href={`/app/${app.id}`} rel="noopener" className="btn btn-secondary">
-                  Launch <i className="bi bi-arrow-right ms-2"></i>
+                  {t('appItem.launch')} <i className="bi bi-arrow-right ms-2"></i>
                 </a>
               ) : (
-                <button className="btn btn-primary disabled" title="App is unavailable">
-                  Unavailable <i className="bi bi-lock ms-2"></i>
+                <button className="btn btn-primary disabled" title={t('appItem.unavailableButtonTitle')}>
+                  {t('appItem.unavailable')} <i className="bi bi-lock ms-2"></i>
                 </button>
               )}
             </div>

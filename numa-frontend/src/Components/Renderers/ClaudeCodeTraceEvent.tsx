@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Collapse } from 'react-bootstrap';
+import { useTranslation } from 'react-i18next';
 
 type TraceThinkingBlock = { type: 'thinking'; thinking?: string };
 type TraceTextBlock = { type: 'text'; text?: string };
@@ -26,6 +27,7 @@ interface TraceEventProps {
 }
 
 export const TraceEvent: React.FC<TraceEventProps> = ({ event }) => {
+  const { t } = useTranslation('common');
   const [expanded, setExpanded] = useState(true);
 
   // Render system initialization event
@@ -37,11 +39,11 @@ export const TraceEvent: React.FC<TraceEventProps> = ({ event }) => {
           <div className="trace-event-card system-event">
             <div className="trace-event-header">
               <i className="bi bi-gear-fill me-2"></i>
-              <span className="trace-event-title">Session Initialized</span>
+              <span className="trace-event-title">{t('traceViewer.sessionInitialized')}</span>
             </div>
             <div className="trace-event-details">
-              <div>Model: {event.model}</div>
-              <div>Tools: {event.tools?.join(', ')}</div>
+              <div>{t('traceViewer.modelLabel', { model: event.model || t('traceViewer.unknownModel') })}</div>
+              <div>{t('traceViewer.toolsLabel', { tools: event.tools?.join(', ') || t('traceViewer.none') })}</div>
             </div>
           </div>
         </div>
@@ -64,7 +66,7 @@ export const TraceEvent: React.FC<TraceEventProps> = ({ event }) => {
                 <div key={blockIndex} className="trace-event-card thinking-card" onClick={() => setExpanded(!expanded)}>
                   <div className="trace-event-header">
                     <i className="bi bi-lightbulb me-2"></i>
-                    <span className="trace-event-title">Thinking</span>
+                    <span className="trace-event-title">{t('traceViewer.thinking')}</span>
                     <i className={`bi bi-chevron-${expanded ? 'up' : 'down'} ms-auto`}></i>
                   </div>
                   <Collapse in={expanded}>
@@ -81,8 +83,8 @@ export const TraceEvent: React.FC<TraceEventProps> = ({ event }) => {
               return (
                 <div key={blockIndex} className="trace-event-card text-card">
                   <div className="trace-event-header">
-                    <img src="/numa-logo.svg" alt="Numa" className="numa-logo-icon" />
-                    <span className="trace-event-title">Numa</span>
+                    <img src="/numa-logo.svg" alt={t('traceViewer.numaAlt')} className="numa-logo-icon" />
+                    <span className="trace-event-title">{t('traceViewer.numa')}</span>
                   </div>
                   <div className="trace-event-content">{block.text}</div>
                 </div>
@@ -96,7 +98,7 @@ export const TraceEvent: React.FC<TraceEventProps> = ({ event }) => {
                   <div className="trace-event-header">
                     <i className="bi bi-tools me-2"></i>
                     <span className="trace-event-title">{block.name}</span>
-                    <span className="trace-event-label">Tool Call</span>
+                    <span className="trace-event-label">{t('traceViewer.toolCall')}</span>
                     <i className={`bi bi-chevron-${expanded ? 'up' : 'down'} ms-auto`}></i>
                   </div>
                   <Collapse in={expanded}>
@@ -134,8 +136,8 @@ export const TraceEvent: React.FC<TraceEventProps> = ({ event }) => {
                 >
                   <div className="trace-event-header">
                     <i className={`bi ${isError ? 'bi-x-circle' : 'bi-check-circle'} me-2`}></i>
-                    <span className="trace-event-title">Tool Result</span>
-                    {isError && <span className="trace-event-label error">Error</span>}
+                    <span className="trace-event-title">{t('traceViewer.toolResult')}</span>
+                    {isError && <span className="trace-event-label error">{t('traceViewer.error')}</span>}
                     <i className={`bi bi-chevron-${expanded ? 'up' : 'down'} ms-auto`}></i>
                   </div>
                   <Collapse in={expanded}>

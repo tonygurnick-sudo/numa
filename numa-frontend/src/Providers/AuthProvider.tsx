@@ -20,6 +20,7 @@ import { NumaChatDynamoUtils } from '../utils/DynamoDBUtils';
 import { NumaBedrockUtils } from '../utils/NumaBedrockUtils';
 import Notification from '../Components/Notification';
 import { withPRM } from '../utils/prmUtils';
+import { useTranslation } from 'react-i18next';
 
 const AuthContext = createContext(null);
 
@@ -1534,13 +1535,12 @@ export const AuthProvider = ({ children, initialTokens }) => {
 
   // Token revocation notification component
   const TokenRevocationNotificationComponent = () => {
+    const { t } = useTranslation('auth');
     if (!tokenRevocationState.show) return null;
 
     const isRevocation = tokenRevocationState.reason === 'revocation';
-    const title = isRevocation ? 'Session Ended' : 'Session Expired';
-    const message = isRevocation
-      ? 'Your permissions changed or an administrator ended your session. You will be redirected to the login page.'
-      : 'Your session has expired. You will be redirected to the login page.';
+    const title = isRevocation ? t('session.endedTitle') : t('session.expiredTitle');
+    const message = isRevocation ? t('session.endedMessage') : t('session.expiredMessage');
 
     return (
       <Notification

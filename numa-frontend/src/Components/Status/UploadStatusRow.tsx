@@ -1,4 +1,5 @@
 import { Spinner } from 'react-bootstrap';
+import { useTranslation } from 'react-i18next';
 import PropTypes from 'prop-types';
 
 const UploadStatusRow = ({
@@ -9,6 +10,7 @@ const UploadStatusRow = ({
   showCheckmark = false,
   variant = 'default',
 }) => {
+  const { t } = useTranslation('apps');
   // Determine status class based on state
   const getStatusClass = () => {
     if (showSpinner) return 'status-loading';
@@ -23,7 +25,13 @@ const UploadStatusRow = ({
   return (
     <div className={`status-indicator ${statusClass} ${className}`}>
       {showSpinner && (
-        <Spinner animation="border" size={spinnerSize} role="status" aria-label="Loading" className="status-icon" />
+        <Spinner
+          animation="border"
+          size={spinnerSize}
+          role="status"
+          aria-label={t('uploadStatus.loadingAria')}
+          className="status-icon"
+        />
       )}
       {showCheckmark && <i className="bi bi-check-circle-fill status-icon" />}
       {variant === 'error' && !showSpinner && !showCheckmark && (

@@ -5,6 +5,7 @@ import { fromWebToken } from '@aws-sdk/credential-providers';
 import { useAuth } from '../Providers/AuthProvider';
 import { useKnowledgeBase } from '../Providers/KnowledgeBaseProvider';
 import { useNumaRequest } from '../Providers/NumaRequestContext';
+import { useTranslation } from 'react-i18next';
 import {
   AdminChatSettingsService,
   DEFAULT_GLOBAL_CHAT_SETTINGS,
@@ -23,6 +24,7 @@ import { manifestService } from '../Services/manifestService';
 type Connection = { id: string; name: string; isConnected: boolean; mcpServerUrl?: string };
 
 export default function UserProfilePage() {
+  const { t } = useTranslation('settings');
   const { user } = useAuth();
   const { numaGet, numaPut } = useNumaRequest();
   const { availableKBs, isLoadingKBs, kbError } = useKnowledgeBase();
@@ -118,7 +120,7 @@ export default function UserProfilePage() {
         setDirty(false);
       } catch (e) {
         if (cancelled) return;
-        setError((e as Error).message || 'Failed to load defaults');
+        setError((e as Error).message || t('userProfile.errors.loadDefaults'));
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -252,7 +254,7 @@ export default function UserProfilePage() {
         <Container fluid>
           <Row>
             <Col>
-              <h1 className="page-title">Profile</h1>
+              <h1 className="page-title">{t('userProfile.title')}</h1>
             </Col>
           </Row>
         </Container>
@@ -273,7 +275,7 @@ export default function UserProfilePage() {
               </div>
             ) : !globalAllowUserDefaults ? (
               <Alert variant="secondary" className="mb-3">
-                Your admin has disabled personal defaults. You’ll use company defaults when starting new chats.
+                {t('userProfile.adminDisabled')}
               </Alert>
             ) : null}
 
@@ -282,18 +284,19 @@ export default function UserProfilePage() {
                 eventKey="user-defaults"
                 title={
                   <span>
-                    <i className="bi bi-sliders me-2"></i>User Defaults
+                    <i className="bi bi-sliders me-2"></i>
+                    {t('userProfile.tabs.defaults')}
                   </span>
                 }
               >
                 <Alert variant="secondary" className="mb-3">
-                  These defaults apply when you start a new chat without selecting an agent.
+                  {t('userProfile.defaults.description')}
                 </Alert>
 
                 <Form>
                   <div className="mb-3 p-3 border rounded-3 bg-light">
                     <div className="d-flex align-items-center justify-content-between gap-3">
-                      <div className="fw-semibold">Enable my defaults</div>
+                      <div className="fw-semibold">{t('userProfile.defaults.enableTitle')}</div>
                       <Form.Check
                         type="switch"
                         id="profile-defaults-enabled"
@@ -306,10 +309,7 @@ export default function UserProfilePage() {
                         }}
                       />
                     </div>
-                    <div className="text-muted small">
-                      When off, new chats will use company defaults. Your saved defaults remain available when you turn
-                      this back on.
-                    </div>
+                    <div className="text-muted small">{t('userProfile.defaults.enableHelp')}</div>
                   </div>
 
                   {loading ? (
@@ -319,12 +319,12 @@ export default function UserProfilePage() {
                   ) : (
                     <>
                       <Form.Group className="mb-3">
-                        <Form.Label className="fw-semibold">Default knowledge bases</Form.Label>
+                        <Form.Label className="fw-semibold">{t('userProfile.defaults.kbLabel')}</Form.Label>
                         {kbError && <div className="text-danger small mb-2">{kbError}</div>}
 
                         <ExpandableOverflowBox className="border rounded-3 p-2 bg-white" maxHeight={240}>
                           {isLoadingKBs ? (
-                            <div className="text-muted small">Loading knowledge bases…</div>
+                            <div className="text-muted small">{t('userProfile.defaults.kbLoading')}</div>
                           ) : (
                             kbIdsSorted.map((kbId) => {
                               const kb = availableKBs.find((k) => k.kb_id === kbId);
@@ -353,12 +353,10 @@ export default function UserProfilePage() {
                             })
                           )}
                           {!isLoadingKBs && kbIdsSorted.length === 0 && (
-                            <div className="text-muted small">No knowledge bases available.</div>
+                            <div className="text-muted small">{t('userProfile.defaults.kbEmpty')}</div>
                           )}
                         </ExpandableOverflowBox>
-                        <div className="text-muted small mt-1">
-                          Select one or more knowledge bases to enable by default.
-                        </div>
+                        <div className="text-muted small mt-1">{t('userProfile.defaults.kbHelp')}</div>
                       </Form.Group>
 
                       <div className="mb-3">
@@ -381,9 +379,9 @@ export default function UserProfilePage() {
                               setDirty(true);
                             }}
                           />
-                          <div className="fw-semibold">All Tools</div>
+                          <div className="fw-semibold">{t('userProfile.defaults.allTools.title')}</div>
                         </div>
-                        <div className="text-muted small ms-5">When enabled, all tools are automatically available</div>
+                        <div className="text-muted small ms-5">{t('userProfile.defaults.allTools.help')}</div>
 
                         <div className="mt-3 ms-4">
                           <div className="d-flex align-items-center gap-2">
@@ -398,9 +396,9 @@ export default function UserProfilePage() {
                                 setDirty(true);
                               }}
                             />
-                            <div className="fw-semibold">Web Search</div>
+                            <div className="fw-semibold">{t('userProfile.defaults.webSearch.title')}</div>
                           </div>
-                          <div className="text-muted small ms-5">Search the web for current information</div>
+                          <div className="text-muted small ms-5">{t('userProfile.defaults.webSearch.help')}</div>
                         </div>
 
                         {dataAnalysisAvailable && (
@@ -417,9 +415,9 @@ export default function UserProfilePage() {
                                   setDirty(true);
                                 }}
                               />
-                              <div className="fw-semibold">Data Analysis</div>
+                              <div className="fw-semibold">{t('userProfile.defaults.dataAnalysis.title')}</div>
                             </div>
-                            <div className="text-muted small ms-5">Analyze CSV, Excel, or JSON data files</div>
+                            <div className="text-muted small ms-5">{t('userProfile.defaults.dataAnalysis.help')}</div>
                           </div>
                         )}
 
@@ -436,20 +434,18 @@ export default function UserProfilePage() {
                                 setDirty(true);
                               }}
                             />
-                            <div className="fw-semibold">Agent Creation</div>
+                            <div className="fw-semibold">{t('userProfile.defaults.agentCreation.title')}</div>
                           </div>
-                          <div className="text-muted small ms-5">
-                            Allow me to create saved agents when you explicitly ask.
-                          </div>
+                          <div className="text-muted small ms-5">{t('userProfile.defaults.agentCreation.help')}</div>
                         </div>
                       </div>
 
                       <Form.Group className="mb-3">
-                        <Form.Label className="fw-semibold">Default integrations</Form.Label>
+                        <Form.Label className="fw-semibold">{t('userProfile.defaults.integrations.label')}</Form.Label>
                         {previewMode ? (
-                          <div className="text-muted small">Integrations are not enabled in this environment.</div>
+                          <div className="text-muted small">{t('userProfile.defaults.integrations.disabled')}</div>
                         ) : connectionsLoading ? (
-                          <div className="text-muted small">Loading integrations…</div>
+                          <div className="text-muted small">{t('userProfile.defaults.integrations.loading')}</div>
                         ) : (
                           <>
                             <ExpandableOverflowBox className="border rounded-3 p-2 bg-white" maxHeight={240}>
@@ -480,12 +476,10 @@ export default function UserProfilePage() {
                                   );
                                 })}
                               {availableConnections.length === 0 && (
-                                <div className="text-muted small">No connected integrations available.</div>
+                                <div className="text-muted small">{t('userProfile.defaults.integrations.empty')}</div>
                               )}
                             </ExpandableOverflowBox>
-                            <div className="text-muted small mt-1">
-                              Select one or more integrations to enable by default.
-                            </div>
+                            <div className="text-muted small mt-1">{t('userProfile.defaults.integrations.help')}</div>
                           </>
                         )}
                       </Form.Group>
@@ -515,7 +509,7 @@ export default function UserProfilePage() {
                               setUserDefaultsEnabled(refreshed.userDefaultsEnabled);
                               setDirty(false);
                             } catch (e) {
-                              setError((e as Error).message || 'Failed to save defaults');
+                              setError((e as Error).message || t('userProfile.errors.saveDefaults'));
                             } finally {
                               setSaving(false);
                             }
@@ -524,10 +518,10 @@ export default function UserProfilePage() {
                           {saving ? (
                             <>
                               <Spinner as="span" animation="border" size="sm" className="me-2" />
-                              Saving...
+                              {t('userProfile.actions.saving')}
                             </>
                           ) : (
-                            'Save Changes'
+                            t('userProfile.actions.save')
                           )}
                         </Button>
                         <Button
@@ -546,7 +540,7 @@ export default function UserProfilePage() {
                             setDirty(true);
                           }}
                         >
-                          Reset to company defaults
+                          {t('userProfile.actions.reset')}
                         </Button>
                       </div>
                     </>

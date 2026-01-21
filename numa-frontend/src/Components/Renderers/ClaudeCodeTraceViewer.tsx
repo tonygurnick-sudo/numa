@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Spinner, Button, Collapse, Dropdown } from 'react-bootstrap';
+import { useTranslation } from 'react-i18next';
 import { useAuth } from '../../Providers/AuthProvider';
 import { useNumaApp } from '../../Providers/NumaAppContext';
 import { TraceEvent, TraceEventData, TraceContentBlock } from './ClaudeCodeTraceEvent';
@@ -12,6 +13,7 @@ interface TraceViewerProps {
 }
 
 export const TraceViewer: React.FC<TraceViewerProps> = ({ traceS3Key, bucket, defaultExpanded = false }) => {
+  const { t } = useTranslation('common');
   const { getCredentials } = useAuth();
   const { fetchS3Content } = useNumaApp();
   const [traceContent, setTraceContent] = useState<string | null>(null);
@@ -31,14 +33,18 @@ export const TraceViewer: React.FC<TraceViewerProps> = ({ traceS3Key, bucket, de
       try {
         const credentials = await getCredentials();
         if (!credentials) {
-          throw new Error('Failed to get credentials');
+          throw new Error(t('traceViewer.errors.credentials'));
         }
 
         const content = await fetchS3Content(bucket, traceS3Key, credentials);
         setTraceContent(content);
       } catch (err) {
         console.error('Error loading trace file:', err);
-        setError(`Failed to load trace: ${err instanceof Error ? err.message : 'Unknown error'}`);
+        setError(
+          t('traceViewer.errors.loadFailed', {
+            message: err instanceof Error ? err.message : t('traceViewer.errors.unknown'),
+          }),
+        );
       } finally {
         setLoading(false);
       }
@@ -77,7 +83,7 @@ export const TraceViewer: React.FC<TraceViewerProps> = ({ traceS3Key, bucket, de
       setParsedEvents(events);
     } catch (err) {
       console.error('Error parsing trace content:', err);
-      setError('Failed to parse trace file');
+      setError(t('traceViewer.errors.parseFailed'));
     }
   }, [traceContent]);
 
@@ -85,6 +91,12 @@ export const TraceViewer: React.FC<TraceViewerProps> = ({ traceS3Key, bucket, de
     const eventsHTML = events
       .map((event) => {
         if (event.type === 'system' && event.subtype === 'init') {
+          const modelLabel = t('traceViewer.modelLabel', {
+            model: escapeHtml(event.model || t('traceViewer.notAvailable')),
+          });
+          const toolsLabel = t('traceViewer.toolsLabel', {
+            tools: escapeHtml(event.tools?.join(', ') || t('traceViewer.none')),
+          });
           return `
             <div class="trace-step">
               <span class="step-indicator system"></span>
@@ -92,11 +104,11 @@ export const TraceViewer: React.FC<TraceViewerProps> = ({ traceS3Key, bucket, de
                 <div class="trace-event-card system-event">
                   <div class="trace-event-header">
                     <i class="bi bi-gear-fill"></i>
-                    <span class="trace-event-title">Session Initialized</span>
+                    <span class="trace-event-title">${t('traceViewer.sessionInitialized')}</span>
                   </div>
                   <div class="trace-event-details">
-                    <div>Model: ${event.model || 'N/A'}</div>
-                    <div>Tools: ${event.tools?.join(', ') || 'None'}</div>
+                    <div>${modelLabel}</div>
+                    <div>${toolsLabel}</div>
                   </div>
                 </div>
               </div>
@@ -115,7 +127,7 @@ export const TraceViewer: React.FC<TraceViewerProps> = ({ traceS3Key, bucket, de
                       <div class="trace-event-card thinking-card">
                         <div class="trace-event-header">
                           <i class="bi bi-lightbulb"></i>
-                          <span class="trace-event-title">Thinking</span>
+                          <span class="trace-event-title">${t('traceViewer.thinking')}</span>
                         </div>
                         <div class="trace-event-content">
                           <pre>${escapeHtml(block.thinking || '')}</pre>
@@ -131,7 +143,7 @@ export const TraceViewer: React.FC<TraceViewerProps> = ({ traceS3Key, bucket, de
                     <div class="flex-grow-1">
                       <div class="trace-event-card text-card">
                         <div class="trace-event-header">
-                          <span class="trace-event-title">Numa</span>
+                          <span class="trace-event-title">${t('traceViewer.numa')}</span>
                         </div>
                         <div class="trace-event-content">${escapeHtml(block.text || '')}</div>
                       </div>
@@ -147,7 +159,7 @@ export const TraceViewer: React.FC<TraceViewerProps> = ({ traceS3Key, bucket, de
                         <div class="trace-event-header">
                           <i class="bi bi-tools"></i>
                           <span class="trace-event-title">${escapeHtml(block.name || '')}</span>
-                          <span class="trace-event-label">Tool Call</span>
+                          <span class="trace-event-label">${t('traceViewer.toolCall')}</span>
                         </div>
                         <div class="trace-event-content">
                           <pre>${escapeHtml(JSON.stringify(block.input, null, 2))}</pre>
@@ -176,8 +188,8 @@ export const TraceViewer: React.FC<TraceViewerProps> = ({ traceS3Key, bucket, de
                       <div class="trace-event-card tool-result-card ${isError ? 'error' : 'success'}">
                         <div class="trace-event-header">
                           <i class="bi ${isError ? 'bi-x-circle' : 'bi-check-circle'}"></i>
-                          <span class="trace-event-title">Tool Result</span>
-                          ${isError ? '<span class="trace-event-label error">Error</span>' : ''}
+                          <span class="trace-event-title">${t('traceViewer.toolResult')}</span>
+                          ${isError ? `<span class="trace-event-label error">${t('traceViewer.error')}</span>` : ''}
                         </div>
                         <div class="trace-event-content">
                           <pre>${escapeHtml(contentStr)}</pre>
@@ -200,7 +212,7 @@ export const TraceViewer: React.FC<TraceViewerProps> = ({ traceS3Key, bucket, de
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Execution Trace</title>
+  <title>${t('traceViewer.executionTitle')}</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -271,10 +283,10 @@ export const TraceViewer: React.FC<TraceViewerProps> = ({ traceS3Key, bucket, de
   <div class="container">
     <h1>
       <i class="bi bi-clock-history"></i>
-      Execution Trace
+      ${t('traceViewer.executionTitle')}
     </h1>
     <div class="meta">
-      Showing ${events.length} events (filtered from ${totalLines} total lines)
+      ${t('traceViewer.showingEvents', { count: events.length, total: totalLines })}
     </div>
     <div class="trace-timeline">
       ${eventsHTML}
@@ -296,7 +308,7 @@ export const TraceViewer: React.FC<TraceViewerProps> = ({ traceS3Key, bucket, de
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = 'trace.jsonl';
+    a.download = t('traceViewer.download.rawFilename');
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -309,7 +321,7 @@ export const TraceViewer: React.FC<TraceViewerProps> = ({ traceS3Key, bucket, de
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = 'trace.html';
+    a.download = t('traceViewer.download.formattedFilename');
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -319,23 +331,23 @@ export const TraceViewer: React.FC<TraceViewerProps> = ({ traceS3Key, bucket, de
       <div className="d-flex align-items-center justify-content-between mb-3">
         <h4 className="mb-0">
           <i className="bi bi-clock-history me-2"></i>
-          Execution Trace
+          {t('traceViewer.executionTitle')}
         </h4>
         <div className="d-flex gap-2">
           {traceContent && (
             <Dropdown>
               <Dropdown.Toggle variant="outline-secondary" size="sm" id="trace-download-dropdown">
                 <i className="bi bi-download me-1"></i>
-                Download
+                {t('traceViewer.download.title')}
               </Dropdown.Toggle>
               <Dropdown.Menu>
                 <Dropdown.Item onClick={handleDownloadRaw}>
                   <i className="bi bi-file-earmark-code me-2"></i>
-                  Raw (JSONL)
+                  {t('traceViewer.download.raw')}
                 </Dropdown.Item>
                 <Dropdown.Item onClick={handleDownloadFormatted}>
                   <i className="bi bi-file-earmark-richtext me-2"></i>
-                  Formatted (HTML)
+                  {t('traceViewer.download.formatted')}
                 </Dropdown.Item>
               </Dropdown.Menu>
             </Dropdown>
@@ -350,12 +362,12 @@ export const TraceViewer: React.FC<TraceViewerProps> = ({ traceS3Key, bucket, de
             {expanded ? (
               <>
                 <i className="bi bi-chevron-up me-1"></i>
-                Hide Trace
+                {t('traceViewer.toggle.hide')}
               </>
             ) : (
               <>
                 <i className="bi bi-chevron-down me-1"></i>
-                Show Trace
+                {t('traceViewer.toggle.show')}
               </>
             )}
           </Button>
@@ -367,7 +379,7 @@ export const TraceViewer: React.FC<TraceViewerProps> = ({ traceS3Key, bucket, de
           {loading && (
             <div className="text-center py-4">
               <Spinner animation="border" size="sm" />
-              <span className="ms-2">Loading execution trace...</span>
+              <span className="ms-2">{t('traceViewer.loading')}</span>
             </div>
           )}
 
@@ -381,7 +393,7 @@ export const TraceViewer: React.FC<TraceViewerProps> = ({ traceS3Key, bucket, de
           {!loading && !error && parsedEvents.length === 0 && traceContent && (
             <div className="alert alert-info">
               <i className="bi bi-info-circle me-2"></i>
-              No trace events found
+              {t('traceViewer.empty')}
             </div>
           )}
 
@@ -390,8 +402,10 @@ export const TraceViewer: React.FC<TraceViewerProps> = ({ traceS3Key, bucket, de
               <div className="mb-3 d-flex justify-content-between align-items-center">
                 <span className="text-muted small">
                   <i className="bi bi-info-circle me-1"></i>
-                  Showing {parsedEvents.length} events (filtered from{' '}
-                  {traceContent?.split('\n').filter((l) => l.trim()).length || 0} total lines)
+                  {t('traceViewer.showingEvents', {
+                    count: parsedEvents.length,
+                    total: traceContent?.split('\n').filter((l) => l.trim()).length || 0,
+                  })}
                 </span>
               </div>
               <div className="trace-events-container">

@@ -2,9 +2,11 @@ import { useState, useEffect } from 'react';
 import { Form, Row, Col, Card } from 'react-bootstrap';
 import { useNumaApp } from '../Providers/NumaAppContext';
 import { Preloader } from '../Components/Preloader';
+import { useTranslation } from 'react-i18next';
 
 function DropdownTableModule({ task, onComplete, onNotComplete, onChange, hasRun }) {
   const { appRunning, taskInputValues } = useNumaApp();
+  const { t } = useTranslation('common');
   const [formValues, setFormValues] = useState({});
   const [validationStatus, setValidationStatus] = useState({});
   const fields = task.params?.fields || [];
@@ -96,7 +98,7 @@ function DropdownTableModule({ task, onComplete, onNotComplete, onChange, hasRun
             disabled={appRunning || hasRun}
           >
             <option value="" disabled={field.required}>
-              Select an option...
+              {t('inputs.selectOption')}
             </option>
             {field.options?.map((option, idx) => (
               <option key={`${field.id}-option-${idx}`} value={option}>
@@ -112,7 +114,7 @@ function DropdownTableModule({ task, onComplete, onNotComplete, onChange, hasRun
             type="number"
             value={formValues[field.id] || ''}
             onChange={(e) => handleFieldChange(field.id, e.target.value, field)}
-            placeholder={field.placeholder || 'Enter a value'}
+            placeholder={field.placeholder || t('inputs.enterValue')}
             isInvalid={isInvalid}
             disabled={appRunning || hasRun}
             min={field.validation?.min}
@@ -127,7 +129,7 @@ function DropdownTableModule({ task, onComplete, onNotComplete, onChange, hasRun
             type="text"
             value={formValues[field.id] || ''}
             onChange={(e) => handleFieldChange(field.id, e.target.value, field)}
-            placeholder={field.placeholder || 'Enter text'}
+            placeholder={field.placeholder || t('inputs.enterText')}
             isInvalid={isInvalid}
             disabled={appRunning || hasRun}
           />
@@ -155,7 +157,7 @@ function DropdownTableModule({ task, onComplete, onNotComplete, onChange, hasRun
                     for different validation failure types (out-of-range, invalid format, etc.)
                     instead of the generic "This field is required" message */}
                 {validationStatus[field.id] === false && (
-                  <Form.Text className="text-danger">This field is required</Form.Text>
+                  <Form.Text className="text-danger">{t('validation.required')}</Form.Text>
                 )}
               </Col>
             </Form.Group>

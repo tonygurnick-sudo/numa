@@ -1,7 +1,9 @@
-import { StrictMode } from 'react';
+import { StrictMode, Suspense } from 'react';
 import { createRoot } from 'react-dom/client';
+import { I18nextProvider } from 'react-i18next';
 import App from './App.jsx';
 import installOpenTelemetry from './otel-config.jsx';
+import i18n from './i18n';
 
 import { fetchConfigAddtoSession } from './Components/ConfigSetup';
 import { NicetyProvider } from './Providers/NicetyProvider';
@@ -20,11 +22,15 @@ if (!window.location.hostname.includes('localhost')) {
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
-    <ToastProvider>
-      <NicetyProvider>
-        <App />
-      </NicetyProvider>
-    </ToastProvider>
+    <I18nextProvider i18n={i18n}>
+      <Suspense fallback={<div>{i18n.t('common:loading.generic')}</div>}>
+        <ToastProvider>
+          <NicetyProvider>
+            <App />
+          </NicetyProvider>
+        </ToastProvider>
+      </Suspense>
+    </I18nextProvider>
   </StrictMode>,
 );
 
@@ -37,7 +43,7 @@ try {
     () => {
       try {
         // Non-blocking, minimal UX: ask user to reload. For chat-heavy pages, change to show a banner.
-        if (confirm('A new version of Numa is available. Reload to update?')) {
+        if (confirm(i18n.t('common:version.reloadPrompt'))) {
           window.location.reload();
         }
       } catch {

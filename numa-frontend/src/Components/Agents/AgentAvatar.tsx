@@ -1,4 +1,5 @@
 import { CSSProperties, useEffect, useMemo, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { GetObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import type { AgentSummary } from '../../types/agents';
@@ -37,6 +38,7 @@ export const AgentAvatar = ({
   alt,
   fit = 'cover',
 }: AgentAvatarProps) => {
+  const { t } = useTranslation('agents');
   const { getCredentials } = useAuth();
 
   const effectiveIconImage = useMemo<IconImage | undefined>(() => {
@@ -132,12 +134,13 @@ export const AgentAvatar = ({
     () => ({ width: size, height: size, flexShrink: 0, ...style }),
     [size, style],
   );
+  const resolvedAlt = alt || agent?.title || t('avatar.defaultAlt');
 
   if (effectiveIconImage && imageUrl && !error) {
     return (
       <img
         src={imageUrl}
-        alt={alt || agent?.title || 'Agent'}
+        alt={resolvedAlt}
         className={className}
         loading="lazy"
         decoding="async"
@@ -160,7 +163,7 @@ export const AgentAvatar = ({
         ...dimensionStyle,
         borderRadius: rounded ? 8 : 0,
       }}
-      aria-label={alt || agent?.title || 'Agent'}
+      aria-label={resolvedAlt}
     >
       <i
         className={effectiveIconClass}

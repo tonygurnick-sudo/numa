@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { MANUAL_VERSION_LABEL } from '../utils/versionLabel';
 
 type VersionInfo = {
@@ -13,6 +14,7 @@ type VersionInfo = {
 export const VersionDisplay = () => {
   const [versionInfo, setVersionInfo] = useState<VersionInfo | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const { t } = useTranslation('common');
 
   useEffect(() => {
     let cancelled = false;
@@ -42,22 +44,22 @@ export const VersionDisplay = () => {
     // If we have a manual version label, show it even if version.json fails
     if (MANUAL_VERSION_LABEL) {
       return (
-        <span className="version" title={`Version info unavailable: ${error}`}>
+        <span className="version" title={t('version.infoUnavailable', { error })}>
           {MANUAL_VERSION_LABEL}
         </span>
       );
     }
     return (
-      <span className="version" title={`Failed to load version: ${error}`}>
-        version unavailable
+      <span className="version" title={t('version.loadFailed', { error })}>
+        {t('version.unavailable')}
       </span>
     );
   }
 
   if (!versionInfo) {
     return (
-      <span className="version" title="Loading version information">
-        loading...
+      <span className="version" title={t('version.loadingTitle')}>
+        {t('version.loadingLabel')}
       </span>
     );
   }
@@ -66,10 +68,10 @@ export const VersionDisplay = () => {
   const shortHash = versionInfo.gitHash?.slice(0, 7) || hashFromVersion.slice(0, 7) || versionInfo.version;
   const display = MANUAL_VERSION_LABEL || versionInfo.displayVersion || shortHash;
   const titleParts = [
-    versionInfo.gitBranch ? `Branch: ${versionInfo.gitBranch}` : null,
-    versionInfo.gitHash ? `Commit: ${versionInfo.gitHash}` : null,
-    versionInfo.deployTimeHuman ? `Deployed: ${versionInfo.deployTimeHuman}` : null,
-    versionInfo.version ? `Version: ${versionInfo.version}` : null,
+    versionInfo.gitBranch ? t('version.details.branch', { value: versionInfo.gitBranch }) : null,
+    versionInfo.gitHash ? t('version.details.commit', { value: versionInfo.gitHash }) : null,
+    versionInfo.deployTimeHuman ? t('version.details.deployed', { value: versionInfo.deployTimeHuman }) : null,
+    versionInfo.version ? t('version.details.version', { value: versionInfo.version }) : null,
   ].filter(Boolean);
 
   return (

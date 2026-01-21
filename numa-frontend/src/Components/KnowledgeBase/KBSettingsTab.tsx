@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Card, Alert, Button, Badge, Form, Modal } from 'react-bootstrap';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { useKnowledgeBase } from '../../Providers/KnowledgeBaseProvider';
 import { useAuth } from '../../Providers/AuthProvider';
 import { knowledgeBaseService } from '../../Services/knowledgeBaseService';
@@ -43,6 +44,7 @@ function getNextSyncTime(): Date {
  * Shows KB status, data sources, and permissions
  */
 export function KBSettingsTab({ kbId, kbType, role: _role = 'VIEWER' }: KBSettingsTabProps): React.JSX.Element {
+  const { t, i18n } = useTranslation('knowledgeBase');
   // Use KB state from context
   const { kbState, isLoading, error, refreshKBState } = useKBState();
   const { refreshKBs } = useKnowledgeBase();
@@ -173,7 +175,7 @@ export function KBSettingsTab({ kbId, kbType, role: _role = 'VIEWER' }: KBSettin
       setPermSuccess(true);
       setTimeout(() => setPermSuccess(false), 3000);
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Failed to update permissions';
+      const msg = err instanceof Error ? err.message : t('settings.permissions.updateFailed');
       setPermError(msg);
     } finally {
       setPermSaving(false);
@@ -189,7 +191,7 @@ export function KBSettingsTab({ kbId, kbType, role: _role = 'VIEWER' }: KBSettin
     <div className="kb-settings-tab">
       {error && (
         <Alert variant="warning" className="mb-4">
-          <strong>Error:</strong> {error}
+          <strong>{t('settings.errorLabel')}</strong> {error}
         </Alert>
       )}
 
@@ -198,19 +200,19 @@ export function KBSettingsTab({ kbId, kbType, role: _role = 'VIEWER' }: KBSettin
         <Card.Header className="d-flex justify-content-between align-items-center">
           <Card.Title className="mb-0">
             <i className="bi bi-activity me-2"></i>
-            Knowledge Base Status
+            {t('settings.status.title')}
           </Card.Title>
           <Button variant="primary" size="sm" onClick={() => refreshKBState({ force: true })} disabled={isLoading}>
             {isLoading && <span className="spinner-border spinner-border-sm me-1" />}
             <i className="bi bi-arrow-clockwise me-1"></i>
-            Refresh
+            {t('settings.status.refresh')}
           </Button>
         </Card.Header>
         <Card.Body>
           {isLoading ? (
             <div className="text-center p-4">
               <div className="spinner-border text-primary">
-                <span className="visually-hidden">Loading...</span>
+                <span className="visually-hidden">{t('settings.status.loading')}</span>
               </div>
             </div>
           ) : (
@@ -220,48 +222,54 @@ export function KBSettingsTab({ kbId, kbType, role: _role = 'VIEWER' }: KBSettin
                 <table className="table table-borderless mb-0">
                   <tbody>
                     <tr>
-                      <td className="ps-0 fw-semibold">Status</td>
+                      <td className="ps-0 fw-semibold">{t('settings.status.fields.status')}</td>
                       <td className="pe-0 text-end">
                         {syncStatus === 'ACTIVE' || syncStatus === 'AVAILABLE' ? (
                           <Badge bg="success">{syncStatus}</Badge>
                         ) : (
-                          <Badge bg="secondary">{syncStatus || 'Unknown'}</Badge>
+                          <Badge bg="secondary">{syncStatus || t('settings.status.unknown')}</Badge>
                         )}
                       </td>
                     </tr>
                     <tr>
-                      <td className="ps-0 fw-semibold">Last synced</td>
+                      <td className="ps-0 fw-semibold">{t('settings.status.fields.lastSynced')}</td>
                       <td className="pe-0 text-end text-muted">
                         {lastSuccessfulSync
-                          ? new Date(lastSuccessfulSync).toLocaleString('en-NZ')
-                          : 'No successful sync yet'}
+                          ? new Date(lastSuccessfulSync).toLocaleString(i18n.language)
+                          : t('settings.status.noSync')}
                       </td>
                     </tr>
                     <tr>
-                      <td className="ps-0 fw-semibold">Next scheduled index</td>
-                      <td className="pe-0 text-end text-muted">{getNextSyncTime().toLocaleTimeString()}</td>
+                      <td className="ps-0 fw-semibold">{t('settings.status.fields.nextIndex')}</td>
+                      <td className="pe-0 text-end text-muted">
+                        {getNextSyncTime().toLocaleTimeString(i18n.language)}
+                      </td>
                     </tr>
                     <tr>
-                      <td className="ps-0 fw-semibold">Total Documents</td>
+                      <td className="ps-0 fw-semibold">{t('settings.status.fields.totalDocuments')}</td>
                       <td className="pe-0 text-end">
                         {kbState?.documents ? (
                           <div className="d-flex align-items-center justify-content-end gap-2">
                             <span>{kbState.documents.length}</span>
                             {kbState.failedDocuments && kbState.failedDocuments.length > 0 && (
                               <Badge bg="warning" className="small">
-                                {kbState.failedDocuments.length} failed
+                                {t('settings.status.failedCount', { count: kbState.failedDocuments.length })}
                               </Badge>
                             )}
                           </div>
                         ) : (
-                          <span className="text-muted">—</span>
+                          <span className="text-muted">{t('settings.emptyValue')}</span>
                         )}
                       </td>
                     </tr>
                     <tr>
-                      <td className="ps-0 fw-semibold">Data Sources</td>
+                      <td className="ps-0 fw-semibold">{t('settings.status.fields.dataSources')}</td>
                       <td className="pe-0 text-end">
-                        {kbState?.dataSources ? kbState.dataSources.length : <span className="text-muted">—</span>}
+                        {kbState?.dataSources ? (
+                          kbState.dataSources.length
+                        ) : (
+                          <span className="text-muted">{t('settings.emptyValue')}</span>
+                        )}
                       </td>
                     </tr>
                   </tbody>
@@ -271,7 +279,7 @@ export function KBSettingsTab({ kbId, kbType, role: _role = 'VIEWER' }: KBSettin
               {syncJobStatus === 'SYNCING' && (
                 <Alert variant="warning" className="d-flex align-items-center mt-3 mb-0">
                   <span className="spinner-border spinner-border-sm me-2" />
-                  <strong>Indexing in progress...</strong>
+                  <strong>{t('settings.status.syncing')}</strong>
                 </Alert>
               )}
             </>
@@ -285,7 +293,7 @@ export function KBSettingsTab({ kbId, kbType, role: _role = 'VIEWER' }: KBSettin
           <Card.Header>
             <Card.Title className="mb-0">
               <i className="bi bi-graph-up me-2"></i>
-              Sync Metrics
+              {t('settings.syncMetrics.title')}
             </Card.Title>
           </Card.Header>
           <Card.Body>
@@ -302,7 +310,7 @@ export function KBSettingsTab({ kbId, kbType, role: _role = 'VIEWER' }: KBSettin
                       </td>
                       <td className="pe-0 text-end">
                         <span className={value === 0 ? 'text-muted' : ''}>
-                          {typeof value === 'number' ? value.toLocaleString() : value}
+                          {typeof value === 'number' ? value.toLocaleString(i18n.language) : value}
                         </span>
                       </td>
                     </tr>
@@ -319,12 +327,12 @@ export function KBSettingsTab({ kbId, kbType, role: _role = 'VIEWER' }: KBSettin
         <Card.Header className="d-flex justify-content-between align-items-center">
           <Card.Title className="mb-0">
             <i className="bi bi-people me-2"></i>
-            Permissions
+            {t('settings.permissions.title')}
           </Card.Title>
           {canEditPermissions && !editingPerms && (
             <Button variant="primary" size="sm" onClick={startEditPermissions}>
               <i className="bi bi-pencil-square me-1"></i>
-              Edit
+              {t('settings.permissions.edit')}
             </Button>
           )}
         </Card.Header>
@@ -332,37 +340,37 @@ export function KBSettingsTab({ kbId, kbType, role: _role = 'VIEWER' }: KBSettin
           {kbType === 'company' ? (
             // Company KB: Show group roles
             <div>
-              <p className="text-muted mb-3">Access to the company knowledge base is controlled by group roles.</p>
+              <p className="text-muted mb-3">{t('settings.permissions.companyNote')}</p>
               <div className="table-responsive">
                 <table className="table table-borderless mb-0">
                   <tbody>
                     <tr>
-                      <td className="ps-0 fw-semibold">View Company Data</td>
+                      <td className="ps-0 fw-semibold">{t('settings.permissions.company.view')}</td>
                       <td className="pe-0 text-end">
                         {user?.features?.includes('useCompanyData') ? (
-                          <Badge bg="success">Enabled</Badge>
+                          <Badge bg="success">{t('settings.permissions.company.enabled')}</Badge>
                         ) : (
-                          <Badge bg="secondary">Disabled</Badge>
+                          <Badge bg="secondary">{t('settings.permissions.company.disabled')}</Badge>
                         )}
                       </td>
                     </tr>
                     <tr>
-                      <td className="ps-0 fw-semibold">Add to Company Data</td>
+                      <td className="ps-0 fw-semibold">{t('settings.permissions.company.add')}</td>
                       <td className="pe-0 text-end">
                         {user?.features?.includes('addToCompanyData') ? (
-                          <Badge bg="success">Enabled</Badge>
+                          <Badge bg="success">{t('settings.permissions.company.enabled')}</Badge>
                         ) : (
-                          <Badge bg="secondary">Disabled</Badge>
+                          <Badge bg="secondary">{t('settings.permissions.company.disabled')}</Badge>
                         )}
                       </td>
                     </tr>
                     <tr>
-                      <td className="ps-0 fw-semibold">Delete from Company Data</td>
+                      <td className="ps-0 fw-semibold">{t('settings.permissions.company.delete')}</td>
                       <td className="pe-0 text-end">
                         {user?.features?.includes('deleteFromCompanyData') ? (
-                          <Badge bg="success">Enabled</Badge>
+                          <Badge bg="success">{t('settings.permissions.company.enabled')}</Badge>
                         ) : (
-                          <Badge bg="secondary">Disabled</Badge>
+                          <Badge bg="secondary">{t('settings.permissions.company.disabled')}</Badge>
                         )}
                       </td>
                     </tr>
@@ -378,7 +386,7 @@ export function KBSettingsTab({ kbId, kbType, role: _role = 'VIEWER' }: KBSettin
                   {permSuccess && (
                     <Alert variant="success" className="mb-3">
                       <i className="bi bi-check-circle me-2"></i>
-                      Permissions updated successfully.
+                      {t('settings.permissions.updated')}
                     </Alert>
                   )}
 
@@ -386,18 +394,18 @@ export function KBSettingsTab({ kbId, kbType, role: _role = 'VIEWER' }: KBSettin
                     <div>
                       {permError && (
                         <Alert variant="danger" className="mb-3">
-                          <strong>Error:</strong> {permError}
+                          <strong>{t('settings.errorLabel')}</strong> {permError}
                         </Alert>
                       )}
 
                       <Form>
                         <Form.Group className="mb-3" controlId="kbVisibility">
-                          <Form.Label>Visibility</Form.Label>
+                          <Form.Label>{t('settings.permissions.visibility.label')}</Form.Label>
                           <div className="d-flex gap-3">
                             <Form.Check
                               type="radio"
                               id="kb-vis-personal"
-                              label="Personal (only you)"
+                              label={t('settings.permissions.visibility.personal')}
                               checked={visibility === 'personal'}
                               onChange={() => setVisibility('personal')}
                               disabled={permSaving}
@@ -405,7 +413,7 @@ export function KBSettingsTab({ kbId, kbType, role: _role = 'VIEWER' }: KBSettin
                             <Form.Check
                               type="radio"
                               id="kb-vis-shared"
-                              label="Shared (specific users)"
+                              label={t('settings.permissions.visibility.shared')}
                               checked={visibility === 'shared'}
                               onChange={() => setVisibility('shared')}
                               disabled={permSaving}
@@ -413,67 +421,68 @@ export function KBSettingsTab({ kbId, kbType, role: _role = 'VIEWER' }: KBSettin
                             <Form.Check
                               type="radio"
                               id="kb-vis-public"
-                              label="Public (everyone can view)"
+                              label={t('settings.permissions.visibility.public')}
                               checked={visibility === 'public'}
                               onChange={() => setVisibility('public')}
                               disabled={permSaving}
                             />
                           </div>
-                          <Form.Text className="text-muted">
-                            Public allows all users in your organization to view this knowledge base. Editors still must
-                            be explicitly granted.
-                          </Form.Text>
+                          <Form.Text className="text-muted">{t('settings.permissions.visibility.help')}</Form.Text>
                         </Form.Group>
 
                         {visibility === 'shared' && (
                           <ChipsInput
                             id="kbViewersEdit"
-                            label="Viewers (user IDs or emails)"
+                            label={t('settings.permissions.viewers.label')}
                             chips={viewerChips}
                             onChange={setViewerChips}
-                            placeholder="Type an email or ID then press Add/Enter"
-                            helperText="Editors automatically gain viewer access."
+                            placeholder={t('settings.permissions.viewers.placeholder')}
+                            helperText={t('settings.permissions.viewers.helper')}
                             disabled={permSaving}
                           />
                         )}
 
                         <ChipsInput
                           id="kbEditorsEdit"
-                          label="Editors (user IDs or emails)"
+                          label={t('settings.permissions.editors.label')}
                           chips={editorChips}
                           onChange={setEditorChips}
-                          placeholder="Type an email or ID then press Add/Enter"
-                          helperText="Editors can upload files and modify this KB; they automatically gain viewer permissions."
+                          placeholder={t('settings.permissions.editors.placeholder')}
+                          helperText={t('settings.permissions.editors.helper')}
                           disabled={permSaving}
                         />
 
                         {visibility === 'shared' && findInvalidEmailLikes(viewerChips).length > 0 && (
                           <div className="mt-2 small text-warning" aria-live="polite">
                             <i className="bi bi-exclamation-circle me-1" />
-                            These viewers look unusual as emails: {findInvalidEmailLikes(viewerChips).join(', ')}
+                            {t('settings.permissions.viewers.invalid', {
+                              items: findInvalidEmailLikes(viewerChips).join(', '),
+                            })}
                           </div>
                         )}
                         {findInvalidEmailLikes(editorChips).length > 0 && (
                           <div className="mt-2 small text-warning" aria-live="polite">
                             <i className="bi bi-exclamation-circle me-1" />
-                            These editors look unusual as emails: {findInvalidEmailLikes(editorChips).join(', ')}
+                            {t('settings.permissions.editors.invalid', {
+                              items: findInvalidEmailLikes(editorChips).join(', '),
+                            })}
                           </div>
                         )}
 
                         <div className="d-flex gap-2">
                           <Button variant="secondary" onClick={cancelEditPermissions} disabled={permSaving}>
-                            Cancel
+                            {t('actions.cancel')}
                           </Button>
                           <Button variant="primary" onClick={savePermissions} disabled={permSaving}>
                             {permSaving ? (
                               <>
                                 <span className="spinner-border spinner-border-sm me-2" />
-                                Saving…
+                                {t('actions.saving')}
                               </>
                             ) : (
                               <>
                                 <i className="bi bi-save me-2"></i>
-                                Save Changes
+                                {t('actions.saveChanges')}
                               </>
                             )}
                           </Button>
@@ -483,17 +492,20 @@ export function KBSettingsTab({ kbId, kbType, role: _role = 'VIEWER' }: KBSettin
                   ) : kbDetails.viewers.includes('*') ? (
                     <Alert variant="info">
                       <i className="bi bi-globe me-2"></i>
-                      This is a <strong>public</strong> knowledge base. Anyone in your organization can view it.
+                      {t('settings.permissions.publicPrefix')} <strong>{t('settings.permissions.publicLabel')}</strong>{' '}
+                      {t('settings.permissions.publicSuffix')}
                     </Alert>
                   ) : kbDetails.viewers.length === 1 && kbDetails.editors.length === 1 ? (
                     <Alert variant="info">
                       <i className="bi bi-lock me-2"></i>
-                      This is a <strong>personal</strong> knowledge base. Only you have access.
+                      {t('settings.permissions.personalPrefix')}{' '}
+                      <strong>{t('settings.permissions.personalLabel')}</strong>{' '}
+                      {t('settings.permissions.personalSuffix')}
                     </Alert>
                   ) : (
                     <>
                       <div className="mb-3">
-                        <strong>Editors ({kbDetails.editors.length}):</strong>
+                        <strong>{t('settings.permissions.editors.title', { count: kbDetails.editors.length })}</strong>
                         <ul className="mt-2">
                           {kbDetails.editor_emails && kbDetails.editor_emails.length > 0
                             ? kbDetails.editor_emails.map((email, idx) => <li key={idx}>{email}</li>)
@@ -501,7 +513,7 @@ export function KBSettingsTab({ kbId, kbType, role: _role = 'VIEWER' }: KBSettin
                         </ul>
                       </div>
                       <div>
-                        <strong>Viewers ({kbDetails.viewers.length}):</strong>
+                        <strong>{t('settings.permissions.viewers.title', { count: kbDetails.viewers.length })}</strong>
                         <ul className="mt-2">
                           {kbDetails.viewer_emails && kbDetails.viewer_emails.length > 0
                             ? kbDetails.viewer_emails.map((email, idx) => <li key={idx}>{email}</li>)
@@ -512,7 +524,7 @@ export function KBSettingsTab({ kbId, kbType, role: _role = 'VIEWER' }: KBSettin
                   )}
                 </>
               ) : (
-                <p className="text-muted">Loading permissions...</p>
+                <p className="text-muted">{t('settings.permissions.loading')}</p>
               )}
             </div>
           )}
@@ -525,13 +537,12 @@ export function KBSettingsTab({ kbId, kbType, role: _role = 'VIEWER' }: KBSettin
           <Card.Header className="d-flex justify-content-between align-items-center bg-danger text-white">
             <Card.Title className="mb-0">
               <i className="bi bi-trash3 me-2"></i>
-              Delete Knowledge Base
+              {t('settings.delete.title')}
             </Card.Title>
           </Card.Header>
           <Card.Body>
             <Alert variant="danger">
-              <strong>Warning:</strong> This action permanently deletes this knowledge base configuration and its
-              membership settings. Files previously uploaded remain in S3 but will no longer be associated with this KB.
+              <strong>{t('settings.delete.warningLabel')}</strong> {t('settings.delete.warningBody')}
             </Alert>
             <Button
               variant="outline-danger"
@@ -539,7 +550,7 @@ export function KBSettingsTab({ kbId, kbType, role: _role = 'VIEWER' }: KBSettin
               disabled={isLoading || !kbDetails}
             >
               <i className="bi bi-exclamation-triangle me-2"></i>
-              Delete this Knowledge Base
+              {t('settings.delete.action')}
             </Button>
           </Card.Body>
         </Card>
@@ -548,30 +559,31 @@ export function KBSettingsTab({ kbId, kbType, role: _role = 'VIEWER' }: KBSettin
       {/* Delete Confirmation Modal */}
       <Modal show={showDeleteModal} onHide={() => setShowDeleteModal(false)} centered>
         <Modal.Header closeButton={!deleteSaving}>
-          <Modal.Title>Confirm Delete</Modal.Title>
+          <Modal.Title>{t('settings.delete.confirmTitle')}</Modal.Title>
         </Modal.Header>
         <Modal.Body>
           {deleteError && (
             <Alert variant="danger" className="mb-3">
-              <strong>Error:</strong> {deleteError}
+              <strong>{t('settings.errorLabel')}</strong> {deleteError}
             </Alert>
           )}
           <p>
-            Deleting <strong>{kbDetails?.kb_name || 'this knowledge base'}</strong> cannot be undone. To confirm, type
-            the knowledge base name below:
+            {t('settings.delete.confirmPrefix')}{' '}
+            <strong>{kbDetails?.kb_name || t('settings.delete.fallbackName')}</strong>{' '}
+            {t('settings.delete.confirmSuffix')}
           </p>
           <Form.Control
             type="text"
             value={deleteInput}
             onChange={(e: React.ChangeEvent<HTMLInputElement>) => setDeleteInput(e.target.value)}
-            placeholder={kbDetails?.kb_name || 'Knowledge base name'}
+            placeholder={kbDetails?.kb_name || t('settings.delete.placeholder')}
             disabled={deleteSaving}
             autoFocus
           />
         </Modal.Body>
         <Modal.Footer>
           <Button variant="secondary" onClick={() => setShowDeleteModal(false)} disabled={deleteSaving}>
-            Cancel
+            {t('actions.cancel')}
           </Button>
           <Button
             variant="danger"
@@ -588,7 +600,7 @@ export function KBSettingsTab({ kbId, kbType, role: _role = 'VIEWER' }: KBSettin
                 setShowDeleteModal(false);
                 navigate('/user-knowledge-bases');
               } catch (err: unknown) {
-                const msg = err instanceof Error ? err.message : 'Failed to delete knowledge base';
+                const msg = err instanceof Error ? err.message : t('settings.delete.failed');
                 setDeleteError(msg);
               } finally {
                 setDeleteSaving(false);
@@ -598,12 +610,12 @@ export function KBSettingsTab({ kbId, kbType, role: _role = 'VIEWER' }: KBSettin
             {deleteSaving ? (
               <>
                 <span className="spinner-border spinner-border-sm me-2" />
-                Deleting…
+                {t('settings.delete.deleting')}
               </>
             ) : (
               <>
                 <i className="bi bi-trash3 me-2"></i>
-                Delete
+                {t('settings.delete.confirm')}
               </>
             )}
           </Button>

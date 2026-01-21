@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Form, Button, Card, Table, InputGroup, Collapse } from 'react-bootstrap';
+import { useTranslation } from 'react-i18next';
 import { useWebCrawler, parseUrlsFromText } from '../utils/webCrawler';
 
 interface UrlEntry {
@@ -19,6 +20,7 @@ interface WebCrawlerProps {
 }
 
 export const WebCrawler = ({ onCrawlerStarted, kb_id = 'company' }: WebCrawlerProps) => {
+  const { t } = useTranslation('knowledgeBase');
   const [urlInput, setUrlInput] = useState<string>('');
   const [urlEntries, setUrlEntries] = useState<UrlEntry[]>([]);
   const [crawlError, setCrawlError] = useState<string | null>(null);
@@ -58,10 +60,10 @@ export const WebCrawler = ({ onCrawlerStarted, kb_id = 'company' }: WebCrawlerPr
 
         // Show warning for duplicates if there were any
         if (duplicateUrls.length > 0) {
-          setUrlError(`Duplicate URL${duplicateUrls.length > 1 ? 's' : ''} skipped`);
+          setUrlError(t('webCrawlerComponent.errors.duplicateSkipped', { count: duplicateUrls.length }));
         }
       } else {
-        setUrlError('URL already added');
+        setUrlError(t('webCrawlerComponent.errors.alreadyAdded'));
         setUrlInput('');
       }
     }
@@ -94,14 +96,14 @@ export const WebCrawler = ({ onCrawlerStarted, kb_id = 'company' }: WebCrawlerPr
 
     try {
       if (urlEntries.length === 0) {
-        throw new Error('Please add at least one valid URL');
+        throw new Error(t('webCrawlerComponent.errors.missingUrl'));
       }
 
       const urls = urlEntries.map((entry) => entry.url);
       const invalidDepths = urlEntries.filter((entry) => entry.depth < 1 || entry.depth > 5);
 
       if (invalidDepths.length > 0) {
-        throw new Error('Crawl depth must be between 1 and 5 for all URLs');
+        throw new Error(t('webCrawlerComponent.errors.invalidDepth'));
       }
 
       const urlDepthMap = Object.fromEntries(urlEntries.map((entry) => [entry.url, entry.depth]));
@@ -113,7 +115,7 @@ export const WebCrawler = ({ onCrawlerStarted, kb_id = 'company' }: WebCrawlerPr
 
       if (result.success) {
         setCrawlSuccess({
-          message: 'Web crawler started successfully',
+          message: t('webCrawlerComponent.results.successMessage'),
           executionName: result.executionName,
         });
         setUrlEntries([]);
@@ -122,11 +124,11 @@ export const WebCrawler = ({ onCrawlerStarted, kb_id = 'company' }: WebCrawlerPr
           onCrawlerStarted(result);
         }
       } else {
-        setCrawlError(result.error || 'Failed to start web crawler');
+        setCrawlError(result.error || t('webCrawlerComponent.errors.startFailed'));
       }
     } catch (error) {
       console.error('Error starting crawler:', error);
-      setCrawlError(error instanceof Error ? error.message : 'Failed to start web crawler');
+      setCrawlError(error instanceof Error ? error.message : t('webCrawlerComponent.errors.startFailed'));
     } finally {
       setIsCrawling(false);
     }
@@ -136,20 +138,20 @@ export const WebCrawler = ({ onCrawlerStarted, kb_id = 'company' }: WebCrawlerPr
     <Card className="mb-4 shadow-sm">
       <Card.Header className="d-flex align-items-center py-3">
         <i className="bi bi-globe2 me-2 text-primary"></i>
-        <Card.Title className="mb-0">Website Crawler</Card.Title>
+        <Card.Title className="mb-0">{t('webCrawlerComponent.title')}</Card.Title>
       </Card.Header>
       <Card.Body>
-        <p className="small mt-2">Add content from websites to your knowledge base by specifying URLs to crawl.</p>
+        <p className="small mt-2">{t('webCrawlerComponent.subtitle')}</p>
 
         <div className="row g-0">
           <div className="col-lg-5 p-4 border-end">
             <Form>
               <Form.Group className="mb-4">
-                <Form.Label className="fw-semibold">Website URL</Form.Label>
+                <Form.Label className="fw-semibold">{t('webCrawlerComponent.form.urlLabel')}</Form.Label>
                 <InputGroup>
                   <Form.Control
                     type="text"
-                    placeholder="https://example.com"
+                    placeholder={t('webCrawlerComponent.form.urlPlaceholder')}
                     value={urlInput}
                     onChange={(e) => {
                       setUrlInput(e.target.value);
@@ -173,7 +175,7 @@ export const WebCrawler = ({ onCrawlerStarted, kb_id = 'company' }: WebCrawlerPr
                     {urlError}
                   </Form.Text>
                 ) : (
-                  <Form.Text className="text-muted mt-2">Enter a website URL to crawl</Form.Text>
+                  <Form.Text className="text-muted mt-2">{t('webCrawlerComponent.form.urlHint')}</Form.Text>
                 )}
               </Form.Group>
 
@@ -181,15 +183,12 @@ export const WebCrawler = ({ onCrawlerStarted, kb_id = 'company' }: WebCrawlerPr
                 <Form.Check
                   type="checkbox"
                   id="limit-to-path"
-                  label="Limit to pages under this URL"
+                  label={t('webCrawlerComponent.form.limitLabel')}
                   checked={limitToPath}
                   onChange={(e) => setLimitToPath(e.target.checked)}
                   disabled={isCrawling}
                 />
-                <Form.Text className="text-muted">
-                  If enabled, Numa will not follow links outside this part of the website and will only add pages that
-                  start with this URL path
-                </Form.Text>
+                <Form.Text className="text-muted">{t('webCrawlerComponent.form.limitHint')}</Form.Text>
               </Form.Group>
 
               <div className="d-grid">
@@ -202,12 +201,12 @@ export const WebCrawler = ({ onCrawlerStarted, kb_id = 'company' }: WebCrawlerPr
                   {isCrawling ? (
                     <>
                       <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true" />
-                      Starting...
+                      {t('webCrawlerComponent.actions.starting')}
                     </>
                   ) : (
                     <>
                       <i className="bi bi-play-fill me-2"></i>
-                      Start Crawler
+                      {t('webCrawlerComponent.actions.start')}
                     </>
                   )}
                 </Button>
@@ -221,21 +220,19 @@ export const WebCrawler = ({ onCrawlerStarted, kb_id = 'company' }: WebCrawlerPr
                   aria-expanded={showAbout}
                 >
                   <i className="bi bi-info-circle me-2 text-primary"></i>
-                  <span>About</span>
+                  <span>{t('webCrawlerComponent.about.title')}</span>
                   <i className={`bi ${showAbout ? 'bi-chevron-up' : 'bi-chevron-down'} ms-auto`}></i>
                 </button>
                 <Collapse in={showAbout}>
                   <div className="border-top">
                     <div className="p-3">
                       <div className="mb-3">
-                        <strong className="d-block mb-1">Web Crawler</strong>
-                        <div className="small">Indexes website content for your knowledge base.</div>
+                        <strong className="d-block mb-1">{t('webCrawlerComponent.about.webCrawlerTitle')}</strong>
+                        <div className="small">{t('webCrawlerComponent.about.webCrawlerBody')}</div>
                       </div>
                       <div>
-                        <strong className="d-block mb-1">Depth Setting (1-5)</strong>
-                        <div className="small">
-                          Higher values crawl deeper into the site structure. 5 is recommended.
-                        </div>
+                        <strong className="d-block mb-1">{t('webCrawlerComponent.about.depthTitle')}</strong>
+                        <div className="small">{t('webCrawlerComponent.about.depthBody')}</div>
                       </div>
                     </div>
                   </div>
@@ -258,9 +255,13 @@ export const WebCrawler = ({ onCrawlerStarted, kb_id = 'company' }: WebCrawlerPr
                       <i className={`bi ${crawlSuccess ? 'bi-check-lg' : 'bi-exclamation-triangle'} small`}></i>
                     </div>
                     <div>
-                      <h6 className="mb-1">{crawlSuccess ? 'Crawler started successfully' : 'Error'}</h6>
+                      <h6 className="mb-1">
+                        {crawlSuccess
+                          ? t('webCrawlerComponent.results.successTitle')
+                          : t('webCrawlerComponent.results.errorTitle')}
+                      </h6>
                       <p className="small mb-0">
-                        {crawlSuccess ? 'The web crawler is now running in the background.' : crawlError}
+                        {crawlSuccess ? t('webCrawlerComponent.results.successHint') : crawlError}
                       </p>
                     </div>
                   </div>
@@ -274,15 +275,15 @@ export const WebCrawler = ({ onCrawlerStarted, kb_id = 'company' }: WebCrawlerPr
               <div className="h-100 d-flex flex-column">
                 <div className="p-3 bg-light border-bottom d-flex align-items-center">
                   <i className="bi bi-link-45deg me-2 text-primary"></i>
-                  <span className="fw-semibold">URLs to crawl</span>
+                  <span className="fw-semibold">{t('webCrawlerComponent.table.title')}</span>
                   <span className="ms-2 badge bg-primary rounded-pill">{urlEntries.length}</span>
                 </div>
                 <div className="table-responsive flex-grow-1">
                   <Table hover className="mb-0">
                     <thead className="table-light">
                       <tr>
-                        <th className="ps-3">URL</th>
-                        <th style={{ width: '100px' }}>Depth</th>
+                        <th className="ps-3">{t('webCrawlerComponent.table.url')}</th>
+                        <th style={{ width: '100px' }}>{t('webCrawlerComponent.table.depth')}</th>
                         <th style={{ width: '60px' }}></th>
                       </tr>
                     </thead>
@@ -326,8 +327,8 @@ export const WebCrawler = ({ onCrawlerStarted, kb_id = 'company' }: WebCrawlerPr
                 >
                   <i className="bi bi-link-45deg text-primary" style={{ fontSize: '1.75rem' }}></i>
                 </div>
-                <h6>No URLs added yet</h6>
-                <p className="text-muted px-4 small">Add URLs on the left to begin crawling websites</p>
+                <h6>{t('webCrawlerComponent.empty.title')}</h6>
+                <p className="text-muted px-4 small">{t('webCrawlerComponent.empty.body')}</p>
               </div>
             )}
           </div>

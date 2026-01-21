@@ -5,6 +5,8 @@
 
 import React, { useState, useEffect } from 'react';
 import { Table, Button, Badge, Modal, Form, Alert, Spinner, Card } from 'react-bootstrap';
+import { useTranslation } from 'react-i18next';
+import i18n from '../i18n';
 import { knowledgeBaseService, KnowledgeBase } from '../Services/knowledgeBaseService';
 import { useKnowledgeBase } from '../Providers/KnowledgeBaseProvider';
 
@@ -20,6 +22,7 @@ interface EditKBModalProps {
 }
 
 function EditKBModal({ show, kb, onHide, onSuccess }: EditKBModalProps): React.JSX.Element {
+  const { t } = useTranslation('common');
   const [kbName, setKbName] = useState('');
   const [viewersInput, setViewersInput] = useState('');
   const [editorsInput, setEditorsInput] = useState('');
@@ -77,7 +80,7 @@ function EditKBModal({ show, kb, onHide, onSuccess }: EditKBModalProps): React.J
       onSuccess();
     } catch (err) {
       console.error('Error updating KB:', err);
-      setError(err instanceof Error ? err.message : 'Failed to update knowledge base');
+      setError(err instanceof Error ? err.message : t('manageKBs.errors.updateFailed'));
     } finally {
       setIsSubmitting(false);
     }
@@ -86,7 +89,7 @@ function EditKBModal({ show, kb, onHide, onSuccess }: EditKBModalProps): React.J
   return (
     <Modal show={show} onHide={handleClose} backdrop={isSubmitting ? 'static' : true}>
       <Modal.Header closeButton={!isSubmitting}>
-        <Modal.Title>Edit Knowledge Base</Modal.Title>
+        <Modal.Title>{t('manageKBs.editModal.title')}</Modal.Title>
       </Modal.Header>
 
       <Form onSubmit={handleSubmit}>
@@ -101,12 +104,12 @@ function EditKBModal({ show, kb, onHide, onSuccess }: EditKBModalProps): React.J
           {kb?.is_default && (
             <Alert variant="info" className="mb-3">
               <i className="bi bi-info-circle me-2"></i>
-              This is the default company knowledge base. Some settings cannot be changed.
+              {t('manageKBs.editModal.defaultNotice')}
             </Alert>
           )}
 
           <Form.Group className="mb-3">
-            <Form.Label>Knowledge Base Name</Form.Label>
+            <Form.Label>{t('manageKBs.editModal.nameLabel')}</Form.Label>
             <Form.Control
               type="text"
               value={kbName}
@@ -118,7 +121,7 @@ function EditKBModal({ show, kb, onHide, onSuccess }: EditKBModalProps): React.J
           <Form.Group className="mb-3">
             <Form.Check
               type="checkbox"
-              label="Make this KB accessible to all users"
+              label={t('manageKBs.editModal.publicLabel')}
               checked={isPublic}
               onChange={(e) => setIsPublic(e.target.checked)}
               disabled={isSubmitting}
@@ -127,43 +130,43 @@ function EditKBModal({ show, kb, onHide, onSuccess }: EditKBModalProps): React.J
 
           {!isPublic && (
             <Form.Group className="mb-3">
-              <Form.Label>Viewers (Emails)</Form.Label>
+              <Form.Label>{t('manageKBs.editModal.viewersLabel')}</Form.Label>
               <Form.Control
                 type="text"
-                placeholder="e.g., user1@example.com, user2@example.com"
+                placeholder={t('manageKBs.editModal.viewersPlaceholder')}
                 value={viewersInput}
                 onChange={(e) => setViewersInput(e.target.value)}
                 disabled={isSubmitting}
               />
-              <Form.Text className="text-muted">Comma-separated list of email addresses</Form.Text>
+              <Form.Text className="text-muted">{t('manageKBs.editModal.commaSeparated')}</Form.Text>
             </Form.Group>
           )}
 
           <Form.Group className="mb-3">
-            <Form.Label>Editors (Emails)</Form.Label>
+            <Form.Label>{t('manageKBs.editModal.editorsLabel')}</Form.Label>
             <Form.Control
               type="text"
-              placeholder="e.g., admin@example.com"
+              placeholder={t('manageKBs.editModal.editorsPlaceholder')}
               value={editorsInput}
               onChange={(e) => setEditorsInput(e.target.value)}
               disabled={isSubmitting}
             />
-            <Form.Text className="text-muted">Comma-separated list of email addresses</Form.Text>
+            <Form.Text className="text-muted">{t('manageKBs.editModal.commaSeparated')}</Form.Text>
           </Form.Group>
         </Modal.Body>
 
         <Modal.Footer>
           <Button variant="secondary" onClick={handleClose} disabled={isSubmitting}>
-            Cancel
+            {t('common.cancel')}
           </Button>
           <Button variant="primary" type="submit" disabled={isSubmitting}>
             {isSubmitting ? (
               <>
                 <span className="spinner-border spinner-border-sm me-2" />
-                Saving...
+                {t('manageKBs.editModal.saving')}
               </>
             ) : (
-              'Save Changes'
+              t('manageKBs.editModal.saveChanges')
             )}
           </Button>
         </Modal.Footer>
@@ -173,6 +176,7 @@ function EditKBModal({ show, kb, onHide, onSuccess }: EditKBModalProps): React.J
 }
 
 export function ManageKBsTable({ refreshKey = 0 }: ManageKBsTableProps): React.JSX.Element {
+  const { t } = useTranslation('common');
   const { refreshKBs } = useKnowledgeBase();
   const [kbs, setKbs] = useState<KnowledgeBase[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -204,7 +208,7 @@ export function ManageKBsTable({ refreshKey = 0 }: ManageKBsTableProps): React.J
       setKbs(kbDetails);
     } catch (err) {
       console.error('Error loading KBs:', err);
-      setError(err instanceof Error ? err.message : 'Failed to load knowledge bases');
+      setError(err instanceof Error ? err.message : t('manageKBs.errors.loadFailed'));
     } finally {
       setIsLoading(false);
     }
@@ -242,7 +246,7 @@ export function ManageKBsTable({ refreshKey = 0 }: ManageKBsTableProps): React.J
       refreshKBs();
     } catch (err) {
       console.error('Error deleting KB:', err);
-      setError(err instanceof Error ? err.message : 'Failed to delete knowledge base');
+      setError(err instanceof Error ? err.message : t('manageKBs.errors.deleteFailed'));
     } finally {
       setIsDeleting(false);
     }
@@ -253,7 +257,7 @@ export function ManageKBsTable({ refreshKey = 0 }: ManageKBsTableProps): React.J
       <Card>
         <Card.Body className="text-center py-5">
           <Spinner animation="border" />
-          <p className="mt-3 text-muted mb-0">Loading your knowledge bases...</p>
+          <p className="mt-3 text-muted mb-0">{t('manageKBs.loading')}</p>
         </Card.Body>
       </Card>
     );
@@ -263,7 +267,7 @@ export function ManageKBsTable({ refreshKey = 0 }: ManageKBsTableProps): React.J
     <>
       <Card>
         <Card.Header>
-          <Card.Title className="mb-0">Your Knowledge Bases</Card.Title>
+          <Card.Title className="mb-0">{t('manageKBs.title')}</Card.Title>
         </Card.Header>
         <Card.Body>
           {error && (
@@ -276,22 +280,20 @@ export function ManageKBsTable({ refreshKey = 0 }: ManageKBsTableProps): React.J
           {kbs.length === 0 ? (
             <div className="text-center py-4">
               <i className="bi bi-inbox display-4 text-muted"></i>
-              <p className="text-muted mt-3 mb-0">
-                You don&apos;t have any editable knowledge bases yet. Create one to get started!
-              </p>
+              <p className="text-muted mt-3 mb-0">{t('manageKBs.empty')}</p>
             </div>
           ) : (
             <div className="table-responsive">
               <Table hover>
                 <thead>
                   <tr>
-                    <th>Name</th>
-                    <th>Status</th>
-                    <th>Viewers</th>
-                    <th>Editors</th>
-                    <th>Documents</th>
-                    <th>Created</th>
-                    <th>Actions</th>
+                    <th>{t('manageKBs.columns.name')}</th>
+                    <th>{t('manageKBs.columns.status')}</th>
+                    <th>{t('manageKBs.columns.viewers')}</th>
+                    <th>{t('manageKBs.columns.editors')}</th>
+                    <th>{t('manageKBs.columns.documents')}</th>
+                    <th>{t('manageKBs.columns.created')}</th>
+                    <th>{t('manageKBs.columns.actions')}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -303,24 +305,26 @@ export function ManageKBsTable({ refreshKey = 0 }: ManageKBsTableProps): React.J
                           <strong>{kb.kb_name}</strong>
                           {kb.is_default && (
                             <Badge bg="info" className="ms-2">
-                              Default
+                              {t('manageKBs.badges.default')}
                             </Badge>
                           )}
                         </div>
                       </td>
                       <td>
-                        <Badge bg={kb.status === 'ACTIVE' ? 'success' : 'secondary'}>{kb.status}</Badge>
+                        <Badge bg={kb.status === 'ACTIVE' ? 'success' : 'secondary'}>
+                          {t('manageKBs.status', { status: kb.status })}
+                        </Badge>
                       </td>
                       <td>
                         {kb.viewers.includes('*') ? (
-                          <Badge bg="info">All Users</Badge>
+                          <Badge bg="info">{t('manageKBs.badges.allUsers')}</Badge>
                         ) : (
-                          <span>{kb.viewers.length} users</span>
+                          <span>{t('manageKBs.viewersCount', { count: kb.viewers.length })}</span>
                         )}
                       </td>
-                      <td>{kb.editors.length} users</td>
+                      <td>{t('manageKBs.editorsCount', { count: kb.editors.length })}</td>
                       <td>{kb.document_count}</td>
-                      <td>{new Date(kb.created_at).toLocaleDateString()}</td>
+                      <td>{new Date(kb.created_at).toLocaleDateString(i18n.language)}</td>
                       <td>
                         <div className="d-flex gap-2">
                           <Button variant="outline-primary" size="sm" onClick={() => handleEdit(kb)}>
@@ -351,32 +355,32 @@ export function ManageKBsTable({ refreshKey = 0 }: ManageKBsTableProps): React.J
 
       <Modal show={showDeleteModal} onHide={() => !isDeleting && setShowDeleteModal(false)}>
         <Modal.Header closeButton={!isDeleting}>
-          <Modal.Title>Confirm Delete</Modal.Title>
+          <Modal.Title>{t('manageKBs.deleteModal.title')}</Modal.Title>
         </Modal.Header>
         <Modal.Body>
           <Alert variant="warning">
             <i className="bi bi-exclamation-triangle me-2"></i>
-            Are you sure you want to archive the knowledge base <strong>{selectedKB?.kb_name}</strong>?
+            {t('manageKBs.deleteModal.confirm', { name: selectedKB?.kb_name || '' })}
           </Alert>
-          <p className="mb-0">This action will:</p>
+          <p className="mb-0">{t('manageKBs.deleteModal.willDo')}</p>
           <ul>
-            <li>Archive the knowledge base (soft delete)</li>
-            <li>Make it inaccessible to all users</li>
-            <li>Preserve the files in S3 (not deleted)</li>
+            <li>{t('manageKBs.deleteModal.steps.archive')}</li>
+            <li>{t('manageKBs.deleteModal.steps.inaccessible')}</li>
+            <li>{t('manageKBs.deleteModal.steps.preserve')}</li>
           </ul>
         </Modal.Body>
         <Modal.Footer>
           <Button variant="secondary" onClick={() => setShowDeleteModal(false)} disabled={isDeleting}>
-            Cancel
+            {t('common.cancel')}
           </Button>
           <Button variant="danger" onClick={confirmDelete} disabled={isDeleting}>
             {isDeleting ? (
               <>
                 <span className="spinner-border spinner-border-sm me-2" />
-                Deleting...
+                {t('manageKBs.deleteModal.deleting')}
               </>
             ) : (
-              'Delete'
+              t('common.delete')
             )}
           </Button>
         </Modal.Footer>

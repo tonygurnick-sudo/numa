@@ -1,5 +1,6 @@
 import { Form, Spinner } from 'react-bootstrap';
 import { Dispatch, SetStateAction } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   getConnectionIcon,
   getConnectionDisplayName,
@@ -70,6 +71,7 @@ export const ChatSettingsPanel = ({
   hasPipedreamFeature,
   isDisabled,
 }: ChatSettingsPanelProps) => {
+  const { t } = useTranslation('chat');
   // Connected integrations only (can only enable connected ones)
   const connectedIntegrations = availableConnections.filter((conn) => conn.isConnected);
 
@@ -107,16 +109,16 @@ export const ChatSettingsPanel = ({
       <div className="settings-section">
         <Form.Label className="fw-semibold text-muted small text-uppercase mb-2">
           <i className="bi bi-folder2-open me-2" />
-          Knowledge Bases
+          {t('settingsPanel.knowledgeBases')}
         </Form.Label>
 
         {isLoadingKBs ? (
           <div className="text-muted small d-flex align-items-center gap-2">
             <Spinner animation="border" size="sm" />
-            Loading knowledge bases...
+            {t('settingsPanel.loadingKnowledgeBases')}
           </div>
         ) : availableKBs.length === 0 ? (
-          <div className="text-muted small fst-italic">No knowledge bases available</div>
+          <div className="text-muted small fst-italic">{t('settingsPanel.noKnowledgeBases')}</div>
         ) : (
           <div className="border rounded-3 p-2 bg-white" style={{ maxHeight: 180, overflowY: 'auto' }}>
             {availableKBs.map((kb) => (
@@ -138,14 +140,14 @@ export const ChatSettingsPanel = ({
             ))}
           </div>
         )}
-        <div className="text-muted small mt-1">Select knowledge bases to query during this chat</div>
+        <div className="text-muted small mt-1">{t('settingsPanel.selectKnowledgeBases')}</div>
       </div>
 
       {/* Tools Section */}
       <div className="settings-section">
         <Form.Label className="fw-semibold text-muted small text-uppercase mb-2">
           <i className="bi bi-tools me-2" />
-          Tools
+          {t('settingsPanel.tools')}
         </Form.Label>
 
         <div className="mb-3">
@@ -160,8 +162,8 @@ export const ChatSettingsPanel = ({
               className="settings-toggle-switch"
             />
             <div className="settings-toggle-text">
-              <div className="settings-toggle-title">All Tools</div>
-              <div className="settings-toggle-subtitle">When enabled, all tools are automatically available</div>
+              <div className="settings-toggle-title">{t('settingsPanel.allTools')}</div>
+              <div className="settings-toggle-subtitle">{t('settingsPanel.allToolsDescription')}</div>
             </div>
           </div>
 
@@ -176,8 +178,10 @@ export const ChatSettingsPanel = ({
               className="settings-toggle-switch"
             />
             <div className="settings-toggle-text">
-              <div className={`settings-toggle-title ${autoToolsEnabled ? 'is-disabled' : ''}`}>Web Search</div>
-              <div className="settings-toggle-subtitle">Search the web for current information</div>
+              <div className={`settings-toggle-title ${autoToolsEnabled ? 'is-disabled' : ''}`}>
+                {t('settingsPanel.webSearch')}
+              </div>
+              <div className="settings-toggle-subtitle">{t('settingsPanel.webSearchDescription')}</div>
             </div>
           </div>
 
@@ -193,8 +197,10 @@ export const ChatSettingsPanel = ({
                 className="settings-toggle-switch"
               />
               <div className="settings-toggle-text">
-                <div className={`settings-toggle-title ${autoToolsEnabled ? 'is-disabled' : ''}`}>Data Analysis</div>
-                <div className="settings-toggle-subtitle">Analyze CSV, Excel, or JSON data files</div>
+                <div className={`settings-toggle-title ${autoToolsEnabled ? 'is-disabled' : ''}`}>
+                  {t('settingsPanel.dataAnalysis')}
+                </div>
+                <div className="settings-toggle-subtitle">{t('settingsPanel.dataAnalysisDescription')}</div>
               </div>
             </div>
           )}
@@ -211,8 +217,10 @@ export const ChatSettingsPanel = ({
                 className="settings-toggle-switch"
               />
               <div className="settings-toggle-text">
-                <div className={`settings-toggle-title ${autoToolsEnabled ? 'is-disabled' : ''}`}>Agent Creation</div>
-                <div className="settings-toggle-subtitle">Allow creating new agents during chat</div>
+                <div className={`settings-toggle-title ${autoToolsEnabled ? 'is-disabled' : ''}`}>
+                  {t('settingsPanel.agentCreation')}
+                </div>
+                <div className="settings-toggle-subtitle">{t('settingsPanel.agentCreationDescription')}</div>
               </div>
             </div>
           )}
@@ -224,18 +232,18 @@ export const ChatSettingsPanel = ({
         <div className="settings-section">
           <Form.Label className="fw-semibold text-muted small text-uppercase mb-2">
             <i className="bi bi-link-45deg me-2" />
-            Integrations
+            {t('settingsPanel.integrations')}
           </Form.Label>
 
           {connectionsLoading ? (
             <div className="text-muted small d-flex align-items-center gap-2">
               <Spinner animation="border" size="sm" />
-              Loading integrations...
+              {t('settingsPanel.loadingIntegrations')}
             </div>
           ) : connectedIntegrations.length === 0 ? (
             <div className="text-muted small fst-italic">
               <i className="bi bi-info-circle me-1" />
-              No integrations connected. Visit the Integrations page to connect apps.
+              {t('settingsPanel.noIntegrations')}
             </div>
           ) : (
             <div className="border rounded-3 p-2 bg-white" style={{ maxHeight: 180, overflowY: 'auto' }}>
@@ -277,7 +285,7 @@ export const ChatSettingsPanel = ({
                 })}
             </div>
           )}
-          <div className="text-muted small mt-1">Enable integrations to use during this chat</div>
+          <div className="text-muted small mt-1">{t('settingsPanel.enableIntegrations')}</div>
         </div>
       )}
     </div>

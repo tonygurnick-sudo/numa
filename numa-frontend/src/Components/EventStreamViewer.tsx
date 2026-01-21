@@ -1,8 +1,11 @@
 import type React from 'react';
+import type { TFunction } from 'i18next';
 import { useEffect, useRef, useState } from 'react';
 import { Card, Badge } from 'react-bootstrap';
+import { useTranslation } from 'react-i18next';
 import { JobEvent } from '../types/apps';
 import '../assets/styles/components/EventStreamViewer.scss';
+import i18n from '../i18n';
 
 interface EventStreamViewerProps {
   events: JobEvent[];
@@ -49,7 +52,7 @@ const formatJobStatus = (status?: string): string => {
 /**
  * Formats a timestamp to a human-readable relative time or short format
  */
-const formatTimestamp = (timestamp: string): string => {
+const formatTimestamp = (timestamp: string, t: TFunction): string => {
   try {
     const date = new Date(timestamp);
     const now = new Date();
@@ -58,17 +61,17 @@ const formatTimestamp = (timestamp: string): string => {
 
     // Less than 60 seconds: show "Xs ago"
     if (diffSecs < 60) {
-      return `${diffSecs}s ago`;
+      return t('eventStream.secondsAgo', { count: diffSecs });
     }
 
     // Less than 60 minutes: show "Xm ago"
     const diffMins = Math.floor(diffSecs / 60);
     if (diffMins < 60) {
-      return `${diffMins}m ago`;
+      return t('eventStream.minutesAgo', { count: diffMins });
     }
 
     // Otherwise, show formatted time
-    return date.toLocaleString('en-NZ', {
+    return date.toLocaleString(i18n.language, {
       month: 'short',
       day: 'numeric',
       hour: 'numeric',
@@ -87,6 +90,7 @@ const EventStreamViewer: React.FC<EventStreamViewerProps> = ({
   typicalDurationMinutes,
   jobStatus,
 }) => {
+  const { t } = useTranslation('common');
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const [isExpanded, setIsExpanded] = useState<boolean>(isRunning);
   const [latestEventIndex, setLatestEventIndex] = useState<number>(-1);
@@ -133,7 +137,7 @@ const EventStreamViewer: React.FC<EventStreamViewerProps> = ({
   }
 
   const hasEvents = events && events.length > 0;
-  const displayTitle = appName ? `${appName} Activity Log` : 'Activity Log';
+  const displayTitle = appName ? t('eventStream.appActivityLog', { appName }) : t('eventStream.activityLog');
 
   return (
     <Card className="event-stream-viewer mb-3">
@@ -190,7 +194,7 @@ const EventStreamViewer: React.FC<EventStreamViewerProps> = ({
           {!isExpanded && hasEvents && <Badge bg="secondary">{events.length}</Badge>}
           {typicalDurationMinutes && (
             <span className="duration-text-header">
-              This app typically takes {typicalDurationMinutes} {typicalDurationMinutes === 1 ? 'minute' : 'minutes'}.
+              {t('eventStream.typicalDuration', { count: typicalDurationMinutes })}
             </span>
           )}
         </div>
@@ -205,7 +209,7 @@ const EventStreamViewer: React.FC<EventStreamViewerProps> = ({
             className="event-stream-toggle btn btn-link p-0 text-decoration-none"
             onClick={toggleExpanded}
             aria-expanded={isExpanded}
-            aria-label={isExpanded ? 'Collapse event log' : 'Expand event log'}
+            aria-label={isExpanded ? t('eventStream.collapse') : t('eventStream.expand')}
           >
             <i className={`bi ${isExpanded ? 'bi-chevron-up' : 'bi-chevron-down'}`}></i>
           </button>
@@ -221,14 +225,14 @@ const EventStreamViewer: React.FC<EventStreamViewerProps> = ({
                   key={`${event.timestamp}-${index}`}
                   className={`event-stream-item ${index === latestEventIndex ? 'event-item-latest' : ''}`}
                 >
-                  <span className="event-timestamp">{formatTimestamp(event.timestamp)}</span>
+                  <span className="event-timestamp">{formatTimestamp(event.timestamp, t)}</span>
                   <span className="event-message">{event.message}</span>
                 </div>
               ))
             ) : (
               <div className="event-stream-empty">
                 <i className="bi bi-hourglass-split text-muted"></i>
-                <span className="text-muted">Waiting for activity...</span>
+                <span className="text-muted">{t('eventStream.waiting')}</span>
               </div>
             )}
           </div>

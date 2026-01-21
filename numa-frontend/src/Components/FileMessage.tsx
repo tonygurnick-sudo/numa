@@ -1,4 +1,5 @@
 // FileMessage.tsx - Unified component for file upload/download success messages
+import { useTranslation } from 'react-i18next';
 import { getFileIconClass } from '../utils/fileUtils';
 
 type FileMessageProps = {
@@ -20,6 +21,7 @@ export const FileMessage = ({
   onClick,
   clickable = false,
 }: FileMessageProps) => {
+  const { t } = useTranslation('common');
   const iconClass = getFileIconClass(filename);
   const isClickable = clickable || !!onClick;
 
@@ -54,7 +56,7 @@ export const FileMessage = ({
       )}
       {showSpinner && (
         <div className="spinner-border spinner-border-sm ms-2" role="status">
-          <span className="visually-hidden">Processing...</span>
+          <span className="visually-hidden">{t('fileMessage.processing')}</span>
         </div>
       )}
     </div>

@@ -1,6 +1,7 @@
 import { Button } from 'react-bootstrap';
 import { useNavigate } from 'react-router-dom';
 import { Link } from 'react-bootstrap-icons';
+import { useTranslation } from 'react-i18next';
 import { getConnectionExampleQuery } from '../config/integrationsConfig';
 
 export const GenericTestConnection = ({
@@ -13,6 +14,7 @@ export const GenericTestConnection = ({
   onClose: () => void;
 }) => {
   const navigate = useNavigate();
+  const { t } = useTranslation('common');
   const exampleQuery = getConnectionExampleQuery(appName);
 
   const handleTestConnection = () => {
@@ -31,8 +33,8 @@ export const GenericTestConnection = ({
             <i className="bi bi-lightning-fill text-white fs-5"></i>
           </div>
           <div>
-            <h5 className="mb-1 fw-semibold">Test {integrationName} Integration</h5>
-            <p className="mb-0 small text-muted">Test your integration by using it in NumaChat</p>
+            <h5 className="mb-1 fw-semibold">{t('genericTestConnection.title', { integrationName })}</h5>
+            <p className="mb-0 small text-muted">{t('genericTestConnection.subtitle')}</p>
           </div>
         </div>
         <Button variant="link" size="sm" className="p-0 text-muted" onClick={onClose}>
@@ -44,7 +46,7 @@ export const GenericTestConnection = ({
         <div className="mb-4">
           <h6 className="fw-semibold mb-3 d-flex align-items-center">
             <i className="bi bi-chat-dots text-primary me-2"></i>
-            How to Test Your Connection
+            {t('genericTestConnection.howToTitle')}
           </h6>
 
           <div className="d-flex align-items-start mb-3">
@@ -55,8 +57,8 @@ export const GenericTestConnection = ({
               1
             </div>
             <div>
-              <div className="fw-semibold mb-1">Go to NumaChat</div>
-              <div className="small text-muted">Click the button below to navigate to NumaChat</div>
+              <div className="fw-semibold mb-1">{t('genericTestConnection.steps.goTitle')}</div>
+              <div className="small text-muted">{t('genericTestConnection.steps.goDescription')}</div>
             </div>
           </div>
 
@@ -68,10 +70,11 @@ export const GenericTestConnection = ({
               2
             </div>
             <div>
-              <div className="fw-semibold mb-1">Enable the Integration</div>
+              <div className="fw-semibold mb-1">{t('genericTestConnection.steps.enableTitle')}</div>
               <div className="small text-muted">
-                Click the integrations button (<Link size={14} className="mx-1" />) in the chat input and enable{' '}
-                {integrationName}
+                {t('genericTestConnection.steps.enableDescriptionPrefix')}
+                <Link size={14} className="mx-1" />
+                {t('genericTestConnection.steps.enableDescriptionSuffix', { integrationName })}
               </div>
             </div>
           </div>
@@ -84,20 +87,20 @@ export const GenericTestConnection = ({
               3
             </div>
             <div>
-              <div className="fw-semibold mb-1">Type and Send Query</div>
-              <div className="small text-muted">Type the example query below into the chat input and send it</div>
+              <div className="fw-semibold mb-1">{t('genericTestConnection.steps.sendTitle')}</div>
+              <div className="small text-muted">{t('genericTestConnection.steps.sendDescription')}</div>
             </div>
           </div>
         </div>
 
         <div className="bg-light rounded-3 p-3 mb-4">
-          <div className="small fw-semibold text-muted mb-2">Example Query:</div>
+          <div className="small fw-semibold text-muted mb-2">{t('genericTestConnection.exampleQueryLabel')}</div>
           <div className="bg-white rounded-2 p-3 border">
             <code className="text-primary">{exampleQuery}</code>
           </div>
           <div className="small text-muted mt-2">
             <i className="bi bi-info-circle me-1"></i>
-            This is a read-only query that won&apos;t modify your data
+            {t('genericTestConnection.exampleQueryNote')}
           </div>
         </div>
 
@@ -109,14 +112,15 @@ export const GenericTestConnection = ({
             className="d-flex align-items-center justify-content-center py-3"
           >
             <i className="bi bi-arrow-right-circle me-2"></i>
-            Go to NumaChat
+            {t('genericTestConnection.goButton')}
           </Button>
         </div>
 
         <div className="text-center mt-3">
           <div className="small text-muted">
-            Remember to enable the integration using the <Link size={12} className="mx-1" /> button before sending your
-            query
+            {t('genericTestConnection.reminderPrefix')}
+            <Link size={12} className="mx-1" />
+            {t('genericTestConnection.reminderSuffix')}
           </div>
         </div>
       </div>

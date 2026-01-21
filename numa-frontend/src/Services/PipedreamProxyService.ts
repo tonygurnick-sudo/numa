@@ -11,6 +11,7 @@ import type {
   AuthUserMinimal,
   DisconnectIntegrationData,
 } from '../types/pipedream';
+import i18n from '../i18n';
 
 export class PipedreamProxyService {
   /**
@@ -80,7 +81,7 @@ export class PipedreamProxyService {
     try {
       const response = await this.invokePipedreamProxy<IntegrationStatusData>(lambdaClient, payload);
       if (!response.success) {
-        throw new Error(response.error || 'Failed to get integration status');
+        throw new Error(response.error || i18n.t('errors:pipedream.getStatusFailed'));
       }
 
       // Transform response to match frontend expectations
@@ -122,7 +123,7 @@ export class PipedreamProxyService {
     try {
       const response = await this.invokePipedreamProxy<ConnectTokenData>(lambdaClient, payload);
       if (!response.success) {
-        throw new Error(response.error || 'Failed to generate connect token');
+        throw new Error(response.error || i18n.t('errors:pipedream.generateTokenFailed'));
       }
 
       // Transform response to match frontend expectations
@@ -134,7 +135,7 @@ export class PipedreamProxyService {
       };
     } catch (error) {
       console.error('PipedreamProxyService.generateConnectToken failed:', error);
-      throw new Error(`Failed to generate connect token: ${error.message}`);
+      throw new Error(i18n.t('errors:pipedream.generateTokenFailedWithMessage', { message: (error as Error).message }));
     }
   }
 
@@ -153,7 +154,7 @@ export class PipedreamProxyService {
       payload,
     );
     if (!response.success) {
-      throw new Error(response.error || 'Failed to list MCP tools');
+      throw new Error(response.error || i18n.t('errors:pipedream.listToolsFailed'));
     }
     return response.data;
   }
@@ -173,7 +174,7 @@ export class PipedreamProxyService {
       payload,
     );
     if (!response.success) {
-      throw new Error(response.error || 'Failed to get MCP policy');
+      throw new Error(response.error || i18n.t('errors:pipedream.getPolicyFailed'));
     }
     return response.data;
   }
@@ -191,7 +192,7 @@ export class PipedreamProxyService {
     };
     const response = await this.invokePipedreamProxy<Record<string, unknown>>(lambdaClient, payload);
     if (!response.success) {
-      throw new Error(response.error || 'Failed to set MCP policy');
+      throw new Error(response.error || i18n.t('errors:pipedream.setPolicyFailed'));
     }
     return;
   }
@@ -218,7 +219,7 @@ export class PipedreamProxyService {
     const response = await this.invokePipedreamProxy<DisconnectIntegrationData>(lambdaClient, payload);
 
     if (!response.success) {
-      throw new Error(response.error || 'Failed to disconnect integration');
+      throw new Error(response.error || i18n.t('errors:pipedream.disconnectFailed'));
     }
     return response.data;
   }
@@ -238,7 +239,7 @@ export class PipedreamProxyService {
     const relayLambdaArn = sessionStorage.getItem('PIPEDREAM_RELAY_LAMBDA_ARN');
 
     if (!relayLambdaArn) {
-      throw new Error('Numa Integrations are not available for this account.');
+      throw new Error(i18n.t('errors:pipedream.unavailable'));
     }
 
     const command = new InvokeCommand({
@@ -269,12 +270,18 @@ export class PipedreamProxyService {
       // Handle lambda execution errors
       if (lambdaResponse.FunctionError) {
         console.error('Relay lambda function error:', responsePayload);
-        throw new Error(`Relay lambda execution failed: ${responsePayload.body?.error || 'Unknown error'}`);
+        throw new Error(
+          i18n.t('errors:pipedream.relayExecutionFailed', {
+            message: responsePayload.body?.error || i18n.t('errors:unknown'),
+          }),
+        );
       }
 
       // Handle HTTP-style error responses from lambda
       if (responsePayload.statusCode !== 200) {
-        const errorMessage = responsePayload.body?.error || `HTTP ${responsePayload.statusCode} error`;
+        const errorMessage =
+          responsePayload.body?.error ||
+          i18n.t('errors:pipedream.relayHttpError', { status: responsePayload.statusCode });
         throw new Error(errorMessage);
       }
 
@@ -283,12 +290,12 @@ export class PipedreamProxyService {
       console.error('Relay lambda invocation failed:', error);
 
       // Provide user-friendly error messages
-      if (error.name === 'AccessDeniedException') {
-        throw new Error('Access denied: Please check your permissions for Pipedream relay lambda invocation');
-      } else if (error.name === 'ResourceNotFoundException') {
-        throw new Error('Pipedream relay lambda not found: Please check configuration');
-      } else if (error.message?.includes('timeout')) {
-        throw new Error('Request timeout: Pipedream relay is taking too long to respond');
+      if ((error as Error).name === 'AccessDeniedException') {
+        throw new Error(i18n.t('errors:pipedream.accessDenied'));
+      } else if ((error as Error).name === 'ResourceNotFoundException') {
+        throw new Error(i18n.t('errors:pipedream.relayNotFound'));
+      } else if ((error as Error).message?.includes('timeout')) {
+        throw new Error(i18n.t('errors:pipedream.timeout'));
       }
 
       throw error;
@@ -302,7 +309,7 @@ export class PipedreamProxyService {
    */
   static deriveExternalUserId(user: AuthUserMinimal): string {
     if (!user) {
-      throw new Error('User not authenticated');
+      throw new Error(i18n.t('errors:auth.userNotAuthenticated'));
     }
 
     // Extract client ID from session storage
@@ -317,7 +324,7 @@ export class PipedreamProxyService {
         cognitoUserId: !!cognitoUserId,
         userKeys: Object.keys(user as object),
       });
-      throw new Error('Unable to derive external user ID: missing client ID or user ID');
+      throw new Error(i18n.t('errors:pipedream.externalUserIdMissing'));
     }
 
     // Construct external user ID in expected format

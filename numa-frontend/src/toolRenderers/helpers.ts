@@ -1,4 +1,5 @@
 // Shared helper functions and types for tool renderers
+import i18n from '../i18n';
 
 export type ToolResultLike = {
   name?: string;
@@ -48,10 +49,8 @@ export function getIntegrationsSummary(result: ToolResultLike): string {
   const payload = getIntegrationsPayload(result);
   if (payload?.type === 'integrations-file-download') {
     const fileCount = payload.files?.length || 0;
-    const integration = payload.integration || 'integration';
-    return fileCount === 1
-      ? `Downloaded 1 file from ${integration}`
-      : `Downloaded ${fileCount} files from ${integration}`;
+    const integration = payload.integration || i18n.t('common:toolSummaries.integrations.integrationFallback');
+    return i18n.t('common:toolSummaries.integrations.downloaded', { count: fileCount, integration });
   }
   // Check for denied status - can be at top level, in content[0].json.status,
   // or as a stringified dict in content[0].text (Python dict format with single quotes)
@@ -60,10 +59,15 @@ export function getIntegrationsSummary(result: ToolResultLike): string {
   const textContent = (contentBlock as { text?: string } | undefined)?.text ?? '';
   const hasDeniedInText = textContent.includes("'status': 'denied'") || textContent.includes('"status": "denied"');
   if (status === 'denied' || nestedJsonStatus === 'denied' || hasDeniedInText) {
-    return `${friendlyLabel}: Denied - User Confirmation Needed`;
+    return i18n.t('common:toolSummaries.integrations.denied', { label: friendlyLabel });
   }
-  if (status === 'success' || status === 'completed') return `${friendlyLabel}: Tool call successful`;
-  return `${friendlyLabel}: ${status || 'completed'}`;
+  if (status === 'success' || status === 'completed') {
+    return i18n.t('common:toolSummaries.integrations.success', { label: friendlyLabel });
+  }
+  return i18n.t('common:toolSummaries.integrations.status', {
+    label: friendlyLabel,
+    status: status || i18n.t('common:toolSummaries.statusFallback'),
+  });
 }
 
 // -------- Web search --------
@@ -95,13 +99,15 @@ export function getWebSearchPayload(result: ToolResultLike): WebSearchPayload | 
 
 export function getWebSearchSummary(result: ToolResultLike): string {
   const payload = getWebSearchPayload(result);
-  if (!payload) return 'Web Search results';
+  if (!payload) return i18n.t('common:toolSummaries.webSearch.default');
   const { summarised_content = '', results = [], results_count = 0, error = '' } = payload;
   const hasError = !!(error && String(error).trim());
   const hasSummary = !!(summarised_content && String(summarised_content).trim());
-  if (hasError) return '⚠️ Search failed';
-  if (hasSummary) return `${results_count} sources found`;
-  return `${(results && results.length) || results_count || 0} web search references`;
+  if (hasError) return i18n.t('common:toolSummaries.webSearch.failed');
+  if (hasSummary) return i18n.t('common:toolSummaries.webSearch.sourcesFound', { count: results_count });
+  return i18n.t('common:toolSummaries.webSearch.referencesFound', {
+    count: (results && results.length) || results_count || 0,
+  });
 }
 
 // -------- Knowledge base --------
@@ -124,12 +130,15 @@ export function getKnowledgeBasePayload(result: ToolResultLike): KnowledgeBasePa
 
 export function getKnowledgeBaseSummary(result: ToolResultLike): string {
   const payload = getKnowledgeBasePayload(result);
-  if (!payload) return 'Knowledge Base results';
+  if (!payload) return i18n.t('common:toolSummaries.knowledgeBase.default');
   const { summarised_content = '', knowledgeText = [], provider = 'unknown', results_count = 0 } = payload;
   const hasSummary = !!(summarised_content && String(summarised_content).trim());
   return hasSummary
-    ? `${results_count} sources found (${provider})`
-    : `${results_count || (Array.isArray(knowledgeText) ? knowledgeText.length : 0)} knowledge entries found (${provider})`;
+    ? i18n.t('common:toolSummaries.knowledgeBase.sourcesFound', { count: results_count, provider })
+    : i18n.t('common:toolSummaries.knowledgeBase.entriesFound', {
+        count: results_count || (Array.isArray(knowledgeText) ? knowledgeText.length : 0),
+        provider,
+      });
 }
 
 // -------- Generic fallback --------
@@ -144,17 +153,24 @@ export function getFallbackSummary(result: ToolResultLike): string {
   const textContent = (contentBlock as { text?: string } | undefined)?.text ?? '';
   const hasDeniedInText = textContent.includes("'status': 'denied'") || textContent.includes('"status": "denied"');
   if (status === 'denied' || nestedJsonStatus === 'denied' || hasDeniedInText) {
-    return `${friendlyLabel}: Denied - User Confirmation Needed`;
+    return i18n.t('common:toolSummaries.fallback.denied', { label: friendlyLabel });
   }
-  if (status === 'success' || status === 'completed') return `${friendlyLabel}: Tool call successful`;
-  return `${friendlyLabel}: ${status || 'completed'}`;
+  if (status === 'success' || status === 'completed') {
+    return i18n.t('common:toolSummaries.fallback.success', { label: friendlyLabel });
+  }
+  return i18n.t('common:toolSummaries.fallback.status', {
+    label: friendlyLabel,
+    status: status || i18n.t('common:toolSummaries.statusFallback'),
+  });
 }
 
 // -------- Data analysis --------
 export function getDataAnalysisSummary(result: ToolResultLike): string {
   const rawName = result?.name ?? result?.toolName ?? 'data_analysis';
   const status = result?.status ?? 'completed';
-  if (status === 'error' || status === 'failed') return `${rawName}: Failed`;
-  return 'Data analysis results ready';
+  if (status === 'error' || status === 'failed') {
+    return i18n.t('common:toolSummaries.dataAnalysis.failed', { label: rawName });
+  }
+  return i18n.t('common:toolSummaries.dataAnalysis.ready');
 }
 export type { IntegrationDownloadFile as IntegrationFile, IntegrationsFileDownloadPayload };

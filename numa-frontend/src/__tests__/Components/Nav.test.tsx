@@ -121,7 +121,7 @@ describe('Nav Component', () => {
 
   describe('Standard User Navigation', () => {
     beforeEach(() => {
-      setMockUser('standard'); // Standard user only has chat feature
+      setMockUser('standard'); // Standard user has chat + company data features
     });
 
     it('renders navigation items for standard user', async () => {
@@ -150,8 +150,10 @@ describe('Nav Component', () => {
       // Standard user should NOT see admin features
       // We can still check for absence of these items
       expect(screen.queryByText('User Management')).not.toBeInTheDocument();
-      expect(screen.queryByText('Knowledge Base')).not.toBeInTheDocument();
-      expect(screen.queryByText('Company')).not.toBeInTheDocument();
+
+      // Standard user should still see company data features
+      expect(screen.queryByText('Knowledge Base')).toBeInTheDocument();
+      expect(screen.queryByText('Company')).toBeInTheDocument();
     });
 
     it('handles navigation clicks correctly for standard user', async () => {

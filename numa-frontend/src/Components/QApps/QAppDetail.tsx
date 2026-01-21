@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import { QAppWizard } from './QAppWizard';
 import { Preloader } from '../Preloader';
@@ -9,6 +10,7 @@ import { useNumaApp } from '../../Providers/NumaAppContext';
 import { GetQAppCommand, GetQAppSessionCommand, StartQAppSessionCommand } from '@aws-sdk/client-qapps';
 
 const QAppDetail = () => {
+  const { t } = useTranslation('apps');
   const { qAppsClient } = useAuth();
   const Q_APPLICATION_ID = window.sessionStorage.getItem('Q_APPLICATION_ID');
 
@@ -186,7 +188,7 @@ const QAppDetail = () => {
           sessionResults={qSessionDetails}
         />
       ) : (
-        <div>Error fetching app details</div>
+        <div>{t('qApps.errors.details')}</div>
       )}
     </>
   );

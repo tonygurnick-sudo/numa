@@ -1,0 +1,508 @@
+{
+  "appSearch": {
+    "search": {
+      "placeholder": "Type to filter apps"
+    },
+    "clear": "Clear",
+    "sort": {
+      "asc": "A to Z",
+      "desc": "Z to A",
+      "toggle": "Sort {{order}}",
+      "optionAsc": "Sort A to Z",
+      "optionDesc": "Sort Z to A"
+    }
+  },
+  "appItem": {
+    "unavailableTitle": "This app is unavailable",
+    "unavailableButtonTitle": "App is unavailable",
+    "unavailable": "Unavailable",
+    "launch": "Launch",
+    "filterByCategory": "Filter by {{category}} category",
+    "loading": "Loading...",
+    "version": "v{{version}}",
+    "favorites": {
+      "add": "Add to favorites",
+      "remove": "Remove from favorites"
+    }
+  },
+  "appCard": {
+    "resultTitle": "Result",
+    "generating": "Generating output...",
+    "waiting": "Waiting for input...",
+    "unsupported": "Unsupported card type"
+  },
+  "wizard": {
+    "results": {
+      "outputTitle": "Output {{index}}",
+      "noOutput": "No output found at index {{index}}"
+    },
+    "tasks": {
+      "unknownType": "Unknown task type"
+    },
+    "loadingJobResults": "Loading job results...",
+    "runName": {
+      "title": "Name this run",
+      "subtitle": "Create a short label so you can spot it in job history.",
+      "label": "Run name",
+      "placeholder": "Name it here...",
+      "hint": "This is visible to everyone viewing job history.",
+      "remaining": "{{count}} characters remaining",
+      "cancel": "Cancel",
+      "saving": "Saving...",
+      "saveAndRun": "Save and Run",
+      "required": "Please enter a job name."
+    },
+    "tabs": {
+      "inputs": "Inputs",
+      "results": "Results"
+    },
+    "navigation": {
+      "previous": "Previous input",
+      "next": "Next input"
+    }
+  },
+  "wizardNavigation": {
+    "inputs": "Inputs",
+    "requiredTitle": "Required item to run",
+    "requiredShort": "req",
+    "reset": "Reset App",
+    "running": "Running...",
+    "run": "Run App",
+    "completeRequired": "Complete the required inputs to run."
+  },
+  "statusDashboard": {
+    "title": "Current and recent jobs",
+    "loading": "Loading...",
+    "refresh": "Refresh",
+    "autoRefresh": "Auto-refresh in {{time}}",
+    "empty": "No recent jobs to display.",
+    "columns": {
+      "app": "App",
+      "started": "Started",
+      "status": "Status"
+    },
+    "status": {
+      "unknown": "Unknown",
+      "completed": "Completed",
+      "failed": "Failed",
+      "running": "Running",
+      "queued": "Queued",
+      "filesUploaded": "Files Uploaded"
+    }
+  },
+  "jobIdSidebar": {
+    "showAria": "Show job ID information",
+    "button": "Job ID",
+    "title": "Job information",
+    "info": "This information is useful for debugging and tracking your application's state.",
+    "support": "Please provide this when seeking support.",
+    "currentJobId": "Current job ID",
+    "appId": "App ID",
+    "copy": "Copy to clipboard"
+  },
+  "uploadStatus": {
+    "loadingAria": "Loading"
+  },
+  "dash": {
+    "title": {
+      "favorites": "Favourite Apps",
+      "all": "Numa Apps"
+    },
+    "subtitle": {
+      "favorites": "Your favorite apps at a glance",
+      "all": "Get started uncovering insights from your data with Numa."
+    },
+    "errors": {
+      "loadApps": "Failed to load apps: {{message}}"
+    }
+  },
+  "appDetail": {
+    "loadingTitle": "Loading...",
+    "loading": "Loading...",
+    "jobHistory": "Job History",
+    "jobNaming": "Turn on job naming for all apps",
+    "errors": {
+      "loadApp": "Failed to load app: {{message}}",
+      "generic": "An error occurred while loading the app"
+    }
+  },
+  "jobHistory": {
+    "title": "Job History",
+    "subtitle": "View and manage job history across all Numa apps",
+    "unknown": "Unknown",
+    "loading": "Loading...",
+    "loadingHistory": "Loading job history...",
+    "sidebar": {
+      "showAria": "Show job history",
+      "showButton": "Job History",
+      "headerTitle": "Job History - {{appName}}",
+      "closeAria": "Close job history",
+      "appFallback": "App",
+      "runLabel": "Run {{date}}",
+      "untitledRun": "Untitled run",
+      "unknownTime": "Unknown time",
+      "jobIdTitle": "Job ID: {{jobId}}",
+      "loadingMore": "Loading more...",
+      "empty": "No job history available"
+    },
+    "autoRefresh": "Auto-refresh in {{time}}",
+    "empty": "No job history available matching your filters",
+    "fileUploads": "Contains file uploads",
+    "status": {
+      "unknown": "Unknown",
+      "completed": "Completed",
+      "failed": "Failed",
+      "running": "Running",
+      "queued": "Queued",
+      "filesUploaded": "Files Uploaded"
+    },
+    "actions": {
+      "refresh": "Refresh",
+      "viewProgress": "View Progress",
+      "viewFiles": "View Files",
+      "viewError": "View Error",
+      "viewResults": "View Results",
+      "continue": "Continue"
+    },
+    "columns": {
+      "started": "Started",
+      "run": "Run",
+      "status": "Status",
+      "actions": "Actions"
+    },
+    "filters": {
+      "app": {
+        "label": "Filter by App",
+        "aria": "Filter by application",
+        "all": "All Apps"
+      },
+      "status": {
+        "label": "Filter by Status",
+        "all": "All Statuses"
+      },
+      "search": {
+        "label": "Search",
+        "placeholder": "Search by run name or app name..."
+      }
+    }
+  },
+  "qApps": {
+    "createSuccess": "App created successfully!",
+    "creating": "Creating...",
+    "createButton": "Create New App (deploy a Q demo)",
+    "addToLibrary": "Add to Library",
+    "run": "Run",
+    "errors": {
+      "details": "Error fetching app details"
+    }
+  },
+  "policyBuilder": {
+    "loadingContent": "Loading policy content...",
+    "loading": "Loading...",
+    "processing": "Processing...",
+    "empty": "No policies found. Create a new policy to get started.",
+    "createTitle": "Create New School Policy",
+    "comingSoon": "Coming Soon",
+    "tabs": {
+      "policies": "School Policies",
+      "create": "Create New Policy"
+    },
+    "table": {
+      "headers": {
+        "name": "Policy Name",
+        "lastModified": "Last Modified",
+        "status": "Status",
+        "actions": "Actions"
+      }
+    },
+    "status": {
+      "success": "SUCCESS",
+      "failed": "Failed",
+      "uploaded": "UPLOADED"
+    },
+    "date": {
+      "notAvailable": "N/A",
+      "invalid": "Invalid Date"
+    },
+    "labels": {
+      "unnamedPolicy": "Unnamed Policy"
+    },
+    "actions": {
+      "download": "Download...",
+      "pdf": "PDF",
+      "docx": "DOCX",
+      "createScenario": "Create New Scenario",
+      "blankScenario": "Blank Scenario",
+      "useScenario": "Use Scenario"
+    },
+    "chat": {
+      "defaultResponse": "I understand your request. How would you like to proceed with these changes?"
+    },
+    "errors": {
+      "title": "Error",
+      "downloadFailed": "Failed to download file",
+      "jobStatus": "Error fetching job status. Please try again.",
+      "unauthorized": "Unauthorized access. Please check your credentials."
+    },
+    "templates": {
+      "catholic": {
+        "name": "Catholic School Policies",
+        "description": "Complete policy framework aligned with Catholic Special Character and values.",
+        "category": "Catholic Education",
+        "instructions": "Generate policies covering: Catholic Character integration, academic excellence, faith formation, community engagement, student achievement, operational expectations, and governance aligned with Catholic education principles."
+      },
+      "green": {
+        "name": "Green School Policies",
+        "description": "Policy framework centered on environmental sustainability and ecological awareness.",
+        "category": "Environmental Education",
+        "instructions": "Generate policies covering: environmental leadership, sustainability practices, nature-based learning, community impact, student achievement, operational expectations, and governance through an environmental lens."
+      },
+      "public": {
+        "name": "Public School Policies",
+        "description": "Standard policy framework for state education.",
+        "category": "Public Education",
+        "instructions": "Generate policies covering: educational achievement, cultural responsiveness, community engagement, student support, operational expectations, and governance aligned with state education requirements."
+      },
+      "kura": {
+        "name": "Kura Kaupapa Māori Policies",
+        "description": "Policy framework based on Te Aho Matua principles.",
+        "category": "Māori Education",
+        "instructions": "Generate policies covering: Te Reo Māori, tikanga Māori, Te Aho Matua principles, whānau engagement, student achievement, operational expectations, and governance aligned with Kura Kaupapa values."
+      },
+      "anglican": {
+        "name": "Anglican School Policies",
+        "description": "Policy framework aligned with Anglican Special Character and values.",
+        "category": "Anglican Education",
+        "instructions": "Generate policies covering: Anglican Character integration, academic excellence, spiritual formation, community engagement, student achievement, operational expectations, and governance aligned with Anglican education principles."
+      },
+      "presbyterian": {
+        "name": "Presbyterian School Policies",
+        "description": "Policy framework aligned with Presbyterian Special Character and values.",
+        "category": "Presbyterian Education",
+        "instructions": "Generate policies covering: Presbyterian Character integration, academic excellence, faith development, community engagement, student achievement, operational expectations, and governance aligned with Presbyterian education principles."
+      },
+      "integrated": {
+        "name": "State Integrated School Policies",
+        "description": "Policy framework for schools with special character integration agreements.",
+        "category": "Integrated Education",
+        "instructions": "Generate policies covering: special character preservation, integration requirements, community engagement, student achievement, operational expectations, and governance aligned with integration agreement obligations."
+      },
+      "independent": {
+        "name": "Independent School Policies",
+        "description": "Policy framework for private independent schools.",
+        "category": "Independent Education",
+        "instructions": "Generate policies covering: school-specific values, academic excellence, character development, community engagement, student achievement, operational expectations, and governance aligned with independent school requirements."
+      }
+    },
+    "modal": {
+      "title": "Create New Policy",
+      "usingScenario": "Using {{name}} Scenario",
+      "schoolName": {
+        "label": "School Name",
+        "placeholder": "e.g., St Theresa's School (Plimmerton)"
+      },
+      "schoolContext": {
+        "label": "School Context",
+        "placeholder": "Describe your school's characteristics, values, and community..."
+      },
+      "actions": {
+        "cancel": "Cancel",
+        "generating": "Generating...",
+        "generate": "Generate Policy"
+      }
+    }
+  },
+  "policyReviewer": {
+    "status": {
+      "success": "SUCCESS",
+      "failed": "Failed",
+      "uploaded": "UPLOADED"
+    },
+    "date": {
+      "notAvailable": "N/A",
+      "invalid": "Invalid Date"
+    },
+    "labels": {
+      "unnamedPolicy": "Unnamed Policy"
+    },
+    "errors": {
+      "fetchPolicies": "Failed to fetch policies",
+      "invalidLegislationUrl": "Please enter a valid legislation URL",
+      "duplicateUrl": "URL already added to the list",
+      "policyNotFound": "Policy not found",
+      "editFailed": "Failed to edit policy configuration",
+      "fileTooLarge": "File exceeds the 10 MB limit",
+      "missingPolicyName": "Please enter a policy name",
+      "missingPolicyContext": "Please provide policy context",
+      "duplicatePolicy": "A policy with this name already exists",
+      "missingFile": "Please select a file to upload",
+      "missingPolicyData": "Could not find policy data",
+      "generic": "An error occurred while processing your request",
+      "saveRunNameFailed": "Failed to save job name. Please try again.",
+      "downloadFailed": "Download failed",
+      "loadResults": "Failed to load results",
+      "originalMissing": "Original file missing",
+      "startReviewFailed": "Failed to start review",
+      "deleteFailed": "Failed to delete policy",
+      "originalNotFound": "Original file not found",
+      "viewOriginalFailed": "Failed to view original policy",
+      "loadConfig": "Failed to load configuration"
+    },
+    "success": {
+      "updated": "Policy configuration updated",
+      "uploaded": "Policy uploaded successfully",
+      "reviewStarted": "Policy review started successfully",
+      "deleted": "Policy \"{{name}}\" has been deleted"
+    },
+    "results": {
+      "selectPolicy": "Select a policy from the dashboard to view results",
+      "loading": "Loading review results...",
+      "reviewTitle": "Policy Review",
+      "updatedTitle": "Required Changes",
+      "title": "Policy Review Results:",
+      "unknownPolicy": "Unknown Policy",
+      "back": "Back to Dashboard",
+      "reviewTab": "Policy Review",
+      "updatedTab": "Required Changes",
+      "empty": "No results available"
+    },
+    "toast": {
+      "success": "Success",
+      "error": "Error"
+    },
+    "empty": "No policies found. Upload a policy to get started.",
+    "table": {
+      "headers": {
+        "name": "Name",
+        "uploaded": "Uploaded",
+        "status": "Status",
+        "actions": "Actions"
+      }
+    },
+    "actions": {
+      "view": "View",
+      "review": "Review",
+      "reviewIcon": "▶",
+      "viewOriginal": "View Original",
+      "viewResults": "View Results",
+      "rerun": "Re-run",
+      "rerunIcon": "↻",
+      "edit": "Edit Config",
+      "delete": "Delete",
+      "add": "Add",
+      "remove": "Remove",
+      "viewUrlExamples": "View Supported URL Examples",
+      "cancel": "Cancel",
+      "update": "Update Configuration",
+      "upload": "Upload to Dashboard"
+    },
+    "upload": {
+      "title": "Upload a Policy",
+      "editTitle": "Edit Policy Configuration",
+      "description": "Upload a policy document to the dashboard for easy access and management.",
+      "editDescription": "Edit the policy details and legislation URLs for this policy.",
+      "fields": {
+        "policyName": {
+          "label": "Policy Name",
+          "placeholder": "Enter policy name"
+        },
+        "policyContext": {
+          "label": "Policy Context",
+          "placeholder": "Provide context about the policy",
+          "hint": "Detailed context helps generate better recommendations."
+        },
+        "legislation": {
+          "label": "Legislation URLs (Optional)",
+          "placeholder": "Enter a URL",
+          "supported": "We support legislation.vic.gov.au & legislation.govt.nz links.",
+          "addedLabel": "Added URLs:",
+          "empty": "No URLs added yet"
+        },
+        "document": {
+          "label": "Upload Policy Document",
+          "placeholder": "Drag and drop or click to select a file",
+          "supported": "Supported formats: PDF, DOCX, TXT (Max 10 MB)"
+        }
+      },
+      "uploading": "Uploading..."
+    },
+    "urlExamples": {
+      "windowTitle": "Supported Legislation URL Examples",
+      "title": "Supported Legislation URLs",
+      "vicTitle": "Victoria Legislation",
+      "vicIntro": "Use URLs from legislation.vic.gov.au in these formats:",
+      "vicNote1": "This example is for the Electronic Transactions (Victoria) Act 2000",
+      "vicNote2": "This example is for the Ararat Land Act 1926",
+      "nzTitle": "New Zealand Legislation",
+      "nzIntro": "Use URLs from legislation.govt.nz in these formats:",
+      "nzNote1": "This example is for the Resource Management Act 1991",
+      "nzNote2": "This example is for the Companies Act 1993",
+      "note": "Note: Please ensure you use the exact URL format as shown in these examples. The system will validate your URLs against these patterns."
+    },
+    "tabs": {
+      "upload": "Upload Policy",
+      "dashboard": "Policy Dashboard",
+      "results": "Review Results"
+    },
+    "loadingConfig": "Loading application configuration..."
+  },
+  "policyEditor": {
+    "loading": "Loading...",
+    "editorPlaceholder": "# Start editing your policy here...",
+    "chatPlaceholder": "Type your message...",
+    "send": "Send",
+    "toolbar": {
+      "undo": "Undo",
+      "redo": "Redo",
+      "bold": "Bold",
+      "italic": "Italic",
+      "underline": "Underline",
+      "blockType": "Block Type",
+      "heading1": "Heading 1",
+      "heading2": "Heading 2",
+      "heading3": "Heading 3",
+      "paragraph": "Paragraph",
+      "insertLink": "Insert Link"
+    }
+  },
+  "processing": {
+    "processing": "Processing...",
+    "complete": "Complete!",
+    "error": "Error",
+    "runningAnalysis": "Running analysis...",
+    "startingProcess": "Starting process...",
+    "startingApp": "Starting {{appName}}...",
+    "analysisComplete": "Analysis complete",
+    "startingFollowUp": "Starting follow-up...",
+    "startingFollowUpAnalysis": "Starting follow-up analysis...",
+    "sendingFollowUpRequest": "Sending follow-up request...",
+    "processingFollowUpQuestion": "Processing follow-up question...",
+    "followUpComplete": "Follow-up analysis complete",
+    "errorWithMessage": "Error: {{message}}",
+    "taskFallback": "task",
+    "appFallback": "App",
+    "taskPrefixes": {
+      "processing": "Processing",
+      "processingInput": "Processing Input",
+      "executing": "Executing",
+      "preparingOutput": "Preparing Output"
+    },
+    "taskMessage": "{{prefix}}: {{title}}..."
+  },
+  "errors": {
+    "noFileUploaded": "No file uploaded",
+    "noJobId": "No job ID received from initial request",
+    "processFailed": "We encountered an issue processing your request. Please try again.",
+    "timeout": "The process exceeded the 30-minute timeout limit. Please check again later via the job history tab.",
+    "jobIncomplete": "Job did not complete successfully",
+    "noResultData": "No result data in successful response",
+    "taskFailed": "Task failed",
+    "qAppSessionFailed": "Q App session failed",
+    "startProcessFailed": "Unable to start the process. Please try again.",
+    "jobNotFound": "Job not found",
+    "noManifest": "No manifest available for job",
+    "appNotInitialized": "App not initialized",
+    "followUpNoJobId": "No job ID received from follow-up request",
+    "startFollowUpFailed": "Unable to start follow-up. Please try again."
+  }
+}

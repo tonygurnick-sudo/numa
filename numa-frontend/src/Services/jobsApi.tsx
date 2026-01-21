@@ -2,6 +2,7 @@
 import { createFormattedDate } from '../utils/dateUtils';
 import { useNumaRequest } from '../Providers/NumaRequestContext';
 import { useAuth } from '../Providers/AuthProvider';
+import { useTranslation } from 'react-i18next';
 
 const createJobData = (numaAppData, taskInputs, jobId = null, status = 'PROCESSING') => {
   const { displayDate, isoDate } = createFormattedDate();
@@ -21,6 +22,7 @@ const createJobData = (numaAppData, taskInputs, jobId = null, status = 'PROCESSI
 };
 
 export const useJobsApi = () => {
+  const { t } = useTranslation('errors');
   const { numaGet, numaPost, numaPut } = useNumaRequest();
   const { user } = useAuth();
   const userId = user?.decoded_tokens?.idToken?.['sub'];
@@ -42,12 +44,12 @@ export const useJobsApi = () => {
       const response = await numaPost(endpoint_call, requestBody);
       // Check if the response is an object
       if (typeof response !== 'object') {
-        throw new Error('Invalid job creation response from API');
+        throw new Error(t('jobs.invalidCreateResponse'));
       }
 
       // Check if the response status matches what we expect
       if (response.status !== status) {
-        const errorMessage = response.error || 'Failed to create job';
+        const errorMessage = response.error || t('jobs.createFailed');
         console.error('Job creation failed:', errorMessage);
         throw new Error(errorMessage);
       }
@@ -56,7 +58,7 @@ export const useJobsApi = () => {
     } catch (error) {
       console.error('API Error creating job:', error);
       console.error('Error details:', error.response?.data);
-      throw new Error(`Failed to create job: ${error.message}`);
+      throw new Error(t('jobs.createFailedWithMessage', { message: (error as Error).message }));
     }
   };
 
@@ -97,7 +99,7 @@ export const useJobsApi = () => {
     } catch (error) {
       console.error('API Error updating job:', error);
       console.error('Error details:', error.response?.data);
-      throw new Error(`Failed to update job: ${error.message}`);
+      throw new Error(t('jobs.updateFailed', { message: (error as Error).message }));
     }
   };
 
@@ -141,7 +143,7 @@ export const useJobsApi = () => {
       const response = await numaGet(endpoint, params);
 
       if (!response) {
-        throw new Error('No response received from server');
+        throw new Error(t('jobs.noResponse'));
       }
 
       return response;

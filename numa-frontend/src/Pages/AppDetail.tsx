@@ -14,8 +14,10 @@ import { PolicyBuilderDetail } from '../Components/Policy/PolicyBuilderDetail';
 import { PolicyReviewerDetail } from '../Components/Policy/PolicyReviewerDetail';
 import { manifestService } from '../Services/manifestService';
 import { PageHeader } from '../Components/PageHeader';
+import { useTranslation } from 'react-i18next';
 
 const AppDetail = () => {
+  const { t } = useTranslation('apps');
   const { appId } = useParams(); // Get appId from URL
   const {
     error,
@@ -52,7 +54,7 @@ const AppDetail = () => {
         // We'll create a job when files are uploaded instead of using a session ID
         // This ensures we have a real job ID from the beginning
       } catch (error) {
-        setError(`Failed to load app: ${error.message}`);
+        setError(t('appDetail.errors.loadApp', { message: (error as Error).message }));
       } finally {
         setLoading(false);
       }
@@ -71,7 +73,7 @@ const AppDetail = () => {
       {error && (
         <div className="position-fixed bottom-0 end-0 p-3" style={{ zIndex: 1001 }}>
           <Alert variant="danger" dismissible className="mb-0 shadow" onClose={() => setError(null)}>
-            {typeof error === 'string' ? error : 'An error occurred while loading the app'}
+            {typeof error === 'string' ? error : t('appDetail.errors.generic')}
           </Alert>
         </div>
       )}
@@ -83,7 +85,7 @@ const AppDetail = () => {
       <PageHeader
         title={
           <div className="d-flex align-items-center">
-            {numaAppData?.appName || 'Loading...'}
+            {numaAppData?.appName || t('appDetail.loadingTitle')}
             <button onClick={handleFavoriteClick} className="btn btn-link text-warning p-0 ms-2">
               {favorite ? <StarFill size={20} /> : <Star size={20} />}
             </button>
@@ -94,7 +96,7 @@ const AppDetail = () => {
           numaAppData?.id !== 'policy-builder' && numaAppData?.id !== 'policy-reviewer' ? (
             <Button variant="secondary" onClick={() => setJobHistorySidebarOpen(true)}>
               <i className="bi bi-clock-history me-1"></i>
-              Job History
+              {t('appDetail.jobHistory')}
             </Button>
           ) : null
         }
@@ -108,7 +110,7 @@ const AppDetail = () => {
                 <Form.Check
                   type="switch"
                   id="layout-job-naming-toggle"
-                  label="Turn on job naming for all apps"
+                  label={t('appDetail.jobNaming')}
                   checked={isJobNamingEnabled}
                   onChange={(event) => setIsJobNamingEnabled(event.target.checked)}
                 />
@@ -145,7 +147,7 @@ const AppDetail = () => {
       </Container>
 
       {loading ? (
-        <div>Loading...</div>
+        <div>{t('appDetail.loading')}</div>
       ) : numaAppData?.type === 'policy-builder' ? (
         <PolicyBuilderDetail id={numaAppData.id} />
       ) : numaAppData?.id === 'policy-reviewer' ? (

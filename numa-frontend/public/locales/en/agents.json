@@ -1,0 +1,318 @@
+{
+  "card": {
+    "companyKb": "Company Knowledge Base",
+    "visibility": {
+      "company": "Company Agent",
+      "personal": "Personal Agent"
+    },
+    "timeSaved": "Saved {{time}}",
+    "knowledgeBases": {
+      "all": "All Knowledge Bases"
+    },
+    "favorite": {
+      "add": "Add to favorites",
+      "remove": "Remove from favorites",
+      "addAria": "Add agent to favorites",
+      "removeAria": "Remove agent from favorites"
+    },
+    "collapse": "Collapse agent",
+    "collapseAria": "Collapse agent details",
+    "noDescription": "No description provided.",
+    "labels": {
+      "tools": "TOOLS",
+      "knowledgeBases": "KNOWLEDGE BASES",
+      "integrations": "INTEGRATIONS",
+      "timeSaved": "TIME SAVED",
+      "files": "FILES",
+      "createdBy": "CREATED BY",
+      "updated": "UPDATED"
+    },
+    "tools": {
+      "webSearch": "Web search",
+      "agentCreation": "Agent creation"
+    },
+    "unknown": "Unknown",
+    "time": {
+      "today": "Today",
+      "yesterday": "Yesterday",
+      "daysAgo": "{{count}} days ago"
+    },
+    "actions": {
+      "chat": "Chat",
+      "edit": "Edit",
+      "duplicate": "Duplicate",
+      "export": "Export JSON",
+      "exportAria": "Export agent as JSON",
+      "delete": "Delete"
+    }
+  },
+  "iconPicker": {
+    "icons": {
+      "assistant": "Assistant",
+      "automation": "Automation",
+      "documentation": "Documentation",
+      "peopleOps": "People Ops",
+      "business": "Business",
+      "analytics": "Analytics",
+      "compliance": "Compliance",
+      "operations": "Operations"
+    }
+  },
+  "createModal": {
+    "header": {
+      "avatarAlt": "Agent avatar",
+      "editTitle": "Edit agent",
+      "createTitle": "Create agent",
+      "subtitle": "Configure what this agent knows, looks like, and can do."
+    },
+    "validation": {
+      "title": "Agent name",
+      "instructions": "Instructions",
+      "referenceFiles": "Reference files (max 5 files)",
+      "missing": "Please complete the following fields:\n{{fields}}"
+    },
+    "visibility": {
+      "label": "Visibility",
+      "personal": "Personal",
+      "personalHelp": "Only you can access this agent.",
+      "public": "Company",
+      "publicHelp": "Visible to everyone in your workspace.",
+      "disabledNote": "Company agents are disabled for your account.",
+      "publicScopeNote": "This agent is managed at the workspace level and cannot be changed.",
+      "publicConfirm": "You are about to make this agent public. Make sure it does not contain sensitive information. Continue?"
+    },
+    "errors": {
+      "save": "Unable to save agent.",
+      "export": "Unable to export agent.",
+      "import": "Unable to import agent."
+    },
+    "import": {
+      "notes": "Imported with notes:\n- {{notes}}",
+      "success": "Agent imported successfully."
+    },
+    "sections": {
+      "setup": {
+        "title": "Agent setup",
+        "required": "Required"
+      },
+      "appearance": {
+        "title": "Appearance & sharing"
+      },
+      "tools": {
+        "title": "Tools & capabilities"
+      },
+      "referenceFiles": {
+        "title": "Reference files"
+      }
+    },
+    "setup": {
+      "titleLabel": "Agent name",
+      "titlePlaceholder": "e.g., Contract reviewer",
+      "instructionsLabel": "Instructions",
+      "instructionsPlaceholder": "Describe how the agent should behave and what it should focus on.",
+      "instructionsHelp": "These instructions guide how the agent responds.",
+      "descriptionLabel": "Description",
+      "descriptionPlaceholder": "Short summary of what this agent does.",
+      "descriptionHelp": "Shown on the agent card.",
+      "welcomeLabel": "Welcome message",
+      "welcomePlaceholder": "Message shown when a chat starts.",
+      "welcomeHelp": "Shown to users when they open the chat."
+    },
+    "appearance": {
+      "selectedAvatarAlt": "Selected agent avatar",
+      "avatarLabel": "Avatar"
+    },
+    "timeSaved": {
+      "label": "Estimated time saved",
+      "hoursShort": "hr",
+      "minutesShort": "min",
+      "help": "Shown on the agent card to indicate value."
+    },
+    "tools": {
+      "summary": {
+        "auto": "Auto",
+        "kb": "KB",
+        "web": "Web",
+        "agentCreation": "Agent creation",
+        "integrations": "{{count}} integrations"
+      },
+      "autoSelect": {
+        "title": "Auto-select tools",
+        "description": "Let the agent pick the right tools per request."
+      },
+      "kbAccess": {
+        "title": "Knowledge base access",
+        "description": "Choose which knowledge bases this agent can use.",
+        "none": "No knowledge bases",
+        "all": "All knowledge bases",
+        "selected": "Selected knowledge bases",
+        "noneAvailable": "No knowledge bases available.",
+        "defaultBadge": "Default",
+        "sharedBadge": "Shared",
+        "compareLink": "Compare reference files vs knowledge bases"
+      },
+      "webSearch": {
+        "title": "Web search",
+        "description": "Allow this agent to search the web."
+      },
+      "agentCreation": {
+        "title": "Agent creation",
+        "description": "Allow this agent to create new agents."
+      }
+    },
+    "integrations": {
+      "title": "Integrations",
+      "help": "Connect integrations for this agent.",
+      "loading": "Loading integrations...",
+      "none": "No integrations available.",
+      "notConnected": "Not connected",
+      "maxAlert": "You can select up to 4 integrations.",
+      "connectionCount": "{{current}} / {{max}}"
+    },
+    "referenceFiles": {
+      "count": "{{count}} files",
+      "comparison": {
+        "title": "Reference files vs knowledge bases",
+        "referenceTitle": "Reference files",
+        "referenceAlways": "Always included",
+        "referenceIncluded": "Included in every request.",
+        "referenceMax": "Up to 5 files.",
+        "referenceSizes": "Best for small sets of docs.",
+        "kbTitle": "Knowledge bases",
+        "kbQueried": "Queried when relevant",
+        "kbSearches": "Searches content across your data sources.",
+        "kbUnlimited": "Unlimited files.",
+        "kbSizes": "Great for large collections."
+      },
+      "help": "Reference files are always sent with the agent's prompt."
+    },
+    "footer": {
+      "createdBy": "Created by",
+      "export": "Export",
+      "import": "Import",
+      "cancel": "Cancel",
+      "saving": "Saving...",
+      "saveChanges": "Save changes",
+      "create": "Create agent",
+      "unknownUser": "Unknown user"
+    }
+  },
+  "avatarSelector": {
+    "previewAlt": "Agent avatar preview",
+    "current": {
+      "customImage": "Custom image",
+      "icon": "Icon",
+      "uploadedCustom": "Uploaded custom avatar",
+      "selectOrUpload": "Select an icon or upload your own"
+    },
+    "actions": {
+      "remove": "Remove"
+    },
+    "tabs": {
+      "chooseIcon": "Choose icon",
+      "uploadImage": "Upload image"
+    },
+    "upload": {
+      "helper": "Upload a PNG or JPG image (max 1 MB). Images will be resized to 256x256 pixels.",
+      "uploading": "Uploading...",
+      "chooseFile": "Choose file"
+    },
+    "errors": {
+      "configLoading": "Configuration still loading. Please try again.",
+      "invalidType": "Please select a PNG or JPEG image.",
+      "credentials": "Unable to obtain AWS credentials",
+      "imageLoad": "Image load error",
+      "canvas": "Canvas not supported",
+      "uploadFailed": "Failed to upload image"
+    }
+  },
+  "avatar": {
+    "defaultAlt": "Agent"
+  },
+  "fileUpload": {
+    "uploading": "Uploading...",
+    "uploadButton": "Upload files",
+    "supported": "Supported: Documents (PDF, DOCX, XLSX), Images (PNG, JPG), Text/Code (TXT, MD, JSON, HTML, XML, YAML, Python, JavaScript, etc.), Audio/Video (MP3, MP4, WAV, etc.)",
+    "unknownType": "Unknown type",
+    "errors": {
+      "maxFiles": "Maximum {{max}} files allowed per agent.",
+      "configLoading": "Configuration still loading. Please try again in a moment.",
+      "credentials": "Unable to obtain AWS credentials",
+      "fileFailed": "Failed to upload \"{{fileName}}\": {{message}}",
+      "unknown": "Unknown error",
+      "uploadFailed": "Upload failed"
+    }
+  },
+  "sidebar": {
+    "openButton": "Agents",
+    "title": "My agents",
+    "manage": "Manage",
+    "subtitle": "Select an agent to start chatting with their instructions.",
+    "disabled": "Agents are disabled by your administrator.",
+    "empty": "No agents yet. Create one from the Agents page.",
+    "visibility": {
+      "public": "Public Agent",
+      "personal": "Personal Agent"
+    },
+    "use": "Use",
+    "requires": "Requires: {{integrations}}",
+    "errors": {
+      "loadAgents": "Failed to load agents"
+    }
+  },
+  "management": {
+    "title": "AI Agents",
+    "subtitle": "Design, deploy, and manage your intelligent AI assistants",
+    "actions": {
+      "refresh": "Refresh",
+      "create": "Create Agent",
+      "createFirst": "Create Your First Agent"
+    },
+    "stats": {
+      "total": "Total Agents",
+      "personal": "Personal",
+      "company": "Company"
+    },
+    "disabled": {
+      "title": "Agents are not enabled for your company",
+      "description": "Create agents to automate tasks, standardize workflows, and reuse expert setups across your team. Contact your account administrator to request access.",
+      "emptyTitle": "Agents are disabled",
+      "emptyDescription": "Agents let you define reusable AI assistants with custom instructions, reference files, and tool access. When enabled, you can create personal agents or share company agents for common tasks."
+    },
+    "sections": {
+      "myAgents": {
+        "title": "My Agents",
+        "subtitle": "Your personal AI assistants"
+      },
+      "company": {
+        "title": "Company Agent Marketplace",
+        "subtitle": "Discover and copy agents shared by other users in your organization"
+      }
+    },
+    "empty": {
+      "personalOnly": "You have not created any personal agents yet. Click \"Create Agent\" to get started.",
+      "none": "No agents found.",
+      "company": "No company agents are available in your workspace yet.",
+      "title": "No agents found",
+      "modeOff": "Agents are disabled. Contact your admin to enable Agents.",
+      "all": "Get started by creating your first AI agent",
+      "personal": "You have not created any personal agents yet"
+    },
+    "errors": {
+      "load": "Failed to load agents",
+      "duplicate": "Failed to duplicate agent",
+      "favorite": "Failed to update favorite",
+      "delete": "Failed to delete agent"
+    },
+    "confirmDelete": "Delete agent \"{{title}}\"?",
+    "missingIntegrations": {
+      "title": "Missing integrations",
+      "loading": "Checking your integrations...",
+      "description": "This agent requests access to the following integrations which are not connected for your account:",
+      "note": "Continuing may result in limited or unintended behavior. You can connect integrations now from the Integrations page and try again.",
+      "back": "Back",
+      "goToIntegrations": "Go to Integrations",
+      "continue": "Continue without"
+    }
+  }
+}

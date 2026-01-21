@@ -1,4 +1,5 @@
 import type { ToolResultLike } from './helpers';
+import i18n from '../i18n';
 
 type AgentItem = {
   agent_id?: string;
@@ -133,14 +134,16 @@ function parseRelaxedAgentCreation(text: string): AgentCreationPayload | null {
 
 export function getAgentCreationSummary(result: ToolResultLike): string {
   const payload = getAgentCreationPayload(result);
-  if (!payload) return 'Agent creation';
+  if (!payload) return i18n.t('common:toolSummaries.agentCreation.default');
   const { status = '', agent } = payload;
   if ((status || '').toLowerCase() === 'success' && agent) {
-    const t = agent.title ? `"${agent.title}"` : 'agent';
-    const scope = agent.visibility ? ` (${agent.visibility})` : '';
-    return `Agent created: ${t}${scope}`;
+    const agentLabel = agent.title ? `"${agent.title}"` : i18n.t('common:toolSummaries.agentCreation.agentFallback');
+    const scopeLabel = agent.visibility
+      ? i18n.t('common:toolSummaries.agentCreation.scopeSuffix', { scope: agent.visibility })
+      : '';
+    return i18n.t('common:toolSummaries.agentCreation.created', { agent: agentLabel, scope: scopeLabel });
   }
-  if ((status || '').toLowerCase() === 'denied') return 'Agent creation denied';
-  if ((status || '').toLowerCase() === 'error') return 'Agent creation failed';
-  return 'Agent creation completed';
+  if ((status || '').toLowerCase() === 'denied') return i18n.t('common:toolSummaries.agentCreation.denied');
+  if ((status || '').toLowerCase() === 'error') return i18n.t('common:toolSummaries.agentCreation.failed');
+  return i18n.t('common:toolSummaries.agentCreation.completed');
 }

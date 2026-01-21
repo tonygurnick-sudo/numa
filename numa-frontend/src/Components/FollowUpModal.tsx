@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Modal, Button, Form } from 'react-bootstrap';
+import { useTranslation } from 'react-i18next';
 
 interface FollowUpModalProps {
   show: boolean;
@@ -12,6 +13,7 @@ interface FollowUpModalProps {
  * Modal for submitting follow-up prompts to continue an analysis session
  */
 export function FollowUpModal({ show, onHide, onSubmit, isLoading = false }: FollowUpModalProps): React.JSX.Element {
+  const { t } = useTranslation('common');
   const [prompt, setPrompt] = useState('');
 
   const handleSubmit = () => {
@@ -39,16 +41,16 @@ export function FollowUpModal({ show, onHide, onSubmit, isLoading = false }: Fol
       <Modal.Header closeButton className="bg-primary bg-opacity-10 border-primary border-opacity-25">
         <Modal.Title className="d-flex align-items-center">
           <i className="bi bi-chat-dots me-2 text-primary"></i>
-          Ask Follow-Up Question
+          {t('followUp.title')}
         </Modal.Title>
       </Modal.Header>
 
       <Modal.Body>
         <Form.Group>
           <Form.Label className="fw-semibold">
-            What would you like to explore next?
+            {t('followUp.promptLabel')}
             <span className="text-muted ms-2" style={{ fontSize: '0.85rem', fontWeight: 'normal' }}>
-              (Ctrl+Enter to submit)
+              {t('followUp.shortcutHint')}
             </span>
           </Form.Label>
           <Form.Control
@@ -57,19 +59,17 @@ export function FollowUpModal({ show, onHide, onSubmit, isLoading = false }: Fol
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="E.g., 'Create a visualization of the top 10 products' or 'Can you break down the data by region?'"
+            placeholder={t('followUp.placeholder')}
             disabled={isLoading}
             autoFocus
           />
-          <Form.Text className="text-muted">
-            This will continue your analysis with access to all previous work and outputs.
-          </Form.Text>
+          <Form.Text className="text-muted">{t('followUp.helper')}</Form.Text>
         </Form.Group>
       </Modal.Body>
 
       <Modal.Footer className="d-flex justify-content-between">
         <Button variant="secondary" onClick={handleClose} disabled={isLoading}>
-          Cancel
+          {t('common.cancel')}
         </Button>
         <Button
           variant="primary"
@@ -83,12 +83,12 @@ export function FollowUpModal({ show, onHide, onSubmit, isLoading = false }: Fol
           {isLoading ? (
             <>
               <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
-              Starting...
+              {t('followUp.starting')}
             </>
           ) : (
             <>
               <i className="bi bi-arrow-right-circle me-1"></i>
-              Continue Analysis
+              {t('followUp.continue')}
             </>
           )}
         </Button>

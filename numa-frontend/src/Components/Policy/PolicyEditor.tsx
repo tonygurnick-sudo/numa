@@ -11,6 +11,7 @@ import {
   TypeH2,
   TypeH3,
 } from 'react-bootstrap-icons';
+import { useTranslation } from 'react-i18next';
 
 // Import necessary plugins
 import {
@@ -50,55 +51,59 @@ const editorStyles = {
   },
 };
 
-const CustomToolbar = () => (
-  <div className="border-bottom p-2 d-flex gap-2">
-    <ButtonGroup size="sm">
-      <Button variant="secondary" title="Undo">
-        <ArrowCounterclockwise />
-      </Button>
-      <Button variant="secondary" title="Redo">
-        <ArrowClockwise />
-      </Button>
-    </ButtonGroup>
+const CustomToolbar = () => {
+  const { t } = useTranslation('apps');
 
-    <ButtonGroup size="sm">
-      <Button variant="secondary" title="Bold">
-        <TypeBold />
-      </Button>
-      <Button variant="secondary" title="Italic">
-        <TypeItalic />
-      </Button>
-      <Button variant="secondary" title="Underline">
-        <TypeUnderline />
-      </Button>
-    </ButtonGroup>
+  return (
+    <div className="border-bottom p-2 d-flex gap-2">
+      <ButtonGroup size="sm">
+        <Button variant="secondary" title={t('policyEditor.toolbar.undo')}>
+          <ArrowCounterclockwise />
+        </Button>
+        <Button variant="secondary" title={t('policyEditor.toolbar.redo')}>
+          <ArrowClockwise />
+        </Button>
+      </ButtonGroup>
 
-    <Dropdown as={ButtonGroup} size="sm">
-      <Dropdown.Toggle variant="secondary" id="block-type">
-        <TextParagraph className="me-1" />
-        Block Type
-      </Dropdown.Toggle>
-      <Dropdown.Menu>
-        <Dropdown.Item>
-          <TypeH1 className="me-2" /> Heading 1
-        </Dropdown.Item>
-        <Dropdown.Item>
-          <TypeH2 className="me-2" /> Heading 2
-        </Dropdown.Item>
-        <Dropdown.Item>
-          <TypeH3 className="me-2" /> Heading 3
-        </Dropdown.Item>
-        <Dropdown.Item>
-          <TextParagraph className="me-2" /> Paragraph
-        </Dropdown.Item>
-      </Dropdown.Menu>
-    </Dropdown>
+      <ButtonGroup size="sm">
+        <Button variant="secondary" title={t('policyEditor.toolbar.bold')}>
+          <TypeBold />
+        </Button>
+        <Button variant="secondary" title={t('policyEditor.toolbar.italic')}>
+          <TypeItalic />
+        </Button>
+        <Button variant="secondary" title={t('policyEditor.toolbar.underline')}>
+          <TypeUnderline />
+        </Button>
+      </ButtonGroup>
 
-    <Button variant="secondary" size="sm" title="Insert Link">
-      <Link45deg />
-    </Button>
-  </div>
-);
+      <Dropdown as={ButtonGroup} size="sm">
+        <Dropdown.Toggle variant="secondary" id="block-type">
+          <TextParagraph className="me-1" />
+          {t('policyEditor.toolbar.blockType')}
+        </Dropdown.Toggle>
+        <Dropdown.Menu>
+          <Dropdown.Item>
+            <TypeH1 className="me-2" /> {t('policyEditor.toolbar.heading1')}
+          </Dropdown.Item>
+          <Dropdown.Item>
+            <TypeH2 className="me-2" /> {t('policyEditor.toolbar.heading2')}
+          </Dropdown.Item>
+          <Dropdown.Item>
+            <TypeH3 className="me-2" /> {t('policyEditor.toolbar.heading3')}
+          </Dropdown.Item>
+          <Dropdown.Item>
+            <TextParagraph className="me-2" /> {t('policyEditor.toolbar.paragraph')}
+          </Dropdown.Item>
+        </Dropdown.Menu>
+      </Dropdown>
+
+      <Button variant="secondary" size="sm" title={t('policyEditor.toolbar.insertLink')}>
+        <Link45deg />
+      </Button>
+    </div>
+  );
+};
 
 const PolicyEditor = ({
   showEditModal,
@@ -112,6 +117,8 @@ const PolicyEditor = ({
   newMessage,
   onNewMessageChange,
 }) => {
+  const { t } = useTranslation('apps');
+
   return (
     <div
       className="policy-editor position-fixed top-0 h-100 bg-white"
@@ -126,7 +133,7 @@ const PolicyEditor = ({
       <div className="policy-editor-header border-bottom d-flex justify-content-between align-items-center p-3">
         <h5 className="mb-0">
           {selectedPolicy?.name}
-          {isLoading && <span className="ms-2 text-muted">(Loading...)</span>}
+          {isLoading && <span className="ms-2 text-muted">({t('policyEditor.loading')})</span>}
         </h5>
         <Button variant="link" className="p-0 text-dark" onClick={() => setShowEditModal(false)}>
           ×
@@ -138,7 +145,7 @@ const PolicyEditor = ({
             <CustomToolbar />
             <div className="p-4">
               <MDXEditor
-                markdown={initialValue || '# Start editing your policy here...'}
+                markdown={initialValue || t('policyEditor.editorPlaceholder')}
                 onChange={onChange}
                 plugins={[
                   headingsPlugin(),
@@ -175,10 +182,10 @@ const PolicyEditor = ({
                   className="form-control"
                   value={newMessage}
                   onChange={(e) => onNewMessageChange(e.target.value)}
-                  placeholder="Type your message..."
+                  placeholder={t('policyEditor.chatPlaceholder')}
                 />
                 <Button type="submit" variant="primary">
-                  Send
+                  {t('policyEditor.send')}
                 </Button>
               </div>
             </form>

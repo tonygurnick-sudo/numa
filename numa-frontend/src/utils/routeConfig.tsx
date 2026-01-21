@@ -27,17 +27,17 @@ export const ROUTE_CONFIG = [
   {
     path: '/dash',
     element: () => <Dash />,
-    nav: { label: 'Apps', icon: 'bi bi-grid-1x2-fill' },
+    nav: { label: 'Apps', labelKey: 'nav.items.apps', icon: 'bi bi-grid-1x2-fill' },
   },
   {
     path: '/favourite-apps',
     element: (navigate) => <Dash onClick={() => reloadFavourites(navigate)} showFavorites />,
-    nav: { label: 'Favs', icon: 'bi bi-star-fill' },
+    nav: { label: 'Favs', labelKey: 'nav.items.favs', icon: 'bi bi-star-fill' },
   },
   {
     path: '/job-history',
     element: () => <JobHistoryManager />,
-    nav: { label: 'Job History', icon: 'bi bi-clock-history' },
+    nav: { label: 'Job History', labelKey: 'nav.items.jobHistory', icon: 'bi bi-clock-history' },
   },
   {
     path: '/chat',
@@ -45,30 +45,34 @@ export const ROUTE_CONFIG = [
       return <NumaChatAgents />;
     },
     requiredFeature: 'chat',
-    nav: { label: 'Chat', icon: 'bi bi-chat-dots-fill' },
+    nav: { label: 'Chat', labelKey: 'nav.items.chat', icon: 'bi bi-chat-dots-fill' },
   },
   {
     path: '/agents',
     element: () => <AgentsManagement />,
-    nav: { label: 'Agents', icon: 'bi bi-robot' },
+    nav: { label: 'Agents', labelKey: 'nav.items.agents', icon: 'bi bi-robot' },
   },
   {
     path: '/company-info',
     element: () => <CompanyInfo />,
     requiredFeature: 'useCompanyData',
-    nav: { label: 'Company', icon: 'bi bi-building-fill' },
+    nav: { label: 'Company', labelKey: 'nav.items.company', icon: 'bi bi-building-fill' },
   },
   {
     path: '/company-knowledge-base',
     element: () => <CompanyKnowledgeBase />,
     requiredFeature: 'useCompanyData',
-    nav: { label: 'Company Knowledge Base', icon: 'bi bi-file-earmark-text' },
+    nav: {
+      label: 'Company Knowledge Base',
+      labelKey: 'nav.items.companyKnowledgeBase',
+      icon: 'bi bi-file-earmark-text',
+    },
   },
   {
     path: '/user-knowledge-bases',
     element: () => <UserKnowledgeBases />,
     requiredFeature: 'useCompanyData',
-    nav: { label: 'User Knowledge Base', icon: 'bi bi-person-lines-fill' },
+    nav: { label: 'User Knowledge Base', labelKey: 'nav.items.userKnowledgeBase', icon: 'bi bi-person-lines-fill' },
   },
   {
     path: '/user-knowledge-bases/:kbId',
@@ -80,13 +84,13 @@ export const ROUTE_CONFIG = [
   {
     path: '/profile',
     element: () => <UserProfilePage />,
-    nav: { label: 'Profile', icon: 'bi bi-person-circle', footerOnly: true },
+    nav: { label: 'Profile', labelKey: 'nav.items.profile', icon: 'bi bi-person-circle', footerOnly: true },
   },
   {
     path: '/settings',
     element: () => <SettingsPage />,
     requiredFeature: 'manageUsers',
-    nav: { label: 'Admin Settings', icon: 'bi bi-gear-fill', footerOnly: true },
+    nav: { label: 'Admin Settings', labelKey: 'nav.items.adminSettings', icon: 'bi bi-gear-fill', footerOnly: true },
   },
   // Keep legacy route for deep links (no nav)
   {
@@ -98,7 +102,7 @@ export const ROUTE_CONFIG = [
   {
     path: '/integrations',
     element: () => <NumaIntegrations />,
-    nav: { label: 'Integrations', icon: 'bi bi-link-45deg' },
+    nav: { label: 'Integrations', labelKey: 'nav.items.integrations', icon: 'bi bi-link-45deg' },
   },
   {
     path: '/data-connectors',

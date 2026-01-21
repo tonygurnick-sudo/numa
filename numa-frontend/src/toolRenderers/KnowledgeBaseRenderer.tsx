@@ -5,6 +5,7 @@ import { useKnowledgeBase } from '../Providers/KnowledgeBaseProvider';
 import type { AwsCredentialIdentity } from '@aws-sdk/types';
 import { getKnowledgeBasePayload } from './helpers';
 import type { KnowledgeBasePayload, ToolResultLike } from './helpers';
+import { useTranslation } from 'react-i18next';
 
 const KnowledgeBaseBody = ({
   payload,
@@ -13,6 +14,7 @@ const KnowledgeBaseBody = ({
   payload: KnowledgeBasePayload;
   getCredentials: () => Promise<AwsCredentialIdentity>;
 }) => {
+  const { t } = useTranslation('common');
   const { availableKBs } = useKnowledgeBase();
   if (!payload) return null;
   const { summarised_content = '', knowledgeText = [], references = [], query = '', kb_id } = payload;
@@ -26,17 +28,17 @@ const KnowledgeBaseBody = ({
     <>
       {kbName && (
         <div className="kb-target mb-1">
-          <strong>Querying:</strong> {kbName}
+          <strong>{t('toolRenderers.knowledgeBase.querying')}</strong> {kbName}
         </div>
       )}
       {query && (
         <div className="kb-query mb-2">
-          <strong>Query:</strong> <em>{query}</em>
+          <strong>{t('toolRenderers.knowledgeBase.query')}</strong> <em>{query}</em>
         </div>
       )}
       {Array.isArray(references) && references.length > 0 && (
         <div className="kb-sources mb-3">
-          <strong>Sources:</strong>
+          <strong>{t('toolRenderers.knowledgeBase.sources')}</strong>
           <div className="mt-1 mb-0">
             <ChatReferencesDropdown
               references={references as string[]}
@@ -50,7 +52,7 @@ const KnowledgeBaseBody = ({
       )}
       {hasSummary && (
         <div className="kb-summary">
-          <strong>Summary of Relevant Content:</strong>
+          <strong>{t('toolRenderers.knowledgeBase.summary')}</strong>
           <div style={{ marginTop: '0.5rem' }}>
             <MarkdownContent content={summarised_content} />
           </div>
@@ -59,15 +61,18 @@ const KnowledgeBaseBody = ({
       {!hasSummary && Array.isArray(knowledgeText) && knowledgeText.length > 0 && (
         <div className="kb-knowledge-list">
           {knowledgeText.map((item: Record<string, unknown>, idx: number) => {
-            const [source, content] = Object.entries(item)[0] || ['Unknown', 'No content'];
+            const [source, content] = Object.entries(item)[0] || [
+              t('toolRenderers.knowledgeBase.unknownSource'),
+              t('toolRenderers.knowledgeBase.noContent'),
+            ];
             return (
               <div key={idx} className="kb-knowledge-item mb-3 p-3 border rounded">
                 <div className="kb-content mb-2">
-                  <strong>Content:</strong>
+                  <strong>{t('toolRenderers.knowledgeBase.content')}</strong>
                   <div style={{ whiteSpace: 'pre-wrap', marginTop: '0.5rem' }}>{String(content)}</div>
                 </div>
                 <div className="kb-source">
-                  <strong>Source:</strong>{' '}
+                  <strong>{t('toolRenderers.knowledgeBase.source')}</strong>{' '}
                   {String(source).startsWith('http') ? (
                     <a href={String(source)} target="_blank" rel="noopener noreferrer">
                       {String(source)}

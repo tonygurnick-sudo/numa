@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Modal } from 'react-bootstrap';
+import { useTranslation } from 'react-i18next';
 import { S3UploadModule } from '../../Modules/S3UploadModule';
 import { UploadStatusRow } from '../Status/UploadStatusRow';
 import { useAuth } from '../../Providers/AuthProvider';
@@ -94,13 +95,13 @@ export const ChatFileUpload = ({
   dataAnalysisToolEnabled = false,
   onFilesUploaded,
 }: ChatFileUploadProps) => {
+  const { t } = useTranslation('chat');
   const { numaChatDynamoUtils, user, getCredentials } = useAuth();
   const { numaPost } = useNumaRequest();
   const { selectedKB, selectedKbId } = useKnowledgeBase();
   const [showCsvWarning, setShowCsvWarning] = useState(false);
   const [csvNoticeShown, setCsvNoticeShown] = useState(false);
-  const csvWarningText =
-    'CSV support is limited when Data Analysis is off. Enable Data Analysis in chat tools to analyze CSV files.';
+  const csvWarningText = t('fileUpload.csvWarning');
 
   // Imperative access into S3UploadModule
   const uploadRef = useRef<UploaderRef>(null);
@@ -147,7 +148,7 @@ export const ChatFileUpload = ({
 
   const handleUploadComplete = async (fileArray: FileResult[]) => {
     if (!Array.isArray(fileArray) || fileArray.length === 0) {
-      console.log('No files were selected for upload');
+      console.log(t('fileUpload.noFilesSelected'));
       return;
     }
 
@@ -208,7 +209,9 @@ export const ChatFileUpload = ({
         ...prev,
         {
           role: 'assistant',
-          content: <UploadStatusRow text={`Processing ${fileArray.length} file(s)...`} showSpinner={true} />,
+          content: (
+            <UploadStatusRow text={t('fileUpload.processing', { count: fileArray.length })} showSpinner={true} />
+          ),
           status: 'processingFile',
           ephemeralId: processingMessageId,
         },
@@ -217,7 +220,10 @@ export const ChatFileUpload = ({
       for (let i = 0; i < fileArray.length; i++) {
         const fileObj = fileArray[i];
         if (!fileObj || !fileObj.filePath || !fileObj.fileName) {
-          setMessages((prev: ChatMessage[]) => [...prev, { role: 'system', content: `Invalid file at index ${i}` }]);
+          setMessages((prev: ChatMessage[]) => [
+            ...prev,
+            { role: 'system', content: t('fileUpload.invalidFile', { index: i }) },
+          ]);
           continue;
         }
 
@@ -238,7 +244,7 @@ export const ChatFileUpload = ({
 
           setMessages((prev: ChatMessage[]) => [
             ...prev,
-            { role: 'assistant', content: `Successfully processed "${fileName}".` },
+            { role: 'assistant', content: t('fileUpload.successfullyProcessed', { name: fileName }) },
           ]);
         } catch (error) {
           const msg = error instanceof Error ? error.message : String(error);
@@ -246,7 +252,7 @@ export const ChatFileUpload = ({
           console.error(`Error processing file ${fileName}:`, error);
           setMessages((prev: ChatMessage[]) => [
             ...prev,
-            { role: 'system', content: `Failed to process "${fileName}": ${msg}` },
+            { role: 'system', content: t('fileUpload.failedToProcess', { name: fileName, message: msg }) },
           ]);
         }
       }
@@ -261,7 +267,9 @@ export const ChatFileUpload = ({
           .join(', ');
         const moreCount = Math.max(0, fileArray.length - 2);
         const latestMessage =
-          moreCount > 0 ? `Uploaded ${uploadedNames} and ${moreCount} more` : `Uploaded ${uploadedNames}`;
+          moreCount > 0
+            ? t('fileUpload.uploadedNames.multiple', { names: uploadedNames, count: moreCount })
+            : t('fileUpload.uploadedNames.single', { names: uploadedNames });
         await numaChatDynamoUtils.updateMetaItem(cid, sub, {
           latestTimestamp: Date.now(),
           latestMessage,
@@ -280,7 +288,7 @@ export const ChatFileUpload = ({
       console.error('Error processing uploaded files:', error);
       setMessages((prev: ChatMessage[]) => [
         ...prev,
-        { role: 'system', content: `Error while processing files: ${msg}` },
+        { role: 'system', content: t('fileUpload.errorProcessing', { message: msg }) },
       ]);
     } finally {
       setIsFileProcessing(false);
@@ -290,7 +298,7 @@ export const ChatFileUpload = ({
   return (
     <Modal show={show} onHide={onHide} size="lg" animation={false}>
       <Modal.Header closeButton>
-        <Modal.Title>Upload Files</Modal.Title>
+        <Modal.Title>{t('fileUpload.modalTitle')}</Modal.Title>
       </Modal.Header>
       <Modal.Body data-testid="upload-modal-body">
         {showCsvWarning && (
@@ -380,15 +388,15 @@ export const ChatFileUpload = ({
         />
 
         <div className="supported-file-types mt-3">
-          <h6>Supported File Types:</h6>
+          <h6>{t('fileUpload.supportedFileTypesTitle')}</h6>
           <ul>
-            <li>PDF (pdf)</li>
-            <li>Documents (docx, txt)</li>
-            <li>Spreadsheets (csv, xlsx)</li>
-            <li>Images (jpg, jpeg, png)</li>
-            <li>Audio/Video (mp3, mp4, wav, flac, ogg, amr, webm, m4a)</li>
-            <li>Markdown (md)</li>
-            <li>Other (json, xml, html, py, js, ts)</li>
+            <li>{t('fileUpload.supportedFileTypes.pdf')}</li>
+            <li>{t('fileUpload.supportedFileTypes.documents')}</li>
+            <li>{t('fileUpload.supportedFileTypes.spreadsheets')}</li>
+            <li>{t('fileUpload.supportedFileTypes.images')}</li>
+            <li>{t('fileUpload.supportedFileTypes.audioVideo')}</li>
+            <li>{t('fileUpload.supportedFileTypes.markdown')}</li>
+            <li>{t('fileUpload.supportedFileTypes.other')}</li>
           </ul>
         </div>
       </Modal.Body>

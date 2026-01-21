@@ -3,6 +3,7 @@ import { MarkdownContent } from '../Components/Renderers/MarkdownContent';
 import { useAuth } from '../Providers/AuthProvider';
 import { getSignedUrlForS3Object } from '../utils/s3Utils';
 import type { ToolResultLike } from './helpers';
+import { useTranslation } from 'react-i18next';
 
 type OutputItem = {
   content_type?: string;
@@ -34,7 +35,7 @@ const tryParseJson = (value: unknown): unknown => {
   }
 };
 
-const normalizeOutputs = (payload: unknown): NormalizedOutput[] => {
+const normalizeOutputs = (payload: unknown, getDefaultTitle: (index: number) => string): NormalizedOutput[] => {
   const normalized = tryParseJson(payload) as AppOutput | unknown;
   const candidate = (normalized as AppOutput)?.results ? normalized : tryParseJson((normalized as AppOutput)?.results);
   const results = (candidate as AppOutput | null)?.results;
@@ -46,7 +47,7 @@ const normalizeOutputs = (payload: unknown): NormalizedOutput[] => {
   return outputs.map((output, index) => {
     const location = String(output?.location || '').toLowerCase() || 'inline';
     const contentType = String(output?.content_type || '').toLowerCase();
-    const title = (output?.title && String(output.title)) || `Output ${index + 1}`;
+    const title = (output?.title && String(output.title)) || getDefaultTitle(index + 1);
     const data = output?.data;
     let content: string | null = null;
     let s3Key: string | null = null;
@@ -79,9 +80,13 @@ const normalizeOutputs = (payload: unknown): NormalizedOutput[] => {
 
 export const DataAnalysisRenderer = ({ result, bare: _bare = false }: { result: ToolResultLike; bare?: boolean }) => {
   const { getCredentials } = useAuth();
+  const { t } = useTranslation('common');
   const blocks = Array.isArray(result?.content) ? (result.content as Array<{ json?: unknown }>) : [];
   const payload = blocks[0]?.json ?? result;
-  const outputs = useMemo(() => normalizeOutputs(payload), [payload]);
+  const outputs = useMemo(
+    () => normalizeOutputs(payload, (index) => t('toolRenderers.dataAnalysis.outputTitle', { index })),
+    [payload, t],
+  );
 
   // Memoize filtered arrays to prevent useEffect from re-running on every render
   const markdownOutputs = useMemo(
@@ -128,7 +133,7 @@ export const DataAnalysisRenderer = ({ result, bare: _bare = false }: { result: 
           const signed = await getSignedUrlForS3Object(s3Key, bucketName, region, getCredentials);
           const response = await fetch(signed);
           if (!response.ok) {
-            throw new Error(`Failed to load (${response.status})`);
+            throw new Error(t('toolRenderers.dataAnalysis.loadFailed', { status: response.status }));
           }
           const text = await response.text();
           if (isMounted) {
@@ -136,7 +141,7 @@ export const DataAnalysisRenderer = ({ result, bare: _bare = false }: { result: 
           }
         } catch (error) {
           if (isMounted) {
-            nextErrors[s3Key] = (error as Error)?.message || 'Unable to load markdown';
+            nextErrors[s3Key] = (error as Error)?.message || t('toolRenderers.dataAnalysis.unableToLoad');
           }
         }
       }
@@ -155,7 +160,7 @@ export const DataAnalysisRenderer = ({ result, bare: _bare = false }: { result: 
     return () => {
       isMounted = false;
     };
-  }, [bucketName, getCredentials, keysToFetch, region]);
+  }, [bucketName, getCredentials, keysToFetch, region, t]);
 
   // Allow retrying failed fetches by clearing the error for a specific key
   const retryFetch = useCallback((s3Key: string) => {
@@ -181,14 +186,14 @@ export const DataAnalysisRenderer = ({ result, bare: _bare = false }: { result: 
               className="btn btn-link btn-sm p-0 text-decoration-underline"
               onClick={() => retryFetch(s3Key)}
             >
-              Retry
+              {t('toolRenderers.dataAnalysis.retry')}
             </button>
           </div>
         );
       }
       return (
         <div key={`${output.title}-${index}`} className="data-analysis-section mt-3 text-muted small">
-          Loading analysis output...
+          {t('toolRenderers.dataAnalysis.loadingOutput')}
         </div>
       );
     }

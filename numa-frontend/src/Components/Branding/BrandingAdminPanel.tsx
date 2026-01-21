@@ -15,6 +15,8 @@ import {
   Spinner,
   Tooltip,
 } from 'react-bootstrap';
+import { useTranslation } from 'react-i18next';
+import i18n from '../../i18n';
 import {
   BrandingAdminService,
   sanitizeFileName,
@@ -50,72 +52,85 @@ type AssetConstraint = {
   description: string;
 };
 
-const COLOR_GROUPS: Array<{ title: string; fields: Array<{ key: string; label: string }> }> = [
+type ColorGroupId = 'brandPalette' | 'surfaceBackground' | 'typography' | 'primaryButton' | 'secondaryButton';
+
+type ColorGroup = {
+  id: ColorGroupId;
+  title: string;
+  fields: Array<{ key: string; label: string }>;
+};
+
+const buildColorGroups = (t: (key: string) => string): ColorGroup[] => [
   {
-    title: 'Brand Palette',
+    id: 'brandPalette',
+    title: t('brandingAdmin.colors.groups.brandPalette.title'),
     fields: [
-      { key: 'primary', label: 'Primary' },
-      { key: 'primaryContrast', label: 'Primary Contrast' },
-      { key: 'hover', label: 'Hover' },
+      { key: 'primary', label: t('brandingAdmin.colors.groups.brandPalette.primary') },
+      { key: 'primaryContrast', label: t('brandingAdmin.colors.groups.brandPalette.primaryContrast') },
+      { key: 'hover', label: t('brandingAdmin.colors.groups.brandPalette.hover') },
     ],
   },
   {
-    title: 'Surface & Background',
+    id: 'surfaceBackground',
+    title: t('brandingAdmin.colors.groups.surfaceBackground.title'),
     fields: [
-      { key: 'surface', label: 'Surface' },
-      { key: 'surfaceContrast', label: 'Surface Contrast' },
-      { key: 'border', label: 'Border' },
-      { key: 'background', label: 'Background' },
+      { key: 'surface', label: t('brandingAdmin.colors.groups.surfaceBackground.surface') },
+      { key: 'surfaceContrast', label: t('brandingAdmin.colors.groups.surfaceBackground.surfaceContrast') },
+      { key: 'border', label: t('brandingAdmin.colors.groups.surfaceBackground.border') },
+      { key: 'background', label: t('brandingAdmin.colors.groups.surfaceBackground.background') },
     ],
   },
   {
-    title: 'Typography',
+    id: 'typography',
+    title: t('brandingAdmin.colors.groups.typography.title'),
     fields: [
-      { key: 'text', label: 'Primary Text' },
-      { key: 'textMuted', label: 'Muted Text' },
+      { key: 'text', label: t('brandingAdmin.colors.groups.typography.text') },
+      { key: 'textMuted', label: t('brandingAdmin.colors.groups.typography.textMuted') },
     ],
   },
   {
-    title: 'Primary Button',
+    id: 'primaryButton',
+    title: t('brandingAdmin.colors.groups.primaryButton.title'),
     fields: [
-      { key: 'buttonPrimary', label: 'Fill' },
-      { key: 'buttonPrimaryText', label: 'Text' },
-      { key: 'buttonPrimaryHover', label: 'Hover' },
-      { key: 'buttonPrimaryBorder', label: 'Border' },
+      { key: 'buttonPrimary', label: t('brandingAdmin.colors.groups.primaryButton.fill') },
+      { key: 'buttonPrimaryText', label: t('brandingAdmin.colors.groups.primaryButton.text') },
+      { key: 'buttonPrimaryHover', label: t('brandingAdmin.colors.groups.primaryButton.hover') },
+      { key: 'buttonPrimaryBorder', label: t('brandingAdmin.colors.groups.primaryButton.border') },
     ],
   },
   {
-    title: 'Secondary Button',
+    id: 'secondaryButton',
+    title: t('brandingAdmin.colors.groups.secondaryButton.title'),
     fields: [
-      { key: 'buttonSecondary', label: 'Fill' },
-      { key: 'buttonSecondaryText', label: 'Text' },
-      { key: 'buttonSecondaryHover', label: 'Hover' },
-      { key: 'buttonSecondaryHoverText', label: 'Hover Text' },
-      { key: 'buttonSecondaryBorder', label: 'Border' },
+      { key: 'buttonSecondary', label: t('brandingAdmin.colors.groups.secondaryButton.fill') },
+      { key: 'buttonSecondaryText', label: t('brandingAdmin.colors.groups.secondaryButton.text') },
+      { key: 'buttonSecondaryHover', label: t('brandingAdmin.colors.groups.secondaryButton.hover') },
+      { key: 'buttonSecondaryHoverText', label: t('brandingAdmin.colors.groups.secondaryButton.hoverText') },
+      { key: 'buttonSecondaryBorder', label: t('brandingAdmin.colors.groups.secondaryButton.border') },
     ],
   },
 ];
 
-const ASSET_CONSTRAINTS: Record<AssetType, AssetConstraint> = {
+const buildAssetConstraints = (t: (key: string) => string): Record<AssetType, AssetConstraint> => ({
   logoNav: {
-    label: 'Navigation Logo',
+    label: t('brandingAdmin.assets.logoNav.label'),
     accept: '.svg,.png,.jpg,.jpeg,.webp',
     maxSizeKb: 1500,
-    description: 'SVG, PNG, JPG, or WebP up to 1.5 MB. Displayed at max-height 48px with auto width.',
+    description: t('brandingAdmin.assets.logoNav.description'),
   },
   logoLoginRight: {
-    label: 'Login Panel Image',
+    label: t('brandingAdmin.assets.logoLoginRight.label'),
     accept: '.svg,.png,.jpg,.jpeg,.webp',
     maxSizeKb: 1500,
-    description: 'SVG, PNG, JPG, or WebP up to 1.5 MB. Use responsive-friendly dimensions.',
+    description: t('brandingAdmin.assets.logoLoginRight.description'),
   },
   favicon: {
-    label: 'Favicon',
+    label: t('brandingAdmin.assets.favicon.label'),
     accept: '.ico,.png',
     maxSizeKb: 500,
-    description: 'ICO or PNG up to 500 KB. Provide multi-size favicon if available.',
+    description: t('brandingAdmin.assets.favicon.description'),
   },
-};
+});
 
 const DEFAULT_COLOR_MAP = DEFAULT_BRANDING_THEME.colors as Record<string, string | undefined>;
 
@@ -170,8 +185,13 @@ const mergeBranding = (incoming?: BrandingSavePayload['branding']): BrandingForm
   };
 };
 
-const getFileValidationError = (type: AssetType, file: File): string | null => {
-  const constraint = ASSET_CONSTRAINTS[type];
+const getFileValidationError = (
+  t: (key: string, options?: Record<string, unknown>) => string,
+  constraints: Record<AssetType, AssetConstraint>,
+  type: AssetType,
+  file: File,
+): string | null => {
+  const constraint = constraints[type];
   if (!constraint) {
     return null;
   }
@@ -182,10 +202,10 @@ const getFileValidationError = (type: AssetType, file: File): string | null => {
     .some((ext) => file.name.toLowerCase().endsWith(ext));
 
   if (!isValidType) {
-    return `${constraint.label}: Unsupported file type.`;
+    return t('brandingAdmin.errors.fileTypeUnsupported', { label: constraint.label });
   }
   if (file.size > constraint.maxSizeKb * 1024) {
-    return `${constraint.label}: File exceeds ${constraint.maxSizeKb} KB.`;
+    return t('brandingAdmin.errors.fileTooLarge', { label: constraint.label, size: constraint.maxSizeKb });
   }
   return null;
 };
@@ -195,6 +215,7 @@ type BrandingAdminPanelProps = {
 };
 
 const BrandingAdminPanel: React.FC<BrandingAdminPanelProps> = ({ onDirtyChange }) => {
+  const { t } = useTranslation('settings');
   const { numaGet, numaPut, numaPost } = useNumaRequest();
   const { getCredentials } = useAuth();
   const s3Region = sessionStorage.getItem('REGION') || '';
@@ -225,6 +246,8 @@ const BrandingAdminPanel: React.FC<BrandingAdminPanelProps> = ({ onDirtyChange }
   const [showRevertModal, setShowRevertModal] = useState(false);
   const [revertTargetVersion, setRevertTargetVersion] = useState<BrandingVersionSummary | null>(null);
   const { showToast } = useToast();
+  const colorGroups = useMemo(() => buildColorGroups(t), [t]);
+  const assetConstraints = useMemo(() => buildAssetConstraints(t), [t]);
   // Mark the form as dirty
   const markDirty = useCallback(() => {
     if (!dirtyRef.current) {
@@ -259,8 +282,8 @@ const BrandingAdminPanel: React.FC<BrandingAdminPanelProps> = ({ onDirtyChange }
       } catch (error) {
         showToast({
           variant: 'error',
-          title: 'Branding configuration',
-          message: (error as Error).message || 'Failed to load branding configuration',
+          title: t('brandingAdmin.toasts.configTitle'),
+          message: (error as Error).message || t('brandingAdmin.errors.loadConfig'),
         });
       } finally {
         setLoading(false);
@@ -275,7 +298,7 @@ const BrandingAdminPanel: React.FC<BrandingAdminPanelProps> = ({ onDirtyChange }
     setBranding(defaults);
     dirtyRef.current = true;
     setIsDirty(true);
-    showToast({ variant: 'info', message: 'Reset to default branding' });
+    showToast({ variant: 'info', message: t('brandingAdmin.toasts.resetDefault') });
     onDirtyChange?.(true);
   }, [onDirtyChange]);
 
@@ -331,19 +354,19 @@ const BrandingAdminPanel: React.FC<BrandingAdminPanelProps> = ({ onDirtyChange }
     };
   }, [branding.colors]);
 
-  const renderGroupPreview = (groupTitle: string) => {
-    switch (groupTitle) {
-      case 'Brand Palette':
+  const renderGroupPreview = (groupId: ColorGroupId) => {
+    switch (groupId) {
+      case 'brandPalette':
         return (
           <div
             className="rounded-3 p-3 text-center"
             style={{ background: previewColors.primary, color: previewColors.primaryContrast }}
           >
-            <div className="small text-uppercase fw-semibold">Primary</div>
+            <div className="small text-uppercase fw-semibold">{t('brandingAdmin.colors.preview.primaryLabel')}</div>
             <div className="fw-semibold">{previewColors.primary}</div>
           </div>
         );
-      case 'Surface & Background':
+      case 'surfaceBackground':
         return (
           <div className="rounded-3 border p-3" style={{ background: previewColors.background }}>
             <div
@@ -354,9 +377,9 @@ const BrandingAdminPanel: React.FC<BrandingAdminPanelProps> = ({ onDirtyChange }
                 color: previewColors.surfaceContrast,
               }}
             >
-              <div className="fw-semibold">Surface component</div>
+              <div className="fw-semibold">{t('brandingAdmin.colors.preview.surfaceTitle')}</div>
               <div className="text-muted" style={{ color: previewColors.textMuted }}>
-                Cards and panels inherit these tones.
+                {t('brandingAdmin.colors.preview.surfaceHint')}
               </div>
             </div>
             <div
@@ -367,22 +390,22 @@ const BrandingAdminPanel: React.FC<BrandingAdminPanelProps> = ({ onDirtyChange }
                 color: previewColors.text,
               }}
             >
-              Page background preview
+              {t('brandingAdmin.colors.preview.pageBackground')}
             </div>
           </div>
         );
-      case 'Typography':
+      case 'typography':
         return (
           <div className="rounded-3 border p-3" style={{ background: '#ffffff' }}>
             <h5 className="fw-semibold" style={{ color: previewColors.text }}>
-              Heading preview
+              {t('brandingAdmin.colors.preview.heading')}
             </h5>
             <p className="mb-0" style={{ color: previewColors.textMuted }}>
-              Supporting copy reflects muted typography. Adjust values to test legibility.
+              {t('brandingAdmin.colors.preview.typographyHint')}
             </p>
           </div>
         );
-      case 'Primary Button':
+      case 'primaryButton':
         return (
           <Button
             onMouseEnter={() => setPalettePrimaryHovered(true)}
@@ -395,10 +418,10 @@ const BrandingAdminPanel: React.FC<BrandingAdminPanelProps> = ({ onDirtyChange }
               color: previewColors.buttonPrimaryText,
             }}
           >
-            Primary Action
+            {t('brandingAdmin.colors.preview.primaryAction')}
           </Button>
         );
-      case 'Secondary Button':
+      case 'secondaryButton':
         return (
           <div className="d-flex flex-column gap-2">
             <Button
@@ -417,15 +440,15 @@ const BrandingAdminPanel: React.FC<BrandingAdminPanelProps> = ({ onDirtyChange }
                 border: `1px solid ${previewColors.buttonSecondaryBorder}`,
               }}
             >
-              Secondary Action
+              {t('brandingAdmin.colors.preview.secondaryAction')}
             </Button>
             <Button variant="link" style={{ color: previewColors.buttonSecondaryText }}>
-              Text Link Example
+              {t('brandingAdmin.colors.preview.textLink')}
             </Button>
           </div>
         );
       default:
-        return <div className="rounded-3 border p-3 text-muted">Adjust colors to see real-time preview here.</div>;
+        return <div className="rounded-3 border p-3 text-muted">{t('brandingAdmin.colors.preview.fallback')}</div>;
     }
   };
 
@@ -511,8 +534,8 @@ const BrandingAdminPanel: React.FC<BrandingAdminPanelProps> = ({ onDirtyChange }
     } catch (error) {
       showToast({
         variant: 'error',
-        title: 'Open asset failed',
-        message: (error as Error).message || 'Failed to open asset',
+        title: t('brandingAdmin.errors.openAssetTitle'),
+        message: (error as Error).message || t('brandingAdmin.errors.openAsset'),
       });
     }
   };
@@ -521,7 +544,7 @@ const BrandingAdminPanel: React.FC<BrandingAdminPanelProps> = ({ onDirtyChange }
     let cancelled = false;
     const refreshPreviews = async () => {
       const entries = await Promise.all(
-        (Object.keys(ASSET_CONSTRAINTS) as AssetType[]).map(async (type) => {
+        (Object.keys(assetConstraints) as AssetType[]).map(async (type) => {
           const uri = branding.assets?.[type];
           if (!uri) {
             return [type, undefined] as const;
@@ -553,7 +576,7 @@ const BrandingAdminPanel: React.FC<BrandingAdminPanelProps> = ({ onDirtyChange }
     return () => {
       cancelled = true;
     };
-  }, [branding.assets, getCredentials, s3Region]);
+  }, [branding.assets, getCredentials, s3Region, assetConstraints]);
 
   useEffect(() => {
     const handleBeforeUnload = (event: BeforeUnloadEvent) => {
@@ -609,17 +632,17 @@ const BrandingAdminPanel: React.FC<BrandingAdminPanelProps> = ({ onDirtyChange }
   };
 
   const uploadAsset = async (type: AssetType, file: File) => {
-    const validationError = getFileValidationError(type, file);
+    const validationError = getFileValidationError(t, assetConstraints, type, file);
     if (validationError) {
-      showToast({ variant: 'warning', title: 'Upload blocked', message: validationError });
+      showToast({ variant: 'warning', title: t('brandingAdmin.toasts.uploadBlockedTitle'), message: validationError });
       return;
     }
 
     if (!s3Region || !s3Bucket) {
       showToast({
         variant: 'error',
-        title: `${ASSET_CONSTRAINTS[type].label}`,
-        message: 'Branding S3 configuration is missing. Check REGION and BRANDING_ASSETS_BUCKET values.',
+        title: `${assetConstraints[type].label}`,
+        message: t('brandingAdmin.errors.missingS3Config'),
       });
       console.error('Branding upload aborted: missing S3 configuration', {
         s3Region,
@@ -642,8 +665,8 @@ const BrandingAdminPanel: React.FC<BrandingAdminPanelProps> = ({ onDirtyChange }
 
       showToast({
         variant: 'success',
-        title: `${ASSET_CONSTRAINTS[type].label}`,
-        message: 'Uploaded successfully. Remember to save changes to apply.',
+        title: `${assetConstraints[type].label}`,
+        message: t('brandingAdmin.toasts.uploadSuccess'),
         autoHideDurationMs: 6000,
       });
     } catch (error) {
@@ -653,8 +676,8 @@ const BrandingAdminPanel: React.FC<BrandingAdminPanelProps> = ({ onDirtyChange }
       });
       showToast({
         variant: 'error',
-        title: `${ASSET_CONSTRAINTS[type].label}`,
-        message: (error as Error).message || 'Asset upload failed',
+        title: `${assetConstraints[type].label}`,
+        message: (error as Error).message || t('brandingAdmin.errors.uploadFailed'),
       });
     } finally {
       setUploading((prev) => ({ ...prev, [type]: false }));
@@ -672,7 +695,7 @@ const BrandingAdminPanel: React.FC<BrandingAdminPanelProps> = ({ onDirtyChange }
   const saveChanges = async (options?: { createVersion?: boolean; label?: string }) => {
     try {
       setSaving(true);
-      showToast({ variant: 'info', message: 'Saving branding changes…' });
+      showToast({ variant: 'info', message: t('brandingAdmin.toasts.savingChanges') });
 
       const trimmedColors = Object.fromEntries(
         Object.entries(branding.colors).map(([key, value]) => [key, value?.trim?.() ?? value ?? '']),
@@ -689,15 +712,15 @@ const BrandingAdminPanel: React.FC<BrandingAdminPanelProps> = ({ onDirtyChange }
       };
 
       await BrandingAdminService.saveConfig(numaPut, payload);
-      showToast({ variant: 'success', message: 'Branding settings saved successfully.' });
+      showToast({ variant: 'success', message: t('brandingAdmin.toasts.saveSuccess') });
       sessionStorage.setItem('BRANDING_THEME_ENABLED', enabled ? 'true' : 'false');
       await loadConfig({ force: true });
       setHistoryLoaded(false);
     } catch (error) {
       showToast({
         variant: 'error',
-        title: 'Save failed',
-        message: (error as Error).message || 'Failed to save branding settings',
+        title: t('brandingAdmin.errors.saveTitle'),
+        message: (error as Error).message || t('brandingAdmin.errors.saveFailed'),
       });
     } finally {
       setSaving(false);
@@ -711,20 +734,20 @@ const BrandingAdminPanel: React.FC<BrandingAdminPanelProps> = ({ onDirtyChange }
   };
 
   const openVersionModal = () => {
-    setVersionLabel(new Date().toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }));
+    setVersionLabel(new Date().toLocaleString(i18n.language, { dateStyle: 'medium', timeStyle: 'short' }));
     setShowVersionModal(true);
   };
 
   const previewVersion = async (versionId: string) => {
     try {
       setPreviewingVersionId(versionId);
-      showToast({ variant: 'info', message: 'Loading preview...' });
+      showToast({ variant: 'info', message: t('brandingAdmin.toasts.loadingPreview') });
 
       // Fetch the full version config from backend
       const versionConfig = await BrandingAdminService.fetchVersion(numaGet, versionId);
 
       if (!versionConfig.branding) {
-        throw new Error('Version config not found');
+        throw new Error(t('brandingAdmin.errors.versionNotFound'));
       }
 
       // Store preview branding data in sessionStorage for the new tab
@@ -738,15 +761,15 @@ const BrandingAdminPanel: React.FC<BrandingAdminPanelProps> = ({ onDirtyChange }
 
       showToast({
         variant: 'info',
-        title: 'Preview opened',
-        message: 'A new tab has opened with a preview of this branding version. Close the tab when done.',
+        title: t('brandingAdmin.toasts.previewOpenedTitle'),
+        message: t('brandingAdmin.toasts.previewOpenedMessage'),
         autoHideDurationMs: 6000,
       });
     } catch (error) {
       showToast({
         variant: 'error',
-        title: 'Preview failed',
-        message: (error as Error).message || 'Failed to load version for preview',
+        title: t('brandingAdmin.errors.previewTitle'),
+        message: (error as Error).message || t('brandingAdmin.errors.previewFailed'),
       });
     } finally {
       setPreviewingVersionId(null);
@@ -765,8 +788,8 @@ const BrandingAdminPanel: React.FC<BrandingAdminPanelProps> = ({ onDirtyChange }
     } catch (error) {
       showToast({
         variant: 'error',
-        title: 'History failed',
-        message: (error as Error).message || 'Failed to load version history',
+        title: t('brandingAdmin.errors.historyTitle'),
+        message: (error as Error).message || t('brandingAdmin.errors.historyFailed'),
       });
     } finally {
       setHistoryLoading(false);
@@ -776,7 +799,7 @@ const BrandingAdminPanel: React.FC<BrandingAdminPanelProps> = ({ onDirtyChange }
   const revertVersion = async (versionId: string) => {
     try {
       setSaving(true);
-      showToast({ variant: 'info', message: 'Restoring branding version…' });
+      showToast({ variant: 'info', message: t('brandingAdmin.toasts.restoring') });
 
       const result = await BrandingAdminService.revertVersion(numaPost, versionId);
       const revertedEnabled = Boolean(result.enabled);
@@ -791,12 +814,12 @@ const BrandingAdminPanel: React.FC<BrandingAdminPanelProps> = ({ onDirtyChange }
       );
       setHistory(result.history ?? []);
       setHistoryLoaded(true);
-      showToast({ variant: 'success', message: 'Version restored successfully.' });
+      showToast({ variant: 'success', message: t('brandingAdmin.toasts.restoreSuccess') });
     } catch (error) {
       showToast({
         variant: 'error',
-        title: 'Restore failed',
-        message: (error as Error).message || 'Failed to revert version',
+        title: t('brandingAdmin.errors.restoreTitle'),
+        message: (error as Error).message || t('brandingAdmin.errors.restoreFailed'),
       });
     } finally {
       setSaving(false);
@@ -827,7 +850,7 @@ const BrandingAdminPanel: React.FC<BrandingAdminPanelProps> = ({ onDirtyChange }
           <div className="d-flex align-items-center">
             <i className="bi bi-exclamation-circle me-2" />
             <span>
-              <strong>Unsaved changes.</strong> Your modifications have not been saved yet.
+              <strong>{t('brandingAdmin.alerts.unsavedTitle')}</strong> {t('brandingAdmin.alerts.unsavedMessage')}
             </span>
           </div>
           <div className="d-flex gap-2">
@@ -837,10 +860,10 @@ const BrandingAdminPanel: React.FC<BrandingAdminPanelProps> = ({ onDirtyChange }
               onClick={() => void loadConfig({ force: true })}
               disabled={saving}
             >
-              Discard
+              {t('brandingAdmin.actions.discard')}
             </Button>
             <Button variant="warning" size="sm" onClick={() => void saveChanges()} disabled={saving}>
-              {saving ? <Spinner animation="border" size="sm" /> : 'Save Now'}
+              {saving ? <Spinner animation="border" size="sm" /> : t('brandingAdmin.actions.saveNow')}
             </Button>
           </div>
         </Alert>
@@ -849,15 +872,17 @@ const BrandingAdminPanel: React.FC<BrandingAdminPanelProps> = ({ onDirtyChange }
       <div>
         <div className="d-flex justify-content-between align-items-center mb-4 pt-2">
           <div>
-            <h5 className="mb-1 fw-semibold">Branding Controls</h5>
-            <p className="text-muted mb-0 small">
-              Manage tenant branding, colors, and assets. Changes publish immediately after saving.
-            </p>
+            <h5 className="mb-1 fw-semibold">{t('brandingAdmin.title')}</h5>
+            <p className="text-muted mb-0 small">{t('brandingAdmin.subtitle')}</p>
           </div>
           <Form.Check
             type="switch"
             id="branding-enabled-toggle"
-            label={<span className="ms-2">{enabled ? 'Branding enabled' : 'Branding disabled'}</span>}
+            label={
+              <span className="ms-2">
+                {enabled ? t('brandingAdmin.toggle.enabled') : t('brandingAdmin.toggle.disabled')}
+              </span>
+            }
             checked={enabled}
             onChange={(event) => {
               markDirty();
@@ -874,24 +899,22 @@ const BrandingAdminPanel: React.FC<BrandingAdminPanelProps> = ({ onDirtyChange }
               }}
             >
               <i className="bi bi-clock-history me-2" />
-              Version History
+              {t('brandingAdmin.history.title')}
             </Accordion.Header>
             <Accordion.Body>
               {historyLoading ? (
                 <div className="d-flex align-items-center gap-2">
                   <Spinner animation="border" size="sm" />
-                  <span>Loading versions…</span>
+                  <span>{t('brandingAdmin.history.loading')}</span>
                 </div>
               ) : history.length === 0 ? (
-                <div className="text-muted">
-                  No published versions yet. Save a new version to create a restore point.
-                </div>
+                <div className="text-muted">{t('brandingAdmin.history.empty')}</div>
               ) : (
                 <ListGroup variant="flush">
                   {history.map((item) => {
                     console.log('Version history item:', item);
                     const formattedTimestamp = item.updatedAt
-                      ? new Date(item.updatedAt).toLocaleString(undefined, {
+                      ? new Date(item.updatedAt).toLocaleString(i18n.language, {
                           dateStyle: 'medium',
                           timeStyle: 'short',
                         })
@@ -901,7 +924,7 @@ const BrandingAdminPanel: React.FC<BrandingAdminPanelProps> = ({ onDirtyChange }
                     if (formattedTimestamp && formattedTimestamp !== displayLabel) {
                       metaParts.push(formattedTimestamp);
                     }
-                    metaParts.push(item.updatedBy || 'system');
+                    metaParts.push(item.updatedBy || t('brandingAdmin.history.system'));
 
                     return (
                       <ListGroup.Item
@@ -918,7 +941,7 @@ const BrandingAdminPanel: React.FC<BrandingAdminPanelProps> = ({ onDirtyChange }
                                 backgroundColor: item.primaryColor,
                                 border: '1px solid rgba(0,0,0,0.1)',
                               }}
-                              title={`Primary color: ${item.primaryColor}`}
+                              title={t('brandingAdmin.history.primaryColor', { color: item.primaryColor })}
                             />
                           )}
                           <div
@@ -930,11 +953,15 @@ const BrandingAdminPanel: React.FC<BrandingAdminPanelProps> = ({ onDirtyChange }
                               backgroundColor: '#f8f9fa',
                               overflow: 'hidden',
                             }}
-                            title="Navigation logo"
+                            title={t('brandingAdmin.history.navigationLogo')}
                           >
                             <img
                               src={item.logoNav ? toPreviewUrl(item.logoNav) : '/numa-logo.svg'}
-                              alt={item.logoNav ? 'Logo' : 'Default logo'}
+                              alt={
+                                item.logoNav
+                                  ? t('brandingAdmin.history.logoAlt')
+                                  : t('brandingAdmin.history.defaultLogoAlt')
+                              }
                               style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }}
                             />
                           </div>
@@ -955,7 +982,7 @@ const BrandingAdminPanel: React.FC<BrandingAdminPanelProps> = ({ onDirtyChange }
                             ) : (
                               <>
                                 <i className="bi bi-eye me-1" />
-                                Preview
+                                {t('brandingAdmin.actions.preview')}
                               </>
                             )}
                           </Button>
@@ -968,7 +995,7 @@ const BrandingAdminPanel: React.FC<BrandingAdminPanelProps> = ({ onDirtyChange }
                             }}
                             disabled={saving}
                           >
-                            Revert
+                            {t('brandingAdmin.actions.revert')}
                           </Button>
                         </div>
                       </ListGroup.Item>
@@ -984,15 +1011,14 @@ const BrandingAdminPanel: React.FC<BrandingAdminPanelProps> = ({ onDirtyChange }
           <Alert variant="info" className="mb-0 d-flex align-items-center">
             <i className="bi bi-info-circle-fill me-2 fs-5" />
             <div>
-              <strong>Branding is currently disabled.</strong> Please enable branding above to modify the Numa component
-              colour scheme and login panels.
+              <strong>{t('brandingAdmin.disabled.title')}</strong> {t('brandingAdmin.disabled.message')}
             </div>
           </Alert>
         ) : (
           <div>
             <div className="d-flex flex-wrap gap-2 justify-content-between mb-3">
               <Button variant="secondary" size="sm" onClick={resetToDefault} disabled={saving}>
-                Reset to Default
+                {t('brandingAdmin.actions.resetDefault')}
               </Button>
               <div className="d-flex gap-2">
                 <Button
@@ -1001,7 +1027,7 @@ const BrandingAdminPanel: React.FC<BrandingAdminPanelProps> = ({ onDirtyChange }
                   onClick={() => void loadConfig({ force: true })}
                   disabled={saving || !isDirty}
                 >
-                  Discard Changes
+                  {t('brandingAdmin.actions.discardChanges')}
                 </Button>
                 <Button
                   variant="outline-secondary"
@@ -1010,22 +1036,22 @@ const BrandingAdminPanel: React.FC<BrandingAdminPanelProps> = ({ onDirtyChange }
                   disabled={saving || !isDirty}
                 >
                   {saving ? <Spinner animation="border" size="sm" /> : <i className="bi bi-check-lg me-2" />}
-                  Save Changes
+                  {t('brandingAdmin.actions.saveChanges')}
                 </Button>
                 <Button variant="primary" size="sm" onClick={openVersionModal} disabled={saving || !isDirty}>
                   {saving ? <Spinner animation="border" size="sm" /> : <i className="bi bi-layers me-2" />}
-                  Save as New Version
+                  {t('brandingAdmin.actions.saveAsVersion')}
                 </Button>
               </div>
             </div>
 
-            <h6 className="fw-semibold text-uppercase text-muted small mb-3">Color Palette</h6>
+            <h6 className="fw-semibold text-uppercase text-muted small mb-3">{t('brandingAdmin.sections.colors')}</h6>
             <Row className="gy-4 align-items-start">
               <Col xs={12} xl={7}>
                 <div>
                   <div className="d-flex flex-column gap-4">
-                    {COLOR_GROUPS.map(({ title, fields }) => (
-                      <div key={title} className="border rounded-3 p-3">
+                    {colorGroups.map(({ id, title, fields }) => (
+                      <div key={id} className="border rounded-3 p-3">
                         <div className="d-flex flex-column flex-lg-row gap-4">
                           <div className="flex-fill">
                             <div className="border-bottom pb-1 mb-3">
@@ -1047,32 +1073,34 @@ const BrandingAdminPanel: React.FC<BrandingAdminPanelProps> = ({ onDirtyChange }
                                     type="text"
                                     value={branding.colors?.[key] || ''}
                                     onChange={handleColorInput(key)}
-                                    placeholder="#000000"
+                                    placeholder={t('brandingAdmin.colors.hexPlaceholder')}
                                   />
                                 </div>
                               ))}
                             </div>
                           </div>
-                          <div className="flex-fill">{renderGroupPreview(title)}</div>
+                          <div className="flex-fill">{renderGroupPreview(id)}</div>
                         </div>
                       </div>
                     ))}
                   </div>
 
                   <div className="mt-4 border-top pt-3">
-                    <h6 className="fw-semibold text-uppercase text-muted small mb-3">Branding Details</h6>
+                    <h6 className="fw-semibold text-uppercase text-muted small mb-3">
+                      {t('brandingAdmin.sections.details')}
+                    </h6>
                     <div className="d-flex flex-column gap-3">
                       <Form.Group controlId="branding-name">
-                        <Form.Label>Brand Name</Form.Label>
+                        <Form.Label>{t('brandingAdmin.details.brandName.label')}</Form.Label>
                         <Form.Control
                           type="text"
                           value={branding.name || ''}
                           onChange={handleBrandNameChange}
-                          placeholder="Client brand name"
+                          placeholder={t('brandingAdmin.details.brandName.placeholder')}
                         />
                       </Form.Group>
                       <Form.Group controlId="branding-login-title">
-                        <Form.Label>Login Page Title</Form.Label>
+                        <Form.Label>{t('brandingAdmin.details.loginTitle.label')}</Form.Label>
                         <Form.Control
                           type="text"
                           value={branding.loginPage?.title || ''}
@@ -1080,7 +1108,7 @@ const BrandingAdminPanel: React.FC<BrandingAdminPanelProps> = ({ onDirtyChange }
                         />
                       </Form.Group>
                       <Form.Group controlId="branding-login-message">
-                        <Form.Label>Login Welcome Message</Form.Label>
+                        <Form.Label>{t('brandingAdmin.details.loginMessage.label')}</Form.Label>
                         <Form.Control
                           as="textarea"
                           rows={2}
@@ -1091,29 +1119,31 @@ const BrandingAdminPanel: React.FC<BrandingAdminPanelProps> = ({ onDirtyChange }
                     </div>
                   </div>
                   <div className="mt-4 border-top pt-3">
-                    <h6 className="fw-semibold text-uppercase text-muted small mb-3">Splash Screen</h6>
+                    <h6 className="fw-semibold text-uppercase text-muted small mb-3">
+                      {t('brandingAdmin.sections.splash')}
+                    </h6>
                     <div className="d-flex flex-column gap-3">
                       <Form.Group controlId="branding-splash-title">
-                        <Form.Label>Splash Title</Form.Label>
+                        <Form.Label>{t('brandingAdmin.splash.title.label')}</Form.Label>
                         <Form.Control
                           type="text"
                           value={branding.splashScreen?.title || ''}
                           onChange={handleSplashUpdate('title')}
-                          placeholder="Main heading on login splash panel"
+                          placeholder={t('brandingAdmin.splash.title.placeholder')}
                         />
                       </Form.Group>
                       <Form.Group controlId="branding-splash-description">
-                        <Form.Label>Splash Description</Form.Label>
+                        <Form.Label>{t('brandingAdmin.splash.description.label')}</Form.Label>
                         <Form.Control
                           as="textarea"
                           rows={2}
                           value={branding.splashScreen?.description || ''}
                           onChange={handleSplashUpdate('description')}
-                          placeholder="Description text below the title"
+                          placeholder={t('brandingAdmin.splash.description.placeholder')}
                         />
                       </Form.Group>
                       <Form.Group controlId="branding-splash-text-color">
-                        <Form.Label>Splash Text Color</Form.Label>
+                        <Form.Label>{t('brandingAdmin.splash.textColor.label')}</Form.Label>
                         <div className="d-flex align-items-center gap-2">
                           <Form.Control
                             type="color"
@@ -1121,13 +1151,15 @@ const BrandingAdminPanel: React.FC<BrandingAdminPanelProps> = ({ onDirtyChange }
                             onChange={handleSplashUpdate('textColor')}
                             style={{ width: '50px', height: '32px', padding: '2px' }}
                           />
-                          <Form.Text className="text-muted mb-0">Default: white</Form.Text>
+                          <Form.Text className="text-muted mb-0">
+                            {t('brandingAdmin.splash.textColor.default')}
+                          </Form.Text>
                         </div>
                       </Form.Group>
                       <Form.Group controlId="branding-splash-show-panel">
                         <Form.Check
                           type="checkbox"
-                          label="Show semi-transparent background panel"
+                          label={t('brandingAdmin.splash.showPanel')}
                           checked={branding.splashScreen?.showPanel || false}
                           onChange={handleSplashUpdate('showPanel')}
                         />
@@ -1140,7 +1172,7 @@ const BrandingAdminPanel: React.FC<BrandingAdminPanelProps> = ({ onDirtyChange }
                 <div className="position-sticky" style={{ top: '1rem' }}>
                   <Card className="h-100" style={{ background: previewColors.background }}>
                     <Card.Body className="d-flex flex-column gap-3">
-                      <Card.Title className="fs-6 mb-0">Preview</Card.Title>
+                      <Card.Title className="fs-6 mb-0">{t('brandingAdmin.preview.title')}</Card.Title>
                       <div
                         className="rounded-3 p-3"
                         style={{ background: previewColors.surface, border: `1px solid ${previewColors.border}` }}
@@ -1157,10 +1189,10 @@ const BrandingAdminPanel: React.FC<BrandingAdminPanelProps> = ({ onDirtyChange }
                                 fontWeight: 600,
                               }}
                             >
-                              {branding.name?.substring(0, 2).toUpperCase() || 'BR'}
+                              {branding.name?.substring(0, 2).toUpperCase() || t('brandingAdmin.preview.brandInitials')}
                             </span>
                             <span style={{ color: previewColors.surfaceContrast, fontWeight: 600 }}>
-                              {branding.name || 'Brand'}
+                              {branding.name || t('brandingAdmin.preview.brandFallback')}
                             </span>
                           </div>
                           <Badge
@@ -1168,7 +1200,7 @@ const BrandingAdminPanel: React.FC<BrandingAdminPanelProps> = ({ onDirtyChange }
                             text="dark"
                             style={{ border: `1px solid ${previewColors.border}`, color: previewColors.text }}
                           >
-                            Active
+                            {t('brandingAdmin.preview.status')}
                           </Badge>
                         </div>
                       </div>
@@ -1187,7 +1219,7 @@ const BrandingAdminPanel: React.FC<BrandingAdminPanelProps> = ({ onDirtyChange }
                             color: previewColors.buttonPrimaryText,
                           }}
                         >
-                          Primary Action
+                          {t('brandingAdmin.preview.primaryAction')}
                         </Button>
                         <Button
                           variant="outline-primary"
@@ -1205,15 +1237,13 @@ const BrandingAdminPanel: React.FC<BrandingAdminPanelProps> = ({ onDirtyChange }
                             border: `1px solid ${previewColors.buttonSecondaryBorder}`,
                           }}
                         >
-                          Secondary Action
+                          {t('brandingAdmin.preview.secondaryAction')}
                         </Button>
                       </div>
 
                       <div>
-                        <h5 style={{ color: previewColors.text }}>Section Header</h5>
-                        <p style={{ color: previewColors.textMuted }}>
-                          Supporting copy uses muted text color for hierarchy and readability.
-                        </p>
+                        <h5 style={{ color: previewColors.text }}>{t('brandingAdmin.preview.sectionTitle')}</h5>
+                        <p style={{ color: previewColors.textMuted }}>{t('brandingAdmin.preview.sectionBody')}</p>
                       </div>
 
                       <div
@@ -1234,13 +1264,13 @@ const BrandingAdminPanel: React.FC<BrandingAdminPanelProps> = ({ onDirtyChange }
                               fontWeight: 600,
                             }}
                           >
-                            N
+                            {t('brandingAdmin.preview.chat.initials')}
                           </span>
                           <div className="d-flex flex-column">
                             <span className="fw-semibold" style={{ color: previewColors.text }}>
-                              Numa Assistant
+                              {t('brandingAdmin.preview.chat.assistant')}
                             </span>
-                            <small className="text-muted">Online</small>
+                            <small className="text-muted">{t('brandingAdmin.preview.chat.status')}</small>
                           </div>
                         </div>
 
@@ -1253,10 +1283,9 @@ const BrandingAdminPanel: React.FC<BrandingAdminPanelProps> = ({ onDirtyChange }
                               maxWidth: '85%',
                             }}
                           >
-                            <p className="mb-1 fw-semibold">Numa Assistant</p>
+                            <p className="mb-1 fw-semibold">{t('brandingAdmin.preview.chat.assistant')}</p>
                             <p className="mb-0" style={{ color: previewColors.textMuted }}>
-                              Hi! I can help you with onboarding, training resources, or account updates. What would you
-                              like to do today?
+                              {t('brandingAdmin.preview.chat.message')}
                             </p>
                           </div>
 
@@ -1270,7 +1299,7 @@ const BrandingAdminPanel: React.FC<BrandingAdminPanelProps> = ({ onDirtyChange }
                                 boxShadow: '0 2px 6px rgba(0,0,0,0.05)',
                               }}
                             >
-                              I&apos;d like the onboarding checklist and the latest adoption metrics.
+                              {t('brandingAdmin.preview.chat.userMessage')}
                             </div>
                           </div>
                         </div>
@@ -1288,7 +1317,7 @@ const BrandingAdminPanel: React.FC<BrandingAdminPanelProps> = ({ onDirtyChange }
                             }}
                           >
                             <i className="bi bi-send" style={{ color: previewColors.textMuted }}></i>
-                            <span>Type a message…</span>
+                            <span>{t('brandingAdmin.preview.chat.placeholder')}</span>
                           </div>
                           <Button
                             size="sm"
@@ -1298,7 +1327,7 @@ const BrandingAdminPanel: React.FC<BrandingAdminPanelProps> = ({ onDirtyChange }
                               color: previewColors.buttonPrimaryText,
                             }}
                           >
-                            Send
+                            {t('brandingAdmin.preview.chat.send')}
                           </Button>
                         </div>
                       </div>
@@ -1312,7 +1341,7 @@ const BrandingAdminPanel: React.FC<BrandingAdminPanelProps> = ({ onDirtyChange }
                       >
                         <div className="d-flex flex-column gap-2 text-center">
                           <span className="fw-semibold" style={{ color: previewColors.text }}>
-                            Login Preview
+                            {t('brandingAdmin.preview.login.title')}
                           </span>
                           <Button
                             size="sm"
@@ -1322,7 +1351,7 @@ const BrandingAdminPanel: React.FC<BrandingAdminPanelProps> = ({ onDirtyChange }
                               color: previewColors.buttonPrimaryText,
                             }}
                           >
-                            Sign in
+                            {t('brandingAdmin.preview.login.signIn')}
                           </Button>
                         </div>
                       </div>
@@ -1333,8 +1362,8 @@ const BrandingAdminPanel: React.FC<BrandingAdminPanelProps> = ({ onDirtyChange }
             </Row>
 
             <Row className="mt-4 gy-4">
-              {(Object.keys(ASSET_CONSTRAINTS) as AssetType[]).map((type) => {
-                const constraint = ASSET_CONSTRAINTS[type];
+              {(Object.keys(assetConstraints) as AssetType[]).map((type) => {
+                const constraint = assetConstraints[type];
                 const currentUrl = branding.assets?.[type];
                 const previewUrl = previewUrls[type] || (currentUrl ? toPreviewUrl(currentUrl) : undefined);
                 return (
@@ -1354,11 +1383,16 @@ const BrandingAdminPanel: React.FC<BrandingAdminPanelProps> = ({ onDirtyChange }
                         {previewUrl && (
                           <div className="mt-3 text-center">
                             {type === 'favicon' ? (
-                              <img src={previewUrl} alt={`${constraint.label} preview`} width={32} height={32} />
+                              <img
+                                src={previewUrl}
+                                alt={t('brandingAdmin.assets.previewAlt', { label: constraint.label })}
+                                width={32}
+                                height={32}
+                              />
                             ) : (
                               <img
                                 src={previewUrl}
-                                alt={`${constraint.label} preview`}
+                                alt={t('brandingAdmin.assets.previewAlt', { label: constraint.label })}
                                 style={{
                                   maxHeight: type === 'logoNav' ? 48 : 120,
                                   maxWidth: '100%',
@@ -1375,7 +1409,7 @@ const BrandingAdminPanel: React.FC<BrandingAdminPanelProps> = ({ onDirtyChange }
                                 }}
                                 rel="noopener noreferrer"
                               >
-                                View asset
+                                {t('brandingAdmin.assets.view')}
                               </a>
                             </div>
                           </div>
@@ -1391,15 +1425,15 @@ const BrandingAdminPanel: React.FC<BrandingAdminPanelProps> = ({ onDirtyChange }
         {enabled && (
           <div className="d-flex justify-content-end gap-2 mt-4 pt-3 border-top">
             <Button variant="secondary" onClick={() => void loadConfig({ force: true })} disabled={saving || !isDirty}>
-              Discard Changes
+              {t('brandingAdmin.actions.discard')}
             </Button>
             <Button variant="outline-secondary" onClick={() => void saveChanges()} disabled={saving || !isDirty}>
               {saving ? <Spinner animation="border" size="sm" /> : <i className="bi bi-check-lg me-2" />}
-              Save Changes
+              {t('brandingAdmin.actions.saveChanges')}
             </Button>
             <Button variant="primary" onClick={openVersionModal} disabled={saving || !isDirty}>
               {saving ? <Spinner animation="border" size="sm" /> : <i className="bi bi-layers me-2" />}
-              Save as New Version
+              {t('brandingAdmin.actions.saveAsVersion')}
             </Button>
           </div>
         )}
@@ -1407,50 +1441,47 @@ const BrandingAdminPanel: React.FC<BrandingAdminPanelProps> = ({ onDirtyChange }
 
       <Modal show={showVersionModal} onHide={() => setShowVersionModal(false)} centered>
         <Modal.Header closeButton>
-          <Modal.Title>Save as New Version</Modal.Title>
+          <Modal.Title>{t('brandingAdmin.versionModal.title')}</Modal.Title>
         </Modal.Header>
         <Modal.Body>
-          <p className="text-muted mb-3">
-            Create a named version of your current branding settings. You can restore to this version later.
-          </p>
+          <p className="text-muted mb-3">{t('brandingAdmin.versionModal.description')}</p>
           <Form.Group controlId="version-label">
-            <Form.Label>Version Name</Form.Label>
+            <Form.Label>{t('brandingAdmin.versionModal.label')}</Form.Label>
             <Form.Control
               type="text"
               value={versionLabel}
               onChange={(e) => setVersionLabel(e.target.value)}
-              placeholder="e.g., Holiday theme, Q4 rebrand"
+              placeholder={t('brandingAdmin.versionModal.placeholder')}
               autoFocus
             />
-            <Form.Text className="text-muted">Give this version a memorable name to help identify it later.</Form.Text>
+            <Form.Text className="text-muted">{t('brandingAdmin.versionModal.hint')}</Form.Text>
           </Form.Group>
         </Modal.Body>
         <Modal.Footer>
           <Button variant="secondary" onClick={() => setShowVersionModal(false)}>
-            Cancel
+            {t('brandingAdmin.actions.cancel')}
           </Button>
           <Button variant="primary" onClick={() => void handleSaveVersion()} disabled={saving}>
-            {saving ? <Spinner animation="border" size="sm" /> : 'Save Version'}
+            {saving ? <Spinner animation="border" size="sm" /> : t('brandingAdmin.actions.saveVersion')}
           </Button>
         </Modal.Footer>
       </Modal>
 
       <Modal show={showRevertModal} onHide={() => setShowRevertModal(false)} centered>
         <Modal.Header closeButton>
-          <Modal.Title>Revert to Previous Version</Modal.Title>
+          <Modal.Title>{t('brandingAdmin.revertModal.title')}</Modal.Title>
         </Modal.Header>
         <Modal.Body>
           <p>
-            Are you sure you want to revert to{' '}
-            <strong>{revertTargetVersion?.label || revertTargetVersion?.versionId}</strong>?
+            {t('brandingAdmin.revertModal.confirmPrefix')}{' '}
+            <strong>{revertTargetVersion?.label || revertTargetVersion?.versionId}</strong>
+            {t('brandingAdmin.revertModal.confirmSuffix')}
           </p>
-          <p className="text-muted mb-0">
-            This will replace your current branding settings with this version. Any unsaved changes will be lost.
-          </p>
+          <p className="text-muted mb-0">{t('brandingAdmin.revertModal.warning')}</p>
         </Modal.Body>
         <Modal.Footer>
           <Button variant="secondary" onClick={() => setShowRevertModal(false)}>
-            Cancel
+            {t('brandingAdmin.actions.cancel')}
           </Button>
           <Button
             variant="primary"
@@ -1462,7 +1493,7 @@ const BrandingAdminPanel: React.FC<BrandingAdminPanelProps> = ({ onDirtyChange }
             }}
             disabled={saving}
           >
-            {saving ? <Spinner animation="border" size="sm" /> : 'Revert'}
+            {saving ? <Spinner animation="border" size="sm" /> : t('brandingAdmin.actions.revert')}
           </Button>
         </Modal.Footer>
       </Modal>

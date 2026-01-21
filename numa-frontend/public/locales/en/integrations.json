@@ -1,0 +1,351 @@
+{
+  "header": {
+    "title": "Numa Integrations",
+    "subtitle": "Connect external tools and services to enhance your Numa experience"
+  },
+  "connections": {
+    "defaults": {
+      "exampleQuery": "Test my connection to this service"
+    },
+    "gmail": {
+      "name": "Gmail",
+      "description": "Send emails, manage inbox, and automate email workflows",
+      "example_query": "List what emails I received today"
+    },
+    "microsoft_outlook": {
+      "name": "Microsoft Outlook",
+      "description": "Manage emails, calendar events, and contacts in Outlook",
+      "example_query": "Show me my unread emails from the last week"
+    },
+    "microsoft_outlook_calendar": {
+      "name": "Microsoft Outlook Calendar",
+      "description": "Manage calendar events and scheduling in Outlook. Create, update, and delete events, check availability, and sync across devices",
+      "example_query": "Schedule a meeting for tomorrow at 2 PM and check my availability for this week"
+    },
+    "slack": {
+      "name": "Slack",
+      "description": "Send messages, create channels, and collaborate with your team",
+      "example_query": "Show me recent messages from my team channels"
+    },
+    "google_calendar": {
+      "name": "Google Calendar",
+      "description": "Schedule meetings, check availability, and manage calendar events automatically",
+      "example_query": "What meetings do I have scheduled for today?"
+    },
+    "xero_accounting_api": {
+      "name": "Xero",
+      "description": "Manage invoices, expenses, and financial data in your accounting system",
+      "example_query": "Show me my recent invoices and their status"
+    },
+    "hubspot": {
+      "name": "HubSpot",
+      "description": "Manage contacts, deals, and marketing campaigns in your CRM",
+      "example_query": "List my open deals and their values"
+    },
+    "notion": {
+      "name": "Notion",
+      "description": "Access pages, manage databases, and organize your workspace content",
+      "example_query": "Find pages I've recently edited in my workspace"
+    },
+    "apollo_io": {
+      "name": "Apollo.io",
+      "description": "Manage leads, contacts, and sales sequences for prospecting",
+      "example_query": "Show me my recent contact searches"
+    },
+    "pipedrive": {
+      "name": "Pipedrive",
+      "description": "Manage deals, activities, and sales pipeline in your CRM",
+      "example_query": "List my active deals in the pipeline"
+    },
+    "jira": {
+      "name": "Jira",
+      "description": "Create issues, track project progress, and manage development workflows",
+      "example_query": "Show me issues assigned to me"
+    },
+    "linkedin": {
+      "name": "LinkedIn",
+      "description": "Create posts, manage your profile, and automate professional networking",
+      "example_query": "Show my recent activity and connections"
+    },
+    "google_drive": {
+      "name": "Google Drive",
+      "description": "Upload files, create folders, manage permissions, and automate document workflows",
+      "example_query": "List files I've recently modified"
+    },
+    "google_analytics": {
+      "name": "Google Analytics",
+      "description": "Access website analytics, track user behavior, and generate marketing insights",
+      "example_query": "Show me my website traffic for the last 30 days"
+    },
+    "sharepoint": {
+      "name": "Microsoft SharePoint",
+      "description": "Manage SharePoint lists, documents, and sites. Create items, sync data, and automate content workflows",
+      "example_query": "Show me recent updates to my SharePoint lists and documents"
+    },
+    "salesforce_rest_api": {
+      "name": "Salesforce",
+      "description": "Manage your Salesforce CRM data including leads, accounts, contacts, opportunities, and cases. Create, update, query, and sync customer relationship data",
+      "example_query": "Show me all open opportunities over $10,000 and create a new lead from this contact information"
+    },
+    "asana": {
+      "name": "Asana",
+      "description": "Manage projects and tasks. Create, update, and track work across teams.",
+      "example_query": "List my tasks due this week and create a new task for the marketing project."
+    },
+    "onenote": {
+      "name": "Microsoft OneNote",
+      "description": "Create and organize notebooks, sections, and pages in OneNote.",
+      "example_query": "Create a new page in my project notebook summarizing today's meeting."
+    },
+    "trello": {
+      "name": "Trello",
+      "description": "Manage boards, lists, and cards to keep work organized.",
+      "example_query": "Add a card to the Sprint board with a checklist for release tasks."
+    },
+    "whatsapp_business": {
+      "name": "WhatsApp Business",
+      "description": "Send and receive WhatsApp Business messages and manage templates.",
+      "example_query": "Send a WhatsApp message to this customer about their order status."
+    },
+    "mailchimp": {
+      "name": "Mailchimp",
+      "description": "Manage audiences, campaigns, and email marketing automations.",
+      "example_query": "Create and schedule a campaign to the newsletter audience for Friday."
+    },
+    "freshdesk": {
+      "name": "Freshdesk",
+      "description": "Handle tickets, contacts, and support automation.",
+      "example_query": "Create a ticket for this customer issue and assign it to support."
+    },
+    "rentman": {
+      "name": "Rentman",
+      "description": "Manage projects, equipment, and planning in Rentman.",
+      "example_query": "List current rentals and create a new project booking for next week."
+    },
+    "podio": {
+      "name": "Podio",
+      "description": "Manage projects, tasks, and collaboration in Podio workspaces.",
+      "example_query": "Create a new task in the NZS Group workspace for this request."
+    },
+    "google_sheets": {
+      "name": "Google Sheets",
+      "description": "Read, update, and manage spreadsheets to automate reporting and workflows.",
+      "example_query": "Append a new row to the quarterly report sheet with these values."
+    },
+    "google_forms": {
+      "name": "Google Forms",
+      "description": "Create and manage forms, questions, and responses programmatically.",
+      "example_query": "Create a survey form with three questions and share the link."
+    },
+    "google_docs": {
+      "name": "Google Docs",
+      "description": "Create, read, and update documents in Google Docs.",
+      "example_query": "Draft a status update document in my project folder."
+    },
+    "telegram_bot_api": {
+      "name": "Telegram",
+      "description": "Send messages and manage chats via Telegram bots.",
+      "example_query": "Send a Telegram message to the support channel about this issue."
+    },
+    "microsoft_teams": {
+      "name": "Microsoft Teams",
+      "description": "Send messages, manage channels, and collaborate via Microsoft Teams.",
+      "example_query": "Post an update to the project channel and mention the owner."
+    },
+    "zoom": {
+      "name": "Zoom",
+      "description": "Schedule meetings, manage recordings, and automate Zoom workflows.",
+      "example_query": "Schedule a Zoom meeting for tomorrow at 10am with this agenda."
+    },
+    "microsoft_excel": {
+      "name": "Microsoft Excel",
+      "description": "Read, update, and manage Excel workbooks and worksheets.",
+      "example_query": "Append a row to the monthly report sheet with these numbers."
+    },
+    "smartsheet": {
+      "name": "Smartsheet",
+      "description": "Read, update, and automate Smartsheet sheets, rows, and attachments.",
+      "example_query": "Add a row to the project tracker sheet with this status update."
+    },
+    "box": {
+      "name": "Box",
+      "description": "Manage files, folders, and sharing in Box.",
+      "example_query": "Find the latest proposal PDF in the shared Box folder."
+    }
+  },
+  "tabs": {
+    "connectedApps": "Connected Apps",
+    "dataConnectors": "Data Connectors"
+  },
+  "preview": {
+    "notice": "Numa Integrations are not enabled in your Numa environment. Contact your account administrator to request access."
+  },
+  "errors": {
+    "permissions": "Unable to access AWS resources. Please check your permissions.",
+    "initLambda": "Failed to initialize AWS Lambda client. Please try refreshing the page.",
+    "loadStatus": "Failed to load integration status: {{message}}",
+    "systemNotReady": "System not ready. Please refresh the page and try again.",
+    "connectFailed": "Failed to connect {{appName}}: {{message}}",
+    "connectFailedGeneric": "Failed to connect {{appName}}. {{message}}",
+    "tryAgain": "Please try again.",
+    "unknownError": "Unknown error",
+    "authFailed": "Authentication failed. Please refresh the page and try again.",
+    "network": "Network error. Please check your connection and try again.",
+    "disconnectFailed": "Failed to disconnect integration",
+    "loadSettings": "Failed to load settings",
+    "saveSettings": "Failed to save settings"
+  },
+  "confirm": {
+    "disconnect": "Are you sure you want to disconnect {{appName}}? This will revoke access until you reconnect."
+  },
+  "status": {
+    "connected": "Connected",
+    "notConnected": "Not Connected",
+    "disabledByAdmin": "Disabled by your administrator"
+  },
+  "actions": {
+    "test": "Test",
+    "settings": "Settings",
+    "pleaseWait": "Please wait...",
+    "disconnecting": "Disconnecting...",
+    "disconnect": "Disconnect",
+    "connect": "Connect",
+    "connecting": "Connecting...",
+    "refresh": "Refresh",
+    "refreshing": "Refreshing",
+    "saveChanges": "Save Changes",
+    "cancel": "Cancel"
+  },
+  "toolPolicy": {
+    "applying": "Applying default tool policy...",
+    "tooltip": "For better security and performance, review each integration's Settings to enable only the tools you need. Fewer enabled tools means more focused AI responses and enhanced data protection."
+  },
+  "connection": {
+    "successTitle": "Integration Connected Successfully!",
+    "successDescription": "Your {{appName}} integration is now ready to use.",
+    "customizeTools": "Customize Tool Access"
+  },
+  "steps": {
+    "connect": {
+      "title": "Connect Integration",
+      "body": "Click the connect button on any app below to get started"
+    },
+    "signIn": {
+      "title": "Sign In Securely",
+      "body": "Follow the secure authentication steps and test your connection was successful"
+    },
+    "optimize": {
+      "title": "Optimize Security",
+      "body": "Use Settings to enable only the tools you need for better security and performance"
+    },
+    "work": {
+      "title": "Get Work Done",
+      "bodyPrefix": "Utilise your integrations while getting work done in",
+      "chatLink": "Numa Chat"
+    }
+  },
+  "availableIntegrations": "Available Integrations",
+  "availableIntegrationsWithCount": "Available Integrations ({{count}})",
+  "loadingIntegrations": "Loading integrations...",
+  "appIconAlt": "{{name}} icon",
+  "settingsModal": {
+    "confirmClose": "Exit will lose the changes made. Cancel and use \"Save Changes\" if you wish to update the available tools.\n\nExit anyway?",
+    "title": "Integration Settings",
+    "unsavedBadge": "Unsaved Changes",
+    "subtitle": "Toggle on and off the tools that Numa will have access to when using this integration",
+    "loading": "Loading available tools...",
+    "empty": "No tools available for this integration.",
+    "seeDocumentation": "see documentation",
+    "globallyDisabled": "Disabled globally by your administrator",
+    "toolsEnabledCount": "{{enabled}} of {{total}} tools enabled"
+  },
+  "dataConnectors": {
+    "loading": "Loading data connectors...",
+    "disabled": "This data connector has been disabled by your administrator.",
+    "available": "Available Data Connectors ({{count}})",
+    "success": "Connected successfully.",
+    "successWithJobs": "Connected successfully. Found {{count}} jobs.",
+    "errors": {
+      "loadFailed": "Failed to load data connectors.",
+      "connectFailed": "Failed to connect to Synergy."
+    },
+    "modal": {
+      "connectTitle": "Connect to Synergy",
+      "settingsTitle": "Synergy Settings",
+      "testTitle": "Test Synergy Connection",
+      "disabled": "This connector is disabled by your administrator.",
+      "serverLabel": "Server",
+      "serverPlaceholder": "https://synergy.myserver.com:8080",
+      "tokenLabel": "Personal Access Token",
+      "tokenPlaceholder": "Paste token",
+      "cancel": "Cancel",
+      "saving": "Saving...",
+      "testAction": "Test Connection",
+      "saveAction": "Save Changes",
+      "connectAction": "Connect"
+    },
+    "actions": {
+      "test": "Test",
+      "settings": "Settings",
+      "reconnect": "Reconnect",
+      "connecting": "Connecting...",
+      "connect": "Connect"
+    },
+    "synergy": {
+      "name": "Synergy",
+      "description": "Data connector for Synergy job data.",
+      "iconAlt": "Synergy icon"
+    }
+  },
+  "kbTargetSelector": {
+    "label": "Target Knowledge Base",
+    "placeholder": "Select a knowledge base",
+    "createKB": "Create KB"
+  },
+  "synergyJobsTree": {
+    "subfolders": "{{count}} subfolders",
+    "selectAll": "Select all",
+    "unselectAll": "Unselect all",
+    "noFolders": "No folders found.",
+    "loadingFolders": "Loading folders...",
+    "hideFolders": "Hide folders",
+    "browseFolders": "Browse folders",
+    "connected": "Connected",
+    "available": "Available"
+  },
+  "dataConnectorsPage": {
+    "title": "Data Connectors",
+    "subtitle": {
+      "synergy": "Select Synergy jobs and folders to connect into a knowledge base.",
+      "list": "Choose a connector to configure connected data sources."
+    },
+    "saving": "Saving...",
+    "saveChanges": "Save changes",
+    "synergyCard": {
+      "title": "Synergy",
+      "description": "Connect jobs and folders from 12d Synergy.",
+      "open": "Open"
+    },
+    "backToConnectors": "Back to connectors",
+    "synergyNotConnected": "Synergy is not connected. Connect your Synergy credentials in Integrations first.",
+    "skipUnsupportedFiles": "Skip files that the knowledge base cannot ingest",
+    "loadingConnectors": "Loading data connectors...",
+    "searchJobs": "Search jobs...",
+    "connectedJobs": "Connected Jobs",
+    "disconnectAll": "Disconnect all",
+    "noJobsConnected": "No jobs connected yet.",
+    "disconnect": "Disconnect",
+    "availableJobs": "Available Jobs",
+    "connectAll": "Connect all",
+    "noAvailableJobs": "No available jobs found.",
+    "connect": "Connect",
+    "errors": {
+      "loadStatus": "Failed to load data connector status.",
+      "loadJobs": "Failed to load Synergy jobs.",
+      "loadConfigs": "Failed to load sync selections.",
+      "loadKbs": "Failed to load knowledge bases.",
+      "saveChanges": "Failed to save changes.",
+      "selectKbFirst": "Select a knowledge base before connecting."
+    }
+  }
+}

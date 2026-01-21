@@ -1,4 +1,5 @@
 import { Button, Form } from 'react-bootstrap';
+import { useTranslation } from 'react-i18next';
 import type { UserKB } from '../../Services/knowledgeBaseService';
 
 type KBTargetSelectorProps = {
@@ -10,13 +11,15 @@ type KBTargetSelectorProps = {
 };
 
 export const KBTargetSelector = ({ kbs, selectedKbId, onChange, onCreate, disabled }: KBTargetSelectorProps) => {
+  const { t } = useTranslation('integrations');
+
   return (
     <div className="d-flex flex-wrap align-items-end gap-2">
       <Form.Group className="flex-grow-1" controlId="kbTarget">
-        <Form.Label className="small fw-semibold mb-1">Target Knowledge Base</Form.Label>
+        <Form.Label className="small fw-semibold mb-1">{t('kbTargetSelector.label')}</Form.Label>
         <Form.Select value={selectedKbId ?? ''} onChange={(e) => onChange(e.target.value)} disabled={disabled}>
           <option value="" disabled>
-            Select a knowledge base
+            {t('kbTargetSelector.placeholder')}
           </option>
           {kbs.map((kb) => (
             <option key={kb.kb_id} value={kb.kb_id}>
@@ -27,7 +30,7 @@ export const KBTargetSelector = ({ kbs, selectedKbId, onChange, onCreate, disabl
       </Form.Group>
       <Button variant="secondary" onClick={onCreate} disabled={disabled}>
         <i className="bi bi-plus-lg me-2" />
-        Create KB
+        {t('kbTargetSelector.createKB')}
       </Button>
     </div>
   );

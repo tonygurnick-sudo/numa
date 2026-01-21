@@ -9,6 +9,7 @@
 
 import React, { useMemo, useState } from 'react';
 import { Modal, Button, Form, Alert } from 'react-bootstrap';
+import { useTranslation } from 'react-i18next';
 import { knowledgeBaseService } from '../Services/knowledgeBaseService';
 import { ChipsInput } from './Inputs/ChipsInput';
 
@@ -101,6 +102,7 @@ function toUserMessage(err: unknown): string {
  */
 
 export function CreateKBModal(props: CreateKBModalProps): React.JSX.Element {
+  const { t } = useTranslation('common');
   const { show, onHide, onSuccess } = props;
 
   const [kbName, setKbName] = useState<string>('');
@@ -139,7 +141,7 @@ export function CreateKBModal(props: CreateKBModalProps): React.JSX.Element {
     setError(null);
 
     if (!isNonEmptyString(kbName)) {
-      setError('Please provide a name for the knowledge base.');
+      setError(t('createKB.errors.nameRequired'));
       return;
     }
 
@@ -160,7 +162,7 @@ export function CreateKBModal(props: CreateKBModalProps): React.JSX.Element {
         const viewerSet = new Set<UserIdentifier>(request.viewers as PrivateViewers);
         const allEditorsInViewers = request.editors.every((ed) => viewerSet.has(ed));
         if (!allEditorsInViewers) {
-          setError('Editors must also be viewers for shared knowledge bases.');
+          setError(t('createKB.errors.editorsMustBeViewers'));
           setIsSubmitting(false);
           return;
         }
@@ -179,7 +181,7 @@ export function CreateKBModal(props: CreateKBModalProps): React.JSX.Element {
   return (
     <Modal show={show} onHide={handleClose} backdrop={isSubmitting ? 'static' : true}>
       <Modal.Header closeButton={!isSubmitting}>
-        <Modal.Title>Create New Knowledge Base</Modal.Title>
+        <Modal.Title>{t('createKB.title')}</Modal.Title>
       </Modal.Header>
 
       <Form onSubmit={handleSubmit} noValidate>
@@ -193,11 +195,11 @@ export function CreateKBModal(props: CreateKBModalProps): React.JSX.Element {
 
           <Form.Group className="mb-3" controlId="kbName">
             <Form.Label>
-              Knowledge Base Name <span className="text-danger">*</span>
+              {t('createKB.nameLabel')} <span className="text-danger">*</span>
             </Form.Label>
             <Form.Control
               type="text"
-              placeholder="e.g., Product Team KB"
+              placeholder={t('createKB.namePlaceholder')}
               value={kbName}
               onChange={(ev: React.ChangeEvent<HTMLInputElement>): void => setKbName(ev.target.value)}
               disabled={isSubmitting}
@@ -205,16 +207,16 @@ export function CreateKBModal(props: CreateKBModalProps): React.JSX.Element {
               maxLength={120}
               aria-required="true"
             />
-            <Form.Text className="text-muted">Choose a descriptive name for your knowledge base.</Form.Text>
+            <Form.Text className="text-muted">{t('createKB.nameHelp')}</Form.Text>
           </Form.Group>
 
           <Form.Group className="mb-3" controlId="kbType">
-            <Form.Label>Knowledge Base Type</Form.Label>
+            <Form.Label>{t('createKB.typeLabel')}</Form.Label>
             <div className="d-flex gap-3">
               <Form.Check
                 type="radio"
                 id="kb-type-personal"
-                label="Personal"
+                label={t('createKB.typePersonal')}
                 checked={!isShared}
                 onChange={(): void => setIsShared(false)}
                 disabled={isSubmitting}
@@ -222,27 +224,25 @@ export function CreateKBModal(props: CreateKBModalProps): React.JSX.Element {
               <Form.Check
                 type="radio"
                 id="kb-type-shared"
-                label="Shared"
+                label={t('createKB.typeShared')}
                 checked={isShared}
                 onChange={(): void => setIsShared(true)}
                 disabled={isSubmitting}
               />
             </div>
             <Form.Text className="text-muted">
-              {isShared
-                ? 'Share this KB with specific users who can view or edit.'
-                : 'Only you will have access to this KB.'}
+              {isShared ? t('createKB.typeSharedHelp') : t('createKB.typePersonalHelp')}
             </Form.Text>
           </Form.Group>
 
           {isShared && (
             <ChipsInput
               id="kbViewers"
-              label="Viewers (user IDs or emails)"
+              label={t('createKB.viewersLabel')}
               chips={viewerChips}
               onChange={setViewerChips}
-              placeholder="Type an email or ID and press Add/Enter"
-              helperText="Editors are automatically included as viewers."
+              placeholder={t('createKB.viewersPlaceholder')}
+              helperText={t('createKB.viewersHelp')}
               disabled={isSubmitting}
             />
           )}
@@ -250,11 +250,11 @@ export function CreateKBModal(props: CreateKBModalProps): React.JSX.Element {
           {isShared && (
             <ChipsInput
               id="kbEditors"
-              label="Editors (user IDs or emails)"
+              label={t('createKB.editorsLabel')}
               chips={editorChips}
               onChange={setEditorChips}
-              placeholder="Type an email or ID and press Add/Enter"
-              helperText="Editors can upload files and modify this KB; they automatically gain viewer access."
+              placeholder={t('createKB.editorsPlaceholder')}
+              helperText={t('createKB.editorsHelp')}
               disabled={isSubmitting}
             />
           )}
@@ -262,46 +262,41 @@ export function CreateKBModal(props: CreateKBModalProps): React.JSX.Element {
           {isShared && invalidViewers.length > 0 && (
             <div className="mt-2 small text-warning" aria-live="polite">
               <i className="bi bi-exclamation-circle me-1" />
-              These look unusual as emails: {invalidViewers.join(', ')}
+              {t('createKB.invalidEmails', { values: invalidViewers.join(', ') })}
             </div>
           )}
           {isShared && invalidEditors.length > 0 && (
             <div className="mt-2 small text-warning" aria-live="polite">
               <i className="bi bi-exclamation-circle me-1" />
-              These look unusual as emails: {invalidEditors.join(', ')}
+              {t('createKB.invalidEmails', { values: invalidEditors.join(', ') })}
             </div>
           )}
 
           <Alert variant="light" className="mb-0">
-            <strong>Note:</strong>
+            <strong>{t('createKB.noteTitle')}</strong>
             <ul className="mb-0 mt-2">
-              <li>You will be set as the creator and automatically added as an editor.</li>
-              <li>
-                <strong>Personal KBs:</strong> Only you have access. No need to specify viewers/editors.
-              </li>
-              <li>
-                <strong>Shared KBs:</strong> Specify viewers (can query) and editors (can upload/modify). Editors
-                automatically have viewer permissions.
-              </li>
-              <li>Files uploaded to this KB are isolated from other KBs.</li>
+              <li>{t('createKB.notes.creator')}</li>
+              <li>{t('createKB.notes.personal')}</li>
+              <li>{t('createKB.notes.shared')}</li>
+              <li>{t('createKB.notes.isolation')}</li>
             </ul>
           </Alert>
         </Modal.Body>
 
         <Modal.Footer>
           <Button variant="secondary" onClick={handleClose} disabled={isSubmitting}>
-            Cancel
+            {t('common.cancel')}
           </Button>
           <Button variant="primary" type="submit" disabled={isSubmitting}>
             {isSubmitting ? (
               <>
                 <span className="spinner-border spinner-border-sm me-2" />
-                Creating…
+                {t('createKB.creating')}
               </>
             ) : (
               <>
                 <i className="bi bi-plus-circle me-2" />
-                Create Knowledge Base
+                {t('createKB.createButton')}
               </>
             )}
           </Button>

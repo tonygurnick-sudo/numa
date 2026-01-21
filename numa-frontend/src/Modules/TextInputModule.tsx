@@ -2,11 +2,13 @@ import { useState, useEffect } from 'react';
 import { Form } from 'react-bootstrap';
 import { useNumaApp } from '../Providers/NumaAppContext';
 import { Preloader } from '../Components/Preloader';
+import { useTranslation } from 'react-i18next';
 
 function TextInputModule({ task, onComplete, onNotComplete, onChange, hasRun }) {
   // Check if the task is required (default to true for backward compatibility)
   const isRequired = task.required !== undefined ? task.required : true;
   const { numaTaskResponses, appRunning, taskInputValues } = useNumaApp();
+  const { t } = useTranslation('common');
   const [inputValue, setInputValue] = useState('');
 
   const taskResponse = numaTaskResponses?.find((response) => response?.taskId === task.id);
@@ -72,7 +74,7 @@ function TextInputModule({ task, onComplete, onNotComplete, onChange, hasRun }) 
         <Form.Control
           as="textarea"
           rows={7}
-          placeholder="Enter text here..."
+          placeholder={t('inputs.enterTextArea')}
           value={inputValue}
           // Disable the input if the app is running or has run
           disabled={appRunning || hasRun}

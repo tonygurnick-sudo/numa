@@ -3,11 +3,13 @@ import type { ChangeEvent } from 'react';
 import { Form } from 'react-bootstrap';
 import { useNumaApp } from '../Providers/NumaAppContext';
 import { Preloader } from '../Components/Preloader';
+import { useTranslation } from 'react-i18next';
 
 function DropdownModule({ task, onComplete, onNotComplete, onChange, hasRun }) {
   // Check if the task is required (default to true for backward compatibility)
   const isRequired = task.required !== undefined ? task.required : true;
   const { numaTaskResponses, appRunning, taskInputValues } = useNumaApp();
+  const { t } = useTranslation('common');
   const isMultiple = task.params?.multiple === true;
   const [selectedOption, setSelectedOption] = useState('');
   const [selectedOptions, setSelectedOptions] = useState<string[]>([]);
@@ -122,7 +124,7 @@ function DropdownModule({ task, onComplete, onNotComplete, onChange, hasRun }) {
         ) : (
           <Form.Select value={selectedOption} onChange={handleSelectChange} disabled={appRunning || hasRun}>
             <option value="" disabled={isRequired}>
-              Select an option...
+              {t('inputs.selectOption')}
             </option>
             {options.map((option, index) => (
               <option key={`${task.id}-option-${index}`} value={option}>

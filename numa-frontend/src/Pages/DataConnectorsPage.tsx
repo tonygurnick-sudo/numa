@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Alert, Button, Card, Col, Container, Form, Row, Spinner } from 'react-bootstrap';
+import { useTranslation } from 'react-i18next';
 import { PageHeader } from '../Components/PageHeader';
 import { CreateKBModal } from '../Components/CreateKBModal';
 import { KBTargetSelector } from '../Components/DataConnectors/KBTargetSelector';
@@ -14,6 +15,7 @@ import { LayoutDashboard } from '../Layouts/LayoutDashboard';
 import { SynergyIcon } from '../Components/DataConnectors/SynergyConnectorCard';
 
 export const DataConnectorsPage = () => {
+  const { t } = useTranslation('integrations');
   const { numaGet, numaPost, numaPut, numaDelete } = useNumaRequest();
   const [statusItems, setStatusItems] = useState<DataConnectorStatus[]>([]);
   const [jobs, setJobs] = useState<SynergyJob[]>([]);
@@ -45,10 +47,10 @@ export const DataConnectorsPage = () => {
       const items = await DataConnectorsService.listStatus(numaGet);
       setStatusItems(items);
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to load data connector status.';
+      const message = err instanceof Error ? err.message : t('dataConnectorsPage.errors.loadStatus');
       setLoadError(message);
     }
-  }, [numaGet]);
+  }, [numaGet, t]);
 
   const loadJobs = useCallback(async () => {
     if (activeConnector !== 'synergy') {
@@ -65,12 +67,12 @@ export const DataConnectorsPage = () => {
       const response = await SynergyDataConnectorService.listJobs(numaGet, { page: 1, page_size: 200 });
       setJobs(response.items || []);
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to load Synergy jobs.';
+      const message = err instanceof Error ? err.message : t('dataConnectorsPage.errors.loadJobs');
       setLoadError(message);
     } finally {
       setLoadingJobs(false);
     }
-  }, [activeConnector, isSynergyConnected, numaGet]);
+  }, [activeConnector, isSynergyConnected, numaGet, t]);
 
   const loadConfigs = useCallback(async () => {
     try {
@@ -88,12 +90,12 @@ export const DataConnectorsPage = () => {
         setPreferredKbId(items[0].target_kb_id ?? null);
       }
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to load sync selections.';
+      const message = err instanceof Error ? err.message : t('dataConnectorsPage.errors.loadConfigs');
       setLoadError(message);
     } finally {
       setLoadingConfigs(false);
     }
-  }, [activeConnector, numaGet]);
+  }, [activeConnector, numaGet, t]);
 
   const loadKbs = useCallback(async () => {
     try {
@@ -119,12 +121,12 @@ export const DataConnectorsPage = () => {
         }
       }
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to load knowledge bases.';
+      const message = err instanceof Error ? err.message : t('dataConnectorsPage.errors.loadKbs');
       setLoadError(message);
     } finally {
       setLoadingKbs(false);
     }
-  }, [activeConnector, preferredKbId, selectedKbId, syncConfigs]);
+  }, [activeConnector, preferredKbId, selectedKbId, syncConfigs, t]);
 
   useEffect(() => {
     loadStatus();
@@ -161,7 +163,7 @@ export const DataConnectorsPage = () => {
 
   const handleSyncJob = (job: SynergyJob) => {
     if (!selectedKbId) {
-      setLoadError('Select a knowledge base before connecting.');
+      setLoadError(t('dataConnectorsPage.errors.selectKbFirst'));
       return;
     }
     setLoadError(null);
@@ -292,7 +294,7 @@ export const DataConnectorsPage = () => {
       setSyncConfigs(nextConfigs);
       setInitialSyncConfigs(nextConfigs);
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to save changes.';
+      const message = err instanceof Error ? err.message : t('dataConnectorsPage.errors.saveChanges');
       setSaveError(message);
     } finally {
       setSavingChanges(false);
@@ -304,11 +306,11 @@ export const DataConnectorsPage = () => {
   return (
     <div className="data-connectors-page">
       <PageHeader
-        title="Data Connectors"
+        title={t('dataConnectorsPage.title')}
         subtitle={
           activeConnector === 'synergy'
-            ? 'Select Synergy jobs and folders to connect into a knowledge base.'
-            : 'Choose a connector to configure connected data sources.'
+            ? t('dataConnectorsPage.subtitle.synergy')
+            : t('dataConnectorsPage.subtitle.list')
         }
         actions={
           activeConnector === 'synergy' ? (
@@ -319,10 +321,10 @@ export const DataConnectorsPage = () => {
             >
               {savingChanges ? (
                 <>
-                  <Spinner size="sm" className="me-2" /> Saving...
+                  <Spinner size="sm" className="me-2" /> {t('dataConnectorsPage.saving')}
                 </>
               ) : (
-                'Save changes'
+                t('dataConnectorsPage.saveChanges')
               )}
             </Button>
           ) : null
@@ -339,8 +341,8 @@ export const DataConnectorsPage = () => {
                     <div className="d-flex align-items-center gap-3">
                       <SynergyIcon />
                       <div>
-                        <h6 className="mb-1">Synergy</h6>
-                        <div className="text-muted small">Connect jobs and folders from 12d Synergy.</div>
+                        <h6 className="mb-1">{t('dataConnectorsPage.synergyCard.title')}</h6>
+                        <div className="text-muted small">{t('dataConnectorsPage.synergyCard.description')}</div>
                       </div>
                     </div>
                     <div className="d-flex align-items-center justify-content-between">
@@ -349,10 +351,10 @@ export const DataConnectorsPage = () => {
                           isSynergyConnected ? 'brand-status-badge--active' : 'brand-status-badge--inactive'
                         }`}
                       >
-                        {isSynergyConnected ? 'Connected' : 'Not connected'}
+                        {isSynergyConnected ? t('status.connected') : t('status.notConnected')}
                       </span>
                       <Button variant="secondary" onClick={() => setActiveConnector('synergy')}>
-                        Open
+                        {t('dataConnectorsPage.synergyCard.open')}
                       </Button>
                     </div>
                   </Card.Body>
@@ -373,7 +375,7 @@ export const DataConnectorsPage = () => {
                         onClick={() => setActiveConnector('list')}
                       >
                         <i className="bi bi-arrow-left me-2" />
-                        Back to connectors
+                        {t('dataConnectorsPage.backToConnectors')}
                       </Button>
                     </div>
                     {loadError && (
@@ -388,7 +390,7 @@ export const DataConnectorsPage = () => {
                     )}
                     {!isSynergyConnected && (
                       <Alert variant="warning" className="mb-3">
-                        Synergy is not connected. Connect your Synergy credentials in Integrations first.
+                        {t('dataConnectorsPage.synergyNotConnected')}
                       </Alert>
                     )}
                     <div className="mb-4">
@@ -414,7 +416,7 @@ export const DataConnectorsPage = () => {
                             })),
                           );
                         }}
-                        label="Skip files that the knowledge base cannot ingest"
+                        label={t('dataConnectorsPage.skipUnsupportedFiles')}
                         disabled={!isSynergyConnected}
                       />
                     </div>
@@ -422,13 +424,13 @@ export const DataConnectorsPage = () => {
                     {isLoading ? (
                       <div className="text-center py-5">
                         <Spinner animation="border" variant="primary" />
-                        <p className="mt-3 text-muted">Loading data connectors...</p>
+                        <p className="mt-3 text-muted">{t('dataConnectorsPage.loadingConnectors')}</p>
                       </div>
                     ) : (
                       <>
                         <Form.Control
                           type="search"
-                          placeholder="Search jobs..."
+                          placeholder={t('dataConnectorsPage.searchJobs')}
                           value={jobSearch}
                           onChange={(e) => setJobSearch(e.target.value)}
                           className="mb-3"
@@ -436,7 +438,7 @@ export const DataConnectorsPage = () => {
                         <Row className="g-4">
                           <Col lg={6}>
                             <div className="d-flex align-items-center justify-content-between mb-3">
-                              <h5 className="mb-0">Connected Jobs</h5>
+                              <h5 className="mb-0">{t('dataConnectorsPage.connectedJobs')}</h5>
                               <Button
                                 size="sm"
                                 variant="secondary"
@@ -448,11 +450,11 @@ export const DataConnectorsPage = () => {
                                 }}
                                 disabled={!isSynergyConnected || connectedConfigsForKb.length === 0}
                               >
-                                Disconnect all
+                                {t('dataConnectorsPage.disconnectAll')}
                               </Button>
                             </div>
                             {filteredConnectedConfigs.length === 0 && (
-                              <div className="text-muted">No jobs connected yet.</div>
+                              <div className="text-muted">{t('dataConnectorsPage.noJobsConnected')}</div>
                             )}
                             {filteredConnectedConfigs.map((config) => {
                               const job = jobs.find((item) => item.job_id === config.synergy_job_id) || {
@@ -469,7 +471,7 @@ export const DataConnectorsPage = () => {
                                     onSelectionChange={(folders, includeAll) =>
                                       handleSelectionChange(config.sync_config_id, folders, includeAll)
                                     }
-                                    actionLabel="Disconnect"
+                                    actionLabel={t('dataConnectorsPage.disconnect')}
                                     actionVariant="secondary"
                                     onAction={() => handleUnsyncJob(config.sync_config_id)}
                                     loadJobFolders={loadJobFolders}
@@ -483,13 +485,13 @@ export const DataConnectorsPage = () => {
 
                           <Col lg={6}>
                             <div className="d-flex align-items-center justify-content-between mb-3">
-                              <h5 className="mb-0">Available Jobs</h5>
+                              <h5 className="mb-0">{t('dataConnectorsPage.availableJobs')}</h5>
                               <Button
                                 size="sm"
                                 variant="secondary"
                                 onClick={() => {
                                   if (!selectedKbId) {
-                                    setLoadError('Select a knowledge base before connecting.');
+                                    setLoadError(t('dataConnectorsPage.errors.selectKbFirst'));
                                     return;
                                   }
                                   setLoadError(null);
@@ -523,11 +525,11 @@ export const DataConnectorsPage = () => {
                                 }}
                                 disabled={!isSynergyConnected || availableJobs.length === 0}
                               >
-                                Connect all
+                                {t('dataConnectorsPage.connectAll')}
                               </Button>
                             </div>
                             {filteredAvailableJobs.length === 0 && (
-                              <div className="text-muted">No available jobs found.</div>
+                              <div className="text-muted">{t('dataConnectorsPage.noAvailableJobs')}</div>
                             )}
                             {filteredAvailableJobs.map((job) => (
                               <div key={job.job_id} className="mb-3">
@@ -539,7 +541,7 @@ export const DataConnectorsPage = () => {
                                   onSelectionChange={(folders, includeAll) =>
                                     handleDraftSelectionChange(job.job_id, folders, includeAll)
                                   }
-                                  actionLabel="Connect"
+                                  actionLabel={t('dataConnectorsPage.connect')}
                                   actionVariant="secondary"
                                   onAction={() => handleSyncJob(job)}
                                   loadJobFolders={loadJobFolders}

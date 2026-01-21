@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Row, Col, Dropdown } from 'react-bootstrap';
+import { useTranslation } from 'react-i18next';
 import { formatCategory } from '../../utils/textUtils';
 
 export const AppSearch = ({
@@ -10,9 +11,11 @@ export const AppSearch = ({
   initialCategories = [],
   initialSortOrder = 'asc',
 }) => {
+  const { t } = useTranslation('apps');
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategories, setSelectedCategories] = useState(initialCategories);
   const [sortOrder, setSortOrder] = useState(initialSortOrder);
+  const sortOrderLabel = sortOrder === 'asc' ? t('appSearch.sort.asc') : t('appSearch.sort.desc');
 
   useEffect(() => {
     setSelectedCategories(initialCategories);
@@ -54,7 +57,7 @@ export const AppSearch = ({
             <i className="bi bi-search search-icon"></i>
             <input
               type="text"
-              placeholder="Type to Filter Apps"
+              placeholder={t('appSearch.search.placeholder')}
               value={searchTerm}
               onChange={handleSearch}
               className="search-input"
@@ -75,7 +78,7 @@ export const AppSearch = ({
               ))}
               {selectedCategories.length > 0 && (
                 <button className="category-filter clear" onClick={handleClearCategories}>
-                  Clear
+                  {t('appSearch.clear')}
                   <i className="bi bi-x ms-2"></i>
                 </button>
               )}
@@ -84,17 +87,17 @@ export const AppSearch = ({
             <Dropdown>
               <Dropdown.Toggle variant="" id="sort-dropdown">
                 <i className="bi bi-sort-alpha-down me-2"></i>
-                Sort {sortOrder === 'asc' ? 'A to Z' : 'Z to A'}
+                {t('appSearch.sort.toggle', { order: sortOrderLabel })}
               </Dropdown.Toggle>
 
               <Dropdown.Menu>
                 <Dropdown.Item onClick={() => handleSort('asc')} active={sortOrder === 'asc'}>
                   <i className="bi bi-sort-alpha-down me-2"></i>
-                  Sort A to Z
+                  {t('appSearch.sort.optionAsc')}
                 </Dropdown.Item>
                 <Dropdown.Item onClick={() => handleSort('desc')} active={sortOrder === 'desc'}>
                   <i className="bi bi-sort-alpha-up me-2"></i>
-                  Sort Z to A
+                  {t('appSearch.sort.optionDesc')}
                 </Dropdown.Item>
               </Dropdown.Menu>
             </Dropdown>

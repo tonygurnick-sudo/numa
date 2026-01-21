@@ -5,6 +5,8 @@ import { formatDistanceToNow } from 'date-fns';
 import { Preloader } from './Preloader';
 import { CheckCircleFill, ArrowClockwise, ExclamationCircleFill, FileEarmarkArrowUp } from 'react-bootstrap-icons';
 import { useDrawerBackClose } from '../hooks/useDrawerBackClose';
+import { useTranslation } from 'react-i18next';
+import i18n from '../i18n';
 
 const SIDEBAR_NAME_LIMIT = 60;
 
@@ -13,6 +15,7 @@ interface JobHistorySidebarProps {
 }
 
 const JobHistorySidebar = ({ hideToggle = false }: JobHistorySidebarProps) => {
+  const { t } = useTranslation('apps');
   const {
     getAppJobs,
     loadAppJobs,
@@ -144,7 +147,7 @@ const JobHistorySidebar = ({ hideToggle = false }: JobHistorySidebarProps) => {
   }, [loadAppJobs, nextToken, loadingMore, hasMore, jobHistorySidebarOpen]);
 
   const formatRunLabel = (job) => {
-    const appLabel = job.appName || numaAppData?.appName || 'App';
+    const appLabel = job.appName || numaAppData?.appName || t('jobHistory.sidebar.appFallback');
     const rawName = (job.name || '').trim();
     const startedAt = job.startedAt || job.dateTime || job.createdAt;
 
@@ -154,23 +157,25 @@ const JobHistorySidebar = ({ hideToggle = false }: JobHistorySidebarProps) => {
         if (startedAt) {
           const date = new Date(startedAt);
           if (!Number.isNaN(date.valueOf())) {
-            baseLabel = `Run ${date.toLocaleString('en-NZ', {
-              day: '2-digit',
-              month: 'short',
-              year: 'numeric',
-              hour: '2-digit',
-              minute: '2-digit',
-              hour12: true,
-            })}`;
+            baseLabel = t('jobHistory.sidebar.runLabel', {
+              date: date.toLocaleString(i18n.language, {
+                day: '2-digit',
+                month: 'short',
+                year: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: true,
+              }),
+            });
           } else {
-            baseLabel = 'Untitled run';
+            baseLabel = t('jobHistory.sidebar.untitledRun');
           }
         } else {
-          baseLabel = 'Untitled run';
+          baseLabel = t('jobHistory.sidebar.untitledRun');
         }
       } catch (error) {
         console.error('Error formatting run label for sidebar:', error);
-        baseLabel = 'Untitled run';
+        baseLabel = t('jobHistory.sidebar.untitledRun');
       }
     }
 
@@ -235,10 +240,10 @@ const JobHistorySidebar = ({ hideToggle = false }: JobHistorySidebarProps) => {
           className="job-history-toggle"
           variant="primary"
           size="sm"
-          aria-label="Show Job History"
+          aria-label={t('jobHistory.sidebar.showAria')}
         >
           <i className="bi bi-clock-history me-1"></i>
-          Job History
+          {t('jobHistory.sidebar.showButton')}
         </Button>
       )}
 
@@ -262,12 +267,14 @@ const JobHistorySidebar = ({ hideToggle = false }: JobHistorySidebarProps) => {
         <div className="sidebar-header d-flex justify-content-between align-items-center border-bottom bg-light py-3 px-3">
           <h6 className="mb-0 d-flex align-items-center">
             <i className="bi bi-clock-history me-2"></i>
-            Job History - {numaAppData?.appName || 'App'}
+            {t('jobHistory.sidebar.headerTitle', {
+              appName: numaAppData?.appName || t('jobHistory.sidebar.appFallback'),
+            })}
           </h6>
           <Button
             variant="link"
             className="close-button p-0 text-muted"
-            aria-label="Close job history"
+            aria-label={t('jobHistory.sidebar.closeAria')}
             onClick={handleClose}
           >
             <i className="bi bi-x-lg"></i>
@@ -284,12 +291,12 @@ const JobHistorySidebar = ({ hideToggle = false }: JobHistorySidebarProps) => {
           {isLoading ? (
             <div className="text-center py-5">
               <Preloader smallscreen={true} />
-              <p className="text-muted mt-3">Loading job history...</p>
+              <p className="text-muted mt-3">{t('jobHistory.loadingHistory')}</p>
             </div>
           ) : jobs.length === 0 || typeof jobs === 'string' ? (
             <div className="alert alert-light text-center p-4 border shadow-sm">
               <i className="bi bi-info-circle fs-4 mb-3 text-muted d-block"></i>
-              <p className="mb-0 text-muted">No job history available</p>
+              <p className="mb-0 text-muted">{t('jobHistory.sidebar.empty')}</p>
             </div>
           ) : (
             <ListGroup className="job-history-list">
@@ -303,9 +310,9 @@ const JobHistorySidebar = ({ hideToggle = false }: JobHistorySidebarProps) => {
                           try {
                             const date = new Date(job.startedAt || job.dateTime);
                             if (isNaN(date.getTime())) {
-                              return 'Unknown time';
+                              return t('jobHistory.sidebar.unknownTime');
                             }
-                            return date.toLocaleString('en-NZ', {
+                            return date.toLocaleString(i18n.language, {
                               month: 'short',
                               day: 'numeric',
                               hour: 'numeric',
@@ -314,7 +321,7 @@ const JobHistorySidebar = ({ hideToggle = false }: JobHistorySidebarProps) => {
                             });
                           } catch (error) {
                             console.error('Error formatting date:', error);
-                            return 'Unknown time';
+                            return t('jobHistory.sidebar.unknownTime');
                           }
                         })()}
                       </div>
@@ -324,12 +331,12 @@ const JobHistorySidebar = ({ hideToggle = false }: JobHistorySidebarProps) => {
                             const date = new Date(job.startedAt || job.dateTime);
                             // Check if date is valid
                             if (isNaN(date.getTime())) {
-                              return 'Unknown time';
+                              return t('jobHistory.sidebar.unknownTime');
                             }
                             return formatDistanceToNow(date, { addSuffix: true });
                           } catch (error) {
                             console.error('Error formatting date:', error);
-                            return 'Unknown time';
+                            return t('jobHistory.sidebar.unknownTime');
                           }
                         })()}
                       </small>
@@ -347,9 +354,12 @@ const JobHistorySidebar = ({ hideToggle = false }: JobHistorySidebarProps) => {
                               return (
                                 <>
                                   <CheckCircleFill className="text-success me-1" />
-                                  <span>Completed</span>
+                                  <span>{t('jobHistory.status.completed')}</span>
                                   {hasFileUploads && (
-                                    <FileEarmarkArrowUp className="ms-2 text-primary" title="Contains file uploads" />
+                                    <FileEarmarkArrowUp
+                                      className="ms-2 text-primary"
+                                      title={t('jobHistory.fileUploads')}
+                                    />
                                   )}
                                 </>
                               );
@@ -358,7 +368,7 @@ const JobHistorySidebar = ({ hideToggle = false }: JobHistorySidebarProps) => {
                               return (
                                 <>
                                   <ArrowClockwise className="text-primary me-1 spin" />
-                                  <span>Running</span>
+                                  <span>{t('jobHistory.status.running')}</span>
                                 </>
                               );
                             case 'failed':
@@ -366,14 +376,14 @@ const JobHistorySidebar = ({ hideToggle = false }: JobHistorySidebarProps) => {
                               return (
                                 <>
                                   <ExclamationCircleFill className="text-danger me-1" />
-                                  <span>Failed</span>
+                                  <span>{t('jobHistory.status.failed')}</span>
                                 </>
                               );
                             case 'files-uploaded':
                               return (
                                 <>
                                   <FileEarmarkArrowUp className="text-primary me-1" />
-                                  <span>Files Uploaded</span>
+                                  <span>{t('jobHistory.status.filesUploaded')}</span>
                                 </>
                               );
                             default:
@@ -401,7 +411,7 @@ const JobHistorySidebar = ({ hideToggle = false }: JobHistorySidebarProps) => {
                       size="sm"
                       onClick={() => handleViewResults(job.jobId)}
                       disabled={loadingJobId === job.jobId}
-                      title={`Job ID: ${job.jobId}`}
+                      title={t('jobHistory.sidebar.jobIdTitle', { jobId: job.jobId })}
                       className="shadow-sm"
                       style={(() => {
                         const status = job.status || 'completed';
@@ -418,7 +428,7 @@ const JobHistorySidebar = ({ hideToggle = false }: JobHistorySidebarProps) => {
                       {loadingJobId === job.jobId ? (
                         <div className="d-flex align-items-center">
                           <Preloader smallscreen={true} />
-                          <span className="ms-2">Loading...</span>
+                          <span className="ms-2">{t('jobHistory.loading')}</span>
                         </div>
                       ) : (
                         <>
@@ -430,7 +440,9 @@ const JobHistorySidebar = ({ hideToggle = false }: JobHistorySidebarProps) => {
                               case 'in-progress':
                                 return (
                                   <>
-                                    <span style={{ color: '#0d6efd', fontWeight: '500' }}>View Progress</span>{' '}
+                                    <span style={{ color: '#0d6efd', fontWeight: '500' }}>
+                                      {t('jobHistory.actions.viewProgress')}
+                                    </span>{' '}
                                     <i
                                       style={{ lineHeight: '1px', color: '#0d6efd' }}
                                       className="bi bi-arrow-right ms-1"
@@ -440,13 +452,14 @@ const JobHistorySidebar = ({ hideToggle = false }: JobHistorySidebarProps) => {
                               case 'files-uploaded':
                                 return (
                                   <>
-                                    Continue <i style={{ lineHeight: '1px' }} className="bi bi-arrow-right ms-1"></i>
+                                    {t('jobHistory.actions.continue')}{' '}
+                                    <i style={{ lineHeight: '1px' }} className="bi bi-arrow-right ms-1"></i>
                                   </>
                                 );
                               default:
                                 return (
                                   <>
-                                    View Results{' '}
+                                    {t('jobHistory.actions.viewResults')}{' '}
                                     <i style={{ lineHeight: '1px' }} className="bi bi-arrow-right ms-1"></i>
                                   </>
                                 );
@@ -471,7 +484,7 @@ const JobHistorySidebar = ({ hideToggle = false }: JobHistorySidebarProps) => {
                         justifyContent: 'center',
                       }}
                     >
-                      <span style={{ color: '#999' }}>Loading more...</span>
+                      <span style={{ color: '#999' }}>{t('jobHistory.sidebar.loadingMore')}</span>
                     </div>
                   );
                 })()}

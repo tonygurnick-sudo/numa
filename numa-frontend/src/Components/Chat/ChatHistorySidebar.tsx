@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef, forwardRef, useImperativeHandle, useCallback } from 'react';
 import { Button, OverlayTrigger, Tooltip } from 'react-bootstrap';
+import { useTranslation } from 'react-i18next';
+import i18n from '../../i18n';
 import { useAuth } from '../../Providers/AuthProvider';
 import AgentAvatar from '../Agents/AgentAvatar';
 import { useAgentById } from '../../hooks/useAgentById';
@@ -46,6 +48,7 @@ const HistoryAvatar = ({ convo }: { convo: ConversationMeta }) => {
 
 export const ChatHistorySidebar = forwardRef<ChatHistorySidebarRef, ChatHistorySidebarProps>(
   function ChatHistorySidebar({ onSelectConversation, setError, currentConversationId }, ref) {
+    const { t } = useTranslation('chat');
     const [isLoading, setIsLoading] = useState(false);
     const [show, setShow] = useState(false);
     const [conversations, setConversations] = useState<ConversationMeta[]>([]);
@@ -93,9 +96,9 @@ export const ChatHistorySidebar = forwardRef<ChatHistorySidebarRef, ChatHistoryS
         setLocalError(null);
       } catch (error) {
         console.error('Error fetching conversations:', error);
-        setLocalError('Failed to load conversation history');
+        setLocalError(t('history.loadFailed'));
         // Optionally pass error to parent:
-        setError('Failed to load conversation history');
+        setError(t('history.loadFailed'));
       } finally {
         setIsLoading(false);
       }
@@ -137,7 +140,7 @@ export const ChatHistorySidebar = forwardRef<ChatHistorySidebarRef, ChatHistoryS
      * Prompts for a new name, calls the DynamoDB client, and refreshes the list.
      */
     const handleRename = async (conversationId, currentName) => {
-      const newName = prompt('Enter new name for this conversation:', currentName);
+      const newName = prompt(t('history.renamePrompt'), currentName);
       if (newName === null) return; // user cancelled
       if (!numaChatDynamoUtils) {
         console.error('DynamoDB client not initialized');
@@ -148,8 +151,8 @@ export const ChatHistorySidebar = forwardRef<ChatHistorySidebarRef, ChatHistoryS
         fetchConversations();
       } catch (error) {
         console.error('Error renaming conversation:', error);
-        setLocalError('Failed to rename conversation');
-        setError('Failed to rename conversation');
+        setLocalError(t('history.renameFailed'));
+        setError(t('history.renameFailed'));
       }
     };
 
@@ -160,7 +163,7 @@ export const ChatHistorySidebar = forwardRef<ChatHistorySidebarRef, ChatHistoryS
     const handleDelete = async (conversationIdToDelete) => {
       if (!numaChatDynamoUtils) return;
       // Confirm deletion with the user
-      if (!window.confirm('Are you sure you want to delete this conversation?')) {
+      if (!window.confirm(t('history.deleteConfirm'))) {
         return;
       }
       try {
@@ -170,8 +173,8 @@ export const ChatHistorySidebar = forwardRef<ChatHistorySidebarRef, ChatHistoryS
         fetchConversations();
       } catch (error) {
         console.error('Error deleting conversation:', error);
-        setLocalError('Failed to delete conversation');
-        setError('Failed to delete conversation');
+        setLocalError(t('history.deleteFailed'));
+        setError(t('history.deleteFailed'));
       }
     };
 
@@ -198,11 +201,11 @@ export const ChatHistorySidebar = forwardRef<ChatHistorySidebarRef, ChatHistoryS
           }}
         >
           <div className="sidebar-header d-flex justify-content-between align-items-center">
-            <h6 className="mb-0">Chat History</h6>
+            <h6 className="mb-0">{t('history.title')}</h6>
             <Button
               variant="link"
               className="close-button p-0 text-muted"
-              aria-label="Close chat history"
+              aria-label={t('history.closeAria')}
               onClick={handleShow}
             >
               <i className="bi bi-x-lg"></i>
@@ -217,7 +220,7 @@ export const ChatHistorySidebar = forwardRef<ChatHistorySidebarRef, ChatHistoryS
             }}
           >
             {isLoading ? (
-              <div className="text-muted small">Loading conversations...</div>
+              <div className="text-muted small">{t('history.loading')}</div>
             ) : localError ? (
               <div className="error-message text-muted small">
                 {localError}
@@ -229,11 +232,11 @@ export const ChatHistorySidebar = forwardRef<ChatHistorySidebarRef, ChatHistoryS
                     fetchConversations();
                   }}
                 >
-                  Retry
+                  {t('history.retry')}
                 </Button>
               </div>
             ) : conversations.length === 0 ? (
-              <p className="small text-muted">No conversations available</p>
+              <p className="small text-muted">{t('history.empty')}</p>
             ) : (
               <div className="conversations-container small">
                 {conversations.map((convo) => (
@@ -248,7 +251,7 @@ export const ChatHistorySidebar = forwardRef<ChatHistorySidebarRef, ChatHistoryS
                         placement="left"
                         overlay={
                           <Tooltip id={`tooltip-${convo.conversation_id}`}>
-                            {new Date(convo.latestTimestamp).toLocaleString()}
+                            {new Date(convo.latestTimestamp).toLocaleString(i18n.language)}
                           </Tooltip>
                         }
                       >
@@ -260,11 +263,13 @@ export const ChatHistorySidebar = forwardRef<ChatHistorySidebarRef, ChatHistoryS
                           <div className="d-flex align-items-center gap-2">
                             <HistoryAvatar convo={convo} />
                             <div className="conversation-title fw-bold text-wrap text-break">
-                              {convo.conversationName || 'Untitled Chat'}
+                              {convo.conversationName || t('history.untitled')}
                             </div>
                           </div>
                           {convo.isAgentConversation && convo.agentTitle && (
-                            <div className="text-muted small mt-1">Agent: {convo.agentTitle}</div>
+                            <div className="text-muted small mt-1">
+                              {t('history.agentPrefix', { name: convo.agentTitle })}
+                            </div>
                           )}
                         </div>
                       </OverlayTrigger>
@@ -273,7 +278,7 @@ export const ChatHistorySidebar = forwardRef<ChatHistorySidebarRef, ChatHistoryS
                           variant="link"
                           size="sm"
                           className="p-0 text-secondary"
-                          aria-label="Rename conversation"
+                          aria-label={t('history.renameAria')}
                           onClick={(e) => {
                             e.stopPropagation();
                             handleRename(convo.conversation_id, convo.conversationName);
@@ -285,7 +290,7 @@ export const ChatHistorySidebar = forwardRef<ChatHistorySidebarRef, ChatHistoryS
                           variant="link"
                           size="sm"
                           className="p-0 text-danger"
-                          aria-label="Delete conversation"
+                          aria-label={t('history.deleteAria')}
                           onClick={(e) => {
                             e.stopPropagation();
                             handleDelete(convo.conversation_id);

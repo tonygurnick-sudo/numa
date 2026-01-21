@@ -1,12 +1,14 @@
 import { useState, useEffect, useRef } from 'react';
 import { Alert, Button, Spinner } from 'react-bootstrap';
+import { useTranslation } from 'react-i18next';
 import { ListDataSourcesCommand } from '@aws-sdk/client-qbusiness';
 import { useAuth } from '../Providers/AuthProvider';
+import i18n from '../i18n';
 
-const formatDate = (dateString) => {
-  if (!dateString) return 'Unknown';
+const formatDate = (dateString, unknownLabel: string) => {
+  if (!dateString) return unknownLabel;
   const date = new Date(dateString);
-  return date.toLocaleDateString('en-US', {
+  return date.toLocaleDateString(i18n.language, {
     year: 'numeric',
     month: 'short',
     day: 'numeric',
@@ -16,6 +18,7 @@ const formatDate = (dateString) => {
 };
 
 export const DataSourcesList = () => {
+  const { t } = useTranslation(['knowledgeBase', 'common']);
   const Q_APPLICATION_ID = window.sessionStorage.getItem('Q_APPLICATION_ID');
   const Q_INDEX_ID = window.sessionStorage.getItem('Q_INDEX_ID');
 
@@ -36,14 +39,14 @@ export const DataSourcesList = () => {
     setLoading(true);
     try {
       if (!Q_APPLICATION_ID || Q_APPLICATION_ID === 'undefined') {
-        setError('No Q application ID found');
-        console.error('No Q application ID found');
+        setError(t('dataSources.sidebar.missingAppId'));
+        console.error(t('dataSources.sidebar.missingAppId'));
         return;
       }
 
       if (!Q_INDEX_ID || Q_INDEX_ID === 'undefined') {
-        setError('No Q index ID found');
-        console.error('No Q index ID found');
+        setError(t('dataSources.sidebar.missingIndexId'));
+        console.error(t('dataSources.sidebar.missingIndexId'));
         return;
       }
 
@@ -59,7 +62,7 @@ export const DataSourcesList = () => {
       setDataSources(response.dataSources || []);
     } catch (err) {
       console.error('Error fetching data sources:', err);
-      setError('Failed to fetch data sources');
+      setError(t('dataSources.sidebar.fetchFailed'));
     } finally {
       setLoading(false);
       fetchInProgress.current = false;
@@ -78,7 +81,7 @@ export const DataSourcesList = () => {
     <>
       <div className={`sources-sidebar ${show ? 'show' : ''}`}>
         <div className="sidebar-header d-flex justify-content-between align-items-center mb-3">
-          <h6 className="mb-0">Available Data Sources</h6>
+          <h6 className="mb-0">{t('dataSources.sidebar.title')}</h6>
           <Button variant="link" className="close-button p-0 text-muted" onClick={handleShow}>
             <i className="bi bi-x-lg"></i>
           </Button>
@@ -87,14 +90,14 @@ export const DataSourcesList = () => {
           {loading ? (
             <div className="text-muted small">
               <Spinner animation="border" size="sm" className="me-2" />
-              Loading datasources...
+              {t('dataSources.sidebar.loading')}
             </div>
           ) : error ? (
             <Alert variant="danger" className="py-1 mb-1">
               {error}
             </Alert>
           ) : dataSources.length === 0 ? (
-            <p className="small text-muted">No data sources available</p>
+            <p className="small text-muted">{t('dataSources.sidebar.empty')}</p>
           ) : (
             <div className="sources-container small">
               {dataSources.map((source) => (
@@ -109,11 +112,11 @@ export const DataSourcesList = () => {
                   <div className="source-name fw-bold">{source.displayName}</div>
                   <div className="d-flex justify-content-between align-items-center mt-1">
                     {source.type === 'S3' && source.displayName?.toLowerCase().includes('knowledge-base-datasource') ? (
-                      <span className="source-type text-muted small">(BEDROCK)</span>
+                      <span className="source-type text-muted small">({t('dataSources.sidebar.bedrockLabel')})</span>
                     ) : source.type ? (
                       <span className="source-type text-muted small">({source.type})</span>
                     ) : (
-                      <span className="source-type text-muted small">(Unknown)</span>
+                      <span className="source-type text-muted small">({t('dataSources.types.unknown')})</span>
                     )}
                     <span
                       className={`source-status badge tag-pill ${source.status === 'ACTIVE' ? 'tag-green' : 'tag-blue'}`}
@@ -122,7 +125,9 @@ export const DataSourcesList = () => {
                     </span>
                   </div>
                   <div className="source-update text-muted mt-1" style={{ fontSize: '0.75rem' }}>
-                    Last updated: {formatDate(source.updatedAt)}
+                    {t('dataSources.sidebar.lastUpdated', {
+                      date: formatDate(source.updatedAt, t('dataSources.sidebar.unknownDate')),
+                    })}
                   </div>
                 </div>
               ))}
@@ -138,17 +143,19 @@ export const DataSourcesList = () => {
 
         {uploadedFiles.length > 0 && (
           <div className="uploaded-files-section">
-            <h6>Uploaded Files:</h6>
+            <h6>{t('dataSources.sidebar.uploadedFiles')}</h6>
             <div className="uploaded-files-list">
               {uploadedFiles.map((file, index) => (
                 <div key={index} className="uploaded-file">
                   <i className="bi bi-file-text"></i>
                   <span className="file-name">{file.name}</span>
-                  <span className="file-size">({(file.size / 1024).toFixed(1)} KB)</span>
+                  <span className="file-size">
+                    ({t('common:fileSize.kb', { size: (file.size / 1024).toFixed(1) })})
+                  </span>
                   <button
                     onClick={() => removeFile(index)}
                     className="remove-file btn btn-link p-0 ms-2"
-                    title="Remove file"
+                    title={t('dataSources.sidebar.removeFile')}
                   >
                     ×
                   </button>
@@ -159,7 +166,10 @@ export const DataSourcesList = () => {
         )}
       </div>
       <div className="sidebar-buttons">
-        <Button onClick={handleShow} title={show ? 'Hide Sources' : 'Show Sources'}>
+        <Button
+          onClick={handleShow}
+          title={show ? t('dataSources.sidebar.actions.hide') : t('dataSources.sidebar.actions.show')}
+        >
           <i className="bi bi-file-text"></i>
         </Button>
       </div>

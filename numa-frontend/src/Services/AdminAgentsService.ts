@@ -1,3 +1,5 @@
+import i18n from '../i18n';
+
 export type AgentsMode = 'off' | 'personal_only' | 'full';
 
 export type AgentsSettings = {
@@ -39,7 +41,7 @@ export const AdminAgentsService = {
     });
     if (!resp.ok) {
       const text = await resp.text();
-      throw new Error(text || 'Failed to update agents settings');
+      throw new Error(text || i18n.t('errors:adminAgents.updateFailed'));
     }
   },
 };

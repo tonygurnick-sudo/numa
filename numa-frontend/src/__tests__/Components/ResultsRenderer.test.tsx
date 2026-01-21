@@ -528,6 +528,6 @@ describe('CsvRenderer Component', () => {
     expect(screen.getByText('Resume:')).toBeInTheDocument();
     expect(screen.getByText('resume.pdf')).toBeInTheDocument();
     expect(screen.getByTitle('Download file')).toBeInTheDocument();
-    expect(screen.getByTitle('Open in new tab')).toBeInTheDocument();
+    expect(screen.getByTitle('Open in New Tab')).toBeInTheDocument();
   });
 });

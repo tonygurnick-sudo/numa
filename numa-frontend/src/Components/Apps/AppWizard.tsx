@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Button, Col, Container, Row, Tab, Tabs, Modal, Form } from 'react-bootstrap';
+import { useTranslation } from 'react-i18next';
 import { useNumaApp } from '../../Providers/NumaAppContext';
 import { S3UploadModule } from '../../Modules/S3UploadModule';
 import { TextInputModule } from '../../Modules/TextInputModule';
@@ -220,6 +221,7 @@ function explainNextDisabled<T extends VisibleTask[]>(
 const DEFAULT_MANIFEST: Manifest = { tasks: [], typicalDurationMinutes: 0 };
 
 const AppWizard: React.FC<AppWizardProps> = ({ manifest = DEFAULT_MANIFEST }) => {
+  const { t } = useTranslation('apps');
   const {
     taskCompletionStatus,
     handleRunButtonClick,
@@ -407,7 +409,7 @@ const AppWizard: React.FC<AppWizardProps> = ({ manifest = DEFAULT_MANIFEST }) =>
   const handleRunNameSubmit = async () => {
     const trimmedName = runNameDraft.trim();
     if (!trimmedName) {
-      setRunNameError('Please enter a job name.');
+      setRunNameError(t('wizard.runName.required'));
       return;
     }
 
@@ -531,7 +533,7 @@ const AppWizard: React.FC<AppWizardProps> = ({ manifest = DEFAULT_MANIFEST }) =>
       if (currentOutput) {
         return (
           <div className="result-output" key={`result-${index}`}>
-            <h3>{currentOutput.title ?? `Output ${outputIndex + 1}`}</h3>
+            <h3>{currentOutput.title ?? t('wizard.results.outputTitle', { index: outputIndex + 1 })}</h3>
             <div>
               {isMarkdownOutput(currentOutput) ? <MarkdownContent content={currentOutput.data} /> : null}
               {isJsonOutput(currentOutput) ? <pre>{JSON.stringify(currentOutput.data, null, 2)}</pre> : null}
@@ -549,7 +551,7 @@ const AppWizard: React.FC<AppWizardProps> = ({ manifest = DEFAULT_MANIFEST }) =>
         );
       }
 
-      return <p key={`no-output-${index}`}>No output found at index {index}</p>;
+      return <p key={`no-output-${index}`}>{t('wizard.results.noOutput', { index })}</p>;
     }
 
     // Traditional task
@@ -577,7 +579,7 @@ const AppWizard: React.FC<AppWizardProps> = ({ manifest = DEFAULT_MANIFEST }) =>
       case 'text-output':
         return <TextOutputModule key={task.id} task={task} />;
       default:
-        return <p key={task.id}>Unknown task type</p>;
+        return <p key={task.id}>{t('wizard.tasks.unknownType')}</p>;
     }
   };
 
@@ -594,7 +596,7 @@ const AppWizard: React.FC<AppWizardProps> = ({ manifest = DEFAULT_MANIFEST }) =>
       <div>
         <Preloader smallscreen={true} overlayParent={true} />
         <div className="text-center mt-3">
-          <p>Loading job results...</p>
+          <p>{t('wizard.loadingJobResults')}</p>
         </div>
       </div>
     );
@@ -612,16 +614,16 @@ const AppWizard: React.FC<AppWizardProps> = ({ manifest = DEFAULT_MANIFEST }) =>
       >
         <Modal.Header closeButton className="run-name-modal__header">
           <div>
-            <Modal.Title className="run-name-modal__title">Name this run</Modal.Title>
-            <p className="run-name-modal__subtitle mb-0">Create a short label so you can spot it in job history.</p>
+            <Modal.Title className="run-name-modal__title">{t('wizard.runName.title')}</Modal.Title>
+            <p className="run-name-modal__subtitle mb-0">{t('wizard.runName.subtitle')}</p>
           </div>
         </Modal.Header>
         <Modal.Body className="run-name-modal__body">
           <Form.Group controlId="job-name-input">
-            <Form.Label className="run-name-modal__label">Run name</Form.Label>
+            <Form.Label className="run-name-modal__label">{t('wizard.runName.label')}</Form.Label>
             <Form.Control
               type="text"
-              placeholder="Name it here..."
+              placeholder={t('wizard.runName.placeholder')}
               value={runNameDraft}
               autoFocus
               maxLength={JOB_NAME_MAX_LENGTH}
@@ -638,9 +640,9 @@ const AppWizard: React.FC<AppWizardProps> = ({ manifest = DEFAULT_MANIFEST }) =>
             <Form.Control.Feedback type="invalid" className="run-name-modal__feedback">
               {runNameError}
             </Form.Control.Feedback>
-            <Form.Text className="run-name-modal__hint">This is visible to everyone viewing job history.</Form.Text>
+            <Form.Text className="run-name-modal__hint">{t('wizard.runName.hint')}</Form.Text>
             <span className={`run-name-modal__counter ${runNameRemaining <= 10 ? 'text-danger' : 'text-muted'}`}>
-              {runNameRemaining} characters remaining
+              {t('wizard.runName.remaining', { count: runNameRemaining })}
             </span>
           </Form.Group>
         </Modal.Body>
@@ -652,7 +654,7 @@ const AppWizard: React.FC<AppWizardProps> = ({ manifest = DEFAULT_MANIFEST }) =>
               disabled={isRunNameSubmitting}
               className="run-name-modal__button"
             >
-              Cancel
+              {t('wizard.runName.cancel')}
             </Button>
             <Button
               variant="primary"
@@ -660,7 +662,7 @@ const AppWizard: React.FC<AppWizardProps> = ({ manifest = DEFAULT_MANIFEST }) =>
               disabled={!canSubmitRunName}
               className="run-name-modal__button"
             >
-              {isRunNameSubmitting ? 'Saving…' : 'Save and Run'}
+              {isRunNameSubmitting ? t('wizard.runName.saving') : t('wizard.runName.saveAndRun')}
             </Button>
           </div>
         </Modal.Footer>
@@ -704,7 +706,7 @@ const AppWizard: React.FC<AppWizardProps> = ({ manifest = DEFAULT_MANIFEST }) =>
                 }}
                 className="mb-4"
               >
-                <Tab eventKey="inputs" title="Inputs">
+                <Tab eventKey="inputs" title={t('wizard.tabs.inputs')}>
                   {activeStep < visibleTasks.length ? (
                     <div className="mb-4 position-relative">
                       {renderTask(visibleTasks[activeStep], activeStep)}
@@ -716,11 +718,11 @@ const AppWizard: React.FC<AppWizardProps> = ({ manifest = DEFAULT_MANIFEST }) =>
                           <>
                             <Button variant="primary" onClick={handlePrevStep} disabled={activeStep === 0}>
                               <i className="bi bi-arrow-left me-2"></i>
-                              Previous Input
+                              {t('wizard.navigation.previous')}
                             </Button>
                             {/* Results tab ignores incomplete-step rule (original behaviour) */}
                             <Button variant="primary" onClick={handleNextStep} disabled={nextDisabledResultsView}>
-                              Next Input
+                              {t('wizard.navigation.next')}
                               <i className="bi bi-arrow-right ms-2"></i>
                             </Button>
                           </>
@@ -729,7 +731,7 @@ const AppWizard: React.FC<AppWizardProps> = ({ manifest = DEFAULT_MANIFEST }) =>
                     </div>
                   ) : null}
                 </Tab>
-                <Tab eventKey="results" title="Results">
+                <Tab eventKey="results" title={t('wizard.tabs.results')}>
                   <ResultsRenderer results={(job as JobLike)?.results} />
                 </Tab>
               </Tabs>
@@ -746,11 +748,11 @@ const AppWizard: React.FC<AppWizardProps> = ({ manifest = DEFAULT_MANIFEST }) =>
                         <>
                           <Button variant="primary" onClick={handlePrevStep} disabled={activeStep === 0}>
                             <i className="bi bi-arrow-left me-2"></i>
-                            Previous Input
+                            {t('wizard.navigation.previous')}
                           </Button>
                           {/* Inputs view enforces completeness (original logic) */}
                           <Button variant="primary" onClick={handleNextStep} disabled={nextDisabledInputsView}>
-                            Next Input
+                            {t('wizard.navigation.next')}
                             <i className="bi bi-arrow-right ms-2"></i>
                           </Button>
                         </>

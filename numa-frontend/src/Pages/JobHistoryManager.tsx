@@ -8,12 +8,14 @@ import { useNavigate } from 'react-router-dom';
 import { Search, FileEarmarkArrowUp } from 'react-bootstrap-icons';
 import { JobStatusContext } from '../Providers/JobStatusContext';
 import { PageHeader } from '../Components/PageHeader';
+import { useTranslation } from 'react-i18next';
 
 import { getDisplayStatusUpper } from '../utils/jobStatus';
 
 const JOB_NAME_DISPLAY_LIMIT = 60;
 
 const JobHistoryManager = () => {
+  const { t, i18n } = useTranslation('apps');
   useAuth();
   const { setNumaAppId } = useNumaApp();
   const jobsApi = useJobsApi();
@@ -125,8 +127,8 @@ const JobHistoryManager = () => {
             ...job,
             appName: manifestApps.find((app) => app.id === selectedApp)?.appName || selectedApp,
             appId: selectedApp,
-            displayId: job.jobId?.substring(0, 8) || 'Unknown',
-            status: job.status || 'Unknown',
+            displayId: job.jobId?.substring(0, 8) || t('jobHistory.unknown'),
+            status: job.status || t('jobHistory.unknown'),
             date: startedAt,
             startedAt: startedAt,
             completedAt: endTimeStr,
@@ -211,8 +213,8 @@ const JobHistoryManager = () => {
                     ...job,
                     appName: app.appName || app.id,
                     appId: app.id,
-                    displayId: job.jobId?.substring(0, 8) || 'Unknown',
-                    status: job.status || 'Unknown',
+                    displayId: job.jobId?.substring(0, 8) || t('jobHistory.unknown'),
+                    status: job.status || t('jobHistory.unknown'),
                     date: startedAt,
                     startedAt: startedAt,
                     completedAt: endTimeStr,
@@ -351,10 +353,10 @@ const JobHistoryManager = () => {
   };
 
   const formatDate = (dateString) => {
-    if (!dateString) return 'Unknown';
+    if (!dateString) return t('jobHistory.unknown');
     try {
       const date = new Date(dateString);
-      return date.toLocaleString('en-NZ', {
+      return date.toLocaleString(i18n.language, {
         day: '2-digit',
         month: 'short',
         year: 'numeric',
@@ -364,7 +366,7 @@ const JobHistoryManager = () => {
       });
     } catch (error) {
       console.error('Error formatting date:', error);
-      return 'Unknown';
+      return t('jobHistory.unknown');
     }
   };
 
@@ -376,7 +378,7 @@ const JobHistoryManager = () => {
     if (job.appName) {
       return job.appName;
     }
-    return job.appId || 'Unknown';
+    return job.appId || t('jobHistory.unknown');
   };
 
   const getBaseJobName = (job) => {
@@ -498,7 +500,7 @@ const JobHistoryManager = () => {
 
     const getStatusInfo = (status) => {
       if (!status) {
-        return { variant: 'secondary', text: 'Unknown' };
+        return { variant: 'secondary', text: t('jobHistory.status.unknown') };
       }
 
       const upperStatus = status.toUpperCase();
@@ -507,30 +509,30 @@ const JobHistoryManager = () => {
         // Success states
         case 'SUCCESS':
         case 'COMPLETED':
-          return { variant: 'success', text: 'Completed' };
+          return { variant: 'success', text: t('jobHistory.status.completed') };
 
         // Failure states
         case 'FAILURE':
         case 'FAILED':
         case 'ERROR':
         case 'FAILED-STUCK':
-          return { variant: 'danger', text: 'Failed' };
+          return { variant: 'danger', text: t('jobHistory.status.failed') };
 
         // Processing states
         case 'PROCESSING':
         case 'RUNNING':
         case 'IN-PROGRESS':
-          return { variant: 'primary', text: 'Running' };
+          return { variant: 'primary', text: t('jobHistory.status.running') };
 
         // Queued states
         case 'QUEUED':
         case 'PENDING':
-          return { variant: 'warning', text: 'Queued' };
+          return { variant: 'warning', text: t('jobHistory.status.queued') };
 
         // Files uploaded state
         case 'FILES_UPLOADED':
         case 'FILES-UPLOADED':
-          return { variant: 'info', text: 'Files Uploaded' };
+          return { variant: 'info', text: t('jobHistory.status.filesUploaded') };
 
         default:
           return {
@@ -546,7 +548,7 @@ const JobHistoryManager = () => {
         <Badge bg={statusInfo.variant} className="small">
           {statusInfo.text}
         </Badge>
-        {hasFileUploads && <FileEarmarkArrowUp className="ms-2 text-primary" title="Contains file uploads" />}
+        {hasFileUploads && <FileEarmarkArrowUp className="ms-2 text-primary" title={t('jobHistory.fileUploads')} />}
       </div>
     );
   };
@@ -583,7 +585,7 @@ const JobHistoryManager = () => {
         {loadingJobId === job.jobId ? (
           <div className="d-flex align-items-center">
             <Spinner animation="border" size="sm" />
-            <span className="ms-2">Loading...</span>
+            <span className="ms-2">{t('jobHistory.loading')}</span>
           </div>
         ) : (
           <>
@@ -592,17 +594,17 @@ const JobHistoryManager = () => {
                 case 'RUNNING':
                 case 'IN-PROGRESS':
                 case 'PROCESSING':
-                  return <>View Progress</>;
+                  return <>{t('jobHistory.actions.viewProgress')}</>;
                 case 'FILES-UPLOADED':
                 case 'FILES_UPLOADED':
-                  return <>View Files</>;
+                  return <>{t('jobHistory.actions.viewFiles')}</>;
                 case 'FAILED':
                 case 'ERROR':
                 case 'FAILURE':
                 case 'FAILED-STUCK':
-                  return <>View Error</>;
+                  return <>{t('jobHistory.actions.viewError')}</>;
                 default:
-                  return <>View Results</>;
+                  return <>{t('jobHistory.actions.viewResults')}</>;
               }
             })()}
           </>
@@ -614,8 +616,8 @@ const JobHistoryManager = () => {
   return (
     <div className="dashboard" data-testid="layout-dashboard">
       <PageHeader
-        title="Job History"
-        subtitle="View and manage job history across all Numa apps"
+        title={t('jobHistory.title')}
+        subtitle={t('jobHistory.subtitle')}
         actions={
           <>
             <Button
@@ -627,18 +629,20 @@ const JobHistoryManager = () => {
               {jobStatusLoading ? (
                 <>
                   <Spinner animation="border" size="sm" />
-                  <span className="ms-2">Loading...</span>
+                  <span className="ms-2">{t('jobHistory.loading')}</span>
                 </>
               ) : (
                 <>
                   <i className="bi bi-arrow-clockwise me-1"></i>
-                  Refresh
+                  {t('jobHistory.actions.refresh')}
                 </>
               )}
             </Button>
             {nextRefreshIn && (
               <small className="text-muted">
-                Auto-refresh in {Math.floor(nextRefreshIn / 60)}:{(nextRefreshIn % 60).toString().padStart(2, '0')}
+                {t('jobHistory.autoRefresh', {
+                  time: `${Math.floor(nextRefreshIn / 60)}:${(nextRefreshIn % 60).toString().padStart(2, '0')}`,
+                })}
               </small>
             )}
           </>
@@ -651,15 +655,15 @@ const JobHistoryManager = () => {
             <Row className="mb-3">
               <Col md={4}>
                 <Form.Group>
-                  <Form.Label>Filter by App</Form.Label>
+                  <Form.Label>{t('jobHistory.filters.app.label')}</Form.Label>
                   {/* Form.Select is disabled during loading to prevent users from changing the app selection while data is being fetched */}
                   <Form.Select
                     value={selectedApp}
                     onChange={handleAppChange}
                     disabled={isLoading}
-                    aria-label="Filter by application"
+                    aria-label={t('jobHistory.filters.app.aria')}
                   >
-                    <option value="all">All Apps</option>
+                    <option value="all">{t('jobHistory.filters.app.all')}</option>
                     {manifestApps
                       .filter((app) => app.id !== 'policy-builder-app' && app.id !== 'policy-reviewer-app')
                       .map((app) => (
@@ -672,23 +676,23 @@ const JobHistoryManager = () => {
               </Col>
               <Col md={3}>
                 <Form.Group>
-                  <Form.Label>Filter by Status</Form.Label>
+                  <Form.Label>{t('jobHistory.filters.status.label')}</Form.Label>
                   <Form.Select value={filterStatus} onChange={handleStatusFilterChange}>
-                    <option value="all">All Statuses</option>
-                    <option value="completed">Completed</option>
-                    <option value="running">Running</option>
-                    <option value="failed">Failed</option>
-                    <option value="files-uploaded">Files Uploaded</option>
+                    <option value="all">{t('jobHistory.filters.status.all')}</option>
+                    <option value="completed">{t('jobHistory.status.completed')}</option>
+                    <option value="running">{t('jobHistory.status.running')}</option>
+                    <option value="failed">{t('jobHistory.status.failed')}</option>
+                    <option value="files-uploaded">{t('jobHistory.status.filesUploaded')}</option>
                   </Form.Select>
                 </Form.Group>
               </Col>
               <Col md={5}>
                 <Form.Group>
-                  <Form.Label>Search</Form.Label>
+                  <Form.Label>{t('jobHistory.filters.search.label')}</Form.Label>
                   <div className="position-relative">
                     <Form.Control
                       type="text"
-                      placeholder="Search by run name or app name..."
+                      placeholder={t('jobHistory.filters.search.placeholder')}
                       value={searchTerm}
                       onChange={handleSearch}
                     />
@@ -705,13 +709,13 @@ const JobHistoryManager = () => {
             {isLoading ? (
               <div className="text-center p-4">
                 <div className="spinner-border text-primary">
-                  <span className="visually-hidden">Loading…</span>
+                  <span className="visually-hidden">{t('jobHistory.loading')}</span>
                 </div>
-                <p className="mt-3 text-muted small mb-0">Loading job history...</p>
+                <p className="mt-3 text-muted small mb-0">{t('jobHistory.loadingHistory')}</p>
               </div>
             ) : filteredJobs.length === 0 ? (
               <div className="text-center bg-light rounded p-4">
-                <p className="mb-0 text-muted">No job history available matching your filters</p>
+                <p className="mb-0 text-muted">{t('jobHistory.empty')}</p>
               </div>
             ) : (
               <>
@@ -720,24 +724,24 @@ const JobHistoryManager = () => {
                     <thead className="sticky-table-header numa-table-header">
                       <tr>
                         <th onClick={() => handleSort('startedAt')} className="sortable-header">
-                          Started{' '}
+                          {t('jobHistory.columns.started')}{' '}
                           {sortField === 'startedAt' && (
                             <i className={`bi bi-caret-${sortDirection === 'asc' ? 'up' : 'down'}-fill ms-1`}></i>
                           )}
                         </th>
                         <th onClick={() => handleSort('name')} className="sortable-header">
-                          Run{' '}
+                          {t('jobHistory.columns.run')}{' '}
                           {sortField === 'name' && (
                             <i className={`bi bi-caret-${sortDirection === 'asc' ? 'up' : 'down'}-fill ms-1`}></i>
                           )}
                         </th>
                         <th onClick={() => handleSort('status')} className="sortable-header">
-                          Status{' '}
+                          {t('jobHistory.columns.status')}{' '}
                           {sortField === 'status' && (
                             <i className={`bi bi-caret-${sortDirection === 'asc' ? 'up' : 'down'}-fill ms-1`}></i>
                           )}
                         </th>
-                        <th className="sortable-header">Actions</th>
+                        <th className="sortable-header">{t('jobHistory.columns.actions')}</th>
                       </tr>
                     </thead>
                     <tbody>

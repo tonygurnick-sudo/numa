@@ -8,6 +8,7 @@
 
 import React, { createContext, useContext, useState, useEffect, useRef, ReactNode } from 'react';
 import { knowledgeBaseService, KBState } from '../Services/knowledgeBaseService';
+import i18n from '../i18n';
 
 // Cache TTL: 30 minutes (aligns with AWS sync schedule)
 const CACHE_TTL = 30 * 60 * 1000;
@@ -107,7 +108,7 @@ export function KBStateProvider({ kbId, kbType: _kbType, children }: KBStateProv
         setCache((prev) => ({
           ...prev,
           isLoading: false,
-          error: (err as Error).message || 'Failed to fetch KB state',
+          error: (err as Error).message || i18n.t('errors:knowledgeBase.stateFailed'),
         }));
       } finally {
         inflightRequestRef.current = null;

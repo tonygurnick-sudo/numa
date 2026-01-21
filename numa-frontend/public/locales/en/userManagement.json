@@ -1,0 +1,223 @@
+{
+  "page": {
+    "title": "User Management",
+    "subtitle": "Manage user accounts and permissions"
+  },
+  "actions": {
+    "createUser": "Create User",
+    "view": "View",
+    "deleteUser": "Delete User",
+    "close": "Close",
+    "cancel": "Cancel",
+    "done": "Done"
+  },
+  "roles": {
+    "admin": "Admin",
+    "standard": "Standard"
+  },
+  "sections": {
+    "admins": "Administrators",
+    "standardUsers": "Standard Users"
+  },
+  "search": {
+    "placeholder": "Search by email...",
+    "aria": "Search users by email"
+  },
+  "view": {
+    "table": "Table view",
+    "card": "Card view"
+  },
+  "filters": {
+    "label": "Filter",
+    "roleLabel": "Role",
+    "clearAll": "Clear all filters",
+    "roles": {
+      "admin": "Admin",
+      "standard": "Standard"
+    }
+  },
+  "sort": {
+    "label": "Sort",
+    "created": "Created Date",
+    "email": "Email"
+  },
+  "count": "{{filtered}} of {{total}} users",
+  "table": {
+    "headers": {
+      "email": "Email",
+      "role": "Role",
+      "status": "Status",
+      "created": "Created",
+      "actions": "Actions"
+    },
+    "systemUserTitle": "System user - not editable",
+    "systemBadge": "(System)",
+    "youBadge": "(You)",
+    "empty": {
+      "admins": "No administrators",
+      "standard": "No standard users",
+      "none": "No users"
+    }
+  },
+  "card": {
+    "disabled": "Disabled",
+    "role": "Role: {{role}}",
+    "created": "Created"
+  },
+  "roleSection": {
+    "empty": "No {{role}} users"
+  },
+  "empty": {
+    "noUsers": "No users found",
+    "noMatches": "No users match the current filters"
+  },
+  "errors": {
+    "credentials": "Failed to get AWS credentials",
+    "accountId": "Could not determine AWS Account ID",
+    "fetchUsers": "Failed to fetch users",
+    "sessionExpired": "Session expired",
+    "promote": "Failed to promote user to admin",
+    "demote": "Failed to demote user from admin",
+    "demoteSession": "User {{name}} was demoted from admin but their session could not be terminated. They may still have admin privileges until they manually log out.",
+    "qBusinessClient": "Q Business client not found",
+    "webTokenCredentials": "Get web token credentials not found",
+    "delete": "Failed to delete user",
+    "create": "Failed to create user"
+  },
+  "createModal": {
+    "title": "Create New User",
+    "description": "Create a new user account by entering their email address:",
+    "bullets": {
+      "passwordSetup": "The user will need to visit {{origin}}/create-password to set their password",
+      "instructions": "You'll receive instructions to share with the user after creation",
+      "permissions": "Access to Numa will be based on their assigned permissions"
+    },
+    "emailLabel": "Email address",
+    "emailPlaceholder": "Enter email",
+    "emailHelp": "This email will be their username for logging in.",
+    "creating": "Creating...",
+    "copyInstructionsText": "Welcome to Numa!\n\nYour account has been created with the following email address: {{email}}\n\nTo set up your password and access the system, please:\n1. Go to {{origin}}/create-password\n2. Enter your email address: {{email}}\n3. Follow the instructions to create your password\n\nIf you have any questions, please contact your administrator.",
+    "success": {
+      "title": "User created successfully!",
+      "instructionsTitle": "User Instructions",
+      "welcome": "Welcome to Numa!",
+      "createdForLabel": "Your account has been created with the following email address:",
+      "stepsIntro": "To set up your password and access the system, please:",
+      "steps": {
+        "goTo": "Go to {{origin}}/create-password",
+        "enterEmail": "Enter your email address: {{email}}",
+        "follow": "Follow the instructions to create your password"
+      },
+      "support": "If you have any questions, please contact your administrator.",
+      "copied": "Copied!",
+      "copyAddress": "Copy Address",
+      "copyInstructions": "Copy User Instructions",
+      "nextSteps": "Next Steps",
+      "nextStepItems": {
+        "share": "Share these instructions with the user securely",
+        "visit": "They will need to visit {{origin}}/create-password",
+        "setPassword": "They will be able to set their password there for the first time"
+      }
+    }
+  },
+  "details": {
+    "title": "User Details",
+    "fields": {
+      "email": "Email",
+      "status": "Status",
+      "account": "Account",
+      "created": "Created"
+    },
+    "systemBadge": "(System)",
+    "account": {
+      "enabled": "Enabled",
+      "disabled": "Disabled"
+    },
+    "permissions": {
+      "title": "Permissions",
+      "roleLabel": "Role",
+      "descriptions": {
+        "admin": "Admin users can manage users, upload documents, and configure system settings.",
+        "standard": "Standard users can use Numa chat and apps but cannot manage the system."
+      }
+    },
+    "currentUserNotice": "This is your account. You cannot modify your own permissions.",
+    "systemUserNotice": "System users cannot be modified.",
+    "adminDeleteBlocked": "Administrator accounts cannot be deleted directly. Please demote the user to Standard first."
+  },
+  "promote": {
+    "title": "Grant Administrator Privileges",
+    "warningTitle": "Important: Administrator Access",
+    "warningBodyPrefix": "You are about to grant administrator privileges to",
+    "warningBodySuffix": "Please review the permissions this will provide before proceeding.",
+    "privilegesTitle": "Administrator privileges include:",
+    "sections": {
+      "userManagement": "User Management",
+      "dataManagement": "Data Management",
+      "systemConfiguration": "System Configuration"
+    },
+    "bullets": {
+      "userManagement": {
+        "create": "Create new user accounts",
+        "delete": "Delete existing users",
+        "roleChanges": "Promote/demote other users to admin",
+        "view": "View all user information"
+      },
+      "dataManagement": {
+        "upload": "Upload company documents",
+        "delete": "Delete company files",
+        "sources": "Manage data sources",
+        "indexing": "Configure document indexing"
+      },
+      "systemConfiguration": {
+        "settings": "Modify system settings",
+        "integrations": "Configure integrations",
+        "tools": "Access administrative tools",
+        "logs": "View system logs and metrics"
+      }
+    },
+    "noteLabel": "Note:",
+    "noteBody": "Administrators have significant control over the system and can access all company data. Only grant these privileges to trusted team members who need administrative access.",
+    "granting": "Granting Access...",
+    "confirm": "Yes, Grant Admin Access"
+  },
+  "delete": {
+    "title": "Delete User Account",
+    "warningTitle": "Warning: Permanent Account Deletion",
+    "warningBodyPrefix": "You are about to permanently delete the user account for",
+    "warningBodySuffix": "This action cannot be undone.",
+    "effectsTitle": "What will happen when you delete this user:",
+    "sections": {
+      "accountAccess": "Account Access",
+      "dataImpact": "Data Impact",
+      "immediateEffects": "Immediate Effects",
+      "recoveryOptions": "Recovery Options"
+    },
+    "bullets": {
+      "accountAccess": {
+        "loseAccess": "User will immediately lose access to Numa",
+        "credentials": "All login credentials will be revoked",
+        "recovery": "User cannot log in or recover their account"
+      },
+      "dataImpact": {
+        "chatHistory": "Chat history will be preserved, but inaccessible to the user",
+        "activityLogs": "User activity logs will remain",
+        "uploads": "Uploaded documents will not be affected"
+      },
+      "immediateEffects": {
+        "groups": "User removed from all groups",
+        "sessions": "All active sessions terminated",
+        "audit": "Account appears as \"deleted\" in audit logs"
+      },
+      "recoveryOptions": {
+        "restore": "Account cannot be restored",
+        "newAccount": "Must create a new account with same email",
+        "permissions": "Previous permissions will not be restored"
+      }
+    },
+    "beforeLabel": "Before deleting:",
+    "beforeBody": "Account deletion is permanent and irreversible.",
+    "deleting": "Deleting Account...",
+    "confirm": "Yes, Delete Account"
+  }
+}

@@ -1,5 +1,7 @@
 # Numa Agents: Frontend Implementation
 
+> **i18n Requirement:** All user-facing text must use translations via `useTranslation('agents')`. See CLAUDE.md for details. ESLint will error on hardcoded strings.
+
 ## Agent Builder Form
 
 **Location:** `/numa-frontend/src/Components/Agents/AgentCreateModal.tsx` (~1300 lines)

@@ -1,6 +1,8 @@
 import React from 'react';
 import { Card, Badge, Button } from 'react-bootstrap';
 import { Eye } from 'react-bootstrap-icons';
+import { useTranslation } from 'react-i18next';
+import i18n from '../../i18n';
 import type { User } from './UserDetailsModal';
 
 interface UserCardProps {
@@ -10,8 +12,9 @@ interface UserCardProps {
 }
 
 export function UserCard({ user, currentUserSub, onViewUser }: UserCardProps): React.JSX.Element {
+  const { t } = useTranslation('userManagement');
   const isAdmin = user.groups?.includes('admin');
-  const roleLabel = isAdmin ? 'Admin' : 'Standard';
+  const roleLabel = isAdmin ? t('roles.admin') : t('roles.standard');
   const isCurrentUser = user.username === currentUserSub;
   const isSystemUser = user.email?.includes('numa-system-user');
 
@@ -25,8 +28,8 @@ export function UserCard({ user, currentUserSub, onViewUser }: UserCardProps): R
             </Card.Title>
             {(isSystemUser || isCurrentUser) && (
               <div className="d-flex flex-wrap gap-2">
-                {isSystemUser && <small className="text-muted fst-italic">(System)</small>}
-                {isCurrentUser && <small className="text-muted fst-italic">(You)</small>}
+                {isSystemUser && <small className="text-muted fst-italic">{t('table.systemBadge')}</small>}
+                {isCurrentUser && <small className="text-muted fst-italic">{t('table.youBadge')}</small>}
               </div>
             )}
           </div>
@@ -39,16 +42,16 @@ export function UserCard({ user, currentUserSub, onViewUser }: UserCardProps): R
           </Badge>
           {!user.enabled && (
             <Badge bg="danger" className="small">
-              Disabled
+              {t('card.disabled')}
             </Badge>
           )}
         </div>
 
         <div className="mt-auto mb-2">
-          <div className="text-muted small">Role: {roleLabel}</div>
+          <div className="text-muted small">{t('card.role', { role: roleLabel })}</div>
           <div className="text-muted small">
-            Created:{' '}
-            {new Date(user.created).toLocaleDateString('en-US', {
+            {t('card.created')}:{' '}
+            {new Date(user.created).toLocaleDateString(i18n.language, {
               year: 'numeric',
               month: 'short',
               day: 'numeric',
@@ -64,7 +67,7 @@ export function UserCard({ user, currentUserSub, onViewUser }: UserCardProps): R
           disabled={isSystemUser}
         >
           <Eye size={14} className="me-1" />
-          View
+          {t('actions.view')}
         </Button>
       </Card.Body>
     </Card>

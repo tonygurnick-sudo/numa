@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { Container, Table, Badge, Button, Tabs, Tab, Toast, Form, Card, Spinner, Modal } from 'react-bootstrap';
+import { useTranslation } from 'react-i18next';
 import axios from 'axios';
 import {
   Upload as UploadIcon,
@@ -15,6 +16,7 @@ import { useNumaApp } from '../../Providers/NumaAppContext';
 import { useNumaRequest } from '../../Providers/NumaRequestContext';
 import { useJobsApi } from '../../Services/jobsApi';
 import { ResultsRenderer } from '../Renderers/ResultsRenderer';
+import i18n from '../../i18n';
 
 /*********************************************************
  * Constants / Enums                                     *
@@ -59,19 +61,19 @@ const getBadgeColor = (status, results) => {
   }
 };
 
-const formatStatus = (status, results) => {
+const formatStatus = (t, status, results) => {
   const s = normalizeStatus(status);
-  if (s === 'COMPLETED' && results?.error) return 'Failed';
-  if (s === 'SUCCESS' || s === 'COMPLETED') return 'SUCCESS';
-  if (s === 'UPLOADED') return 'UPLOADED';
+  if (s === 'COMPLETED' && results?.error) return t('policyReviewer.status.failed');
+  if (s === 'SUCCESS' || s === 'COMPLETED') return t('policyReviewer.status.success');
+  if (s === 'UPLOADED') return t('policyReviewer.status.uploaded');
   return s.replace(/_/g, ' ').replace(/\b\w/g, (l) => l.toUpperCase());
 };
 
-const formatDate = (dateString) => {
-  if (!dateString) return 'N/A';
+const formatDate = (t, dateString) => {
+  if (!dateString) return t('policyReviewer.date.notAvailable');
   const date = new Date(dateString);
-  if (Number.isNaN(date.getTime())) return 'Invalid Date';
-  return new Intl.DateTimeFormat('en-NZ', {
+  if (Number.isNaN(date.getTime())) return t('policyReviewer.date.invalid');
+  return new Intl.DateTimeFormat(i18n.language, {
     day: '2-digit',
     month: 'short',
     year: 'numeric',
@@ -110,6 +112,7 @@ const validateUrl = (url) => {
  * Component                                             *
  *********************************************************/
 export const PolicyReviewerDetail = () => {
+  const { t } = useTranslation('apps');
   /**********************
    * State & Refs       *
    **********************/
@@ -181,7 +184,7 @@ export const PolicyReviewerDetail = () => {
       })
       .catch((error) => {
         console.error('Error loading config:', error);
-        setToast({ type: 'danger', message: 'Failed to load configuration' });
+        setToast({ type: 'danger', message: t('policyReviewer.errors.loadConfig') });
       });
   }, []);
 
@@ -225,7 +228,7 @@ export const PolicyReviewerDetail = () => {
               inputs = {};
             }
           }
-          const name = inputs?.policyName || 'Unnamed Policy';
+          const name = inputs?.policyName || t('policyReviewer.labels.unnamedPolicy');
           return {
             id: j.jobId,
             name,
@@ -238,7 +241,7 @@ export const PolicyReviewerDetail = () => {
       setPolicies(filtered);
     } catch (error) {
       console.error('Error fetching policies:', error);
-      setToast({ type: 'danger', message: 'Failed to fetch policies' });
+      setToast({ type: 'danger', message: t('policyReviewer.errors.fetchPolicies') });
     } finally {
       setIsLoadingPolicies(false);
     }
@@ -250,11 +253,11 @@ export const PolicyReviewerDetail = () => {
   const handleAddUrl = () => {
     const validated = validateUrl(newUrl);
     if (!validated) {
-      setToast({ type: 'danger', message: 'Please enter a valid legislation URL' });
+      setToast({ type: 'danger', message: t('policyReviewer.errors.invalidLegislationUrl') });
       return;
     }
     if (urlList.includes(validated)) {
-      setToast({ type: 'danger', message: 'URL already added to the list' });
+      setToast({ type: 'danger', message: t('policyReviewer.errors.duplicateUrl') });
       return;
     }
 
@@ -267,7 +270,7 @@ export const PolicyReviewerDetail = () => {
   const handleEditConfig = async (jobId) => {
     try {
       const job = policies.find((p) => p.id === jobId);
-      if (!job) throw new Error('Policy not found');
+      if (!job) throw new Error(t('policyReviewer.errors.policyNotFound'));
 
       setIsEditing(true);
       setEditingJobId(jobId);
@@ -303,7 +306,7 @@ export const PolicyReviewerDetail = () => {
       setActiveTab('upload');
     } catch (err) {
       console.error('Error editing policy config:', err);
-      setToast({ type: 'danger', message: err.message || 'Failed to edit policy configuration' });
+      setToast({ type: 'danger', message: err.message || t('policyReviewer.errors.editFailed') });
     }
   };
 
@@ -315,7 +318,7 @@ export const PolicyReviewerDetail = () => {
 
     const file = event.target.files[0];
     if (file.size > MAX_FILE_SIZE) {
-      setToast({ type: 'danger', message: 'File exceeds the 10 MB limit' });
+      setToast({ type: 'danger', message: t('policyReviewer.errors.fileTooLarge') });
       return;
     }
 
@@ -357,21 +360,21 @@ export const PolicyReviewerDetail = () => {
 
   const createOrUpdateJob = async (nameOverride?: string) => {
     try {
-      if (!policyName) throw new Error('Please enter a policy name');
-      if (!policyContext) throw new Error('Please provide policy context');
+      if (!policyName) throw new Error(t('policyReviewer.errors.missingPolicyName'));
+      if (!policyContext) throw new Error(t('policyReviewer.errors.missingPolicyContext'));
 
       if (
         policies.some(
           (p) => p.name.toLowerCase() === policyName.toLowerCase() && p.id !== (isEditing ? editingJobId : undefined),
         )
       ) {
-        throw new Error('A policy with this name already exists');
+        throw new Error(t('policyReviewer.errors.duplicatePolicy'));
       }
 
       const normalizedRunName = (nameOverride ?? (isJobNamingEnabled ? runName : '') ?? '').trim();
 
       if (!isEditing && !selectedFile) {
-        throw new Error('Please select a file to upload');
+        throw new Error(t('policyReviewer.errors.missingFile'));
       }
 
       setIsUploading(true);
@@ -382,7 +385,7 @@ export const PolicyReviewerDetail = () => {
 
       if (isEditing) {
         jobData = policies.find((p) => p.id === editingJobId)?.jobDetails;
-        if (!jobData) throw new Error('Could not find policy data');
+        if (!jobData) throw new Error(t('policyReviewer.errors.missingPolicyData'));
 
         const payload = {
           ...jobData,
@@ -460,7 +463,7 @@ export const PolicyReviewerDetail = () => {
 
       setToast({
         type: 'success',
-        message: isEditing ? 'Policy configuration updated' : 'Policy uploaded successfully',
+        message: isEditing ? t('policyReviewer.success.updated') : t('policyReviewer.success.uploaded'),
       });
 
       if (normalizedRunName) {
@@ -474,7 +477,7 @@ export const PolicyReviewerDetail = () => {
       console.error('Error in createOrUpdateJob:', err);
       setToast({
         type: 'danger',
-        message: err.message || 'An error occurred while processing your request',
+        message: err.message || t('policyReviewer.errors.generic'),
       });
     } finally {
       setIsUploading(false);
@@ -507,7 +510,7 @@ export const PolicyReviewerDetail = () => {
   const handleRunNameSubmit = async () => {
     const trimmedName = runNameDraft.trim();
     if (!trimmedName) {
-      setRunNameError('Please enter a job name.');
+      setRunNameError(t('wizard.runName.required'));
       return;
     }
 
@@ -518,7 +521,7 @@ export const PolicyReviewerDetail = () => {
     } catch (error) {
       console.error('Failed to create or update policy job with name:', error);
       setShowRunNameModal(true);
-      setRunNameError(error?.message || 'Failed to save job name. Please try again.');
+      setRunNameError(error?.message || t('policyReviewer.errors.saveRunNameFailed'));
     } finally {
       setIsRunNameSubmitting(false);
     }
@@ -546,7 +549,7 @@ export const PolicyReviewerDetail = () => {
     );
 
     const res = await fetch(url);
-    if (!res.ok) throw new Error('Download failed');
+    if (!res.ok) throw new Error(t('policyReviewer.errors.downloadFailed'));
     return res.blob();
   };
 
@@ -561,7 +564,7 @@ export const PolicyReviewerDetail = () => {
       setResultsTabView('review');
 
       const policy = policies.find((p) => p.id === id);
-      if (!policy) throw new Error('Policy not found');
+      if (!policy) throw new Error(t('policyReviewer.errors.policyNotFound'));
 
       // Fetch markdown content
       const reviewBlob = await downloadMarkdown(policy, 'policy_review');
@@ -578,7 +581,7 @@ export const PolicyReviewerDetail = () => {
       }
     } catch (e) {
       console.error('Error loading results:', e);
-      setToast({ type: 'danger', message: e.message || 'Failed to load results' });
+      setToast({ type: 'danger', message: e.message || t('policyReviewer.errors.loadResults') });
       setActiveTab('policies'); // Return to policies tab if error
     } finally {
       setIsLoadingResults(false);
@@ -592,8 +595,8 @@ export const PolicyReviewerDetail = () => {
     try {
       setReviewingPolicyId(id);
       const policy = policies.find((p) => p.id === id);
-      if (!policy) throw new Error('Policy not found');
-      if (!policy.jobDetails.uploadedFile?.s3Key) throw new Error('Original file missing');
+      if (!policy) throw new Error(t('policyReviewer.errors.policyNotFound'));
+      if (!policy.jobDetails.uploadedFile?.s3Key) throw new Error(t('policyReviewer.errors.originalMissing'));
 
       const payload = {
         original_job_id: id,
@@ -608,7 +611,7 @@ export const PolicyReviewerDetail = () => {
       });
 
       const stepFn = await numaPost(`${config.API_ENDPOINT}/policy-reviewer/main`, payload);
-      if (!stepFn?.job_id) throw new Error('Failed to start review');
+      if (!stepFn?.job_id) throw new Error(t('policyReviewer.errors.startReviewFailed'));
 
       await numaPut(`${config.API_ENDPOINT}/policy-reviewer/jobs/${id}`, {
         ...policy.jobDetails,
@@ -617,10 +620,10 @@ export const PolicyReviewerDetail = () => {
       });
 
       fetchPolicies();
-      setToast({ type: 'success', message: 'Policy review started successfully' });
+      setToast({ type: 'success', message: t('policyReviewer.success.reviewStarted') });
     } catch (e) {
       console.error('Error starting review:', e);
-      setToast({ type: 'danger', message: e.message || 'Failed to start review' });
+      setToast({ type: 'danger', message: e.message || t('policyReviewer.errors.startReviewFailed') });
     } finally {
       setReviewingPolicyId(null);
     }
@@ -630,17 +633,17 @@ export const PolicyReviewerDetail = () => {
     try {
       setDeletingPolicyId(id);
       const policy = policies.find((p) => p.id === id);
-      if (!policy) throw new Error('Policy not found');
+      if (!policy) throw new Error(t('policyReviewer.errors.policyNotFound'));
 
       await numaPut(`${config.API_ENDPOINT}/policy-reviewer/jobs/${id}`, {
         status: JobStatus.DELETED,
       });
 
-      setToast({ type: 'success', message: `Policy "${policy.name}" has been deleted` });
+      setToast({ type: 'success', message: t('policyReviewer.success.deleted', { name: policy.name }) });
       fetchPolicies();
     } catch (e) {
       console.error('Error deleting policy:', e);
-      setToast({ type: 'danger', message: e.message || 'Failed to delete policy' });
+      setToast({ type: 'danger', message: e.message || t('policyReviewer.errors.deleteFailed') });
     } finally {
       setDeletingPolicyId(null);
     }
@@ -650,7 +653,7 @@ export const PolicyReviewerDetail = () => {
     try {
       const policy = policies.find((p) => p.id === id);
       if (!policy?.jobDetails.uploadedFile?.s3Key) {
-        throw new Error('Original file not found');
+        throw new Error(t('policyReviewer.errors.originalNotFound'));
       }
 
       const credentials = await getCredentials();
@@ -671,7 +674,7 @@ export const PolicyReviewerDetail = () => {
       window.open(url, '_blank');
     } catch (e) {
       console.error('Error viewing original policy:', e);
-      setToast({ type: 'danger', message: e.message || 'Failed to view original policy' });
+      setToast({ type: 'danger', message: e.message || t('policyReviewer.errors.viewOriginalFailed') });
     }
   };
 
@@ -744,7 +747,7 @@ export const PolicyReviewerDetail = () => {
     if (!selectedResultPolicy) {
       return (
         <div className="p-4 text-center">
-          <p>Select a policy from the dashboard to view results</p>
+          <p>{t('policyReviewer.results.selectPolicy')}</p>
         </div>
       );
     }
@@ -753,7 +756,7 @@ export const PolicyReviewerDetail = () => {
       return (
         <div className="p-4 text-center">
           <Spinner animation="border" />
-          <p>Loading review results...</p>
+          <p>{t('policyReviewer.results.loading')}</p>
         </div>
       );
     }
@@ -765,14 +768,14 @@ export const PolicyReviewerDetail = () => {
     if (resultsTabView === 'review') {
       outputs.push({
         content_type: 'text/markdown',
-        title: 'Policy Review',
+        title: t('policyReviewer.results.reviewTitle'),
         location: 'inline',
         data: policyResults || '',
       });
     } else if (resultsTabView === 'updated' && updatedPolicyResults) {
       outputs.push({
         content_type: 'text/markdown',
-        title: 'Required Changes',
+        title: t('policyReviewer.results.updatedTitle'),
         location: 'inline',
         data: updatedPolicyResults || '',
       });
@@ -789,7 +792,8 @@ export const PolicyReviewerDetail = () => {
       <div className="p-4">
         <div className="d-flex justify-content-between align-items-center mb-4">
           <h5>
-            Policy Review Results: <span className="text-primary">{policy?.name || 'Unknown Policy'}</span>
+            {t('policyReviewer.results.title')}{' '}
+            <span className="text-primary">{policy?.name || t('policyReviewer.results.unknownPolicy')}</span>
           </h5>
           <Button
             variant="primary"
@@ -799,7 +803,7 @@ export const PolicyReviewerDetail = () => {
             }}
           >
             <ArrowLeftIcon className="me-1" />
-            Back to Dashboard
+            {t('policyReviewer.results.back')}
           </Button>
         </div>
 
@@ -812,7 +816,7 @@ export const PolicyReviewerDetail = () => {
                     className={`nav-link ${resultsTabView === 'review' ? 'active' : ''}`}
                     onClick={() => setResultsTabView('review')}
                   >
-                    Policy Review
+                    {t('policyReviewer.results.reviewTab')}
                   </button>
                 </li>
                 {updatedPolicyResults && (
@@ -821,7 +825,7 @@ export const PolicyReviewerDetail = () => {
                       className={`nav-link ${resultsTabView === 'updated' ? 'active' : ''}`}
                       onClick={() => setResultsTabView('updated')}
                     >
-                      Required Changes
+                      {t('policyReviewer.results.updatedTab')}
                     </button>
                   </li>
                 )}
@@ -831,7 +835,7 @@ export const PolicyReviewerDetail = () => {
           </>
         ) : (
           <div className="text-center p-4 text-muted">
-            <p>No results available</p>
+            <p>{t('policyReviewer.results.empty')}</p>
           </div>
         )}
       </div>
@@ -852,7 +856,9 @@ export const PolicyReviewerDetail = () => {
       style={{ position: 'fixed', bottom: 20, right: 20, zIndex: 1000 }}
     >
       <Toast.Header closeButton>
-        <strong className="me-auto">{variant === 'success' ? 'Success' : 'Error'}</strong>
+        <strong className="me-auto">
+          {variant === 'success' ? t('policyReviewer.toast.success') : t('policyReviewer.toast.error')}
+        </strong>
       </Toast.Header>
       <Toast.Body>{toast.message}</Toast.Body>
     </Toast>
@@ -866,23 +872,23 @@ export const PolicyReviewerDetail = () => {
         </div>
       ) : policies.length === 0 ? (
         <div className="text-center py-4">
-          <p className="text-muted">No policies found. Upload a policy to get started.</p>
+          <p className="text-muted">{t('policyReviewer.empty')}</p>
         </div>
       ) : (
         <Table responsive striped bordered hover>
           <thead>
             <tr className="table-light">
-              <th>Name</th>
-              <th className="d-none d-md-table-cell">Uploaded</th>
-              <th>Status</th>
-              <th>Actions</th>
+              <th>{t('policyReviewer.table.headers.name')}</th>
+              <th className="d-none d-md-table-cell">{t('policyReviewer.table.headers.uploaded')}</th>
+              <th>{t('policyReviewer.table.headers.status')}</th>
+              <th>{t('policyReviewer.table.headers.actions')}</th>
             </tr>
           </thead>
           <tbody>
             {policies.map((p) => (
               <tr key={p.id}>
                 <td className="text-break">{p.name}</td>
-                <td className="d-none d-md-table-cell">{formatDate(p.lastModified)}</td>
+                <td className="d-none d-md-table-cell">{formatDate(t, p.lastModified)}</td>
                 <td>
                   <Badge bg={getBadgeColor(p.status, p.jobDetails.results)}>
                     {normalizeStatus(p.status) === 'PROCESSING' && (
@@ -893,7 +899,7 @@ export const PolicyReviewerDetail = () => {
                         style={{ width: '0.8rem', height: '0.8rem' }}
                       />
                     )}
-                    {formatStatus(p.status, p.jobDetails.results)}
+                    {formatStatus(t, p.status, p.jobDetails.results)}
                   </Badge>
                 </td>
                 <td>
@@ -902,7 +908,7 @@ export const PolicyReviewerDetail = () => {
                       <>
                         <Button variant="primary" size="sm" onClick={() => handleViewOriginalPolicy(p.id)}>
                           <FileTextIcon className="me-1" />
-                          {!isMobile && 'View'}
+                          {!isMobile && t('policyReviewer.actions.view')}
                         </Button>
                         <Button
                           variant="primary"
@@ -913,9 +919,9 @@ export const PolicyReviewerDetail = () => {
                           {reviewingPolicyId === p.id ? (
                             <Spinner animation="border" size="sm" className="me-1" />
                           ) : (
-                            <span className="me-1">▶</span>
+                            <span className="me-1">{t('policyReviewer.actions.reviewIcon')}</span>
                           )}
-                          {!isMobile && 'Review'}
+                          {!isMobile && t('policyReviewer.actions.review')}
                         </Button>
                       </>
                     )}
@@ -924,11 +930,11 @@ export const PolicyReviewerDetail = () => {
                       <>
                         <Button variant="primary" size="sm" onClick={() => handleViewOriginalPolicy(p.id)}>
                           <FileTextIcon className="me-1" />
-                          {!isMobile && 'View Original'}
+                          {!isMobile && t('policyReviewer.actions.viewOriginal')}
                         </Button>
                         <Button variant="primary" size="sm" onClick={() => handleViewResults(p.id)}>
                           <FileTextIcon className="me-1" />
-                          {!isMobile && 'View Results'}
+                          {!isMobile && t('policyReviewer.actions.viewResults')}
                         </Button>
                         <Button
                           variant="primary"
@@ -939,16 +945,16 @@ export const PolicyReviewerDetail = () => {
                           {reviewingPolicyId === p.id ? (
                             <Spinner animation="border" size="sm" className="me-1" />
                           ) : (
-                            <span className="me-1">↻</span>
+                            <span className="me-1">{t('policyReviewer.actions.rerunIcon')}</span>
                           )}
-                          {!isMobile && 'Re-run'}
+                          {!isMobile && t('policyReviewer.actions.rerun')}
                         </Button>
                       </>
                     )}
 
                     <Button variant="secondary" size="sm" onClick={() => handleEditConfig(p.id)}>
                       <GearIcon className="me-1" />
-                      {!isMobile && 'Edit Config'}
+                      {!isMobile && t('policyReviewer.actions.edit')}
                     </Button>
 
                     <Button
@@ -972,7 +978,7 @@ export const PolicyReviewerDetail = () => {
                           <path d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4zM2.5 3h11V2h-11z" />
                         </svg>
                       )}
-                      {!isMobile && 'Delete'}
+                      {!isMobile && t('policyReviewer.actions.delete')}
                     </Button>
                   </div>
                 </td>
@@ -991,19 +997,17 @@ export const PolicyReviewerDetail = () => {
     <div className="p-3 p-md-4">
       <Card className="shadow-sm mb-4">
         <Card.Body>
-          <Card.Title>{isEditing ? 'Edit Policy Configuration' : 'Upload a Policy'}</Card.Title>
+          <Card.Title>{isEditing ? t('policyReviewer.upload.editTitle') : t('policyReviewer.upload.title')}</Card.Title>
           <Card.Text>
-            {isEditing
-              ? 'Edit the policy details and legislation URLs for this policy.'
-              : 'Upload a policy document to the dashboard for easy access and management.'}
+            {isEditing ? t('policyReviewer.upload.editDescription') : t('policyReviewer.upload.description')}
           </Card.Text>
 
           <Form onSubmit={handleFormSubmit}>
             <Form.Group className="mb-3">
-              <Form.Label>Policy Name</Form.Label>
+              <Form.Label>{t('policyReviewer.upload.fields.policyName.label')}</Form.Label>
               <Form.Control
                 type="text"
-                placeholder="Enter policy name"
+                placeholder={t('policyReviewer.upload.fields.policyName.placeholder')}
                 value={policyName}
                 onChange={(e) => setPolicyName(e.target.value)}
                 required
@@ -1011,34 +1015,34 @@ export const PolicyReviewerDetail = () => {
             </Form.Group>
 
             <Form.Group className="mb-3">
-              <Form.Label>Policy Context</Form.Label>
+              <Form.Label>{t('policyReviewer.upload.fields.policyContext.label')}</Form.Label>
               <Form.Control
                 as="textarea"
                 rows={3}
-                placeholder="Provide context about the policy"
+                placeholder={t('policyReviewer.upload.fields.policyContext.placeholder')}
                 value={policyContext}
                 onChange={(e) => setPolicyContext(e.target.value)}
                 required
               />
-              <Form.Text className="text-muted">Detailed context helps generate better recommendations.</Form.Text>
+              <Form.Text className="text-muted">{t('policyReviewer.upload.fields.policyContext.hint')}</Form.Text>
             </Form.Group>
 
             <Form.Group className="mb-3">
-              <Form.Label>Legislation URLs (Optional)</Form.Label>
+              <Form.Label>{t('policyReviewer.upload.fields.legislation.label')}</Form.Label>
               <div className="d-flex mb-2">
                 <Form.Control
                   type="text"
-                  placeholder="Enter a URL"
+                  placeholder={t('policyReviewer.upload.fields.legislation.placeholder')}
                   value={newUrl}
                   onChange={(e) => setNewUrl(e.target.value)}
                 />
                 <Button variant="outline-primary" className="ms-2" onClick={handleAddUrl} disabled={!newUrl.trim()}>
-                  Add
+                  {t('policyReviewer.actions.add')}
                 </Button>
               </div>
 
               <Form.Text className="text-muted d-block mb-2">
-                We support legislation.vic.gov.au & legislation.govt.nz links.
+                {t('policyReviewer.upload.fields.legislation.supported')}
               </Form.Text>
 
               <div className="d-flex flex-wrap gap-2 mb-3">
@@ -1050,7 +1054,7 @@ export const PolicyReviewerDetail = () => {
                     modal.document.write(`
                       <html>
                         <head>
-                          <title>Supported Legislation URL Examples</title>
+                          <title>${t('policyReviewer.urlExamples.windowTitle')}</title>
                           <style>
                             body { font-family: Arial, sans-serif; margin: 20px; line-height: 1.5; }
                             .url-example {
@@ -1069,55 +1073,55 @@ export const PolicyReviewerDetail = () => {
                           </style>
                         </head>
                         <body>
-                          <h2>Supported Legislation URLs</h2>
+                          <h2>${t('policyReviewer.urlExamples.title')}</h2>
 
                           <div class="section">
-                            <h3>Victoria Legislation</h3>
-                            <p>Use URLs from legislation.vic.gov.au in these formats:</p>
+                            <h3>${t('policyReviewer.urlExamples.vicTitle')}</h3>
+                            <p>${t('policyReviewer.urlExamples.vicIntro')}</p>
 
                             <div class="url-example">
                               https://content.legislation.vic.gov.au/sites/default/files/2021-04/00-20aa004%20authorised.pdf
                             </div>
 
-                            <p class="note">This example is for the Electronic Transactions (Victoria) Act 2000</p>
+                            <p class="note">${t('policyReviewer.urlExamples.vicNote1')}</p>
 
                             <div class="url-example">
                               https://content.legislation.vic.gov.au/sites/default/files/bd9bfebd-8561-3814-b2a6-0e90189c5d6a_26-3484aa002%20authorised.pdf
                             </div>
 
-                            <p class="note">This example is for the Ararat Land Act 1926</p>
+                            <p class="note">${t('policyReviewer.urlExamples.vicNote2')}</p>
                           </div>
 
                           <div class="section">
-                            <h3>New Zealand Legislation</h3>
-                            <p>Use URLs from legislation.govt.nz in these formats:</p>
+                            <h3>${t('policyReviewer.urlExamples.nzTitle')}</h3>
+                            <p>${t('policyReviewer.urlExamples.nzIntro')}</p>
 
                             <div class="url-example">
                               https://www.legislation.govt.nz/act/public/1991/0069/latest/DLM230265.html
                             </div>
 
-                            <p class="note">This example is for the Resource Management Act 1991</p>
+                            <p class="note">${t('policyReviewer.urlExamples.nzNote1')}</p>
 
                             <div class="url-example">
                               https://www.legislation.govt.nz/act/public/1993/0105/latest/DLM319570.html
                             </div>
 
-                            <p class="note">This example is for the Companies Act 1993</p>
+                            <p class="note">${t('policyReviewer.urlExamples.nzNote2')}</p>
                           </div>
 
-                          <p class="note">Note: Please ensure you use the exact URL format as shown in these examples. The system will validate your URLs against these patterns.</p>
+                          <p class="note">${t('policyReviewer.urlExamples.note')}</p>
                         </body>
                       </html>
                     `);
                   }}
                 >
-                  View Supported URL Examples
+                  {t('policyReviewer.actions.viewUrlExamples')}
                 </Button>
               </div>
 
               {urlList.length > 0 ? (
                 <div className="border rounded p-2 bg-light">
-                  <div className="fw-bold mb-2">Added URLs:</div>
+                  <div className="fw-bold mb-2">{t('policyReviewer.upload.fields.legislation.addedLabel')}</div>
                   <ul className="list-group">
                     {urlList.map((url) => (
                       <li key={url} className="list-group-item d-flex justify-content-between align-items-center">
@@ -1125,20 +1129,20 @@ export const PolicyReviewerDetail = () => {
                           {url}
                         </a>
                         <Button variant="outline-danger" size="sm" onClick={() => handleRemoveUrl(url)}>
-                          Remove
+                          {t('policyReviewer.actions.remove')}
                         </Button>
                       </li>
                     ))}
                   </ul>
                 </div>
               ) : (
-                <div className="text-muted fst-italic">No URLs added yet</div>
+                <div className="text-muted fst-italic">{t('policyReviewer.upload.fields.legislation.empty')}</div>
               )}
             </Form.Group>
 
             {!isEditing && (
               <Form.Group className="mb-4">
-                <Form.Label>Upload Policy Document</Form.Label>
+                <Form.Label>{t('policyReviewer.upload.fields.document.label')}</Form.Label>
                 <div
                   className="border rounded p-4 text-center mb-2"
                   style={{ cursor: 'pointer', background: '#f9f9f9' }}
@@ -1154,8 +1158,10 @@ export const PolicyReviewerDetail = () => {
                     accept=".pdf,.docx,.txt"
                   />
                   <UploadIcon size={32} className="mb-3 text-primary" />
-                  <p className="mb-1">{selectedFile ? selectedFile.name : 'Drag and drop or click to select a file'}</p>
-                  <small className="text-muted">Supported formats: PDF, DOCX, TXT (Max 10 MB)</small>
+                  <p className="mb-1">
+                    {selectedFile ? selectedFile.name : t('policyReviewer.upload.fields.document.placeholder')}
+                  </p>
+                  <small className="text-muted">{t('policyReviewer.upload.fields.document.supported')}</small>
                 </div>
               </Form.Group>
             )}
@@ -1164,7 +1170,7 @@ export const PolicyReviewerDetail = () => {
               <div className="mb-3">
                 <div className="d-flex align-items-center mb-2">
                   <Spinner animation="border" size="sm" className="me-2" />
-                  <span>Uploading...</span>
+                  <span>{t('policyReviewer.upload.uploading')}</span>
                 </div>
                 <div className="progress">
                   <div
@@ -1180,19 +1186,19 @@ export const PolicyReviewerDetail = () => {
               <div className="d-flex gap-2">
                 {isEditing && (
                   <Button variant="secondary" onClick={resetForm} className="flex-grow-1">
-                    Cancel
+                    {t('policyReviewer.actions.cancel')}
                   </Button>
                 )}
                 <Button variant="primary" type="submit" className="flex-grow-1">
                   {isEditing ? (
                     <>
                       <GearIcon className="me-2" />
-                      Update Configuration
+                      {t('policyReviewer.actions.update')}
                     </>
                   ) : (
                     <>
                       <UploadIcon className="me-2" />
-                      Upload to Dashboard
+                      {t('policyReviewer.actions.upload')}
                     </>
                   )}
                 </Button>
@@ -1212,7 +1218,7 @@ export const PolicyReviewerDetail = () => {
     return (
       <Container className="py-5 text-center">
         <Spinner animation="border" className="mb-3" />
-        <p>Loading application configuration...</p>
+        <p>{t('policyReviewer.loadingConfig')}</p>
       </Container>
     );
   }
@@ -1229,16 +1235,16 @@ export const PolicyReviewerDetail = () => {
       >
         <Modal.Header closeButton className="run-name-modal__header">
           <div>
-            <Modal.Title className="run-name-modal__title">Name this run</Modal.Title>
-            <p className="run-name-modal__subtitle mb-0">Create a short label so you can spot it in job history.</p>
+            <Modal.Title className="run-name-modal__title">{t('wizard.runName.title')}</Modal.Title>
+            <p className="run-name-modal__subtitle mb-0">{t('wizard.runName.subtitle')}</p>
           </div>
         </Modal.Header>
         <Modal.Body className="run-name-modal__body">
           <Form.Group controlId="policy-reviewer-job-name">
-            <Form.Label className="run-name-modal__label">Run name</Form.Label>
+            <Form.Label className="run-name-modal__label">{t('wizard.runName.label')}</Form.Label>
             <Form.Control
               type="text"
-              placeholder="Name it here..."
+              placeholder={t('wizard.runName.placeholder')}
               value={runNameDraft}
               autoFocus
               maxLength={JOB_NAME_MAX_LENGTH}
@@ -1255,9 +1261,9 @@ export const PolicyReviewerDetail = () => {
             <Form.Control.Feedback type="invalid" className="run-name-modal__feedback">
               {runNameError}
             </Form.Control.Feedback>
-            <Form.Text className="run-name-modal__hint">This is visible to everyone viewing job history.</Form.Text>
+            <Form.Text className="run-name-modal__hint">{t('wizard.runName.hint')}</Form.Text>
             <span className={`run-name-modal__counter ${runNameRemaining <= 10 ? 'text-danger' : 'text-muted'}`}>
-              {runNameRemaining} characters remaining
+              {t('wizard.runName.remaining', { count: runNameRemaining })}
             </span>
           </Form.Group>
         </Modal.Body>
@@ -1269,7 +1275,7 @@ export const PolicyReviewerDetail = () => {
               disabled={isRunNameSubmitting}
               className="run-name-modal__button"
             >
-              Cancel
+              {t('wizard.runName.cancel')}
             </Button>
             <Button
               variant="primary"
@@ -1277,7 +1283,7 @@ export const PolicyReviewerDetail = () => {
               disabled={!canSubmitRunName}
               className="run-name-modal__button"
             >
-              {isRunNameSubmitting ? 'Saving…' : 'Save and Run'}
+              {isRunNameSubmitting ? t('wizard.runName.saving') : t('wizard.runName.saveAndRun')}
             </Button>
           </div>
         </Modal.Footer>
@@ -1289,19 +1295,19 @@ export const PolicyReviewerDetail = () => {
             <Form.Check
               type="switch"
               id="policy-reviewer-job-naming-toggle"
-              label="Turn on job naming for all apps"
+              label={t('appDetail.jobNaming')}
               checked={isJobNamingEnabled}
               onChange={(event) => setIsJobNamingEnabled(event.target.checked)}
             />
           </div>
           <Tabs activeKey={activeTab} onSelect={setActiveTab} className="mb-0">
-            <Tab eventKey="upload" title="Upload Policy">
+            <Tab eventKey="upload" title={t('policyReviewer.tabs.upload')}>
               {renderUploadTab()}
             </Tab>
-            <Tab eventKey="policies" title="Policy Dashboard">
+            <Tab eventKey="policies" title={t('policyReviewer.tabs.dashboard')}>
               {renderPoliciesTab()}
             </Tab>
-            <Tab eventKey="results" title="Review Results" disabled={!selectedResultPolicy}>
+            <Tab eventKey="results" title={t('policyReviewer.tabs.results')} disabled={!selectedResultPolicy}>
               {renderResultsTab()}
             </Tab>
           </Tabs>

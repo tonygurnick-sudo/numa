@@ -5,7 +5,9 @@
 
 import React, { useMemo } from 'react';
 import { Card, Row, Col, Badge, Alert, Table, Button } from 'react-bootstrap';
+import { useTranslation } from 'react-i18next';
 import { useKBState } from '../../Providers/KBStateProvider';
+import i18n from '../../i18n';
 
 interface DataSource {
   dataSourceId: string;
@@ -31,11 +33,11 @@ interface KBDataSourcesTabProps {
 /**
  * Format date for display
  */
-function formatDate(dateString: string | undefined): string {
-  if (!dateString) return '—';
+function formatDate(dateString: string | undefined, emptyLabel: string): string {
+  if (!dateString) return emptyLabel;
   try {
     const date = new Date(dateString);
-    return date.toLocaleDateString('en-NZ', {
+    return date.toLocaleDateString(i18n.language, {
       year: 'numeric',
       month: 'short',
       day: 'numeric',
@@ -43,7 +45,7 @@ function formatDate(dateString: string | undefined): string {
       minute: '2-digit',
     });
   } catch {
-    return '—';
+    return emptyLabel;
   }
 }
 
@@ -75,21 +77,25 @@ function getStatusVariant(status: string): string {
 /**
  * Get data source type display name
  */
-function getDataSourceTypeDisplay(type: string, isWebCrawler?: boolean): string {
-  if (isWebCrawler) return 'Web Crawler';
-  if (!type) return 'Unknown';
+function getDataSourceTypeDisplay(
+  type: string,
+  isWebCrawler: boolean | undefined,
+  labels: Record<string, string>,
+): string {
+  if (isWebCrawler) return labels.webCrawler;
+  if (!type) return labels.unknown;
 
   switch (type.toUpperCase()) {
     case 'S3':
-      return 'Amazon S3';
+      return labels.s3;
     case 'WEB_CRAWLER':
-      return 'Web Crawler';
+      return labels.webCrawler;
     case 'SHAREPOINT':
-      return 'SharePoint';
+      return labels.sharepoint;
     case 'CONFLUENCE':
-      return 'Confluence';
+      return labels.confluence;
     case 'SALESFORCE':
-      return 'Salesforce';
+      return labels.salesforce;
     default:
       return type;
   }
@@ -100,6 +106,7 @@ export function KBDataSourcesTab({
   kbType: _kbType,
   role: _role = 'VIEWER',
 }: KBDataSourcesTabProps): React.JSX.Element {
+  const { t } = useTranslation('knowledgeBase');
   const { kbState, isLoading, error, refreshKBState } = useKBState();
 
   /**
@@ -147,7 +154,7 @@ export function KBDataSourcesTab({
   /**
    * Render data source table
    */
-  function renderDataSourceTable(sources: DataSource[], title: string, emptyMessage: string) {
+  function renderDataSourceTable(sources: DataSource[], emptyMessage: string) {
     if (sources.length === 0) {
       return (
         <div className="text-center p-4 bg-light rounded">
@@ -162,11 +169,11 @@ export function KBDataSourcesTab({
         <Table hover size="sm">
           <thead className="table-light">
             <tr>
-              <th>Name</th>
-              <th>Type</th>
-              <th>Status</th>
-              <th>Last Updated</th>
-              {sources.some((s) => s.isWebCrawler) && <th>Details</th>}
+              <th>{t('dataSources.table.name')}</th>
+              <th>{t('dataSources.table.type')}</th>
+              <th>{t('dataSources.table.status')}</th>
+              <th>{t('dataSources.table.lastUpdated')}</th>
+              {sources.some((s) => s.isWebCrawler) && <th>{t('dataSources.table.details')}</th>}
             </tr>
           </thead>
           <tbody>
@@ -180,23 +187,34 @@ export function KBDataSourcesTab({
                 </td>
                 <td>
                   <Badge bg="light" text="dark" className="border">
-                    {getDataSourceTypeDisplay(source.type, source.isWebCrawler)}
+                    {getDataSourceTypeDisplay(source.type, source.isWebCrawler, {
+                      webCrawler: t('dataSources.types.webCrawler'),
+                      unknown: t('dataSources.types.unknown'),
+                      s3: t('dataSources.types.s3'),
+                      sharepoint: t('dataSources.types.sharepoint'),
+                      confluence: t('dataSources.types.confluence'),
+                      salesforce: t('dataSources.types.salesforce'),
+                    })}
                   </Badge>
                 </td>
                 <td>
                   <Badge bg={getStatusVariant(source.status)}>{source.status}</Badge>
                 </td>
-                <td className="small text-muted">{formatDate(source.lastUpdated || source.lastSynced)}</td>
+                <td className="small text-muted">
+                  {formatDate(source.lastUpdated || source.lastSynced, t('dataSources.emptyValue'))}
+                </td>
                 {source.isWebCrawler && (
                   <td className="small">
                     {source.pageCount && (
                       <div>
-                        <strong>Pages:</strong> {source.pageCount.toLocaleString()}
+                        <strong>{t('dataSources.details.pages')}</strong>{' '}
+                        {source.pageCount.toLocaleString(i18n.language)}
                       </div>
                     )}
                     {source.lastCrawled && (
                       <div>
-                        <strong>Crawled:</strong> {formatDate(source.lastCrawled)}
+                        <strong>{t('dataSources.details.crawled')}</strong>{' '}
+                        {formatDate(source.lastCrawled, t('dataSources.emptyValue'))}
                       </div>
                     )}
                   </td>
@@ -213,7 +231,7 @@ export function KBDataSourcesTab({
     <div className="kb-data-sources-tab">
       {error && (
         <Alert variant="warning" className="mb-4">
-          <strong>Error:</strong> {error}
+          <strong>{t('dataSources.errorLabel')}</strong> {error}
         </Alert>
       )}
 
@@ -222,46 +240,46 @@ export function KBDataSourcesTab({
         <Card.Header className="d-flex justify-content-between align-items-center">
           <Card.Title className="mb-0">
             <i className="bi bi-database me-2"></i>
-            Data Sources Overview
+            {t('dataSources.overviewTitle')}
           </Card.Title>
           <Button variant="primary" size="sm" onClick={() => refreshKBState({ force: true })} disabled={isLoading}>
             {isLoading && <span className="spinner-border spinner-border-sm me-1" />}
             <i className="bi bi-arrow-clockwise me-1"></i>
-            Refresh
+            {t('dataSources.refresh')}
           </Button>
         </Card.Header>
         <Card.Body>
           {isLoading ? (
             <div className="text-center p-4">
               <div className="spinner-border text-primary">
-                <span className="visually-hidden">Loading...</span>
+                <span className="visually-hidden">{t('dataSources.loading')}</span>
               </div>
-              <p className="mt-2 text-muted">Loading data sources...</p>
+              <p className="mt-2 text-muted">{t('dataSources.loadingData')}</p>
             </div>
           ) : (
             <Row>
               <Col sm={6} md={3}>
                 <div className="text-center">
                   <div className="h4 text-primary mb-1">{(kbState?.dataSources || []).length}</div>
-                  <div className="small text-muted">Total Data Sources</div>
+                  <div className="small text-muted">{t('dataSources.summary.total')}</div>
                 </div>
               </Col>
               <Col sm={6} md={3}>
                 <div className="text-center">
                   <div className="h4 text-success mb-1">{fileDataSources.length}</div>
-                  <div className="small text-muted">File Sources</div>
+                  <div className="small text-muted">{t('dataSources.summary.file')}</div>
                 </div>
               </Col>
               <Col sm={6} md={3}>
                 <div className="text-center">
                   <div className="h4 text-info mb-1">{webCrawlerDataSources.length}</div>
-                  <div className="small text-muted">Web Crawlers</div>
+                  <div className="small text-muted">{t('dataSources.summary.webCrawler')}</div>
                 </div>
               </Col>
               <Col sm={6} md={3}>
                 <div className="text-center">
                   <div className="h4 text-warning mb-1">{otherDataSources.length}</div>
-                  <div className="small text-muted">Other Sources</div>
+                  <div className="small text-muted">{t('dataSources.summary.other')}</div>
                 </div>
               </Col>
             </Row>
@@ -276,12 +294,10 @@ export function KBDataSourcesTab({
             <Card.Header>
               <Card.Title className="mb-0">
                 <i className="bi bi-file-earmark me-2"></i>
-                File Data Sources
+                {t('dataSources.sections.files')}
               </Card.Title>
             </Card.Header>
-            <Card.Body>
-              {renderDataSourceTable(fileDataSources, 'File Data Sources', 'No file data sources configured')}
-            </Card.Body>
+            <Card.Body>{renderDataSourceTable(fileDataSources, t('dataSources.empty.files'))}</Card.Body>
           </Card>
 
           {/* Web Crawler Data Sources */}
@@ -289,16 +305,10 @@ export function KBDataSourcesTab({
             <Card.Header>
               <Card.Title className="mb-0">
                 <i className="bi bi-globe2 me-2"></i>
-                Web Crawler Data Sources
+                {t('dataSources.sections.webCrawlers')}
               </Card.Title>
             </Card.Header>
-            <Card.Body>
-              {renderDataSourceTable(
-                webCrawlerDataSources,
-                'Web Crawler Data Sources',
-                'No web crawler data sources configured',
-              )}
-            </Card.Body>
+            <Card.Body>{renderDataSourceTable(webCrawlerDataSources, t('dataSources.empty.webCrawlers'))}</Card.Body>
           </Card>
 
           {/* Other Data Sources */}
@@ -307,12 +317,10 @@ export function KBDataSourcesTab({
               <Card.Header>
                 <Card.Title className="mb-0">
                   <i className="bi bi-plugin me-2"></i>
-                  Other Data Sources
+                  {t('dataSources.sections.other')}
                 </Card.Title>
               </Card.Header>
-              <Card.Body>
-                {renderDataSourceTable(otherDataSources, 'Other Data Sources', 'No other data sources configured')}
-              </Card.Body>
+              <Card.Body>{renderDataSourceTable(otherDataSources, t('dataSources.empty.other'))}</Card.Body>
             </Card>
           )}
         </>

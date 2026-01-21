@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { resolveToolDescriptor, resolveToolVisual } from '../utils/ToolConfig';
 import { WebSearchRenderer } from '../toolRenderers/WebSearchRenderer';
 import { KnowledgeBaseRenderer } from '../toolRenderers/KnowledgeBaseRenderer';
@@ -50,12 +51,14 @@ export const UnifiedToolCard = ({
   numaChatDynamoUtils,
   setMessages,
 }: Props) => {
+  const { t } = useTranslation('common');
   const [expanded, setExpanded] = useState(false);
   const [stepsExpanded, setStepsExpanded] = useState(() => toolName !== 'data_analysis');
   const descriptor = resolveToolDescriptor(toolName);
   const visual = resolveToolVisual(toolName);
   // Derive dynamic title for KB when result contains kb_id
-  let title = `Calling ${label || descriptor.label || toolName} Tool`;
+  const baseLabel = label || descriptor.label || toolName;
+  let title = t('toolCard.callingTool', { label: baseLabel });
   if (toolName === 'query_knowledge_base' && result) {
     try {
       const resultWithContent = result as { content?: unknown };
@@ -68,7 +71,7 @@ export const UnifiedToolCard = ({
       if (kbId && typeof kbId === 'string') {
         // Lazy import hook-free map via window session (best effort) – fallback to showing ID
         // The full friendly name is shown inside the renderer as well.
-        title = `Querying ${kbId}`;
+        title = t('toolCard.querying', { kbId });
       }
     } catch {
       /* keep default title */
@@ -81,7 +84,9 @@ export const UnifiedToolCard = ({
   // Determine summary line for result
   const resultSummary = useMemo(() => {
     if (!hasResult) return null;
-    if (toolName === 'web_search') return `Web Search Results (${getWebSearchSummary(result)})`;
+    if (toolName === 'web_search') {
+      return t('toolCard.webSearchResults', { summary: getWebSearchSummary(result) });
+    }
     if (toolName === 'query_knowledge_base') return getKnowledgeBaseSummary(result);
     if (toolName === 'create_agent_tool') return getAgentCreationSummary(result);
     if (toolName === 'data_analysis') return getDataAnalysisSummary(result);
@@ -146,12 +151,14 @@ export const UnifiedToolCard = ({
           <i className={`${visual.className} me-2`} />
         )}
         <strong>{title}</strong>
-        {isLoading && <div className="ms-2 spinner-border spinner-border-sm" role="status" aria-label="loading" />}
+        {isLoading && (
+          <div className="ms-2 spinner-border spinner-border-sm" role="status" aria-label={t('toolCard.loading')} />
+        )}
       </div>
-      {isDataAnalysis && isLoading && <div className="text-muted small mb-2">This may take up to 5 minutes.</div>}
+      {isDataAnalysis && isLoading && <div className="text-muted small mb-2">{t('toolCard.dataAnalysisWait')}</div>}
       {isDataAnalysis && (
         <div className="show-toggle tool-card-indent" onClick={toggleSteps} role="button">
-          {stepsExpanded ? '▲ Hide progress' : '▼ Show progress'}
+          {stepsExpanded ? t('toolCard.hideProgress') : t('toolCard.showProgress')}
         </div>
       )}
       {(stepsExpanded || !isDataAnalysis) && (
@@ -189,7 +196,7 @@ export const UnifiedToolCard = ({
           aria-disabled={!hasResult}
           style={{ opacity: hasResult ? 1 : 0.6, cursor: hasResult ? 'pointer' : 'not-allowed' }}
         >
-          {expanded ? '▲ Hide details' : '▼ Show details'}
+          {expanded ? t('toolCard.hideDetails') : t('toolCard.showDetails')}
         </div>
       )}
       {expanded && hasDetails && body && <div className="card-body-content mt-2">{body}</div>}

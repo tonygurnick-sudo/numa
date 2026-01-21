@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Row, Col } from 'react-bootstrap';
+import { useTranslation } from 'react-i18next';
 import { S3UploadModule } from '../../Modules/S3UploadModule';
 import { useNumaApp } from '../../Providers/NumaAppContext';
 import { MarkdownContent } from '../Renderers/MarkdownContent';
@@ -30,6 +31,7 @@ const replaceReferences = (prompt, dependencies = [], appsCards = []) => {
 };
 
 const AppCard = ({ card, dependencies, appsCards, onInputChange, inputValue, sessionResults }) => {
+  const { t } = useTranslation('apps');
   const { updateTaskCompletionStatus } = useNumaApp();
   const this_card = card[Object.keys(card)[0]];
 
@@ -136,18 +138,18 @@ const AppCard = ({ card, dependencies, appsCards, onInputChange, inputValue, ses
             {outputValue ? (
               <>
                 <MarkdownContent content={outputValue} />
-                <ResultActions content={outputValue} title={this_card.title || 'Result'} />
+                <ResultActions content={outputValue} title={this_card.title || t('appCard.resultTitle')} />
               </>
             ) : (
               <>
-                <p>{isGenerating ? 'Generating output... ' : 'Waiting for input...'}</p>
+                <p>{isGenerating ? t('appCard.generating') : t('appCard.waiting')}</p>
                 <Preloader smallscreen={true} />
               </>
             )}
           </div>
         );
       default:
-        return <div className="card-body">Unsupported card type</div>;
+        return <div className="card-body">{t('appCard.unsupported')}</div>;
     }
   };
 
