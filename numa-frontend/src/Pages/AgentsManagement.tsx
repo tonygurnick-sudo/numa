@@ -53,6 +53,15 @@ export const AgentsManagement = () => {
     error?: string | null;
   }>({ show: false, loading: false, agent: null, missing: [], error: null });
 
+  // Chat version selection modal (V1 vs V2)
+  const [chatVersionModal, setChatVersionModal] = useState<{
+    show: boolean;
+    agent: AgentSummary | null;
+  }>({ show: false, agent: null });
+
+  const workspaceChatEnabled =
+    typeof window !== 'undefined' && window.sessionStorage.getItem('NUMA_WORKSPACE_CHAT') === 'true';
+
   const userId = user?.decoded_tokens?.idToken?.sub ?? '';
 
   const loadAgents = async () => {
@@ -174,19 +183,35 @@ export const AgentsManagement = () => {
     }
   };
 
-  const proceedToChat = (agent: AgentSummary) => {
+  const proceedToChat = (agent: AgentSummary, chatVersion: 'v1' | 'v2' = 'v1') => {
     const token = String(Date.now());
     sessionStorage.setItem('numa_preselected_agent', JSON.stringify(agent));
     sessionStorage.setItem('numa_preselected_agent_token', token);
     sessionStorage.removeItem('numa_preselected_agent_consumed');
-    navigate('/chat');
+    navigate(chatVersion === 'v2' ? '/chat-v2' : '/chat');
+  };
+
+  // Show chat version selection modal if V2 is enabled, otherwise go directly to V1
+  const initiateChat = (agent: AgentSummary) => {
+    if (workspaceChatEnabled) {
+      setChatVersionModal({ show: true, agent });
+    } else {
+      proceedToChat(agent, 'v1');
+    }
+  };
+
+  const handleChatVersionSelect = (version: 'v1' | 'v2') => {
+    if (chatVersionModal.agent) {
+      proceedToChat(chatVersionModal.agent, version);
+    }
+    setChatVersionModal({ show: false, agent: null });
   };
 
   const handleStartChat = async (agent: AgentSummary) => {
     const needs = agent.requiredIntegrations || [];
     const hasPipedreamFeature = window.sessionStorage.getItem('PIPEDREAM_INTEGRATIONS') === 'true';
     if (!hasPipedreamFeature || needs.length === 0) {
-      proceedToChat(agent);
+      initiateChat(agent);
       return;
     }
     // Open modal in loading state while we resolve connections
@@ -222,7 +247,7 @@ export const AgentsManagement = () => {
       const missing = needs.filter((n) => !connected.has(n));
       if (missing.length === 0) {
         setMissingModal({ show: false, loading: false, agent: null, missing: [] });
-        proceedToChat(agent);
+        initiateChat(agent);
         return;
       }
       setMissingModal({ show: true, loading: false, agent, missing, error: null });
@@ -650,13 +675,101 @@ export const AgentsManagement = () => {
                   onClick={() => {
                     const a = missingModal.agent;
                     setMissingModal({ show: false, loading: false, agent: null, missing: [] });
-                    if (a) proceedToChat(a);
+                    if (a) initiateChat(a);
                   }}
                 >
                   {t('management.missingIntegrations.continue')}
                 </Button>
               </Modal.Footer>
             )}
+          </Modal>
+
+          {/* Chat version selection modal (V1 vs V2) */}
+          <Modal show={chatVersionModal.show} onHide={() => setChatVersionModal({ show: false, agent: null })} centered>
+            <Modal.Header closeButton>
+              <Modal.Title>{t('management.chatVersion.title')}</Modal.Title>
+            </Modal.Header>
+            <Modal.Body>
+              <p
+                className="mb-3"
+                dangerouslySetInnerHTML={{
+                  __html: t('management.chatVersion.prompt', {
+                    agentTitle: chatVersionModal.agent?.title || 'this agent',
+                    interpolation: { escapeValue: false },
+                  }),
+                }}
+              />
+              <div className="d-flex flex-column gap-3">
+                <div
+                  role="button"
+                  tabIndex={0}
+                  className="d-flex align-items-center justify-content-between p-3 border rounded-3"
+                  style={{
+                    cursor: 'pointer',
+                    backgroundColor: 'var(--bs-body-bg)',
+                    transition: 'all 0.15s ease-in-out',
+                  }}
+                  onClick={() => handleChatVersionSelect('v1')}
+                  onKeyDown={(e) => e.key === 'Enter' && handleChatVersionSelect('v1')}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.backgroundColor = 'var(--bs-tertiary-bg)';
+                    e.currentTarget.style.borderColor = 'var(--bs-primary)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.backgroundColor = 'var(--bs-body-bg)';
+                    e.currentTarget.style.borderColor = '';
+                  }}
+                >
+                  <div className="d-flex align-items-center gap-3">
+                    <div
+                      className="rounded-2 d-flex align-items-center justify-content-center"
+                      style={{ width: 40, height: 40, backgroundColor: '#6c757d' }}
+                    >
+                      <i className="bi bi-chat-dots text-white"></i>
+                    </div>
+                    <div>
+                      <div className="fw-semibold">{t('management.chatVersion.v1.title')}</div>
+                      <small className="text-muted">{t('management.chatVersion.v1.description')}</small>
+                    </div>
+                  </div>
+                  <i className="bi bi-chevron-right text-muted"></i>
+                </div>
+                <div
+                  role="button"
+                  tabIndex={0}
+                  className="d-flex align-items-center justify-content-between p-3 border rounded-3"
+                  style={{
+                    cursor: 'pointer',
+                    backgroundColor: 'var(--bs-body-bg)',
+                    transition: 'all 0.15s ease-in-out',
+                  }}
+                  onClick={() => handleChatVersionSelect('v2')}
+                  onKeyDown={(e) => e.key === 'Enter' && handleChatVersionSelect('v2')}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.backgroundColor = 'var(--bs-tertiary-bg)';
+                    e.currentTarget.style.borderColor = 'var(--bs-primary)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.backgroundColor = 'var(--bs-body-bg)';
+                    e.currentTarget.style.borderColor = '';
+                  }}
+                >
+                  <div className="d-flex align-items-center gap-3">
+                    <div
+                      className="rounded-2 d-flex align-items-center justify-content-center"
+                      style={{ width: 40, height: 40, backgroundColor: '#0d6efd' }}
+                    >
+                      <i className="bi bi-chat-square-dots text-white"></i>
+                    </div>
+                    <div>
+                      <div className="fw-semibold">{t('management.chatVersion.v2.title')}</div>
+                      <small className="text-muted">{t('management.chatVersion.v2.description')}</small>
+                    </div>
+                  </div>
+                  <i className="bi bi-chevron-right text-muted"></i>
+                </div>
+              </div>
+            </Modal.Body>
           </Modal>
         </Container>
       </LayoutDashboard>

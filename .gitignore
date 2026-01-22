@@ -159,4 +159,4 @@ clientConfigProd.json
 .claude/*
 !.claude/skills/
 
-infra/assets/artifacts/numa-workspace-agent/
+infra/assets/artifacts/numa-workspace-agent/image.tar

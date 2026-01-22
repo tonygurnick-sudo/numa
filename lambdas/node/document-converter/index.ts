@@ -3,7 +3,7 @@ import { S3Client, PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { v4 as uuidv4 } from 'uuid';
 import * as process from 'node:process';
-import { convertMdToDocx, convertMdToPdf } from './lib/converter.js';
+import { convertMdToDocx, convertMdToPdf, convertDocxToPdf, convertPdfToDocx } from './lib/converter.js';
 
 // Initialize S3 client
 const s3Client = new S3Client({});
@@ -11,10 +11,20 @@ const outputsBucket = process.env.OUTPUTS_BUCKET || '';
 
 // Request/Response interfaces
 interface ConvertRequest {
+  // Action type: 'markdown' (default) for MD conversion, 'file' for direct file conversion
+  action?: 'markdown' | 'file';
+
+  // For markdown conversion
   markdown?: string;
+
+  // For file conversion or markdown from S3
   sourceBucket?: string;
   sourceKey?: string;
+
+  // Output format
   format: 'docx' | 'pdf';
+
+  // Optional metadata
   title?: string;
   filename?: string;
 }
@@ -93,36 +103,81 @@ export async function handler(event: APIGatewayProxyEventV2): Promise<APIGateway
       return errorResponse(400, 'Invalid format. Must be "docx" or "pdf"');
     }
 
-    if (!request.markdown && !(request.sourceBucket && request.sourceKey)) {
-      return errorResponse(400, 'Either markdown content or sourceBucket/sourceKey is required');
-    }
+    // Determine action type (default: markdown for backwards compatibility)
+    const action = request.action || 'markdown';
 
-    // Get markdown content
-    let markdown: string;
-    if (request.markdown) {
-      markdown = request.markdown;
-    } else {
-      // Fetch from S3
+    let outputBuffer: Buffer;
+
+    if (action === 'file') {
+      // Direct file conversion (DOCX ↔ PDF)
+      if (!request.sourceBucket || !request.sourceKey) {
+        return errorResponse(400, 'sourceBucket and sourceKey required for file conversion');
+      }
+
+      // Fetch file from S3
       const getCommand = new GetObjectCommand({
         Bucket: request.sourceBucket,
         Key: request.sourceKey,
       });
       const s3Response = await s3Client.send(getCommand);
-      markdown = (await s3Response.Body?.transformToString()) || '';
-    }
+      const inputBuffer = Buffer.from((await s3Response.Body?.transformToByteArray()) || []);
 
-    if (!markdown || markdown.trim().length === 0) {
-      return errorResponse(400, 'Markdown content is empty');
-    }
+      if (inputBuffer.length === 0) {
+        return errorResponse(400, 'Source file is empty');
+      }
 
-    console.log(`Converting markdown (${markdown.length} chars) to ${request.format}`);
+      // Detect input format from S3 key extension
+      const keyLower = request.sourceKey.toLowerCase();
+      const inputFormat = keyLower.endsWith('.pdf') ? 'pdf' : keyLower.endsWith('.docx') ? 'docx' : null;
 
-    // Convert based on format
-    let outputBuffer: Buffer;
-    if (request.format === 'docx') {
-      outputBuffer = await convertMdToDocx(markdown);
+      if (!inputFormat) {
+        return errorResponse(400, 'Source file must be .pdf or .docx');
+      }
+
+      console.log(`Converting file (${inputBuffer.length} bytes, ${inputFormat}) to ${request.format}`);
+
+      // Convert based on input/output format
+      if (inputFormat === 'docx' && request.format === 'pdf') {
+        outputBuffer = await convertDocxToPdf(inputBuffer);
+      } else if (inputFormat === 'pdf' && request.format === 'docx') {
+        outputBuffer = await convertPdfToDocx(inputBuffer);
+      } else if (inputFormat === request.format) {
+        return errorResponse(400, `Input and output format are the same (${inputFormat})`);
+      } else {
+        return errorResponse(400, `Cannot convert ${inputFormat} to ${request.format}`);
+      }
     } else {
-      outputBuffer = await convertMdToPdf(markdown);
+      // Markdown conversion (existing behavior)
+      if (!request.markdown && !(request.sourceBucket && request.sourceKey)) {
+        return errorResponse(400, 'Either markdown content or sourceBucket/sourceKey is required');
+      }
+
+      // Get markdown content
+      let markdown: string;
+      if (request.markdown) {
+        markdown = request.markdown;
+      } else {
+        // Fetch from S3
+        const getCommand = new GetObjectCommand({
+          Bucket: request.sourceBucket,
+          Key: request.sourceKey,
+        });
+        const s3Response = await s3Client.send(getCommand);
+        markdown = (await s3Response.Body?.transformToString()) || '';
+      }
+
+      if (!markdown || markdown.trim().length === 0) {
+        return errorResponse(400, 'Markdown content is empty');
+      }
+
+      console.log(`Converting markdown (${markdown.length} chars) to ${request.format}`);
+
+      // Convert based on format
+      if (request.format === 'docx') {
+        outputBuffer = await convertMdToDocx(markdown);
+      } else {
+        outputBuffer = await convertMdToPdf(markdown);
+      }
     }
 
     console.log(`Conversion complete. Output size: ${outputBuffer.length} bytes`);

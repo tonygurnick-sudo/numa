@@ -8,6 +8,13 @@ Always use context7 when I need code generation, setup or configuration steps, o
 library/API documentation. This means you should automatically use the Context7 MCP
 tools to resolve library id and get library docs without me having to explicitly ask.
 
+# AWS Profile
+
+When running AWS CLI commands for this project, use `AWS_PROFILE=q-demo`. For example:
+```bash
+AWS_PROFILE=q-demo aws iot list-targets-for-policy --policy-name "some-policy"
+```
+
 # Numa — High‑Level Overview
 
 This document orients AI agents and contributors to the Numa platform at a glance. It focuses on the frontend, Lambda backends, and infrastructure stacks that deploy per‑client environments.

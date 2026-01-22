@@ -274,6 +274,8 @@ export const AgentCreateModal = ({ show, onHide, editingAgent = null, onAgentSav
           webSearchEnabled: editingAgent.toolsConfig?.webSearchEnabled ?? false,
           createAgentEnabled: editingAgent.toolsConfig?.createAgentEnabled ?? false,
           enabledConnections: editingAgent.toolsConfig?.enabledConnections ?? [],
+          // Preserve KB access setting - null means "all KBs", [] means "none", array means "selected"
+          allowedKnowledgeBases: editingAgent.toolsConfig?.allowedKnowledgeBases ?? null,
         },
         referenceFiles: editingAgent.referenceFiles ?? [],
         requiredIntegrations: editingAgent.requiredIntegrations ?? [],
@@ -373,8 +375,13 @@ export const AgentCreateModal = ({ show, onHide, editingAgent = null, onAgentSav
   // Derive KB access mode from form state
   const getKBAccessMode = (): KBAccessMode => {
     const allowed = formState.toolsConfig?.allowedKnowledgeBases;
-    if (allowed === null || allowed === undefined) {
-      // Backwards compat: check queryDataSources for existing agents
+    // null means explicitly "all KBs" - user selected this option
+    if (allowed === null) {
+      return 'all';
+    }
+    // undefined means not set - check backwards compat for legacy agents
+    if (allowed === undefined) {
+      // Backwards compat: check queryDataSources for existing agents without allowedKnowledgeBases
       if (
         formState.toolsConfig?.queryDataSources === false &&
         editingAgent &&
@@ -384,7 +391,9 @@ export const AgentCreateModal = ({ show, onHide, editingAgent = null, onAgentSav
       }
       return 'all';
     }
+    // Empty array means "no KB access"
     if (allowed.length === 0) return 'none';
+    // Non-empty array means specific KBs selected
     return 'selected';
   };
 

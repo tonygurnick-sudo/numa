@@ -11,6 +11,7 @@ export type ConversationMeta = {
   agentVisibility?: string | null;
   agentVersion?: number | null;
   isAgentConversation?: boolean;
+  isWorkspaceConversation?: boolean;
 };
 
 type UseChatInactivityArgs = {
@@ -20,6 +21,10 @@ type UseChatInactivityArgs = {
   isProcessingRef: React.MutableRefObject<boolean>;
   onExpired: () => Promise<void> | void; // called when inactivity expires to start new chat
   inputMessage?: string; // optional: if provided, suggestions will hide on non-empty
+  /** Optional suffix to isolate localStorage keys (e.g., '-v2' for workspace mode) */
+  storageKeySuffix?: string;
+  /** If true, filter out workspace conversations from suggestions (for V1 chat) */
+  excludeWorkspaceConversations?: boolean;
 };
 
 export function useChatInactivity({
@@ -29,13 +34,15 @@ export function useChatInactivity({
   isProcessingRef,
   onExpired,
   inputMessage,
+  storageKeySuffix = '',
+  excludeWorkspaceConversations = false,
 }: UseChatInactivityArgs) {
   const [showContinueSuggestions, setShowContinueSuggestions] = useState(false);
   const [recentConversations, setRecentConversations] = useState<ConversationMeta[]>([]);
   const [suggestionsLoading, setSuggestionsLoading] = useState(false);
   const newChatActiveRef = useRef(false);
 
-  const INACTIVITY_KEY = 'numa_chat_lastInteraction';
+  const INACTIVITY_KEY = `numa_chat_lastInteraction${storageKeySuffix}`;
   const INACTIVITY_MS = 20 * 60 * 1000; // 20 minutes
 
   const activateNewChatView = () => {
@@ -86,7 +93,11 @@ export function useChatInactivity({
   const showSuggestionsIfAvailable = async (forceShow = false) => {
     setSuggestionsLoading(true);
     try {
-      const items = await fetchRecentConversations();
+      let items = await fetchRecentConversations();
+      // Filter out workspace conversations if excludeWorkspaceConversations is true (for V1 chat)
+      if (excludeWorkspaceConversations) {
+        items = items.filter((item) => !item.isWorkspaceConversation);
+      }
       setRecentConversations(items.slice(0, 10));
       if (!forceShow) {
         const shouldShow = items.length > 0;

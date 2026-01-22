@@ -1,0 +1,578 @@
+/**
+ * Service for interacting with the Numa Workspace Chat Agent via HTTP streaming
+ *
+ * The workspace chat agent uses Claude Agent SDK format events.
+ * With AgentCore, we use the /invocations endpoint and dispatch by action field.
+ */
+import type {
+  SDKEvent,
+  WorkspaceChatRequest,
+  WorkspaceChatConversationDetailResponse,
+  WorkspaceChatUploadResponse,
+  WorkspaceChatAgentStatusResponse,
+  WorkspaceChatFilesResponse,
+  WorkspaceChatCleanupResponse,
+  OnWorkspaceChatComplete,
+  OnWorkspaceChatError,
+  SessionInitEvent,
+  ConversationSwitchEvent,
+  AssistantAdviceEvent,
+} from '../types/workspaceChatTypes';
+
+/** Callback for receiving SDK events during streaming */
+export type OnWorkspaceChatEvent = (event: SDKEvent) => void;
+
+const API_BASE = '/api/workspace-chat-agent';
+
+/**
+ * Get the direct Lambda Function URL for workspace chat agent.
+ * This bypasses CloudFront to avoid response buffering issues.
+ */
+function getDirectLambdaUrl(): string | null {
+  return sessionStorage.getItem('WORKSPACE_CHAT_AGENT_FUNCTION_URL');
+}
+
+/**
+ * Get URL for streaming endpoints (invocations).
+ * Uses direct Lambda URL if available to bypass CloudFront buffering.
+ * Falls back to CloudFront path if not configured.
+ */
+function getStreamingUrl(): string {
+  const directUrl = getDirectLambdaUrl();
+  if (directUrl) {
+    const baseUrl = directUrl.replace(/\/$/, '');
+    console.log('[WorkspaceChat] Using direct Lambda URL for streaming:', baseUrl);
+    return baseUrl + '/api/workspace-chat-agent';
+  }
+  console.log('[WorkspaceChat] Using CloudFront path for streaming:', API_BASE);
+  return API_BASE;
+}
+
+/**
+ * Get URL for non-streaming endpoints (status, history, files, trace).
+ * Always uses CloudFront path for caching and standard routing.
+ */
+function getApiUrl(): string {
+  return API_BASE;
+}
+
+/**
+ * Get auth headers for API requests
+ * Includes the AgentCore session ID header for session persistence
+ */
+function getAuthHeaders(userSub?: string): Record<string, string> {
+  const headers: Record<string, string> = {};
+  const idToken = localStorage.getItem('idToken');
+  if (idToken) {
+    headers.Authorization = `Bearer ${idToken}`;
+  }
+  // AgentCore session ID header - use user sub for user-level sessions
+  if (userSub) {
+    headers['X-Amzn-Bedrock-AgentCore-Runtime-Session-Id'] = userSub;
+  }
+  return headers;
+}
+
+/**
+ * Get the user sub from the stored ID token
+ */
+function getUserSubFromToken(): string | undefined {
+  const idToken = localStorage.getItem('idToken');
+  if (!idToken) return undefined;
+
+  try {
+    const payload = idToken.split('.')[1];
+    const decoded = JSON.parse(atob(payload));
+    return decoded.sub;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Get the user email from the stored ID token
+ */
+function getUserEmailFromToken(): string | undefined {
+  const idToken = localStorage.getItem('idToken');
+  if (!idToken) return undefined;
+
+  try {
+    const payload = idToken.split('.')[1];
+    const decoded = JSON.parse(atob(payload));
+    return decoded.email;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Generate TODAY string matching the format in chatSystemPromptUtils.ts
+ * Format: "Local date: Monday, 12/9/2024, Local time: 10:30:00 AM (America/New_York)"
+ */
+function generateTodayString(): string {
+  const NOW = new Date();
+  const date = NOW.toLocaleDateString();
+  const time = NOW.toLocaleTimeString();
+  const dayOfWeek = NOW.toLocaleDateString(undefined, { weekday: 'long' });
+  const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  return `Local date: ${dayOfWeek}, ${date}, Local time: ${time} (${timezone})`;
+}
+
+/** Callback for AgentCore session events (cold start, conversation switch, assistant advice) */
+export type OnSessionEvent = (event: SessionInitEvent | ConversationSwitchEvent | AssistantAdviceEvent) => void;
+
+/**
+ * Stream a chat message to the workspace chat agent.
+ *
+ * Uses the AgentCore /invocations endpoint with action='chat'.
+ *
+ * @param request - Chat request with prompt and optional conversationId
+ * @param onEvent - Callback for each NDJSON event from Claude Agent SDK
+ * @param onComplete - Callback when stream completes
+ * @param onError - Callback for errors
+ * @param onSessionEvent - Optional callback for AgentCore session events (cold start, conversation switch)
+ * @returns Abort function to cancel the stream
+ */
+export async function streamWorkspaceChatAgent(
+  request: WorkspaceChatRequest,
+  onEvent: OnWorkspaceChatEvent,
+  onComplete: OnWorkspaceChatComplete,
+  onError: OnWorkspaceChatError,
+  onSessionEvent?: OnSessionEvent,
+): Promise<{ abort: () => void; requestId: string }> {
+  const abortController = new AbortController();
+  const userSub = getUserSubFromToken();
+  const requestId =
+    request.requestId ||
+    (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `req-${Date.now()}-${Math.random()}`);
+
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    ...getAuthHeaders(userSub),
+  };
+
+  // AgentCore invocations payload with action='chat'
+  const invocationPayload = {
+    action: 'chat',
+    prompt: request.prompt,
+    conversationId: request.conversationId,
+    timezone: request.timezone,
+    userEmail: request.userEmail || getUserEmailFromToken(),
+    todayString: request.todayString || generateTodayString(),
+    // Parity with ChatAgentRequest
+    availableKBs: request.availableKBs,
+    enabledTools: request.enabledTools,
+    enabledConnections: request.enabledConnections,
+    // Model selection (global cross-region inference profile)
+    modelId: request.modelId,
+    // File attachments for workspace uploads
+    attachments: request.attachments,
+    hasUploads: request.hasUploads,
+    expectedUploadPaths: request.expectedUploadPaths,
+    requestId,
+    // V1 to V2 migration flag
+    migrateFromV1: request.migrateFromV1 || false,
+    // Agent support - ID of agent for custom prompts/restrictions
+    agentId: request.agentId,
+  };
+
+  try {
+    const streamingUrl = getStreamingUrl();
+    const res = await fetch(`${streamingUrl}/invocations`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(invocationPayload),
+      signal: abortController.signal,
+    });
+
+    if (!res.ok) {
+      const errorText = await res.text().catch(() => 'Unknown error');
+      throw new Error(`Workspace chat agent error (${res.status}): ${errorText}`);
+    }
+
+    if (!res.body) {
+      throw new Error('No response body from workspace chat agent');
+    }
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    // Async streaming pump - parses SSE format (text/event-stream)
+    // SSE format: lines starting with "data: " contain JSON, lines starting with ":" are comments (heartbeats)
+    // Events are separated by double newlines (\n\n)
+    (async () => {
+      try {
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+
+          // Process SSE events (separated by double newlines)
+          let eventEndIndex: number;
+          while ((eventEndIndex = buffer.indexOf('\n\n')) >= 0) {
+            const eventBlock = buffer.slice(0, eventEndIndex);
+            buffer = buffer.slice(eventEndIndex + 2); // Skip past \n\n
+
+            // Process each line in the event block
+            for (const line of eventBlock.split('\n')) {
+              const trimmedLine = line.trim();
+              if (!trimmedLine) continue;
+
+              // SSE comment (heartbeat) - starts with ':'
+              if (trimmedLine.startsWith(':')) {
+                console.log('[WorkspaceChat] SSE heartbeat:', trimmedLine);
+                continue;
+              }
+
+              // SSE data line - starts with 'data: '
+              if (trimmedLine.startsWith('data: ')) {
+                const jsonStr = trimmedLine.slice(6); // Remove 'data: ' prefix
+                try {
+                  const event = JSON.parse(jsonStr);
+
+                  // Log HTTP event for debugging
+                  console.log('[HTTP] Received event:', event.type || 'unknown');
+
+                  // Check for AgentCore session events first (including assistant advice)
+                  if (
+                    event.type === 'session_init' ||
+                    event.type === 'conversation_switch' ||
+                    event.type === 'assistant_advice'
+                  ) {
+                    onSessionEvent?.(event as SessionInitEvent | ConversationSwitchEvent | AssistantAdviceEvent);
+                  } else {
+                    onEvent(event as SDKEvent);
+                  }
+                } catch {
+                  console.warn('Invalid SSE data from workspace chat agent:', jsonStr.slice(0, 100));
+                }
+              }
+            }
+          }
+        }
+
+        // Flush any trailing content
+        if (buffer.trim()) {
+          for (const line of buffer.split('\n')) {
+            const trimmedLine = line.trim();
+            if (!trimmedLine) continue;
+
+            // SSE comment - ignore
+            if (trimmedLine.startsWith(':')) continue;
+
+            // SSE data line
+            if (trimmedLine.startsWith('data: ')) {
+              const jsonStr = trimmedLine.slice(6);
+              try {
+                const event = JSON.parse(jsonStr);
+                console.log('[HTTP] Received event:', event.type || 'unknown');
+                if (
+                  event.type === 'session_init' ||
+                  event.type === 'conversation_switch' ||
+                  event.type === 'assistant_advice'
+                ) {
+                  onSessionEvent?.(event as SessionInitEvent | ConversationSwitchEvent | AssistantAdviceEvent);
+                } else {
+                  onEvent(event as SDKEvent);
+                }
+              } catch {
+                // Ignore trailing parse errors
+              }
+            }
+          }
+        }
+
+        onComplete();
+      } catch (err) {
+        if ((err as Error).name !== 'AbortError') {
+          onError(err as Error);
+        }
+      }
+    })();
+  } catch (err) {
+    if ((err as Error).name !== 'AbortError') {
+      onError(err as Error);
+    }
+  }
+
+  return { abort: () => abortController.abort(), requestId };
+}
+
+/**
+ * Stop an in-flight workspace chat run.
+ *
+ * Uses AgentCore /invocations with action='stop'.
+ */
+export async function stopWorkspaceChatAgent(conversationId: string, requestId: string): Promise<void> {
+  const userSub = getUserSubFromToken();
+
+  const res = await fetch(`${getApiUrl()}/invocations`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...getAuthHeaders(userSub),
+    },
+    body: JSON.stringify({
+      action: 'stop',
+      conversationId,
+      requestId,
+    }),
+  });
+
+  if (!res.ok) {
+    const errorText = await res.text().catch(() => 'Unknown error');
+    throw new Error(`Stop request failed (${res.status}): ${errorText}`);
+  }
+}
+
+/**
+ * Get conversation history by fetching and parsing the trace from S3.
+ *
+ * This is a lightweight GET endpoint that reads directly from S3
+ * without triggering workspace sync or starting a session.
+ */
+export async function getWorkspaceChatConversation(
+  conversationId: string,
+): Promise<WorkspaceChatConversationDetailResponse> {
+  const res = await fetch(`${getApiUrl()}/history/${encodeURIComponent(conversationId)}`, {
+    headers: getAuthHeaders(),
+  });
+
+  if (!res.ok) {
+    throw new Error(`Failed to get conversation: ${res.status}`);
+  }
+
+  return res.json();
+}
+
+/**
+ * Get raw trace.jsonl content for a conversation.
+ *
+ * This is a lightweight GET endpoint that returns the raw NDJSON trace file
+ * without parsing. Used for downloading/viewing the full trace.
+ *
+ * Includes a 30-second timeout to prevent infinite loading if AgentCore is slow or hung.
+ */
+export async function getWorkspaceChatRawTrace(conversationId: string): Promise<string> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+
+  try {
+    const res = await fetch(`${getApiUrl()}/trace/${encodeURIComponent(conversationId)}`, {
+      headers: getAuthHeaders(),
+      signal: controller.signal,
+    });
+
+    clearTimeout(timeoutId);
+
+    if (!res.ok) {
+      throw new Error(`Failed to get trace: ${res.status}`);
+    }
+
+    return res.text();
+  } catch (err) {
+    clearTimeout(timeoutId);
+    if (err instanceof Error && err.name === 'AbortError') {
+      throw new Error('Unable to load conversation history. The request took too long - please try again.');
+    }
+    throw err;
+  }
+}
+
+/**
+ * Normalize a filename by replacing unicode space characters with regular ASCII spaces.
+ *
+ * macOS uses non-breaking spaces (U+00A0) in screenshot filenames like
+ * "Screenshot 2026-01-14 at 7.43.42 am.png" which causes phantom file issues
+ * where Glob can find files but Read/cp fail because the space characters differ.
+ *
+ * @param name - The filename to normalize
+ * @returns Normalized filename with unicode spaces replaced
+ */
+function normalizeFilename(name: string): string {
+  // Normalize to NFC form and replace various unicode spaces with regular ASCII space
+  // Non-breaking (U+00A0), figure (U+2007), and narrow no-break (U+202F) spaces
+  return name.normalize('NFC').replace(/[\u00a0\u2007\u202f]/g, ' ');
+}
+
+/**
+ * Upload a file to a conversation's uploads directory
+ *
+ * Uses AgentCore /invocations with action='upload' and base64 file content.
+ *
+ * @param file - The file to upload
+ * @param conversationId - The conversation ID
+ * @param relativePath - Optional relative path for folder uploads (e.g., "folder/subfolder/file.txt")
+ */
+export async function uploadWorkspaceChatFile(
+  file: File,
+  conversationId: string,
+  relativePath?: string,
+): Promise<WorkspaceChatUploadResponse> {
+  const userSub = getUserSubFromToken();
+
+  // Convert file to base64
+  const arrayBuffer = await file.arrayBuffer();
+  const base64Content = btoa(new Uint8Array(arrayBuffer).reduce((data, byte) => data + String.fromCharCode(byte), ''));
+
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    ...getAuthHeaders(userSub),
+  };
+
+  // Use relativePath if provided (for folder uploads), otherwise just filename
+  // Normalize to replace unicode spaces (e.g., macOS non-breaking spaces) with regular spaces
+  const filename = relativePath ? normalizeFilename(relativePath) : normalizeFilename(file.name);
+
+  const res = await fetch(`${getApiUrl()}/invocations`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({
+      action: 'upload',
+      conversationId,
+      filename,
+      fileContent: base64Content,
+    }),
+  });
+
+  if (!res.ok) {
+    const errorText = await res.text().catch(() => 'Unknown error');
+    throw new Error(`Upload failed (${res.status}): ${errorText}`);
+  }
+
+  return res.json();
+}
+
+/**
+ * Delete uploaded files from workspace
+ *
+ * Uses AgentCore /invocations with action='delete_uploads'.
+ * Deletes from both local EFS and S3.
+ *
+ * @param conversationId - The conversation ID
+ * @param paths - Array of relative paths within uploads/ (e.g., ["folder/file.pdf", "doc.txt"])
+ */
+export async function deleteWorkspaceChatUploads(
+  conversationId: string,
+  paths: string[],
+): Promise<{ deleted: string[]; errors: Array<{ path: string; error: string }> }> {
+  const userSub = getUserSubFromToken();
+
+  const res = await fetch(`${getApiUrl()}/invocations`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...getAuthHeaders(userSub),
+    },
+    body: JSON.stringify({
+      action: 'delete_uploads',
+      conversationId,
+      paths,
+    }),
+  });
+
+  if (!res.ok) {
+    const errorText = await res.text().catch(() => 'Unknown error');
+    throw new Error(`Delete failed (${res.status}): ${errorText}`);
+  }
+
+  return res.json();
+}
+
+/**
+ * List files in user's persistent workspace directory
+ *
+ * This is a lightweight GET endpoint that reads directly from S3
+ * without triggering workspace sync or starting a session.
+ */
+export async function listWorkspaceChatFiles(): Promise<WorkspaceChatFilesResponse> {
+  const res = await fetch(`${getApiUrl()}/files`, {
+    headers: getAuthHeaders(),
+  });
+
+  if (!res.ok) {
+    throw new Error(`Failed to list workspace files: ${res.status}`);
+  }
+
+  return res.json();
+}
+
+/**
+ * List files for a specific conversation (uploads + session folders)
+ *
+ * This endpoint lists files from the conversation's uploads/ and session/
+ * directories in S3, used for the settings panel file listing.
+ */
+export async function listConversationFiles(conversationId: string): Promise<WorkspaceChatFilesResponse> {
+  const res = await fetch(`${getApiUrl()}/files/${encodeURIComponent(conversationId)}`, {
+    headers: getAuthHeaders(),
+  });
+
+  if (!res.ok) {
+    throw new Error(`Failed to list conversation files: ${res.status}`);
+  }
+
+  return res.json();
+}
+
+/**
+ * Clean up session files for a conversation
+ *
+ * Uses AgentCore /invocations with action='cleanup_session'.
+ */
+export async function cleanupConversationSession(conversationId: string): Promise<WorkspaceChatCleanupResponse> {
+  const userSub = getUserSubFromToken();
+
+  const res = await fetch(`${getApiUrl()}/invocations`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...getAuthHeaders(userSub),
+    },
+    body: JSON.stringify({
+      action: 'cleanup_session',
+      conversationId,
+    }),
+  });
+
+  if (!res.ok) {
+    throw new Error(`Cleanup failed: ${res.status}`);
+  }
+
+  return res.json();
+}
+
+/**
+ * Check workspace chat agent status
+ *
+ * This is a lightweight GET endpoint that doesn't trigger workspace sync.
+ */
+export async function getWorkspaceChatAgentStatus(): Promise<WorkspaceChatAgentStatusResponse> {
+  const res = await fetch(`${getApiUrl()}/status`, {
+    headers: getAuthHeaders(),
+  });
+
+  if (!res.ok) {
+    throw new Error(`Status check failed: ${res.status}`);
+  }
+
+  return res.json();
+}
+
+/**
+ * Check if the workspace chat agent is available (basic connectivity check)
+ *
+ * Uses AgentCore /ping endpoint.
+ */
+export async function isWorkspaceChatAgentAvailable(): Promise<boolean> {
+  try {
+    const res = await fetch(`${getApiUrl()}/ping`, {
+      headers: getAuthHeaders(),
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}

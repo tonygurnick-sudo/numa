@@ -348,6 +348,28 @@ export class NumaFrontendInfra extends Construct {
       });
     }
 
+    // Workspace chat agent proxy Lambda Function URL origin (if enabled)
+    // Uses same pattern as chat-agent-fnurl since both are Lambda Function URLs
+    if (props.workspaceChatAgentProxyUrl) {
+      const workspaceChatProxyDomain = Fn.replace(
+        Fn.replace(props.workspaceChatAgentProxyUrl, '/^https?:\/{2}/', ''),
+        '/\/$/',
+        '',
+      );
+      origins.push({
+        customHeader: [{ name: 'x-arcanum-cloudfront-secret', value: cloudfrontSecretParameter.value }],
+        customOriginConfig: {
+          httpPort: 80,
+          httpsPort: 443,
+          originProtocolPolicy: 'https-only',
+          originSslProtocols: ['TLSv1.2'],
+          originReadTimeout: 60, // Long timeout for streaming
+        },
+        domainName: workspaceChatProxyDomain,
+        originId: 'workspace-chat-agent-proxy',
+      });
+    }
+
     // Build ordered cache behaviors (more specific routes before generic /api/*)
     const orderedCacheBehavior: CloudfrontDistributionOrderedCacheBehavior[] = [
       {
@@ -453,7 +475,21 @@ export class NumaFrontendInfra extends Construct {
       });
     }
 
-    // Add generic API pattern last (catch-all)
+    // Workspace chat agent proxy cache behavior (if enabled) - must come before /api/* catch-all
+    if (props.workspaceChatAgentProxyUrl) {
+      orderedCacheBehavior.push({
+        targetOriginId: 'workspace-chat-agent-proxy',
+        allowedMethods: ['GET', 'HEAD', 'OPTIONS', 'PUT', 'POST', 'PATCH', 'DELETE'],
+        cachedMethods: ['GET', 'HEAD'],
+        pathPattern: '/api/workspace-chat-agent/*',
+        viewerProtocolPolicy: 'redirect-to-https',
+        compress: false, // IMPORTANT: Disable compression for streaming - compression buffers responses
+        cachePolicyId: cachingDisabledPolicyId, // No caching for streaming
+        originRequestPolicyId: 'b689b0a8-53d0-40ab-baf2-68738e2966ac', // AllViewerExceptHostHeader
+      });
+    }
+
+    // API Gateway catch-all (must be last)
     orderedCacheBehavior.push({
       targetOriginId: 'api-gateway',
       allowedMethods: ['GET', 'HEAD', 'OPTIONS', 'PUT', 'POST', 'PATCH', 'DELETE'],
@@ -577,4 +613,6 @@ export interface NumaFrontendInfraProps {
   devInstance?: boolean;
   enableOpenApiDocs?: boolean;
   logGroup?: import('@cdktf/provider-aws/lib/cloudwatch-log-group').CloudwatchLogGroup;
+  /** Optional workspace chat agent proxy Lambda Function URL (if enabled) */
+  workspaceChatAgentProxyUrl?: string;
 }

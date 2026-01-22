@@ -22,6 +22,7 @@ type AddMessageOptions = {
   agentType?: string;
   agentVisibility?: string;
   isAgentConversation?: boolean;
+  isWorkspaceConversation?: boolean;
 };
 
 type AddFileMessageOptions = {
@@ -73,6 +74,7 @@ class NumaChatDynamoUtils {
     agentType,
     agentVisibility,
     isAgentConversation,
+    isWorkspaceConversation,
   }: AddMessageOptions) {
     try {
       const timestamp = Date.now();
@@ -99,6 +101,7 @@ class NumaChatDynamoUtils {
         agentType,
         agentVisibility,
         isAgentConversation,
+        isWorkspaceConversation,
       };
 
       const command = new PutItemCommand({
@@ -329,7 +332,7 @@ class NumaChatDynamoUtils {
             ':mtype': 'meta',
           }),
           ProjectionExpression:
-            'sk, conversation_id, user_id, conversationName, latestTimestamp, content, agentId, agentTitle, agentIcon, agentType, agentVisibility, agentVersion, isAgentConversation',
+            'sk, conversation_id, user_id, conversationName, latestTimestamp, content, agentId, agentTitle, agentIcon, agentType, agentVisibility, agentVersion, isAgentConversation, isWorkspaceConversation',
           ScanIndexForward: false, // Sort descending by sort key (newest first)
           ExclusiveStartKey: lastEvaluatedKey,
         });
@@ -364,6 +367,7 @@ class NumaChatDynamoUtils {
         agentVisibility: it.agentVisibility || null,
         agentVersion: it.agentVersion || null,
         isAgentConversation: Boolean(it.isAgentConversation),
+        isWorkspaceConversation: Boolean(it.isWorkspaceConversation),
       }));
 
       // Sort by latestTimestamp (most recent activity first) to provide better UX

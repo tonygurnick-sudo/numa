@@ -1,0 +1,705 @@
+"""
+Claude Agent SDK runner module for Numa Workspace Agent.
+
+Replaces cli_runner.py with native SDK-based execution.
+Streams SDK message types directly for frontend consumption.
+"""
+
+import asyncio
+import json
+import uuid as uuid_mod
+from dataclasses import dataclass
+from datetime import datetime, timezone
+from typing import Any, AsyncIterator, Awaitable, Callable, Optional
+
+import structlog
+from claude_agent_sdk import (
+    AssistantMessage,
+    ClaudeSDKClient,
+    ResultMessage,
+    SystemMessage,
+    TextBlock,
+    ThinkingBlock,
+    ToolResultBlock,
+    ToolUseBlock,
+    UserMessage,
+)
+from numa_workspace_agent.agent_config import AgentConfig
+from numa_workspace_agent.prompts import augment_prompt_with_context
+from numa_workspace_agent.s3_workspace import (
+    archive_claude_session,
+    restore_claude_session,
+    restore_trace_from_s3,
+)
+from numa_workspace_agent.sdk_config import (
+    LOCAL_ROOT,
+    create_agent_options,
+    validate_model_id,
+)
+from numa_workspace_agent.stream_logger import StreamLog
+from numa_workspace_agent.workspace import (
+    get_active_conversation,
+    get_active_session_id,
+    get_workspace_paths,
+    set_active_conversation,
+)
+
+logger = structlog.get_logger()
+
+RunKey = tuple[str, str, str]
+
+
+@dataclass
+class RunHandle:
+    """Track an in-flight SDK run for external interruption."""
+
+    client: ClaudeSDKClient
+    task: asyncio.Task
+    stop_event: asyncio.Event
+    request_id: str
+    stop_reason: Optional[str] = None
+
+
+# Registry of in-flight SDK runs, keyed by (user_sub, conversation_id, request_id).
+# Used to support external stop requests from the /invocations?action=stop endpoint.
+_active_runs: dict[RunKey, RunHandle] = {}
+_active_runs_lock = asyncio.Lock()
+
+
+async def register_run(key: RunKey, handle: RunHandle) -> None:
+    """Register an active run so other requests can stop it."""
+    async with _active_runs_lock:
+        _active_runs[key] = handle
+
+
+async def pop_run(key: RunKey) -> Optional[RunHandle]:
+    """Remove and return an active run entry."""
+    async with _active_runs_lock:
+        return _active_runs.pop(key, None)
+
+
+async def get_run(key: RunKey) -> Optional[RunHandle]:
+    """Get an active run handle if present."""
+    async with _active_runs_lock:
+        return _active_runs.get(key)
+
+
+async def request_stop(key: RunKey, reason: str = "user_requested") -> bool:
+    """
+    Request a stop for an active run by setting the stop event, interrupting the client,
+    and cancelling the running task if needed.
+    """
+    async with _active_runs_lock:
+        handle = _active_runs.get(key)
+        if not handle:
+            return False
+        handle.stop_reason = reason
+        handle.stop_event.set()
+        client = handle.client
+        task = handle.task
+
+    try:
+        await client.interrupt()
+    except Exception as e:
+        logger.warning(
+            "Failed to interrupt SDK client",
+            error=str(e),
+            conversation_id=key[1],
+            request_id=key[2],
+        )
+
+    if task and not task.done():
+        task.cancel()
+    return True
+
+
+def format_sse_event(data: dict) -> bytes:
+    """Format a dict as an SSE data event.
+
+    SSE format: data: {json}\n\n
+    The double newline signals end of event.
+    """
+    return f"data: {json.dumps(data)}\n\n".encode("utf-8")
+
+
+def serialize_content_block(block: Any) -> dict[str, Any]:
+    """Serialize a content block to a JSON-compatible dict."""
+    if isinstance(block, TextBlock):
+        return {"type": "text", "text": block.text}
+    elif isinstance(block, ThinkingBlock):
+        return {
+            "type": "thinking",
+            "thinking": block.thinking,
+            "signature": block.signature,
+        }
+    elif isinstance(block, ToolUseBlock):
+        return {
+            "type": "tool_use",
+            "id": block.id,
+            "name": block.name,
+            "input": block.input,
+        }
+    elif isinstance(block, ToolResultBlock):
+        return {
+            "type": "tool_result",
+            "tool_use_id": block.tool_use_id,
+            "content": block.content,
+            "is_error": block.is_error,
+        }
+    elif hasattr(block, "__dict__"):
+        return {"type": type(block).__name__, **block.__dict__}
+    else:
+        return {"type": "unknown", "value": str(block)}
+
+
+def serialize_message(message: Any) -> dict[str, Any]:
+    """Serialize an SDK message to a JSON-compatible dict for trace storage."""
+    timestamp = datetime.now(timezone.utc).isoformat()
+
+    if isinstance(message, AssistantMessage):
+        return {
+            "type": "assistant",
+            "timestamp": timestamp,
+            "message": {
+                "id": getattr(message, "id", None) or str(uuid_mod.uuid4()),
+                "role": "assistant",
+                "model": message.model,
+                "content": [serialize_content_block(b) for b in message.content],
+            },
+            # Track subagent context: null = main agent, string = inside subagent
+            "parent_tool_use_id": getattr(message, "parent_tool_use_id", None),
+        }
+    elif isinstance(message, UserMessage):
+        content = message.content
+        if isinstance(content, str):
+            content = [{"type": "text", "text": content}]
+        elif isinstance(content, list):
+            content = [serialize_content_block(b) for b in content]
+        return {
+            "type": "user",
+            "timestamp": timestamp,
+            "message": {
+                "role": "user",
+                "content": content,
+            },
+            # Track subagent context: null = main agent, string = inside subagent
+            "parent_tool_use_id": getattr(message, "parent_tool_use_id", None),
+        }
+    elif isinstance(message, SystemMessage):
+        return {
+            "type": "system",
+            "timestamp": timestamp,
+            "subtype": message.subtype,
+            "data": message.data,
+        }
+    elif isinstance(message, ResultMessage):
+        return {
+            "type": "result",
+            "timestamp": timestamp,
+            "subtype": message.subtype,
+            "session_id": message.session_id,
+            "duration_ms": message.duration_ms,
+            "duration_api_ms": message.duration_api_ms,
+            "is_error": message.is_error,
+            "num_turns": message.num_turns,
+            "total_cost_usd": message.total_cost_usd,
+            "usage": message.usage,
+            "result": message.result,
+        }
+    elif type(message).__name__ == "StreamEvent":
+        # StreamEvent contains raw Anthropic API events (content_block_delta, etc.)
+        # With fine-grained tool streaming enabled, this includes input_json_delta
+        # for partial tool inputs that enable real-time Write tool preview
+        # Note: StreamEvent is not exported from claude_agent_sdk, so we check by name
+        event_data = getattr(message, "event", None)
+        # Convert event to dict if it has __dict__, otherwise use as-is
+        if event_data and hasattr(event_data, "__dict__"):
+            event_dict = {
+                k: v for k, v in event_data.__dict__.items() if not k.startswith("_")
+            }
+            # Handle nested objects (like delta) that may also need serialization
+            for key, value in event_dict.items():
+                if hasattr(value, "__dict__"):
+                    event_dict[key] = {
+                        k: v for k, v in value.__dict__.items() if not k.startswith("_")
+                    }
+        else:
+            event_dict = event_data
+        return {
+            "type": "StreamEvent",
+            "timestamp": timestamp,
+            "event": event_dict,
+        }
+    elif hasattr(message, "__dict__"):
+        return {
+            "type": type(message).__name__,
+            "timestamp": timestamp,
+            **{k: v for k, v in message.__dict__.items() if not k.startswith("_")},
+        }
+    else:
+        return {
+            "type": "unknown",
+            "timestamp": timestamp,
+            "value": str(message),
+        }
+
+
+async def stream_claude_sdk(
+    conversation_id: str,
+    prompt: str,
+    user_sub: str,
+    timezone_str: Optional[str] = None,
+    user_email: Optional[str] = None,
+    today_string: Optional[str] = None,
+    available_kbs: Optional[list[dict]] = None,
+    enabled_tools: Optional[list[str]] = None,
+    is_cold_start: bool = False,
+    attached_files: Optional[list[dict]] = None,
+    attached_folders: Optional[list[dict]] = None,
+    original_prompt: Optional[str] = None,
+    model_id: Optional[str] = None,
+    kb_listings: Optional[dict[str, dict]] = None,
+    request_id: Optional[str] = None,
+    disconnect_checker: Optional[Callable[[], Awaitable[bool]]] = None,
+    v1_migration_context: Optional[str] = None,
+    agent_config: Optional[AgentConfig] = None,
+    agent_file_paths: Optional[list[str]] = None,
+) -> AsyncIterator[bytes]:
+    """
+    Stream Claude SDK output for a conversation.
+
+    This:
+    1. Restores Claude session if conversation changed
+    2. Creates SDK options with hooks
+    3. Augments prompt with context
+    4. Streams SDK message events
+    5. Writes events to trace.jsonl
+    6. Captures session_id from result
+    7. Archives Claude session to S3
+
+    Args:
+        conversation_id: Conversation ID
+        prompt: User prompt (may include assistant advice for Claude)
+        user_sub: Cognito user sub for S3 session storage
+        timezone_str: User timezone for date formatting
+        user_email: User's email address for system prompt personalization
+        today_string: Formatted date/time string for system prompt
+        available_kbs: List of available knowledge bases for KB tool context
+        enabled_tools: List of enabled tool names (e.g., ["web_search"])
+        attached_files: List of file attachments [{path, filename, size}]
+        attached_folders: List of folder attachments [{name, path, fileCount, totalSize}]
+        original_prompt: Clean user prompt for trace storage (without advice tags)
+        model_id: Optional model ID for Bedrock (global cross-region inference profile)
+        kb_listings: Optional dict mapping kb_id -> {files, folders, total_count} for prompt context
+        agent_config: Optional agent configuration for custom system prompts and restrictions
+        agent_file_paths: Optional list of downloaded agent reference file paths
+
+    Yields:
+        SSE formatted events as bytes (SDK message types serialized)
+    """
+    paths = get_workspace_paths()
+    trace_path = paths["trace_file"]
+    session_id: Optional[str] = None
+    captured_session_id: Optional[str] = None
+    stop_reason: Optional[str] = None
+    stop_event = asyncio.Event()
+    handle: Optional[RunHandle] = None
+    run_key: Optional[RunKey] = (
+        (user_sub, conversation_id, request_id) if request_id else None
+    )
+
+    # Initialize stream log for verbose debugging
+    stream_log = StreamLog(
+        conversation_id=conversation_id,
+        user_sub=user_sub,
+        prompt=prompt,
+    )
+
+    # 1. Determine session_id for resumption
+    active_conv = get_active_conversation()
+    conversation_changed = active_conv != conversation_id
+
+    if is_cold_start or conversation_changed:
+        # Cold start or conversation switch: restore from S3 archive
+        reason = "cold_start" if is_cold_start else "conversation_change"
+        logger.info(
+            "Restoring session from S3",
+            reason=reason,
+            old_conv=active_conv,
+            new_conv=conversation_id,
+        )
+        restore_result = restore_claude_session(
+            user_sub, conversation_id, paths["system_dir"]
+        )
+        if restore_result and restore_result.get("session_id"):
+            session_id = restore_result["session_id"]
+            logger.debug(
+                "Restored session_id from S3",
+                phase="init",
+                session_id=session_id,
+            )
+
+        # Also restore the trace file to preserve conversation history.
+        # This is critical when the container was recycled or conversation changed,
+        # as the trace file may not exist locally even if the session was restored.
+        restore_trace_from_s3(user_sub, conversation_id)
+    else:
+        # Warm container, same conversation: use locally stored session_id
+        session_id = get_active_session_id()
+        if session_id:
+            logger.debug(
+                "Using locally stored session_id",
+                phase="init",
+                session_id=session_id,
+                conversation_id=conversation_id,
+            )
+        else:
+            # Local files missing despite warm container - fallback to S3 restore
+            # This can happen when:
+            # - Container was warmed by a read-only request (GET /trace, /status, /files)
+            # - AgentCore cleared ephemeral storage between invocations
+            # - Container was killed/replaced but .system dir was recreated
+            logger.debug(
+                "No local session_id, restoring from S3",
+                phase="init",
+                conversation_id=conversation_id,
+            )
+            restore_result = restore_claude_session(
+                user_sub, conversation_id, paths["system_dir"]
+            )
+            if restore_result and restore_result.get("session_id"):
+                session_id = restore_result["session_id"]
+
+            # Also restore the trace file - critical to preserve conversation history!
+            # Without this, a new empty trace is created and overwrites the S3 trace.
+            restore_trace_from_s3(user_sub, conversation_id)
+
+    # 2. List uploaded files for context
+    uploaded_files: list[str] = []
+    if paths["uploads"].exists():
+        uploaded_files = [f.name for f in paths["uploads"].iterdir() if f.is_file()]
+
+    # 3. Augment user prompt with upload context, folder info, KB info, and V1 migration context
+    augmented_prompt = augment_prompt_with_context(
+        prompt,
+        uploaded_files,
+        available_kbs,
+        kb_listings,
+        attached_folders,
+        v1_migration_context,
+    )
+
+    # 4. Create SDK options with validated model
+    validated_model = validate_model_id(model_id)
+    options = create_agent_options(
+        session_id=session_id,
+        conversation_id=conversation_id,
+        user_sub=user_sub,
+        user_email=user_email,
+        user_timezone=timezone_str,
+        today_string=today_string,
+        allowed_kb_ids=available_kbs,
+        enabled_tools=enabled_tools,
+        model=validated_model,
+        agent_config=agent_config,
+        agent_file_paths=agent_file_paths,
+    )
+
+    logger.info(
+        "Starting Claude SDK",
+        _name="SDK_START",
+        phase="sdk",
+        conversation_id=conversation_id,
+        user_sub=user_sub,
+        session_id=session_id,
+        model_id=validated_model,
+        has_uploads=len(uploaded_files) > 0,
+        has_attachments=bool(attached_files),
+        has_folders=bool(attached_folders),
+        request_id=request_id,
+    )
+
+    # 5a. Write attachment event if files are attached (before user event)
+    if attached_files:
+        attachment_event: dict = {
+            "type": "attachments",
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "files": attached_files,
+            "session_id": session_id or "",
+            "request_id": request_id or "",
+        }
+        # Include folder metadata if folders were uploaded
+        if attached_folders:
+            attachment_event["folders"] = attached_folders
+        with trace_path.open("a", encoding="utf-8") as f:
+            f.write(json.dumps(attachment_event) + "\n")
+        # Yield attachment event to frontend (SSE format)
+        yield format_sse_event(attachment_event)
+
+    # 5b. Write user prompt to trace BEFORE streaming SDK output
+    # Use original_prompt (clean) for trace storage if provided,
+    # otherwise fall back to prompt (which may include assistant advice tags)
+    trace_prompt = original_prompt if original_prompt else prompt
+    user_event = {
+        "type": "user",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "message": {
+            "role": "user",
+            "content": [{"type": "text", "text": trace_prompt}],
+        },
+        "session_id": session_id or "",
+        "uuid": str(uuid_mod.uuid4()),
+        "request_id": request_id or "",
+    }
+    with trace_path.open("a", encoding="utf-8") as f:
+        f.write(json.dumps(user_event) + "\n")
+
+    # Yield user event to frontend (SSE format)
+    yield format_sse_event(user_event)
+
+    message_count = 0
+    try:
+        # 6. Use ClaudeSDKClient for hooks support (query() doesn't fire hooks)
+        async with ClaudeSDKClient(options=options) as client:
+            if run_key:
+                handle = RunHandle(
+                    client=client,
+                    task=asyncio.current_task(),  # type: ignore[arg-type]
+                    stop_event=stop_event,
+                    request_id=request_id or "",
+                )
+                await register_run(run_key, handle)
+
+            # Send the query
+            await client.query(augmented_prompt)
+
+            # Stream responses - receive_response() completes when query finishes
+            # (receive_messages() stays open for multi-turn and doesn't auto-end)
+            async for message in client.receive_response():
+                # External stop request
+                if stop_event.is_set():
+                    if handle and not stop_reason:
+                        stop_reason = handle.stop_reason or "user_requested"
+                    elif not stop_reason:
+                        stop_reason = "user_requested"
+                    try:
+                        await client.interrupt()
+                    except Exception:
+                        pass
+                    break
+
+                # Client disconnect stop path
+                if disconnect_checker and await disconnect_checker():
+                    stop_reason = "client_disconnect"
+                    stop_event.set()
+                    if handle:
+                        handle.stop_reason = stop_reason
+                    try:
+                        await client.interrupt()
+                    except Exception:
+                        pass
+                    break
+
+                message_count += 1
+                msg_type = type(message).__name__
+
+                # Log each message type (debug level to reduce noise)
+                logger.debug(
+                    "SDK message received",
+                    message_type=msg_type,
+                    message_num=message_count,
+                    parent_tool_use_id=getattr(message, "parent_tool_use_id", None),
+                )
+
+                # Record events for verbose stream logging
+                if isinstance(message, AssistantMessage):
+                    for block in message.content:
+                        if isinstance(block, TextBlock):
+                            stream_log.record_text(block.text)
+                        elif isinstance(block, ThinkingBlock):
+                            stream_log.record_thinking(block.thinking)
+                        elif isinstance(block, ToolUseBlock):
+                            stream_log.record_tool_start(
+                                block.id,
+                                block.name,
+                                block.input if isinstance(block.input, dict) else None,
+                            )
+                elif isinstance(message, UserMessage):
+                    # Check for tool results in user messages
+                    content = message.content
+                    if isinstance(content, list):
+                        for block in content:
+                            if isinstance(block, ToolResultBlock):
+                                stream_log.record_tool_result(
+                                    block.tool_use_id,
+                                    block.content,
+                                    block.is_error,
+                                )
+
+                # Serialize message to JSON
+                serialized = serialize_message(message)
+
+                # Capture session_id and log summary from result message
+                if isinstance(message, ResultMessage):
+                    captured_session_id = message.session_id
+                    serialized["session_id"] = captured_session_id
+                    # Finalize stream log with result data
+                    stream_log.finalize(message)
+                    logger.info(
+                        "SDK result summary",
+                        _name="SDK_RESULT",
+                        phase="sdk",
+                        conversation_id=conversation_id,
+                        session_id=message.session_id,
+                        duration_ms=message.duration_ms,
+                        num_turns=message.num_turns,
+                        total_cost_usd=message.total_cost_usd,
+                        is_error=message.is_error,
+                        request_id=request_id,
+                    )
+
+                # Capture session_id from system init message
+                if isinstance(message, SystemMessage) and message.subtype == "init":
+                    if "session_id" in message.data:
+                        captured_session_id = message.data["session_id"]
+                        logger.debug(
+                            "SDK session initialized",
+                            phase="sdk",
+                            session_id=captured_session_id,
+                        )
+
+                # Write to trace file (NDJSON format for storage)
+                trace_line = json.dumps(serialized) + "\n"
+                with trace_path.open("a", encoding="utf-8") as f:
+                    f.write(trace_line)
+
+                # Yield to caller (SSE format for streaming)
+                yield format_sse_event(serialized)
+
+            # If we exited loop due to stop, emit a terminal event for the frontend/trace
+            if stop_reason:
+                stop_event_payload = {
+                    "type": "completion",
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "reason": "user_cancelled",
+                    "stop_reason": stop_reason,
+                    "session_id": captured_session_id or session_id or "",
+                    "request_id": request_id or "",
+                }
+                with trace_path.open("a", encoding="utf-8") as f:
+                    f.write(json.dumps(stop_event_payload) + "\n")
+                yield format_sse_event(stop_event_payload)
+
+    except Exception as e:
+        import traceback
+
+        error_tb = traceback.format_exc()
+        error_str = str(e)
+
+        # Record error in stream log
+        stream_log.is_error = True
+        stream_log.error_message = error_str
+
+        logger.error(
+            "Claude SDK execution error",
+            error=error_str,
+            error_type=type(e).__name__,
+            traceback=error_tb,
+            conversation_id=conversation_id,
+        )
+
+        # Log the full error for debugging
+        print(f"SDK_ERROR: {error_str}", flush=True)
+        print(f"SDK_ERROR_TYPE: {type(e).__name__}", flush=True)
+        print(f"SDK_ERROR_TRACEBACK:\n{error_tb}", flush=True)
+
+        # Check if error has additional attributes (some SDK errors have more info)
+        extra_info = {}
+        if hasattr(e, "stderr"):
+            extra_info["stderr"] = getattr(e, "stderr", "")
+            print(f"SDK_ERROR_STDERR: {extra_info['stderr']}", flush=True)
+        if hasattr(e, "stdout"):
+            extra_info["stdout"] = getattr(e, "stdout", "")
+            print(f"SDK_ERROR_STDOUT: {extra_info['stdout']}", flush=True)
+        if hasattr(e, "returncode"):
+            extra_info["returncode"] = getattr(e, "returncode", None)
+        if hasattr(e, "cmd"):
+            extra_info["cmd"] = str(getattr(e, "cmd", ""))
+
+        error_event = {
+            "type": "error",
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "error": error_str,
+            "error_type": type(e).__name__,
+            **extra_info,
+        }
+        # Write to trace file (NDJSON format for storage)
+        trace_line = json.dumps(error_event) + "\n"
+        with trace_path.open("a", encoding="utf-8") as f:
+            f.write(trace_line)
+        # Yield to caller (SSE format for streaming)
+        yield format_sse_event(error_event)
+
+    finally:
+        # 7. Save session_id locally for warm container resumption
+        if captured_session_id:
+            set_active_conversation(conversation_id, session_id=captured_session_id)
+
+        # 8. Archive Claude session to S3 at end of invocation
+        archive_claude_session(
+            user_sub,
+            conversation_id,
+            paths["system_dir"],
+            session_id=captured_session_id,
+        )
+
+        # Remove run handle from registry
+        if run_key:
+            await pop_run(run_key)
+
+        # 9. Log verbose stream summary for debugging
+        stream_log.stop_reason = stop_reason
+        stream_log.log_summary()
+
+    logger.info(
+        "Claude SDK completed",
+        _name="SDK_COMPLETE",
+        phase="sdk",
+        conversation_id=conversation_id,
+        user_sub=user_sub,
+        session_id=captured_session_id,
+        trace_size=trace_path.stat().st_size if trace_path.exists() else 0,
+        request_id=request_id,
+        stop_reason=stop_reason,
+    )
+
+
+def check_sdk_available() -> bool:
+    """
+    Check if Claude Agent SDK is available.
+
+    Returns:
+        True if SDK is available, False otherwise
+    """
+    try:
+        from claude_agent_sdk import ClaudeSDKClient  # noqa: F401
+
+        return True
+    except ImportError:
+        return False
+
+
+async def get_sdk_version() -> Optional[str]:
+    """
+    Get Claude Agent SDK version.
+
+    Returns:
+        Version string or None if unavailable
+    """
+    try:
+        import claude_agent_sdk
+
+        return getattr(claude_agent_sdk, "__version__", "unknown")
+    except Exception as e:
+        logger.warning("Failed to get SDK version", error=str(e))
+        return None

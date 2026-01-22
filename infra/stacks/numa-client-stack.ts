@@ -1,4 +1,5 @@
 import { AwsProvider } from '@cdktf/provider-aws/lib/provider';
+import { CloudwatchLogGroup } from '@cdktf/provider-aws/lib/cloudwatch-log-group';
 import { S3Object } from '@cdktf/provider-aws/lib/s3-object';
 import { Fn, S3Backend, TerraformOutput, TerraformStack } from 'cdktf';
 import { Construct } from 'constructs';
@@ -47,6 +48,11 @@ import { S3VectorsKnowledgeBase } from '../constructs/s3-vectors-knowledge-base-
 import { LambdaInvocation } from '@cdktf/provider-aws/lib/lambda-invocation';
 import { DataAwsSsmParameter } from '@cdktf/provider-aws/lib/data-aws-ssm-parameter';
 import { NumaLambda } from '../constructs/numa-lambda';
+import { WorkspaceChatAgentConstruct } from '../constructs/workspace-chat-agent-construct';
+import { WorkspaceChatAgentProxy } from '../constructs/workspace-chat-agent-proxy-construct';
+import { WorkspaceChatToolsConstruct } from '../constructs/workspace-chat-tools-construct';
+import { NullProvider } from '@cdktf/provider-null/lib/provider';
+import { awsNameWithHashedPrefix } from '../constructs/aws-name-utils';
 
 const arcanumOrgId = 'o-g8veu85jva';
 const nextGenOrgId = 'o-apdsu3c1a7';
@@ -223,6 +229,95 @@ export class NumaClientStack extends TerraformStack {
       crawlUrlsTableName: core.webCrawler.crawlUrlsTable.name,
     });
 
+    // Numa Workspace Chat Agent (AgentCore runtime + proxy Lambda, routed through main CloudFront)
+    // Created before frontend so we can pass proxy URL for CloudFront routing
+    let workspaceChatAgent: WorkspaceChatAgentConstruct | undefined;
+    let workspaceChatAgentProxy: WorkspaceChatAgentProxy | undefined;
+    let workspaceChatTools: WorkspaceChatToolsConstruct | undefined;
+    if (clientConfig.numaWorkspaceChat) {
+      // Null provider is required for the NullResource used in skopeo image push
+      new NullProvider(this, 'null-provider', {});
+
+      // Shared log group for all workspace chat logs (agent + tools)
+      // This enables unified debugging across the workspace chat system
+      const workspaceChatLogGroup = new CloudwatchLogGroup(this, 'workspace-chat-log-group', {
+        name: `/numa/${props.clientName}/workspace-chat-agent`,
+      });
+
+      // Compute the expected extract-content lambda name (created later in coreApis)
+      // This follows the naming convention in AppAgnosticApiGatewayLambdaCollection
+      const extractContentLambdaName = awsNameWithHashedPrefix(props.clientName, '_extract-content', 64);
+      const extractContentLambdaArn = `arn:aws:lambda:${clientConfig.region}:${clientConfig.clientAccountId}:function:${extractContentLambdaName}`;
+
+      // Compute the expected document-converter lambda name (created later in coreApis)
+      const documentConverterLambdaName = awsNameWithHashedPrefix(props.clientName, '_document-converter', 64);
+      const documentConverterLambdaArn = `arn:aws:lambda:${clientConfig.region}:${clientConfig.clientAccountId}:function:${documentConverterLambdaName}`;
+
+      // Create the workspace chat tools Lambda (provides KB queries etc. for workspace chat agent)
+      workspaceChatTools = new WorkspaceChatToolsConstruct(this, 'workspace-chat-tools', {
+        clientName: props.clientName,
+        region: clientConfig.region,
+        logGroup: workspaceChatLogGroup,
+        preferredKnowledgeBase: (clientConfig.preferredKnowledgeBase as 'q' | 'bedrock') ?? 'bedrock',
+        bedrockKnowledgeBaseId: knowledgeBase.knowledgeBaseId,
+        qApplicationId: core.qBusinessApplicationId,
+        qRetrieverId: core.qBusinessRetrieverId,
+        // Data bucket for KB file downloads/uploads
+        dataBucketArn: core.dataBucket.bucket.arn,
+        dataBucketName: core.dataBucket.bucket.bucket,
+        // Cognito User Pool for admin group checks on KB uploads
+        userPoolId: core.userPoolId,
+        userPoolArn: `arn:aws:cognito-idp:${clientConfig.region}:${clientConfig.clientAccountId}:userpool/${core.userPoolId}`,
+        // Outputs bucket for workspace files (extract_content tool)
+        outputsBucketArn: core.outputsBucket.bucket.arn,
+        outputsBucketName: core.outputsBucket.bucket.bucket,
+        // Extract content Lambda for file extraction (ARN computed, Lambda created later in coreApis)
+        extractContentLambdaArn: extractContentLambdaArn,
+        // Document converter Lambda for markdown to PDF/DOCX conversion
+        documentConverterLambdaArn: documentConverterLambdaArn,
+      });
+
+      // Create the AgentCore runtime
+      workspaceChatAgent = new WorkspaceChatAgentConstruct(this, 'workspace-chat-agent', {
+        clientName: props.clientName,
+        region: clientConfig.region,
+        deployerRoleArn: deployerRole,
+        cognitoUserPoolId: core.userPoolId,
+        cognitoUserPoolClientId: core.userPoolClient.id,
+        outputsBucketArn: core.outputsBucket.bucket.arn,
+        outputsBucketName: core.outputsBucket.bucket.bucket,
+        // Workspace chat tools Lambda for KB queries etc.
+        workspaceToolsLambdaName: workspaceChatTools.lambdaName,
+        workspaceToolsLambdaArn: workspaceChatTools.lambdaArn,
+        // Shared log group for unified workspace chat logging
+        containerLogGroup: workspaceChatLogGroup,
+        // Cross-account Bedrock access for global inference profiles (Claude 4.5 models)
+        bedrockAccount: clientConfig.bedrockAccount,
+      });
+
+      // Create the proxy Lambda that bridges CloudFront to AgentCore SDK
+      // AgentCore has no public HTTP endpoint, so we need this proxy
+      workspaceChatAgentProxy = new WorkspaceChatAgentProxy(this, 'workspace-chat-agent-proxy', {
+        clientName: props.clientName,
+        region: clientConfig.region,
+        agentRuntimeArn: workspaceChatAgent.agentRuntimeArn,
+        cloudfrontSharedSecret: cfSecretParam.value,
+        // Cognito config for JWT verification (prevents token forgery via direct Lambda URL calls)
+        cognitoUserPoolId: core.userPoolId,
+        cognitoClientId: core.userPoolClient.id,
+      });
+
+      new TerraformOutput(this, 'workspace-chat-agent-proxy-url', {
+        value: workspaceChatAgentProxy.functionUrl,
+        description: 'Workspace Chat Agent Proxy Lambda Function URL (routed through main CloudFront)',
+      });
+
+      new TerraformOutput(this, 'workspace-chat-agent-runtime-arn', {
+        value: workspaceChatAgent.agentRuntimeArn,
+        description: 'Workspace Chat Agent AgentCore Runtime ARN',
+      });
+    }
+
     const fe = new NumaFrontendInfra(this, 'numa-frontend', {
       ...clientConfig,
       environmentName: props.environmentName,
@@ -237,6 +332,9 @@ export class NumaClientStack extends TerraformStack {
       knowledgeBase: knowledgeBase,
       chatAgentFunctionUrl: chatAgent.functionUrl,
       cloudfrontSecretParam: cfSecretParam,
+      // Workspace chat agent proxy Lambda Function URL is routed through main CloudFront
+      // (AgentCore has no public HTTP endpoint, so we use a proxy Lambda)
+      workspaceChatAgentProxyUrl: workspaceChatAgentProxy?.functionUrl,
     });
 
     // Resources can't start with a number, so prefix with an underscore if required.
@@ -367,6 +465,9 @@ export class NumaClientStack extends TerraformStack {
         PIPEDREAM_RELAY_LAMBDA_ARN: core.pipedreamRelayLambdaArn ?? undefined,
         PIPEDREAM_INTEGRATIONS: clientConfig.pipedreamIntegrations ?? false,
         AGENTS: clientConfig.agents ?? false,
+        NUMA_WORKSPACE_CHAT: clientConfig.numaWorkspaceChat ?? false,
+        // Direct Lambda Function URL for workspace chat agent (bypasses CloudFront buffering for streaming)
+        WORKSPACE_CHAT_AGENT_FUNCTION_URL: workspaceChatAgentProxy?.functionUrl,
         NUMA_VERSION: siteVersion,
       }),
       contentType: 'application/json',
@@ -658,6 +759,14 @@ export const clientConfigSchema = coreNumaInfraPropsSchema
          * CloudWatch log group for OpenAPI docs (internal use)
          */
         logGroup: z.any().optional(),
+
+        /**
+         * Whether to provision the Numa Workspace Chat Agent (AgentCore runtime).
+         * This provides a persistent workspace with Claude Code CLI for complex tasks.
+         *
+         * @default false
+         */
+        numaWorkspaceChat: z.boolean().optional().default(false),
       })
       .strict(),
   );

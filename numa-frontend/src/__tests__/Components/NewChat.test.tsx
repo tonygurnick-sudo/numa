@@ -135,7 +135,7 @@ describe('NewChat component', () => {
 
     await waitFor(() => {
       expect(hideSuggestions).toHaveBeenCalledTimes(1);
-      expect(onContinueConversation).toHaveBeenCalledWith('abc-123');
+      expect(onContinueConversation).toHaveBeenCalledWith('abc-123', undefined);
     });
   });
 

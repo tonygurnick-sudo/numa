@@ -28,7 +28,18 @@ const getHasPreselectedAgent = () => {
   }
 };
 
-export const useConversationManager = () => {
+type UseConversationManagerOptions = {
+  /** Optional suffix to isolate localStorage keys (e.g., '-v2' for workspace mode) */
+  storageKeySuffix?: string;
+  /** If true, conversations created will be marked as workspace conversations (for V2 chat) */
+  isWorkspaceMode?: boolean;
+};
+
+export const useConversationManager = (options: UseConversationManagerOptions = {}) => {
+  const { storageKeySuffix = '', isWorkspaceMode = false } = options;
+  const storageKey = `currentConversationId${storageKeySuffix}`;
+  const workspaceStorageKey = `isWorkspaceConversation${storageKeySuffix}`;
+
   const [conversationId, setConversationId] = useState(null);
   const [isConversationLoading, setIsConversationLoading] = useState(true);
   const [hasUserStartedNewChat, setHasUserStartedNewChat] = useState<boolean>(() => getHasPreselectedAgent());
@@ -78,7 +89,9 @@ export const useConversationManager = () => {
         targetId = `${sub || 'anonymous'}_${Date.now()}`;
         pendingConversationIdRef.current = targetId;
         setConversationId(targetId);
-        localStorage.setItem('currentConversationId', targetId);
+        localStorage.setItem(storageKey, targetId);
+        // Store whether this is a workspace conversation for auto-load on page refresh
+        localStorage.setItem(workspaceStorageKey, isWorkspaceMode ? 'true' : 'false');
       }
 
       if (createdConversationIdsRef.current.has(targetId)) {
@@ -101,6 +114,8 @@ export const useConversationManager = () => {
 
       const creationPromise = (async () => {
         try {
+          // Use the isWorkspaceMode option passed by the calling component
+          // V1 chat passes false, V2 chat passes true
           const metaPayload: Record<string, unknown> = {
             conversationId: targetId,
             userId: sub,
@@ -108,6 +123,7 @@ export const useConversationManager = () => {
             role: 'user',
             conversationName: defaultName,
             content: 'New conversation started',
+            isWorkspaceConversation: isWorkspaceMode,
           };
 
           if (agentInfo) {
@@ -120,7 +136,15 @@ export const useConversationManager = () => {
             metaPayload.isAgentConversation = true;
           }
 
+          console.log('[DEBUG] Creating conversation meta record:', {
+            conversationId: targetId,
+            isWorkspaceMode,
+            userId: sub,
+          });
+
           await numaChatDynamoUtils.addMessage(metaPayload as never);
+
+          console.log('[DEBUG] Meta record created successfully for conversation:', targetId);
 
           if (!agentInfo) {
             await numaChatDynamoUtils.addMessage({
@@ -143,7 +167,16 @@ export const useConversationManager = () => {
       creationPromisesRef.current.set(targetId, creationPromise);
       return creationPromise;
     },
-    [conversationId, hasUserStartedNewChat, numaChatDynamoUtils, setConversationId, sub],
+    [
+      conversationId,
+      hasUserStartedNewChat,
+      numaChatDynamoUtils,
+      setConversationId,
+      sub,
+      storageKey,
+      workspaceStorageKey,
+      isWorkspaceMode,
+    ],
   );
 
   /**
@@ -154,13 +187,14 @@ export const useConversationManager = () => {
     setConversationId(null);
     setHasUserStartedNewChat(true);
     hasUserStartedNewChatRef.current = true;
-    localStorage.removeItem('currentConversationId');
+    localStorage.removeItem(storageKey);
+    localStorage.removeItem(workspaceStorageKey);
     pendingConversationIdRef.current = null;
     creationPromisesRef.current.clear();
 
     // Reset conversation ID first; ensureConversationReady will handle persistence when needed
     return null;
-  }, []);
+  }, [storageKey, workspaceStorageKey]);
 
   /**
    * Initialize conversation on component mount
@@ -191,11 +225,16 @@ export const useConversationManager = () => {
           return;
         }
 
-        const savedConvoId = localStorage.getItem('currentConversationId');
-        if (savedConvoId && metaItems.some((item) => item.conversation_id === savedConvoId)) {
+        const savedConvoId = localStorage.getItem(storageKey);
+        const savedConvo = metaItems.find((item) => item.conversation_id === savedConvoId);
+        if (savedConvoId && savedConvo) {
           setConversationId(savedConvoId);
+          // Update localStorage with workspace status from metadata
+          localStorage.setItem(workspaceStorageKey, savedConvo.isWorkspaceConversation ? 'true' : 'false');
         } else {
           setConversationId(metaItems[0].conversation_id);
+          // Update localStorage with workspace status from first conversation
+          localStorage.setItem(workspaceStorageKey, metaItems[0].isWorkspaceConversation ? 'true' : 'false');
         }
       } catch (err) {
         if (!cancelled) {
@@ -209,7 +248,7 @@ export const useConversationManager = () => {
     return () => {
       cancelled = true;
     };
-  }, [numaChatDynamoUtils, sub, handleNewChat]);
+  }, [numaChatDynamoUtils, sub, handleNewChat, storageKey, workspaceStorageKey]);
 
   return {
     conversationId,

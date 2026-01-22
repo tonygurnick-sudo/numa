@@ -1,0 +1,17 @@
+[MESSAGES CONTROL]
+disable=missing-module-docstring,
+        missing-class-docstring,
+        missing-function-docstring,
+        line-too-long,
+        too-few-public-methods,
+        broad-exception-caught,
+        duplicate-code,
+        import-error,
+        no-name-in-module,
+        raise-missing-from,
+        too-many-arguments,
+        too-many-positional-arguments,
+        no-else-return
+
+[TYPECHECK]
+ignored-modules=fastapi

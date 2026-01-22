@@ -37,14 +37,22 @@ const Nav = ({ isCollapsed = false, onToggleCollapse }: NavProps) => {
     let isMounted = true;
     import('../utils/routeConfig.tsx').then((mod) => {
       if (!isMounted) return;
-      const items = mod.ROUTE_CONFIG.filter((r) => r.nav).map((r) => ({
-        to: r.path,
-        label: r.nav.label,
-        labelKey: r.nav.labelKey,
-        icon: r.nav.icon,
-        feature: r.requiredFeature,
-        footerOnly: r.nav.footerOnly,
-      }));
+      const items = mod.ROUTE_CONFIG.filter((r) => r.nav)
+        .filter((r) => {
+          // Hide items with featureFlag if flag is not enabled in sessionStorage
+          if (r.nav.featureFlag) {
+            return window.sessionStorage.getItem(r.nav.featureFlag) === 'true';
+          }
+          return true;
+        })
+        .map((r) => ({
+          to: r.path,
+          label: r.nav.label,
+          labelKey: r.nav.labelKey,
+          icon: r.nav.icon,
+          feature: r.requiredFeature,
+          footerOnly: r.nav.footerOnly,
+        }));
       setNavItems(items);
     });
     return () => {
@@ -248,6 +256,8 @@ function getExpandedLabel(item, t) {
       return t('nav.expanded.knowledgeBaseManagement');
     case 'nav.items.chat':
       return t('nav.expanded.numaChat');
+    case 'nav.items.chatV2':
+      return t('nav.expanded.numaChatV2', 'Numa Chat V2');
     case 'nav.items.apps':
       return t('nav.expanded.applications');
     case 'nav.items.company':

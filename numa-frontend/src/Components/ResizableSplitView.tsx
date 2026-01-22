@@ -1,5 +1,19 @@
 import { useState, useRef, useEffect } from 'react';
 
+interface ResizableSplitViewProps {
+  left: React.ReactNode;
+  right: React.ReactNode;
+  showRight?: boolean;
+  minLeft?: number;
+  minRight?: number;
+  leftFraction: number;
+  onLeftFractionChange: (fraction: number) => void;
+  /** Show the resize handle between panes (default: true) */
+  showDivider?: boolean;
+  /** Padding for the right panel (default: '1rem', use '0' for edge-to-edge) */
+  rightPadding?: string;
+}
+
 const ResizableSplitView = ({
   left,
   right,
@@ -8,7 +22,9 @@ const ResizableSplitView = ({
   minRight = 200,
   leftFraction,
   onLeftFractionChange,
-}) => {
+  showDivider = true,
+  rightPadding = '1rem',
+}: ResizableSplitViewProps) => {
   const containerRef = useRef(null);
   const [dragging, setDragging] = useState(false);
   const [handleHovered, setHandleHovered] = useState(false);
@@ -66,20 +82,20 @@ const ResizableSplitView = ({
           flex: showRight ? `0 0 ${leftFraction * 99.5}%` : '1 1 100%',
           height: '100%',
           overflowY: 'auto',
-          transition: dragging ? 'none' : 'flex 0.15s ease-out',
         }}
       >
         {left}
       </div>
 
-      {/* Divider – only if showRight is true */}
-      {showRight && (
+      {/* Divider – only if showRight and showDivider are both true */}
+      {showRight && showDivider && (
         <div
           style={{
             width: '5px',
             position: 'relative',
             zIndex: 10,
             backgroundColor: 'transparent',
+            cursor: 'col-resize',
           }}
           onMouseDown={handleMouseDown}
         >
@@ -115,8 +131,7 @@ const ResizableSplitView = ({
             flex: `0 0 ${(1 - leftFraction) * 99.5}%`,
             height: '100%',
             overflowY: 'auto',
-            padding: '1rem',
-            transition: dragging ? 'none' : 'flex 0.15s ease-out',
+            padding: rightPadding,
           }}
         >
           {right}

@@ -5,11 +5,15 @@
 
 /**
  * parseChunkWithoutDocComments(chunk, docStripState)
- * - This function is used to strip comments from the assistant response.
- * - Removes everything from <!-- ... --> while preserving newlines/other text.
- * - Replace the comment with '---' for nicer display of the document.
+ * - This function is used to strip HTML comment tags from the assistant response.
+ * - Removes HTML comment tags (<!-- ... -->) but preserves content between different comments.
+ * - For document blocks like <!--BEGIN_DOC title="X"-->content<!--END_DOC-->:
+ *   - Strips <!--BEGIN_DOC title="X"--> → ---
+ *   - Preserves content (visible inline!)
+ *   - Strips <!--END_DOC--> → ---
+ * - Replace each comment tag with '---' for nicer display.
  * - Returns the stripped text.
- * - If a comment tag is split across chunk boundaries, it uses docStripState.leftover
+ * - If a tag is split across chunk boundaries, it uses docStripState.leftover
  *   to handle partial tags in the next chunk.
  */
 export function parseChunkWithoutDocComments(chunk, docStripState) {

@@ -313,6 +313,18 @@
       "back": "Back",
       "goToIntegrations": "Go to Integrations",
       "continue": "Continue without"
+    },
+    "chatVersion": {
+      "title": "Choose Chat Experience",
+      "prompt": "Which chat experience would you like to use with <strong>{{agentTitle}}</strong>?",
+      "v1": {
+        "title": "Numa Chat",
+        "description": "Original chat experience"
+      },
+      "v2": {
+        "title": "Numa Chat V2",
+        "description": "Enhanced experience with file management"
+      }
     }
   }
 }
