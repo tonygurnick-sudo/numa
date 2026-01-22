@@ -46,6 +46,7 @@ import { sortAgentsByPriority } from '../utils/agentSortingUtils';
 import { formatAgentDisplayName } from '../utils/agentUtils';
 import { AdminAgentsService, type AgentsMode } from '../Services/AdminAgentsService';
 import { ChatSettingsService, type ChatSettings, DEFAULT_CHAT_SETTINGS } from '../Services/ChatSettingsService';
+import { applyLanguagePreference } from '../utils/languagePreference';
 import { AgentAvatar } from '../Components/Agents/AgentAvatar';
 import { withPRM } from '../utils/prmUtils';
 
@@ -556,9 +557,11 @@ const NumaChatAgents = () => {
       try {
         const settings = await ChatSettingsService.get(numaGet);
         setUserChatSettings(settings);
+        await applyLanguagePreference(settings.language);
       } catch (err) {
         console.warn('Failed to load user chat settings, using defaults', err);
         setUserChatSettings(DEFAULT_CHAT_SETTINGS);
+        await applyLanguagePreference(DEFAULT_CHAT_SETTINGS.language);
       } finally {
         setChatSettingsLoaded(true);
       }

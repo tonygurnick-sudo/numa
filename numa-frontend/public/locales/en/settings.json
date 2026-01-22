@@ -341,7 +341,8 @@
     "title": "Profile",
     "adminDisabled": "Your admin has disabled personal defaults. You'll use company defaults when starting new chats.",
     "tabs": {
-      "defaults": "User Defaults"
+      "userSettings": "User Settings",
+      "chatDefaults": "Chat Defaults"
     },
     "defaults": {
       "description": "These defaults apply when you start a new chat without selecting an agent.",
@@ -351,6 +352,12 @@
       "kbLoading": "Loading knowledge bases...",
       "kbEmpty": "No knowledge bases available.",
       "kbHelp": "Select one or more knowledge bases to enable by default.",
+      "language": {
+        "label": "Default language",
+        "help": "Choose the language to use throughout the app.",
+        "browser": "Browser default",
+        "english": "English"
+      },
       "allTools": {
         "title": "All Tools",
         "help": "When enabled, all tools are automatically available"
@@ -378,7 +385,8 @@
     "actions": {
       "saving": "Saving...",
       "save": "Save Changes",
-      "reset": "Reset to company defaults"
+      "reset": "Reset to company defaults",
+      "resetBrowser": "Reset to browser defaults"
     },
     "errors": {
       "loadDefaults": "Failed to load defaults",

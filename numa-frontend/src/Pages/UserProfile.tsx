@@ -20,6 +20,7 @@ import { PipedreamProxyService } from '../Services/PipedreamProxyService';
 import { withPRM } from '../utils/prmUtils';
 import ExpandableOverflowBox from '../Components/ExpandableOverflowBox';
 import { manifestService } from '../Services/manifestService';
+import { applyLanguagePreference, LANGUAGE_BROWSER_DEFAULT } from '../utils/languagePreference';
 
 type Connection = { id: string; name: string; isConnected: boolean; mcpServerUrl?: string };
 
@@ -247,6 +248,73 @@ export default function UserProfilePage() {
   );
 
   const disableForm = saving || loading || !canEdit || !userDefaultsEnabled;
+  const resetToCompanyDefaults = () => {
+    setUserDefaultsEnabled(true);
+    setUserDefaults({
+      defaultKBIds: companyDefaults.defaultKBIds,
+      autoToolsEnabled: companyDefaults.autoToolsEnabled,
+      webSearchEnabled: companyDefaults.webSearchEnabled,
+      createAgentEnabled: companyDefaults.createAgentEnabled,
+      dataAnalysisEnabled: companyDefaults.dataAnalysisEnabled,
+      defaultConnectionIds: companyDefaults.defaultConnectionIds,
+      language: LANGUAGE_BROWSER_DEFAULT,
+    });
+    setDirty(true);
+  };
+
+  const resetToBrowserDefaults = () => {
+    setUserDefaults((prev) => ({ ...prev, language: LANGUAGE_BROWSER_DEFAULT }));
+    setDirty(true);
+  };
+
+  const renderSaveActions = (resetLabelKey: string, onReset: () => void) => (
+    <div className="d-flex gap-2">
+      <Button
+        variant="primary"
+        disabled={!dirty || saving || !canEdit}
+        onClick={async () => {
+          try {
+            setSaving(true);
+            setError(null);
+
+            const payload: UserChatSettingsUpdate = {
+              userDefaultsEnabled,
+              defaultKBIds: userDefaults.defaultKBIds,
+              autoToolsEnabled: userDefaults.autoToolsEnabled,
+              webSearchEnabled: userDefaults.webSearchEnabled,
+              createAgentEnabled: userDefaults.createAgentEnabled,
+              dataAnalysisEnabled: userDefaults.dataAnalysisEnabled,
+              defaultConnectionIds: userDefaults.defaultConnectionIds,
+              language: userDefaults.language,
+            };
+
+            await ChatSettingsService.updateForProfile(payload, numaPut);
+            const refreshed = await ChatSettingsService.getForProfile(numaGet);
+            setUserDefaults(refreshed.settings);
+            setUserDefaultsEnabled(refreshed.userDefaultsEnabled);
+            await applyLanguagePreference(refreshed.settings.language);
+            setDirty(false);
+          } catch (e) {
+            setError((e as Error).message || t('userProfile.errors.saveDefaults'));
+          } finally {
+            setSaving(false);
+          }
+        }}
+      >
+        {saving ? (
+          <>
+            <Spinner as="span" animation="border" size="sm" className="me-2" />
+            {t('userProfile.actions.saving')}
+          </>
+        ) : (
+          t('userProfile.actions.save')
+        )}
+      </Button>
+      <Button variant="outline-secondary" disabled={saving || !canEdit} onClick={onReset}>
+        {t(resetLabelKey)}
+      </Button>
+    </div>
+  );
 
   return (
     <div className="dashboard">
@@ -281,11 +349,39 @@ export default function UserProfilePage() {
 
             <Tabs activeKey={activeKey} onSelect={(k) => k && setActiveKey(k)} className="mb-3">
               <Tab
+                eventKey="user-settings"
+                title={
+                  <span>
+                    <i className="bi bi-person-gear me-2"></i>
+                    {t('userProfile.tabs.userSettings')}
+                  </span>
+                }
+              >
+                <Form>
+                  <Form.Group className="mb-3">
+                    <Form.Label className="fw-semibold">{t('userProfile.defaults.language.label')}</Form.Label>
+                    <Form.Select
+                      value={userDefaults.language ?? LANGUAGE_BROWSER_DEFAULT}
+                      disabled={disableForm}
+                      onChange={(e) => {
+                        setUserDefaults((prev) => ({ ...prev, language: e.target.value }));
+                        setDirty(true);
+                      }}
+                    >
+                      <option value={LANGUAGE_BROWSER_DEFAULT}>{t('userProfile.defaults.language.browser')}</option>
+                      <option value="en">{t('userProfile.defaults.language.english')}</option>
+                    </Form.Select>
+                    <div className="text-muted small mt-1">{t('userProfile.defaults.language.help')}</div>
+                  </Form.Group>
+                  {renderSaveActions('userProfile.actions.resetBrowser', resetToBrowserDefaults)}
+                </Form>
+              </Tab>
+              <Tab
                 eventKey="user-defaults"
                 title={
                   <span>
                     <i className="bi bi-sliders me-2"></i>
-                    {t('userProfile.tabs.defaults')}
+                    {t('userProfile.tabs.chatDefaults')}
                   </span>
                 }
               >
@@ -484,65 +580,7 @@ export default function UserProfilePage() {
                         )}
                       </Form.Group>
 
-                      <div className="d-flex gap-2">
-                        <Button
-                          variant="primary"
-                          disabled={!dirty || saving || !canEdit}
-                          onClick={async () => {
-                            try {
-                              setSaving(true);
-                              setError(null);
-
-                              const payload: UserChatSettingsUpdate = {
-                                userDefaultsEnabled,
-                                defaultKBIds: userDefaults.defaultKBIds,
-                                autoToolsEnabled: userDefaults.autoToolsEnabled,
-                                webSearchEnabled: userDefaults.webSearchEnabled,
-                                createAgentEnabled: userDefaults.createAgentEnabled,
-                                dataAnalysisEnabled: userDefaults.dataAnalysisEnabled,
-                                defaultConnectionIds: userDefaults.defaultConnectionIds,
-                              };
-
-                              await ChatSettingsService.updateForProfile(payload, numaPut);
-                              const refreshed = await ChatSettingsService.getForProfile(numaGet);
-                              setUserDefaults(refreshed.settings);
-                              setUserDefaultsEnabled(refreshed.userDefaultsEnabled);
-                              setDirty(false);
-                            } catch (e) {
-                              setError((e as Error).message || t('userProfile.errors.saveDefaults'));
-                            } finally {
-                              setSaving(false);
-                            }
-                          }}
-                        >
-                          {saving ? (
-                            <>
-                              <Spinner as="span" animation="border" size="sm" className="me-2" />
-                              {t('userProfile.actions.saving')}
-                            </>
-                          ) : (
-                            t('userProfile.actions.save')
-                          )}
-                        </Button>
-                        <Button
-                          variant="outline-secondary"
-                          disabled={saving || !canEdit}
-                          onClick={() => {
-                            setUserDefaultsEnabled(true);
-                            setUserDefaults({
-                              defaultKBIds: companyDefaults.defaultKBIds,
-                              autoToolsEnabled: companyDefaults.autoToolsEnabled,
-                              webSearchEnabled: companyDefaults.webSearchEnabled,
-                              createAgentEnabled: companyDefaults.createAgentEnabled,
-                              dataAnalysisEnabled: companyDefaults.dataAnalysisEnabled,
-                              defaultConnectionIds: companyDefaults.defaultConnectionIds,
-                            });
-                            setDirty(true);
-                          }}
-                        >
-                          {t('userProfile.actions.reset')}
-                        </Button>
-                      </div>
+                      {renderSaveActions('userProfile.actions.reset', resetToCompanyDefaults)}
                     </>
                   )}
                 </Form>
