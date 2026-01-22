@@ -48,6 +48,7 @@
     "crypto-js": "^4.2.0",
     "date-fns": "^4.1.0",
     "docx": "^9.0.0",
+    "docx-preview": "^0.3.7",
     "file-saver": "^2.0.5",
     "file-type": "^20.0.0",
     "html-to-docx-lite": "^2.0.1",
@@ -65,12 +66,14 @@
     "react-dom": "^19.0.0",
     "react-i18next": "^15.6.1",
     "react-markdown": "^10.0.0",
+    "react-pdf": "^10.2.0",
     "react-router-dom": "^7.0.0",
     "react-syntax-highlighter": "15.6.1",
     "react-transition-group": "^4.4.5",
     "remark-breaks": "^4.0.0",
     "remark-gfm": "^4.0.0",
-    "vitest": "^3.0.0"
+    "vitest": "^3.0.0",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@arcanumai/style": "workspace:*",

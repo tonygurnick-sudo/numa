@@ -1,0 +1,199 @@
+/**
+ * WorkspaceChatSegmentRenderer - Central dispatcher for rendering workspace chat segments
+ *
+ * Routes segment types to their appropriate components.
+ */
+import { useTranslation } from 'react-i18next';
+import type {
+  WorkspaceChatSegment,
+  WorkspaceChatInlineToolSegment,
+  WorkspaceChatThinkingSegment,
+  WorkspaceChatAssistantAdviceSegment,
+  WorkspaceChatFolderAttachmentSegment,
+  WorkspaceChatInlineThinkingSegment,
+  WorkspaceChatCompactionSegment,
+} from '@/types/workspaceChatTypes';
+import { WorkspaceChatInlineToolGroup } from './WorkspaceChatInlineTool';
+import { WorkspaceChatSubagentCard } from './WorkspaceChatSubagentCard';
+import { WorkspaceChatTodoCard } from './WorkspaceChatTodoCard';
+import { WorkspaceChatInlineThinking } from './WorkspaceChatInlineThinking';
+import { WorkspaceChatCompactionBlock } from './WorkspaceChatCompactionBlock';
+import { UnifiedToolCard } from '../UnifiedToolCard';
+import { ThinkingBlock } from '../Chat/ThinkingBlock';
+import { AssistantAdviceBlock } from '../Chat/AssistantAdviceBlock';
+import WorkspaceChatMarkdown, { type FileReference, type FolderReference } from '../Renderers/WorkspaceChatMarkdown';
+import { useAuth } from '../../Providers/AuthProvider';
+
+interface Props {
+  segments: WorkspaceChatSegment[];
+  conversationId?: string;
+  userSub?: string;
+  bucket?: string;
+  region?: string;
+  onOpenFilePreview?: (ref: FileReference) => void;
+  onOpenFolderPreview?: (ref: FolderReference) => void;
+}
+
+/**
+ * Group consecutive inline_tool segments together.
+ */
+function groupSegments(
+  segments: WorkspaceChatSegment[],
+): Array<WorkspaceChatSegment | WorkspaceChatInlineToolSegment[]> {
+  const result: Array<WorkspaceChatSegment | WorkspaceChatInlineToolSegment[]> = [];
+  let currentInlineGroup: WorkspaceChatInlineToolSegment[] = [];
+
+  for (const segment of segments) {
+    if (segment.kind === 'inline_tool') {
+      currentInlineGroup.push(segment);
+    } else {
+      // Flush any accumulated inline tools
+      if (currentInlineGroup.length > 0) {
+        result.push(currentInlineGroup);
+        currentInlineGroup = [];
+      }
+      result.push(segment);
+    }
+  }
+
+  // Flush remaining inline tools
+  if (currentInlineGroup.length > 0) {
+    result.push(currentInlineGroup);
+  }
+
+  return result;
+}
+
+export function WorkspaceChatSegmentRenderer({
+  segments,
+  conversationId,
+  userSub,
+  bucket,
+  region,
+  onOpenFilePreview,
+  onOpenFolderPreview,
+}: Props) {
+  const { t } = useTranslation('chat');
+  const { getCredentials } = useAuth();
+  const groupedSegments = groupSegments(segments);
+
+  return (
+    <>
+      {groupedSegments.map((item, index) => {
+        // Handle grouped inline tools
+        if (Array.isArray(item)) {
+          return <WorkspaceChatInlineToolGroup key={`inline-group-${index}`} segments={item} />;
+        }
+
+        const segment = item;
+
+        switch (segment.kind) {
+          case 'text':
+            return (
+              <WorkspaceChatMarkdown
+                key={`text-${index}`}
+                content={segment.text}
+                conversationId={conversationId || ''}
+                userSub={userSub || ''}
+                bucket={bucket || ''}
+                region={region || ''}
+                onOpenFilePreview={onOpenFilePreview}
+                onOpenFolderPreview={onOpenFolderPreview}
+                getCredentials={getCredentials}
+              />
+            );
+
+          case 'thinking':
+            return <ThinkingBlock key={`thinking-${index}`} segment={segment as WorkspaceChatThinkingSegment} />;
+
+          case 'inline_thinking':
+            return (
+              <WorkspaceChatInlineThinking
+                key={`inline-thinking-${index}`}
+                isStreaming={(segment as WorkspaceChatInlineThinkingSegment).isStreaming}
+              />
+            );
+
+          case 'assistant_advice':
+            return (
+              <AssistantAdviceBlock key={`advice-${index}`} segment={segment as WorkspaceChatAssistantAdviceSegment} />
+            );
+
+          case 'subagent':
+            return <WorkspaceChatSubagentCard key={`subagent-${segment.parentToolUseId}`} segment={segment} />;
+
+          case 'todo':
+            return <WorkspaceChatTodoCard key={`todo-${segment.toolUseId}`} segment={segment} />;
+
+          case 'compaction':
+            return (
+              <WorkspaceChatCompactionBlock
+                key={`compaction-${index}`}
+                segment={segment as WorkspaceChatCompactionSegment}
+              />
+            );
+
+          case 'tool_card':
+            return (
+              <UnifiedToolCard
+                key={`tool-${segment.toolUseId}`}
+                toolName={segment.toolName}
+                label={segment.label}
+                steps={segment.steps}
+                result={segment.result}
+                isLoading={segment.isLoading}
+                conversationId={conversationId}
+                sub={userSub}
+              />
+            );
+
+          case 'file_upload':
+            return (
+              <div key={`upload-${index}`} className="workspace-chat-file-upload-indicator">
+                <i className="bi bi-file-earmark-arrow-up me-2" />
+                <span>{t('workspace.segments.uploaded', { filename: segment.filename })}</span>
+                {segment.uploadStatus === 'processing' && <span className="ms-2 spinner-border spinner-border-sm" />}
+              </div>
+            );
+
+          case 'file_attachment':
+            return (
+              <div key={`attachment-${index}`} className="workspace-chat-file-attachment">
+                <i className="bi bi-paperclip me-2" />
+                <span>{segment.filename}</span>
+                <span className="text-muted ms-2">({formatFileSize(segment.size)})</span>
+              </div>
+            );
+
+          case 'folder_attachment': {
+            const folderSeg = segment as WorkspaceChatFolderAttachmentSegment;
+            return (
+              <div key={`folder-${index}`} className="workspace-chat-file-attachment">
+                <i className="bi bi-folder-fill me-2" />
+                <span>{folderSeg.folderName}</span>
+                <span className="text-muted ms-2">
+                  ({t('workspace.segments.fileCount', { count: folderSeg.fileCount })},{' '}
+                  {formatFileSize(folderSeg.totalSize)})
+                </span>
+              </div>
+            );
+          }
+
+          default:
+            return null;
+        }
+      })}
+    </>
+  );
+}
+
+/**
+ * Format file size for display.
+ */
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+export default WorkspaceChatSegmentRenderer;

@@ -1,17 +1,23 @@
-import type React from 'react'; // for React.DragEvent types
+import React, { Dispatch, SetStateAction, RefObject, useEffect, useRef, useState, memo } from 'react';
 import { Button, Spinner, OverlayTrigger, Tooltip, Nav } from 'react-bootstrap';
-import { Dispatch, SetStateAction, RefObject, useEffect, useRef, useState } from 'react';
 import type { FormEvent, MouseEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import i18n from '../../i18n';
-import { ChatInput } from './ChatInput';
+import { ChatInput, ChatInputVariant } from './ChatInput';
 import { ChatSettingsPanel } from './ChatSettingsPanel';
+import { PendingFilesBar } from './PendingFilesBar';
+import { QuickActionsRow } from './QuickActionsRow';
 import type { ConversationMeta } from '../../hooks/useChatInactivity';
+import type { WorkspaceChatModelId, StagedItem } from '../../types/workspaceChatTypes';
+import type { QuickActionConfig } from '../../config/quickActionsConfig';
 import numaIcon from '/numa-logo.svg?url';
 import { useBranding } from '../../Providers/BrandingContext';
 import { useBrandingAsset } from '../../hooks/useBrandingAsset';
 import AgentAvatar from '../Agents/AgentAvatar';
 import { useAgentById } from '../../hooks/useAgentById';
+
+/** NewChat variant - 'v1' shows inline settings, 'v2' relies on external settings panel */
+export type NewChatVariant = 'v1' | 'v2';
 
 declare global {
   interface Window {
@@ -69,7 +75,7 @@ type NewChatProps = {
   inputRef: RefObject<HTMLTextAreaElement>;
   recentConversations: ConversationMeta[];
   hideSuggestions: () => void;
-  onContinueConversation: (conversationId: string) => void;
+  onContinueConversation: (conversationId: string, isWorkspaceConversation?: boolean) => void;
   suggestionsLoading: boolean;
   userName?: string;
   onRenameConversation?: (conversationId: string, currentName: string) => Promise<void>;
@@ -77,6 +83,7 @@ type NewChatProps = {
   personalAgents?: AgentSummary[];
   onSelectAgent?: (agent: AgentSummary) => void;
   agentsLoading?: boolean;
+  uploadDisabledReason?: string;
   onFilesDropped?: (files: File[]) => void;
   // Multi‑KB selection (optional; when provided, ChatInput will control selection)
   enabledKBIds?: string[];
@@ -86,6 +93,34 @@ type NewChatProps = {
   isLoadingKBs?: boolean;
   agentsFeatureEnabled?: boolean;
   dataAnalysisBanner?: React.ReactNode;
+  onStop?: () => void;
+  isStopping?: boolean;
+  // V2 variant props (for workspace chat)
+  /** Layout variant: 'v1' (default) shows inline settings, 'v2' relies on external settings panel */
+  variant?: NewChatVariant;
+  /** Callback when settings button is clicked (V2 only) */
+  onSettingsClick?: () => void;
+  /** Whether settings panel is currently open (V2 only) */
+  isSettingsPanelOpen?: boolean;
+  /** Whether settings panel has active selections (V2 only) */
+  hasActiveSettings?: boolean;
+  // Model selector props (V2 only)
+  /** Currently selected model ID for workspace chat */
+  selectedModelId?: WorkspaceChatModelId;
+  /** Callback to change the selected model */
+  setSelectedModelId?: (id: WorkspaceChatModelId) => void;
+  /** Whether to show the model selector (V2 only) */
+  showModelSelector?: boolean;
+  // Staged files display props (V2 only - for pre-minted conversations)
+  /** Files staged for upload before first message is sent */
+  stagedItems?: StagedItem[];
+  /** Callback to remove a staged item */
+  onRemoveStagedItem?: (item: StagedItem) => Promise<void>;
+  // Quick actions props (V2 only)
+  /** Callback when a quick action button is clicked */
+  onQuickAction?: (action: QuickActionConfig) => void;
+  /** Set of connected integration IDs for conditional quick actions */
+  connectedIntegrations?: Set<string>;
 };
 
 // Avatar for recent conversations
@@ -127,7 +162,7 @@ const hexToRgb = (hex: string): string => {
   return result ? `${parseInt(result[1], 16)}, ${parseInt(result[2], 16)}, ${parseInt(result[3], 16)}` : '75, 0, 125';
 };
 
-export const NewChat = ({
+const NewChat = ({
   inputMessage,
   setInputMessage,
   handleSubmit,
@@ -160,6 +195,7 @@ export const NewChat = ({
   personalAgents = [],
   onSelectAgent,
   agentsLoading: _agentsLoading = false,
+  uploadDisabledReason = '',
   onFilesDropped,
   enabledKBIds,
   setEnabledKBIds,
@@ -167,6 +203,23 @@ export const NewChat = ({
   isLoadingKBs = false,
   agentsFeatureEnabled = false,
   dataAnalysisBanner,
+  onStop,
+  isStopping = false,
+  // V2 variant props
+  variant = 'v1',
+  onSettingsClick,
+  isSettingsPanelOpen = false,
+  hasActiveSettings = false,
+  // Model selector props
+  selectedModelId,
+  setSelectedModelId,
+  showModelSelector = false,
+  // Staged files props
+  stagedItems = [],
+  onRemoveStagedItem,
+  // Quick actions props
+  onQuickAction,
+  connectedIntegrations = new Set<string>(),
 }: NewChatProps) => {
   const { t } = useTranslation('chat');
   // ------- Mobile detection and tab state -------
@@ -330,9 +383,9 @@ export const NewChat = ({
   const rawLogoSrc = branding.resolvedAssets?.logoNav || branding.assets?.logoNav || branding.logo || numaIcon;
   const logoSrc = useBrandingAsset(rawLogoSrc, numaIcon);
   const logoAlt = branding.name || t('newChat.logoAltFallback');
-  const handleContinueClick = (conversationId: string) => {
+  const handleContinueClick = (conversationId: string, isWorkspaceConversation?: boolean) => {
     hideSuggestions();
-    onContinueConversation(conversationId);
+    onContinueConversation(conversationId, isWorkspaceConversation);
   };
 
   const handleRename = async (e: React.MouseEvent, conversationId: string, currentName: string) => {
@@ -373,7 +426,7 @@ export const NewChat = ({
   return (
     <div
       ref={wrapperRef}
-      className="d-flex flex-column h-100 new-chat-wrapper"
+      className={`d-flex flex-column h-100 new-chat-wrapper ${variant === 'v2' ? 'new-chat-wrapper-v2' : ''}`}
       onDragEnterCapture={handleDragEnter}
       onDragOverCapture={handleDragOver}
       onDragLeaveCapture={handleDragLeave}
@@ -386,8 +439,25 @@ export const NewChat = ({
         <span className="new-chat-greeting-text">{greeting}</span>
       </div>
 
+      {/* Quick Actions Row - V2 only */}
+      {variant === 'v2' && onQuickAction && (
+        <QuickActionsRow
+          onQuickAction={onQuickAction}
+          webSearchEnabled={webSearchEnabled || autoToolsEnabled}
+          kbEnabled={(enabledKBIds?.length ?? 0) > 0}
+          agentsEnabled={agentsFeatureEnabled}
+          connectedIntegrations={connectedIntegrations}
+          disabled={buttonStatus === 'streaming' || uploadsInProgress}
+          maxVisible={isMobile ? 4 : 9}
+        />
+      )}
+
       <div className="chat-input-wrapper new-chat-input-wrapper" style={{ animation: 'fadeIn 0.8s ease-in-out' }}>
         {dataAnalysisBanner}
+        {/* Show pending files indicator for pre-minted conversations (V2) */}
+        {variant === 'v2' && stagedItems.length > 0 && onRemoveStagedItem && (
+          <PendingFilesBar items={stagedItems} onRemove={onRemoveStagedItem} />
+        )}
         <ChatInput
           inputMessage={inputMessage}
           setInputMessage={setInputMessage}
@@ -417,6 +487,18 @@ export const NewChat = ({
           enabledKBIds={enabledKBIds || []}
           setEnabledKBIds={setEnabledKBIds}
           dropdownDirection="down" // New chat hero sits higher; open menus downward to avoid clipping
+          uploadDisabledReason={uploadDisabledReason}
+          onStop={onStop}
+          isStopping={isStopping}
+          // V2 variant props
+          variant={variant as ChatInputVariant}
+          onSettingsClick={onSettingsClick}
+          isSettingsPanelOpen={isSettingsPanelOpen}
+          hasActiveSettings={hasActiveSettings}
+          // Model selector props
+          selectedModelId={selectedModelId}
+          setSelectedModelId={setSelectedModelId}
+          showModelSelector={showModelSelector}
         />
       </div>
 
@@ -488,31 +570,32 @@ export const NewChat = ({
       {(() => {
         const isDisabled = buttonStatus === 'streaming' || uploadsInProgress;
 
-        // Settings Panel Content
-        const settingsPanelContent = (
-          <ChatSettingsPanel
-            autoToolsEnabled={autoToolsEnabled}
-            setAutoToolsEnabled={setAutoToolsEnabled}
-            webSearchEnabled={webSearchEnabled}
-            setWebSearchEnabled={setWebSearchEnabled}
-            createAgentEnabled={createAgentEnabled}
-            setCreateAgentEnabled={setCreateAgentEnabled}
-            dataAnalysisEnabled={dataAnalysisEnabled}
-            setDataAnalysisEnabled={setDataAnalysisEnabled}
-            dataAnalysisAvailable={dataAnalysisAvailable}
-            agentsFeatureEnabled={agentsFeatureEnabled}
-            enabledKBIds={enabledKBIds || []}
-            setEnabledKBIds={setEnabledKBIds || (() => {})}
-            availableKBs={availableKBs}
-            isLoadingKBs={isLoadingKBs}
-            enabledConnections={enabledConnections}
-            setEnabledConnections={setEnabledConnections}
-            availableConnections={availableConnections}
-            connectionsLoading={connectionsLoading}
-            hasPipedreamFeature={hasPipedreamFeature}
-            isDisabled={isDisabled}
-          />
-        );
+        // Settings Panel Content (V1 only - V2 uses right side panel)
+        const settingsPanelContent =
+          variant === 'v1' ? (
+            <ChatSettingsPanel
+              autoToolsEnabled={autoToolsEnabled}
+              setAutoToolsEnabled={setAutoToolsEnabled}
+              webSearchEnabled={webSearchEnabled}
+              setWebSearchEnabled={setWebSearchEnabled}
+              createAgentEnabled={createAgentEnabled}
+              setCreateAgentEnabled={setCreateAgentEnabled}
+              dataAnalysisEnabled={dataAnalysisEnabled}
+              setDataAnalysisEnabled={setDataAnalysisEnabled}
+              dataAnalysisAvailable={dataAnalysisAvailable}
+              agentsFeatureEnabled={agentsFeatureEnabled}
+              enabledKBIds={enabledKBIds || []}
+              setEnabledKBIds={setEnabledKBIds || (() => {})}
+              availableKBs={availableKBs}
+              isLoadingKBs={isLoadingKBs}
+              enabledConnections={enabledConnections}
+              setEnabledConnections={setEnabledConnections}
+              availableConnections={availableConnections}
+              connectionsLoading={connectionsLoading}
+              hasPipedreamFeature={hasPipedreamFeature}
+              isDisabled={isDisabled}
+            />
+          ) : null;
 
         // History Panel Content
         const historyPanelContent = (
@@ -527,9 +610,12 @@ export const NewChat = ({
               minHeight: 0,
             }}
           >
-            <div className="history-inner">
-              <div className="suggestions-header static-header">{t('newChat.continue')}</div>
-            </div>
+            {/* Only show internal header for non-V2 (mobile/V1) - V2 has its own external header */}
+            {variant !== 'v2' && (
+              <div className="history-inner">
+                <div className="suggestions-header static-header">{t('newChat.continue')}</div>
+              </div>
+            )}
             {suggestionsLoading ? (
               <div
                 className="d-flex justify-content-center align-items-center history-scroll"
@@ -548,11 +634,11 @@ export const NewChat = ({
                       className="text-start conversation-suggestion-btn"
                       role="button"
                       tabIndex={0}
-                      onClick={() => handleContinueClick(convo.conversation_id)}
+                      onClick={() => handleContinueClick(convo.conversation_id, convo.isWorkspaceConversation)}
                       onKeyDown={(e) => {
                         if (e.key === 'Enter' || e.key === ' ') {
                           e.preventDefault();
-                          handleContinueClick(convo.conversation_id);
+                          handleContinueClick(convo.conversation_id, convo.isWorkspaceConversation);
                         }
                       }}
                       onMouseEnter={(e) => {
@@ -646,8 +732,21 @@ export const NewChat = ({
           </div>
         );
 
-        // Mobile Layout: Tabs
+        // Mobile Layout: Tabs (V1 only shows both tabs, V2 only shows history)
         if (isMobile) {
+          // V2: Just show history content directly (settings in right panel)
+          if (variant === 'v2') {
+            return (
+              <div
+                className="new-chat-content-area"
+                style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}
+              >
+                {historyPanelContent}
+              </div>
+            );
+          }
+
+          // V1: Show tabs for settings and history
           return (
             <div
               className="new-chat-content-area"
@@ -693,7 +792,20 @@ export const NewChat = ({
           );
         }
 
-        // Desktop Layout: Two Columns
+        // Desktop Layout: Two Columns (V1) or Single Column (V2)
+        // V2: Just show history centered (settings in right panel)
+        if (variant === 'v2') {
+          return (
+            <div className="new-chat-desktop-layout new-chat-desktop-layout-v2">
+              <div className="new-chat-desktop-column history-column history-column-v2">
+                <div className="suggestions-header-v2">{t('newChat.continue')}</div>
+                <div className="new-chat-desktop-scroll conversation-suggestions">{historyPanelContent}</div>
+              </div>
+            </div>
+          );
+        }
+
+        // V1: Two column layout
         return (
           <div className="new-chat-desktop-layout">
             <div className="new-chat-desktop-column settings-column">
@@ -725,11 +837,11 @@ export const NewChat = ({
                         className="text-start conversation-suggestion-btn"
                         role="button"
                         tabIndex={0}
-                        onClick={() => handleContinueClick(convo.conversation_id)}
+                        onClick={() => handleContinueClick(convo.conversation_id, convo.isWorkspaceConversation)}
                         onKeyDown={(e) => {
                           if (e.key === 'Enter' || e.key === ' ') {
                             e.preventDefault();
-                            handleContinueClick(convo.conversation_id);
+                            handleContinueClick(convo.conversation_id, convo.isWorkspaceConversation);
                           }
                         }}
                         onMouseEnter={(e) => {
@@ -832,4 +944,9 @@ export const NewChat = ({
   );
 };
 
-export default NewChat;
+// Memoize to prevent re-renders when parent state changes but NewChat props haven't
+const MemoizedNewChat = memo(NewChat);
+MemoizedNewChat.displayName = 'NewChat';
+
+export { MemoizedNewChat as NewChat };
+export default MemoizedNewChat;

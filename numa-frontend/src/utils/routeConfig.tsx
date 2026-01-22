@@ -8,6 +8,9 @@ const UserManagement = lazy(() => import('../Pages/UserManagement'));
 const SettingsPage = lazy(() => import('../Pages/Settings'));
 const UserProfilePage = lazy(() => import('../Pages/UserProfile'));
 const NumaChatAgents = lazy(() => import('../Pages/NumaChatAgents').then((m) => ({ default: m.NumaChatAgents })));
+const NumaWorkspaceChatAgents = lazy(() =>
+  import('../Pages/NumaWorkspaceChatAgents').then((m) => ({ default: m.NumaWorkspaceChatAgents })),
+);
 const CompanyKnowledgeBase = lazy(() =>
   import('../Pages/CompanyKnowledgeBase').then((m) => ({ default: m.CompanyKnowledgeBase })),
 );
@@ -46,6 +49,16 @@ export const ROUTE_CONFIG = [
     },
     requiredFeature: 'chat',
     nav: { label: 'Chat', labelKey: 'nav.items.chat', icon: 'bi bi-chat-dots-fill' },
+  },
+  {
+    path: '/chat-v2',
+    element: () => <NumaWorkspaceChatAgents />,
+    requiredFeature: 'chat',
+    nav: {
+      label: 'Chat V2',
+      icon: 'bi bi-chat-square-dots-fill',
+      featureFlag: 'NUMA_WORKSPACE_CHAT',
+    },
   },
   {
     path: '/agents',

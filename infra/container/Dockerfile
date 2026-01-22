@@ -9,7 +9,7 @@ ARG CLAUDE_CLI_VERSION=2.0.37
 
 WORKDIR /workspace
 
-# Install Terraform as root
+# Install Terraform and skopeo as root
 USER root
 RUN apt-get update && apt-get install -y \
   bash-completion \
@@ -24,6 +24,11 @@ RUN curl -fsSL https://releases.hashicorp.com/terraform/${TERRAFORM_VERSION}/ter
   && mv /tmp/terraform /usr/local/bin/ \
   && rm -rf /tmp/* \
   && terraform version
+
+# Install skopeo for pushing container images to client ECR without Docker daemon
+RUN curl -sL https://github.com/lework/skopeo-binary/releases/download/v1.14.0/skopeo-linux-amd64 \
+  -o /usr/local/bin/skopeo && chmod +x /usr/local/bin/skopeo \
+  && skopeo --version
 
 USER node
 
@@ -78,6 +83,21 @@ RUN bash -c 'set -euo pipefail \
   && echo "Artifact size: $SZ bytes" \
   && [ "$SZ" -gt 1048576 ] \
   && ls -lh "$ACT"'
+
+# Copy the workspace-agent container image tar (if present from CI packaging)
+# Uses --exclude to make the COPY optional (won't fail if file doesn't exist)
+# The tar is created by: services/package-service.sh numa-workspace-agent
+COPY --exclude=.gitkeep infra/assets/artifacts/numa-workspace-agent/ infra/assets/artifacts/numa-workspace-agent/
+RUN bash -c 'set -euo pipefail \
+  && ART_DIR=/workspace/infra/assets/artifacts/numa-workspace-agent \
+  && ART_TAR="$ART_DIR/image.tar" \
+  && if [ -f "$ART_TAR" ]; then \
+       echo "Workspace agent artifact present: $ART_TAR"; \
+       ls -lh "$ART_TAR"; \
+     else \
+       echo "Workspace agent artifact not present (optional for now)"; \
+       mkdir -p "$ART_DIR"; \
+     fi'
 USER node
 
 ENV GIT_HASH=${GIT_HASH:-unknown}

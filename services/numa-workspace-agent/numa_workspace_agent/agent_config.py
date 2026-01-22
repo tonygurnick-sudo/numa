@@ -1,0 +1,333 @@
+"""
+Agent configuration module for Numa Workspace Agent.
+
+Handles fetching agent configuration from DynamoDB (workspace-agents and user-agents tables)
+and caching to avoid repeated database reads.
+"""
+
+import os
+from dataclasses import dataclass, field
+from functools import lru_cache
+from typing import Optional
+
+import boto3
+import structlog
+
+logger = structlog.get_logger()
+
+# Environment variables
+CLIENT_NAME = os.environ.get("CLIENT_NAME", "")
+REGION = os.environ.get("AWS_REGION", "us-east-1")
+
+# Table names follow the pattern: numa-{client}-agents and numa-{client}-user-agents
+# These are passed as environment variables from the infrastructure
+
+
+@dataclass
+class AgentReferenceFile:
+    """Reference file metadata for agent configuration."""
+
+    file_name: str
+    s3_key: str
+    s3_bucket: str
+    file_type: Optional[str] = None
+    file_size: Optional[int] = None
+    extracted_content_s3_key: Optional[str] = None
+    uploaded_at: Optional[str] = None
+    source: Optional[str] = None
+
+
+@dataclass
+class AgentToolsConfig:
+    """Tools configuration for agent."""
+
+    auto_tools_enabled: bool = True
+    query_data_sources: bool = False
+    web_search_enabled: bool = True
+    create_agent_enabled: bool = False
+    enabled_connections: list[str] = field(default_factory=list)
+    # Multi-KB support:
+    # None = all KBs (backwards compat)
+    # [] = no KB access
+    # ['company', 'kb-123'] = specific KBs only
+    allowed_knowledge_bases: Optional[list[str]] = None
+
+
+@dataclass
+class AgentConfig:
+    """Agent configuration loaded from DynamoDB."""
+
+    agent_id: str
+    title: str
+    system_prompt: str
+    user_welcome_message: Optional[str]
+    tools_config: AgentToolsConfig
+    reference_files: list[AgentReferenceFile]
+    version: int
+    icon: Optional[str] = None
+    icon_image: Optional[dict] = None
+    agent_type: str = "task"
+    description: Optional[str] = None
+    scope: str = "user"  # 'user' or 'workspace'
+
+
+def _get_dynamodb_client():
+    """Get DynamoDB client."""
+    return boto3.client("dynamodb", region_name=REGION)
+
+
+def _parse_tools_config(raw_config: Optional[dict]) -> AgentToolsConfig:
+    """Parse tools config from DynamoDB item."""
+    if not raw_config:
+        return AgentToolsConfig()
+
+    return AgentToolsConfig(
+        auto_tools_enabled=raw_config.get("autoToolsEnabled", True),
+        query_data_sources=raw_config.get("queryDataSources", False),
+        web_search_enabled=raw_config.get("webSearchEnabled", True),
+        create_agent_enabled=raw_config.get("createAgentEnabled", False),
+        enabled_connections=raw_config.get("enabledConnections", []),
+        allowed_knowledge_bases=raw_config.get("allowedKnowledgeBases"),
+    )
+
+
+def _parse_reference_files(raw_files: Optional[list]) -> list[AgentReferenceFile]:
+    """Parse reference files from DynamoDB item."""
+    if not raw_files:
+        return []
+
+    result = []
+    for raw in raw_files:
+        if not raw.get("fileName") or not raw.get("s3Key"):
+            continue
+        result.append(
+            AgentReferenceFile(
+                file_name=raw["fileName"],
+                s3_key=raw["s3Key"],
+                s3_bucket=raw.get("s3Bucket", ""),
+                file_type=raw.get("fileType"),
+                file_size=raw.get("fileSize"),
+                extracted_content_s3_key=raw.get("extractedContentS3Key"),
+                uploaded_at=raw.get("uploadedAt"),
+                source=raw.get("source"),
+            )
+        )
+    return result
+
+
+def _parse_workspace_agent(item: dict) -> AgentConfig:
+    """Parse a workspace agent item from DynamoDB."""
+    return AgentConfig(
+        agent_id=item["agent_id"],
+        title=item.get("title", "Untitled Agent"),
+        system_prompt=item.get("system_prompt", ""),
+        user_welcome_message=item.get("user_instructions"),
+        tools_config=_parse_tools_config(item.get("tools_config")),
+        reference_files=_parse_reference_files(item.get("reference_files")),
+        version=item.get("version", 0),
+        icon=item.get("icon"),
+        icon_image=item.get("icon_image"),
+        agent_type=item.get("agent_type", "task"),
+        description=item.get("description"),
+        scope="workspace",
+    )
+
+
+def _parse_user_agent(item: dict) -> AgentConfig:
+    """Parse a user agent item from DynamoDB."""
+    return AgentConfig(
+        agent_id=item["agent_id"],
+        title=item.get("title", "Untitled Agent"),
+        system_prompt=item.get("system_prompt", ""),
+        user_welcome_message=item.get("user_instructions"),
+        tools_config=_parse_tools_config(item.get("tools_config")),
+        reference_files=_parse_reference_files(item.get("reference_files")),
+        version=item.get("version", 0),
+        icon=item.get("icon"),
+        icon_image=item.get("icon_image"),
+        agent_type=item.get("agent_type", "task"),
+        description=item.get("description"),
+        scope="user",
+    )
+
+
+def _get_workspace_agent(
+    dynamo, agent_id: str, workspace_table: str
+) -> Optional[AgentConfig]:
+    """Fetch agent from workspace agents table."""
+    try:
+        response = dynamo.get_item(
+            TableName=workspace_table,
+            Key={
+                "tenant_id": {"S": CLIENT_NAME},
+                "agent_id": {"S": agent_id},
+            },
+        )
+        if "Item" not in response:
+            return None
+
+        # Convert DynamoDB item to Python dict
+        item = _dynamodb_item_to_dict(response["Item"])
+        return _parse_workspace_agent(item)
+    except Exception as e:
+        logger.warning(
+            "Failed to fetch workspace agent",
+            agent_id=agent_id,
+            error=str(e),
+        )
+        return None
+
+
+def _get_user_agent(
+    dynamo, agent_id: str, user_sub: str, user_table: str
+) -> Optional[AgentConfig]:
+    """Fetch agent from user agents table."""
+    try:
+        response = dynamo.get_item(
+            TableName=user_table,
+            Key={
+                "user_id": {"S": user_sub},
+                "agent_id": {"S": agent_id},
+            },
+        )
+        if "Item" not in response:
+            return None
+
+        # Convert DynamoDB item to Python dict
+        item = _dynamodb_item_to_dict(response["Item"])
+        return _parse_user_agent(item)
+    except Exception as e:
+        logger.warning(
+            "Failed to fetch user agent",
+            agent_id=agent_id,
+            user_sub=user_sub,
+            error=str(e),
+        )
+        return None
+
+
+def _dynamodb_item_to_dict(item: dict) -> dict:
+    """Convert DynamoDB item format to Python dict."""
+    result = {}
+    for key, value in item.items():
+        result[key] = _dynamodb_value_to_python(value)
+    return result
+
+
+def _dynamodb_value_to_python(value: dict):
+    """Convert a DynamoDB value to Python."""
+    if "S" in value:
+        return value["S"]
+    elif "N" in value:
+        num_str = value["N"]
+        # Try int first, fall back to float
+        try:
+            return int(num_str)
+        except ValueError:
+            return float(num_str)
+    elif "BOOL" in value:
+        return value["BOOL"]
+    elif "NULL" in value:
+        return None
+    elif "L" in value:
+        return [_dynamodb_value_to_python(v) for v in value["L"]]
+    elif "M" in value:
+        return {k: _dynamodb_value_to_python(v) for k, v in value["M"].items()}
+    elif "SS" in value:
+        return list(value["SS"])
+    elif "NS" in value:
+        return [float(n) for n in value["NS"]]
+    else:
+        # Unknown type, return as-is
+        return value
+
+
+def fetch_agent_config(
+    agent_id: str,
+    user_sub: str,
+    workspace_table: Optional[str] = None,
+    user_table: Optional[str] = None,
+) -> Optional[AgentConfig]:
+    """
+    Fetch agent configuration from DynamoDB.
+
+    Checks user agents first (personal agents), then workspace agents (public).
+    Results are cached by (agent_id, version) to avoid repeated reads.
+
+    Args:
+        agent_id: The agent ID to fetch
+        user_sub: The user's Cognito sub (for personal agents)
+        workspace_table: Optional override for workspace agents table name
+        user_table: Optional override for user agents table name
+
+    Returns:
+        AgentConfig if found, None otherwise
+    """
+    if not agent_id:
+        return None
+
+    # Resolve table names
+    ws_table = workspace_table or os.environ.get(
+        "WORKSPACE_AGENTS_TABLE", f"numa-{CLIENT_NAME}-agents"
+    )
+    u_table = user_table or os.environ.get(
+        "USER_AGENTS_TABLE", f"numa-{CLIENT_NAME}-user-agents"
+    )
+
+    dynamo = _get_dynamodb_client()
+
+    # Try user agents first (personal agents)
+    config = _get_user_agent(dynamo, agent_id, user_sub, u_table)
+    if config:
+        logger.info(
+            "Fetched user agent config",
+            agent_id=agent_id,
+            title=config.title,
+            version=config.version,
+        )
+        return config
+
+    # Then try workspace agents (public)
+    config = _get_workspace_agent(dynamo, agent_id, ws_table)
+    if config:
+        logger.info(
+            "Fetched workspace agent config",
+            agent_id=agent_id,
+            title=config.title,
+            version=config.version,
+        )
+        return config
+
+    logger.warning(
+        "Agent not found in either table",
+        agent_id=agent_id,
+        user_sub=user_sub,
+    )
+    return None
+
+
+@lru_cache(maxsize=50)
+def get_cached_agent_config(
+    agent_id: str, user_sub: str, version: int  # noqa: ARG001 - used as cache key
+) -> Optional[AgentConfig]:
+    """
+    Get agent config with caching by (agent_id, user_sub, version).
+
+    This is useful when the version is known to avoid refetching unchanged agents.
+    The version parameter is part of the lru_cache key, ensuring cache invalidation
+    when agent versions change.
+
+    Args:
+        agent_id: The agent ID
+        user_sub: The user's Cognito sub
+        version: The agent version (used as cache key for invalidation)
+
+    Returns:
+        AgentConfig if found, None otherwise
+    """
+    return fetch_agent_config(agent_id, user_sub)
+
+
+def clear_agent_cache():
+    """Clear the agent config cache."""
+    get_cached_agent_config.cache_clear()

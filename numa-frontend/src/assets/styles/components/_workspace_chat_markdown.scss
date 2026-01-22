@@ -1,0 +1,435 @@
+// Workspace Chat Markdown Component Styles
+
+.workspace-chat-markdown {
+  // File Reference Container
+  .workspace-chat-file-reference {
+    max-width: 100%;
+
+    .workspace-chat-file-header {
+      border-radius: 0.375rem 0.375rem 0 0;
+    }
+
+    .workspace-chat-file-preview {
+      max-width: 100%;
+      overflow-x: auto;
+
+      iframe,
+      .workspace-chat-markdown-preview,
+      .workspace-chat-csv-preview,
+      .workspace-chat-html-preview {
+        max-width: 100%;
+      }
+
+      .workspace-chat-markdown-preview {
+        max-width: 100%;
+        overflow-x: auto;
+
+        table {
+          max-width: 100%;
+          overflow-x: auto;
+          display: block;
+        }
+      }
+
+      .workspace-chat-csv-preview {
+        overflow-x: auto;
+
+        table {
+          min-width: 100%;
+        }
+      }
+
+      // PDF Preview styles
+      .workspace-chat-pdf-preview {
+        background-color: #f5f5f5;
+
+        .pdf-pages-container {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          padding: 1rem;
+          background-color: #525659;
+        }
+
+        .pdf-page-wrapper {
+          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+          background-color: white;
+
+          canvas {
+            display: block;
+            max-width: 100%;
+            height: auto;
+          }
+        }
+      }
+
+      // XLSX/Excel Preview styles
+      .workspace-chat-xlsx-preview {
+        .xlsx-sheet-tabs {
+          overflow-x: auto;
+          flex-wrap: nowrap;
+
+          .btn {
+            white-space: nowrap;
+          }
+        }
+
+        .xlsx-table {
+          font-size: 0.875rem;
+
+          td,
+          th {
+            vertical-align: middle;
+          }
+
+          // First row styling (headers)
+          tr:first-child {
+            background-color: #f8f9fa;
+          }
+        }
+      }
+
+      // DOCX/Word Preview styles
+      .workspace-chat-docx-preview {
+        background-color: #f5f5f5;
+
+        .docx-container {
+          background-color: #525659;
+          padding: 1rem;
+
+          // docx-preview library styles override
+          .docx-wrapper {
+            background-color: white;
+            margin: 0 auto;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+            max-width: 100%;
+            overflow-x: auto;
+
+            > section.docx {
+              padding: 1rem !important;
+              min-height: auto !important;
+            }
+          }
+        }
+      }
+
+      // File too large message
+      .workspace-chat-file-too-large {
+        background-color: #fffbe6;
+        border-top: 1px solid #ffe58f;
+      }
+    }
+  }
+
+  // Folder Reference Container
+  .workspace-chat-folder-reference {
+    .workspace-chat-folder-header {
+      border-radius: 0.375rem;
+      transition: all 0.2s ease;
+
+      &:hover {
+        box-shadow: 0 2px 8px rgba(142, 80, 167, 0.1);
+      }
+    }
+
+    .workspace-chat-folder-contents {
+      background-color: #fafafa;
+      max-height: 400px;
+      overflow-y: auto;
+    }
+  }
+
+  // Inline code styling for file/folder names
+  code {
+    background-color: rgba(142, 80, 167, 0.1);
+    color: var(--color-primary);
+    padding: 0.15rem 0.4rem;
+    border-radius: 4px;
+    font-size: 0.9em;
+    font-weight: 500;
+  }
+
+  // Markdown content within previews
+  .markdown-body {
+    font-size: 1rem;
+    line-height: 1.6;
+  }
+
+  // Button styling consistency
+  .btn-outline-primary {
+    border-color: var(--color-primary);
+    color: var(--color-primary);
+
+    &:hover {
+      background-color: var(--color-primary);
+      border-color: var(--color-primary);
+      color: white;
+    }
+  }
+}
+
+// Inline File Reference - minimal inline style
+.workspace-chat-inline-file-reference {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0;
+  background: none;
+  border: none;
+  font-family: 'SF Mono', 'Monaco', 'Inconsolata', monospace;
+  font-size: 0.875em;
+  line-height: 1.4;
+  vertical-align: baseline;
+  white-space: nowrap;
+  cursor: pointer;
+  color: var(--color-primary);
+  transition: opacity 0.15s ease;
+
+  &:hover {
+    opacity: 0.8;
+  }
+
+  .file-icon {
+    font-size: 1em;
+    color: var(--color-primary);
+    flex-shrink: 0;
+  }
+
+  .file-name {
+    color: var(--color-primary);
+    font-weight: 600;
+    max-width: 400px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .open-icon {
+    font-size: 0.75em;
+    color: var(--color-primary);
+    margin-left: 0.125rem;
+    font-weight: 600;
+  }
+}
+
+// Inline Folder Reference - minimal inline style
+.workspace-chat-inline-folder-reference {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0;
+  background: none;
+  border: none;
+  font-family: 'SF Mono', 'Monaco', 'Inconsolata', monospace;
+  font-size: 0.875em;
+  line-height: 1.4;
+  vertical-align: baseline;
+  white-space: nowrap;
+  cursor: pointer;
+  color: var(--color-primary);
+  transition: opacity 0.15s ease;
+
+  &:hover {
+    opacity: 0.8;
+  }
+
+  .folder-icon {
+    font-size: 1em;
+    color: var(--color-primary);
+    flex-shrink: 0;
+  }
+
+  .folder-name {
+    color: var(--color-primary);
+    font-weight: 600;
+    max-width: 400px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .open-icon {
+    font-size: 0.75em;
+    color: var(--color-primary);
+    margin-left: 0.125rem;
+    font-weight: 600;
+  }
+}
+
+// Inline KB Source Reference - minimal inline style for knowledge base documents
+.workspace-chat-inline-kb-source {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0;
+  background: none;
+  border: none;
+  font-family: 'SF Mono', 'Monaco', 'Inconsolata', monospace;
+  font-size: 0.875em;
+  line-height: 1.4;
+  vertical-align: baseline;
+  white-space: nowrap;
+  cursor: pointer;
+  color: var(--brand-primary, var(--color-primary));
+  transition: opacity 0.15s ease;
+
+  &:hover:not(:disabled) {
+    opacity: 0.8;
+  }
+
+  &:disabled {
+    opacity: 0.7;
+    cursor: not-allowed;
+  }
+
+  &.has-error {
+    .file-icon,
+    .file-name,
+    .open-icon {
+      color: var(--bs-danger);
+    }
+  }
+
+  .file-icon {
+    font-size: 1em;
+    color: var(--brand-primary, var(--color-primary));
+    flex-shrink: 0;
+  }
+
+  .file-name {
+    color: var(--brand-primary, var(--color-primary));
+    font-weight: 600;
+    max-width: 400px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .open-icon {
+    font-size: 0.75em;
+    color: var(--brand-primary, var(--color-primary));
+    margin-left: 0.125rem;
+    font-weight: 600;
+  }
+
+  .loading-icon {
+    width: 0.75rem;
+    height: 0.75rem;
+    color: var(--brand-primary, var(--color-primary));
+    margin-left: 0.125rem;
+  }
+}
+
+// File Preview Panel - right-side split view panel
+.file-preview-panel-container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: white;
+  border: 1px solid #e0e0e0;
+  border-radius: 0.5rem;
+  overflow: hidden;
+
+  &.embedded {
+    border: none;
+    border-radius: 0;
+  }
+
+  .file-preview-panel-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.75rem 1rem;
+    background: #f8f9fa;
+    border-bottom: 1px solid #e0e0e0;
+    flex-shrink: 0;
+
+    .file-preview-panel-title {
+      display: flex;
+      align-items: center;
+      gap: 0.25rem;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+  }
+
+  .file-preview-panel-body {
+    flex: 1;
+    overflow-y: auto;
+    background: white;
+    min-height: 0; // Allow flex shrinking
+
+    // Inherit preview component styles
+    .workspace-chat-pdf-preview,
+    .workspace-chat-xlsx-preview,
+    .workspace-chat-docx-preview,
+    .workspace-chat-csv-preview,
+    .workspace-chat-markdown-preview {
+      height: 100%;
+    }
+
+    // HTML preview needs special handling to fill available space
+    .workspace-chat-html-preview {
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+
+      iframe {
+        flex: 1;
+        min-height: 0;
+      }
+    }
+  }
+
+  // Actions footer
+  .file-preview-actions {
+    padding: 0.75rem 1rem;
+    background: #f8f9fa;
+    border-top: 1px solid #e0e0e0;
+    flex-shrink: 0;
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.5rem;
+  }
+}
+
+// File Preview Modal (mobile)
+.file-preview-modal {
+  .modal-header {
+    background: #f8f9fa;
+    border-bottom: 1px solid #e0e0e0;
+  }
+
+  .modal-body {
+    padding: 0;
+
+    .file-preview-panel-container {
+      height: 100%;
+    }
+  }
+}
+
+// Dark mode support (if needed)
+@media (prefers-color-scheme: dark) {
+  .workspace-chat-markdown {
+    .workspace-chat-file-reference {
+      background-color: #2d2d2d;
+      border-color: #444;
+
+      .workspace-chat-file-header {
+        background-color: #3a3a3a;
+        border-color: #444;
+      }
+    }
+
+    .workspace-chat-folder-reference {
+      .workspace-chat-folder-header {
+        background-color: #3a3a3a;
+        border-color: #444;
+      }
+
+      .workspace-chat-folder-contents {
+        background-color: #2d2d2d;
+      }
+    }
+  }
+}

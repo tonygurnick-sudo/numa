@@ -5,7 +5,13 @@
       "upload": "File Upload",
       "knowledgeBases": "Knowledge Bases",
       "tools": "Tools",
-      "integrations": "Integrations"
+      "integrations": "Integrations",
+      "settings": "Chat Settings",
+      "model": "Model"
+    },
+    "modelSelector": {
+      "title": "Select Model",
+      "mobileTitle": "Select Model"
     },
     "aria": {
       "upload": "Upload Files",
@@ -62,7 +68,9 @@
       "system": "System"
     },
     "fileUploaded": "File '{{name}}' uploaded successfully.",
-    "openDocument": "Open: {{title}}"
+    "openDocument": "Open: {{title}}",
+    "copyMessage": "Copy message",
+    "copyMessageAria": "Copy message to clipboard"
   },
   "dataAnalysis": {
     "fileFallback": "data file"
@@ -195,6 +203,7 @@
     "title": "Numa Chat",
     "historyButton": "History",
     "newChat": "New Chat",
+    "chatHistory": "Chat History",
     "mobileActions": {
       "show": "Show chat actions",
       "hide": "Hide chat actions"
@@ -208,8 +217,167 @@
       "goToIntegrations": "Go to Integrations",
       "continueWithout": "Continue without"
     },
+    "legacyMigration": {
+      "title": "Continuing from previous chat",
+      "description": "This conversation was started in an earlier version of Numa Chat. Send a message to continue and migrate to the new format with enhanced capabilities."
+    },
     "loading": "Loading...",
     "loadingConversation": "Loading conversation...",
     "documentTitle": "Document"
+  },
+  "workspace": {
+    "thinkingBlock": {
+      "label": "Extended Thinking"
+    },
+    "assistantAdvice": {
+      "label": "Pre-Analysis"
+    },
+    "compaction": {
+      "summarizing": "Summarizing conversation...",
+      "complete": "Conversation summarized",
+      "tokensSaved": "Reduced context by {{tokens}} tokens"
+    },
+    "pendingFiles": {
+      "label_one": "{{count}} file ready to send",
+      "label_other": "{{count}} files ready to send",
+      "folderCount_one": "({{count}} file)",
+      "folderCount_other": "({{count}} files)",
+      "showAll": "Show all",
+      "showLess": "Show less",
+      "moreFiles": "+{{count}} more"
+    },
+    "userAttachments": {
+      "moreFiles": "+{{count}} more files",
+      "showLess": "Show less"
+    },
+    "trace": {
+      "button": "Trace",
+      "downloadTitle": "Download trace as HTML",
+      "cleanTrace": "Clean Trace",
+      "cleanTraceDesc": "Excludes streaming deltas",
+      "fullTrace": "Full Trace",
+      "fullTraceDesc": "All events including deltas",
+      "rawTrace": "Raw Trace",
+      "rawTraceDesc": "Download as NDJSON file"
+    },
+    "todo": {
+      "title": "Task List",
+      "pending": "Pending",
+      "inProgress": "In Progress",
+      "completed": "Completed"
+    },
+    "kbSource": {
+      "source": "Source",
+      "viewDocument": "View document",
+      "failedToOpen": "Failed to open file",
+      "openFile": "Open {{filename}}"
+    },
+    "settings": {
+      "thinkingMode": "Thinking Mode",
+      "thinkingModeDesc": "Enable extended thinking for complex tasks",
+      "stopButton": "Stop"
+    },
+    "fileUpload": {
+      "title": "Upload to Workspace",
+      "dropzone": "Drag and drop files here",
+      "clickToBrowse": "or click to browse",
+      "uploadFiles": "Upload Files",
+      "uploadFolder": "Upload Folder",
+      "uploading": "Uploading...",
+      "remove": "Remove",
+      "fileTooLarge": "File exceeds 50MB limit",
+      "success_one": "{{count}} file uploaded successfully!",
+      "success_other": "{{count}} files uploaded successfully!",
+      "allFailed": "All uploads failed. Please try again.",
+      "partialSuccess": "{{success}} uploaded, {{failed}} failed.",
+      "infoMessage": "Files are uploaded to this conversation's <code>uploads/</code> directory and are only available during this conversation.",
+      "clear": "Clear",
+      "uploadCount_one": "Upload {{count}} File",
+      "uploadCount_other": "Upload {{count}} Files",
+      "uploadMore": "Upload More",
+      "done": "Done",
+      "cancel": "Cancel"
+    },
+    "segments": {
+      "uploaded": "Uploaded: {{filename}}",
+      "fileCount_one": "{{count}} file",
+      "fileCount_other": "{{count}} files"
+    }
+  },
+  "filePreview": {
+    "csv": {
+      "noData": "No CSV data to preview",
+      "rowsShowing": "Showing first 100 of {{total}} rows. Download the file to see all data."
+    },
+    "xlsx": {
+      "noData": "No data found in spreadsheet",
+      "rowsShowing": "Showing first 100 of {{total}} rows. Download the file to see all data."
+    },
+    "json": {
+      "invalid": "Invalid JSON:"
+    },
+    "markdown": {
+      "showLess": "Show Less",
+      "showMore": "Show More"
+    },
+    "pdf": {
+      "pages_one": "{{count}} page",
+      "pages_other": "{{count}} pages"
+    },
+    "folder": {
+      "noFiles": "No files found in this folder"
+    },
+    "actions": {
+      "download": "Download",
+      "downloadZip": "Download as ZIP",
+      "downloadOriginal": "Download Original",
+      "copyPath": "Copy Path",
+      "copied": "Copied!",
+      "openInEditor": "Open in Editor",
+      "close": "Close",
+      "converting": "Converting...",
+      "openInNewTab": "Open in New Tab",
+      "pdf": "PDF",
+      "docx": "DOCX",
+      "rawMarkdown": "Raw Markdown",
+      "downloadToView": "Download to view",
+      "downloadFile": "Download file"
+    },
+    "noFileSelected": "No File Selected",
+    "selectFile": "Select a file to preview",
+    "loadingPreview": "Loading preview...",
+    "fileTooLarge": "File is too large to preview ({{size}}). Download to view.",
+    "previewNotAvailable": "Preview not available for this file type"
+  },
+  "workspaceSettings": {
+    "chatUploads": "Chat Uploads",
+    "sessionFiles": "Session Files",
+    "refresh": "Refresh",
+    "uploaded": "Uploaded: {{filename}}",
+    "folderLabel": "{{name}} ({{count}} files)",
+    "loadingFiles": "Loading files...",
+    "retry": "Retry",
+    "noUploads": "No uploaded files",
+    "noSessionFiles": "No files generated yet",
+    "refreshFiles": "Refresh files",
+    "knowledgeBases": "Knowledge Bases",
+    "selectKBs": "Select knowledge bases to search",
+    "loading": "Loading...",
+    "noKBs": "No knowledge bases available",
+    "tools": "Tools",
+    "toolsHelper": "Enable capabilities for this chat",
+    "allTools": "All Tools",
+    "allToolsHelper": "Enable all tools automatically",
+    "webSearch": "Web Search",
+    "agentCreation": "Agent Creation",
+    "integrations": "Integrations",
+    "integrationsHelper": "Connect external services",
+    "integrationsDisabled": "Not enabled yet for V2 Chat",
+    "noIntegrations": "No integrations connected",
+    "preview": "Preview",
+    "download": "Download"
+  },
+  "agents": {
+    "chooseExperience": "Choose Chat Experience"
   }
 }

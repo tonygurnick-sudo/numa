@@ -1,0 +1,51 @@
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.coverage.run]
+omit = [
+    "**/tests/**/*"
+]
+source = [
+    ".",
+]
+
+[tool.poetry]
+name = "workspace-chat-tools"
+version = "0.1.0"
+description = "Lambda function providing tools for workspace-chat-agent (KB queries, etc.)"
+authors = ["Arcanum AI <hello@arcanum.ai>"]
+packages = [
+    { include = "**/*.py" },
+]
+
+[tool.poetry.dependencies]
+python = "~3.13.0"
+prm = {path = "../../../lib/prm", develop = true}
+aws-lambda-powertools = "^2.24.0"
+structlog = "^23.1.0"
+# Web search dependencies
+httpx = "^0.28.1"
+beautifulsoup4 = "^4.12.0"
+html5lib = "^1.1"
+ddgs = "^9.6.0"
+
+[tool.poetry.group.dev.dependencies]
+boto3-stubs = "^1.37.20"
+mypy = "^1.15.0"
+pylint = "^3.3.6"
+pyright = "^1.1.400"
+pytest = "^7.4.0"
+pytest-cov = "^4.1.0"
+
+[tool.poetry.group.boto.dependencies]
+boto3 = "1.40.25"
+
+[tool.mypy]
+python_version = "3.13"
+ignore_missing_imports = true
+strict_optional = true
+
+[tool.pyright]
+pythonVersion = "3.13"
+typeCheckingMode = "basic"

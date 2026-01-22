@@ -84,17 +84,21 @@ export const fetchCompanyInfo = async (s3Bucket, region, getCredentials) => {
       const companyInfo = JSON.parse(text);
       return companyInfo;
     } catch (fetchError) {
-      // Check if this is a 404 (Not Found) error, which is expected for new environments
-      if (fetchError.message && fetchError.message.includes('Not Found')) {
-        console.log('Company information file does not exist yet. Will create on first save.');
+      // Check if this is a 404 (Not Found) or 403 (Forbidden) error, which is expected for new environments
+      // S3 often returns 403 instead of 404 when the file doesn't exist due to bucket policy
+      if (
+        fetchError.message &&
+        (fetchError.message.includes('Not Found') || fetchError.message.includes('Forbidden'))
+      ) {
+        console.debug('Company information file does not exist yet. Will create on first save.');
         return { profile: '', lastUpdated: null };
       }
       // For other errors, re-throw to be handled by the outer catch
       throw fetchError;
     }
   } catch (error) {
-    // Handle any other errors
-    console.error('Error fetching company information:', error);
+    // Handle any other errors (silently for expected missing file scenarios)
+    console.debug('Company profile not available:', error.message || error);
     return { profile: '', lastUpdated: null };
   }
 };

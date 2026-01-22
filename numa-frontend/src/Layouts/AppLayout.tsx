@@ -46,6 +46,15 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
     localStorage.setItem(SIDEBAR_COLLAPSE_KEY, String(isCollapsed));
   }, [isCollapsed]);
 
+  // Listen for custom collapse event (e.g., when opening file preview)
+  useEffect(() => {
+    const handleCollapseEvent = () => {
+      setIsCollapsed(true);
+    };
+    window.addEventListener('numa-collapse-sidebar', handleCollapseEvent);
+    return () => window.removeEventListener('numa-collapse-sidebar', handleCollapseEvent);
+  }, []);
+
   const toggleCollapse = () => {
     setIsCollapsed(!isCollapsed);
   };

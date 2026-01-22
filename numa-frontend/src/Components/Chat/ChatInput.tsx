@@ -1,4 +1,4 @@
-import { useRef, useEffect, useState } from 'react';
+import React, { useRef, useEffect, useState } from 'react';
 import { Button, Form, Spinner, Modal, Dropdown, Badge, OverlayTrigger, Tooltip } from 'react-bootstrap';
 import { Search, Robot, BarChart } from 'react-bootstrap-icons';
 import { useTranslation } from 'react-i18next';
@@ -12,9 +12,14 @@ import {
 } from '../../config/integrationsConfig';
 import { useKnowledgeBase } from '../../Providers/KnowledgeBaseProvider';
 import { useDrawerBackClose } from '../../hooks/useDrawerBackClose';
+import type { WorkspaceChatModelId } from '../../types/workspaceChatTypes';
+import { WORKSPACE_MODEL_OPTIONS } from '../../types/workspaceChatTypes';
 
 // WebSocket message size limit (AWS API Gateway limit is 32KB)
 const MAX_MESSAGE_LENGTH = 20000; // Conservative limit accounting for JSON overhead
+
+/** ChatInput variant - 'v1' is the default with all dropdowns, 'v2' is simplified for workspace chat */
+export type ChatInputVariant = 'v1' | 'v2';
 
 const ChatInput = ({
   inputMessage,
@@ -46,6 +51,19 @@ const ChatInput = ({
   enabledKBIds = [],
   setEnabledKBIds,
   dropdownDirection = 'up',
+  // Optional reason why upload is disabled (shown as tooltip)
+  uploadDisabledReason = '',
+  // Model selection (workspace chat only)
+  selectedModelId = undefined as WorkspaceChatModelId | undefined,
+  setSelectedModelId = undefined as ((id: WorkspaceChatModelId) => void) | undefined,
+  showModelSelector = false,
+  onStop = undefined as (() => void) | undefined,
+  isStopping = false,
+  // V2 variant props
+  variant = 'v1' as ChatInputVariant,
+  onSettingsClick = undefined as (() => void) | undefined,
+  isSettingsPanelOpen = false,
+  hasActiveSettings = false,
 }) => {
   const { t } = useTranslation('chat');
   const internalRef = useRef(null);
@@ -53,6 +71,7 @@ const ChatInput = ({
   const [showConnectionsModal, setShowConnectionsModal] = useState(false);
   const [showKBDropdown, setShowKBDropdown] = useState(false);
   const [showToolsDropdown, setShowToolsDropdown] = useState(false);
+  const [showModelDropdown, setShowModelDropdown] = useState(false);
   const [isMobile] = useState(() => (typeof window !== 'undefined' ? window.innerWidth <= 768 : false));
   const {
     selectedKB: _selectedKB,
@@ -84,6 +103,13 @@ const ChatInput = ({
     stateKey: 'tools-dropdown',
   });
 
+  useDrawerBackClose({
+    isOpen: showModelDropdown,
+    onClose: () => setShowModelDropdown(false),
+    enabled: isMobile,
+    stateKey: 'model-dropdown',
+  });
+
   // Agent mode is the default and only mode; remove legacy flag checks
 
   // Keep text input enabled during chat processing and uploads; only honor a hard disable
@@ -91,11 +117,11 @@ const ChatInput = ({
 
   // Send button should be disabled during loading/streaming, uploads, hard-disable, or oversized messages
   const isSendDisabled =
-    buttonStatus === 'loading' ||
-    buttonStatus === 'streaming' ||
-    uploadsInProgress ||
-    !!disabled ||
-    inputMessage.length > MAX_MESSAGE_LENGTH;
+    buttonStatus === 'loading' || uploadsInProgress || !!disabled || inputMessage.length > MAX_MESSAGE_LENGTH;
+
+  const showStopButton = buttonStatus === 'streaming' && !!onStop;
+  const showSendSpinner =
+    (buttonStatus === 'loading' || uploadsInProgress || buttonStatus === 'streaming') && !showStopButton;
 
   // Keep other controls disabled during streaming/uploads to avoid mid-turn config changes
   const isControlsDisabled = buttonStatus === 'streaming' || uploadsInProgress || !!disabled;
@@ -112,14 +138,17 @@ const ChatInput = ({
     }
 
     setInputMessage(newValue);
-    e.target.style.height = 'auto';
-    e.target.style.height = `${e.target.scrollHeight}px`;
+    // Only expand if content actually wraps (scrollHeight > single line threshold ~70px)
+    e.target.style.height = '46px';
+    if (e.target.scrollHeight > 70) {
+      e.target.style.height = `${e.target.scrollHeight}px`;
+    }
   };
 
   // Reset height when inputMessage is cleared.
   useEffect(() => {
     if (inputMessage === '' && inputRef.current) {
-      inputRef.current.style.height = '40px';
+      inputRef.current.style.height = '46px';
     }
   }, [inputMessage]);
 
@@ -178,7 +207,6 @@ const ChatInput = ({
             placeholder={placeholderText}
             disabled={isTextInputDisabled}
             className="chat-textarea"
-            style={{ paddingRight: '80px' }}
           />
           {/* Character count positioned absolutely in bottom right of textarea */}
           <small
@@ -206,169 +234,196 @@ const ChatInput = ({
               <>
                 <OverlayTrigger
                   placement="top"
-                  overlay={<Tooltip id="tooltip-file-upload">{t('input.tooltips.upload')}</Tooltip>}
+                  overlay={
+                    <Tooltip id="tooltip-file-upload">{uploadDisabledReason || t('input.tooltips.upload')}</Tooltip>
+                  }
                 >
-                  <Button
-                    variant="link"
-                    className="attachment-icon"
-                    onClick={() => {
-                      console.log('Paperclip button clicked');
-                      setShowUploadModal(true);
-                    }}
-                    aria-label={t('input.aria.upload')}
-                    disabled={isControlsDisabled}
-                  >
-                    <i className="bi bi-paperclip"></i>
-                  </Button>
-                </OverlayTrigger>
-
-                <OverlayTrigger
-                  placement="top"
-                  overlay={<Tooltip id="tooltip-knowledge-bases">{t('input.tooltips.knowledgeBases')}</Tooltip>}
-                >
-                  <Dropdown
-                    drop={dropdownDirection}
-                    className="kb-selector-compact-dropdown"
-                    show={showKBDropdown}
-                    onToggle={(isOpen) => setShowKBDropdown(isOpen)}
-                  >
-                    <Dropdown.Toggle
+                  <span className="d-inline-block">
+                    <Button
                       variant="link"
-                      className={`kb-selector-compact-toggle ${enabledKBIds.length > 0 ? 'active' : ''}`}
-                      disabled={isControlsDisabled}
-                      aria-label={t('input.aria.knowledgeBase')}
-                    >
-                      <i className="bi bi-folder2-open"></i>
-                      {enabledKBIds.length > 0 && (
-                        <span
-                          className="kb-active-indicators"
-                          style={{
-                            position: 'absolute',
-                            top: '2px',
-                            right: '2px',
-                            display: 'flex',
-                            gap: '2px',
-                          }}
-                        >
-                          {Array.from({ length: Math.min(enabledKBIds.length, 3) }).map((_, i) => (
-                            <span
-                              key={i}
-                              style={{
-                                width: '6px',
-                                height: '6px',
-                                borderRadius: '50%',
-                                backgroundColor: 'var(--brand-primary, var(--color-primary))',
-                              }}
-                            ></span>
-                          ))}
-                        </span>
-                      )}
-                    </Dropdown.Toggle>
-
-                    <Dropdown.Menu
-                      className="p-3 kb-dropdown-menu"
-                      style={{ minWidth: '280px', zIndex: 9999 }}
-                      popperConfig={{
-                        strategy: 'fixed',
-                        modifiers: [
-                          {
-                            name: 'offset',
-                            options: {
-                              offset: [0, 8], // [skidding, distance] - 8px gap above button
-                            },
-                          },
-                          {
-                            name: 'preventOverflow',
-                            options: {
-                              boundary: 'viewport',
-                              padding: 8,
-                              altAxis: true, // Allow horizontal adjustment to avoid clipping on narrow screens
-                            },
-                          },
-                          {
-                            name: 'flip',
-                            enabled: false, // Disable flip to force it to stay above
-                          },
-                        ],
+                      className="attachment-icon"
+                      onClick={() => {
+                        console.log('Paperclip button clicked');
+                        setShowUploadModal(true);
                       }}
+                      aria-label={t('input.aria.upload')}
+                      disabled={isControlsDisabled || !!uploadDisabledReason}
+                      style={uploadDisabledReason ? { pointerEvents: 'none' } : undefined}
                     >
-                      {/* Mobile Close Button */}
-                      <div className="kb-mobile-header d-md-none">
-                        <span className="kb-header-title">{t('input.kb.title')}</span>
-                        <Button
-                          variant="link"
-                          className="kb-close-button"
-                          onClick={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            setShowKBDropdown(false);
-                          }}
-                          aria-label={t('input.aria.close')}
-                        >
-                          <i className="bi bi-x-lg"></i>
-                        </Button>
-                      </div>
-
-                      {/* KB Selection */}
-                      <Dropdown.Header className="d-none d-md-block">{t('input.kb.available')}</Dropdown.Header>
-                      {isLoadingKBs ? (
-                        <div className="text-center py-2">
-                          <Spinner animation="border" size="sm" />
-                        </div>
-                      ) : availableKBs.length === 0 ? (
-                        <div className="px-3 py-2 text-muted">{t('input.kb.empty')}</div>
-                      ) : (
-                        availableKBs.map((kb) => (
-                          <div key={kb.kb_id} className="kb-item">
-                            <Form.Check
-                              type="switch"
-                              id={`kb-switch-${kb.kb_id}`}
-                              label={
-                                <div className="kb-label-container">
-                                  <div className="kb-info">
-                                    <i className="bi bi-folder2-open kb-icon"></i>
-                                    <span className="kb-name">{kb.kb_name}</span>
-                                    {kb.kb_id === 'company' && (
-                                      <Badge bg="" className="badge-outline ms-2" style={{ fontSize: '0.65rem' }}>
-                                        {t('input.kb.defaultBadge')}
-                                      </Badge>
-                                    )}
-                                  </div>
-                                  <Badge
-                                    bg=""
-                                    className={`kb-role-badge ${kb.role === 'OWNER' ? 'badge-outline-primary' : 'badge-outline'}`}
-                                    style={{ fontSize: '0.65rem' }}
-                                  >
-                                    {kb.role}
-                                  </Badge>
-                                </div>
-                              }
-                              checked={enabledKBIds.includes(kb.kb_id)}
-                              onChange={(e) => {
-                                if (e.target.checked) {
-                                  setEnabledKBIds([...enabledKBIds, kb.kb_id]);
-                                } else {
-                                  setEnabledKBIds(enabledKBIds.filter((id) => id !== kb.kb_id));
-                                }
-                              }}
-                            />
-                          </div>
-                        ))
-                      )}
-
-                      <Dropdown.Divider />
-                      <Dropdown.Item onClick={() => refreshKBs()}>
-                        <i className="bi bi-arrow-clockwise me-2"></i>
-                        {t('input.kb.refresh')}
-                      </Dropdown.Item>
-                    </Dropdown.Menu>
-                  </Dropdown>
+                      <i className="bi bi-paperclip"></i>
+                    </Button>
+                  </span>
                 </OverlayTrigger>
+
+                {/* V1 only: KB Dropdown (V2 has KB in settings panel) */}
+                {variant === 'v1' && (
+                  <OverlayTrigger
+                    placement="top"
+                    overlay={<Tooltip id="tooltip-knowledge-bases">{t('input.tooltips.knowledgeBases')}</Tooltip>}
+                  >
+                    <Dropdown
+                      drop={dropdownDirection as DropDirection}
+                      className="kb-selector-compact-dropdown"
+                      show={showKBDropdown}
+                      onToggle={(isOpen) => setShowKBDropdown(isOpen)}
+                    >
+                      <Dropdown.Toggle
+                        variant="link"
+                        className={`kb-selector-compact-toggle ${enabledKBIds.length > 0 ? 'active' : ''}`}
+                        disabled={isControlsDisabled}
+                        aria-label={t('input.aria.knowledgeBase')}
+                      >
+                        <i className="bi bi-folder2-open"></i>
+                        {enabledKBIds.length > 0 && (
+                          <span
+                            className="kb-active-indicators"
+                            style={{
+                              position: 'absolute',
+                              top: '2px',
+                              right: '2px',
+                              display: 'flex',
+                              gap: '2px',
+                            }}
+                          >
+                            {Array.from({ length: Math.min(enabledKBIds.length, 3) }).map((_, i) => (
+                              <span
+                                key={i}
+                                style={{
+                                  width: '6px',
+                                  height: '6px',
+                                  borderRadius: '50%',
+                                  backgroundColor: 'var(--brand-primary, var(--color-primary))',
+                                }}
+                              ></span>
+                            ))}
+                          </span>
+                        )}
+                      </Dropdown.Toggle>
+
+                      <Dropdown.Menu
+                        className="p-3 kb-dropdown-menu"
+                        style={{ minWidth: '280px', zIndex: 9999 }}
+                        popperConfig={{
+                          strategy: 'fixed',
+                          modifiers: [
+                            {
+                              name: 'offset',
+                              options: {
+                                offset: [0, 8], // [skidding, distance] - 8px gap above button
+                              },
+                            },
+                            {
+                              name: 'preventOverflow',
+                              options: {
+                                boundary: 'viewport',
+                                padding: 8,
+                                altAxis: true, // Allow horizontal adjustment to avoid clipping on narrow screens
+                              },
+                            },
+                            {
+                              name: 'flip',
+                              enabled: false, // Disable flip to force it to stay above
+                            },
+                          ],
+                        }}
+                      >
+                        {/* Mobile Close Button */}
+                        <div className="kb-mobile-header d-md-none">
+                          <span className="kb-header-title">{t('input.kb.title')}</span>
+                          <Button
+                            variant="link"
+                            className="kb-close-button"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              setShowKBDropdown(false);
+                            }}
+                            aria-label={t('input.aria.close')}
+                          >
+                            <i className="bi bi-x-lg"></i>
+                          </Button>
+                        </div>
+
+                        {/* KB Selection */}
+                        <Dropdown.Header className="d-none d-md-block">{t('input.kb.available')}</Dropdown.Header>
+                        {isLoadingKBs ? (
+                          <div className="text-center py-2">
+                            <Spinner animation="border" size="sm" />
+                          </div>
+                        ) : availableKBs.length === 0 ? (
+                          <div className="px-3 py-2 text-muted">{t('input.kb.empty')}</div>
+                        ) : (
+                          availableKBs.map((kb) => (
+                            <div key={kb.kb_id} className="kb-item">
+                              <Form.Check
+                                type="switch"
+                                id={`kb-switch-${kb.kb_id}`}
+                                label={
+                                  <div className="kb-label-container">
+                                    <div className="kb-info">
+                                      <i className="bi bi-folder2-open kb-icon"></i>
+                                      <span className="kb-name">{kb.kb_name}</span>
+                                      {kb.kb_id === 'company' && (
+                                        <Badge bg="" className="badge-outline ms-2" style={{ fontSize: '0.65rem' }}>
+                                          {t('input.kb.defaultBadge')}
+                                        </Badge>
+                                      )}
+                                    </div>
+                                    <Badge
+                                      bg=""
+                                      className={`kb-role-badge ${kb.role === 'OWNER' ? 'badge-outline-primary' : 'badge-outline'}`}
+                                      style={{ fontSize: '0.65rem' }}
+                                    >
+                                      {kb.role}
+                                    </Badge>
+                                  </div>
+                                }
+                                checked={enabledKBIds.includes(kb.kb_id)}
+                                onChange={(e) => {
+                                  if (e.target.checked) {
+                                    setEnabledKBIds([...enabledKBIds, kb.kb_id]);
+                                  } else {
+                                    setEnabledKBIds(enabledKBIds.filter((id) => id !== kb.kb_id));
+                                  }
+                                }}
+                              />
+                            </div>
+                          ))
+                        )}
+
+                        <Dropdown.Divider />
+                        <Dropdown.Item onClick={() => refreshKBs()}>
+                          <i className="bi bi-arrow-clockwise me-2"></i>
+                          {t('input.kb.refresh')}
+                        </Dropdown.Item>
+                      </Dropdown.Menu>
+                    </Dropdown>
+                  </OverlayTrigger>
+                )}
               </>
             </FeatureWrapper>
 
-            {/* Tools Settings Dropup */}
-            {autoToolsEnabled !== undefined && setAutoToolsEnabled && (
+            {/* V2: Settings Toggle Button (opens/closes right panel) */}
+            {variant === 'v2' && onSettingsClick && (
+              <OverlayTrigger
+                placement="top"
+                overlay={<Tooltip id="tooltip-settings">{t('input.tooltips.settings')}</Tooltip>}
+              >
+                <Button
+                  variant="link"
+                  className={`settings-toggle-btn ${isSettingsPanelOpen ? 'panel-open' : ''} ${hasActiveSettings ? 'has-active' : ''}`}
+                  onClick={onSettingsClick}
+                  aria-label={t('input.tooltips.settings')}
+                  aria-pressed={isSettingsPanelOpen}
+                  disabled={isControlsDisabled}
+                >
+                  <i className="bi bi-sliders"></i>
+                </Button>
+              </OverlayTrigger>
+            )}
+
+            {/* Tools Settings Dropup - V1 only (V2 has tools in settings panel) */}
+            {variant === 'v1' && autoToolsEnabled !== undefined && setAutoToolsEnabled && (
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
                 <OverlayTrigger
                   placement="top"
@@ -540,8 +595,85 @@ const ChatInput = ({
               </div>
             )}
 
-            {/* Integrations Toggle */}
-            {hasPipedreamFeature && (
+            {/* Model Selector (Workspace Chat only) */}
+            {showModelSelector && setSelectedModelId && (
+              <OverlayTrigger
+                placement="top"
+                overlay={<Tooltip id="tooltip-model">{t('input.tooltips.model')}</Tooltip>}
+              >
+                <Dropdown
+                  drop={dropdownDirection}
+                  className="model-selector-dropdown"
+                  show={showModelDropdown}
+                  onToggle={(isOpen) => setShowModelDropdown(isOpen)}
+                >
+                  <Dropdown.Toggle
+                    variant="link"
+                    disabled={isControlsDisabled}
+                    aria-label={t('input.modelSelector.title')}
+                  >
+                    <i className="bi bi-cpu"></i>
+                    {selectedModelId && (
+                      <span className="model-indicator">
+                        {WORKSPACE_MODEL_OPTIONS.find((m) => m.id === selectedModelId)?.label.replace('Claude ', '') ||
+                          'Sonnet'}
+                      </span>
+                    )}
+                  </Dropdown.Toggle>
+
+                  <Dropdown.Menu
+                    popperConfig={{
+                      strategy: 'fixed',
+                      modifiers: [
+                        { name: 'offset', options: { offset: [0, 8] } },
+                        { name: 'preventOverflow', options: { boundary: 'viewport', padding: 8, altAxis: true } },
+                        { name: 'flip', enabled: false },
+                      ],
+                    }}
+                  >
+                    {/* Mobile Close Button */}
+                    <div className="model-mobile-header d-md-none">
+                      <span className="model-header-title">{t('input.modelSelector.mobileTitle')}</span>
+                      <Button
+                        variant="link"
+                        className="model-close-button"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          setShowModelDropdown(false);
+                        }}
+                        aria-label="Close"
+                      >
+                        <i className="bi bi-x-lg"></i>
+                      </Button>
+                    </div>
+
+                    <Dropdown.Header className="d-none d-md-block">{t('input.modelSelector.title')}</Dropdown.Header>
+                    {WORKSPACE_MODEL_OPTIONS.map((model) => (
+                      <div
+                        key={model.id}
+                        className={`model-item ${selectedModelId === model.id ? 'active' : ''}`}
+                        onClick={() => {
+                          setSelectedModelId(model.id);
+                          setShowModelDropdown(false);
+                        }}
+                      >
+                        <div className="d-flex justify-content-between align-items-center">
+                          <div>
+                            <div className="model-name">{model.label}</div>
+                            <div className="model-description">{model.description}</div>
+                          </div>
+                          {selectedModelId === model.id && <i className="bi bi-check-lg"></i>}
+                        </div>
+                      </div>
+                    ))}
+                  </Dropdown.Menu>
+                </Dropdown>
+              </OverlayTrigger>
+            )}
+
+            {/* Integrations Toggle - V1 only (V2 has integrations in settings panel) */}
+            {variant === 'v1' && hasPipedreamFeature && (
               <OverlayTrigger
                 placement="top"
                 overlay={<Tooltip id="tooltip-integrations">{t('input.tooltips.integrations')}</Tooltip>}
@@ -609,7 +741,22 @@ const ChatInput = ({
             )}
           </div>
           <div className="right-controls">
-            {buttonStatus === 'loading' || buttonStatus === 'streaming' || uploadsInProgress ? (
+            {showStopButton ? (
+              <Button
+                variant="primary"
+                type="button"
+                className="stop-button"
+                onClick={onStop}
+                disabled={isStopping}
+                aria-label="Stop response"
+              >
+                {isStopping ? (
+                  <Spinner as="span" animation="border" size="sm" role="status" aria-hidden="true" />
+                ) : (
+                  <i className="bi bi-stop-fill"></i>
+                )}
+              </Button>
+            ) : showSendSpinner ? (
               <Button
                 variant="primary"
                 type="submit"
@@ -698,4 +845,8 @@ const ChatInput = ({
   );
 };
 
-export { ChatInput };
+// Memoize to prevent re-renders when parent state changes but ChatInput props haven't
+const MemoizedChatInput = React.memo(ChatInput);
+MemoizedChatInput.displayName = 'ChatInput';
+
+export { MemoizedChatInput as ChatInput };

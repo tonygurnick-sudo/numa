@@ -8,14 +8,17 @@ import { useAgentById } from '../../hooks/useAgentById';
 import { useDrawerBackClose } from '../../hooks/useDrawerBackClose';
 
 type ChatHistorySidebarProps = {
-  onSelectConversation: (conversationId: string) => void;
+  onSelectConversation: (conversationId: string, isWorkspaceConversation?: boolean) => void;
   setError: (message: string | null) => void;
   currentConversationId?: string | null;
+  /** If true, exclude workspace (V2) conversations from the list */
+  excludeWorkspaceConversations?: boolean;
 };
 
-type ChatHistorySidebarRef = {
+export type ChatHistorySidebarRef = {
   refreshConversations: () => void;
   toggleSidebar: () => void;
+  collapseSidebar: () => void;
 };
 
 type ConversationMeta = {
@@ -30,6 +33,7 @@ type ConversationMeta = {
   agentType?: string | null;
   agentVisibility?: string | null;
   isAgentConversation?: boolean;
+  isWorkspaceConversation?: boolean;
 };
 
 const HistoryAvatar = ({ convo }: { convo: ConversationMeta }) => {
@@ -46,8 +50,33 @@ const HistoryAvatar = ({ convo }: { convo: ConversationMeta }) => {
   );
 };
 
+/** Format timestamp as relative time (e.g., "2 hours ago", "Yesterday") */
+const formatRelativeTime = (timestamp: number): string => {
+  const now = Date.now();
+  const diff = now - timestamp;
+  const seconds = Math.floor(diff / 1000);
+  const minutes = Math.floor(seconds / 60);
+  const hours = Math.floor(minutes / 60);
+  const days = Math.floor(hours / 24);
+
+  if (seconds < 60) return 'Just now';
+  if (minutes < 60) return `${minutes}m ago`;
+  if (hours < 24) return `${hours}h ago`;
+  if (days === 1) return 'Yesterday';
+  if (days < 7) return `${days}d ago`;
+
+  // For older conversations, show the date
+  return new Date(timestamp).toLocaleDateString(undefined, {
+    month: 'short',
+    day: 'numeric',
+  });
+};
+
 export const ChatHistorySidebar = forwardRef<ChatHistorySidebarRef, ChatHistorySidebarProps>(
-  function ChatHistorySidebar({ onSelectConversation, setError, currentConversationId }, ref) {
+  function ChatHistorySidebar(
+    { onSelectConversation, setError, currentConversationId, excludeWorkspaceConversations },
+    ref,
+  ) {
     const { t } = useTranslation('chat');
     const [isLoading, setIsLoading] = useState(false);
     const [show, setShow] = useState(false);
@@ -89,9 +118,15 @@ export const ChatHistorySidebar = forwardRef<ChatHistorySidebarRef, ChatHistoryS
       setIsLoading(true);
       try {
         const userId = sub || 'anonymous';
-        const metaItems = await numaChatDynamoUtils.getUserConversationsMeta(userId);
+        let metaItems = await numaChatDynamoUtils.getUserConversationsMeta(userId);
         // No need to sort here anymore - DynamoDBUtils now returns conversations
         // sorted by latestTimestamp descending (newest first)
+
+        // If excludeWorkspaceConversations is true, filter out V2 workspace conversations
+        if (excludeWorkspaceConversations) {
+          metaItems = metaItems.filter((item: ConversationMeta) => !item.isWorkspaceConversation);
+        }
+
         setConversations(metaItems);
         setLocalError(null);
       } catch (error) {
@@ -104,13 +139,16 @@ export const ChatHistorySidebar = forwardRef<ChatHistorySidebarRef, ChatHistoryS
       }
     };
 
-    // Expose refreshConversations() and toggleSidebar() via ref for parent components
+    // Expose refreshConversations(), toggleSidebar(), and collapseSidebar() via ref for parent components
     useImperativeHandle(ref, () => ({
       refreshConversations: () => {
         fetchConversations();
       },
       toggleSidebar: () => {
         setShow((prevShow) => !prevShow);
+      },
+      collapseSidebar: () => {
+        setShow(false);
       },
     }));
 
@@ -243,7 +281,15 @@ export const ChatHistorySidebar = forwardRef<ChatHistorySidebarRef, ChatHistoryS
                   <div
                     key={convo.conversation_id}
                     className={`conversation-item mb-2 p-2 rounded ${convo.conversation_id === currentConversationId ? 'active' : ''}`}
-                    onClick={() => onSelectConversation(convo.conversation_id)}
+                    onClick={() => {
+                      console.log('[ChatHistory] Selected conversation metadata:', {
+                        conversation_id: convo.conversation_id,
+                        isWorkspaceConversation: convo.isWorkspaceConversation,
+                        typeofIsWorkspace: typeof convo.isWorkspaceConversation,
+                        fullMeta: convo,
+                      });
+                      onSelectConversation(convo.conversation_id, convo.isWorkspaceConversation);
+                    }}
                     role="button"
                   >
                     <div className="d-flex align-items-center justify-content-between">
@@ -271,6 +317,9 @@ export const ChatHistorySidebar = forwardRef<ChatHistorySidebarRef, ChatHistoryS
                               {t('history.agentPrefix', { name: convo.agentTitle })}
                             </div>
                           )}
+                          <div className="mt-1" style={{ fontSize: '0.7rem', color: '#9ca3af' }}>
+                            {formatRelativeTime(convo.latestTimestamp)}
+                          </div>
                         </div>
                       </OverlayTrigger>
                       <div className="conversation-actions d-flex flex-column align-items-center flex-shrink-0 ms-2">

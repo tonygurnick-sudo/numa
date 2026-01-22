@@ -132,7 +132,8 @@ const NumaChatAgents = () => {
   const dataAnalysisEventIndexRef = useRef<Map<string, number>>(new Map());
 
   // Custom hooks
-  const conversationManager = useConversationManager();
+  // V1 chat: explicitly set isWorkspaceMode to false so chats aren't marked as workspace conversations
+  const conversationManager = useConversationManager({ isWorkspaceMode: false });
   const streamingHandler = useStreamingHandler();
   const documentProcessor = useDocumentProcessor();
   const { companyProfile } = useCompanyProfile();
@@ -460,8 +461,11 @@ const NumaChatAgents = () => {
 
       // Apply KB constraints from agent
       const allowedKBs = config.allowedKnowledgeBases;
-      if (allowedKBs === null || allowedKBs === undefined) {
-        // Backwards compat: check queryDataSources for existing agents
+      if (allowedKBs === null) {
+        // Explicitly set to "all KBs" - enable all available
+        setEnabledKBIds(availableKBs.map((kb) => kb.kb_id));
+      } else if (allowedKBs === undefined) {
+        // Not set - use backwards compat check for legacy agents
         if (config.queryDataSources === false) {
           // No KB access
           setEnabledKBIds([]);
@@ -971,6 +975,7 @@ const NumaChatAgents = () => {
     buttonStatus,
     isProcessingRef,
     onExpired: handleNewChatOnExpired,
+    excludeWorkspaceConversations: true, // V1 chat should only show V1 conversations
     // DO NOT pass inputMessage: keep suggestions visible while typing; hide on submit instead
   });
 
@@ -1960,6 +1965,7 @@ const NumaChatAgents = () => {
             onSelectConversation={handleLoadConversation}
             currentConversationId={conversationId}
             setError={(error) => console.error('Chat history error:', error)}
+            excludeWorkspaceConversations={true}
           />
 
           {/* Main chat content */}

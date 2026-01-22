@@ -1,0 +1,31 @@
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.poetry]
+name = "workspace-chat-agent-proxy"
+version = "0.1.0"
+description = "Thin Lambda proxy bridging CloudFront HTTP to AgentCore SDK for workspace chat"
+authors = ["ArcanumAI"]
+packages = [{ include = "*.py" }]
+
+[tool.poetry.dependencies]
+python = "~3.13.0"
+boto3 = "^1.40"
+fastapi = "^0.115"
+uvicorn = "^0.30"
+pyjwt = {extras = ["crypto"], version = "^2.8.0"}
+requests = "^2.31.0"
+
+[tool.poetry.group.dev.dependencies]
+mypy = "^1.13"
+pylint = "^3.3"
+pyright = "^1.1"
+pytest = "^8.3"
+boto3-stubs = { version = "^1.40.0", extras = ["bedrock-agentcore"] }
+types-requests = "^2.32.4.20260107"
+
+[tool.pyright]
+typeCheckingMode = "basic"
+reportMissingImports = "none"
+exclude = ["tests"]

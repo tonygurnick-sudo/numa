@@ -6,6 +6,7 @@ import { extractSingleDocBlock } from '../utils/streamingProcessors';
  * Extracted from NumaChat.jsx to improve maintainability
  */
 export const useDocumentProcessor = () => {
+  // Document state
   const [inlineDocument, setInlineDocument] = useState(null);
   const [showSplitView, setShowSplitView] = useState(false);
   const [leftFraction, setLeftFraction] = useState(0.99);
@@ -102,12 +103,12 @@ export const useDocumentProcessor = () => {
   );
 
   return {
-    // State
+    // Document state
     inlineDocument,
     showSplitView,
     leftFraction,
 
-    // State setters (for external control if needed)
+    // Document state setters (for external control if needed)
     setInlineDocument,
     setShowSplitView,
     setLeftFraction,

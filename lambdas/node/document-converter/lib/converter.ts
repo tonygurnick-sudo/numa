@@ -80,6 +80,57 @@ export async function convertMdToPdf(markdown: string): Promise<Buffer> {
 }
 
 /**
+ * Convert DOCX to PDF using LibreOffice directly
+ */
+export async function convertDocxToPdf(docxBuffer: Buffer): Promise<Buffer> {
+  const inputPath = '/tmp/input.docx';
+
+  try {
+    // Write DOCX to temp file
+    writeFileSync(inputPath, docxBuffer);
+
+    // Convert using LibreOffice
+    // Note: convertTo expects filename only, it prepends /tmp/ internally
+    const pdfPath = await convertTo('input.docx', 'pdf');
+
+    // Read and return the result
+    const result = readFileSync(pdfPath);
+    return result;
+  } finally {
+    // Cleanup temp files
+    cleanup(inputPath);
+    // Note: LibreOffice creates the PDF in /tmp, cleanup handled by Lambda container
+  }
+}
+
+/**
+ * Convert PDF to DOCX using LibreOffice directly
+ * Note: Quality may vary - PDF is a presentation format, not editable.
+ * Complex layouts, images, and tables may not convert cleanly.
+ * Scanned PDFs won't work (need OCR first).
+ */
+export async function convertPdfToDocx(pdfBuffer: Buffer): Promise<Buffer> {
+  const inputPath = '/tmp/input.pdf';
+
+  try {
+    // Write PDF to temp file
+    writeFileSync(inputPath, pdfBuffer);
+
+    // Convert using LibreOffice
+    // Note: convertTo expects filename only, it prepends /tmp/ internally
+    const docxPath = await convertTo('input.pdf', 'docx');
+
+    // Read and return the result
+    const result = readFileSync(docxPath);
+    return result;
+  } finally {
+    // Cleanup temp files
+    cleanup(inputPath);
+    // Note: LibreOffice creates the DOCX in /tmp, cleanup handled by Lambda container
+  }
+}
+
+/**
  * Cleanup temporary files
  */
 function cleanup(...paths: string[]): void {
