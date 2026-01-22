@@ -16,6 +16,7 @@ export type ChatSettings = {
   createAgentEnabled: boolean;
   dataAnalysisEnabled: boolean;
   defaultConnectionIds: string[];
+  language: string | null;
 };
 
 export type UserChatSettings = ChatSettings & {
@@ -42,6 +43,7 @@ const DEFAULT_SETTINGS: ChatSettings = {
   createAgentEnabled: false,
   dataAnalysisEnabled: true,
   defaultConnectionIds: [],
+  language: 'browser',
 };
 
 const GLOBAL_SETTINGS_KEY = '__global__';
@@ -120,6 +122,7 @@ async function loadGlobalSettings(): Promise<GlobalChatSettings> {
       createAgentEnabled: DEFAULT_SETTINGS.createAgentEnabled,
       dataAnalysisEnabled: DEFAULT_SETTINGS.dataAnalysisEnabled,
       defaultConnectionIds: DEFAULT_SETTINGS.defaultConnectionIds,
+      language: DEFAULT_SETTINGS.language,
       allowUserDefaults: false,
     };
   }
@@ -143,6 +146,7 @@ async function loadGlobalSettings(): Promise<GlobalChatSettings> {
     defaultConnectionIds: Array.isArray(item?.defaultConnectionIds)
       ? item!.defaultConnectionIds
       : DEFAULT_SETTINGS.defaultConnectionIds,
+    language: DEFAULT_SETTINGS.language,
     allowUserDefaults,
   };
 }
@@ -182,6 +186,10 @@ function mergeUserSettings(globalSettings: ChatSettings, userItem: Record<string
   const defaultConnectionIds = Array.isArray(userItem?.defaultConnectionIds)
     ? (userItem!.defaultConnectionIds as unknown[]).filter((id): id is string => typeof id === 'string')
     : globalSettings.defaultConnectionIds;
+  const language =
+    typeof userItem?.language === 'string' || userItem?.language === null
+      ? (userItem!.language as string | null)
+      : globalSettings.language;
   const userDefaultsEnabled =
     parseBoolean(userItem?.userDefaultsEnabled) ?? parseBoolean(userItem?.user_defaults_enabled) ?? true;
 
@@ -192,6 +200,7 @@ function mergeUserSettings(globalSettings: ChatSettings, userItem: Record<string
     createAgentEnabled,
     dataAnalysisEnabled,
     defaultConnectionIds,
+    language,
     userDefaultsEnabled,
   };
 }
@@ -273,6 +282,7 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
               ? body.defaultConnectionIds.filter((id): id is string => typeof id === 'string')
               : currentGlobal.defaultConnectionIds
             : currentGlobal.defaultConnectionIds,
+        language: DEFAULT_SETTINGS.language,
         allowUserDefaults,
         updatedAt: new Date().toISOString(),
       };
@@ -293,6 +303,7 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
         createAgentEnabled: updatedSettings.createAgentEnabled,
         dataAnalysisEnabled: updatedSettings.dataAnalysisEnabled,
         defaultConnectionIds: updatedSettings.defaultConnectionIds,
+        language: updatedSettings.language,
         allowUserDefaults: updatedSettings.allowUserDefaults,
       };
 
@@ -311,6 +322,7 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
           createAgentEnabled: globalSettings.createAgentEnabled,
           dataAnalysisEnabled: globalSettings.dataAnalysisEnabled,
           defaultConnectionIds: globalSettings.defaultConnectionIds,
+          language: globalSettings.language,
         };
         return { statusCode: 200, headers: HEADERS, body: JSON.stringify(settings) };
       }
@@ -325,6 +337,7 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
         createAgentEnabled: merged.createAgentEnabled,
         dataAnalysisEnabled: merged.dataAnalysisEnabled,
         defaultConnectionIds: merged.defaultConnectionIds,
+        language: merged.language,
       };
 
       if (profileView) {
@@ -345,6 +358,7 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
             createAgentEnabled: globalSettings.createAgentEnabled,
             dataAnalysisEnabled: globalSettings.dataAnalysisEnabled,
             defaultConnectionIds: globalSettings.defaultConnectionIds,
+            language: globalSettings.language,
           };
 
       return {
@@ -444,6 +458,17 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
         next.defaultConnectionIds = current.defaultConnectionIds;
       }
 
+      // language
+      if ('language' in body) {
+        if (body.language === null) {
+          // clear override
+        } else if (typeof body.language === 'string') {
+          next.language = body.language;
+        }
+      } else if (typeof current.language === 'string' || current.language === null) {
+        next.language = current.language as string | null;
+      }
+
       // userDefaultsEnabled
       if ('userDefaultsEnabled' in body) {
         if (body.userDefaultsEnabled === null) {
@@ -470,6 +495,7 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
         'createAgentEnabled' in next ||
         'dataAnalysisEnabled' in next ||
         'defaultConnectionIds' in next ||
+        'language' in next ||
         'userDefaultsEnabled' in next;
 
       const itemToStore = hasOverrides ? next : { user_id: userId, updatedAt: next.updatedAt };

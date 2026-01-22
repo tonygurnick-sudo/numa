@@ -12,6 +12,7 @@ export type ChatSettings = {
   createAgentEnabled: boolean;
   dataAnalysisEnabled: boolean;
   defaultConnectionIds: string[];
+  language: string | null;
 };
 
 export type ChatSettingsUpdate = {
@@ -35,6 +36,7 @@ export const DEFAULT_CHAT_SETTINGS: ChatSettings = {
   createAgentEnabled: true, // Should be true when autoToolsEnabled is true
   dataAnalysisEnabled: true,
   defaultConnectionIds: [],
+  language: 'browser',
 };
 
 // Helper types for RequestProvider integration
@@ -166,6 +168,10 @@ function validateSettings(data: unknown): ChatSettings {
     defaultConnectionIds: Array.isArray(obj.defaultConnectionIds)
       ? obj.defaultConnectionIds.filter((id): id is string => typeof id === 'string')
       : DEFAULT_CHAT_SETTINGS.defaultConnectionIds,
+    language:
+      typeof obj.language === 'string' || obj.language === null
+        ? (obj.language as string | null)
+        : DEFAULT_CHAT_SETTINGS.language,
   };
 }
 

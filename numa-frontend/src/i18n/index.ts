@@ -26,8 +26,8 @@ i18n
     interpolation: { escapeValue: false },
     backend: { loadPath: `${import.meta.env.BASE_URL}locales/{{lng}}/{{ns}}.json` },
     detection: {
-      order: ['navigator'],
-      caches: [],
+      order: ['localStorage', 'navigator'],
+      caches: ['localStorage'],
     },
   });
 
