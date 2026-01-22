@@ -462,16 +462,10 @@ build-deployment-container:
     - aws # need to use our AWS workers as TLS docker doesn't seem to work on hosted runners
   environment:
     name: prod-images
-  needs:
-    - job: python-lambdas-package
-      artifacts: true
-    - job: node-package
-      artifacts: true
-    - job: claude-cli-artifact-build
-      artifacts: true
-    - job: workspace-agent-package
-      artifacts: true
-      optional: true  # Optional during rollout
+  # Note: Removed explicit `needs` to work around GitLab's 50-job limit.
+  # This job runs after the package stage completes and automatically
+  # receives all artifacts from python-lambdas-package, node-package,
+  # claude-cli-artifact-build, and workspace-agent-package.
   variables:
     BUILD_DIR: .
     ECR_REPO: ${ECR_BASE}/numa-deploy
