@@ -83,6 +83,20 @@ MESSAGE_HINTS: list[tuple[str, str]] = [
     # Context-based patterns - agent with tools context
     (r"\bagents?[\s-]+tools?\b", "agents"),
     (r"\busing[\s-]+(your[\s-]+)?.*agents?\b", "agents"),
+    # Data analysis performance patterns
+    (
+        r"\b(slow|taking\s+forever|too\s+long|performance|optimize|speed\s+up)\b.*\b(data|analysis|query|pandas)\b",
+        "data-analysis",
+    ),
+    (r"\b(large|big|huge|massive)\s+(dataset|file|data|csv|excel)\b", "data-analysis"),
+    (r"\b(sqlite|sql|database)\b.*\b(convert|load|import|query)\b", "data-analysis"),
+    (
+        r"\b(multiple|many|several)\s+(queries|questions)\b.*\b(same\s+)?(data|file)\b",
+        "data-analysis",
+    ),
+    (r"\b(memory|ram)\s+(error|issue|problem)\b", "data-analysis"),
+    (r"\b(100k|million|millions)\s+(rows?|records?)\b", "data-analysis"),
+    (r"\b(chart|graph|plot|visuali[sz]e|matplotlib)\b", "data-analysis"),
 ]
 
 
@@ -274,6 +288,7 @@ def build_assistant_prompt(context: AssistantContext) -> str:
 | pdf-handling | "pdf", file.pdf mentioned | Read, create, merge, annotate, or work with PDF files |
 | docx-handling | "word doc", "docx", file.docx mentioned | Create, edit, or work with Word documents |
 | spreadsheet-handling | "excel", "spreadsheet", "csv", file.xlsx/.csv mentioned | Analyze data, work with tables, create charts |
+| data-analysis | "slow", "optimize", "large dataset", "sqlite", "million rows", "chart", "matplotlib" | Optimize performance for large files (50MB+), convert to SQLite for fast queries, create visualizations |
 | web-search | "search online", "google", "latest news", "current" | Find recent/external info, look up things not in company docs |
 | agents | "agent", "agents", "numa agent", "saved agent", "my agent" | List, create, update, configure, or do ANYTHING with Numa agents |
 

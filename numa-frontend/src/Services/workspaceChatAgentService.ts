@@ -4,6 +4,10 @@
  * The workspace chat agent uses Claude Agent SDK format events.
  * With AgentCore, we use the /invocations endpoint and dispatch by action field.
  */
+import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+import type { AwsCredentialIdentity } from '@aws-sdk/types';
+import axios from 'axios';
 import type {
   SDKEvent,
   WorkspaceChatRequest,
@@ -18,6 +22,7 @@ import type {
   ConversationSwitchEvent,
   AssistantAdviceEvent,
 } from '../types/workspaceChatTypes';
+import { withPRM } from '../utils/prmUtils';
 
 /** Callback for receiving SDK events during streaming */
 export type OnWorkspaceChatEvent = (event: SDKEvent) => void;
@@ -575,4 +580,109 @@ export async function isWorkspaceChatAgentAvailable(): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+/**
+ * Notify backend that a file was uploaded directly to S3.
+ *
+ * Called after direct S3 upload completes. Backend syncs the file from S3 to local EFS.
+ */
+async function notifyUploadComplete(
+  conversationId: string,
+  filename: string,
+  s3Key: string,
+  size: number,
+): Promise<WorkspaceChatUploadResponse> {
+  const userSub = getUserSubFromToken();
+
+  const res = await fetch(`${getApiUrl()}/invocations`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...getAuthHeaders(userSub),
+    },
+    body: JSON.stringify({
+      action: 'upload_complete',
+      conversationId,
+      filename,
+      s3Key,
+      size,
+    }),
+  });
+
+  if (!res.ok) {
+    const errorText = await res.text().catch(() => 'Unknown error');
+    throw new Error(`Upload complete notification failed (${res.status}): ${errorText}`);
+  }
+
+  return res.json();
+}
+
+/**
+ * Upload a file directly to S3, bypassing CloudFront.
+ *
+ * This method supports files up to 200MB by:
+ * 1. Generating a presigned PUT URL for S3
+ * 2. Uploading the file directly to S3 (bypasses 10MB CloudFront limit)
+ * 3. Notifying the backend to sync the file from S3 to local EFS
+ *
+ * @param file - The file to upload
+ * @param conversationId - The conversation ID
+ * @param relativePath - Optional relative path for folder uploads (e.g., "folder/subfolder/file.txt")
+ * @param onProgress - Callback for upload progress (0-100)
+ * @param getCredentials - Function to get AWS credentials
+ */
+export async function uploadWorkspaceChatFileDirect(
+  file: File,
+  conversationId: string,
+  relativePath: string | undefined,
+  onProgress: (progress: number) => void,
+  getCredentials: () => Promise<AwsCredentialIdentity>,
+): Promise<WorkspaceChatUploadResponse> {
+  // Get config from session storage
+  const region = sessionStorage.getItem('REGION');
+  const bucket = sessionStorage.getItem('OUTPUTS_BUCKET_NAME');
+  const userSub = getUserSubFromToken();
+
+  if (!region || !bucket) {
+    throw new Error('Missing region or bucket configuration');
+  }
+  if (!userSub) {
+    throw new Error('User not authenticated');
+  }
+
+  // Use relativePath if provided (for folder uploads), otherwise just filename
+  // Normalize to replace unicode spaces (e.g., macOS non-breaking spaces) with regular spaces
+  const filename = relativePath ? normalizeFilename(relativePath) : normalizeFilename(file.name);
+
+  // Build S3 key (same path structure as existing upload)
+  const s3Key = `numa-chat/workspace/${userSub}/conversations/${conversationId}/uploads/${filename}`;
+
+  // Get credentials and create S3 client
+  const credentials = await getCredentials();
+  const s3Client = withPRM(S3Client, { region, credentials });
+
+  // Generate presigned URL for PUT
+  const command = new PutObjectCommand({
+    Bucket: bucket,
+    Key: s3Key,
+    ContentType: file.type || 'application/octet-stream',
+  });
+
+  const presignedUrl = await getSignedUrl(s3Client, command, { expiresIn: 3600 });
+
+  // Upload directly to S3 with real progress tracking
+  await axios.put(presignedUrl, file, {
+    headers: {
+      'Content-Type': file.type || 'application/octet-stream',
+    },
+    onUploadProgress: (progressEvent) => {
+      const total = progressEvent.total || file.size || 1;
+      const progress = Math.round((progressEvent.loaded * 100) / total);
+      onProgress(progress);
+    },
+  });
+
+  // Notify backend that upload is complete (backend syncs from S3 to EFS)
+  return notifyUploadComplete(conversationId, filename, s3Key, file.size);
 }

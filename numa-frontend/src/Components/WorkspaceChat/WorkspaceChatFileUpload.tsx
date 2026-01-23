@@ -1,13 +1,15 @@
 /**
  * WorkspaceChatFileUpload - Modal for uploading files to workspace.
  *
- * Uploads files directly to EFS via the workspace chat agent API.
+ * Uploads files directly to S3 using presigned URLs, bypassing CloudFront's 10MB limit.
+ * Supports files up to 200MB with real progress tracking.
  * Supports drag-and-drop, multi-file selection, and folder uploads.
  */
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { Modal, Button, ProgressBar, Alert } from 'react-bootstrap';
 import { useTranslation, Trans } from 'react-i18next';
-import { uploadWorkspaceChatFile } from '../../Services/workspaceChatAgentService';
+import type { AwsCredentialIdentity } from '@aws-sdk/types';
+import { uploadWorkspaceChatFileDirect } from '../../Services/workspaceChatAgentService';
 import type { WorkspaceChatUploadResponse } from '../../types/workspaceChatTypes';
 
 // ============================================================
@@ -19,6 +21,8 @@ export interface WorkspaceChatFileUploadProps {
   onHide: () => void;
   conversationId: string;
   onUploadComplete?: (responses: WorkspaceChatUploadResponse[]) => void;
+  /** Function to get AWS credentials for direct S3 uploads */
+  getCredentials: () => Promise<AwsCredentialIdentity>;
 }
 
 interface FileUploadItem {
@@ -91,6 +95,7 @@ export function WorkspaceChatFileUpload({
   onHide,
   conversationId,
   onUploadComplete,
+  getCredentials,
 }: WorkspaceChatFileUploadProps) {
   const { t } = useTranslation('chat');
   const [files, setFiles] = useState<FileUploadItem[]>([]);
@@ -140,7 +145,7 @@ export function WorkspaceChatFileUpload({
    */
   const addFiles = useCallback(
     (newFiles: File[], relativePaths?: string[]) => {
-      const maxSize = 50 * 1024 * 1024; // 50MB
+      const maxSize = 500 * 1024 * 1024; // 500MB (direct S3 upload bypasses CloudFront 10MB limit)
 
       // Filter out folder entries that browsers sometimes include
       const filteredFiles: Array<{ file: File; relativePath?: string }> = [];
@@ -183,6 +188,9 @@ export function WorkspaceChatFileUpload({
 
   /**
    * Upload all pending files.
+   *
+   * Uses direct S3 upload with presigned URLs to bypass CloudFront's 10MB limit.
+   * Real progress tracking via axios onUploadProgress.
    */
   const uploadFiles = useCallback(async () => {
     const pendingFiles = files.filter((f) => f.status === 'pending');
@@ -195,23 +203,23 @@ export function WorkspaceChatFileUpload({
       const item = files[i];
       if (item.status !== 'pending') continue;
 
-      // Mark as uploading
-      setFiles((prev) => prev.map((f, idx) => (idx === i ? { ...f, status: 'uploading' as const, progress: 10 } : f)));
+      // Mark as uploading with 0 progress
+      setFiles((prev) => prev.map((f, idx) => (idx === i ? { ...f, status: 'uploading' as const, progress: 0 } : f)));
 
       try {
-        // Simulate progress
-        const progressInterval = setInterval(() => {
-          setFiles((prev) =>
-            prev.map((f, idx) =>
-              idx === i && f.status === 'uploading' ? { ...f, progress: Math.min(f.progress + 15, 90) } : f,
-            ),
-          );
-        }, 100);
+        // Create progress callback for this file index
+        const onProgress = (progress: number) => {
+          setFiles((prev) => prev.map((f, idx) => (idx === i && f.status === 'uploading' ? { ...f, progress } : f)));
+        };
 
-        // Use relativePath for folder uploads to preserve structure
-        const response = await uploadWorkspaceChatFile(item.file, conversationId, item.relativePath);
-
-        clearInterval(progressInterval);
+        // Use direct S3 upload with real progress tracking
+        const response = await uploadWorkspaceChatFileDirect(
+          item.file,
+          conversationId,
+          item.relativePath,
+          onProgress,
+          getCredentials,
+        );
 
         setFiles((prev) =>
           prev.map((f, idx) => (idx === i ? { ...f, status: 'success' as const, progress: 100, response } : f)),
@@ -219,6 +227,7 @@ export function WorkspaceChatFileUpload({
 
         responses.push(response);
       } catch (error) {
+        console.error('[WorkspaceChatFileUpload] Upload failed:', error);
         setFiles((prev) =>
           prev.map((f, idx) =>
             idx === i
@@ -256,7 +265,7 @@ export function WorkspaceChatFileUpload({
     if (responses.length > 0 && onUploadComplete) {
       onUploadComplete(responses);
     }
-  }, [files, conversationId, onUploadComplete]);
+  }, [files, conversationId, onUploadComplete, getCredentials]);
 
   /**
    * Handle file input change (multi-file).
