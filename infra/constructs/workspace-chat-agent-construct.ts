@@ -178,7 +178,8 @@ else
 fi
 
 # Push image from tar to client ECR
-skopeo copy --authfile /tmp/skopeo-auth.json \\
+# --insecure-policy skips signature verification (no policy.json in container)
+skopeo copy --authfile /tmp/skopeo-auth.json --insecure-policy \\
   docker-archive:${imageTarPath} \\
   docker://${this.ecrRepository.repositoryUrl}:${imageTag}
 
