@@ -183,10 +183,10 @@ client-list-lint:
 
 .node-job-cdktf-get-before-script: &node-job-cdktf-get-before-script
   before_script:
-    # Install AWS CLI and jq for Terraform local-exec provisioners (e.g., workspace-agent ECR push)
+    # Install curl, jq, and AWS CLI for Terraform local-exec provisioners (e.g., workspace-agent ECR push)
+    - apt-get update && apt-get install -y -qq curl jq && rm -rf /var/lib/apt/lists/*
     - curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o /tmp/awscliv2.zip
     - unzip -q /tmp/awscliv2.zip -d /tmp && /tmp/aws/install && rm -rf /tmp/aws /tmp/awscliv2.zip
-    - apt-get update && apt-get install -y -qq jq && rm -rf /var/lib/apt/lists/*
     - corepack enable
     - (cd infra && yarn exec cdktf get)
     - cd $BUILD_DIR
