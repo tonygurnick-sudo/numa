@@ -48,9 +48,12 @@ echo "=== Setting up Docker buildx for ARM64 ==="
 # Create docker context first (fixes TLS issues on GitLab.com SaaS)
 docker context create buildctx 2>/dev/null || true
 
+# Remove any existing builder and create fresh (avoids state ambiguity in CI)
+docker buildx rm arm64builder 2>/dev/null || true
+
 # Create a buildx builder with docker-container driver
 # This driver has built-in QEMU support when binfmt is registered
-docker buildx create --name arm64builder --driver docker-container --use 2>/dev/null || docker buildx use arm64builder
+docker buildx create --name arm64builder --driver docker-container --use
 
 # Bootstrap the builder (ensures QEMU is available)
 docker buildx inspect --bootstrap
