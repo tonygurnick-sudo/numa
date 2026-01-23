@@ -26,7 +26,7 @@ RUN curl -fsSL https://releases.hashicorp.com/terraform/${TERRAFORM_VERSION}/ter
   && terraform version
 
 # Install skopeo for pushing container images to client ECR without Docker daemon
-RUN curl -sL https://github.com/lework/skopeo-binary/releases/download/v1.14.0/skopeo-linux-amd64 \
+RUN curl -fsSL https://github.com/lework/skopeo-binary/releases/download/v1.16.1/skopeo-linux-amd64 \
   -o /usr/local/bin/skopeo && chmod +x /usr/local/bin/skopeo \
   && skopeo --version
 
