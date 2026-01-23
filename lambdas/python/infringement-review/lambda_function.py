@@ -6,6 +6,7 @@ from aws_lambda_powertools.utilities.typing import LambdaContext
 import bedrock
 import helpers
 import s3_helpers
+from bedrock.language import get_language_system_prompt
 from prompts import (
     DECISION_DETERMINATION_PROMPT,
     EVIDENCE_ANALYSIS_PROMPT,
@@ -26,6 +27,7 @@ def handler(event: dict, context: LambdaContext) -> helpers.AppOutput:
         input_key = event["input_key"]
         output_path = event["output_path"]
         infringement_details = event["infringement_details"]
+        language = event.get("language")
 
         # Create outputs array for each file
         outputs: list[
@@ -54,6 +56,7 @@ def handler(event: dict, context: LambdaContext) -> helpers.AppOutput:
                 "evidence_content": evidence_content,
                 "infringement_details": infringement_details,
             },
+            language=language,
         )
 
         # Save evidence analysis as markdown
@@ -83,6 +86,7 @@ def handler(event: dict, context: LambdaContext) -> helpers.AppOutput:
                 "evidence_content": evidence_content,
                 "infringement_details": infringement_details,
             },
+            language=language,
         )
 
         # Save human error analysis as markdown
@@ -113,6 +117,7 @@ def handler(event: dict, context: LambdaContext) -> helpers.AppOutput:
                 "human_error_analysis": human_error_analysis,
                 "legislation_content": PARKING_LEGISLATION,
             },
+            language=language,
         )
 
         # Save legislation evaluation as markdown
@@ -143,6 +148,7 @@ def handler(event: dict, context: LambdaContext) -> helpers.AppOutput:
                 "human_error_analysis": human_error_analysis,
                 "legislation_comparison": legislation_evaluation,
             },
+            language=language,
         )
 
         # Save decision determination as markdown
@@ -175,6 +181,7 @@ def handler(event: dict, context: LambdaContext) -> helpers.AppOutput:
                 "human_error_analysis": human_error_analysis,
                 "legislation_comparison": legislation_evaluation,
             },
+            language=language,
         )
 
         # Save response letter as markdown
@@ -212,13 +219,17 @@ def handler(event: dict, context: LambdaContext) -> helpers.AppOutput:
         raise
 
 
-def get_model_response(prompt: str, input_data: dict) -> str:
+def get_model_response(
+    prompt: str, input_data: dict, language: str | None = None
+) -> str:
     """Get response from the model."""
+    system_prompt = get_language_system_prompt(language)
     model = bedrock.BedrockClaude3Model(
         model_args={
             "max_tokens": MAX_TOKENS,
             "temperature": 0.1,
-        }
+        },
+        system_prompt=system_prompt,
     )
 
     formatted_prompt = prompt.format(**input_data)

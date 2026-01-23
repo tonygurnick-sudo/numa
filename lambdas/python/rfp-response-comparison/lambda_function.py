@@ -7,6 +7,7 @@ from aws_lambda_powertools.utilities.typing import LambdaContext
 import bedrock
 import helpers
 import s3_helpers
+from bedrock.language import get_language_system_prompt
 from prompts import COMPARISON_PROMPT
 from tools import COMPARISON_TOOL
 
@@ -22,6 +23,7 @@ def handler(event: dict, context: LambdaContext) -> dict:
         # list of S3 keys for extracted texts
         extracted_keys = event["extracted_keys"]
         framework_key = event["framework"]
+        language = event.get("language")
 
         # Process each extracted response
         responses_text = []
@@ -55,13 +57,15 @@ def handler(event: dict, context: LambdaContext) -> dict:
         )
 
         # Invoke Bedrock LLM
+        system_prompt = get_language_system_prompt(language)
         model = bedrock.BedrockClaude3Model(
             model_args={
                 "max_tokens": MAX_TOKENS,
                 "temperature": 0.1,
                 "tools": COMPARISON_TOOL,
                 "tool_choice": {"type": "tool", "name": "compare_rfp_responses"},
-            }
+            },
+            system_prompt=system_prompt,
         )
         response = model.run(query=prompt, name_for_logging="rfp_comparison")
 

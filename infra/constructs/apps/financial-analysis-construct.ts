@@ -103,6 +103,7 @@ export class FinancialAnalysis extends BaseNumaApp {
             'job_id.$': '$$.Execution.Input.job_id',
             'user_id.$': '$$.Execution.Input.user_id',
             'uploaded_files.$': '$$.Execution.Input.uploaded_files',
+            'language.$': '$$.Execution.Input.language',
           },
           Next: 'ExtractAndAnalyseMap',
         },
@@ -114,6 +115,7 @@ export class FinancialAnalysis extends BaseNumaApp {
             'user_id.$': '$.user_id',
             'key.$': '$$.Map.Item.Value.s3_key',
             'key_parts.$': `States.StringSplit($$.Map.Item.Value.s3_key, '/')`,
+            'language.$': '$.language',
           },
           ItemProcessor: {
             ProcessorConfig: {
@@ -145,6 +147,7 @@ export class FinancialAnalysis extends BaseNumaApp {
                   'user_id.$': '$.user_id',
                   'input_key.$': '$.extracted.output_key',
                   'output_key.$': `States.Format('${this.appId}/{}/{}/structured/{}.json', $.user_id, $.job_id, States.ArrayGetItem($.key_parts[-1:], 0))`,
+                  'language.$': '$.language',
                 },
                 null,
                 {
@@ -175,6 +178,7 @@ export class FinancialAnalysis extends BaseNumaApp {
             'user_id.$': '$.user_id',
             'inputs.$': '$.mapped',
             'output_prefix.$': `States.Format('${this.appId}/{}/{}', $.user_id, $.job_id)`,
+            'language.$': '$.language',
           },
           'WriteSuccessStatus',
           {

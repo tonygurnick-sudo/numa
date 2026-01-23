@@ -6,6 +6,7 @@ from aws_lambda_powertools.utilities.typing import LambdaContext
 import bedrock
 import helpers
 import s3_helpers
+from bedrock.language import get_language_system_prompt
 from prompts import (
     DRAFT_POLICY_PROMPT,
     LEGISLATIVE_REVIEW_PROMPT,
@@ -27,6 +28,7 @@ def handler(event: dict, context: LambdaContext) -> helpers.AppOutput:
         extracted_example_policy_key = event["extracted_example_policy_key"]
 
         output_path = event["output_path"]
+        language = event.get("language")
 
         example_policy_content = b""
         if extracted_example_policy_key:
@@ -38,6 +40,7 @@ def handler(event: dict, context: LambdaContext) -> helpers.AppOutput:
                 "policy_context": policy_context,
                 "additional_instructions": additional_instructions,
             },
+            language=language,
         )
 
         outputs: list[
@@ -52,6 +55,7 @@ def handler(event: dict, context: LambdaContext) -> helpers.AppOutput:
                 "example_template": example_policy_content.decode("utf-8"),
                 "generated_template": generated_template,
             },
+            language=language,
         )
         s3_helpers.write(draft_policy_key, draft_policy.encode("utf-8"))
         outputs.append(
@@ -76,6 +80,7 @@ def handler(event: dict, context: LambdaContext) -> helpers.AppOutput:
                     "draft_policy": draft_policy,
                     "legislation_content": legislation_content,
                 },
+                language=language,
             )
             s3_helpers.write(legislative_review_key, legislative_review.encode("utf-8"))
             outputs.append(
@@ -106,15 +111,19 @@ def handler(event: dict, context: LambdaContext) -> helpers.AppOutput:
         raise
 
 
-def _get_model_response(prompt: str, input_data: dict[str, str]) -> str:
+def _get_model_response(
+    prompt: str, input_data: dict[str, str], language: str | None = None
+) -> str:
     """Get response from the model."""
+    system_prompt = get_language_system_prompt(language)
     model = bedrock.BedrockClaude3Model(
         model_args={
             "max_tokens": MAX_TOKENS,
             "temperature": 0.1,
             "tools": POLICY_GENERATION_TOOL,
             "tool_choice": {"type": "tool", "name": "policy_content"},
-        }
+        },
+        system_prompt=system_prompt,
     )
 
     formatted_prompt = prompt.format(**input_data)

@@ -95,6 +95,22 @@ const MyComponent = () => {
 3. For interpolation, use `{{variable}}` in JSON: `"greeting": "Hello, {{name}}!"`
 4. Run `yarn lint` to verify no hardcoded strings remain
 
+### Language Picker + LLM Language (single source of truth)
+
+To add a new language option for users and ensure it reaches the LLM prompts, update all of the following:
+
+1. **Picker options (UI):** `numa-frontend/src/Pages/UserProfile.tsx`
+   Add a new `<option value="xx">` entry.
+2. **Picker label text (i18n):** `numa-frontend/public/locales/en/settings.json`
+   Add a new `userProfile.defaults.language.<key>` label for the option.
+3. **Supported UI languages:** `numa-frontend/src/i18n/index.ts`
+   Add the language code to `supportedLngs` so i18n does not overwrite the user's choice.
+4. **LLM language preference storage:** `numa-frontend/src/utils/languagePreference.ts`
+   The chosen language is persisted under `numaLanguagePreference` and passed to chat/apps via `getEffectiveLanguage()`.
+   Do not add fallback logic here beyond `browser` default behavior.
+5. **LLM prompt wording + language names:** `lib/bedrock/bedrock/language.py`
+   Add the language code to `LANGUAGE_NAMES`. This file is the single source of truth for the system prompt wording used by both chat and apps.
+
 ---
 
 ## Core Chat Agent (lambdas/python/numa-chat-agent)

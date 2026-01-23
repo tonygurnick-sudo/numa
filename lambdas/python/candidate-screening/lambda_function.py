@@ -6,6 +6,7 @@ from aws_lambda_powertools.utilities.typing import LambdaContext
 import bedrock
 import helpers
 import s3_helpers
+from bedrock.language import get_language_system_prompt
 from prompts import CANDIDATE_SCREENING_PROMPT
 from tools import CANDIDATE_SCREENING_TOOL
 
@@ -28,6 +29,7 @@ def handler(event: dict, context: LambdaContext) -> None:
         app_id = event["app_id"]
         job_id = event["job_id"]
         output_key = event["output_key"]
+        language = event.get("language")
 
         resume_text = s3_helpers.read(resume_text_key)
 
@@ -46,7 +48,7 @@ def handler(event: dict, context: LambdaContext) -> None:
             "job_requirements": job_requirements,
         }
 
-        screening_results = _screen_candidate(input_data)
+        screening_results = _screen_candidate(input_data, language)
 
         final_results = {
             "screening_results": screening_results,
@@ -67,14 +69,16 @@ def handler(event: dict, context: LambdaContext) -> None:
         raise
 
 
-def _screen_candidate(input_data: dict) -> dict:
+def _screen_candidate(input_data: dict, language: str | None = None) -> dict:
+    system_prompt = get_language_system_prompt(language)
     model = bedrock.BedrockClaude3Model(
         model_args={
             "max_tokens": MAX_TOKENS,
             "temperature": 0.1,
             "tools": CANDIDATE_SCREENING_TOOL,
             "tool_choice": {"type": "tool", "name": "analyze_candidate"},
-        }
+        },
+        system_prompt=system_prompt,
     )
 
     formatted_prompt = CANDIDATE_SCREENING_PROMPT.format(

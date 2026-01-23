@@ -122,6 +122,7 @@ export class MeetingAnalyser extends BaseNumaApp {
             'job_id.$': '$$.Execution.Input.job_id',
             'user_id.$': '$$.Execution.Input.user_id',
             'uploaded_files.$': '$$.Execution.Input.uploaded_files',
+            'language.$': '$$.Execution.Input.language',
           },
           Next: 'ExtractContentMap',
         },
@@ -197,6 +198,7 @@ export class MeetingAnalyser extends BaseNumaApp {
             'other_notes.$': '$$.Execution.Input.other_notes',
             'output_path.$': `States.Format('${this.appId}/{}/{}', $$.Execution.Input.user_id, $$.Execution.Input.job_id)`,
             'template.$': '$$.Execution.Input.template',
+            'language.$': '$.language',
           },
           'WriteSuccessStatus',
           {

@@ -133,6 +133,7 @@ export class CandidateScreening extends BaseNumaApp {
             'company_profile.$': '$[0].company_profile',
             'job_requirements.$': '$[0].job_requirements',
             'app_id.$': '$[0].app_id',
+            'language.$': '$[0].language',
           },
           Next: 'LoopThroughCandidates',
         },
@@ -147,6 +148,7 @@ export class CandidateScreening extends BaseNumaApp {
             'job_id.$': '$.job_id',
             'user_id.$': '$.user_id',
             'app_id.$': '$.app_id',
+            'language.$': '$.language',
           },
           ItemProcessor: {
             ProcessorConfig: {
@@ -195,6 +197,7 @@ export class CandidateScreening extends BaseNumaApp {
                   'user_id.$': '$.user_id',
                   'output_key.$':
                     "States.Format('{}/{}/{}/results/{}.json', $.app_id, $.user_id, $.job_id, $.resume_key)",
+                  'language.$': '$.language',
                 },
                 null,
                 {

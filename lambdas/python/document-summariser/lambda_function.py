@@ -4,6 +4,7 @@ from aws_lambda_powertools.utilities.typing import LambdaContext
 import bedrock
 import helpers
 import s3_helpers
+from bedrock.language import get_language_system_prompt
 from prompts import DOCUMENT_SUMMARY_PROMPT
 from tools import DOCUMENT_SUMMARY_TOOL
 
@@ -18,6 +19,7 @@ def handler(event: dict, context: LambdaContext) -> dict:
     try:
         input_key = event["input_key"]
         output_key = event["output_key"]
+        language = event.get("language")
 
         input_data = {
             "document_content": s3_helpers.read(input_key),
@@ -25,7 +27,7 @@ def handler(event: dict, context: LambdaContext) -> dict:
             "summary_level": event.get("summary_level", "detailed"),
         }
 
-        summary = _summarise(input_data)["markdown_summary"].encode("utf-8")
+        summary = _summarise(input_data, language)["markdown_summary"].encode("utf-8")
         s3_helpers.write(output_key, summary, content_type="text/markdown")
 
         return {"output_key": output_key}
@@ -35,14 +37,16 @@ def handler(event: dict, context: LambdaContext) -> dict:
         raise
 
 
-def _summarise(input_data: dict) -> dict:
+def _summarise(input_data: dict, language: str | None = None) -> dict:
+    system_prompt = get_language_system_prompt(language)
     model = bedrock.BedrockClaude3Model(
         model_args={
             "max_tokens": MAX_TOKENS,
             "temperature": 0.1,
             "tools": DOCUMENT_SUMMARY_TOOL,
             "tool_choice": {"type": "tool", "name": "summarize_document"},
-        }
+        },
+        system_prompt=system_prompt,
     )
 
     formatted_prompt = DOCUMENT_SUMMARY_PROMPT.format(

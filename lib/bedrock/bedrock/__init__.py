@@ -59,6 +59,7 @@ class BedrockClaude3Model:
         claude_only: bool = False,
         max_retries: int = 3,
         retry_delay: float = 1.0,
+        system_prompt: str | None = None,
     ):
         """
         Initialize the Bedrock Claude 3 model with fallback support.
@@ -70,7 +71,9 @@ class BedrockClaude3Model:
             claude_only: Whether to only use anthropic models (maintain current behaviour)
             max_retries: Maximum number of retry attempts for non-quota errors
             retry_delay: Delay between retries in seconds
+            system_prompt: Optional system prompt to include in all requests
         """
+        self.system_prompt = system_prompt
         # Convert external string to enum early at the system boundary
         self.bedrock_region = Region(os.environ["AWS_REGION"])
         self.enable_fallback = enable_fallback
@@ -192,6 +195,10 @@ class BedrockClaude3Model:
                     messages=multimodal_messages, model_args=model_specific_args
                 )
 
+                # Add system prompt if provided (for Anthropic Claude models)
+                if self.system_prompt:
+                    request_body["system"] = self.system_prompt
+
                 # Attempt to invoke the model
                 response = self.bedrock_client.invoke_model(
                     modelId=model_id,
@@ -288,6 +295,11 @@ class BedrockClaude3Model:
                                 messages=multimodal_messages,
                                 model_args=retry_model_args,
                             )
+
+                            # Add system prompt if provided (for Anthropic Claude models)
+                            if self.system_prompt:
+                                retry_request_body["system"] = self.system_prompt
+
                             response = self.bedrock_client.invoke_model(
                                 modelId=model_id,
                                 body=json.dumps(retry_request_body),

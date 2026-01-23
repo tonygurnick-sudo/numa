@@ -22,6 +22,7 @@ from googlesearch import search
 
 import bedrock
 import helpers
+from bedrock.language import get_language_system_prompt
 from prm import client as prm_client
 from prompts import REWRITE_QUERY_PROMPT
 
@@ -151,7 +152,9 @@ def scrape_page(url: str) -> Dict[str, str]:
         return {"title": "", "url": url, "snippet": ""}
 
 
-def rewrite_query_with_context(query: str, context: str) -> str:
+def rewrite_query_with_context(
+    query: str, context: str, language: str | None = None
+) -> str:
     """
     Rewrite a search query using conversation context to improve search relevance.
 
@@ -166,11 +169,13 @@ def rewrite_query_with_context(query: str, context: str) -> str:
         prompt = REWRITE_QUERY_PROMPT.format(context=context, query=query)
 
         # Create model and run query
+        system_prompt = get_language_system_prompt(language)
         model = bedrock.BedrockClaude3Model(
             model_args={
                 "max_tokens": 100,
                 "temperature": 0.1,
-            }
+            },
+            system_prompt=system_prompt,
         )
 
         response = model.run(prompt, name_for_logging="search_query_rewrite")
@@ -233,6 +238,7 @@ def lambda_handler(
         conversation_id = params.get("conversation_id", "")
         user_id = params.get("user_id", "")
         table_name = params.get("table_name", "")
+        language = params.get("language")
 
         # Check required parameters
         if not query:
@@ -282,7 +288,9 @@ def lambda_handler(
         # If we have context, rewrite the query
         search_query = query
         if conversation_context:
-            search_query = rewrite_query_with_context(query, conversation_context)
+            search_query = rewrite_query_with_context(
+                query, conversation_context, language
+            )
 
         try:
             max_results = int(max_results_str)

@@ -10,13 +10,14 @@ from unittest.mock import Mock, patch
 from aws_lambda_powertools.utilities.typing import LambdaContext
 
 # Create mock modules with type ignore comments for mypy
-for mod in ["bedrock", "helpers", "s3_helpers", "prompts", "tools"]:
+for mod in ["bedrock", "bedrock.language", "helpers", "s3_helpers", "prompts", "tools"]:
     sys.modules[mod] = types.SimpleNamespace()  # type: ignore[assignment]
 
 # Add attributes to mock modules with type ignore comments
 sys.modules["prompts"].COMPARISON_PROMPT = "COMPARISON_PROMPT {summaries} {framework}"  # type: ignore[attr-defined]
 sys.modules["tools"].COMPARISON_TOOL = "COMPARISON_TOOL"  # type: ignore[attr-defined]
 sys.modules["helpers"].setup_step_function_lambda_logging = lambda event, context: None  # type: ignore[attr-defined]
+sys.modules["bedrock.language"].get_language_system_prompt = lambda lang: None  # type: ignore[attr-defined]
 
 # Import the lambda function directly
 import lambda_function

@@ -10,6 +10,7 @@ from aws_lambda_powertools.utilities.typing import LambdaContext
 import bedrock
 import helpers
 import s3_helpers
+from bedrock.language import get_language_system_prompt
 from prompts import DOCUMENTS_SUMMARY_PROMPT, FINANCIAL_ANALYSIS_PROMPT
 
 MAX_TOKENS = 16000
@@ -39,6 +40,7 @@ def handler(event: dict, context: LambdaContext) -> helpers.AppOutput:
     try:
         output_prefix = event["output_prefix"]
         inputs: list[Input] = event["inputs"]
+        language = event.get("language")
 
         combined_content = __combine_files(inputs)
 
@@ -51,7 +53,11 @@ def handler(event: dict, context: LambdaContext) -> helpers.AppOutput:
             content_type="text/csv",
         )
 
-        model = bedrock.BedrockClaude3Model(model_args={"max_tokens": MAX_TOKENS})
+        system_prompt = get_language_system_prompt(language)
+        model = bedrock.BedrockClaude3Model(
+            model_args={"max_tokens": MAX_TOKENS},
+            system_prompt=system_prompt,
+        )
         # Format the content for the prompt
         formatted_content = json.dumps(combined_content, indent=2)
 

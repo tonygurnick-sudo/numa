@@ -17,6 +17,7 @@ from unittest import mock
 from aws_lambda_powertools.utilities.typing import LambdaContext
 
 sys.modules["bedrock"] = mock.Mock()
+sys.modules["bedrock.language"] = mock.Mock()
 sys.modules["helpers"] = mock.Mock()
 sys.modules["s3_helpers"] = mock.Mock()
 sys.modules["jwt"] = mock.Mock()

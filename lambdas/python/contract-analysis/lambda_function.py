@@ -6,6 +6,7 @@ from aws_lambda_powertools.utilities.typing import LambdaContext
 import bedrock
 import helpers
 import s3_helpers
+from bedrock.language import get_language_system_prompt
 from prompts import (
     CLAUSE_IDENTIFICATION_PROMPT,
     HIGHLIGHTING_EXPLANATION_PROMPT,
@@ -29,6 +30,7 @@ def handler(event: dict, context: LambdaContext) -> helpers.AppOutput:
         input_key = event["input_key"]
         output_path = event["output_path"]
         contract_context = event.get("contract_context", "")
+        language = event.get("language")
 
         # Create outputs array for each file
         outputs: list[
@@ -45,6 +47,7 @@ def handler(event: dict, context: LambdaContext) -> helpers.AppOutput:
                 "contract_content": contract_content,
                 "contract_context": contract_context,
             },
+            language=language,
         )
 
         # Save clause identification as markdown
@@ -75,6 +78,7 @@ def handler(event: dict, context: LambdaContext) -> helpers.AppOutput:
                 "contract_context": contract_context,
                 "identified_clauses": identified_clauses,
             },
+            language=language,
         )
 
         # Save highlighting & explanation as markdown
@@ -105,6 +109,7 @@ def handler(event: dict, context: LambdaContext) -> helpers.AppOutput:
                 "contract_context": contract_context,
                 "highlighted_explanations": highlighted_explanations,
             },
+            language=language,
         )
 
         # Save risk assessment as markdown
@@ -135,6 +140,7 @@ def handler(event: dict, context: LambdaContext) -> helpers.AppOutput:
                 "contract_context": contract_context,
                 "risk_assessment": risk_assessment,
             },
+            language=language,
         )
 
         # Save improvement suggestions as markdown
@@ -172,13 +178,17 @@ def handler(event: dict, context: LambdaContext) -> helpers.AppOutput:
         raise
 
 
-def get_model_response(prompt: str, input_data: dict) -> str:
+def get_model_response(
+    prompt: str, input_data: dict, language: str | None = None
+) -> str:
     """Get response from the model."""
+    system_prompt = get_language_system_prompt(language)
     model = bedrock.BedrockClaude3Model(
         model_args={
             "max_tokens": MAX_TOKENS,
             "temperature": 0.1,
-        }
+        },
+        system_prompt=system_prompt,
     )
 
     formatted_prompt = prompt.format(**input_data)

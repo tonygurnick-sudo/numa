@@ -19,6 +19,7 @@ import unittest.mock
 
 sys.modules["jwt"] = unittest.mock.Mock()  # type: ignore
 sys.modules["bedrock"] = unittest.mock.Mock()  # type: ignore
+sys.modules["bedrock.language"] = unittest.mock.Mock()  # type: ignore
 sys.modules["helpers"] = unittest.mock.Mock()  # type: ignore
 sys.modules["s3_helpers"] = unittest.mock.Mock()  # type: ignore
 

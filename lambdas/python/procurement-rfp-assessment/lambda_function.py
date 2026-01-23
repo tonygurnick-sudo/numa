@@ -6,6 +6,7 @@ from aws_lambda_powertools.utilities.typing import LambdaContext
 import bedrock
 import helpers
 import s3_helpers
+from bedrock.language import get_language_system_prompt
 from prompts import ELIGIBILITY_ASSESSMENT_PROMPT, RFP_ASSESSMENT_PROMPT
 
 MAX_TOKENS = 16000
@@ -26,6 +27,7 @@ def handler(event: dict, context: LambdaContext) -> helpers.AppOutput:
         rfp_reference_key = event["rfp_reference_key"]
         assessment_instructions = event.get("assessment_instructions", "")
         output_path = event["output_path"]
+        language = event.get("language")
 
         # Read document content from S3
         application_bytes = s3_helpers.read(input_key)
@@ -36,7 +38,10 @@ def handler(event: dict, context: LambdaContext) -> helpers.AppOutput:
 
         # Generate eligibility assessment
         eligibility_assessment = _assess_eligibility(
-            application_content, rfp_reference_content, assessment_instructions
+            application_content,
+            rfp_reference_content,
+            assessment_instructions,
+            language,
         )
         eligibility_assessment = remove_backticks(eligibility_assessment)
         eligibility_output_key = f"{output_path}/eligibility_assessment.md"
@@ -52,6 +57,7 @@ def handler(event: dict, context: LambdaContext) -> helpers.AppOutput:
             rfp_reference_content,
             eligibility_assessment,
             assessment_instructions,
+            language,
         )
         rfp_assessment = remove_backticks(rfp_assessment)
         rfp_output_key = f"{output_path}/rfp_assessment.md"
@@ -95,13 +101,18 @@ def handler(event: dict, context: LambdaContext) -> helpers.AppOutput:
 
 
 def _assess_eligibility(
-    application_content: str, rfp_reference_content: str, assessment_instructions: str
+    application_content: str,
+    rfp_reference_content: str,
+    assessment_instructions: str,
+    language: str | None = None,
 ) -> str:
+    system_prompt = get_language_system_prompt(language)
     model = bedrock.BedrockClaude3Model(
         model_args={
             "max_tokens": MAX_TOKENS,
             "temperature": 0.1,
-        }
+        },
+        system_prompt=system_prompt,
     )
 
     formatted_prompt = ELIGIBILITY_ASSESSMENT_PROMPT.format(
@@ -122,12 +133,15 @@ def _assess_rfp(
     rfp_reference_content: str,
     eligibility_assessment: str,
     assessment_instructions: str,
+    language: str | None = None,
 ) -> str:
+    system_prompt = get_language_system_prompt(language)
     model = bedrock.BedrockClaude3Model(
         model_args={
             "max_tokens": MAX_TOKENS,
             "temperature": 0.1,
-        }
+        },
+        system_prompt=system_prompt,
     )
 
     formatted_prompt = RFP_ASSESSMENT_PROMPT.format(

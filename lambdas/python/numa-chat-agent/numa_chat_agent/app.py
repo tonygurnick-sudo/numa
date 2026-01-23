@@ -504,6 +504,9 @@ async def http_stream(request: Request) -> Response:
         # Capture optional client-local time info for downstream tools/prompts
         client_time_info = body.get("timeInfo") or {}
 
+        # Capture optional client locale for language preference
+        client_locale = body.get("locale") or {}
+
         user_auth = {
             **(
                 {
@@ -548,6 +551,7 @@ async def http_stream(request: Request) -> Response:
                 model_id,
                 messages,
                 enabled_connections,
+                locale=client_locale,
             )
 
             async def generator() -> AsyncGenerator[bytes, None]:
@@ -654,6 +658,9 @@ async def http_invoke(request: Request) -> Response:
         # Capture optional client-local time info for downstream tools/prompts
         client_time_info = body.get("timeInfo") or {}
 
+        # Capture optional client locale for language preference
+        client_locale = body.get("locale") or {}
+
         user_auth = {
             **(
                 {
@@ -697,6 +704,7 @@ async def http_invoke(request: Request) -> Response:
                 model_id,
                 messages,
                 enabled_connections,
+                locale=client_locale,
             )
 
             try:

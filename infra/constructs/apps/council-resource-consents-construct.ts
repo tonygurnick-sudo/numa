@@ -101,6 +101,7 @@ export class CouncilResourceConsents extends BaseNumaApp {
             'job_id.$': '$$.Execution.Input.job_id',
             'council_references.$': '$$.Execution.Input.council_references',
             'application.$': '$$.Execution.Input.application',
+            'language.$': '$$.Execution.Input.language',
           },
           Next: 'ExtractCouncilReferencesMap',
         },
@@ -169,6 +170,7 @@ export class CouncilResourceConsents extends BaseNumaApp {
             'council_references_extracted.$': '$.council_references_extracted[*].extracted.output_key',
             'application_extracted.$': '$.application_extracted.output_key',
             'output_key.$': `States.Format('${this.appId}/{}/{}/analysis.md', $$.Execution.Input.user_id, $$.Execution.Input.job_id)`,
+            'language.$': '$.language',
           },
           'WriteSuccessStatus',
           {

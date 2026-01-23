@@ -13,6 +13,7 @@ sys.path.append(os.path.join(project_root, "lib/bedrock"))
 # Mock the jwt and bedrock modules before importing lambda_function
 sys.modules["jwt"] = Mock()
 sys.modules["bedrock"] = Mock()
+sys.modules["bedrock.language"] = Mock()
 sys.modules["s3_helpers"] = Mock()
 
 import lambda_function
