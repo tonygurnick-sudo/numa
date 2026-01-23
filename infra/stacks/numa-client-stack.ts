@@ -464,6 +464,7 @@ export class NumaClientStack extends TerraformStack {
         BEDROCK_ACCOUNT: clientConfig.bedrockAccount,
         PIPEDREAM_RELAY_LAMBDA_ARN: core.pipedreamRelayLambdaArn ?? undefined,
         PIPEDREAM_INTEGRATIONS: clientConfig.pipedreamIntegrations ?? false,
+        DATA_CONNECTORS_ENABLED: clientConfig.dataConnectorsEnabled ?? false,
         AGENTS: clientConfig.agents ?? false,
         NUMA_WORKSPACE_CHAT: clientConfig.numaWorkspaceChat ?? false,
         // Direct Lambda Function URL for workspace chat agent (bypasses CloudFront buffering for streaming)
@@ -739,6 +740,12 @@ export const clientConfigSchema = coreNumaInfraPropsSchema
          * @default false
          */
         pipedreamIntegrations: z.boolean().optional().default(false),
+        /**
+         * Whether to enable Data Connectors UI in the frontend.
+         *
+         * @default false
+         */
+        dataConnectorsEnabled: z.boolean().optional().default(false),
 
         /**
          * Whether to show branding UI and attempt runtime fetch on the FE

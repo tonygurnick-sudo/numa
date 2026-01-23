@@ -35,6 +35,11 @@ const AppRoutes = () => {
   const { user, loading, tokenValidationComplete } = useAuth();
   const navigate = useNavigate();
   const { t } = useTranslation('common');
+  const isFeatureEnabled = (flag?: string) => {
+    if (!flag) return true;
+    if (typeof window === 'undefined') return false;
+    return window.sessionStorage.getItem(flag) === 'true';
+  };
 
   if (loading || !tokenValidationComplete) {
     return <div>{t('loading.generic')}</div>;
@@ -59,15 +64,22 @@ const AppRoutes = () => {
         <Route path="/create-password" element={<ResetPassword />} />
         <Route path="/ian" element={<Ian />} />
         {/* Dynamically render all protected routes from ROUTE_CONFIG */}
-        {ROUTE_CONFIG.map((r) => (
-          <Route
-            key={r.path}
-            path={r.path}
-            element={
-              <AuthenticatedLayout requiredFeature={r.requiredFeature}>{r.element(navigate)}</AuthenticatedLayout>
-            }
-          />
-        ))}
+        {ROUTE_CONFIG.map((r) => {
+          const featureEnabled = isFeatureEnabled(r.featureFlag);
+          return (
+            <Route
+              key={r.path}
+              path={r.path}
+              element={
+                featureEnabled ? (
+                  <AuthenticatedLayout requiredFeature={r.requiredFeature}>{r.element(navigate)}</AuthenticatedLayout>
+                ) : (
+                  <Navigate to="/dash" replace />
+                )
+              }
+            />
+          );
+        })}
       </Routes>
     </Suspense>
   );

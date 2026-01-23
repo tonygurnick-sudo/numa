@@ -121,7 +121,8 @@ export const ROUTE_CONFIG = [
   {
     path: '/data-connectors',
     element: () => <DataConnectorsPage />,
-    nav: { label: 'Data Connectors', icon: 'bi bi-cloud-download' },
+    nav: { label: 'Data Connectors', icon: 'bi bi-cloud-download', featureFlag: 'DATA_CONNECTORS_ENABLED' },
+    featureFlag: 'DATA_CONNECTORS_ENABLED',
   },
   {
     path: '/app/:appId',

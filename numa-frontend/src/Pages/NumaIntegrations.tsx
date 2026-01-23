@@ -62,6 +62,8 @@ export const NumaIntegrations = () => {
   const [availableTools, setAvailableTools] = useState<{ name: string; description?: string }[]>([]);
   const [toolToggles, setToolToggles] = useState<Record<string, boolean>>({});
   const [activeTab, setActiveTab] = useState<'connected-apps' | 'data-connectors'>('connected-apps');
+  const dataConnectorsEnabled =
+    typeof window !== 'undefined' ? window.sessionStorage.getItem('DATA_CONNECTORS_ENABLED') === 'true' : false;
   // Version removed: last-write-wins policy
   const [recentlyConnectedApp, setRecentlyConnectedApp] = useState<string | null>(null);
   // Track per-app default policy application in-flight to avoid race in Settings
@@ -137,19 +139,29 @@ export const NumaIntegrations = () => {
 
   const loadDataConnectorSettings = useCallback(async () => {
     try {
+      if (!dataConnectorsEnabled) {
+        setDataConnectorSettings({ synergy: { status: 'disabled' } });
+        return;
+      }
       if (!user) return;
       const data = await AdminDataConnectorsService.listWithNuma(numaGet);
       setDataConnectorSettings(data);
     } catch {
       setDataConnectorSettings({ synergy: { status: 'disabled' } });
     }
-  }, [user, numaGet]);
+  }, [user, numaGet, dataConnectorsEnabled]);
 
   // Initial fetch for global settings
   useEffect(() => {
     loadGlobalSettings();
     loadDataConnectorSettings();
   }, [loadGlobalSettings, loadDataConnectorSettings]);
+
+  useEffect(() => {
+    if (!dataConnectorsEnabled && activeTab === 'data-connectors') {
+      setActiveTab('connected-apps');
+    }
+  }, [dataConnectorsEnabled, activeTab]);
 
   const loadConnectionStatus = useCallback(
     async (forceRefresh = false) => {
@@ -647,9 +659,11 @@ export const NumaIntegrations = () => {
           <Nav.Item>
             <Nav.Link eventKey="connected-apps">{t('tabs.connectedApps')}</Nav.Link>
           </Nav.Item>
-          <Nav.Item>
-            <Nav.Link eventKey="data-connectors">{t('tabs.dataConnectors')}</Nav.Link>
-          </Nav.Item>
+          {dataConnectorsEnabled && (
+            <Nav.Item>
+              <Nav.Link eventKey="data-connectors">{t('tabs.dataConnectors')}</Nav.Link>
+            </Nav.Item>
+          )}
         </Nav>
 
         {activeTab === 'connected-apps' && (
@@ -803,7 +817,9 @@ export const NumaIntegrations = () => {
           </>
         )}
 
-        {activeTab === 'data-connectors' && <DataConnectorsTab adminSettings={dataConnectorSettings} />}
+        {dataConnectorsEnabled && activeTab === 'data-connectors' && (
+          <DataConnectorsTab adminSettings={dataConnectorSettings} />
+        )}
       </Container>
       {/* Settings modal */}
       <SettingsModal
