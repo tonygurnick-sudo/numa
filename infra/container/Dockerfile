@@ -30,6 +30,18 @@ RUN curl -fsSL https://github.com/lework/skopeo-binary/releases/download/v1.16.1
   -o /usr/local/bin/skopeo && chmod +x /usr/local/bin/skopeo \
   && skopeo --version
 
+# Install AWS CLI v2 for provisioner scripts that interact with ECR
+RUN curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o /tmp/awscliv2.zip \
+  && unzip -q /tmp/awscliv2.zip -d /tmp \
+  && /tmp/aws/install \
+  && rm -rf /tmp/aws /tmp/awscliv2.zip \
+  && aws --version
+
+# Install jq for parsing JSON in provisioner scripts
+RUN apt-get update && apt-get install -y jq \
+  && apt-get clean && rm -rf /var/lib/apt/lists/* \
+  && jq --version
+
 USER node
 
 # Copy in dependencies

@@ -357,32 +357,9 @@ echo "Successfully pushed image to ${this.ecrRepository.repositoryUrl}:${imageTa
       }),
     });
 
-    // Policy for container log group (watchtower direct writes)
-    new CloudwatchLogResourcePolicy(this, 'container-logs-delivery-policy', {
-      policyName: `numa-${props.clientName}-workspace-chat-container-delivery`,
-      policyDocument: JSON.stringify({
-        Version: '2012-10-17',
-        Statement: [
-          {
-            Sid: 'AllowLogDelivery',
-            Effect: 'Allow',
-            Principal: {
-              Service: 'delivery.logs.amazonaws.com',
-            },
-            Action: ['logs:CreateLogStream', 'logs:PutLogEvents'],
-            Resource: `${containerLogGroup.arn}:*`,
-            Condition: {
-              StringEquals: {
-                'aws:SourceAccount': callerIdentity.accountId,
-              },
-              ArnLike: {
-                'aws:SourceArn': `arn:aws:logs:${props.region}:${callerIdentity.accountId}:*`,
-              },
-            },
-          },
-        ],
-      }),
-    });
+    // NOTE: Container log group (/numa/{clientName}/workspace-chat-agent) is covered by
+    // the wildcard CloudWatch resource policy created by NumaLogGroup (/numa/*).
+    // No additional policy needed here - see numa-log-group.ts for the shared policy.
 
     // =========================================================================
     // AGENTCORE RUNTIME
