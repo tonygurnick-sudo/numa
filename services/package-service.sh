@@ -40,9 +40,10 @@ echo "Git hash: $GIT_HASH"
 
 # Build the Docker image
 # AgentCore requires ARM64 (Graviton) architecture
+# Requires QEMU emulation when building on x86_64 (CI registers binfmt handlers)
 # --no-cache ensures code changes are always included (Docker caching can be aggressive)
 echo ""
-echo "=== Building Docker image ==="
+echo "=== Building Docker image (ARM64) ==="
 docker build \
     --no-cache \
     --platform linux/arm64 \
