@@ -1,19 +1,20 @@
 {
-  "clientAccountId": "006043185629",
+  "clientAccountId": "905418183804",
+  "createServiceLinkedRole": false,
+  "devInstance": true,
   "provisionQResources": false,
   "pipedreamIntegrations": true,
-  "agents": false,
+  "agents": true,
   "region": "us-east-1",
-  "allProdApps": false,
+  "allApps": true,
   "apps": {
-    "tor-assessment": {},
-    "nolia": {},
-    "gdsr-assessment": {},
     "rfp-response-comparison": {},
+    "gdsr-assessment": {},
     "procurement-rfp-assessment": {}
   },
   "preferredKnowledgeBase": "bedrock",
   "vectorStorageType": "s3vectors",
-  "allowBedrockQuotaSharing": false,
-  "additionalOrigins": ["http://worldbank.getnolia.io", "https://worldbank.getnolia.io"]
+  "allowBedrockQuotaSharing": true,
+  "brandingProviderEnabled": true,
+  "numaWorkspaceChat": true
 }
