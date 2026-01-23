@@ -162,8 +162,9 @@ export AWS_SECRET_ACCESS_KEY=$(echo $CLIENT_CREDS | jq -r .SecretAccessKey)
 export AWS_SESSION_TOKEN=$(echo $CLIENT_CREDS | jq -r .SessionToken)
 
 # Login to client ECR with client credentials
+# Use --authfile to avoid /run/containers permission issues when running as non-root
 aws ecr get-login-password --region ${props.region} | \\
-  skopeo login --username AWS --password-stdin ${callerIdentity.accountId}.dkr.ecr.${props.region}.amazonaws.com
+  skopeo login --authfile /tmp/skopeo-auth.json --username AWS --password-stdin ${callerIdentity.accountId}.dkr.ecr.${props.region}.amazonaws.com
 
 # Delete all existing images to keep ECR lean (versions tracked in git, not ECR)
 echo "Cleaning up old images from ECR..."
@@ -177,7 +178,7 @@ else
 fi
 
 # Push image from tar to client ECR
-skopeo copy \\
+skopeo copy --authfile /tmp/skopeo-auth.json \\
   docker-archive:${imageTarPath} \\
   docker://${this.ecrRepository.repositoryUrl}:${imageTag}
 
