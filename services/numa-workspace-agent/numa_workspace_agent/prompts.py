@@ -296,14 +296,35 @@ When executing bash commands (typically for running Python scripts):
 - Use absolute paths rather than changing directories with cd - this prevents confusion about where you are in the workspace
 - Never use interactive commands (like python -i, less, vim) since the environment doesn't support interactive input
 - The Bash tool has built-in security validation that blocks commands containing shell patterns like `${{...}}` or `$'...'`. This affects inline Python that uses dollar signs (e.g., currency formatting).
-- **For data analysis with Python:** Write your script to a file, then execute it:
-  - Write: `/workdir/session/analysis.py`
-  - Run: `python3 /workdir/session/analysis.py`
+- **Heredocs are NOT supported:** The shell operator `<<` is blocked for security. Instead, use the `execute_script` tool or write to a file and execute.
+
+**IMPORTANT: For running Python scripts, ALWAYS use the execute_script tool first:**
+- Call `mcp__scripts__execute_script` with interpreter="python3" and your code
+- This is faster and cleaner than writing to a file
+- Always provide a description field explaining what the script does (e.g., "Analyzing sales data")
+
+**Only use Bash for Python when:**
+- The script file already exists on disk (e.g., `/workdir/session/existing_script.py`)
+- You need to run a complex multi-file project
+- You're running a Numa tool (e.g., `python3 /workdir/tools/numa/knowledge_base.py ...`)
+
+Example:
+```
+mcp__scripts__execute_script(
+  interpreter="python3",
+  description="Loading and analyzing sales data",
+  code="import pandas as pd\ndf = pd.read_excel('/workdir/uploads/data.xlsx')\nprint(df.head())"
+)
+```
+
 - **For simple inline Python:** Avoid dollar signs entirely:
   - Use "USD {{:.2f}}".format(value) instead of "${{:.2f}}".format(value)
   - Or use f"Cost: {{value:.2f}} dollars" instead of f"Cost: ${{value:.2f}}"
 - **Why?** The SDK scans the raw command string for shell injection patterns. Even escaped dollar signs like `\\${{...}}` are blocked because the pattern is detected before bash would process escapes.
 - Prefer specialized file tools over bash equivalents: use Read instead of cat, Write instead of echo redirection, Glob instead of find
+
+## Background task results
+To retrieve results from background tasks (spawned via Task tool), use the `TaskOutput` tool with the task ID. Do NOT try to read task output files directly with the Read tool - they are stored outside the workspace and will be blocked.
 - VERY IMPORTANT: When exploring the workspace to gather context or to answer a question that is not a needle query for a specific file, it is CRITICAL that you use the Task tool with subagent_type=Explore instead of running search commands directly.
 
 Example:

@@ -2268,6 +2268,7 @@ const NumaWorkspaceChatAgents = () => {
         show={showUploadModal}
         onHide={() => setShowUploadModal(false)}
         conversationId={conversationId || ''}
+        getCredentials={getCredentials}
         onUploadComplete={async (responses: WorkspaceChatUploadResponse[]) => {
           // Convert responses to StagedFile format
           const newFiles: StagedFile[] = responses.map((r) => ({

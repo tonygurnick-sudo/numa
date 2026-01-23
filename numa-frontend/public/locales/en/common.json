@@ -39,6 +39,7 @@
       "favs": "Favs",
       "jobHistory": "Job History",
       "chat": "Chat",
+      "chatV2": "Numa Chat V2",
       "agents": "Agents",
       "company": "Company",
       "companyKnowledgeBase": "Company Knowledge Base",
@@ -51,6 +52,7 @@
       "knowledgeBase": "Knowledge Base",
       "knowledgeBaseManagement": "Knowledge Base Management",
       "numaChat": "Numa Chat",
+      "numaChatV2": "Numa Chat V2",
       "applications": "Applications",
       "companyInformation": "Company Information"
     },

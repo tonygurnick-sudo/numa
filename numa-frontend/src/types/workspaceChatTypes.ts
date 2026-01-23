@@ -471,6 +471,15 @@ export interface WorkspaceChatUploadResponse {
   size: number;
 }
 
+/** Request body for upload_complete action (direct S3 upload notification) */
+export interface WorkspaceChatUploadCompleteRequest {
+  action: 'upload_complete';
+  conversationId: string;
+  filename: string;
+  s3Key: string;
+  size: number;
+}
+
 /** Response from GET /api/workspace-chat-agent/status */
 export interface WorkspaceChatAgentStatusResponse {
   status: string;
@@ -835,6 +844,14 @@ export interface BashInput {
   description?: string;
   timeout?: number;
   run_in_background?: boolean;
+}
+
+/** Execute script MCP tool input */
+export interface ExecuteScriptInput {
+  interpreter: string;
+  code: string;
+  description?: string;
+  timeout?: number;
 }
 
 /** WebFetch tool input */

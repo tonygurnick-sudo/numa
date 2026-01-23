@@ -902,6 +902,8 @@ async def invocations(request: Request):
             return await _handle_stop(body, user_sub)
         elif action == "upload":
             return await _handle_upload(body, user_sub, conversation_id)
+        elif action == "upload_complete":
+            return await _handle_upload_complete(body, user_sub, conversation_id)
         elif action == "delete_uploads":
             return await _handle_delete_uploads(body, user_sub, conversation_id)
         elif action == "cleanup_session":
@@ -1461,6 +1463,103 @@ async def _handle_upload(
         "path": f"uploads/{safe_rel_path}",
         "filename": safe_filename,
         "size": len(content),
+    }
+
+
+async def _handle_upload_complete(
+    body: dict[str, Any],
+    user_sub: str,
+    conversation_id: str,
+) -> dict[str, Any]:
+    """
+    Handle upload_complete action - file was uploaded directly to S3.
+
+    This is called after frontend uploads a file directly to S3 using a presigned URL.
+    We need to sync the file from S3 to local EFS so the agent can access it.
+
+    Body:
+        filename: str - relative path within uploads/ (e.g., "folder/file.pdf" or "doc.txt")
+        s3Key: str - full S3 key where the file was uploaded
+        size: int - file size in bytes
+    """
+    from .s3_workspace import OUTPUTS_BUCKET
+
+    filename = body.get("filename")
+    s3_key = body.get("s3Key")
+    size = body.get("size", 0)
+
+    if not filename:
+        raise HTTPException(status_code=400, detail="Missing filename")
+    if not s3_key:
+        raise HTTPException(status_code=400, detail="Missing s3Key")
+
+    # Validate S3 key matches expected pattern (security check)
+    expected_prefix = (
+        f"numa-chat/workspace/{user_sub}/conversations/{conversation_id}/uploads/"
+    )
+    if not s3_key.startswith(expected_prefix):
+        logger.warning(
+            "Invalid S3 key - does not match expected prefix",
+            s3_key=s3_key,
+            expected_prefix=expected_prefix,
+        )
+        raise HTTPException(status_code=400, detail="Invalid S3 key")
+
+    if not OUTPUTS_BUCKET:
+        raise HTTPException(
+            status_code=500, detail="OUTPUTS_BUCKET_NAME not configured"
+        )
+
+    # Ensure we're on the right conversation
+    active_conv = get_active_conversation()
+    if active_conv and active_conv != conversation_id:
+        # Switch conversation first
+        sync_conversation_switch(user_sub, active_conv, conversation_id)
+        set_active_conversation(conversation_id)
+
+    # Sanitize the upload path
+    safe_rel_path = _sanitize_upload_path(filename)
+    if safe_rel_path is None:
+        raise HTTPException(status_code=400, detail="Invalid filename")
+
+    # Sync file from S3 to local EFS
+    paths = get_workspace_paths()
+    local_path = paths["uploads"] / safe_rel_path
+    local_path.parent.mkdir(parents=True, exist_ok=True)
+
+    s3 = boto3.client("s3")
+    try:
+        s3.download_file(OUTPUTS_BUCKET, s3_key, str(local_path))
+    except Exception as e:
+        logger.error(
+            "Failed to sync file from S3",
+            s3_key=s3_key,
+            local_path=str(local_path),
+            error=str(e),
+        )
+        raise HTTPException(
+            status_code=500, detail=f"Failed to sync file from S3: {str(e)}"
+        ) from e
+
+    # Extract just the filename for the response
+    safe_filename = safe_rel_path.split("/")[-1]
+
+    logger.info(
+        "File synced from S3",
+        _name="UPLOAD_COMPLETE",
+        phase="upload",
+        conversation_id=conversation_id,
+        path=safe_rel_path,
+        filename=safe_filename,
+        size=size,
+        s3_key=s3_key,
+    )
+
+    return {
+        "status": "success",
+        "path": f"uploads/{safe_rel_path}",
+        "filename": safe_filename,
+        "size": size,
     }
 
 

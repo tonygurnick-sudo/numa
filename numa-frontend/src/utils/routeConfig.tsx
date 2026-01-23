@@ -55,7 +55,8 @@ export const ROUTE_CONFIG = [
     element: () => <NumaWorkspaceChatAgents />,
     requiredFeature: 'chat',
     nav: {
-      label: 'Chat V2',
+      label: 'Numa Chat V2',
+      labelKey: 'nav.items.chatV2',
       icon: 'bi bi-chat-square-dots-fill',
       featureFlag: 'NUMA_WORKSPACE_CHAT',
     },

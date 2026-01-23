@@ -322,25 +322,39 @@ def check_python_command(command: str) -> tuple[bool, str | None]:
     """
     Check Python command for dangerous patterns.
 
-    Catches common bypasses like __import__, exec(), eval(), etc.
-    """
-    # Extract Python code from command
-    # Handles: python -c "code", python3 -c 'code', etc.
-    python_code = None
+    Scans BOTH:
+    - Inline code via -c flag: python3 -c "code"
+    - Python files: python3 /workdir/script.py
 
+    Catches common bypasses like __import__, exec(), eval(), network access, etc.
+    """
+    # Check inline code passed via -c flag
+    # Handles: python -c "code", python3 -c 'code', etc.
     if " -c " in command:
-        # Find the code after -c
         parts = command.split(" -c ", 1)
         if len(parts) > 1:
             python_code = parts[1]
+            for pattern in DANGEROUS_PYTHON_PATTERNS:
+                if re.search(pattern, python_code, re.IGNORECASE):
+                    return True, f"Dangerous Python pattern detected: {pattern}"
 
-    if not python_code:
-        return False, None
-
-    # Check against all dangerous patterns
-    for pattern in DANGEROUS_PYTHON_PATTERNS:
-        if re.search(pattern, python_code, re.IGNORECASE):
-            return True, f"Dangerous Python pattern detected: {pattern}"
+    # Check Python file content when executing .py files
+    # Match: python3 /workdir/script.py, python /workdir/foo.py, etc.
+    # Security: Only scans files within /workdir (workspace jail applies)
+    file_match = re.search(r'python3?\s+["\']?(/workdir/[^\s"\']+\.py)["\']?', command)
+    if file_match:
+        script_path = file_match.group(1)
+        try:
+            with open(script_path, "r") as f:
+                file_content = f.read()
+            for pattern in DANGEROUS_PYTHON_PATTERNS:
+                if re.search(pattern, file_content, re.IGNORECASE):
+                    return True, f"Dangerous pattern in {script_path}: {pattern}"
+        except FileNotFoundError:
+            # File doesn't exist yet, will fail at execution anyway
+            pass
+        except Exception as e:
+            logger.warning(f"Could not scan Python file {script_path}: {e}")
 
     return False, None
 
@@ -382,17 +396,33 @@ def check_bash_command(
                 "Access to protected directories (.system/, secrets/) is blocked",
             )
 
+    # Check if this is a trusted Numa tool (whitelist before scanning)
+    # Security: These are platform-provided tools with their own security measures:
+    # - knowledge_base.py: KB ID validated against NUMA_ALLOWED_KBS, DynamoDB perms server-side
+    # - All Numa tools: Output written to /workdir/session/ (within workspace)
+    # - Tools are deployed with the container, not user-uploadable
+    if "/workdir/tools/numa/" in command and command.strip().startswith(
+        ("python", "python3")
+    ):
+        # Extract the script path and verify it's a .py file in the trusted directory
+        file_match = re.search(
+            r'python3?\s+["\']?(/workdir/tools/numa/[^\s"\']+\.py)["\']?', command
+        )
+        if file_match:
+            script_path = file_match.group(1)
+            # SECURITY: Normalize path to prevent traversal attacks like:
+            # /workdir/tools/numa/../uploads/malicious.py
+            normalized_path = os.path.normpath(script_path)
+            if normalized_path.startswith("/workdir/tools/numa/"):
+                # Trusted Numa tool - skip dangerous pattern scanning
+                return False, None
+            # Path traversal detected - fall through to normal scanning
+
     # Check Python commands specifically for dangerous patterns
     if command.strip().startswith(("python", "python3")):
         blocked, reason = check_python_command(command)
         if blocked:
             return True, reason
-
-    # Check if this is the knowledge_base tool (trusted - has its own security)
-    # Security: KB ID validated against NUMA_ALLOWED_KBS, DynamoDB perms checked server-side
-    # Output is always written to /workdir/session/ (within workspace)
-    if "knowledge_base.py" in command:
-        return False, None
 
     # Block any command referencing paths outside /workdir
     # Use regex to find path-like strings in the command

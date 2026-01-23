@@ -37,6 +37,7 @@ import type {
   WebFetchInput,
   ToolCategory,
   SkillInput,
+  ExecuteScriptInput,
 } from '@/types/workspaceChatTypes';
 
 // Document processing utilities
@@ -63,7 +64,19 @@ import {
 // ============================================================
 
 /** Tools that show as inline indicators (minimal UI) */
-const INLINE_TOOLS = new Set(['Read', 'Write', 'Edit', 'WebSearch', 'WebFetch', 'Bash', 'Glob', 'Grep', 'Skill']);
+const INLINE_TOOLS = new Set([
+  'Read',
+  'Write',
+  'Edit',
+  'WebSearch',
+  'WebFetch',
+  'Bash',
+  'Glob',
+  'Grep',
+  'Skill',
+  'mcp__scripts__execute_script',
+  'TaskOutput',
+]);
 
 /** Tools that are internal plumbing (hidden from UI) - kept for future use */
 const PLUMBING_TOOLS = new Set<string>();
@@ -78,8 +91,8 @@ const _SPECIAL_CARD_TOOLS = new Set(['Task', 'TodoWrite', 'AskUserQuestion']);
 // Tool Display Categorization (Transient vs Important vs Default)
 // ============================================================
 
-/** Transient tools - fade out after completion (file system exploration) */
-const TRANSIENT_TOOLS = new Set(['Glob', 'Grep', 'Read']);
+/** Transient tools - fade out after completion (file system exploration, internal plumbing) */
+const TRANSIENT_TOOLS = new Set(['Glob', 'Grep', 'Read', 'TaskOutput']);
 
 /** Important tools with icons - always visible */
 const IMPORTANT_TOOLS = new Map<string, { icon: string; name: string }>([
@@ -94,6 +107,8 @@ const IMPORTANT_TOOLS = new Map<string, { icon: string; name: string }>([
   // File operations
   ['Write', { icon: 'bi-file-earmark-plus', name: 'Created' }],
   ['Edit', { icon: 'bi-pencil-square', name: 'Edited' }],
+  // Script execution (MCP tool)
+  ['mcp__scripts__execute_script', { icon: 'bi-terminal', name: 'Running script' }],
 ]);
 
 /**
@@ -284,6 +299,20 @@ export function getInlineToolDisplay(toolName: string, input: unknown): { text: 
       const cmd = (bashInput.command || '').slice(0, 50);
       return { text: `Running: ${cmd}${cmd.length >= 50 ? '...' : ''}` };
     }
+    case 'mcp__scripts__execute_script': {
+      const scriptInput = inputObj as ExecuteScriptInput;
+      // Use description field if present (human-friendly)
+      if (scriptInput.description && typeof scriptInput.description === 'string') {
+        return { text: scriptInput.description };
+      }
+      // Fallback to interpreter + truncated code
+      const interpreter = scriptInput.interpreter || 'python3';
+      const code = (scriptInput.code || '').slice(0, 30);
+      return { text: `Running ${interpreter} script${code ? `: ${code}...` : ''}` };
+    }
+    case 'TaskOutput':
+      // Internal tool for retrieving background task results
+      return { text: 'Getting task results...' };
     case 'Glob':
       // Internal file-finding tool - show user-friendly message
       return { text: 'Searching files...' };

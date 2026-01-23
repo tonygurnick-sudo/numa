@@ -14,13 +14,14 @@ from typing import TYPE_CHECKING, Any, Optional
 # X-Ray requires CloudWatch Logs as trace destination for OTLP, which isn't configured
 os.environ["OTEL_SDK_DISABLED"] = "true"
 
-from claude_agent_sdk import ClaudeAgentOptions, HookMatcher
+from claude_agent_sdk import ClaudeAgentOptions, HookMatcher, create_sdk_mcp_server
 from numa_workspace_agent.hooks import (
     audit_hook,
     security_hook,
     subagent_cleanup_hook,
     subagent_limit_hook,
 )
+from numa_workspace_agent.mcp_tools import execute_script
 from numa_workspace_agent.prompts import build_workspace_system_prompt
 
 if TYPE_CHECKING:
@@ -214,6 +215,8 @@ ALLOWED_TOOLS = [
     # Shell
     "BashOutput",
     "KillShell",
+    # MCP tools (our custom tools)
+    "mcp__scripts__execute_script",  # Execute code without shell heredocs
     # Bash with allowed commands
     "Bash(python:*)",
     "Bash(python3:*)",
@@ -235,12 +238,23 @@ ALLOWED_TOOLS = [
     "Bash(mkdir:*)",
     "Bash(mv:*)",
     "Bash(cp:*)",
+    # Common data analysis tools
+    "Bash(sqlite3:*)",  # Database queries
+    "Bash(jq:*)",  # JSON processing
+    "Bash(sort:*)",  # Sorting
+    "Bash(uniq:*)",  # Deduplication
+    "Bash(cut:*)",  # Field extraction
+    "Bash(awk:*)",  # Text processing
+    "Bash(sed:*)",  # Text substitution
+    "Bash(diff:*)",  # File comparison
+    "Bash(grep:*)",  # Pattern matching (useful with pipes)
+    "Bash(xargs:*)",  # Build command lines from input
 ]
 
 # Tools that Claude cannot use
-DISALLOWED_TOOLS = [
-    # Block MCP tools (we don't use them in workspace agent)
-    "mcp__*",
+DISALLOWED_TOOLS: list[str] = [
+    # Note: We explicitly allow mcp__scripts__* tools above
+    # Block other MCP tools that we don't control
 ]
 
 
@@ -349,6 +363,13 @@ def create_agent_options(
         logger = structlog.get_logger()
         logger.warning("SDK CLI stderr", message=msg)
 
+    # Create MCP server for script execution (replaces heredoc pattern)
+    scripts_mcp_server = create_sdk_mcp_server(
+        name="scripts",
+        version="1.0.0",
+        tools=[execute_script],
+    )
+
     return ClaudeAgentOptions(
         # Core settings
         system_prompt=system_prompt,
@@ -360,6 +381,8 @@ def create_agent_options(
         cwd=str(LOCAL_ROOT),
         # Tools - explicitly set which tools are available (reduces token overhead)
         tools=TOOLS,
+        # MCP servers for custom tools
+        mcp_servers={"scripts": scripts_mcp_server},
         # Permissions - use acceptEdits mode with Python hooks for security
         # acceptEdits auto-approves file operations; hooks handle deny logic
         permission_mode="acceptEdits",
