@@ -9,6 +9,7 @@ export const BASIC_FEATURES = [
   'addToCompanyData',
   'selfService',
   'pipedreamIntegration',
+  'brandingRead',
 ] as const
 
 // Recommended admin-only features (more sensitive/destructive capabilities)
@@ -16,6 +17,7 @@ export const ADMIN_ONLY_FEATURES = [
   'deleteFromCompanyData',
   'manageUsers',
   'editCompanyProfile',
+  'manageBranding',
 ] as const
 
 export const ALL_FEATURES = [...BASIC_FEATURES, ...ADMIN_ONLY_FEATURES] as const
@@ -28,6 +30,7 @@ export const DEFAULT_STANDARD_FEATURES: string[] = [
   'addToCompanyData',
   'selfService',
   'pipedreamIntegration',
+  'brandingRead',
 ]
 
 export const DEFAULT_ADMIN_FEATURES: string[] = [...ALL_FEATURES]
