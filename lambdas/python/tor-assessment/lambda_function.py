@@ -6,6 +6,7 @@ from aws_lambda_powertools.utilities.typing import LambdaContext
 import bedrock
 import helpers
 import s3_helpers
+from bedrock.language import get_language_system_prompt
 from prompts import (
     TOR_ASSESSMENT_PROMPT,
     TOR_ASSESSMENT_TEMPLATE,
@@ -30,15 +31,16 @@ def handler(event: dict, context: LambdaContext) -> helpers.AppOutput:
         input_key = event["input_key"]
         assessment_output_key = event["assessment_output_key"]
         suggestions_output_key = event["suggestions_output_key"]
+        language = event.get("language")
 
         document_bytes = s3_helpers.read(input_key)
         document_content = document_bytes.decode("utf-8")
 
         # Generate assessment first
-        assessment = _assess_tor(document_content)
+        assessment = _assess_tor(document_content, language)
 
         # Generate suggestions based on the assessment
-        suggestions = _generate_suggestions(document_content, assessment)
+        suggestions = _generate_suggestions(document_content, assessment, language)
 
         # Clean up any markdown formatting issues
         assessment = remove_backticks(assessment)
@@ -89,13 +91,15 @@ def handler(event: dict, context: LambdaContext) -> helpers.AppOutput:
         raise
 
 
-def _assess_tor(document_content: str) -> str:
+def _assess_tor(document_content: str, language: str | None = None) -> str:
     """Generate the comprehensive ToR assessment using the template."""
+    system_prompt = get_language_system_prompt(language)
     model = bedrock.BedrockClaude3Model(
         model_args={
             "max_tokens": MAX_TOKENS,
             "temperature": 0.1,
-        }
+        },
+        system_prompt=system_prompt,
     )
 
     formatted_prompt = TOR_ASSESSMENT_PROMPT.format(
@@ -108,13 +112,17 @@ def _assess_tor(document_content: str) -> str:
     return response.response[0]["text"]
 
 
-def _generate_suggestions(document_content: str, assessment: str) -> str:
+def _generate_suggestions(
+    document_content: str, assessment: str, language: str | None = None
+) -> str:
     """Generate the suggested changes based on the assessment findings."""
+    system_prompt = get_language_system_prompt(language)
     model = bedrock.BedrockClaude3Model(
         model_args={
             "max_tokens": MAX_TOKENS,
             "temperature": 0.1,
-        }
+        },
+        system_prompt=system_prompt,
     )
 
     formatted_prompt = TOR_SUGGESTIONS_PROMPT.format(

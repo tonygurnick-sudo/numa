@@ -8,6 +8,7 @@ from aws_lambda_powertools.utilities.typing import LambdaContext
 import bedrock
 import helpers
 import s3_helpers
+from bedrock.language import get_language_system_prompt
 from costing_engine import get_costing_engine
 from prompts import CALCULATION_DETAIL_PROMPT, QUOTE_GENERATION_PROMPT
 from tools import PARAMETER_EXTRACTION_TOOL
@@ -40,6 +41,7 @@ def handler(event: dict, context: LambdaContext) -> helpers.AppOutput:
         output_key = event.get("output_key", "")
         detail_output_key = output_key.replace(".json", "-details.md")
         quote_output_key = output_key.replace(".json", "-quote.md")
+        language = event.get("language")
 
         logger.info(
             "Processing costing calculation",
@@ -47,7 +49,7 @@ def handler(event: dict, context: LambdaContext) -> helpers.AppOutput:
             has_specifications=bool(specifications),
         )
         input_data = prepare_input_parameters(specifications)
-        parameters = extract_parameters_with_tool(input_data)
+        parameters = extract_parameters_with_tool(input_data, language)
 
         # Step 2: Calculate costs using the appropriate engine
         costing_model = parameters.get("costing_model", "decrashape")
@@ -59,14 +61,16 @@ def handler(event: dict, context: LambdaContext) -> helpers.AppOutput:
         )
 
         # Step 3: Generate detailed calculation explanation
-        calculation_details = generate_calculation_details(parameters, costing_results)
+        calculation_details = generate_calculation_details(
+            parameters, costing_results, language
+        )
         calculation_details = remove_backticks(calculation_details)
         logger.info(
             "Calculation details generated", details_length=len(calculation_details)
         )
 
         # Step 4: Generate final quote
-        quote = generate_quote(parameters, costing_results)
+        quote = generate_quote(parameters, costing_results, language)
         quote = remove_backticks(quote)
         logger.info("Quote generated", quote_length=len(quote))
 
@@ -135,14 +139,18 @@ def handler(event: dict, context: LambdaContext) -> helpers.AppOutput:
         raise
 
 
-def extract_parameters_with_tool(input_text: str) -> Dict[str, Any]:
+def extract_parameters_with_tool(
+    input_text: str, language: str | None = None
+) -> Dict[str, Any]:
+    system_prompt = get_language_system_prompt(language)
     model = bedrock.BedrockClaude3Model(
         model_args={
             "max_tokens": MAX_TOKENS,
             "temperature": 0.1,
             "tools": [PARAMETER_EXTRACTION_TOOL],
             "tool_choice": {"type": "tool", "name": "extract_parameters"},
-        }
+        },
+        system_prompt=system_prompt,
     )
 
     try:
@@ -187,13 +195,17 @@ def calculate_costs(parameters: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def generate_calculation_details(
-    parameters: Dict[str, Any], costing_results: Dict[str, Any]
+    parameters: Dict[str, Any],
+    costing_results: Dict[str, Any],
+    language: str | None = None,
 ) -> str:
+    system_prompt = get_language_system_prompt(language)
     model = bedrock.BedrockClaude3Model(
         model_args={
             "max_tokens": MAX_TOKENS,
             "temperature": 0.1,
-        }
+        },
+        system_prompt=system_prompt,
     )
 
     try:
@@ -224,12 +236,18 @@ def generate_calculation_details(
         return "Error generating calculation details"
 
 
-def generate_quote(parameters: Dict[str, Any], costing_results: Dict[str, Any]) -> str:
+def generate_quote(
+    parameters: Dict[str, Any],
+    costing_results: Dict[str, Any],
+    language: str | None = None,
+) -> str:
+    system_prompt = get_language_system_prompt(language)
     model = bedrock.BedrockClaude3Model(
         model_args={
             "max_tokens": MAX_TOKENS,
             "temperature": 0.1,
-        }
+        },
+        system_prompt=system_prompt,
     )
 
     try:

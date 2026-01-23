@@ -15,6 +15,7 @@ sys.path.append(os.path.join(project_root, "lib/s3_helpers"))
 # Mock the modules before importing lambda_function
 sys.modules["jwt"] = Mock()  # type: ignore
 sys.modules["bedrock"] = Mock()  # type: ignore
+sys.modules["bedrock.language"] = Mock()  # type: ignore
 sys.modules["helpers"] = Mock()  # type: ignore
 sys.modules["s3_helpers"] = Mock()  # type: ignore
 

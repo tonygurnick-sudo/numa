@@ -339,6 +339,12 @@ export interface ChatAgentRequest {
     summary?: string; // human-readable summary
     [key: string]: unknown;
   };
+  // User language preference for LLM responses
+  locale?: {
+    language: string; // Effective language code (e.g., "en", "fr")
+    browserLanguage: string; // navigator.language
+    userChoice: string | null; // User's explicit preference (null if using browser default)
+  };
 }
 
 // NDJSON frames coming back from the HTTP stream

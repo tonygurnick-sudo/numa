@@ -6,6 +6,7 @@ from aws_lambda_powertools.utilities.typing import LambdaContext
 import bedrock
 import helpers
 import s3_helpers
+from bedrock.language import get_language_system_prompt
 from prompts import PERSONAL_FINANCE_PROMPT
 from tools import PERSONAL_FINANCE_TOOLS
 
@@ -21,11 +22,14 @@ def handler(event: dict, context: LambdaContext) -> dict:
     try:
         input_key = event["input_key"]
         output_key = event["output_key"]
+        language = event.get("language")
 
         extracted_content = json.loads(s3_helpers.read(input_key))
         pages = extracted_content["pages"][:MAX_PAGES]
 
-        result: list[dict] = [field for page in pages for field in __run_model(page)]
+        result: list[dict] = [
+            field for page in pages for field in __run_model(page, language)
+        ]
 
         s3_helpers.write(
             output_key,
@@ -38,7 +42,8 @@ def handler(event: dict, context: LambdaContext) -> dict:
         raise
 
 
-def __run_model(extracted_content: dict) -> list[dict]:
+def __run_model(extracted_content: dict, language: str | None = None) -> list[dict]:
+    system_prompt = get_language_system_prompt(language)
     model = bedrock.BedrockClaude3Model(
         model_args={
             "tools": PERSONAL_FINANCE_TOOLS,
@@ -46,6 +51,7 @@ def __run_model(extracted_content: dict) -> list[dict]:
             "max_tokens": MAX_TOKENS,
         },
         claude_only=True,
+        system_prompt=system_prompt,
     )
 
     prompt = PERSONAL_FINANCE_PROMPT.format(document=extracted_content)

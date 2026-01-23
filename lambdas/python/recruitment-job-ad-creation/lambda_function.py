@@ -1,6 +1,7 @@
 import json
 
 import bedrock
+from bedrock.language import get_language_system_prompt
 from prm import client as prm_client
 from prompts import JOB_AD_CREATION_PROMPT
 from tools import JOB_AD_CREATION_TOOL
@@ -14,6 +15,7 @@ def handler(event, _context):
     company_profile = event.get("company_profile") or {}
     output_bucket = event.get("output_bucket")
     output_key = event.get("output_key")
+    language = event.get("language")
     if not output_bucket:
         raise KeyError("output_bucket is missing in event")
     if not output_key:
@@ -29,12 +31,14 @@ def handler(event, _context):
     prompt = build_prompt(job_ad_context, company_profile)
 
     # 3) Run the prompt using Bedrock Claude 3
+    system_prompt = get_language_system_prompt(language)
     model = bedrock.BedrockClaude3Model(
         model_args={
             "max_tokens": MAX_TOKENS,
             "tools": JOB_AD_CREATION_TOOL,
             "tool_choice": {"type": "tool", "name": "print_job_ad"},
-        }
+        },
+        system_prompt=system_prompt,
     )
     message_for_logging = "Creating job ads"
     result = model.run(prompt, name_for_logging=message_for_logging).response[0][

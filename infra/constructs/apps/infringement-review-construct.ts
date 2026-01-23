@@ -152,6 +152,7 @@ export class InfringementReview extends BaseNumaApp {
             'user_id.$': '$$.Execution.Input.user_id',
             'evidence_key.$': '$$.Execution.Input.uploaded_files[0].s3_key',
             'infringement_details.$': '$$.Execution.Input.infringement_details',
+            'language.$': '$$.Execution.Input.language',
           },
           Next: 'ExtractContent',
         },
@@ -168,6 +169,7 @@ export class InfringementReview extends BaseNumaApp {
             'input_key.$': '$.extracted.output_key',
             'infringement_details.$': '$.infringement_details',
             'output_path.$': `States.Format('${this.appId}/{}/{}', $$.Execution.Input.user_id, $$.Execution.Input.job_id)`,
+            'language.$': '$.language',
           },
           'WriteSuccessStatus',
           {

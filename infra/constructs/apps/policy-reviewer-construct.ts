@@ -94,6 +94,7 @@ export class PolicyReviewer extends BaseNumaApp {
             'policy_context.$': '$$.Execution.Input.policy_context',
             app_id: this.appId,
             'output_path.$': `States.Format('${this.appId}/{}/{}', $$.Execution.Input.user_id, $$.Execution.Input.original_job_id)`,
+            'language.$': '$$.Execution.Input.language',
           },
           Next: 'ExtractContent',
         },
@@ -112,6 +113,7 @@ export class PolicyReviewer extends BaseNumaApp {
             'policy_context.$': '$.policy_context',
             app_id: this.appId,
             'output_path.$': `States.Format('${this.appId}/{}/{}', $.user_id, $.job_id)`,
+            'language.$': '$.language',
           },
           'WriteSuccessStatus',
           {

@@ -7,6 +7,7 @@ import bedrock
 import helpers
 import prompts
 import s3_helpers
+from bedrock.language import get_language_system_prompt
 from tools import MEETING_ANALYSIS_TOOL
 
 MAX_TOKENS = 16000
@@ -22,6 +23,7 @@ def handler(event: dict, context: LambdaContext) -> helpers.AppOutput:
         other_notes = event["other_notes"]
         template = event["template"]
         output_path = event["output_path"]
+        language = event.get("language")
 
         # Extract context for event streaming
         job_id = event["job_id"]
@@ -54,6 +56,7 @@ def handler(event: dict, context: LambdaContext) -> helpers.AppOutput:
                 "template": template,
                 "other_notes": other_notes,
             },
+            language=language,
         )
 
         # Save template output as markdown
@@ -100,6 +103,7 @@ def handler(event: dict, context: LambdaContext) -> helpers.AppOutput:
                 "meeting_notes_and_or_transcript": meeting_notes_and_or_transcript,
                 "other_notes": other_notes,
             },
+            language=language,
         )
 
         # Save summary as markdown
@@ -144,6 +148,7 @@ def handler(event: dict, context: LambdaContext) -> helpers.AppOutput:
                 "meeting_notes_and_or_transcript": meeting_notes_and_or_transcript,
                 "other_notes": other_notes,
             },
+            language=language,
         )
 
         # Save topic analysis as markdown
@@ -190,6 +195,7 @@ def handler(event: dict, context: LambdaContext) -> helpers.AppOutput:
                 "meeting_notes_and_or_transcript": meeting_notes_and_or_transcript,
                 "other_notes": other_notes,
             },
+            language=language,
         )
 
         # Save action items as markdown
@@ -235,6 +241,7 @@ def handler(event: dict, context: LambdaContext) -> helpers.AppOutput:
                 "other_notes": other_notes,
                 "summary": summary,
             },
+            language=language,
         )
 
         # Save follow-up emails as markdown
@@ -281,6 +288,7 @@ def handler(event: dict, context: LambdaContext) -> helpers.AppOutput:
                 "meeting_notes_and_or_transcript": meeting_notes_and_or_transcript,
                 "other_notes": other_notes,
             },
+            language=language,
         )
 
         # Save participant insights as markdown
@@ -327,15 +335,19 @@ def handler(event: dict, context: LambdaContext) -> helpers.AppOutput:
         raise
 
 
-def get_model_response(prompt: str, input_data: dict) -> str:
+def get_model_response(
+    prompt: str, input_data: dict, language: str | None = None
+) -> str:
     """Get response from the model."""
+    system_prompt = get_language_system_prompt(language)
     model = bedrock.BedrockClaude3Model(
         model_args={
             "max_tokens": MAX_TOKENS,
             "temperature": 0.1,
             "tools": MEETING_ANALYSIS_TOOL,
             "tool_choice": {"type": "tool", "name": "meeting_content"},
-        }
+        },
+        system_prompt=system_prompt,
     )
 
     formatted_prompt = prompt.format(**input_data)

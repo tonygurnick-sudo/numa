@@ -2,6 +2,7 @@ import argparse
 import json
 
 import bedrock
+from bedrock.language import get_language_system_prompt
 from config import configurations
 
 MAX_TOKENS = 16000
@@ -14,6 +15,7 @@ def handler(event: dict, _context) -> list[dict]:
     data_extraction_type = (
         event.get("data_extraction_type") or "page_by_page"
     )  # or "full_document"
+    language = event.get("language")
 
     # Get the tools and prompt based on the config
     selected_config = configurations.get(config) or None
@@ -25,12 +27,14 @@ def handler(event: dict, _context) -> list[dict]:
     tool_array_key = selected_config.get("tool_array_key") or None
     prompt = selected_config["prompt"]
 
+    system_prompt = get_language_system_prompt(language)
     model = bedrock.BedrockClaude3Model(
         model_args={
             "tools": tools,
             "tool_choice": {"type": "tool", "name": tool_name},
             "max_tokens": MAX_TOKENS,
         },
+        system_prompt=system_prompt,
     )
 
     if data_extraction_type == "full_document":

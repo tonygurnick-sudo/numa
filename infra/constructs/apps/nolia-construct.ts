@@ -304,6 +304,7 @@ export class Nolia extends BaseNumaApp {
             'user_timezone.$': '$.merged.user_timezone',
             'assessment_type.$': '$.merged.assessment_type',
             'output_language.$': '$.merged.output_language',
+            'language.$': '$.merged.language',
           },
           Next: 'CheckFileType',
         },

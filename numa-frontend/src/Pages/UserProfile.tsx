@@ -370,6 +370,8 @@ export default function UserProfilePage() {
                     >
                       <option value={LANGUAGE_BROWSER_DEFAULT}>{t('userProfile.defaults.language.browser')}</option>
                       <option value="en">{t('userProfile.defaults.language.english')}</option>
+                      <option value="fr">{t('userProfile.defaults.language.french')}</option>
+                      <option value="id">{t('userProfile.defaults.language.indonesian')}</option>
                     </Form.Select>
                     <div className="text-muted small mt-1">{t('userProfile.defaults.language.help')}</div>
                   </Form.Group>

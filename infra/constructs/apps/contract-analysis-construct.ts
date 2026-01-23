@@ -99,6 +99,7 @@ export class ContractAnalysis extends BaseNumaApp {
             'user_id.$': '$$.Execution.Input.user_id',
             'contract_key.$': '$$.Execution.Input.uploaded_files[0].s3_key',
             'contract_context.$': '$$.Execution.Input.contract_context',
+            'language.$': '$$.Execution.Input.language',
           },
           Next: 'ExtractContent',
         },
@@ -116,6 +117,7 @@ export class ContractAnalysis extends BaseNumaApp {
             'input_key.$': '$.extracted.output_key',
             'contract_context.$': '$.contract_context',
             'output_path.$': `States.Format('${this.appId}/{}/{}', $$.Execution.Input.user_id, $$.Execution.Input.job_id)`,
+            'language.$': '$.language',
           },
           'WriteSuccessStatus',
           {

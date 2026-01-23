@@ -103,6 +103,7 @@ export class GdsrAssessment extends BaseNumaApp {
             'job_id.$': '$$.Execution.Input.job_id',
             'user_id.$': '$$.Execution.Input.user_id',
             'application_key.$': '$$.Execution.Input.uploaded_files[0].s3_key',
+            'language.$': '$$.Execution.Input.language',
           },
           Next: 'ExtractContent',
         },
@@ -139,6 +140,7 @@ export class GdsrAssessment extends BaseNumaApp {
             'input_key.$': '$.extracted.output_key',
             'supporting_data_key.$': '$.extracted_supporting_data.output_key',
             'output_key.$': `States.Format('${this.appId}/{}/{}/assessment.md', $.user_id, $.job_id)`,
+            'language.$': '$.language',
           },
           'WriteSuccessStatus',
           {
@@ -153,6 +155,7 @@ export class GdsrAssessment extends BaseNumaApp {
             'user_id.$': '$.user_id',
             'input_key.$': '$.extracted.output_key',
             'output_key.$': `States.Format('${this.appId}/{}/{}/assessment.md', $.user_id, $.job_id)`,
+            'language.$': '$.language',
           },
           'WriteSuccessStatus',
           {

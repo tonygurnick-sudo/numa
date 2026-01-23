@@ -120,6 +120,7 @@ export class ProcurementRfpAssessment extends BaseNumaApp {
             'input_key.$': '$$.Execution.Input.application_file[0].s3_key',
             'rfp_reference_key.$': '$$.Execution.Input.rfp_reference_file[0].s3_key',
             'assessment_instructions.$': '$$.Execution.Input.assessment_instructions',
+            'language.$': '$$.Execution.Input.language',
           },
           Next: 'ExtractApplicationContent',
         },
@@ -157,6 +158,7 @@ export class ProcurementRfpAssessment extends BaseNumaApp {
             'rfp_reference_key.$': '$.rfp_reference_extracted.output_key',
             'assessment_instructions.$': '$.assessment_instructions',
             'output_path.$': `States.Format('${this.appId}/{}/{}/assessment', $$.Execution.Input.user_id, $$.Execution.Input.job_id)`,
+            'language.$': '$.language',
           },
           'WriteSuccessStatus',
           {

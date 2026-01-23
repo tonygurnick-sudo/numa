@@ -14,6 +14,7 @@ from pdfminer.high_level import extract_text
 import bedrock
 import helpers
 import s3_helpers
+from bedrock.language import get_language_system_prompt
 from prompts import POLICY_REVIEW_PROMPT, UPDATED_POLICY_PROMPT
 
 # Constants
@@ -232,6 +233,7 @@ def handler(event: dict, context: LambdaContext) -> helpers.AppOutput:
         legislation_content = event["legislation_content"]
         policy_context = event["policy_context"]
         output_path = event["output_path"]
+        language = event.get("language")
 
         # Step 2: Read the policy content
         logger.info("Reading policy content")
@@ -266,6 +268,7 @@ def handler(event: dict, context: LambdaContext) -> helpers.AppOutput:
                 "initial_analysis": f"Policy context: {policy_context}",
                 "legislation_content": combined_legislation,
             },
+            language=language,
         )
 
         # Step 7: Generate updated policy document
@@ -276,6 +279,7 @@ def handler(event: dict, context: LambdaContext) -> helpers.AppOutput:
                 "policy_content": policy_content,
                 "policy_review": policy_review,
             },
+            language=language,
         )
 
         # Step 8: Save both documents as markdown and prepare output
@@ -327,13 +331,17 @@ def handler(event: dict, context: LambdaContext) -> helpers.AppOutput:
         raise
 
 
-def get_model_response(prompt: str, input_data: dict) -> str:
+def get_model_response(
+    prompt: str, input_data: dict, language: str | None = None
+) -> str:
     """Get formatted response from the Bedrock model."""
+    system_prompt = get_language_system_prompt(language)
     model = bedrock.BedrockClaude3Model(
         model_args={
             "max_tokens": MAX_TOKENS,
             "temperature": 0.1,
-        }
+        },
+        system_prompt=system_prompt,
     )
 
     formatted_prompt = prompt.format(**input_data)

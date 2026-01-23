@@ -13,6 +13,8 @@ from typing import Any
 import structlog
 from strands import Agent
 
+from bedrock.language import get_language_system_prompt
+
 from .auth import clear_current_user_auth, set_current_user_auth
 
 # Import main components
@@ -71,6 +73,7 @@ def create_fresh_agent(
     messages=None,
     enabled_connections=None,
     conversation_manager=None,
+    locale=None,
 ):
     """
     Create a fresh Agent instance for each request to avoid shared state.
@@ -88,6 +91,10 @@ def create_fresh_agent(
             Defaults to an empty list.
         conversation_manager (ConversationManager, optional): Strands conversation manager
             for runtime context management. If not provided, agent uses default behavior.
+        locale (dict, optional): Client locale information with keys:
+            - language: Effective language code (e.g., "en", "fr")
+            - browserLanguage: Browser's navigator.language
+            - userChoice: User's explicit preference (null if browser default)
 
     Returns:
         tuple: (Agent, mcp_clients_list) - Agent instance and list of MCP clients to keep alive
@@ -127,6 +134,13 @@ def create_fresh_agent(
             "Prefer query_knowledge_base for organisational content. When web_search is enabled, do not apologise about browsing limitations; when it is disabled but would help, explain briefly and offer to proceed without it. "
             "Additionally, use connected service tools (e.g., Slack, Notion, Google Calendar) when appropriate to interact with the user's integrated applications."
         )
+
+    # Append language instruction based on user's locale preference
+    if locale and isinstance(locale, dict):
+        lang_code = locale.get("language")
+        language_prompt = get_language_system_prompt(lang_code)
+        if language_prompt:
+            system_prompt += f"\n\n{language_prompt}"
 
     # Get standard tool instances based on enabled tools
     tools = get_tools_for_agent(enabled_tools)

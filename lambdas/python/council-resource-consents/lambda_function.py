@@ -7,6 +7,7 @@ from aws_lambda_powertools.utilities.typing import LambdaContext
 import bedrock
 import helpers
 import s3_helpers
+from bedrock.language import get_language_system_prompt
 from prompts import COUNCIL_RESOURCE_ANALYSIS_PROMPT
 
 MAX_TOKENS = 16000
@@ -22,6 +23,7 @@ def handler(event: dict, context: LambdaContext) -> helpers.AppOutput:
         council_references_extracted = event["council_references_extracted"]
         application_extracted = event["application_extracted"]
         output_key = event["output_key"]
+        language = event.get("language")
 
         logger.info("Processing job", job_id=job_id, output_key=output_key)
 
@@ -47,6 +49,7 @@ def handler(event: dict, context: LambdaContext) -> helpers.AppOutput:
                 ),
                 "application": application_content,
             },
+            language=language,
         )
 
         s3_helpers.write(
@@ -100,13 +103,17 @@ def remove_backticks(text: str) -> str:
     return text.replace("`", "")
 
 
-def get_model_response(prompt: str, input_data: dict) -> str:
+def get_model_response(
+    prompt: str, input_data: dict, language: str | None = None
+) -> str:
     """Get response from the model."""
+    system_prompt = get_language_system_prompt(language)
     model = bedrock.BedrockClaude3Model(
         model_args={
             "max_tokens": MAX_TOKENS,
             "temperature": 0.1,
-        }
+        },
+        system_prompt=system_prompt,
     )
 
     formatted_prompt = prompt.format(**input_data)

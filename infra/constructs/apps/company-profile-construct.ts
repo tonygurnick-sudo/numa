@@ -103,6 +103,7 @@ export class CompanyProfile extends BaseNumaApp {
             'job_id.$': '$$.Execution.Input.job_id',
             'user_id.$': '$$.Execution.Input.user_id',
             'uploaded_files.$': '$$.Execution.Input.uploaded_files',
+            'language.$': '$$.Execution.Input.language',
           },
           Next: 'ExtractMap',
         },
@@ -160,6 +161,7 @@ export class CompanyProfile extends BaseNumaApp {
             'user_id.$': '$.user_id',
             'output_key.$': `States.Format('${this.appId}/{}/{}/profile.json', $.user_id, $.job_id)`,
             app_id: this.appId,
+            'language.$': '$.language',
           },
           'WriteSuccessStatus',
           {

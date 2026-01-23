@@ -149,6 +149,7 @@ export class CostingCalculator extends BaseNumaApp {
             'job_id.$': '$$.Execution.Input.job_id',
             'user_id.$': '$$.Execution.Input.user_id',
             'specifications.$': '$$.Execution.Input.specifications',
+            'language.$': '$$.Execution.Input.language',
           },
           Next: 'ProcessCostCalculation',
         },
@@ -160,6 +161,7 @@ export class CostingCalculator extends BaseNumaApp {
             'user_id.$': '$.user_id',
             'specifications.$': '$.specifications',
             'output_key.$': `States.Format('${this.appId}/{}/{}/costing-results.json', $$.Execution.Input.user_id, $$.Execution.Input.job_id)`,
+            'language.$': '$.language',
           },
           'WriteSuccessStatus',
           {

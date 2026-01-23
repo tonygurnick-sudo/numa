@@ -13,6 +13,7 @@ import type {
 } from '../types/chat';
 import { getStopReason, isMessageStopFrame, isToolEventFrame, tryGetDeltaText } from '../types/chat';
 import i18n from '../i18n';
+import { getEffectiveLanguage } from '../utils/languagePreference';
 
 class ChatAgentHttpStream {
   private currentOnEvent: OnEvent | null | undefined;
@@ -157,6 +158,9 @@ class ChatAgentHttpStream {
       summary: `Local date: ${NOW.toLocaleDateString(undefined, { weekday: 'long' })}, ${NOW.toLocaleDateString()}, Local time: ${NOW.toLocaleTimeString()} (${Intl.DateTimeFormat().resolvedOptions().timeZone})`,
     };
 
+    // Capture user language preference for LLM responses
+    const locale = getEffectiveLanguage();
+
     const payload: ChatAgentRequest = {
       prompt,
       conversationId,
@@ -166,6 +170,7 @@ class ChatAgentHttpStream {
       modelId,
       enabledKBIds,
       timeInfo,
+      locale,
     };
 
     const idToken = localStorage.getItem('idToken');

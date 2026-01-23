@@ -89,6 +89,7 @@ export class TorAssessment extends BaseNumaApp {
             'job_id.$': '$$.Execution.Input.job_id',
             'user_id.$': '$$.Execution.Input.user_id',
             'tor_document_key.$': '$$.Execution.Input.uploaded_files[0].s3_key',
+            'language.$': '$$.Execution.Input.language',
           },
           Next: 'ExtractContent',
         },
@@ -106,6 +107,7 @@ export class TorAssessment extends BaseNumaApp {
             'input_key.$': '$.extracted.output_key',
             'assessment_output_key.$': `States.Format('${this.appId}/{}/{}/assessment.md', $.user_id, $.job_id)`,
             'suggestions_output_key.$': `States.Format('${this.appId}/{}/{}/suggestions.md', $.user_id, $.job_id)`,
+            'language.$': '$.language',
           },
           'WriteSuccessStatus',
           {

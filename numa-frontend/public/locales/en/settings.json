@@ -356,7 +356,9 @@
         "label": "Default language",
         "help": "Choose the language to use throughout the app.",
         "browser": "Browser default",
-        "english": "English"
+        "english": "English",
+        "french": "French",
+        "indonesian": "Indonesian"
       },
       "allTools": {
         "title": "All Tools",

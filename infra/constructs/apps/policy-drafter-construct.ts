@@ -120,6 +120,7 @@ export class PolicyDrafter extends BaseNumaApp {
             'user_id.$': '$$.Execution.Input.user_id',
             'legislation_content.$': '$$.Execution.Input.legislation_content',
             'policy_context.$': '$$.Execution.Input.policy_context',
+            'language.$': '$$.Execution.Input.language',
           },
           Next: 'CheckForExamplePolicy',
         },
@@ -157,6 +158,7 @@ export class PolicyDrafter extends BaseNumaApp {
             'output_path.$': `States.Format('${this.appId}/{}/{}', $.user_id, $.job_id)`,
             'policy_context.$': '$.policy_context',
             app_id: this.appId,
+            'language.$': '$.language',
           },
           'WriteSuccessStatus',
           {

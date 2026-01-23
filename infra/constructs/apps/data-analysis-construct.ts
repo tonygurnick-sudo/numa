@@ -230,6 +230,7 @@ export class DataAnalysis extends BaseNumaApp {
             'uploaded_files.$': '$$.Execution.Input.uploaded_files',
             'user_timezone.$': '$$.Execution.Input.user_timezone',
             'analysis_mode.$': '$$.Execution.Input.analysis_mode',
+            'language.$': '$$.Execution.Input.language',
           },
           Next: 'RunAnalysis',
         },
@@ -244,6 +245,7 @@ export class DataAnalysis extends BaseNumaApp {
             'uploaded_files.$': '$.uploaded_files',
             'user_timezone.$': '$.user_timezone',
             'analysis_mode.$': '$.analysis_mode',
+            'language.$': '$.language',
             resume_session: true, // Enable session continuity for follow-up prompts
             stream_events: true, // Enable event streaming to show progress in real-time
             use_dynamodb: true, // Write events to DynamoDB jobs table for real-time status

@@ -20,6 +20,7 @@ import {
   findValueWithFormatFlexibility,
   resolveReference,
 } from './NumaAppContext';
+import { getEffectiveLanguage } from '../utils/languagePreference';
 
 // Provider component
 export const NumaAppProvider = ({ children }) => {
@@ -358,10 +359,14 @@ export const NumaAppProvider = ({ children }) => {
 
     const payload = createPayloadFromTemplate(templatePayload, taskInputValues, currentResults);
 
+    // Get user's language preference for LLM responses
+    const { language } = getEffectiveLanguage();
+
     const requestPayload = {
       ...payload,
       jobId: jobId,
       user_timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      language,
     };
 
     // Initial request should return success status
@@ -1359,12 +1364,16 @@ export const NumaAppProvider = ({ children }) => {
       // Get current task input values (uploaded files, etc.)
       const uploaded_files = taskInputValues['upload-files-to-s3'] || [];
 
+      // Get user's language preference for LLM responses
+      const { language } = getEffectiveLanguage();
+
       const requestPayload = {
         jobId: jobId, // Re-use same job ID for session continuity
         prompt: prompt,
         uploaded_files: uploaded_files,
         resume_session: true, // Enable session continuity
         user_timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        language,
       };
 
       // Start the follow-up run
