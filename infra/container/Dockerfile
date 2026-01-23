@@ -99,7 +99,8 @@ RUN bash -c 'set -euo pipefail \
 # Copy the workspace-agent container image tar (if present from CI packaging)
 # Uses --exclude to make the COPY optional (won't fail if file doesn't exist)
 # The tar is created by: services/package-service.sh numa-workspace-agent
-COPY --exclude=.gitkeep infra/assets/artifacts/numa-workspace-agent/ infra/assets/artifacts/numa-workspace-agent/
+# --chown=node:node ensures the node user can read the file for Terraform's filesha256()
+COPY --chown=node:node --exclude=.gitkeep infra/assets/artifacts/numa-workspace-agent/ infra/assets/artifacts/numa-workspace-agent/
 RUN bash -c 'set -euo pipefail \
   && ART_DIR=/workspace/infra/assets/artifacts/numa-workspace-agent \
   && ART_TAR="$ART_DIR/image.tar" \
