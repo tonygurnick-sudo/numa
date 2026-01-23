@@ -45,15 +45,26 @@ echo "Git hash: $GIT_HASH"
 echo ""
 echo "=== Setting up Docker buildx for ARM64 ==="
 
-# Create docker context first (fixes TLS issues on GitLab.com SaaS)
-docker context create buildctx 2>/dev/null || true
-
-# Remove any existing builder and create fresh (avoids state ambiguity in CI)
+# Remove any existing builder (avoids state ambiguity in CI)
 docker buildx rm arm64builder 2>/dev/null || true
 
-# Create a buildx builder with docker-container driver
-# This driver has built-in QEMU support when binfmt is registered
-docker buildx create --name arm64builder --driver docker-container --use
+# Check if we're in a DinD environment with TLS (GitLab CI)
+if [ -d "/certs/client" ]; then
+    echo "Detected TLS-enabled Docker-in-Docker environment"
+
+    # Create a docker context with explicit TLS configuration for DinD
+    docker context rm dind-context 2>/dev/null || true
+    docker context create dind-context \
+        --docker "host=tcp://docker:2376,ca=/certs/client/ca.pem,cert=/certs/client/cert.pem,key=/certs/client/key.pem"
+
+    # Create buildx builder using the TLS-configured context
+    docker buildx create --name arm64builder --driver docker-container dind-context --use
+else
+    echo "Using default Docker context"
+
+    # Create buildx builder with default context (local development)
+    docker buildx create --name arm64builder --driver docker-container --use
+fi
 
 # Bootstrap the builder (ensures QEMU is available)
 docker buildx inspect --bootstrap
