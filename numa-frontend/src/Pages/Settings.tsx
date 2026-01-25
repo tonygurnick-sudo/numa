@@ -81,6 +81,8 @@ export default function SettingsPage() {
   const allowBrandingTab = brandingApiEnabled && isAdmin;
   const agentsFeatureEnabled =
     typeof window !== 'undefined' ? window.sessionStorage.getItem('AGENTS') === 'true' : false;
+  const dataConnectorsEnabled =
+    typeof window !== 'undefined' ? window.sessionStorage.getItem('DATA_CONNECTORS_ENABLED') === 'true' : false;
 
   // Global (admin) settings
   const [globalSettings, setGlobalSettings] = useState<GlobalIntegrationSettingsMap>({});
@@ -168,6 +170,10 @@ export default function SettingsPage() {
 
   const loadDataConnectorSettings = async () => {
     try {
+      if (!dataConnectorsEnabled) {
+        setDataConnectorSettings({ synergy: { status: 'disabled' } });
+        return;
+      }
       if (!user) return;
       const data = await AdminDataConnectorsService.listWithNuma(numaGet);
       setDataConnectorSettings(data);
@@ -189,7 +195,7 @@ export default function SettingsPage() {
 
   useEffect(() => {
     loadDataConnectorSettings();
-  }, [user, numaGet]);
+  }, [user, numaGet, dataConnectorsEnabled]);
 
   // Load Agents settings
   useEffect(() => {
@@ -218,6 +224,12 @@ export default function SettingsPage() {
   const [toolList, setToolList] = useState<{ name: string; description?: string }[]>([]);
   const [toolToggles, setToolToggles] = useState<Record<string, boolean>>({});
   const [integrationsTabKey, setIntegrationsTabKey] = useState<'connected-apps' | 'data-connectors'>('connected-apps');
+
+  useEffect(() => {
+    if (!dataConnectorsEnabled && integrationsTabKey === 'data-connectors') {
+      setIntegrationsTabKey('connected-apps');
+    }
+  }, [dataConnectorsEnabled, integrationsTabKey]);
   const [isBrandingDirty, setIsBrandingDirty] = useState<boolean>(false);
 
   useNavigationConfirm(activeKey === 'branding' && isBrandingDirty, t('navigation.unsavedBranding'));
@@ -980,18 +992,20 @@ export default function SettingsPage() {
                       </div>
                     )}
                   </Tab>
-                  <Tab eventKey="data-connectors" title={t('tabs.dataConnectors')}>
-                    <Alert variant="secondary" className="mb-3">
-                      <div className="d-flex align-items-start">
-                        <i className="bi bi-building-gear me-2 mt-1"></i>
-                        <div>
-                          <div className="fw-semibold">{t('dataConnectors.companySettingsTitle')}</div>
-                          <div className="small text-muted">{t('dataConnectors.companySettingsDescription')}</div>
+                  {dataConnectorsEnabled && (
+                    <Tab eventKey="data-connectors" title={t('tabs.dataConnectors')}>
+                      <Alert variant="secondary" className="mb-3">
+                        <div className="d-flex align-items-start">
+                          <i className="bi bi-building-gear me-2 mt-1"></i>
+                          <div>
+                            <div className="fw-semibold">{t('dataConnectors.companySettingsTitle')}</div>
+                            <div className="small text-muted">{t('dataConnectors.companySettingsDescription')}</div>
+                          </div>
                         </div>
-                      </div>
-                    </Alert>
-                    <div>{dataConnectors.map(renderDataConnectorRow)}</div>
-                  </Tab>
+                      </Alert>
+                      <div>{dataConnectors.map(renderDataConnectorRow)}</div>
+                    </Tab>
+                  )}
                 </Tabs>
               </Tab>
             </Tabs>

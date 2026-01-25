@@ -67,6 +67,7 @@ export default function UpdateClientConfig() {
   const [allApps, setAllApps] = useState<boolean>(false)
   const [selectedApps, setSelectedApps] = useState<string[]>([])
   const [pipedream, setPipedream] = useState<boolean>(false)
+  const [dataConnectorsEnabled, setDataConnectorsEnabled] = useState<boolean>(false)
   const [agents, setAgents] = useState<boolean>(false)
   const [devInstance, setDevInstance] = useState<boolean>(false)
   const [customDomain, setCustomDomain] = useState<string>('')
@@ -122,6 +123,8 @@ export default function UpdateClientConfig() {
     setSelectedApps(apps)
     const pd = (cfg as unknown as Record<string, unknown>)['pipedreamIntegrations']
     setPipedream(Boolean(pd))
+    const dc = (cfg as unknown as Record<string, unknown>)['dataConnectorsEnabled']
+    setDataConnectorsEnabled(Boolean(dc))
     const ag = (cfg as unknown as Record<string, unknown>)['agents']
     setAgents(Boolean(ag))
     setDevInstance(Boolean(cfg.devInstance))
@@ -149,6 +152,7 @@ export default function UpdateClientConfig() {
       allowBedrockQuotaSharing: current?.allowBedrockQuotaSharing ?? defaults.allowBedrockQuotaSharing,
       bedrockAccount: current?.bedrockAccount ?? '',
       pipedreamIntegrations: current?.pipedreamIntegrations ?? false,
+      dataConnectorsEnabled: (current as any)?.dataConnectorsEnabled ?? false,
       agents: (current as any)?.agents ?? false,
       brandingProviderEnabled: (current as any)?.brandingProviderEnabled ?? defaults.brandingProviderEnabled,
       provisionQResources: (current as any)?.provisionQResources ?? defaults.provisionQResources,
@@ -184,6 +188,7 @@ export default function UpdateClientConfig() {
 
     // Only include pipedreamIntegrations if changed
     if (eff.pipedreamIntegrations !== pipedream) updates.pipedreamIntegrations = pipedream
+    if (eff.dataConnectorsEnabled !== dataConnectorsEnabled) updates.dataConnectorsEnabled = dataConnectorsEnabled
 
     // Only include agents if changed
     if (eff.agents !== agents) updates.agents = agents
@@ -399,6 +404,14 @@ export default function UpdateClientConfig() {
                       onChange={setPipedream}
                       type="switch"
                       helpText="Enable external API integrations"
+                    />
+                    <ConfigField
+                      label="Data Connectors"
+                      value={dataConnectorsEnabled}
+                      defaultValue={defaults.dataConnectorsEnabled}
+                      onChange={setDataConnectorsEnabled}
+                      type="switch"
+                      helpText="Show data connectors in the frontend"
                     />
                     <ConfigField
                       label="Agents"

@@ -79,6 +79,7 @@ export const clientConfigSchema = z.object({
   numaChatAgents: z.boolean().optional(), // default: true
   allowBedrockQuotaSharing: z.boolean().optional(), // default: false
   pipedreamIntegrations: z.boolean().optional(), // default: false
+  dataConnectorsEnabled: z.boolean().optional(), // default: false
   agents: z.boolean().optional(), // default: false
   brandingProviderEnabled: z.boolean().optional(), // default: false
 
@@ -115,6 +116,7 @@ export const getDefaultClientConfigValues = () => ({
   numaChatAgents: true,
   allowBedrockQuotaSharing: false,
   pipedreamIntegrations: false,
+  dataConnectorsEnabled: false,
   agents: false,
   brandingProviderEnabled: false,
 })
@@ -141,6 +143,7 @@ export const getFieldDisplayName = (key: keyof ClientConfig): string => {
     allProdApps: 'All Production Apps',
     apps: 'Selected Applications',
     pipedreamIntegrations: 'Pipedream Integrations',
+    dataConnectorsEnabled: 'Data Connectors',
     allowBedrockQuotaSharing: 'Bedrock Quota Sharing',
     preferredKnowledgeBase: 'Knowledge Base Type',
     qBusinessRegion: 'Q Business Region',

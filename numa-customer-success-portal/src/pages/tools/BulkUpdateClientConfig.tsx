@@ -63,6 +63,12 @@ const BULK_UPDATABLE_FIELDS: FieldConfig[] = [
     description: 'Enable external API integrations',
   },
   {
+    key: 'dataConnectorsEnabled',
+    label: 'Data Connectors',
+    type: 'boolean',
+    description: 'Show data connectors in the frontend',
+  },
+  {
     key: 'allowBedrockQuotaSharing',
     label: 'Allow Bedrock Quota Sharing',
     type: 'boolean',
