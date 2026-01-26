@@ -129,6 +129,12 @@ const BULK_UPDATABLE_FIELDS: FieldConfig[] = [
     description: 'Provision Q Business resources in this account',
   },
   {
+    key: 'mfa',
+    label: 'Multi-Factor Authentication (MFA)',
+    type: 'boolean',
+    description: 'Require TOTP-based two-factor authentication for all users',
+  },
+  {
     key: 'groups',
     label: 'Groups (Advanced)',
     type: 'json',

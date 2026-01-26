@@ -76,6 +76,7 @@ export default function UpdateClientConfig() {
   const [provisionQResources, setProvisionQResources] = useState<boolean>(false)
   const [preferredKnowledgeBase, setPreferredKnowledgeBase] = useState<'q' | 'bedrock'>(defaults.preferredKnowledgeBase)
   const [brandingProviderEnabled, setBrandingProviderEnabled] = useState<boolean>(false)
+  const [mfa, setMfa] = useState<boolean>(false)
   const [groupAdmin, setGroupAdmin] = useState(featuresListToString(DEFAULT_ADMIN_FEATURES))
   const [groupStandard, setGroupStandard] = useState(featuresListToString(DEFAULT_STANDARD_FEATURES))
   const [showAdvanced, setShowAdvanced] = useState(false)
@@ -134,6 +135,7 @@ export default function UpdateClientConfig() {
     setProvisionQResources(Boolean((cfg as any).provisionQResources))
     setPreferredKnowledgeBase(((cfg as any).preferredKnowledgeBase as 'q' | 'bedrock') || defaults.preferredKnowledgeBase)
     setBrandingProviderEnabled(Boolean((cfg as any).brandingProviderEnabled))
+    setMfa(Boolean((cfg as any).mfa))
     const groups = (cfg as unknown as Record<string, unknown>)['groups'] as { admin?: string[]; standard?: string[] } | undefined
     const adminList = (groups?.admin && groups.admin.length > 0) ? groups.admin : DEFAULT_ADMIN_FEATURES
     const standardList = (groups?.standard && groups.standard.length > 0) ? groups.standard : DEFAULT_STANDARD_FEATURES
@@ -157,6 +159,7 @@ export default function UpdateClientConfig() {
       brandingProviderEnabled: (current as any)?.brandingProviderEnabled ?? defaults.brandingProviderEnabled,
       provisionQResources: (current as any)?.provisionQResources ?? defaults.provisionQResources,
       preferredKnowledgeBase: ((current as any)?.preferredKnowledgeBase as 'q' | 'bedrock') ?? defaults.preferredKnowledgeBase,
+      mfa: (current as any)?.mfa ?? defaults.mfa,
     }
 
     const updates: Partial<ClientConfig> = {}
@@ -213,6 +216,7 @@ export default function UpdateClientConfig() {
       }
     }
     if (eff.brandingProviderEnabled !== brandingProviderEnabled) updates.brandingProviderEnabled = brandingProviderEnabled
+    if (eff.mfa !== mfa) updates.mfa = mfa
 
     // Ensure these new fields are written even if default and currently missing
     if ((current as any)?.provisionQResources === undefined) {
@@ -444,6 +448,14 @@ export default function UpdateClientConfig() {
                       onChange={setBrandingProviderEnabled}
                       type="switch"
                       helpText="Enable custom branding UI and runtime asset loading"
+                    />
+                    <ConfigField
+                      label="Multi-Factor Authentication (MFA)"
+                      value={mfa}
+                      defaultValue={defaults.mfa}
+                      onChange={setMfa}
+                      type="switch"
+                      helpText="Require TOTP-based two-factor authentication for all users"
                     />
                     <ConfigField
                       label="Provision Q Resources"

@@ -86,7 +86,7 @@ describe('NumaLogin Component', () => {
 
   it('handles new password submission', async () => {
     mockLogin.mockResolvedValueOnce({ requiresNewPassword: true });
-    mockSetNewPassword.mockResolvedValueOnce({});
+    mockSetNewPassword.mockResolvedValueOnce({ success: true });
 
     const { getByLabelText, getByText, getByRole, findByLabelText } = render(<NumaLogin />);
 

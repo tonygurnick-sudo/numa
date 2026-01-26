@@ -742,13 +742,6 @@ export const clientConfigSchema = coreNumaInfraPropsSchema
          */
         pipedreamIntegrations: z.boolean().optional().default(false),
         /**
-         * Whether to enable Data Connectors UI in the frontend.
-         *
-         * @default false
-         */
-        dataConnectorsEnabled: z.boolean().optional().default(false),
-
-        /**
          * Whether to show branding UI and attempt runtime fetch on the FE
          * (Backend still enforces runtime owner switch via numa-client-config)
          *
@@ -775,6 +768,13 @@ export const clientConfigSchema = coreNumaInfraPropsSchema
          * @default false
          */
         numaWorkspaceChat: z.boolean().optional().default(false),
+
+        /**
+         * Whether to enable Data Connectors functionality in the frontend.
+         *
+         * @default false
+         */
+        dataConnectorsEnabled: z.boolean().optional().default(false),
       })
       .strict(),
   );
