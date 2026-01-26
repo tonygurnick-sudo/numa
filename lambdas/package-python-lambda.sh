@@ -84,6 +84,17 @@ pushd "${LAMBDA_DIRECTORY}"
     # shellcheck disable=SC2046
     # Pillow is very sensitive to the Python version provided, a typical mismatch error is:
     # ImportError: cannot import name '_imaging' from 'PIL'
+    LOCK_DEPS=""
+    if test -f "${LAMBDA_DIRECTORY}/poetry.lock"; then
+        if command -v poetry >/dev/null 2>&1; then
+            LOCK_DEPS=$(poetry show --only main | sed 's|(!)|   |' | grep -v "../" | awk '{print $1 "==" $2}')
+        else
+            echo "poetry.lock found but poetry is not installed; proceeding without locked dependency versions."
+        fi
+    else
+        echo "poetry.lock not found; proceeding without locked dependency versions."
+    fi
+
     ${PIP} install \
         --disable-pip-version-check \
         --platform manylinux2014_x86_64 \
@@ -93,7 +104,7 @@ pushd "${LAMBDA_DIRECTORY}"
         --no-cache-dir \
         --no-compile \
         --find-links "${WHEEL_DIR}" \
-        . $(poetry show --only main | sed 's|(!)|   |'| grep -v "../" | awk '{print $1 "==" $2}')
+        . ${LOCK_DEPS}
 popd
 
 # remove files that aren't required and contain paths that can differ based on clone location
@@ -122,7 +133,7 @@ fi
 # it deterministic
 LAST_MODIFIED=$(git log -1 --format=%cd --date format:"%FT%T" "${LAMBDA_DIRECTORY}" || true)
 if test -z "${LAST_MODIFIED}"; then
-    LAST_MODIFIED=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+    LAST_MODIFIED=$(date -u +"%FT%T")
 fi
 find "${BUILD_DIR}" -exec touch -d "${LAST_MODIFIED}" {} +
 

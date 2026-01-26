@@ -446,6 +446,31 @@
     },
     "loadingConfig": "Loading application configuration..."
   },
+  "structuredDataQuery": {
+    "table": {
+      "showingFirstRows": "Showing first {{shown}} of {{total}} rows"
+    },
+    "debug": {
+      "payloadTitle": "Debug payload"
+    },
+    "intro": {
+      "title": "Query Your Data with Natural Language",
+      "description": "Upload a CSV file and ask questions about your data. The AI will generate SQL queries and return results automatically.",
+      "debugTipPrefix": "Tip: add",
+      "debugQueryParam": "?debug=1",
+      "debugTipSuffix": "to the URL to enable debug iterations."
+    },
+    "upload": {
+      "dragDropTitle": "Drag and drop your CSV file here",
+      "dragDropSubtitle": "or click to browse your files",
+      "selectFile": "Select File"
+    },
+    "header": {
+      "ready": "Ready for queries",
+      "newSession": "New Session"
+    },
+    "disclaimer": "AI can make mistakes. Please verify important results."
+  },
   "policyEditor": {
     "loading": "Loading...",
     "editorPlaceholder": "# Start editing your policy here...",

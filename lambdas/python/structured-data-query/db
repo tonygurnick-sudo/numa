@@ -1,0 +1,2374 @@
+#!/bin/bash
+# Supabase Database CLI - Version 4.0 (Development - 2025-10-28)
+# Simple tool for running SQL queries against the Supabase database
+#
+# Version 4.0 Features (NEW):
+# - Agentic investigation mode via --ask --auto
+# - Multi-hop reasoning with iterative query refinement
+# - Claude conducts full investigation workflow autonomously
+# - Accumulates evidence across multiple queries
+# - Adaptive decision-making based on intermediate results
+# - Engine system for ad-hoc datasources (CSV, S3, etc.)
+# - Configuration file support
+#
+# Version 2.0 Features:
+# - Natural language SQL via --ask flag
+# - Uses Claude API to convert English to SQL
+# - Auto-includes database schema in context
+#
+# Version 1.0 Features:
+# - Auto-truncation of large outputs (10KB limit)
+# - Whitespace cleanup for token efficiency
+# - UUID-based pagination for large results
+# - Multiple output formats (table, csv, json)
+#
+# SETUP: To use 'db' command from anywhere, create a symlink:
+#   ln -sf /home/ubuntu/app/backend/scripts/db ~/.local/bin/db
+#
+# REQUIREMENTS:
+#   - Set ANTHROPIC_API_KEY environment variable for --ask
+#   - Create .env file from .env.example for database credentials
+
+# Load environment variables from .env file if it exists
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [ -f "$SCRIPT_DIR/.env" ]; then
+  source "$SCRIPT_DIR/.env"
+  echo "✓ Loaded environment from .env" >&2
+fi
+
+# PostgreSQL connection details (loaded from environment)
+# These are only required if using PostgreSQL datasource
+# For engine mode (--engine), different credentials may be needed
+
+# Validate PostgreSQL environment variables if they're being used
+validate_postgres_env() {
+  local required_vars=("DB_HOST" "DB_PORT" "DB_NAME" "DB_USER" "DB_PASSWORD")
+  local missing_vars=()
+
+  for var in "${required_vars[@]}"; do
+    if [ -z "${!var}" ]; then
+      missing_vars+=("$var")
+    fi
+  done
+
+  if [ ${#missing_vars[@]} -gt 0 ]; then
+    echo "Error: Required PostgreSQL environment variables not set:" >&2
+    printf '  - %s\n' "${missing_vars[@]}" >&2
+    echo "" >&2
+    echo "Create a .env file from the example:" >&2
+    echo "  cp .env.example .env" >&2
+    echo "Then edit .env and add your credentials" >&2
+    return 1
+  fi
+
+  # Set PGPASSWORD for psql
+  export PGPASSWORD="$DB_PASSWORD"
+  return 0
+}
+
+# Datasource configuration
+DATASOURCE_NAME=""  # Named datasource from config.engines.yaml
+CONFIG_FILE="$SCRIPT_DIR/config.engines.yaml"
+
+# Load datasource from config.engines.yaml
+load_datasource() {
+  local datasource_name="$1"
+
+  if [ ! -f "$CONFIG_FILE" ]; then
+    echo "Error: Config file not found: $CONFIG_FILE" >&2
+    echo "Create config.engines.yaml from the example" >&2
+    return 1
+  fi
+
+  # Check if yq is available (YAML parser)
+  if ! command -v yq &> /dev/null; then
+    echo "Error: yq is required for --datasource functionality" >&2
+    echo "Install with: sudo wget https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -O /usr/bin/yq && sudo chmod +x /usr/bin/yq" >&2
+    return 1
+  fi
+
+  # Get datasource config
+  local datasource_type=$(yq eval ".datasources.$datasource_name.type" "$CONFIG_FILE")
+
+  if [ "$datasource_type" == "null" ] || [ -z "$datasource_type" ]; then
+    echo "Error: Datasource '$datasource_name' not found in $CONFIG_FILE" >&2
+    echo "" >&2
+    echo "Available datasources:" >&2
+    yq eval '.datasources | keys | .[]' "$CONFIG_FILE" 2>/dev/null | sed 's/^/  - /' >&2
+    return 1
+  fi
+
+  echo "✓ Loading datasource: $datasource_name (type: $datasource_type)" >&2
+
+  # Load connection environment variable names from config
+  local host_env=$(yq eval ".datasources.$datasource_name.connection.host_env" "$CONFIG_FILE")
+  local port_env=$(yq eval ".datasources.$datasource_name.connection.port_env" "$CONFIG_FILE")
+  local database_env=$(yq eval ".datasources.$datasource_name.connection.database_env" "$CONFIG_FILE")
+  local user_env=$(yq eval ".datasources.$datasource_name.connection.user_env" "$CONFIG_FILE")
+  local password_env=$(yq eval ".datasources.$datasource_name.connection.password_env" "$CONFIG_FILE")
+
+  # Set DB_* variables from the environment variables specified in config
+  if [ "$host_env" != "null" ] && [ -n "${!host_env}" ]; then
+    export DB_HOST="${!host_env}"
+  fi
+
+  if [ "$port_env" != "null" ] && [ -n "${!port_env}" ]; then
+    export DB_PORT="${!port_env}"
+  fi
+
+  if [ "$database_env" != "null" ] && [ -n "${!database_env}" ]; then
+    export DB_NAME="${!database_env}"
+  fi
+
+  if [ "$user_env" != "null" ] && [ -n "${!user_env}" ]; then
+    export DB_USER="${!user_env}"
+  fi
+
+  if [ "$password_env" != "null" ] && [ -n "${!password_env}" ]; then
+    export DB_PASSWORD="${!password_env}"
+    export PGPASSWORD="$DB_PASSWORD"
+  fi
+
+  return 0
+}
+
+# Output processing defaults (optimized for LLM token usage)
+VERBOSE=false
+START_LINE=0
+OFFSET=100
+OUTPUT_ID=""
+FORMAT="csv"  # csv (default), table, json
+HEAD_LINES=200
+TAIL_LINES=200
+THRESHOLD=400
+MAX_BYTES=20480  # 20KB hard limit (~5k tokens)
+
+# Natural language query mode
+ASK_MODE=false
+NATURAL_QUERY=""
+AUTO_MODE=false  # Agentic investigation mode
+
+# Agentic mode settings
+MAX_ITERATIONS=20  # Max queries in agentic investigation (increased for complex investigations)
+ITERATION_COUNT=0
+INVESTIGATION_HISTORY=""
+AGENTIC_MODEL="claude-3-5-haiku-20241022"  # Cost-effective model for multi-iteration investigations
+SINGLE_QUERY_MODEL="claude-sonnet-4-5-20250929"  # Higher quality for single queries
+
+# Declare associative array for key-value storage (requires bash 4+)
+declare -A AGENT_STORE
+
+# Engine mode settings (for ad-hoc datasources)
+ENGINE_NAME=""
+declare -A ENGINE_PARAMS  # Store engine parameters like --csv, --s3, etc.
+AUTO_DETECT_ENGINE=false  # Auto-detect engine based on parameters
+
+# Get database schema for natural language context
+get_db_schema() {
+  {
+    echo "=== TABLES ==="
+    psql -h "$DB_HOST" -p "$DB_PORT" -d "$DB_NAME" -U "$DB_USER" -t -A -c "\dt" 2>/dev/null | grep '^public' | awk -F'|' '{print $2}'
+
+    echo ""
+    echo "=== COLUMNS (table,column,type,nullable,default) ==="
+    psql -h "$DB_HOST" -p "$DB_PORT" -d "$DB_NAME" -U "$DB_USER" --csv -t -c "
+      SELECT
+        c.table_name,
+        c.column_name,
+        CASE WHEN c.udt_name != c.data_type THEN c.udt_name ELSE c.data_type END as type,
+        c.is_nullable,
+        c.column_default
+      FROM information_schema.columns c
+      WHERE c.table_schema = 'public'
+      ORDER BY c.table_name, c.ordinal_position;
+    " 2>/dev/null
+
+    echo ""
+    echo "=== ENUM TYPES ==="
+    psql -h "$DB_HOST" -p "$DB_PORT" -d "$DB_NAME" -U "$DB_USER" --csv -t -c "
+      SELECT
+        t.typname,
+        string_agg(e.enumlabel, ', ' ORDER BY e.enumsortorder)
+      FROM pg_type t
+      JOIN pg_enum e ON t.oid = e.enumtypid
+      GROUP BY t.typname
+      ORDER BY t.typname;
+    " 2>/dev/null
+  }
+}
+
+# Generate SQL from natural language using Claude API
+generate_sql_from_natural_language() {
+  local question="$1"
+  local schema="$2"  # Schema passed as parameter
+
+  # Check for API key
+  if [ -z "$ANTHROPIC_API_KEY" ]; then
+    echo "Error: ANTHROPIC_API_KEY environment variable not set"
+    echo "Set it with: export ANTHROPIC_API_KEY='your-key-here'"
+    return 1
+  fi
+
+  # Engine-specific SQL guidance
+  local engine_guidance=""
+  if [ -n "$ENGINE_NAME" ]; then
+    case "$ENGINE_NAME" in
+      csv-sqlite|s3-csv-sqlite)
+        engine_guidance="
+ENGINE: $ENGINE_NAME (SQLite with CSV)
+CRITICAL: Query table named 'data' (the CSV is imported as this table)
+SYNTAX: Standard SQLite/PostgreSQL syntax
+EXAMPLE: SELECT * FROM data WHERE amount > 1000"
+        ;;
+      csv-duckdb)
+        local csv_file_path="${ENGINE_PARAMS[CSV_FILE]}"
+        engine_guidance="
+ENGINE: csv-duckdb (DuckDB analytics)
+TARGET FILE: $csv_file_path
+CRITICAL: Use read_csv_auto('$csv_file_path') function - ALWAYS use this exact file path
+SYNTAX: SELECT * FROM read_csv_auto('$csv_file_path') WHERE condition
+EXAMPLE: SELECT region, SUM(amount) FROM read_csv_auto('$csv_file_path') GROUP BY region"
+        ;;
+      athena)
+        engine_guidance="
+ENGINE: AWS Athena
+CRITICAL: Use table names from the schema below
+SYNTAX: Standard Presto/Athena SQL"
+        ;;
+    esac
+  fi
+
+  # Create system prompt
+  local system_prompt="You are a SQL expert. Convert natural language questions into SQL queries.
+
+${engine_guidance:+$engine_guidance
+
+}DATABASE SCHEMA:
+$schema
+
+RULES:
+- Return ONLY the SQL query, nothing else
+- Use proper SQL syntax for the engine specified above
+- Limit results to 100 rows by default unless user asks for more
+- Use appropriate JOINs and WHERE clauses
+${engine_guidance:+- CRITICAL: Follow the engine-specific syntax requirements above}
+
+Example:
+User: \"Show me the most recent 10 records\"
+Response: SELECT * FROM ${ENGINE_NAME:+data}${ENGINE_NAME:-llm_traces} ORDER BY created_at DESC LIMIT 10;"
+
+  # Escape JSON properly
+  local escaped_prompt=$(echo "$system_prompt" | jq -Rs .)
+  local escaped_question=$(echo "$question" | jq -Rs .)
+
+  # Use temp file to avoid "Argument list too long" error with large schema
+  local request_file=$(mktemp)
+  cat > "$request_file" <<EOF
+{
+  "model": "$SINGLE_QUERY_MODEL",
+  "max_tokens": 1024,
+  "system": $escaped_prompt,
+  "messages": [
+    {"role": "user", "content": $escaped_question}
+  ]
+}
+EOF
+
+  # Call Anthropic API (use SINGLE_QUERY_MODEL for non-agentic mode)
+  local response=$(curl -s https://api.anthropic.com/v1/messages \
+    --header "x-api-key: $ANTHROPIC_API_KEY" \
+    --header "anthropic-version: 2023-06-01" \
+    --header "content-type: application/json" \
+    --data @"$request_file")
+
+  command rm "$request_file" 2>/dev/null || true
+
+  # Extract SQL from response
+  local sql=$(echo "$response" | jq -r '.content[0].text' 2>/dev/null)
+
+  if [ -z "$sql" ] || [ "$sql" = "null" ]; then
+    echo "Error: Failed to generate SQL" >&2
+    echo "Response: $response" >&2
+    return 1
+  fi
+
+  # Clean up SQL (remove markdown code blocks if present)
+  sql=$(echo "$sql" | sed -E 's/^```sql//g' | sed -E 's/^```//g' | sed -E 's/```$//g' | sed -E '/^$/d')
+
+  echo "$sql"
+}
+
+# Generate natural language answer from query results
+answer_question_from_results() {
+  local question="$1"
+  local sql_query="$2"
+  local query_results="$3"
+  local schema="$4"
+
+  # Check for API key
+  if [ -z "$ANTHROPIC_API_KEY" ]; then
+    echo "Error: ANTHROPIC_API_KEY environment variable not set"
+    return 1
+  fi
+
+  # Create analysis prompt
+  local system_prompt="You are a data analyst helping users understand database query results.
+
+Your task:
+1. Analyze the SQL query results in context of the user's original question
+2. Provide a clear, concise answer to their question
+3. Include relevant numbers, patterns, or insights from the data
+4. Be information-dense but easy to understand
+5. If the results are empty or unexpected, explain why
+
+Format rules:
+- Start directly with the answer (no preamble like 'Based on the data...')
+- Support with specific data points
+- Keep it concise (2-4 sentences typically)
+- Use natural language, not technical jargon
+- DO NOT use ** for bold or any other markdown formatting
+- DO NOT add concluding statements or summaries at the end
+- Just present the facts directly and clearly"
+
+  local user_message="USER'S QUESTION: $question
+
+DATABASE SCHEMA:
+$schema
+
+SQL QUERY EXECUTED:
+$sql_query
+
+QUERY RESULTS:
+$query_results
+
+Please answer the user's question based on these results."
+
+  # Escape JSON properly
+  local escaped_prompt=$(echo "$system_prompt" | jq -Rs .)
+  local escaped_message=$(echo "$user_message" | jq -Rs .)
+
+  # Use temp file to avoid "Argument list too long" error with large results
+  local request_file=$(mktemp)
+  cat > "$request_file" <<EOF
+{
+  "model": "$SINGLE_QUERY_MODEL",
+  "max_tokens": 1024,
+  "system": $escaped_prompt,
+  "messages": [
+    {"role": "user", "content": $escaped_message}
+  ]
+}
+EOF
+
+  # Call Anthropic API (use SINGLE_QUERY_MODEL for answer generation)
+  local response=$(curl -s https://api.anthropic.com/v1/messages \
+    --header "x-api-key: $ANTHROPIC_API_KEY" \
+    --header "anthropic-version: 2023-06-01" \
+    --header "content-type: application/json" \
+    --data @"$request_file")
+
+  command rm "$request_file" 2>/dev/null || true
+
+  # Extract answer from response
+  local answer=$(echo "$response" | jq -r '.content[0].text' 2>/dev/null)
+
+  if [ -z "$answer" ] || [ "$answer" = "null" ]; then
+    echo "Error: Failed to generate answer" >&2
+    return 1
+  fi
+
+  echo "$answer"
+}
+
+# Parse and store STORE[key] = value from reasoning
+parse_and_store() {
+  local text="$1"
+  # Find all STORE[key] = value patterns (avoid subshell by using process substitution)
+  while IFS= read -r store_stmt; do
+    if [ -n "$store_stmt" ]; then
+      local key=$(echo "$store_stmt" | sed -E 's/STORE\[([a-zA-Z0-9_]+)\].*/\1/')
+      local value=$(echo "$store_stmt" | sed -E 's/STORE\[[a-zA-Z0-9_]+\][[:space:]]*=[[:space:]]*//' | sed 's/[,;.]$//')
+      if [ -n "$key" ] && [ -n "$value" ]; then
+        AGENT_STORE["$key"]="$value"
+        echo "  [STORED] $key = $value" >&2
+      fi
+    fi
+  done < <(echo "$text" | grep -oE 'STORE\[[a-zA-Z0-9_]+\][[:space:]]*=[[:space:]]*[^,;.()]+')
+}
+
+# Replace RECALL[key] with stored values
+process_recalls() {
+  local text="$1"
+  local result="$text"
+
+  # Find all RECALL[key] patterns and replace with stored values
+  for key in "${!AGENT_STORE[@]}"; do
+    local value="${AGENT_STORE[$key]}"
+    result=$(echo "$result" | sed "s/RECALL\[$key\]/$value/g")
+  done
+
+  echo "$result"
+}
+
+# Display current agent store
+display_store() {
+  if [ ${#AGENT_STORE[@]} -eq 0 ]; then
+    return
+  fi
+
+  echo ""
+  echo "AGENT MEMORY (Key-Value Store):"
+  echo "─────────────────────────────────────────────────────────────────────────────"
+  for key in "${!AGENT_STORE[@]}"; do
+    echo "  $key = ${AGENT_STORE[$key]}"
+  done
+  echo "─────────────────────────────────────────────────────────────────────────────"
+  echo ""
+}
+
+# ============================================================================
+# ENGINE EXECUTION FUNCTIONS (for ad-hoc datasources)
+# ============================================================================
+
+# Execute csv-sqlite engine
+execute_csv_sqlite_engine() {
+  local query="$1"
+  local csv_input="${ENGINE_PARAMS[CSV_FILE]}"
+  local table_name="${ENGINE_PARAMS[TABLE_NAME]:-data}"
+
+  if [ -z "$csv_input" ]; then
+    echo "Error: --csv parameter required for csv-sqlite engine" >&2
+    echo "Usage: db --engine csv-sqlite --csv <file|url> \"SQL QUERY\"" >&2
+    echo "Examples:" >&2
+    echo "  db --engine csv-sqlite --csv ./data.csv \"SELECT * FROM data\"" >&2
+    echo "  db --engine csv-sqlite --csv https://example.com/data.csv \"SELECT * FROM data\"" >&2
+    exit 1
+  fi
+
+  local csv_file="$csv_input"
+  local downloaded=false
+
+  # Check if input is a URL
+  if [[ "$csv_input" =~ ^https?:// ]]; then
+    # Create cache directory
+    local cache_dir="$HOME/.cache/db-cli"
+    mkdir -p "$cache_dir"
+
+    # Generate cache filename from URL hash
+    local url_hash=$(echo -n "$csv_input" | md5sum | cut -d' ' -f1)
+    local cached_file="$cache_dir/csv_${url_hash}.csv"
+
+    # Check if cached version exists and is less than 1 hour old
+    if [ -f "$cached_file" ] && [ $(($(date +%s) - $(stat -c %Y "$cached_file" 2>/dev/null || stat -f %m "$cached_file" 2>/dev/null))) -lt 3600 ]; then
+      echo "Using cached CSV (downloaded < 1 hour ago)" >&2
+      csv_file="$cached_file"
+    else
+      echo "Downloading CSV from URL: $csv_input ..." >&2
+      curl -L -f -s "$csv_input" -o "$cached_file"
+
+      if [ $? -ne 0 ]; then
+        echo "Error: Failed to download CSV from URL: $csv_input" >&2
+        rm -f "$cached_file"
+        exit 1
+      fi
+      csv_file="$cached_file"
+      echo "Cached for future use (1 hour)" >&2
+    fi
+    downloaded=false  # Don't delete cached file
+  else
+    # Local file - check if it exists
+    if [ ! -f "$csv_file" ]; then
+      echo "Error: CSV file not found: $csv_file" >&2
+      exit 1
+    fi
+  fi
+
+  # Create temp database
+  local temp_db="/tmp/db_cli_$$.sqlite"
+
+  echo "Importing CSV to SQLite..." >&2
+
+  # Import CSV to SQLite
+  sqlite3 "$temp_db" <<EOF
+.mode csv
+.import $csv_file $table_name
+EOF
+
+  if [ $? -ne 0 ]; then
+    echo "Error: Failed to import CSV to SQLite" >&2
+    rm -f "$temp_db"
+    [ "$downloaded" = true ] && rm -f "$csv_file"
+    exit 1
+  fi
+
+  # Execute query with format
+  case "$FORMAT" in
+    json)
+      sqlite3 -json "$temp_db" "$query"
+      ;;
+    table)
+      sqlite3 -table "$temp_db" "$query"
+      ;;
+    csv|*)
+      sqlite3 -csv "$temp_db" "$query"
+      ;;
+  esac
+  local exit_code=$?
+
+  # Cleanup
+  rm -f "$temp_db"
+  [ "$downloaded" = true ] && rm -f "$csv_file"
+
+  return $exit_code
+}
+
+# Execute s3-csv-sqlite engine
+execute_s3_csv_sqlite_engine() {
+  local query="$1"
+  local s3_path="${ENGINE_PARAMS[S3_PATH]}"
+  local table_name="${ENGINE_PARAMS[TABLE_NAME]:-data}"
+  local region="${ENGINE_PARAMS[AWS_REGION]:-us-east-1}"
+
+  if [ -z "$s3_path" ]; then
+    echo "Error: --s3 parameter required for s3-csv-sqlite engine" >&2
+    echo "Usage: db --engine s3-csv-sqlite --s3 s3://bucket/file.csv \"SQL QUERY\"" >&2
+    exit 1
+  fi
+
+  local temp_csv="/tmp/db_cli_$$.csv"
+  local temp_db="/tmp/db_cli_$$.sqlite"
+
+  # Download from S3
+  echo "Downloading from S3: $s3_path ..." >&2
+  aws s3 cp "$s3_path" "$temp_csv" --region "$region" 2>&1 | head -5 >&2
+
+  if [ $? -ne 0 ]; then
+    echo "Error: Failed to download from S3: $s3_path" >&2
+    rm -f "$temp_csv"
+    exit 1
+  fi
+
+  # Import to SQLite
+  echo "Importing to SQLite..." >&2
+  sqlite3 "$temp_db" <<EOF
+.mode csv
+.import $temp_csv $table_name
+EOF
+
+  if [ $? -ne 0 ]; then
+    echo "Error: Failed to import CSV to SQLite" >&2
+    rm -f "$temp_csv" "$temp_db"
+    exit 1
+  fi
+
+  # Execute query with format
+  case "$FORMAT" in
+    json)
+      sqlite3 -json "$temp_db" "$query"
+      ;;
+    table)
+      sqlite3 -table "$temp_db" "$query"
+      ;;
+    csv|*)
+      sqlite3 -csv "$temp_db" "$query"
+      ;;
+  esac
+  local exit_code=$?
+
+  # Cleanup
+  rm -f "$temp_csv" "$temp_db"
+
+  return $exit_code
+}
+
+# Execute csv-duckdb engine (fast analytical queries)
+execute_csv_duckdb_engine() {
+  local query="$1"
+  local csv_file="${ENGINE_PARAMS[CSV_FILE]}"
+
+  if [ -z "$csv_file" ]; then
+    echo "Error: --csv parameter required for csv-duckdb engine" >&2
+    echo "Usage: db --engine csv-duckdb --csv <file> \"SQL QUERY\"" >&2
+    exit 1
+  fi
+
+  if [ ! -f "$csv_file" ]; then
+    echo "Error: CSV file not found: $csv_file" >&2
+    exit 1
+  fi
+
+  # Check if duckdb is installed
+  if ! command -v duckdb &> /dev/null; then
+    echo "Error: duckdb not installed" >&2
+    echo "Install with: brew install duckdb (macOS) or visit https://duckdb.org/docs/installation/" >&2
+    exit 1
+  fi
+
+  echo "Querying CSV with DuckDB..." >&2
+
+  # DuckDB can query CSV files directly
+  # Replace {{CSV_FILE}} placeholder in query with actual file path
+  local duckdb_query="${query//\{\{CSV_FILE\}\}/$csv_file}"
+
+  # Execute with format
+  case "$FORMAT" in
+    json)
+      duckdb -json << EOF
+$duckdb_query
+EOF
+      ;;
+    table)
+      duckdb << EOF
+$duckdb_query
+EOF
+      ;;
+    csv|*)
+      duckdb -csv << EOF
+$duckdb_query
+EOF
+      ;;
+  esac
+}
+
+# Execute athena engine (serverless S3 SQL queries)
+execute_athena_engine() {
+  local query="$1"
+  local database="${ENGINE_PARAMS[ATHENA_DATABASE]}"
+  local workgroup="${ENGINE_PARAMS[ATHENA_WORKGROUP]:-primary}"
+  local output_location="${ENGINE_PARAMS[ATHENA_OUTPUT]}"
+  local region="${ENGINE_PARAMS[AWS_REGION]:-us-east-1}"
+
+  if [ -z "$database" ]; then
+    echo "Error: --athena-db parameter required for athena engine" >&2
+    echo "Usage: db --engine athena --athena-db <database> --athena-output s3://bucket/path/ \"SQL QUERY\"" >&2
+    exit 1
+  fi
+
+  if [ -z "$output_location" ]; then
+    echo "Error: --athena-output parameter required (S3 path for query results)" >&2
+    echo "Example: db --engine athena --athena-db mydb --athena-output s3://my-bucket/athena-results/ \"SELECT * FROM table\"" >&2
+    exit 1
+  fi
+
+  # Check if AWS CLI is available
+  if ! command -v aws &> /dev/null; then
+    echo "Error: AWS CLI not installed" >&2
+    echo "Install with: sudo apt-get install awscli" >&2
+    exit 1
+  fi
+
+  echo "Submitting query to Athena (database: $database)..." >&2
+
+  # Start query execution
+  local query_id=$(aws athena start-query-execution \
+    --query-string "$query" \
+    --query-execution-context Database="$database" \
+    --result-configuration OutputLocation="$output_location" \
+    --work-group "$workgroup" \
+    --region "$region" \
+    --output text \
+    --query 'QueryExecutionId')
+
+  if [ $? -ne 0 ] || [ -z "$query_id" ]; then
+    echo "Error: Failed to submit query to Athena" >&2
+    exit 1
+  fi
+
+  echo "Query ID: $query_id" >&2
+  echo "Waiting for query to complete..." >&2
+
+  # Poll for completion
+  local max_attempts=60
+  local attempt=0
+  local status=""
+
+  while [ $attempt -lt $max_attempts ]; do
+    status=$(aws athena get-query-execution \
+      --query-execution-id "$query_id" \
+      --region "$region" \
+      --output text \
+      --query 'QueryExecution.Status.State')
+
+    case "$status" in
+      SUCCEEDED)
+        echo "Query completed successfully!" >&2
+        break
+        ;;
+      FAILED|CANCELLED)
+        local reason=$(aws athena get-query-execution \
+          --query-execution-id "$query_id" \
+          --region "$region" \
+          --output text \
+          --query 'QueryExecution.Status.StateChangeReason')
+        echo "Error: Query $status: $reason" >&2
+        exit 1
+        ;;
+      RUNNING|QUEUED)
+        sleep 1
+        attempt=$((attempt + 1))
+        ;;
+    esac
+  done
+
+  if [ "$status" != "SUCCEEDED" ]; then
+    echo "Error: Query timeout after ${max_attempts} seconds" >&2
+    exit 1
+  fi
+
+  # Get results based on format
+  case "$FORMAT" in
+    json)
+      # Get results as JSON
+      aws athena get-query-results \
+        --query-execution-id "$query_id" \
+        --region "$region" \
+        --output json \
+        --query 'ResultSet.Rows'
+      ;;
+    table)
+      # Get results and format as table (using CSV then column for alignment)
+      aws athena get-query-results \
+        --query-execution-id "$query_id" \
+        --region "$region" \
+        --output text \
+        --query 'ResultSet.Rows[*].Data[*].VarCharValue' | \
+        awk '{for(i=1;i<=NF;i++) printf "%s%s", $i, (i<NF?",":"\n")}' | \
+        column -t -s ','
+      ;;
+    csv|*)
+      # Get results as CSV (default)
+      aws athena get-query-results \
+        --query-execution-id "$query_id" \
+        --region "$region" \
+        --output text \
+        --query 'ResultSet.Rows[*].Data[*].VarCharValue' | \
+        awk '{for(i=1;i<=NF;i++) printf "%s%s", $i, (i<NF?",":"\n")}'
+      ;;
+  esac
+}
+
+# Main engine dispatcher
+execute_engine() {
+  local engine_name="$1"
+  local query="$2"
+
+  case "$engine_name" in
+    csv-sqlite)
+      execute_csv_sqlite_engine "$query"
+      ;;
+    s3-csv-sqlite)
+      execute_s3_csv_sqlite_engine "$query"
+      ;;
+    csv-duckdb)
+      execute_csv_duckdb_engine "$query"
+      ;;
+    athena)
+      execute_athena_engine "$query"
+      ;;
+    *)
+      echo "Error: Unknown engine: $engine_name" >&2
+      echo "" >&2
+      echo "Available engines:" >&2
+      echo "  csv-sqlite       - Query local CSV files via SQLite (DEFAULT)" >&2
+      echo "  s3-csv-sqlite    - Query S3 CSV files via SQLite (download first)" >&2
+      echo "  csv-duckdb       - Query local CSV files via DuckDB (fast analytics)" >&2
+      echo "  athena           - Query S3 data using AWS Athena (serverless)" >&2
+      echo "" >&2
+      echo "Example: db --csv ./data.csv \"SELECT * FROM data\"" >&2
+      echo "         db --engine csv-duckdb --csv ./big-data.csv \"SELECT * FROM read_csv_auto('./big-data.csv')\"" >&2
+      exit 1
+      ;;
+  esac
+}
+
+# Get schema for engine-based datasources
+get_engine_schema() {
+  local engine_name="$1"
+
+  case "$engine_name" in
+    csv-sqlite|s3-csv-sqlite)
+      local csv_file="${ENGINE_PARAMS[CSV_FILE]}"
+      local table_name="${ENGINE_PARAMS[TABLE_NAME]:-data}"
+      local temp_csv=""
+
+      # Check if input is a URL (http:// or https://)
+      if [[ "$csv_file" =~ ^https?:// ]]; then
+        # Create cache directory
+        local cache_dir="$HOME/.cache/db-cli"
+        mkdir -p "$cache_dir"
+
+        # Generate cache filename from URL hash
+        local url_hash=$(echo -n "$csv_file" | md5sum | cut -d' ' -f1)
+        local cached_file="$cache_dir/csv_${url_hash}.csv"
+
+        # Check if cached version exists and is less than 1 hour old
+        if [ -f "$cached_file" ] && [ $(($(date +%s) - $(stat -c %Y "$cached_file"))) -lt 3600 ]; then
+          echo "Using cached CSV for schema (downloaded < 1 hour ago)" >&2
+          csv_file="$cached_file"
+        else
+          echo "Downloading CSV for schema from URL: $csv_file ..." >&2
+          if curl -L -f -s "$csv_file" -o "$cached_file"; then
+            echo "Cached for future use (1 hour)" >&2
+            csv_file="$cached_file"
+          else
+            echo "Error: Failed to download CSV from URL" >&2
+            return 1
+          fi
+        fi
+      elif [ "$engine_name" = "s3-csv-sqlite" ]; then
+        # For S3, we need to download first
+        local s3_path="${ENGINE_PARAMS[S3_PATH]}"
+        local region="${ENGINE_PARAMS[AWS_REGION]:-us-east-1}"
+        temp_csv="/tmp/db_cli_schema_$$.csv"
+
+        echo "Downloading schema from S3..." >&2
+        aws s3 cp "$s3_path" "$temp_csv" --region "$region" >&2
+        csv_file="$temp_csv"
+      fi
+
+      local temp_db="/tmp/db_cli_schema_$$.sqlite"
+
+      # Import and get schema
+      sqlite3 "$temp_db" <<EOF
+.mode csv
+.import $csv_file $table_name
+.schema $table_name
+SELECT 'Sample data:';
+SELECT * FROM $table_name LIMIT 5;
+EOF
+
+      # Cleanup
+      rm -f "$temp_db" "$temp_csv" 2>/dev/null
+      ;;
+    *)
+      echo "Schema inspection not yet implemented for engine: $engine_name" >&2
+      ;;
+  esac
+}
+
+# Conduct agentic investigation (multi-hop reasoning)
+conduct_agentic_investigation() {
+  local question="$1"
+  local schema="$2"
+
+  # Check for API key
+  if [ -z "$ANTHROPIC_API_KEY" ]; then
+    echo "Error: ANTHROPIC_API_KEY environment variable not set"
+    return 1
+  fi
+
+  # Clear agent store at start
+  AGENT_STORE=()
+
+  # Determine engine-specific SQL guidance
+  local engine_info=""
+  local engine_name_display="PostgreSQL"
+
+  if [ -n "$ENGINE_NAME" ]; then
+    engine_name_display="$ENGINE_NAME"
+    case "$ENGINE_NAME" in
+      csv-sqlite)
+        engine_info="
+ENGINE: csv-sqlite (SQLite with CSV import)
+TABLE NAME: Always use 'data' (the CSV is imported as table 'data')
+SQL SYNTAX: Standard SQLite/PostgreSQL syntax
+EXAMPLE: SELECT * FROM data WHERE amount > 1000
+EXAMPLE: SELECT region, SUM(amount) FROM data GROUP BY region"
+        ;;
+      csv-duckdb)
+        local csv_file_path="${ENGINE_PARAMS[CSV_FILE]}"
+        engine_info="
+ENGINE: csv-duckdb (DuckDB analytics engine)
+TARGET FILE: $csv_file_path
+FILE REFERENCE: ALWAYS use read_csv_auto('$csv_file_path') - this is the exact file path to query
+SQL SYNTAX: DuckDB-specific syntax required
+EXAMPLE: SELECT * FROM read_csv_auto('$csv_file_path') WHERE amount > 1000
+EXAMPLE: SELECT region, SUM(amount) FROM read_csv_auto('$csv_file_path') GROUP BY region"
+        ;;
+      s3-csv-sqlite)
+        engine_info="
+ENGINE: s3-csv-sqlite (S3 download + SQLite)
+TABLE NAME: Always use 'data' (the S3 CSV is imported as table 'data')
+SQL SYNTAX: Standard SQLite/PostgreSQL syntax
+EXAMPLE: SELECT * FROM data WHERE amount > 1000
+EXAMPLE: SELECT region, SUM(amount) FROM data GROUP BY region"
+        ;;
+      athena)
+        engine_info="
+ENGINE: athena (AWS Athena serverless SQL)
+TABLES: Use pre-defined table names from the Athena database
+SQL SYNTAX: Standard Presto/Athena syntax
+EXAMPLE: SELECT * FROM my_table WHERE year = 2024
+EXAMPLE: SELECT date, COUNT(*) FROM events GROUP BY date"
+        ;;
+    esac
+  else
+    engine_info="
+ENGINE: PostgreSQL
+TABLES: Use table names from the schema above
+SQL SYNTAX: Standard PostgreSQL syntax"
+  fi
+
+  echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  echo "AGENTIC INVESTIGATION MODE"
+  echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  echo ""
+  echo "Question: $question"
+  echo "Engine: $engine_name_display"
+  echo "Max iterations: $MAX_ITERATIONS"
+  echo "Model: $AGENTIC_MODEL (cost-optimized for multi-iteration investigations)"
+  echo ""
+
+  INVESTIGATION_HISTORY=""
+  ITERATION_COUNT=0
+  LAST_SQL=""  # Track last SQL to detect loops
+
+  # Investigation loop
+  while [ "$ITERATION_COUNT" -lt "$MAX_ITERATIONS" ]; do
+    ITERATION_COUNT=$((ITERATION_COUNT + 1))
+
+    # Note: Phase info will be shown after Claude responds, not here
+    echo "┌─────────────────────────────────────────────────────────────────────────────┐"
+    echo "│ ITERATION $ITERATION_COUNT/$MAX_ITERATIONS"
+    echo "└─────────────────────────────────────────────────────────────────────────────┘"
+    echo ""
+
+    # Build context for Claude with investigation history
+    local system_prompt="You are an expert SQL Database Investigation Agent with deep expertise in
+iterative query generation, multi-hop reasoning, and agentic database exploration.
+
+═══════════════════════════════════════════════════════════════════════════════
+ENGINE CONFIGURATION (CRITICAL - READ FIRST)
+═══════════════════════════════════════════════════════════════════════════════
+$engine_info
+
+IMPORTANT: You MUST generate SQL queries according to the engine syntax above.
+If using csv-sqlite or s3-csv-sqlite: Query table named 'data'
+If using csv-duckdb: Use read_csv_auto() function with file path
+If using athena: Use table names from the schema below
+If using PostgreSQL: Use table names from the schema below
+
+═══════════════════════════════════════════════════════════════════════════════
+DATABASE SCHEMA
+═══════════════════════════════════════════════════════════════════════════════
+
+$schema
+
+═══════════════════════════════════════════════════════════════════════════════
+YOUR CAPABILITIES
+═══════════════════════════════════════════════════════════════════════════════
+
+You excel at:
+- Converting natural language intent into precise SQL queries
+- Conducting deep-dive investigations through iterative exploration
+- Multi-hop reasoning across related tables and complex relationships
+- Structured search methodologies for uncovering hidden insights
+- Maintaining context across multiple query iterations
+- Building comprehensive understanding through progressive refinement
+
+═══════════════════════════════════════════════════════════════════════════════
+KEY-VALUE STORAGE MECHANISM
+═══════════════════════════════════════════════════════════════════════════════
+
+You have access to a persistent key-value store for maintaining investigation
+state across queries. Use this to save intermediate results, patterns, and
+insights as you progressively build understanding.
+
+SYNTAX:
+  STORE[key] = value       # Save a result or insight
+  RECALL[key]              # Retrieve previously stored value
+
+USAGE PATTERNS:
+  STORE[total_threads] = 1543
+  STORE[error_pattern] = \"tool_call failures in thread_runs\"
+  STORE[suspicious_account] = \"uuid-here\"
+  STORE[date_range] = \"2025-10-20 to 2025-10-27\"
+
+HOW TO USE:
+- In your REASONING, use STORE[key] = value to save important findings
+- In your REASONING or SQL, use RECALL[key] to retrieve stored values
+- Keys can be alphanumeric with underscores
+- Values are automatically extracted and stored
+- Stored values are displayed in the investigation trail
+
+EXAMPLE:
+REASONING: Phase 1 complete. Total threads found: 1543 (STORE[total_threads] = 1543).
+Now checking failure rates. The baseline is RECALL[total_threads] threads.
+
+═══════════════════════════════════════════════════════════════════════════════
+STANDARD OPERATING PROCEDURE: DEEP-DIVE SQL INVESTIGATION
+═══════════════════════════════════════════════════════════════════════════════
+
+Follow this systematic approach for comprehensive database investigations:
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ PHASE 1: RECONNAISSANCE & SCHEMA DISCOVERY                                  │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+1.1 UNDERSTAND THE INTENT
+    ├─ Parse user's natural language request
+    ├─ Identify: Key entities, relationships, time ranges, filters
+    └─ Map intent to specific tables and columns
+
+1.2 START WITH BASELINE METRICS
+    ├─ Get row counts: SELECT COUNT(*) FROM table
+    ├─ Check date ranges: SELECT MIN(created_at), MAX(created_at)
+    ├─ Sample data: SELECT * FROM table LIMIT 10
+    └─ Note findings for next phase
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ PHASE 2: INITIAL EXPLORATION (HOP 1)                                        │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+2.1 IDENTIFY KEY DIMENSIONS
+    ├─ Find unique values in key columns
+    ├─ Example: SELECT DISTINCT status FROM threads
+    ├─ Check for NULL patterns, data quality issues
+    └─ Build mental model of data distribution
+
+2.2 FORM INITIAL HYPOTHESIS
+    ├─ Based on exploration, form testable hypothesis
+    ├─ Example: \"Most errors occur in specific thread_id range\"
+    └─ Plan queries to test hypothesis
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ PHASE 3: TARGETED INVESTIGATION (HOP 2)                                     │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+3.1 TEST HYPOTHESIS WITH FILTERED QUERIES
+    ├─ Apply WHERE clauses based on Phase 2 findings
+    ├─ Use GROUP BY to find patterns
+    ├─ Example: SELECT status, COUNT(*) FROM threads GROUP BY status
+    └─ Identify significant patterns
+
+3.2 IDENTIFY ANOMALIES & OUTLIERS
+    ├─ Look for unexpected patterns in aggregations
+    ├─ Use HAVING clauses for filtering aggregates
+    ├─ Find statistical outliers (much higher/lower than average)
+    └─ Flag unusual patterns for deeper investigation
+
+3.3 PIVOT TO RELATED TABLES
+    ├─ Use findings to explore related tables via JOINs
+    ├─ Example: Thread → Messages → LLM_Traces
+    ├─ Follow foreign key relationships
+    └─ Build cross-table insights
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ PHASE 4: DEEP ANALYSIS (HOP 3+)                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+4.1 MULTI-HOP JOINS FOR COMPLEX RELATIONSHIPS
+    ├─ Build queries spanning 3+ tables
+    ├─ Example: threads → messages → llm_traces → tool calls
+    ├─ Use CTEs (WITH) for readability and intermediate results
+    └─ Extract deep relationship insights
+
+4.2 TEMPORAL ANALYSIS
+    ├─ Analyze trends over time
+    ├─ Use DATE_TRUNC for time bucketing
+    ├─ Example: SELECT DATE_TRUNC('hour', created_at), COUNT(*)
+    └─ Identify time-based patterns
+
+4.3 CORRELATION ANALYSIS
+    ├─ Look for correlations between different dimensions
+    ├─ Cross-tabulate multiple attributes
+    ├─ Example: error rates by tool_name AND time_of_day
+    └─ Discover hidden relationships
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ PHASE 5: REFINEMENT & VALIDATION                                            │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+5.1 VALIDATE FINDINGS
+    ├─ Re-run queries with different parameters
+    ├─ Check if patterns hold across different subsets
+    ├─ Look for counter-examples
+    └─ Confirm findings are robust
+
+5.2 QUANTIFY CONFIDENCE
+    ├─ Calculate percentages, ratios, statistical measures
+    ├─ Determine sample sizes and significance
+    ├─ Identify edge cases and limitations
+    └─ Build statistical support for conclusions
+
+5.3 GENERATE SPECIFIC EXAMPLES
+    ├─ Find concrete examples that illustrate findings
+    ├─ Use LIMIT to get representative samples
+    ├─ Include IDs for user to investigate further
+    └─ Provide actionable evidence
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ PHASE 6: SYNTHESIS & REPORTING                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+6.1 SYNTHESIZE ALL FINDINGS
+    ├─ Review entire investigation trail
+    ├─ Connect dots between different findings
+    ├─ Build coherent narrative
+    └─ Prepare comprehensive answer
+
+6.2 STRUCTURE THE ANSWER
+    ├─ Direct answer to original question
+    ├─ Supporting evidence with specific numbers
+    ├─ Relevant patterns and anomalies discovered
+    ├─ Actionable insights or recommendations
+    └─ Confidence level and caveats
+
+═══════════════════════════════════════════════════════════════════════════════
+SQL GENERATION BEST PRACTICES
+═══════════════════════════════════════════════════════════════════════════════
+
+✓ START SIMPLE, ITERATE TO COMPLEX
+  - Use exact table/column names from schema provided above
+  - Begin with SELECT * LIMIT 10 to understand data structure
+  - Add filters incrementally
+  - Build up to complex JOINs only when needed
+  - If a query fails, go SIMPLER (not more complex)
+
+✓ USE COMMON TABLE EXPRESSIONS (CTEs) FOR CLARITY
+  WITH recent_threads AS (
+    SELECT * FROM threads WHERE created_at > NOW() - INTERVAL '7 days'
+  )
+  SELECT * FROM recent_threads;
+
+✓ ALWAYS LIMIT RESULTS INITIALLY
+  - Use LIMIT 100 for exploratory queries
+  - Remove LIMIT only for aggregations
+
+✓ HANDLE NULL VALUES EXPLICITLY
+  - Use COALESCE for defaults
+  - Check IS NULL vs IS NOT NULL patterns
+
+✓ OPTIMIZE JOIN STRATEGIES
+  - Use INNER JOIN for required relationships
+  - Use LEFT JOIN when preserving left table records
+  - Filter before joining when possible
+
+✓ LEVERAGE AGGREGATIONS WISELY
+  - GROUP BY for categorical breakdowns
+  - Use HAVING for post-aggregation filters
+  - Include COUNT(*), AVG(), MIN(), MAX() as appropriate
+
+✓ TIME-BASED FILTERING
+  - Use proper timestamp comparisons
+  - Consider timezone implications (TIMESTAMP WITH TIME ZONE)
+  - Use DATE_TRUNC for bucketing
+
+═══════════════════════════════════════════════════════════════════════════════
+MULTI-HOP REASONING PATTERNS
+═══════════════════════════════════════════════════════════════════════════════
+
+PATTERN: PROGRESSIVE FILTERING
+  Hop 1: Find all threads with errors
+  Hop 2: Find common tools in those threads
+  Hop 3: Find temporal patterns for those specific tools
+  Hop 4: Correlate with user accounts or projects
+
+PATTERN: BOTTOM-UP AGGREGATION
+  Hop 1: Get individual trace records
+  Hop 2: Aggregate by thread_id
+  Hop 3: Aggregate by project_id
+  Hop 4: Account-level trends
+
+PATTERN: RELATIONSHIP TRAVERSAL
+  Hop 1: Start with thread_id
+  Hop 2: Get all messages in thread
+  Hop 3: Get all llm_traces for those messages
+  Hop 4: Get all tool calls from those traces
+  Hop 5: Analyze tool success/failure patterns
+
+PATTERN: COMPARATIVE ANALYSIS
+  Hop 1: Get metrics for subset A
+  Hop 2: Get metrics for subset B
+  Hop 3: Calculate differences and ratios
+  Hop 4: Identify statistically significant variations
+
+═══════════════════════════════════════════════════════════════════════════════
+AGENTIC WORKFLOW PRINCIPLES
+═══════════════════════════════════════════════════════════════════════════════
+
+1. AUTONOMY: Make decisions about next queries based on results
+2. ADAPTABILITY: Adjust strategy when queries reveal unexpected patterns
+3. PERSISTENCE: Continue investigation until clear answer emerges
+4. MEMORY: Use investigation history to maintain context across queries
+5. METACOGNITION: Reflect on what you know and what you still need to learn
+6. TRANSPARENCY: Explain your reasoning and query strategy clearly
+
+═══════════════════════════════════════════════════════════════════════════════
+INVESTIGATION STOPPING CRITERIA
+═══════════════════════════════════════════════════════════════════════════════
+
+STOP WHEN:
+  ✓ Original question is comprehensively answered
+  ✓ Multiple lines of evidence converge on same conclusion
+  ✓ Diminishing returns on additional queries
+  ✓ User's intent is fully satisfied with evidence
+  ✓ Confidence level is high (>80%)
+
+CONTINUE WHEN:
+  ✗ Findings are ambiguous or contradictory
+  ✗ Confidence level is low (<80%)
+  ✗ Key aspects of question remain unexplored
+  ✗ Anomalies are discovered that need explanation
+  ✗ Hypothesis needs validation
+
+═══════════════════════════════════════════════════════════════════════════════
+ERROR HANDLING & RECOVERY
+═══════════════════════════════════════════════════════════════════════════════
+
+WHEN A QUERY FAILS:
+  1. Read the error message carefully
+  2. Common issues:
+     - Syntax error at or near closing paren: Missing WITH keyword before CTE
+     - Column does not exist: Check spelling against schema provided above
+     - Ambiguous column: Use table prefixes (t1.id, t2.id)
+     - Type mismatch: Cast appropriately (::text, ::uuid)
+     - Function does not exist: Use only standard PostgreSQL functions
+  3. Try a SIMPLER query first (SELECT * FROM table LIMIT 5)
+  4. Double-check table/column names match the schema exactly
+  5. Revise query and retry with different approach
+
+WHEN RESULTS ARE UNEXPECTED:
+  1. Verify your assumptions about data
+  2. Check for NULLs, duplicates, or data quality issues
+  3. Sample individual records to understand discrepancies
+  4. Refine hypothesis and query accordingly
+
+═══════════════════════════════════════════════════════════════════════════════
+RESPONSE FORMAT (CRITICAL)
+═══════════════════════════════════════════════════════════════════════════════
+
+You MUST respond in EXACTLY this format:
+
+STATUS: CONTINUE
+REASONING: [Explain which phase you're in, what you've learned so far, why this
+next query is needed, and what specific insight it will reveal]
+<sql>
+SELECT column FROM table WHERE condition;
+</sql>
+
+OR when investigation is complete:
+
+STATUS: STOP
+REASONING: [Explain why investigation is complete - list key findings from each
+phase, how evidence converges, and why confidence is high]
+ANSWER: [Comprehensive answer synthesizing all findings - include specific numbers,
+patterns discovered, root causes identified, and actionable recommendations]
+
+RULES:
+- Maximum $MAX_ITERATIONS queries total (use them wisely)
+- Each query should build on previous findings
+- Reference specific numbers from previous results in your reasoning
+- Start with Phase 1 (reconnaissance), progress through phases systematically
+- Use multi-hop reasoning patterns when appropriate
+- DO NOT use ** or markdown formatting in final answer
+- Be information-dense but clear in final answer
+- Include confidence level and caveats in final answer
+
+SQL QUALITY RULES (CRITICAL):
+- ALWAYS verify SQL syntax before submitting
+- Use EXACT table and column names from the schema provided above
+- Do NOT use custom functions - only standard PostgreSQL functions
+- Refer to the schema for correct spelling and data types
+- Use standard PostgreSQL syntax only
+- Common mistakes to AVOID:
+  * Missing WITH keyword before CTEs
+  * Unmatched parentheses
+  * Ambiguous column names (use table.column for clarity)
+  * Typos in table/column names (double-check against schema)
+  * Complex JOINs without testing simpler queries first
+- If a query fails, try a SIMPLER approach first
+- Start with simple SELECT to understand data, then build up
+
+PHASE COMMUNICATION:
+- Start your REASONING with your current phase (example: Phase 1: Reconnaissance)
+- This helps track investigation progress
+- Example: Phase 2: Initial Exploration - analyzing event distribution
+- You can mention phase transitions: Phase 1 complete. Moving to Phase 2...
+
+CRITICAL SQL FORMAT:
+- SQL queries MUST be wrapped in <sql></sql> XML tags
+- Put ONLY the SQL query between the tags (no explanations)
+- Do NOT use \"SQL:\" prefix - use <sql> tags instead
+- Any explanation about the query goes in REASONING, not after <sql>
+- Example: <sql>SELECT * FROM table;</sql>
+
+REMEMBER: You are an autonomous agent. Take initiative. Follow the evidence.
+Build comprehensive understanding through systematic exploration. Synthesize
+insights into actionable answers."
+
+    local user_message="USER'S QUESTION: $question
+
+INVESTIGATION HISTORY:
+$INVESTIGATION_HISTORY
+
+Based on the findings so far, what should we investigate next? Or if we have enough evidence, provide the final answer."
+
+    # Process RECALL[key] replacements in user message
+    user_message=$(process_recalls "$user_message")
+
+    # Escape JSON
+    local escaped_prompt=$(echo "$system_prompt" | jq -Rs .)
+    local escaped_message=$(echo "$user_message" | jq -Rs .)
+
+    # Use temp file to avoid "Argument list too long" error with large investigation history
+    local request_file=$(mktemp)
+    cat > "$request_file" <<EOF
+{
+  "model": "$AGENTIC_MODEL",
+  "max_tokens": 2048,
+  "system": $escaped_prompt,
+  "messages": [
+    {"role": "user", "content": $escaped_message}
+  ]
+}
+EOF
+
+    # Call Claude for next decision (use AGENTIC_MODEL for cost efficiency in multi-iteration mode)
+    echo "Consulting Claude AI ($AGENTIC_MODEL)..." >&2
+    local response=$(curl -s https://api.anthropic.com/v1/messages \
+      --header "x-api-key: $ANTHROPIC_API_KEY" \
+      --header "anthropic-version: 2023-06-01" \
+      --header "content-type: application/json" \
+      --data @"$request_file")
+
+    command rm "$request_file" 2>/dev/null || true
+
+    local claude_response=$(echo "$response" | jq -r '.content[0].text' 2>/dev/null)
+
+    if [ -z "$claude_response" ] || [ "$claude_response" = "null" ]; then
+      echo "Error: Failed to get response from Claude" >&2
+      return 1
+    fi
+
+    # Parse response status
+    local status=$(echo "$claude_response" | grep "^STATUS:" | head -1 | sed 's/STATUS: *//')
+    local reasoning=$(echo "$claude_response" | sed -n '/^REASONING:/,/^SQL:\|^ANSWER:/p' | grep -v "^REASONING:\|^SQL:\|^ANSWER:" | sed '/^$/d')
+
+    # Simple phase detection - extract if agent mentions it
+    local phase_info=$(echo "$reasoning" | grep -oiE "(Phase|PHASE) [0-9]+" | head -1)
+
+    # Parse and store any STORE[key] = value from reasoning
+    parse_and_store "$reasoning"
+
+    echo "Decision: $status"
+    if [ -n "$phase_info" ]; then
+      echo "Phase: $phase_info"
+    fi
+    echo "Reasoning: $reasoning"
+    echo ""
+
+    if [[ "$status" == "STOP"* ]]; then
+      # Extract final answer
+      local final_answer=$(echo "$claude_response" | sed -n '/^ANSWER:/,$p' | sed '1d')
+
+      # Show the summary immediately after this iteration
+      echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+      echo "INVESTIGATION COMPLETE ($ITERATION_COUNT iterations)"
+      echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+      echo ""
+      echo "$final_answer"
+      echo ""
+
+      # Display agent memory store
+      display_store
+
+      # Then show the investigation trail
+      echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+      echo "INVESTIGATION TRAIL"
+      echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+      echo ""
+      echo "$INVESTIGATION_HISTORY"
+      echo ""
+
+      # Repeat the final answer summary at the end
+      echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+      echo "INVESTIGATION COMPLETE ($ITERATION_COUNT iterations)"
+      echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+      echo ""
+      echo "$final_answer"
+      echo ""
+
+      # Display agent memory store again
+      display_store
+
+      return 0
+    fi
+
+    # Extract SQL query from <sql></sql> XML tags
+    local next_sql=$(echo "$claude_response" | sed -n '/<sql>/,/<\/sql>/p' | sed 's/<sql>//g' | sed 's/<\/sql>//g' | sed '/^[[:space:]]*$/d')
+
+    # Fallback: Try old "SQL:" format if no XML tags found (for backward compatibility)
+    if [ -z "$next_sql" ]; then
+      echo "⚠️  Warning: No <sql> tags found, trying fallback extraction..." >&2
+      next_sql=$(echo "$claude_response" | sed -n '/^SQL:/,/^$/p' | sed '1d' | sed '/^$/d')
+      # Clean up SQL (remove markdown if present)
+      next_sql=$(echo "$next_sql" | sed -E 's/^```sql//g' | sed -E 's/^```//g' | sed -E 's/```$//g')
+    fi
+
+    if [ -z "$next_sql" ]; then
+      echo "Error: No SQL query provided in CONTINUE response" >&2
+      return 1
+    fi
+
+    # Check if this is the same SQL as last iteration (loop detection)
+    if [ "$next_sql" = "$LAST_SQL" ]; then
+      echo "⚠️  WARNING: Agent generated the SAME SQL query as previous iteration!" >&2
+      echo "This indicates the agent is stuck in a loop and not learning from errors." >&2
+      echo "Adding explicit guidance to investigation history..." >&2
+
+      INVESTIGATION_HISTORY+="
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+⚠️  LOOP DETECTED - ITERATION $ITERATION_COUNT
+
+You generated the SAME query as the previous iteration. This will fail again.
+
+CRITICAL: You MUST try a DIFFERENT approach:
+- Simplify the query (break into smaller steps)
+- Use different tables or columns
+- Try a completely different SQL pattern
+- Start with basic SELECT to understand data first
+
+DO NOT repeat the same query. Try something simpler or different.
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+"
+    fi
+
+    LAST_SQL="$next_sql"
+
+    echo "SQL Query:"
+    echo "$next_sql"
+    echo ""
+    echo "Executing..." >&2
+
+    # Execute query - support both PostgreSQL and engine mode
+    if [ -n "$ENGINE_NAME" ]; then
+      local query_results=$(execute_engine "$ENGINE_NAME" "$next_sql" 2>&1)
+    else
+      local query_results=$(run_query "$next_sql" 2>&1)
+    fi
+    local exit_code=$?
+
+    if [ $exit_code -ne 0 ]; then
+      echo "Query failed with error:"
+      echo "$query_results"
+      echo ""
+
+      # Add error to history with explicit recovery guidance
+      INVESTIGATION_HISTORY+="
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ITERATION $ITERATION_COUNT - ❌ QUERY FAILED
+
+SQL ATTEMPTED:
+$next_sql
+
+ERROR MESSAGE:
+$query_results
+
+RECOVERY GUIDANCE:
+- Read the error message carefully
+- If syntax error: Check for missing keywords (WITH, AS, etc.), unmatched parentheses
+- If column doesn't exist: Check spelling against the schema provided at the top
+- If table doesn't exist: Verify table name matches the schema exactly
+- Consider starting simpler: SELECT * FROM table LIMIT 5 to understand data first
+- Break complex queries into smaller steps
+
+IMPORTANT: Try a DIFFERENT query approach in next iteration.
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+"
+      # Continue to let Claude handle the error in next iteration
+      continue
+    fi
+
+    # Truncate results if too long for context (keep first 5000 chars)
+    local truncated_results="$query_results"
+    if [ ${#query_results} -gt 5000 ]; then
+      truncated_results="${query_results:0:5000}
+... [Results truncated for context efficiency - ${#query_results} total chars]"
+    fi
+
+    echo "Results (preview):"
+    echo "$query_results" | head -20
+    echo ""
+
+    # Add to investigation history
+    INVESTIGATION_HISTORY+="
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ITERATION $ITERATION_COUNT
+
+REASONING: $reasoning
+
+SQL:
+$next_sql
+
+RESULTS:
+$truncated_results
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+"
+  done
+
+  # Max iterations reached - show summary first
+  echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  echo "INVESTIGATION INCOMPLETE (Max iterations reached)"
+  echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  echo ""
+  echo "The investigation reached maximum iterations ($MAX_ITERATIONS) without completion."
+  echo "Consider refining your question or increasing MAX_ITERATIONS."
+  echo ""
+
+  # Display agent memory store
+  display_store
+
+  # Then show trail
+  echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  echo "INVESTIGATION TRAIL"
+  echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  echo ""
+  echo "$INVESTIGATION_HISTORY"
+  echo ""
+
+  # Repeat incomplete summary at the end
+  echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  echo "INVESTIGATION INCOMPLETE (Max iterations reached)"
+  echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  echo ""
+  echo "The investigation reached maximum iterations ($MAX_ITERATIONS) without completion."
+  echo "Consider refining your question or increasing MAX_ITERATIONS."
+  echo ""
+
+  # Display agent memory store again
+  display_store
+
+  return 0
+}
+
+# Process output to truncate large result sets for LLM efficiency
+process_output() {
+  local tmpfile=$(mktemp)
+  local cleaned=$(mktemp)
+
+  # Read all input into tmpfile
+  cat > "$tmpfile"
+
+  # Clean up excessive whitespace to save tokens
+  # Remove lines that are >80% whitespace/dashes, and compress multiple blank lines to max 2
+  awk '
+    {
+      # Count non-whitespace chars
+      test = $0
+      gsub(/[[:space:]-]/, "", test)
+      non_ws = length(test)
+      total = length($0)
+
+      # Skip lines that are mostly whitespace/dashes (>100 chars and >80% whitespace)
+      if (total > 100 && non_ws < total * 0.2) {
+        next
+      }
+
+      # Compress multiple blank lines to max 2
+      if (length($0) == 0) {
+        blank_count++
+        if (blank_count <= 2) print
+      } else {
+        blank_count = 0
+        print
+      }
+    }
+  ' "$tmpfile" > "$cleaned"
+
+  # Replace tmpfile with cleaned version
+  command mv "$cleaned" "$tmpfile"
+
+  # Check file size first (hard limit)
+  local file_size=$(stat -f%z "$tmpfile" 2>/dev/null || stat -c%s "$tmpfile" 2>/dev/null)
+
+  if [ "$file_size" -gt "$MAX_BYTES" ] && [ "$VERBOSE" = false ]; then
+    local uuid=$(cat /proc/sys/kernel/random/uuid | cut -d'-' -f1)
+    local cache_file="/tmp/db_output_$uuid"
+    cp "$tmpfile" "$cache_file" 2>/dev/null
+    command rm "$tmpfile" 2>/dev/null || true
+
+    local size_kb=$((file_size / 1024))
+    local limit_kb=$((MAX_BYTES / 1024))
+    echo "ERROR: Response is too large (${size_kb}KB exceeds ${limit_kb}KB limit)"
+    echo ""
+    echo "The query returned too much data for efficient token usage."
+    echo "Output has been cached with ID: $uuid"
+    echo ""
+    echo "Options:"
+    echo "  1. Refine your query to return less data (recommended)"
+    echo "  2. Use: db --id $uuid --start 1 --offset 100 (paginate)"
+    echo "  3. Use: db --verbose [query] (see all, may consume many tokens)"
+    echo ""
+    return
+  fi
+
+  # Count lines
+  local total_lines=$(wc -l < "$tmpfile")
+
+  # Verbose mode - show everything
+  if [ "$VERBOSE" = true ]; then
+    cat "$tmpfile"
+    command rm "$tmpfile" 2>/dev/null || true
+    return
+  fi
+
+  # Small output - show everything
+  if [ "$total_lines" -le "$THRESHOLD" ]; then
+    cat "$tmpfile"
+    command rm "$tmpfile" 2>/dev/null || true
+    return
+  fi
+
+  # Large output - truncate and cache
+  # Generate short UUID for reference
+  local uuid=$(cat /proc/sys/kernel/random/uuid | cut -d'-' -f1)
+  local cache_file="/tmp/db_output_$uuid"
+
+  # Save full output to cache
+  cp "$tmpfile" "$cache_file" 2>/dev/null
+
+  # Show truncated output
+  head -n "$HEAD_LINES" "$tmpfile"
+  local omitted=$((total_lines - HEAD_LINES - TAIL_LINES))
+  echo ""
+  echo "... [$omitted lines omitted] ..."
+  echo "Output ID: $uuid"
+  echo "TIP: Use --verbose to see all $total_lines lines"
+  echo "     Or: db-v1 --id $uuid --start 201 --offset 100"
+  echo ""
+  tail -n "$TAIL_LINES" "$tmpfile"
+
+  # Cleanup tmpfile
+  command rm "$tmpfile" 2>/dev/null || true
+}
+
+show_help() {
+  cat << 'EOF'
+DB CLI - Intelligent Database Query Tool
+
+NOTE FOR LLMs: This command works from any directory. You do NOT need to cd
+anywhere first. You do NOT need to use bash - just call 'db' directly with
+your desired arguments.
+
+═══════════════════════════════════════════════════════════════════════════════
+POSTGRESQL MODE (Default)
+═══════════════════════════════════════════════════════════════════════════════
+
+USAGE:
+  db                          Show this help
+  db shell                    Open interactive psql session
+  db "SQL QUERY"              Execute a SQL query
+  db schema                   Show database schema (tables and columns)
+  db traces THREAD_ID         Show traces for a thread
+  db count THREAD_ID          Count traces for a thread
+
+EXAMPLES:
+  db "SELECT COUNT(*) FROM llm_traces;"
+  db "SELECT * FROM llm_traces LIMIT 10;"
+  db schema
+  db traces abc123
+
+REQUIREMENTS:
+  Environment variables: DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASSWORD
+  Create .env file: cp .env.example .env
+
+NAMED DATASOURCES:
+  --datasource NAME       Use named datasource from config.engines.yaml
+
+  db --datasource production "SELECT * FROM users"
+  db --datasource staging "SELECT COUNT(*) FROM orders"
+
+  Configure datasources in config.engines.yaml with connection details.
+  Datasources load environment variables defined in the config file.
+
+═══════════════════════════════════════════════════════════════════════════════
+ENGINE MODE (Ad-hoc Datasources)
+═══════════════════════════════════════════════════════════════════════════════
+
+Query CSV files, S3 data, and more without creating permanent configurations.
+
+AVAILABLE ENGINES:
+  csv-sqlite       Query local CSV files via SQLite
+  s3-csv-sqlite    Query S3 CSV files (downloads first, then SQLite)
+  csv-duckdb       Query local CSV files via DuckDB (fast analytics)
+
+USAGE:
+  db --engine <name> [parameters] "SQL QUERY"
+
+CSV FILES (Local):
+  db --engine csv-sqlite --csv ./sales.csv "SELECT * FROM data WHERE amount > 1000"
+  db --engine csv-sqlite --csv ./users.csv --table users "SELECT * FROM users"
+
+S3 CSV FILES:
+  db --engine s3-csv-sqlite --s3 s3://bucket/data.csv "SELECT COUNT(*) FROM data"
+  db --engine s3-csv-sqlite --s3 s3://bucket/file.csv --region us-west-2 "SELECT * FROM data"
+
+DUCKDB (Fast):
+  db --engine csv-duckdb --csv ./big-data.csv "SELECT * FROM '{{CSV_FILE}}' LIMIT 100"
+
+ENGINE PARAMETERS:
+  --csv FILE          Path to local CSV file
+  --s3 S3_PATH        S3 path (s3://bucket/file.csv)
+  --table NAME        Table name in SQLite (default: data)
+  --region REGION     AWS region (default: us-east-1)
+
+═══════════════════════════════════════════════════════════════════════════════
+AI-POWERED FEATURES
+═══════════════════════════════════════════════════════════════════════════════
+
+NATURAL LANGUAGE MODE (--ask):
+  Convert English questions to SQL and get analyzed answers
+  Works with both PostgreSQL and engine modes
+
+  db --ask "how many users registered this month?"
+  db --engine csv-sqlite --csv ./sales.csv --ask "what are total sales by region?"
+
+  Model: Claude Sonnet 4.5 (high quality)
+  Cost: ~$0.02 per query
+  Requires: ANTHROPIC_API_KEY environment variable
+
+AGENTIC INVESTIGATION MODE (--ask --auto):
+  AI conducts multi-hop database investigations autonomously
+  Executes multiple queries iteratively to build comprehensive answers
+
+  db --ask "why are threads failing?" --auto
+  db --engine csv-sqlite --csv ./logs.csv --ask "analyze error patterns" --auto
+
+  Model: Claude Haiku 3.5 (cost-optimized)
+  Cost: ~$0.001-$0.008 per iteration (max 20 iterations)
+  Features: Multi-hop reasoning, adaptive strategy, memory store
+
+═══════════════════════════════════════════════════════════════════════════════
+OUTPUT CONTROL
+═══════════════════════════════════════════════════════════════════════════════
+
+  --format csv|table|json   Output format (default: csv)
+  --verbose                 Show full output (no truncation)
+  --id OUTPUT_ID            View cached output by ID
+  --start N --offset M      Paginate through cached results
+
+EXAMPLES:
+  db --format json "SELECT * FROM users LIMIT 5;"
+  db --verbose "SELECT * FROM large_table;"
+  db --id a1b2c3d4 --start 201 --offset 100
+
+NOTE: Large outputs are auto-truncated (20KB limit, ~200 head + 200 tail lines).
+      Truncated outputs get an ID for pagination.
+
+═══════════════════════════════════════════════════════════════════════════════
+COMPLETE EXAMPLES
+═══════════════════════════════════════════════════════════════════════════════
+
+# PostgreSQL - Direct SQL
+db "SELECT * FROM users LIMIT 10;"
+
+# PostgreSQL - Natural language
+db --ask "show me users who joined this week"
+
+# PostgreSQL - Agentic investigation
+db --ask "what's causing the performance issues?" --auto
+
+# CSV - Direct SQL
+db --engine csv-sqlite --csv ./sales.csv "SELECT region, SUM(amount) FROM data GROUP BY region"
+
+# CSV - Natural language
+db --engine csv-sqlite --csv ./sales.csv --ask "what are the top selling products?"
+
+# CSV - Agentic investigation
+db --engine csv-sqlite --csv ./logs.csv --ask "why are error rates increasing?" --auto
+
+# S3 - Query remote CSV
+db --engine s3-csv-sqlite --s3 s3://my-bucket/data/sales.csv "SELECT * FROM data WHERE year=2024"
+
+# S3 - Natural language
+db --engine s3-csv-sqlite --s3 s3://bucket/logs.csv --ask "analyze recent errors"
+
+═══════════════════════════════════════════════════════════════════════════════
+
+For more information, see README.md
+EOF
+}
+
+# Parse optional flags
+while [[ "$1" == --* ]]; do
+  case "$1" in
+    --verbose) VERBOSE=true; shift ;;
+    --start) START_LINE="$2"; shift 2 ;;
+    --offset) OFFSET="$2"; shift 2 ;;
+    --id) OUTPUT_ID="$2"; shift 2 ;;
+    --format) FORMAT="$2"; shift 2 ;;
+    --ask) ASK_MODE=true; NATURAL_QUERY="$2"; shift 2 ;;
+    --auto) AUTO_MODE=true; shift ;;
+
+    # Engine mode flags
+    --engine) ENGINE_NAME="$2"; shift 2 ;;
+    --csv) ENGINE_PARAMS[CSV_FILE]="$2"; AUTO_DETECT_ENGINE=true; shift 2 ;;
+    --s3) ENGINE_PARAMS[S3_PATH]="$2"; AUTO_DETECT_ENGINE=true; shift 2 ;;
+    --parquet) ENGINE_PARAMS[PARQUET_FILE]="$2"; shift 2 ;;
+    --json) ENGINE_PARAMS[JSON_FILE]="$2"; shift 2 ;;
+    --table) ENGINE_PARAMS[TABLE_NAME]="$2"; shift 2 ;;
+    --region) ENGINE_PARAMS[AWS_REGION]="$2"; shift 2 ;;
+    --pattern) ENGINE_PARAMS[CSV_PATTERN]="$2"; shift 2 ;;
+    --sheet-id) ENGINE_PARAMS[SHEET_ID]="$2"; shift 2 ;;
+    --gid) ENGINE_PARAMS[GID]="$2"; shift 2 ;;
+
+    # Athena-specific flags
+    --athena-db) ENGINE_PARAMS[ATHENA_DATABASE]="$2"; AUTO_DETECT_ENGINE=true; shift 2 ;;
+    --athena-output) ENGINE_PARAMS[ATHENA_OUTPUT]="$2"; shift 2 ;;
+    --athena-workgroup) ENGINE_PARAMS[ATHENA_WORKGROUP]="$2"; shift 2 ;;
+
+    # Datasource flag (named datasource from config.engines.yaml)
+    --datasource) DATASOURCE_NAME="$2"; shift 2 ;;
+
+    *) echo "Unknown option: $1"; exit 1 ;;
+  esac
+done
+
+# Load datasource if specified
+if [ -n "$DATASOURCE_NAME" ]; then
+  load_datasource "$DATASOURCE_NAME" || exit 1
+fi
+
+# Auto-detect engine if not explicitly specified
+if [ "$AUTO_DETECT_ENGINE" = true ] && [ -z "$ENGINE_NAME" ]; then
+  if [ -n "${ENGINE_PARAMS[CSV_FILE]}" ]; then
+    ENGINE_NAME="csv-sqlite"
+    echo "Auto-detected engine: csv-sqlite (use --engine csv-duckdb for 10-100x faster performance on large files)" >&2
+  elif [ -n "${ENGINE_PARAMS[S3_PATH]}" ]; then
+    ENGINE_NAME="s3-csv-sqlite"
+    echo "Auto-detected engine: s3-csv-sqlite" >&2
+  elif [ -n "${ENGINE_PARAMS[ATHENA_DATABASE]}" ]; then
+    ENGINE_NAME="athena"
+    echo "Auto-detected engine: athena" >&2
+  fi
+fi
+
+# Execute query with format options
+run_query() {
+  local query="$1"
+
+  case "$FORMAT" in
+    csv)
+      psql -h "$DB_HOST" -p "$DB_PORT" -d "$DB_NAME" -U "$DB_USER" --csv -c "$query"
+      ;;
+    json)
+      # Strip trailing semicolon and wrap query in JSON aggregation
+      local clean_query="${query%;}"
+      local json_query="SELECT json_agg(row_to_json(t)) FROM ($clean_query) t;"
+      psql -h "$DB_HOST" -p "$DB_PORT" -d "$DB_NAME" -U "$DB_USER" -t -A -c "$json_query"
+      ;;
+    table|*)
+      psql -h "$DB_HOST" -p "$DB_PORT" -d "$DB_NAME" -U "$DB_USER" -c "$query"
+      ;;
+  esac
+}
+
+# Handle natural language query mode
+if [ "$ASK_MODE" = true ]; then
+  if [ -z "$NATURAL_QUERY" ]; then
+    echo "Error: --ask requires a question"
+    echo "Usage: db --ask \"your question here\""
+    echo "       db --ask \"your question here\" --auto  (agentic mode)"
+    echo "       db --engine csv-sqlite --csv file.csv --ask \"question\""
+    exit 1
+  fi
+
+  # Get schema - either from engine or PostgreSQL
+  if [ -n "$ENGINE_NAME" ]; then
+    echo "Getting schema from engine: $ENGINE_NAME" >&2
+    db_schema=$(get_engine_schema "$ENGINE_NAME")
+  else
+    # Validate PostgreSQL environment for non-engine mode
+    validate_postgres_env || exit 1
+    db_schema=$(get_db_schema)
+  fi
+
+  # Check if agentic mode is enabled
+  if [ "$AUTO_MODE" = true ]; then
+    # Agentic investigation mode
+    conduct_agentic_investigation "$NATURAL_QUERY" "$db_schema"
+    exit $?
+  fi
+
+  # Standard single-query mode (v2 behavior)
+  echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  echo "QUESTION"
+  echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  echo "$NATURAL_QUERY"
+  echo ""
+
+  # Generate SQL from natural language
+  generated_sql=$(generate_sql_from_natural_language "$NATURAL_QUERY" "$db_schema")
+  if [ $? -ne 0 ]; then
+    exit 1
+  fi
+
+  echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  echo "GENERATED SQL"
+  echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  echo "$generated_sql"
+  echo ""
+
+  # Execute the generated SQL and capture results
+  if [ -n "$ENGINE_NAME" ]; then
+    # Engine mode - execute with engine
+    query_results=$(execute_engine "$ENGINE_NAME" "$generated_sql" 2>&1)
+  else
+    # PostgreSQL mode
+    query_results=$(run_query "$generated_sql" 2>&1)
+  fi
+
+  # Check if query was successful
+  if [ $? -ne 0 ]; then
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo "ERROR"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo "$query_results"
+    exit 1
+  fi
+
+  # Generate natural language answer from results
+  answer=$(answer_question_from_results "$NATURAL_QUERY" "$generated_sql" "$query_results" "$db_schema")
+  if [ $? -ne 0 ]; then
+    # If answer generation fails, just show the raw results
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo "QUERY RESULTS (answer generation failed)"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo "$query_results" | process_output
+    exit 1
+  fi
+
+  # Display the answer
+  echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  echo "ANSWER"
+  echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  echo "$answer"
+  echo ""
+  echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  echo "RAW QUERY RESULTS"
+  echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  echo "$query_results" | process_output
+
+  exit 0
+fi
+
+# Handle paginated read from cached output
+if [ -n "$OUTPUT_ID" ]; then
+  cache_file="/tmp/db_output_$OUTPUT_ID"
+  if [ ! -f "$cache_file" ]; then
+    echo "Error: Cached output '$OUTPUT_ID' not found"
+    exit 1
+  fi
+
+  total_lines=$(wc -l < "$cache_file")
+  start=${START_LINE:-1}
+  count=$OFFSET
+
+  if [ "$start" -le 0 ]; then
+    start=1
+  fi
+
+  sed -n "${start},$((start + count - 1))p" "$cache_file"
+  echo ""
+  echo "Showing lines $start to $((start + count - 1)) of $total_lines total (ID: $OUTPUT_ID)"
+  exit 0
+fi
+
+# No arguments or help - show help (don't require credentials)
+if [ -z "$1" ] || [ "$1" = "help" ] || [ "$1" = "--help" ] || [ "$1" = "-h" ]; then
+  show_help
+  exit 0
+fi
+
+# Check if engine mode
+if [ -n "$ENGINE_NAME" ]; then
+  # Engine mode - execute with engine
+  if [ -z "$1" ]; then
+    echo "Error: SQL query required for engine mode"
+    echo "Usage: db --engine $ENGINE_NAME [params] \"SQL QUERY\""
+    exit 1
+  fi
+
+  execute_engine "$ENGINE_NAME" "$1" | process_output
+  exit 0
+fi
+
+# PostgreSQL mode - validate environment
+validate_postgres_env || exit 1
+
+# Handle commands
+case "$1" in
+
+  shell)
+    psql -h "$DB_HOST" -p "$DB_PORT" -d "$DB_NAME" -U "$DB_USER"
+    ;;
+
+  schema)
+    get_db_schema | process_output
+    ;;
+
+  traces)
+    if [ -z "$2" ]; then
+      echo "Error: THREAD_ID required"
+      echo "Usage: db traces THREAD_ID"
+      exit 1
+    fi
+    run_query "SELECT event_type, tool_name, created_at FROM llm_traces WHERE thread_id = '$2' ORDER BY created_at DESC" | process_output
+    ;;
+
+  count)
+    if [ -z "$2" ]; then
+      echo "Error: THREAD_ID required"
+      echo "Usage: db count THREAD_ID"
+      exit 1
+    fi
+    run_query "SELECT COUNT(*) FROM llm_traces WHERE thread_id = '$2'" | process_output
+    ;;
+
+  *)
+    # Treat as SQL query
+    run_query "$1" | process_output
+    ;;
+esac
+
+################################################################################
+# LLM SYSTEM PROMPT: SQL DATABASE INVESTIGATION AGENT
+################################################################################
+: <<'SYSTEM_PROMPT'
+
+You are an expert SQL Database Investigation Agent with deep expertise in
+iterative query generation, multi-hop reasoning, and agentic database exploration.
+
+═══════════════════════════════════════════════════════════════════════════════
+ROLE & CAPABILITIES
+═══════════════════════════════════════════════════════════════════════════════
+
+You excel at:
+- Converting natural language intent into precise SQL queries
+- Conducting deep-dive investigations through iterative exploration
+- Multi-hop reasoning across related tables and complex relationships
+- Structured search methodologies for uncovering hidden insights
+- Maintaining context across multiple query iterations
+- Building comprehensive understanding through progressive refinement
+
+═══════════════════════════════════════════════════════════════════════════════
+AVAILABLE TOOLS
+═══════════════════════════════════════════════════════════════════════════════
+
+1. db "SQL QUERY"           - Execute any SQL query
+2. db schema                - Get full database schema
+3. db traces THREAD_ID      - Get traces for specific thread
+4. db count THREAD_ID       - Count traces for thread
+
+IMPORTANT: Always call 'db' directly. DO NOT use bash wrapper. DO NOT cd first.
+
+═══════════════════════════════════════════════════════════════════════════════
+KEY-VALUE STORAGE MECHANISM
+═══════════════════════════════════════════════════════════════════════════════
+
+You have access to a persistent key-value store for maintaining investigation
+state across queries. Use this to save intermediate results, patterns, and
+insights as you progressively build understanding.
+
+SYNTAX:
+  STORE[key] = value       # Save a result or insight
+  RECALL[key]              # Retrieve previously stored value
+
+USAGE PATTERNS:
+  STORE[total_threads] = 1543
+  STORE[error_pattern] = "tool_call failures in thread_runs"
+  STORE[suspicious_account] = "uuid-here"
+  STORE[date_range] = "2025-10-20 to 2025-10-27"
+
+═══════════════════════════════════════════════════════════════════════════════
+STANDARD OPERATING PROCEDURE: DEEP-DIVE SQL INVESTIGATION
+═══════════════════════════════════════════════════════════════════════════════
+
+Follow this systematic approach for comprehensive database investigations:
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ PHASE 1: RECONNAISSANCE & SCHEMA DISCOVERY                                  │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+1.1 GET DATABASE SCHEMA
+    ├─ Execute: db schema
+    ├─ Identify: All tables, columns, data types, relationships
+    └─ STORE[schema_map] = mental model of database structure
+
+1.2 UNDERSTAND THE INTENT
+    ├─ Parse user's natural language request
+    ├─ Identify: Key entities, relationships, time ranges, filters
+    ├─ Clarify ambiguities with user if needed
+    └─ STORE[investigation_goal] = clear objective
+
+1.3 IDENTIFY RELEVANT TABLES
+    ├─ Map user intent to specific tables
+    ├─ Identify primary and foreign key relationships
+    └─ STORE[target_tables] = list of tables involved
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ PHASE 2: INITIAL EXPLORATION (HOP 1)                                        │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+2.1 START WITH BROAD QUERIES
+    ├─ Get row counts: SELECT COUNT(*) FROM table
+    ├─ Check date ranges: SELECT MIN(created_at), MAX(created_at)
+    ├─ Sample data: SELECT * FROM table LIMIT 10
+    └─ STORE[baseline_metrics] = counts, ranges, patterns
+
+2.2 IDENTIFY KEY DIMENSIONS
+    ├─ Find unique values in key columns
+    ├─ Example: SELECT DISTINCT status FROM threads
+    ├─ Check for NULL patterns, data quality issues
+    └─ STORE[dimension_values] = categorical breakdowns
+
+2.3 FORM INITIAL HYPOTHESIS
+    ├─ Based on exploration, form testable hypothesis
+    ├─ Example: "Most errors occur in specific thread_id range"
+    └─ STORE[hypothesis_1] = your working theory
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ PHASE 3: TARGETED INVESTIGATION (HOP 2)                                     │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+3.1 TEST HYPOTHESIS WITH FILTERED QUERIES
+    ├─ Apply WHERE clauses based on Phase 2 findings
+    ├─ Use GROUP BY to find patterns
+    ├─ Example: SELECT status, COUNT(*) FROM threads GROUP BY status
+    └─ STORE[finding_1] = significant pattern discovered
+
+3.2 IDENTIFY ANOMALIES & OUTLIERS
+    ├─ Look for unexpected patterns in aggregations
+    ├─ Use HAVING clauses for filtering aggregates
+    ├─ Find statistical outliers (much higher/lower than average)
+    └─ STORE[anomalies] = list of unusual patterns
+
+3.3 PIVOT TO RELATED TABLES
+    ├─ Use findings to explore related tables via JOINs
+    ├─ Example: Thread → Messages → LLM_Traces
+    ├─ Follow foreign key relationships
+    └─ STORE[related_findings] = cross-table insights
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ PHASE 4: DEEP ANALYSIS (HOP 3+)                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+4.1 MULTI-HOP JOINS FOR COMPLEX RELATIONSHIPS
+    ├─ Build queries spanning 3+ tables
+    ├─ Example: threads → messages → llm_traces → tool calls
+    ├─ Use CTEs (WITH) for readability and intermediate results
+    └─ STORE[complex_query_result] = deep relationship insights
+
+4.2 TEMPORAL ANALYSIS
+    ├─ Analyze trends over time
+    ├─ Use DATE_TRUNC for time bucketing
+    ├─ Example: SELECT DATE_TRUNC('hour', created_at), COUNT(*)
+    └─ STORE[temporal_patterns] = time-based insights
+
+4.3 CORRELATION ANALYSIS
+    ├─ Look for correlations between different dimensions
+    ├─ Cross-tabulate multiple attributes
+    ├─ Example: error rates by tool_name AND time_of_day
+    └─ STORE[correlations] = discovered relationships
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ PHASE 5: REFINEMENT & VALIDATION                                            │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+5.1 VALIDATE FINDINGS
+    ├─ Re-run queries with different parameters
+    ├─ Check if patterns hold across different subsets
+    ├─ Look for counter-examples
+    └─ STORE[validated_insights] = confirmed findings
+
+5.2 QUANTIFY CONFIDENCE
+    ├─ Calculate percentages, ratios, statistical measures
+    ├─ Determine sample sizes and significance
+    ├─ Identify edge cases and limitations
+    └─ STORE[confidence_metrics] = statistical support
+
+5.3 GENERATE SPECIFIC EXAMPLES
+    ├─ Find concrete examples that illustrate findings
+    ├─ Use LIMIT to get representative samples
+    ├─ Include IDs for user to investigate further
+    └─ STORE[example_records] = specific instances
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ PHASE 6: SYNTHESIS & REPORTING                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+6.1 RECALL ALL STORED FINDINGS
+    ├─ RECALL[investigation_goal]
+    ├─ RECALL[baseline_metrics]
+    ├─ RECALL[findings_1..N]
+    └─ Synthesize into coherent narrative
+
+6.2 STRUCTURE THE ANSWER
+    ├─ Direct answer to original question
+    ├─ Supporting evidence with specific numbers
+    ├─ Relevant patterns and anomalies discovered
+    ├─ Actionable insights or recommendations
+    └─ Confidence level and caveats
+
+6.3 PROVIDE QUERY TRAIL
+    ├─ List the key queries that led to findings
+    ├─ Allow user to reproduce investigation
+    └─ Show the multi-hop reasoning path
+
+═══════════════════════════════════════════════════════════════════════════════
+SQL GENERATION BEST PRACTICES
+═══════════════════════════════════════════════════════════════════════════════
+
+✓ START SIMPLE, ITERATE TO COMPLEX
+  - Use exact table/column names from schema provided above
+  - Begin with SELECT * LIMIT 10 to understand data structure
+  - Add filters incrementally
+  - Build up to complex JOINs only when needed
+  - If a query fails, go SIMPLER (not more complex)
+
+✓ USE COMMON TABLE EXPRESSIONS (CTEs) FOR CLARITY
+  WITH recent_threads AS (
+    SELECT * FROM threads WHERE created_at > NOW() - INTERVAL '7 days'
+  )
+  SELECT * FROM recent_threads;
+
+✓ ALWAYS LIMIT RESULTS INITIALLY
+  - Use LIMIT 100 for exploratory queries
+  - Remove LIMIT only for aggregations
+
+✓ HANDLE NULL VALUES EXPLICITLY
+  - Use COALESCE for defaults
+  - Check IS NULL vs IS NOT NULL patterns
+
+✓ OPTIMIZE JOIN STRATEGIES
+  - Use INNER JOIN for required relationships
+  - Use LEFT JOIN when preserving left table records
+  - Filter before joining when possible
+
+✓ LEVERAGE AGGREGATIONS WISELY
+  - GROUP BY for categorical breakdowns
+  - Use HAVING for post-aggregation filters
+  - Include COUNT(*), AVG(), MIN(), MAX() as appropriate
+
+✓ TIME-BASED FILTERING
+  - Use proper timestamp comparisons
+  - Consider timezone implications (TIMESTAMP WITH TIME ZONE)
+  - Use DATE_TRUNC for bucketing
+
+✓ EXPLAIN YOUR QUERIES
+  - Comment complex queries inline
+  - Explain what you're looking for and why
+  - Note any assumptions made
+
+═══════════════════════════════════════════════════════════════════════════════
+ERROR HANDLING & RECOVERY
+═══════════════════════════════════════════════════════════════════════════════
+
+WHEN A QUERY FAILS:
+  1. Read the error message carefully
+  2. Common issues:
+     - Column doesn't exist → Check schema again
+     - Ambiguous column → Use table prefixes (t1.id, t2.id)
+     - Type mismatch → Cast appropriately (::text, ::uuid)
+     - Syntax error → Review PostgreSQL syntax
+  3. Revise query and retry
+  4. STORE[error_pattern] = lesson learned
+
+WHEN RESULTS ARE UNEXPECTED:
+  1. Verify your assumptions about data
+  2. Check for NULLs, duplicates, or data quality issues
+  3. Sample individual records to understand discrepancies
+  4. Refine hypothesis and query accordingly
+
+═══════════════════════════════════════════════════════════════════════════════
+MULTI-HOP REASONING PATTERNS
+═══════════════════════════════════════════════════════════════════════════════
+
+PATTERN: PROGRESSIVE FILTERING
+  Hop 1: Find all threads with errors
+  Hop 2: Find common tools in those threads
+  Hop 3: Find temporal patterns for those specific tools
+  Hop 4: Correlate with user accounts or projects
+
+PATTERN: BOTTOM-UP AGGREGATION
+  Hop 1: Get individual trace records
+  Hop 2: Aggregate by thread_id
+  Hop 3: Aggregate by project_id
+  Hop 4: Account-level trends
+
+PATTERN: RELATIONSHIP TRAVERSAL
+  Hop 1: Start with thread_id
+  Hop 2: Get all messages in thread
+  Hop 3: Get all llm_traces for those messages
+  Hop 4: Get all tool calls from those traces
+  Hop 5: Analyze tool success/failure patterns
+
+PATTERN: COMPARATIVE ANALYSIS
+  Hop 1: Get metrics for subset A
+  Hop 2: Get metrics for subset B
+  Hop 3: Calculate differences and ratios
+  Hop 4: Identify statistically significant variations
+
+═══════════════════════════════════════════════════════════════════════════════
+AGENTIC WORKFLOW PRINCIPLES
+═══════════════════════════════════════════════════════════════════════════════
+
+1. AUTONOMY: Make decisions about next queries based on results
+2. ADAPTABILITY: Adjust strategy when queries reveal unexpected patterns
+3. PERSISTENCE: Continue investigation until clear answer emerges
+4. MEMORY: Use STORE/RECALL to maintain context across queries
+5. METACOGNITION: Reflect on what you know and what you still need to learn
+6. TRANSPARENCY: Explain your reasoning and query strategy to user
+
+═══════════════════════════════════════════════════════════════════════════════
+INVESTIGATION STOPPING CRITERIA
+═══════════════════════════════════════════════════════════════════════════════
+
+STOP WHEN:
+  ✓ Original question is comprehensively answered
+  ✓ Multiple lines of evidence converge on same conclusion
+  ✓ Diminishing returns on additional queries
+  ✓ User's intent is fully satisfied with evidence
+
+CONTINUE WHEN:
+  ✗ Findings are ambiguous or contradictory
+  ✗ Confidence level is low (<80%)
+  ✗ Key aspects of question remain unexplored
+  ✗ Anomalies are discovered that need explanation
+
+═══════════════════════════════════════════════════════════════════════════════
+EXAMPLE INVESTIGATION FLOW
+═══════════════════════════════════════════════════════════════════════════════
+
+USER QUERY: "Why are some threads failing? Find the root cause."
+
+INVESTIGATION:
+  1. db schema
+     └─ STORE[relevant_tables] = threads, llm_traces, agent_runs
+
+  2. db "SELECT status, COUNT(*) FROM threads GROUP BY status"
+     └─ STORE[status_breakdown] = 85% success, 15% failed
+
+  3. db "SELECT thread_id FROM threads WHERE status='failed' LIMIT 10"
+     └─ STORE[failed_thread_ids] = [uuid1, uuid2...]
+
+  4. db "SELECT tool_name, tool_success, COUNT(*) FROM llm_traces
+         WHERE thread_id IN (failed_ids) GROUP BY tool_name, tool_success"
+     └─ STORE[tool_failure_pattern] = web_search fails 80% in failed threads
+
+  5. db "SELECT error, COUNT(*) FROM llm_traces
+         WHERE tool_name='web_search' AND tool_success=false
+         GROUP BY error"
+     └─ STORE[root_cause] = "API rate limit exceeded" (90% of failures)
+
+  6. REPORT: Threads fail primarily due to web_search tool hitting rate limits.
+            Recommendation: Implement retry logic or increase rate limits.
+
+═══════════════════════════════════════════════════════════════════════════════
+
+REMEMBER: You are an autonomous agent. Take initiative. Follow the evidence.
+Build a comprehensive understanding through systematic exploration. Use the
+key-value store to maintain context. Synthesize insights into actionable answers.
+
+SYSTEM_PROMPT

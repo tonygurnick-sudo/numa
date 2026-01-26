@@ -33,6 +33,7 @@ import { NZSBAPolicyBuilder } from '../constructs/apps/nzsba-policy-builder-cons
 import { PolicyDrafter } from '../constructs/apps/policy-drafter-construct';
 import { PolicyReviewer } from '../constructs/apps/policy-reviewer-construct';
 import { ProcurementRfpAssessment } from '../constructs/apps/procurement-rfp-assessment-construct';
+import { StructuredDataQueryApp } from '../constructs/apps/structured-data-query-construct';
 import { RfpResponseComparison } from '../constructs/apps/rfp-response-comparison-construct';
 import { CoreNumaInfra, coreNumaInfraPropsSchema } from '../constructs/core-numa-infra-construct';
 import { InvalidateCloudfront } from '../constructs/invalidate-cloudfront-construct';
@@ -807,6 +808,7 @@ export const appLibrary: Record<string, AppDefinition> = {
   'infringement-review': { app: InfringementReview, isProdApp: false },
   'tor-assessment': { app: TorAssessment, isProdApp: false },
   'meeting-analyser': { app: MeetingAnalyser, isProdApp: true },
+  'structured-data-query': { app: StructuredDataQueryApp, isProdApp: false },
   nolia: { app: Nolia, isProdApp: false },
   'nzsba-policy-builder': { app: NZSBAPolicyBuilder, isProdApp: false },
   'policy-drafter': { app: PolicyDrafter, isProdApp: true },

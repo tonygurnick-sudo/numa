@@ -12,6 +12,7 @@ import AppWizard from '../Components/Apps/AppWizard';
 import { formatCategory } from '../utils/textUtils';
 import { PolicyBuilderDetail } from '../Components/Policy/PolicyBuilderDetail';
 import { PolicyReviewerDetail } from '../Components/Policy/PolicyReviewerDetail';
+import { StructuredDataQueryDetail } from '../Components/StructuredDataQuery/StructuredDataQueryDetail';
 import { manifestService } from '../Services/manifestService';
 import { PageHeader } from '../Components/PageHeader';
 import { useTranslation } from 'react-i18next';
@@ -152,6 +153,8 @@ const AppDetail = () => {
         <PolicyBuilderDetail id={numaAppData.id} />
       ) : numaAppData?.id === 'policy-reviewer' ? (
         <PolicyReviewerDetail />
+      ) : numaAppData?.id === 'structured-data-query' ? (
+        <StructuredDataQueryDetail />
       ) : numaAppData ? (
         <AppWizard manifest={numaAppData} />
       ) : null}
