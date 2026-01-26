@@ -1,0 +1,32 @@
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.coverage.run]
+omit = [
+    "**/tests/**/*"
+]
+source = [
+    ".",
+]
+
+[tool.poetry]
+name = "structured-data-query"
+version = "0.1.0"
+description = "Structured Data Query - S3/CSV query capabilities for Numa platform"
+authors = ["Arcanum AI <engineering@arcanum.ai>"]
+readme = "README.md"
+packages = [
+    { include = "**/*.py" },
+]
+
+[tool.poetry.dependencies]
+python = "~3.13.0"
+pyyaml = ">=6.0"
+boto3 = ">=1.26.0"
+prm = {path = "../../../lib/prm", develop = true}
+
+[tool.poetry.group.dev.dependencies]
+mypy = "1.17.1"
+pylint = "3.3.8"
+pyright = "1.1.403"

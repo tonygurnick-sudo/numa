@@ -71,11 +71,18 @@ export const NumaRequestProvider = ({ children }) => {
 
   const numaPost = useCallback(
     async (url, data, headers = {}) => {
-      const response = await axios.post(url, data, {
-        ...axiosConfig,
-        headers: { ...defaultHeaders, ...headers },
-      });
-      return response.data;
+      try {
+        const response = await axios.post(url, data, {
+          ...axiosConfig,
+          headers: { ...defaultHeaders, ...headers },
+        });
+        return response.data;
+      } catch (error) {
+        console.error('Request failed:', error.message);
+        console.error('Response status:', error.response?.status);
+        console.error('Response data:', error.response?.data);
+        throw error;
+      }
     },
     [axiosConfig, defaultHeaders],
   );

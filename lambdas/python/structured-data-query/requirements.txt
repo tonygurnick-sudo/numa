@@ -1,0 +1,8 @@
+# Structured Data Query - Lambda Dependencies
+# S3/CSV query capabilities only (no Postgres)
+
+# Core SDK dependency
+pyyaml>=6.0
+
+# AWS SDK (pre-installed in Lambda, but included for completeness)
+boto3>=1.26.0
