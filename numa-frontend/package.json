@@ -60,6 +60,7 @@
     "jwt-decode": "^4.0.0",
     "micromark": "^4.0.1",
     "papaparse": "^5.5.3",
+    "qrcode.react": "^4.2.0",
     "react": "^19.0.0",
     "react-bootstrap": "^2.10.5",
     "react-bootstrap-icons": "^1.11.4",

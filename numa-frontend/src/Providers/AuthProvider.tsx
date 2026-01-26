@@ -15,6 +15,8 @@ import {
   ForgotPasswordCommand,
   ConfirmForgotPasswordCommand,
   GetUserCommand,
+  AssociateSoftwareTokenCommand,
+  VerifySoftwareTokenCommand,
 } from '@aws-sdk/client-cognito-identity-provider';
 import { NumaChatDynamoUtils } from '../utils/DynamoDBUtils';
 import { NumaBedrockUtils } from '../utils/NumaBedrockUtils';
@@ -23,6 +25,27 @@ import { withPRM } from '../utils/prmUtils';
 import { useTranslation } from 'react-i18next';
 
 const AuthContext = createContext(null);
+
+// MFA type definitions
+export interface MfaSetupRequired {
+  requiresMfaSetup: true;
+  session: string;
+  username: string;
+  secretCode: string;
+  otpauthUrl: string;
+}
+
+export interface MfaCodeRequired {
+  requiresMfaCode: true;
+  session: string;
+  username: string;
+}
+
+export type LoginResult =
+  | { success: true }
+  | { requiresNewPassword: true; session: unknown }
+  | MfaSetupRequired
+  | MfaCodeRequired;
 
 const MINUTE = 1000 * 60;
 
@@ -62,6 +85,10 @@ export const AuthProvider = ({ children, initialTokens }) => {
 
   const lastRefreshTimeRef = useRef(0);
   const refreshTimeoutRef = useRef(null);
+
+  // MFA session tracking refs
+  const mfaSessionRef = useRef<string | null>(null);
+  const mfaUsernameRef = useRef<string | null>(null);
 
   const clearScheduledRefresh = useCallback(() => {
     if (refreshTimeoutRef.current) {
@@ -1234,15 +1261,33 @@ export const AuthProvider = ({ children, initialTokens }) => {
     };
   };
 
-  const login = useCallback(async (username, password) => {
+  const login = useCallback(async (username, password): Promise<LoginResult> => {
     try {
       // Clear any previous auth errors when attempting login
       setAuthError(null);
 
-      const { response } = await performSrpAuthentication(username, password);
+      const { response, lowercaseUsername } = await performSrpAuthentication(username, password);
 
       if (response.ChallengeName === 'NEW_PASSWORD_REQUIRED') {
         return { requiresNewPassword: true, session: response.AuthenticationResult };
+      }
+
+      // Handle MFA_SETUP challenge - user needs to enroll in TOTP MFA
+      if (response.ChallengeName === 'MFA_SETUP') {
+        const mfaSetupResult = await buildMfaSetupRequired(response.Session, lowercaseUsername);
+        return mfaSetupResult;
+      }
+
+      // Handle SOFTWARE_TOKEN_MFA challenge - user needs to enter TOTP code
+      if (response.ChallengeName === 'SOFTWARE_TOKEN_MFA') {
+        // Store session and username for later use in submitMfaCode
+        mfaSessionRef.current = response.Session;
+        mfaUsernameRef.current = lowercaseUsername;
+        return {
+          requiresMfaCode: true,
+          session: response.Session,
+          username: lowercaseUsername,
+        };
       }
 
       await handleLoginSuccess(response.AuthenticationResult);
@@ -1253,8 +1298,136 @@ export const AuthProvider = ({ children, initialTokens }) => {
     }
   }, []);
 
+  // Build MFA setup data after receiving MFA_SETUP challenge
+  // Calls AssociateSoftwareTokenCommand to get the secret code for the authenticator app
+  const buildMfaSetupRequired = async (session: string, username: string): Promise<MfaSetupRequired> => {
+    const REGION = window.sessionStorage.getItem('REGION');
+    const cognitoClient = withPRM(CognitoIdentityProviderClient, { region: REGION });
+
+    // Get the secret code from Cognito for TOTP setup
+    const associateCommand = new AssociateSoftwareTokenCommand({
+      Session: session,
+    });
+
+    const associateResponse = await cognitoClient.send(associateCommand);
+
+    if (!associateResponse.SecretCode || !associateResponse.Session) {
+      throw new Error('Failed to get MFA secret code from Cognito');
+    }
+
+    // Store session and username for later use in completeMfaSetup
+    mfaSessionRef.current = associateResponse.Session;
+    mfaUsernameRef.current = username;
+
+    // Build the otpauth URL for authenticator apps
+    // Format: otpauth://totp/ISSUER:ACCOUNT?secret=SECRET&issuer=ISSUER
+    const issuer = 'Numa';
+    const otpauthUrl = `otpauth://totp/${encodeURIComponent(issuer)}:${encodeURIComponent(username)}?secret=${associateResponse.SecretCode}&issuer=${encodeURIComponent(issuer)}`;
+
+    return {
+      requiresMfaSetup: true,
+      session: associateResponse.Session,
+      username,
+      secretCode: associateResponse.SecretCode,
+      otpauthUrl,
+    };
+  };
+
+  // Complete MFA setup by verifying the TOTP code and enabling MFA
+  const completeMfaSetup = useCallback(async (code: string): Promise<LoginResult> => {
+    const REGION = window.sessionStorage.getItem('REGION');
+    const CLIENT_ID = window.sessionStorage.getItem('CLIENT_ID');
+    const cognitoClient = withPRM(CognitoIdentityProviderClient, { region: REGION });
+
+    const session = mfaSessionRef.current;
+    const username = mfaUsernameRef.current;
+
+    if (!session || !username) {
+      throw new Error('MFA session expired. Please log in again.');
+    }
+
+    // Verify the TOTP code
+    const verifyCommand = new VerifySoftwareTokenCommand({
+      Session: session,
+      UserCode: code,
+    });
+
+    const verifyResponse = await cognitoClient.send(verifyCommand);
+
+    if (verifyResponse.Status !== 'SUCCESS') {
+      throw new Error('Invalid verification code');
+    }
+
+    // After verification, we need to respond to the MFA_SETUP challenge to complete authentication
+    const SECRET_HASH = await fetchSecretHash(username);
+
+    const respondCommand = new RespondToAuthChallengeCommand({
+      ClientId: CLIENT_ID,
+      ChallengeName: 'MFA_SETUP',
+      Session: verifyResponse.Session,
+      ChallengeResponses: {
+        USERNAME: username,
+        SECRET_HASH: SECRET_HASH,
+      },
+    });
+
+    const authResponse = await cognitoClient.send(respondCommand);
+
+    // Clear MFA session refs
+    mfaSessionRef.current = null;
+    mfaUsernameRef.current = null;
+
+    if (authResponse.AuthenticationResult) {
+      await handleLoginSuccess(authResponse.AuthenticationResult);
+      return { success: true };
+    }
+
+    throw new Error('MFA setup completed but authentication failed');
+  }, []);
+
+  // Submit MFA code for SOFTWARE_TOKEN_MFA challenge (subsequent logins)
+  const submitMfaCode = useCallback(async (code: string): Promise<LoginResult> => {
+    const REGION = window.sessionStorage.getItem('REGION');
+    const CLIENT_ID = window.sessionStorage.getItem('CLIENT_ID');
+    const cognitoClient = withPRM(CognitoIdentityProviderClient, { region: REGION });
+
+    const session = mfaSessionRef.current;
+    const username = mfaUsernameRef.current;
+
+    if (!session || !username) {
+      throw new Error('MFA session expired. Please log in again.');
+    }
+
+    const SECRET_HASH = await fetchSecretHash(username);
+
+    // Respond to the SOFTWARE_TOKEN_MFA challenge
+    const respondCommand = new RespondToAuthChallengeCommand({
+      ClientId: CLIENT_ID,
+      ChallengeName: 'SOFTWARE_TOKEN_MFA',
+      Session: session,
+      ChallengeResponses: {
+        USERNAME: username,
+        SOFTWARE_TOKEN_MFA_CODE: code,
+        SECRET_HASH: SECRET_HASH,
+      },
+    });
+
+    const authResponse = await cognitoClient.send(respondCommand);
+
+    // Clear MFA session refs
+    mfaSessionRef.current = null;
+    mfaUsernameRef.current = null;
+
+    if (authResponse.AuthenticationResult) {
+      await handleLoginSuccess(authResponse.AuthenticationResult);
+      return { success: true };
+    }
+
+    throw new Error('MFA verification failed');
+  }, []);
+
   const setNewPassword = useCallback(
-    async (username, oldPassword, newPassword) => {
+    async (username, oldPassword, newPassword): Promise<LoginResult> => {
       try {
         const { response, cognitoClient, lowercaseUsername, SECRET_HASH, CLIENT_ID } = await performSrpAuthentication(
           username,
@@ -1495,6 +1668,8 @@ export const AuthProvider = ({ children, initialTokens }) => {
       getUserInfo,
       checkAndRefreshTokens,
       forceTokenValidation,
+      completeMfaSetup,
+      submitMfaCode,
       qBusinessClient,
       qAppsClient,
       bedrockRuntimeClient,
@@ -1519,6 +1694,8 @@ export const AuthProvider = ({ children, initialTokens }) => {
     getUserInfo,
     checkAndRefreshTokens,
     forceTokenValidation,
+    completeMfaSetup,
+    submitMfaCode,
     qBusinessClient,
     qAppsClient,
     bedrockRuntimeClient,

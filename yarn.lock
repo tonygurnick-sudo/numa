@@ -166,6 +166,7 @@ __metadata:
     jwt-decode: "npm:^4.0.0"
     micromark: "npm:^4.0.1"
     papaparse: "npm:^5.5.3"
+    qrcode.react: "npm:^4.2.0"
     react: "npm:^19.0.0"
     react-bootstrap: "npm:^2.10.5"
     react-bootstrap-icons: "npm:^1.11.4"
@@ -22990,6 +22991,15 @@ __metadata:
     typescript: "npm:^5.7.2"
   languageName: unknown
   linkType: soft
+
+"qrcode.react@npm:^4.2.0":
+  version: 4.2.0
+  resolution: "qrcode.react@npm:4.2.0"
+  peerDependencies:
+    react: ^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0
+  checksum: 10c0/68c691d130e5fda2f57cee505ed7aea840e7d02033100687b764601f9595e1116e34c13876628a93e1a5c2b85e4efc27d30b2fda72e2050c02f3e1c4e998d248
+  languageName: node
+  linkType: hard
 
 "querystring@npm:0.2.0":
   version: 0.2.0

@@ -119,6 +119,7 @@ export const getDefaultClientConfigValues = () => ({
   dataConnectorsEnabled: false,
   agents: false,
   brandingProviderEnabled: false,
+  mfa: false,
 })
 
 // Helper to check if a config value differs from default
@@ -152,6 +153,7 @@ export const getFieldDisplayName = (key: keyof ClientConfig): string => {
     visionModelType: 'Vision Model Type',
     numaChatAgents: 'Numa Chat Agents',
     agents: 'Agents',
+    mfa: 'Multi-Factor Authentication (MFA)',
   }
 
   return fieldNames[key] || key
