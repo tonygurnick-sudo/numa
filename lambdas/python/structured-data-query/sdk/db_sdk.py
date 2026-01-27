@@ -28,28 +28,35 @@ Example usage:
     results = db.csv(sheet_url, "SELECT * FROM data LIMIT 10")
 """
 
-import csv as csv_module
+# pylint: disable=redefined-builtin,too-many-arguments,too-many-positional-arguments,too-many-locals
+
 import json
 import os
 import subprocess
 from copy import deepcopy
-from io import StringIO
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 
 import yaml
 
+__all__ = [
+    "DB",
+    "DBError",
+    "Config",
+    "ConfigError",
+    "query",
+    "csv",
+    "ask",
+    "investigate",
+]
+
 
 class DBError(Exception):
     """Raised when db CLI command fails"""
 
-    pass
-
 
 class ConfigError(Exception):
     """Raised when configuration operations fail"""
-
-    pass
 
 
 class Config:
@@ -97,29 +104,35 @@ class Config:
         else:
             self.config_path = Path(config_path)
 
-        self._config = None
+        self._config: Dict[str, Any] = {}
         self.load()
 
     def load(self):
         """Load configuration from YAML file."""
         try:
-            with open(self.config_path, "r") as f:
-                self._config = yaml.safe_load(f)
+            with open(self.config_path, "r", encoding="utf-8") as f:
+                loaded = yaml.safe_load(f)
+                if loaded is None:
+                    self._config = self._default_config()
+                elif not isinstance(loaded, dict):
+                    raise ConfigError("Config file must be a YAML mapping")
+                else:
+                    self._config = loaded
         except FileNotFoundError:
             self._config = self._default_config()
             self.save()
-        except yaml.YAMLError as e:
-            raise ConfigError(f"Failed to parse config file: {e}")
+        except yaml.YAMLError as exc:
+            raise ConfigError(f"Failed to parse config file: {exc}") from exc
 
     def save(self):
         """Save configuration to YAML file."""
         try:
-            with open(self.config_path, "w") as f:
+            with open(self.config_path, "w", encoding="utf-8") as f:
                 yaml.dump(self._config, f, default_flow_style=False, sort_keys=False)
-        except Exception as e:
-            raise ConfigError(f"Failed to save config file: {e}")
+        except Exception as exc:
+            raise ConfigError(f"Failed to save config file: {exc}") from exc
 
-    def _default_config(self) -> Dict:
+    def _default_config(self) -> Dict[str, Any]:
         """Return default configuration structure."""
         return {
             "active_datasource": "production",
@@ -162,7 +175,7 @@ class Config:
         """Get list of configured datasource names."""
         return list(self._config.get("datasources", {}).keys())
 
-    def get_datasource(self, name: str) -> Dict:
+    def get_datasource(self, name: str) -> Dict[str, Any]:
         """
         Get datasource configuration.
 
@@ -180,7 +193,7 @@ class Config:
             raise ConfigError(f"Datasource '{name}' not found")
         return deepcopy(datasources[name])
 
-    def add_datasource(self, name: str, config: Dict):
+    def add_datasource(self, name: str, config: Dict[str, Any]) -> None:
         """
         Add or update a datasource.
 
@@ -215,7 +228,7 @@ class Config:
         """Get list of configured engine names."""
         return list(self._config.get("engines", {}).keys())
 
-    def get_engine(self, name: str) -> Dict:
+    def get_engine(self, name: str) -> Dict[str, Any]:
         """
         Get engine configuration.
 
@@ -233,7 +246,7 @@ class Config:
             raise ConfigError(f"Engine '{name}' not found")
         return deepcopy(engines[name])
 
-    def add_engine(self, name: str, config: Dict):
+    def add_engine(self, name: str, config: Dict[str, Any]) -> None:
         """
         Add or update an engine.
 
@@ -260,19 +273,19 @@ class Config:
         else:
             raise ConfigError(f"Engine '{name}' not found")
 
-    def get_ai_config(self) -> Dict:
+    def get_ai_config(self) -> Dict[str, Any]:
         """Get AI configuration."""
         return deepcopy(self._config.get("ai", {}))
 
-    def set_ai_config(self, config: Dict):
+    def set_ai_config(self, config: Dict[str, Any]) -> None:
         """Update AI configuration."""
         self._config["ai"] = config
 
-    def get_output_config(self) -> Dict:
+    def get_output_config(self) -> Dict[str, Any]:
         """Get output configuration."""
         return deepcopy(self._config.get("output", {}))
 
-    def set_output_config(self, config: Dict):
+    def set_output_config(self, config: Dict[str, Any]) -> None:
         """Update output configuration."""
         self._config["output"] = config
 
@@ -396,7 +409,9 @@ class DB:
         """
         cmd = [self.db_path] + args
 
-        result = subprocess.run(cmd, capture_output=True, text=True, env=self.env)
+        result = subprocess.run(
+            cmd, capture_output=True, text=True, env=self.env, check=False
+        )
 
         if check and result.returncode != 0:
             raise DBError(f"Command failed: {' '.join(cmd)}\n{result.stderr}")
@@ -548,7 +563,10 @@ class DB:
             answer = db.ask("what are total sales by region?", csv_file="./sales.csv")
 
             # URL CSV
-            url = "https://raw.githubusercontent.com/datasets/covid-19/main/data/countries-aggregated.csv"
+            url = (
+                "https://raw.githubusercontent.com/datasets/covid-19/main/data/"
+                "countries-aggregated.csv"
+            )
             answer = db.ask("which country had the most COVID cases?", csv_file=url)
 
             # PostgreSQL query (uses default datasource)
@@ -636,13 +654,19 @@ class DB:
             # Pattern detection
             result = db.investigate(
                 "find patterns and anomalies in the COVID data",
-                csv_file="https://raw.githubusercontent.com/datasets/covid-19/main/data/countries-aggregated.csv"
+                csv_file=(
+                    "https://raw.githubusercontent.com/datasets/covid-19/main/data/"
+                    "countries-aggregated.csv"
+                ),
             )
 
             # Trend analysis
             result = db.investigate(
                 "analyze temperature trends and identify extreme weather events",
-                csv_file="https://raw.githubusercontent.com/plotly/datasets/master/2016-weather-data-seattle.csv"
+                csv_file=(
+                    "https://raw.githubusercontent.com/plotly/datasets/master/"
+                    "2016-weather-data-seattle.csv"
+                ),
             )
 
             # PostgreSQL investigation (uses default datasource)
@@ -856,8 +880,6 @@ def investigate(
 
 if __name__ == "__main__":
     # Example usage
-    import sys
-
     print("DB CLI Python SDK")
     print("=" * 80)
     print()

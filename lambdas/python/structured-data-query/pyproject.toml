@@ -30,3 +30,16 @@ prm = {path = "../../../lib/prm", develop = true}
 mypy = "1.17.1"
 pylint = "3.3.8"
 pyright = "1.1.403"
+pytest = "8.4.2"
+pytest-timeout = "2.3.1"
+db-cli-sdk = { path = "sdk", develop = true }
+setuptools = "75.8.0"
+types-PyYAML = "6.0.12.20250915"
+
+[tool.mypy]
+python_version = "3.13"
+ignore_missing_imports = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+warn_unused_configs = true
+exclude = "^(sdk/tests|tests)/"
