@@ -603,10 +603,12 @@ const ResultActions: React.FC<ResultActionsProps> = ({ content, title, appType =
 
       if (shouldCreateMetadata) {
         const metadata = {
-          kb_id: resolvedKbId,
-          tenant_id: clientName,
-          uploaded_at: currentDate.toISOString(),
-          uploader_id: user?.sub || 'unknown',
+          metadataAttributes: {
+            kb_id: resolvedKbId,
+            tenant_id: clientName,
+            uploaded_at: currentDate.toISOString(),
+            uploader_id: user?.sub || 'unknown',
+          },
         };
         const metadataKey = `${s3Key}.metadata.json`;
         const metadataBlob = new Blob([JSON.stringify(metadata)], { type: 'application/json' });
