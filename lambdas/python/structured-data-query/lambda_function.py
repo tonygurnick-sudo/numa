@@ -29,7 +29,9 @@ import sys
 import tempfile
 import traceback
 import urllib.request
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+
+import boto3
 
 # --- Configuration & Imports ---
 
@@ -39,16 +41,23 @@ DEFAULT_BEDROCK_MODEL_ID = os.environ.get(
     "BEDROCK_MODEL_ID", "us.anthropic.claude-sonnet-4-20250514-v1:0"
 )
 
+# pylint: disable=broad-exception-caught,too-many-locals,too-many-branches,too-many-statements
+
+prm_client: Optional[Callable[..., Any]] = None  # pylint: disable=invalid-name
+_prm_client: Optional[Callable[..., Any]]
+
 # Try to import PRM (Platform Resource Manager), fallback to standard boto3 if missing.
 try:
-    from prm import client as prm_client
-
-    HAS_PRM = True
+    from prm import client as _prm_client
 except ImportError:
-    import boto3
+    _prm_client = None
 
+if _prm_client is None:
     HAS_PRM = False
     print("PRM module not found, falling back to standard boto3")
+else:
+    prm_client = _prm_client
+    HAS_PRM = True
 
 # Agent Tuning Parameters
 AGENT_MAX_STEPS = int(os.environ.get("AGENT_MAX_STEPS", "15"))
@@ -97,7 +106,7 @@ def get_aws_client(service_name: str, region: str = DEFAULT_AWS_REGION):
     """
     Wrapper to get an AWS client via PRM (if available) or Boto3.
     """
-    if HAS_PRM:
+    if HAS_PRM and prm_client is not None:
         return prm_client(service_name, region=region)
     return boto3.client(service_name, region_name=region)
 
@@ -253,8 +262,8 @@ def load_csv_into_sqlite(
 
         try:
             raw_header = next(reader, None)
-        except StopIteration:
-            raise ValueError("CSV file is empty")
+        except StopIteration as exc:
+            raise ValueError("CSV file is empty") from exc
 
         if not raw_header:
             raise ValueError("CSV file missing header row")
@@ -270,7 +279,7 @@ def load_csv_into_sqlite(
         columns: List[str] = []
         seen: Dict[str, int] = {}
 
-        for idx, col in enumerate(header):
+        for col in header:
             name = normalize_header_cell(col)
             if not name:
                 name = "col"
@@ -300,7 +309,10 @@ def load_csv_into_sqlite(
 
         # Insert data
         placeholders = ", ".join(["?"] * len(columns))
-        insert_sql = f"INSERT INTO {quoted_table} ({', '.join(quoted_columns)}) VALUES ({placeholders})"
+        insert_sql = (
+            f"INSERT INTO {quoted_table} ({', '.join(quoted_columns)}) "
+            f"VALUES ({placeholders})"
+        )
 
         batch: List[List[str]] = []
         for row in reader:
@@ -350,9 +362,9 @@ def invoke_bedrock(messages: List[Dict[str, Any]], system_prompt: str) -> str:
             (b.get("text", "") for b in content_blocks if b.get("type") == "text"),
             "",
         )
-    except Exception as e:
-        print(f"Bedrock invocation failed: {e}")
-        raise ValueError(f"AI Model Error: {str(e)}")
+    except Exception as exc:
+        print(f"Bedrock invocation failed: {exc}")
+        raise ValueError(f"AI Model Error: {str(exc)}") from exc
 
 
 # --- Robust JSON extraction helpers ---
@@ -515,11 +527,13 @@ def select_best_action_from_parsed(values: List[JsonLike]) -> Dict[str, Any]:
 
 
 def extract_action_json(text: str) -> Dict[str, Any]:
+    """Extract the best action JSON object from loose model output."""
     vals = parse_json_loose(text)
     return select_best_action_from_parsed(vals)
 
 
 def make_plaintext_answer_from_llm_text(llm_text: str) -> str:
+    """Produce a safe plaintext answer from model output."""
     if not llm_text:
         return "I could not generate an answer."
 
@@ -530,7 +544,10 @@ def make_plaintext_answer_from_llm_text(llm_text: str) -> str:
     if isinstance(action.get("thought"), str) and action["thought"].strip():
         return action["thought"].strip()
 
-    return "I could not generate a final answer. Please try rephrasing your question or asking something more specific."
+    return (
+        "I could not generate a final answer. Please try rephrasing your question "
+        "or asking something more specific."
+    )
 
 
 # --- Agent Loop ---
@@ -540,16 +557,17 @@ def run_agent_loop(
     connection: sqlite3.Connection,
     question: str,
     columns: List[str],
-    lambda_context: Any = None,
+    _lambda_context: Any = None,
 ) -> Dict[str, Any]:
     """
     Executes a ReAct loop to investigate the database.
     """
     preview_cols = columns[:50]
     # Tell the model explicitly it MUST quote identifiers exactly.
+    schema_cols = ", ".join([f'"{c}"' for c in preview_cols])
     schema_desc = (
-        f"Table name: data\n"
-        f"Columns (MUST use double quotes around names): {', '.join([f'\"{c}\"' for c in preview_cols])}"
+        "Table name: data\n"
+        f"Columns (MUST use double quotes around names): {schema_cols}"
     )
 
     system_prompt = f"""You are a data analyst using SQLite.
@@ -705,11 +723,12 @@ def parse_event_body(event: Dict[str, Any]) -> Dict[str, Any]:
         if isinstance(raw_body, dict):
             return raw_body
         return json.loads(raw_body)
-    except Exception:
-        raise ValueError("Invalid JSON body")
+    except Exception as exc:
+        raise ValueError("Invalid JSON body") from exc
 
 
 def _is_row_count_question(question: str) -> bool:
+    """Detect simple row-count questions to avoid unnecessary LLM calls."""
     q = re.sub(r"\s+", " ", (question or "").strip().lower())
     if not q:
         return False
@@ -722,6 +741,7 @@ def _is_row_count_question(question: str) -> bool:
 
 
 def handle_investigate(body: Dict[str, Any], context: Any) -> Dict[str, Any]:
+    """Handle the /investigate API request for structured data queries."""
     local_path = None
     conn: Optional[sqlite3.Connection] = None
     try:
@@ -745,14 +765,14 @@ def handle_investigate(body: Dict[str, Any], context: Any) -> Dict[str, Any]:
         conn, columns, row_count = load_csv_into_sqlite(local_path)
 
         if _is_row_count_question(question):
-            payload: Dict[str, Any] = {
+            row_count_payload: Dict[str, Any] = {
                 "status": "success",
                 "answer": f"There are {row_count} rows in the file.",
                 "sql": "SELECT COUNT(*) AS row_count FROM data",
                 "data": [{"row_count": row_count}],
                 "question": question,
             }
-            return create_response(200, payload)
+            return create_response(200, row_count_payload)
 
         result = run_agent_loop(conn, question, columns, context)
 
@@ -786,6 +806,7 @@ def handle_investigate(body: Dict[str, Any], context: Any) -> Dict[str, Any]:
 
 
 def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
+    """Route API Gateway requests to the correct handler."""
     print("Event:", json.dumps(event, default=str))
 
     try:
