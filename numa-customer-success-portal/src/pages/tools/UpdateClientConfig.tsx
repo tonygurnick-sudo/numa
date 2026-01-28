@@ -76,6 +76,7 @@ export default function UpdateClientConfig() {
   const [provisionQResources, setProvisionQResources] = useState<boolean>(false)
   const [preferredKnowledgeBase, setPreferredKnowledgeBase] = useState<'q' | 'bedrock'>(defaults.preferredKnowledgeBase)
   const [brandingProviderEnabled, setBrandingProviderEnabled] = useState<boolean>(false)
+  const [numaWorkspaceChat, setNumaWorkspaceChat] = useState<boolean>(false)
   const [mfa, setMfa] = useState<boolean>(false)
   const [groupAdmin, setGroupAdmin] = useState(featuresListToString(DEFAULT_ADMIN_FEATURES))
   const [groupStandard, setGroupStandard] = useState(featuresListToString(DEFAULT_STANDARD_FEATURES))
@@ -135,6 +136,7 @@ export default function UpdateClientConfig() {
     setProvisionQResources(Boolean((cfg as any).provisionQResources))
     setPreferredKnowledgeBase(((cfg as any).preferredKnowledgeBase as 'q' | 'bedrock') || defaults.preferredKnowledgeBase)
     setBrandingProviderEnabled(Boolean((cfg as any).brandingProviderEnabled))
+    setNumaWorkspaceChat(Boolean((cfg as any).numaWorkspaceChat))
     setMfa(Boolean((cfg as any).mfa))
     const groups = (cfg as unknown as Record<string, unknown>)['groups'] as { admin?: string[]; standard?: string[] } | undefined
     const adminList = (groups?.admin && groups.admin.length > 0) ? groups.admin : DEFAULT_ADMIN_FEATURES
@@ -157,6 +159,7 @@ export default function UpdateClientConfig() {
       dataConnectorsEnabled: (current as any)?.dataConnectorsEnabled ?? false,
       agents: (current as any)?.agents ?? false,
       brandingProviderEnabled: (current as any)?.brandingProviderEnabled ?? defaults.brandingProviderEnabled,
+      numaWorkspaceChat: (current as any)?.numaWorkspaceChat ?? defaults.numaWorkspaceChat,
       provisionQResources: (current as any)?.provisionQResources ?? defaults.provisionQResources,
       preferredKnowledgeBase: ((current as any)?.preferredKnowledgeBase as 'q' | 'bedrock') ?? defaults.preferredKnowledgeBase,
       mfa: (current as any)?.mfa ?? defaults.mfa,
@@ -216,6 +219,7 @@ export default function UpdateClientConfig() {
       }
     }
     if (eff.brandingProviderEnabled !== brandingProviderEnabled) updates.brandingProviderEnabled = brandingProviderEnabled
+    if (eff.numaWorkspaceChat !== numaWorkspaceChat) updates.numaWorkspaceChat = numaWorkspaceChat
     if (eff.mfa !== mfa) updates.mfa = mfa
 
     // Ensure these new fields are written even if default and currently missing
@@ -448,6 +452,14 @@ export default function UpdateClientConfig() {
                       onChange={setBrandingProviderEnabled}
                       type="switch"
                       helpText="Enable custom branding UI and runtime asset loading"
+                    />
+                    <ConfigField
+                      label="Numa Workspace Chat"
+                      value={numaWorkspaceChat}
+                      defaultValue={defaults.numaWorkspaceChat}
+                      onChange={setNumaWorkspaceChat}
+                      type="switch"
+                      helpText="Feature flag for Numa Chat V2 testing"
                     />
                     <ConfigField
                       label="Multi-Factor Authentication (MFA)"

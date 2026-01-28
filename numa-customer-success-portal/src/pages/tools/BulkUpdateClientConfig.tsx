@@ -69,6 +69,12 @@ const BULK_UPDATABLE_FIELDS: FieldConfig[] = [
     description: 'Show data connectors in the frontend',
   },
   {
+    key: 'numaWorkspaceChat',
+    label: 'Numa Workspace Chat',
+    type: 'boolean',
+    description: 'Feature flag for Numa Chat V2 testing',
+  },
+  {
     key: 'allowBedrockQuotaSharing',
     label: 'Allow Bedrock Quota Sharing',
     type: 'boolean',
