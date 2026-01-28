@@ -1,6 +1,7 @@
 import { CloudwatchLogGroup } from '@cdktf/provider-aws/lib/cloudwatch-log-group';
 import { LambdaFunction } from '@cdktf/provider-aws/lib/lambda-function';
 import { LambdaFunctionUrl } from '@cdktf/provider-aws/lib/lambda-function-url';
+import { LambdaPermission } from '@cdktf/provider-aws/lib/lambda-permission';
 import { Construct } from 'constructs';
 import { NumaLambda } from './numa-lambda';
 
@@ -65,6 +66,17 @@ export class OpenAPIDocsConstruct extends Construct {
         exposeHeaders: ['Content-Type'],
         maxAge: 300,
       },
+    });
+
+    // As of October 2025, AWS requires BOTH lambda:InvokeFunctionUrl AND lambda:InvokeFunction
+    // permissions for public Function URLs. The LambdaFunctionUrl resource auto-creates
+    // the InvokeFunctionUrl permission, but we must explicitly add InvokeFunction.
+    // See: https://docs.aws.amazon.com/lambda/latest/dg/urls-auth.html
+    new LambdaPermission(this, 'openapi-docs-function-url-invoke-permission', {
+      functionName: this.lambda.functionName,
+      action: 'lambda:InvokeFunction',
+      principal: '*',
+      statementId: 'FunctionURLAllowPublicAccessInvoke',
     });
   }
 
