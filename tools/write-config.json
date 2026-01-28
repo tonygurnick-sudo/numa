@@ -4,6 +4,7 @@
   "devInstance": true,
   "provisionQResources": false,
   "pipedreamIntegrations": true,
+  "dataConnectorsEnabled": true,
   "agents": true,
   "region": "us-east-1",
   "allApps": true,
@@ -14,6 +15,7 @@
   },
   "preferredKnowledgeBase": "bedrock",
   "vectorStorageType": "s3vectors",
+  "bedrockAccount": "552162429805",
   "allowBedrockQuotaSharing": true,
   "brandingProviderEnabled": true,
   "numaWorkspaceChat": true

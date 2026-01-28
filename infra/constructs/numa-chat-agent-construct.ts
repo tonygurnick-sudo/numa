@@ -2,6 +2,7 @@ import { Construct } from 'constructs';
 import { DataAwsCallerIdentity } from '@cdktf/provider-aws/lib/data-aws-caller-identity';
 import { CloudwatchLogGroup } from '@cdktf/provider-aws/lib/cloudwatch-log-group';
 import { LambdaFunctionUrl } from '@cdktf/provider-aws/lib/lambda-function-url';
+import { LambdaPermission } from '@cdktf/provider-aws/lib/lambda-permission';
 import { NumaLambda } from './numa-lambda';
 import type { Construct as CDKConstruct } from 'constructs';
 import { SUPPORTED_INTEGRATIONS } from '../config/integrations';
@@ -353,6 +354,17 @@ export class NumaChatAgent extends Construct {
       functionName: agentFn.lambda.functionName,
       authorizationType: 'NONE',
       invokeMode: 'RESPONSE_STREAM',
+    });
+
+    // As of October 2025, AWS requires BOTH lambda:InvokeFunctionUrl AND lambda:InvokeFunction
+    // permissions for public Function URLs. The LambdaFunctionUrl resource auto-creates
+    // the InvokeFunctionUrl permission, but we must explicitly add InvokeFunction.
+    // See: https://docs.aws.amazon.com/lambda/latest/dg/urls-auth.html
+    new LambdaPermission(this, 'chat-agent-url-invoke-permission', {
+      functionName: agentFn.lambda.functionName,
+      action: 'lambda:InvokeFunction',
+      principal: '*',
+      statementId: 'FunctionURLAllowPublicAccessInvoke',
     });
 
     this.functionUrl = fnUrl.functionUrl;
