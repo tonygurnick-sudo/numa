@@ -70,6 +70,7 @@ export default function CreateClientConfig() {
   const [preferredKnowledgeBase, setPreferredKnowledgeBase] = useState<"q" | "bedrock">(defaults.preferredKnowledgeBase)
   const [agents, setAgents] = useState(defaults.agents)
   const [brandingProviderEnabled, setBrandingProviderEnabled] = useState(defaults.brandingProviderEnabled)
+  const [numaWorkspaceChat, setNumaWorkspaceChat] = useState(defaults.numaWorkspaceChat)
   const [groupAdmin, setGroupAdmin] = useState(featuresListToString(DEFAULT_ADMIN_FEATURES))
   const [groupStandard, setGroupStandard] = useState(featuresListToString(DEFAULT_STANDARD_FEATURES))
   const [showAdvanced, setShowAdvanced] = useState(false)
@@ -145,6 +146,7 @@ export default function CreateClientConfig() {
     if (pipedream) minimal['pipedreamIntegrations'] = true
     if (agents) minimal['agents'] = true
     if (brandingProviderEnabled !== defaults.brandingProviderEnabled) minimal['brandingProviderEnabled'] = brandingProviderEnabled
+    if (numaWorkspaceChat) minimal['numaWorkspaceChat'] = true
 
     // Always include these two fields so defaults are written explicitly
     minimal['provisionQResources'] = provisionQResources
@@ -377,6 +379,14 @@ export default function CreateClientConfig() {
                   onChange={setBrandingProviderEnabled}
                   type="switch"
                   helpText="Enable custom branding UI and runtime asset loading"
+                />
+                <ConfigField
+                  label="Numa Workspace Chat"
+                  value={numaWorkspaceChat}
+                  defaultValue={defaults.numaWorkspaceChat}
+                  onChange={setNumaWorkspaceChat}
+                  type="switch"
+                  helpText="Feature flag for Numa Chat V2 testing"
                 />
                 <ConfigField
                   label="Provision Q Resources"
