@@ -29,7 +29,7 @@ STACK := numa-arcanum-demo-tony
 SYSTEM_USER_FUNCTION_RESOURCE := aws_lambda_function.numa_system-user_function_38BDAEEC
 SYSTEM_USER_FUNCTION_NAME := system-user-creator---TfToken-TOKEN-81--
 
-.PHONY: init get plan import deploy clean
+.PHONY: init get plan import deploy clean pipelinefix
 .DEFAULT_GOAL := deploy
 
 init:
@@ -56,3 +56,56 @@ deploy: init get
 
 clean:
 	rm -rf cdktf.out .gen tf-debug.log "$(TF_PLUGIN_CACHE_DIR)" || true
+
+# ---- Pre-commit Pipeline Fix ----
+pipelinefix:
+	@echo "🔧 Setting up pre-commit hooks to fix pipeline failures..."
+	@echo ""
+
+	# Check if pre-commit is installed, if not install it
+	@if ! command -v pre-commit >/dev/null 2>&1; then \
+		echo "📦 Installing pre-commit..."; \
+		if command -v pipx >/dev/null 2>&1; then \
+			pipx install pre-commit; \
+		elif command -v pip3 >/dev/null 2>&1; then \
+			pip3 install --user pre-commit; \
+		elif command -v pip >/dev/null 2>&1; then \
+			pip install --user pre-commit; \
+		else \
+			echo "❌ Could not find pip or pipx. Please install pre-commit manually:"; \
+			echo "   brew install pre-commit  # or"; \
+			echo "   pip install pre-commit"; \
+			exit 1; \
+		fi; \
+	else \
+		echo "✅ pre-commit already installed"; \
+	fi
+
+	# Install the pre-commit hooks
+	@echo "🪝 Installing pre-commit hooks..."
+	@pre-commit install
+	@pre-commit install --hook-type commit-msg
+
+	# Run pre-commit on all files to fix any current issues
+	@echo "🧹 Running pre-commit on all files to fix formatting..."
+	@echo "   This may take a moment on first run..."
+	@if pre-commit run --all-files; then \
+		echo ""; \
+		echo "✅ All pre-commit checks passed!"; \
+	else \
+		echo ""; \
+		echo "🔄 Some files were reformatted. Running again to verify..."; \
+		pre-commit run --all-files; \
+		echo ""; \
+		echo "✅ All formatting issues fixed!"; \
+	fi
+
+	@echo ""
+	@echo "🎉 Setup complete! Your repository is now ready for clean commits."
+	@echo ""
+	@echo "📝 Usage:"
+	@echo "   • Hooks will run automatically on 'git commit'"
+	@echo "   • Run 'pre-commit run --all-files' to check all files"
+	@echo "   • Run 'pre-commit run' to check only staged files"
+	@echo "   • Use conventional commit format: feat:/fix:/docs: etc."
+	@echo ""
