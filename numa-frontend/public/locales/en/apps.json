@@ -132,6 +132,9 @@
     "unknown": "Unknown",
     "loading": "Loading...",
     "loadingHistory": "Loading job history...",
+    "scheduledAgents": "Scheduled Agents",
+    "scheduledAgentRun": "{{agent}}: \"{{prompt}}\"",
+    "untitledRun": "Untitled run",
     "sidebar": {
       "showAria": "Show job history",
       "showButton": "Job History",
@@ -158,6 +161,7 @@
     },
     "actions": {
       "refresh": "Refresh",
+      "viewSchedule": "View Schedule",
       "viewProgress": "View Progress",
       "viewFiles": "View Files",
       "viewError": "View Error",
@@ -171,6 +175,12 @@
       "actions": "Actions"
     },
     "filters": {
+      "jobType": {
+        "label": "Job Type",
+        "all": "All",
+        "apps": "Apps",
+        "agents": "Agents"
+      },
       "app": {
         "label": "Filter by App",
         "aria": "Filter by application",

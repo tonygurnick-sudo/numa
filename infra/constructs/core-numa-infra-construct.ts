@@ -69,6 +69,8 @@ export class CoreNumaInfra extends Construct {
   readonly workspaceAgentsTable: DynamodbTable;
   readonly userAgentsTable: DynamodbTable;
   readonly agentsSettingsTable: DynamodbTable;
+  readonly agentSchedulesTable: DynamodbTable;
+  readonly notificationsTable: DynamodbTable;
   readonly chatSettingsTable: DynamodbTable;
   readonly dataConnectorsTable: DynamodbTable;
   readonly dataConnectorsSettingsTable: DynamodbTable;
@@ -525,6 +527,71 @@ export class CoreNumaInfra extends Construct {
         Name: `${numaClient}-agents-settings`,
         Environment: props.environmentName,
         Purpose: 'agents-settings',
+      },
+    });
+
+    this.agentSchedulesTable = new DynamodbTable(this, 'numa-agent-schedules-table', {
+      name: `${numaClient}-agent-schedules`,
+      billingMode: 'PAY_PER_REQUEST',
+      hashKey: 'user_id',
+      rangeKey: 'schedule_id',
+      attribute: [
+        { name: 'user_id', type: 'S' },
+        { name: 'schedule_id', type: 'S' },
+        { name: 'event_type', type: 'S' },
+      ],
+      globalSecondaryIndex: [
+        {
+          name: 'schedule-id-index',
+          hashKey: 'schedule_id',
+          projectionType: 'ALL',
+        },
+        {
+          name: 'event-type-index',
+          hashKey: 'event_type',
+          rangeKey: 'user_id',
+          projectionType: 'ALL',
+        },
+      ],
+      pointInTimeRecovery: {
+        enabled: true,
+      },
+      tags: {
+        Name: `${numaClient}-agent-schedules`,
+        Environment: props.environmentName,
+        Purpose: 'agent-schedules',
+      },
+    });
+
+    // Notifications table for schedule events
+    this.notificationsTable = new DynamodbTable(this, 'numa-notifications-table', {
+      name: `${numaClient}-notifications`,
+      billingMode: 'PAY_PER_REQUEST',
+      hashKey: 'user_id',
+      rangeKey: 'notification_id',
+      attribute: [
+        { name: 'user_id', type: 'S' },
+        { name: 'notification_id', type: 'S' },
+        { name: 'schedule_id', type: 'S' },
+      ],
+      globalSecondaryIndex: [
+        {
+          name: 'schedule-id-index',
+          hashKey: 'schedule_id',
+          projectionType: 'ALL',
+        },
+      ],
+      ttl: {
+        attributeName: 'expires_at',
+        enabled: true,
+      },
+      pointInTimeRecovery: {
+        enabled: true,
+      },
+      tags: {
+        Name: `${numaClient}-notifications`,
+        Environment: props.environmentName,
+        Purpose: 'notifications',
       },
     });
 

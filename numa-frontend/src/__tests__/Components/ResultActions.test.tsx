@@ -71,6 +71,12 @@ vi.mock('../../utils/s3Utils', () => ({
   uploadFileToS3: vi.fn().mockResolvedValue('mock-file-name.pdf'),
 }));
 
+// Mock document converter service to force client-side fallback
+vi.mock('../../Services/documentConverterService', () => ({
+  downloadPdf: vi.fn().mockRejectedValue(new Error('mock server failure')),
+  downloadDocx: vi.fn().mockRejectedValue(new Error('mock server failure')),
+}));
+
 // Mock knowledgeBaseService to return test KBs
 vi.mock('../../Services/knowledgeBaseService', () => ({
   knowledgeBaseService: {
@@ -187,6 +193,7 @@ describe('ResultActions Component', () => {
 
   it('handles "Download -> PDF" correctly', async () => {
     const { saveAs } = await import('file-saver');
+    const { downloadPdf } = await import('../../Services/documentConverterService');
 
     renderWithProviders(<ResultActions content="**Bold** text" title="My PDF Title" />);
 
@@ -202,6 +209,7 @@ describe('ResultActions Component', () => {
     await waitFor(() => {
       expect(saveAs).toHaveBeenCalledTimes(1);
     });
+    expect(downloadPdf).toHaveBeenCalledTimes(1);
     expect(saveAs.mock.calls[0][1]).toBe('My PDF Title.pdf');
   });
 

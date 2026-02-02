@@ -75,6 +75,12 @@ const BULK_UPDATABLE_FIELDS: FieldConfig[] = [
     description: 'Feature flag for Numa Chat V2 testing',
   },
   {
+    key: 'scheduling',
+    label: 'Agent Scheduling',
+    type: 'boolean',
+    description: 'Enable agent scheduling and notifications features',
+  },
+  {
     key: 'allowBedrockQuotaSharing',
     label: 'Allow Bedrock Quota Sharing',
     type: 'boolean',

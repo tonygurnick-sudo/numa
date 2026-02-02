@@ -6,10 +6,7 @@
     "tools",
     "numa-frontend",
     "numa-customer-success-portal",
-    "lambdas/node/*",
-    "lib/client-config-node"
-  ],
-  "resolutions": {
-    "@smithy/types": "4.6.0"
-  }
+    "lib/client-config-node",
+    "lambdas/node/*"
+  ]
 }

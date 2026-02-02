@@ -195,6 +195,14 @@ export class NumaClientStack extends TerraformStack {
       provider: hostedZoneProvider,
     });
 
+    const agentScheduleSecretParam = new SsmParameter(this, 'agent-schedule-runner-secret', {
+      name: clientConfig.clientName + '_' + 'agent-schedule-runner-secret',
+      type: 'String',
+      value: uuidv4(),
+      lifecycle: { createBeforeDestroy: true, ignoreChanges: ['value'] },
+      provider: hostedZoneProvider,
+    });
+
     // Chat Agent – HTTP streaming via Lambda Function URL (created first to pass URL into FE)
     const chatAgent = new NumaChatAgent(this, 'chat-agent', {
       clientName: props.clientName,
@@ -228,6 +236,7 @@ export class NumaClientStack extends TerraformStack {
       bedrockAccount: clientConfig.bedrockAccount,
       // Web crawler stats for KB state endpoint
       crawlUrlsTableName: core.webCrawler.crawlUrlsTable.name,
+      scheduleRunnerSecret: agentScheduleSecretParam.value,
     });
 
     // Numa Workspace Chat Agent (AgentCore runtime + proxy Lambda, routed through main CloudFront)
@@ -370,6 +379,13 @@ export class NumaClientStack extends TerraformStack {
       dataConnectorsTableName: core.dataConnectorsTable.name,
       dataConnectorsSettingsTableName: core.dataConnectorsSettingsTable.name,
       dataConnectorsSyncConfigsTableName: core.dataConnectorsSyncConfigsTable.name,
+      agentSchedulesTableName: core.agentSchedulesTable.name,
+      notificationsTableName: core.notificationsTable.name,
+      chatAgentFunctionUrl: chatAgent.functionUrl,
+      cloudfrontSharedSecret: cfSecretParam.value,
+      agentScheduleRunnerSecret: agentScheduleSecretParam.value,
+      bedrockKbId: knowledgeBase.knowledgeBaseId,
+      bedrockDataSourceId: knowledgeBase.dataSourceId,
     });
 
     const appConfigsToDeploy = getAppConfigsToDeploy(
@@ -468,6 +484,7 @@ export class NumaClientStack extends TerraformStack {
         DATA_CONNECTORS_ENABLED: clientConfig.dataConnectorsEnabled ?? false,
         AGENTS: clientConfig.agents ?? false,
         NUMA_WORKSPACE_CHAT: clientConfig.numaWorkspaceChat ?? false,
+        SCHEDULING: clientConfig.scheduling ?? false,
         // Direct Lambda Function URL for workspace chat agent (bypasses CloudFront buffering for streaming)
         WORKSPACE_CHAT_AGENT_FUNCTION_URL: workspaceChatAgentProxy?.functionUrl,
         NUMA_VERSION: siteVersion,
@@ -775,6 +792,13 @@ export const clientConfigSchema = coreNumaInfraPropsSchema
          * @default false
          */
         dataConnectorsEnabled: z.boolean().optional().default(false),
+
+        /**
+         * Whether to enable Agent Scheduling and Notifications features.
+         *
+         * @default false
+         */
+        scheduling: z.boolean().optional().default(false),
       })
       .strict(),
   );

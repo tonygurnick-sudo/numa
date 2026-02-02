@@ -25,6 +25,7 @@ import { StateMachine } from 'asl-types';
 export class KnowledgeBase extends Construct {
   public readonly knowledgeBaseId: string;
   public readonly knowledgeBaseArn: string;
+  public readonly dataSourceId: string;
 
   constructor(scope: Construct, id: string, props: KnowledgeBaseProps) {
     super(scope, id);
@@ -455,6 +456,8 @@ export class KnowledgeBase extends Construct {
         },
       ],
     });
+
+    this.dataSourceId = dataSource.dataSourceId;
 
     const stateMachineRoleAssumptionPolicyDocument = new DataAwsIamPolicyDocument(
       this,

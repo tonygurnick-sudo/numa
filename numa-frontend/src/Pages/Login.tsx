@@ -23,6 +23,7 @@ const NumaLogin = () => {
   const [loading, setLoading] = useState(false);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
 
   // MFA state
   const [mfaSetupRequired, setMfaSetupRequired] = useState<MfaSetupRequired | null>(null);
@@ -246,13 +247,24 @@ const NumaLogin = () => {
 
           <Form.Group className="mb-3">
             <Form.Label htmlFor="password">{t('login.passwordLabel')}</Form.Label>
-            <Form.Control
-              id="password"
-              name="password"
-              type="password"
-              ref={passwordRef}
-              data-testid="password-input"
-            />
+            <InputGroup>
+              <Form.Control
+                id="password"
+                name="password"
+                type={showPassword ? 'text' : 'password'}
+                ref={passwordRef}
+                data-testid="password-input"
+              />
+              <Button
+                variant="outline-secondary"
+                onClick={() => setShowPassword(!showPassword)}
+                aria-label={
+                  showPassword ? t('login.hidePassword', 'Hide password') : t('login.showPassword', 'Show password')
+                }
+              >
+                {showPassword ? '👁️' : '👁️‍🗨️'}
+              </Button>
+            </InputGroup>
             <p className="mt-1">
               <a href="/reset-password">{t('login.forgotPassword')}</a>
             </p>

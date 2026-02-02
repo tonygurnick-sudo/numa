@@ -32,6 +32,7 @@ const CONFIG_OPTIONAL_PROPERTIES = [
   'BRANDING_ASSETS_PREFIX',
   'NUMA_VERSION',
   'WORKSPACE_CHAT_AGENT_FUNCTION_URL', // Direct Lambda URL for streaming (bypasses CloudFront buffering)
+  'SCHEDULING', // Feature flag for agent scheduling and notifications
 ];
 const CONFIG_PROPERTIES = [...CONFIG_REQUIRED_PROPERTIES, ...CONFIG_OPTIONAL_PROPERTIES];
 

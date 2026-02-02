@@ -59,6 +59,17 @@ export default defineConfig({
         manualChunks: undefined,
       },
     },
+    // Standard CommonJS options for node_modules
+    commonjsOptions: {
+      include: [/node_modules/],
+      transformMixedEsModules: true,
+    },
+  },
+  // Optimize dependencies to ensure proper loading
+  optimizeDeps: {
+    include: [], // Using custom cron implementation, no external libraries needed
+    force: false, // Reset to default since we fixed the core issue
+    exclude: [],
   },
   server: {
     proxy: {

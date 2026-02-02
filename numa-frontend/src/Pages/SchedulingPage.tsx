@@ -1,0 +1,676 @@
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import {
+  Container,
+  Row,
+  Col,
+  Card,
+  Alert,
+  Table,
+  Badge,
+  Button,
+  Spinner,
+  Modal,
+  ButtonGroup,
+  Form,
+} from 'react-bootstrap';
+import { useNavigate } from 'react-router-dom';
+import { PageHeader } from '../Components/PageHeader';
+import { StickyToolbar } from '../Components/StickyToolbar';
+import { ScheduleService } from '../Services/ScheduleService';
+import type { AgentSchedule } from '../types/agentSchedules';
+import { AgentScheduleModal } from '../Components/Agents/AgentScheduleModal';
+import { useNumaRequest } from '../Providers/NumaRequestContext';
+import { getNextRunTimes, describeCronExpression } from '../utils/cronUtils';
+import { useTranslation } from 'react-i18next';
+
+const getStatusBadgeVariant = (status: string) => {
+  switch (status) {
+    case 'active':
+      return 'success';
+    case 'paused':
+      return 'warning';
+    case 'deleted':
+      return 'danger';
+    case 'inactive':
+      return 'secondary';
+    default:
+      return 'secondary';
+  }
+};
+
+const formatDate = (date: Date | null, labels: { notAvailable: string }, timezone?: string): string => {
+  if (!date) return labels.notAvailable;
+  try {
+    return date.toLocaleString(undefined, timezone ? { timeZone: timezone } : undefined);
+  } catch {
+    return date.toLocaleString();
+  }
+};
+
+type ScheduleWithNextRun = AgentSchedule & { nextRun: Date | null };
+
+type SortField = 'name' | 'agent' | 'schedule' | 'nextRun' | 'lastRun' | 'status' | 'timezone';
+
+const isOneTimeCron = (cronExpression: string) => {
+  if (!cronExpression?.startsWith('cron(') || !cronExpression.endsWith(')')) return false;
+  const parts = cronExpression.slice(5, -1).trim().split(/\s+/);
+  if (parts.length < 6) return false;
+  const dayOfMonth = parts[2];
+  const month = parts[3];
+  const dayOfWeek = parts[4];
+  const year = parts[5];
+  return dayOfMonth !== '*' && month !== '*' && dayOfWeek === '?' && !!year && year !== '*';
+};
+
+const getDerivedStatus = (schedule: ScheduleWithNextRun) => {
+  if (schedule.status === 'active' && isOneTimeCron(schedule.cronExpression) && !schedule.nextRun) {
+    return 'inactive';
+  }
+  return schedule.status;
+};
+
+export const SchedulingPage: React.FC = () => {
+  const navigate = useNavigate();
+  const { t } = useTranslation('agents');
+  const { numaGet, numaPut, numaDelete } = useNumaRequest();
+  const [schedules, setSchedules] = useState<AgentSchedule[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editingSchedule, setEditingSchedule] = useState<AgentSchedule | null>(null);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [scheduleToDelete, setScheduleToDelete] = useState<AgentSchedule | null>(null);
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [timezoneFilter, setTimezoneFilter] = useState('all');
+  const [agentFilter, setAgentFilter] = useState('all');
+  const [sortField, setSortField] = useState<SortField | null>(null);
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
+  const [showDebugIds, setShowDebugIds] = useState(false);
+
+  const loadSchedules = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const scheduleEvents = await ScheduleService.getActiveSchedules(numaGet);
+      setSchedules(scheduleEvents);
+    } catch (err) {
+      console.error('Failed to load schedules:', err);
+      setError((err as Error)?.message ?? t('scheduling.errors.load'));
+    } finally {
+      setLoading(false);
+    }
+  }, [numaGet, t]);
+
+  useEffect(() => {
+    loadSchedules();
+  }, [loadSchedules]);
+
+  const handleScheduleClick = useCallback(
+    (schedule: AgentSchedule) => {
+      navigate(`/scheduling/${schedule.scheduleId}`, { state: { schedule } });
+    },
+    [navigate],
+  );
+
+  const handleEditSchedule = useCallback((e: React.MouseEvent, schedule: AgentSchedule) => {
+    e.stopPropagation();
+    setEditingSchedule(schedule);
+    setShowEditModal(true);
+  }, []);
+
+  const handleCloseEditModal = useCallback(() => {
+    setShowEditModal(false);
+    setEditingSchedule(null);
+  }, []);
+
+  const handleUpdateSchedule = useCallback(
+    async (payload: { promptText: string; cronExpression: string; timezone: string; label?: string }) => {
+      if (!editingSchedule) return;
+
+      await ScheduleService.update(numaPut, editingSchedule.scheduleId, {
+        promptText: payload.promptText,
+        cronExpression: payload.cronExpression,
+        timezone: payload.timezone,
+        label: payload.label,
+      });
+
+      await loadSchedules();
+    },
+    [editingSchedule, numaPut, loadSchedules],
+  );
+
+  const handleTogglePause = useCallback(
+    async (e: React.MouseEvent, schedule: AgentSchedule) => {
+      e.stopPropagation();
+      const newStatus = schedule.status === 'active' ? 'paused' : 'active';
+      setActionLoading(schedule.scheduleId);
+      try {
+        await ScheduleService.update(numaPut, schedule.scheduleId, { status: newStatus });
+        await loadSchedules();
+      } catch (err) {
+        console.error('Failed to update schedule status:', err);
+        setError((err as Error)?.message ?? t('scheduling.errors.updateStatus'));
+      } finally {
+        setActionLoading(null);
+      }
+    },
+    [numaPut, loadSchedules, t],
+  );
+
+  const handleDeleteClick = useCallback((e: React.MouseEvent, schedule: AgentSchedule) => {
+    e.stopPropagation();
+    setScheduleToDelete(schedule);
+    setShowDeleteConfirm(true);
+  }, []);
+
+  const handleConfirmDelete = useCallback(async () => {
+    if (!scheduleToDelete) return;
+    setActionLoading(scheduleToDelete.scheduleId);
+    try {
+      await ScheduleService.delete(numaDelete, scheduleToDelete.scheduleId);
+      setShowDeleteConfirm(false);
+      setScheduleToDelete(null);
+      await loadSchedules();
+    } catch (err) {
+      console.error('Failed to delete schedule:', err);
+      setError((err as Error)?.message ?? t('scheduling.errors.delete'));
+    } finally {
+      setActionLoading(null);
+    }
+  }, [scheduleToDelete, numaDelete, loadSchedules, t]);
+
+  const handleCancelDelete = useCallback(() => {
+    setShowDeleteConfirm(false);
+    setScheduleToDelete(null);
+  }, []);
+
+  // Compute next run for each schedule
+  const schedulesWithNextRun = useMemo<ScheduleWithNextRun[]>(() => {
+    return schedules.map((schedule) => {
+      // Paused or deleted schedules have no next run
+      if (schedule.status !== 'active') {
+        return {
+          ...schedule,
+          nextRun: null,
+        };
+      }
+      const nextRuns = getNextRunTimes(schedule.cronExpression, schedule.timezone ?? 'UTC', 1);
+      return {
+        ...schedule,
+        nextRun: nextRuns[0] ?? null,
+      };
+    });
+  }, [schedules]);
+
+  const timezoneOptions = useMemo(() => {
+    const zones = new Set<string>();
+    schedulesWithNextRun.forEach((schedule) => {
+      zones.add(schedule.timezone ?? 'unknown');
+    });
+    return Array.from(zones).sort((a, b) => {
+      if (a === 'unknown') return 1;
+      if (b === 'unknown') return -1;
+      return a.localeCompare(b);
+    });
+  }, [schedulesWithNextRun]);
+
+  const agentOptions = useMemo(() => {
+    const map = new Map<string, string>();
+    schedulesWithNextRun.forEach((schedule) => {
+      const value = schedule.agentId || schedule.agentTitle || 'unknown';
+      const label = schedule.agentTitle || schedule.agentId || t('scheduling.filters.agent.unknown');
+      map.set(value, label);
+    });
+    return Array.from(map.entries())
+      .map(([value, label]) => ({ value, label }))
+      .sort((a, b) => {
+        if (a.value === 'unknown') return 1;
+        if (b.value === 'unknown') return -1;
+        return a.label.localeCompare(b.label);
+      });
+  }, [schedulesWithNextRun, t]);
+
+  const filteredSchedules = useMemo(() => {
+    let result = schedulesWithNextRun;
+    const normalizedSearch = searchTerm.trim().toLowerCase();
+
+    if (normalizedSearch) {
+      result = result.filter((schedule) => {
+        const nameMatch = schedule.label?.toLowerCase().includes(normalizedSearch) ?? false;
+        const agentValue = schedule.agentTitle || schedule.agentId || '';
+        const agentMatch = agentValue.toLowerCase().includes(normalizedSearch);
+        return nameMatch || agentMatch;
+      });
+    }
+
+    if (statusFilter !== 'all') {
+      result = result.filter((schedule) => getDerivedStatus(schedule) === statusFilter);
+    }
+
+    if (timezoneFilter !== 'all') {
+      result = result.filter((schedule) => (schedule.timezone ?? 'unknown') === timezoneFilter);
+    }
+
+    if (agentFilter !== 'all') {
+      result = result.filter((schedule) => {
+        const value = schedule.agentId || schedule.agentTitle || 'unknown';
+        return value === agentFilter;
+      });
+    }
+
+    return result;
+  }, [schedulesWithNextRun, searchTerm, statusFilter, timezoneFilter, agentFilter]);
+
+  const sortedSchedules = useMemo(() => {
+    if (!sortField) return filteredSchedules;
+
+    const direction = sortDirection === 'asc' ? 1 : -1;
+
+    const getSortMeta = (schedule: ScheduleWithNextRun) => {
+      switch (sortField) {
+        case 'name':
+          return { value: (schedule.label || '').toLowerCase(), missing: !schedule.label, type: 'string' as const };
+        case 'agent': {
+          const agentValue = schedule.agentTitle || schedule.agentId || '';
+          return { value: agentValue.toLowerCase(), missing: !agentValue, type: 'string' as const };
+        }
+        case 'schedule':
+          return {
+            value: (schedule.cronExpression || '').toLowerCase(),
+            missing: !schedule.cronExpression,
+            type: 'string' as const,
+          };
+        case 'nextRun':
+          return {
+            value: schedule.nextRun?.getTime() ?? 0,
+            missing: !schedule.nextRun,
+            type: 'number' as const,
+          };
+        case 'lastRun':
+          return {
+            value: schedule.lastRunEpoch ?? 0,
+            missing: !schedule.lastRunEpoch,
+            type: 'number' as const,
+          };
+        case 'status':
+          return {
+            value: getDerivedStatus(schedule).toLowerCase(),
+            missing: !getDerivedStatus(schedule),
+            type: 'string' as const,
+          };
+        case 'timezone':
+          return {
+            value: (schedule.timezone || '').toLowerCase(),
+            missing: !schedule.timezone,
+            type: 'string' as const,
+          };
+        default:
+          return { value: '', missing: true, type: 'string' as const };
+      }
+    };
+
+    return [...filteredSchedules].sort((a, b) => {
+      const aMeta = getSortMeta(a);
+      const bMeta = getSortMeta(b);
+
+      if (aMeta.missing && bMeta.missing) return 0;
+      if (aMeta.missing) return 1;
+      if (bMeta.missing) return -1;
+
+      if (aMeta.type === 'number' && bMeta.type === 'number') {
+        return (aMeta.value - bMeta.value) * direction;
+      }
+
+      return String(aMeta.value).localeCompare(String(bMeta.value)) * direction;
+    });
+  }, [filteredSchedules, sortDirection, sortField]);
+
+  const handleSort = useCallback((field: SortField) => {
+    setSortField((current) => {
+      if (current === field) {
+        setSortDirection((prev) => (prev === 'asc' ? 'desc' : 'asc'));
+        return current;
+      }
+      setSortDirection('asc');
+      return field;
+    });
+  }, []);
+
+  // Build a minimal agent object for the edit modal
+  const editingAgent = useMemo(() => {
+    if (!editingSchedule) return null;
+    return {
+      agentId: editingSchedule.agentId,
+      title: editingSchedule.agentTitle || editingSchedule.agentId,
+    };
+  }, [editingSchedule]);
+
+  return (
+    <Container fluid>
+      <PageHeader title={t('scheduling.page.title')} subtitle={t('scheduling.page.subtitle')} />
+
+      {error && (
+        <Alert variant="danger" onClose={() => setError(null)} dismissible className="mb-4">
+          {error}
+        </Alert>
+      )}
+
+      <Row>
+        <Col>
+          <StickyToolbar>
+            <Row className="g-3 align-items-end px-3">
+              <Col md={4}>
+                <Form.Group>
+                  <Form.Label>{t('scheduling.filters.search.label')}</Form.Label>
+                  <div className="position-relative">
+                    <Form.Control
+                      type="text"
+                      placeholder={t('scheduling.filters.search.placeholder')}
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                    />
+                    <i
+                      className="bi bi-search position-absolute"
+                      style={{ right: '10px', top: '10px', color: '#6c757d' }}
+                    ></i>
+                  </div>
+                </Form.Group>
+              </Col>
+              <Col md={2}>
+                <Form.Group>
+                  <Form.Label>{t('scheduling.filters.agent.label')}</Form.Label>
+                  <Form.Select
+                    value={agentFilter}
+                    onChange={(e) => setAgentFilter(e.target.value)}
+                    aria-label={t('scheduling.filters.agent.aria')}
+                  >
+                    <option value="all">{t('scheduling.filters.agent.all')}</option>
+                    {agentOptions.map((agent) => (
+                      <option key={agent.value} value={agent.value}>
+                        {agent.label}
+                      </option>
+                    ))}
+                  </Form.Select>
+                </Form.Group>
+              </Col>
+              <Col md={2}>
+                <Form.Group>
+                  <Form.Label>{t('scheduling.filters.status.label')}</Form.Label>
+                  <Form.Select
+                    value={statusFilter}
+                    onChange={(e) => setStatusFilter(e.target.value)}
+                    aria-label={t('scheduling.filters.status.aria')}
+                  >
+                    <option value="all">{t('scheduling.filters.status.all')}</option>
+                    <option value="active">{t('scheduling.status.active')}</option>
+                    <option value="inactive">{t('scheduling.status.inactive')}</option>
+                    <option value="paused">{t('scheduling.status.paused')}</option>
+                    <option value="deleted">{t('scheduling.status.deleted')}</option>
+                  </Form.Select>
+                </Form.Group>
+              </Col>
+              <Col md={2}>
+                <Form.Group>
+                  <Form.Label>{t('scheduling.filters.timezone.label')}</Form.Label>
+                  <Form.Select
+                    value={timezoneFilter}
+                    onChange={(e) => setTimezoneFilter(e.target.value)}
+                    aria-label={t('scheduling.filters.timezone.aria')}
+                  >
+                    <option value="all">{t('scheduling.filters.timezone.all')}</option>
+                    {timezoneOptions.map((timezone) => (
+                      <option key={timezone} value={timezone}>
+                        {timezone === 'unknown' ? t('scheduling.filters.timezone.unknown') : timezone}
+                      </option>
+                    ))}
+                  </Form.Select>
+                </Form.Group>
+              </Col>
+              <Col md={2} className="d-flex justify-content-md-end">
+                <ButtonGroup size="sm">
+                  <Button
+                    variant="outline-secondary"
+                    onClick={() => setShowDebugIds((current) => !current)}
+                    aria-pressed={showDebugIds}
+                  >
+                    <i className="bi bi-bug me-2"></i>
+                    {showDebugIds ? t('scheduling.debug.hideIds') : t('scheduling.debug.showIds')}
+                  </Button>
+                  <Button variant="outline-primary" onClick={loadSchedules} disabled={loading}>
+                    {loading ? <Spinner animation="border" size="sm" /> : <i className="bi bi-arrow-clockwise"></i>}
+                    <span className="ms-2">{t('scheduling.actions.refresh')}</span>
+                  </Button>
+                </ButtonGroup>
+              </Col>
+            </Row>
+          </StickyToolbar>
+          <Card>
+            <Card.Body className="p-0">
+              {loading && schedules.length === 0 ? (
+                <div className="text-center py-5">
+                  <Spinner animation="border" />
+                  <p className="mt-3 text-muted">{t('scheduling.loading')}</p>
+                </div>
+              ) : schedules.length === 0 ? (
+                <div className="text-center py-5">
+                  <i className="bi bi-calendar-x fs-1 text-muted"></i>
+                  <p className="mt-3 text-muted">{t('scheduling.page.empty')}</p>
+                </div>
+              ) : filteredSchedules.length === 0 ? (
+                <div className="text-center py-5">
+                  <i className="bi bi-funnel fs-1 text-muted"></i>
+                  <p className="mt-3 text-muted">{t('scheduling.page.emptyFiltered')}</p>
+                </div>
+              ) : (
+                <div className="table-responsive file-table-container scrollable">
+                  <Table hover className="mb-0 file-table auto-layout">
+                    <thead className="sticky-table-header numa-table-header">
+                      <tr>
+                        <th onClick={() => handleSort('name')} className="sortable-header">
+                          {t('scheduling.page.columns.name')}{' '}
+                          {sortField === 'name' && (
+                            <i className={`bi bi-caret-${sortDirection === 'asc' ? 'up' : 'down'}-fill ms-1`}></i>
+                          )}
+                        </th>
+                        <th onClick={() => handleSort('agent')} className="sortable-header">
+                          {t('scheduling.page.columns.agent')}{' '}
+                          {sortField === 'agent' && (
+                            <i className={`bi bi-caret-${sortDirection === 'asc' ? 'up' : 'down'}-fill ms-1`}></i>
+                          )}
+                        </th>
+                        <th onClick={() => handleSort('schedule')} className="sortable-header">
+                          {t('scheduling.page.columns.schedule')}{' '}
+                          {sortField === 'schedule' && (
+                            <i className={`bi bi-caret-${sortDirection === 'asc' ? 'up' : 'down'}-fill ms-1`}></i>
+                          )}
+                        </th>
+                        <th onClick={() => handleSort('nextRun')} className="sortable-header">
+                          {t('scheduling.page.columns.nextRun')}{' '}
+                          {sortField === 'nextRun' && (
+                            <i className={`bi bi-caret-${sortDirection === 'asc' ? 'up' : 'down'}-fill ms-1`}></i>
+                          )}
+                        </th>
+                        <th onClick={() => handleSort('lastRun')} className="sortable-header">
+                          {t('scheduling.page.columns.lastRun')}{' '}
+                          {sortField === 'lastRun' && (
+                            <i className={`bi bi-caret-${sortDirection === 'asc' ? 'up' : 'down'}-fill ms-1`}></i>
+                          )}
+                        </th>
+                        <th onClick={() => handleSort('status')} className="sortable-header">
+                          {t('scheduling.page.columns.status')}{' '}
+                          {sortField === 'status' && (
+                            <i className={`bi bi-caret-${sortDirection === 'asc' ? 'up' : 'down'}-fill ms-1`}></i>
+                          )}
+                        </th>
+                        <th onClick={() => handleSort('timezone')} className="sortable-header">
+                          {t('scheduling.page.columns.timezone')}{' '}
+                          {sortField === 'timezone' && (
+                            <i className={`bi bi-caret-${sortDirection === 'asc' ? 'up' : 'down'}-fill ms-1`}></i>
+                          )}
+                        </th>
+                        <th style={{ width: '120px' }}>{t('scheduling.page.columns.actions')}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {sortedSchedules.map((schedule) => {
+                        const derivedStatus = getDerivedStatus(schedule);
+                        return (
+                          <tr
+                            key={schedule.scheduleId}
+                            onClick={() => handleScheduleClick(schedule)}
+                            style={{ cursor: 'pointer' }}
+                          >
+                            <td>
+                              <strong>{schedule.label || t('scheduling.labels.unnamed')}</strong>
+                              {showDebugIds && (
+                                <>
+                                  <br />
+                                  <small className="text-muted">{schedule.scheduleId}</small>
+                                </>
+                              )}
+                            </td>
+                            <td>{schedule.agentTitle || schedule.agentId || '-'}</td>
+                            <td>
+                              <span>{describeCronExpression(schedule.cronExpression)}</span>
+                              {showDebugIds && (
+                                <>
+                                  <br />
+                                  <small className="text-muted font-monospace">{schedule.cronExpression}</small>
+                                </>
+                              )}
+                            </td>
+                            <td>
+                              {formatDate(
+                                schedule.nextRun,
+                                { notAvailable: t('scheduling.labels.notAvailable') },
+                                schedule.timezone,
+                              )}
+                            </td>
+                            <td>
+                              {schedule.lastRunEpoch
+                                ? formatDate(
+                                    new Date(schedule.lastRunEpoch),
+                                    { notAvailable: t('scheduling.labels.notAvailable') },
+                                    schedule.timezone,
+                                  )
+                                : t('scheduling.labels.never')}
+                              {schedule.lastStatus && (
+                                <>
+                                  <br />
+                                  <small className="text-muted">{schedule.lastStatus}</small>
+                                </>
+                              )}
+                            </td>
+                            <td>
+                              <Badge bg={getStatusBadgeVariant(derivedStatus)}>
+                                {t(`scheduling.status.${derivedStatus}`, derivedStatus)}
+                              </Badge>
+                            </td>
+                            <td>
+                              <small>{schedule.timezone}</small>
+                            </td>
+                            <td>
+                              <ButtonGroup size="sm">
+                                <Button
+                                  variant="outline-secondary"
+                                  onClick={(e) => handleEditSchedule(e, schedule)}
+                                  title={t('scheduling.actions.edit')}
+                                  disabled={actionLoading === schedule.scheduleId}
+                                >
+                                  <i className="bi bi-pencil"></i>
+                                </Button>
+                                <Button
+                                  variant={schedule.status === 'active' ? 'outline-warning' : 'outline-success'}
+                                  onClick={(e) => handleTogglePause(e, schedule)}
+                                  title={
+                                    schedule.status === 'active'
+                                      ? t('scheduling.actions.pause')
+                                      : t('scheduling.actions.resume')
+                                  }
+                                  disabled={actionLoading === schedule.scheduleId}
+                                >
+                                  {actionLoading === schedule.scheduleId ? (
+                                    <Spinner animation="border" size="sm" />
+                                  ) : (
+                                    <i
+                                      className={schedule.status === 'active' ? 'bi bi-pause-fill' : 'bi bi-play-fill'}
+                                    ></i>
+                                  )}
+                                </Button>
+                                <Button
+                                  variant="outline-danger"
+                                  onClick={(e) => handleDeleteClick(e, schedule)}
+                                  title={t('scheduling.actions.delete')}
+                                  disabled={actionLoading === schedule.scheduleId}
+                                >
+                                  <i className="bi bi-trash"></i>
+                                </Button>
+                              </ButtonGroup>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </Table>
+                </div>
+              )}
+            </Card.Body>
+          </Card>
+        </Col>
+      </Row>
+
+      {editingAgent && (
+        <AgentScheduleModal
+          show={showEditModal}
+          onHide={handleCloseEditModal}
+          agent={editingAgent}
+          editingSchedule={editingSchedule}
+          onCreate={handleUpdateSchedule}
+        />
+      )}
+
+      {/* Delete Confirmation Modal */}
+      <Modal show={showDeleteConfirm} onHide={handleCancelDelete} centered>
+        <Modal.Header closeButton>
+          <Modal.Title className="text-danger">
+            <i className="bi bi-exclamation-triangle-fill me-2"></i>
+            {t('scheduling.delete.title')}
+          </Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          <p>
+            {t('scheduling.delete.confirmPrefix')}{' '}
+            <strong>{scheduleToDelete?.label || t('scheduling.labels.unnamed')}</strong>
+            {t('scheduling.delete.confirmSuffix')}
+          </p>
+          <Alert variant="warning" className="mb-0">
+            <i className="bi bi-exclamation-triangle me-2"></i>
+            <strong>{t('scheduling.delete.warningTitle')}</strong> {t('scheduling.delete.warningBody')}
+          </Alert>
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="secondary" onClick={handleCancelDelete} disabled={actionLoading !== null}>
+            {t('scheduling.actions.cancel')}
+          </Button>
+          <Button variant="danger" onClick={handleConfirmDelete} disabled={actionLoading !== null}>
+            {actionLoading ? (
+              <>
+                <Spinner animation="border" size="sm" className="me-2" />
+                {t('scheduling.delete.deleting')}
+              </>
+            ) : (
+              <>
+                <i className="bi bi-trash me-2"></i>
+                {t('scheduling.delete.confirmButton')}
+              </>
+            )}
+          </Button>
+        </Modal.Footer>
+      </Modal>
+    </Container>
+  );
+};
+
+export default SchedulingPage;

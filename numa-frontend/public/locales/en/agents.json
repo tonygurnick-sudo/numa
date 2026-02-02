@@ -44,6 +44,11 @@
       "export": "Export JSON",
       "exportAria": "Export agent as JSON",
       "delete": "Delete"
+    },
+    "schedules": {
+      "active": "Has active schedules",
+      "manage": "Manage schedules",
+      "create": "Schedule runs"
     }
   },
   "iconPicker": {
@@ -317,6 +322,7 @@
     "chatVersion": {
       "title": "Choose Chat Experience",
       "prompt": "Which chat experience would you like to use with <strong>{{agentTitle}}</strong>?",
+      "agentFallback": "this agent",
       "v1": {
         "title": "Numa Chat",
         "description": "Original chat experience"
@@ -324,6 +330,439 @@
       "v2": {
         "title": "Numa Chat V2",
         "description": "Enhanced experience with file management"
+      }
+    }
+  },
+  "scheduling": {
+    "labels": {
+      "agentFallback": "Agent",
+      "unnamed": "Unnamed Schedule",
+      "never": "Never",
+      "invalidDate": "Invalid date",
+      "notAvailable": "N/A",
+      "scheduledTask": "Scheduled Task",
+      "scheduledAgent": "Scheduled Agent"
+    },
+    "status": {
+      "active": "Active",
+      "inactive": "Inactive",
+      "paused": "Paused",
+      "deleted": "Deleted"
+    },
+    "actions": {
+      "cancel": "Cancel",
+      "close": "Close",
+      "create": "Create New Schedule",
+      "edit": "Edit",
+      "pause": "Pause",
+      "resume": "Resume",
+      "delete": "Delete",
+      "refresh": "Refresh",
+      "runNow": "Run Now",
+      "running": "Running...",
+      "runAgent": "Run Agent",
+      "viewLastRun": "View Last Run"
+    },
+    "debug": {
+      "showIds": "Show IDs",
+      "hideIds": "Hide IDs"
+    },
+    "filters": {
+      "search": {
+        "label": "Search",
+        "placeholder": "Search by schedule name or agent"
+      },
+      "agent": {
+        "label": "Agent",
+        "all": "All agents",
+        "unknown": "Unknown agent",
+        "aria": "Filter schedules by agent"
+      },
+      "status": {
+        "label": "Status",
+        "all": "All statuses",
+        "aria": "Filter schedules by status"
+      },
+      "timezone": {
+        "label": "Timezone",
+        "all": "All timezones",
+        "unknown": "Unknown timezone",
+        "aria": "Filter schedules by timezone"
+      }
+    },
+    "errors": {
+      "load": "Failed to load schedules",
+      "delete": "Failed to delete schedule",
+      "update": "Failed to update schedule",
+      "updateStatus": "Failed to update schedule status",
+      "create": "Failed to create schedule",
+      "run": "Failed to run schedule",
+      "notFound": "Schedule not found",
+      "outputsBucketMissing": "Outputs bucket or region is not configured",
+      "credentialsMissing": "AWS credentials are not available",
+      "loadRunLog": "Failed to load run log"
+    },
+    "confirmDelete": "Delete schedule \"{{label}}\"?",
+    "modal": {
+      "title": {
+        "edit": "Edit Schedule - {{agent}}",
+        "create": "Schedule Job"
+      },
+      "submit": {
+        "update": "Update Schedule",
+        "create": "Create Schedule"
+      },
+      "submitting": {
+        "update": "Updating…",
+        "create": "Scheduling…"
+      }
+    },
+    "fields": {
+      "taskName": {
+        "label": "Task name",
+        "placeholder": "Task name"
+      },
+      "agent": {
+        "label": "Agent",
+        "placeholder": "Select an agent"
+      },
+      "cronExpression": {
+        "label": "Cron expression",
+        "inlineLabel": "Cron expression:"
+      },
+      "instructions": {
+        "label": "Job instructions (optional)",
+        "placeholder": "Add any extra instructions for the agent (optional).",
+        "help": "Use this only if you want to add extra guidance beyond the conversation context."
+      },
+      "timezone": {
+        "label": "Timezone"
+      },
+      "timeOfDay": "Time of day",
+      "runDate": "Run date",
+      "runTime": "Run time",
+      "every": "Every",
+      "hourRange": {
+        "min": "1h",
+        "max": "24h"
+      },
+      "minuteRange": {
+        "min": "5m",
+        "max": "60m"
+      },
+      "hourInterval": "{{interval}} hour(s)",
+      "minuteInterval": "{{interval}} minute(s)",
+      "startAt": "Start at",
+      "repeatEvery": "Repeat every",
+      "daysSuffix": "day(s)",
+      "dailyHelp": "Use this for every other day or every N days schedules.",
+      "selectDays": "Select days",
+      "selectDaysHelp": "Pick one or more days for the agent to run.",
+      "weekOfMonth": "Week of the month (optional)",
+      "weekOfMonthHelp": "Select week numbers (e.g., 1st & 3rd). Leave blank for every week.",
+      "monthsSuffix": "month(s)",
+      "scheduleStyle": "Schedule style",
+      "scheduleStyleDate": "On date",
+      "scheduleStyleWeekday": "On weekday",
+      "dayOfMonth": "Day of month",
+      "week": "Week",
+      "weekday": "Weekday",
+      "customCron": {
+        "label": "Custom cron expression",
+        "placeholder": "cron(0 13 * * ? *)",
+        "help": "Use AWS cron format, e.g. cron(0 13 * * ? *) for 1PM UTC daily."
+      }
+    },
+    "frequency": {
+      "once": {
+        "label": "One time",
+        "description": "Run once at a specific date and time"
+      },
+      "fiveMinute": {
+        "label": "Every 5 minutes",
+        "description": "Run every 5 minutes"
+      },
+      "hourly": {
+        "label": "Hourly",
+        "description": "Repeat every few hours"
+      },
+      "daily": {
+        "label": "Daily",
+        "description": "Every day at a set time"
+      },
+      "weekdays": {
+        "label": "Weekdays",
+        "description": "Monday through Friday"
+      },
+      "weekly": {
+        "label": "Weekly",
+        "description": "Pick one or more days"
+      },
+      "monthly": {
+        "label": "Monthly",
+        "description": "Specific day each month"
+      },
+      "custom": {
+        "label": "Advanced cron",
+        "description": "Use a custom expression"
+      }
+    },
+    "days": {
+      "monday": { "short": "Mon", "full": "Monday" },
+      "tuesday": { "short": "Tue", "full": "Tuesday" },
+      "wednesday": { "short": "Wed", "full": "Wednesday" },
+      "thursday": { "short": "Thu", "full": "Thursday" },
+      "friday": { "short": "Fri", "full": "Friday" },
+      "saturday": { "short": "Sat", "full": "Saturday" },
+      "sunday": { "short": "Sun", "full": "Sunday" }
+    },
+    "weekNumbers": {
+      "first": "1st",
+      "second": "2nd",
+      "third": "3rd",
+      "fourth": "4th",
+      "fifth": "5th",
+      "last": "Last"
+    },
+    "summary": {
+      "label": "Schedule summary",
+      "once": "Runs once on {{date}} at {{time}}",
+      "fiveMinute": "Every {{interval}} minutes starting at {{time}}",
+      "hourly": "Every {{interval}} hour(s) starting at {{time}}",
+      "dailyEvery": "Every {{interval}} days at {{time}}",
+      "daily": "Daily at {{time}}",
+      "weekdays": "Weekdays at {{time}}",
+      "weeklySelectPrompt": "Select one or more days to run",
+      "weeklyWeekText": " ({{weeks}})",
+      "weekly": "{{days}}{{weekText}} at {{time}}",
+      "monthlyDayOfWeek": "{{weekLabel}} {{weekday}} every {{interval}} month(s) at {{time}}",
+      "monthlyDayOfMonth": "Day {{day}} every {{interval}} month(s) at {{time}}",
+      "custom": "Using a custom cron expression"
+    },
+    "header": {
+      "title": "Schedule cadence",
+      "timezone": "Times are shown in {{timezone}}",
+      "autoUpdate": "Cron updates automatically as you change options"
+    },
+    "timezones": {
+      "utc": "UTC",
+      "americaNewYork": "Eastern Time (America/New_York)",
+      "americaChicago": "Central Time (America/Chicago)",
+      "americaDenver": "Mountain Time (America/Denver)",
+      "americaLosAngeles": "Pacific Time (America/Los_Angeles)",
+      "europeLondon": "London (Europe/London)",
+      "europeParis": "Paris (Europe/Paris)",
+      "asiaTokyo": "Tokyo (Asia/Tokyo)",
+      "australiaSydney": "Sydney (Australia/Sydney)",
+      "pacificAuckland": "Auckland (Pacific/Auckland)",
+      "americaNewYorkShort": "Eastern Time",
+      "americaChicagoShort": "Central Time",
+      "americaDenverShort": "Mountain Time",
+      "americaLosAngelesShort": "Pacific Time",
+      "europeLondonShort": "London",
+      "europeParisShort": "Paris",
+      "asiaTokyoShort": "Tokyo"
+    },
+    "list": {
+      "title": "Manage Schedules - {{agent}}",
+      "emptyTitle": "No active schedules",
+      "emptyBody": "This agent doesn't have any scheduled runs yet.",
+      "columns": {
+        "schedule": "Schedule",
+        "prompt": "Prompt",
+        "frequency": "Frequency",
+        "status": "Status",
+        "lastRun": "Last Run",
+        "actions": "Actions"
+      },
+      "createdAt": "Created {{timestamp}}"
+    },
+    "loading": "Loading schedules...",
+    "page": {
+      "title": "Scheduling",
+      "subtitle": "View and manage all scheduled jobs and automated tasks",
+      "table": {
+        "title": "Scheduled Jobs"
+      },
+      "empty": "No scheduled jobs found",
+      "emptyFiltered": "No schedules match your search or filters.",
+      "columns": {
+        "name": "Name",
+        "agent": "Agent",
+        "schedule": "Schedule",
+        "nextRun": "Next Run",
+        "lastRun": "Last Run",
+        "status": "Status",
+        "timezone": "Timezone",
+        "actions": "Actions"
+      }
+    },
+    "delete": {
+      "title": "Delete Schedule",
+      "confirmPrefix": "Are you sure you want to delete the schedule",
+      "confirmSuffix": "?",
+      "warningTitle": "Warning:",
+      "warningBody": "This action cannot be undone. The schedule will be permanently deleted.",
+      "deleting": "Deleting...",
+      "confirmButton": "Delete Schedule"
+    },
+    "details": {
+      "loading": "Loading schedule...",
+      "backToScheduling": "Back to Scheduling",
+      "backToSchedules": "Back to Schedules",
+      "cardTitle": "Schedule Details",
+      "fields": {
+        "scheduleId": "Schedule ID",
+        "agent": "Agent",
+        "frequency": "Frequency",
+        "timezone": "Timezone",
+        "nextRun": "Next Run",
+        "lastRun": "Last Run",
+        "created": "Created",
+        "updated": "Updated",
+        "id": "ID",
+        "conversation": "Conversation"
+      },
+      "instructionsTitle": "Job Instructions",
+      "instructionsEmpty": "No instructions specified",
+      "promptTitle": "Scheduled Prompt",
+      "promptEmpty": "No prompt text specified",
+      "timingTitle": "Timing Information",
+      "eventTimeTitle": "Event Time",
+      "eventTime": {
+        "start": "Start",
+        "end": "End"
+      },
+      "latestRunTitle": "Latest Run Output",
+      "latestRunLoading": "Loading run output...",
+      "latestRunProcessing": "Run still processing.",
+      "latestRunEmpty": "No run output loaded yet.",
+      "latestRunNoContent": "No content returned.",
+      "latestRunLogKey": "Log key: {{key}}",
+      "frequencyMeta": "{{timezone}} • {{cron}}",
+      "frequencyTitle": "Schedule Frequency",
+      "runHistory": {
+        "title": "Run History",
+        "loading": "Loading run history...",
+        "empty": "No runs yet",
+        "columns": {
+          "runId": "Run ID",
+          "started": "Started",
+          "completed": "Completed",
+          "status": "Status"
+        },
+        "placeholder": "-",
+        "status": {
+          "error": "Error",
+          "failed": "Failed",
+          "completed": "Completed"
+        },
+        "loadingDetails": "Loading run details...",
+        "noContent": "No content",
+        "noMessages": "No messages in this run",
+        "clickToLoad": "Click to load run details"
+      }
+    },
+    "calendar": {
+      "views": {
+        "month": "Month",
+        "week": "Week",
+        "day": "Day",
+        "agenda": "Agenda"
+      },
+      "navigation": {
+        "previous": "Previous",
+        "next": "Next",
+        "today": "Today"
+      },
+      "loading": "Loading calendar...",
+      "tooltip": "{{title}}\nStatus: {{status}}\nSchedule: {{schedule}}\n\nClick to edit • Right-click for options",
+      "tooltipShort": "{{title}}\nStatus: {{status}}\nSchedule: {{schedule}}",
+      "eventCount_one": "{{count}} event",
+      "eventCount_other": "{{count}} events",
+      "scrollHint": "Scroll for more months",
+      "scrollMore": "Scroll for more {{unit}}",
+      "units": {
+        "months": "months",
+        "weeks": "weeks",
+        "days": "days",
+        "periods": "periods",
+        "events": "events"
+      },
+      "periodHeader": {
+        "weekOf": "Week of"
+      }
+    },
+    "scheduleModal": {
+      "title": {
+        "edit": "Edit Schedule",
+        "create": "Create New Schedule"
+      },
+      "submitting": {
+        "update": "Updating...",
+        "create": "Creating..."
+      },
+      "eventType": {
+        "label": "Event Type",
+        "agent": "Agent",
+        "application": "Application",
+        "dataSync": "Data Sync"
+      },
+      "fields": {
+        "label": "Schedule Label *",
+        "labelPlaceholder": "Enter a descriptive label",
+        "timezone": "Timezone *",
+        "frequency": "Schedule Frequency *",
+        "frequencyPlaceholder": "Select a frequency...",
+        "cronPlaceholder": "Or enter custom cron expression (AWS EventBridge format)",
+        "cronHelp": "Use AWS EventBridge cron format: cron(minute hour day-of-month month day-of-week year)",
+        "agentId": "Agent ID *",
+        "agentIdPlaceholder": "Enter agent ID",
+        "agentTitle": "Agent Title",
+        "agentTitlePlaceholder": "Enter agent display name",
+        "conversationId": "Conversation ID *",
+        "conversationIdPlaceholder": "Enter conversation ID",
+        "conversationHelp": "The conversation where the scheduled prompt will be sent",
+        "promptText": "Prompt Text *",
+        "promptTextPlaceholder": "Enter the prompt that will be sent to the agent",
+        "application": "Application *",
+        "applicationPlaceholder": "Select an application...",
+        "sourceType": "Source Type *"
+      },
+      "applicationNotice": "Application scheduling will be available in a future update.",
+      "dataSyncNotice": "Data synchronization scheduling will be available in a future update.",
+      "sourceTypes": {
+        "knowledgeBase": "Knowledge Base Refresh",
+        "s3": "S3 Data Sync",
+        "api": "API Data Sync"
+      },
+      "commonCron": {
+        "hourly": "Every hour",
+        "dailyMorning": "Daily at 9:00 AM",
+        "dailyEvening": "Daily at 6:00 PM",
+        "weeklyMonday": "Weekly on Monday at 9:00 AM",
+        "weeklyFriday": "Weekly on Friday at 5:00 PM",
+        "monthlyFirst": "Monthly on the 1st at 9:00 AM"
+      },
+      "apps": {
+        "documentSummariser": "Document Summariser",
+        "policyBuilder": "Policy Builder",
+        "candidateScreening": "Candidate Screening",
+        "financialAnalysis": "Financial Analysis"
+      },
+      "validation": {
+        "label": "Schedule label is required",
+        "cron": "Cron expression is required",
+        "timezone": "Timezone is required",
+        "agentId": "Agent ID is required",
+        "promptText": "Prompt text is required",
+        "conversationId": "Conversation ID is required",
+        "appId": "Application ID is required",
+        "sourceType": "Source type is required"
+      },
+      "errors": {
+        "editNotImplemented": "Schedule editing not yet implemented",
+        "save": "Failed to save schedule"
       }
     }
   }

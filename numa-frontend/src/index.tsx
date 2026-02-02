@@ -43,7 +43,10 @@ try {
     () => {
       try {
         // Non-blocking, minimal UX: ask user to reload. For chat-heavy pages, change to show a banner.
-        if (confirm(i18n.t('common:version.reloadPrompt'))) {
+        const prompt = i18n.t('common:version.reloadPrompt', {
+          defaultValue: 'A new version of Numa is available. Reload to update?',
+        });
+        if (confirm(prompt)) {
           window.location.reload();
         }
       } catch {

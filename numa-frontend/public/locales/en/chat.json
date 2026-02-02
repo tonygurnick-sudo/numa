@@ -84,6 +84,19 @@
       "notNow": "Not now"
     }
   },
+  "schedule": {
+    "actions": {
+      "schedule": "Schedule"
+    },
+    "success": {
+      "created": "Scheduled run created successfully."
+    },
+    "errors": {
+      "noAgent": "Select an agent before scheduling.",
+      "noConversation": "Start a conversation with the agent before scheduling.",
+      "missingContext": "Missing schedule context"
+    }
+  },
   "systemMessages": {
     "backupModel": "Switching to backup model due to high demand. Please try your request again.",
     "agentError": "Agent error: {{message}}",

@@ -12,9 +12,9 @@
     "typescript": "^5.8.3"
   },
   "scripts": {
-    "build": "tsc",
+    "build": "node ../../node_modules/typescript/bin/tsc",
     "lint": "eslint && tsc --noEmit",
-    "test": "mkdir -p test-reports; tsx --test --experimental-test-coverage --test-reporter=spec --test-reporter-destination=stdout --test-reporter=junit --test-reporter-destination=test-reports/test-report.xml"
+    "test": "mkdir -p test-reports; node ../../node_modules/tsx/dist/cli.mjs --test --experimental-test-coverage --test-reporter=spec --test-reporter-destination=stdout --test-reporter=junit --test-reporter-destination=test-reports/test-report.xml"
   },
   "dependencies": {
     "@aws-sdk/client-dynamodb": "^3.799.0",
