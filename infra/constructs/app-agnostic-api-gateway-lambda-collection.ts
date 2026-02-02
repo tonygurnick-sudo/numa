@@ -1,4 +1,8 @@
 import { CloudwatchLogGroup } from '@cdktf/provider-aws/lib/cloudwatch-log-group';
+import { DataAwsIamPolicyDocument } from '@cdktf/provider-aws/lib/data-aws-iam-policy-document';
+import { IamRole } from '@cdktf/provider-aws/lib/iam-role';
+import { IamRolePolicy } from '@cdktf/provider-aws/lib/iam-role-policy';
+import { SchedulerScheduleGroup } from '@cdktf/provider-aws/lib/scheduler-schedule-group';
 import { ServerlessapplicationrepositoryCloudformationStack } from '@cdktf/provider-aws/lib/serverlessapplicationrepository-cloudformation-stack';
 import { Construct } from 'constructs';
 import { ApiGatewayLambdaCollection, ApiGatewayLambdaCollectionProps } from './api-gateway-lambda-collection';
@@ -10,6 +14,7 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
   // Expose shared extract-content Lambda for reuse by Step Functions
   public readonly extractContentLambda: import('@cdktf/provider-aws/lib/lambda-function').LambdaFunction;
   public readonly agentsLambda: import('@cdktf/provider-aws/lib/lambda-function').LambdaFunction;
+  public readonly agentScheduleRunnerLambda: import('@cdktf/provider-aws/lib/lambda-function').LambdaFunction;
 
   constructor(scope: Construct, name: string, props: AppAgnosticApiGatewayLambdaCollectionProps) {
     super(scope, name, props);
@@ -602,6 +607,290 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
       ],
     });
 
+    // Runner Lambda handles EventBridge + manual executions
+    this.agentScheduleRunnerLambda = this.addLambdaFunction(this, 'agent-schedule-runner', {
+      addAuthorizer: true,
+      lambdaDirectory: 'node/agent-schedule-runner',
+      runtime: 'nodejs22.x',
+      handler: 'index.handler',
+      timeout: 900,
+      route: {
+        verb: 'POST',
+        path: 'agent-schedules/run',
+      },
+      environment: {
+        CLIENT_NAME: props.clientName,
+        REGION: props.region,
+        CHAT_HISTORY_TABLE_NAME: props.chatHistoryTableName,
+        AGENT_SCHEDULES_TABLE_NAME: props.agentSchedulesTableName,
+        NOTIFICATIONS_TABLE_NAME: props.notificationsTableName,
+        CHAT_AGENT_FUNCTION_URL: props.chatAgentFunctionUrl,
+        CLOUDFRONT_SHARED_SECRET: props.cloudfrontSharedSecret,
+        SCHEDULE_RUNNER_SECRET: props.agentScheduleRunnerSecret,
+        OUTPUTS_BUCKET_NAME: props.outputsBucketName,
+      },
+      additionalPolicyStatements: [
+        {
+          effect: 'Allow',
+          actions: ['dynamodb:PutItem', 'dynamodb:UpdateItem', 'dynamodb:GetItem', 'dynamodb:Query'],
+          resources: [
+            `arn:aws:dynamodb:*:*:table/${props.chatHistoryTableName}`,
+            `arn:aws:dynamodb:*:*:table/${props.chatHistoryTableName}/index/*`,
+          ],
+        },
+        {
+          effect: 'Allow',
+          actions: ['dynamodb:PutItem', 'dynamodb:UpdateItem', 'dynamodb:GetItem', 'dynamodb:Query'],
+          resources: [
+            `arn:aws:dynamodb:*:*:table/${props.agentSchedulesTableName}`,
+            `arn:aws:dynamodb:*:*:table/${props.agentSchedulesTableName}/index/*`,
+          ],
+        },
+        {
+          effect: 'Allow',
+          actions: ['dynamodb:PutItem'],
+          resources: [`arn:aws:dynamodb:*:*:table/${props.notificationsTableName}`],
+        },
+        {
+          effect: 'Allow',
+          actions: ['s3:PutObject'],
+          resources: [`arn:aws:s3:::${props.outputsBucketName}/numa-chat/scheduled-runs/*`],
+        },
+        {
+          effect: 'Allow',
+          actions: ['lambda:InvokeFunction'],
+          resources: ['*'],
+        },
+      ],
+    });
+
+    const schedulerAssumePolicy = new DataAwsIamPolicyDocument(this, 'agent-schedule-runner-assume-policy', {
+      statement: [
+        {
+          effect: 'Allow',
+          actions: ['sts:AssumeRole'],
+          principals: [{ identifiers: ['scheduler.amazonaws.com'], type: 'Service' }],
+        },
+      ],
+    }).json;
+
+    const agentScheduleExecutionRole = new IamRole(this, 'agent-schedule-runner-role', {
+      name: `${props.clientName}-agent-schedule-runner`,
+      assumeRolePolicy: schedulerAssumePolicy,
+    });
+
+    new IamRolePolicy(this, 'agent-schedule-runner-role-policy', {
+      name: `${props.clientName}-agent-schedule-runner`,
+      role: agentScheduleExecutionRole.name,
+      policy: new DataAwsIamPolicyDocument(this, 'agent-schedule-runner-policy', {
+        statement: [
+          {
+            effect: 'Allow',
+            actions: ['lambda:InvokeFunction'],
+            resources: [this.agentScheduleRunnerLambda.arn],
+          },
+        ],
+      }).json,
+    });
+
+    // Create EventBridge Schedule Groups for different event types
+    new SchedulerScheduleGroup(this, 'agent-schedule-group', {
+      name: `${props.clientName}-agent-schedules`,
+    });
+
+    new SchedulerScheduleGroup(this, 'application-schedule-group', {
+      name: `${props.clientName}-application-schedules`,
+    });
+
+    new SchedulerScheduleGroup(this, 'data-sync-schedule-group', {
+      name: `${props.clientName}-datasync-schedules`,
+    });
+
+    const agentSchedulesEnv = {
+      CLIENT_NAME: props.clientName,
+      REGION: props.region,
+      AGENT_SCHEDULES_TABLE_NAME: props.agentSchedulesTableName,
+      AGENT_SCHEDULE_EXECUTION_ROLE_ARN: agentScheduleExecutionRole.arn,
+      AGENT_SCHEDULE_RUNNER_ARN: this.agentScheduleRunnerLambda.arn,
+    } as Record<string, string>;
+
+    const agentSchedulesPolicy = [
+      {
+        effect: 'Allow',
+        actions: [
+          'dynamodb:Query',
+          'dynamodb:GetItem',
+          'dynamodb:PutItem',
+          'dynamodb:UpdateItem',
+          'dynamodb:DeleteItem',
+        ],
+        resources: [
+          `arn:aws:dynamodb:*:*:table/${props.agentSchedulesTableName}`,
+          `arn:aws:dynamodb:*:*:table/${props.agentSchedulesTableName}/index/*`,
+        ],
+      },
+      {
+        effect: 'Allow',
+        actions: [
+          'scheduler:CreateSchedule',
+          'scheduler:DeleteSchedule',
+          'scheduler:GetSchedule',
+          'scheduler:UpdateSchedule',
+        ],
+        resources: ['*'],
+      },
+      {
+        effect: 'Allow',
+        actions: ['iam:PassRole'],
+        resources: [agentScheduleExecutionRole.arn],
+      },
+    ];
+
+    this.addLambdaFunction(this, 'agent-schedules', {
+      addAuthorizer: true,
+      lambdaDirectory: 'node/agent-schedules',
+      runtime: 'nodejs22.x',
+      handler: 'index.handler',
+      route: [
+        { verb: 'ANY', path: 'agent-schedules' },
+        { verb: 'ANY', path: 'agent-schedules/{proxy+}' },
+      ],
+      environment: agentSchedulesEnv,
+      additionalPolicyStatements: agentSchedulesPolicy,
+    });
+
+    // Notifications API - CRUD operations for notifications
+    this.addLambdaFunction(this, 'notifications-api', {
+      addAuthorizer: true,
+      lambdaDirectory: 'node/notifications-api',
+      runtime: 'nodejs22.x',
+      handler: 'index.handler',
+      route: [
+        { verb: 'ANY', path: 'notifications' },
+        { verb: 'ANY', path: 'notifications/{proxy+}' },
+      ],
+      environment: {
+        CLIENT_NAME: props.clientName,
+        REGION: props.region,
+        NOTIFICATIONS_TABLE_NAME: props.notificationsTableName,
+      },
+      additionalPolicyStatements: [
+        {
+          effect: 'Allow',
+          actions: ['dynamodb:Query', 'dynamodb:UpdateItem', 'dynamodb:DeleteItem'],
+          resources: [
+            `arn:aws:dynamodb:*:*:table/${props.notificationsTableName}`,
+            `arn:aws:dynamodb:*:*:table/${props.notificationsTableName}/index/*`,
+          ],
+        },
+      ],
+    });
+
+    // Notifications Stream - Server-sent events for real-time notifications
+    this.addLambdaFunction(this, 'notifications-stream', {
+      addAuthorizer: false, // Uses CloudFront secret + JWT validation
+      lambdaDirectory: 'node/notifications-stream',
+      runtime: 'nodejs22.x',
+      handler: 'index.handler',
+      route: [
+        { verb: 'GET', path: 'notifications/stream' },
+        { verb: 'GET', path: 'notifications/health' },
+      ],
+      environment: {
+        CLIENT_NAME: props.clientName,
+        REGION: props.region,
+        NOTIFICATIONS_TABLE_NAME: props.notificationsTableName,
+        CLOUDFRONT_SHARED_SECRET: props.cloudfrontSharedSecret,
+      },
+      additionalPolicyStatements: [
+        {
+          effect: 'Allow',
+          actions: ['dynamodb:Query'],
+          resources: [
+            `arn:aws:dynamodb:*:*:table/${props.notificationsTableName}`,
+            `arn:aws:dynamodb:*:*:table/${props.notificationsTableName}/index/*`,
+          ],
+        },
+      ],
+      timeout: 900, // 15 minutes for streaming
+    });
+
+    // Application Scheduler - handles scheduled application runs
+    this.addLambdaFunction(this, 'application-scheduler', {
+      addAuthorizer: false, // Invoked by EventBridge Scheduler only
+      lambdaDirectory: 'node/application-scheduler',
+      runtime: 'nodejs22.x',
+      handler: 'index.handler',
+      environment: {
+        CLIENT_NAME: props.clientName,
+        REGION: props.region,
+        AGENT_SCHEDULES_TABLE_NAME: props.agentSchedulesTableName,
+        SCHEDULE_RUNNER_SECRET: props.agentScheduleRunnerSecret || 'placeholder',
+        OUTPUTS_BUCKET_NAME: props.outputsBucketName,
+      },
+      additionalPolicyStatements: [
+        {
+          effect: 'Allow',
+          actions: ['dynamodb:Query', 'dynamodb:UpdateItem'],
+          resources: [
+            `arn:aws:dynamodb:*:*:table/${props.agentSchedulesTableName}`,
+            `arn:aws:dynamodb:*:*:table/${props.agentSchedulesTableName}/index/*`,
+          ],
+        },
+        {
+          effect: 'Allow',
+          actions: ['states:StartExecution', 'states:DescribeExecution'],
+          resources: ['*'], // Step Function ARNs vary by app
+        },
+        {
+          effect: 'Allow',
+          actions: ['s3:GetObject', 's3:PutObject'],
+          resources: [`arn:aws:s3:::${props.outputsBucketName}/*`],
+        },
+      ],
+    });
+
+    // Data Sync Scheduler - handles scheduled data synchronization
+    this.addLambdaFunction(this, 'data-sync-scheduler', {
+      addAuthorizer: false, // Invoked by EventBridge Scheduler only
+      lambdaDirectory: 'node/data-sync-scheduler',
+      runtime: 'nodejs22.x',
+      handler: 'index.handler',
+      environment: {
+        CLIENT_NAME: props.clientName,
+        REGION: props.region,
+        AGENT_SCHEDULES_TABLE_NAME: props.agentSchedulesTableName,
+        SCHEDULE_RUNNER_SECRET: props.agentScheduleRunnerSecret || 'placeholder',
+        DATA_BUCKET_NAME: props.dataBucketName,
+        BEDROCK_KB_ID: props.bedrockKbId || '',
+        BEDROCK_DATA_SOURCE_ID: props.bedrockDataSourceId || '',
+      },
+      additionalPolicyStatements: [
+        {
+          effect: 'Allow',
+          actions: ['dynamodb:Query', 'dynamodb:UpdateItem'],
+          resources: [
+            `arn:aws:dynamodb:*:*:table/${props.agentSchedulesTableName}`,
+            `arn:aws:dynamodb:*:*:table/${props.agentSchedulesTableName}/index/*`,
+          ],
+        },
+        {
+          effect: 'Allow',
+          actions: ['bedrock:StartIngestionJob', 'bedrock:GetIngestionJob', 'bedrock:ListIngestionJobs'],
+          resources: ['*'],
+        },
+        {
+          effect: 'Allow',
+          actions: ['s3:GetObject', 's3:PutObject', 's3:ListBucket', 's3:CopyObject'],
+          resources: [`arn:aws:s3:::${props.dataBucketName}`, `arn:aws:s3:::${props.dataBucketName}/*`],
+        },
+      ],
+    });
+
+    // Update the agent-schedules Lambda to use the extended environment
+    // Note: This would require modifying the existing Lambda's environment
+    // For now, the ARNs are available for EventBridge schedule targets
+
     // Document Converter API - converts markdown to DOCX/PDF
     // Uses Pandoc layer for MD->DOCX, LibreOffice layer for DOCX->PDF
 
@@ -663,6 +952,8 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
 export interface AppAgnosticApiGatewayLambdaCollectionProps
   extends Omit<ApiGatewayLambdaCollectionProps, 'apiGatewayId' | 'apiGatewayAuthorizerId'> {
   chatHistoryTableName: string;
+  agentSchedulesTableName: string;
+  notificationsTableName: string;
   clientName: string;
   dataBucketName: string;
   logGroup: CloudwatchLogGroup;
@@ -697,4 +988,14 @@ export interface AppAgnosticApiGatewayLambdaCollectionProps
   dataConnectorsSettingsTableName: string;
   /** Data connector selection configs table name. */
   dataConnectorsSyncConfigsTableName: string;
+  /** Chat agent function URL for internal invocations. */
+  chatAgentFunctionUrl: string;
+  /** CloudFront shared secret for internal agent calls. */
+  cloudfrontSharedSecret: string;
+  /** Secret shared with chat agent for schedule runner auth. */
+  agentScheduleRunnerSecret: string;
+  /** Bedrock Knowledge Base ID for data sync scheduling (optional). */
+  bedrockKbId?: string;
+  /** Bedrock Knowledge Base data source ID for data sync scheduling (optional). */
+  bedrockDataSourceId?: string;
 }

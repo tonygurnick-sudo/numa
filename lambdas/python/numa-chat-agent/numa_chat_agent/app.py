@@ -42,6 +42,7 @@ USER_POOL_ID = os.environ.get("COGNITO_USER_POOL_ID")
 USER_POOL_CLIENT_ID = os.environ.get("COGNITO_USER_POOL_CLIENT_ID")
 CF_SHARED_SECRET = os.environ.get("CLOUDFRONT_SHARED_SECRET")
 CLIENT_NAME = os.environ.get("CLIENT_NAME", "")
+SCHEDULE_RUNNER_SECRET = os.environ.get("SCHEDULE_RUNNER_SECRET")
 
 _jwks_cache: Dict[str, Any] = {"data": None}
 _COGNITO_CLIENT = None
@@ -455,13 +456,28 @@ async def http_stream(request: Request) -> Response:
                 return JSONResponse({"error": "Forbidden"}, status_code=403)
 
         auth = headers.get("authorization")
-        if not auth:
-            return JSONResponse(
-                {"error": "Missing Authorization header"}, status_code=401
-            )
-
-        user = _verify_jwt_token(auth)
         body = await request.json()
+
+        internal_user_override: Optional[dict] = None
+        if (
+            SCHEDULE_RUNNER_SECRET
+            and auth == f"Bearer {SCHEDULE_RUNNER_SECRET}"
+            and isinstance(body, dict)
+        ):
+            internal_user_override = body.get("internalUser") or {}
+
+        if internal_user_override:
+            if not internal_user_override.get("sub"):
+                return JSONResponse(
+                    {"error": "Missing internal user context"}, status_code=400
+                )
+            user = internal_user_override
+        else:
+            if not auth:
+                return JSONResponse(
+                    {"error": "Missing Authorization header"}, status_code=401
+                )
+            user = _verify_jwt_token(auth)
 
         prompt: str = (body.get("prompt") or "").strip()
         if not prompt:
@@ -980,13 +996,28 @@ async def http_invoke(request: Request) -> Response:
                 return JSONResponse({"error": "Forbidden"}, status_code=403)
 
         auth = headers.get("authorization")
-        if not auth:
-            return JSONResponse(
-                {"error": "Missing Authorization header"}, status_code=401
-            )
-
-        user = _verify_jwt_token(auth)
         body = await request.json()
+
+        internal_user_override: Optional[dict] = None
+        if (
+            SCHEDULE_RUNNER_SECRET
+            and auth == f"Bearer {SCHEDULE_RUNNER_SECRET}"
+            and isinstance(body, dict)
+        ):
+            internal_user_override = body.get("internalUser") or {}
+
+        if internal_user_override:
+            if not internal_user_override.get("sub"):
+                return JSONResponse(
+                    {"error": "Missing internal user context"}, status_code=400
+                )
+            user = internal_user_override
+        else:
+            if not auth:
+                return JSONResponse(
+                    {"error": "Missing Authorization header"}, status_code=401
+                )
+            user = _verify_jwt_token(auth)
 
         prompt: str = (body.get("prompt") or "").strip()
         if not prompt:

@@ -33,15 +33,21 @@ variables:
         - lambdas/node/admin-data-connector-settings
         - lambdas/node/admin-agents-settings
         - lambdas/node/admin-integration-settings
+        - lambdas/node/agent-schedule-runner
+        - lambdas/node/agent-schedules
         - lambdas/node/agents
         - lambdas/node/api-gateway-authorizer
+        - lambdas/node/application-scheduler
         - lambdas/node/bedrock-cleanup-failed-files
         - lambdas/node/budget-forwarder
         - lambdas/node/branding-config
         - lambdas/node/callback-renamer
         - lambdas/node/chat-settings
         - lambdas/node/cloudfront-invalidator
+        - lambdas/node/data-sync-scheduler
         - lambdas/node/document-converter
+        - lambdas/node/notifications-api
+        - lambdas/node/notifications-stream
         - lambdas/node/q-business-chat-control-configurer
         - lambdas/node/s3-kb-file-migrator
         - lambdas/node/s3-vectors-manager
@@ -56,14 +62,20 @@ variables:
         - lambdas/node/admin-data-connector-settings
         - lambdas/node/admin-agents-settings
         - lambdas/node/admin-integration-settings
+        - lambdas/node/agent-schedule-runner
+        - lambdas/node/agent-schedules
         - lambdas/node/agents
         - lambdas/node/api-gateway-authorizer
+        - lambdas/node/application-scheduler
         - lambdas/node/bedrock-cleanup-failed-files
         - lambdas/node/budget-forwarder
         - lambdas/node/branding-config
         - lambdas/node/callback-renamer
         - lambdas/node/chat-settings
         - lambdas/node/cloudfront-invalidator
+        - lambdas/node/data-sync-scheduler
+        - lambdas/node/notifications-api
+        - lambdas/node/notifications-stream
         - lambdas/node/q-business-chat-control-configurer
         - lambdas/node/srp-hasher
         - lambdas/node/system-user-creator
@@ -189,7 +201,9 @@ client-list-lint:
     - curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o /tmp/awscliv2.zip
     - unzip -q /tmp/awscliv2.zip -d /tmp && /tmp/aws/install && rm -rf /tmp/aws /tmp/awscliv2.zip
     - curl -fsSL https://github.com/lework/skopeo-binary/releases/download/v1.16.1/skopeo-linux-amd64 -o /usr/local/bin/skopeo && chmod +x /usr/local/bin/skopeo
+    - !reference [.yarn, setup-private-auth]
     - corepack enable
+    - yarn install --immutable
     - (cd infra && yarn exec cdktf get)
     - cd $BUILD_DIR
 
@@ -273,6 +287,10 @@ python-lambdas-test:
 node-lint:
   extends: .node-lint
   image: registry.gitlab.com/arcanumai/ci/cdktf:latest
+  before_script:
+    - !reference [.yarn, setup-private-auth]
+    - corepack enable
+    - yarn install --immutable
   script:
     - yarn workspace @arcanumai/q-apps-deployer-infra run get
     - yarn workspaces foreach --parallel --all --exclude infra run lint --fix || true

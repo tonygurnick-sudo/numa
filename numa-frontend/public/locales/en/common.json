@@ -41,12 +41,18 @@
       "chat": "Chat",
       "chatV2": "Numa Chat V2",
       "agents": "Agents",
+      "scheduling": "Scheduling",
       "company": "Company",
       "companyKnowledgeBase": "Company Knowledge Base",
       "userKnowledgeBase": "User Knowledge Base",
       "profile": "Profile",
       "adminSettings": "Admin Settings",
       "integrations": "Integrations"
+    },
+    "sections": {
+      "workflows": "Workflows",
+      "timeline": "Timeline",
+      "knowledgeBases": "Knowledge Bases"
     },
     "expanded": {
       "knowledgeBase": "Knowledge Base",
@@ -585,6 +591,56 @@
       "loadFolder": "Failed to load folder contents: {{message}}",
       "unknown": "Unknown error",
       "noResults": "No results available."
+    }
+  },
+  "notifications": {
+    "title": "Notifications",
+    "unreadCountTitle_one": "{{count}} unread notification",
+    "unreadCountTitle_other": "{{count}} unread notifications",
+    "unreadCount_one": "{{count}} unread",
+    "unreadCount_other": "{{count}} unread",
+    "streamDisconnected": "Notification stream disconnected",
+    "loading": "Loading notifications...",
+    "empty": "No notifications yet. You'll see updates here when your scheduled tasks run.",
+    "emptyFiltered": "No notifications in this view.",
+    "errors": {
+      "load": "Failed to load notifications"
+    },
+    "labels": {
+      "new": "New"
+    },
+    "actions": {
+      "markAllRead": "Mark all as read",
+      "tryAgain": "Try again",
+      "viewSchedule": "View schedule",
+      "markRead": "Mark read",
+      "dismiss": "Dismiss",
+      "delete": "Delete"
+    },
+    "tabs": {
+      "unread": "Unread ({{count}})",
+      "read": "Read ({{count}})",
+      "all": "All ({{count}})"
+    },
+    "time": {
+      "justNow": "Just now",
+      "minutesAgo_one": "{{count}}m ago",
+      "minutesAgo_other": "{{count}}m ago",
+      "hoursAgo_one": "{{count}}h ago",
+      "hoursAgo_other": "{{count}}h ago",
+      "daysAgo_one": "{{count}}d ago",
+      "daysAgo_other": "{{count}}d ago"
+    },
+    "eventTypes": {
+      "started": "Started",
+      "completed": "Completed",
+      "failed": "Failed",
+      "cancelled": "Cancelled"
+    },
+    "scheduleTypes": {
+      "agent": "Agent",
+      "application": "Application",
+      "data_sync": "Data Sync"
     }
   },
   "eventStream": {

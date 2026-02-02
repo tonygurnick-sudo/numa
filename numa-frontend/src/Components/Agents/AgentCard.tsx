@@ -16,7 +16,9 @@ type AgentCardProps = {
   onEdit?: (agent: AgentSummary) => void;
   onDuplicate?: (agent: AgentSummary) => void;
   onDelete?: (agent: AgentSummary) => void;
+  onSchedule?: (agent: AgentSummary) => void;
   onToggleFavorite?: (agent: AgentSummary, next: boolean) => void;
+  hasSchedules?: boolean;
   highlight?: boolean;
   disabled?: boolean;
   isInMyAgentsSection?: boolean;
@@ -85,7 +87,9 @@ export const AgentCard = ({
   onEdit,
   onDuplicate,
   onDelete,
+  onSchedule,
   onToggleFavorite,
+  hasSchedules = false,
   highlight = false,
   disabled = false,
   isInMyAgentsSection = false,
@@ -177,14 +181,29 @@ export const AgentCard = ({
         }}
         onClick={handleToggle}
       >
-        <Card.Body className="p-3">
+        <Card.Body className="p-3 d-flex flex-column">
           <div className="d-flex align-items-center gap-3">
             <AgentAvatar agent={agent} size={40} alt={`${agent.title} avatar`} />
             <div className="flex-grow-1" style={{ minWidth: 0, overflow: 'hidden' }}>
               {/* Title */}
-              <h6 className="mb-1 fw-semibold text-truncate" style={{ fontSize: '1rem' }}>
-                {agent.title}
-              </h6>
+              <div className="d-flex align-items-center gap-2 mb-1">
+                <h6 className="mb-0 fw-semibold text-truncate" style={{ fontSize: '1rem' }}>
+                  {agent.title}
+                </h6>
+                {hasSchedules && (
+                  <OverlayTrigger
+                    placement="top"
+                    overlay={
+                      <Tooltip id={`schedules-indicator-${agent.agentId}`}>{t('card.schedules.active')}</Tooltip>
+                    }
+                  >
+                    <i
+                      className="bi bi-clock-fill"
+                      style={{ fontSize: '0.8rem', color: 'var(--brand-primary, var(--color-primary))' }}
+                    ></i>
+                  </OverlayTrigger>
+                )}
+              </div>
 
               {/* First Row: Badge and Time Saved */}
               <div className="d-flex align-items-center gap-2 mb-1" style={{ flexWrap: 'nowrap' }}>
@@ -322,7 +341,7 @@ export const AgentCard = ({
   // Expanded view (default for public agents, toggleable for personal)
   return (
     <Card
-      className={`h-100 shadow-sm agent-card ${highlight ? 'border-primary border-2' : ''}`}
+      className={`shadow-sm agent-card ${highlight ? 'border-primary border-2' : ''}`}
       style={{
         cursor: disabled ? 'not-allowed' : 'default',
         opacity: disabled ? 0.65 : 1,
@@ -336,9 +355,26 @@ export const AgentCard = ({
           <div className="d-flex align-items-start gap-3 flex-grow-1">
             <AgentAvatar agent={agent} size={48} alt={`${agent.title} avatar`} />
             <div className="flex-grow-1" style={{ minWidth: 0 }}>
-              <h5 className="mb-1 fw-semibold" style={{ fontSize: '1.1rem' }}>
-                {agent.title}
-              </h5>
+              <div className="d-flex align-items-center gap-2 mb-1">
+                <h5 className="mb-0 fw-semibold" style={{ fontSize: '1.1rem' }}>
+                  {agent.title}
+                </h5>
+                {hasSchedules && (
+                  <OverlayTrigger
+                    placement="top"
+                    overlay={
+                      <Tooltip id={`schedules-indicator-expanded-${agent.agentId}`}>
+                        {t('card.schedules.active')}
+                      </Tooltip>
+                    }
+                  >
+                    <i
+                      className="bi bi-clock-fill"
+                      style={{ fontSize: '0.9rem', color: 'var(--brand-primary, var(--color-primary))' }}
+                    ></i>
+                  </OverlayTrigger>
+                )}
+              </div>
               <div className="d-flex align-items-center gap-2 flex-wrap">
                 {agent.visibility === 'public' ? (
                   <span className="text-muted small" style={{ fontSize: '0.75rem' }}>
@@ -593,6 +629,20 @@ export const AgentCard = ({
               >
                 <Button variant="secondary" size="sm" onClick={() => onDuplicate(agent)} disabled={disabled}>
                   <i className="bi bi-files"></i>
+                </Button>
+              </OverlayTrigger>
+            )}
+            {onSchedule && (
+              <OverlayTrigger
+                placement="top"
+                overlay={
+                  <Tooltip id={`schedule-${agent.agentId}`}>
+                    {hasSchedules ? t('card.schedules.manage') : t('card.schedules.create')}
+                  </Tooltip>
+                }
+              >
+                <Button variant="secondary" size="sm" onClick={() => onSchedule(agent)} disabled={disabled}>
+                  <i className="bi bi-clock"></i>
                 </Button>
               </OverlayTrigger>
             )}

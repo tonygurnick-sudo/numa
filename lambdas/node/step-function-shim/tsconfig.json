@@ -1,6 +1,7 @@
 {
   "compilerOptions": {
     "outDir": "dist",
+    "skipLibCheck": true,
     "alwaysStrict": true,
     "declaration": true,
     "esModuleInterop": true,

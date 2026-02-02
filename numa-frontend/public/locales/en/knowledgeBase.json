@@ -336,7 +336,34 @@
   "userKnowledgeBases": {
     "title": "Your Knowledge Bases",
     "subtitle": "Select a knowledge base to manage files and settings",
-    "create": "Create Knowledge Base"
+    "create": "Create Knowledge Base",
+    "actions": {
+      "refresh": "Refresh",
+      "viewDetails": "View Details"
+    },
+    "search": {
+      "placeholder": "Search knowledge bases..."
+    },
+    "filters": {
+      "all": "All KBs",
+      "shared": "Shared",
+      "personal": "Personal"
+    },
+    "count_one": "{{count}} knowledge base",
+    "count_other": "{{count}} knowledge bases",
+    "loading": "Loading...",
+    "loadingMessage": "Loading your knowledge bases...",
+    "empty": {
+      "title": "No knowledge bases found",
+      "subtitle": "Try adjusting your search or filter"
+    },
+    "badges": {
+      "shared": "Shared",
+      "personal": "Personal"
+    },
+    "documents_one": "{{count}} document",
+    "documents_other": "{{count}} documents",
+    "created": "Created {{date}}"
   },
   "webCrawlerPage": {
     "title": "Web Crawler",

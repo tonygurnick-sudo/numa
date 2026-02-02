@@ -8,6 +8,10 @@ import { AdminAgentsService, type AgentsMode } from '../Services/AdminAgentsServ
 import type { AgentSummary } from '../types/agents';
 import { AgentCard } from '../Components/Agents/AgentCard';
 import { AgentCreateModal } from '../Components/Agents/AgentCreateModal';
+import { AgentScheduleModal } from '../Components/Agents/AgentScheduleModal';
+import { AgentScheduleListModal } from '../Components/Agents/AgentScheduleListModal';
+import { ScheduleService } from '../Services/ScheduleService';
+import type { AgentSchedule } from '../types/agentSchedules';
 import { LayoutDashboard } from '../Layouts/LayoutDashboard';
 import { LambdaClient } from '@aws-sdk/client-lambda';
 import { fromWebToken } from '@aws-sdk/credential-providers';
@@ -27,6 +31,8 @@ export const AgentsManagement = () => {
   const navigate = useNavigate();
   const agentsFeatureEnabled =
     typeof window !== 'undefined' ? window.sessionStorage.getItem('AGENTS') === 'true' : false;
+  const schedulingEnabled =
+    typeof window !== 'undefined' ? window.sessionStorage.getItem('SCHEDULING') === 'true' : false;
 
   // Feature flag UX: do not redirect; show disabled preview panel instead
   const { branding } = useBranding();
@@ -59,10 +65,43 @@ export const AgentsManagement = () => {
     agent: AgentSummary | null;
   }>({ show: false, agent: null });
 
+  // Schedule management state
+  const [scheduleModal, setScheduleModal] = useState<{
+    show: boolean;
+    agent: AgentSummary | null;
+    editingSchedule: AgentSchedule | null;
+  }>({ show: false, agent: null, editingSchedule: null });
+
+  const [scheduleListModal, setScheduleListModal] = useState<{
+    show: boolean;
+    agent: AgentSummary | null;
+  }>({ show: false, agent: null });
+
+  const [agentScheduleMap, setAgentScheduleMap] = useState<Map<string, boolean>>(new Map());
+
   const workspaceChatEnabled =
     typeof window !== 'undefined' && window.sessionStorage.getItem('NUMA_WORKSPACE_CHAT') === 'true';
 
   const userId = user?.decoded_tokens?.idToken?.sub ?? '';
+
+  const loadSchedules = async () => {
+    try {
+      const schedules = await ScheduleService.list(numaGet);
+      const scheduleMap = new Map<string, boolean>();
+
+      // Count schedules per agent - include paused schedules
+      schedules.forEach((schedule) => {
+        if (schedule.agentId && schedule.status !== 'deleted') {
+          scheduleMap.set(schedule.agentId, true);
+        }
+      });
+
+      setAgentScheduleMap(scheduleMap);
+    } catch (err) {
+      console.error('Failed to load schedules:', err);
+      // Don't set error for schedule loading - it's not critical
+    }
+  };
 
   const loadAgents = async () => {
     try {
@@ -90,6 +129,9 @@ export const AgentsManagement = () => {
         setMyAgents([...personal, ...createdPublic].sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0)));
         setWorkspaceAgents(companyAgents.sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0)));
       }
+
+      // Load schedules after agents are loaded
+      await loadSchedules();
     } catch (err) {
       console.error('AgentsManagement: failed to load agents', err);
       setError((err as Error)?.message ?? t('management.errors.load'));
@@ -260,6 +302,115 @@ export const AgentsManagement = () => {
     await loadAgents();
   };
 
+  const handleScheduleAgent = (agent: AgentSummary) => {
+    const hasSchedules = agentScheduleMap.get(agent.agentId) || false;
+
+    if (hasSchedules) {
+      // Show schedule list/management modal
+      setScheduleListModal({ show: true, agent });
+    } else {
+      // Show create schedule modal
+      setScheduleModal({ show: true, agent, editingSchedule: null });
+    }
+  };
+
+  const buildScheduleRunConfig = (agent: AgentSummary) => {
+    const toolsConfig = agent.toolsConfig || {};
+    const enabledConnections = Array.from(
+      new Set([...(toolsConfig.enabledConnections || []), ...(agent.requiredIntegrations || [])]),
+    );
+    const enabledKBIds = Array.isArray(toolsConfig.allowedKnowledgeBases)
+      ? toolsConfig.allowedKnowledgeBases
+      : undefined;
+    return {
+      enabledConnections,
+      enabledKBIds,
+      autoToolsEnabled: toolsConfig.autoToolsEnabled,
+      webSearchEnabled: toolsConfig.webSearchEnabled,
+      createAgentEnabled: toolsConfig.createAgentEnabled,
+    };
+  };
+
+  const buildAgentSnapshot = (agent: AgentSummary) => ({
+    agentId: agent.agentId,
+    title: agent.title,
+    icon: agent.icon,
+    iconImage: agent.iconImage,
+    version: agent.version,
+    visibility: agent.visibility,
+    systemPrompt: agent.systemPrompt,
+    userWelcomeMessage: agent.userWelcomeMessage,
+    requiredIntegrations: agent.requiredIntegrations,
+    toolsConfig: agent.toolsConfig,
+  });
+
+  const handleScheduleCreate = async (payload: {
+    promptText: string;
+    cronExpression: string;
+    timezone: string;
+    label?: string;
+  }) => {
+    try {
+      if (!scheduleModal.agent) return;
+
+      if (scheduleModal.editingSchedule) {
+        // Update existing schedule
+        await ScheduleService.update(numaPut, scheduleModal.editingSchedule.scheduleId, payload);
+      } else {
+        // Create new schedule
+        await ScheduleService.create(numaPost, {
+          agentId: scheduleModal.agent.agentId,
+          agentTitle: scheduleModal.agent.title,
+          conversationId: `schedule-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`, // Generate unique conversation ID
+          ...payload,
+          runConfig: buildScheduleRunConfig(scheduleModal.agent),
+          agentSnapshot: buildAgentSnapshot(scheduleModal.agent),
+        });
+      }
+
+      // Refresh schedules after creation/update
+      await loadSchedules();
+
+      // Close modal
+      setScheduleModal({ show: false, agent: null, editingSchedule: null });
+
+      // Optional: Show success notification
+      console.log(scheduleModal.editingSchedule ? 'Schedule updated successfully' : 'Schedule created successfully');
+    } catch (err) {
+      console.error('Failed to save schedule:', err);
+      // Error will be handled by the modal component
+      throw err;
+    }
+  };
+
+  const handleScheduleModalClose = () => {
+    setScheduleModal({ show: false, agent: null, editingSchedule: null });
+  };
+
+  const handleScheduleListModalClose = () => {
+    setScheduleListModal({ show: false, agent: null });
+  };
+
+  const handleEditSchedule = (schedule: AgentSchedule) => {
+    // Find the agent for this schedule
+    const agent = [...myAgents, ...workspaceAgents].find((a) => a.agentId === schedule.agentId);
+    if (agent) {
+      setScheduleModal({ show: true, agent, editingSchedule: schedule });
+    }
+  };
+
+  const handleScheduleChange = () => {
+    // Called when schedules are modified in the list modal
+    loadSchedules();
+  };
+
+  const handleCreateScheduleFromList = () => {
+    // Create a new schedule for the current agent from the schedule list modal
+    if (scheduleListModal.agent) {
+      setScheduleModal({ show: true, agent: scheduleListModal.agent, editingSchedule: null });
+    }
+  };
+
   // Warm integrations cache on page load to make pre-chat checks instant
   useEffect(() => {
     const warmCache = async () => {
@@ -305,9 +456,11 @@ export const AgentsManagement = () => {
               onEdit={agent.scope === 'user' || agent.createdBy.userId === userId ? handleEdit : undefined}
               onDuplicate={handleDuplicate}
               onDelete={agent.scope === 'user' || agent.createdBy.userId === userId ? handleDelete : undefined}
+              onSchedule={schedulingEnabled ? handleScheduleAgent : undefined}
               onToggleFavorite={
                 agent.scope === 'user' || agent.createdBy.userId === userId ? handleToggleFavorite : undefined
               }
+              hasSchedules={schedulingEnabled && (agentScheduleMap.get(agent.agentId) || false)}
               isInMyAgentsSection={isMyAgentsSection}
             />
           </Col>
@@ -610,6 +763,23 @@ export const AgentsManagement = () => {
             editingAgent={editingAgent}
             onAgentSaved={handleModalSaved}
           />
+
+          <AgentScheduleModal
+            show={scheduleModal.show}
+            onHide={handleScheduleModalClose}
+            agent={scheduleModal.agent}
+            editingSchedule={scheduleModal.editingSchedule}
+            onCreate={handleScheduleCreate}
+          />
+
+          <AgentScheduleListModal
+            show={scheduleListModal.show}
+            onHide={handleScheduleListModalClose}
+            agent={scheduleListModal.agent}
+            onScheduleChange={handleScheduleChange}
+            onEditSchedule={handleEditSchedule}
+            onCreateSchedule={handleCreateScheduleFromList}
+          />
           {/* Missing integrations confirmation modal (pre-chat) */}
           <Modal show={missingModal.show} onHide={() => setMissingModal((m) => ({ ...m, show: false }))} centered>
             <Modal.Header closeButton>
@@ -694,7 +864,7 @@ export const AgentsManagement = () => {
                 className="mb-3"
                 dangerouslySetInnerHTML={{
                   __html: t('management.chatVersion.prompt', {
-                    agentTitle: chatVersionModal.agent?.title || 'this agent',
+                    agentTitle: chatVersionModal.agent?.title || t('management.chatVersion.agentFallback'),
                     interpolation: { escapeValue: false },
                   }),
                 }}

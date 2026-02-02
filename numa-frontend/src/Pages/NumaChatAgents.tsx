@@ -49,6 +49,9 @@ import { ChatSettingsService, type ChatSettings, DEFAULT_CHAT_SETTINGS } from '.
 import { applyLanguagePreference } from '../utils/languagePreference';
 import { AgentAvatar } from '../Components/Agents/AgentAvatar';
 import { withPRM } from '../utils/prmUtils';
+import { AgentScheduleModal } from '../Components/Agents/AgentScheduleModal';
+import { ScheduleService } from '../Services/ScheduleService';
+import type { AgentScheduleSnapshot, ScheduledRunConfig } from '../types/agentSchedules';
 
 type ConversationChatConfig = {
   autoToolsEnabled?: boolean;
@@ -63,6 +66,14 @@ type DataAnalysisFile = {
   fileName: string;
   fileType?: string;
   s3Key?: string;
+};
+
+type ScheduleDefaults = {
+  agentId: string;
+  agentTitle?: string;
+  conversationId: string;
+  agentSnapshot?: AgentScheduleSnapshot;
+  runConfig: ScheduledRunConfig;
 };
 
 const resolveErrorMessage = (error: unknown, fallback: string): string => {
@@ -106,6 +117,9 @@ const NumaChatAgents = () => {
   const [agentsFeatureEnabled] = useState(() =>
     typeof window !== 'undefined' ? window.sessionStorage.getItem('AGENTS') === 'true' : false,
   );
+  const [schedulingEnabled] = useState(() =>
+    typeof window !== 'undefined' ? window.sessionStorage.getItem('SCHEDULING') === 'true' : false,
+  );
   const [missingConfirm, setMissingConfirm] = useState<{ agent: AgentSummary; missing: string[] } | null>(null);
   const [isMobile, setIsMobile] = useState(() => (typeof window !== 'undefined' ? window.innerWidth <= 768 : false));
   const [showMobileActions, setShowMobileActions] = useState(false);
@@ -117,6 +131,10 @@ const NumaChatAgents = () => {
     null,
   );
   const [dataAnalysisBannerFiles, setDataAnalysisBannerFiles] = useState<DataAnalysisFile[] | null>(null);
+  const [showScheduleModal, setShowScheduleModal] = useState(false);
+  const [scheduleDefaults, setScheduleDefaults] = useState<ScheduleDefaults | null>(null);
+  const [scheduleSuccess, setScheduleSuccess] = useState<string | null>(null);
+  const [scheduleError, setScheduleError] = useState<string | null>(null);
 
   // Refs
   const messageEndRef = useRef(null);
@@ -1171,6 +1189,93 @@ const NumaChatAgents = () => {
     return { modelId, enabledTools, systemPrompt, userAuth, clientName };
   };
 
+  const _handleOpenScheduleModal = () => {
+    if (!currentAgent) {
+      setScheduleError(t('schedule.errors.noAgent'));
+      return;
+    }
+    if (!conversationId) {
+      setScheduleError(t('schedule.errors.noConversation'));
+      return;
+    }
+    setScheduleError(null);
+    const scheduleConfig = configureAgentCall(
+      autoToolsEnabled,
+      webSearchEnabled,
+      createAgentEnabled,
+      idToken,
+      companyProfile,
+      user,
+      sub,
+    );
+    const runConfig: ScheduledRunConfig = {
+      systemPrompt: scheduleConfig.systemPrompt,
+      modelId: scheduleConfig.modelId,
+      enabledTools: scheduleConfig.enabledTools,
+      enabledConnections,
+      enabledKBIds,
+      autoToolsEnabled,
+      webSearchEnabled,
+      createAgentEnabled,
+    };
+    const snapshot: AgentScheduleSnapshot | undefined = currentAgent
+      ? {
+          agentId: currentAgent.agentId,
+          title: currentAgent.title,
+          icon: currentAgent.icon,
+          iconImage: currentAgent.iconImage,
+          version: currentAgent.version,
+          visibility: currentAgent.visibility,
+          systemPrompt: currentAgent.systemPrompt,
+          userWelcomeMessage: currentAgent.userWelcomeMessage,
+          requiredIntegrations: currentAgent.requiredIntegrations,
+          toolsConfig: currentAgent.toolsConfig,
+        }
+      : undefined;
+    setScheduleDefaults({
+      agentId: currentAgent.agentId,
+      agentTitle: currentAgent.title,
+      conversationId,
+      agentSnapshot: snapshot,
+      runConfig,
+    });
+    setShowScheduleModal(true);
+  };
+
+  const handleScheduleModalClose = () => {
+    setShowScheduleModal(false);
+    setScheduleDefaults(null);
+  };
+
+  const handleCreateSchedule = async ({
+    promptText,
+    cronExpression,
+    timezone,
+    label,
+  }: {
+    promptText: string;
+    cronExpression: string;
+    timezone: string;
+    label?: string;
+  }) => {
+    if (!scheduleDefaults) {
+      throw new Error(t('schedule.errors.missingContext'));
+    }
+    const payload = {
+      agentId: scheduleDefaults.agentId,
+      agentTitle: scheduleDefaults.agentTitle,
+      conversationId: scheduleDefaults.conversationId,
+      promptText,
+      cronExpression,
+      timezone,
+      label,
+      runConfig: scheduleDefaults.runConfig,
+      agentSnapshot: scheduleDefaults.agentSnapshot,
+    };
+    await ScheduleService.create(numaPost, payload);
+    setScheduleSuccess(t('schedule.success.created'));
+  };
+
   // Handle streaming chunk data
   const createStreamChunkHandler = (streamingHandler, setMessages, setButtonStatus) => {
     let hasStreamingStarted = false;
@@ -1955,6 +2060,21 @@ const NumaChatAgents = () => {
         </div>
       )}
 
+      {schedulingEnabled && scheduleSuccess && (
+        <div className="mt-3">
+          <Alert variant="success" dismissible onClose={() => setScheduleSuccess(null)}>
+            {scheduleSuccess}
+          </Alert>
+        </div>
+      )}
+      {schedulingEnabled && scheduleError && (
+        <div className="mt-3">
+          <Alert variant="warning" dismissible onClose={() => setScheduleError(null)}>
+            {scheduleError}
+          </Alert>
+        </div>
+      )}
+
       {/* Main content */}
       <LayoutDashboard>
         {/* Chat layout */}
@@ -2189,6 +2309,15 @@ const NumaChatAgents = () => {
           </div>
         </div>
       </LayoutDashboard>
+      {schedulingEnabled && scheduleDefaults && (
+        <AgentScheduleModal
+          show={showScheduleModal}
+          onHide={handleScheduleModalClose}
+          agent={currentAgent}
+          defaultPrompt={inputMessage}
+          onCreate={handleCreateSchedule}
+        />
+      )}
 
       {/* Mobile document viewer */}
       <Modal

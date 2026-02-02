@@ -1,5 +1,6 @@
 @use 'sass:color';
 @use '../abstracts/mixins' as *;
+@use 'calendar';
 
 .platform_version {
   color: white;
@@ -182,6 +183,115 @@ fieldset:disabled .btn {
     border-color: var(--brand-buttonSecondaryBorder, var(--color-primary)) !important;
     color: var(--brand-buttonSecondaryHoverText, #ffffff) !important;
     filter: brightness(0.95);
+  }
+}
+
+.cron-builder {
+  border: 1px solid color-mix(in srgb, var(--brand-primary, var(--color-primary)) 15%, transparent);
+  background: var(--brand-surface, #fff);
+  box-shadow: 0 8px 16px color-mix(in srgb, var(--brand-primary, var(--color-primary)) 8%, transparent);
+
+  &__options {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 0.75rem;
+  }
+
+  &__option {
+    display: flex;
+    gap: 0.75rem;
+    border: 1px solid rgba(0, 0, 0, 0.08);
+    border-radius: 0.85rem;
+    padding: 0.85rem;
+    background: var(--brand-surface, #fff);
+    text-align: left;
+    transition: all 0.2s ease;
+    width: 100%;
+
+    i {
+      font-size: 1.25rem;
+      color: var(--brand-primary, var(--color-primary));
+    }
+
+    &:hover:not(:disabled) {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+    }
+
+    &.active {
+      border-color: var(--brand-primary, var(--color-primary));
+      background: color-mix(in srgb, var(--brand-primary, var(--color-primary)) 8%, transparent);
+      box-shadow: 0 6px 18px color-mix(in srgb, var(--brand-primary, var(--color-primary)) 16%, transparent);
+    }
+  }
+
+  &__days {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+
+  &__day {
+    border: 1px solid rgba(0, 0, 0, 0.08);
+    border-radius: 999px;
+    padding: 0.35rem 0.85rem;
+    background: #fff;
+    font-weight: 600;
+    font-size: 0.85rem;
+    transition: all 0.2s ease;
+
+    &.active {
+      background: var(--brand-primary, var(--color-primary));
+      color: var(--brand-primaryContrast, #fff);
+      border-color: var(--brand-primary, var(--color-primary));
+    }
+  }
+
+  &__preview {
+    background: color-mix(in srgb, var(--brand-primary, var(--color-primary)) 6%, transparent);
+    border: 1px solid color-mix(in srgb, var(--brand-primary, var(--color-primary)) 20%, transparent);
+  }
+
+  &__summary {
+    font-weight: 600;
+    font-size: 1rem;
+  }
+
+  &__weeks {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+  }
+
+  &__week {
+    border: 1px solid rgba(0, 0, 0, 0.08);
+    border-radius: 0.6rem;
+    padding: 0.35rem 0.9rem;
+    background: #fff;
+    font-weight: 600;
+    font-size: 0.85rem;
+    transition: all 0.2s ease;
+
+    &.active {
+      background: var(--brand-primary, var(--color-primary));
+      color: var(--brand-primaryContrast, #fff);
+      border-color: var(--brand-primary, var(--color-primary));
+    }
+  }
+
+  &__toggle {
+    border: 1px solid rgba(0, 0, 0, 0.12);
+    border-radius: 999px;
+    padding: 0.35rem 1rem;
+    background: #fff;
+    font-weight: 500;
+    transition: all 0.2s ease;
+
+    &.active {
+      background: var(--brand-primary, var(--color-primary));
+      color: var(--brand-primaryContrast, #fff);
+      border-color: var(--brand-primary, var(--color-primary));
+    }
   }
 }
 
@@ -461,6 +571,22 @@ label {
     width: 100%;
   }
 
+  // Section header styles - readable but small
+  .nav-section-header {
+    margin: 1rem 0 0.5rem 0;
+    padding: 0 10px;
+    width: 100%;
+
+    .nav-section-label {
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: var(--brand-textMuted, var(--color-gray));
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      line-height: 1;
+    }
+  }
+
   &.expanded .nav-links {
     align-items: flex-start; /* Left align when expanded */
     padding-left: 10px;
@@ -684,6 +810,20 @@ label {
   &:hover {
     background-color: var(--color-bg-dark);
   }
+}
+
+/* Mobile dropdown section headers */
+.dropdown-section-header {
+  font-size: 0.7rem !important;
+  font-weight: 600 !important;
+  color: var(--brand-textMuted, var(--color-gray)) !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.05em !important;
+  background: none !important;
+  border: none !important;
+  margin-top: 0.5rem !important;
+  margin-bottom: 0.25rem !important;
+  padding-left: 0.5rem !important;
 }
 
 .public-footer {

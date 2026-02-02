@@ -36,12 +36,16 @@ export const handler: APIGatewayRequestSimpleAuthorizerHandlerV2 = async (event)
     console.error('Authorization header is missing');
     return { isAuthorized: false };
   }
+
+  // Strip "Bearer " prefix if present
+  const cleanJwt = jwt.startsWith('Bearer ') ? jwt.slice(7) : jwt;
+
   try {
-    await verifier.verify(jwt);
+    await verifier.verify(cleanJwt);
     console.info('JWT is valid');
     return { isAuthorized: true };
   } catch (err) {
-    console.error(err);
+    console.error('JWT verification failed:', err);
     return { isAuthorized: false };
   }
 };

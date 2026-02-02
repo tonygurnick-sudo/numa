@@ -83,6 +83,7 @@ export const clientConfigSchema = z.object({
   agents: z.boolean().optional(), // default: false
   brandingProviderEnabled: z.boolean().optional(), // default: false
   numaWorkspaceChat: z.boolean().optional(), // default: false
+  scheduling: z.boolean().optional(), // default: false
 
   // Data source configurations
   webCrawlerConfigs: z.array(webCrawlerConfigSchema).optional(),
@@ -121,6 +122,7 @@ export const getDefaultClientConfigValues = () => ({
   agents: false,
   brandingProviderEnabled: false,
   numaWorkspaceChat: false,
+  scheduling: false,
   mfa: false,
 })
 
@@ -155,6 +157,7 @@ export const getFieldDisplayName = (key: keyof ClientConfig): string => {
     visionModelType: 'Vision Model Type',
     numaChatAgents: 'Numa Chat Agents',
     agents: 'Agents',
+    scheduling: 'Agent Scheduling',
     mfa: 'Multi-Factor Authentication (MFA)',
   }
 

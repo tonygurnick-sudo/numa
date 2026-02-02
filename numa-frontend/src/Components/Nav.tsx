@@ -37,22 +37,45 @@ const Nav = ({ isCollapsed = false, onToggleCollapse }: NavProps) => {
     let isMounted = true;
     import('../utils/routeConfig.tsx').then((mod) => {
       if (!isMounted) return;
-      const items = mod.ROUTE_CONFIG.filter((r) => r.nav)
-        .filter((r) => {
-          // Hide items with featureFlag if flag is not enabled in sessionStorage
-          if (r.nav.featureFlag) {
-            return window.sessionStorage.getItem(r.nav.featureFlag) === 'true';
-          }
-          return true;
-        })
-        .map((r) => ({
+      const navRoutes = mod.ROUTE_CONFIG.filter((r) => r.nav).filter((r) => {
+        // Hide items with featureFlag if flag is not enabled in sessionStorage
+        if (r.nav.featureFlag) {
+          return window.sessionStorage.getItem(r.nav.featureFlag) === 'true';
+        }
+        return true;
+      });
+
+      // Sort by order to maintain correct sequence
+      navRoutes.sort((a, b) => (a.nav.order || 999) - (b.nav.order || 999));
+
+      const items = [];
+      const seenSections = new Set();
+
+      navRoutes.forEach((r) => {
+        // Add section header if this is the first item in a new section
+        const sectionId = r.nav.sectionKey ?? r.nav.section;
+        if (sectionId && !seenSections.has(sectionId)) {
+          seenSections.add(sectionId);
+          items.push({
+            sectionOnly: true,
+            section: sectionId,
+            sectionLabelKey: r.nav.sectionKey,
+            footerOnly: r.nav.footerOnly,
+          });
+        }
+
+        // Add the nav item
+        items.push({
           to: r.path,
           label: r.nav.label,
           labelKey: r.nav.labelKey,
           icon: r.nav.icon,
           feature: r.requiredFeature,
           footerOnly: r.nav.footerOnly,
-        }));
+          section: r.nav.sectionKey ?? r.nav.section,
+          sectionLabelKey: r.nav.sectionKey,
+        });
+      });
       setNavItems(items);
     });
     return () => {
@@ -90,28 +113,55 @@ const Nav = ({ isCollapsed = false, onToggleCollapse }: NavProps) => {
               {navName}
             </div>
           </div>
-          <Button
-            variant="link"
-            className="navbar-toggler"
-            onClick={toggleDropdown}
-            aria-controls="mobile-nav-dropdown"
-            aria-expanded={showDropdown}
-            style={{ boxShadow: 'none' }}
-            data-testid="mobile-menu-button"
-          >
-            <i className="bi bi-list"></i>
-          </Button>
+          <div className="d-flex align-items-center">
+            <Button
+              variant="link"
+              className="navbar-toggler"
+              onClick={toggleDropdown}
+              aria-controls="mobile-nav-dropdown"
+              aria-expanded={showDropdown}
+              style={{ boxShadow: 'none' }}
+              data-testid="mobile-menu-button"
+            >
+              <i className="bi bi-list"></i>
+            </Button>
+          </div>
         </div>
         <Dropdown show={showDropdown} className="w-100" id="nav-dropdown">
           <Dropdown.Menu className="w-100 mt-0">
-            {navItems.map((item) => (
-              <FeatureWrapper key={item.to} requiredFeature={item.feature}>
-                <Dropdown.Item onClick={() => navigate(item.to)}>
-                  <i className={`${item.icon} me-2`}></i>
-                  {item.labelKey ? t(item.labelKey) : item.label}
-                </Dropdown.Item>
-              </FeatureWrapper>
-            ))}
+            {navItems
+              .filter((item) => !item.footerOnly)
+              .map((item) => {
+                // Handle section headers
+                if (item.sectionOnly) {
+                  return (
+                    <Dropdown.Header key={`section-${item.section}`} className="dropdown-section-header">
+                      {item.sectionLabelKey ? t(item.sectionLabelKey) : item.section}
+                    </Dropdown.Header>
+                  );
+                }
+
+                // Handle regular nav items
+                return (
+                  <FeatureWrapper key={item.to} requiredFeature={item.feature}>
+                    <Dropdown.Item onClick={() => navigate(item.to)}>
+                      <i className={`${item.icon} me-2`}></i>
+                      {item.labelKey ? t(item.labelKey) : item.label}
+                    </Dropdown.Item>
+                  </FeatureWrapper>
+                );
+              })}
+            <Dropdown.Divider />
+            {navItems
+              .filter((item) => item.footerOnly && !item.sectionOnly)
+              .map((item) => (
+                <FeatureWrapper key={item.to} requiredFeature={item.feature}>
+                  <Dropdown.Item onClick={() => navigate(item.to)}>
+                    <i className={`${item.icon} me-2`}></i>
+                    {item.labelKey ? t(item.labelKey) : item.label}
+                  </Dropdown.Item>
+                </FeatureWrapper>
+              ))}
             <Dropdown.Divider />
             <Dropdown.Item onClick={authLogout}>
               <i className="bi bi-box-arrow-right me-2"></i>
@@ -161,42 +211,28 @@ const Nav = ({ isCollapsed = false, onToggleCollapse }: NavProps) => {
             <i className={`bi ${isCollapsed ? 'bi-chevron-right' : 'bi-chevron-left'}`}></i>
           </button>
         )}
+
         <div className="divider"></div>
 
         <ul className="nav-links">
           {navItems
             .filter((item) => !item.footerOnly)
-            .map((item) => (
-              <FeatureWrapper key={item.to} requiredFeature={item.feature}>
-                <li>
-                  <div
-                    className="nav-link nav-item"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      navigate(item.to);
-                    }}
-                    title={item.labelKey ? t(item.labelKey) : item.label}
-                    role="button"
-                  >
-                    <div className="nav-icon-container">
-                      <i className={`${item.icon} icon`}></i>
-                    </div>
-                    <span className={`nav-label ${isExpanded ? 'expanded' : ''}`}>
-                      {isExpanded ? getExpandedLabel(item, t) : ''}
-                    </span>
-                  </div>
-                </li>
-              </FeatureWrapper>
-            ))}
-        </ul>
+            .map((item) => {
+              // Handle section headers
+              if (item.sectionOnly) {
+                return (
+                  <li key={`section-${item.section}`} className="nav-section-header">
+                    {isExpanded && (
+                      <span className="nav-section-label">
+                        {item.sectionLabelKey ? t(item.sectionLabelKey) : item.section}
+                      </span>
+                    )}
+                  </li>
+                );
+              }
 
-        <footer className="footer">
-          <div className="footer-divider"></div>
-          <ul className="nav-links">
-            {navItems
-              .filter((item) => item.footerOnly)
-              .map((item) => (
+              // Handle regular nav items
+              return (
                 <FeatureWrapper key={item.to} requiredFeature={item.feature}>
                   <li>
                     <div
@@ -218,7 +254,54 @@ const Nav = ({ isCollapsed = false, onToggleCollapse }: NavProps) => {
                     </div>
                   </li>
                 </FeatureWrapper>
-              ))}
+              );
+            })}
+        </ul>
+
+        <footer className="footer">
+          <div className="footer-divider"></div>
+          <ul className="nav-links">
+            {navItems
+              .filter((item) => item.footerOnly)
+              .map((item) => {
+                // Handle section headers
+                if (item.sectionOnly) {
+                  return (
+                    <li key={`section-${item.section}`} className="nav-section-header">
+                      {isExpanded && (
+                        <span className="nav-section-label">
+                          {item.sectionLabelKey ? t(item.sectionLabelKey) : item.section}
+                        </span>
+                      )}
+                    </li>
+                  );
+                }
+
+                // Handle regular footer nav items
+                return (
+                  <FeatureWrapper key={item.to} requiredFeature={item.feature}>
+                    <li>
+                      <div
+                        className="nav-link nav-item"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          navigate(item.to);
+                        }}
+                        title={item.labelKey ? t(item.labelKey) : item.label}
+                        role="button"
+                      >
+                        <div className="nav-icon-container">
+                          <i className={`${item.icon} icon`}></i>
+                        </div>
+                        <span className={`nav-label ${isExpanded ? 'expanded' : ''}`}>
+                          {isExpanded ? getExpandedLabel(item, t) : ''}
+                        </span>
+                      </div>
+                    </li>
+                  </FeatureWrapper>
+                );
+              })}
             <li>
               <div className="nav-link nav-item" onClick={authLogout} title={t('nav.logout')} role="button">
                 <div className="nav-icon-container">
@@ -248,6 +331,10 @@ const Nav = ({ isCollapsed = false, onToggleCollapse }: NavProps) => {
 
 // Helper function to get more descriptive labels when sidebar is expanded
 function getExpandedLabel(item, t) {
+  if (typeof item.label === 'object' && item.label !== null) {
+    return item.label;
+  }
+
   const labelKey = item.labelKey ?? item.label;
   switch (labelKey) {
     case 'nav.items.files':

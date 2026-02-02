@@ -40,6 +40,8 @@ export interface ChatAgentHttpProps {
   bedrockAccount?: string;
   /** Optional crawl URLs table name for web crawler stats in KB state */
   crawlUrlsTableName?: string;
+  /** Shared secret to authenticate internal schedule runner calls */
+  scheduleRunnerSecret: string;
 }
 
 export class NumaChatAgent extends Construct {
@@ -117,6 +119,7 @@ export class NumaChatAgent extends Construct {
         ...(props.agentsSettingsTableName && { AGENTS_SETTINGS_TABLE_NAME: props.agentsSettingsTableName }),
         CLOUDFRONT_SHARED_SECRET: props.cloudfrontSharedSecret,
         DATA_ANALYSIS_STEP_FUNCTION_PARAM_NAME: `/numa/${props.clientName}/apps/data-analysis/step-function-arn`,
+        SCHEDULE_RUNNER_SECRET: props.scheduleRunnerSecret,
         // LWA configuration for response streaming
         AWS_LAMBDA_EXEC_WRAPPER: '/opt/bootstrap',
         AWS_LWA_INVOKE_MODE: 'response_stream',

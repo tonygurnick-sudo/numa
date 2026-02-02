@@ -1,5 +1,17 @@
 import { useState, useEffect, useContext } from 'react';
-import { Container, Row, Col, Card, Table, Button, Form, Pagination, Spinner, Badge } from 'react-bootstrap';
+import {
+  Container,
+  Row,
+  Col,
+  Card,
+  Table,
+  Button,
+  Form,
+  Pagination,
+  Spinner,
+  Badge,
+  ButtonGroup,
+} from 'react-bootstrap';
 import { useNumaApp } from '../Providers/NumaAppContext';
 import { useJobsApi } from '../Services/jobsApi';
 import { manifestService } from '../Services/manifestService';
@@ -9,16 +21,27 @@ import { Search, FileEarmarkArrowUp } from 'react-bootstrap-icons';
 import { JobStatusContext } from '../Providers/JobStatusContext';
 import { PageHeader } from '../Components/PageHeader';
 import { useTranslation } from 'react-i18next';
+import { StickyToolbar } from '../Components/StickyToolbar';
+import { useScheduledAgentJobs } from '../hooks/useScheduledAgentJobs';
 
 import { getDisplayStatusUpper } from '../utils/jobStatus';
 
 const JOB_NAME_DISPLAY_LIMIT = 60;
+const getJobSortTime = (job) => {
+  const completed = job.completedAt || job.finishedAt || job.lastUpdated;
+  const started = job.startedAt || job.dateTime || job.createdAt || job.date;
+  const candidate = completed || started || 0;
+  const parsed = new Date(candidate).getTime();
+  return Number.isNaN(parsed) ? 0 : parsed;
+};
 
 const JobHistoryManager = () => {
   const { t, i18n } = useTranslation('apps');
-  useAuth();
+  const { user, loading: authLoading } = useAuth();
   const { setNumaAppId } = useNumaApp();
   const jobsApi = useJobsApi();
+  const { getScheduledAgentJobs } = useScheduledAgentJobs();
+  const userId = user?.decoded_tokens?.idToken?.['sub'];
 
   // Access job status from the global context
   const {
@@ -33,6 +56,7 @@ const JobHistoryManager = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [manifestApps, setManifestApps] = useState([]);
   const [selectedApp, setSelectedApp] = useState('all');
+  const [jobType, setJobType] = useState('all'); // 'all', 'apps', 'agents'
   const [sortField, setSortField] = useState('startedAt');
   const [sortDirection, setSortDirection] = useState('desc');
   const [loadingJobId, setLoadingJobId] = useState(null);
@@ -79,177 +103,79 @@ const JobHistoryManager = () => {
     };
   }, [jobStatusLoading, jobStatusHasLoaded]);
 
-  // Main function to load jobs - simplified as we primarily use JobStatusContext
+  // Main function to load jobs - handles both apps and scheduled agents
   const loadJobs = async () => {
-    if (selectedApp !== 'all') {
-      setIsLoading(true);
-      try {
-        const response = await jobsApi.getJobsByAppId(selectedApp, null);
-        const appJobs = response?.items || [];
+    setIsLoading(true);
+    let allJobs = [];
 
-        const formattedJobs = appJobs.map((job) => {
-          // Get the start time
-          const startedAt = job.startedAt || job.dateTime || job.createdAt || null;
+    try {
+      if (!userId) {
+        setIsLoading(false);
+        return;
+      }
 
-          // Get the end time reference
-          const endTimeStr = job.completedAt || job.finishedAt || job.lastUpdated || null;
+      // Load app jobs if jobType is 'all' or 'apps'
+      if (jobType === 'all' || jobType === 'apps') {
+        if (selectedApp !== 'all') {
+          const response = await jobsApi.getJobsByAppId(selectedApp, null);
+          const appJobs = response?.items || [];
 
-          // Calculate duration
-          let duration = null;
-
-          // // For completed jobs with both start and end times
-          // if (!isRunning && !isFilesUploaded && !isFailed && startedAt && endTimeStr) {
-          //   try {
-          //     const startTime = new Date(startedAt);
-          //     const endTime = new Date(endTimeStr);
-          //     if (!isNaN(startTime) && !isNaN(endTime)) {
-          //       duration = Math.max(0, (endTime - startTime) / 1000);
-          //     }
-          //   } catch (error) {
-          //     console.error(`Error calculating duration for job ${job.jobId}:`, error);
-          //   }
-          // }
-
-          // // For running jobs with start time
-          // if (isRunning && startedAt) {
-          //   try {
-          //     const startTime = new Date(startedAt);
-          //     const now = new Date();
-          //     if (!isNaN(startTime)) {
-          //       duration = Math.max(0, (now - startTime) / 1000);
-          //     }
-          //   } catch (error) {
-          //     console.error(`Error calculating running duration for job ${job.jobId}:`, error);
-          //   }
-          // }
-
-          return {
+          const formattedAppJobs = appJobs.map((job) => ({
             ...job,
             appName: manifestApps.find((app) => app.id === selectedApp)?.appName || selectedApp,
             appId: selectedApp,
             displayId: job.jobId?.substring(0, 8) || t('jobHistory.unknown'),
             status: job.status || t('jobHistory.unknown'),
-            date: startedAt,
-            startedAt: startedAt,
-            completedAt: endTimeStr,
-            duration: duration,
-          };
-        });
-        setJobs(formattedJobs);
-      } catch (error) {
-        console.error('Error fetching jobs:', error);
-      } finally {
-        setIsLoading(false);
-      }
-    } else {
-      setIsLoading(true);
-      let allJobs = [];
+            date: job.startedAt || job.dateTime || job.createdAt || null,
+            startedAt: job.startedAt || job.dateTime || job.createdAt || null,
+            completedAt: job.completedAt || job.finishedAt || job.lastUpdated || null,
+            isScheduledAgent: false,
+          }));
 
-      try {
-        // Only proceed if we have apps to fetch
-        if (manifestApps.length === 0) {
-          setIsLoading(false);
-          return;
-        }
+          allJobs = [...allJobs, ...formattedAppJobs];
+        } else {
+          for (const app of manifestApps) {
+            if (app.id === 'policy-builder-app' || app.id === 'policy-reviewer-app') continue;
 
-        // Track unique app IDs to prevent duplicate fetches
-        const uniqueApps = [];
-        const processedAppIds = new Set();
+            try {
+              const response = await jobsApi.getJobsByAppId(app.id, null);
+              const appJobs = response?.items || [];
 
-        // Filter out duplicate apps
-        manifestApps.forEach((app) => {
-          if (!processedAppIds.has(app.id)) {
-            processedAppIds.add(app.id);
-            uniqueApps.push(app);
+              const formattedAppJobs = appJobs.map((job) => ({
+                ...job,
+                appName: app.appName || app.id,
+                appId: app.id,
+                displayId: job.jobId?.substring(0, 8) || t('jobHistory.unknown'),
+                status: job.status || t('jobHistory.unknown'),
+                date: job.startedAt || job.dateTime || job.createdAt || null,
+                startedAt: job.startedAt || job.dateTime || job.createdAt || null,
+                completedAt: job.completedAt || job.finishedAt || job.lastUpdated || null,
+                isScheduledAgent: false,
+              }));
+
+              allJobs = [...allJobs, ...formattedAppJobs];
+            } catch (error) {
+              console.error(`Failed to load jobs for app ${app.id}:`, error);
+            }
           }
-        });
-
-        // Create an array of promises for each app's job fetch
-        const jobFetchPromises = uniqueApps.map((app) => {
-          return Promise.race([
-            jobsApi
-              .getJobsByAppId(app.id, null)
-              .then((response) => {
-                const appJobs = response?.items || [];
-
-                return appJobs.map((job) => {
-                  // Get the start time
-                  const startedAt = job.startedAt || job.dateTime || job.createdAt || null;
-
-                  // Get the end time reference
-                  const endTimeStr = job.completedAt || job.finishedAt || job.lastUpdated || null;
-
-                  // Calculate duration
-                  let duration = null;
-
-                  // // For completed jobs with both start and end times
-                  // if (!isRunning && !isFilesUploaded && !isFailed && startedAt && endTimeStr) {
-                  //   try {
-                  //     const startTime = new Date(startedAt);
-                  //     const endTime = new Date(endTimeStr);
-
-                  //     if (!isNaN(startTime) && !isNaN(endTime)) {
-                  //       duration = Math.max(0, (endTime - startTime) / 1000); // Duration in seconds, minimum 0
-                  //     }
-                  //   } catch (error) {
-                  //     console.error(`Error calculating duration for job ${job.jobId}:`, error);
-                  //   }
-                  // }
-
-                  // // For running jobs with start time
-                  // if (isRunning && startedAt) {
-                  //   try {
-                  //     const startTime = new Date(startedAt);
-                  //     const now = new Date();
-                  //     if (!isNaN(startTime)) {
-                  //       duration = Math.max(0, (now - startTime) / 1000); // Running duration in seconds
-                  //     }
-                  //   } catch (error) {
-                  //     console.error(`Error calculating running duration for job ${job.jobId}:`, error);
-                  //   }
-                  // }
-
-                  return {
-                    ...job,
-                    appName: app.appName || app.id,
-                    appId: app.id,
-                    displayId: job.jobId?.substring(0, 8) || t('jobHistory.unknown'),
-                    status: job.status || t('jobHistory.unknown'),
-                    date: startedAt,
-                    startedAt: startedAt,
-                    completedAt: endTimeStr,
-                    duration: duration,
-                  };
-                });
-              })
-              .catch((error) => {
-                console.error(`API call failed for app ${app.id}:`, error);
-                return []; // Return empty array on error
-              }),
-            // Add timeout for each request - increased to 20 seconds
-            new Promise((_, reject) => setTimeout(() => reject(new Error(`Request timeout for app ${app.id}`)), 20000)),
-          ]).catch((error) => {
-            console.error(`Error fetching jobs for app ${app.id}:`, error);
-            return []; // Return empty array on error
-          });
-        });
-
-        // Wait for all promises to resolve
-        const jobsArrays = await Promise.all(jobFetchPromises);
-
-        // Flatten the array of job arrays
-        allJobs = jobsArrays.flat();
-
-        // Sort all jobs by date (newest first)
-        if (allJobs.length > 0) {
-          allJobs.sort((a, b) => new Date(b.date) - new Date(a.date));
-          setJobs(allJobs);
         }
-      } catch (error) {
-        console.error('Error fetching jobs:', error);
-      } finally {
-        setIsLoading(false);
       }
+
+      // Load scheduled agent jobs if jobType is 'all' or 'agents'
+      if (jobType === 'all' || jobType === 'agents') {
+        const agentJobsResponse = await getScheduledAgentJobs();
+        const agentJobs = agentJobsResponse?.items || [];
+        allJobs = [...allJobs, ...agentJobs];
+      }
+
+      // Sort jobs by date (most recent first)
+      allJobs.sort((a, b) => getJobSortTime(b) - getJobSortTime(a));
+
+      setJobs(allJobs);
+    } catch (error) {
+      console.error('Error fetching jobs:', error);
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -259,6 +185,21 @@ const JobHistoryManager = () => {
     let abortController = new AbortController();
     let loadingTimeout;
 
+    if (authLoading) {
+      return () => {
+        isMounted = false;
+        abortController.abort();
+      };
+    }
+
+    if (selectedApp === 'all' && manifestApps.length === 0) {
+      setIsLoading(false);
+      return () => {
+        isMounted = false;
+        abortController.abort();
+      };
+    }
+
     // Set a safety timeout to ensure loading state is cleared even if something goes wrong
     loadingTimeout = setTimeout(() => {
       if (isMounted && isLoading) {
@@ -267,15 +208,13 @@ const JobHistoryManager = () => {
       }
     }, 35000);
 
-    // Always load jobs so we compute durations with full job records
     loadJobs();
-    // Cleanup function to prevent state updates after unmount and abort any pending requests
     return () => {
       isMounted = false;
       abortController.abort();
       clearTimeout(loadingTimeout);
     };
-  }, [selectedApp, manifestApps, jobStatusHasLoaded]);
+  }, [selectedApp, manifestApps, jobStatusHasLoaded, jobType, authLoading, userId]);
 
   // Refresh handler to force both context refresh and local job reload
   const onRefreshClick = () => {
@@ -371,6 +310,11 @@ const JobHistoryManager = () => {
   };
 
   const getAppDisplayName = (job) => {
+    // Handle scheduled agents
+    if (job.isScheduledAgent) {
+      return t('jobHistory.scheduledAgents');
+    }
+
     const manifestApp = manifestApps.find((app) => app.id === job.appId);
     if (manifestApp?.appName) {
       return manifestApp.appName;
@@ -382,11 +326,16 @@ const JobHistoryManager = () => {
   };
 
   const getBaseJobName = (job) => {
+    // Handle scheduled agents
+    if (job.isScheduledAgent) {
+      return t('jobHistory.scheduledAgentRun', { agent: job.agentTitle, prompt: job.promptText });
+    }
+
     const rawName = (job.name || '').trim();
     if (rawName) {
       return rawName;
     }
-    return 'Untitled run';
+    return t('jobHistory.untitledRun');
   };
 
   const formatJobDisplayName = (job) => {
@@ -448,9 +397,9 @@ const JobHistoryManager = () => {
     .sort((a, b) => {
       // Apply sorting
       if (sortField === 'startedAt') {
-        const dateA = new Date(a.startedAt || a.date || 0);
-        const dateB = new Date(b.startedAt || b.date || 0);
-        return sortDirection === 'asc' ? dateA - dateB : dateB - dateA;
+        const timeA = getJobSortTime(a);
+        const timeB = getJobSortTime(b);
+        return sortDirection === 'asc' ? timeA - timeB : timeB - timeA;
       }
       if (sortField === 'appId') {
         const nameA = getAppDisplayName(a).toLowerCase();
@@ -557,6 +506,19 @@ const JobHistoryManager = () => {
   const renderActionButton = (job) => {
     const statusUpper = getDisplayStatusUpper(job);
 
+    if (job.isScheduledAgent) {
+      return (
+        <Button
+          variant="outline-primary"
+          size="sm"
+          onClick={() => navigate(`/scheduling/${job.scheduleId || job.results?.scheduleId}`)}
+          className="d-flex align-items-center"
+        >
+          {t('jobHistory.actions.viewSchedule')}
+        </Button>
+      );
+    }
+
     return (
       <Button
         variant={(() => {
@@ -650,59 +612,84 @@ const JobHistoryManager = () => {
       />
 
       <Container fluid>
-        <Card className="mb-4">
-          <Card.Body>
-            <Row className="mb-3">
-              <Col md={4}>
-                <Form.Group>
-                  <Form.Label>{t('jobHistory.filters.app.label')}</Form.Label>
-                  {/* Form.Select is disabled during loading to prevent users from changing the app selection while data is being fetched */}
-                  <Form.Select
-                    value={selectedApp}
-                    onChange={handleAppChange}
-                    disabled={isLoading}
-                    aria-label={t('jobHistory.filters.app.aria')}
+        <StickyToolbar>
+          <Row className="mb-0 px-3">
+            <Col md={2}>
+              <Form.Group>
+                <Form.Label>{t('jobHistory.filters.jobType.label')}</Form.Label>
+                <ButtonGroup className="w-100">
+                  <Button
+                    variant={jobType === 'all' ? 'primary' : 'outline-primary'}
+                    size="sm"
+                    onClick={() => setJobType('all')}
                   >
-                    <option value="all">{t('jobHistory.filters.app.all')}</option>
-                    {manifestApps
-                      .filter((app) => app.id !== 'policy-builder-app' && app.id !== 'policy-reviewer-app')
-                      .map((app) => (
-                        <option key={app.id} value={app.id}>
-                          {app.appName || app.id}
-                        </option>
-                      ))}
-                  </Form.Select>
-                </Form.Group>
-              </Col>
-              <Col md={3}>
-                <Form.Group>
-                  <Form.Label>{t('jobHistory.filters.status.label')}</Form.Label>
-                  <Form.Select value={filterStatus} onChange={handleStatusFilterChange}>
-                    <option value="all">{t('jobHistory.filters.status.all')}</option>
-                    <option value="completed">{t('jobHistory.status.completed')}</option>
-                    <option value="running">{t('jobHistory.status.running')}</option>
-                    <option value="failed">{t('jobHistory.status.failed')}</option>
-                    <option value="files-uploaded">{t('jobHistory.status.filesUploaded')}</option>
-                  </Form.Select>
-                </Form.Group>
-              </Col>
-              <Col md={5}>
-                <Form.Group>
-                  <Form.Label>{t('jobHistory.filters.search.label')}</Form.Label>
-                  <div className="position-relative">
-                    <Form.Control
-                      type="text"
-                      placeholder={t('jobHistory.filters.search.placeholder')}
-                      value={searchTerm}
-                      onChange={handleSearch}
-                    />
-                    <Search className="position-absolute" style={{ right: '10px', top: '10px', color: '#6c757d' }} />
-                  </div>
-                </Form.Group>
-              </Col>
-            </Row>
-          </Card.Body>
-        </Card>
+                    {t('jobHistory.filters.jobType.all')}
+                  </Button>
+                  <Button
+                    variant={jobType === 'apps' ? 'primary' : 'outline-primary'}
+                    size="sm"
+                    onClick={() => setJobType('apps')}
+                  >
+                    {t('jobHistory.filters.jobType.apps')}
+                  </Button>
+                  <Button
+                    variant={jobType === 'agents' ? 'primary' : 'outline-primary'}
+                    size="sm"
+                    onClick={() => setJobType('agents')}
+                  >
+                    {t('jobHistory.filters.jobType.agents')}
+                  </Button>
+                </ButtonGroup>
+              </Form.Group>
+            </Col>
+            <Col md={3}>
+              <Form.Group>
+                <Form.Label>{t('jobHistory.filters.app.label')}</Form.Label>
+                <Form.Select
+                  value={selectedApp}
+                  onChange={handleAppChange}
+                  disabled={isLoading || jobType === 'agents'}
+                  aria-label={t('jobHistory.filters.app.aria')}
+                >
+                  <option value="all">{t('jobHistory.filters.app.all')}</option>
+                  {manifestApps
+                    .filter((app) => app.id !== 'policy-builder-app' && app.id !== 'policy-reviewer-app')
+                    .map((app) => (
+                      <option key={app.id} value={app.id}>
+                        {app.appName || app.id}
+                      </option>
+                    ))}
+                </Form.Select>
+              </Form.Group>
+            </Col>
+            <Col md={3}>
+              <Form.Group>
+                <Form.Label>{t('jobHistory.filters.status.label')}</Form.Label>
+                <Form.Select value={filterStatus} onChange={handleStatusFilterChange}>
+                  <option value="all">{t('jobHistory.filters.status.all')}</option>
+                  <option value="completed">{t('jobHistory.status.completed')}</option>
+                  <option value="running">{t('jobHistory.status.running')}</option>
+                  <option value="failed">{t('jobHistory.status.failed')}</option>
+                  <option value="files-uploaded">{t('jobHistory.status.filesUploaded')}</option>
+                </Form.Select>
+              </Form.Group>
+            </Col>
+            <Col md={5}>
+              <Form.Group>
+                <Form.Label>{t('jobHistory.filters.search.label')}</Form.Label>
+                <div className="position-relative">
+                  <Form.Control
+                    type="text"
+                    placeholder={t('jobHistory.filters.search.placeholder')}
+                    value={searchTerm}
+                    onChange={handleSearch}
+                  />
+                  <Search className="position-absolute" style={{ right: '10px', top: '10px', color: '#6c757d' }} />
+                </div>
+              </Form.Group>
+            </Col>
+          </Row>
+        </StickyToolbar>
 
         <Card>
           <Card.Body className="p-0">
@@ -758,7 +745,7 @@ const JobHistoryManager = () => {
                               <div className="fw-medium text-break">{displayName}</div>
                             </td>
                             <td>{renderStatusBadge(job)}</td>
-                            <td className="text-end align-middle">{renderActionButton(job)}</td>
+                            <td className="text-end align-middle pe-3">{renderActionButton(job)}</td>
                           </tr>
                         );
                       })}
