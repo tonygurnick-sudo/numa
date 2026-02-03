@@ -1014,6 +1014,7 @@ export const KBFileExplorer = forwardRef<KBFileExplorerHandle, KBFileExplorerPro
 
       try {
         setDeleteError(null);
+        setBulkDeleteProgress(null);
         const { visibleCount } = await getItemsToDelete(selectedItems, rows);
         setBulkDeleteItemCount(visibleCount);
         setShowBulkDeleteConfirmation(true);
@@ -1296,6 +1297,7 @@ export const KBFileExplorer = forwardRef<KBFileExplorerHandle, KBFileExplorerPro
                 {rows.map((row) => {
                   const isFolder = row.type === 'folder';
                   const isExpanded = expandedFolders.has(row.id);
+                  const isEmptyFolder = isFolder && (row.children?.length ?? 0) === 0;
 
                   return (
                     <tr key={row.id}>
@@ -1325,6 +1327,11 @@ export const KBFileExplorer = forwardRef<KBFileExplorerHandle, KBFileExplorerPro
                               {row.urlTag === 'web-crawler-folder' && (
                                 <Badge bg="info" className="ms-2 flex-shrink-0 small">
                                   {t('fileExplorer.webCrawlerBadge')}
+                                </Badge>
+                              )}
+                              {isEmptyFolder && (
+                                <Badge bg="secondary" className="ms-2 flex-shrink-0 small">
+                                  {t('fileExplorer.badges.empty')}
                                 </Badge>
                               )}
                             </>
@@ -1470,7 +1477,7 @@ export const KBFileExplorer = forwardRef<KBFileExplorerHandle, KBFileExplorerPro
                 {t('fileExplorer.bulkDelete.warning', { count: bulkDeleteItemCount })}
               </Alert>
             )}
-            {bulkDeleteProgress && (
+            {bulkDeleteProgress && bulkDeleteProgress.total > 0 && isDeletingBulk && (
               <div className="mb-3">
                 <div className="d-flex justify-content-between small text-muted mb-1">
                   <span>
@@ -1479,12 +1486,23 @@ export const KBFileExplorer = forwardRef<KBFileExplorerHandle, KBFileExplorerPro
                       total: bulkDeleteProgress.total,
                     })}
                   </span>
-                  <span>{Math.round((bulkDeleteProgress.processed / bulkDeleteProgress.total) * 100)}%</span>
+                  <span>
+                    {bulkDeleteProgress.total > 0
+                      ? Math.round((bulkDeleteProgress.processed / bulkDeleteProgress.total) * 100)
+                      : 0}
+                    %
+                  </span>
                 </div>
                 <div className="progress">
                   <div
                     className="progress-bar"
-                    style={{ width: `${(bulkDeleteProgress.processed / bulkDeleteProgress.total) * 100}%` }}
+                    style={{
+                      width: `${
+                        bulkDeleteProgress.total > 0
+                          ? (bulkDeleteProgress.processed / bulkDeleteProgress.total) * 100
+                          : 0
+                      }%`,
+                    }}
                   ></div>
                 </div>
               </div>

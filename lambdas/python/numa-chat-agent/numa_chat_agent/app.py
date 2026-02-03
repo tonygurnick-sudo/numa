@@ -5,7 +5,7 @@ import json
 import os
 import re
 import time
-from typing import Any, AsyncGenerator, Dict, List, Optional
+from typing import Any, AsyncGenerator, Dict, List, Optional, Tuple
 from urllib.parse import urlparse
 
 import jwt
@@ -1948,33 +1948,38 @@ def _get_s3_url_tag(s3_client: Any, bucket_name: str, key: str) -> Optional[str]
         return None
 
 
-def _list_kb_files(bucket_name: str, prefix: str) -> List[Dict[str, Any]]:
+def _list_kb_files(bucket_name: str, prefix: str) -> Tuple[List[Dict[str, Any]], int]:
     """
     List all files in an S3 bucket prefix with metadata.
+    Includes folder marker objects (keys ending with "/") so empty folders are visible.
 
     Args:
         bucket_name: S3 bucket name
         prefix: S3 prefix to search (e.g., "documents/kb-123/")
 
     Returns:
-        List of file objects with key, lastModified, size, and optionally urlTag
+        Tuple of:
+            - List of objects with key, lastModified, size, and optionally urlTag
+            - Document count (excludes folder markers)
     """
     try:
         s3_client = prm_client("s3", region=REGION)
         paginator = s3_client.get_paginator("list_objects_v2")
 
         files: List[Dict[str, Any]] = []
+        doc_count = 0
         for page in paginator.paginate(Bucket=bucket_name, Prefix=prefix):
             contents = page.get("Contents", [])
             for obj in contents:
                 key_val = obj.get("Key") if isinstance(obj, dict) else None
                 if not isinstance(key_val, str):
                     continue
-                # Skip directories and metadata.json files
-                if key_val.endswith("/") or key_val.endswith(".metadata.json"):
+                # Skip metadata sidecar files
+                if key_val.endswith(".metadata.json"):
                     continue
 
                 last_modified = obj.get("LastModified")
+                is_folder = key_val.endswith("/")
                 file_info: Dict[str, Any] = {
                     "key": key_val,
                     "lastModified": (
@@ -1984,17 +1989,25 @@ def _list_kb_files(bucket_name: str, prefix: str) -> List[Dict[str, Any]]:
                 }
 
                 # Fetch URL tag for web crawler files
-                if "web-crawler/" in key_val or "scraped-content/" in key_val:
+                if not is_folder and (
+                    "web-crawler/" in key_val or "scraped-content/" in key_val
+                ):
                     url_tag = _get_s3_url_tag(s3_client, bucket_name, key_val)
                     if url_tag:
                         file_info["urlTag"] = url_tag
 
                 files.append(file_info)
+                if not is_folder:
+                    doc_count += 1
 
         logger.debug(
-            "Listed S3 files", bucket=bucket_name, prefix=prefix, count=len(files)
+            "Listed S3 files",
+            bucket=bucket_name,
+            prefix=prefix,
+            count=len(files),
+            doc_count=doc_count,
         )
-        return files
+        return files, doc_count
     except Exception as e:
         logger.error(
             "Error listing S3 files",
@@ -2002,7 +2015,7 @@ def _list_kb_files(bucket_name: str, prefix: str) -> List[Dict[str, Any]]:
             prefix=prefix,
             error=str(e),
         )
-        return []
+        return [], 0
 
 
 @app.get("/api/kb/{kb_id}/files")
@@ -2094,10 +2107,9 @@ async def list_kb_files(request: Request, kb_id: str) -> Response:
         s3_prefix = kb["s3_prefix"]
 
         # List files from S3
-        files = _list_kb_files(data_bucket, s3_prefix)
+        files, doc_count = _list_kb_files(data_bucket, s3_prefix)
 
         # Update cached document count in DynamoDB
-        doc_count = len(files)
         kb_manager.update_document_count(kb_id, doc_count)
 
         logger.info(
