@@ -3,11 +3,14 @@ Helpers for invoking the secure Pipedream proxy lambda.
 """
 
 import json
+import random
 import time
 import uuid
 from typing import Any, Dict
 
 import structlog
+from botocore.config import Config
+from botocore.exceptions import ClientError
 from botocore.session import Session
 
 from ....config import PIPEDREAM_PROXY_LAMBDA_ARN, get_lambda_client
@@ -61,6 +64,11 @@ def generate_sts_proof_url(region: str = "us-east-1", expires: int = 60) -> str:
                 "network_round_trip_time_varies_100ms_to_2_seconds",
                 "proxy_processing_time_2_to_5_seconds_typical",
                 "total_time_budget_often_exceeds_60_seconds",
+                "fixed_60_second_expiry_insufficient_under_load",
+                "no_adaptive_expiry_based_on_system_conditions",
+                "lambda_cold_starts_may_exceed_proof_validity",
+                "network_latency_can_cause_proof_expiration",
+                "proxy_processing_time_not_accounted_for_in_expiry",
             ],
         )
 
@@ -243,6 +251,189 @@ def generate_sts_proof_url(region: str = "us-east-1", expires: int = 60) -> str:
         raise ValueError(f"STS proof URL generation failed: {exc}") from exc
 
 
+def _invoke_lambda_with_retry(
+    lambda_client,
+    function_arn: str,
+    payload: Dict[str, Any],
+    invocation_id: str,
+    max_retries: int = 3,
+    base_timeout: int = 30,
+) -> Dict[str, Any]:
+    """Invoke Lambda with retry logic, timeout controls, and error handling.
+
+    Args:
+        lambda_client: Boto3 Lambda client
+        function_arn: Lambda function ARN to invoke
+        payload: JSON payload to send
+        invocation_id: Unique invocation ID for logging
+        max_retries: Maximum retry attempts
+        base_timeout: Base timeout in seconds
+
+    Returns:
+        Lambda response dictionary
+
+    Raises:
+        Exception: After all retries are exhausted
+    """
+    # Configure resilient client with timeouts
+    resilient_config = Config(
+        retries={"max_attempts": 1},  # We handle retries manually
+        read_timeout=base_timeout,
+        connect_timeout=10,
+        max_pool_connections=10,
+    )
+
+    # Create a new client with timeout configuration
+    resilient_lambda_client = lambda_client.__class__(
+        lambda_client.meta.region_name, config=resilient_config
+    )
+
+    last_exception = None
+    total_start = time.time()
+
+    for attempt in range(max_retries):
+        attempt_start = time.time()
+        adaptive_timeout = base_timeout + (attempt * 10)  # Increase timeout on retries
+
+        logger.info(
+            "LAMBDA_INVOKE_ATTEMPT: Attempting proxy Lambda invocation with timeout control",
+            attempt=attempt + 1,
+            max_attempts=max_retries,
+            function_arn=function_arn,
+            timeout_seconds=adaptive_timeout,
+            invocation_id=invocation_id,
+            resilience_features=[
+                "timeout_control",
+                "retry_logic",
+                "exponential_backoff",
+            ],
+        )
+
+        try:
+            response = resilient_lambda_client.invoke(
+                FunctionName=function_arn,
+                Payload=json.dumps(payload),
+                InvocationType="RequestResponse",
+            )
+
+            attempt_duration = time.time() - attempt_start
+            total_duration = time.time() - total_start
+
+            # Check for function errors
+            if response.get("FunctionError"):
+                error_type = response.get("FunctionError")
+                logger.warning(
+                    "LAMBDA_FUNCTION_ERROR: Lambda returned function error - may be retryable",
+                    function_error_type=error_type,
+                    attempt=attempt + 1,
+                    attempt_duration_ms=round(attempt_duration * 1000, 2),
+                    invocation_id=invocation_id,
+                )
+
+                # Function errors might be retryable depending on type
+                if attempt < max_retries - 1 and error_type in [
+                    "Unhandled",
+                    "Runtime.Unknown",
+                ]:
+                    last_exception = Exception(f"Function error: {error_type}")
+                    continue
+
+            logger.info(
+                "RELIABILITY_SUCCESS: Resilient Lambda invocation succeeded",
+                attempt=attempt + 1,
+                attempt_duration_ms=round(attempt_duration * 1000, 2),
+                total_duration_ms=round(total_duration * 1000, 2),
+                status_code=response.get("StatusCode"),
+                invocation_id=invocation_id,
+                resilience_improvement="ENABLED",
+            )
+
+            return response
+
+        except ClientError as e:
+            error_code = e.response.get("Error", {}).get("Code", "Unknown")
+            last_exception = e
+            attempt_duration = time.time() - attempt_start
+
+            # Categorize retryable vs non-retryable errors
+            retryable_errors = [
+                "ServiceException",
+                "TooManyRequestsException",
+                "RequestTimeoutException",
+                "InternalServerError",
+                "ResourceConflictException",
+            ]
+            non_retryable_errors = [
+                "InvalidParameterValueException",
+                "ResourceNotFoundException",
+                "AccessDeniedException",
+            ]
+
+            is_retryable = (error_code in retryable_errors) or (
+                error_code not in non_retryable_errors
+                and attempt_duration >= adaptive_timeout * 0.9
+            )
+
+            logger.warning(
+                "RELIABILITY_RETRY: Lambda invocation failed - analyzing for retry",
+                attempt=attempt + 1,
+                error_code=error_code,
+                error_message=str(e),
+                attempt_duration_ms=round(attempt_duration * 1000, 2),
+                is_retryable=is_retryable,
+                will_retry=is_retryable and attempt < max_retries - 1,
+                invocation_id=invocation_id,
+            )
+
+            if not is_retryable or attempt == max_retries - 1:
+                break
+
+        except Exception as e:
+            last_exception = e
+            attempt_duration = time.time() - attempt_start
+
+            logger.error(
+                "RELIABILITY_UNEXPECTED: Unexpected error during Lambda invocation",
+                attempt=attempt + 1,
+                error_type=type(e).__name__,
+                error=str(e),
+                attempt_duration_ms=round(attempt_duration * 1000, 2),
+                invocation_id=invocation_id,
+            )
+
+            if attempt == max_retries - 1:
+                break
+
+        # Apply exponential backoff with jitter
+        if attempt < max_retries - 1:
+            base_backoff = min((2**attempt) * 0.5, 10)  # Cap at 10 seconds
+            jitter = random.uniform(0, base_backoff * 0.3)  # Up to 30% jitter
+            backoff_delay = base_backoff + jitter
+
+            logger.info(
+                "RELIABILITY_BACKOFF: Applying exponential backoff with jitter",
+                backoff_delay_seconds=backoff_delay,
+                base_backoff=base_backoff,
+                jitter_seconds=jitter,
+                next_attempt=attempt + 2,
+                invocation_id=invocation_id,
+            )
+            time.sleep(backoff_delay)
+
+    # All attempts failed
+    total_duration = time.time() - total_start
+    logger.critical(
+        "RELIABILITY_FAILURE: All resilient Lambda invocation attempts failed",
+        total_attempts=max_retries,
+        total_duration_ms=round(total_duration * 1000, 2),
+        final_error=str(last_exception) if last_exception else "Unknown error",
+        invocation_id=invocation_id,
+    )
+    raise last_exception or Exception(
+        "Lambda invocation failed after all resilient retry attempts"
+    )
+
+
 def invoke_pipedream_proxy(operation: str, external_user_id: str, **kwargs) -> Dict:
     """
     Invoke the secure Pipedream proxy lambda for operations.
@@ -327,6 +518,7 @@ def invoke_pipedream_proxy(operation: str, external_user_id: str, **kwargs) -> D
                 "RELIABILITY_CRITICAL: Cross-account Lambda invocation is SINGLE "
                 "POINT OF FAILURE with zero resilience"
             ),
+            "RELIABILITY_CRITICAL: Cross-account Lambda invocation is SINGLE POINT OF FAILURE with zero resilience",
             proxy_arn=PIPEDREAM_PROXY_LAMBDA_ARN,
             operation=operation,
             user_id=(
@@ -718,18 +910,20 @@ def invoke_pipedream_proxy(operation: str, external_user_id: str, **kwargs) -> D
         #     lambda_client, PIPEDREAM_PROXY_LAMBDA_ARN, payload, invocation_id
         # )
 
-        # CURRENT IMPLEMENTATION - SINGLE SHOT WITH ZERO RESILIENCE
-        logger.error(
-            "EXECUTING_SINGLE_SHOT_LAMBDA: Proceeding with vulnerable single-shot invocation - may fail unpredictably",
+        # RELIABILITY IMPROVEMENT: Resilient Lambda invocation with timeout and retry
+        response = _invoke_lambda_with_retry(
+            lambda_client=lambda_client,
+            function_arn=PIPEDREAM_PROXY_LAMBDA_ARN,
+            payload=payload,
             invocation_id=invocation_id,
-            risk_assessment="MAXIMUM",
-            time_to_failure="UNPREDICTABLE",
         )
 
         response = lambda_client.invoke(
             FunctionName=PIPEDREAM_PROXY_LAMBDA_ARN,
             Payload=json.dumps(payload),
             InvocationType="RequestResponse",
+            max_retries=3,
+            base_timeout=30,
         )
         lambda_invocation_duration = time.time() - lambda_invocation_start
 

@@ -612,17 +612,68 @@ class PipedreamProvider:
                 except Exception:
                     pass
 
-                raw_tools = entered_client.list_tools_sync()
-                logger.info(
-                    "Raw MCP tools retrieved",
-                    app_name=app_name,
-                    tool_names=[
-                        getattr(t, "tool_name", None)
-                        or getattr(getattr(t, "mcp_tool", None), "name", None)
-                        or getattr(t, "name", None)
-                        for t in raw_tools
-                    ],
-                )
+                # Perform connection health check
+                health_check_start = time.time()
+                try:
+                    raw_tools = entered_client.list_tools_sync()
+                    health_check_duration = time.time() - health_check_start
+
+                    if not raw_tools:
+                        logger.error(
+                            "CONNECTION_HEALTH_FAILED: MCP connection returned no tools",
+                            app_name=app_name,
+                            health_check_duration_ms=round(
+                                health_check_duration * 1000, 2
+                            ),
+                        )
+                        if stack:
+                            stack.close()
+                        failed_apps.append(
+                            {"app": app_name, "reason": "no_tools_available"}
+                        )
+                        continue
+
+                    if health_check_duration > 10.0:  # Slow response threshold
+                        logger.warning(
+                            "CONNECTION_HEALTH_DEGRADED: MCP connection responding slowly",
+                            app_name=app_name,
+                            health_check_duration_ms=round(
+                                health_check_duration * 1000, 2
+                            ),
+                            threshold_ms=10000,
+                        )
+
+                    logger.info(
+                        "CONNECTION_HEALTH_OK: MCP connection health check passed",
+                        app_name=app_name,
+                        tools_available=len(raw_tools),
+                        health_check_duration_ms=round(health_check_duration * 1000, 2),
+                        tool_names=[
+                            getattr(t, "tool_name", None)
+                            or getattr(getattr(t, "mcp_tool", None), "name", None)
+                            or getattr(t, "name", None)
+                            for t in raw_tools
+                        ],
+                    )
+                except Exception as e:
+                    health_check_duration = time.time() - health_check_start
+                    logger.error(
+                        "CONNECTION_HEALTH_ERROR: MCP connection health check failed",
+                        app_name=app_name,
+                        error_type=type(e).__name__,
+                        error=str(e),
+                        health_check_duration_ms=round(health_check_duration * 1000, 2),
+                    )
+                    if stack:
+                        stack.close()
+                    failed_apps.append(
+                        {
+                            "app": app_name,
+                            "reason": "health_check_failed",
+                            "error": str(e),
+                        }
+                    )
+                    continue
 
                 filtered_tools = self._filter_tools(
                     app_name, raw_tools, external_user_id

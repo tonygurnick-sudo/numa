@@ -18,8 +18,10 @@ from __future__ import annotations
 
 import json
 import os
+import signal
 import time
 import uuid
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, Iterable, List, Optional
@@ -27,7 +29,7 @@ from typing import TYPE_CHECKING, Any, Dict, Iterable, List, Optional
 import structlog
 from jsonschema import Draft7Validator  # type: ignore[import-untyped,unused-ignore]
 
-from ....auth import get_current_user_auth
+from ....auth import get_request_scoped_user_auth
 from ....intent_verification import (
     IntentVerificationConfig,
     get_delete_config,
@@ -56,6 +58,32 @@ except ImportError:  # pragma: no cover
     BedrockClaude3Model = None  # type: ignore
 
 logger = structlog.get_logger(__name__)
+
+# ── Timeout Protection ──────────────────────────────────────────────────────
+
+
+@contextmanager
+def timeout_context(seconds):
+    """Context manager for timeout protection using signals.
+
+    Args:
+        seconds: Timeout duration in seconds
+    """
+
+    def timeout_handler(signum, frame):
+        raise TimeoutError(f"MCP operation timed out after {seconds} seconds")
+
+    # Set the signal handler
+    old_handler = signal.signal(signal.SIGALRM, timeout_handler)
+    signal.alarm(seconds)
+
+    try:
+        yield
+    finally:
+        # Restore the old signal handler
+        signal.signal(signal.SIGALRM, old_handler)
+        signal.alarm(0)
+
 
 # ── Material Tool Verification Configuration ──────────────────────────────────
 
@@ -178,27 +206,79 @@ class PipedreamToolDefinition:
 
 
 def _build_local_time_context() -> str:
-    """Render a concise local time context string from current user auth.
+    """Render a comprehensive local time context string from current user auth.
 
     Expected keys under user_auth["timeInfo"]:
-    - date, time, timezone, dayOfWeek (optional)
+    - summary: Pre-formatted summary (preferred)
+    - iso: ISO timestamp for precise parsing
+    - epochMs: Epoch milliseconds for calculations
+    - local: {year, month, day, hour, minute, second, weekday}
+    - timezone, timezoneAbbr: Full timezone and abbreviation
+    - date, time, dayOfWeek: Human-readable formats (legacy fallback)
     Falls back gracefully if not provided.
     """
     try:
-        ua = get_current_user_auth() or {}
+        ua = get_request_scoped_user_auth() or {}
         ti = (ua.get("timeInfo") or {}) if isinstance(ua, dict) else {}
         if not isinstance(ti, dict):
             return "not provided"
+
+        # Use pre-formatted summary if available (most comprehensive)
+        summary = str(ti.get("summary") or "").strip()
+        if summary:
+            # Add precise timestamp for tools that need it
+            iso = str(ti.get("iso") or "").strip()
+            epoch_ms = ti.get("epochMs")
+            extras = []
+            if iso:
+                extras.append(f"ISO: {iso}")
+            if epoch_ms:
+                extras.append(f"Epoch: {epoch_ms}ms")
+
+            if extras:
+                return f"{summary}, {', '.join(extras)}"
+            return summary
+
+        # Enhanced format using available fields
         date = str(ti.get("date") or "").strip()
         time_str = str(ti.get("time") or "").strip()
         tz = str(ti.get("timezone") or "").strip()
+        tz_abbr = str(ti.get("timezoneAbbr") or "").strip()
         day_of_week = str(ti.get("dayOfWeek") or "").strip()
 
-        # Format: "Local date: {dayOfWeek}, {date}, Local time: {time} ({timezone})"
+        # Try to build from local numeric parts if available
+        local = ti.get("local") or {}
+        if isinstance(local, dict) and local.get("year"):
+            year = local.get("year")
+            month = local.get("month")
+            day_num = local.get("day")
+            hour = local.get("hour")
+            minute = local.get("minute")
+
+            date_part = (
+                f"{day_num}/{month:02d}/{year}" if all([year, month, day_num]) else date
+            )
+            time_part = (
+                f"{hour:02d}:{minute:02d}"
+                if hour is not None and minute is not None
+                else time_str
+            )
+
+            tz_display = tz_abbr or tz
+            if date_part and time_part and tz_display:
+                result = f"Local date: {day_of_week}, {date_part}, Local time: {time_part} ({tz_display})"
+
+                # Add epoch for precise calculations
+                epoch_ms = ti.get("epochMs")
+                if epoch_ms:
+                    result += f", Epoch: {epoch_ms}ms"
+                return result
+
+        # Legacy fallback format
         if day_of_week and date and time_str and tz:
             return f"Local date: {day_of_week}, {date}, Local time: {time_str} ({tz})"
 
-        # Fallback to partial info if not all fields available
+        # Minimal fallback
         pieces = []
         if day_of_week and date:
             pieces.append(f"Local date: {day_of_week}, {date}")
@@ -222,7 +302,7 @@ def _get_user_timezone() -> Optional[str]:
     otherwise None.
     """
     try:
-        ua = get_current_user_auth() or {}
+        ua = get_request_scoped_user_auth() or {}
         ti = (ua.get("timeInfo") or {}) if isinstance(ua, dict) else {}
         if isinstance(ti, dict):
             tz = str(ti.get("timezone") or "").strip()
@@ -679,9 +759,9 @@ class ToolsOnlyIntegrationRouter:
                 integration=self.integration_name,
                 tool=tool_name,
                 verification_enabled=MATERIAL_TOOL_VERIFICATION_ENABLED,
-                user_context_available=bool(get_current_user_auth()),
+                user_context_available=bool(get_request_scoped_user_auth()),
             )
-            user_auth = get_current_user_auth() or {}
+            user_auth = get_request_scoped_user_auth() or {}
             if not user_auth:
                 logger.error(
                     "SECURITY_RISK: No user auth context available during tool execution - authentication lost",
@@ -1320,6 +1400,136 @@ class ToolsOnlyIntegrationRouter:
         # # Use adaptive retry logic instead of fixed 2 attempts
         # return execute_with_exponential_backoff_and_jitter(adaptive_max_attempts, definition, instruction, feedback)
 
+        # ADAPTIVE RETRY LOGIC FIX - COMMENTED OUT BUT READY FOR IMPLEMENTATION
+        # import random
+        #
+        # def calculate_adaptive_retry_attempts(definition: PipedreamToolDefinition, base_attempts: int = 2) -> int:
+        #     """Calculate retry attempts based on schema complexity and error patterns."""
+        #     schema = definition.schema or {}
+        #     properties = schema.get("properties", {})
+        #
+        #     # Start with base attempts
+        #     attempts = base_attempts
+        #
+        #     # Increase attempts for complex schemas
+        #     if isinstance(properties, dict):
+        #         property_count = len(properties)
+        #         if property_count > 15:  # Very complex
+        #             attempts += 3
+        #         elif property_count > 10:  # Complex
+        #             attempts += 2
+        #         elif property_count > 5:  # Moderate
+        #             attempts += 1
+        #
+        #     # Check for complex nested structures
+        #     nested_complexity = 0
+        #     array_complexity = 0
+        #     if isinstance(properties, dict):
+        #         for prop_name, prop_def in properties.items():
+        #             if isinstance(prop_def, dict):
+        #                 prop_type = prop_def.get("type")
+        #                 if prop_type == "object":
+        #                     nested_complexity += 1
+        #                 elif prop_type == "array":
+        #                     array_complexity += 1
+        #                     # Arrays with object items are especially complex
+        #                     items = prop_def.get("items", {})
+        #                     if isinstance(items, dict) and items.get("type") == "object":
+        #                         nested_complexity += 1
+        #
+        #     # Add attempts for high complexity
+        #     if nested_complexity > 3 or array_complexity > 2:
+        #         attempts += 2
+        #     elif nested_complexity > 1 or array_complexity > 1:
+        #         attempts += 1
+        #
+        #     # Cap at reasonable maximum
+        #     return min(attempts, 6)
+        #
+        # def execute_with_exponential_backoff_and_jitter(max_attempts: int, definition: PipedreamToolDefinition, instruction: str, feedback: list):
+        #     """Execute payload generation with exponential backoff and jitter."""
+        #     last_error = None
+        #
+        #     for attempt in range(max_attempts):
+        #         attempt_start = time.time()
+        #
+        #         logger.info(
+        #             "RELIABILITY_IMPROVEMENT: Adaptive retry attempt with exponential backoff",
+        #             integration=self.integration_name,
+        #             tool=definition.name,
+        #             attempt=attempt + 1,
+        #             max_attempts=max_attempts,
+        #             backoff_enabled=attempt > 0,
+        #             jitter_enabled=True
+        #         )
+        #
+        #         try:
+        #             # Attempt payload generation
+        #             prompt_text = self._build_user_prompt(definition, instruction, feedback)
+        #             response = self._invoke_model(prompt_text, definition)
+        #             candidate = self._parse_json_response(response)
+        #             validation_errors = self._validate_payload(definition, candidate)
+        #
+        #             if not validation_errors:
+        #                 logger.info(
+        #                     "RELIABILITY_SUCCESS: Adaptive retry succeeded",
+        #                     integration=self.integration_name,
+        #                     tool=definition.name,
+        #                     successful_attempt=attempt + 1,
+        #                     total_attempts=max_attempts
+        #                 )
+        #                 return candidate
+        #
+        #             # Validation failed, add feedback
+        #             feedback.append("Schema validation issues: " + "; ".join(validation_errors))
+        #             last_error = ValueError("; ".join(validation_errors))
+        #
+        #         except Exception as e:
+        #             feedback.append(f"Attempt {attempt + 1}: {str(e)}")
+        #             last_error = e
+        #
+        #         # Apply exponential backoff with jitter if not the last attempt
+        #         if attempt < max_attempts - 1:
+        #             base_delay = 0.5 * (2 ** attempt)  # Exponential backoff
+        #             jitter = random.uniform(0, 0.3)    # Up to 300ms jitter
+        #             delay = min(base_delay + jitter, 5.0)  # Cap at 5 seconds
+        #
+        #             logger.info(
+        #                 "RELIABILITY_BACKOFF: Applying exponential backoff with jitter",
+        #                 integration=self.integration_name,
+        #                 tool=definition.name,
+        #                 attempt=attempt + 1,
+        #                 delay_seconds=delay,
+        #                 base_delay=base_delay,
+        #                 jitter_seconds=jitter
+        #             )
+        #
+        #             time.sleep(delay)
+        #
+        #     # All attempts failed
+        #     logger.error(
+        #         "RELIABILITY_FAILURE: All adaptive retry attempts failed",
+        #         integration=self.integration_name,
+        #         tool=definition.name,
+        #         total_attempts=max_attempts,
+        #         final_error=str(last_error) if last_error else "unknown"
+        #     )
+        #     raise last_error or ValueError("Payload generation failed after all adaptive retry attempts")
+        #
+        # # Calculate adaptive retry attempts based on schema complexity
+        # adaptive_max_attempts = calculate_adaptive_retry_attempts(definition)
+        # logger.info(
+        #     "RELIABILITY_IMPROVEMENT: Using adaptive retry logic based on schema complexity",
+        #     integration=self.integration_name,
+        #     tool=definition.name,
+        #     schema_properties_count=len(definition.schema.get("properties", {})) if definition.schema else 0,
+        #     adaptive_max_attempts=adaptive_max_attempts,
+        #     improvement_enabled=True
+        # )
+        #
+        # # Use adaptive retry logic instead of fixed 2 attempts
+        # return execute_with_exponential_backoff_and_jitter(adaptive_max_attempts, definition, instruction, feedback)
+
         # RELIABILITY IMPROVEMENT NEEDED: Implement adaptive retry logic with exponential backoff
         # RATIONALE: The current implementation only attempts payload generation 2 times before giving up,
         # which is insufficient for complex schemas or when model responses vary. This causes intermittent
@@ -1776,19 +1986,35 @@ class ToolsOnlyIntegrationRouter:
             #     raise RuntimeError(f"MCP tool call timed out after {MCP_CALL_TIMEOUT_SECONDS}s")
 
             # CURRENT IMPLEMENTATION - NO TIMEOUT PROTECTION
-            logger.error(
-                "EXECUTING_WITHOUT_TIMEOUT: MCP call proceeding without timeout - may hang indefinitely",
+            logger.info(
+                "RELIABILITY_IMPROVEMENT: MCP call executing with timeout protection",
                 integration=self.integration_name,
                 tool=definition.name,
+                timeout_seconds=30,
                 current_time=time.time(),
                 risk_assessment="HIGH",
+                reliability_status="UNPROTECTED",
+                protection="TIMEOUT_ENABLED",
             )
 
-            result = self._mcp_client.call_tool_sync(
-                tool_use_id=tool_use_id,
-                name=definition.name,
-                arguments=payload,
-            )
+            try:
+                with timeout_context(30):  # 30-second timeout
+                    result = self._mcp_client.call_tool_sync(
+                        tool_use_id=tool_use_id,
+                        name=definition.name,
+                        arguments=payload,
+                    )
+            except TimeoutError as e:
+                logger.error(
+                    "MCP_CALL_TIMEOUT: MCP tool call timed out",
+                    integration=self.integration_name,
+                    tool=definition.name,
+                    timeout_seconds=30,
+                    error=str(e),
+                )
+                raise Exception(
+                    f"Tool call timed out after 30 seconds: {definition.name}"
+                ) from e
             mcp_call_duration = time.time() - mcp_call_start
 
             logger.warning(

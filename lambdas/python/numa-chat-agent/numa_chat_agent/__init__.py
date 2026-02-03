@@ -15,7 +15,13 @@ from strands import Agent
 
 from bedrock.language import get_language_system_prompt
 
-from .auth import clear_current_user_auth, set_current_user_auth
+from .auth import (
+    clear_current_user_auth,
+    clear_request_scoped_user_auth,
+    get_request_scoped_user_auth,
+    set_current_user_auth,
+    set_request_scoped_user_auth,
+)
 
 # Import main components
 from .config import MODEL_ID, get_bedrock_model, validate_config
@@ -64,6 +70,72 @@ os.environ.setdefault(
 logger = structlog.get_logger()
 
 SUPPORTED_MCP_APPS = get_supported_mcp_apps()
+
+
+def _build_comprehensive_date_context() -> str:
+    """Build comprehensive date/time context from user auth for system prompts.
+
+    Returns formatted date context that helps AI understand temporal references
+    like "today", "this week", "next month", etc.
+    """
+    try:
+        ua = get_request_scoped_user_auth() or {}
+        ti = (ua.get("timeInfo") or {}) if isinstance(ua, dict) else {}
+        if not isinstance(ti, dict):
+            return ""
+
+        # Use pre-formatted summary if available (most comprehensive)
+        summary = str(ti.get("summary") or "").strip()
+        if summary:
+            context_parts = [summary]
+
+            # Add precise timestamp information for temporal calculations
+            iso = str(ti.get("iso") or "").strip()
+            local = ti.get("local") or {}
+
+            if iso:
+                context_parts.append(f"ISO timestamp: {iso}")
+
+            if isinstance(local, dict) and local.get("year"):
+                year = local.get("year")
+                month = local.get("month")
+                day = local.get("day")
+                weekday = local.get("weekday", 0)  # 0=Sunday
+
+                # Add structured date for temporal reasoning
+                weekday_names = [
+                    "Sunday",
+                    "Monday",
+                    "Tuesday",
+                    "Wednesday",
+                    "Thursday",
+                    "Friday",
+                    "Saturday",
+                ]
+                weekday_name = (
+                    weekday_names[weekday] if 0 <= weekday <= 6 else "Unknown"
+                )
+
+                context_parts.append(
+                    f"Structured date: Year {year}, Month {month}, Day {day}, Weekday {weekday} ({weekday_name})"
+                )
+
+            return "\n".join(context_parts)
+
+        # Fallback to basic context if no summary
+        date = str(ti.get("date") or "").strip()
+        time_str = str(ti.get("time") or "").strip()
+        tz = str(ti.get("timezone") or "").strip()
+        day_of_week = str(ti.get("dayOfWeek") or "").strip()
+
+        if date and time_str and tz:
+            return (
+                f"Current date: {day_of_week}, {date}\nCurrent time: {time_str} ({tz})"
+            )
+
+        return ""
+    except Exception:
+        return ""
 
 
 def create_fresh_agent(
@@ -125,7 +197,7 @@ def create_fresh_agent(
 
     # Default system prompt if none provided
     if not system_prompt:
-        system_prompt = (
+        base_prompt = (
             "You are Numa, an AI assistant that intelligently uses available tools to provide accurate information. "
             "The user can enable or disable your access to tools - respect these preferences. "
             "When tools are available, use them strategically: query_knowledge_base for organisational information, "
@@ -134,6 +206,13 @@ def create_fresh_agent(
             "Prefer query_knowledge_base for organisational content. When web_search is enabled, do not apologise about browsing limitations; when it is disabled but would help, explain briefly and offer to proceed without it. "
             "Additionally, use connected service tools (e.g., Slack, Notion, Google Calendar) when appropriate to interact with the user's integrated applications."
         )
+
+        # Add current date/time context for temporal awareness
+        date_context = _build_comprehensive_date_context()
+        if date_context:
+            system_prompt = f"{base_prompt}\n\nCURRENT DATE & TIME CONTEXT:\n{date_context}\n\nUse this date/time information when the user refers to temporal concepts like 'today', 'this week', 'next month', 'yesterday', etc."
+        else:
+            system_prompt = base_prompt
 
     # Append language instruction based on user's locale preference
     if locale and isinstance(locale, dict):
@@ -210,7 +289,11 @@ __all__ = [
     "cleanup_mcp_clients",
     "set_current_user_auth",
     "clear_current_user_auth",
+    "set_request_scoped_user_auth",
+    "get_request_scoped_user_auth",
+    "clear_request_scoped_user_auth",
     "get_available_tool_names",
     "AVAILABLE_TOOLS",
     "SUPPORTED_MCP_APPS",
+    "_build_comprehensive_date_context",
 ]

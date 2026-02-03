@@ -10,7 +10,7 @@ from numa_chat_agent.tools.agent_creation import (
 
 
 class TestAgentCreationTool(unittest.TestCase):
-    @patch("numa_chat_agent.tools.agent_creation.get_current_user_auth")
+    @patch("numa_chat_agent.tools.agent_creation.get_request_scoped_user_auth")
     def test_create_agent_tool_requires_user_context(self, mock_auth):
         mock_auth.return_value = {}
         result = create_agent_tool(title="Test", system_prompt="Prompt")  # type: ignore[arg-type]
@@ -23,7 +23,7 @@ class TestAgentCreationTool(unittest.TestCase):
         return_value=("assistant: hi", "", []),
     )
     @patch(
-        "numa_chat_agent.tools.agent_creation.get_current_user_auth",
+        "numa_chat_agent.tools.agent_creation.get_request_scoped_user_auth",
         return_value={"sub": "user-123", "conversation_id": "conv-1"},
     )
     def test_create_agent_tool_denied_without_confirmation(
@@ -56,7 +56,7 @@ class TestAgentCreationTool(unittest.TestCase):
     )
     @patch("numa_chat_agent.tools.agent_creation.AgentPayload.from_kwargs")
     @patch(
-        "numa_chat_agent.tools.agent_creation.get_current_user_auth",
+        "numa_chat_agent.tools.agent_creation.get_request_scoped_user_auth",
         return_value={"sub": "user-123", "conversation_id": "conv-1"},
     )
     def test_create_agent_tool_success_personal(

@@ -12,6 +12,8 @@ import {
   getIntegrationsSummary,
   getDataAnalysisSummary,
   getFallbackSummary,
+  getEnhancedIntegrationStatus,
+  type ToolResultLike,
 } from '../toolRenderers/helpers';
 import { getAgentCreationSummary } from '../toolRenderers/agentCreationHelpers';
 
@@ -81,19 +83,32 @@ export const UnifiedToolCard = ({
   const hasResult = !!result;
   const isDataAnalysis = toolName === 'data_analysis';
 
+  // Enhanced status for integration tools with retry detection
+  const enhancedStatus = useMemo(() => {
+    if (toolName.endsWith('_integration') && result) {
+      return getEnhancedIntegrationStatus(result as ToolResultLike);
+    }
+    return null;
+  }, [toolName, result]);
+
+  const isRetrying = enhancedStatus?.isRetrying || false;
+
   // Determine summary line for result
   const resultSummary = useMemo(() => {
     if (!hasResult) return null;
     if (toolName === 'web_search') {
-      return t('toolCard.webSearchResults', { summary: getWebSearchSummary(result) });
+      return t('toolCard.webSearchResults', { summary: getWebSearchSummary(result as ToolResultLike) });
     }
-    if (toolName === 'query_knowledge_base') return getKnowledgeBaseSummary(result);
-    if (toolName === 'create_agent_tool') return getAgentCreationSummary(result);
-    if (toolName === 'data_analysis') return getDataAnalysisSummary(result);
+    if (toolName === 'query_knowledge_base') return getKnowledgeBaseSummary(result as ToolResultLike);
+    if (toolName === 'create_agent_tool') return getAgentCreationSummary(result as ToolResultLike);
+    if (toolName === 'data_analysis') return getDataAnalysisSummary(result as ToolResultLike);
     // Check if it's an integration tool (ends with _integration)
-    if (toolName.endsWith('_integration')) return getIntegrationsSummary(result);
-    return getFallbackSummary(result);
-  }, [toolName, result, hasResult]);
+    if (toolName.endsWith('_integration')) {
+      // Use enhanced status message for integrations
+      return enhancedStatus?.message || getIntegrationsSummary(result as ToolResultLike);
+    }
+    return getFallbackSummary(result as ToolResultLike);
+  }, [toolName, result, hasResult, enhancedStatus]);
 
   // Only Web Search and Knowledge Base have collapsible details
   const hasDetails = useMemo(() => toolName === 'web_search' || toolName === 'query_knowledge_base', [toolName]);
@@ -101,8 +116,8 @@ export const UnifiedToolCard = ({
   // Choose body renderer (bare/inner only) for tools that support collapsible details
   const body = useMemo(() => {
     if (!hasDetails || !hasResult) return null;
-    if (toolName === 'web_search') return <WebSearchRenderer result={result} bare />;
-    if (toolName === 'query_knowledge_base') return <KnowledgeBaseRenderer result={result} bare />;
+    if (toolName === 'web_search') return <WebSearchRenderer result={result as ToolResultLike} bare />;
+    if (toolName === 'query_knowledge_base') return <KnowledgeBaseRenderer result={result as ToolResultLike} bare />;
     return null;
   }, [toolName, result, hasResult, hasDetails]);
 
@@ -111,7 +126,7 @@ export const UnifiedToolCard = ({
     if (!hasResult || !toolName.endsWith('_integration')) return null;
     return (
       <IntegrationsRenderer
-        result={result}
+        result={result as ToolResultLike}
         bare
         conversationId={conversationId}
         sub={sub}
@@ -124,12 +139,12 @@ export const UnifiedToolCard = ({
   // Agent Creation tool renders inline (simple message with link)
   const inlineAgentCreationContent = useMemo(() => {
     if (!hasResult || toolName !== 'create_agent_tool') return null;
-    return <AgentCreationRenderer result={result} bare />;
+    return <AgentCreationRenderer result={result as ToolResultLike} bare />;
   }, [toolName, result, hasResult]);
 
   const inlineDataAnalysisContent = useMemo(() => {
     if (!hasResult || toolName !== 'data_analysis') return null;
-    return <DataAnalysisRenderer result={result} bare />;
+    return <DataAnalysisRenderer result={result as ToolResultLike} bare />;
   }, [toolName, result, hasResult]);
 
   const toggle = () => setExpanded((e) => !e);
@@ -154,7 +169,24 @@ export const UnifiedToolCard = ({
         {isLoading && (
           <div className="ms-2 spinner-border spinner-border-sm" role="status" aria-label={t('toolCard.loading')} />
         )}
+        {isRetrying && !isLoading && (
+          <div className="ms-2 d-flex align-items-center">
+            <div className="spinner-border spinner-border-sm text-warning me-1" role="status" aria-label="Retrying" />
+            <small className="text-warning">
+              {t('toolCard.retrying', {
+                attempt: enhancedStatus?.attempt || 1,
+                maxAttempts: enhancedStatus?.maxAttempts || 2,
+              })}
+            </small>
+          </div>
+        )}
       </div>
+      {isRetrying && enhancedStatus?.retryReason && (
+        <div className="text-muted small mb-2">
+          <i className="bi bi-exclamation-triangle me-1"></i>
+          {t('toolCard.retryReason', { reason: enhancedStatus.retryReason })}
+        </div>
+      )}
       {isDataAnalysis && isLoading && <div className="text-muted small mb-2">{t('toolCard.dataAnalysisWait')}</div>}
       {isDataAnalysis && (
         <div className="show-toggle tool-card-indent" onClick={toggleSteps} role="button">
