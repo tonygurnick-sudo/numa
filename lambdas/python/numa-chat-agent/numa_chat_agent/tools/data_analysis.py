@@ -11,7 +11,7 @@ from boto3.dynamodb.types import TypeDeserializer
 
 from prm import client as prm_client
 
-from ..auth import get_current_user_auth
+from ..auth import get_request_scoped_user_auth
 from ..dynamodb_utils import NumaChatDynamoUtils
 
 logger = structlog.get_logger(__name__)
@@ -231,7 +231,7 @@ def run_data_analysis(
     file_uris: Optional[List[str]] = None,
     job_id: Optional[str] = None,
 ) -> Dict[str, Any]:
-    auth = get_current_user_auth() or {}
+    auth = get_request_scoped_user_auth() or {}
     conversation_id = auth.get("conversation_id") or auth.get("conversationId")
     user_id = auth.get("sub")
 

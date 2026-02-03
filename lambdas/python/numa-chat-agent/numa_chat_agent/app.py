@@ -19,7 +19,12 @@ from jwt import algorithms
 from prm import client as prm_client
 from prm import resource as prm_resource
 
-from . import clear_current_user_auth, create_fresh_agent, set_current_user_auth
+from . import (
+    clear_current_user_auth,
+    create_fresh_agent,
+    set_current_user_auth,
+    set_request_scoped_user_auth,
+)
 from .dynamodb_utils import (
     NumaChatDynamoUtils,
     format_conversation_for_bedrock,
@@ -622,6 +627,7 @@ async def http_stream(request: Request) -> Response:
                 "one_users_context_can_overwrite_anothers_in_concurrent_execution",
                 "authentication_context_inheritance_between_unrelated_users",
                 "potential_data_leakage_between_user_sessions",
+                "potential_data_leakage_between_user_sessions",
             ],
             concurrency_risks=[
                 "concurrent_lambda_invocations_share_global_state",
@@ -695,9 +701,10 @@ async def http_stream(request: Request) -> Response:
         #     # and pass it through the execution chain instead of relying on global state
         #     return create_agent_with_explicit_auth(enabled_tools, system_prompt, model_id, messages, enabled_connections, user_auth_context)
         #
-        # # Use request-scoped authentication instead of global state
-        # set_request_scoped_user_auth(user_auth)
+        # Use request-scoped authentication instead of global state
+        set_request_scoped_user_auth(user_auth)
 
+        # DEPRECATED: Keeping global auth for backward compatibility during migration
         set_current_user_auth(user_auth)
         logger.error(
             "RELIABILITY_FAILURE: Using global authentication context - ACTIVE RACE CONDITION VULNERABILITY",
@@ -953,6 +960,7 @@ async def http_stream(request: Request) -> Response:
                             total_request_duration_ms=round(
                                 (time.time() - request_timestamp) * 1000, 2
                             ),
+                            timestamp=time.time(),
                         )
                     except Exception:
                         pass
@@ -1090,6 +1098,8 @@ async def http_invoke(request: Request) -> Response:
         if not enabled_tools:
             messages = convert_tool_blocks_to_text(messages)
         messages = process_messages_with_file_refs(messages)
+        # Set both new scoped auth and legacy global auth during migration
+        set_request_scoped_user_auth(user_auth)
         set_current_user_auth(user_auth)
 
         try:

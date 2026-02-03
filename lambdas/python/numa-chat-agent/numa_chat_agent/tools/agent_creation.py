@@ -21,7 +21,7 @@ from strands import tool
 from prm import client as prm_client
 from prm import resource as prm_resource
 
-from ..auth import get_current_user_auth
+from ..auth import get_request_scoped_user_auth
 from ..intent_verification import (
     get_agent_creation_config,
     get_recent_conversation_snippets,
@@ -506,7 +506,7 @@ def create_agent_tool(**kwargs):
     """
     # Check user context first so unit tests that don't set env vars
     # can still validate guard behavior without raising.
-    user_auth = get_current_user_auth() or {}
+    user_auth = get_request_scoped_user_auth() or {}
     user_id = user_auth.get("sub")
     conversation_id = user_auth.get("conversation_id") or user_auth.get(
         "conversationId"

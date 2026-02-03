@@ -9,7 +9,7 @@ from typing import Any, Dict
 
 import structlog
 
-from ..auth import get_current_user_auth, get_qbusiness_client_for_user
+from ..auth import get_qbusiness_client_for_user, get_request_scoped_user_auth
 from ..config import (
     BEDROCK_KNOWLEDGE_BASE_ID,
     PREFERRED_KNOWLEDGE_BASE,
@@ -59,7 +59,7 @@ def query_qbusiness_knowledge_base(query: str, max_results: int = 6):
     )
 
     # Get authenticated client if possible
-    current_user_auth = get_current_user_auth()
+    current_user_auth = get_request_scoped_user_auth()
     qb_client = get_qbusiness_client_for_user(current_user_auth)
 
     resp = qb_client.search_relevant_content(

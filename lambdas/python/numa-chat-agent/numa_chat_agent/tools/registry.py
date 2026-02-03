@@ -13,7 +13,7 @@ from typing import Optional
 import structlog
 from strands import tool
 
-from ..auth import get_current_user_auth
+from ..auth import get_request_scoped_user_auth
 
 logger = structlog.get_logger(__name__)
 
@@ -90,7 +90,7 @@ def query_knowledge_base(
         ToolResult: Structured JSON content containing knowledge base results
     """
     # Enforce per‑turn KB allowlist
-    current_auth = get_current_user_auth()
+    current_auth = get_request_scoped_user_auth()
     enabled_list = []
     if isinstance(current_auth, dict):
         val = current_auth.get("enabled_kb_ids")

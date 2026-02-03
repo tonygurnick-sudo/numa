@@ -146,16 +146,45 @@ class ChatAgentHttpStream {
       }
     });
 
-    // Capture client local time information for backend routing/prompting (timezone-aware)
     const NOW = new Date();
+
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    const offsetMinutes = -NOW.getTimezoneOffset();
+
+    // Best-effort timezone abbreviation (e.g. NZDT/NZST). May be null on some runtimes.
+    const tzAbbr =
+      Intl.DateTimeFormat('en-NZ', { timeZoneName: 'short' })
+        .formatToParts(NOW)
+        .find((p) => p.type === 'timeZoneName')?.value ?? null;
+
     const timeInfo = {
-      date: NOW.toLocaleDateString(),
-      time: NOW.toLocaleTimeString(),
-      // Include dayOfWeek for better calendaring context (e.g., "Monday")
-      dayOfWeek: NOW.toLocaleDateString(undefined, { weekday: 'long' }),
-      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      // human display (not for parsing)
+      date: NOW.toLocaleDateString('en-NZ'),
+      time: NOW.toLocaleTimeString('en-NZ'),
+      dayOfWeek: NOW.toLocaleDateString('en-NZ', { weekday: 'long' }),
+
+      // canonical / absolute
       iso: NOW.toISOString(),
-      summary: `Local date: ${NOW.toLocaleDateString(undefined, { weekday: 'long' })}, ${NOW.toLocaleDateString()}, Local time: ${NOW.toLocaleTimeString()} (${Intl.DateTimeFormat().resolvedOptions().timeZone})`,
+      epochMs: NOW.getTime(),
+
+      // timezone / DST context
+      timezone: tz,
+      offsetMinutes: offsetMinutes,
+      offsetHours: offsetMinutes / 60,
+      timezoneAbbr: tzAbbr,
+
+      // numeric local parts (best for LLM reasoning)
+      local: {
+        year: NOW.getFullYear(),
+        month: NOW.getMonth() + 1, // 1-12
+        day: NOW.getDate(),
+        hour: NOW.getHours(),
+        minute: NOW.getMinutes(),
+        second: NOW.getSeconds(),
+        weekday: NOW.getDay(), // 0-6 (Sun-Sat)
+      },
+
+      summary: `Local date: ${NOW.toLocaleDateString('en-NZ', { weekday: 'long' })}, ${NOW.toLocaleDateString('en-NZ')}, Local time: ${NOW.toLocaleTimeString('en-NZ')} (${tzAbbr ?? tz}, UTC${offsetMinutes >= 0 ? '+' : ''}${offsetMinutes / 60})`,
     };
 
     // Capture user language preference for LLM responses
@@ -202,7 +231,7 @@ class ChatAgentHttpStream {
       const emitStart = () => {
         if (!started) {
           started = true;
-          this.handleFrame({ type: 'start' } as AgentEventFrame, onChunk, onComplete, onError);
+          this.handleFrame({ type: 'start' } as ChatAgentNdjsonFrame, onChunk, onComplete, onError);
         }
       };
 

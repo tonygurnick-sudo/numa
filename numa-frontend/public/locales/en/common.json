@@ -151,7 +151,9 @@
     "showProgress": "\u25bc Show progress",
     "hideProgress": "\u25b2 Hide progress",
     "showDetails": "\u25bc Show details",
-    "hideDetails": "\u25b2 Hide details"
+    "hideDetails": "\u25b2 Hide details",
+    "retrying": "Retrying ({{attempt}}/{{maxAttempts}})",
+    "retryReason": "Reason: {{reason}}"
   },
   "manageKBs": {
     "title": "Your Knowledge Bases",
@@ -463,6 +465,8 @@
       "downloaded_other": "Downloaded {{count}} files from {{integration}}",
       "denied": "{{label}}: Denied - User Confirmation Needed",
       "success": "{{label}}: Tool call successful",
+      "successAfterRetry": "{{label}}: Completed successfully after retry",
+      "retrying": "{{label}}: Retrying ({{attempt}}/{{maxAttempts}}) - {{reason}}",
       "status": "{{label}}: {{status}}"
     },
     "webSearch": {

@@ -7,8 +7,21 @@ export type ToolResultLike = {
   status?: string;
   toolUseId?: string;
   content?: Array<{ json?: unknown; text?: string; [key: string]: unknown }> | unknown;
+  attempt?: number;
+  maxAttempts?: number;
+  retryReason?: string;
+  isRetrying?: boolean;
   [key: string]: unknown;
 };
+
+export interface EnhancedIntegrationStatus {
+  displayStatus: 'executing' | 'retrying' | 'success' | 'failed' | 'denied';
+  message: string;
+  attempt?: number;
+  maxAttempts?: number;
+  retryReason?: string;
+  isRetrying: boolean;
+}
 
 // -------- Integrations (file download) --------
 export interface IntegrationDownloadFile {
@@ -42,32 +55,97 @@ export function getIntegrationsPayload(result: ToolResultLike): IntegrationsFile
   return null;
 }
 
-export function getIntegrationsSummary(result: ToolResultLike): string {
+export function getEnhancedIntegrationStatus(result: ToolResultLike): EnhancedIntegrationStatus {
   const rawName = result?.name ?? result?.toolName ?? 'tool';
   const status = result?.status ?? 'completed';
   const friendlyLabel = String(rawName);
+
+  // Check for retry indicators in content or metadata
+  const contentBlock = Array.isArray(result?.content) ? result.content[0] : undefined;
+  const textContent = (contentBlock as { text?: string } | undefined)?.text ?? '';
+
+  // Detect retry patterns from backend logs/messages
+  const isRetryingFromContent =
+    textContent.includes('Auto-retrying') ||
+    textContent.includes('sub-agent') ||
+    textContent.includes('backup') ||
+    textContent.includes('validation error');
+
+  const isRetrying = result?.isRetrying || isRetryingFromContent;
+  const attempt = result?.attempt || 1;
+  const maxAttempts = result?.maxAttempts || 2;
+  const retryReason =
+    result?.retryReason ||
+    (textContent.includes('required properties')
+      ? 'Missing required fields'
+      : textContent.includes('validation')
+        ? 'Validation error'
+        : undefined);
+
+  // Check for denied status
+  const nestedJsonStatus = (contentBlock as { json?: { status?: string } } | undefined)?.json?.status;
+  const hasDeniedInText = textContent.includes("'status': 'denied'") || textContent.includes('"status": "denied"');
+
+  if (status === 'denied' || nestedJsonStatus === 'denied' || hasDeniedInText) {
+    return {
+      displayStatus: 'denied',
+      message: i18n.t('common:toolSummaries.integrations.denied', { label: friendlyLabel }),
+      isRetrying: false,
+    };
+  }
+
+  // Check for retry state
+  if (isRetrying && status !== 'completed') {
+    return {
+      displayStatus: 'retrying',
+      message: i18n.t('common:toolSummaries.integrations.retrying', {
+        label: friendlyLabel,
+        attempt,
+        maxAttempts,
+        reason: retryReason || 'validation issue',
+      }),
+      attempt,
+      maxAttempts,
+      retryReason,
+      isRetrying: true,
+    };
+  }
+
+  // Check for success after potential retry
+  if (status === 'success' || status === 'completed') {
+    const hadRetry = attempt > 1 || textContent.includes('sub-agent');
+    return {
+      displayStatus: 'success',
+      message: hadRetry
+        ? i18n.t('common:toolSummaries.integrations.successAfterRetry', { label: friendlyLabel })
+        : i18n.t('common:toolSummaries.integrations.success', { label: friendlyLabel }),
+      isRetrying: false,
+    };
+  }
+
+  // Fallback status
+  return {
+    displayStatus: 'failed',
+    message: i18n.t('common:toolSummaries.integrations.status', {
+      label: friendlyLabel,
+      status: status || i18n.t('common:toolSummaries.statusFallback'),
+    }),
+    isRetrying: false,
+  };
+}
+
+export function getIntegrationsSummary(result: ToolResultLike): string {
   const payload = getIntegrationsPayload(result);
+
   if (payload?.type === 'integrations-file-download') {
     const fileCount = payload.files?.length || 0;
     const integration = payload.integration || i18n.t('common:toolSummaries.integrations.integrationFallback');
     return i18n.t('common:toolSummaries.integrations.downloaded', { count: fileCount, integration });
   }
-  // Check for denied status - can be at top level, in content[0].json.status,
-  // or as a stringified dict in content[0].text (Python dict format with single quotes)
-  const contentBlock = Array.isArray(result?.content) ? result.content[0] : undefined;
-  const nestedJsonStatus = (contentBlock as { json?: { status?: string } } | undefined)?.json?.status;
-  const textContent = (contentBlock as { text?: string } | undefined)?.text ?? '';
-  const hasDeniedInText = textContent.includes("'status': 'denied'") || textContent.includes('"status": "denied"');
-  if (status === 'denied' || nestedJsonStatus === 'denied' || hasDeniedInText) {
-    return i18n.t('common:toolSummaries.integrations.denied', { label: friendlyLabel });
-  }
-  if (status === 'success' || status === 'completed') {
-    return i18n.t('common:toolSummaries.integrations.success', { label: friendlyLabel });
-  }
-  return i18n.t('common:toolSummaries.integrations.status', {
-    label: friendlyLabel,
-    status: status || i18n.t('common:toolSummaries.statusFallback'),
-  });
+
+  // Use enhanced status detection
+  const enhancedStatus = getEnhancedIntegrationStatus(result);
+  return enhancedStatus.message;
 }
 
 // -------- Web search --------
@@ -173,4 +251,4 @@ export function getDataAnalysisSummary(result: ToolResultLike): string {
   }
   return i18n.t('common:toolSummaries.dataAnalysis.ready');
 }
-export type { IntegrationDownloadFile as IntegrationFile, IntegrationsFileDownloadPayload };
+export type { IntegrationDownloadFile as IntegrationFile };

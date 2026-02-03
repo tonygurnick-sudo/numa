@@ -7,7 +7,7 @@ from typing import Optional
 
 import structlog
 
-from ..auth import get_current_user_auth
+from ..auth import get_request_scoped_user_auth
 
 logger = structlog.get_logger(__name__)
 
@@ -18,9 +18,11 @@ def get_external_user_id() -> Optional[str]:
 
     Format matches the frontend: ``{client_id}_{cognito_user_id}``.
     """
-    user_auth = get_current_user_auth()
+    user_auth = get_request_scoped_user_auth()
     if not user_auth:
-        logger.warning("No user auth context available for MCP integration")
+        logger.warning(
+            "No user auth context available for MCP integration - using request-scoped authentication"
+        )
         return None
 
     client_id = os.environ.get("CLIENT_NAME")

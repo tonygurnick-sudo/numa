@@ -4,6 +4,10 @@ Authentication module for Numa Chat Agent.
 Handles user authentication, role assumption, and Q Business client creation.
 """
 
+import threading
+from contextvars import ContextVar
+from typing import Any, Dict, Optional
+
 import structlog
 
 from prm import client as prm_client
@@ -12,8 +16,17 @@ from .config import REGION, get_qbusiness_client, get_sts_client
 
 logger = structlog.get_logger()
 
+# Request-scoped context variable for proper user isolation
+request_user_auth: ContextVar[Optional[Dict[str, Any]]] = ContextVar(
+    "request_user_auth", default=None
+)
+
+# Thread-local fallback for edge cases where context vars don't work
+_thread_local_auth = threading.local()
+
 # Global variable to store current user authentication context
 # This allows tools to access user context during the request
+# NOTE: This will be deprecated in favor of request-scoped authentication
 CURRENT_USER_AUTH = None
 
 logger.error(
@@ -150,8 +163,137 @@ logger.error(
 #         pass
 
 
+# ═══════════════════════════════════════════════════════════════════════════════
+# REQUEST-SCOPED AUTHENTICATION FUNCTIONS (NEW - RECOMMENDED)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+def set_request_scoped_user_auth(user_auth: Dict[str, Any]) -> None:
+    """Set user authentication context with proper request isolation.
+
+    This function provides secure, concurrent-safe authentication context
+    management using context variables with thread-local fallback.
+
+    Args:
+        user_auth: Dictionary containing user authentication info
+    """
+    try:
+        # Primary: Use context variables for proper asyncio/request isolation
+        request_user_auth.set(user_auth)
+        logger.info(
+            "AUTH_CONTEXT_ISOLATED: User authentication set with request isolation",
+            user_id=(
+                user_auth.get("sub", "unknown")[:8] + "..."
+                if user_auth.get("sub")
+                else "unknown"
+            ),
+            context_mechanism="CONTEXT_VAR",
+            isolation_level="REQUEST_SCOPED",
+            thread_safety="GUARANTEED",
+        )
+    except LookupError:
+        # Fallback: Use thread-local storage if context vars not available
+        _thread_local_auth.user_auth = user_auth
+        logger.warning(
+            "AUTH_CONTEXT_THREAD_LOCAL: Fallback to thread-local authentication storage",
+            user_id=(
+                user_auth.get("sub", "unknown")[:8] + "..."
+                if user_auth.get("sub")
+                else "unknown"
+            ),
+            context_mechanism="THREAD_LOCAL",
+            isolation_level="THREAD_SCOPED",
+            reason="context_vars_not_available",
+        )
+
+
+def get_request_scoped_user_auth() -> Optional[Dict[str, Any]]:
+    """Get user authentication context for current request only.
+
+    This function provides secure access to authentication context with
+    proper request isolation and fallback mechanisms.
+
+    Returns:
+        User authentication context for current request, or None if not available
+    """
+    try:
+        # Primary: Get from context variables
+        auth_context = request_user_auth.get()
+        if auth_context:
+            logger.debug(
+                "AUTH_CONTEXT_RETRIEVED: Retrieved request-scoped authentication",
+                user_id=(
+                    auth_context.get("sub", "unknown")[:8] + "..."
+                    if auth_context.get("sub")
+                    else "unknown"
+                ),
+                context_mechanism="CONTEXT_VAR",
+            )
+            return auth_context
+    except LookupError:
+        pass
+
+    # Fallback: Get from thread-local storage
+    try:
+        thread_auth = getattr(_thread_local_auth, "user_auth", None)
+        if thread_auth:
+            logger.debug(
+                "AUTH_CONTEXT_THREAD_LOCAL_RETRIEVED: Retrieved thread-local authentication",
+                user_id=(
+                    thread_auth.get("sub", "unknown")[:8] + "..."
+                    if thread_auth.get("sub")
+                    else "unknown"
+                ),
+                context_mechanism="THREAD_LOCAL",
+            )
+            return thread_auth
+    except AttributeError:
+        pass
+
+    logger.debug(
+        "AUTH_CONTEXT_NOT_FOUND: No authentication context available in current scope",
+        context_mechanisms_tried=["CONTEXT_VAR", "THREAD_LOCAL"],
+    )
+    return None
+
+
+def clear_request_scoped_user_auth() -> None:
+    """Clear user authentication context for current request.
+
+    This function safely clears authentication context using both
+    context variables and thread-local storage.
+    """
+    try:
+        request_user_auth.set(None)
+        logger.info(
+            "AUTH_CONTEXT_CLEARED: Request-scoped authentication cleared",
+            context_mechanism="CONTEXT_VAR",
+        )
+    except LookupError:
+        pass
+
+    # Also clear thread-local fallback
+    try:
+        if hasattr(_thread_local_auth, "user_auth"):
+            delattr(_thread_local_auth, "user_auth")
+            logger.info(
+                "AUTH_CONTEXT_THREAD_LOCAL_CLEARED: Thread-local authentication cleared",
+                context_mechanism="THREAD_LOCAL",
+            )
+    except AttributeError:
+        pass
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# GLOBAL AUTHENTICATION FUNCTIONS (LEGACY - DEPRECATED)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
 def set_current_user_auth(user_auth):
-    """Set the current user authentication context."""
+    """Set the current user authentication context.
+
+    DEPRECATED: Use set_request_scoped_user_auth() instead for proper concurrency safety.
+    """
     global CURRENT_USER_AUTH  # pylint: disable=global-statement
 
     logger.error(
@@ -169,25 +311,35 @@ def set_current_user_auth(user_auth):
             "other_lambda_invocations",
             "overlapping_requests",
         ],
+        deprecation_warning="Use set_request_scoped_user_auth() for proper request isolation",
+        migration_path="Replace with set_request_scoped_user_auth(user_auth)",
     )
 
     CURRENT_USER_AUTH = user_auth
 
 
 def get_current_user_auth():
-    """Get the current user authentication context."""
+    """Get the current user authentication context.
+
+    DEPRECATED: Use get_request_scoped_user_auth() instead for proper concurrency safety.
+    """
     logger.warning(
         "RELIABILITY_RISK: Accessing global authentication context - may return wrong user's auth",
         global_state_operation="GET",
         returned_context="MAY_BE_FROM_CONCURRENT_USER",
         reliability_guarantee="NONE",
+        deprecation_warning="Use get_request_scoped_user_auth() for proper request isolation",
+        migration_path="Replace with get_request_scoped_user_auth()",
     )
 
     return CURRENT_USER_AUTH
 
 
 def clear_current_user_auth():
-    """Clear the current user authentication context."""
+    """Clear the current user authentication context.
+
+    DEPRECATED: Use clear_request_scoped_user_auth() instead for proper concurrency safety.
+    """
     global CURRENT_USER_AUTH  # pylint: disable=global-statement
 
     logger.warning(
@@ -195,6 +347,8 @@ def clear_current_user_auth():
         global_state_operation="CLEAR",
         concurrency_impact="MAY_CLEAR_OTHER_USERS_AUTH",
         timing_dependency="CRITICAL",
+        deprecation_warning="Use clear_request_scoped_user_auth() for proper request isolation",
+        migration_path="Replace with clear_request_scoped_user_auth()",
     )
 
     CURRENT_USER_AUTH = None
