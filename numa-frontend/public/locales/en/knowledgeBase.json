@@ -294,6 +294,9 @@
       "select": "Select",
       "selectShort": "Sel"
     },
+    "badges": {
+      "empty": "Empty"
+    },
     "webCrawlerBadge": "Web Crawler",
     "status": {
       "indexed": "Indexed",
