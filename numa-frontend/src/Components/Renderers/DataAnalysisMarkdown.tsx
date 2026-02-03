@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkBreaks from 'remark-breaks';
 import remarkGfm from 'remark-gfm';
@@ -78,6 +78,9 @@ export const DataAnalysisMarkdown: React.FC<DataAnalysisMarkdownProps> = ({ cont
   // Follow-up modal state
   const [showFollowUpModal, setShowFollowUpModal] = useState(false);
   const [isSubmittingFollowUp, setIsSubmittingFollowUp] = useState(false);
+
+  // Ref to track which conversation has been loaded to prevent duplicate fetches
+  const conversationLoadedKeyRef = useRef<string | null>(null);
 
   // Extract job_id from baseS3Key
   // baseS3Key format: "data-analysis/{userId}/{jobId}/outputs/results-timestamp.md"
@@ -342,6 +345,12 @@ export const DataAnalysisMarkdown: React.FC<DataAnalysisMarkdownProps> = ({ cont
 
   // Load conversation.json to display full conversation history
   useEffect(() => {
+    // Skip if we've already loaded conversation for this exact baseS3Key
+    // This prevents flickering from duplicate fetches when dependencies change
+    if (conversationLoadedKeyRef.current === baseS3Key) {
+      return;
+    }
+
     const loadConversation = async () => {
       try {
         setLoadingConversation(true);
@@ -375,6 +384,9 @@ export const DataAnalysisMarkdown: React.FC<DataAnalysisMarkdownProps> = ({ cont
             },
           ]);
         }
+
+        // Mark this conversation as loaded to prevent duplicate fetches
+        conversationLoadedKeyRef.current = baseS3Key;
       } catch (err) {
         console.error('Error loading conversation:', err);
         // Fallback to single message with content prop
@@ -386,6 +398,8 @@ export const DataAnalysisMarkdown: React.FC<DataAnalysisMarkdownProps> = ({ cont
             textMd: content,
           },
         ]);
+        // Still mark as loaded to prevent retry loops on persistent errors
+        conversationLoadedKeyRef.current = baseS3Key;
       } finally {
         setLoadingConversation(false);
       }

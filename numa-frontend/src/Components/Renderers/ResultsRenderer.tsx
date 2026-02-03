@@ -665,6 +665,7 @@ export const ResultsRenderer = ({ results }) => {
   const { getCredentials } = useAuth();
   const { fetchS3Content, numaAppData } = useNumaApp();
   const pendingRequests = useRef({});
+  const loadedKeysRef = useRef<Set<string>>(new Set());
   const [loadingActions, setLoadingActions] = useState({});
   const [selectedOutputIndex, setSelectedOutputIndex] = useState(0);
 
@@ -751,7 +752,7 @@ export const ResultsRenderer = ({ results }) => {
           const key = `${result.input_reference}-${output.content_type}-${output.data.key}`;
 
           // Skip if we've already loaded this content
-          if (contents[key] !== undefined) {
+          if (loadedKeysRef.current.has(key) || contents[key] !== undefined) {
             continue;
           }
 
@@ -789,6 +790,7 @@ export const ResultsRenderer = ({ results }) => {
 
               const content = await fetchS3Content(output.data.bucket, output.data.key, credentials);
               setContents((prev) => ({ ...prev, [key]: content }));
+              loadedKeysRef.current.add(key);
             } catch (err) {
               console.error('Error fetching S3 content:', err);
               setErrors((prev) => ({
@@ -858,9 +860,9 @@ export const ResultsRenderer = ({ results }) => {
 
   // Create unique key for this output
   const key = `${result.input_reference}-${selectedOutput.content_type}-${selectedOutput.data.key}`;
-  const isLoading = loading[key];
-  const error = errors[key];
   const content = contents[key];
+  const isLoading = loading[key] && !content;
+  const error = errors[key];
 
   // Render tabs for all outputs
   const renderOutputTabs = () => {

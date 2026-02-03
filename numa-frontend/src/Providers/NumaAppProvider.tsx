@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../Providers/AuthProvider';
 import { manifestService } from '../Services/manifestService';
 import {
@@ -183,6 +183,9 @@ export const NumaAppProvider = ({ children }) => {
 
   // Auto-load job if jobId query parameter is present
   useEffect(() => {
+    if (appRunning || loading || loadingJobId) {
+      return;
+    }
     const urlParams = new URLSearchParams(window.location.search);
     const jobIdParam = urlParams.get('jobId');
 
@@ -203,7 +206,7 @@ export const NumaAppProvider = ({ children }) => {
         });
       }
     }
-  }, [numaAppId, numaAppData, window.location.search, currentJobId, job]);
+  }, [appRunning, loading, loadingJobId, numaAppId, numaAppData, window.location.search, currentJobId, job]);
 
   const getAppJobs = () => jobs;
 
@@ -670,7 +673,8 @@ export const NumaAppProvider = ({ children }) => {
   };
 
   // Fetch content from S3
-  const fetchS3Content = async (bucket, key, credentials) => {
+  // Wrapped in useCallback to maintain stable reference and prevent unnecessary re-renders
+  const fetchS3Content = useCallback(async (bucket, key, credentials) => {
     try {
       const region = window.sessionStorage.getItem('REGION');
       const s3Client = withPRM(S3Client, {
@@ -698,7 +702,7 @@ export const NumaAppProvider = ({ children }) => {
       console.error('Error fetching S3 content:', error);
       throw error;
     }
-  };
+  }, []);
 
   const pollQAppSession = async (sessionId, updateProgress) => {
     let polling = true;
@@ -1150,6 +1154,13 @@ export const NumaAppProvider = ({ children }) => {
       // Set the current job ID so we can use it when running the app
       if (job.jobId) {
         setCurrentJobId(job.jobId);
+
+        // Update URL with jobId so the results persist across page refresh
+        const url = new URL(window.location.href);
+        if (url.searchParams.get('jobId') !== job.jobId) {
+          url.searchParams.set('jobId', job.jobId);
+          window.history.replaceState({}, '', url);
+        }
       }
 
       // Parse stored manifest if available, otherwise fall back to current manifest

@@ -378,7 +378,17 @@ const NumaChatAgents = () => {
             dataAnalysisEventIndexRef.current.set(toolUseId, events.length);
           }
           const status = String(response?.status || '').toLowerCase();
-          if (status === 'success' || status === 'failure') {
+          const terminalStatuses = new Set([
+            'success',
+            'failure',
+            'completed',
+            'complete',
+            'succeeded',
+            'done',
+            'cancelled',
+            'canceled',
+          ]);
+          if (terminalStatuses.has(status)) {
             stopDataAnalysisPolling(toolUseId);
           }
         } catch (error) {
@@ -943,9 +953,20 @@ const NumaChatAgents = () => {
   // Ref for input textarea
   const inputRef = useRef(null);
   const isProcessingRef = useRef(false);
+  const chatScrollRef = useRef<HTMLDivElement | null>(null);
+  const shouldAutoScrollRef = useRef(true);
+
+  const handleChatScroll = useCallback(() => {
+    const container = chatScrollRef.current;
+    if (!container) return;
+    const threshold = 80;
+    const distanceFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight;
+    shouldAutoScrollRef.current = distanceFromBottom <= threshold;
+  }, []);
 
   // Auto-scroll to bottom on messages or ephemeral changes
   useEffect(() => {
+    if (!shouldAutoScrollRef.current) return;
     messageEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
@@ -2179,7 +2200,11 @@ const NumaChatAgents = () => {
                     left={
                       /* LEFT PANE: chat messages + input */
                       <div className="chat-left-pane d-flex flex-column h-100">
-                        <div className="chat-messages flex-grow-1 overflow-auto">
+                        <div
+                          className="chat-messages flex-grow-1 overflow-auto"
+                          ref={chatScrollRef}
+                          onScroll={handleChatScroll}
+                        >
                           {isConversationLoading ? (
                             <div className="d-flex justify-content-center align-items-center h-100">
                               <div className="text-center">
