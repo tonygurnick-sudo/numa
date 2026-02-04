@@ -20,7 +20,7 @@ import { PageHeader } from '../Components/PageHeader';
 
 export const Dash = ({ showFavorites = false, ...rest }: DashProps) => {
   const niceties = useContext(NicetyContext);
-  const { t } = useTranslation('apps');
+  const { t, i18n } = useTranslation('apps');
   const { error, setError, loading, setLoading, setNumaApps, numaApps } = useNumaApp();
   const [searchTerm, setSearchTerm] = useState('');
   const [activeCategories, setActiveCategories] = useState(() => {
@@ -33,6 +33,16 @@ export const Dash = ({ showFavorites = false, ...rest }: DashProps) => {
   });
   const [currentPage, setCurrentPage] = useState(1);
   const { favorites } = useFavorites();
+
+  const localizedApps = useMemo(
+    () =>
+      numaApps.map((app) => ({
+        ...app,
+        appName: t(`dash.catalog.${app.id}.name`, { defaultValue: app.appName }),
+        appDescription: t(`dash.catalog.${app.id}.description`, { defaultValue: app.appDescription || '' }),
+      })),
+    [numaApps, i18n.language, t],
+  );
 
   // Fetch apps data and get unique categories
   useEffect(() => {
@@ -58,7 +68,7 @@ export const Dash = ({ showFavorites = false, ...rest }: DashProps) => {
   // Memoize filtered apps to avoid unnecessary recalculations
   const filteredApps = useMemo(() => {
     // Filter and sort apps based on search term, active categories, and sort order
-    let filtered = numaApps.filter((app) => {
+    let filtered = localizedApps.filter((app) => {
       // Favorites filtering
       if (showFavorites && !favorites.includes(app.id)) {
         return false;
@@ -108,7 +118,7 @@ export const Dash = ({ showFavorites = false, ...rest }: DashProps) => {
         ? a.appName.toLowerCase().localeCompare(b.appName.toLowerCase())
         : b.appName.toLowerCase().localeCompare(a.appName.toLowerCase());
     });
-  }, [searchTerm, activeCategories, numaApps, sortOrder, showFavorites, favorites]);
+  }, [searchTerm, activeCategories, localizedApps, sortOrder, showFavorites, favorites]);
 
   useEffect(() => {
     setCurrentPage(1);

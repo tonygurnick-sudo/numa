@@ -9,7 +9,10 @@ i18n
   .use(initReactI18next)
   .init({
     fallbackLng: 'en',
-    supportedLngs: ['en', 'fr', 'id'],
+    supportedLngs: ['en'],
+    // Normalize variants like en-US -> en so the backend resolves a real file.
+    load: 'languageOnly',
+    nonExplicitSupportedLngs: true,
     defaultNS: 'common',
     ns: [
       'common',

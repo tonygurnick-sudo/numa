@@ -20,6 +20,13 @@ export function KnowledgeBaseSelector({
 }: KnowledgeBaseSelectorProps): React.JSX.Element {
   const { t } = useTranslation('knowledgeBase');
   const { selectedKB, availableKBs, isLoadingKBs, selectKBById, refreshKBs } = useKnowledgeBase();
+  const getKbLabel = useCallback(
+    (kb?: { kb_id: string; kb_name: string }) => {
+      if (!kb) return '';
+      return kb.kb_id === 'company' ? t('selector.companyKbName') : kb.kb_name;
+    },
+    [t],
+  );
 
   const handleToggle = useCallback(
     (nextShow: boolean) => {
@@ -77,7 +84,7 @@ export function KnowledgeBaseSelector({
           {selectedKB ? (
             <>
               <i className="bi bi-folder2-open me-1"></i>
-              {selectedKB.kb_name}
+              {getKbLabel(selectedKB)}
               {selectedKB.kb_id === 'company' && (
                 <Badge bg="info" className="ms-2">
                   {t('selector.defaultBadge')}
@@ -114,7 +121,7 @@ export function KnowledgeBaseSelector({
                 <div className="d-flex justify-content-between align-items-center">
                   <div>
                     <i className="bi bi-folder2-open me-2"></i>
-                    {kb.kb_name}
+                    {getKbLabel(kb)}
                     {kb.kb_id === 'company' && (
                       <Badge bg="info" className="ms-2">
                         {t('selector.defaultBadge')}

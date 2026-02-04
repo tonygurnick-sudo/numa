@@ -23,7 +23,13 @@ if (!window.location.hostname.includes('localhost')) {
 createRoot(document.getElementById('root')).render(
   <StrictMode>
     <I18nextProvider i18n={i18n}>
-      <Suspense fallback={<div>{i18n.t('common:loading.generic')}</div>}>
+      <Suspense
+        fallback={
+          <div className="d-flex justify-content-center align-items-center vh-100">
+            <div className="spinner-border text-primary" role="status" aria-hidden="true"></div>
+          </div>
+        }
+      >
         <ToastProvider>
           <NicetyProvider>
             <App />

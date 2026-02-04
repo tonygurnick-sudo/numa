@@ -42,7 +42,14 @@ const AppRoutes = () => {
   };
 
   if (loading || !tokenValidationComplete) {
-    return <div>{t('loading.generic')}</div>;
+    return (
+      <div className="d-flex justify-content-center align-items-center vh-100">
+        <div className="text-center">
+          <div className="spinner-border text-primary" role="status" aria-hidden="true"></div>
+          <div className="mt-3 text-muted">{t('loading.generic')}</div>
+        </div>
+      </div>
+    );
   }
 
   return (

@@ -39,6 +39,11 @@ const mockQBusinessClient = {
 // Define different user types
 const createMockUser = (userType) => {
   const baseUser = {
+    tokens: {
+      accessToken: 'mock-access-token',
+      idToken: 'mock-id-token',
+      refreshToken: 'mock-refresh-token',
+    },
     decoded_tokens: {
       idToken: {
         'cognito:groups': ['TestGroup'],

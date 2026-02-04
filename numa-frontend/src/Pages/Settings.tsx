@@ -1,4 +1,4 @@
-import { useCallback, useContext, useEffect, useRef, useState } from 'react';
+import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Container,
   Row,
@@ -38,8 +38,6 @@ import {
 import ExpandableOverflowBox from '../Components/ExpandableOverflowBox';
 import { SynergyIcon } from '../Components/DataConnectors/SynergyConnectorCard';
 
-const AVAILABLE_INTEGRATIONS: IntegrationListItem[] = getIntegrationsListFormat();
-
 const useNavigationConfirm = (when: boolean, message: string) => {
   const navigationContext = useContext(UNSAFE_NavigationContext);
 
@@ -70,7 +68,7 @@ const useNavigationConfirm = (when: boolean, message: string) => {
 };
 
 export default function SettingsPage() {
-  const { t } = useTranslation('settings');
+  const { t, i18n } = useTranslation('settings');
   const { user } = useAuth();
   const { numaGet, numaPut } = useNumaRequest();
   const [activeKey, setActiveKey] = useState<string>('users');
@@ -83,6 +81,7 @@ export default function SettingsPage() {
     typeof window !== 'undefined' ? window.sessionStorage.getItem('AGENTS') === 'true' : false;
   const dataConnectorsEnabled =
     typeof window !== 'undefined' ? window.sessionStorage.getItem('DATA_CONNECTORS_ENABLED') === 'true' : false;
+  const availableIntegrations = useMemo<IntegrationListItem[]>(() => getIntegrationsListFormat(), [i18n.language]);
 
   // Global (admin) settings
   const [globalSettings, setGlobalSettings] = useState<GlobalIntegrationSettingsMap>({});
@@ -759,34 +758,36 @@ export default function SettingsPage() {
                           ) : (
                             <>
                               <ExpandableOverflowBox className="border rounded-3 p-2 bg-white" maxHeight={240}>
-                                {AVAILABLE_INTEGRATIONS.filter((integration) => {
-                                  const id = integration.name_slug;
-                                  return globalSettings[id]?.status === 'enabled';
-                                }).map((integration) => {
-                                  const id = integration.name_slug;
-                                  const checked = globalChatSettings.defaultConnectionIds.includes(id);
-                                  return (
-                                    <Form.Check
-                                      key={id}
-                                      type="checkbox"
-                                      id={`chat-defaults-integration-${id}`}
-                                      label={integration.name}
-                                      checked={checked}
-                                      disabled={loadingSettings}
-                                      onChange={(e) => {
-                                        const nextChecked = e.target.checked;
-                                        setGlobalChatSettings((prev) => ({
-                                          ...prev,
-                                          defaultConnectionIds: nextChecked
-                                            ? [...prev.defaultConnectionIds, id]
-                                            : prev.defaultConnectionIds.filter((x) => x !== id),
-                                        }));
-                                        setChatDefaultsDirty(true);
-                                      }}
-                                    />
-                                  );
-                                })}
-                                {AVAILABLE_INTEGRATIONS.filter((integration) => {
+                                {availableIntegrations
+                                  .filter((integration) => {
+                                    const id = integration.name_slug;
+                                    return globalSettings[id]?.status === 'enabled';
+                                  })
+                                  .map((integration) => {
+                                    const id = integration.name_slug;
+                                    const checked = globalChatSettings.defaultConnectionIds.includes(id);
+                                    return (
+                                      <Form.Check
+                                        key={id}
+                                        type="checkbox"
+                                        id={`chat-defaults-integration-${id}`}
+                                        label={integration.name}
+                                        checked={checked}
+                                        disabled={loadingSettings}
+                                        onChange={(e) => {
+                                          const nextChecked = e.target.checked;
+                                          setGlobalChatSettings((prev) => ({
+                                            ...prev,
+                                            defaultConnectionIds: nextChecked
+                                              ? [...prev.defaultConnectionIds, id]
+                                              : prev.defaultConnectionIds.filter((x) => x !== id),
+                                          }));
+                                          setChatDefaultsDirty(true);
+                                        }}
+                                      />
+                                    );
+                                  })}
+                                {availableIntegrations.filter((integration) => {
                                   const id = integration.name_slug;
                                   return globalSettings[id]?.status === 'enabled';
                                 }).length === 0 && (
@@ -988,7 +989,9 @@ export default function SettingsPage() {
                       </div>
                     ) : (
                       <div>
-                        {AVAILABLE_INTEGRATIONS.sort((a, b) => a.name.localeCompare(b.name)).map(renderIntegrationRow)}
+                        {[...availableIntegrations]
+                          .sort((a, b) => a.name.localeCompare(b.name))
+                          .map(renderIntegrationRow)}
                       </div>
                     )}
                   </Tab>

@@ -288,12 +288,52 @@
   // Add left/right padding like .dashboard to create spacing
   width: 100%;
   padding: 0 2rem;
+  box-sizing: border-box;
   display: flex;
   flex-direction: column;
   height: 100%;
 
   .page-header {
     padding-bottom: var(--spacing-xl);
+  }
+}
+
+.user-knowledge-bases {
+  overflow-x: hidden;
+
+  .kb-toolbar {
+    padding-left: 1.5rem;
+    padding-right: 1.5rem;
+  }
+
+  .user-kb-grid {
+    margin-left: 0;
+    margin-right: 0;
+  }
+
+  .kb-search-group {
+    .kb-search-icon {
+      padding-left: 0.75rem;
+      padding-right: 0.5rem;
+    }
+
+    .kb-search-input {
+      padding-left: 0.75rem;
+      padding-right: 0.75rem;
+    }
+  }
+
+  .kb-count {
+    padding-right: 0.5rem;
+  }
+}
+
+@include mobile {
+  .user-knowledge-bases {
+    .kb-toolbar {
+      padding-left: 1rem;
+      padding-right: 1rem;
+    }
   }
 }
 

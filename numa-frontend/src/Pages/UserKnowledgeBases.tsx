@@ -73,14 +73,15 @@ export function UserKnowledgeBases(): React.JSX.Element {
       />
 
       <LayoutDashboard>
-        <StickyToolbar>
+        <StickyToolbar className="kb-toolbar">
           <div className="d-flex flex-wrap gap-3 mb-0 align-items-center justify-content-between">
             <div className="d-flex gap-3 align-items-center" style={{ minWidth: 0 }}>
-              <InputGroup style={{ maxWidth: '400px', minWidth: '200px', width: '300px' }}>
-                <InputGroup.Text>
+              <InputGroup className="kb-search-group" style={{ maxWidth: '400px', minWidth: '200px', width: '300px' }}>
+                <InputGroup.Text className="kb-search-icon">
                   <i className="bi bi-search"></i>
                 </InputGroup.Text>
                 <Form.Control
+                  className="kb-search-input"
                   type="text"
                   placeholder={t('userKnowledgeBases.search.placeholder')}
                   value={searchQuery}
@@ -97,7 +98,7 @@ export function UserKnowledgeBases(): React.JSX.Element {
                 <option value="personal">{t('userKnowledgeBases.filters.personal')}</option>
               </Form.Select>
             </div>
-            <div className="text-muted flex-shrink-0" style={{ whiteSpace: 'nowrap' }}>
+            <div className="text-muted flex-shrink-0 kb-count" style={{ whiteSpace: 'nowrap' }}>
               {t('userKnowledgeBases.count', { count: filteredKBs.length })}
             </div>
           </div>
@@ -117,7 +118,7 @@ export function UserKnowledgeBases(): React.JSX.Element {
             <p className="text-muted">{t('userKnowledgeBases.empty.subtitle')}</p>
           </div>
         ) : (
-          <div className="row g-4">
+          <div className="row g-4 user-kb-grid">
             {filteredKBs.map((kb) => {
               const isShared = isKBShared(kb);
               return (

@@ -1059,7 +1059,7 @@ const NumaWorkspaceChatAgents = () => {
 
   // Handle renaming a conversation from NewChat view
   const handleRenameConversation = async (conversationId: string, currentName: string) => {
-    const newName = prompt('Enter new name for this conversation:', currentName);
+    const newName = prompt(t('history.renamePrompt'), currentName);
     if (newName === null) return; // user cancelled
     if (!numaChatDynamoUtils) {
       console.error('DynamoDB client not initialized');
@@ -1081,7 +1081,7 @@ const NumaWorkspaceChatAgents = () => {
   const handleDeleteConversation = async (conversationId: string) => {
     if (!numaChatDynamoUtils) return;
     // Confirm deletion with the user
-    if (!window.confirm('Are you sure you want to delete this conversation?')) {
+    if (!window.confirm(t('history.deleteConfirm'))) {
       return;
     }
     try {

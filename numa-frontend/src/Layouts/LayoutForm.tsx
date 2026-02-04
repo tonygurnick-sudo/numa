@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { Container, Row, Col } from 'react-bootstrap';
-import { useBranding } from '../Providers/BrandingContext';
+import { useTranslation } from 'react-i18next';
+import { useBranding, DEFAULT_BRANDING_THEME } from '../Providers/BrandingContext';
 import { useBrandingAsset } from '../hooks/useBrandingAsset';
 import LogoBk from '../assets/images/arc_logo_black.svg';
 import LoginIllustration from '../assets/images/logo-accelerate.svg';
@@ -11,6 +12,7 @@ type LayoutFormProps = {
 };
 
 const LayoutForm = ({ FormName, Content }: LayoutFormProps) => {
+  const { t } = useTranslation('auth');
   const { branding } = useBranding();
 
   const rawLogo = branding.resolvedAssets?.logoNav || branding.assets?.logoNav || branding.logo || LogoBk;
@@ -23,8 +25,16 @@ const LayoutForm = ({ FormName, Content }: LayoutFormProps) => {
   const splashImageResolved = useBrandingAsset(rawSplashImage, LoginIllustration);
   const splashImage = rawSplashImage ? splashImageResolved : null;
   const shouldShowSplashText = splash?.showText ?? true;
-  const splashTitle = splash?.title || '';
-  const splashDescription = splash?.description || '';
+  const defaultSplashTitle = DEFAULT_BRANDING_THEME.splashScreen?.title || '';
+  const defaultSplashDescription = DEFAULT_BRANDING_THEME.splashScreen?.description || '';
+  const splashTitle =
+    splash?.title && splash.title !== defaultSplashTitle
+      ? splash.title
+      : t('brandingDefaults.splashTitle', { defaultValue: defaultSplashTitle });
+  const splashDescription =
+    splash?.description && splash.description !== defaultSplashDescription
+      ? splash.description
+      : t('brandingDefaults.splashDescription', { defaultValue: defaultSplashDescription });
   const splashTextColor = splash?.textColor || '#ffffff';
   const showSplashPanel = splash?.showPanel ?? false;
 

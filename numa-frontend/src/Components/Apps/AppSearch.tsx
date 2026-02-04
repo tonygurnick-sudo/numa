@@ -49,6 +49,15 @@ export const AppSearch = ({
     onSort(order);
   };
 
+  const getCategoryLabel = (category) => {
+    const categoryKey = String(category || '')
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '_')
+      .replace(/^_+|_+$/g, '');
+    return t(`appSearch.categories.${categoryKey}`, { defaultValue: formatCategory(category) });
+  };
+
   return (
     <Row className="g-4">
       <Col xs={12}>
@@ -73,7 +82,7 @@ export const AppSearch = ({
                   onClick={() => handleCategoryClick(category)}
                   data-category={category.toLowerCase()}
                 >
-                  {formatCategory(category)}
+                  {getCategoryLabel(category)}
                 </button>
               ))}
               {selectedCategories.length > 0 && (

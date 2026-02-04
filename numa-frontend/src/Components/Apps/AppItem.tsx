@@ -4,6 +4,7 @@ import { useFavorites } from '../../hooks/useFavorites';
 import { useState } from 'react';
 import { FlyingStarAnimation } from '../FlyingStarAnimation';
 import { useTranslation } from 'react-i18next';
+import { formatCategory } from '../../utils/textUtils';
 
 const AppItem = ({ app, onCategoryClick }) => {
   const { t } = useTranslation('apps');
@@ -39,6 +40,17 @@ const AppItem = ({ app, onCategoryClick }) => {
     return name;
   };
 
+  const getCategoryLabel = (category) => {
+    const categoryKey = String(category || '')
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '_')
+      .replace(/^_+|_+$/g, '');
+    return t(`appSearch.categories.${categoryKey}`, { defaultValue: formatCategory(category) });
+  };
+
+  const statusLabel = t(`appItem.status.${String(app.status || '').toLowerCase()}`, { defaultValue: app.status });
+
   return (
     <>
       {showAnimation && (
@@ -72,9 +84,9 @@ const AppItem = ({ app, onCategoryClick }) => {
                   }
                 }}
                 style={{ cursor: 'pointer' }}
-                title={t('appItem.filterByCategory', { category: app.category })}
+                title={t('appItem.filterByCategory', { category: getCategoryLabel(app.category) })}
               >
-                {app.category.toLowerCase().replace(/\b\w/g, (l) => l.toUpperCase())}
+                {getCategoryLabel(app.category)}
               </div>
             )}
           </div>
@@ -118,7 +130,7 @@ const AppItem = ({ app, onCategoryClick }) => {
                   )}
                 </div>
                 <div className="app-status">
-                  <span className={`status ${app.status.toLowerCase()}`}>{app.status}</span>
+                  <span className={`status ${app.status.toLowerCase()}`}>{statusLabel}</span>
                 </div>
                 {app.appVersion && (
                   <div className="version-badge">

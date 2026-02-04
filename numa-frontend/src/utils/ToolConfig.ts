@@ -15,33 +15,61 @@ export type ToolDescriptor = {
   renderer: ToolRenderer;
 };
 
-// Static mapping for known core tools
-export const TOOL_CONFIG: Record<string, ToolDescriptor> = {
-  web_search: {
-    label: i18n.t('common:toolLabels.webSearch'),
-    renderer: WebSearchRenderer,
-  },
-  query_knowledge_base: {
-    label: i18n.t('common:toolLabels.knowledgeBase'),
-    renderer: KnowledgeBaseRenderer,
-  },
-  create_agent_tool: {
-    label: i18n.t('common:toolLabels.agentCreation'),
-    renderer: AgentCreationRenderer,
-  },
-  data_analysis: {
-    label: i18n.t('common:toolLabels.dataAnalysis'),
-    renderer: DataAnalysisRenderer,
-  },
-  integrations: {
-    label: i18n.t('common:toolLabels.integration'),
-    renderer: IntegrationsRenderer,
-  },
-  _default: {
-    label: i18n.t('common:toolLabels.unknown'),
-    renderer: FallbackRenderer,
-  },
+/**
+ * Static mapping for known core tools.
+ * Labels are resolved at runtime via getToolConfig() to ensure i18n translations
+ * are loaded before being accessed.
+ */
+const TOOL_RENDERERS: Record<string, ToolRenderer> = {
+  web_search: WebSearchRenderer,
+  query_knowledge_base: KnowledgeBaseRenderer,
+  create_agent_tool: AgentCreationRenderer,
+  data_analysis: DataAnalysisRenderer,
+  integrations: IntegrationsRenderer,
+  _default: FallbackRenderer,
 };
+
+const TOOL_LABEL_KEYS: Record<string, string> = {
+  web_search: 'common:toolLabels.webSearch',
+  query_knowledge_base: 'common:toolLabels.knowledgeBase',
+  create_agent_tool: 'common:toolLabels.agentCreation',
+  data_analysis: 'common:toolLabels.dataAnalysis',
+  integrations: 'common:toolLabels.integration',
+  _default: 'common:toolLabels.unknown',
+};
+
+/**
+ * Get the tool config with translated labels.
+ * This function resolves translations at runtime rather than at module load time,
+ * ensuring i18n has finished loading translation files.
+ */
+function getToolConfig(): Record<string, ToolDescriptor> {
+  const config: Record<string, ToolDescriptor> = {};
+  for (const key of Object.keys(TOOL_RENDERERS)) {
+    config[key] = {
+      label: i18n.t(TOOL_LABEL_KEYS[key]),
+      renderer: TOOL_RENDERERS[key],
+    };
+  }
+  return config;
+}
+
+// For backwards compatibility, export TOOL_CONFIG as a getter
+// This ensures translations are resolved at access time, not module load time
+export const TOOL_CONFIG: Record<string, ToolDescriptor> = new Proxy({} as Record<string, ToolDescriptor>, {
+  get(_, prop: string) {
+    return getToolConfig()[prop];
+  },
+  ownKeys() {
+    return Object.keys(TOOL_RENDERERS);
+  },
+  getOwnPropertyDescriptor(_, prop: string) {
+    if (prop in TOOL_RENDERERS) {
+      return { enumerable: true, configurable: true };
+    }
+    return undefined;
+  },
+});
 
 // Helper: convert snake/hyphen to spaced words; optionally title case
 const humanize = (s: string, { titleCase = false }: { titleCase?: boolean } = {}) => {

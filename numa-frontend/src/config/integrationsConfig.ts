@@ -66,7 +66,7 @@ export interface ConnectionConfigEntry {
 const connectionText = (id: string, field: 'name' | 'description' | 'example_query') =>
   i18n.t(`integrations:connections.${id}.${field}`);
 
-export const CONNECTIONS_CONFIG: Record<string, ConnectionConfigEntry> = {
+const getConnectionsConfig = (): Record<string, ConnectionConfigEntry> => ({
   gmail: {
     id: 'gmail',
     name: connectionText('gmail', 'name'),
@@ -397,26 +397,27 @@ export const CONNECTIONS_CONFIG: Record<string, ConnectionConfigEntry> = {
     fallback_color: 'primary',
     example_query: connectionText('box', 'example_query'),
   },
-};
+});
 
 // Helper functions for easy access across components
-export const getConnectionConfig = (id: string): ConnectionConfigEntry | null => CONNECTIONS_CONFIG[id] || null;
+export const getConnectionConfig = (id: string): ConnectionConfigEntry | null => getConnectionsConfig()[id] || null;
 
-export const getAllConnections = (): ConnectionConfigEntry[] => Object.values(CONNECTIONS_CONFIG);
+export const getAllConnections = (): ConnectionConfigEntry[] => Object.values(getConnectionsConfig());
 
-export const getConnectionIcon = (id: string): string => CONNECTIONS_CONFIG[id]?.img_src || gmailIcon;
+export const getConnectionIcon = (id: string): string => getConnectionsConfig()[id]?.img_src || gmailIcon;
 
-export const getConnectionFallbackIcon = (id: string): string => CONNECTIONS_CONFIG[id]?.fallback_icon || 'bi bi-link';
+export const getConnectionFallbackIcon = (id: string): string =>
+  getConnectionsConfig()[id]?.fallback_icon || 'bi bi-link';
 
 export const getConnectionFallbackColor = (id: string): BootstrapColor =>
-  CONNECTIONS_CONFIG[id]?.fallback_color || 'primary';
+  getConnectionsConfig()[id]?.fallback_color || 'primary';
 
-export const getConnectionDisplayName = (id: string): string => CONNECTIONS_CONFIG[id]?.name || id;
+export const getConnectionDisplayName = (id: string): string => getConnectionsConfig()[id]?.name || id;
 
 export const getConnectionExampleQuery = (id: string): string =>
-  CONNECTIONS_CONFIG[id]?.example_query || i18n.t('integrations:connections.defaults.exampleQuery');
+  getConnectionsConfig()[id]?.example_query || i18n.t('integrations:connections.defaults.exampleQuery');
 
-export const getConnectionDescription = (id: string): string => CONNECTIONS_CONFIG[id]?.description || '';
+export const getConnectionDescription = (id: string): string => getConnectionsConfig()[id]?.description || '';
 
 // For PipedreamIntegrations page - converts to expected format
 export const getIntegrationsListFormat = () => {

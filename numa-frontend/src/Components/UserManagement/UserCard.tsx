@@ -4,6 +4,7 @@ import { Eye } from 'react-bootstrap-icons';
 import { useTranslation } from 'react-i18next';
 import i18n from '../../i18n';
 import type { User } from './UserDetailsModal';
+import { getUserStatusBadgeVariant, getUserStatusLabel } from './userStatusUtils';
 
 interface UserCardProps {
   user: User;
@@ -17,6 +18,7 @@ export function UserCard({ user, currentUserSub, onViewUser }: UserCardProps): R
   const roleLabel = isAdmin ? t('roles.admin') : t('roles.standard');
   const isCurrentUser = user.username === currentUserSub;
   const isSystemUser = user.email?.includes('numa-system-user');
+  const statusLabel = getUserStatusLabel(t, user.status);
 
   return (
     <Card className={`h-100 shadow-sm ${isSystemUser ? 'opacity-50' : ''}`} style={{ transition: 'box-shadow 0.2s' }}>
@@ -37,8 +39,8 @@ export function UserCard({ user, currentUserSub, onViewUser }: UserCardProps): R
         </div>
 
         <div className="d-flex gap-2 mb-3">
-          <Badge bg={user.enabled ? (user.status === 'CONFIRMED' ? 'success' : 'warning') : 'danger'} className="small">
-            {user.status}
+          <Badge bg={getUserStatusBadgeVariant(user.enabled, user.status)} className="small">
+            {statusLabel}
           </Badge>
           {!user.enabled && (
             <Badge bg="danger" className="small">
