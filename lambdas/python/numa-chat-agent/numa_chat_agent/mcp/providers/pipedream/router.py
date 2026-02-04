@@ -1530,6 +1530,136 @@ class ToolsOnlyIntegrationRouter:
         # # Use adaptive retry logic instead of fixed 2 attempts
         # return execute_with_exponential_backoff_and_jitter(adaptive_max_attempts, definition, instruction, feedback)
 
+        # ADAPTIVE RETRY LOGIC FIX - COMMENTED OUT BUT READY FOR IMPLEMENTATION
+        # import random
+        #
+        # def calculate_adaptive_retry_attempts(definition: PipedreamToolDefinition, base_attempts: int = 2) -> int:
+        #     """Calculate retry attempts based on schema complexity and error patterns."""
+        #     schema = definition.schema or {}
+        #     properties = schema.get("properties", {})
+        #
+        #     # Start with base attempts
+        #     attempts = base_attempts
+        #
+        #     # Increase attempts for complex schemas
+        #     if isinstance(properties, dict):
+        #         property_count = len(properties)
+        #         if property_count > 15:  # Very complex
+        #             attempts += 3
+        #         elif property_count > 10:  # Complex
+        #             attempts += 2
+        #         elif property_count > 5:  # Moderate
+        #             attempts += 1
+        #
+        #     # Check for complex nested structures
+        #     nested_complexity = 0
+        #     array_complexity = 0
+        #     if isinstance(properties, dict):
+        #         for prop_name, prop_def in properties.items():
+        #             if isinstance(prop_def, dict):
+        #                 prop_type = prop_def.get("type")
+        #                 if prop_type == "object":
+        #                     nested_complexity += 1
+        #                 elif prop_type == "array":
+        #                     array_complexity += 1
+        #                     # Arrays with object items are especially complex
+        #                     items = prop_def.get("items", {})
+        #                     if isinstance(items, dict) and items.get("type") == "object":
+        #                         nested_complexity += 1
+        #
+        #     # Add attempts for high complexity
+        #     if nested_complexity > 3 or array_complexity > 2:
+        #         attempts += 2
+        #     elif nested_complexity > 1 or array_complexity > 1:
+        #         attempts += 1
+        #
+        #     # Cap at reasonable maximum
+        #     return min(attempts, 6)
+        #
+        # def execute_with_exponential_backoff_and_jitter(max_attempts: int, definition: PipedreamToolDefinition, instruction: str, feedback: list):
+        #     """Execute payload generation with exponential backoff and jitter."""
+        #     last_error = None
+        #
+        #     for attempt in range(max_attempts):
+        #         attempt_start = time.time()
+        #
+        #         logger.info(
+        #             "RELIABILITY_IMPROVEMENT: Adaptive retry attempt with exponential backoff",
+        #             integration=self.integration_name,
+        #             tool=definition.name,
+        #             attempt=attempt + 1,
+        #             max_attempts=max_attempts,
+        #             backoff_enabled=attempt > 0,
+        #             jitter_enabled=True
+        #         )
+        #
+        #         try:
+        #             # Attempt payload generation
+        #             prompt_text = self._build_user_prompt(definition, instruction, feedback)
+        #             response = self._invoke_model(prompt_text, definition)
+        #             candidate = self._parse_json_response(response)
+        #             validation_errors = self._validate_payload(definition, candidate)
+        #
+        #             if not validation_errors:
+        #                 logger.info(
+        #                     "RELIABILITY_SUCCESS: Adaptive retry succeeded",
+        #                     integration=self.integration_name,
+        #                     tool=definition.name,
+        #                     successful_attempt=attempt + 1,
+        #                     total_attempts=max_attempts
+        #                 )
+        #                 return candidate
+        #
+        #             # Validation failed, add feedback
+        #             feedback.append("Schema validation issues: " + "; ".join(validation_errors))
+        #             last_error = ValueError("; ".join(validation_errors))
+        #
+        #         except Exception as e:
+        #             feedback.append(f"Attempt {attempt + 1}: {str(e)}")
+        #             last_error = e
+        #
+        #         # Apply exponential backoff with jitter if not the last attempt
+        #         if attempt < max_attempts - 1:
+        #             base_delay = 0.5 * (2 ** attempt)  # Exponential backoff
+        #             jitter = random.uniform(0, 0.3)    # Up to 300ms jitter
+        #             delay = min(base_delay + jitter, 5.0)  # Cap at 5 seconds
+        #
+        #             logger.info(
+        #                 "RELIABILITY_BACKOFF: Applying exponential backoff with jitter",
+        #                 integration=self.integration_name,
+        #                 tool=definition.name,
+        #                 attempt=attempt + 1,
+        #                 delay_seconds=delay,
+        #                 base_delay=base_delay,
+        #                 jitter_seconds=jitter
+        #             )
+        #
+        #             time.sleep(delay)
+        #
+        #     # All attempts failed
+        #     logger.error(
+        #         "RELIABILITY_FAILURE: All adaptive retry attempts failed",
+        #         integration=self.integration_name,
+        #         tool=definition.name,
+        #         total_attempts=max_attempts,
+        #         final_error=str(last_error) if last_error else "unknown"
+        #     )
+        #     raise last_error or ValueError("Payload generation failed after all adaptive retry attempts")
+        #
+        # # Calculate adaptive retry attempts based on schema complexity
+        # adaptive_max_attempts = calculate_adaptive_retry_attempts(definition)
+        # logger.info(
+        #     "RELIABILITY_IMPROVEMENT: Using adaptive retry logic based on schema complexity",
+        #     integration=self.integration_name,
+        #     tool=definition.name,
+        #     schema_properties_count=len(definition.schema.get("properties", {})) if definition.schema else 0,
+        #     adaptive_max_attempts=adaptive_max_attempts,
+        #     improvement_enabled=True
+        # )
+        #
+        # # Use adaptive retry logic instead of fixed 2 attempts
+        # return execute_with_exponential_backoff_and_jitter(adaptive_max_attempts, definition, instruction, feedback)
+
         # RELIABILITY IMPROVEMENT NEEDED: Implement adaptive retry logic with exponential backoff
         # RATIONALE: The current implementation only attempts payload generation 2 times before giving up,
         # which is insufficient for complex schemas or when model responses vary. This causes intermittent
