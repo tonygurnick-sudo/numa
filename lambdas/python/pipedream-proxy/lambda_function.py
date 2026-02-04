@@ -28,6 +28,10 @@ SUPPORTED_OPERATIONS = [
     "create_mcp_client",
     "disconnect_integration",
     "list_mcp_tools",
+    "list_actions",
+    "run_action",
+    "configure_props",
+    "proxy_request",
 ]
 
 
@@ -169,6 +173,53 @@ def handler(event: Dict[str, Any], context: LambdaContext) -> Dict[str, Any]:
                     400, "list_mcp_tools operation requires app_name parameter"
                 )
             result = {"tools": pipedream_ops.list_mcp_tools(external_user_id, app_name)}
+
+        elif operation == "list_actions":
+            app_slug = parameters.get("app_slug")
+            if not app_slug:
+                return _error_response(
+                    400, "list_actions operation requires app_slug parameter"
+                )
+            result = {"actions": pipedream_ops.list_actions(app_slug)}
+
+        elif operation == "run_action":
+            action_key = parameters.get("action_key")
+            configured_props = parameters.get("configured_props", {})
+            stash_id = parameters.get("stash_id")
+            if not action_key:
+                return _error_response(
+                    400, "run_action operation requires action_key parameter"
+                )
+            result = pipedream_ops.run_action(
+                external_user_id, action_key, configured_props, stash_id
+            )
+
+        elif operation == "configure_props":
+            action_key = parameters.get("action_key")
+            prop_name = parameters.get("prop_name")
+            configured_props = parameters.get("configured_props", {})
+            if not action_key or not prop_name:
+                return _error_response(
+                    400,
+                    "configure_props requires action_key and prop_name parameters",
+                )
+            result = pipedream_ops.configure_props(
+                external_user_id, action_key, prop_name, configured_props
+            )
+
+        elif operation == "proxy_request":
+            method = parameters.get("method", "GET")
+            upstream_url = parameters.get("upstream_url")
+            account_id = parameters.get("account_id")
+            body = parameters.get("body")
+            if not upstream_url or not account_id:
+                return _error_response(
+                    400,
+                    "proxy_request requires upstream_url and account_id parameters",
+                )
+            result = pipedream_ops.proxy_request(
+                external_user_id, account_id, method, upstream_url, body
+            )
 
         else:
             return _error_response(

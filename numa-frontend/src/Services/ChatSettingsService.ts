@@ -5,6 +5,8 @@
  */
 import i18n from '../i18n';
 
+export type ApprovalMode = 'always' | 'non_destructive' | 'never';
+
 export type ChatSettings = {
   defaultKBIds: string[];
   autoToolsEnabled: boolean;
@@ -13,6 +15,7 @@ export type ChatSettings = {
   dataAnalysisEnabled: boolean;
   defaultConnectionIds: string[];
   language: string | null;
+  approvalMode: ApprovalMode;
 };
 
 export type ChatSettingsUpdate = {
@@ -29,6 +32,8 @@ export type ProfileChatSettingsResponse = {
 };
 
 // Default settings for new users or when API is unavailable
+export const VALID_APPROVAL_MODES: ApprovalMode[] = ['always', 'non_destructive', 'never'];
+
 export const DEFAULT_CHAT_SETTINGS: ChatSettings = {
   defaultKBIds: ['company'],
   autoToolsEnabled: true,
@@ -37,6 +42,7 @@ export const DEFAULT_CHAT_SETTINGS: ChatSettings = {
   dataAnalysisEnabled: true,
   defaultConnectionIds: [],
   language: 'browser',
+  approvalMode: 'non_destructive',
 };
 
 // Helper types for RequestProvider integration
@@ -172,6 +178,10 @@ function validateSettings(data: unknown): ChatSettings {
       typeof obj.language === 'string' || obj.language === null
         ? (obj.language as string | null)
         : DEFAULT_CHAT_SETTINGS.language,
+    approvalMode:
+      typeof obj.approvalMode === 'string' && VALID_APPROVAL_MODES.includes(obj.approvalMode as ApprovalMode)
+        ? (obj.approvalMode as ApprovalMode)
+        : DEFAULT_CHAT_SETTINGS.approvalMode,
   };
 }
 

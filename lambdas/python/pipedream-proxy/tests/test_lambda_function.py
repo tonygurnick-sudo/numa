@@ -1,3 +1,4 @@
+# pylint: disable=protected-access
 import json
 import os
 import unittest
@@ -476,6 +477,183 @@ class TestPipedreamOperations(unittest.TestCase):
                 ops.get_access_token()
 
             self.assertIn("Pipedream OAuth error", str(context.exception))
+
+
+class TestInjectAuthProvisionId(unittest.TestCase):
+    """Test cases for _inject_auth_provision_id auth resolution."""
+
+    def setUp(self) -> None:
+        self.env_vars = {
+            "SECURITY_MAPPING_TABLE": "pipedream-security-mapping",
+            "ALLOWED_ACCOUNTS_TABLE": "pipedream-allowed-accounts",
+            "PIPEDREAM_SECRET_ARN": "arn:aws:secretsmanager:us-east-1:123456789012:secret:test",
+            "SUPPORTED_INTEGRATIONS": '["jira", "slack", "trello"]',
+            "ENVIRONMENT": "test",
+        }
+        self.mock_connections = [
+            {"id": "apn_jira123", "app": {"name_slug": "jira"}},
+            {"id": "apn_slack456", "app": {"name_slug": "slack"}},
+            {"id": "apn_salesforce789", "app": {"name_slug": "salesforce_rest_api"}},
+        ]
+
+    @patch.object(PipedreamOperations, "_get_user_connections")
+    def test_normal_match_by_prop_key(self, mock_connections) -> None:
+        """Prop key 'jira' maps directly to the jira connection."""
+        mock_connections.return_value = self.mock_connections
+
+        with patch.dict(os.environ, self.env_vars):
+            ops = PipedreamOperations()
+            result = ops._inject_auth_provision_id(
+                "user1",
+                "jira-get-issue",
+                {"jira": {"authProvisionId": "auto"}, "cloudId": "abc"},
+            )
+
+        self.assertEqual(result["jira"]["authProvisionId"], "apn_jira123")
+        self.assertEqual(result["cloudId"], "abc")
+
+    @patch.object(PipedreamOperations, "_get_user_connections")
+    def test_fallback_app_key_resolves_via_action_key(self, mock_connections) -> None:
+        """Legacy prop key 'app' falls back to action_key 'jira-create-issue' -> jira."""
+        mock_connections.return_value = self.mock_connections
+
+        with patch.dict(os.environ, self.env_vars):
+            ops = PipedreamOperations()
+            result = ops._inject_auth_provision_id(
+                "user1",
+                "jira-create-issue",
+                {"app": {"authProvisionId": "auto"}, "cloudId": "abc"},
+            )
+
+        self.assertEqual(result["app"]["authProvisionId"], "apn_jira123")
+
+    @patch.object(PipedreamOperations, "_get_user_connections")
+    def test_fallback_with_underscore_slug(self, mock_connections) -> None:
+        """Action key 'salesforce_rest_api-create-record' resolves to salesforce_rest_api."""
+        mock_connections.return_value = self.mock_connections
+
+        with patch.dict(os.environ, self.env_vars):
+            ops = PipedreamOperations()
+            result = ops._inject_auth_provision_id(
+                "user1",
+                "salesforce_rest_api-create-record",
+                {"app": {"authProvisionId": "auto"}},
+            )
+
+        self.assertEqual(result["app"]["authProvisionId"], "apn_salesforce789")
+
+    @patch.object(PipedreamOperations, "_get_user_connections")
+    def test_no_match_raises_error(self, mock_connections) -> None:
+        """Raises ValueError when no connection matches."""
+        mock_connections.return_value = self.mock_connections
+
+        with patch.dict(os.environ, self.env_vars):
+            ops = PipedreamOperations()
+            with self.assertRaises(ValueError):
+                ops._inject_auth_provision_id(
+                    "user1",
+                    "unknown_app-do-thing",
+                    {"app": {"authProvisionId": "auto"}},
+                )
+
+    @patch.object(PipedreamOperations, "_get_user_connections")
+    def test_non_auto_props_untouched(self, mock_connections) -> None:
+        """Props without authProvisionId 'auto' are not modified."""
+        mock_connections.return_value = self.mock_connections
+
+        with patch.dict(os.environ, self.env_vars):
+            ops = PipedreamOperations()
+            result = ops._inject_auth_provision_id(
+                "user1",
+                "jira-get-issue",
+                {"cloudId": "abc", "issueKey": "NUMA-1"},
+            )
+
+        self.assertEqual(result, {"cloudId": "abc", "issueKey": "NUMA-1"})
+        mock_connections.assert_not_called()
+
+    @patch.object(PipedreamOperations, "_get_expected_auth_key")
+    @patch.object(PipedreamOperations, "_get_user_connections")
+    def test_auth_key_normalization_jira_to_app(
+        self, mock_connections, mock_expected_key
+    ) -> None:
+        """Auth key 'jira' should be normalized to 'app' for jira-create-issue."""
+        mock_connections.return_value = self.mock_connections
+        mock_expected_key.return_value = "app"  # Schema says use 'app'
+
+        with patch.dict(os.environ, self.env_vars):
+            ops = PipedreamOperations()
+            result = ops._inject_auth_provision_id(
+                "user1",
+                "jira-create-issue",
+                {"jira": {"authProvisionId": "auto"}, "cloudId": "abc"},
+            )
+
+        # Should have normalized "jira" -> "app"
+        self.assertNotIn("jira", result)
+        self.assertEqual(result["app"]["authProvisionId"], "apn_jira123")
+        self.assertEqual(result["cloudId"], "abc")
+
+    @patch.object(PipedreamOperations, "_get_expected_auth_key")
+    @patch.object(PipedreamOperations, "_get_user_connections")
+    def test_auth_key_no_normalization_when_matches(
+        self, mock_connections, mock_expected_key
+    ) -> None:
+        """Auth key 'jira' should stay 'jira' when schema expects 'jira'."""
+        mock_connections.return_value = self.mock_connections
+        mock_expected_key.return_value = "jira"  # Schema says use 'jira'
+
+        with patch.dict(os.environ, self.env_vars):
+            ops = PipedreamOperations()
+            result = ops._inject_auth_provision_id(
+                "user1",
+                "jira-get-issue",
+                {"jira": {"authProvisionId": "auto"}, "issueIdOrKey": "NUMA-1"},
+            )
+
+        # Should keep "jira" unchanged
+        self.assertEqual(result["jira"]["authProvisionId"], "apn_jira123")
+        self.assertEqual(result["issueIdOrKey"], "NUMA-1")
+
+    @patch.object(PipedreamOperations, "_get_expected_auth_key")
+    @patch.object(PipedreamOperations, "_get_user_connections")
+    def test_auth_key_already_correct(
+        self, mock_connections, mock_expected_key
+    ) -> None:
+        """Auth key 'app' should stay 'app' when schema expects 'app'."""
+        mock_connections.return_value = self.mock_connections
+        mock_expected_key.return_value = "app"  # Schema says use 'app'
+
+        with patch.dict(os.environ, self.env_vars):
+            ops = PipedreamOperations()
+            result = ops._inject_auth_provision_id(
+                "user1",
+                "jira-create-issue",
+                {"app": {"authProvisionId": "auto"}},
+            )
+
+        # Should keep "app" unchanged (already correct)
+        self.assertEqual(result["app"]["authProvisionId"], "apn_jira123")
+
+    @patch.object(PipedreamOperations, "_get_expected_auth_key")
+    @patch.object(PipedreamOperations, "_get_user_connections")
+    def test_auth_key_normalization_fallback_when_schema_unavailable(
+        self, mock_connections, mock_expected_key
+    ) -> None:
+        """When schema is unavailable, original key is used unchanged."""
+        mock_connections.return_value = self.mock_connections
+        mock_expected_key.return_value = None  # Schema not found
+
+        with patch.dict(os.environ, self.env_vars):
+            ops = PipedreamOperations()
+            result = ops._inject_auth_provision_id(
+                "user1",
+                "jira-get-issue",
+                {"jira": {"authProvisionId": "auto"}},
+            )
+
+        # Should use original key when schema unavailable
+        self.assertEqual(result["jira"]["authProvisionId"], "apn_jira123")
 
 
 if __name__ == "__main__":

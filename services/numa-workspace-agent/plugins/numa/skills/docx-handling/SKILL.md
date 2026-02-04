@@ -1,6 +1,6 @@
 ---
 name: docx-handling
-description: Create, read, and fill Word document templates. Use when asked to generate DOCX files, fill templates, populate forms, extract text from Word documents, or modify existing DOCX files.
+description: Create, read, fill Word document templates, and add images. Use when asked to generate DOCX files, fill templates, add images/logos/letterheads, populate forms, extract text from Word documents, or modify existing DOCX files.
 ---
 
 # DOCX Handling Skill
@@ -125,6 +125,51 @@ run.font.color.rgb = RGBColor(255, 0, 0)  # Red
 
 doc.save('/workdir/output/styled.docx')
 ```
+
+### Adding Images
+
+Insert images into documents using `add_picture()`. Images can be placed directly in the document, in table cells (useful for letterheads/logos), or within paragraphs.
+
+```python
+from docx import Document
+from docx.shared import Inches, Cm
+from docx.enum.text import WD_ALIGN_PARAGRAPH
+
+doc = Document()
+
+# Basic image insertion
+doc.add_picture('/workdir/uploads/image.png', width=Inches(4))
+
+# Add image with size constraints
+# Width-constrained (height scales proportionally)
+doc.add_picture('/workdir/uploads/chart.png', width=Inches(6))
+# Height-constrained
+doc.add_picture('/workdir/uploads/logo.png', height=Cm(3))
+
+# Centered image
+paragraph = doc.add_paragraph()
+paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
+run = paragraph.add_run()
+run.add_picture('/workdir/uploads/banner.png', width=Inches(5))
+
+# Image in table cell (letterheads, logos)
+table = doc.add_table(rows=1, cols=2)
+cell = table.rows[0].cells[0]
+paragraph = cell.paragraphs[0]
+run = paragraph.add_run()
+run.add_picture('/workdir/uploads/logo.png', width=Inches(1.5))
+
+doc.save('/workdir/output/with_images.docx')
+```
+
+**Common image use cases:**
+
+| Use Case | Technique |
+|----------|-----------|
+| Company letterhead | Image in table cell at document start |
+| Report charts | `doc.add_picture()` after relevant section |
+| Signature images | Small image in table cell |
+| Centered banners | Paragraph alignment + `run.add_picture()` |
 
 ---
 

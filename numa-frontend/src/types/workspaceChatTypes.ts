@@ -291,7 +291,8 @@ export type WorkspaceChatSegment =
   | WorkspaceChatSubagentSegment
   | WorkspaceChatTodoSegment
   | WorkspaceChatInlineThinkingSegment
-  | WorkspaceChatCompactionSegment;
+  | WorkspaceChatCompactionSegment
+  | WorkspaceChatToolApprovalSegment;
 
 export interface WorkspaceChatTextSegment {
   kind: 'text';
@@ -349,6 +350,19 @@ export interface WorkspaceChatCompactionSegment {
   preTokens?: number;
   /** What triggered the compaction */
   trigger?: 'auto' | 'manual';
+}
+
+export interface WorkspaceChatToolApprovalSegment {
+  kind: 'tool_approval';
+  toolName: string;
+  toolUseId: string;
+  actionKey: string;
+  description: string;
+  propsPreview: string;
+  requestId: string;
+  decision?: 'approved' | 'denied' | 'timeout';
+  isLoading: boolean;
+  autoApproved?: boolean;
 }
 
 export interface WorkspaceChatFileUploadSegment {
@@ -620,7 +634,8 @@ export type SDKEventType =
   | 'error'
   | 'StreamEvent'
   | 'completion'
-  | 'assistant_advice';
+  | 'assistant_advice'
+  | 'tool_approval';
 
 /** Base SDK event with common fields */
 export interface SDKBaseEvent {
@@ -797,7 +812,22 @@ export type SDKEvent =
   | SDKStreamEvent
   | SDKAttachmentsEvent
   | SDKCompletionEvent
-  | SDKAssistantAdviceEvent;
+  | SDKAssistantAdviceEvent
+  | SDKToolApprovalEvent;
+
+/** SDK Tool Approval event — emitted when an integration tool needs user approval */
+export interface SDKToolApprovalEvent {
+  type: 'tool_approval';
+  timestamp?: string;
+  tool_use_id: string;
+  tool_name: string;
+  action_key: string;
+  description: string;
+  props_preview: string;
+  request_id: string;
+  auto_approved?: boolean;
+  parent_tool_use_id?: string | null;
+}
 
 // ============================================================
 // SDK Tool Input Types
@@ -926,6 +956,18 @@ export interface WorkspaceChatInlineToolSegment {
   category?: ToolCategory;
   /** Bootstrap icon class name for important tools (e.g., 'bi-search' for web search) */
   iconName?: string;
+  /** Image URL for branded icons (e.g., integration logos) */
+  iconImage?: string;
+  /** Approval data for integration tools requiring human-in-the-loop confirmation */
+  approval?: {
+    actionKey: string;
+    description: string;
+    propsPreview: string;
+    requestId: string;
+    decision?: 'approved' | 'denied' | 'timeout';
+    isSubmitting?: boolean;
+    autoApproved?: boolean;
+  };
 }
 
 /** Subagent container segment (for Task tool) */

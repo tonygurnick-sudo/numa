@@ -21,7 +21,12 @@ from numa_workspace_agent.hooks import (
     subagent_cleanup_hook,
     subagent_limit_hook,
 )
-from numa_workspace_agent.mcp_tools import execute_script
+from numa_workspace_agent.mcp_tools import (
+    configure_props,
+    execute_script,
+    proxy_request,
+    run_action,
+)
 from numa_workspace_agent.prompts import build_workspace_system_prompt
 
 if TYPE_CHECKING:
@@ -217,6 +222,10 @@ ALLOWED_TOOLS = [
     "KillShell",
     # MCP tools (our custom tools)
     "mcp__scripts__execute_script",  # Execute code without shell heredocs
+    # Pipedream integration tools
+    "mcp__integrations__run_action",  # Execute integration actions (with approval)
+    "mcp__integrations__configure_props",  # Get dynamic prop options (no approval)
+    "mcp__integrations__proxy_request",  # Raw API proxy calls (with approval)
     # Bash with allowed commands
     "Bash(python:*)",
     "Bash(python3:*)",
@@ -270,6 +279,9 @@ def create_agent_options(
     model: Optional[str] = None,
     agent_config: Optional["AgentConfig"] = None,
     agent_file_paths: Optional[list[str]] = None,
+    external_user_id: Optional[str] = None,
+    enabled_integrations: Optional[list[str]] = None,
+    request_id: Optional[str] = None,
 ) -> ClaudeAgentOptions:
     """
     Create ClaudeAgentOptions for the Numa Workspace Agent.
@@ -299,6 +311,7 @@ def create_agent_options(
         today_string=today_string,
         agent_config=agent_config,
         agent_file_paths=agent_file_paths,
+        enabled_integrations=enabled_integrations,
     )
 
     # Build environment variables for SDK subprocess
@@ -312,7 +325,7 @@ def create_agent_options(
         "CLAUDE_CODE_USE_BEDROCK": "1",
         "AWS_REGION": REGION,
         "AWS_DEFAULT_REGION": REGION,  # Some AWS SDKs need this
-        "DISABLE_PROMPT_CACHING": "1",
+        # "DISABLE_PROMPT_CACHING": "1",
         # Disable OpenTelemetry in SDK subprocess (X-Ray OTLP not configured)
         "OTEL_SDK_DISABLED": "true",
         # Thinking tokens
@@ -344,6 +357,18 @@ def create_agent_options(
     if conversation_id:
         env["NUMA_CONVERSATION_ID"] = conversation_id
 
+    # Pipedream external user ID for integration tools
+    if external_user_id:
+        env["NUMA_EXTERNAL_USER_ID"] = external_user_id
+
+    # Request ID for deterministic approval IDs
+    if request_id:
+        env["NUMA_REQUEST_ID"] = request_id
+
+    # Pass enabled integrations list to SDK subprocess
+    if enabled_integrations:
+        env["NUMA_ENABLED_INTEGRATIONS"] = json.dumps(enabled_integrations)
+
     # IMPORTANT: Capture local credentials BEFORE cross-account assume.
     # Tools need these to invoke Lambdas/S3 in the local account while
     # the SDK subprocess has cross-account Bedrock credentials in AWS_* vars.
@@ -355,6 +380,18 @@ def create_agent_options(
     cross_account_creds = _get_cross_account_credentials()
     if cross_account_creds:
         env.update(cross_account_creds)
+
+    # Propagate integration env vars to os.environ for in-process MCP tools.
+    # The env dict in ClaudeAgentOptions only reaches subprocess-based tools,
+    # but MCP servers created via create_sdk_mcp_server run in-process and
+    # read os.environ directly. Sync the keys that integration tools need.
+    for _key in (
+        "NUMA_ENABLED_TOOLS",
+        "NUMA_ENABLED_INTEGRATIONS",
+        "NUMA_EXTERNAL_USER_ID",
+    ):
+        if _key in env:
+            os.environ[_key] = env[_key]
 
     # Stderr callback to capture CLI subprocess errors
     def log_stderr(msg: str) -> None:
@@ -370,6 +407,25 @@ def create_agent_options(
         tools=[execute_script],
     )
 
+    # Create MCP server for Pipedream integrations
+    integrations_mcp_server = create_sdk_mcp_server(
+        name="integrations",
+        version="1.0.0",
+        tools=[run_action, configure_props, proxy_request],
+    )
+
+    import structlog as _structlog
+
+    _logger = _structlog.get_logger()
+    _logger.info(
+        "SDK env configured",
+        _name="SDK_ENV_TOOLS",
+        phase="sdk",
+        numa_enabled_tools=env.get("NUMA_ENABLED_TOOLS", "NOT SET"),
+        numa_enabled_integrations=env.get("NUMA_ENABLED_INTEGRATIONS", "NOT SET"),
+        numa_external_user_id=env.get("NUMA_EXTERNAL_USER_ID", "NOT SET"),
+    )
+
     return ClaudeAgentOptions(
         # Core settings
         system_prompt=system_prompt,
@@ -382,7 +438,10 @@ def create_agent_options(
         # Tools - explicitly set which tools are available (reduces token overhead)
         tools=TOOLS,
         # MCP servers for custom tools
-        mcp_servers={"scripts": scripts_mcp_server},
+        mcp_servers={
+            "scripts": scripts_mcp_server,
+            "integrations": integrations_mcp_server,
+        },
         # Permissions - use acceptEdits mode with Python hooks for security
         # acceptEdits auto-approves file operations; hooks handle deny logic
         permission_mode="acceptEdits",

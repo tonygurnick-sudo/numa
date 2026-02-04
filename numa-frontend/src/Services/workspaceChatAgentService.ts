@@ -333,6 +333,37 @@ export async function stopWorkspaceChatAgent(conversationId: string, requestId: 
 }
 
 /**
+ * Approve or deny an integration tool action.
+ * Called when the user clicks Approve/Deny on a tool-approval card.
+ */
+export async function approveToolAction(
+  approvalId: string,
+  decision: 'approved' | 'denied',
+  conversationId: string,
+): Promise<void> {
+  const userSub = getUserSubFromToken();
+
+  const res = await fetch(`${getApiUrl()}/invocations`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...getAuthHeaders(userSub),
+    },
+    body: JSON.stringify({
+      action: 'approve',
+      approvalId,
+      decision,
+      conversationId,
+    }),
+  });
+
+  if (!res.ok) {
+    const errorText = await res.text().catch(() => 'Unknown error');
+    throw new Error(`Approval request failed (${res.status}): ${errorText}`);
+  }
+}
+
+/**
  * Get conversation history by fetching and parsing the trace from S3.
  *
  * This is a lightweight GET endpoint that reads directly from S3

@@ -39,6 +39,16 @@ export interface WorkspaceChatToolsConstructProps {
   extractContentLambdaArn?: string;
   /** Document converter Lambda ARN for invoking document-converter */
   documentConverterLambdaArn?: string;
+  /** Integrations approval table name (for Pipedream human-in-the-loop approval) */
+  integrationsApprovalTableName?: string;
+  /** Integrations approval table ARN (for IAM permissions) */
+  integrationsApprovalTableArn?: string;
+  /** Pipedream relay Lambda ARN (for invoking relay from workspace tools) */
+  pipedreamRelayLambdaArn?: string;
+  /** File redirect HMAC secret (for generating clean URLs for integration uploads) */
+  fileRedirectSecret?: string;
+  /** File redirect base URL (e.g. https://domain/api/workspace-chat-agent) */
+  fileRedirectBaseUrl?: string;
 }
 
 /**
@@ -200,6 +210,26 @@ export class WorkspaceChatToolsConstruct extends Construct {
       });
     }
 
+    // DynamoDB permission for integrations approval table (human-in-the-loop)
+    if (props.integrationsApprovalTableArn) {
+      policyStatements.push({
+        sid: 'DynamoDBIntegrationsApproval',
+        effect: 'Allow',
+        actions: ['dynamodb:GetItem', 'dynamodb:PutItem', 'dynamodb:UpdateItem'],
+        resources: [props.integrationsApprovalTableArn],
+      });
+    }
+
+    // Lambda invoke permission for Pipedream relay (integration actions)
+    if (props.pipedreamRelayLambdaArn) {
+      policyStatements.push({
+        sid: 'InvokePipedreamRelay',
+        effect: 'Allow',
+        actions: ['lambda:InvokeFunction'],
+        resources: [props.pipedreamRelayLambdaArn],
+      });
+    }
+
     // Create the Lambda using NumaLambda construct
     this.numaLambda = new NumaLambda(this, 'lambda', {
       clientName: props.clientName,
@@ -207,7 +237,7 @@ export class WorkspaceChatToolsConstruct extends Construct {
       handler: 'lambda_function.handler',
       runtime: 'python3.13',
       memorySize: 512,
-      timeout: 60,
+      timeout: 300,
       logGroup: props.logGroup,
       resourceNameSuffix: '_workspace_chat_tools',
       otelConfig: props.otelConfig,
@@ -239,6 +269,16 @@ export class WorkspaceChatToolsConstruct extends Construct {
         WORKSPACE_AGENTS_TABLE: `numa-${props.clientName}-agents`,
         USER_AGENTS_TABLE: `numa-${props.clientName}-user-agents`,
         AGENTS_SETTINGS_TABLE_NAME: `numa-${props.clientName}-agents-settings`,
+        // Pipedream integrations (optional)
+        INTEGRATIONS_APPROVAL_TABLE_NAME: props.integrationsApprovalTableName ?? '',
+        PIPEDREAM_RELAY_LAMBDA_ARN: props.pipedreamRelayLambdaArn ?? '',
+        // File redirect for integration uploads (clean URLs to avoid Slack filename length issues)
+        ...(props.fileRedirectSecret && {
+          FILE_REDIRECT_SECRET: props.fileRedirectSecret,
+        }),
+        ...(props.fileRedirectBaseUrl && {
+          FILE_REDIRECT_BASE_URL: props.fileRedirectBaseUrl,
+        }),
         // Note: Lambda's native logging goes to the shared log group via logGroup prop
       },
       additionalPolicyStatements: policyStatements,

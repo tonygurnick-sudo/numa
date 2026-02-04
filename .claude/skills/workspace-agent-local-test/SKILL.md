@@ -88,7 +88,7 @@ curl -s -X POST http://localhost:8080/invocations \
   -d '{"action":"chat","prompt":"Hello","conversationId":"test-123"}'
 ```
 
-**IMPORTANT:** Avoid special characters like `!` in prompts - bash escapes them as `\!` causing JSON parse errors.
+**IMPORTANT:** Avoid special characters in prompts - bash escapes them causing JSON parse errors.
 
 Expected output: NDJSON stream with events:
 - `type: "user"` - Your prompt
@@ -119,9 +119,9 @@ These are OpenTelemetry/AWS resource detectors that only work in cloud environme
 
 ## Troubleshooting
 
-### JSON Parse Error: "Invalid \escape"
-**Cause:** Bash escaped special characters in the prompt (e.g., `!` becomes `\!`)
-**Fix:** Use simple prompts without `!`, `$`, backticks, or other shell metacharacters
+### JSON Parse Error: "Invalid escape"
+**Cause:** Bash escaped special characters in the prompt
+**Fix:** Use simple prompts without shell metacharacters
 
 ### Exit Code 1 Errors
 - Check `CLAUDE_CODE_USE_BEDROCK=1` is set

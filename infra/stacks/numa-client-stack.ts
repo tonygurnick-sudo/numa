@@ -263,6 +263,14 @@ export class NumaClientStack extends TerraformStack {
       const documentConverterLambdaName = awsNameWithHashedPrefix(props.clientName, '_document-converter', 64);
       const documentConverterLambdaArn = `arn:aws:lambda:${clientConfig.region}:${clientConfig.clientAccountId}:function:${documentConverterLambdaName}`;
 
+      // Shared secret for file redirect HMAC tokens (used by both tools and proxy Lambdas)
+      const fileRedirectSecret = new SsmParameter(this, 'file-redirect-secret', {
+        name: `${props.clientName}_workspace-chat_file-redirect-secret`,
+        type: 'String',
+        value: uuidv4(),
+        lifecycle: { createBeforeDestroy: true, ignoreChanges: ['value'] },
+      });
+
       // Create the workspace chat tools Lambda (provides KB queries etc. for workspace chat agent)
       workspaceChatTools = new WorkspaceChatToolsConstruct(this, 'workspace-chat-tools', {
         clientName: props.clientName,
@@ -285,6 +293,13 @@ export class NumaClientStack extends TerraformStack {
         extractContentLambdaArn: extractContentLambdaArn,
         // Document converter Lambda for markdown to PDF/DOCX conversion
         documentConverterLambdaArn: documentConverterLambdaArn,
+        // Pipedream integrations (optional, only if enabled)
+        integrationsApprovalTableName: core.integrationsApprovalTable?.name,
+        integrationsApprovalTableArn: core.integrationsApprovalTable?.arn,
+        pipedreamRelayLambdaArn: core.pipedreamRelayLambdaArn,
+        // File redirect for integration uploads (clean URLs to avoid Slack filename length issues)
+        fileRedirectSecret: fileRedirectSecret.value,
+        fileRedirectBaseUrl: `https://${domainName}/api/workspace-chat-agent`,
       });
 
       // Create the AgentCore runtime
@@ -303,6 +318,12 @@ export class NumaClientStack extends TerraformStack {
         containerLogGroup: workspaceChatLogGroup,
         // Cross-account Bedrock access for global inference profiles (Claude 4.5 models)
         bedrockAccount: clientConfig.bedrockAccount,
+        // Integrations approval table (for writing approval decisions from the service)
+        integrationsApprovalTableName: core.integrationsApprovalTable?.name,
+        integrationsApprovalTableArn: core.integrationsApprovalTable?.arn,
+        // Chat settings table (for reading user approval mode preferences)
+        chatSettingsTableName: core.chatSettingsTable.name,
+        chatSettingsTableArn: core.chatSettingsTable.arn,
       });
 
       // Create the proxy Lambda that bridges CloudFront to AgentCore SDK
@@ -315,6 +336,13 @@ export class NumaClientStack extends TerraformStack {
         // Cognito config for JWT verification (prevents token forgery via direct Lambda URL calls)
         cognitoUserPoolId: core.userPoolId,
         cognitoClientId: core.userPoolClient.id,
+        // Integrations approval table (proxy handles approve actions directly to avoid container deadlock)
+        integrationsApprovalTableName: core.integrationsApprovalTable?.name,
+        integrationsApprovalTableArn: core.integrationsApprovalTable?.arn,
+        // File redirect for integration uploads (clean URLs to avoid Slack filename length issues)
+        fileRedirectSecret: fileRedirectSecret.value,
+        outputsBucketName: core.outputsBucket.bucket.bucket,
+        outputsBucketArn: core.outputsBucket.bucket.arn,
       });
 
       new TerraformOutput(this, 'workspace-chat-agent-proxy-url', {

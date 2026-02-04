@@ -46,6 +46,11 @@ EXTENSION_SKILLS: dict[str, str] = {
 # Each tuple: (pattern, skill_name)
 MESSAGE_HINTS: list[tuple[str, str]] = [
     (r"\b(word\s+doc|word\s+document|docx)\b", "docx-handling"),
+    (r"\b(letterhead|logo|banner)\b.*\b(word|doc|docx|document)\b", "docx-handling"),
+    (
+        r"\b(add|insert)\b.*\b(image|picture|logo)\b.*\b(word|doc|docx)\b",
+        "docx-handling",
+    ),
     (r"\b(excel|spreadsheet)\b", "spreadsheet-handling"),
     (r"\b(knowledge\s*base|KB|company\s+docs?|internal\s+docs?)\b", "knowledge-search"),
     (
@@ -97,6 +102,13 @@ MESSAGE_HINTS: list[tuple[str, str]] = [
     (r"\b(memory|ram)\s+(error|issue|problem)\b", "data-analysis"),
     (r"\b(100k|million|millions)\s+(rows?|records?)\b", "data-analysis"),
     (r"\b(chart|graph|plot|visuali[sz]e|matplotlib)\b", "data-analysis"),
+    # Integration patterns
+    (r"\b(integrations?|connected\s+apps?|pipedream)\b", "integrations"),
+    (r"\b(run[\s_]+action|proxy[\s_]+request|configure[\s_]+props)\b", "integrations"),
+    (
+        r"\b(google[\s-]*drive|slack|gmail|hubspot|salesforce|jira|notion|asana|trello|github|outlook|teams)\b",
+        "integrations",
+    ),
 ]
 
 
@@ -119,6 +131,13 @@ class AssistantContext:
     )
     attached_files: Optional[list[dict]] = (
         None  # [{name, path, size}] for files attached to THIS request
+    )
+    enabled_integrations: Optional[list[str]] = None  # ["google_drive", "slack", ...]
+    activated_skills: Optional[list[str]] = (
+        None  # Skills already activated in this conversation
+    )
+    integration_indexes: Optional[dict[str, list[dict]]] = (
+        None  # {app_slug: [action summaries from _index.json]}
     )
 
 
@@ -217,11 +236,12 @@ def get_skill_hints(user_message: str, context: AssistantContext) -> list[str]:
     """
     skills: set[str] = set()
 
-    # 1. Check message for explicit patterns
-    message_lower = user_message.lower()
-    for pattern, skill in MESSAGE_HINTS:
-        if re.search(pattern, message_lower, re.IGNORECASE):
-            skills.add(skill)
+    # 1. Regex skill hints disabled — producing too many false positives.
+    #    The Nova 2 Lite model handles skill recommendations via the skills table instead.
+    # message_lower = user_message.lower()
+    # for pattern, skill in MESSAGE_HINTS:
+    #     if re.search(pattern, message_lower, re.IGNORECASE):
+    #         skills.add(skill)
 
     # 2. Check attached_files for file extensions (files attached to THIS request)
     if context.attached_files:
@@ -238,6 +258,10 @@ def get_skill_hints(user_message: str, context: AssistantContext) -> list[str]:
             for ext, skill in EXTENSION_SKILLS.items():
                 if name.endswith(ext):
                     skills.add(skill)
+
+    # Filter out skills already activated in this conversation
+    if context.activated_skills:
+        skills -= set(context.activated_skills)
 
     return [f"Activate {skill} skill." for skill in sorted(skills)]
 
@@ -272,6 +296,13 @@ def build_assistant_prompt(context: AssistantContext) -> str:
     else:
         tool_lines.append("- knowledge_base: DISABLED (user can enable in settings)")
 
+    if context.enabled_integrations:
+        tool_lines.append(
+            f"- integrations: ENABLED ({', '.join(context.enabled_integrations)})"
+        )
+    else:
+        tool_lines.append("- integrations: DISABLED (no connected apps)")
+
     tool_status = "\n".join(tool_lines)
 
     return f"""You are a routing assistant for Numa. Output brief recommendations OR "None".
@@ -286,13 +317,50 @@ def build_assistant_prompt(context: AssistantContext) -> str:
 |-------|----------------|-------------------------------|
 | knowledge-search | "KB", "knowledge base", "company docs", "internal docs" | Search internal/company documents, find policies, look up procedures, retrieve stored info |
 | pdf-handling | "pdf", file.pdf mentioned | Read, create, merge, annotate, or work with PDF files |
-| docx-handling | "word doc", "docx", file.docx mentioned | Create, edit, or work with Word documents |
+| docx-handling | "word doc", "docx", file.docx mentioned, "letterhead", "logo" | Create, edit, add images/logos to Word documents |
 | spreadsheet-handling | "excel", "spreadsheet", "csv", file.xlsx/.csv mentioned | Analyze data, work with tables, create charts |
 | data-analysis | "slow", "optimize", "large dataset", "sqlite", "million rows", "chart", "matplotlib" | Optimize performance for large files (50MB+), convert to SQLite for fast queries, create visualizations |
 | web-search | "search online", "google", "latest news", "current" | Find recent/external info, look up things not in company docs |
 | agents | "agent", "agents", "numa agent", "saved agent", "my agent" | List, create, update, configure, or do ANYTHING with Numa agents |
+| integrations | "integration", "connected app", "slack", "google drive", "gmail", app names | Use connected integrations to run actions, search data, or make API calls to external apps |
+
+Here are a list of current integrations in Numa a user may use:
+'gmail',
+'microsoft_outlook',
+'microsoft_outlook_calendar',
+'slack',
+'google_calendar',
+'xero_accounting_api',
+'hubspot',
+'notion',
+'apollo_io',
+'pipedrive',
+'jira',
+'linkedin',
+'google_drive',
+'google_analytics',
+'sharepoint',
+'salesforce_rest_api',
+'asana',
+'onenote',
+'trello',
+'whatsapp_business',
+'mailchimp',
+'freshdesk',
+'rentman',
+'podio',
+'google_sheets',
+'google_forms',
+'google_docs',
+'telegram_bot_api',
+'microsoft_teams',
+'zoom',
+'microsoft_excel',
+'smartsheet',
+'box',
 
 **Default to activating** if the request seems related - better to load a skill and not need it than miss a recommendation.
+**Do NOT recommend skills already activated in this conversation** — they are listed in the context block as ACTIVATED_SKILLS.
 
 Format: "Activate [skill-name] skill."
 
@@ -339,6 +407,23 @@ def build_context_block(context: AssistantContext) -> str:
         lines.append(f"ENABLED_KBS: {', '.join(kb_names)}")
     else:
         lines.append("ENABLED_KBS: None - disabled")
+
+    # Enabled integrations
+    if context.enabled_integrations:
+        lines.append(f"ENABLED_INTEGRATIONS: {', '.join(context.enabled_integrations)}")
+        # Include available actions per integration from _index.json
+        if context.integration_indexes:
+            for slug, actions in context.integration_indexes.items():
+                action_names = [a.get("name", a.get("key", "?")) for a in actions]
+                lines.append(f"  {slug} actions: {', '.join(action_names)}")
+    else:
+        lines.append("ENABLED_INTEGRATIONS: None")
+
+    # Already activated skills in this conversation
+    if context.activated_skills:
+        lines.append(f"ACTIVATED_SKILLS: {', '.join(context.activated_skills)}")
+    else:
+        lines.append("ACTIVATED_SKILLS: None")
 
     return "\n".join(lines)
 

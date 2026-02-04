@@ -79,6 +79,7 @@ export class CoreNumaInfra extends Construct {
   readonly cognitoGroups!: CognitoGroupsConstruct;
   readonly pipedreamRelayLambdaArn?: string;
   readonly mcpPolicyTable?: DynamodbTable;
+  readonly integrationsApprovalTable?: DynamodbTable;
 
   constructor(scope: Construct, name: string, props: CoreNumaInfraProps) {
     super(scope, name);
@@ -1124,6 +1125,20 @@ export class CoreNumaInfra extends Construct {
         },
       });
 
+      // Create integrations approval table for human-in-the-loop approval flow
+      this.integrationsApprovalTable = new DynamodbTable(this, 'integrations-approval', {
+        name: `${props.clientName}-integrations-approval`,
+        billingMode: 'PAY_PER_REQUEST',
+        hashKey: 'approval_id',
+        attribute: [{ name: 'approval_id', type: 'S' }],
+        ttl: { attributeName: 'ttl', enabled: true },
+        tags: {
+          Name: `${props.clientName}-integrations-approval`,
+          Environment: props.environmentName,
+          Purpose: 'integration-approval-workflow',
+        },
+      });
+
       // Create global integration settings table in client account
       const globalIntegrationSettingsTable = new DynamodbTable(this, 'global-integration-settings', {
         name: `${props.clientName}-global-integration-settings`,
@@ -1168,6 +1183,16 @@ export class CoreNumaInfra extends Construct {
           effect: 'Allow',
           resources: [globalIntegrationSettingsTable.arn],
         },
+        // Allow reading/writing integrations approval table (for approval flow)
+        ...(this.integrationsApprovalTable
+          ? [
+              {
+                actions: ['dynamodb:GetItem', 'dynamodb:PutItem', 'dynamodb:UpdateItem'],
+                effect: 'Allow',
+                resources: [this.integrationsApprovalTable.arn],
+              },
+            ]
+          : []),
       ];
 
       pipedreamRelayLambda = new NumaLambda(this, 'pipedream-relay', {

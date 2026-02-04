@@ -35,8 +35,8 @@ function filterEvents(events: TraceEvent[], mode: 'full' | 'clean'): TraceEvent[
     return events;
   }
 
-  // Clean mode: filter out stream_event types
-  return events.filter((event) => event.type !== 'stream_event');
+  // Clean mode: filter out streaming delta events (handles both casing variants)
+  return events.filter((event) => event.type !== 'stream_event' && event.type !== 'StreamEvent');
 }
 
 /**
@@ -70,6 +70,7 @@ function getEventClass(type: string): string {
     case 'assistant':
       return 'event-assistant';
     case 'stream_event':
+    case 'StreamEvent':
       return 'event-stream';
     case 'error':
       return 'event-error';
@@ -158,7 +159,7 @@ function renderEvent(event: TraceEvent, index: number): string {
     } else {
       content = formatJson(event);
     }
-  } else if (event.type === 'stream_event') {
+  } else if (event.type === 'stream_event' || event.type === 'StreamEvent') {
     // Streaming delta - show compact
     const eventData = event.event;
     const eventSubtype = eventData?.type || 'unknown';

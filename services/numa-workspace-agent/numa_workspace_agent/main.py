@@ -12,6 +12,8 @@ Session ID = user_sub (from JWT).
 import base64
 import json
 import os
+import shutil
+import time
 import unicodedata
 import uuid
 from pathlib import Path
@@ -23,7 +25,7 @@ import structlog
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse, Response, StreamingResponse
 
-from .agent_config import AgentConfig, fetch_agent_config
+from .agent_config import AgentConfig, fetch_agent_config, resolve_approval_mode
 from .assistant import (
     AssistantContext,
     build_workspace_tree,
@@ -916,6 +918,162 @@ async def invocations(request: Request):
             sync_to_s3(user_sub, conversation_id, _checksums_cache)
 
 
+def _download_single_integration(
+    app_slug: str,
+    external_user_id: str,
+    tools_dir: Path,
+    lambda_client: Any,
+    lambda_name: str,
+) -> bool:
+    """Download action schemas for a single integration.
+
+    Returns True if schemas were successfully downloaded.
+    """
+    app_dir = tools_dir / app_slug
+
+    try:
+        event = {
+            "tool": "pipedream_list_actions",
+            "allowed_tools": [app_slug],
+            "params": {
+                "app_slug": app_slug,
+                "external_user_id": external_user_id,
+            },
+        }
+
+        response = lambda_client.invoke(
+            FunctionName=lambda_name,
+            Payload=json.dumps(event),
+            InvocationType="RequestResponse",
+        )
+        payload = json.loads(response["Payload"].read())
+
+        if payload.get("status") != "success":
+            logger.warning(
+                "Failed to list actions",
+                app_slug=app_slug,
+                error=payload.get("error"),
+            )
+            return False
+
+        actions = payload.get("result", {}).get("actions", [])
+        if not actions:
+            logger.info("No actions found", app_slug=app_slug)
+            return False
+
+        # Save individual action files and build index
+        app_dir.mkdir(parents=True, exist_ok=True)
+        index_entries = []
+
+        for action in actions:
+            key = action.get("key", action.get("name_slug", "unknown"))
+            name = action.get("name", key)
+            description = action.get("description", "")
+            annotations = action.get("annotations", {})
+            props = action.get("configurable_props", [])
+
+            # Save full action schema
+            action_filename = key.replace("/", "_") + ".json"
+            (app_dir / action_filename).write_text(
+                json.dumps(action, indent=2, default=str)
+            )
+
+            # Build index entry
+            index_entries.append(
+                {
+                    "key": key,
+                    "name": name,
+                    "description": description[:200],
+                    "annotations": annotations,
+                    "prop_count": len(props),
+                    "file": action_filename,
+                }
+            )
+
+        # Save index
+        index_file = app_dir / "_index.json"
+        index_file.write_text(json.dumps(index_entries, indent=2))
+
+        logger.info(
+            "Downloaded integration schemas",
+            app_slug=app_slug,
+            action_count=len(index_entries),
+        )
+        return True
+
+    except Exception as e:
+        logger.warning(
+            "Failed to download schemas for integration",
+            app_slug=app_slug,
+            error=str(e),
+        )
+        return False
+
+
+def _sync_integration_schemas(
+    enabled_integrations: list[str],
+    external_user_id: str,
+) -> dict:
+    """Sync integration schemas to match enabled integrations.
+
+    Downloads schemas for newly enabled integrations and removes
+    schemas for disabled ones. On the common path (nothing changed),
+    this is just a directory listing — negligible overhead.
+
+    Args:
+        enabled_integrations: List of app slugs (e.g., ["google_drive", "slack"])
+        external_user_id: The Pipedream external user ID
+
+    Returns:
+        {"added": [...], "removed": [...], "cached": [...]}
+    """
+    tools_dir = Path("/workdir/tools/integrations")
+    tools_dir.mkdir(parents=True, exist_ok=True)
+
+    enabled_set = set(enabled_integrations)
+    on_disk = {d.name for d in tools_dir.iterdir() if d.is_dir()}
+
+    to_download = enabled_set - on_disk
+    to_remove = on_disk - enabled_set
+    cached = enabled_set & on_disk
+
+    # Remove disabled integrations
+    for slug in to_remove:
+        shutil.rmtree(tools_dir / slug, ignore_errors=True)
+
+    # Download new integrations
+    added = []
+    if to_download:
+        lambda_name = os.environ.get("WORKSPACE_TOOLS_LAMBDA_NAME", "")
+        if not lambda_name:
+            logger.warning("No WORKSPACE_TOOLS_LAMBDA_NAME, skipping schema download")
+            return {"added": [], "removed": list(to_remove), "cached": list(cached)}
+
+        lambda_client = boto3.client(
+            "lambda", region_name=os.environ.get("AWS_REGION", "us-east-1")
+        )
+
+        for slug in to_download:
+            if _download_single_integration(
+                slug, external_user_id, tools_dir, lambda_client, lambda_name
+            ):
+                added.append(slug)
+
+    result = {"added": added, "removed": list(to_remove), "cached": list(cached)}
+
+    if added or to_remove:
+        logger.info(
+            "Integration schemas synced",
+            _name="INTEGRATION_SCHEMAS_SYNCED",
+            phase="integrations",
+            added=added,
+            removed=list(to_remove),
+            cached=list(cached),
+        )
+
+    return result
+
+
 async def _handle_chat(
     body: dict[str, Any],
     request: Request,
@@ -952,6 +1110,29 @@ async def _handle_chat(
     model_id = body.get("modelId")
     request_id = body.get("requestId") or str(uuid.uuid4())
 
+    # Pipedream integrations - construct external_user_id for the relay
+    # Format: "{client_name}_{user_sub}" matching what the frontend uses
+    enabled_integrations = body.get("enabledConnections", [])
+    external_user_id = f"{CLIENT_NAME}_{user_sub}" if enabled_integrations else None
+
+    # Add each connected integration slug to enabled_tools so the
+    # workspace-chat-tools Lambda can validate per-integration access
+    # (e.g. "google_drive", "google_calendar" rather than a blanket flag)
+    if enabled_integrations:
+        enabled_tools = list(enabled_tools)
+        for slug in enabled_integrations:
+            if slug not in enabled_tools:
+                enabled_tools.append(slug)
+
+    logger.info(
+        "Integration tools configured",
+        _name="INTEGRATION_TOOLS_CONFIGURED",
+        phase="request",
+        enabled_tools=enabled_tools,
+        enabled_integrations=enabled_integrations,
+        external_user_id=external_user_id,
+    )
+
     # V1 to V2 migration flag - frontend sets this when loading a V1 conversation
     migrate_from_v1 = body.get("migrateFromV1", False)
 
@@ -968,11 +1149,18 @@ async def _handle_chat(
                 tools_config = agent_config.tools_config
 
                 # Filter web_search if disabled by agent
-                if not tools_config.web_search_enabled:
+                # auto_tools_enabled implies all tools are enabled
+                if (
+                    not tools_config.auto_tools_enabled
+                    and not tools_config.web_search_enabled
+                ):
                     enabled_tools = [t for t in enabled_tools if t != "web_search"]
 
                 # Filter create_agent_tool if disabled by agent
-                if not tools_config.create_agent_enabled:
+                if (
+                    not tools_config.auto_tools_enabled
+                    and not tools_config.create_agent_enabled
+                ):
                     enabled_tools = [
                         t for t in enabled_tools if t != "create_agent_tool"
                     ]
@@ -1138,6 +1326,34 @@ async def _handle_chat(
                     ),
                 )
 
+        # --- Sync Integration Schemas ---
+        # Diff-based sync on every request: download new, remove disabled
+        if enabled_integrations and external_user_id:
+            try:
+                sync_result = _sync_integration_schemas(
+                    enabled_integrations, external_user_id
+                )
+                if sync_result["added"] or sync_result["removed"]:
+                    yield emit_event(
+                        {
+                            "type": "integrations_ready",
+                            "integrations": enabled_integrations,
+                            "added": sync_result["added"],
+                            "removed": sync_result["removed"],
+                        }
+                    )
+            except Exception as e:
+                logger.warning(
+                    "Failed to sync integration schemas",
+                    error=str(e),
+                    integrations=enabled_integrations,
+                )
+        elif not enabled_integrations:
+            # No integrations enabled — clean up any stale schemas on disk
+            tools_dir = Path("/workdir/tools/integrations")
+            if tools_dir.exists() and any(tools_dir.iterdir()):
+                shutil.rmtree(tools_dir, ignore_errors=True)
+
         # --- Fetch KB File Listings ---
         # Fetch top-level file listings for KBs on conversation start/switch
         kb_listings = None
@@ -1161,8 +1377,9 @@ async def _handle_chat(
             paths = get_workspace_paths()
             workspace_tree = build_workspace_tree(str(paths["root"]))
 
-            # Get recent messages from trace for context
+            # Get recent messages and activated skills from trace
             recent_messages = None
+            activated_skills = []
             try:
                 trace_file = paths["trace_file"]
                 if trace_file.exists():
@@ -1172,8 +1389,47 @@ async def _handle_chat(
                         {"role": msg.get("role"), "content": msg.get("content", "")}
                         for msg in all_messages[-5:]
                     ]
+                    # Extract skills already activated in this conversation
+                    # by scanning raw trace for Skill tool_use entries
+                    with trace_file.open("r", encoding="utf-8") as f:
+                        for line in f:
+                            line = line.strip()
+                            if not line:
+                                continue
+                            try:
+                                event = json.loads(line)
+                                if event.get("type") != "assistant":
+                                    continue
+                                contents = event.get("message", {}).get("content", [])
+                                for c in contents:
+                                    if (
+                                        c.get("type") == "tool_use"
+                                        and c.get("name") == "Skill"
+                                    ):
+                                        skill_name = c.get("input", {}).get("skill")
+                                        if (
+                                            skill_name
+                                            and skill_name not in activated_skills
+                                        ):
+                                            activated_skills.append(skill_name)
+                            except (json.JSONDecodeError, KeyError):
+                                continue
             except Exception as e:
                 logger.debug("Failed to read trace for recent messages", error=str(e))
+
+            # Load integration index files for pre-assistant context
+            integration_indexes = None
+            if enabled_integrations:
+                integration_indexes = {}
+                for slug in enabled_integrations:
+                    index_path = Path(f"/workdir/tools/integrations/{slug}/_index.json")
+                    if index_path.exists():
+                        try:
+                            integration_indexes[slug] = json.loads(
+                                index_path.read_text(encoding="utf-8")
+                            )
+                        except (json.JSONDecodeError, OSError):
+                            pass
 
             assistant_context = AssistantContext(
                 user_email=user_email,
@@ -1186,6 +1442,11 @@ async def _handle_chat(
                 kb_listings=kb_listings,
                 attached_folders=attached_folders,
                 attached_files=attached_files,
+                enabled_integrations=(
+                    enabled_integrations if enabled_integrations else None
+                ),
+                activated_skills=activated_skills if activated_skills else None,
+                integration_indexes=integration_indexes,
             )
 
             assistant_advice = invoke_assistant(prompt, assistant_context)
@@ -1236,6 +1497,9 @@ async def _handle_chat(
         try:
             # Wrap SDK stream with heartbeat to keep CloudFront connection alive
             # during long-running tool executions (CloudFront has 60s timeout)
+            # Resolve integration approval mode (agent config > user setting > default)
+            effective_approval_mode = resolve_approval_mode(user_sub, agent_config)
+
             sdk_stream = stream_claude_sdk(
                 conversation_id,
                 augmented_prompt,  # May include <numa-assistant> tags for Claude
@@ -1256,6 +1520,9 @@ async def _handle_chat(
                 v1_migration_context=v1_context,  # V1 conversation history context
                 agent_config=agent_config,  # Agent configuration (custom prompt, restrictions)
                 agent_file_paths=agent_file_paths,  # Downloaded agent reference files
+                external_user_id=external_user_id,  # Pipedream integrations user ID
+                enabled_integrations=enabled_integrations,  # Connected integration app slugs
+                approval_mode=effective_approval_mode,  # Integration approval mode
             )
             async for chunk in sdk_stream:
                 # Stream chunk directly to frontend via HTTP SSE

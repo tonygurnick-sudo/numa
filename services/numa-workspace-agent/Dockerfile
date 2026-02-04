@@ -85,6 +85,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application code
 COPY numa_workspace_agent/ ./numa_workspace_agent/
+COPY integration-prompts/ ./integration-prompts/
 COPY run.sh ./
 
 # Copy tools directory inside /workdir (read+execute only)

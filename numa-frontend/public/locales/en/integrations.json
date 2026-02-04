@@ -1,4 +1,17 @@
 {
+  "approval": {
+    "title": "Action Approval Required",
+    "integration": "Integration Name",
+    "action": "Integration Tool",
+    "description": "Tool Call Description",
+    "approve": "Approve",
+    "deny": "Deny",
+    "approved": "Approved",
+    "autoApproved": "Auto-approved",
+    "denied": "Denied",
+    "timeout": "Timed Out",
+    "viewDetails": "View details"
+  },
   "header": {
     "title": "Numa Integrations",
     "subtitle": "Connect external tools and services to enhance your Numa experience"

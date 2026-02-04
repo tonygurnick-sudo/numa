@@ -1,0 +1,64 @@
+# Google Calendar Integration
+
+## Essential First Step
+Always call `get-current-user` first to obtain primary calendar ID, timezone, accessible calendars, and color palettes. This saves time and prevents timezone issues.
+
+## Auth Structure
+Auth key is `googleCalendar` (camelCase):
+```json
+{"googleCalendar": {"authProvisionId": "auto"}, "...other_params": "..."}
+```
+
+## Critical Gotchas
+- **Date/time format:** RFC3339 with timezone offset required: `2026-02-10T14:00:00+10:00`
+- **`query-free-busy-calendars`:** `calendarId` is an **ARRAY**, not a string:
+  ```json
+  {"calendarId": ["primary"]}   // Correct
+  {"calendarId": "primary"}     // Wrong
+  ```
+- **`orderBy="startTime"`:** Requires `singleEvents: true` or it will fail.
+- **`maxResults` default:** 250 events. Max 2500. Use pagination for more.
+
+## When to Use What
+
+- **"Find free time with [person]"** → `query-free-busy-calendars` with their email in the array
+  - Shows busy/free only (privacy-respecting)
+  - Works cross-org
+  - Returns timezone-aware results
+  - Don't use `list-events` for this
+- **"Schedule a meeting"** → `create-event` with attendees array
+- **"Quick meeting tomorrow at 2pm"** → `quick-add-event` with natural language
+- **"Meeting with video"** → `create-event` with `createMeetRoom: true` (generates Meet link automatically)
+- **"When am I free?"** → `list-events` then calculate gaps
+- **Creating meetings** → Default to `createMeetRoom: true` unless user explicitly says no video/in-person only
+  - Automatically generates Google Meet link
+  - Adds dial-in details to `conferenceData`
+
+## Key Parameters
+- `calendarId`: Defaults to `"primary"` if omitted
+- `sendUpdates`: Use `"none"` for testing, `"all"` to notify attendees
+- `createMeetRoom: true`: Returns `hangoutLink` and full `conferenceData` with dial-in
+- `timeZone`: Supports IANA timezones, get from `get-current-user`
+
+## Dynamic Props (`configure_props`)
+Three props support remote options:
+- `calendarId`: User's accessible calendars
+- `colorId`: Event color IDs (1-11)
+- `timeZone`: Full IANA timezone list
+
+## Example: Check Availability
+```json
+{
+  "googleCalendar": {"authProvisionId": "auto"},
+  "calendarId": ["colleague@company.com"],
+  "timeMin": "2026-02-03T09:00:00+10:00",
+  "timeMax": "2026-02-03T17:00:00+10:00",
+  "timeZone": "Australia/Brisbane"
+}
+```
+Returns busy blocks. Gaps = free time.
+
+## Note on Transcription
+Google Meet transcription cannot be enabled via the Calendar API. Users must:
+- Enable it manually in each meeting, or
+- Set as default in Google Workspace admin console settings
