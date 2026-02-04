@@ -3,9 +3,10 @@
  * Manages the selected KB state and provides KB-related functionality
  */
 
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { knowledgeBaseService, UserKB } from '../Services/knowledgeBaseService';
 import i18n from '../i18n';
+import { useAuth } from './AuthProvider';
 
 interface KnowledgeBaseContextType {
   // Current selected KB
@@ -28,11 +29,18 @@ const KnowledgeBaseContext = createContext<KnowledgeBaseContextType | undefined>
 
 const KB_STORAGE_KEY = 'numa_selected_kb';
 
-const DEFAULT_COMPANY_KB: UserKB = {
-  kb_id: 'company',
-  kb_name: i18n.t('knowledgeBase:selector.companyKbName'),
-  role: 'VIEWER',
-};
+/**
+ * Get the default company KB object.
+ * This is a function rather than a constant because the translation
+ * must be resolved at runtime, after i18n has loaded the translation files.
+ */
+function getDefaultCompanyKB(): UserKB {
+  return {
+    kb_id: 'company',
+    kb_name: i18n.t('knowledgeBase:selector.companyKbName'),
+    role: 'VIEWER',
+  };
+}
 
 function sanitizeUserKB(kb: UserKB | null | undefined): UserKB | null {
   if (!kb || typeof kb.kb_id !== 'string') {
@@ -42,10 +50,16 @@ function sanitizeUserKB(kb: UserKB | null | undefined): UserKB | null {
   if (!kbId) {
     return null;
   }
+  const companyName = i18n.t('knowledgeBase:selector.companyKbName');
   const isShared = typeof kb.is_shared === 'boolean' ? kb.is_shared : kb.role === 'VIEWER';
   return {
     kb_id: kbId,
-    kb_name: typeof kb.kb_name === 'string' && kb.kb_name.trim().length > 0 ? kb.kb_name : kbId,
+    kb_name:
+      kbId === 'company'
+        ? companyName
+        : typeof kb.kb_name === 'string' && kb.kb_name.trim().length > 0
+          ? kb.kb_name
+          : kbId,
     role: kb.role === 'EDITOR' || kb.role === 'OWNER' ? kb.role : 'VIEWER',
     is_shared: isShared,
     document_count: kb.document_count,
@@ -57,6 +71,9 @@ function sanitizeUserKB(kb: UserKB | null | undefined): UserKB | null {
  */
 function loadSelectedKBFromStorage(): UserKB | null {
   try {
+    if (typeof window === 'undefined' || !window.localStorage) {
+      return null;
+    }
     const stored = localStorage.getItem(KB_STORAGE_KEY);
     if (stored) {
       return sanitizeUserKB(JSON.parse(stored) as UserKB);
@@ -72,6 +89,9 @@ function loadSelectedKBFromStorage(): UserKB | null {
  */
 function saveSelectedKBToStorage(kb: UserKB | null): void {
   try {
+    if (typeof window === 'undefined' || !window.localStorage) {
+      return;
+    }
     if (kb) {
       const sanitized = sanitizeUserKB(kb);
       if (sanitized) {
@@ -88,6 +108,8 @@ function saveSelectedKBToStorage(kb: UserKB | null): void {
 }
 
 export function KnowledgeBaseProvider({ children }: { children: React.ReactNode }): React.JSX.Element {
+  const { user, tokenValidationComplete } = useAuth();
+  const isMountedRef = useRef(true);
   const [selectedKB, setSelectedKBState] = useState<UserKB | null>(loadSelectedKBFromStorage);
   const [selectedKbId, setSelectedKbId] = useState<string | null>(() => {
     const initial = loadSelectedKBFromStorage();
@@ -96,6 +118,12 @@ export function KnowledgeBaseProvider({ children }: { children: React.ReactNode 
   const [availableKBs, setAvailableKBs] = useState<UserKB[]>([]);
   const [isLoadingKBs, setIsLoadingKBs] = useState<boolean>(true); // Start loading immediately
   const [kbError, setKbError] = useState<string | null>(null);
+
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
 
   /**
    * Set selected KB and persist to storage
@@ -111,17 +139,23 @@ export function KnowledgeBaseProvider({ children }: { children: React.ReactNode 
    * Refresh the list of available KBs
    */
   const refreshKBs = useCallback(async () => {
+    if (!isMountedRef.current) {
+      return;
+    }
     setIsLoadingKBs(true);
     setKbError(null);
 
     try {
       const kbs = await knowledgeBaseService.listUserKBs();
+      if (!isMountedRef.current) {
+        return;
+      }
       const sanitizedKbs = kbs.map((kb) => sanitizeUserKB(kb)).filter((kb): kb is UserKB => kb !== null);
 
       // Ensure the default "company" knowledge base is always present so users can
       // select it even if the API only returns user-specific KBs.
       const hasCompanyKb = sanitizedKbs.some((kb) => kb.kb_id === 'company');
-      const augmentedKbs: UserKB[] = hasCompanyKb ? sanitizedKbs : [DEFAULT_COMPANY_KB, ...sanitizedKbs];
+      const augmentedKbs: UserKB[] = hasCompanyKb ? sanitizedKbs : [getDefaultCompanyKB(), ...sanitizedKbs];
 
       setAvailableKBs(augmentedKbs);
 
@@ -145,10 +179,13 @@ export function KnowledgeBaseProvider({ children }: { children: React.ReactNode 
         return currentSelected;
       });
     } catch (error) {
+      if (!isMountedRef.current) {
+        return;
+      }
       console.error('Error fetching KBs:', error);
 
       // Check if this might be an auth-related error
-      const token = window.localStorage.getItem('idToken');
+      const token = typeof window !== 'undefined' ? window.localStorage.getItem('idToken') : null;
 
       let errorMessage = i18n.t('errors:knowledgeBase.listFailed');
       if (!token) {
@@ -161,17 +198,19 @@ export function KnowledgeBaseProvider({ children }: { children: React.ReactNode 
       setKbError(errorMessage);
 
       // On error, default to company KB
-      setAvailableKBs([DEFAULT_COMPANY_KB]);
+      setAvailableKBs([getDefaultCompanyKB()]);
       setSelectedKBState((currentSelected) => {
         if (!currentSelected) {
-          setSelectedKbId(DEFAULT_COMPANY_KB.kb_id);
-          saveSelectedKBToStorage(DEFAULT_COMPANY_KB);
-          return DEFAULT_COMPANY_KB;
+          setSelectedKbId(getDefaultCompanyKB().kb_id);
+          saveSelectedKBToStorage(getDefaultCompanyKB());
+          return getDefaultCompanyKB();
         }
         return currentSelected;
       });
     } finally {
-      setIsLoadingKBs(false);
+      if (isMountedRef.current) {
+        setIsLoadingKBs(false);
+      }
     }
   }, []); // Remove selectedKB dependency to avoid loops
 
@@ -234,49 +273,54 @@ export function KnowledgeBaseProvider({ children }: { children: React.ReactNode 
    * Note: Empty dependency array to run only once on mount
    */
   useEffect(() => {
-    let retryCount = 0;
-    let timeoutId: NodeJS.Timeout | null = null;
     let isCancelled = false;
-    const maxRetries = 10;
-    const retryDelay = 500; // Start with 500ms delay
+    const shouldLoad = tokenValidationComplete && !!user?.tokens?.idToken;
+
+    // Don't set isLoadingKBs to false when auth isn't ready yet.
+    // Keep the loading state true until we can actually attempt to load KBs.
+    // This prevents showing "No knowledge bases" message during auth initialization.
+    if (!shouldLoad) {
+      // Only set loading to false if auth validation is complete but user has no token
+      // (i.e., user is definitely not authenticated, not just "still checking")
+      if (tokenValidationComplete && !user?.tokens?.idToken) {
+        setIsLoadingKBs(false);
+      }
+      return () => {
+        isCancelled = true;
+      };
+    }
 
     const attemptLoadKBs = async () => {
       if (isCancelled) return;
-
-      // Check if auth tokens are available
-      const token = window.localStorage.getItem('idToken');
-
-      if (token) {
-        // Token is available, proceed with loading (CloudFront will inject the secret header automatically)
-        if (!isCancelled) {
-          await refreshKBs();
-        }
-        return;
-      }
-
-      // Tokens not ready yet, retry if we haven't exceeded max retries
-      if (retryCount < maxRetries && !isCancelled) {
-        retryCount++;
-        console.debug(`KB loading attempt ${retryCount}/${maxRetries}: waiting for auth tokens...`);
-        timeoutId = setTimeout(attemptLoadKBs, retryDelay * retryCount); // Exponential backoff
-      } else if (!isCancelled) {
-        console.warn('Max retries reached for KB loading - proceeding without full auth');
-        // Still attempt to load in case there's cached data or fallback logic
-        await refreshKBs();
-      }
+      await refreshKBs();
     };
 
-    // Start the loading process
     attemptLoadKBs();
 
     // Cleanup function to prevent memory leaks
     return () => {
       isCancelled = true;
-      if (timeoutId) {
-        clearTimeout(timeoutId);
-      }
     };
-  }, []); // Empty dependency array - only run on mount
+  }, [refreshKBs, tokenValidationComplete, user?.tokens?.idToken]);
+
+  useEffect(() => {
+    const updateCompanyLabel = () => {
+      const companyName = i18n.t('knowledgeBase:selector.companyKbName');
+      setAvailableKBs((prev) => prev.map((kb) => (kb.kb_id === 'company' ? { ...kb, kb_name: companyName } : kb)));
+      setSelectedKBState((prev) => (prev && prev.kb_id === 'company' ? { ...prev, kb_name: companyName } : prev));
+    };
+
+    if (i18n.isInitialized) {
+      updateCompanyLabel();
+    }
+
+    i18n.on('languageChanged', updateCompanyLabel);
+    i18n.on('loaded', updateCompanyLabel);
+    return () => {
+      i18n.off('languageChanged', updateCompanyLabel);
+      i18n.off('loaded', updateCompanyLabel);
+    };
+  }, []);
 
   const value: KnowledgeBaseContextType = {
     selectedKB,

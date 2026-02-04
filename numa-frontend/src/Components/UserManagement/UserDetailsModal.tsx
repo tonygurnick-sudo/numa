@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Modal, Button, Alert, Badge, Row, Col, Form } from 'react-bootstrap';
 import { useTranslation } from 'react-i18next';
 import i18n from '../../i18n';
+import { getUserStatusBadgeVariant, getUserStatusLabel } from './userStatusUtils';
 
 export interface User {
   username: string;
@@ -42,6 +43,7 @@ export function UserDetailsModal({
   const isAdmin = user.groups?.includes('admin');
   const isCurrentUser = user.username === currentUserSub;
   const isSystemUser = user.email?.includes('numa-system-user');
+  const statusLabel = getUserStatusLabel(t, user.status);
 
   const handleClose = () => {
     if (isProcessing) return;
@@ -106,9 +108,7 @@ export function UserDetailsModal({
               {t('details.fields.status')}
             </Col>
             <Col sm={8}>
-              <Badge bg={user.enabled ? (user.status === 'CONFIRMED' ? 'success' : 'warning') : 'danger'}>
-                {user.status}
-              </Badge>
+              <Badge bg={getUserStatusBadgeVariant(user.enabled, user.status)}>{statusLabel}</Badge>
             </Col>
           </Row>
           <Row className="mb-3">

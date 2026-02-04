@@ -352,6 +352,7 @@
       "shared": "Shared",
       "personal": "Personal"
     },
+    "count": "{{count}} knowledge bases",
     "count_one": "{{count}} knowledge base",
     "count_other": "{{count}} knowledge bases",
     "loading": "Loading...",

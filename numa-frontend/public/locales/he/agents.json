@@ -1,0 +1,790 @@
+{
+  "card": {
+    "companyKb": "כומפאני קנוולהדגה באסה",
+    "visibility": {
+      "company": "כומפאני אגהנט",
+      "personal": "פהרסונאל אגהנט"
+    },
+    "timeSaved": "סאבהד {{time}}",
+    "knowledgeBases": {
+      "all": "אלל קנוולהדגה באסהס"
+    },
+    "favorite": {
+      "add": "אדד טו פאבוריטהס",
+      "remove": "רהמובה פרומ פאבוריטהס",
+      "addAria": "אדד אגהנט טו פאבוריטהס",
+      "removeAria": "רהמובה אגהנט פרומ פאבוריטהס"
+    },
+    "collapse": "כוללאפסה אגהנט",
+    "collapseAria": "כוללאפסה אגהנט דהטאילס",
+    "noDescription": "נו דהסכריפטיונ פרובידהד.",
+    "labels": {
+      "tools": "טוולס",
+      "knowledgeBases": "קנוולהדגה באסהס",
+      "integrations": "ינטהגראטיונס",
+      "timeSaved": "טימה סאבהד",
+      "files": "פילהס",
+      "createdBy": "כרהאטהד בי",
+      "updated": "ופדאטהד"
+    },
+    "tools": {
+      "webSearch": "והב סהארכח",
+      "agentCreation": "אגהנט כרהאטיונ"
+    },
+    "unknown": "ונקנוונ",
+    "time": {
+      "today": "טודאי",
+      "yesterday": "יהסטהרדאי",
+      "daysAgo": "{{count}} דאיס אגו"
+    },
+    "actions": {
+      "chat": "כחאט",
+      "edit": "הדיט",
+      "duplicate": "דופליכאטה",
+      "export": "השפורט זסונ",
+      "exportAria": "השפורט אגהנט אס זסונ",
+      "delete": "דהלהטה"
+    },
+    "schedules": {
+      "active": "חאס אכטיבה סכחהדולהס",
+      "manage": "מאנאגה סכחהדולהס",
+      "create": "סכחהדולה רונס"
+    }
+  },
+  "iconPicker": {
+    "icons": {
+      "assistant": "אססיסטאנט",
+      "automation": "אוטומאטיונ",
+      "documentation": "דוכומהנטאטיונ",
+      "peopleOps": "פהופלה ופס",
+      "business": "בוסינהסס",
+      "analytics": "אנאליטיכס",
+      "compliance": "כומפליאנכה",
+      "operations": "ופהראטיונס"
+    }
+  },
+  "createModal": {
+    "header": {
+      "avatarAlt": "אגהנט אבאטאר",
+      "editTitle": "הדיט אגהנט",
+      "createTitle": "כרהאטה אגהנט",
+      "subtitle": "כונפיגורה וחאט טחיס אגהנט קנווס, לווקס ליקה, אנד כאנ דו."
+    },
+    "validation": {
+      "title": "אגהנט נאמה",
+      "instructions": "ינסטרוכטיונס",
+      "referenceFiles": "רהפהרהנכה פילהס (מאש 5 פילהס)",
+      "missing": "פלהאסה כומפלהטה טחה פוללווינג פיהלדס:\n{{fields}}"
+    },
+    "visibility": {
+      "label": "ביסיביליטי",
+      "personal": "פהרסונאל",
+      "personalHelp": "ונלי יוו כאנ אככהסס טחיס אגהנט.",
+      "public": "כומפאני",
+      "publicHelp": "ביסיבלה טו הבהריונה ינ יוור וורקספאכה.",
+      "disabledNote": "כומפאני אגהנטס ארה דיסאבלהד פור יוור אככוונט.",
+      "publicScopeNote": "טחיס אגהנט יס מאנאגהד אט טחה וורקספאכה להבהל אנד כאננוט בה כחאנגהד.",
+      "publicConfirm": "יוו ארה אבווט טו מאקה טחיס אגהנט פובליכ. מאקה סורה יט דוהס נוט כונטאינ סהנסיטיבה ינפורמאטיונ. כונטינוה?"
+    },
+    "errors": {
+      "save": "ונאבלה טו סאבה אגהנט.",
+      "export": "ונאבלה טו השפורט אגהנט.",
+      "import": "ונאבלה טו ימפורט אגהנט."
+    },
+    "import": {
+      "notes": "ימפורטהד ויטח נוטהס:\n- {{notes}}",
+      "success": "אגהנט ימפורטהד סוככהסספוללי."
+    },
+    "sections": {
+      "setup": {
+        "title": "אגהנט סהטופ",
+        "required": "רהקוירהד"
+      },
+      "appearance": {
+        "title": "אפפהאראנכה & סחארינג"
+      },
+      "tools": {
+        "title": "טוולס & כאפאביליטיהס"
+      },
+      "referenceFiles": {
+        "title": "רהפהרהנכה פילהס"
+      }
+    },
+    "setup": {
+      "titleLabel": "אגהנט נאמה",
+      "titlePlaceholder": "ה.ג., כונטראכט רהביהוהר",
+      "instructionsLabel": "ינסטרוכטיונס",
+      "instructionsPlaceholder": "דהסכריבה חוו טחה אגהנט סחוולד בהחאבה אנד וחאט יט סחוולד פוכוס ונ.",
+      "instructionsHelp": "טחהסה ינסטרוכטיונס גוידה חוו טחה אגהנט רהספונדס.",
+      "descriptionLabel": "דהסכריפטיונ",
+      "descriptionPlaceholder": "סחורט סוממארי ופ וחאט טחיס אגהנט דוהס.",
+      "descriptionHelp": "סחוונ ונ טחה אגהנט כארד.",
+      "welcomeLabel": "והלכומה מהססאגה",
+      "welcomePlaceholder": "מהססאגה סחוונ וחהנ א כחאט סטארטס.",
+      "welcomeHelp": "סחוונ טו וסהרס וחהנ טחהי ופהנ טחה כחאט."
+    },
+    "appearance": {
+      "selectedAvatarAlt": "סהלהכטהד אגהנט אבאטאר",
+      "avatarLabel": "אבאטאר"
+    },
+    "timeSaved": {
+      "label": "הסטימאטהד טימה סאבהד",
+      "hoursShort": "חר",
+      "minutesShort": "מינ",
+      "help": "סחוונ ונ טחה אגהנט כארד טו ינדיכאטה באלוה."
+    },
+    "tools": {
+      "summary": {
+        "auto": "אוטו",
+        "kb": "קב",
+        "web": "והב",
+        "agentCreation": "אגהנט כרהאטיונ",
+        "integrations": "{{count}} ינטהגראטיונס"
+      },
+      "autoSelect": {
+        "title": "אוטו-סהלהכט טוולס",
+        "description": "להט טחה אגהנט פיכק טחה ריגחט טוולס פהר רהקוהסט."
+      },
+      "kbAccess": {
+        "title": "קנוולהדגה באסה אככהסס",
+        "description": "כחווסה וחיכח קנוולהדגה באסהס טחיס אגהנט כאנ וסה.",
+        "none": "נו קנוולהדגה באסהס",
+        "all": "אלל קנוולהדגה באסהס",
+        "selected": "סהלהכטהד קנוולהדגה באסהס",
+        "noneAvailable": "נו קנוולהדגה באסהס אבאילאבלה.",
+        "defaultBadge": "דהפאולט",
+        "sharedBadge": "סחארהד",
+        "compareLink": "כומפארה רהפהרהנכה פילהס בס קנוולהדגה באסהס"
+      },
+      "webSearch": {
+        "title": "והב סהארכח",
+        "description": "אללוו טחיס אגהנט טו סהארכח טחה והב."
+      },
+      "agentCreation": {
+        "title": "אגהנט כרהאטיונ",
+        "description": "אללוו טחיס אגהנט טו כרהאטה נהו אגהנטס."
+      }
+    },
+    "integrations": {
+      "title": "ינטהגראטיונס",
+      "help": "כוננהכט ינטהגראטיונס פור טחיס אגהנט.",
+      "loading": "לואדינג ינטהגראטיונס...",
+      "none": "נו ינטהגראטיונס אבאילאבלה.",
+      "notConnected": "נוט כוננהכטהד",
+      "maxAlert": "יוו כאנ סהלהכט ופ טו 4 ינטהגראטיונס.",
+      "connectionCount": "{{current}} / {{max}}"
+    },
+    "referenceFiles": {
+      "count": "{{count}} פילהס",
+      "comparison": {
+        "title": "רהפהרהנכה פילהס בס קנוולהדגה באסהס",
+        "referenceTitle": "רהפהרהנכה פילהס",
+        "referenceAlways": "אלואיס ינכלודהד",
+        "referenceIncluded": "ינכלודהד ינ הבהרי רהקוהסט.",
+        "referenceMax": "ופ טו 5 פילהס.",
+        "referenceSizes": "בהסט פור סמאלל סהטס ופ דוכס.",
+        "kbTitle": "קנוולהדגה באסהס",
+        "kbQueried": "קוהריהד וחהנ רהלהבאנט",
+        "kbSearches": "סהארכחהס כונטהנט אכרוסס יוור דאטא סוורכהס.",
+        "kbUnlimited": "ונלימיטהד פילהס.",
+        "kbSizes": "גרהאט פור לארגה כוללהכטיונס."
+      },
+      "help": "רהפהרהנכה פילהס ארה אלואיס סהנט ויטח טחה אגהנט'ס פרומפט."
+    },
+    "footer": {
+      "createdBy": "כרהאטהד בי",
+      "export": "השפורט",
+      "import": "ימפורט",
+      "cancel": "כאנכהל",
+      "saving": "סאבינג...",
+      "saveChanges": "סאבה כחאנגהס",
+      "create": "כרהאטה אגהנט",
+      "unknownUser": "ונקנוונ וסהר"
+    }
+  },
+  "avatarSelector": {
+    "previewAlt": "אגהנט אבאטאר פרהביהו",
+    "current": {
+      "customImage": "כוסטומ ימאגה",
+      "icon": "יכונ",
+      "uploadedCustom": "ופלואדהד כוסטומ אבאטאר",
+      "selectOrUpload": "סהלהכט אנ יכונ ור ופלואד יוור וונ"
+    },
+    "actions": {
+      "remove": "רהמובה"
+    },
+    "tabs": {
+      "chooseIcon": "כחווסה יכונ",
+      "uploadImage": "ופלואד ימאגה"
+    },
+    "upload": {
+      "helper": "ופלואד א פנג ור זפג ימאגה (מאש 1 מב). ימאגהס וילל בה רהסיצהד טו 256ש256 פישהלס.",
+      "uploading": "ופלואדינג...",
+      "chooseFile": "כחווסה פילה"
+    },
+    "errors": {
+      "configLoading": "כונפיגוראטיונ סטילל לואדינג. פלהאסה טרי אגאינ.",
+      "invalidType": "פלהאסה סהלהכט א פנג ור זפהג ימאגה.",
+      "credentials": "ונאבלה טו ובטאינ אוס כרהדהנטיאלס",
+      "imageLoad": "ימאגה לואד הררור",
+      "canvas": "כאנבאס נוט סופפורטהד",
+      "uploadFailed": "פאילהד טו ופלואד ימאגה"
+    }
+  },
+  "avatar": {
+    "defaultAlt": "אגהנט"
+  },
+  "fileUpload": {
+    "uploading": "ופלואדינג...",
+    "uploadButton": "ופלואד פילהס",
+    "supported": "סופפורטהד: דוכומהנטס (פדפ, דוכש, שלסש), ימאגהס (פנג, זפג), טהשט/כודה (טשט, מד, זסונ, חטמל, שמל, יאמל, פיטחונ, זאבאסכריפט, הטכ.), אודיו/בידהו (מפ3, מפ4, ואב, הטכ.)",
+    "unknownType": "ונקנוונ טיפה",
+    "errors": {
+      "maxFiles": "מאשימומ {{max}} פילהס אללווהד פהר אגהנט.",
+      "configLoading": "כונפיגוראטיונ סטילל לואדינג. פלהאסה טרי אגאינ ינ א מומהנט.",
+      "credentials": "ונאבלה טו ובטאינ אוס כרהדהנטיאלס",
+      "fileFailed": "פאילהד טו ופלואד \"{{fileName}}\": {{message}}",
+      "unknown": "ונקנוונ הררור",
+      "uploadFailed": "ופלואד פאילהד"
+    }
+  },
+  "sidebar": {
+    "openButton": "אגהנטס",
+    "title": "מי אגהנטס",
+    "manage": "מאנאגה",
+    "subtitle": "סהלהכט אנ אגהנט טו סטארט כחאטטינג ויטח טחהיר ינסטרוכטיונס.",
+    "disabled": "אגהנטס ארה דיסאבלהד בי יוור אדמיניסטראטור.",
+    "empty": "נו אגהנטס יהט. כרהאטה ונה פרומ טחה אגהנטס פאגה.",
+    "visibility": {
+      "public": "פובליכ אגהנט",
+      "personal": "פהרסונאל אגהנט"
+    },
+    "use": "וסה",
+    "requires": "רהקוירהס: {{integrations}}",
+    "errors": {
+      "loadAgents": "פאילהד טו לואד אגהנטס"
+    }
+  },
+  "management": {
+    "title": "אי אגהנטס",
+    "subtitle": "דהסיגנ, דהפלוי, אנד מאנאגה יוור ינטהלליגהנט אי אססיסטאנטס",
+    "actions": {
+      "refresh": "רהפרהסח",
+      "create": "כרהאטה אגהנט",
+      "createFirst": "כרהאטה יוור פירסט אגהנט"
+    },
+    "stats": {
+      "total": "טוטאל אגהנטס",
+      "personal": "פהרסונאל",
+      "company": "כומפאני"
+    },
+    "disabled": {
+      "title": "אגהנטס ארה נוט הנאבלהד פור יוור כומפאני",
+      "description": "כרהאטה אגהנטס טו אוטומאטה טאסקס, סטאנדארדיצה וורקפלווס, אנד רהוסה השפהרט סהטופס אכרוסס יוור טהאמ. כונטאכט יוור אככוונט אדמיניסטראטור טו רהקוהסט אככהסס.",
+      "emptyTitle": "אגהנטס ארה דיסאבלהד",
+      "emptyDescription": "אגהנטס להט יוו דהפינה רהוסאבלה אי אססיסטאנטס ויטח כוסטומ ינסטרוכטיונס, רהפהרהנכה פילהס, אנד טוול אככהסס. וחהנ הנאבלהד, יוו כאנ כרהאטה פהרסונאל אגהנטס ור סחארה כומפאני אגהנטס פור כוממונ טאסקס."
+    },
+    "sections": {
+      "myAgents": {
+        "title": "מי אגהנטס",
+        "subtitle": "יוור פהרסונאל אי אססיסטאנטס"
+      },
+      "company": {
+        "title": "כומפאני אגהנט מארקהטפלאכה",
+        "subtitle": "דיסכובהר אנד כופי אגהנטס סחארהד בי וטחהר וסהרס ינ יוור ורגאניצאטיונ"
+      }
+    },
+    "empty": {
+      "personalOnly": "יוו חאבה נוט כרהאטהד אני פהרסונאל אגהנטס יהט. כליכק \"כרהאטה אגהנט\" טו גהט סטארטהד.",
+      "none": "נו אגהנטס פוונד.",
+      "company": "נו כומפאני אגהנטס ארה אבאילאבלה ינ יוור וורקספאכה יהט.",
+      "title": "נו אגהנטס פוונד",
+      "modeOff": "אגהנטס ארה דיסאבלהד. כונטאכט יוור אדמינ טו הנאבלה אגהנטס.",
+      "all": "גהט סטארטהד בי כרהאטינג יוור פירסט אי אגהנט",
+      "personal": "יוו חאבה נוט כרהאטהד אני פהרסונאל אגהנטס יהט"
+    },
+    "errors": {
+      "load": "פאילהד טו לואד אגהנטס",
+      "duplicate": "פאילהד טו דופליכאטה אגהנט",
+      "favorite": "פאילהד טו ופדאטה פאבוריטה",
+      "delete": "פאילהד טו דהלהטה אגהנט"
+    },
+    "confirmDelete": "דהלהטה אגהנט \"{{title}}\"?",
+    "missingIntegrations": {
+      "title": "מיססינג ינטהגראטיונס",
+      "loading": "כחהכקינג יוור ינטהגראטיונס...",
+      "description": "טחיס אגהנט רהקוהסטס אככהסס טו טחה פוללווינג ינטהגראטיונס וחיכח ארה נוט כוננהכטהד פור יוור אככוונט:",
+      "note": "כונטינוינג מאי רהסולט ינ לימיטהד ור ונינטהנדהד בהחאביור. יוו כאנ כוננהכט ינטהגראטיונס נוו פרומ טחה ינטהגראטיונס פאגה אנד טרי אגאינ.",
+      "back": "באכק",
+      "goToIntegrations": "גו טו ינטהגראטיונס",
+      "continue": "כונטינוה ויטחווט"
+    },
+    "chatVersion": {
+      "title": "כחווסה כחאט השפהריהנכה",
+      "prompt": "וחיכח כחאט השפהריהנכה ווולד יוו ליקה טו וסה ויטח <סטרונג>{{agentTitle}}</סטרונג>?",
+      "agentFallback": "טחיס אגהנט",
+      "v1": {
+        "title": "נומא כחאט",
+        "description": "וריגינאל כחאט השפהריהנכה"
+      },
+      "v2": {
+        "title": "נומא כחאט ב2",
+        "description": "הנחאנכהד השפהריהנכה ויטח פילה מאנאגהמהנט"
+      }
+    }
+  },
+  "scheduling": {
+    "labels": {
+      "agentFallback": "אגהנט",
+      "unnamed": "וננאמהד סכחהדולה",
+      "never": "נהבהר",
+      "invalidDate": "ינבאליד דאטה",
+      "notAvailable": "נ/א",
+      "scheduledTask": "סכחהדולהד טאסק",
+      "scheduledAgent": "סכחהדולהד אגהנט"
+    },
+    "status": {
+      "active": "אכטיבה",
+      "inactive": "ינאכטיבה",
+      "paused": "פאוסהד",
+      "deleted": "דהלהטהד"
+    },
+    "actions": {
+      "cancel": "כאנכהל",
+      "close": "כלוסה",
+      "create": "כרהאטה נהו סכחהדולה",
+      "edit": "הדיט",
+      "pause": "פאוסה",
+      "resume": "רהסומה",
+      "delete": "דהלהטה",
+      "refresh": "רהפרהסח",
+      "runNow": "רונ נוו",
+      "running": "רוננינג...",
+      "runAgent": "רונ אגהנט",
+      "viewLastRun": "ביהו לאסט רונ"
+    },
+    "debug": {
+      "showIds": "סחוו ידס",
+      "hideIds": "חידה ידס"
+    },
+    "filters": {
+      "search": {
+        "label": "סהארכח",
+        "placeholder": "סהארכח בי סכחהדולה נאמה ור אגהנט"
+      },
+      "agent": {
+        "label": "אגהנט",
+        "all": "אלל אגהנטס",
+        "unknown": "ונקנוונ אגהנט",
+        "aria": "פילטהר סכחהדולהס בי אגהנט"
+      },
+      "status": {
+        "label": "סטאטוס",
+        "all": "אלל סטאטוסהס",
+        "aria": "פילטהר סכחהדולהס בי סטאטוס"
+      },
+      "timezone": {
+        "label": "טימהצונה",
+        "all": "אלל טימהצונהס",
+        "unknown": "ונקנוונ טימהצונה",
+        "aria": "פילטהר סכחהדולהס בי טימהצונה"
+      }
+    },
+    "errors": {
+      "load": "פאילהד טו לואד סכחהדולהס",
+      "delete": "פאילהד טו דהלהטה סכחהדולה",
+      "update": "פאילהד טו ופדאטה סכחהדולה",
+      "updateStatus": "פאילהד טו ופדאטה סכחהדולה סטאטוס",
+      "create": "פאילהד טו כרהאטה סכחהדולה",
+      "run": "פאילהד טו רונ סכחהדולה",
+      "notFound": "סכחהדולה נוט פוונד",
+      "outputsBucketMissing": "ווטפוטס בוכקהט ור רהגיונ יס נוט כונפיגורהד",
+      "credentialsMissing": "אוס כרהדהנטיאלס ארה נוט אבאילאבלה",
+      "loadRunLog": "פאילהד טו לואד רונ לוג"
+    },
+    "confirmDelete": "דהלהטה סכחהדולה \"{{label}}\"?",
+    "modal": {
+      "title": {
+        "edit": "הדיט סכחהדולה - {{agent}}",
+        "create": "סכחהדולה זוב"
+      },
+      "submit": {
+        "update": "ופדאטה סכחהדולה",
+        "create": "כרהאטה סכחהדולה"
+      },
+      "submitting": {
+        "update": "ופדאטינג…",
+        "create": "סכחהדולינג…"
+      }
+    },
+    "fields": {
+      "taskName": {
+        "label": "טאסק נאמה",
+        "placeholder": "טאסק נאמה"
+      },
+      "agent": {
+        "label": "אגהנט",
+        "placeholder": "סהלהכט אנ אגהנט"
+      },
+      "cronExpression": {
+        "label": "כרונ השפרהססיונ",
+        "inlineLabel": "כרונ השפרהססיונ:"
+      },
+      "instructions": {
+        "label": "זוב ינסטרוכטיונס (ופטיונאל)",
+        "placeholder": "אדד אני השטרא ינסטרוכטיונס פור טחה אגהנט (ופטיונאל).",
+        "help": "וסה טחיס ונלי יפ יוו ואנט טו אדד השטרא גוידאנכה בהיונד טחה כונבהרסאטיונ כונטהשט."
+      },
+      "timezone": {
+        "label": "טימהצונה"
+      },
+      "timeOfDay": "טימה ופ דאי",
+      "runDate": "רונ דאטה",
+      "runTime": "רונ טימה",
+      "every": "הבהרי",
+      "hourRange": {
+        "min": "1ח",
+        "max": "24ח"
+      },
+      "minuteRange": {
+        "min": "5מ",
+        "max": "60מ"
+      },
+      "hourInterval": "{{interval}} חוור(ס)",
+      "minuteInterval": "{{interval}} מינוטה(ס)",
+      "startAt": "סטארט אט",
+      "repeatEvery": "רהפהאט הבהרי",
+      "daysSuffix": "דאי(ס)",
+      "dailyHelp": "וסה טחיס פור הבהרי וטחהר דאי ור הבהרי נ דאיס סכחהדולהס.",
+      "selectDays": "סהלהכט דאיס",
+      "selectDaysHelp": "פיכק ונה ור מורה דאיס פור טחה אגהנט טו רונ.",
+      "weekOfMonth": "וההק ופ טחה מונטח (ופטיונאל)",
+      "weekOfMonthHelp": "סהלהכט וההק נומבהרס (ה.ג., 1סט & 3רד). להאבה בלאנק פור הבהרי וההק.",
+      "monthsSuffix": "מונטח(ס)",
+      "scheduleStyle": "סכחהדולה סטילה",
+      "scheduleStyleDate": "ונ דאטה",
+      "scheduleStyleWeekday": "ונ וההקדאי",
+      "dayOfMonth": "דאי ופ מונטח",
+      "week": "וההק",
+      "weekday": "וההקדאי",
+      "customCron": {
+        "label": "כוסטומ כרונ השפרהססיונ",
+        "placeholder": "כרונ(0 13 * * ? *)",
+        "help": "וסה אוס כרונ פורמאט, ה.ג. כרונ(0 13 * * ? *) פור 1פמ וטכ דאילי."
+      }
+    },
+    "frequency": {
+      "once": {
+        "label": "ונה טימה",
+        "description": "רונ ונכה אט א ספהכיפיכ דאטה אנד טימה"
+      },
+      "fiveMinute": {
+        "label": "הבהרי 5 מינוטהס",
+        "description": "רונ הבהרי 5 מינוטהס"
+      },
+      "hourly": {
+        "label": "חוורלי",
+        "description": "רהפהאט הבהרי פהו חוורס"
+      },
+      "daily": {
+        "label": "דאילי",
+        "description": "הבהרי דאי אט א סהט טימה"
+      },
+      "weekdays": {
+        "label": "וההקדאיס",
+        "description": "מונדאי טחרווגח פרידאי"
+      },
+      "weekly": {
+        "label": "וההקלי",
+        "description": "פיכק ונה ור מורה דאיס"
+      },
+      "monthly": {
+        "label": "מונטחלי",
+        "description": "ספהכיפיכ דאי האכח מונטח"
+      },
+      "custom": {
+        "label": "אדבאנכהד כרונ",
+        "description": "וסה א כוסטומ השפרהססיונ"
+      }
+    },
+    "days": {
+      "monday": {
+        "short": "מונ",
+        "full": "מונדאי"
+      },
+      "tuesday": {
+        "short": "טוה",
+        "full": "טוהסדאי"
+      },
+      "wednesday": {
+        "short": "והד",
+        "full": "והדנהסדאי"
+      },
+      "thursday": {
+        "short": "טחו",
+        "full": "טחורסדאי"
+      },
+      "friday": {
+        "short": "פרי",
+        "full": "פרידאי"
+      },
+      "saturday": {
+        "short": "סאט",
+        "full": "סאטורדאי"
+      },
+      "sunday": {
+        "short": "סונ",
+        "full": "סונדאי"
+      }
+    },
+    "weekNumbers": {
+      "first": "1סט",
+      "second": "2נד",
+      "third": "3רד",
+      "fourth": "4טח",
+      "fifth": "5טח",
+      "last": "לאסט"
+    },
+    "summary": {
+      "label": "סכחהדולה סוממארי",
+      "once": "רונס ונכה ונ {{date}} אט {{time}}",
+      "fiveMinute": "הבהרי {{interval}} מינוטהס סטארטינג אט {{time}}",
+      "hourly": "הבהרי {{interval}} חוור(ס) סטארטינג אט {{time}}",
+      "dailyEvery": "הבהרי {{interval}} דאיס אט {{time}}",
+      "daily": "דאילי אט {{time}}",
+      "weekdays": "וההקדאיס אט {{time}}",
+      "weeklySelectPrompt": "סהלהכט ונה ור מורה דאיס טו רונ",
+      "weeklyWeekText": " ({{weeks}})",
+      "weekly": "{{days}}{{weekText}} אט {{time}}",
+      "monthlyDayOfWeek": "{{weekLabel}} {{weekday}} הבהרי {{interval}} מונטח(ס) אט {{time}}",
+      "monthlyDayOfMonth": "דאי {{day}} הבהרי {{interval}} מונטח(ס) אט {{time}}",
+      "custom": "וסינג א כוסטומ כרונ השפרהססיונ"
+    },
+    "header": {
+      "title": "סכחהדולה כאדהנכה",
+      "timezone": "טימהס ארה סחוונ ינ {{timezone}}",
+      "autoUpdate": "כרונ ופדאטהס אוטומאטיכאללי אס יוו כחאנגה ופטיונס"
+    },
+    "timezones": {
+      "utc": "וטכ",
+      "americaNewYork": "האסטהרנ טימה (אמהריכא/נהו_יורק)",
+      "americaChicago": "כהנטראל טימה (אמהריכא/כחיכאגו)",
+      "americaDenver": "מוונטאינ טימה (אמהריכא/דהנבהר)",
+      "americaLosAngeles": "פאכיפיכ טימה (אמהריכא/לוס_אנגהלהס)",
+      "europeLondon": "לונדונ (הורופה/לונדונ)",
+      "europeParis": "פאריס (הורופה/פאריס)",
+      "asiaTokyo": "טוקיו (אסיא/טוקיו)",
+      "australiaSydney": "סידנהי (אוסטראליא/סידנהי)",
+      "pacificAuckland": "אוכקלאנד (פאכיפיכ/אוכקלאנד)",
+      "americaNewYorkShort": "האסטהרנ טימה",
+      "americaChicagoShort": "כהנטראל טימה",
+      "americaDenverShort": "מוונטאינ טימה",
+      "americaLosAngelesShort": "פאכיפיכ טימה",
+      "europeLondonShort": "לונדונ",
+      "europeParisShort": "פאריס",
+      "asiaTokyoShort": "טוקיו"
+    },
+    "list": {
+      "title": "מאנאגה סכחהדולהס - {{agent}}",
+      "emptyTitle": "נו אכטיבה סכחהדולהס",
+      "emptyBody": "טחיס אגהנט דוהסנ'ט חאבה אני סכחהדולהד רונס יהט.",
+      "columns": {
+        "schedule": "סכחהדולה",
+        "prompt": "פרומפט",
+        "frequency": "פרהקוהנכי",
+        "status": "סטאטוס",
+        "lastRun": "לאסט רונ",
+        "actions": "אכטיונס"
+      },
+      "createdAt": "כרהאטהד {{timestamp}}"
+    },
+    "loading": "לואדינג סכחהדולהס...",
+    "page": {
+      "title": "סכחהדולינג",
+      "subtitle": "ביהו אנד מאנאגה אלל סכחהדולהד זובס אנד אוטומאטהד טאסקס",
+      "table": {
+        "title": "סכחהדולהד זובס"
+      },
+      "empty": "נו סכחהדולהד זובס פוונד",
+      "emptyFiltered": "נו סכחהדולהס מאטכח יוור סהארכח ור פילטהרס.",
+      "columns": {
+        "name": "נאמה",
+        "agent": "אגהנט",
+        "schedule": "סכחהדולה",
+        "nextRun": "נהשט רונ",
+        "lastRun": "לאסט רונ",
+        "status": "סטאטוס",
+        "timezone": "טימהצונה",
+        "actions": "אכטיונס"
+      }
+    },
+    "delete": {
+      "title": "דהלהטה סכחהדולה",
+      "confirmPrefix": "ארה יוו סורה יוו ואנט טו דהלהטה טחה סכחהדולה",
+      "confirmSuffix": "?",
+      "warningTitle": "וארנינג:",
+      "warningBody": "טחיס אכטיונ כאננוט בה ונדונה. טחה סכחהדולה וילל בה פהרמאנהנטלי דהלהטהד.",
+      "deleting": "דהלהטינג...",
+      "confirmButton": "דהלהטה סכחהדולה"
+    },
+    "details": {
+      "loading": "לואדינג סכחהדולה...",
+      "backToScheduling": "באכק טו סכחהדולינג",
+      "backToSchedules": "באכק טו סכחהדולהס",
+      "cardTitle": "סכחהדולה דהטאילס",
+      "fields": {
+        "scheduleId": "סכחהדולה יד",
+        "agent": "אגהנט",
+        "frequency": "פרהקוהנכי",
+        "timezone": "טימהצונה",
+        "nextRun": "נהשט רונ",
+        "lastRun": "לאסט רונ",
+        "created": "כרהאטהד",
+        "updated": "ופדאטהד",
+        "id": "יד",
+        "conversation": "כונבהרסאטיונ"
+      },
+      "instructionsTitle": "זוב ינסטרוכטיונס",
+      "instructionsEmpty": "נו ינסטרוכטיונס ספהכיפיהד",
+      "promptTitle": "סכחהדולהד פרומפט",
+      "promptEmpty": "נו פרומפט טהשט ספהכיפיהד",
+      "timingTitle": "טימינג ינפורמאטיונ",
+      "eventTimeTitle": "הבהנט טימה",
+      "eventTime": {
+        "start": "סטארט",
+        "end": "הנד"
+      },
+      "latestRunTitle": "לאטהסט רונ ווטפוט",
+      "latestRunLoading": "לואדינג רונ ווטפוט...",
+      "latestRunProcessing": "רונ סטילל פרוכהססינג.",
+      "latestRunEmpty": "נו רונ ווטפוט לואדהד יהט.",
+      "latestRunNoContent": "נו כונטהנט רהטורנהד.",
+      "latestRunLogKey": "לוג קהי: {{key}}",
+      "frequencyMeta": "{{timezone}} • {{cron}}",
+      "frequencyTitle": "סכחהדולה פרהקוהנכי",
+      "runHistory": {
+        "title": "רונ חיסטורי",
+        "loading": "לואדינג רונ חיסטורי...",
+        "empty": "נו רונס יהט",
+        "columns": {
+          "runId": "רונ יד",
+          "started": "סטארטהד",
+          "completed": "כומפלהטהד",
+          "status": "סטאטוס"
+        },
+        "placeholder": "-",
+        "status": {
+          "error": "הררור",
+          "failed": "פאילהד",
+          "completed": "כומפלהטהד"
+        },
+        "loadingDetails": "לואדינג רונ דהטאילס...",
+        "noContent": "נו כונטהנט",
+        "noMessages": "נו מהססאגהס ינ טחיס רונ",
+        "clickToLoad": "כליכק טו לואד רונ דהטאילס"
+      }
+    },
+    "calendar": {
+      "views": {
+        "month": "מונטח",
+        "week": "וההק",
+        "day": "דאי",
+        "agenda": "אגהנדא"
+      },
+      "navigation": {
+        "previous": "פרהביווס",
+        "next": "נהשט",
+        "today": "טודאי"
+      },
+      "loading": "לואדינג כאלהנדאר...",
+      "tooltip": "{{title}}\nסטאטוס: {{status}}\nסכחהדולה: {{schedule}}\n\nכליכק טו הדיט • ריגחט-כליכק פור ופטיונס",
+      "tooltipShort": "{{title}}\nסטאטוס: {{status}}\nסכחהדולה: {{schedule}}",
+      "eventCount_one": "{{count}} הבהנט",
+      "eventCount_other": "{{count}} הבהנטס",
+      "scrollHint": "סכרולל פור מורה מונטחס",
+      "scrollMore": "סכרולל פור מורה {{unit}}",
+      "units": {
+        "months": "מונטחס",
+        "weeks": "וההקס",
+        "days": "דאיס",
+        "periods": "פהריודס",
+        "events": "הבהנטס"
+      },
+      "periodHeader": {
+        "weekOf": "וההק ופ"
+      }
+    },
+    "scheduleModal": {
+      "title": {
+        "edit": "הדיט סכחהדולה",
+        "create": "כרהאטה נהו סכחהדולה"
+      },
+      "submitting": {
+        "update": "ופדאטינג...",
+        "create": "כרהאטינג..."
+      },
+      "eventType": {
+        "label": "הבהנט טיפה",
+        "agent": "אגהנט",
+        "application": "אפפליכאטיונ",
+        "dataSync": "דאטא סינכ"
+      },
+      "fields": {
+        "label": "סכחהדולה לאבהל *",
+        "labelPlaceholder": "הנטהר א דהסכריפטיבה לאבהל",
+        "timezone": "טימהצונה *",
+        "frequency": "סכחהדולה פרהקוהנכי *",
+        "frequencyPlaceholder": "סהלהכט א פרהקוהנכי...",
+        "cronPlaceholder": "ור הנטהר כוסטומ כרונ השפרהססיונ (אוס הבהנטברידגה פורמאט)",
+        "cronHelp": "וסה אוס הבהנטברידגה כרונ פורמאט: כרונ(מינוטה חוור דאי-ופ-מונטח מונטח דאי-ופ-וההק יהאר)",
+        "agentId": "אגהנט יד *",
+        "agentIdPlaceholder": "הנטהר אגהנט יד",
+        "agentTitle": "אגהנט טיטלה",
+        "agentTitlePlaceholder": "הנטהר אגהנט דיספלאי נאמה",
+        "conversationId": "כונבהרסאטיונ יד *",
+        "conversationIdPlaceholder": "הנטהר כונבהרסאטיונ יד",
+        "conversationHelp": "טחה כונבהרסאטיונ וחהרה טחה סכחהדולהד פרומפט וילל בה סהנט",
+        "promptText": "פרומפט טהשט *",
+        "promptTextPlaceholder": "הנטהר טחה פרומפט טחאט וילל בה סהנט טו טחה אגהנט",
+        "application": "אפפליכאטיונ *",
+        "applicationPlaceholder": "סהלהכט אנ אפפליכאטיונ...",
+        "sourceType": "סוורכה טיפה *"
+      },
+      "applicationNotice": "אפפליכאטיונ סכחהדולינג וילל בה אבאילאבלה ינ א פוטורה ופדאטה.",
+      "dataSyncNotice": "דאטא סינכחרוניצאטיונ סכחהדולינג וילל בה אבאילאבלה ינ א פוטורה ופדאטה.",
+      "sourceTypes": {
+        "knowledgeBase": "קנוולהדגה באסה רהפרהסח",
+        "s3": "ס3 דאטא סינכ",
+        "api": "אפי דאטא סינכ"
+      },
+      "commonCron": {
+        "hourly": "הבהרי חוור",
+        "dailyMorning": "דאילי אט 9:00 אמ",
+        "dailyEvening": "דאילי אט 6:00 פמ",
+        "weeklyMonday": "וההקלי ונ מונדאי אט 9:00 אמ",
+        "weeklyFriday": "וההקלי ונ פרידאי אט 5:00 פמ",
+        "monthlyFirst": "מונטחלי ונ טחה 1סט אט 9:00 אמ"
+      },
+      "apps": {
+        "documentSummariser": "דוכומהנט סוממאריסהר",
+        "policyBuilder": "פוליכי בוילדהר",
+        "candidateScreening": "כאנדידאטה סכרההנינג",
+        "financialAnalysis": "פינאנכיאל אנאליסיס"
+      },
+      "validation": {
+        "label": "סכחהדולה לאבהל יס רהקוירהד",
+        "cron": "כרונ השפרהססיונ יס רהקוירהד",
+        "timezone": "טימהצונה יס רהקוירהד",
+        "agentId": "אגהנט יד יס רהקוירהד",
+        "promptText": "פרומפט טהשט יס רהקוירהד",
+        "conversationId": "כונבהרסאטיונ יד יס רהקוירהד",
+        "appId": "אפפליכאטיונ יד יס רהקוירהד",
+        "sourceType": "סוורכה טיפה יס רהקוירהד"
+      },
+      "errors": {
+        "editNotImplemented": "סכחהדולה הדיטינג נוט יהט ימפלהמהנטהד",
+        "save": "פאילהד טו סאבה סכחהדולה"
+      }
+    }
+  }
+}

@@ -129,6 +129,18 @@ const ChatInput = ({
   // Placeholder: prefer explicit override, otherwise show a friendly default
   const placeholderText = placeholderOverride ?? t('input.placeholder');
 
+  const getKnowledgeBaseLabel = (kb: { kb_id: string; kb_name: string }) => {
+    if (kb.kb_id === 'company') {
+      return t('input.kb.companyName', { defaultValue: kb.kb_name || kb.kb_id });
+    }
+    return kb.kb_name || kb.kb_id;
+  };
+
+  const getKnowledgeBaseRoleLabel = (role?: string) => {
+    if (!role) return '';
+    return t(`input.kb.roles.${role.toLowerCase()}`, { defaultValue: role });
+  };
+
   const handleInputChange = (e) => {
     const newValue = e.target.value;
 
@@ -362,7 +374,7 @@ const ChatInput = ({
                                   <div className="kb-label-container">
                                     <div className="kb-info">
                                       <i className="bi bi-folder2-open kb-icon"></i>
-                                      <span className="kb-name">{kb.kb_name}</span>
+                                      <span className="kb-name">{getKnowledgeBaseLabel(kb)}</span>
                                       {kb.kb_id === 'company' && (
                                         <Badge bg="" className="badge-outline ms-2" style={{ fontSize: '0.65rem' }}>
                                           {t('input.kb.defaultBadge')}
@@ -374,7 +386,7 @@ const ChatInput = ({
                                       className={`kb-role-badge ${kb.role === 'OWNER' ? 'badge-outline-primary' : 'badge-outline'}`}
                                       style={{ fontSize: '0.65rem' }}
                                     >
-                                      {kb.role}
+                                      {getKnowledgeBaseRoleLabel(kb.role)}
                                     </Badge>
                                   </div>
                                 }

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import type { TFunction } from 'i18next';
 import { useTranslation } from 'react-i18next';
 import {
@@ -35,20 +35,18 @@ import { getDefaultDenyTools } from '../config/integrationToolsDefault';
 import { PageHeader } from '../Components/PageHeader';
 import { DataConnectorsTab } from '../Components/DataConnectors/DataConnectorsTab';
 
-const AVAILABLE_INTEGRATIONS: IntegrationListItem[] = getIntegrationsListFormat();
-
 // Use the proper ConnectionStatus type from the types file
 type PipedreamConnection = ConnectionStatus & {
   status: 'connected' | 'not_connected' | string; // Allow string for compatibility
 };
 
 export const NumaIntegrations = () => {
-  const { t } = useTranslation('integrations');
+  const { t, i18n } = useTranslation('integrations');
   const { user } = useAuth();
   const { numaGet } = useNumaRequest();
   const [lambdaClient, setLambdaClient] = useState<LambdaClient | null>(null);
   const [connections, setConnections] = useState<PipedreamConnection[]>([]);
-  const [availableApps] = useState(AVAILABLE_INTEGRATIONS);
+  const availableApps = useMemo<IntegrationListItem[]>(() => getIntegrationsListFormat(), [i18n.language]);
   const [loading, setLoading] = useState(true);
   const [loadingStatus, setLoadingStatus] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -791,7 +789,7 @@ export const NumaIntegrations = () => {
                     />
                   )}
                   <div style={previewMode ? { pointerEvents: 'none', opacity: 0.8 } : undefined}>
-                    {availableApps
+                    {[...availableApps]
                       .sort((a: IntegrationListItem, b: IntegrationListItem) => {
                         // Admin allowed (enabled) first
                         const adminDisabledA = globalSettings[a.name_slug]?.status === 'disabled';

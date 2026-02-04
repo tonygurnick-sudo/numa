@@ -21,8 +21,9 @@ import { withPRM } from '../utils/prmUtils';
 import ExpandableOverflowBox from '../Components/ExpandableOverflowBox';
 import { manifestService } from '../Services/manifestService';
 import { applyLanguagePreference, LANGUAGE_BROWSER_DEFAULT } from '../utils/languagePreference';
+import { getConnectionDisplayName } from '../config/integrationsConfig';
 
-type Connection = { id: string; name: string; isConnected: boolean; mcpServerUrl?: string };
+type Connection = { id: string; isConnected: boolean; mcpServerUrl?: string };
 
 export default function UserProfilePage() {
   const { t } = useTranslation('settings');
@@ -136,7 +137,8 @@ export default function UserProfilePage() {
     [availableKBs],
   );
 
-  const canEdit = globalLoaded && globalAllowUserDefaults;
+  const canEditUserDefaults = globalLoaded && globalAllowUserDefaults;
+  const canEditProfile = globalLoaded;
 
   useEffect(() => {
     const init = async () => {
@@ -204,7 +206,6 @@ export default function UserProfilePage() {
 
         const allConnections: Connection[] = (response.connections || []).map((conn) => ({
           id: conn.app_name,
-          name: conn.app_name,
           isConnected: conn.status === 'connected',
           mcpServerUrl: undefined,
         }));
@@ -246,8 +247,15 @@ export default function UserProfilePage() {
     () => new Set(displayedSettings.defaultConnectionIds),
     [displayedSettings.defaultConnectionIds],
   );
+  const getKBLabel = (kbId: string, kbName?: string) => {
+    if (kbId === 'company') {
+      return t('chatDefaults.companyKnowledgeBase');
+    }
+    return kbName || kbId;
+  };
 
-  const disableForm = saving || loading || !canEdit || !userDefaultsEnabled;
+  const disableDefaultsForm = saving || loading || !canEditUserDefaults || !userDefaultsEnabled;
+  const disableProfileForm = saving || loading;
   const resetToCompanyDefaults = () => {
     setUserDefaultsEnabled(true);
     setUserDefaults({
@@ -267,40 +275,9 @@ export default function UserProfilePage() {
     setDirty(true);
   };
 
-  const renderSaveActions = (resetLabelKey: string, onReset: () => void) => (
+  const renderSaveActions = (resetLabelKey: string, onReset: () => void, onSave: () => void, canSave: boolean) => (
     <div className="d-flex gap-2">
-      <Button
-        variant="primary"
-        disabled={!dirty || saving || !canEdit}
-        onClick={async () => {
-          try {
-            setSaving(true);
-            setError(null);
-
-            const payload: UserChatSettingsUpdate = {
-              userDefaultsEnabled,
-              defaultKBIds: userDefaults.defaultKBIds,
-              autoToolsEnabled: userDefaults.autoToolsEnabled,
-              webSearchEnabled: userDefaults.webSearchEnabled,
-              createAgentEnabled: userDefaults.createAgentEnabled,
-              dataAnalysisEnabled: userDefaults.dataAnalysisEnabled,
-              defaultConnectionIds: userDefaults.defaultConnectionIds,
-              language: userDefaults.language,
-            };
-
-            await ChatSettingsService.updateForProfile(payload, numaPut);
-            const refreshed = await ChatSettingsService.getForProfile(numaGet);
-            setUserDefaults(refreshed.settings);
-            setUserDefaultsEnabled(refreshed.userDefaultsEnabled);
-            await applyLanguagePreference(refreshed.settings.language);
-            setDirty(false);
-          } catch (e) {
-            setError((e as Error).message || t('userProfile.errors.saveDefaults'));
-          } finally {
-            setSaving(false);
-          }
-        }}
-      >
+      <Button variant="primary" disabled={!dirty || saving || !canSave} onClick={onSave}>
         {saving ? (
           <>
             <Spinner as="span" animation="border" size="sm" className="me-2" />
@@ -310,11 +287,57 @@ export default function UserProfilePage() {
           t('userProfile.actions.save')
         )}
       </Button>
-      <Button variant="outline-secondary" disabled={saving || !canEdit} onClick={onReset}>
+      <Button variant="outline-secondary" disabled={saving || !canSave} onClick={onReset}>
         {t(resetLabelKey)}
       </Button>
     </div>
   );
+
+  const handleSaveProfileLanguage = async () => {
+    try {
+      setSaving(true);
+      setError(null);
+      await ChatSettingsService.updateForProfile({ language: userDefaults.language }, numaPut);
+      const refreshed = await ChatSettingsService.getForProfile(numaGet);
+      setUserDefaults(refreshed.settings);
+      setUserDefaultsEnabled(refreshed.userDefaultsEnabled);
+      await applyLanguagePreference(refreshed.settings.language);
+      setDirty(false);
+    } catch (e) {
+      setError((e as Error).message || t('userProfile.errors.saveDefaults'));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleSaveUserDefaults = async () => {
+    try {
+      setSaving(true);
+      setError(null);
+
+      const payload: UserChatSettingsUpdate = {
+        userDefaultsEnabled,
+        defaultKBIds: userDefaults.defaultKBIds,
+        autoToolsEnabled: userDefaults.autoToolsEnabled,
+        webSearchEnabled: userDefaults.webSearchEnabled,
+        createAgentEnabled: userDefaults.createAgentEnabled,
+        dataAnalysisEnabled: userDefaults.dataAnalysisEnabled,
+        defaultConnectionIds: userDefaults.defaultConnectionIds,
+        language: userDefaults.language,
+      };
+
+      await ChatSettingsService.updateForProfile(payload, numaPut);
+      const refreshed = await ChatSettingsService.getForProfile(numaGet);
+      setUserDefaults(refreshed.settings);
+      setUserDefaultsEnabled(refreshed.userDefaultsEnabled);
+      await applyLanguagePreference(refreshed.settings.language);
+      setDirty(false);
+    } catch (e) {
+      setError((e as Error).message || t('userProfile.errors.saveDefaults'));
+    } finally {
+      setSaving(false);
+    }
+  };
 
   return (
     <div className="dashboard">
@@ -341,10 +364,6 @@ export default function UserProfilePage() {
               <div className="text-center py-4">
                 <Spinner animation="border" />
               </div>
-            ) : !globalAllowUserDefaults ? (
-              <Alert variant="secondary" className="mb-3">
-                {t('userProfile.adminDisabled')}
-              </Alert>
             ) : null}
 
             <Tabs activeKey={activeKey} onSelect={(k) => k && setActiveKey(k)} className="mb-3">
@@ -362,7 +381,7 @@ export default function UserProfilePage() {
                     <Form.Label className="fw-semibold">{t('userProfile.defaults.language.label')}</Form.Label>
                     <Form.Select
                       value={userDefaults.language ?? LANGUAGE_BROWSER_DEFAULT}
-                      disabled={disableForm}
+                      disabled={disableProfileForm}
                       onChange={(e) => {
                         setUserDefaults((prev) => ({ ...prev, language: e.target.value }));
                         setDirty(true);
@@ -370,12 +389,15 @@ export default function UserProfilePage() {
                     >
                       <option value={LANGUAGE_BROWSER_DEFAULT}>{t('userProfile.defaults.language.browser')}</option>
                       <option value="en">{t('userProfile.defaults.language.english')}</option>
-                      <option value="fr">{t('userProfile.defaults.language.french')}</option>
-                      <option value="id">{t('userProfile.defaults.language.indonesian')}</option>
                     </Form.Select>
                     <div className="text-muted small mt-1">{t('userProfile.defaults.language.help')}</div>
                   </Form.Group>
-                  {renderSaveActions('userProfile.actions.resetBrowser', resetToBrowserDefaults)}
+                  {renderSaveActions(
+                    'userProfile.actions.resetBrowser',
+                    resetToBrowserDefaults,
+                    handleSaveProfileLanguage,
+                    canEditProfile,
+                  )}
                 </Form>
               </Tab>
               <Tab
@@ -387,6 +409,11 @@ export default function UserProfilePage() {
                   </span>
                 }
               >
+                {!globalAllowUserDefaults && (
+                  <Alert variant="secondary" className="mb-3">
+                    {t('userProfile.adminDisabled')}
+                  </Alert>
+                )}
                 <Alert variant="secondary" className="mb-3">
                   {t('userProfile.defaults.description')}
                 </Alert>
@@ -400,7 +427,7 @@ export default function UserProfilePage() {
                         id="profile-defaults-enabled"
                         label=""
                         checked={userDefaultsEnabled}
-                        disabled={!canEdit || saving || loading}
+                        disabled={!canEditUserDefaults || saving || loading}
                         onChange={(e) => {
                           setUserDefaultsEnabled(e.target.checked);
                           setDirty(true);
@@ -426,7 +453,7 @@ export default function UserProfilePage() {
                           ) : (
                             kbIdsSorted.map((kbId) => {
                               const kb = availableKBs.find((k) => k.kb_id === kbId);
-                              const label = kb?.kb_name || kbId;
+                              const label = getKBLabel(kbId, kb?.kb_name);
                               const checked = enabledKBSet.has(kbId);
                               return (
                                 <Form.Check
@@ -435,7 +462,7 @@ export default function UserProfilePage() {
                                   id={`profile-defaults-kb-${kbId}`}
                                   label={label}
                                   checked={checked}
-                                  disabled={disableForm}
+                                  disabled={disableDefaultsForm}
                                   onChange={(e) => {
                                     const nextChecked = e.target.checked;
                                     setUserDefaults((prev) => ({
@@ -464,7 +491,7 @@ export default function UserProfilePage() {
                             id="profile-defaults-all-tools"
                             label=""
                             checked={displayedSettings.autoToolsEnabled}
-                            disabled={disableForm}
+                            disabled={disableDefaultsForm}
                             onChange={(e) => {
                               const nextEnabled = e.target.checked;
                               setUserDefaults((prev) => ({
@@ -488,7 +515,7 @@ export default function UserProfilePage() {
                               id="profile-defaults-web-search"
                               label=""
                               checked={displayedSettings.webSearchEnabled}
-                              disabled={disableForm || displayedSettings.autoToolsEnabled}
+                              disabled={disableDefaultsForm || displayedSettings.autoToolsEnabled}
                               onChange={(e) => {
                                 setUserDefaults((prev) => ({ ...prev, webSearchEnabled: e.target.checked }));
                                 setDirty(true);
@@ -507,7 +534,7 @@ export default function UserProfilePage() {
                                 id="profile-defaults-data-analysis"
                                 label=""
                                 checked={displayedSettings.dataAnalysisEnabled}
-                                disabled={disableForm || displayedSettings.autoToolsEnabled}
+                                disabled={disableDefaultsForm || displayedSettings.autoToolsEnabled}
                                 onChange={(e) => {
                                   setUserDefaults((prev) => ({ ...prev, dataAnalysisEnabled: e.target.checked }));
                                   setDirty(true);
@@ -526,7 +553,7 @@ export default function UserProfilePage() {
                               id="profile-defaults-create-agent"
                               label=""
                               checked={displayedSettings.createAgentEnabled}
-                              disabled={disableForm || displayedSettings.autoToolsEnabled}
+                              disabled={disableDefaultsForm || displayedSettings.autoToolsEnabled}
                               onChange={(e) => {
                                 setUserDefaults((prev) => ({ ...prev, createAgentEnabled: e.target.checked }));
                                 setDirty(true);
@@ -548,7 +575,9 @@ export default function UserProfilePage() {
                           <>
                             <ExpandableOverflowBox className="border rounded-3 p-2 bg-white" maxHeight={240}>
                               {availableConnections
-                                .sort((a, b) => a.name.localeCompare(b.name))
+                                .sort((a, b) =>
+                                  getConnectionDisplayName(a.id).localeCompare(getConnectionDisplayName(b.id)),
+                                )
                                 .map((conn) => {
                                   const id = conn.id;
                                   const checked = enabledConnectionSet.has(id);
@@ -557,9 +586,9 @@ export default function UserProfilePage() {
                                       key={id}
                                       type="checkbox"
                                       id={`profile-defaults-integration-${id}`}
-                                      label={conn.name}
+                                      label={getConnectionDisplayName(id)}
                                       checked={checked}
-                                      disabled={disableForm}
+                                      disabled={disableDefaultsForm}
                                       onChange={(e) => {
                                         const nextChecked = e.target.checked;
                                         setUserDefaults((prev) => ({
@@ -582,7 +611,12 @@ export default function UserProfilePage() {
                         )}
                       </Form.Group>
 
-                      {renderSaveActions('userProfile.actions.reset', resetToCompanyDefaults)}
+                      {renderSaveActions(
+                        'userProfile.actions.reset',
+                        resetToCompanyDefaults,
+                        handleSaveUserDefaults,
+                        canEditUserDefaults,
+                      )}
                     </>
                   )}
                 </Form>

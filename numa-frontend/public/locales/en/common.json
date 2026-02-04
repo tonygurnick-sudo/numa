@@ -6,7 +6,8 @@
     "delete": "Delete"
   },
   "loading": {
-    "generic": "Loading..."
+    "generic": "Loading...",
+    "geniric": "Loading..."
   },
   "result": "Result",
   "toast": {
@@ -65,6 +66,13 @@
     "logout": "Log out",
     "expandSidebar": "Expand sidebar",
     "collapseSidebar": "Collapse sidebar"
+  },
+  "NAV": {
+    "SECTIONS": {
+      "WORKFLOWS": "Workflows",
+      "TIMELINE": "Timeline",
+      "KNOWLEDGEBASES": "Knowledge Bases"
+    }
   },
   "pagination": {
     "previous": "Previous",

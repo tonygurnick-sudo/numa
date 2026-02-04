@@ -4,7 +4,7 @@ import { LayoutForm } from '../Layouts/LayoutForm';
 import { Button, Form, Alert, Spinner, InputGroup } from 'react-bootstrap';
 import { useTranslation } from 'react-i18next';
 import { useAuth, MfaSetupRequired, MfaCodeRequired } from '../Providers/AuthProvider';
-import { useBranding } from '../Providers/BrandingContext';
+import { useBranding, DEFAULT_BRANDING_THEME } from '../Providers/BrandingContext';
 import { QRCodeSVG } from 'qrcode.react';
 
 const NumaLogin = () => {
@@ -218,7 +218,11 @@ const NumaLogin = () => {
     }
   };
 
-  const loginTitle = branding.loginPage?.title || '';
+  const defaultLoginTitle = DEFAULT_BRANDING_THEME.loginPage?.title || '';
+  const loginTitle =
+    branding.loginPage?.title && branding.loginPage.title !== defaultLoginTitle
+      ? branding.loginPage.title
+      : t('brandingDefaults.loginTitle', { defaultValue: defaultLoginTitle });
   const welcomeMessage = branding.loginPage?.welcomeMessage;
 
   // Determine which form to show

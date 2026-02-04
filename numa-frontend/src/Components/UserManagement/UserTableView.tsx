@@ -4,6 +4,7 @@ import { ChevronDown, ChevronRight, Eye } from 'react-bootstrap-icons';
 import { useTranslation } from 'react-i18next';
 import type { User } from './UserDetailsModal';
 import i18n from '../../i18n';
+import { getUserStatusBadgeVariant, getUserStatusLabel } from './userStatusUtils';
 
 interface UserTableViewProps {
   adminUsers: User[];
@@ -32,6 +33,7 @@ export function UserTableView({
     const isSystemUser = user.email?.includes('numa-system-user');
     const isAdmin = user.groups?.includes('admin');
     const isCurrentUser = user.username === currentUserSub;
+    const statusLabel = getUserStatusLabel(t, user.status);
 
     return (
       <tr
@@ -48,11 +50,8 @@ export function UserTableView({
           <Badge bg={isAdmin ? 'primary' : 'secondary'}>{isAdmin ? t('roles.admin') : t('roles.standard')}</Badge>
         </td>
         <td style={{ width: '15%' }}>
-          <Badge
-            bg={user.enabled ? (user.status === 'CONFIRMED' ? 'success' : 'warning') : 'danger'}
-            className={isSystemUser ? 'opacity-50' : ''}
-          >
-            {user.status}
+          <Badge bg={getUserStatusBadgeVariant(user.enabled, user.status)} className={isSystemUser ? 'opacity-50' : ''}>
+            {statusLabel}
           </Badge>
         </td>
         <td style={{ width: '15%' }}>

@@ -1,0 +1,402 @@
+{
+  "input": {
+    "placeholder": "חוו כאנ י חהלפ יוו טודאי?",
+    "tooltips": {
+      "upload": "פילה ופלואד",
+      "knowledgeBases": "קנוולהדגה באסהס",
+      "tools": "טוולס",
+      "integrations": "ינטהגראטיונס",
+      "settings": "כחאט סהטטינגס",
+      "model": "מודהל"
+    },
+    "modelSelector": {
+      "title": "סהלהכט מודהל",
+      "mobileTitle": "סהלהכט מודהל"
+    },
+    "aria": {
+      "upload": "ופלואד פילהס",
+      "knowledgeBase": "קנוולהדגה באסה",
+      "toolsSettings": "טוולס סהטטינגס",
+      "close": "כלוסה"
+    },
+    "kb": {
+      "title": "קנוולהדגה באסהס",
+      "available": "אבאילאבלה קנוולהדגה באסהס",
+      "empty": "נו קבס אבאילאבלה",
+      "companyName": "כומפאני קנוולהדגה באסה",
+      "roles": {
+        "owner": "וונהר",
+        "editor": "הדיטור",
+        "viewer": "ביהוהר"
+      },
+      "defaultBadge": "דהפאולט",
+      "refresh": "רהפרהסח"
+    },
+    "tools": {
+      "title": "טוולס",
+      "allTools": "אלל טוולס",
+      "allToolsDescription": "וחהנ הנאבלהד, אלל טוולס ארה אוטומאטיכאללי אבאילאבלה",
+      "webSearch": {
+        "title": "והב סהארכח",
+        "description": "סהארכח טחה והב פור כוררהנט ינפורמאטיונ"
+      },
+      "dataAnalysis": {
+        "title": "דאטא אנאליסיס",
+        "description": "אנאליצה כסב, השכהל, ור זסונ דאטא פילהס"
+      },
+      "agentCreation": {
+        "title": "אגהנט כרהאטיונ",
+        "description": "אללוו מה טו כרהאטה סאבהד אגהנטס וחהנ יוו השפליכיטלי אסק"
+      },
+      "selectSpecific": "סהלהכט ספהכיפיכ טוולס טו הנאבלה פור טחיס כונבהרסאטיונ"
+    },
+    "integrations": {
+      "toggleAria": "טוגגלה ינטהגראטיונס",
+      "modalTitle": "סהלהכט ינטהגראטיונס",
+      "modalDescription": "סהלהכט ופ טו 2 ינטהגראטיונס טו הנאבלה פור טחיס כחאט סהססיונ.",
+      "loading": "לואדינג אבאילאבלה ינטהגראטיונס...",
+      "empty": "נו ינטהגראטיונס אבאילאבלה. סהט טחהמ ופ ונ טחה ינטהגראטיונס פאגה.",
+      "connected": "כוננהכטהד",
+      "enabled": "הנאבלהד",
+      "enable": "הנאבלה"
+    }
+  },
+  "messages": {
+    "loadingConversation": "לואדינג כונבהרסאטיונ...",
+    "status": {
+      "initializing": "יניטיאליצינג כחאט...",
+      "processingFile": "פרוכהססינג ופלואד...",
+      "thinking": "טחינקינג..."
+    },
+    "roles": {
+      "assistant": "אססיסטאנט",
+      "you": "יוו",
+      "system": "סיסטהמ"
+    },
+    "fileUploaded": "פילה '{{name}}' ופלואדהד סוככהסספוללי.",
+    "openDocument": "ופהנ: {{title}}",
+    "copyMessage": "כופי מהססאגה",
+    "copyMessageAria": "כופי מהססאגה טו כליפבוארד"
+  },
+  "dataAnalysis": {
+    "fileFallback": "דאטא פילה"
+  },
+  "dataAnalysisBanner": {
+    "title": "אנאליצה ופלואדהד דאטא?",
+    "description": "רונ דאטא אנאליסיס ונ {{files}}.",
+    "note": "טחיס מאי טאקה ופ טו 5 מינוטהס.",
+    "actions": {
+      "run": "רונ דאטא אנאליסיס",
+      "notNow": "נוט נוו"
+    }
+  },
+  "schedule": {
+    "actions": {
+      "schedule": "סכחהדולה"
+    },
+    "success": {
+      "created": "סכחהדולהד רונ כרהאטהד סוככהסספוללי."
+    },
+    "errors": {
+      "noAgent": "סהלהכט אנ אגהנט בהפורה סכחהדולינג.",
+      "noConversation": "סטארט א כונבהרסאטיונ ויטח טחה אגהנט בהפורה סכחהדולינג.",
+      "missingContext": "מיססינג סכחהדולה כונטהשט"
+    }
+  },
+  "systemMessages": {
+    "backupModel": "סויטכחינג טו באכקופ מודהל דוה טו חיגח דהמאנד. פלהאסה טרי יוור רהקוהסט אגאינ.",
+    "agentError": "אגהנט הררור: {{message}}",
+    "loadConversationFailed": "הררור לואדינג כונבהרסאטיונ. פלהאסה טרי אגאינ ור סהלהכט א דיפפהרהנט כונבהרסאטיונ."
+  },
+  "errors": {
+    "activateAgentFailed": "ונאבלה טו אכטיבאטה אגהנט",
+    "activateSelectedAgentFailed": "ונאבלה טו אכטיבאטה סהלהכטהד אגהנט",
+    "loadAgentConfigFailed": "ונאבלה טו לואד אגהנט כונפיגוראטיונ פור טחיס כונבהרסאטיונ.",
+    "sendFailed": "פאילהד טו סהנד מהססאגה"
+  },
+  "history": {
+    "title": "כחאט חיסטורי",
+    "closeAria": "כלוסה כחאט חיסטורי",
+    "loading": "לואדינג כונבהרסאטיונס...",
+    "loadFailed": "פאילהד טו לואד כונבהרסאטיונ חיסטורי",
+    "retry": "רהטרי",
+    "empty": "נו כונבהרסאטיונס אבאילאבלה",
+    "untitled": "ונטיטלהד כחאט",
+    "agentPrefix": "אגהנט: {{name}}",
+    "renamePrompt": "הנטהר נהו נאמה פור טחיס כונבהרסאטיונ:",
+    "renameFailed": "פאילהד טו רהנאמה כונבהרסאטיונ",
+    "renameAria": "רהנאמה כונבהרסאטיונ",
+    "deleteConfirm": "ארה יוו סורה יוו ואנט טו דהלהטה טחיס כונבהרסאטיונ?",
+    "deleteFailed": "פאילהד טו דהלהטה כונבהרסאטיונ",
+    "deleteAria": "דהלהטה כונבהרסאטיונ"
+  },
+  "settingsPanel": {
+    "knowledgeBases": "קנוולהדגה באסהס",
+    "loadingKnowledgeBases": "לואדינג קנוולהדגה באסהס...",
+    "noKnowledgeBases": "נו קנוולהדגה באסהס אבאילאבלה",
+    "selectKnowledgeBases": "סהלהכט קנוולהדגה באסהס טו קוהרי דורינג טחיס כחאט",
+    "tools": "טוולס",
+    "allTools": "אלל טוולס",
+    "allToolsDescription": "וחהנ הנאבלהד, אלל טוולס ארה אוטומאטיכאללי אבאילאבלה",
+    "webSearch": "והב סהארכח",
+    "webSearchDescription": "סהארכח טחה והב פור כוררהנט ינפורמאטיונ",
+    "dataAnalysis": "דאטא אנאליסיס",
+    "dataAnalysisDescription": "אנאליצה כסב, השכהל, ור זסונ דאטא פילהס",
+    "agentCreation": "אגהנט כרהאטיונ",
+    "agentCreationDescription": "אללוו כרהאטינג נהו אגהנטס דורינג כחאט",
+    "integrations": "ינטהגראטיונס",
+    "loadingIntegrations": "לואדינג ינטהגראטיונס...",
+    "noIntegrations": "נו ינטהגראטיונס כוננהכטהד. ביסיט טחה ינטהגראטיונס פאגה טו כוננהכט אפפס.",
+    "enableIntegrations": "הנאבלה ינטהגראטיונס טו וסה דורינג טחיס כחאט"
+  },
+  "fileUpload": {
+    "csvWarning": "כסב סופפורט יס לימיטהד וחהנ דאטא אנאליסיס יס ופפ. הנאבלה דאטא אנאליסיס ינ כחאט טוולס טו אנאליצה כסב פילהס.",
+    "noFilesSelected": "נו פילהס והרה סהלהכטהד פור ופלואד",
+    "processing": "פרוכהססינג {{count}} פילה(ס)...",
+    "invalidFile": "ינבאליד פילה אט ינדהש {{index}}",
+    "successfullyProcessed": "סוככהסספוללי פרוכהססהד \"{{name}}\".",
+    "failedToProcess": "פאילהד טו פרוכהסס \"{{name}}\": {{message}}",
+    "errorProcessing": "הררור וחילה פרוכהססינג פילהס: {{message}}",
+    "uploadedNames": {
+      "single": "ופלואדהד {{names}}",
+      "multiple": "ופלואדהד {{names}} אנד {{count}} מורה"
+    },
+    "modalTitle": "ופלואד פילהס",
+    "supportedFileTypesTitle": "סופפורטהד פילה טיפהס:",
+    "supportedFileTypes": {
+      "pdf": "פדפ (פדפ)",
+      "documents": "דוכומהנטס (דוכש, טשט)",
+      "spreadsheets": "ספרהאדסחההטס (כסב, שלסש)",
+      "images": "ימאגהס (זפג, זפהג, פנג)",
+      "audioVideo": "אודיו/בידהו (מפ3, מפ4, ואב, פלאכ, וגג, אמר, והבמ, מ4א)",
+      "markdown": "מארקדוונ (מד)",
+      "other": "וטחהר (זסונ, שמל, חטמל, פי, זס, טס)"
+    }
+  },
+  "references": {
+    "label": "רהפהרהנכהס",
+    "fileFallback": "פילה",
+    "documentFallback": "דוכומהנט",
+    "unableToAccess": "(ונאבלה טו אככהסס פילה)",
+    "unableToAccessAlert": "ונאבלה טו אככהסס דוכומהנט: {{message}}",
+    "credentialsError": "פאילהד טו גהט אוס כרהדהנטיאלס",
+    "show": "סחוו {{label}}",
+    "hide": "חידה {{label}}"
+  },
+  "newChat": {
+    "agentFallback": "אגהנט",
+    "logoAltFallback": "לוגו",
+    "greeting": {
+      "morning": "גווד מורנינג",
+      "afternoon": "גווד אפטהרנוונ",
+      "evening": "גווד הבהנינג",
+      "withName": "{{greeting}}, {{name}}"
+    },
+    "placeholder": "חוו כאנ י חהלפ יוו טודאי?",
+    "loadingAgents": "לואדינג אגהנטס...",
+    "continue": "כונטינוה וחהרה יוו להפט ופפ",
+    "loadingRecent": "לואדינג רהכהנט כונבהרסאטיונס...",
+    "untitled": "ונטיטלהד כחאט",
+    "renameTooltip": "רהנאמה",
+    "deleteTooltip": "דהלהטה",
+    "renameAria": "רהנאמה כונבהרסאטיונ",
+    "deleteAria": "דהלהטה כונבהרסאטיונ",
+    "noRecent": "נו רהכהנט כונבהרסאטיונס",
+    "tabs": {
+      "settings": "סהטטינגס",
+      "history": "חיסטורי"
+    },
+    "chatSettings": "כחאט סהטטינגס",
+    "relativeTime": {
+      "justNow": "זוסט נוו",
+      "minutesAgo_one": "{{count}}מ אגו",
+      "minutesAgo_other": "{{count}}מ אגו",
+      "hoursAgo_one": "{{count}}ח אגו",
+      "hoursAgo_other": "{{count}}ח אגו",
+      "yesterday": "יהסטהרדאי",
+      "daysAgo_one": "{{count}}ד אגו",
+      "daysAgo_other": "{{count}}ד אגו"
+    }
+  },
+  "page": {
+    "title": "נומא כחאט",
+    "historyButton": "חיסטורי",
+    "newChat": "נהו כחאט",
+    "chatHistory": "כחאט חיסטורי",
+    "mobileActions": {
+      "show": "סחוו כחאט אכטיונס",
+      "hide": "חידה כחאט אכטיונס"
+    },
+    "agentAssistant": "אי אגהנט אססיסטאנט",
+    "missingIntegrations": {
+      "title": "מיססינג ינטהגראטיונס",
+      "body": "טחיס אגהנט רהקוהסטס אככהסס טו טחה פוללווינג ינטהגראטיונס וחיכח ארה נוט כוננהכטהד פור יוור אככוונט:",
+      "note": "כונטינוינג מאי רהסולט ינ לימיטהד ור ונינטהנדהד בהחאביור. יוו כאנ כוננהכט ינטהגראטיונס נוו פרומ טחה ינטהגראטיונס פאגה אנד טרי אגאינ.",
+      "back": "באכק",
+      "goToIntegrations": "גו טו ינטהגראטיונס",
+      "continueWithout": "כונטינוה ויטחווט"
+    },
+    "legacyMigration": {
+      "title": "כונטינוינג פרומ פרהביווס כחאט",
+      "description": "טחיס כונבהרסאטיונ ואס סטארטהד ינ אנ הארליהר בהרסיונ ופ נומא כחאט. סהנד א מהססאגה טו כונטינוה אנד מיגראטה טו טחה נהו פורמאט ויטח הנחאנכהד כאפאביליטיהס."
+    },
+    "loading": "לואדינג...",
+    "loadingConversation": "לואדינג כונבהרסאטיונ...",
+    "documentTitle": "דוכומהנט"
+  },
+  "workspace": {
+    "thinkingBlock": {
+      "label": "השטהנדהד טחינקינג"
+    },
+    "assistantAdvice": {
+      "label": "פרה-אנאליסיס"
+    },
+    "compaction": {
+      "summarizing": "סוממאריצינג כונבהרסאטיונ...",
+      "complete": "כונבהרסאטיונ סוממאריצהד",
+      "tokensSaved": "רהדוכהד כונטהשט בי {{tokens}} טוקהנס"
+    },
+    "pendingFiles": {
+      "label_one": "{{count}} פילה רהאדי טו סהנד",
+      "label_other": "{{count}} פילהס רהאדי טו סהנד",
+      "folderCount_one": "({{count}} פילה)",
+      "folderCount_other": "({{count}} פילהס)",
+      "showAll": "סחוו אלל",
+      "showLess": "סחוו להסס",
+      "moreFiles": "+{{count}} מורה"
+    },
+    "userAttachments": {
+      "moreFiles": "+{{count}} מורה פילהס",
+      "showLess": "סחוו להסס"
+    },
+    "trace": {
+      "button": "טראכה",
+      "downloadTitle": "דוונלואד טראכה אס חטמל",
+      "cleanTrace": "כלהאנ טראכה",
+      "cleanTraceDesc": "השכלודהס סטרהאמינג דהלטאס",
+      "fullTrace": "פולל טראכה",
+      "fullTraceDesc": "אלל הבהנטס ינכלודינג דהלטאס",
+      "rawTrace": "ראו טראכה",
+      "rawTraceDesc": "דוונלואד אס נדזסונ פילה"
+    },
+    "todo": {
+      "title": "טאסק ליסט",
+      "pending": "פהנדינג",
+      "inProgress": "ינ פרוגרהסס",
+      "completed": "כומפלהטהד"
+    },
+    "kbSource": {
+      "source": "סוורכה",
+      "viewDocument": "ביהו דוכומהנט",
+      "failedToOpen": "פאילהד טו ופהנ פילה",
+      "openFile": "ופהנ {{filename}}"
+    },
+    "settings": {
+      "thinkingMode": "טחינקינג מודה",
+      "thinkingModeDesc": "הנאבלה השטהנדהד טחינקינג פור כומפלהש טאסקס",
+      "stopButton": "סטופ"
+    },
+    "fileUpload": {
+      "title": "ופלואד טו וורקספאכה",
+      "dropzone": "דראג אנד דרופ פילהס חהרה",
+      "clickToBrowse": "ור כליכק טו ברווסה",
+      "uploadFiles": "ופלואד פילהס",
+      "uploadFolder": "ופלואד פולדהר",
+      "uploading": "ופלואדינג...",
+      "remove": "רהמובה",
+      "fileTooLarge": "פילה השכההדס 50מב לימיט",
+      "success_one": "{{count}} פילה ופלואדהד סוככהסספוללי!",
+      "success_other": "{{count}} פילהס ופלואדהד סוככהסספוללי!",
+      "allFailed": "אלל ופלואדס פאילהד. פלהאסה טרי אגאינ.",
+      "partialSuccess": "{{success}} ופלואדהד, {{failed}} פאילהד.",
+      "infoMessage": "פילהס ארה ופלואדהד טו טחיס כונבהרסאטיונ'ס <כודה>ופלואדס/</כודה> דירהכטורי אנד ארה ונלי אבאילאבלה דורינג טחיס כונבהרסאטיונ.",
+      "clear": "כלהאר",
+      "uploadCount_one": "ופלואד {{count}} פילה",
+      "uploadCount_other": "ופלואד {{count}} פילהס",
+      "uploadMore": "ופלואד מורה",
+      "done": "דונה",
+      "cancel": "כאנכהל"
+    },
+    "segments": {
+      "uploaded": "ופלואדהד: {{filename}}",
+      "fileCount_one": "{{count}} פילה",
+      "fileCount_other": "{{count}} פילהס"
+    }
+  },
+  "filePreview": {
+    "csv": {
+      "noData": "נו כסב דאטא טו פרהביהו",
+      "rowsShowing": "סחווינג פירסט 100 ופ {{total}} רווס. דוונלואד טחה פילה טו סהה אלל דאטא."
+    },
+    "xlsx": {
+      "noData": "נו דאטא פוונד ינ ספרהאדסחההט",
+      "rowsShowing": "סחווינג פירסט 100 ופ {{total}} רווס. דוונלואד טחה פילה טו סהה אלל דאטא."
+    },
+    "json": {
+      "invalid": "ינבאליד זסונ:"
+    },
+    "markdown": {
+      "showLess": "סחוו להסס",
+      "showMore": "סחוו מורה"
+    },
+    "pdf": {
+      "pages_one": "{{count}} פאגה",
+      "pages_other": "{{count}} פאגהס"
+    },
+    "folder": {
+      "noFiles": "נו פילהס פוונד ינ טחיס פולדהר"
+    },
+    "actions": {
+      "download": "דוונלואד",
+      "downloadZip": "דוונלואד אס ציפ",
+      "downloadOriginal": "דוונלואד וריגינאל",
+      "copyPath": "כופי פאטח",
+      "copied": "כופיהד!",
+      "openInEditor": "ופהנ ינ הדיטור",
+      "close": "כלוסה",
+      "converting": "כונבהרטינג...",
+      "openInNewTab": "ופהנ ינ נהו טאב",
+      "pdf": "פדפ",
+      "docx": "דוכש",
+      "rawMarkdown": "ראו מארקדוונ",
+      "downloadToView": "דוונלואד טו ביהו",
+      "downloadFile": "דוונלואד פילה"
+    },
+    "noFileSelected": "נו פילה סהלהכטהד",
+    "selectFile": "סהלהכט א פילה טו פרהביהו",
+    "loadingPreview": "לואדינג פרהביהו...",
+    "fileTooLarge": "פילה יס טוו לארגה טו פרהביהו ({{size}}). דוונלואד טו ביהו.",
+    "previewNotAvailable": "פרהביהו נוט אבאילאבלה פור טחיס פילה טיפה"
+  },
+  "workspaceSettings": {
+    "chatUploads": "כחאט ופלואדס",
+    "sessionFiles": "סהססיונ פילהס",
+    "refresh": "רהפרהסח",
+    "uploaded": "ופלואדהד: {{filename}}",
+    "folderLabel": "{{name}} ({{count}} פילהס)",
+    "loadingFiles": "לואדינג פילהס...",
+    "retry": "רהטרי",
+    "noUploads": "נו ופלואדהד פילהס",
+    "noSessionFiles": "נו פילהס גהנהראטהד יהט",
+    "refreshFiles": "רהפרהסח פילהס",
+    "knowledgeBases": "קנוולהדגה באסהס",
+    "selectKBs": "סהלהכט קנוולהדגה באסהס טו סהארכח",
+    "loading": "לואדינג...",
+    "noKBs": "נו קנוולהדגה באסהס אבאילאבלה",
+    "tools": "טוולס",
+    "toolsHelper": "הנאבלה כאפאביליטיהס פור טחיס כחאט",
+    "allTools": "אלל טוולס",
+    "allToolsHelper": "הנאבלה אלל טוולס אוטומאטיכאללי",
+    "webSearch": "והב סהארכח",
+    "agentCreation": "אגהנט כרהאטיונ",
+    "integrations": "ינטהגראטיונס",
+    "integrationsHelper": "כוננהכט השטהרנאל סהרביכהס",
+    "integrationsDisabled": "נוט הנאבלהד יהט פור ב2 כחאט",
+    "noIntegrations": "נו ינטהגראטיונס כוננהכטהד",
+    "preview": "פרהביהו",
+    "download": "דוונלואד"
+  },
+  "agents": {
+    "chooseExperience": "כחווסה כחאט השפהריהנכה"
+  }
+}

@@ -6,6 +6,7 @@ import i18n from '../../i18n';
 import { UserCard } from './UserCard';
 import type { User } from './UserDetailsModal';
 import type { ViewMode } from './UserActionsBar';
+import { getUserStatusBadgeVariant, getUserStatusLabel } from './userStatusUtils';
 
 interface UserRoleSectionProps {
   title: string;
@@ -76,6 +77,7 @@ export function UserRoleSection({
                   {users.map((user) => {
                     const isSystemUser = user.email?.includes('numa-system-user');
                     const isCurrentUser = user.username === currentUserSub;
+                    const statusLabel = getUserStatusLabel(t, user.status);
 
                     return (
                       <tr
@@ -90,10 +92,10 @@ export function UserRoleSection({
                         </td>
                         <td>
                           <Badge
-                            bg={user.enabled ? (user.status === 'CONFIRMED' ? 'success' : 'warning') : 'danger'}
+                            bg={getUserStatusBadgeVariant(user.enabled, user.status)}
                             className={isSystemUser ? 'opacity-50' : ''}
                           >
-                            {user.status}
+                            {statusLabel}
                           </Badge>
                         </td>
                         <td>

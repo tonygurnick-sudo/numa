@@ -4,6 +4,13 @@
       "placeholder": "Type to filter apps"
     },
     "clear": "Clear",
+    "categories": {
+      "productivity": "Productivity",
+      "legal": "Legal",
+      "finance": "Finance",
+      "general": "General",
+      "compliance": "Compliance"
+    },
     "sort": {
       "asc": "A to Z",
       "desc": "Z to A",
@@ -23,6 +30,10 @@
     "favorites": {
       "add": "Add to favorites",
       "remove": "Remove from favorites"
+    },
+    "status": {
+      "active": "Active",
+      "inactive": "Inactive"
     }
   },
   "appCard": {
@@ -114,6 +125,92 @@
     },
     "errors": {
       "loadApps": "Failed to load apps: {{message}}"
+    },
+    "catalog": {
+      "beyond-expectations": {
+        "name": "Beyond Expectations",
+        "description": "Analyse application error logs to identify patterns and issues"
+      },
+      "candidate-screening": {
+        "name": "Candidate Screening",
+        "description": "Screen candidates by extracting resume content and matching them against company profile and job requirements."
+      },
+      "company-profile": {
+        "name": "Company Profile",
+        "description": "Generate a structured company profile from information and documents"
+      },
+      "contract-analysis": {
+        "name": "Contract Analysis",
+        "description": "Analyze contracts for clauses, risks, and improvement opportunities"
+      },
+      "costing-calculator": {
+        "name": "Costing Calculator",
+        "description": "Automate cost calculations for custom shapes (pre-meshed, plastered, or poly-only)"
+      },
+      "council-resource-consents": {
+        "name": "Council Resource Consents",
+        "description": "Analyze council references and applications for resource consents"
+      },
+      "data-analysis": {
+        "name": "Data Analysis",
+        "description": "Run data analysis workflows using a Claude Code agent. Upload files and provide a prompt; the assistant returns a markdown response and may generate additional artifacts."
+      },
+      "document-summariser": {
+        "name": "Document Summariser",
+        "description": "Summarise one or multiple documents"
+      },
+      "e2e-test": {
+        "name": "E2E Test App",
+        "description": "A simple test app that completes after 30 seconds to test polling and job creation"
+      },
+      "financial-analysis": {
+        "name": "Financial Analysis",
+        "description": "Create financial analysis of one or multiple documents"
+      },
+      "gdsr-assessment": {
+        "name": "GDSR Assessment",
+        "description": "Application assessment based on the Game Development Sector Rebate (GDSR) framework"
+      },
+      "infringement-review": {
+        "name": "Infringement Review",
+        "description": "Review parking infringement evidence and provide recommendations"
+      },
+      "meeting-analyser": {
+        "name": "Meeting Analyser",
+        "description": "Transform raw meeting data into comprehensive summaries, insightful analyses, and actionable outputs. Whether your meetings are in\nperson, virtual, or a blend of both, this app helps you make the most out of\nyour meeting notes and transcripts by providing structured, automated reports\nand follow-up resources."
+      },
+      "nolia": {
+        "name": "Nolia",
+        "description": "Analyze documents using a knowledge base. Upload a document and select a knowledge base; the AI assistant will perform comprehensive analysis using the knowledge base files."
+      },
+      "policy-builder": {
+        "name": "Policy Designer",
+        "description": "Create and manage organizational policies with AI assistance. This tool helps draft, review, and format policies while ensuring compliance with industry standards and regulations."
+      },
+      "policy-drafter": {
+        "name": "Policy Drafter",
+        "description": "Create and manage organizational policies with AI assistance. This tool helps draft, review, and format policies while ensuring compliance with industry standards and regulations."
+      },
+      "policy-reviewer": {
+        "name": "Policy Reviewer",
+        "description": "Management of policies and legislation compliance."
+      },
+      "procurement-rfp-assessment": {
+        "name": "Procurement RFP Assessment",
+        "description": "Assess RFP (Request for Proposal) submissions against procurement criteria"
+      },
+      "rfp-response-comparison": {
+        "name": "RFP Response Comparison",
+        "description": "Compare and contrast multiple RFP response documents using a Comparative Assessment Framework"
+      },
+      "structured-data-query": {
+        "name": "Structured Data Query",
+        "description": "Run natural language queries against CSV files and get SQL-backed results."
+      },
+      "tor-assessment": {
+        "name": "ToR Assessment",
+        "description": "Assessment of Terms of Reference (ToR) documents with detailed evaluation and suggested improvements"
+      }
     }
   },
   "appDetail": {

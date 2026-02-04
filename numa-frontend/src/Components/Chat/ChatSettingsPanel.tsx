@@ -75,6 +75,18 @@ export const ChatSettingsPanel = ({
   // Connected integrations only (can only enable connected ones)
   const connectedIntegrations = availableConnections.filter((conn) => conn.isConnected);
 
+  const getKnowledgeBaseLabel = (kb: KnowledgeBase) => {
+    if (kb.kb_id === 'company') {
+      return t('input.kb.companyName', { defaultValue: kb.kb_name || kb.kb_id });
+    }
+    return kb.kb_name || kb.kb_id;
+  };
+
+  const getKnowledgeBaseRoleLabel = (role?: string) => {
+    if (!role) return '';
+    return t(`input.kb.roles.${role.toLowerCase()}`, { defaultValue: role });
+  };
+
   const handleKBToggle = (kbId: string, checked: boolean) => {
     if (checked) {
       setEnabledKBIds((prev) => [...prev, kbId]);
@@ -128,8 +140,8 @@ export const ChatSettingsPanel = ({
                 id={`settings-kb-${kb.kb_id}`}
                 label={
                   <span>
-                    {kb.kb_name}
-                    {kb.role && <span className="text-muted small ms-2">({kb.role})</span>}
+                    {getKnowledgeBaseLabel(kb)}
+                    {kb.role && <span className="text-muted small ms-2">({getKnowledgeBaseRoleLabel(kb.role)})</span>}
                   </span>
                 }
                 checked={enabledKBIds.includes(kb.kb_id)}

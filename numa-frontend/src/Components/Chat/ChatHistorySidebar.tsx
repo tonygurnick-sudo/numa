@@ -50,8 +50,11 @@ const HistoryAvatar = ({ convo }: { convo: ConversationMeta }) => {
   );
 };
 
-/** Format timestamp as relative time (e.g., "2 hours ago", "Yesterday") */
-const formatRelativeTime = (timestamp: number): string => {
+/** Format timestamp as relative time using i18n labels */
+const formatRelativeTime = (
+  timestamp: number,
+  t: (key: string, options?: Record<string, unknown>) => string,
+): string => {
   const now = Date.now();
   const diff = now - timestamp;
   const seconds = Math.floor(diff / 1000);
@@ -59,14 +62,14 @@ const formatRelativeTime = (timestamp: number): string => {
   const hours = Math.floor(minutes / 60);
   const days = Math.floor(hours / 24);
 
-  if (seconds < 60) return 'Just now';
-  if (minutes < 60) return `${minutes}m ago`;
-  if (hours < 24) return `${hours}h ago`;
-  if (days === 1) return 'Yesterday';
-  if (days < 7) return `${days}d ago`;
+  if (seconds < 60) return t('newChat.relativeTime.justNow');
+  if (minutes < 60) return t('newChat.relativeTime.minutesAgo', { count: minutes });
+  if (hours < 24) return t('newChat.relativeTime.hoursAgo', { count: hours });
+  if (days === 1) return t('newChat.relativeTime.yesterday');
+  if (days < 7) return t('newChat.relativeTime.daysAgo', { count: days });
 
   // For older conversations, show the date
-  return new Date(timestamp).toLocaleDateString(undefined, {
+  return new Date(timestamp).toLocaleDateString(i18n.language || undefined, {
     month: 'short',
     day: 'numeric',
   });
@@ -318,7 +321,7 @@ export const ChatHistorySidebar = forwardRef<ChatHistorySidebarRef, ChatHistoryS
                             </div>
                           )}
                           <div className="mt-1" style={{ fontSize: '0.7rem', color: '#9ca3af' }}>
-                            {formatRelativeTime(convo.latestTimestamp)}
+                            {formatRelativeTime(convo.latestTimestamp, t)}
                           </div>
                         </div>
                       </OverlayTrigger>

@@ -15,6 +15,16 @@
     "admin": "Admin",
     "standard": "Standard"
   },
+  "status": {
+    "confirmed": "Confirmed",
+    "unconfirmed": "Unconfirmed",
+    "force_change_password": "Password change required",
+    "reset_required": "Password reset required",
+    "compromised": "Compromised",
+    "archived": "Archived",
+    "unknown": "Unknown",
+    "external_provider": "External provider"
+  },
   "sections": {
     "admins": "Administrators",
     "standardUsers": "Standard Users"

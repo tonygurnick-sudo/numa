@@ -23,6 +23,12 @@
       "title": "Knowledge Bases",
       "available": "Available Knowledge Bases",
       "empty": "No KBs available",
+      "companyName": "Company Knowledge Base",
+      "roles": {
+        "owner": "Owner",
+        "editor": "Editor",
+        "viewer": "Viewer"
+      },
       "defaultBadge": "Default",
       "refresh": "Refresh"
     },
