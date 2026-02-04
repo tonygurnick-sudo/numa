@@ -60,7 +60,9 @@ export const UnifiedToolCard = ({
   const visual = resolveToolVisual(toolName);
   // Derive dynamic title for KB when result contains kb_id
   const baseLabel = label || descriptor.label || toolName;
-  let title = t('toolCard.callingTool', { label: baseLabel });
+  // Integration tools with a custom label use it directly (already formatted)
+  const isCustomIntegrationLabel = toolName.endsWith('_integration') && label && label !== toolName;
+  let title = isCustomIntegrationLabel ? label : t('toolCard.callingTool', { label: baseLabel });
   if (toolName === 'query_knowledge_base' && result) {
     try {
       const resultWithContent = result as { content?: unknown };

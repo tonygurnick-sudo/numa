@@ -1,5 +1,5 @@
 import React, { useState, useMemo, Dispatch, SetStateAction } from 'react';
-import { Button, Form, Spinner, Collapse, OverlayTrigger, Tooltip } from 'react-bootstrap';
+import { Button, Form, Spinner, Collapse } from 'react-bootstrap';
 import { useTranslation } from 'react-i18next';
 import { Search, Robot } from 'react-bootstrap-icons';
 import {
@@ -197,10 +197,12 @@ export const WorkspaceChatSettingsPanel: React.FC<WorkspaceChatSettingsPanelProp
   isDisabled,
 }) => {
   const { t } = useTranslation('chat');
-  // Section collapse states (files only - settings always visible)
-  // Default to collapsed for less noise
+  // Section collapse states
   const [uploadsOpen, setUploadsOpen] = useState(false);
   const [sessionOpen, setSessionOpen] = useState(false);
+  const [kbOpen, setKbOpen] = useState(false);
+  const [toolsOpen, setToolsOpen] = useState(false);
+  const [integrationsOpen, setIntegrationsOpen] = useState(false);
 
   // Connected integrations only
   const connectedIntegrations = availableConnections.filter((conn) => conn.isConnected);
@@ -359,173 +361,235 @@ export const WorkspaceChatSettingsPanel: React.FC<WorkspaceChatSettingsPanelProp
         <div className="panel-settings-section">
           {/* Knowledge Bases */}
           <div className="settings-group">
-            <Form.Label>
+            <button
+              className="settings-group-header"
+              onClick={() => setKbOpen(!kbOpen)}
+              aria-expanded={kbOpen}
+              type="button"
+            >
+              <i className={`bi bi-chevron-${kbOpen ? 'down' : 'right'} me-2 chevron-icon`}></i>
               <i className="bi bi-folder2-open me-2" />
-              {t('workspaceSettings.knowledgeBases')}
-            </Form.Label>
-            <div className="settings-helper-text">{t('workspaceSettings.selectKBs')}</div>
-
-            {isLoadingKBs ? (
-              <div className="text-muted small d-flex align-items-center gap-2">
-                <Spinner animation="border" size="sm" />
-                {t('workspaceSettings.loading')}
+              <span>{t('workspaceSettings.knowledgeBases')}</span>
+              {!kbOpen && (
+                <span className="settings-group-summary">
+                  {enabledKBIds.length > 0
+                    ? t('workspaceSettings.kbSelected', { count: enabledKBIds.length })
+                    : t('workspaceSettings.noneSelected')}
+                </span>
+              )}
+            </button>
+            <Collapse in={kbOpen}>
+              <div className="settings-group-content">
+                <div className="settings-helper-text">{t('workspaceSettings.selectKBs')}</div>
+                {isLoadingKBs ? (
+                  <div className="text-muted small d-flex align-items-center gap-2">
+                    <Spinner animation="border" size="sm" />
+                    {t('workspaceSettings.loading')}
+                  </div>
+                ) : availableKBs.length === 0 ? (
+                  <div className="text-muted small fst-italic">{t('workspaceSettings.noKBs')}</div>
+                ) : (
+                  <div className="kb-list">
+                    {availableKBs.map((kb) => (
+                      <Form.Check
+                        key={kb.kb_id}
+                        type="checkbox"
+                        id={`panel-kb-${kb.kb_id}`}
+                        label={
+                          <span>
+                            {kb.kb_name}
+                            {kb.role && <span className="text-muted small ms-2">({kb.role.toLowerCase()})</span>}
+                          </span>
+                        }
+                        checked={enabledKBIds.includes(kb.kb_id)}
+                        onChange={(e) => handleKBToggle(kb.kb_id, e.target.checked)}
+                        disabled={isDisabled}
+                      />
+                    ))}
+                  </div>
+                )}
               </div>
-            ) : availableKBs.length === 0 ? (
-              <div className="text-muted small fst-italic">{t('workspaceSettings.noKBs')}</div>
-            ) : (
-              <div className="kb-list">
-                {availableKBs.map((kb) => (
-                  <Form.Check
-                    key={kb.kb_id}
-                    type="checkbox"
-                    id={`panel-kb-${kb.kb_id}`}
-                    label={
-                      <span>
-                        {kb.kb_name}
-                        {kb.role && <span className="text-muted small ms-2">({kb.role.toLowerCase()})</span>}
-                      </span>
-                    }
-                    checked={enabledKBIds.includes(kb.kb_id)}
-                    onChange={(e) => handleKBToggle(kb.kb_id, e.target.checked)}
-                    disabled={isDisabled}
-                  />
-                ))}
-              </div>
-            )}
+            </Collapse>
           </div>
 
           {/* Tools */}
           <div className="settings-group">
-            <Form.Label>
+            <button
+              className="settings-group-header"
+              onClick={() => setToolsOpen(!toolsOpen)}
+              aria-expanded={toolsOpen}
+              type="button"
+            >
+              <i className={`bi bi-chevron-${toolsOpen ? 'down' : 'right'} me-2 chevron-icon`}></i>
               <i className="bi bi-tools me-2" />
-              {t('workspaceSettings.tools')}
-            </Form.Label>
-            <div className="settings-helper-text">{t('workspaceSettings.toolsHelper')}</div>
+              <span>{t('workspaceSettings.tools')}</span>
+              {!toolsOpen && (
+                <span className="settings-group-summary">
+                  {autoToolsEnabled ? (
+                    t('workspaceSettings.allToolsEnabledSummary')
+                  ) : (
+                    <span className="d-flex align-items-center gap-1">
+                      {webSearchEnabled && <Search size={14} />}
+                      {createAgentEnabled && agentsFeatureEnabled && <Robot size={14} />}
+                      {!webSearchEnabled &&
+                        !(createAgentEnabled && agentsFeatureEnabled) &&
+                        t('workspaceSettings.noneEnabled')}
+                    </span>
+                  )}
+                </span>
+              )}
+            </button>
+            <Collapse in={toolsOpen}>
+              <div className="settings-group-content">
+                <div className="settings-helper-text">{t('workspaceSettings.toolsHelper')}</div>
+                <div className="tools-list">
+                  {/* All Tools toggle - master switch */}
+                  <div className="tool-item all-tools-toggle">
+                    <Form.Check
+                      type="switch"
+                      id="panel-auto-tools"
+                      label=""
+                      checked={autoToolsEnabled}
+                      onChange={(e) => handleAutoToolsToggle(e.target.checked)}
+                      disabled={isDisabled}
+                    />
+                    <div className="tool-info">
+                      <span className="fw-semibold">{t('workspaceSettings.allTools')}</span>
+                      <span className="text-muted small">{t('workspaceSettings.allToolsHelper')}</span>
+                    </div>
+                  </div>
 
-            <div className="tools-list">
-              {/* All Tools toggle - master switch */}
-              <div className="tool-item all-tools-toggle">
-                <Form.Check
-                  type="switch"
-                  id="panel-auto-tools"
-                  label=""
-                  checked={autoToolsEnabled}
-                  onChange={(e) => handleAutoToolsToggle(e.target.checked)}
-                  disabled={isDisabled}
-                />
-                <div className="tool-info">
-                  <span className="fw-semibold">{t('workspaceSettings.allTools')}</span>
-                  <span className="text-muted small">{t('workspaceSettings.allToolsHelper')}</span>
+                  {/* Individual tools as checkboxes */}
+                  <Form.Check
+                    type="checkbox"
+                    id="panel-web-search"
+                    checked={webSearchEnabled}
+                    onChange={(e) => setWebSearchEnabled(e.target.checked)}
+                    disabled={isDisabled || autoToolsEnabled}
+                    label={
+                      <span className={`d-flex align-items-center gap-2 ${autoToolsEnabled ? 'text-muted' : ''}`}>
+                        <Search size={14} />
+                        {t('workspaceSettings.webSearch')}
+                      </span>
+                    }
+                  />
+
+                  {agentsFeatureEnabled && (
+                    <Form.Check
+                      type="checkbox"
+                      id="panel-create-agent"
+                      checked={createAgentEnabled}
+                      onChange={(e) => setCreateAgentEnabled(e.target.checked)}
+                      disabled={isDisabled || autoToolsEnabled}
+                      label={
+                        <span className={`d-flex align-items-center gap-2 ${autoToolsEnabled ? 'text-muted' : ''}`}>
+                          <Robot size={14} />
+                          {t('workspaceSettings.agentCreation')}
+                        </span>
+                      }
+                    />
+                  )}
                 </div>
               </div>
-
-              {/* Individual tools as checkboxes */}
-              <Form.Check
-                type="checkbox"
-                id="panel-web-search"
-                checked={webSearchEnabled}
-                onChange={(e) => setWebSearchEnabled(e.target.checked)}
-                disabled={isDisabled || autoToolsEnabled}
-                label={
-                  <span className={`d-flex align-items-center gap-2 ${autoToolsEnabled ? 'text-muted' : ''}`}>
-                    <Search size={14} />
-                    {t('workspaceSettings.webSearch')}
-                  </span>
-                }
-              />
-
-              {agentsFeatureEnabled && (
-                <Form.Check
-                  type="checkbox"
-                  id="panel-create-agent"
-                  checked={createAgentEnabled}
-                  onChange={(e) => setCreateAgentEnabled(e.target.checked)}
-                  disabled={isDisabled || autoToolsEnabled}
-                  label={
-                    <span className={`d-flex align-items-center gap-2 ${autoToolsEnabled ? 'text-muted' : ''}`}>
-                      <Robot size={14} />
-                      {t('workspaceSettings.agentCreation')}
-                    </span>
-                  }
-                />
-              )}
-            </div>
+            </Collapse>
           </div>
 
-          {/* Integrations - disabled for V2 Chat */}
+          {/* Integrations */}
           {hasPipedreamFeature && (
             <div className="settings-group">
-              <Form.Label>
-                <i className="bi bi-link-45deg me-2" />
-                {t('workspaceSettings.integrations')}
-              </Form.Label>
-              <div className="settings-helper-text">{t('workspaceSettings.integrationsHelper')}</div>
-
-              <OverlayTrigger
-                placement="top"
-                overlay={
-                  <Tooltip id="integrations-disabled-tooltip">{t('workspaceSettings.integrationsDisabled')}</Tooltip>
-                }
+              <button
+                className="settings-group-header"
+                onClick={() => setIntegrationsOpen(!integrationsOpen)}
+                aria-expanded={integrationsOpen}
+                type="button"
               >
-                <div style={{ cursor: 'not-allowed' }}>
-                  <div
-                    style={{
-                      opacity: 0.5,
-                      pointerEvents: 'none',
-                    }}
-                  >
-                    {connectionsLoading ? (
-                      <div className="text-muted small d-flex align-items-center gap-2">
-                        <Spinner animation="border" size="sm" />
-                        {t('workspaceSettings.loading')}
-                      </div>
-                    ) : connectedIntegrations.length === 0 ? (
-                      <div className="text-muted small fst-italic">
-                        <i className="bi bi-info-circle me-1" />
-                        {t('workspaceSettings.noIntegrations')}
-                      </div>
-                    ) : (
-                      <div className="integrations-list">
+                <i className={`bi bi-chevron-${integrationsOpen ? 'down' : 'right'} me-2 chevron-icon`}></i>
+                <i className="bi bi-link-45deg me-2" />
+                <span>{t('workspaceSettings.integrations')}</span>
+                {!integrationsOpen && (
+                  <span className="settings-group-summary">
+                    {enabledConnections.length > 0 ? (
+                      <span className="d-flex align-items-center gap-1">
                         {connectedIntegrations
-                          .sort((a, b) => a.name.localeCompare(b.name))
+                          .filter((conn) => enabledConnections.includes(conn.id))
                           .map((conn) => {
                             const iconSrc = getConnectionIcon(conn.id);
                             const fallbackIcon = getConnectionFallbackIcon(conn.id);
                             const displayName = getConnectionDisplayName(conn.id);
-
-                            return (
-                              <Form.Check
+                            return iconSrc ? (
+                              <img
                                 key={conn.id}
-                                type="checkbox"
-                                id={`panel-integration-${conn.id}`}
-                                label={
-                                  <span className="d-flex align-items-center gap-2">
-                                    {iconSrc ? (
-                                      <img
-                                        src={iconSrc}
-                                        alt={displayName}
-                                        style={{ width: 18, height: 18, objectFit: 'contain' }}
-                                        onError={(e) => {
-                                          e.currentTarget.style.display = 'none';
-                                        }}
-                                      />
-                                    ) : (
-                                      <i className={fallbackIcon} />
-                                    )}
-                                    {displayName}
-                                  </span>
-                                }
-                                checked={enabledConnections.includes(conn.id)}
-                                onChange={(e) => handleIntegrationToggle(conn.id, e.target.checked)}
-                                disabled={true}
+                                src={iconSrc}
+                                alt={displayName}
+                                style={{ width: 16, height: 16, objectFit: 'contain' }}
+                                onError={(e) => {
+                                  e.currentTarget.style.display = 'none';
+                                }}
                               />
+                            ) : (
+                              <i key={conn.id} className={fallbackIcon} style={{ fontSize: 14 }} />
                             );
                           })}
-                      </div>
+                      </span>
+                    ) : (
+                      t('workspaceSettings.noneEnabled')
                     )}
-                  </div>
+                  </span>
+                )}
+              </button>
+              <Collapse in={integrationsOpen}>
+                <div className="settings-group-content">
+                  <div className="settings-helper-text">{t('workspaceSettings.integrationsHelper')}</div>
+                  {connectionsLoading ? (
+                    <div className="text-muted small d-flex align-items-center gap-2">
+                      <Spinner animation="border" size="sm" />
+                      {t('workspaceSettings.loading')}
+                    </div>
+                  ) : connectedIntegrations.length === 0 ? (
+                    <div className="text-muted small fst-italic">
+                      <i className="bi bi-info-circle me-1" />
+                      {t('workspaceSettings.noIntegrations')}
+                    </div>
+                  ) : (
+                    <div className="integrations-list">
+                      {connectedIntegrations
+                        .sort((a, b) => a.name.localeCompare(b.name))
+                        .map((conn) => {
+                          const iconSrc = getConnectionIcon(conn.id);
+                          const fallbackIcon = getConnectionFallbackIcon(conn.id);
+                          const displayName = getConnectionDisplayName(conn.id);
+
+                          return (
+                            <Form.Check
+                              key={conn.id}
+                              type="checkbox"
+                              id={`panel-integration-${conn.id}`}
+                              label={
+                                <span className="d-flex align-items-center gap-2">
+                                  {iconSrc ? (
+                                    <img
+                                      src={iconSrc}
+                                      alt={displayName}
+                                      style={{ width: 18, height: 18, objectFit: 'contain' }}
+                                      onError={(e) => {
+                                        e.currentTarget.style.display = 'none';
+                                      }}
+                                    />
+                                  ) : (
+                                    <i className={fallbackIcon} />
+                                  )}
+                                  {displayName}
+                                </span>
+                              }
+                              checked={enabledConnections.includes(conn.id)}
+                              onChange={(e) => handleIntegrationToggle(conn.id, e.target.checked)}
+                            />
+                          );
+                        })}
+                    </div>
+                  )}
                 </div>
-              </OverlayTrigger>
+              </Collapse>
             </div>
           )}
         </div>

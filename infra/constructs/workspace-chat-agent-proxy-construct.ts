@@ -21,6 +21,16 @@ export interface WorkspaceChatAgentProxyProps {
   cognitoUserPoolId: string;
   /** Cognito User Pool Client ID for JWT verification */
   cognitoClientId: string;
+  /** Optional integrations approval table name (for handling approve actions directly) */
+  integrationsApprovalTableName?: string;
+  /** Optional integrations approval table ARN (for IAM permissions) */
+  integrationsApprovalTableArn?: string;
+  /** File redirect HMAC secret (for integration file upload clean URLs) */
+  fileRedirectSecret?: string;
+  /** Outputs bucket name (for generating presigned URLs in file redirect) */
+  outputsBucketName?: string;
+  /** Outputs bucket ARN (for S3 GetObject IAM permission) */
+  outputsBucketArn?: string;
 }
 
 /**
@@ -67,6 +77,17 @@ export class WorkspaceChatAgentProxy extends Construct {
         // LWA configuration for response streaming
         AWS_LAMBDA_EXEC_WRAPPER: '/opt/bootstrap',
         AWS_LWA_INVOKE_MODE: 'response_stream',
+        // Integrations approval table (for handling approve actions directly in the proxy)
+        ...(props.integrationsApprovalTableName && {
+          INTEGRATIONS_APPROVAL_TABLE_NAME: props.integrationsApprovalTableName,
+        }),
+        // File redirect for integration uploads (clean URLs to avoid Slack filename length issues)
+        ...(props.fileRedirectSecret && {
+          FILE_REDIRECT_SECRET: props.fileRedirectSecret,
+        }),
+        ...(props.outputsBucketName && {
+          OUTPUTS_BUCKET_NAME: props.outputsBucketName,
+        }),
       },
       logGroup: logGroup,
       resourceNameSuffix: '_workspace_chat_agent_proxy',
@@ -90,6 +111,26 @@ export class WorkspaceChatAgentProxy extends Construct {
           actions: ['logs:CreateLogStream', 'logs:PutLogEvents'],
           resources: [`arn:aws:logs:${props.region}:${callerIdentity.accountId}:log-group:${logGroupName}:*`],
         },
+        // DynamoDB permission for handling integration approval decisions directly
+        ...(props.integrationsApprovalTableArn
+          ? [
+              {
+                effect: 'Allow' as const,
+                actions: ['dynamodb:UpdateItem'],
+                resources: [props.integrationsApprovalTableArn],
+              },
+            ]
+          : []),
+        // S3 GetObject for file redirect (serving presigned URLs for integration uploads)
+        ...(props.outputsBucketArn
+          ? [
+              {
+                effect: 'Allow' as const,
+                actions: ['s3:GetObject'],
+                resources: [`${props.outputsBucketArn}/numa-chat/workspace/*`],
+              },
+            ]
+          : []),
       ],
     });
 

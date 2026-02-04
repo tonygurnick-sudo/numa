@@ -1485,6 +1485,12 @@ const NumaWorkspaceChatAgents = () => {
 
     try {
       // V2 workspace conversations: load from trace file
+      console.log(
+        '[DEBUG-AGENT] isWorkspaceConversation:',
+        isWorkspaceConversation,
+        'type:',
+        typeof isWorkspaceConversation,
+      );
       if (isWorkspaceConversation) {
         console.log('[NumaChat] Loading V2 workspace conversation from trace');
         try {
@@ -1507,11 +1513,24 @@ const NumaWorkspaceChatAgents = () => {
           try {
             const conversationHistory = await numaChatDynamoUtils.queryConversations(
               selectedConversationId,
-              10, // Only need a few records to find meta
+              1000, // Must be large enough to include the meta record (oldest item, query is newest-first)
               sub,
+            );
+            console.log('[DEBUG-AGENT] queryConversations returned', conversationHistory.length, 'items');
+            console.log(
+              '[DEBUG-AGENT] message_types:',
+              conversationHistory.map((i: { message_type?: string }) => i.message_type),
             );
             const metaItem = conversationHistory.find(
               (item: { message_type?: string }) => item.message_type === 'meta',
+            );
+            console.log(
+              '[DEBUG-AGENT] metaItem found:',
+              !!metaItem,
+              'isAgentConversation:',
+              metaItem?.isAgentConversation,
+              'agentId:',
+              metaItem?.agentId,
             );
 
             if (metaItem?.isAgentConversation && metaItem?.agentId) {

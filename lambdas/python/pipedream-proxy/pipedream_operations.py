@@ -4,8 +4,10 @@ Pipedream API operations for the secure proxy.
 Contains all the Pipedream-specific logic ported from existing lambdas.
 """
 
+import base64
 import json
 import os
+import re
 import time
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -22,6 +24,11 @@ logger = structlog.get_logger()
 # value = (tools, expires_epoch)
 _TOOL_LIST_CACHE: Dict[Tuple[str, str], Tuple[List[Dict[str, Any]], float]] = {}
 _TOOL_LIST_TTL_SECONDS = 600.0  # 10 minutes
+
+# Simple in-memory TTL cache for action schemas: key = action_key
+# value = (schema_dict, expires_epoch)
+_ACTION_SCHEMA_CACHE: Dict[str, Tuple[Dict[str, Any], float]] = {}
+_ACTION_SCHEMA_TTL_SECONDS = 600.0  # 10 minutes
 
 
 def _extract_tool_info(tool: Any) -> Dict[str, Any]:
@@ -608,6 +615,525 @@ class PipedreamOperations:
                 )
 
         return connection_status
+
+    def list_actions(self, app_slug: str) -> List[Dict[str, Any]]:
+        """List all available actions for an app from the Pipedream Connect API.
+
+        Paginates through results to get all actions with their configurable_props.
+
+        Args:
+            app_slug: The app slug (e.g., "google_drive")
+
+        Returns:
+            List of action objects with key, name, description, annotations, and configurable_props
+        """
+        credentials = self.get_credentials()
+        access_token = self.get_access_token()
+        project_id = credentials["project_id"]
+        environment = credentials["environment"]
+
+        all_actions: List[Dict[str, Any]] = []
+        after_cursor: Optional[str] = None
+        limit = 100
+
+        while True:
+            params: Dict[str, Any] = {
+                "app": app_slug,
+                "component_type": "action",
+                "limit": limit,
+            }
+            if after_cursor:
+                params["after"] = after_cursor
+
+            try:
+                response = requests.get(
+                    f"https://api.pipedream.com/v1/connect/{project_id}/components",
+                    headers={
+                        "Authorization": f"Bearer {access_token}",
+                        "x-pd-environment": environment,
+                    },
+                    params=params,
+                    timeout=30,
+                )
+                response.raise_for_status()
+                data = response.json()
+            except Exception as e:
+                logger.error(
+                    "Failed to list actions",
+                    error=str(e),
+                    app_slug=app_slug,
+                    exc_info=True,
+                )
+                raise Exception(
+                    f"Failed to list actions for {app_slug}: {str(e)}"
+                ) from e
+
+            actions = data.get("data", [])
+            all_actions.extend(actions)
+
+            page_info = data.get("page_info", {})
+            if page_info.get("count", 0) < limit:
+                break
+            after_cursor = page_info.get("end_cursor")
+            if not after_cursor:
+                break
+
+        logger.info(
+            "Listed actions",
+            app_slug=app_slug,
+            count=len(all_actions),
+        )
+        return all_actions
+
+    def run_action(
+        self,
+        external_user_id: str,
+        action_key: str,
+        configured_props: Dict[str, Any],
+        stash_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Execute a Pipedream Connect action.
+
+        Args:
+            external_user_id: The external user ID
+            action_key: The action key (e.g., "google_drive-find-file")
+            configured_props: Props for the action including auth
+            stash_id: Optional stash ID for file operations
+
+        Returns:
+            Action result with ret, exports, and optional stash data
+        """
+        credentials = self.get_credentials()
+        access_token = self.get_access_token()
+        project_id = credentials["project_id"]
+        environment = credentials["environment"]
+
+        # Auto-inject authProvisionId if set to "auto"
+        configured_props = self._inject_auth_provision_id(
+            external_user_id, action_key, configured_props
+        )
+
+        body: Dict[str, Any] = {
+            "id": action_key,
+            "external_user_id": external_user_id,
+            "configured_props": configured_props,
+        }
+        if stash_id:
+            body["stash_id"] = stash_id
+
+        try:
+            logger.info(
+                "Running action",
+                action_key=action_key,
+                external_user_id=external_user_id,
+                has_stash_id=bool(stash_id),
+            )
+
+            response = requests.post(
+                f"https://api.pipedream.com/v1/connect/{project_id}/actions/run",
+                headers={
+                    "Authorization": f"Bearer {access_token}",
+                    "Content-Type": "application/json",
+                    "x-pd-environment": environment,
+                },
+                json=body,
+                timeout=60,
+            )
+            response.raise_for_status()
+            result = response.json()
+
+            logger.info(
+                "Action completed",
+                action_key=action_key,
+                external_user_id=external_user_id,
+                has_ret=bool(result.get("ret")),
+                has_exports=bool(result.get("exports")),
+            )
+
+            return result
+
+        except Exception as e:
+            logger.error(
+                "Failed to run action",
+                error=str(e),
+                action_key=action_key,
+                external_user_id=external_user_id,
+                exc_info=True,
+            )
+            raise Exception(f"Failed to run action {action_key}: {str(e)}") from e
+
+    def configure_props(
+        self,
+        external_user_id: str,
+        action_key: str,
+        prop_name: str,
+        configured_props: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """Get dynamic dropdown options for an action prop.
+
+        Args:
+            external_user_id: The external user ID
+            action_key: The action key
+            prop_name: The prop to configure (e.g., "drive")
+            configured_props: Currently configured props
+
+        Returns:
+            Options list for the prop
+        """
+        credentials = self.get_credentials()
+        access_token = self.get_access_token()
+        project_id = credentials["project_id"]
+        environment = credentials["environment"]
+
+        # Auto-inject authProvisionId if set to "auto"
+        configured_props = self._inject_auth_provision_id(
+            external_user_id, action_key, configured_props
+        )
+
+        body = {
+            "id": action_key,
+            "external_user_id": external_user_id,
+            "prop_name": prop_name,
+            "configured_props": configured_props,
+        }
+
+        try:
+            response = requests.post(
+                f"https://api.pipedream.com/v1/connect/{project_id}/components/configure",
+                headers={
+                    "Authorization": f"Bearer {access_token}",
+                    "Content-Type": "application/json",
+                    "x-pd-environment": environment,
+                },
+                json=body,
+                timeout=30,
+            )
+            response.raise_for_status()
+            result = response.json()
+
+            logger.info(
+                "Configure props completed",
+                action_key=action_key,
+                prop_name=prop_name,
+                external_user_id=external_user_id,
+                options_count=len(result.get("options", [])),
+            )
+
+            return result
+
+        except Exception as e:
+            logger.error(
+                "Failed to configure props",
+                error=str(e),
+                action_key=action_key,
+                prop_name=prop_name,
+                exc_info=True,
+            )
+            raise Exception(
+                f"Failed to configure props for {action_key}.{prop_name}: {str(e)}"
+            ) from e
+
+    def proxy_request(
+        self,
+        external_user_id: str,
+        account_id: str,
+        method: str,
+        upstream_url: str,
+        body: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """Make a raw API call through Pipedream's proxy.
+
+        The proxy injects the user's OAuth token automatically.
+
+        Args:
+            external_user_id: The external user ID
+            account_id: The Pipedream account ID for the connected app
+            method: HTTP method (GET, POST, etc.)
+            upstream_url: The upstream API URL to call
+            body: Optional JSON body for POST/PUT requests
+
+        Returns:
+            Raw upstream API response
+        """
+        credentials = self.get_credentials()
+        access_token = self.get_access_token()
+        project_id = credentials["project_id"]
+        environment = credentials["environment"]
+
+        # Base64 encode the upstream URL (URL-safe, no padding)
+        encoded_url = (
+            base64.urlsafe_b64encode(upstream_url.encode()).rstrip(b"=").decode()
+        )
+
+        try:
+            logger.info(
+                "Proxy request",
+                method=method,
+                external_user_id=external_user_id,
+                account_id=account_id,
+                upstream_url=upstream_url[:100],
+            )
+
+            response = requests.request(
+                method=method,
+                url=f"https://api.pipedream.com/v1/connect/{project_id}/proxy/{encoded_url}",
+                headers={
+                    "Authorization": f"Bearer {access_token}",
+                    "x-pd-environment": environment,
+                },
+                params={
+                    "external_user_id": external_user_id,
+                    "account_id": account_id,
+                },
+                json=body,
+                timeout=30,
+            )
+            response.raise_for_status()
+
+            # Try to parse as JSON, fall back to text (or base64 for binary)
+            try:
+                result = response.json()
+            except Exception:
+                content_type = response.headers.get("content-type", "")
+                if any(
+                    t in content_type
+                    for t in (
+                        "image/",
+                        "application/octet",
+                        "application/pdf",
+                        "force-download",
+                    )
+                ):
+                    result = {
+                        "binary": True,
+                        "base64_body": base64.b64encode(response.content).decode(),
+                        "content_type": content_type,
+                        "size": len(response.content),
+                    }
+                else:
+                    result = {"text": response.text}
+
+            logger.info(
+                "Proxy request completed",
+                method=method,
+                external_user_id=external_user_id,
+                status_code=response.status_code,
+            )
+
+            return result
+
+        except Exception as e:
+            logger.error(
+                "Failed proxy request",
+                error=str(e),
+                method=method,
+                upstream_url=upstream_url[:100],
+                exc_info=True,
+            )
+            raise Exception(f"Proxy request failed: {str(e)}") from e
+
+    def _get_action_schema_cached(self, action_key: str) -> Optional[Dict[str, Any]]:
+        """Get action schema from cache or fetch via list_actions.
+
+        Looks up the action schema for the given action_key, using a TTL cache
+        to avoid repeated API calls.
+
+        Args:
+            action_key: The action key (e.g., "jira-create-issue")
+
+        Returns:
+            Action schema dict if found, None otherwise
+        """
+        cached = _ACTION_SCHEMA_CACHE.get(action_key)
+        now = time.time()
+        if cached and cached[1] > now:
+            return cached[0]
+
+        # Extract app_slug from action_key (e.g., "jira-create-issue" -> "jira")
+        # Handle compound slugs like "microsoft_outlook_calendar-list-events"
+        parts = action_key.split("-")
+        if not parts:
+            return None
+
+        # Find the longest matching slug by trying progressively longer prefixes
+        # e.g., for "microsoft_outlook_calendar-list-events", try:
+        #   "microsoft_outlook_calendar", "microsoft_outlook", "microsoft"
+        app_slug = parts[0]
+        for i in range(1, len(parts)):
+            candidate = "-".join(parts[: i + 1])
+            # Slugs use underscores, not hyphens - convert to check
+            if "_" in candidate.replace("-", "_"):
+                # This might be a compound slug like "microsoft-outlook-calendar"
+                # which should be "microsoft_outlook_calendar"
+                pass
+            else:
+                # Reached the action name part
+                break
+            app_slug = candidate.replace("-", "_")
+
+        # Actually, Pipedream uses underscores in slugs. The action_key format is:
+        # "{app_slug}-{action_name}" where app_slug may contain underscores.
+        # e.g., "microsoft_outlook_calendar-list-events"
+        # So we need to find where the slug ends and action name begins.
+        # The reliable way is to try list_actions with the first part.
+        app_slug = parts[0]
+
+        try:
+            actions = self.list_actions(app_slug)
+            for action in actions:
+                if action.get("key") == action_key:
+                    _ACTION_SCHEMA_CACHE[action_key] = (
+                        action,
+                        now + _ACTION_SCHEMA_TTL_SECONDS,
+                    )
+                    return action
+        except Exception as e:
+            logger.warning(
+                "Failed to fetch action schema",
+                action_key=action_key,
+                app_slug=app_slug,
+                error=str(e),
+            )
+        return None
+
+    def _get_expected_auth_key(self, action_key: str) -> Optional[str]:
+        """Get the expected auth prop key name from action schema.
+
+        Different actions may expect different auth key names. For example,
+        jira-create-issue expects "app" while jira-get-all-projects expects "jira".
+        This method looks up the action schema to find the correct key.
+
+        Args:
+            action_key: The action key (e.g., "jira-create-issue")
+
+        Returns:
+            Expected auth key name (e.g., "app" or "jira"), or None if not found
+        """
+        schema = self._get_action_schema_cached(action_key)
+        if not schema:
+            return None
+
+        for prop in schema.get("configurable_props", []):
+            if prop.get("type") == "app":
+                return prop.get("name")
+
+        return None
+
+    def _inject_auth_provision_id(
+        self,
+        external_user_id: str,
+        action_key: str,
+        configured_props: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """Replace "auto" authProvisionId with the user's actual account ID.
+
+        Also normalizes the auth key name to match what the action schema expects.
+        This handles cases like Jira where some actions use "app" and others use
+        "jira" as the auth prop key.
+
+        Args:
+            external_user_id: The external user ID
+            action_key: The action key (used to derive app slug)
+            configured_props: Props that may contain "auto" auth
+
+        Returns:
+            Updated configured_props with real authProvisionId
+        """
+        # Make a shallow copy to avoid mutating input
+        props = dict(configured_props)
+
+        # Find the auth prop with "auto" value
+        auth_key = None
+        auth_value = None
+        for key, value in list(props.items()):
+            if isinstance(value, dict) and value.get("authProvisionId") == "auto":
+                auth_key = key
+                auth_value = value
+                break
+
+        if auth_key is None:
+            # No auth prop to process
+            return props
+
+        # Normalize auth key to match schema expectation
+        expected_key = self._get_expected_auth_key(action_key)
+        if expected_key and expected_key != auth_key:
+            logger.info(
+                "Normalizing auth key to match schema",
+                provided_key=auth_key,
+                expected_key=expected_key,
+                action_key=action_key,
+            )
+            # Remove old key and add new one
+            del props[auth_key]
+            auth_key = expected_key
+            props[auth_key] = auth_value
+
+        # Look up user's connected accounts
+        connections = self._get_user_connections(external_user_id)
+        account_id = None
+        app_slug = None
+
+        # Priority 1: Match via action_key (most specific).
+        # Action keys follow the pattern "{app_slug}-{action_name}",
+        # e.g., "microsoft_outlook_calendar-list-events".
+        # This handles cases where the prop name is ambiguous (e.g.,
+        # "microsoftOutlook" is used for both mail and calendar apps).
+        if action_key:
+            for conn in connections:
+                conn_slug = self._get_app_name_from_pipedream(conn)
+                if conn_slug and action_key.startswith(conn_slug + "-"):
+                    account_id = conn.get("id")
+                    app_slug = conn_slug
+                    logger.info(
+                        "Resolved auth via action_key",
+                        prop_key=auth_key,
+                        resolved_slug=conn_slug,
+                        action_key=action_key,
+                    )
+                    break
+
+        # Priority 2: Match via prop name (fallback for legacy actions
+        # or when action_key doesn't match).
+        # Prop keys are camelCase (e.g., "googleDrive" -> "google_drive").
+        if not account_id:
+            app_slug = self._camel_to_slug(auth_key)
+            for conn in connections:
+                if self._get_app_name_from_pipedream(conn) == app_slug:
+                    account_id = conn.get("id")
+                    logger.info(
+                        "Resolved auth via prop name",
+                        prop_key=auth_key,
+                        resolved_slug=app_slug,
+                    )
+                    break
+
+        if not account_id:
+            raise ValueError(
+                f"No connected account found for app '{app_slug}' "
+                f"(user: {external_user_id})"
+            )
+
+        props[auth_key] = {"authProvisionId": account_id}
+        logger.info(
+            "Injected authProvisionId",
+            app_slug=app_slug,
+            auth_key=auth_key,
+            external_user_id=external_user_id,
+            account_id=account_id[:8] + "...",
+        )
+
+        return props
+
+    @staticmethod
+    def _camel_to_slug(camel: str) -> str:
+        """Convert camelCase prop name to snake_case app slug.
+
+        e.g., "googleDrive" -> "google_drive", "slack" -> "slack"
+        """
+        # Insert underscore before uppercase letters and lowercase everything
+        slug = re.sub(r"(?<=[a-z0-9])([A-Z])", r"_\1", camel).lower()
+        return slug
 
     def _get_app_name_from_pipedream(self, pipedream_account: Dict[str, Any]) -> str:
         """Map Pipedream account app info to our standard app names."""

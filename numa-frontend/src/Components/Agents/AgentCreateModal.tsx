@@ -276,6 +276,7 @@ export const AgentCreateModal = ({ show, onHide, editingAgent = null, onAgentSav
           enabledConnections: editingAgent.toolsConfig?.enabledConnections ?? [],
           // Preserve KB access setting - null means "all KBs", [] means "none", array means "selected"
           allowedKnowledgeBases: editingAgent.toolsConfig?.allowedKnowledgeBases ?? null,
+          approvalMode: editingAgent.toolsConfig?.approvalMode,
         },
         referenceFiles: editingAgent.referenceFiles ?? [],
         requiredIntegrations: editingAgent.requiredIntegrations ?? [],
@@ -1234,6 +1235,39 @@ export const AgentCreateModal = ({ show, onHide, editingAgent = null, onAgentSav
                     </div>
                   </Col>
                 </Row>
+
+                {/* Integration Approval Mode (only when workspace chat is enabled and integrations exist) */}
+                {window.sessionStorage.getItem('NUMA_WORKSPACE_CHAT') === 'true' &&
+                  hasPipedreamIntegrations &&
+                  (formState.toolsConfig?.enabledConnections?.length ?? 0) > 0 && (
+                    <Row className="mt-3">
+                      <Col>
+                        <Form.Group>
+                          <Form.Label className="fw-semibold">{t('createModal.approvalMode.label')}</Form.Label>
+                          <Form.Select
+                            value={formState.toolsConfig?.approvalMode ?? ''}
+                            disabled={saving}
+                            onChange={(e) => {
+                              const value = e.target.value || undefined;
+                              setFormState((prev) => ({
+                                ...prev,
+                                toolsConfig: {
+                                  ...prev.toolsConfig,
+                                  approvalMode: value as 'always' | 'non_destructive' | 'never' | undefined,
+                                },
+                              }));
+                            }}
+                          >
+                            <option value="">{t('createModal.approvalMode.useDefault')}</option>
+                            <option value="always">{t('createModal.approvalMode.always')}</option>
+                            <option value="non_destructive">{t('createModal.approvalMode.nonDestructive')}</option>
+                            <option value="never">{t('createModal.approvalMode.never')}</option>
+                          </Form.Select>
+                          <div className="text-muted small mt-1">{t('createModal.approvalMode.help')}</div>
+                        </Form.Group>
+                      </Col>
+                    </Row>
+                  )}
               </Accordion.Body>
             </Accordion.Item>
 

@@ -460,7 +460,10 @@
     },
     "integration": {
       "actionFallback": "Executing action",
-      "executing": "Executing {{action}} tool"
+      "executing": "Executing {{action}} tool",
+      "configureProps": "Configure: Getting options for {{propName}}",
+      "apiRequest": "API Request: {{description}}",
+      "apiRequestMethod": "API Request: {{method}}"
     }
   },
   "toolStatus": {

@@ -69,8 +69,9 @@ const normalizeRelativePath = (raw: string): string => {
 // Pattern to match file, folder, and kb-source references
 // Supports both <file:path> and file:/path formats (with or without angle brackets)
 // Also supports <kb-source:s3://bucket/key> for knowledge base source documents
+// Additionally matches bare /workdir/... paths as a fallback
 const FILE_FOLDER_KB_PATTERN =
-  /(?:<file:([^>]+)>|<folder:([^>]+)>|<kb-source:([^>]+)>|file:\/([^\s\])<>]+)|folder:\/([^\s\])<>]+)|kb-source:([^\s\])<>]+))/g;
+  /(?:<file:([^>]+)>|<folder:([^>]+)>|<kb-source:([^>]+)>|file:\/([^\s\])<>]+)|folder:\/([^\s\])<>]+)|kb-source:([^\s\])<>]+)|(\/workdir\/[^\s)\]>,]+))/g;
 
 /**
  * Parse text content and return an array of text and reference parts
@@ -126,9 +127,38 @@ const parseTextWithReferences = (text: string, userSub: string, conversationId: 
     // [4] = file:/path file path (no brackets)
     // [5] = folder:/path folder path (no brackets)
     // [6] = kb-source:s3://... KB source URI (no brackets)
+    // [7] = /workdir/... bare path (fallback)
+    const bareWorkdirPath = match[7];
     const filePathRaw = match[1] || match[4];
     const folderPathRaw = match[2] || match[5];
     const kbSourceRaw = match[3] || match[6];
+
+    // Handle bare /workdir/... paths - determine if file or folder by checking for extension
+    if (bareWorkdirPath) {
+      const rel = normalizeRelativePath(bareWorkdirPath);
+      const cleanRel = cleanDisplayPath(rel);
+      const fullPath = buildS3KeyForPath(rel, userSub, conversationId);
+      const lastSegment = cleanRel.split('/').pop() || cleanRel;
+      // Check if it has a file extension (contains a dot after the last slash)
+      const hasExtension = lastSegment.includes('.') && !lastSegment.startsWith('.');
+
+      if (hasExtension) {
+        // Treat as file
+        const extension = lastSegment.split('.').pop()?.toLowerCase() || '';
+        parts.push({
+          type: 'file',
+          ref: { filename: lastSegment, fullPath, relativePath: cleanRel, extension },
+        });
+      } else {
+        // Treat as folder
+        parts.push({
+          type: 'folder',
+          ref: { name: lastSegment, fullPath, relativePath: cleanRel },
+        });
+      }
+      lastIndex = match.index + match[0].length;
+      continue;
+    }
 
     if (kbSourceRaw) {
       // KB source reference - parse S3 URI
@@ -216,13 +246,15 @@ export const WorkspaceChatMarkdown: React.FC<WorkspaceChatMarkdownProps> = React
 
         // Check if this text contains any file/folder/kb-source references
         // Support both <file:path> and file:/path formats (ReactMarkdown may strip angle brackets)
+        // Also detect bare /workdir/... paths as fallback
         const hasRef =
           children.includes('<file:') ||
           children.includes('<folder:') ||
           children.includes('<kb-source:') ||
           children.includes('file:/') ||
           children.includes('folder:/') ||
-          children.includes('kb-source:');
+          children.includes('kb-source:') ||
+          children.includes('/workdir/');
         if (!hasRef) {
           return <>{children}</>;
         }
@@ -362,6 +394,51 @@ export const WorkspaceChatMarkdown: React.FC<WorkspaceChatMarkdownProps> = React
               })}
             </em>
           );
+        },
+        // Inline code - check for /workdir/ paths and render as file references
+        code: ({
+          children,
+          className,
+          ...props
+        }: React.HTMLAttributes<HTMLElement> & { children?: React.ReactNode }) => {
+          // Only handle inline code (not code blocks which have a className like 'language-xxx')
+          if (className) {
+            return (
+              <code className={className} {...props}>
+                {children}
+              </code>
+            );
+          }
+
+          const text = typeof children === 'string' ? children : '';
+          // Check if this is a /workdir/... path
+          if (text.startsWith('/workdir/')) {
+            const rel = normalizeRelativePath(text);
+            const cleanRel = cleanDisplayPath(rel);
+            const fullPath = buildS3KeyForPath(rel, userSub, conversationId);
+            const lastSegment = cleanRel.split('/').pop() || cleanRel;
+            const hasExtension = lastSegment.includes('.') && !lastSegment.startsWith('.');
+
+            if (hasExtension) {
+              const extension = lastSegment.split('.').pop()?.toLowerCase() || '';
+              return (
+                <WorkspaceChatInlineFileReference
+                  fileRef={{ filename: lastSegment, fullPath, relativePath: cleanRel, extension }}
+                  onOpenPreview={handleOpenFile}
+                />
+              );
+            } else {
+              return (
+                <WorkspaceChatInlineFolderReference
+                  folderRef={{ name: lastSegment, fullPath, relativePath: cleanRel }}
+                  onOpenPreview={handleOpenFolder}
+                />
+              );
+            }
+          }
+
+          // Regular inline code - pass through
+          return <code {...props}>{children}</code>;
         },
         // Intercept links with file:/, folder:/, or kb-source: URLs and render as inline references
         a: ({

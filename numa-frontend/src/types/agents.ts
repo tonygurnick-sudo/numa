@@ -14,6 +14,10 @@ export type AgentToolsConfig = {
   // [] = no KB access
   // ['company', 'kb-123'] = specific KBs only
   allowedKnowledgeBases?: string[] | null;
+  // Integration approval mode override for this agent
+  // undefined = use user's default setting
+  // 'always' | 'non_destructive' | 'never'
+  approvalMode?: 'always' | 'non_destructive' | 'never';
 };
 
 export type AgentReferenceFile = {

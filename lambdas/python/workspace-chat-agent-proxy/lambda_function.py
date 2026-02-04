@@ -8,9 +8,13 @@ This proxy forwards HTTP requests to the workspace chat agent running in AgentCo
 using the invoke_agent_runtime API.
 """
 
+import base64
+import hashlib
+import hmac as hmac_mod
 import json
 import logging
 import os
+import time as time_mod
 from typing import Any, AsyncGenerator, Dict
 
 import boto3
@@ -18,7 +22,12 @@ import jwt
 import requests
 from botocore.config import Config
 from fastapi import FastAPI, Header, HTTPException, Request
-from fastapi.responses import JSONResponse, Response, StreamingResponse
+from fastapi.responses import (
+    JSONResponse,
+    RedirectResponse,
+    Response,
+    StreamingResponse,
+)
 from jwt import algorithms
 
 # Configure logging
@@ -37,6 +46,8 @@ CLIENT_NAME = os.environ.get("CLIENT_NAME", "unknown")
 AWS_REGION = os.environ.get("AWS_REGION", "us-east-1")
 COGNITO_USER_POOL_ID = os.environ.get("COGNITO_USER_POOL_ID", "")
 COGNITO_CLIENT_ID = os.environ.get("COGNITO_CLIENT_ID", "")
+FILE_REDIRECT_SECRET = os.environ.get("FILE_REDIRECT_SECRET", "")
+OUTPUTS_BUCKET_NAME = os.environ.get("OUTPUTS_BUCKET_NAME", "")
 
 # JWKS cache (persists across warm Lambda invocations)
 _jwks_cache: Dict[str, Any] = {"data": None}
@@ -67,6 +78,67 @@ agentcore_client = boto3.client(
     region_name=AWS_REGION,
     config=agentcore_config,
 )
+
+# S3 client for file redirect endpoint
+s3_client = boto3.client("s3", region_name=AWS_REGION) if OUTPUTS_BUCKET_NAME else None
+
+# Blocked path patterns for file redirect security
+_BLOCKED_PATH_PATTERNS = [".system/", ".system", "secrets/", "secrets", ".env"]
+
+
+def _validate_file_token(token: str) -> str:
+    """Validate an HMAC-signed file redirect token and return the S3 key.
+
+    Token format: {base64url(s3_key)}.{expiry_unix}.{base64url(hmac_sha256)}
+
+    Raises HTTPException(403) on any validation failure.
+    """
+    if not FILE_REDIRECT_SECRET:
+        raise HTTPException(status_code=403, detail="File redirect not configured")
+
+    parts = token.split(".")
+    if len(parts) != 3:
+        raise HTTPException(status_code=403, detail="Invalid token format")
+
+    b64_key, expiry, b64_mac = parts
+
+    # Recompute HMAC and compare (timing-safe)
+    message = f"{b64_key}.{expiry}"
+    expected_mac = hmac_mod.new(
+        FILE_REDIRECT_SECRET.encode(), message.encode(), hashlib.sha256
+    ).digest()
+    # Re-pad base64url
+    b64_mac_padded = b64_mac + "=" * (-len(b64_mac) % 4)
+    try:
+        provided_mac = base64.urlsafe_b64decode(b64_mac_padded)
+    except Exception:
+        raise HTTPException(status_code=403, detail="Invalid token")
+
+    if not hmac_mod.compare_digest(expected_mac, provided_mac):
+        raise HTTPException(status_code=403, detail="Invalid token")
+
+    # Check expiry
+    try:
+        if int(expiry) < int(time_mod.time()):
+            raise HTTPException(status_code=403, detail="Token expired")
+    except ValueError:
+        raise HTTPException(status_code=403, detail="Invalid token")
+
+    # Decode S3 key
+    b64_key_padded = b64_key + "=" * (-len(b64_key) % 4)
+    try:
+        s3_key = base64.urlsafe_b64decode(b64_key_padded).decode("utf-8")
+    except Exception:
+        raise HTTPException(status_code=403, detail="Invalid token")
+
+    # Path traversal check
+    if ".." in s3_key:
+        raise HTTPException(status_code=403, detail="Invalid path")
+    for pattern in _BLOCKED_PATH_PATTERNS:
+        if pattern in s3_key:
+            raise HTTPException(status_code=403, detail="Invalid path")
+
+    return s3_key
 
 
 def validate_cloudfront_secret(
@@ -206,6 +278,35 @@ async def ping():
     }
 
 
+@app.get(f"{PREFIX}/integration-file/{{token}}/{{filename}}")
+async def integration_file_redirect(
+    token: str,
+    filename: str,  # pylint: disable=unused-argument  # required by FastAPI path
+    x_arcanum_cloudfront_secret: str | None = Header(
+        None, alias="x-arcanum-cloudfront-secret"
+    ),
+    authorization: str | None = Header(None),
+):
+    """Redirect to a presigned S3 URL for integration file uploads.
+
+    Pipedream extracts filenames from URLs. Presigned S3 URLs have long query
+    strings that cause Slack's upload API to fail (filename > 235 chars).
+    This endpoint provides a clean URL with a short HMAC token.
+    """
+    validate_cloudfront_secret(x_arcanum_cloudfront_secret, authorization)
+
+    if not s3_client or not OUTPUTS_BUCKET_NAME:
+        raise HTTPException(status_code=500, detail="File redirect not configured")
+
+    s3_key = _validate_file_token(token)
+    presigned_url = s3_client.generate_presigned_url(
+        "get_object",
+        Params={"Bucket": OUTPUTS_BUCKET_NAME, "Key": s3_key},
+        ExpiresIn=30,
+    )
+    return RedirectResponse(url=presigned_url, status_code=302)
+
+
 @app.get(f"{PREFIX}/status")
 async def get_status(
     authorization: str | None = Header(None),
@@ -335,6 +436,12 @@ async def invocations(
 
     action = body.get("action", "chat")
 
+    # Handle approve action directly in the proxy to avoid container deadlock.
+    # The container's SDK stream blocks the event loop, so approve requests
+    # would queue behind the active stream until the 90s approval timeout expires.
+    if action == "approve":
+        return await _handle_approve(body, user_sub)
+
     # Chat action streams, others return JSON
     return await _invoke_agentcore(
         user_sub=user_sub,
@@ -344,6 +451,47 @@ async def invocations(
         authorization=authorization,
         stream=(action == "chat"),
     )
+
+
+async def _handle_approve(body: dict, user_sub: str) -> JSONResponse:
+    """Handle integration tool approval directly in the proxy.
+
+    Writes the approval decision to DynamoDB so the tools Lambda poll picks it up.
+    This avoids routing through the AgentCore container which would deadlock
+    (the container is blocked by the SDK stream waiting for this approval).
+    """
+    approval_id = body.get("approvalId")
+    decision = body.get("decision")
+
+    if not approval_id:
+        raise HTTPException(status_code=400, detail="Missing approvalId")
+    if decision not in ("approved", "denied"):
+        raise HTTPException(
+            status_code=400, detail="decision must be 'approved' or 'denied'"
+        )
+
+    table_name = os.environ.get("INTEGRATIONS_APPROVAL_TABLE_NAME", "")
+    if not table_name:
+        raise HTTPException(status_code=500, detail="Approval table not configured")
+
+    dynamodb = boto3.client("dynamodb")
+    dynamodb.update_item(
+        TableName=table_name,
+        Key={"approval_id": {"S": approval_id}},
+        UpdateExpression="SET #s = :status, decided_at = :decided_at",
+        ExpressionAttributeNames={"#s": "status"},
+        ExpressionAttributeValues={
+            ":status": {"S": decision},
+            ":decided_at": {"N": str(int(time_mod.time()))},
+        },
+    )
+
+    logger.info(
+        "Integration tool approval recorded in proxy",
+        extra={"approval_id": approval_id, "decision": decision, "user_sub": user_sub},
+    )
+
+    return JSONResponse(content={"status": decision, "approvalId": approval_id})
 
 
 async def _invoke_agentcore(

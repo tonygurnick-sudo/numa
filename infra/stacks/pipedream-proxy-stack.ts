@@ -279,8 +279,8 @@ export class PipedreamProxyStack extends TerraformStack {
       role: proxyLambdaRole.arn,
       handler: 'lambda_function.handler',
       runtime: 'python3.13',
-      timeout: 30,
-      memorySize: 128,
+      timeout: 180,
+      memorySize: 512,
       filename: lambdaFilename,
       sourceCodeHash: Fn.filebase64sha256(lambdaFilename),
 

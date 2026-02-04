@@ -38,15 +38,20 @@ from aws_lambda_powertools.utilities.typing import LambdaContext
 
 from tools import (
     handle_add_to_kb,
+    handle_approve_action,
+    handle_configure_props,
     handle_convert_document,
     handle_create_agent,
     handle_duplicate_agent,
     handle_extract_content,
     handle_get_agent,
+    handle_list_actions,
     handle_list_agents,
     handle_list_kb_files,
+    handle_proxy_request,
     handle_query_knowledgebase,
     handle_retrieve_kb_file,
+    handle_run_action,
     handle_update_agent,
     handle_web_search,
 )
@@ -107,6 +112,11 @@ TOOL_HANDLERS: Dict[str, Callable[[Dict[str, Any]], Dict[str, Any]]] = {
     "retrieve_kb_file": handle_retrieve_kb_file,
     "update_agent": handle_update_agent,
     "web_search": handle_web_search,
+    "pipedream_list_actions": handle_list_actions,
+    "pipedream_run_action": handle_run_action,
+    "pipedream_configure_props": handle_configure_props,
+    "pipedream_proxy_request": handle_proxy_request,
+    "pipedream_approve_action": handle_approve_action,
 }
 
 
@@ -457,6 +467,74 @@ def handler(event: Dict[str, Any], context: LambdaContext) -> Dict[str, Any]:
             has_admin=("admin" in user_groups),
             has_conversation_id=bool(conversation_id),
         )
+
+    # Security: Validate pipedream integration tool access (fail-closed)
+    pipedream_tools = {
+        "pipedream_list_actions",
+        "pipedream_run_action",
+        "pipedream_configure_props",
+        "pipedream_proxy_request",
+    }
+    if tool_name in pipedream_tools:
+        allowed_tools = event.get("allowed_tools", [])
+
+        # Determine which integration app slug this request targets.
+        # For list_actions the slug is an explicit param; for run_action /
+        # configure_props it's the prefix of the action_key (e.g.
+        # "google_drive" from "google_drive-find-file").
+        target_slug = None
+        if tool_name == "pipedream_list_actions":
+            target_slug = params.get("app_slug")
+        elif tool_name in ("pipedream_run_action", "pipedream_configure_props"):
+            action_key = params.get("action_key", "")
+            if "-" in action_key:
+                target_slug = action_key.split("-", 1)[0]
+
+        # Validate: the specific integration slug must be in allowed_tools.
+        # For proxy_request (no slug extractable), allow if any integration
+        # slug is present — the approval flow gates actual execution.
+        if target_slug:
+            has_access = target_slug in allowed_tools
+        else:
+            # No slug (proxy_request) — check any non-standard tool is present
+            standard_tools = {
+                "web_search",
+                "query_knowledge_base",
+                "data_analysis",
+                "create_agent_tool",
+            }
+            has_access = any(t not in standard_tools for t in allowed_tools)
+
+        if not has_access:
+            logger.warning(
+                "Pipedream integration access denied - integration not enabled",
+                tool=tool_name,
+                target_slug=target_slug,
+                allowed_tools=allowed_tools,
+            )
+            return {
+                "status": "error",
+                "result": None,
+                "error": f"Integration '{target_slug or 'unknown'}' is not enabled for this conversation",
+            }
+        # Pass user context for approval flow
+        params["__user_sub"] = user_sub
+        params["__conversation_id"] = conversation_id
+        # Pass external_user_id from event (set by the MCP tool / caller)
+        if not params.get("external_user_id"):
+            params["external_user_id"] = event.get("external_user_id", "")
+        logger.info(
+            "Pipedream integration tool access validated",
+            tool=tool_name,
+            target_slug=target_slug,
+            allowed_tools=allowed_tools,
+        )
+
+    # Handle approval endpoint (no special access control beyond Lambda invocation)
+    if tool_name == "pipedream_approve_action":
+        # This is called by the frontend API, not by the agent
+        # Access control is handled at the API Gateway level
+        pass
 
     # Pass allowed_kbs to handler for defensive validation
     params["__allowed_kbs"] = allowed_kbs

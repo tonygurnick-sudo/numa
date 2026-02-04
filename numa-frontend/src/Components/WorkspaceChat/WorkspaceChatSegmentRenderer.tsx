@@ -12,12 +12,14 @@ import type {
   WorkspaceChatFolderAttachmentSegment,
   WorkspaceChatInlineThinkingSegment,
   WorkspaceChatCompactionSegment,
+  WorkspaceChatToolApprovalSegment,
 } from '@/types/workspaceChatTypes';
 import { WorkspaceChatInlineToolGroup } from './WorkspaceChatInlineTool';
 import { WorkspaceChatSubagentCard } from './WorkspaceChatSubagentCard';
 import { WorkspaceChatTodoCard } from './WorkspaceChatTodoCard';
 import { WorkspaceChatInlineThinking } from './WorkspaceChatInlineThinking';
 import { WorkspaceChatCompactionBlock } from './WorkspaceChatCompactionBlock';
+import { WorkspaceChatToolApproval } from './WorkspaceChatToolApproval';
 import { UnifiedToolCard } from '../UnifiedToolCard';
 import { ThinkingBlock } from '../Chat/ThinkingBlock';
 import { AssistantAdviceBlock } from '../Chat/AssistantAdviceBlock';
@@ -178,6 +180,15 @@ export function WorkspaceChatSegmentRenderer({
               </div>
             );
           }
+
+          case 'tool_approval':
+            return (
+              <WorkspaceChatToolApproval
+                key={`approval-${segment.toolUseId}`}
+                segment={segment as WorkspaceChatToolApprovalSegment}
+                conversationId={conversationId || ''}
+              />
+            );
 
           default:
             return null;

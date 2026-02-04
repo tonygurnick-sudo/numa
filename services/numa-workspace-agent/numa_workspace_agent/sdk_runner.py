@@ -7,9 +7,11 @@ Streams SDK message types directly for frontend consumption.
 
 import asyncio
 import json
+import os
 import uuid as uuid_mod
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, AsyncIterator, Awaitable, Callable, Optional
 
 import structlog
@@ -264,6 +266,9 @@ async def stream_claude_sdk(
     v1_migration_context: Optional[str] = None,
     agent_config: Optional[AgentConfig] = None,
     agent_file_paths: Optional[list[str]] = None,
+    external_user_id: Optional[str] = None,
+    enabled_integrations: Optional[list[str]] = None,
+    approval_mode: str = "always",
 ) -> AsyncIterator[bytes]:
     """
     Stream Claude SDK output for a conversation.
@@ -403,6 +408,9 @@ async def stream_claude_sdk(
         model=validated_model,
         agent_config=agent_config,
         agent_file_paths=agent_file_paths,
+        external_user_id=external_user_id,
+        enabled_integrations=enabled_integrations,
+        request_id=request_id,
     )
 
     logger.info(
@@ -575,6 +583,131 @@ async def stream_claude_sdk(
 
                 # Yield to caller (SSE format for streaming)
                 yield format_sse_event(serialized)
+
+                # Emit tool_approval SSE event for integration tools that need user approval.
+                # This event is yielded AFTER the tool_use event but BEFORE the tool executes,
+                # giving the frontend time to show an approval card while the tool polls DynamoDB.
+                #
+                # The approval_mode controls whether approval is required:
+                # - 'always': every integration tool call needs manual approval (default)
+                # - 'non_destructive': auto-approve read-only actions (readOnlyHint=true),
+                #   require approval for writes/deletes or unknown actions (fail-closed)
+                # - 'never': auto-approve all integration tool calls
+                APPROVAL_REQUIRED_TOOLS = ("run_action", "proxy_request")
+                if isinstance(message, AssistantMessage):
+                    for block in message.content:
+                        if isinstance(block, ToolUseBlock):
+                            logger.info(
+                                "ToolUseBlock seen",
+                                _name="TOOL_USE_BLOCK_NAME",
+                                tool_name=block.name,
+                                matches_approval=any(
+                                    t in block.name for t in APPROVAL_REQUIRED_TOOLS
+                                ),
+                            )
+                        if isinstance(block, ToolUseBlock) and any(
+                            t in block.name for t in APPROVAL_REQUIRED_TOOLS
+                        ):
+                            tool_input = (
+                                block.input if isinstance(block.input, dict) else {}
+                            )
+                            # Only show approval if the integration is actually enabled.
+                            # run_action has action_key like "google_drive-get-current-user";
+                            # proxy_request has integration_slug directly.
+                            action_key = tool_input.get("action_key", "")
+                            integration_slug = tool_input.get("integration_slug") or (
+                                action_key.split("-")[0] if action_key else ""
+                            )
+                            if (
+                                enabled_integrations
+                                and integration_slug
+                                and integration_slug not in enabled_integrations
+                            ):
+                                continue
+
+                            # Compute the approval key early — needed for both
+                            # schema lookup and the request ID map.
+                            _approval_key = (
+                                action_key
+                                or f"{integration_slug}-{tool_input.get('method', 'request')}"
+                            )
+
+                            # Determine if this tool call should be auto-approved
+                            # based on the resolved approval_mode.
+                            auto_approved = False
+                            if approval_mode == "never":
+                                auto_approved = True
+                            elif approval_mode == "non_destructive":
+                                # Read annotations from the action schema file on
+                                # disk (not from tool input — Claude doesn't send
+                                # annotations).  Schema path:
+                                #   /workdir/tools/integrations/{slug}/{action_key}.json
+                                schema_annotations = {}
+                                try:
+                                    schema_path = (
+                                        Path("/workdir/tools/integrations")
+                                        / integration_slug
+                                        / f"{_approval_key}.json"
+                                    )
+                                    if schema_path.exists():
+                                        schema_data = json.loads(
+                                            schema_path.read_text(encoding="utf-8")
+                                        )
+                                        schema_annotations = schema_data.get(
+                                            "annotations", {}
+                                        )
+                                except Exception as exc:
+                                    logger.debug(
+                                        "Could not read action schema for approval check",
+                                        action_key=_approval_key,
+                                        error=str(exc),
+                                    )
+                                # Auto-approve only if annotations explicitly
+                                # mark this as read-only. Missing annotations
+                                # default to requiring approval (fail-closed).
+                                read_only = (
+                                    schema_annotations.get("readOnlyHint", False)
+                                    if isinstance(schema_annotations, dict)
+                                    else False
+                                )
+                                auto_approved = bool(read_only)
+
+                            # Set NUMA_APPROVAL_MODE env var so the tools Lambda
+                            # knows whether to skip DynamoDB polling.
+                            os.environ["NUMA_APPROVAL_MODE"] = (
+                                "auto" if auto_approved else "manual"
+                            )
+
+                            # Generate a per-tool-call approval ID and store in
+                            # NUMA_REQUEST_ID_MAP (JSON dict of action_key → list of IDs).
+                            # Each parallel tool pops its ID from the list in FIFO order,
+                            # avoiding the race where a single env var gets overwritten.
+                            approval_id = str(uuid_mod.uuid4())
+                            try:
+                                _id_map = json.loads(
+                                    os.environ.get("NUMA_REQUEST_ID_MAP", "{}")
+                                )
+                            except (json.JSONDecodeError, TypeError):
+                                _id_map = {}
+                            _id_map.setdefault(_approval_key, []).append(approval_id)
+                            os.environ["NUMA_REQUEST_ID_MAP"] = json.dumps(_id_map)
+                            approval_event = {
+                                "type": "tool_approval",
+                                "timestamp": datetime.now(timezone.utc).isoformat(),
+                                "tool_use_id": block.id,
+                                "tool_name": block.name,
+                                "action_key": action_key
+                                or f"{integration_slug}-{tool_input.get('method', 'request')}",
+                                "description": tool_input.get("description", ""),
+                                "props_preview": tool_input.get(
+                                    "props", tool_input.get("upstream_url", "")
+                                ),
+                                "request_id": approval_id,
+                                "auto_approved": auto_approved,
+                            }
+                            with trace_path.open("a", encoding="utf-8") as f:
+                                f.write(json.dumps(approval_event) + "\n")
+                            yield format_sse_event(approval_event)
 
             # If we exited loop due to stop, emit a terminal event for the frontend/trace
             if stop_reason:

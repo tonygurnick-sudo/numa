@@ -27,6 +27,7 @@ import type {
   WorkspaceChatFolderAttachmentSegment,
   WorkspaceChatCompactionSegment,
   WorkspaceChatMessageHelpers,
+  SDKToolApprovalEvent,
   TaskInput,
   TodoWriteInput,
   BashInput,
@@ -42,6 +43,7 @@ import type {
 
 // Document processing utilities
 import { parseChunkWithoutDocComments, extractSingleDocBlock, createDocStripState } from './streamingProcessors';
+import { resolveToolVisual } from './ToolConfig';
 
 // Type guards (runtime functions, not types)
 import {
@@ -204,6 +206,8 @@ export function getToolSegmentKind(toolName: string): ToolSegmentKind {
   if (toolName === 'TodoWrite') return 'todo';
   if (INLINE_TOOLS.has(toolName)) return 'inline_tool';
   if (PLUMBING_TOOLS.has(toolName) || HIDDEN_ITEMS.has(toolName)) return 'hidden';
+  // Integration MCP tools render as inline indicators with branded icons
+  if (INTEGRATION_MCP_TOOLS.has(toolName)) return 'inline_tool';
   return 'tool_card'; // Skill, AskUserQuestion, and unknown tools
 }
 
@@ -242,6 +246,61 @@ export function resetSDKEventContext(context: SDKEventContext): void {
   context.isAwaitingCompactionSummary = false;
   context.compactionMetadata = undefined;
   // Keep toolUseMap and completedTools for cross-turn matching
+}
+
+// ============================================================
+// Integration Tool Label Formatting
+// ============================================================
+
+/** MCP integration tool names that should get branded rendering */
+const INTEGRATION_MCP_TOOLS = new Set([
+  'mcp__integrations__run_action',
+  'mcp__integrations__configure_props',
+  'mcp__integrations__proxy_request',
+]);
+
+/**
+ * Format integration MCP tool calls into branded labels and toolName overrides.
+ * Returns null if the tool is not an integration MCP tool.
+ */
+function formatIntegrationToolLabel(
+  toolName: string,
+  input: Record<string, unknown>,
+): { label: string; actionName: string; description: string; integrationToolName: string } | null {
+  if (toolName === 'mcp__integrations__run_action') {
+    const actionKey = (input.action_key as string) || '';
+    const description = (input.description as string) || '';
+    const dashIndex = actionKey.indexOf('-');
+    if (dashIndex === -1) return null;
+    const appSlug = actionKey.substring(0, dashIndex);
+    const actionName = actionKey
+      .substring(dashIndex + 1)
+      .split('-')
+      .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+      .join(' ');
+    const label = description ? `${actionName}: ${description}` : actionName;
+    return { label, actionName, description, integrationToolName: `${appSlug}_integration` };
+  }
+  if (toolName === 'mcp__integrations__configure_props') {
+    const actionKey = (input.action_key as string) || '';
+    const propName = (input.prop_name as string) || '';
+    const dashIndex = actionKey.indexOf('-');
+    const appSlug = dashIndex > -1 ? actionKey.substring(0, dashIndex) : '';
+    const label = `Configure: Getting options for ${propName}`;
+    return {
+      label,
+      actionName: 'Configure',
+      description: `Getting options for ${propName}`,
+      integrationToolName: appSlug ? `${appSlug}_integration` : '',
+    };
+  }
+  if (toolName === 'mcp__integrations__proxy_request') {
+    const method = (input.method as string) || 'GET';
+    const description = (input.description as string) || '';
+    const label = description ? `API Request: ${description}` : `API Request: ${method}`;
+    return { label, actionName: 'API Request', description: description || method, integrationToolName: '' };
+  }
+  return null;
 }
 
 // ============================================================
@@ -387,15 +446,18 @@ export function createInitialToolSegment(toolName: string, toolUseId: string): W
         iconName,
       };
     }
-    case 'tool_card':
+    case 'tool_card': {
+      // Integration MCP tools get a placeholder; real label set in updateSegmentWithInput
+      const isIntegration = INTEGRATION_MCP_TOOLS.has(toolName);
       return {
         kind: 'tool_card',
         toolUseId,
-        toolName,
-        label: toolName,
-        steps: [`Using ${toolName}`],
+        toolName: isIntegration ? toolName : toolName,
+        label: isIntegration ? 'Integration' : toolName,
+        steps: isIntegration ? ['Connecting...'] : [`Using ${toolName}`],
         isLoading: true,
       };
+    }
     case 'hidden':
       return null;
   }
@@ -435,6 +497,26 @@ export function updateSegmentWithInput(
       };
     }
     case 'inline_tool': {
+      // Integration MCP tools get branded display
+      if (INTEGRATION_MCP_TOOLS.has(toolName)) {
+        const integrationInfo = formatIntegrationToolLabel(toolName, inputObj);
+        if (integrationInfo) {
+          const visual = resolveToolVisual(integrationInfo.integrationToolName);
+          const iconImage = visual.kind === 'image' ? visual.src : undefined;
+          const iconName = visual.kind === 'icon' ? visual.className.replace('bi ', '') : undefined;
+          return {
+            ...segment,
+            toolName: integrationInfo.integrationToolName || segment.toolName,
+            displayText: integrationInfo.description
+              ? `Calling ${integrationInfo.actionName} tool: ${integrationInfo.description}`
+              : `Calling ${integrationInfo.actionName} tool`,
+            isComplete: false,
+            category: 'important' as ToolCategory,
+            iconName,
+            iconImage,
+          };
+        }
+      }
       const { text, filePath } = getInlineToolDisplay(toolName, input);
       // Refine category and icon now that we have actual input
       const { category, iconName } = getToolCategoryAndIcon(toolName, input);
@@ -447,6 +529,17 @@ export function updateSegmentWithInput(
       };
     }
     case 'tool_card': {
+      const inputObj2 = input && typeof input === 'object' ? (input as Record<string, unknown>) : {};
+      const integrationInfo = formatIntegrationToolLabel(toolName, inputObj2);
+      if (integrationInfo) {
+        return {
+          ...segment,
+          input,
+          toolName: integrationInfo.integrationToolName || segment.toolName,
+          label: integrationInfo.label,
+          steps: [integrationInfo.label],
+        };
+      }
       return {
         ...segment,
         input,
@@ -928,6 +1021,13 @@ function completeCompaction(helpers: WorkspaceChatMessageHelpers, summary: strin
  * Add a generic tool card segment (fallback for unknown tools).
  */
 function addToolCard(helpers: WorkspaceChatMessageHelpers, toolUseId: string, toolName: string, input: unknown): void {
+  const inputObj = input && typeof input === 'object' ? (input as Record<string, unknown>) : {};
+  const integrationInfo = formatIntegrationToolLabel(toolName, inputObj);
+
+  const effectiveToolName = integrationInfo?.integrationToolName || toolName;
+  const effectiveLabel = integrationInfo?.label || toolName;
+  const effectiveSteps = integrationInfo ? [integrationInfo.label] : [`Using ${toolName}`];
+
   helpers.setMessages((prev) => {
     const updated = ensureAssistantMessage(prev);
     const lastIdx = updated.length - 1;
@@ -937,10 +1037,10 @@ function addToolCard(helpers: WorkspaceChatMessageHelpers, toolUseId: string, to
     segments.push({
       kind: 'tool_card',
       toolUseId,
-      toolName,
-      label: toolName,
+      toolName: effectiveToolName,
+      label: effectiveLabel,
       input,
-      steps: [`Using ${toolName}`],
+      steps: effectiveSteps,
       isLoading: true,
     });
 
@@ -1042,6 +1142,40 @@ function handleToolUseBlock(
     return;
   }
 
+  // Integration MCP tools - inline indicator with branded icon
+  if (INTEGRATION_MCP_TOOLS.has(name)) {
+    const inputObj = input && typeof input === 'object' ? (input as Record<string, unknown>) : {};
+    const integrationInfo = formatIntegrationToolLabel(name, inputObj);
+    if (integrationInfo) {
+      const visual = resolveToolVisual(integrationInfo.integrationToolName);
+      const iconImage = visual.kind === 'image' ? visual.src : undefined;
+      const iconNameVal = visual.kind === 'icon' ? visual.className.replace('bi ', '') : undefined;
+      const displayText = integrationInfo.description
+        ? `Calling ${integrationInfo.actionName} tool: ${integrationInfo.description}`
+        : `Calling ${integrationInfo.actionName} tool`;
+      helpers.setMessages((prev) => {
+        const updated = ensureAssistantMessage(prev);
+        const lastIdx = updated.length - 1;
+        const lastMsg = { ...updated[lastIdx] };
+        const segments = [...(lastMsg.segments || [])] as WorkspaceChatSegment[];
+        segments.push({
+          kind: 'inline_tool',
+          toolUseId: id,
+          toolName: integrationInfo.integrationToolName || name,
+          displayText,
+          isComplete: false,
+          category: 'important' as ToolCategory,
+          iconName: iconNameVal,
+          iconImage,
+        });
+        lastMsg.segments = segments;
+        updated[lastIdx] = lastMsg;
+        return updated;
+      });
+      return;
+    }
+  }
+
   // Fallback: generic tool card for unknown/special tools (Skill, AskUserQuestion, etc.)
   addToolCard(helpers, id, name, input);
 }
@@ -1081,7 +1215,7 @@ function handleToolResultBlock(
     return;
   }
 
-  if (INLINE_TOOLS.has(name)) {
+  if (INLINE_TOOLS.has(name) || INTEGRATION_MCP_TOOLS.has(name)) {
     completeInlineTool(helpers, tool_use_id, is_error);
     return;
   }
@@ -1274,6 +1408,39 @@ function handleErrorEvent(event: SDKErrorEvent, _context: SDKEventContext, helpe
 // ============================================================
 
 /**
+ * Handle a tool_approval event — attaches approval data to the matching inline_tool segment
+ * so the approval panel renders inline below the tool indicator.
+ */
+function handleToolApprovalEvent(event: SDKToolApprovalEvent, helpers: WorkspaceChatMessageHelpers): void {
+  helpers.setMessages((prev) => {
+    const updated = [...prev];
+    // Walk backwards to find the assistant message with the matching inline_tool segment
+    for (let i = updated.length - 1; i >= 0; i--) {
+      const msg = updated[i];
+      if (msg.role !== 'assistant' || !msg.segments) continue;
+      const segIdx = msg.segments.findIndex(
+        (s) => s.kind === 'inline_tool' && (s as WorkspaceChatInlineToolSegment).toolUseId === event.tool_use_id,
+      );
+      if (segIdx >= 0) {
+        const newMsg = { ...msg, segments: [...msg.segments] };
+        const seg = { ...newMsg.segments[segIdx] } as WorkspaceChatInlineToolSegment;
+        seg.approval = {
+          actionKey: event.action_key,
+          description: event.description,
+          propsPreview: event.props_preview,
+          requestId: event.request_id,
+          autoApproved: event.auto_approved,
+        };
+        newMsg.segments[segIdx] = seg;
+        updated[i] = newMsg;
+        return updated;
+      }
+    }
+    return prev;
+  });
+}
+
+/**
  * Process a single SDK event.
  *
  * Routes the event to the appropriate handler based on type.
@@ -1319,6 +1486,12 @@ export function processSDKEvent(event: SDKEvent, context: SDKEventContext, helpe
     context.compactionMetadata = undefined;
 
     // Skip creating a user message bubble - this is an injected summary, not user input
+    return;
+  }
+
+  // Tool approval events (integration actions needing user approval)
+  if (event.type === 'tool_approval') {
+    handleToolApprovalEvent(event as SDKToolApprovalEvent, helpers);
     return;
   }
 
@@ -1539,9 +1712,19 @@ export function parseRawTraceToMessages(traceContent: string): WorkspaceChatMess
         (b: SDKContentBlock) => isSDKToolUseBlock(b) && b.name === 'Skill',
       );
 
-    // Exit Skill context on next assistant message (that doesn't start a new Skill)
+    // Exit Skill context only when we see an assistant message with actual text content
+    // (not just another tool_use from the same turn — the trace serializes each content block separately)
     if (isInsideSkill && event.type === 'assistant' && !isSkillToolUseEvent) {
-      activeSkillIds.clear();
+      const assistantContent =
+        (event as SDKAssistantEvent).message?.content ??
+        (event as unknown as { content?: SDKContentBlock[] }).content ??
+        [];
+      const hasTextContent = (assistantContent as SDKContentBlock[]).some(
+        (b) => b.type === 'text' && (b as { text?: string }).text?.trim(),
+      );
+      if (hasTextContent) {
+        activeSkillIds.clear();
+      }
     }
 
     // Skip ALL user messages while inside Skill execution
@@ -1973,14 +2156,43 @@ function processAssistantContent(
         continue;
       }
 
+      // Integration MCP tools render as inline indicators
+      if (INTEGRATION_MCP_TOOLS.has(toolName)) {
+        const integrationInfo = formatIntegrationToolLabel(toolName, input);
+        if (integrationInfo) {
+          const visual = resolveToolVisual(integrationInfo.integrationToolName);
+          const iconImage = visual.kind === 'image' ? visual.src : undefined;
+          const iconNameVal = visual.kind === 'icon' ? visual.className.replace('bi ', '') : undefined;
+          segments.push({
+            kind: 'inline_tool',
+            toolUseId: block.id,
+            toolName: integrationInfo.integrationToolName || toolName,
+            displayText: integrationInfo.description
+              ? `Calling ${integrationInfo.actionName} tool: ${integrationInfo.description}`
+              : `Calling ${integrationInfo.actionName} tool`,
+            isComplete: true,
+            isError: result?.isError || false,
+            category: 'important' as ToolCategory,
+            iconName: iconNameVal,
+            iconImage,
+          });
+          continue;
+        }
+      }
+
       // Fallback: tool card for other tools
+      const integrationInfo = formatIntegrationToolLabel(toolName, input);
+      const effectiveToolName = integrationInfo?.integrationToolName || toolName;
+      const effectiveLabel = integrationInfo?.label || toolName;
+      const effectiveSteps = integrationInfo ? [integrationInfo.label] : [`Using ${toolName}`];
+
       segments.push({
         kind: 'tool_card',
         toolUseId: block.id,
-        toolName,
-        label: toolName,
+        toolName: effectiveToolName,
+        label: effectiveLabel,
         input,
-        steps: [`Using ${toolName}`],
+        steps: effectiveSteps,
         result: result?.content,
         isLoading: false,
         isError: result?.isError || false,

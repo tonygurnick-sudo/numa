@@ -539,7 +539,7 @@ const ChatMessages = ({
                           <WorkspaceChatInlineTool
                             key={its.toolUseId || `tool-${group.startIndex + toolIdx}`}
                             segment={its as WorkspaceChatInlineToolSegment}
-                            isLast={toolIdx === group.segments.length - 1}
+                            conversationId={conversationId}
                           />
                         ))}
                       </div>

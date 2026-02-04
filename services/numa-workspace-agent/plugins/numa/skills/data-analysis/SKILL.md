@@ -293,9 +293,71 @@ print(df_sample.describe())
 
 ---
 
-## Basic Visualization with matplotlib
+## Choosing the Right Visualization Format
 
-Create simple charts using Numa's purple color scheme.
+**Default to HTML** unless the user specifically asks for a chart/graph or the data is best represented as one.
+
+### Use HTML (`.html`) when:
+- Dashboards, boards, status views (e.g., sprint boards, kanban, project overviews)
+- Reports with mixed content (tables, metrics, cards, progress bars)
+- Layouts with interactive elements (clickable items, hover tooltips, expandable sections)
+- Any visualization where the structure/layout matters more than plotting numeric data
+- The user says "visualize" or "represent" something that isn't inherently a chart
+
+### Use matplotlib/PNG (`.png`) when:
+- The user explicitly asks for a "chart", "graph", or "plot"
+- The data is best shown as a bar chart, line chart, pie chart, scatter plot, histogram, etc.
+- Comparing numeric values across categories or over time
+- Statistical distributions, correlations, or trends
+
+**Rule of thumb:** If you'd draw it on a whiteboard as boxes/cards/layouts → HTML. If you'd draw it as axes with data points → PNG chart.
+
+### HTML Visualization Template
+
+```python
+html = '''<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dashboard Title</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f5f5f5; padding: 24px; }
+  .header { background: #8e50a7; color: white; padding: 20px 24px; border-radius: 8px; margin-bottom: 24px; }
+  .header h1 { font-size: 22px; font-weight: 600; }
+  .metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; margin-bottom: 24px; }
+  .metric-card { background: white; border-radius: 8px; padding: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+  .metric-value { font-size: 28px; font-weight: 700; color: #8e50a7; }
+  .metric-label { font-size: 13px; color: #666; margin-top: 4px; }
+  .card { background: white; border-radius: 8px; padding: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); margin-bottom: 16px; }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { padding: 10px 12px; text-align: left; border-bottom: 1px solid #eee; }
+  th { background: #f9f5fb; color: #6a3a7d; font-weight: 600; font-size: 13px; }
+  .badge { display: inline-block; padding: 3px 10px; border-radius: 12px; font-size: 12px; font-weight: 500; }
+  .badge-purple { background: #f3e8f9; color: #8e50a7; }
+  .badge-green { background: #e8f5e9; color: #2e7d32; }
+  .badge-amber { background: #fff8e1; color: #f57f17; }
+  .badge-red { background: #fce4ec; color: #c62828; }
+</style>
+</head>
+<body>
+  <!-- Build your dashboard here -->
+</body>
+</html>'''
+
+with open('/workdir/output/dashboard.html', 'w') as f:
+    f.write(html)
+print("Dashboard saved: /workdir/output/dashboard.html")
+```
+
+Use Numa's purple (`#8e50a7`) as the primary color. HTML dashboards are responsive, interactive, and more professional for non-chart visualizations.
+
+---
+
+## Basic Chart Visualization with matplotlib
+
+Create charts using Numa's purple color scheme. **Only use this for actual data charts** — see format selection guidance above.
 
 ### Setup and Colors
 

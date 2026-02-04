@@ -41,6 +41,7 @@ type AgentToolsConfig = {
   // [] = no KB access
   // ['company', 'kb-123'] = specific KBs only
   allowedKnowledgeBases?: string[] | null;
+  approvalMode?: 'always' | 'non_destructive' | 'never';
 };
 
 type ReferenceFile = {
@@ -246,6 +247,7 @@ const normaliseToolsConfig = (config?: AgentToolsConfig | null): AgentToolsConfi
         : Array.isArray(config.allowedKnowledgeBases)
           ? config.allowedKnowledgeBases
           : undefined,
+    approvalMode: config.approvalMode,
   };
 };
 

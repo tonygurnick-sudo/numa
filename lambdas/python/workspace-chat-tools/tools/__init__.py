@@ -19,6 +19,13 @@ from .knowledge_base import (
     handle_retrieve_kb_file,
 )
 from .list_kb_files import handle_list_kb_files
+from .pipedream_integration import (
+    handle_approve_action,
+    handle_configure_props,
+    handle_list_actions,
+    handle_proxy_request,
+    handle_run_action,
+)
 from .web_search import handle_web_search
 
 __all__ = [
@@ -34,4 +41,9 @@ __all__ = [
     "handle_retrieve_kb_file",
     "handle_update_agent",
     "handle_web_search",
+    "handle_approve_action",
+    "handle_configure_props",
+    "handle_list_actions",
+    "handle_proxy_request",
+    "handle_run_action",
 ]

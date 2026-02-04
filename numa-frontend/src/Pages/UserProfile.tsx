@@ -44,6 +44,7 @@ export default function UserProfilePage() {
   const [error, setError] = useState<string | null>(null);
   const [dirty, setDirty] = useState<boolean>(false);
 
+  const hasWorkspaceChat = window.sessionStorage.getItem('NUMA_WORKSPACE_CHAT') === 'true';
   const hasPipedreamFeature = window.sessionStorage.getItem('PIPEDREAM_INTEGRATIONS') === 'true';
   const relayLambdaArn = window.sessionStorage.getItem('PIPEDREAM_RELAY_LAMBDA_ARN');
   const previewMode = !hasPipedreamFeature || !relayLambdaArn;
@@ -324,6 +325,7 @@ export default function UserProfilePage() {
         dataAnalysisEnabled: userDefaults.dataAnalysisEnabled,
         defaultConnectionIds: userDefaults.defaultConnectionIds,
         language: userDefaults.language,
+        approvalMode: userDefaults.approvalMode,
       };
 
       await ChatSettingsService.updateForProfile(payload, numaPut);
@@ -621,6 +623,45 @@ export default function UserProfilePage() {
                   )}
                 </Form>
               </Tab>
+
+              {hasWorkspaceChat && (
+                <Tab
+                  eventKey="approval-settings"
+                  title={
+                    <span>
+                      <i className="bi bi-shield-check me-2"></i>
+                      {t('userProfile.tabs.approvalSettings')}
+                    </span>
+                  }
+                >
+                  <Form>
+                    <p className="text-muted mb-3">{t('userProfile.approval.description')}</p>
+                    <Form.Group className="mb-3">
+                      <Form.Label className="fw-semibold">{t('userProfile.approval.label')}</Form.Label>
+                      {(['always', 'non_destructive', 'never'] as const).map((mode) => (
+                        <Form.Check
+                          key={mode}
+                          type="radio"
+                          id={`approval-mode-${mode}`}
+                          name="approvalMode"
+                          label={t(`userProfile.approval.modes.${mode}.label`)}
+                          checked={userDefaults.approvalMode === mode}
+                          disabled={disableForm}
+                          onChange={() => {
+                            setUserDefaults((prev) => ({ ...prev, approvalMode: mode }));
+                            setDirty(true);
+                          }}
+                          className="mb-2"
+                        />
+                      ))}
+                      <div className="text-muted small mt-1">
+                        {t(`userProfile.approval.modes.${userDefaults.approvalMode}.help`)}
+                      </div>
+                    </Form.Group>
+                    {renderSaveActions('userProfile.actions.reset', resetToCompanyDefaults)}
+                  </Form>
+                </Tab>
+              )}
             </Tabs>
           </div>
         </div>

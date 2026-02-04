@@ -166,6 +166,10 @@ def handler(event: Dict[str, Any], _: LambdaContext) -> Dict[str, Any]:
             "create_mcp_client",
             "list_mcp_tools",
             "disconnect_integration",
+            "list_actions",
+            "run_action",
+            "configure_props",
+            "proxy_request",
         ):
             if not proxy_lambda_arn:
                 logger.error("PIPEDREAM_PROXY_LAMBDA_ARN environment variable not set")

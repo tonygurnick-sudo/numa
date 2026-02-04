@@ -342,7 +342,8 @@
     "adminDisabled": "Your admin has disabled personal defaults. You'll use company defaults when starting new chats.",
     "tabs": {
       "userSettings": "User Settings",
-      "chatDefaults": "Chat Defaults"
+      "chatDefaults": "Chat Defaults",
+      "approvalSettings": "Integration Approval"
     },
     "defaults": {
       "description": "These defaults apply when you start a new chat without selecting an agent.",
@@ -383,6 +384,24 @@
         "loading": "Loading integrations...",
         "empty": "No connected integrations available.",
         "help": "Select one or more integrations to enable by default."
+      }
+    },
+    "approval": {
+      "description": "Control how integration tool calls are approved when using Numa. This setting applies to actions performed through connected integrations (e.g. Google Drive, Slack).",
+      "label": "Approval mode",
+      "modes": {
+        "always": {
+          "label": "Always require approval",
+          "help": "Every integration action will require your explicit approval before it runs. This is the safest option."
+        },
+        "non_destructive": {
+          "label": "Auto-approve safe actions",
+          "help": "Read-only actions (e.g. searching, listing files) will run automatically. Actions that create, modify, or delete data will still require your approval. Actions without safety metadata will also require approval."
+        },
+        "never": {
+          "label": "Auto-approve all actions",
+          "help": "All integration actions will run automatically without approval prompts. Use this only if you fully trust the integrations and agents you use."
+        }
       }
     },
     "actions": {

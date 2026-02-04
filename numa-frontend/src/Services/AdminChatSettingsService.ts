@@ -1,4 +1,9 @@
-import { DEFAULT_CHAT_SETTINGS, type ChatSettings } from './ChatSettingsService';
+import {
+  DEFAULT_CHAT_SETTINGS,
+  VALID_APPROVAL_MODES,
+  type ApprovalMode,
+  type ChatSettings,
+} from './ChatSettingsService';
 import i18n from '../i18n';
 
 export type GlobalChatSettings = ChatSettings & {
@@ -118,6 +123,14 @@ function validateGlobal(data: unknown): GlobalChatSettings {
     defaultConnectionIds: Array.isArray(obj.defaultConnectionIds)
       ? obj.defaultConnectionIds.filter((id): id is string => typeof id === 'string')
       : DEFAULT_GLOBAL_CHAT_SETTINGS.defaultConnectionIds,
+    language:
+      typeof obj.language === 'string' || obj.language === null
+        ? (obj.language as string | null)
+        : DEFAULT_GLOBAL_CHAT_SETTINGS.language,
+    approvalMode:
+      typeof obj.approvalMode === 'string' && VALID_APPROVAL_MODES.includes(obj.approvalMode as ApprovalMode)
+        ? (obj.approvalMode as ApprovalMode)
+        : DEFAULT_GLOBAL_CHAT_SETTINGS.approvalMode,
     allowUserDefaults,
   };
 }

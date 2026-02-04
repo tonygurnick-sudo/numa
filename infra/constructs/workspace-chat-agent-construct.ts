@@ -43,6 +43,14 @@ export interface WorkspaceChatAgentConstructProps {
   containerLogGroup: CloudwatchLogGroup;
   /** Optional Bedrock account ID for cross-account model access (global inference profiles) */
   bedrockAccount?: string;
+  /** Integrations approval table name (for writing approval decisions from the service) */
+  integrationsApprovalTableName?: string;
+  /** Integrations approval table ARN (for IAM permissions) */
+  integrationsApprovalTableArn?: string;
+  /** Chat settings table name (for reading user approval mode preferences) */
+  chatSettingsTableName?: string;
+  /** Chat settings table ARN (for IAM permissions) */
+  chatSettingsTableArn?: string;
 }
 
 export class WorkspaceChatAgentConstruct extends Construct {
@@ -255,6 +263,17 @@ echo "Successfully pushed image to ${this.ecrRepository.repositoryUrl}:${imageTa
               `arn:aws:dynamodb:${props.region}:${callerIdentity.accountId}:table/numa-${props.clientName}-user-agents`,
             ],
           },
+          // Chat settings table - read-only access for user approval mode preferences
+          ...(props.chatSettingsTableArn
+            ? [
+                {
+                  sid: 'DynamoDBChatSettingsRead',
+                  effect: 'Allow' as const,
+                  actions: ['dynamodb:GetItem'],
+                  resources: [props.chatSettingsTableArn],
+                },
+              ]
+            : []),
           {
             sid: 'ECRPull',
             effect: 'Allow',
@@ -275,6 +294,17 @@ echo "Successfully pushed image to ${this.ecrRepository.repositoryUrl}:${imageTa
                   effect: 'Allow',
                   actions: ['lambda:InvokeFunction'],
                   resources: [props.workspaceToolsLambdaArn],
+                },
+              ]
+            : []),
+          // DynamoDB UpdateItem for integration tool approval decisions
+          ...(props.integrationsApprovalTableArn
+            ? [
+                {
+                  sid: 'DynamoDBIntegrationsApproval',
+                  effect: 'Allow',
+                  actions: ['dynamodb:UpdateItem'],
+                  resources: [props.integrationsApprovalTableArn],
                 },
               ]
             : []),
@@ -447,7 +477,7 @@ echo "Successfully pushed image to ${this.ecrRepository.repositoryUrl}:${imageTa
         CLOUDWATCH_LOG_GROUP: containerLogGroup.name,
         // Bedrock configuration
         CLAUDE_CODE_USE_BEDROCK: '1',
-        DISABLE_PROMPT_CACHING: '1', // Prompt caching not fully supported on Bedrock
+        // DISABLE_PROMPT_CACHING: '1', // Prompt caching not fully supported on Bedrock
         CLAUDE_CODE_MAX_OUTPUT_TOKENS: String(regionModel.default.max_tokens),
         MAX_THINKING_TOKENS: '10000',
         // Model configuration
@@ -473,6 +503,14 @@ echo "Successfully pushed image to ${this.ecrRepository.repositoryUrl}:${imageTa
         // Agent tables for custom agent support (personal and workspace agents)
         WORKSPACE_AGENTS_TABLE: `numa-${props.clientName}-agents`,
         USER_AGENTS_TABLE: `numa-${props.clientName}-user-agents`,
+        // Integrations approval table (for writing approval decisions)
+        ...(props.integrationsApprovalTableName && {
+          INTEGRATIONS_APPROVAL_TABLE_NAME: props.integrationsApprovalTableName,
+        }),
+        // Chat settings table (for reading user approval mode preferences)
+        ...(props.chatSettingsTableName && {
+          CHAT_SETTINGS_TABLE_NAME: props.chatSettingsTableName,
+        }),
       },
     });
 

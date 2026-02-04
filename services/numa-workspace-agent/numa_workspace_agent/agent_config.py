@@ -51,6 +51,12 @@ class AgentToolsConfig:
     # [] = no KB access
     # ['company', 'kb-123'] = specific KBs only
     allowed_knowledge_bases: Optional[list[str]] = None
+    # Integration approval mode:
+    # None = use user default (no agent override)
+    # 'always' = require approval for every integration tool call
+    # 'non_destructive' = auto-approve read-only actions, require approval for writes
+    # 'never' = auto-approve all integration tool calls
+    approval_mode: Optional[str] = None
 
 
 @dataclass
@@ -88,6 +94,7 @@ def _parse_tools_config(raw_config: Optional[dict]) -> AgentToolsConfig:
         create_agent_enabled=raw_config.get("createAgentEnabled", False),
         enabled_connections=raw_config.get("enabledConnections", []),
         allowed_knowledge_bases=raw_config.get("allowedKnowledgeBases"),
+        approval_mode=raw_config.get("approvalMode"),
     )
 
 
@@ -331,3 +338,93 @@ def get_cached_agent_config(
 def clear_agent_cache():
     """Clear the agent config cache."""
     get_cached_agent_config.cache_clear()
+
+
+# Valid approval modes
+VALID_APPROVAL_MODES = ("always", "non_destructive", "never")
+DEFAULT_APPROVAL_MODE = "non_destructive"
+
+
+def fetch_user_approval_mode(user_sub: str) -> str:
+    """
+    Fetch the user's integration approval mode from the chat settings table.
+
+    The chat settings table stores per-user defaults (tools, KBs, integrations, etc.).
+    The approvalMode field controls how integration tool calls are approved:
+    - 'always': require manual approval for every integration tool call
+    - 'non_destructive': auto-approve read-only actions, require approval for writes
+    - 'never': auto-approve all integration tool calls
+
+    Args:
+        user_sub: The user's Cognito sub (used as partition key in chat settings table)
+
+    Returns:
+        The approval mode string, defaulting to 'always' if not set or table unavailable.
+    """
+    table_name = os.environ.get("CHAT_SETTINGS_TABLE_NAME")
+    if not table_name:
+        logger.debug(
+            "CHAT_SETTINGS_TABLE_NAME not configured, using default approval mode"
+        )
+        return DEFAULT_APPROVAL_MODE
+
+    try:
+        dynamo = _get_dynamodb_client()
+        response = dynamo.get_item(
+            TableName=table_name,
+            Key={"user_id": {"S": user_sub}},
+            ProjectionExpression="approvalMode",
+        )
+        item = response.get("Item", {})
+        mode = item.get("approvalMode", {}).get("S", DEFAULT_APPROVAL_MODE)
+        if mode not in VALID_APPROVAL_MODES:
+            logger.warning(
+                "Invalid approval mode in user settings, using default",
+                user_sub=user_sub[:8] + "...",
+                invalid_mode=mode,
+            )
+            return DEFAULT_APPROVAL_MODE
+        return mode
+    except Exception as e:
+        logger.warning(
+            "Failed to fetch user approval mode, using default",
+            user_sub=user_sub[:8] + "...",
+            error=str(e),
+        )
+        return DEFAULT_APPROVAL_MODE
+
+
+def resolve_approval_mode(
+    user_sub: str,
+    agent_config: Optional[AgentConfig] = None,
+) -> str:
+    """
+    Resolve the effective integration approval mode.
+
+    Priority: agent config > user setting > default ('always').
+
+    Args:
+        user_sub: The user's Cognito sub
+        agent_config: Optional agent configuration (may override user setting)
+
+    Returns:
+        The resolved approval mode string.
+    """
+    # Agent config takes priority if it specifies an approval mode
+    if agent_config and agent_config.tools_config.approval_mode:
+        mode = agent_config.tools_config.approval_mode
+        if mode in VALID_APPROVAL_MODES:
+            logger.info(
+                "Using agent-level approval mode",
+                agent_id=agent_config.agent_id,
+                approval_mode=mode,
+            )
+            return mode
+        logger.warning(
+            "Invalid agent approval mode, falling through to user setting",
+            agent_id=agent_config.agent_id,
+            invalid_mode=mode,
+        )
+
+    # Fall back to user setting
+    return fetch_user_approval_mode(user_sub)

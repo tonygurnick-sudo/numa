@@ -9,6 +9,8 @@ const CLIENT_NAME = process.env.CLIENT_NAME as string;
 const ddb = DynamoDBDocumentClient.from(withPRM(DynamoDBClient, {}));
 
 // Type definitions for chat settings
+export type ApprovalMode = 'always' | 'non_destructive' | 'never';
+
 export type ChatSettings = {
   defaultKBIds: string[];
   autoToolsEnabled: boolean;
@@ -17,6 +19,7 @@ export type ChatSettings = {
   dataAnalysisEnabled: boolean;
   defaultConnectionIds: string[];
   language: string | null;
+  approvalMode: ApprovalMode;
 };
 
 export type UserChatSettings = ChatSettings & {
@@ -36,6 +39,8 @@ type UserChatSettingsUpdate = ChatSettingsUpdate & {
 };
 
 // Default settings for new users
+const VALID_APPROVAL_MODES: ApprovalMode[] = ['always', 'non_destructive', 'never'];
+
 const DEFAULT_SETTINGS: ChatSettings = {
   defaultKBIds: ['company'],
   autoToolsEnabled: true,
@@ -44,6 +49,7 @@ const DEFAULT_SETTINGS: ChatSettings = {
   dataAnalysisEnabled: true,
   defaultConnectionIds: [],
   language: 'browser',
+  approvalMode: 'non_destructive',
 };
 
 const GLOBAL_SETTINGS_KEY = '__global__';
@@ -123,6 +129,7 @@ async function loadGlobalSettings(): Promise<GlobalChatSettings> {
       dataAnalysisEnabled: DEFAULT_SETTINGS.dataAnalysisEnabled,
       defaultConnectionIds: DEFAULT_SETTINGS.defaultConnectionIds,
       language: DEFAULT_SETTINGS.language,
+      approvalMode: DEFAULT_SETTINGS.approvalMode,
       allowUserDefaults: false,
     };
   }
@@ -133,6 +140,13 @@ async function loadGlobalSettings(): Promise<GlobalChatSettings> {
   const itemRecord = item as Record<string, unknown>;
   const allowUserDefaults =
     parseBoolean(itemRecord.allowUserDefaults) ?? parseBoolean(itemRecord.allow_user_defaults) ?? false;
+  const itemRecord2 = item as Record<string, unknown>;
+  const approvalMode =
+    typeof itemRecord2.approvalMode === 'string' &&
+    VALID_APPROVAL_MODES.includes(itemRecord2.approvalMode as ApprovalMode)
+      ? (itemRecord2.approvalMode as ApprovalMode)
+      : DEFAULT_SETTINGS.approvalMode;
+
   return {
     defaultKBIds,
     autoToolsEnabled:
@@ -147,6 +161,7 @@ async function loadGlobalSettings(): Promise<GlobalChatSettings> {
       ? item!.defaultConnectionIds
       : DEFAULT_SETTINGS.defaultConnectionIds,
     language: DEFAULT_SETTINGS.language,
+    approvalMode,
     allowUserDefaults,
   };
 }
@@ -190,6 +205,10 @@ function mergeUserSettings(globalSettings: ChatSettings, userItem: Record<string
     typeof userItem?.language === 'string' || userItem?.language === null
       ? (userItem!.language as string | null)
       : globalSettings.language;
+  const approvalMode =
+    typeof userItem?.approvalMode === 'string' && VALID_APPROVAL_MODES.includes(userItem.approvalMode as ApprovalMode)
+      ? (userItem.approvalMode as ApprovalMode)
+      : globalSettings.approvalMode;
   const userDefaultsEnabled =
     parseBoolean(userItem?.userDefaultsEnabled) ?? parseBoolean(userItem?.user_defaults_enabled) ?? true;
 
@@ -201,6 +220,7 @@ function mergeUserSettings(globalSettings: ChatSettings, userItem: Record<string
     dataAnalysisEnabled,
     defaultConnectionIds,
     language,
+    approvalMode,
     userDefaultsEnabled,
   };
 }
@@ -283,6 +303,12 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
               : currentGlobal.defaultConnectionIds
             : currentGlobal.defaultConnectionIds,
         language: DEFAULT_SETTINGS.language,
+        approvalMode:
+          'approvalMode' in body &&
+          typeof body.approvalMode === 'string' &&
+          VALID_APPROVAL_MODES.includes(body.approvalMode as ApprovalMode)
+            ? (body.approvalMode as ApprovalMode)
+            : currentGlobal.approvalMode,
         allowUserDefaults,
         updatedAt: new Date().toISOString(),
       };
@@ -304,6 +330,7 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
         dataAnalysisEnabled: updatedSettings.dataAnalysisEnabled,
         defaultConnectionIds: updatedSettings.defaultConnectionIds,
         language: updatedSettings.language,
+        approvalMode: updatedSettings.approvalMode,
         allowUserDefaults: updatedSettings.allowUserDefaults,
       };
 
@@ -323,6 +350,7 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
           dataAnalysisEnabled: globalSettings.dataAnalysisEnabled,
           defaultConnectionIds: globalSettings.defaultConnectionIds,
           language: globalSettings.language,
+          approvalMode: globalSettings.approvalMode,
         };
         return { statusCode: 200, headers: HEADERS, body: JSON.stringify(settings) };
       }
@@ -338,6 +366,7 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
         dataAnalysisEnabled: merged.dataAnalysisEnabled,
         defaultConnectionIds: merged.defaultConnectionIds,
         language: merged.language,
+        approvalMode: merged.approvalMode,
       };
 
       if (profileView) {
@@ -359,6 +388,7 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
             dataAnalysisEnabled: globalSettings.dataAnalysisEnabled,
             defaultConnectionIds: globalSettings.defaultConnectionIds,
             language: globalSettings.language,
+            approvalMode: globalSettings.approvalMode,
           };
 
       return {
@@ -384,7 +414,7 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
       const existing = await loadUserItem(userId);
       const current = (existing as (Partial<UserChatSettings> & { user_id: string }) | null) ?? { user_id: userId };
 
-      const next: Partial<UserChatSettings> & { user_id: string; updatedAt: string } = {
+      const next: Partial<UserChatSettings> & { user_id: string; updatedAt: string; approvalMode?: ApprovalMode } = {
         user_id: userId,
         updatedAt: new Date().toISOString(),
       };
@@ -469,6 +499,23 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
         next.language = current.language as string | null;
       }
 
+      // approvalMode
+      if ('approvalMode' in body) {
+        if (body.approvalMode === null) {
+          // clear override
+        } else if (
+          typeof body.approvalMode === 'string' &&
+          VALID_APPROVAL_MODES.includes(body.approvalMode as ApprovalMode)
+        ) {
+          next.approvalMode = body.approvalMode as ApprovalMode;
+        }
+      } else if (
+        typeof current.approvalMode === 'string' &&
+        VALID_APPROVAL_MODES.includes(current.approvalMode as ApprovalMode)
+      ) {
+        next.approvalMode = current.approvalMode as ApprovalMode;
+      }
+
       // userDefaultsEnabled
       if ('userDefaultsEnabled' in body) {
         if (body.userDefaultsEnabled === null) {
@@ -496,6 +543,7 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
         'dataAnalysisEnabled' in next ||
         'defaultConnectionIds' in next ||
         'language' in next ||
+        'approvalMode' in next ||
         'userDefaultsEnabled' in next;
 
       const itemToStore = hasOverrides ? next : { user_id: userId, updatedAt: next.updatedAt };

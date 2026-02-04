@@ -394,7 +394,11 @@
     "integrationsDisabled": "Not enabled yet for V2 Chat",
     "noIntegrations": "No integrations connected",
     "preview": "Preview",
-    "download": "Download"
+    "download": "Download",
+    "kbSelected": "{{count}} selected",
+    "noneSelected": "None",
+    "allToolsEnabledSummary": "All enabled",
+    "noneEnabled": "None enabled"
   },
   "agents": {
     "chooseExperience": "Choose Chat Experience"
