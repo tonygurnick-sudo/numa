@@ -33,6 +33,7 @@ import { useNumaRequest } from '../Providers/NumaRequestContext';
 import type { ConnectionStatus } from '../types/pipedream';
 import { getDefaultDenyTools } from '../config/integrationToolsDefault';
 import { PageHeader } from '../Components/PageHeader';
+import { LayoutDashboard } from '../Layouts/LayoutDashboard';
 import { DataConnectorsTab } from '../Components/DataConnectors/DataConnectorsTab';
 
 // Use the proper ConnectionStatus type from the types file
@@ -189,6 +190,10 @@ export const NumaIntegrations = () => {
           status: connectedAppNames.includes(conn.app_name) ? 'connected' : 'not_connected',
           pipedream_account_id: conn.pipedream_account_id,
           last_auth_check: conn.last_auth_check || new Date().toISOString(),
+          healthy: conn.healthy,
+          dead: conn.dead,
+          connection_name: conn.connection_name,
+          connected_at: conn.connected_at,
         }));
         setConnections(connectionObjects);
         console.log('Integration status loaded successfully:', {
@@ -418,6 +423,10 @@ export const NumaIntegrations = () => {
     return connection?.status || 'not_connected';
   };
 
+  const getConnection = (appName: string) => {
+    return connections.find((conn) => conn.app_name === appName);
+  };
+
   const renderAppIcon = (app: IntegrationListItem) => {
     return (
       <img
@@ -461,39 +470,79 @@ export const NumaIntegrations = () => {
           <div className="row align-items-center h-100">
             {/* Icon & Name */}
             <div className="col-md-6">
-              <div className="d-flex align-items-center">
-                <div
-                  className="rounded-2 d-flex align-items-center justify-content-center me-3 flex-shrink-0"
-                  style={{ width: '48px', height: '48px', backgroundColor: '#f8f9fa', border: '1px solid #dee2e6' }}
-                >
-                  {renderAppIcon(integration)}
-                </div>
-                <div>
-                  <h6 className="mb-1 fw-semibold">{integration.name}</h6>
-                  <p className="mb-0 small text-muted" style={{ fontSize: '0.85rem', lineHeight: '1.4' }}>
-                    {integration.description}
-                  </p>
-                </div>
-              </div>
+              {(() => {
+                const conn = getConnection(integration.name_slug);
+                return (
+                  <div className="d-flex align-items-center">
+                    <div
+                      className="rounded-2 d-flex align-items-center justify-content-center me-3 flex-shrink-0"
+                      style={{ width: '48px', height: '48px', backgroundColor: '#f8f9fa', border: '1px solid #dee2e6' }}
+                    >
+                      {renderAppIcon(integration)}
+                    </div>
+                    <div>
+                      <h6 className="mb-1 fw-semibold">{integration.name}</h6>
+                      <p className="mb-0 small text-muted" style={{ fontSize: '0.85rem', lineHeight: '1.4' }}>
+                        {integration.description}
+                      </p>
+                      {isConnected && conn?.connection_name && (
+                        <div
+                          className="mt-1"
+                          style={{ fontSize: '0.75rem', color: '#8c939a', letterSpacing: '0.01em' }}
+                        >
+                          <i className="bi bi-link-45deg me-1"></i>
+                          {conn.connection_name}
+                          {conn.connected_at && (
+                            <span className="ms-1">
+                              &middot;{' '}
+                              {t('status.connectedSince', { date: new Date(conn.connected_at).toLocaleDateString() })}
+                            </span>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
             {/* Status */}
             <div className="col-md-2 text-center">
-              <div className="d-flex align-items-center justify-content-center">
-                {isConnected ? (
-                  <>
-                    <div className="rounded-circle bg-success me-2" style={{ width: '12px', height: '12px' }}></div>
-                    <span className="text-success small fw-semibold">{t('status.connected')}</span>
-                  </>
-                ) : (
-                  <>
-                    <div
-                      className="rounded-circle border border-secondary me-2"
-                      style={{ width: '12px', height: '12px' }}
-                    ></div>
-                    <span className="text-muted small">{t('status.notConnected')}</span>
-                  </>
-                )}
-              </div>
+              {(() => {
+                const conn = getConnection(integration.name_slug);
+                const isUnhealthy = isConnected && conn?.healthy === false;
+                const isDead = isConnected && conn?.dead === true;
+
+                return (
+                  <div className="d-flex align-items-center justify-content-center">
+                    {isConnected ? (
+                      isUnhealthy || isDead ? (
+                        <>
+                          <i className="bi bi-exclamation-triangle-fill text-warning me-2"></i>
+                          <span className="text-warning small fw-semibold">
+                            {isDead ? t('status.accountInactive') : t('status.reconnectRequired')}
+                          </span>
+                        </>
+                      ) : (
+                        <>
+                          <div
+                            className="rounded-circle bg-success me-2"
+                            style={{ width: '12px', height: '12px' }}
+                          ></div>
+                          <span className="text-success small fw-semibold">{t('status.connected')}</span>
+                        </>
+                      )
+                    ) : (
+                      <>
+                        <div
+                          className="rounded-circle border border-secondary me-2"
+                          style={{ width: '12px', height: '12px' }}
+                        ></div>
+                        <span className="text-muted small">{t('status.notConnected')}</span>
+                      </>
+                    )}
+                  </div>
+                );
+              })()}
             </div>
             {/* Actions */}
             <div className="col-md-4">
@@ -631,194 +680,200 @@ export const NumaIntegrations = () => {
         }
       />
 
-      {/* Moved alerts and content outside header */}
-      <Container>
-        {activeTab === 'connected-apps' && (
-          <>
-            {previewMode && (
-              <Alert variant="info" className="mb-3">
-                {t('preview.notice')}
-              </Alert>
-            )}
-            {error && (
-              <Alert variant="danger" className="mb-3">
-                {error}
-              </Alert>
-            )}
-          </>
-        )}
-
-        <Nav
-          variant="tabs"
-          activeKey={activeTab}
-          onSelect={(key) => setActiveTab((key as 'connected-apps' | 'data-connectors') || 'connected-apps')}
-          className="mb-4"
-        >
-          <Nav.Item>
-            <Nav.Link eventKey="connected-apps">{t('tabs.connectedApps')}</Nav.Link>
-          </Nav.Item>
-          {dataConnectorsEnabled && (
-            <Nav.Item>
-              <Nav.Link eventKey="data-connectors">{t('tabs.dataConnectors')}</Nav.Link>
-            </Nav.Item>
-          )}
-        </Nav>
-
-        {activeTab === 'connected-apps' && (
-          <>
-            {/* Post-connection guidance alert */}
-            {recentlyConnectedApp && (
-              <Alert variant="success" className="mb-3" dismissible onClose={() => setRecentlyConnectedApp(null)}>
-                <div className="d-flex align-items-start">
-                  <i className="bi bi-check-circle-fill text-success me-3 mt-1"></i>
-                  <div className="flex-grow-1">
-                    <h6 className="mb-1 fw-semibold">{t('connection.successTitle')}</h6>
-                    <p className="mb-2 small">
-                      {t('connection.successDescription', {
-                        appName:
-                          availableApps.find((app) => app.name_slug === recentlyConnectedApp)?.name ||
-                          recentlyConnectedApp,
-                      })}
-                    </p>
-                    <Button
-                      variant="success"
-                      size="sm"
-                      onClick={() => {
-                        openSettings(recentlyConnectedApp);
-                        setRecentlyConnectedApp(null);
-                      }}
-                      className="d-flex align-items-center"
-                    >
-                      <i className="bi bi-sliders me-2"></i>
-                      {t('connection.customizeTools')}
-                    </Button>
-                  </div>
-                </div>
-              </Alert>
-            )}
-
-            <Card className="mb-4 border-0 shadow-sm">
-              <Card.Body className="p-4">
-                <Row className="g-4">
-                  <Col md={3}>
-                    <div className="text-center p-2">
-                      <div className="d-flex align-items-center justify-content-center mb-2">
-                        <div className="integration-step-circle me-2">
-                          <span className="fw-bold">1</span>
-                        </div>
-                        <h6 className="text-primary fw-semibold mb-0">{t('steps.connect.title')}</h6>
-                      </div>
-                      <p className="small text-muted mb-0">{t('steps.connect.body')}</p>
-                    </div>
-                  </Col>
-                  <Col md={3}>
-                    <div className="text-center p-2">
-                      <div className="d-flex align-items-center justify-content-center mb-2">
-                        <div className="integration-step-circle me-2">
-                          <span className="fw-bold">2</span>
-                        </div>
-                        <h6 className="text-primary fw-semibold mb-0">{t('steps.signIn.title')}</h6>
-                      </div>
-                      <p className="small text-muted mb-0">{t('steps.signIn.body')}</p>
-                    </div>
-                  </Col>
-                  <Col md={3}>
-                    <div className="text-center p-2">
-                      <div className="d-flex align-items-center justify-content-center mb-2">
-                        <div className="integration-step-circle me-2">
-                          <span className="fw-bold">3</span>
-                        </div>
-                        <h6 className="text-primary fw-semibold mb-0">{t('steps.optimize.title')}</h6>
-                      </div>
-                      <p className="small text-muted mb-0">{t('steps.optimize.body')}</p>
-                    </div>
-                  </Col>
-                  <Col md={3}>
-                    <div className="text-center p-2">
-                      <div className="d-flex align-items-center justify-content-center mb-2">
-                        <div className="integration-step-circle me-2">
-                          <span className="fw-bold">4</span>
-                        </div>
-                        <h6 className="text-primary fw-semibold mb-0">{t('steps.work.title')}</h6>
-                      </div>
-                      <p className="small text-muted mb-0">
-                        {t('steps.work.bodyPrefix')}{' '}
-                        <Button
-                          variant="link"
-                          size="sm"
-                          className="p-0 align-baseline small text-primary fw-semibold"
-                          onClick={() => (window.location.href = '/chat')}
-                        >
-                          {t('steps.work.chatLink')}
-                        </Button>
-                      </p>
-                    </div>
-                  </Col>
-                </Row>
-              </Card.Body>
-            </Card>
-            <div className="mb-4">
-              <h4 className="text-primary mb-0 d-flex align-items-center">
-                <i className="bi bi-grid-3x3-gap me-2"></i>
-                <span>
-                  {loading
-                    ? t('availableIntegrations')
-                    : t('availableIntegrationsWithCount', { count: availableApps.length })}
-                </span>
-              </h4>
-            </div>
-            <div style={previewMode ? { position: 'relative' } : undefined}>
-              {loading ? (
-                <div className="text-center py-5">
-                  <Spinner animation="border" variant="primary" />
-                  <p className="mt-3 text-muted">{t('loadingIntegrations')}</p>
-                </div>
-              ) : (
+      <LayoutDashboard>
+        <div className="content-panel">
+          <Container className="pt-3 pb-0 flex-shrink-0">
+            <Nav
+              variant="tabs"
+              activeKey={activeTab}
+              onSelect={(key) => setActiveTab((key as 'connected-apps' | 'data-connectors') || 'connected-apps')}
+              className="mb-0"
+            >
+              <Nav.Item>
+                <Nav.Link eventKey="connected-apps">{t('tabs.connectedApps')}</Nav.Link>
+              </Nav.Item>
+              {dataConnectorsEnabled && (
+                <Nav.Item>
+                  <Nav.Link eventKey="data-connectors">{t('tabs.dataConnectors')}</Nav.Link>
+                </Nav.Item>
+              )}
+            </Nav>
+          </Container>
+          <div className="content-panel__body">
+            <Container>
+              {activeTab === 'connected-apps' && (
                 <>
-                  {/* Preview overlay */}
                   {previewMode && (
-                    <div
-                      style={{
-                        position: 'absolute',
-                        inset: 0,
-                        background: 'rgba(255,255,255,0.6)',
-                        backdropFilter: 'blur(2px)',
-                        WebkitBackdropFilter: 'blur(2px)',
-                        zIndex: 2,
-                      }}
-                    />
+                    <Alert variant="info" className="mb-3">
+                      {t('preview.notice')}
+                    </Alert>
                   )}
-                  <div style={previewMode ? { pointerEvents: 'none', opacity: 0.8 } : undefined}>
-                    {[...availableApps]
-                      .sort((a: IntegrationListItem, b: IntegrationListItem) => {
-                        // Admin allowed (enabled) first
-                        const adminDisabledA = globalSettings[a.name_slug]?.status === 'disabled';
-                        const adminDisabledB = globalSettings[b.name_slug]?.status === 'disabled';
-                        if (adminDisabledA !== adminDisabledB) return adminDisabledA ? 1 : -1;
+                  {error && (
+                    <Alert variant="danger" className="mb-3">
+                      {error}
+                    </Alert>
+                  )}
+                </>
+              )}
 
-                        // Then connected first
-                        const statusA = getConnectionStatus(a.name_slug);
-                        const statusB = getConnectionStatus(b.name_slug);
-                        const connectedA = statusA === 'connected';
-                        const connectedB = statusB === 'connected';
-                        if (connectedA && !connectedB) return -1;
-                        if (!connectedA && connectedB) return 1;
+              {activeTab === 'connected-apps' && (
+                <>
+                  {/* Post-connection guidance alert */}
+                  {recentlyConnectedApp && (
+                    <Alert variant="success" className="mb-3" dismissible onClose={() => setRecentlyConnectedApp(null)}>
+                      <div className="d-flex align-items-start">
+                        <i className="bi bi-check-circle-fill text-success me-3 mt-1"></i>
+                        <div className="flex-grow-1">
+                          <h6 className="mb-1 fw-semibold">{t('connection.successTitle')}</h6>
+                          <p className="mb-2 small">
+                            {t('connection.successDescription', {
+                              appName:
+                                availableApps.find((app) => app.name_slug === recentlyConnectedApp)?.name ||
+                                recentlyConnectedApp,
+                            })}
+                          </p>
+                          <Button
+                            variant="success"
+                            size="sm"
+                            onClick={() => {
+                              openSettings(recentlyConnectedApp);
+                              setRecentlyConnectedApp(null);
+                            }}
+                            className="d-flex align-items-center"
+                          >
+                            <i className="bi bi-sliders me-2"></i>
+                            {t('connection.customizeTools')}
+                          </Button>
+                        </div>
+                      </div>
+                    </Alert>
+                  )}
 
-                        // Finally alphabetical
-                        return a.name.localeCompare(b.name);
-                      })
-                      .map(renderIntegrationRow)}
+                  <Card className="mb-4 border-0 shadow-sm">
+                    <Card.Body className="p-4">
+                      <Row className="g-4">
+                        <Col md={3}>
+                          <div className="text-center p-2">
+                            <div className="d-flex align-items-center justify-content-center mb-2">
+                              <div className="integration-step-circle me-2">
+                                <span className="fw-bold">1</span>
+                              </div>
+                              <h6 className="text-primary fw-semibold mb-0">{t('steps.connect.title')}</h6>
+                            </div>
+                            <p className="small text-muted mb-0">{t('steps.connect.body')}</p>
+                          </div>
+                        </Col>
+                        <Col md={3}>
+                          <div className="text-center p-2">
+                            <div className="d-flex align-items-center justify-content-center mb-2">
+                              <div className="integration-step-circle me-2">
+                                <span className="fw-bold">2</span>
+                              </div>
+                              <h6 className="text-primary fw-semibold mb-0">{t('steps.signIn.title')}</h6>
+                            </div>
+                            <p className="small text-muted mb-0">{t('steps.signIn.body')}</p>
+                          </div>
+                        </Col>
+                        <Col md={3}>
+                          <div className="text-center p-2">
+                            <div className="d-flex align-items-center justify-content-center mb-2">
+                              <div className="integration-step-circle me-2">
+                                <span className="fw-bold">3</span>
+                              </div>
+                              <h6 className="text-primary fw-semibold mb-0">{t('steps.optimize.title')}</h6>
+                            </div>
+                            <p className="small text-muted mb-0">{t('steps.optimize.body')}</p>
+                          </div>
+                        </Col>
+                        <Col md={3}>
+                          <div className="text-center p-2">
+                            <div className="d-flex align-items-center justify-content-center mb-2">
+                              <div className="integration-step-circle me-2">
+                                <span className="fw-bold">4</span>
+                              </div>
+                              <h6 className="text-primary fw-semibold mb-0">{t('steps.work.title')}</h6>
+                            </div>
+                            <p className="small text-muted mb-0">
+                              {t('steps.work.bodyPrefix')}{' '}
+                              <Button
+                                variant="link"
+                                size="sm"
+                                className="p-0 align-baseline small text-primary fw-semibold"
+                                onClick={() => (window.location.href = '/chat')}
+                              >
+                                {t('steps.work.chatLink')}
+                              </Button>
+                            </p>
+                          </div>
+                        </Col>
+                      </Row>
+                    </Card.Body>
+                  </Card>
+                  <div className="mb-4">
+                    <h4 className="text-primary mb-0 d-flex align-items-center">
+                      <i className="bi bi-grid-3x3-gap me-2"></i>
+                      <span>
+                        {loading
+                          ? t('availableIntegrations')
+                          : t('availableIntegrationsWithCount', { count: availableApps.length })}
+                      </span>
+                    </h4>
+                  </div>
+                  <div style={previewMode ? { position: 'relative' } : undefined}>
+                    {loading ? (
+                      <div className="text-center py-5">
+                        <Spinner animation="border" variant="primary" />
+                        <p className="mt-3 text-muted">{t('loadingIntegrations')}</p>
+                      </div>
+                    ) : (
+                      <>
+                        {/* Preview overlay */}
+                        {previewMode && (
+                          <div
+                            style={{
+                              position: 'absolute',
+                              inset: 0,
+                              background: 'rgba(255,255,255,0.6)',
+                              backdropFilter: 'blur(2px)',
+                              WebkitBackdropFilter: 'blur(2px)',
+                              zIndex: 2,
+                            }}
+                          />
+                        )}
+                        <div style={previewMode ? { pointerEvents: 'none', opacity: 0.8 } : undefined}>
+                          {[...availableApps]
+                            .sort((a: IntegrationListItem, b: IntegrationListItem) => {
+                              // Admin allowed (enabled) first
+                              const adminDisabledA = globalSettings[a.name_slug]?.status === 'disabled';
+                              const adminDisabledB = globalSettings[b.name_slug]?.status === 'disabled';
+                              if (adminDisabledA !== adminDisabledB) return adminDisabledA ? 1 : -1;
+
+                              // Then connected first
+                              const statusA = getConnectionStatus(a.name_slug);
+                              const statusB = getConnectionStatus(b.name_slug);
+                              const connectedA = statusA === 'connected';
+                              const connectedB = statusB === 'connected';
+                              if (connectedA && !connectedB) return -1;
+                              if (!connectedA && connectedB) return 1;
+
+                              // Finally alphabetical
+                              return a.name.localeCompare(b.name);
+                            })
+                            .map(renderIntegrationRow)}
+                        </div>
+                      </>
+                    )}
                   </div>
                 </>
               )}
-            </div>
-          </>
-        )}
 
-        {dataConnectorsEnabled && activeTab === 'data-connectors' && (
-          <DataConnectorsTab adminSettings={dataConnectorSettings} />
-        )}
-      </Container>
+              {dataConnectorsEnabled && activeTab === 'data-connectors' && (
+                <DataConnectorsTab adminSettings={dataConnectorSettings} />
+              )}
+            </Container>
+          </div>
+        </div>
+      </LayoutDashboard>
       {/* Settings modal */}
       <SettingsModal
         show={!!settingsApp}

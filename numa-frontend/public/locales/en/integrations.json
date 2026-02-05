@@ -214,7 +214,10 @@
   "status": {
     "connected": "Connected",
     "notConnected": "Not Connected",
-    "disabledByAdmin": "Disabled by your administrator"
+    "disabledByAdmin": "Disabled by your administrator",
+    "reconnectRequired": "Reconnect Required",
+    "connectedSince": "Since {{date}}",
+    "accountInactive": "Account inactive"
   },
   "actions": {
     "test": "Test",

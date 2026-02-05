@@ -31,7 +31,9 @@
       "alertThresholds": [100]
     },
     "agents": true,
-    "brandingProviderEnabled": true
+    "brandingProviderEnabled": true,
+    "bedrockAccount": "552162429805",
+    "numaWorkspaceChat": true
   },
   "nd-labs": {
     "clientAccountId": "905418183804",
