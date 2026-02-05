@@ -200,6 +200,10 @@ class TestLambdaFunction(unittest.TestCase):
                     "pipedream_account_id": "pa_abc123",
                     "last_auth_check": "2025-08-13T10:00:00Z",
                     "mcp_server_url": "https://remote.mcp.pipedream.net/arcanum_demo_user123/slack",
+                    "healthy": True,
+                    "dead": None,
+                    "connection_name": "nathan@arcanum.ai",
+                    "connected_at": "2025-08-13T10:00:00Z",
                 }
             ],
             "external_user_id": "arcanum_demo_user123",
@@ -654,6 +658,195 @@ class TestInjectAuthProvisionId(unittest.TestCase):
 
         # Should use original key when schema unavailable
         self.assertEqual(result["jira"]["authProvisionId"], "apn_jira123")
+
+
+class TestGetUserConnectionsPagination(unittest.TestCase):
+    """Test cases for _get_user_connections pagination."""
+
+    def setUp(self) -> None:
+        self.env_vars = {
+            "SECURITY_MAPPING_TABLE": "pipedream-security-mapping",
+            "ALLOWED_ACCOUNTS_TABLE": "pipedream-allowed-accounts",
+            "PIPEDREAM_SECRET_ARN": "arn:aws:secretsmanager:us-east-1:123456789012:secret:test",
+            "SUPPORTED_INTEGRATIONS": '["slack", "gmail"]',
+            "ENVIRONMENT": "test",
+        }
+
+    @patch.object(PipedreamOperations, "get_access_token", return_value="test-token")
+    @patch.object(
+        PipedreamOperations,
+        "get_credentials",
+        return_value={"project_id": "prj_123", "environment": "development"},
+    )
+    @patch("pipedream_operations.requests.get")
+    def test_single_page(self, mock_get, _mock_creds, _mock_token) -> None:
+        """When count < limit, returns all connections in one request."""
+        mock_response = Mock()
+        mock_response.json.return_value = {
+            "data": [{"id": "apn_1", "app": {"name_slug": "slack"}}],
+            "page_info": {"count": 1},
+        }
+        mock_response.raise_for_status = Mock()
+        mock_get.return_value = mock_response
+
+        with patch.dict(os.environ, self.env_vars):
+            ops = PipedreamOperations()
+            result = ops._get_user_connections("user123")
+
+        self.assertEqual(len(result), 1)
+        mock_get.assert_called_once()
+
+    @patch.object(PipedreamOperations, "get_access_token", return_value="test-token")
+    @patch.object(
+        PipedreamOperations,
+        "get_credentials",
+        return_value={"project_id": "prj_123", "environment": "development"},
+    )
+    @patch("pipedream_operations.requests.get")
+    def test_multiple_pages(self, mock_get, _mock_creds, _mock_token) -> None:
+        """When count == limit, paginates using after cursor."""
+        page1_response = Mock()
+        page1_response.json.return_value = {
+            "data": [
+                {"id": f"apn_{i}", "app": {"name_slug": "slack"}} for i in range(100)
+            ],
+            "page_info": {"count": 100, "end_cursor": "cursor_abc"},
+        }
+        page1_response.raise_for_status = Mock()
+
+        page2_response = Mock()
+        page2_response.json.return_value = {
+            "data": [{"id": "apn_100", "app": {"name_slug": "gmail"}}],
+            "page_info": {"count": 1},
+        }
+        page2_response.raise_for_status = Mock()
+
+        mock_get.side_effect = [page1_response, page2_response]
+
+        with patch.dict(os.environ, self.env_vars):
+            ops = PipedreamOperations()
+            result = ops._get_user_connections("user123")
+
+        self.assertEqual(len(result), 101)
+        self.assertEqual(mock_get.call_count, 2)
+        # Verify second call includes the after cursor
+        second_call_params = mock_get.call_args_list[1][1].get("params", {})
+        self.assertEqual(second_call_params.get("after"), "cursor_abc")
+
+    @patch.object(PipedreamOperations, "get_access_token", return_value="test-token")
+    @patch.object(
+        PipedreamOperations,
+        "get_credentials",
+        return_value={"project_id": "prj_123", "environment": "development"},
+    )
+    @patch("pipedream_operations.requests.get")
+    def test_no_end_cursor_stops(self, mock_get, _mock_creds, _mock_token) -> None:
+        """Stops paginating when end_cursor is missing even if count == limit."""
+        mock_response = Mock()
+        mock_response.json.return_value = {
+            "data": [
+                {"id": f"apn_{i}", "app": {"name_slug": "slack"}} for i in range(100)
+            ],
+            "page_info": {"count": 100},  # No end_cursor
+        }
+        mock_response.raise_for_status = Mock()
+        mock_get.return_value = mock_response
+
+        with patch.dict(os.environ, self.env_vars):
+            ops = PipedreamOperations()
+            result = ops._get_user_connections("user123")
+
+        self.assertEqual(len(result), 100)
+        mock_get.assert_called_once()
+
+    @patch.object(PipedreamOperations, "get_access_token", return_value="test-token")
+    @patch.object(
+        PipedreamOperations,
+        "get_credentials",
+        return_value={"project_id": "prj_123", "environment": "development"},
+    )
+    @patch("pipedream_operations.requests.get")
+    def test_api_error_raises(self, mock_get, _mock_creds, _mock_token) -> None:
+        """API errors are propagated as exceptions."""
+        mock_get.side_effect = Exception("Network error")
+
+        with patch.dict(os.environ, self.env_vars):
+            ops = PipedreamOperations()
+            with self.assertRaises(Exception) as context:
+                ops._get_user_connections("user123")
+
+        self.assertIn("Failed to fetch connections", str(context.exception))
+
+
+class TestBuildConnectionStatusNewFields(unittest.TestCase):
+    """Test new fields in _build_connection_status."""
+
+    def setUp(self) -> None:
+        self.env_vars = {
+            "SECURITY_MAPPING_TABLE": "pipedream-security-mapping",
+            "ALLOWED_ACCOUNTS_TABLE": "pipedream-allowed-accounts",
+            "PIPEDREAM_SECRET_ARN": "arn:aws:secretsmanager:us-east-1:123456789012:secret:test",
+            "SUPPORTED_INTEGRATIONS": '["slack", "gmail"]',
+            "ENVIRONMENT": "test",
+        }
+
+    def test_connected_includes_new_fields(self) -> None:
+        """Connected integrations include healthy, dead, connection_name, connected_at."""
+        connections = [
+            {
+                "id": "apn_1",
+                "app": {"name_slug": "slack"},
+                "healthy": True,
+                "dead": None,
+                "name": "nathan@arcanum.ai",
+                "created_at": "2025-08-13T10:00:00Z",
+            }
+        ]
+        with patch.dict(os.environ, self.env_vars):
+            ops = PipedreamOperations()
+            result = ops._build_connection_status(connections)
+
+        slack = next(c for c in result if c["app_name"] == "slack")
+        self.assertEqual(slack["status"], "connected")
+        self.assertTrue(slack["healthy"])
+        self.assertIsNone(slack["dead"])
+        self.assertEqual(slack["connection_name"], "nathan@arcanum.ai")
+        self.assertEqual(slack["connected_at"], "2025-08-13T10:00:00Z")
+
+    def test_not_connected_has_null_new_fields(self) -> None:
+        """Not-connected integrations have None for all new fields."""
+        with patch.dict(os.environ, self.env_vars):
+            ops = PipedreamOperations()
+            result = ops._build_connection_status([])  # No connections
+
+        gmail = next(c for c in result if c["app_name"] == "gmail")
+        self.assertEqual(gmail["status"], "not_connected")
+        self.assertIsNone(gmail["healthy"])
+        self.assertIsNone(gmail["dead"])
+        self.assertIsNone(gmail["connection_name"])
+        self.assertIsNone(gmail["connected_at"])
+
+    def test_unhealthy_connection(self) -> None:
+        """Unhealthy connections report healthy=False."""
+        connections = [
+            {
+                "id": "apn_1",
+                "app": {"name_slug": "gmail"},
+                "healthy": False,
+                "dead": True,
+                "name": "old-account@example.com",
+                "created_at": "2025-01-01T00:00:00Z",
+            }
+        ]
+        with patch.dict(os.environ, self.env_vars):
+            ops = PipedreamOperations()
+            result = ops._build_connection_status(connections)
+
+        gmail = next(c for c in result if c["app_name"] == "gmail")
+        self.assertEqual(gmail["status"], "connected")
+        self.assertFalse(gmail["healthy"])
+        self.assertTrue(gmail["dead"])
+        self.assertEqual(gmail["connection_name"], "old-account@example.com")
 
 
 if __name__ == "__main__":

@@ -31,6 +31,10 @@ export interface ConnectionStatus {
   status: 'connected' | 'not_connected';
   pipedream_account_id: string | null;
   last_auth_check: string | null;
+  healthy?: boolean | null;
+  dead?: boolean | null;
+  connection_name?: string | null;
+  connected_at?: string | null;
 }
 
 export interface IntegrationStatusData {

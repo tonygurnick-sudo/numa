@@ -524,45 +524,67 @@ class PipedreamOperations:
         return tools
 
     def _get_user_connections(self, external_user_id: str) -> List[Dict[str, Any]]:
-        """Get user's connected accounts from Pipedream API."""
+        """Get user's connected accounts from Pipedream API.
+
+        Paginates through results since the API defaults to 10 per page.
+        """
         credentials = self.get_credentials()
         access_token = self.get_access_token()
+        project_id = credentials["project_id"]
+        environment = credentials["environment"]
 
-        try:
-            response = requests.get(
-                f"https://api.pipedream.com/v1/connect/{credentials['project_id']}/accounts",
-                headers={
-                    "Authorization": f"Bearer {access_token}",
-                    "x-pd-environment": credentials["environment"],
-                },
-                params={
-                    "external_user_id": external_user_id,
-                    "include_credentials": "false",
-                },
-                timeout=15,
-            )
-            response.raise_for_status()
+        all_connections: List[Dict[str, Any]] = []
+        after_cursor: Optional[str] = None
+        limit = 100
 
-            accounts_data = response.json()
+        while True:
+            params: Dict[str, Any] = {
+                "external_user_id": external_user_id,
+                "include_credentials": "false",
+                "limit": limit,
+            }
+            if after_cursor:
+                params["after"] = after_cursor
+
+            try:
+                response = requests.get(
+                    f"https://api.pipedream.com/v1/connect/{project_id}/accounts",
+                    headers={
+                        "Authorization": f"Bearer {access_token}",
+                        "x-pd-environment": environment,
+                    },
+                    params=params,
+                    timeout=15,
+                )
+                response.raise_for_status()
+                accounts_data = response.json()
+            except Exception as e:
+                logger.error(
+                    "Failed to fetch Pipedream connections",
+                    error=str(e),
+                    external_user_id=external_user_id,
+                )
+                raise Exception(
+                    f"Failed to fetch connections from Pipedream API: {str(e)}"
+                ) from e
+
             connections = accounts_data.get("data", [])
+            all_connections.extend(connections)
 
-            logger.debug(
-                "Successfully fetched Pipedream connections",
-                external_user_id=external_user_id,
-                connection_count=len(connections),
-            )
+            page_info = accounts_data.get("page_info", {})
+            if page_info.get("count", 0) < limit:
+                break
+            after_cursor = page_info.get("end_cursor")
+            if not after_cursor:
+                break
 
-            return connections
+        logger.debug(
+            "Successfully fetched Pipedream connections",
+            external_user_id=external_user_id,
+            connection_count=len(all_connections),
+        )
 
-        except Exception as e:
-            logger.error(
-                "Failed to fetch Pipedream connections",
-                error=str(e),
-                external_user_id=external_user_id,
-            )
-            raise Exception(
-                f"Failed to fetch connections from Pipedream API: {str(e)}"
-            ) from e
+        return all_connections
 
     def _build_connection_status(
         self, pipedream_connections: List[Dict[str, Any]]
@@ -602,6 +624,10 @@ class PipedreamOperations:
                         "status": "connected",
                         "pipedream_account_id": pipedream_connection.get("id"),
                         "last_auth_check": pipedream_connection.get("created_at"),
+                        "healthy": pipedream_connection.get("healthy"),
+                        "dead": pipedream_connection.get("dead"),
+                        "connection_name": pipedream_connection.get("name"),
+                        "connected_at": pipedream_connection.get("created_at"),
                     }
                 )
             else:
@@ -611,6 +637,10 @@ class PipedreamOperations:
                         "status": "not_connected",
                         "pipedream_account_id": None,
                         "last_auth_check": None,
+                        "healthy": None,
+                        "dead": None,
+                        "connection_name": None,
+                        "connected_at": None,
                     }
                 )
 
