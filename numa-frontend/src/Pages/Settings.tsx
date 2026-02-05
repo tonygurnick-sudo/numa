@@ -1046,8 +1046,8 @@ export default function SettingsPage() {
             </div>
           ) : (
             <div className="d-flex flex-column gap-2">
-              {toolList.map((t) => {
-                const allowed = toolToggles[t.name] ?? true;
+              {toolList.map((tool) => {
+                const allowed = toolToggles[tool.name] ?? true;
 
                 // Helper functions for formatting tool names
                 const stripPrefix = (name: string, prefix?: string | null) =>
@@ -1103,11 +1103,11 @@ export default function SettingsPage() {
                   return parts.length > 0 ? parts : desc;
                 };
 
-                const displayName = toTitle(stripPrefix(t.name, manageToolsFor));
+                const displayName = toTitle(stripPrefix(tool.name, manageToolsFor));
 
                 return (
                   <div
-                    key={t.name}
+                    key={tool.name}
                     className={`d-flex align-items-start justify-content-between p-3 border rounded-3 ${allowed ? 'bg-light bg-opacity-25' : 'bg-light bg-opacity-50'}`}
                     style={{
                       transition: 'all 0.2s ease',
@@ -1122,7 +1122,7 @@ export default function SettingsPage() {
                         ></div>
                         <span className={`fw-semibold ${allowed ? 'text-dark' : 'text-muted'}`}>{displayName}</span>
                       </div>
-                      {t.description && (
+                      {tool.description && (
                         <div
                           className={`small ${allowed ? 'text-muted' : 'text-secondary'}`}
                           style={{
@@ -1133,7 +1133,7 @@ export default function SettingsPage() {
                             fontSize: '0.85rem',
                           }}
                         >
-                          {parseDescription(t.description)}
+                          {parseDescription(tool.description)}
                         </div>
                       )}
                     </div>
@@ -1142,7 +1142,7 @@ export default function SettingsPage() {
                         className="form-check-input"
                         type="checkbox"
                         checked={allowed}
-                        onChange={(e) => setToolToggles({ ...toolToggles, [t.name]: e.target.checked })}
+                        onChange={(e) => setToolToggles({ ...toolToggles, [tool.name]: e.target.checked })}
                         style={{
                           transform: 'scale(1.1)',
                         }}
