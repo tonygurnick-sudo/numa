@@ -19,6 +19,9 @@ Auth key is `googleCalendar` (camelCase):
 - **`orderBy="startTime"`:** Requires `singleEvents: true` or it will fail.
 - **`maxResults` default:** 250 events. Max 2500. Use pagination for more.
 
+## Resolving Attendee Emails
+If the user refers to someone by name without providing their email, use `list-events` with the `q` parameter to search past events (e.g., `q: "Tony"`). Extract the correct email from the `attendees` list in matching events rather than guessing the address format. If no match is found, ask the user for the email directly.
+
 ## When to Use What
 
 - **"Find free time with [person]"** → `query-free-busy-calendars` with their email in the array

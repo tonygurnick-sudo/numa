@@ -262,10 +262,13 @@ def extract_user_sub(authorization: str | None) -> str:
         raise HTTPException(status_code=401, detail="Authentication failed")
 
 
-def build_session_id(user_sub: str) -> str:
-    """Build AgentCore session ID from user sub."""
-    # AgentCore sessions are tied to users, not conversations
-    return f"user-{user_sub}"
+def build_session_id(conversation_id: str) -> str:
+    """Build AgentCore session ID from conversation ID.
+
+    Each conversation gets its own MicroVM container, eliminating
+    conversation-switching complexity and solving concurrency issues.
+    """
+    return f"conv-{conversation_id}"
 
 
 @app.get(f"{PREFIX}/ping")
@@ -307,26 +310,6 @@ async def integration_file_redirect(
     return RedirectResponse(url=presigned_url, status_code=302)
 
 
-@app.get(f"{PREFIX}/status")
-async def get_status(
-    authorization: str | None = Header(None),
-    x_arcanum_cloudfront_secret: str | None = Header(
-        None, alias="x-arcanum-cloudfront-secret"
-    ),
-):
-    """Forward status request to AgentCore."""
-    validate_cloudfront_secret(x_arcanum_cloudfront_secret, authorization)
-    user_sub = extract_user_sub(authorization)
-
-    return await _invoke_agentcore(
-        user_sub=user_sub,
-        http_method="GET",
-        http_path="/status",
-        authorization=authorization,
-        stream=False,
-    )
-
-
 @app.get(f"{PREFIX}/files")
 async def list_files(
     authorization: str | None = Header(None),
@@ -334,17 +317,10 @@ async def list_files(
         None, alias="x-arcanum-cloudfront-secret"
     ),
 ):
-    """Forward files list request to AgentCore (global workspace files)."""
+    """List global workspace files (chat-workflows feature - currently disabled)."""
     validate_cloudfront_secret(x_arcanum_cloudfront_secret, authorization)
-    user_sub = extract_user_sub(authorization)
-
-    return await _invoke_agentcore(
-        user_sub=user_sub,
-        http_method="GET",
-        http_path="/files",
-        authorization=authorization,
-        stream=False,
-    )
+    extract_user_sub(authorization)  # Validate auth
+    return {"status": "success", "files": []}
 
 
 @app.get(f"{PREFIX}/files/{{conversation_id}}")
@@ -365,6 +341,7 @@ async def list_conversation_files(
         http_path=f"/files/{conversation_id}",
         authorization=authorization,
         stream=False,
+        conversation_id=conversation_id,
     )
 
 
@@ -386,6 +363,7 @@ async def get_history(
         http_path=f"/history/{conversation_id}",
         authorization=authorization,
         stream=False,
+        conversation_id=conversation_id,
     )
 
 
@@ -408,6 +386,7 @@ async def get_trace(
         authorization=authorization,
         stream=False,
         raw=True,  # Return raw NDJSON, don't wrap in JSON
+        conversation_id=conversation_id,
     )
 
 
@@ -442,6 +421,9 @@ async def invocations(
     if action == "approve":
         return await _handle_approve(body, user_sub)
 
+    # Extract conversationId for per-conversation session routing
+    conversation_id = body.get("conversationId")
+
     # Chat action streams, others return JSON
     return await _invoke_agentcore(
         user_sub=user_sub,
@@ -450,6 +432,7 @@ async def invocations(
         http_body=body,
         authorization=authorization,
         stream=(action == "chat"),
+        conversation_id=conversation_id,
     )
 
 
@@ -502,17 +485,23 @@ async def _invoke_agentcore(
     stream: bool,
     http_body: dict | None = None,
     raw: bool = False,
+    conversation_id: str | None = None,
 ):
     """
     Invoke AgentCore runtime with HTTP request details.
 
     Uses the invoke_agent_runtime API which accepts a payload and returns
-    a streaming response.
+    a streaming response. Routes to a per-conversation MicroVM container.
 
     Args:
         raw: If True, return raw text response without JSON wrapping (for NDJSON endpoints)
+        conversation_id: Conversation ID for per-conversation session routing
     """
-    session_id = build_session_id(user_sub)
+    if conversation_id:
+        session_id = build_session_id(conversation_id)
+    else:
+        # Fallback for requests without a conversation_id
+        session_id = f"user-{user_sub}"
 
     # Build the payload that the workspace agent will receive
     # The workspace agent's FastAPI app will parse this

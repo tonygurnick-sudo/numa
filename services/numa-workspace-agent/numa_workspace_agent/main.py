@@ -5,8 +5,8 @@ AgentCore HTTP Contract:
 - GET /ping - Health check (returns {"status": "Healthy"})
 - POST /invocations - Main request handler (dispatches by action)
 
-Session is tied to user (not conversation) - same MicroVM reused across conversations.
-Session ID = user_sub (from JWT).
+Session is tied to conversation - each conversation gets its own MicroVM container.
+Session ID = conv-{conversation_id} (set by the proxy Lambda).
 """
 
 import base64
@@ -48,7 +48,6 @@ from .s3_workspace import (
     list_conversation_files_from_s3,
     list_workspace_files_from_s3,
     sync_agent_reference_files,
-    sync_conversation_switch,
     sync_from_s3,
     sync_to_s3,
     sync_uploads_from_s3,
@@ -57,7 +56,6 @@ from .sdk_config import CLIENT_NAME
 from .sdk_runner import (
     check_sdk_available,
     get_run,
-    get_sdk_version,
     request_stop,
     stream_claude_sdk,
 )
@@ -90,7 +88,7 @@ logger.info("FastAPI app created successfully")
 # Store checksums for change detection between requests
 _checksums_cache: dict[str, FileChecksum] = {}
 
-# Cache KB file listings for the current conversation (cleared on conversation switch)
+# Cache KB file listings for the current conversation
 _kb_listings_cache: dict[str, dict] = {}
 _kb_listings_conversation_id: str | None = None
 
@@ -314,11 +312,12 @@ def _extract_user_sub(
     if http_user_sub:
         return http_user_sub
 
-    # Source 3: AgentCore session ID header (user-{sub} format)
-    # The proxy sets session_id = f"user-{user_sub}", AgentCore passes it via this header
+    # Source 3: AgentCore session ID header
+    # Legacy format: user-{sub} (backwards compat during rollout)
+    # New format: conv-{conversation_id} (does not contain user_sub)
     session_id = request.headers.get("x-amzn-bedrock-agentcore-runtime-session-id", "")
     if session_id and session_id.startswith("user-"):
-        return session_id[5:]  # Strip "user-" prefix
+        return session_id[5:]  # Strip "user-" prefix (legacy format)
 
     # Source 4: JWT from either payload or HTTP headers
     auth_header = (payload_headers or {}).get("authorization") or request.headers.get(
@@ -544,47 +543,11 @@ async def list_conversation_files_endpoint(conversation_id: str, request: Reques
     }
 
 
-@app.get("/status")
-async def get_status(request: Request):
-    """
-    Get workspace agent status.
-
-    This is a read-only endpoint for checking agent capabilities.
-    """
-    user_sub = _extract_user_sub(request)
-    sdk_version = await get_sdk_version()
-    active_conv = get_active_conversation()
-
-    return {
-        "status": "ready",
-        "client": CLIENT_NAME,
-        "capabilities": ["chat", "file-ops", "workspace"],
-        "userSub": user_sub,
-        "claudeSdkVersion": sdk_version,
-        "activeConversation": active_conv,
-    }
-
-
 # =============================================================================
 # PROXY HANDLER FUNCTIONS
 # These handle requests routed through the workspace-agent-proxy Lambda.
 # AgentCore only POSTs to /invocations, so we route based on httpPath in payload.
 # =============================================================================
-
-
-async def _handle_proxy_status(request: Request, user_sub: str) -> dict:
-    """Handle /status request from proxy."""
-    sdk_version = await get_sdk_version()
-    active_conv = get_active_conversation()
-
-    return {
-        "status": "ready",
-        "client": CLIENT_NAME,
-        "capabilities": ["chat", "file-ops", "workspace"],
-        "userSub": user_sub,
-        "claudeSdkVersion": sdk_version,
-        "activeConversation": active_conv,
-    }
 
 
 async def _handle_proxy_files(user_sub: str) -> dict:
@@ -808,9 +771,7 @@ async def invocations(request: Request):
         # Route requests to appropriate handlers based on httpPath
         # These don't need workspace sync, so handle them early
         user_sub = _extract_user_sub(request, payload_headers)
-        if http_path == "/status":
-            return await _handle_proxy_status(request, user_sub)
-        elif http_path == "/files":
+        if http_path == "/files":
             return await _handle_proxy_files(user_sub)
         elif http_path and http_path.startswith("/files/"):
             # /files/{conversation_id} - per-conversation file listing
@@ -859,30 +820,6 @@ async def invocations(request: Request):
     # Ensure directories exist
     ensure_directories()
 
-    # Check for conversation switch (warm session, different conversation)
-    active_conv = get_active_conversation()
-    conversation_switched = False
-
-    if not cold_start and active_conv and active_conv != conversation_id:
-        logger.info(
-            "Conversation switch detected",
-            from_conv=active_conv[:8] + "...",
-            to_conv=conversation_id[:8] + "...",
-        )
-        conversation_switched = True
-    elif not cold_start and not active_conv:
-        # Edge case: Container is warm (.system exists) but no conversation is active.
-        # This can happen when:
-        # - A non-chat action (upload) warmed the container without setting active_conv
-        # - Container was recycled but .system dir was preserved/recreated
-        # We need to sync this conversation's files from S3.
-        logger.debug(
-            "Warm container with no active conversation, syncing from S3",
-            phase="sync",
-            conversation_id=conversation_id,
-        )
-        sync_from_s3(user_sub, conversation_id)  # sync_from_s3 logs its own summary
-
     # Store checksums before request for change detection
     _checksums_cache = get_local_checksums(conversation_id)
 
@@ -897,8 +834,6 @@ async def invocations(request: Request):
                 user_sub,
                 conversation_id,
                 cold_start,
-                conversation_switched,
-                active_conv,
             )
         elif action == "stop":
             return await _handle_stop(body, user_sub)
@@ -1080,8 +1015,6 @@ async def _handle_chat(
     user_sub: str,
     conversation_id: str,
     is_cold_start: bool,
-    conversation_switched: bool,
-    old_conversation_id: Optional[str],
 ) -> StreamingResponse:
     """Handle chat action - stream Claude CLI response."""
     global _checksums_cache
@@ -1209,7 +1142,6 @@ async def _handle_chat(
         conversation_id=conversation_id,
         prompt_length=len(prompt),
         is_cold_start=is_cold_start,
-        conversation_switched=conversation_switched,
         has_attachments=bool(attached_files),
         has_folders=bool(attached_folders),
         model_id=model_id,
@@ -1219,12 +1151,7 @@ async def _handle_chat(
     )
 
     # Warm session sync guard: if uploads are expected but missing locally, fetch from S3
-    if (
-        has_uploads
-        and expected_upload_paths
-        and not is_cold_start
-        and not conversation_switched
-    ):
+    if has_uploads and expected_upload_paths and not is_cold_start:
         paths = get_workspace_paths()
         uploads_dir = paths["uploads"]
         missing = [
@@ -1261,31 +1188,8 @@ async def _handle_chat(
                 }
             )
 
-        # Handle conversation switch
-        if conversation_switched and old_conversation_id:
-            # Emit switching event
-            yield emit_event(
-                {
-                    "type": "conversation_switch",
-                    "status": "switching",
-                    "fromConversation": old_conversation_id,
-                    "toConversation": conversation_id,
-                }
-            )
-
-            # Perform the switch
-            sync_conversation_switch(user_sub, old_conversation_id, conversation_id)
-            set_active_conversation(conversation_id)
-
-            yield emit_event(
-                {
-                    "type": "conversation_switch",
-                    "status": "ready",
-                    "conversationId": conversation_id,
-                }
-            )
-        elif not get_active_conversation():
-            # First conversation in session
+        # Set active conversation if not already set (first request in this container)
+        if not get_active_conversation():
             set_active_conversation(conversation_id)
 
         # --- V1 to V2 Migration ---
@@ -1355,9 +1259,9 @@ async def _handle_chat(
                 shutil.rmtree(tools_dir, ignore_errors=True)
 
         # --- Fetch KB File Listings ---
-        # Fetch top-level file listings for KBs on conversation start/switch
+        # Fetch top-level file listings for KBs on cold start
         kb_listings = None
-        if available_kbs and (is_cold_start or conversation_switched):
+        if available_kbs and is_cold_start:
             try:
                 kb_listings = _get_cached_kb_listings(
                     conversation_id, available_kbs, user_sub, force_refresh=True
@@ -1687,13 +1591,6 @@ async def _handle_upload(
     if not file_content_b64:
         raise HTTPException(status_code=400, detail="Missing fileContent")
 
-    # Ensure we're on the right conversation
-    active_conv = get_active_conversation()
-    if active_conv and active_conv != conversation_id:
-        # Switch conversation first
-        sync_conversation_switch(user_sub, active_conv, conversation_id)
-        set_active_conversation(conversation_id)
-
     # Decode base64 content
     try:
         content = base64.b64decode(file_content_b64)
@@ -1777,13 +1674,6 @@ async def _handle_upload_complete(
             status_code=500, detail="OUTPUTS_BUCKET_NAME not configured"
         )
 
-    # Ensure we're on the right conversation
-    active_conv = get_active_conversation()
-    if active_conv and active_conv != conversation_id:
-        # Switch conversation first
-        sync_conversation_switch(user_sub, active_conv, conversation_id)
-        set_active_conversation(conversation_id)
-
     # Sanitize the upload path
     safe_rel_path = _sanitize_upload_path(filename)
     if safe_rel_path is None:
@@ -1850,12 +1740,6 @@ async def _handle_delete_uploads(
 
     if not paths_to_delete:
         return {"status": "success", "deleted": [], "errors": []}
-
-    # Ensure we're on the right conversation
-    active_conv = get_active_conversation()
-    if active_conv and active_conv != conversation_id:
-        sync_conversation_switch(user_sub, active_conv, conversation_id)
-        set_active_conversation(conversation_id)
 
     paths = get_workspace_paths()
     deleted: list[str] = []

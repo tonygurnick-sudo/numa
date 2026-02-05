@@ -28,3 +28,4 @@ When working with Jira, keep these tips in mind:
 - **Transitions:** To change issue status, use `jira-transition-issue`. First call `jira-get-transitions` to discover available transitions for the current issue state.
 - **Finding users:** `jira-get-users` requires a `query` parameter (e.g., `{"query": "john"}`) despite being marked optional in the schema.
 - **Comments:** Use `comment` prop for plain text or `body` prop for ADF format. If both are provided, `body` overwrites `comment`.
+- **Fallback to `proxy_request`:** If `jira-update-issue` via `additionalProperties` doesn't persist changes (e.g., description formatting), use `proxy_request` to make a direct `PUT /rest/api/3/issue/{issueIdOrKey}` call with `{"fields": {"description": {...}}}` in the body for full control.

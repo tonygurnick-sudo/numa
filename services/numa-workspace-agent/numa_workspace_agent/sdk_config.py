@@ -52,19 +52,49 @@ PLUGINS_PATH = "/app/plugins/numa"
 
 # ── SDK Configuration ──────────────────────────────────────────────────────────
 
-# Default model for Bedrock
+# Regional inference profile prefixes
+# us-east-1 uses us.*, ap-southeast-2 uses apac.* (except Opus 4.5 which needs global.*)
+_KNOWN_PREFIXES = ("us.", "apac.", "eu.", "global.")
+
+REGIONAL_MODEL_MAP: dict[str, dict[str, str]] = {
+    "us-east-1": {
+        "anthropic.claude-sonnet-4-5-20250929-v1:0": "us.anthropic.claude-sonnet-4-5-20250929-v1:0",
+        "anthropic.claude-opus-4-5-20251101-v1:0": "us.anthropic.claude-opus-4-5-20251101-v1:0",
+        "anthropic.claude-haiku-4-5-20251001-v1:0": "us.anthropic.claude-haiku-4-5-20251001-v1:0",
+        "anthropic.claude-sonnet-4-20250514-v1:0": "us.anthropic.claude-sonnet-4-20250514-v1:0",
+    },
+    "ap-southeast-2": {
+        "anthropic.claude-sonnet-4-5-20250929-v1:0": "apac.anthropic.claude-sonnet-4-5-20250929-v1:0",
+        "anthropic.claude-opus-4-5-20251101-v1:0": "global.anthropic.claude-opus-4-5-20251101-v1:0",
+        "anthropic.claude-haiku-4-5-20251001-v1:0": "apac.anthropic.claude-haiku-4-5-20251001-v1:0",
+        "anthropic.claude-sonnet-4-20250514-v1:0": "apac.anthropic.claude-sonnet-4-20250514-v1:0",
+    },
+}
+
+
+def _strip_prefix(model_id: str) -> str:
+    """Strip regional prefix from a model ID."""
+    for p in _KNOWN_PREFIXES:
+        if model_id.startswith(p):
+            return model_id[len(p) :]
+    return model_id
+
+
+def _regionalize(bare_model_id: str) -> str:
+    """Map a bare model ID to the correct regionalized ID for current AWS_REGION."""
+    region_map = REGIONAL_MODEL_MAP.get(REGION, REGIONAL_MODEL_MAP["us-east-1"])
+    return region_map.get(bare_model_id, f"us.{bare_model_id}")
+
+
+# Default model — env var is set per-region by infra construct; fallback computes dynamically
 DEFAULT_MODEL = os.environ.get(
-    "ANTHROPIC_MODEL", "us.anthropic.claude-sonnet-4-20250514-v1:0"
+    "ANTHROPIC_MODEL", _regionalize("anthropic.claude-sonnet-4-20250514-v1:0")
 )
 
-# Allowed models for user selection (us-east-1 regional inference profiles)
-# These are the only models users can select via the model dropdown
-ALLOWED_MODELS = {
-    "us.anthropic.claude-sonnet-4-5-20250929-v1:0",  # Sonnet 4.5 - Balanced
-    "us.anthropic.claude-opus-4-5-20251101-v1:0",  # Opus 4.5 - Complex (~2/3 more)
-    "us.anthropic.claude-haiku-4-5-20251001-v1:0",  # Haiku 4.5 - Fast (1/3 cost)
-    "us.anthropic.claude-sonnet-4-20250514-v1:0",  # Sonnet 4 - Numa Chat V1 Model
-}
+# Allowed models for user selection (computed from regional map)
+ALLOWED_MODELS = set(
+    REGIONAL_MODEL_MAP.get(REGION, REGIONAL_MODEL_MAP["us-east-1"]).values()
+)
 
 # Cross-account Bedrock access (if configured)
 BEDROCK_ACCOUNT = os.environ.get("BEDROCK_ACCOUNT")
@@ -72,19 +102,22 @@ BEDROCK_ACCOUNT = os.environ.get("BEDROCK_ACCOUNT")
 
 def validate_model_id(model_id: Optional[str]) -> str:
     """
-    Validate and return a model ID for use with Bedrock.
+    Validate and return a region-appropriate model ID for use with Bedrock.
 
-    If the model_id is in the allowed set, returns it.
-    Otherwise, returns the default model.
+    Accepts model IDs with any regional prefix (us., apac., global.) or bare IDs.
+    Strips the prefix, re-adds the correct one for the current AWS_REGION,
+    and validates against the allowed set.
 
     Args:
-        model_id: Optional model ID from frontend request
+        model_id: Optional model ID from frontend request (may have any prefix or none)
 
     Returns:
-        Validated model ID string
+        Validated model ID string with correct regional prefix
     """
-    if model_id and model_id in ALLOWED_MODELS:
-        return model_id
+    if model_id:
+        regionalized = _regionalize(_strip_prefix(model_id))
+        if regionalized in ALLOWED_MODELS:
+            return regionalized
     return DEFAULT_MODEL
 
 

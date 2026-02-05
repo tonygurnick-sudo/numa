@@ -1,8 +1,8 @@
 """
 S3-based workspace persistence for AgentCore.
 
-Syncs workspace files to/from S3 for persistence across AgentCore sessions.
-- chat-workflows/ is globally persistent (syncs to user's root S3 path)
+Syncs workspace files to/from S3 for persistence across per-conversation sessions.
+- chat-workflows/ is globally persistent (syncs to user's root S3 path) [currently disabled]
 - uploads/, session/, root files, and trace sync to conversation-specific S3 path
 
 S3 Structure:
@@ -232,13 +232,18 @@ def get_local_checksums(conversation_id: str) -> dict[str, FileChecksum]:
 
 def is_cold_start() -> bool:
     """
-    Check if this is a cold start (no local workspace exists).
+    Check if this is a cold start (no active conversation set).
+
+    The .system directory is baked into the container image (Dockerfile),
+    so we can't rely on its existence. Instead, check if current_conv.json
+    exists — it's only written after the first request is handled.
 
     Returns:
-        True if .system directory doesn't exist (needs S3 sync)
+        True if no active conversation (needs S3 sync)
     """
-    paths = get_workspace_paths()
-    return not paths["system_dir"].exists()
+    from .workspace import get_active_conversation
+
+    return get_active_conversation() is None
 
 
 def sync_from_s3(user_sub: str, conversation_id: str) -> SyncResult:
@@ -416,89 +421,6 @@ def sync_to_s3(
         files_uploaded=result["files_uploaded"],
         files_checked=len(current_checksums),
         errors=len(result["errors"]),
-    )
-
-    return result
-
-
-def sync_conversation_switch(
-    user_sub: str,
-    old_conversation_id: str,
-    new_conversation_id: str,
-) -> SyncResult:
-    """
-    Handle conversation switch - upload old, download new.
-
-    Args:
-        user_sub: Cognito user sub
-        old_conversation_id: Previous conversation ID
-        new_conversation_id: New conversation ID to switch to
-
-    Returns:
-        Combined SyncResult
-    """
-    result = SyncResult(files_downloaded=0, files_uploaded=0, errors=[])
-
-    logger.info(
-        "Switching conversation",
-        old=old_conversation_id,
-        new=new_conversation_id,
-    )
-
-    # First, upload current conversation files (non-persistent ones)
-    upload_result = sync_to_s3(user_sub, old_conversation_id)
-    result["files_uploaded"] = upload_result["files_uploaded"]
-    result["errors"].extend(upload_result["errors"])
-
-    # Clear local conversation files
-    from .workspace import clear_conversation_files
-
-    clear_conversation_files()
-
-    # Download new conversation files
-    # Only download conversation-specific files, not chat-workflows
-    if not OUTPUTS_BUCKET:
-        return result
-
-    paths = get_workspace_paths()
-    s3 = _get_s3_client()
-    root = paths["root"]
-
-    conv_prefix = f"{S3_PREFIX}/{user_sub}/conversations/{new_conversation_id}/"
-
-    try:
-        paginator = s3.get_paginator("list_objects_v2")
-        for page in paginator.paginate(Bucket=OUTPUTS_BUCKET, Prefix=conv_prefix):
-            for obj in page.get("Contents", []):
-                s3_key = obj["Key"]
-                rel_path = s3_key[len(conv_prefix) :]
-
-                if not rel_path:
-                    continue
-
-                # Route _system/trace.jsonl to trace_file path
-                if rel_path == "_system/trace.jsonl":
-                    local_file = paths["trace_file"]
-                else:
-                    local_file = root / rel_path
-
-                local_file.parent.mkdir(parents=True, exist_ok=True)
-
-                try:
-                    s3.download_file(OUTPUTS_BUCKET, s3_key, str(local_file))
-                    result["files_downloaded"] += 1
-                except ClientError as e:
-                    result["errors"].append(f"Failed to download {s3_key}: {e}")
-
-    except ClientError as e:
-        result["errors"].append(f"Failed to list conversation files: {e}")
-
-    logger.info(
-        "Conversation switch complete",
-        old=old_conversation_id,
-        new=new_conversation_id,
-        uploaded=result["files_uploaded"],
-        downloaded=result["files_downloaded"],
     )
 
     return result

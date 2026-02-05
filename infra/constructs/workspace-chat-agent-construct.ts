@@ -452,12 +452,13 @@ echo "Successfully pushed image to ${this.ecrRepository.repositoryUrl}:${imageTa
         },
       ],
 
-      // Session lifecycle - 2 hour idle timeout, 8 hour max lifetime
+      // Session lifecycle - 1 hour idle timeout (per-conversation sessions), 8 hour max lifetime
+      // Lower idle timeout offsets the increased concurrent MicroVM count from per-conversation scoping
       // Defaults: idleRuntimeSessionTimeout=900s (15 min), maxLifetime=28800s (8 hrs)
       // https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/runtime-lifecycle-settings.html
       lifecycleConfiguration: [
         {
-          idleRuntimeSessionTimeout: 7200, // 2 hours in seconds
+          idleRuntimeSessionTimeout: 3600, // 1 hour in seconds
           maxLifetime: 28800, // 8 hours in seconds
         },
       ],
@@ -548,17 +549,11 @@ echo "Successfully pushed image to ${this.ecrRepository.repositoryUrl}:${imageTa
     });
 
     // =========================================================================
-    // SESSION CLEANUP ON DEPLOY (not currently possible)
+    // SESSION LIFECYCLE ON DEPLOY
     // =========================================================================
-    // NOTE: boto3's bedrock-agentcore client does not have a list_runtime_sessions API.
-    // The list_sessions API is for Memory sessions (requires memoryId/actorId), not
-    // AgentCore runtime sessions. Until AWS adds a list_runtime_sessions API, we cannot
-    // programmatically enumerate and stop active sessions on deploy.
-    //
-    // Existing sessions will continue running the old container until they hit the
-    // idle timeout (4 hours) or max lifetime (8 hours) configured in lifecycleConfiguration.
-    // Users starting new sessions after deploy will get the updated container.
-    //
-    // See: https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/bedrock-agentcore.html
+    // Sessions are conversation-scoped (conv-{conversationId}), so each new chat
+    // automatically gets a fresh MicroVM with the latest container image.
+    // Existing conversations keep their warm sessions until the idle timeout (1hr)
+    // or max lifetime (8hr) expires. No active session cleanup is needed on deploy.
   }
 }

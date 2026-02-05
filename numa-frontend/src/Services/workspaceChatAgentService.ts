@@ -13,7 +13,6 @@ import type {
   WorkspaceChatRequest,
   WorkspaceChatConversationDetailResponse,
   WorkspaceChatUploadResponse,
-  WorkspaceChatAgentStatusResponse,
   WorkspaceChatFilesResponse,
   WorkspaceChatCleanupResponse,
   OnWorkspaceChatComplete,
@@ -62,18 +61,14 @@ function getApiUrl(): string {
 }
 
 /**
- * Get auth headers for API requests
- * Includes the AgentCore session ID header for session persistence
+ * Get auth headers for API requests.
+ * AgentCore session routing is now handled by the proxy based on conversationId.
  */
-function getAuthHeaders(userSub?: string): Record<string, string> {
+function getAuthHeaders(): Record<string, string> {
   const headers: Record<string, string> = {};
   const idToken = localStorage.getItem('idToken');
   if (idToken) {
     headers.Authorization = `Bearer ${idToken}`;
-  }
-  // AgentCore session ID header - use user sub for user-level sessions
-  if (userSub) {
-    headers['X-Amzn-Bedrock-AgentCore-Runtime-Session-Id'] = userSub;
   }
   return headers;
 }
@@ -146,14 +141,13 @@ export async function streamWorkspaceChatAgent(
   onSessionEvent?: OnSessionEvent,
 ): Promise<{ abort: () => void; requestId: string }> {
   const abortController = new AbortController();
-  const userSub = getUserSubFromToken();
   const requestId =
     request.requestId ||
     (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `req-${Date.now()}-${Math.random()}`);
 
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
-    ...getAuthHeaders(userSub),
+    ...getAuthHeaders(),
   };
 
   // AgentCore invocations payload with action='chat'
@@ -311,13 +305,11 @@ export async function streamWorkspaceChatAgent(
  * Uses AgentCore /invocations with action='stop'.
  */
 export async function stopWorkspaceChatAgent(conversationId: string, requestId: string): Promise<void> {
-  const userSub = getUserSubFromToken();
-
   const res = await fetch(`${getApiUrl()}/invocations`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      ...getAuthHeaders(userSub),
+      ...getAuthHeaders(),
     },
     body: JSON.stringify({
       action: 'stop',
@@ -341,13 +333,11 @@ export async function approveToolAction(
   decision: 'approved' | 'denied',
   conversationId: string,
 ): Promise<void> {
-  const userSub = getUserSubFromToken();
-
   const res = await fetch(`${getApiUrl()}/invocations`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      ...getAuthHeaders(userSub),
+      ...getAuthHeaders(),
     },
     body: JSON.stringify({
       action: 'approve',
@@ -447,15 +437,13 @@ export async function uploadWorkspaceChatFile(
   conversationId: string,
   relativePath?: string,
 ): Promise<WorkspaceChatUploadResponse> {
-  const userSub = getUserSubFromToken();
-
   // Convert file to base64
   const arrayBuffer = await file.arrayBuffer();
   const base64Content = btoa(new Uint8Array(arrayBuffer).reduce((data, byte) => data + String.fromCharCode(byte), ''));
 
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
-    ...getAuthHeaders(userSub),
+    ...getAuthHeaders(),
   };
 
   // Use relativePath if provided (for folder uploads), otherwise just filename
@@ -494,13 +482,11 @@ export async function deleteWorkspaceChatUploads(
   conversationId: string,
   paths: string[],
 ): Promise<{ deleted: string[]; errors: Array<{ path: string; error: string }> }> {
-  const userSub = getUserSubFromToken();
-
   const res = await fetch(`${getApiUrl()}/invocations`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      ...getAuthHeaders(userSub),
+      ...getAuthHeaders(),
     },
     body: JSON.stringify({
       action: 'delete_uploads',
@@ -559,13 +545,11 @@ export async function listConversationFiles(conversationId: string): Promise<Wor
  * Uses AgentCore /invocations with action='cleanup_session'.
  */
 export async function cleanupConversationSession(conversationId: string): Promise<WorkspaceChatCleanupResponse> {
-  const userSub = getUserSubFromToken();
-
   const res = await fetch(`${getApiUrl()}/invocations`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      ...getAuthHeaders(userSub),
+      ...getAuthHeaders(),
     },
     body: JSON.stringify({
       action: 'cleanup_session',
@@ -575,23 +559,6 @@ export async function cleanupConversationSession(conversationId: string): Promis
 
   if (!res.ok) {
     throw new Error(`Cleanup failed: ${res.status}`);
-  }
-
-  return res.json();
-}
-
-/**
- * Check workspace chat agent status
- *
- * This is a lightweight GET endpoint that doesn't trigger workspace sync.
- */
-export async function getWorkspaceChatAgentStatus(): Promise<WorkspaceChatAgentStatusResponse> {
-  const res = await fetch(`${getApiUrl()}/status`, {
-    headers: getAuthHeaders(),
-  });
-
-  if (!res.ok) {
-    throw new Error(`Status check failed: ${res.status}`);
   }
 
   return res.json();
@@ -624,13 +591,11 @@ async function notifyUploadComplete(
   s3Key: string,
   size: number,
 ): Promise<WorkspaceChatUploadResponse> {
-  const userSub = getUserSubFromToken();
-
   const res = await fetch(`${getApiUrl()}/invocations`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      ...getAuthHeaders(userSub),
+      ...getAuthHeaders(),
     },
     body: JSON.stringify({
       action: 'upload_complete',

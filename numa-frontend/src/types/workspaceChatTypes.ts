@@ -9,12 +9,13 @@
 // Model Selection Types
 // ============================================================
 
-/** Available workspace chat model IDs (us-east-1 regional inference profiles) */
+/** Available workspace chat model IDs (bare, without regional prefix).
+ * The backend adds the correct regional prefix (us., apac., global.) based on deployment region. */
 export type WorkspaceChatModelId =
-  | 'us.anthropic.claude-sonnet-4-5-20250929-v1:0'
-  | 'us.anthropic.claude-opus-4-5-20251101-v1:0'
-  | 'us.anthropic.claude-haiku-4-5-20251001-v1:0'
-  | 'us.anthropic.claude-sonnet-4-20250514-v1:0';
+  | 'anthropic.claude-sonnet-4-5-20250929-v1:0'
+  | 'anthropic.claude-opus-4-5-20251101-v1:0'
+  | 'anthropic.claude-haiku-4-5-20251001-v1:0'
+  | 'anthropic.claude-sonnet-4-20250514-v1:0';
 
 /** Model option for display in the UI */
 export interface WorkspaceChatModelOption {
@@ -24,27 +25,27 @@ export interface WorkspaceChatModelOption {
 }
 
 /** Default model for workspace chat */
-export const DEFAULT_WORKSPACE_MODEL: WorkspaceChatModelId = 'us.anthropic.claude-sonnet-4-5-20250929-v1:0';
+export const DEFAULT_WORKSPACE_MODEL: WorkspaceChatModelId = 'anthropic.claude-sonnet-4-5-20250929-v1:0';
 
 /** Available model options for the selector */
 export const WORKSPACE_MODEL_OPTIONS: WorkspaceChatModelOption[] = [
   {
-    id: 'us.anthropic.claude-sonnet-4-5-20250929-v1:0',
+    id: 'anthropic.claude-sonnet-4-5-20250929-v1:0',
     label: 'Claude Sonnet 4.5',
     description: 'Balanced',
   },
   {
-    id: 'us.anthropic.claude-opus-4-5-20251101-v1:0',
+    id: 'anthropic.claude-opus-4-5-20251101-v1:0',
     label: 'Claude Opus 4.5',
     description: 'Complex - 66% more expensive then sonnet',
   },
   {
-    id: 'us.anthropic.claude-haiku-4-5-20251001-v1:0',
+    id: 'anthropic.claude-haiku-4-5-20251001-v1:0',
     label: 'Claude Haiku 4.5',
     description: 'Fast - 3x cheaper than sonnet',
   },
   {
-    id: 'us.anthropic.claude-sonnet-4-20250514-v1:0',
+    id: 'anthropic.claude-sonnet-4-20250514-v1:0',
     label: 'Numa Chat V1 Model',
     description: 'Claude Sonnet 4',
   },
@@ -492,15 +493,6 @@ export interface WorkspaceChatUploadCompleteRequest {
   filename: string;
   s3Key: string;
   size: number;
-}
-
-/** Response from GET /api/workspace-chat-agent/status */
-export interface WorkspaceChatAgentStatusResponse {
-  status: string;
-  client: string;
-  capabilities: string[];
-  userSub: string;
-  claudeCliVersion?: string;
 }
 
 /** File info from GET /api/workspace-chat-agent/workspace/files */

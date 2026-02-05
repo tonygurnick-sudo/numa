@@ -2,7 +2,7 @@
 Workspace management module for Numa Workspace Agent.
 
 Handles local directory structure for ephemeral AgentCore storage.
-Session is tied to user (not conversation) - same MicroVM reused across conversations.
+Session is tied to conversation - each conversation gets its own MicroVM container.
 """
 
 import json
