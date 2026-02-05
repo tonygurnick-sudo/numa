@@ -37,7 +37,6 @@ import {
 } from '../Services/AdminChatSettingsService';
 import ExpandableOverflowBox from '../Components/ExpandableOverflowBox';
 import { SynergyIcon } from '../Components/DataConnectors/SynergyConnectorCard';
-import { manifestService } from '../Services/manifestService';
 
 const useNavigationConfirm = (when: boolean, message: string) => {
   const navigationContext = useContext(UNSAFE_NavigationContext);
