@@ -646,7 +646,7 @@ export default function UserProfilePage() {
                           name="approvalMode"
                           label={t(`userProfile.approval.modes.${mode}.label`)}
                           checked={userDefaults.approvalMode === mode}
-                          disabled={disableForm}
+                          disabled={disableDefaultsForm}
                           onChange={() => {
                             setUserDefaults((prev) => ({ ...prev, approvalMode: mode }));
                             setDirty(true);
@@ -658,7 +658,12 @@ export default function UserProfilePage() {
                         {t(`userProfile.approval.modes.${userDefaults.approvalMode}.help`)}
                       </div>
                     </Form.Group>
-                    {renderSaveActions('userProfile.actions.reset', resetToCompanyDefaults)}
+                    {renderSaveActions(
+                      'userProfile.actions.reset',
+                      resetToCompanyDefaults,
+                      handleSaveUserDefaults,
+                      canEditUserDefaults,
+                    )}
                   </Form>
                 </Tab>
               )}
