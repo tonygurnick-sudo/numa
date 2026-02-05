@@ -40,7 +40,6 @@ from numa_workspace_agent.sdk_config import (
 )
 from numa_workspace_agent.stream_logger import StreamLog
 from numa_workspace_agent.workspace import (
-    get_active_conversation,
     get_active_session_id,
     get_workspace_paths,
     set_active_conversation,
@@ -321,17 +320,12 @@ async def stream_claude_sdk(
     )
 
     # 1. Determine session_id for resumption
-    active_conv = get_active_conversation()
-    conversation_changed = active_conv != conversation_id
-
-    if is_cold_start or conversation_changed:
-        # Cold start or conversation switch: restore from S3 archive
-        reason = "cold_start" if is_cold_start else "conversation_change"
+    # With per-conversation sessions, each container serves one conversation.
+    # Cold start always restores from S3. Warm container uses local session_id.
+    if is_cold_start:
         logger.info(
-            "Restoring session from S3",
-            reason=reason,
-            old_conv=active_conv,
-            new_conv=conversation_id,
+            "Restoring session from S3 (cold start)",
+            conversation_id=conversation_id,
         )
         restore_result = restore_claude_session(
             user_sub, conversation_id, paths["system_dir"]
@@ -344,12 +338,10 @@ async def stream_claude_sdk(
                 session_id=session_id,
             )
 
-        # Also restore the trace file to preserve conversation history.
-        # This is critical when the container was recycled or conversation changed,
-        # as the trace file may not exist locally even if the session was restored.
+        # Restore the trace file to preserve conversation history.
         restore_trace_from_s3(user_sub, conversation_id)
     else:
-        # Warm container, same conversation: use locally stored session_id
+        # Warm container: use locally stored session_id
         session_id = get_active_session_id()
         if session_id:
             logger.debug(
@@ -361,9 +353,8 @@ async def stream_claude_sdk(
         else:
             # Local files missing despite warm container - fallback to S3 restore
             # This can happen when:
-            # - Container was warmed by a read-only request (GET /trace, /status, /files)
+            # - Container was warmed by a read-only request (GET /trace, /files)
             # - AgentCore cleared ephemeral storage between invocations
-            # - Container was killed/replaced but .system dir was recreated
             logger.debug(
                 "No local session_id, restoring from S3",
                 phase="init",
@@ -375,8 +366,7 @@ async def stream_claude_sdk(
             if restore_result and restore_result.get("session_id"):
                 session_id = restore_result["session_id"]
 
-            # Also restore the trace file - critical to preserve conversation history!
-            # Without this, a new empty trace is created and overwrites the S3 trace.
+            # Also restore the trace file to preserve conversation history.
             restore_trace_from_s3(user_sub, conversation_id)
 
     # 2. List uploaded files for context
