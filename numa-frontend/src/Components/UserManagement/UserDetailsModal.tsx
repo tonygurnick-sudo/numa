@@ -21,9 +21,10 @@ interface UserDetailsModalProps {
   onPromoteToAdmin: (user: User) => Promise<void>;
   onDemoteFromAdmin: (username: string) => Promise<void>;
   onDeleteUser: (user: User) => Promise<void>;
+  onResetUserMFA: (user: User) => Promise<void>;
 }
 
-type ModalView = 'details' | 'promote' | 'delete';
+type ModalView = 'details' | 'promote' | 'delete' | 'mfaReset';
 
 export function UserDetailsModal({
   show,
@@ -33,6 +34,7 @@ export function UserDetailsModal({
   onPromoteToAdmin,
   onDemoteFromAdmin,
   onDeleteUser,
+  onResetUserMFA,
 }: UserDetailsModalProps): React.JSX.Element {
   const { t } = useTranslation('userManagement');
   const [view, setView] = useState<ModalView>('details');
@@ -81,6 +83,16 @@ export function UserDetailsModal({
     setIsProcessing(true);
     try {
       await onDeleteUser(user);
+      handleClose();
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const confirmMfaReset = async () => {
+    setIsProcessing(true);
+    try {
+      await onResetUserMFA(user);
       handleClose();
     } finally {
       setIsProcessing(false);
@@ -171,6 +183,9 @@ export function UserDetailsModal({
       <Modal.Footer>
         {!isSystemUser && !isCurrentUser && (
           <>
+            <Button variant="warning" onClick={() => setView('mfaReset')} disabled={isProcessing}>
+              {t('actions.resetMFA')}
+            </Button>
             {isAdmin ? (
               <Button
                 variant="secondary"
@@ -311,11 +326,34 @@ export function UserDetailsModal({
     </>
   );
 
+  const renderMfaResetView = () => (
+    <>
+      <Modal.Header closeButton={!isProcessing}>
+        <Modal.Title>{t('mfaReset.title')}</Modal.Title>
+      </Modal.Header>
+      <Modal.Body>
+        <Alert variant="warning" className="mb-4">
+          <Alert.Heading className="h6">{t('mfaReset.warningTitle')}</Alert.Heading>
+          {t('mfaReset.warningBody')}
+        </Alert>
+      </Modal.Body>
+      <Modal.Footer>
+        <Button variant="secondary" onClick={() => setView('details')} disabled={isProcessing}>
+          {t('actions.cancel')}
+        </Button>
+        <Button variant="warning" onClick={confirmMfaReset} disabled={isProcessing}>
+          {isProcessing ? t('mfaReset.resetting') : t('mfaReset.confirm')}
+        </Button>
+      </Modal.Footer>
+    </>
+  );
+
   return (
     <Modal show={show} onHide={handleClose} backdrop={isProcessing ? 'static' : true} size="lg">
       {view === 'details' && renderDetailsView()}
       {view === 'promote' && renderPromoteView()}
       {view === 'delete' && renderDeleteView()}
+      {view === 'mfaReset' && renderMfaResetView()}
     </Modal>
   );
 }

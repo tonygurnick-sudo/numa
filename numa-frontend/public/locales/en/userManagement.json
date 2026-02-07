@@ -7,6 +7,7 @@
     "createUser": "Create User",
     "view": "View",
     "deleteUser": "Delete User",
+    "resetMFA": "Reset MFA",
     "close": "Close",
     "cancel": "Cancel",
     "done": "Done"
@@ -92,7 +93,8 @@
     "qBusinessClient": "Q Business client not found",
     "webTokenCredentials": "Get web token credentials not found",
     "delete": "Failed to delete user",
-    "create": "Failed to create user"
+    "create": "Failed to create user",
+    "mfaReset": "Failed to reset MFA"
   },
   "createModal": {
     "title": "Create New User",
@@ -229,5 +231,13 @@
     "beforeBody": "Account deletion is permanent and irreversible.",
     "deleting": "Deleting Account...",
     "confirm": "Yes, Delete Account"
+  },
+  "mfaReset": {
+    "title": "Reset Two-Factor Authentication",
+    "warningTitle": "Reset MFA for this user?",
+    "warningBody": "This will remove the current authenticator app enrollment. The user will need to set up their authenticator again on their next login.",
+    "confirm": "Yes, Reset MFA",
+    "resetting": "Resetting MFA...",
+    "success": "MFA has been reset. The user will be prompted to set up their authenticator on next login."
   }
 }

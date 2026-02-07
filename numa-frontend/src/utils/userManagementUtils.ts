@@ -10,6 +10,7 @@ import {
   DescribeUserPoolCommand,
   ListUsersInGroupCommand,
   AdminUserGlobalSignOutCommand,
+  AdminSetUserMFAPreferenceCommand,
 } from '@aws-sdk/client-cognito-identity-provider';
 import { DeleteUserCommand, GetUserCommand } from '@aws-sdk/client-qbusiness';
 import { withPRM } from './prmUtils';
@@ -329,6 +330,30 @@ export class UserManagementUtils {
       setUsersError(err.message || 'Failed to delete user');
     } finally {
       setDeletingUser(null);
+    }
+  }
+
+  /**
+   * Resets MFA for a user so they can re-enroll their authenticator app
+   * @param {string} username - Username of the user
+   * @param {string} userPoolId - Cognito User Pool ID
+   * @returns {Promise<void>}
+   */
+  async resetUserMFA(username, userPoolId) {
+    try {
+      const command = new AdminSetUserMFAPreferenceCommand({
+        UserPoolId: userPoolId,
+        Username: username,
+        SoftwareTokenMfaSettings: {
+          Enabled: false,
+          PreferredMfa: false,
+        },
+      });
+
+      await this.cognitoClient.send(command);
+    } catch (error) {
+      console.error(`Error resetting MFA for user ${username}:`, error);
+      throw error;
     }
   }
 }

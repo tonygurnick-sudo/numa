@@ -11,6 +11,7 @@ import { useTranslation } from 'react-i18next';
 const ResetPassword = lazy(() => import('./Pages/ResetPassword').then((m) => ({ default: m.ResetPassword })));
 const NumaLogin = lazy(() => import('./Pages/Login').then((m) => ({ default: m.NumaLogin })));
 const Ian = lazy(() => import('./Pages/Ian').then((m) => ({ default: m.Ian })));
+const Authenticator = lazy(() => import('./Pages/Authenticator').then((m) => ({ default: m.Authenticator })));
 
 // Component to wrap authenticated routes with AppLayout
 const AuthenticatedLayout = ({ children, requiredFeature }: { children: ReactNode; requiredFeature?: string }) => {
@@ -70,6 +71,7 @@ const AppRoutes = () => {
         <Route path="/reset-password" element={<ResetPassword />} />
         <Route path="/create-password" element={<ResetPassword />} />
         <Route path="/ian" element={<Ian />} />
+        <Route path="/authenticator" element={<Authenticator />} />
         {/* Dynamically render all protected routes from ROUTE_CONFIG */}
         {ROUTE_CONFIG.map((r) => {
           const featureEnabled = isFeatureEnabled(r.featureFlag);

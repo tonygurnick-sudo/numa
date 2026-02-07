@@ -90,6 +90,10 @@ export const AuthProvider = ({ children, initialTokens }) => {
   const mfaSessionRef = useRef<string | null>(null);
   const mfaUsernameRef = useRef<string | null>(null);
 
+  // MFA state exposed via context so multiple pages (Login, Authenticator) can display it
+  const [mfaSetupData, setMfaSetupData] = useState<MfaSetupRequired | null>(null);
+  const [mfaCodeData, setMfaCodeData] = useState<MfaCodeRequired | null>(null);
+
   const clearScheduledRefresh = useCallback(() => {
     if (refreshTimeoutRef.current) {
       clearTimeout(refreshTimeoutRef.current);
@@ -1265,6 +1269,8 @@ export const AuthProvider = ({ children, initialTokens }) => {
       // Handle MFA_SETUP challenge - user needs to enroll in TOTP MFA
       if (response.ChallengeName === 'MFA_SETUP') {
         const mfaSetupResult = await buildMfaSetupRequired(response.Session, lowercaseUsername);
+        setMfaSetupData(mfaSetupResult);
+        setMfaCodeData(null);
         return mfaSetupResult;
       }
 
@@ -1273,11 +1279,14 @@ export const AuthProvider = ({ children, initialTokens }) => {
         // Store session and username for later use in submitMfaCode
         mfaSessionRef.current = response.Session;
         mfaUsernameRef.current = lowercaseUsername;
-        return {
+        const mfaCodeResult: MfaCodeRequired = {
           requiresMfaCode: true,
           session: response.Session,
           username: lowercaseUsername,
         };
+        setMfaCodeData(mfaCodeResult);
+        setMfaSetupData(null);
+        return mfaCodeResult;
       }
 
       await handleLoginSuccess(response.AuthenticationResult);
@@ -1363,9 +1372,11 @@ export const AuthProvider = ({ children, initialTokens }) => {
 
     const authResponse = await cognitoClient.send(respondCommand);
 
-    // Clear MFA session refs
+    // Clear MFA session refs and shared state
     mfaSessionRef.current = null;
     mfaUsernameRef.current = null;
+    setMfaSetupData(null);
+    setMfaCodeData(null);
 
     if (authResponse.AuthenticationResult) {
       await handleLoginSuccess(authResponse.AuthenticationResult);
@@ -1404,9 +1415,11 @@ export const AuthProvider = ({ children, initialTokens }) => {
 
     const authResponse = await cognitoClient.send(respondCommand);
 
-    // Clear MFA session refs
+    // Clear MFA session refs and shared state
     mfaSessionRef.current = null;
     mfaUsernameRef.current = null;
+    setMfaSetupData(null);
+    setMfaCodeData(null);
 
     if (authResponse.AuthenticationResult) {
       await handleLoginSuccess(authResponse.AuthenticationResult);
@@ -1660,6 +1673,8 @@ export const AuthProvider = ({ children, initialTokens }) => {
       forceTokenValidation,
       completeMfaSetup,
       submitMfaCode,
+      mfaSetupData,
+      mfaCodeData,
       qBusinessClient,
       qAppsClient,
       bedrockRuntimeClient,
@@ -1686,6 +1701,8 @@ export const AuthProvider = ({ children, initialTokens }) => {
     forceTokenValidation,
     completeMfaSetup,
     submitMfaCode,
+    mfaSetupData,
+    mfaCodeData,
     qBusinessClient,
     qAppsClient,
     bedrockRuntimeClient,

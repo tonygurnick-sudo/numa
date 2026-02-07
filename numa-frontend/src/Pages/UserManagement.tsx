@@ -330,6 +330,26 @@ const UserManagement = ({ embedded = false }: UserManagementProps) => {
     }
   };
 
+  // Reset user MFA
+  const handleResetUserMFA = async (userToReset: User) => {
+    setUsersError(null);
+
+    try {
+      if (!getCredentials) {
+        throw new Error(t('errors.webTokenCredentials'));
+      }
+
+      const REGION = window.sessionStorage.getItem('REGION');
+      const USER_POOL_ID = window.sessionStorage.getItem('USER_POOL_ID');
+      const userManagementUtils = new UserManagementUtils(REGION, await getCredentials());
+      await userManagementUtils.resetUserMFA(userToReset.username, USER_POOL_ID);
+    } catch (err) {
+      console.error('Error resetting user MFA:', err);
+      setUsersError(err instanceof Error ? err.message : t('errors.mfaReset'));
+      throw err;
+    }
+  };
+
   // View user handler
   const handleViewUser = (user: User) => {
     setSelectedUser(user);
@@ -537,6 +557,7 @@ const UserManagement = ({ embedded = false }: UserManagementProps) => {
         onPromoteToAdmin={handlePromoteToAdmin}
         onDemoteFromAdmin={handleDemoteFromAdmin}
         onDeleteUser={handleDeleteUser}
+        onResetUserMFA={handleResetUserMFA}
       />
     </>
   );
