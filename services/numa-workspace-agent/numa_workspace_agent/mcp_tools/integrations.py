@@ -16,6 +16,7 @@ import json
 import logging
 import os
 import urllib.request
+import uuid
 from pathlib import Path
 from typing import Any
 
@@ -220,12 +221,27 @@ def _save_result(
     filestash_uploads = exports.get("$filestash_uploads", [])
 
     for upload in filestash_uploads:
-        get_url = upload.get("get_url")
-        filename = upload.get("path")
-        if not get_url or not filename:
+        # Try multiple URL field names for robustness
+        get_url = None
+        for key in ("get_url", "downloadUrl", "downloadURL"):
+            get_url = upload.get(key)
+            if get_url:
+                break
+
+        # Try multiple filename field names with UUID fallback
+        filename = (
+            upload.get("path")
+            or upload.get("fileName")
+            or f"download-{uuid.uuid4().hex[:8]}"
+        )
+
+        if not get_url:
             continue
+
         dest = results_dir / filename
         try:
+            # Create parent directories (e.g., __stash/) if filename includes subdirs
+            dest.parent.mkdir(parents=True, exist_ok=True)
             urllib.request.urlretrieve(get_url, str(dest))
             downloaded_files.append(str(dest))
         except Exception as dl_err:
@@ -489,8 +505,8 @@ async def configure_props(args: dict[str, Any]) -> dict[str, Any]:
         "properties": {
             "method": {
                 "type": "string",
-                "description": "HTTP method (GET, POST, PUT, DELETE)",
-                "enum": ["GET", "POST", "PUT", "DELETE"],
+                "description": "HTTP method (GET, POST, PUT, PATCH, DELETE)",
+                "enum": ["GET", "POST", "PUT", "PATCH", "DELETE"],
             },
             "upstream_url": {
                 "type": "string",
@@ -506,7 +522,15 @@ async def configure_props(args: dict[str, Any]) -> dict[str, Any]:
             },
             "body": {
                 "type": "object",
-                "description": "Optional JSON body for POST/PUT requests (e.g., event data, query parameters)",
+                "description": "Optional JSON body for POST/PUT/PATCH requests (e.g., event data, query parameters)",
+            },
+            "headers": {
+                "type": "object",
+                "description": (
+                    "Optional custom HTTP headers for the upstream API. "
+                    "Use the Pipedream x-pd-proxy- prefix to forward headers to the upstream service "
+                    '(e.g., {"x-pd-proxy-Notion-Version": "2022-06-28"}).'
+                ),
             },
         },
         "required": [
@@ -524,6 +548,7 @@ async def proxy_request(args: dict[str, Any]) -> dict[str, Any]:
     description = args.get("description", "")
     integration_slug = args.get("integration_slug", "")
     body = args.get("body")
+    headers = args.get("headers")
 
     # Early check: reject if integration is not enabled
     enabled_raw = os.environ.get("NUMA_ENABLED_INTEGRATIONS", "")
@@ -552,6 +577,7 @@ async def proxy_request(args: dict[str, Any]) -> dict[str, Any]:
                 "integration_slug": integration_slug,
                 "description": description,
                 "body": body,
+                "headers": headers,
                 "request_id": _pop_approval_id(f"{integration_slug}-{method}"),
                 "auto_approved": os.environ.get("NUMA_APPROVAL_MODE") == "auto",
             },

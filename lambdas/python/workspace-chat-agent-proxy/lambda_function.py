@@ -13,6 +13,7 @@ import hashlib
 import hmac as hmac_mod
 import json
 import logging
+import mimetypes
 import os
 import time as time_mod
 from typing import Any, AsyncGenerator, Dict
@@ -284,7 +285,7 @@ async def ping():
 @app.get(f"{PREFIX}/integration-file/{{token}}/{{filename}}")
 async def integration_file_redirect(
     token: str,
-    filename: str,  # pylint: disable=unused-argument  # required by FastAPI path
+    filename: str,
     x_arcanum_cloudfront_secret: str | None = Header(
         None, alias="x-arcanum-cloudfront-secret"
     ),
@@ -302,9 +303,13 @@ async def integration_file_redirect(
         raise HTTPException(status_code=500, detail="File redirect not configured")
 
     s3_key = _validate_file_token(token)
+    params: Dict[str, str] = {"Bucket": OUTPUTS_BUCKET_NAME, "Key": s3_key}
+    content_type, _ = mimetypes.guess_type(filename)
+    if content_type:
+        params["ResponseContentType"] = content_type
     presigned_url = s3_client.generate_presigned_url(
         "get_object",
-        Params={"Bucket": OUTPUTS_BUCKET_NAME, "Key": s3_key},
+        Params=params,
         ExpiresIn=30,
     )
     return RedirectResponse(url=presigned_url, status_code=302)

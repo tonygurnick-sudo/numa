@@ -1809,7 +1809,7 @@ const NumaChatAgents = () => {
       } = await loadConversation(selectedConversationId, numaChatDynamoUtils, sub, getAccessToken);
       setMessages(chatMessages);
       setConversationId(selectedConversationId);
-      localStorage.setItem('currentConversationId', selectedConversationId);
+      sessionStorage.setItem('currentConversationId', selectedConversationId);
       setPendingConversationChatConfig((chatConfig as ConversationChatConfig) || null);
 
       // Mark this conversation as already having been through auto-naming consideration

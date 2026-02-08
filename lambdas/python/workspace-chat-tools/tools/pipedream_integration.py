@@ -541,6 +541,7 @@ def handle_proxy_request(params: Dict[str, Any]) -> Dict[str, Any]:
     user_sub = params.get("__user_sub", "")
     request_id = params.get("request_id")
     body = params.get("body")
+    headers = params.get("headers")
 
     if not upstream_url:
         raise ValueError("upstream_url is required")
@@ -610,15 +611,19 @@ def handle_proxy_request(params: Dict[str, Any]) -> Dict[str, Any]:
         )
 
     # Approved — execute
+    relay_params = {
+        "method": method,
+        "upstream_url": upstream_url,
+        "account_id": account_id,
+        "body": body,
+    }
+    if headers:
+        relay_params["headers"] = headers
+
     result = _invoke_relay(
         operation="proxy_request",
         external_user_id=external_user_id,
-        parameters={
-            "method": method,
-            "upstream_url": upstream_url,
-            "account_id": account_id,
-            "body": body,
-        },
+        parameters=relay_params,
     )
 
     return {

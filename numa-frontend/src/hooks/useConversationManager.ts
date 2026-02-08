@@ -29,7 +29,7 @@ const getHasPreselectedAgent = () => {
 };
 
 type UseConversationManagerOptions = {
-  /** Optional suffix to isolate localStorage keys (e.g., '-v2' for workspace mode) */
+  /** Optional suffix to isolate sessionStorage keys (e.g., '-v2' for workspace mode) */
   storageKeySuffix?: string;
   /** If true, conversations created will be marked as workspace conversations (for V2 chat) */
   isWorkspaceMode?: boolean;
@@ -89,9 +89,9 @@ export const useConversationManager = (options: UseConversationManagerOptions = 
         targetId = `${sub || 'anonymous'}_${Date.now()}`;
         pendingConversationIdRef.current = targetId;
         setConversationId(targetId);
-        localStorage.setItem(storageKey, targetId);
+        sessionStorage.setItem(storageKey, targetId);
         // Store whether this is a workspace conversation for auto-load on page refresh
-        localStorage.setItem(workspaceStorageKey, isWorkspaceMode ? 'true' : 'false');
+        sessionStorage.setItem(workspaceStorageKey, isWorkspaceMode ? 'true' : 'false');
       }
 
       if (createdConversationIdsRef.current.has(targetId)) {
@@ -187,8 +187,8 @@ export const useConversationManager = (options: UseConversationManagerOptions = 
     setConversationId(null);
     setHasUserStartedNewChat(true);
     hasUserStartedNewChatRef.current = true;
-    localStorage.removeItem(storageKey);
-    localStorage.removeItem(workspaceStorageKey);
+    sessionStorage.removeItem(storageKey);
+    sessionStorage.removeItem(workspaceStorageKey);
     pendingConversationIdRef.current = null;
     creationPromisesRef.current.clear();
 
@@ -225,16 +225,16 @@ export const useConversationManager = (options: UseConversationManagerOptions = 
           return;
         }
 
-        const savedConvoId = localStorage.getItem(storageKey);
+        const savedConvoId = sessionStorage.getItem(storageKey);
         const savedConvo = metaItems.find((item) => item.conversation_id === savedConvoId);
         if (savedConvoId && savedConvo) {
           setConversationId(savedConvoId);
-          // Update localStorage with workspace status from metadata
-          localStorage.setItem(workspaceStorageKey, savedConvo.isWorkspaceConversation ? 'true' : 'false');
+          // Update sessionStorage with workspace status from metadata
+          sessionStorage.setItem(workspaceStorageKey, savedConvo.isWorkspaceConversation ? 'true' : 'false');
         } else {
           setConversationId(metaItems[0].conversation_id);
-          // Update localStorage with workspace status from first conversation
-          localStorage.setItem(workspaceStorageKey, metaItems[0].isWorkspaceConversation ? 'true' : 'false');
+          // Update sessionStorage with workspace status from first conversation
+          sessionStorage.setItem(workspaceStorageKey, metaItems[0].isWorkspaceConversation ? 'true' : 'false');
         }
       } catch (err) {
         if (!cancelled) {
