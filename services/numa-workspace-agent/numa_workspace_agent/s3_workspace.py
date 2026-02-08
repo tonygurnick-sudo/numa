@@ -17,6 +17,7 @@ S3 Structure:
 """
 
 import hashlib
+import mimetypes
 import os
 from pathlib import Path
 from typing import TypedDict
@@ -396,7 +397,11 @@ def sync_to_s3(
         s3_key = _get_s3_path_for_file(rel_path, conversation_id, user_sub)
 
         try:
-            s3.upload_file(str(local_file), OUTPUTS_BUCKET, s3_key)
+            content_type, _ = mimetypes.guess_type(str(local_file))
+            extra_args = {"ContentType": content_type} if content_type else None
+            s3.upload_file(
+                str(local_file), OUTPUTS_BUCKET, s3_key, ExtraArgs=extra_args
+            )
             result["files_uploaded"] += 1
         except ClientError as e:
             error_msg = f"Failed to upload {rel_path}: {e}"

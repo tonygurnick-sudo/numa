@@ -26,13 +26,39 @@ The `create-calendar-event` action requires `attendees` even for personal events
 ```
 
 ## Teams Meetings Auto-Generate
-Set `isOnlineMeeting: true` to automatically create a Teams meeting link. The response includes `onlineMeeting.joinUrl` and the meeting details are appended to the event body.
+Set `isOnlineMeeting: true` to automatically create a Teams meeting link. The response includes `onlineMeeting.joinUrl` and the meeting details are appended to the event body. Business accounts show `onlineMeetingProvider: "teamsForBusiness"`.
+
+## Creating Recurring Events
+Use the `expand` prop with a `recurrence` object to create recurring events:
+```json
+{
+  "microsoftOutlook": {"authProvisionId": "auto"},
+  "subject": "Weekly Standup",
+  "start": "2026-02-09T10:00:00",
+  "end": "2026-02-09T11:00:00",
+  "timeZone": "E. Australia Standard Time",
+  "attendees": ["user@example.com"],
+  "expand": {
+    "recurrence": {
+      "pattern": {"type": "weekly", "interval": 1, "daysOfWeek": ["monday"]},
+      "range": {"type": "endDate", "startDate": "2026-02-09", "endDate": "2026-03-09"}
+    }
+  }
+}
+```
+Pattern types: `daily`, `weekly`, `absoluteMonthly`, `relativeMonthly`, `absoluteYearly`, `relativeYearly`.
+
+## Updating Recurring Event Instances
+To modify a single occurrence of a recurring series:
+- Use `configure_props` with `recurringEventId`, `startDateTime`, and `endDateTime` to get available `instanceId` values
+- Pass the resolved `instanceId` to `update-recurring-event-instance` or `delete-recurring-event-instance`
+- The `startDateTime` and `endDateTime` define the date range to search for instances (use ISO 8601 with Z suffix, e.g., `2026-02-09T00:00:00Z`)
 
 ## `get-schedule` Cross-Tenant Limitation
 The `get-schedule` action works for the user's own calendar and same-tenant users, but fails for cross-tenant/external users with a `FederatedCrossForest` timeout error. This is a Microsoft Graph API limitation — cross-tenant queries require Azure AD federation between organizations, which most personal/small business accounts don't have configured. The `findMeetingTimes` API has the same limitation.
 
 ## `search-people` vs `search-contacts`
-- `search-people`: Returns "relevant people" based on communication patterns — these are implicit contacts from email/meeting history, ranked by relevance score
+- `search-people`: Returns "relevant people" based on communication patterns and business relationships. For business accounts, this includes organizational directory users.
 - `search-contacts`: Returns saved contacts from the Contacts folder only
 
 Use `search-people` to find recent collaborators; use `search-contacts` for explicitly saved contacts.
@@ -44,4 +70,4 @@ Use `orderBy` (e.g., `start/dateTime`) and `maxResults` to control results. The 
 Get the event `id` (long base64 string) from `list-events` or `create-calendar-event` response, then pass it to `update-calendar-event` or `delete-calendar-event`.
 
 ## Recurring Events Have Separate Actions
-Use `update-recurring-event-instance` and `delete-recurring-event-instance` to modify single occurrences of a recurring event without affecting the series.
+Use `update-recurring-event-instance` and `delete-recurring-event-instance` to modify single occurrences of a recurring event without affecting the series. Deleting the series master (`delete-calendar-event` on the original event ID) deletes all instances.

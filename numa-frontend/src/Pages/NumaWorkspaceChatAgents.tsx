@@ -958,8 +958,8 @@ const NumaWorkspaceChatAgents = () => {
       messages.length === 0 &&
       !isManuallyLoading
     ) {
-      // Read isWorkspaceConversation from localStorage for auto-load
-      const storedIsWorkspace = localStorage.getItem('isWorkspaceConversation-v2') === 'true';
+      // Read isWorkspaceConversation from sessionStorage for auto-load (per-tab)
+      const storedIsWorkspace = sessionStorage.getItem('isWorkspaceConversation-v2') === 'true';
       console.log('[NumaChat] Auto-loading conversation:', conversationId, 'isWorkspace:', storedIsWorkspace);
       handleLoadConversation(conversationId, storedIsWorkspace);
     } else if (conversationId && hasUserStartedNewChat) {
@@ -1141,8 +1141,8 @@ const NumaWorkspaceChatAgents = () => {
   // Handle upload button click that silently mints a conversation for new chats
   // This allows file uploads before the user sends a message
   const handleUploadWithConversationMint = async () => {
-    // If we're on new chat view and don't have a conversation yet (or it was pre-minted), mint one
-    if (shouldShowNewChatView && !conversationId) {
+    // If we don't have a conversation yet, mint one before uploading
+    if (!conversationId) {
       const activeAgent = pendingAgent || currentAgent;
       // Mint conversation with placeholder name (will be updated to first filename after upload)
       await ensureConversationReady(
@@ -1418,9 +1418,9 @@ const NumaWorkspaceChatAgents = () => {
       });
       // Clear the V1 migration flag after first message (migration happens on first request)
       if (needsV1Migration) {
-        console.log('[NumaChat] V1 migration completed, clearing flag and updating localStorage');
+        console.log('[NumaChat] V1 migration completed, clearing flag and updating sessionStorage');
         setNeedsV1Migration(false);
-        localStorage.setItem('isWorkspaceConversation-v2', 'true'); // Now it's V2
+        sessionStorage.setItem('isWorkspaceConversation-v2', 'true'); // Now it's V2
       }
     } catch (err) {
       console.error('Error invoking Chat Agent:', err);
@@ -1503,8 +1503,8 @@ const NumaWorkspaceChatAgents = () => {
 
           setMessages(chatMessages);
           setConversationId(selectedConversationId);
-          localStorage.setItem('currentConversationId-v2', selectedConversationId);
-          localStorage.setItem('isWorkspaceConversation-v2', 'true'); // Mark as V2 for auto-load
+          sessionStorage.setItem('currentConversationId-v2', selectedConversationId);
+          sessionStorage.setItem('isWorkspaceConversation-v2', 'true'); // Mark as V2 for auto-load
           autoNamingAttemptedRef.current.add(selectedConversationId);
           // This is a V2 conversation, clear any migration flag
           setNeedsV1Migration(false);
@@ -1589,8 +1589,8 @@ const NumaWorkspaceChatAgents = () => {
     } = await loadConversation(selectedConversationId, numaChatDynamoUtils, sub, getAccessToken);
     setMessages(chatMessages);
     setConversationId(selectedConversationId);
-    localStorage.setItem('currentConversationId-v2', selectedConversationId);
-    localStorage.setItem('isWorkspaceConversation-v2', 'false'); // V1 until migrated
+    sessionStorage.setItem('currentConversationId-v2', selectedConversationId);
+    sessionStorage.setItem('isWorkspaceConversation-v2', 'false'); // V1 until migrated
     setPendingConversationChatConfig((chatConfig as ConversationChatConfig) || null);
     autoNamingAttemptedRef.current.add(selectedConversationId);
     // Mark this conversation as needing V1 to V2 migration on first message
@@ -2079,7 +2079,7 @@ const NumaWorkspaceChatAgents = () => {
                               inputMessage={inputMessage}
                               setInputMessage={setInputMessage}
                               handleSubmit={handleSubmit}
-                              setShowUploadModal={setShowUploadModal}
+                              setShowUploadModal={() => handleUploadWithConversationMint()}
                               buttonStatus={buttonStatus}
                               webSearchEnabled={webSearchEnabled}
                               setWebSearchEnabled={handleUserSetWebSearchEnabled}

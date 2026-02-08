@@ -870,6 +870,7 @@ class PipedreamOperations:
         method: str,
         upstream_url: str,
         body: Optional[Dict[str, Any]] = None,
+        headers: Optional[Dict[str, str]] = None,
     ) -> Dict[str, Any]:
         """Make a raw API call through Pipedream's proxy.
 
@@ -881,6 +882,7 @@ class PipedreamOperations:
             method: HTTP method (GET, POST, etc.)
             upstream_url: The upstream API URL to call
             body: Optional JSON body for POST/PUT requests
+            headers: Optional custom headers (e.g., x-pd-proxy- prefixed)
 
         Returns:
             Raw upstream API response
@@ -904,13 +906,17 @@ class PipedreamOperations:
                 upstream_url=upstream_url[:100],
             )
 
+            request_headers = {
+                "Authorization": f"Bearer {access_token}",
+                "x-pd-environment": environment,
+            }
+            if headers:
+                request_headers.update(headers)
+
             response = requests.request(
                 method=method,
                 url=f"https://api.pipedream.com/v1/connect/{project_id}/proxy/{encoded_url}",
-                headers={
-                    "Authorization": f"Bearer {access_token}",
-                    "x-pd-environment": environment,
-                },
+                headers=request_headers,
                 params={
                     "external_user_id": external_user_id,
                     "account_id": account_id,

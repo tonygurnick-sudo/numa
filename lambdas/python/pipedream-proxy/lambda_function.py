@@ -212,13 +212,14 @@ def handler(event: Dict[str, Any], context: LambdaContext) -> Dict[str, Any]:
             upstream_url = parameters.get("upstream_url")
             account_id = parameters.get("account_id")
             body = parameters.get("body")
+            headers = parameters.get("headers")
             if not upstream_url or not account_id:
                 return _error_response(
                     400,
                     "proxy_request requires upstream_url and account_id parameters",
                 )
             result = pipedream_ops.proxy_request(
-                external_user_id, account_id, method, upstream_url, body
+                external_user_id, account_id, method, upstream_url, body, headers
             )
 
         else:
