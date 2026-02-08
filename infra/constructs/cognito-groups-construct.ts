@@ -348,6 +348,7 @@ const createFeatureSets = (props: {
           'cognito-idp:ListGroups',
           'cognito-idp:DescribeUserPool',
           'cognito-idp:AdminUserGlobalSignOut',
+          'cognito-idp:AdminSetUserMFAPreference',
         ],
         resources: [`arn:aws:cognito-idp:${props.region}:${props.callerAccountId}:userpool/${props.userPoolId}`],
       },
