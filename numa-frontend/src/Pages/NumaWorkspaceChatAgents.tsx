@@ -342,8 +342,12 @@ const NumaWorkspaceChatAgents = () => {
   );
 
   // Persist current chat controls to the conversation meta item so resuming a chat restores its last state.
+  // Only save when the user has explicitly modified settings (via toggle handlers) to avoid
+  // overwriting saved config with defaults during loading, system config application, or async dependency resolution.
   useEffect(() => {
     if (!conversationId || !numaChatDynamoUtils || !sub) return;
+    if (!userSettingsModified) return;
+    if (isConversationLoading) return;
     if (isApplyingConversationChatConfigRef.current) return;
 
     if (conversationChatConfigSaveTimeoutRef.current) {
@@ -378,8 +382,10 @@ const NumaWorkspaceChatAgents = () => {
     enabledConnections,
     enabledKBIds,
     agentsFeatureEnabled,
+    isConversationLoading,
     numaChatDynamoUtils,
     sub,
+    userSettingsModified,
     webSearchEnabled,
   ]);
 
@@ -1105,6 +1111,7 @@ const NumaWorkspaceChatAgents = () => {
     resetStreamingState();
     resetAgentState();
     setPendingConversationChatConfig(null);
+    setUserSettingsModified(false);
 
     // Clear all UI states
     setMessages([]);
@@ -1474,6 +1481,7 @@ const NumaWorkspaceChatAgents = () => {
 
     setIsManuallyLoading(true);
     setIsConversationLoading(true);
+    setUserSettingsModified(false); // Reset so save effect doesn't fire with stale state from previous conversation
     setMessages([]); // Clear current messages immediately
     resetUserNewChatFlag(); // Reset the flag since user is explicitly loading a conversation
     setIsPreMintedConversation(false); // Clear pre-minted state - user is loading a different conversation
@@ -1545,7 +1553,19 @@ const NumaWorkspaceChatAgents = () => {
                 resetAgentState();
               }
             } else {
-              resetAgentState();
+              // Clear agent state without applying defaults — let chatConfig handle it
+              setCurrentAgent(null);
+              setPendingAgent(null);
+              setAgentError(null);
+            }
+
+            // Restore per-conversation chat settings (integrations, KBs, tools)
+            const v2ChatConfig = metaItem?.chatConfig ?? null;
+            setPendingConversationChatConfig((v2ChatConfig as ConversationChatConfig) || null);
+
+            // If no saved chatConfig and no agent, apply user defaults
+            if (!v2ChatConfig && !(metaItem?.isAgentConversation && metaItem?.agentId)) {
+              applyAgentConfiguration(null);
             }
           } catch (metaErr) {
             console.error('Failed to fetch V2 conversation metadata:', metaErr);

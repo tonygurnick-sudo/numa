@@ -19,6 +19,8 @@ describe('companyInfoUtils', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    // Clear the sessionStorage cache so it doesn't leak between tests
+    window.sessionStorage.removeItem('COMPANY_PROFILE_DATA');
   });
 
   describe('saveCompanyInfo', () => {

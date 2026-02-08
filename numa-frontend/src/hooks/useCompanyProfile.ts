@@ -33,7 +33,6 @@ export const useCompanyProfile = () => {
     try {
       const profileText = await loadCompanyProfile(companyBucket, config.REGION, getCredentials);
       setCompanyProfile(profileText);
-      console.log('Company profile loaded successfully');
     } catch (error) {
       console.error('Error loading company profile:', error);
     } finally {

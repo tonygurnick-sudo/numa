@@ -37,6 +37,8 @@ import {
 } from '../Services/AdminChatSettingsService';
 import ExpandableOverflowBox from '../Components/ExpandableOverflowBox';
 import { SynergyIcon } from '../Components/DataConnectors/SynergyConnectorCard';
+import { fetchCompanyInfo, saveCompanyInfo, getProfileText } from '../utils/companyInfoUtils';
+import { manifestService } from '../Services/manifestService';
 
 const useNavigationConfirm = (when: boolean, message: string) => {
   const navigationContext = useContext(UNSAFE_NavigationContext);
@@ -69,7 +71,7 @@ const useNavigationConfirm = (when: boolean, message: string) => {
 
 export default function SettingsPage() {
   const { t, i18n } = useTranslation('settings');
-  const { user } = useAuth();
+  const { user, getCredentials } = useAuth();
   const { numaGet, numaPut } = useNumaRequest();
   const [activeKey, setActiveKey] = useState<string>('users');
   const brandingFlag =
@@ -94,6 +96,21 @@ export default function SettingsPage() {
   const [agentsLoading, setAgentsLoading] = useState<boolean>(true);
   const [agentsSaving, setAgentsSaving] = useState<boolean>(false);
   const [dataAnalysisAvailable, setDataAnalysisAvailable] = useState(true);
+
+  // Company profile (admin) settings
+  const [companyProfileText, setCompanyProfileText] = useState<string>('');
+  const [companyProfileLastUpdated, setCompanyProfileLastUpdated] = useState<string | null>(null);
+  const [companyProfileLoading, setCompanyProfileLoading] = useState<boolean>(true);
+  const [companyProfileSaving, setCompanyProfileSaving] = useState<boolean>(false);
+  const [companyProfileStatus, setCompanyProfileStatus] = useState<{
+    show: boolean;
+    type: string;
+    message: string;
+  }>({ show: false, type: '', message: '' });
+
+  const companyProfileRegion = window.sessionStorage.getItem('REGION');
+  const companyProfileClientName = window.sessionStorage.getItem('CLIENT_NAME');
+  const companyProfileBucket = companyProfileClientName ? `numa-${companyProfileClientName}-company` : '';
 
   // Pipedream feature + relay
   const hasPipedreamFeature = window.sessionStorage.getItem('PIPEDREAM_INTEGRATIONS') === 'true';
@@ -215,6 +232,67 @@ export default function SettingsPage() {
       cancelled = true;
     };
   }, [user, numaGet]);
+
+  // Load Company Profile
+  useEffect(() => {
+    let cancelled = false;
+    if (!isAdmin || !companyProfileRegion || !companyProfileBucket || !getCredentials) {
+      setCompanyProfileLoading(false);
+      return;
+    }
+    (async () => {
+      try {
+        setCompanyProfileLoading(true);
+        const info = await fetchCompanyInfo(companyProfileBucket, companyProfileRegion, getCredentials);
+        if (!cancelled) {
+          setCompanyProfileText(getProfileText(info));
+          setCompanyProfileLastUpdated(info.lastUpdated);
+          if (!info.lastUpdated) {
+            setCompanyProfileStatus({
+              show: true,
+              type: 'info',
+              message: t('companyInfo.status.empty'),
+            });
+          }
+        }
+      } catch (e) {
+        if (!cancelled) {
+          setCompanyProfileStatus({
+            show: true,
+            type: 'danger',
+            message: t('companyInfo.status.loadError', { message: (e as Error).message }),
+          });
+        }
+      } finally {
+        if (!cancelled) setCompanyProfileLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [isAdmin, getCredentials]);
+
+  const handleSaveCompanyProfile = async () => {
+    setCompanyProfileSaving(true);
+    setCompanyProfileStatus({ show: false, type: '', message: '' });
+    try {
+      await saveCompanyInfo(companyProfileText, companyProfileBucket, companyProfileRegion, getCredentials);
+      setCompanyProfileLastUpdated(new Date().toISOString());
+      setCompanyProfileStatus({
+        show: true,
+        type: 'success',
+        message: t('companyInfo.status.saveSuccess'),
+      });
+    } catch (e) {
+      setCompanyProfileStatus({
+        show: true,
+        type: 'danger',
+        message: t('companyInfo.status.saveError', { message: (e as Error).message }),
+      });
+    } finally {
+      setCompanyProfileSaving(false);
+    }
+  };
 
   // Integrations tab internal state
   const [manageToolsFor, setManageToolsFor] = useState<string | null>(null);
@@ -848,6 +926,89 @@ export default function SettingsPage() {
                             {t('actions.resetDefaults')}
                           </Button>
                         </div>
+                      </Form>
+                    )}
+                  </div>
+                </Tab>
+              )}
+              {isAdmin && (
+                <Tab
+                  eventKey="company-profile"
+                  title={
+                    <span>
+                      <i className="bi bi-building-fill me-2"></i>
+                      {t('tabs.companyProfile')}
+                    </span>
+                  }
+                >
+                  <div className="mb-3">
+                    <Alert variant="secondary" className="mb-3">
+                      <div className="d-flex align-items-start">
+                        <i className="bi bi-building-gear me-2 mt-1"></i>
+                        <div>
+                          <div className="fw-semibold">{t('companyInfo.adminTitle')}</div>
+                          <div className="small text-muted">{t('companyInfo.adminDescription')}</div>
+                        </div>
+                      </div>
+                    </Alert>
+
+                    {companyProfileStatus.show && (
+                      <Alert
+                        variant={companyProfileStatus.type}
+                        dismissible
+                        onClose={() => setCompanyProfileStatus({ ...companyProfileStatus, show: false })}
+                        className="mb-3"
+                      >
+                        {companyProfileStatus.message}
+                      </Alert>
+                    )}
+
+                    {companyProfileLoading ? (
+                      <div className="text-center py-4">
+                        <Spinner animation="border" />
+                      </div>
+                    ) : (
+                      <Form>
+                        <Form.Group className="mb-3">
+                          <Form.Label className="fw-semibold">{t('companyInfo.form.label')}</Form.Label>
+                          <Form.Control
+                            as="textarea"
+                            rows={15}
+                            value={companyProfileText}
+                            onChange={(e) => setCompanyProfileText(e.target.value)}
+                            maxLength={10000}
+                            placeholder={t('companyInfo.form.placeholder')}
+                          />
+                          <Form.Text className="d-block mt-2 mb-1 text-muted">
+                            {t('companyInfo.form.characterCount', { count: companyProfileText.length })}
+                          </Form.Text>
+                          <Form.Text className="d-block mb-1 text-muted">{t('companyInfo.form.sharedNote')}</Form.Text>
+                          {companyProfileText.length > 3000 && (
+                            <Form.Text className="d-block mb-1 text-warning">
+                              {t('companyInfo.form.limitNote')}
+                            </Form.Text>
+                          )}
+                        </Form.Group>
+
+                        {companyProfileLastUpdated && (
+                          <p className="text-muted small mb-3">
+                            <i className="bi bi-clock me-1"></i>
+                            {t('companyInfo.lastUpdated.label', {
+                              date: new Date(companyProfileLastUpdated).toLocaleString(i18n.language),
+                            })}
+                          </p>
+                        )}
+
+                        <Button variant="primary" onClick={handleSaveCompanyProfile} disabled={companyProfileSaving}>
+                          {companyProfileSaving ? (
+                            <>
+                              <Spinner as="span" animation="border" size="sm" className="me-2" />
+                              {t('companyInfo.actions.saving')}
+                            </>
+                          ) : (
+                            t('companyInfo.actions.save')
+                          )}
+                        </Button>
                       </Form>
                     )}
                   </div>
