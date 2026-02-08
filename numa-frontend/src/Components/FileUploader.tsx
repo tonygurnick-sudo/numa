@@ -270,6 +270,10 @@ const FileUploader: React.FC<FileUploaderProps> = ({
               if (userUuid) {
                 metadataAttributes.uploader_id = userUuid;
               }
+              const userEmail = user?.decoded_tokens?.idToken?.email;
+              if (userEmail) {
+                metadataAttributes.uploader_email = userEmail;
+              }
 
               const metadataPayload = {
                 metadataAttributes,

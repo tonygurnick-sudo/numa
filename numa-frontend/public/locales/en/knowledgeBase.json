@@ -273,6 +273,7 @@
     "errorLabel": "Error:",
     "emptyValue": "\u2014",
     "searchPlaceholder": "Search files...",
+    "addedByUnknown": "Unknown",
     "filters": {
       "all": "All Files"
     },
@@ -288,6 +289,7 @@
     "empty": "No files found",
     "table": {
       "name": "Name",
+      "addedBy": "Added By",
       "status": "Status",
       "uploadDate": "Upload Date",
       "size": "Size",

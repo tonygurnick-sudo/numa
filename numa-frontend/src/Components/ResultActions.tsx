@@ -602,13 +602,18 @@ const ResultActions: React.FC<ResultActionsProps> = ({ content, title, appType =
       const shouldCreateMetadata = !(preferredKb === 'q' && resolvedKbId === 'company');
 
       if (shouldCreateMetadata) {
+        const metadataAttributes: Record<string, string> = {
+          kb_id: resolvedKbId,
+          tenant_id: clientName || '',
+          uploaded_at: currentDate.toISOString(),
+          uploader_id: user?.sub || 'unknown',
+        };
+        const userEmail = user?.decoded_tokens?.idToken?.email;
+        if (userEmail) {
+          metadataAttributes.uploader_email = userEmail;
+        }
         const metadata = {
-          metadataAttributes: {
-            kb_id: resolvedKbId,
-            tenant_id: clientName,
-            uploaded_at: currentDate.toISOString(),
-            uploader_id: user?.sub || 'unknown',
-          },
+          metadataAttributes,
         };
         const metadataKey = `${s3Key}.metadata.json`;
         const metadataBlob = new Blob([JSON.stringify(metadata)], { type: 'application/json' });

@@ -66,7 +66,7 @@ type TaskResponse = {
   result?: unknown;
 };
 
-type MaybeIdToken = { sub?: string };
+type MaybeIdToken = { sub?: string; email?: string };
 type MaybeDecodedTokens = { idToken?: MaybeIdToken };
 type MaybeUser = { decoded_tokens?: MaybeDecodedTokens };
 
@@ -650,6 +650,8 @@ const S3UploadModuleInner: ForwardRefRenderFunction<UploaderHandle, S3UploadModu
               };
               if (resolvedTenantName) metadataAttributes.tenant_id = resolvedTenantName;
               if (userUuid) metadataAttributes.uploader_id = userUuid;
+              const userEmail = (user as MaybeUser | undefined)?.decoded_tokens?.idToken?.email;
+              if (typeof userEmail === 'string' && userEmail) metadataAttributes.uploader_email = userEmail;
 
               await s3Client.send(
                 new PutObjectCommand({
