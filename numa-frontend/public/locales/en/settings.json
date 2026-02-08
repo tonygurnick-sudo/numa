@@ -9,7 +9,8 @@
     "agents": "Agents",
     "integrations": "Integrations",
     "connectedApps": "Connected Apps",
-    "dataConnectors": "Data Connectors"
+    "dataConnectors": "Data Connectors",
+    "companyProfile": "Company Profile"
   },
   "navigation": {
     "unsavedBranding": "You have unsaved branding changes. Leaving this page will discard them. Continue?",
@@ -314,6 +315,8 @@
     "subtitle": "Manage your company information and settings",
     "editTitle": "Edit Company Information",
     "editDescription": "Enter your company information below. This will be used in chat interactions.",
+    "adminTitle": "Company-wide profile",
+    "adminDescription": "This profile is injected into every chat as context so the AI understands your organisation. Changes take effect for new chats immediately.",
     "loading": "Loading...",
     "form": {
       "label": "Company Information",

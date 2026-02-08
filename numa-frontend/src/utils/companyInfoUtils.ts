@@ -2,6 +2,45 @@ import { uploadFileToS3, fetchFileFromS3 } from './s3Utils';
 
 // Constants
 const COMPANY_INFO_KEY = 'company-data.json'; // Keep the same file name for backward compatibility
+const COMPANY_PROFILE_CACHE_KEY = 'COMPANY_PROFILE_DATA';
+
+/**
+ * Returns the cached company profile from sessionStorage, or null if not cached.
+ */
+const getCachedCompanyProfile = () => {
+  try {
+    const cached = window.sessionStorage.getItem(COMPANY_PROFILE_CACHE_KEY);
+    if (cached) {
+      return JSON.parse(cached);
+    }
+  } catch {
+    // Ignore parse errors
+  }
+  return null;
+};
+
+/**
+ * Writes the company profile to the sessionStorage cache.
+ */
+const setCachedCompanyProfile = (companyInfo) => {
+  try {
+    window.sessionStorage.setItem(COMPANY_PROFILE_CACHE_KEY, JSON.stringify(companyInfo));
+  } catch {
+    // Ignore storage errors (quota exceeded, etc.)
+  }
+};
+
+/**
+ * Clears the cached company profile from sessionStorage.
+ * Call this when you need to force a fresh fetch from S3.
+ */
+export const clearCompanyProfileCache = () => {
+  try {
+    window.sessionStorage.removeItem(COMPANY_PROFILE_CACHE_KEY);
+  } catch {
+    // Ignore storage errors
+  }
+};
 
 /**
  * Saves the company information to S3
@@ -28,7 +67,6 @@ export const saveCompanyInfo = async (profileText, s3Bucket, region, getCredenti
       profile: profileText,
       lastUpdated: new Date().toISOString(),
     };
-    console.log('companyInfo', companyInfo);
 
     // Convert company info to JSON string
     const dataContent = JSON.stringify(companyInfo, null, 2);
@@ -41,7 +79,7 @@ export const saveCompanyInfo = async (profileText, s3Bucket, region, getCredenti
     };
 
     // Use the existing uploadFileToS3 utility function
-    return await uploadFileToS3(
+    const result = await uploadFileToS3(
       processedFile.content,
       processedFile.contentType,
       s3Bucket,
@@ -49,6 +87,11 @@ export const saveCompanyInfo = async (profileText, s3Bucket, region, getCredenti
       region,
       getCredentials,
     );
+
+    // Update the sessionStorage cache so chat pages pick up changes immediately
+    setCachedCompanyProfile(companyInfo);
+
+    return result;
   } catch (error) {
     console.error('Error saving company information:', error);
     throw error; // Re-throw the error for the component to handle
@@ -63,6 +106,12 @@ export const saveCompanyInfo = async (profileText, s3Bucket, region, getCredenti
  * @returns {Promise<Object>} - The company info object with profile text and metadata
  */
 export const fetchCompanyInfo = async (s3Bucket, region, getCredentials) => {
+  // Check sessionStorage cache first to avoid unnecessary S3 calls (and 403 console errors)
+  const cached = getCachedCompanyProfile();
+  if (cached) {
+    return cached;
+  }
+
   try {
     // Validate required parameters
     if (!region) {
@@ -82,6 +131,7 @@ export const fetchCompanyInfo = async (s3Bucket, region, getCredentials) => {
       // Convert blob to JSON
       const text = await fileBlob.text();
       const companyInfo = JSON.parse(text);
+      setCachedCompanyProfile(companyInfo);
       return companyInfo;
     } catch (fetchError) {
       // Check if this is a 404 (Not Found) or 403 (Forbidden) error, which is expected for new environments
@@ -91,7 +141,9 @@ export const fetchCompanyInfo = async (s3Bucket, region, getCredentials) => {
         (fetchError.message.includes('Not Found') || fetchError.message.includes('Forbidden'))
       ) {
         console.debug('Company information file does not exist yet. Will create on first save.');
-        return { profile: '', lastUpdated: null };
+        const emptyProfile = { profile: '', lastUpdated: null };
+        setCachedCompanyProfile(emptyProfile);
+        return emptyProfile;
       }
       // For other errors, re-throw to be handled by the outer catch
       throw fetchError;
@@ -99,7 +151,9 @@ export const fetchCompanyInfo = async (s3Bucket, region, getCredentials) => {
   } catch (error) {
     // Handle any other errors (silently for expected missing file scenarios)
     console.debug('Company profile not available:', error.message || error);
-    return { profile: '', lastUpdated: null };
+    const emptyProfile = { profile: '', lastUpdated: null };
+    setCachedCompanyProfile(emptyProfile);
+    return emptyProfile;
   }
 };
 

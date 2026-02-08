@@ -184,18 +184,11 @@ export const ROUTE_CONFIG = [
     nav: { label: 'Profile', labelKey: 'nav.items.profile', icon: 'bi bi-person-circle', footerOnly: true, order: 12 },
   },
 
-  // Company Information
+  // Company Information (hidden — now managed via Admin Settings > Company Profile tab)
   {
     path: '/company-info',
     element: () => <CompanyInfo />,
     requiredFeature: 'useCompanyData',
-    nav: {
-      label: 'Company Information',
-      labelKey: 'nav.items.company',
-      icon: 'bi bi-building-fill',
-      footerOnly: true,
-      order: 13,
-    },
   },
 
   // Admin Settings

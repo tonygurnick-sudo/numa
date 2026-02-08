@@ -404,8 +404,12 @@ const NumaChatAgents = () => {
   );
 
   // Persist current chat controls to the conversation meta item so resuming a chat restores its last state.
+  // Only save when the user has explicitly modified settings (via toggle handlers) to avoid
+  // overwriting saved config with defaults during loading, system config application, or async dependency resolution.
   useEffect(() => {
     if (!conversationId || !numaChatDynamoUtils || !sub) return;
+    if (!userSettingsModified) return;
+    if (isConversationLoading) return;
     if (isApplyingConversationChatConfigRef.current) return;
 
     if (conversationChatConfigSaveTimeoutRef.current) {
@@ -442,8 +446,10 @@ const NumaChatAgents = () => {
     enabledConnections,
     enabledKBIds,
     agentsFeatureEnabled,
+    isConversationLoading,
     numaChatDynamoUtils,
     sub,
+    userSettingsModified,
     webSearchEnabled,
   ]);
 
@@ -1108,6 +1114,7 @@ const NumaChatAgents = () => {
     resetStreamingState();
     resetAgentState();
     setPendingConversationChatConfig(null);
+    setUserSettingsModified(false);
 
     // Clear all UI states
     setMessages([]);
@@ -1792,6 +1799,7 @@ const NumaChatAgents = () => {
 
     setIsManuallyLoading(true);
     setIsConversationLoading(true);
+    setUserSettingsModified(false); // Reset so save effect doesn't fire with stale state from previous conversation
     setMessages([]); // Clear current messages immediately
     setDataAnalysisBannerFiles(null);
     resetUserNewChatFlag(); // Reset the flag since user is explicitly loading a conversation
