@@ -513,6 +513,7 @@ export class NumaClientStack extends TerraformStack {
         AGENTS: clientConfig.agents ?? false,
         NUMA_WORKSPACE_CHAT: clientConfig.numaWorkspaceChat ?? false,
         SCHEDULING: clientConfig.scheduling ?? false,
+        MFA_ENABLED: clientConfig.mfa ?? false,
         // Direct Lambda Function URL for workspace chat agent (bypasses CloudFront buffering for streaming)
         WORKSPACE_CHAT_AGENT_FUNCTION_URL: workspaceChatAgentProxy?.functionUrl,
         NUMA_VERSION: siteVersion,

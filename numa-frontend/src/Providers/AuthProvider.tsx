@@ -17,6 +17,7 @@ import {
   GetUserCommand,
   AssociateSoftwareTokenCommand,
   VerifySoftwareTokenCommand,
+  SetUserMFAPreferenceCommand,
 } from '@aws-sdk/client-cognito-identity-provider';
 import { NumaChatDynamoUtils } from '../utils/DynamoDBUtils';
 import { NumaBedrockUtils } from '../utils/NumaBedrockUtils';
@@ -93,6 +94,8 @@ export const AuthProvider = ({ children, initialTokens }) => {
   // MFA state exposed via context so multiple pages (Login, Authenticator) can display it
   const [mfaSetupData, setMfaSetupData] = useState<MfaSetupRequired | null>(null);
   const [mfaCodeData, setMfaCodeData] = useState<MfaCodeRequired | null>(null);
+  // Tracks whether user needs MFA setup after login (OPTIONAL mode + MFA_ENABLED)
+  const [mfaPendingSetup, setMfaPendingSetup] = useState(false);
 
   const clearScheduledRefresh = useCallback(() => {
     if (refreshTimeoutRef.current) {
@@ -1429,6 +1432,100 @@ export const AuthProvider = ({ children, initialTokens }) => {
     throw new Error('MFA verification failed');
   }, []);
 
+  // Re-enroll MFA during a SOFTWARE_TOKEN_MFA challenge (e.g. user lost their authenticator).
+  // Calls AssociateSoftwareToken with the current challenge session to generate a new TOTP secret,
+  // replacing the old one. Returns the same MfaSetupRequired shape so the UI can show a QR code.
+  const resetAndSetupMfa = useCallback(async (): Promise<MfaSetupRequired> => {
+    const session = mfaSessionRef.current;
+    const username = mfaUsernameRef.current;
+
+    if (!session || !username) {
+      throw new Error('MFA session expired. Please log in again.');
+    }
+
+    const mfaSetupResult = await buildMfaSetupRequired(session, username);
+    setMfaSetupData(mfaSetupResult);
+    setMfaCodeData(null);
+    return mfaSetupResult;
+  }, []);
+
+  // Set up MFA using an existing access token (for post-login enrollment in OPTIONAL mode).
+  // Called from /authenticator when user is already logged in but hasn't set up MFA yet.
+  const setupMfaWithAccessToken = useCallback(async (): Promise<MfaSetupRequired> => {
+    const accessToken = tokensRef.current?.accessToken;
+    if (!accessToken) {
+      throw new Error('No access token available. Please log in again.');
+    }
+
+    const REGION = window.sessionStorage.getItem('REGION');
+    const cognitoClient = withPRM(CognitoIdentityProviderClient, { region: REGION });
+
+    const associateCommand = new AssociateSoftwareTokenCommand({
+      AccessToken: accessToken,
+    });
+
+    const associateResponse = await cognitoClient.send(associateCommand);
+
+    if (!associateResponse.SecretCode) {
+      throw new Error('Failed to get MFA secret code from Cognito');
+    }
+
+    const decodedIdToken = decodedTokensRef.current?.idToken;
+    const username = decodedIdToken?.['cognito:username'] || decodedIdToken?.['email'] || 'user';
+
+    const issuer = 'Numa';
+    const otpauthUrl = `otpauth://totp/${encodeURIComponent(issuer)}:${encodeURIComponent(username)}?secret=${associateResponse.SecretCode}&issuer=${encodeURIComponent(issuer)}`;
+
+    const result: MfaSetupRequired = {
+      requiresMfaSetup: true,
+      session: associateResponse.Session ?? '',
+      username,
+      secretCode: associateResponse.SecretCode,
+      otpauthUrl,
+    };
+
+    setMfaSetupData(result);
+    return result;
+  }, []);
+
+  // Complete MFA setup using an access token (for post-login OPTIONAL mode enrollment).
+  // After verifying the TOTP code, enables MFA preference for the user.
+  const completeMfaSetupWithAccessToken = useCallback(async (code: string): Promise<{ success: true }> => {
+    const accessToken = tokensRef.current?.accessToken;
+    if (!accessToken) {
+      throw new Error('No access token available. Please log in again.');
+    }
+
+    const REGION = window.sessionStorage.getItem('REGION');
+    const cognitoClient = withPRM(CognitoIdentityProviderClient, { region: REGION });
+
+    const verifyCommand = new VerifySoftwareTokenCommand({
+      AccessToken: accessToken,
+      UserCode: code,
+    });
+
+    const verifyResponse = await cognitoClient.send(verifyCommand);
+
+    if (verifyResponse.Status !== 'SUCCESS') {
+      throw new Error('Invalid verification code');
+    }
+
+    // Enable MFA preference for this user
+    const setMfaPrefCommand = new SetUserMFAPreferenceCommand({
+      AccessToken: accessToken,
+      SoftwareTokenMfaSettings: {
+        Enabled: true,
+        PreferredMfa: true,
+      },
+    });
+
+    await cognitoClient.send(setMfaPrefCommand);
+
+    setMfaSetupData(null);
+    setMfaPendingSetup(false);
+    return { success: true };
+  }, []);
+
   const setNewPassword = useCallback(
     async (username, oldPassword, newPassword): Promise<LoginResult> => {
       try {
@@ -1522,6 +1619,23 @@ export const AuthProvider = ({ children, initialTokens }) => {
     const now = Date.now().toString();
     localStorage.setItem('lastTokenValidation', now);
     localStorage.setItem('lastGroupCheck', now);
+
+    // Post-login MFA enforcement: if MFA_ENABLED globally but user has no MFA set up,
+    // flag them for setup redirect (OPTIONAL Cognito mode means no challenge was issued)
+    const mfaEnabled = window.sessionStorage.getItem('MFA_ENABLED') === 'true';
+    if (mfaEnabled) {
+      try {
+        const REGION = window.sessionStorage.getItem('REGION');
+        const cognitoClient = withPRM(CognitoIdentityProviderClient, { region: REGION });
+        const getUserResponse = await cognitoClient.send(new GetUserCommand({ AccessToken: tokens.AccessToken }));
+        const userMfaSettings = getUserResponse.UserMFASettingList ?? [];
+        if (!userMfaSettings.includes('SOFTWARE_TOKEN_MFA')) {
+          setMfaPendingSetup(true);
+        }
+      } catch (err) {
+        console.warn('Failed to check MFA status after login:', err);
+      }
+    }
   };
 
   // Initialize user state from testConfig if available
@@ -1673,8 +1787,12 @@ export const AuthProvider = ({ children, initialTokens }) => {
       forceTokenValidation,
       completeMfaSetup,
       submitMfaCode,
+      resetAndSetupMfa,
+      setupMfaWithAccessToken,
+      completeMfaSetupWithAccessToken,
       mfaSetupData,
       mfaCodeData,
+      mfaPendingSetup,
       qBusinessClient,
       qAppsClient,
       bedrockRuntimeClient,
@@ -1701,8 +1819,12 @@ export const AuthProvider = ({ children, initialTokens }) => {
     forceTokenValidation,
     completeMfaSetup,
     submitMfaCode,
+    resetAndSetupMfa,
+    setupMfaWithAccessToken,
+    completeMfaSetupWithAccessToken,
     mfaSetupData,
     mfaCodeData,
+    mfaPendingSetup,
     qBusinessClient,
     qAppsClient,
     bedrockRuntimeClient,

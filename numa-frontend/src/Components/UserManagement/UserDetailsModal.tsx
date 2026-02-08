@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Modal, Button, Alert, Badge, Row, Col, Form } from 'react-bootstrap';
 import { useTranslation } from 'react-i18next';
 import i18n from '../../i18n';
@@ -17,11 +17,14 @@ interface UserDetailsModalProps {
   show: boolean;
   user: User | null;
   currentUserSub: string | undefined;
+  mfaGloballyEnabled?: boolean;
   onHide: () => void;
   onPromoteToAdmin: (user: User) => Promise<void>;
   onDemoteFromAdmin: (username: string) => Promise<void>;
   onDeleteUser: (user: User) => Promise<void>;
   onResetUserMFA: (user: User) => Promise<void>;
+  onGetUserMFAEnabled?: (username: string) => Promise<boolean>;
+  onToggleUserMFA?: (user: User, enabled: boolean) => Promise<void>;
 }
 
 type ModalView = 'details' | 'promote' | 'delete' | 'mfaReset';
@@ -30,15 +33,35 @@ export function UserDetailsModal({
   show,
   user,
   currentUserSub,
+  mfaGloballyEnabled = false,
   onHide,
   onPromoteToAdmin,
   onDemoteFromAdmin,
   onDeleteUser,
   onResetUserMFA,
+  onGetUserMFAEnabled,
+  onToggleUserMFA,
 }: UserDetailsModalProps): React.JSX.Element {
   const { t } = useTranslation('userManagement');
   const [view, setView] = useState<ModalView>('details');
   const [isProcessing, setIsProcessing] = useState(false);
+  const [userMfaEnabled, setUserMfaEnabled] = useState<boolean | null>(null);
+  const [mfaLoading, setMfaLoading] = useState(false);
+
+  // Fetch MFA status when modal opens for a user
+  useEffect(() => {
+    if (show && user && mfaGloballyEnabled && onGetUserMFAEnabled) {
+      setUserMfaEnabled(null);
+      setMfaLoading(true);
+      onGetUserMFAEnabled(user.username)
+        .then((enabled) => setUserMfaEnabled(enabled))
+        .catch((err) => {
+          console.error('Failed to fetch MFA status:', err);
+          setUserMfaEnabled(null);
+        })
+        .finally(() => setMfaLoading(false));
+    }
+  }, [show, user?.username, mfaGloballyEnabled, onGetUserMFAEnabled]);
 
   if (!user) return <></>;
 
@@ -84,6 +107,19 @@ export function UserDetailsModal({
     try {
       await onDeleteUser(user);
       handleClose();
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const handleMfaToggle = async (enabled: boolean) => {
+    if (isProcessing || !onToggleUserMFA) return;
+    setIsProcessing(true);
+    try {
+      await onToggleUserMFA(user, enabled);
+      setUserMfaEnabled(enabled);
+    } catch {
+      // Error is handled by the parent
     } finally {
       setIsProcessing(false);
     }
@@ -165,6 +201,27 @@ export function UserDetailsModal({
                 {isAdmin ? t('details.permissions.descriptions.admin') : t('details.permissions.descriptions.standard')}
               </Form.Text>
             </Form.Group>
+
+            {mfaGloballyEnabled && onToggleUserMFA && (
+              <Form.Group className="mb-3">
+                <Form.Label>{t('details.mfa.label')}</Form.Label>
+                <Form.Check
+                  type="switch"
+                  id="mfa-toggle"
+                  label={
+                    mfaLoading
+                      ? t('details.mfa.loading')
+                      : userMfaEnabled
+                        ? t('details.mfa.enabled')
+                        : t('details.mfa.disabled')
+                  }
+                  checked={userMfaEnabled ?? false}
+                  onChange={(e) => handleMfaToggle(e.target.checked)}
+                  disabled={isProcessing || mfaLoading || userMfaEnabled === null}
+                />
+                <Form.Text className="text-muted">{t('details.mfa.description')}</Form.Text>
+              </Form.Group>
+            )}
           </>
         )}
 

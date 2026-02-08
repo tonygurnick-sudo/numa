@@ -115,7 +115,7 @@ export class CoreNumaInfra extends Construct {
     const mfa =
       (props.mfa ?? false)
         ? {
-            mfaConfiguration: 'ON',
+            mfaConfiguration: 'OPTIONAL',
             softwareTokenMfaConfiguration: {
               enabled: true,
             },

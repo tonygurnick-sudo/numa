@@ -94,7 +94,8 @@
     "webTokenCredentials": "Get web token credentials not found",
     "delete": "Failed to delete user",
     "create": "Failed to create user",
-    "mfaReset": "Failed to reset MFA"
+    "mfaReset": "Failed to reset MFA",
+    "mfaToggle": "Failed to toggle MFA"
   },
   "createModal": {
     "title": "Create New User",
@@ -152,6 +153,13 @@
         "admin": "Admin users can manage users, upload documents, and configure system settings.",
         "standard": "Standard users can use Numa chat and apps but cannot manage the system."
       }
+    },
+    "mfa": {
+      "label": "Two-Factor Authentication",
+      "enabled": "MFA enabled",
+      "disabled": "MFA disabled",
+      "loading": "Checking MFA status...",
+      "description": "Enable or disable two-factor authentication for this user."
     },
     "currentUserNotice": "This is your account. You cannot modify your own permissions.",
     "systemUserNotice": "System users cannot be modified.",

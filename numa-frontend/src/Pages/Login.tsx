@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { LayoutForm } from '../Layouts/LayoutForm';
 import { Button, Form, Alert, Spinner, InputGroup } from 'react-bootstrap';
@@ -30,6 +30,9 @@ const NumaLogin = () => {
   const [mfaCodeRequired, setMfaCodeRequired] = useState<MfaCodeRequired | null>(null);
   const [secretCopied, setSecretCopied] = useState(false);
 
+  // Track whether we just logged in successfully (waiting for mfaPendingSetup check)
+  const [loginSuccessful, setLoginSuccessful] = useState(false);
+
   const clearInputs = () => {
     if (usernameRef.current) usernameRef.current.value = '';
     if (passwordRef.current) passwordRef.current.value = '';
@@ -37,7 +40,18 @@ const NumaLogin = () => {
     if (confirmPasswordRef.current) confirmPasswordRef.current.value = '';
   };
 
-  const { login, setNewPassword, completeMfaSetup, submitMfaCode } = useAuth();
+  const { login, setNewPassword, completeMfaSetup, submitMfaCode, resetAndSetupMfa, mfaPendingSetup } = useAuth();
+
+  // After login succeeds, wait one tick for mfaPendingSetup to resolve, then navigate
+  useEffect(() => {
+    if (loginSuccessful) {
+      if (mfaPendingSetup) {
+        navigate('/authenticator');
+      } else {
+        navigate('/dash');
+      }
+    }
+  }, [loginSuccessful, mfaPendingSetup, navigate]);
 
   const handleSubmit = async (e, providedUsername, providedPassword) => {
     if (e) e.preventDefault();
@@ -83,7 +97,7 @@ const NumaLogin = () => {
         clearInputs();
       } else {
         setSuccess(t('login.messages.loginSuccess'));
-        navigate('/dash');
+        setLoginSuccessful(true);
         clearInputs();
       }
     } catch (error) {
@@ -133,8 +147,8 @@ const NumaLogin = () => {
       if ('success' in result && result.success) {
         setSuccess(t('login.messages.passwordUpdated'));
         setIsSettingNewPassword(false);
+        setLoginSuccessful(true);
         clearInputs();
-        navigate('/dash');
         return;
       }
 
@@ -166,7 +180,7 @@ const NumaLogin = () => {
       if ('success' in result && result.success) {
         setSuccess(t('login.messages.loginSuccess'));
         setMfaSetupRequired(null);
-        navigate('/dash');
+        setLoginSuccessful(true);
       }
     } catch (error) {
       console.error('Error completing MFA setup:', error);
@@ -195,11 +209,27 @@ const NumaLogin = () => {
       if ('success' in result && result.success) {
         setSuccess(t('login.messages.loginSuccess'));
         setMfaCodeRequired(null);
-        navigate('/dash');
+        setLoginSuccessful(true);
       }
     } catch (error) {
       console.error('Error submitting MFA code:', error);
       setError(error.message || t('mfa.errors.verificationFailed'));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Handle "Lost your authenticator?" — re-enroll by generating a new QR code
+  const handleResetMfa = async () => {
+    setError(null);
+    setLoading(true);
+    try {
+      const result = await resetAndSetupMfa();
+      setMfaCodeRequired(null);
+      setMfaSetupRequired(result);
+    } catch (err) {
+      console.error('Error resetting MFA:', err);
+      setError(err.message || t('mfa.errors.setupFailed'));
     } finally {
       setLoading(false);
     }
@@ -443,6 +473,19 @@ const NumaLogin = () => {
               t('mfa.verifyCodeButton')
             )}
           </Button>
+
+          <p className="text-center">
+            <a
+              href="#"
+              onClick={(e) => {
+                e.preventDefault();
+                handleResetMfa();
+              }}
+              className="text-muted small"
+            >
+              {t('mfa.lostAuthenticator')}
+            </a>
+          </p>
         </Form>
       )}
     </>

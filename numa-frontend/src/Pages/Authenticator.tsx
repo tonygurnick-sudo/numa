@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { LayoutForm } from '../Layouts/LayoutForm';
 import { Button, Form, Alert, Spinner, InputGroup } from 'react-bootstrap';
@@ -23,7 +23,36 @@ const Authenticator = () => {
   // Track successful setup completion
   const [setupComplete, setSetupComplete] = useState(false);
 
-  const { login, mfaSetupData, mfaCodeData, completeMfaSetup, submitMfaCode } = useAuth();
+  const {
+    login,
+    mfaSetupData,
+    mfaCodeData,
+    completeMfaSetup,
+    submitMfaCode,
+    resetAndSetupMfa,
+    mfaPendingSetup,
+    setupMfaWithAccessToken,
+    completeMfaSetupWithAccessToken,
+    isAuthenticated,
+  } = useAuth();
+
+  // If user is already authenticated and needs MFA setup, skip credentials and go straight to QR code
+  useEffect(() => {
+    if (isAuthenticated && mfaPendingSetup && !mfaSetupData && !setupComplete) {
+      const initSetup = async () => {
+        setLoading(true);
+        try {
+          await setupMfaWithAccessToken();
+        } catch (err) {
+          console.error('Error setting up MFA with access token:', err);
+          setError(err.message || t('mfa.errors.setupFailed'));
+        } finally {
+          setLoading(false);
+        }
+      };
+      initSetup();
+    }
+  }, [isAuthenticated, mfaPendingSetup, mfaSetupData, setupComplete]);
 
   // Step 1: User submits credentials to trigger the MFA setup flow
   const handleCredentialsSubmit = async (e: React.FormEvent) => {
@@ -115,6 +144,47 @@ const Authenticator = () => {
     }
   };
 
+  // Step 2a (authenticated): Verify TOTP code using access token (post-login enrollment)
+  const handleAuthenticatedMfaSetupSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    setLoading(true);
+
+    const code = mfaCodeRef.current?.value?.trim();
+
+    if (!code || code.length !== 6) {
+      setError(t('mfa.errors.invalidCode'));
+      setLoading(false);
+      return;
+    }
+
+    try {
+      const result = await completeMfaSetupWithAccessToken(code);
+      if (result.success) {
+        setSetupComplete(true);
+      }
+    } catch (err) {
+      console.error('Error completing authenticated MFA setup:', err);
+      setError(err.message || t('mfa.errors.setupFailed'));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Handle "Lost your authenticator?" — re-enroll by generating a new QR code
+  const handleResetMfa = async () => {
+    setError(null);
+    setLoading(true);
+    try {
+      await resetAndSetupMfa();
+    } catch (err) {
+      console.error('Error resetting MFA:', err);
+      setError(err.message || t('mfa.errors.setupFailed'));
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleCopySecret = async () => {
     if (mfaSetupData?.secretCode) {
       try {
@@ -128,7 +198,9 @@ const Authenticator = () => {
   };
 
   // Determine which step to show
-  const showCredentialsForm = !mfaSetupData && !mfaCodeData && !mfaNotEnabled && !setupComplete;
+  const isAuthenticatedSetup = isAuthenticated && mfaPendingSetup;
+  const showCredentialsForm =
+    !isAuthenticatedSetup && !mfaSetupData && !mfaCodeData && !mfaNotEnabled && !setupComplete;
 
   const content = (
     <>
@@ -141,7 +213,11 @@ const Authenticator = () => {
       {setupComplete && (
         <div className="text-center">
           <Alert variant="success">{t('authenticator.setupComplete')}</Alert>
-          <a href="/login">{t('authenticator.backToLogin')}</a>
+          {isAuthenticatedSetup ? (
+            <a href="/dash">{t('authenticator.goToDashboard')}</a>
+          ) : (
+            <a href="/login">{t('authenticator.backToLogin')}</a>
+          )}
         </div>
       )}
 
@@ -216,7 +292,7 @@ const Authenticator = () => {
 
       {/* Step 2a: MFA Setup — QR code display */}
       {mfaSetupData && !setupComplete && (
-        <Form onSubmit={handleMfaSetupSubmit}>
+        <Form onSubmit={isAuthenticatedSetup ? handleAuthenticatedMfaSetupSubmit : handleMfaSetupSubmit}>
           <Alert variant="info" className="mb-3">
             <Alert.Heading className="h6">{t('mfa.setupTitle')}</Alert.Heading>
             <p className="mb-0 small">{t('mfa.setupInstructions')}</p>
@@ -331,6 +407,19 @@ const Authenticator = () => {
               t('mfa.verifyCodeButton')
             )}
           </Button>
+
+          <p className="text-center">
+            <a
+              href="#"
+              onClick={(e) => {
+                e.preventDefault();
+                handleResetMfa();
+              }}
+              className="text-muted small"
+            >
+              {t('mfa.lostAuthenticator')}
+            </a>
+          </p>
         </Form>
       )}
     </>
