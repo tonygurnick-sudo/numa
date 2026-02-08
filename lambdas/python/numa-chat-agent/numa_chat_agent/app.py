@@ -1958,6 +1958,60 @@ def _get_s3_url_tag(s3_client: Any, bucket_name: str, key: str) -> Optional[str]
         return None
 
 
+def _get_file_metadata(s3_client, bucket: str, key: str) -> Optional[Dict[str, Any]]:
+    """Read metadata sidecar for a file if it exists.
+
+    Args:
+        s3_client: S3 client instance
+        bucket: S3 bucket name
+        key: S3 key of the original file
+
+    Returns:
+        Parsed metadata attributes dict, or None if no sidecar exists
+    """
+    metadata_key = f"{key}.metadata.json"
+    try:
+        response = s3_client.get_object(Bucket=bucket, Key=metadata_key)
+        content = response["Body"].read().decode("utf-8")
+        data = json.loads(content)
+        # Return the metadataAttributes dict if present
+        return data.get("metadataAttributes", data)
+    except s3_client.exceptions.NoSuchKey:
+        return None
+    except Exception as e:
+        logger.debug(
+            "Failed to read metadata sidecar",
+            bucket=bucket,
+            key=metadata_key,
+            error=str(e),
+        )
+        return None
+
+
+def _enrich_file_info_with_metadata(
+    s3_client: Any, bucket_name: str, key: str, file_info: Dict[str, Any]
+) -> None:
+    """
+    Fetch metadata sidecar and add uploader info to file_info in place.
+
+    Args:
+        s3_client: Boto3 S3 client
+        bucket_name: S3 bucket name
+        key: S3 object key
+        file_info: Dict to enrich with uploadedBy and uploadedAt fields
+    """
+    metadata = _get_file_metadata(s3_client, bucket_name, key)
+    if not metadata:
+        return
+    # Only use email – if not captured, leave blank
+    uploader = metadata.get("uploader_email")
+    if uploader:
+        file_info["uploadedBy"] = uploader
+    uploaded_at = metadata.get("uploaded_at")
+    if uploaded_at:
+        file_info["uploadedAt"] = uploaded_at
+
+
 def _list_kb_files(bucket_name: str, prefix: str) -> Tuple[List[Dict[str, Any]], int]:
     """
     List all files in an S3 bucket prefix with metadata.
@@ -1969,7 +2023,8 @@ def _list_kb_files(bucket_name: str, prefix: str) -> Tuple[List[Dict[str, Any]],
 
     Returns:
         Tuple of:
-            - List of objects with key, lastModified, size, and optionally urlTag
+            - List of objects with key, lastModified, size, and optionally urlTag,
+              uploadedBy, uploadedAt
             - Document count (excludes folder markers)
     """
     try:
@@ -2005,6 +2060,12 @@ def _list_kb_files(bucket_name: str, prefix: str) -> Tuple[List[Dict[str, Any]],
                     url_tag = _get_s3_url_tag(s3_client, bucket_name, key_val)
                     if url_tag:
                         file_info["urlTag"] = url_tag
+
+                # Fetch uploader info from metadata sidecar
+                if not is_folder:
+                    _enrich_file_info_with_metadata(
+                        s3_client, bucket_name, key_val, file_info
+                    )
 
                 files.append(file_info)
                 if not is_folder:

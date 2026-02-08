@@ -17,6 +17,8 @@ interface S3Object {
   Size: number;
   urlTag?: string;
   kbDoc?: KBDocument;
+  uploadedBy?: string;
+  uploadedAt?: string;
 }
 
 interface TreeNode {
@@ -40,6 +42,8 @@ interface TableRow {
   urlTag?: string | null;
   fileObject?: S3Object;
   children?: TableRow[];
+  uploadedBy?: string | null;
+  uploadedAt?: string | null;
 }
 
 interface BulkDeleteProgress {
@@ -420,6 +424,8 @@ function buildRowsForTree(
       errorMessage,
       urlTag,
       fileObject: f, // Add reference to original file object
+      uploadedBy: f.uploadedBy || null,
+      uploadedAt: f.uploadedAt || null,
     });
   });
 
@@ -590,6 +596,8 @@ export const KBFileExplorer = forwardRef<KBFileExplorerHandle, KBFileExplorerPro
           LastModified: f.lastModified ? new Date(f.lastModified) : new Date(),
           Size: f.size,
           urlTag: f.urlTag,
+          uploadedBy: f.uploadedBy,
+          uploadedAt: f.uploadedAt,
         }));
 
         // Build set of all keys for folder detection
@@ -1238,6 +1246,19 @@ export const KBFileExplorer = forwardRef<KBFileExplorerHandle, KBFileExplorerPro
                     </div>
                   </th>
                   <th
+                    className="d-none d-lg-table-cell"
+                    style={{
+                      width: '180px',
+                      minWidth: '120px',
+                      maxWidth: '200px',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    <span>{t('fileExplorer.table.addedBy')}</span>
+                  </th>
+                  <th
                     className="sortable-header"
                     onClick={() => handleSortToggle('status')}
                     style={{
@@ -1349,6 +1370,13 @@ export const KBFileExplorer = forwardRef<KBFileExplorerHandle, KBFileExplorerPro
                             </>
                           )}
                         </div>
+                      </td>
+                      <td
+                        className="d-none d-lg-table-cell text-truncate"
+                        style={{ maxWidth: '200px' }}
+                        title={row.uploadedBy || undefined}
+                      >
+                        {!isFolder && (row.uploadedBy || '')}
                       </td>
                       <td>
                         {!isStatusReady ? (

@@ -47,6 +47,8 @@ export interface S3FileInfo {
   lastModified: string | null;
   size: number;
   urlTag?: string;
+  uploadedBy?: string;
+  uploadedAt?: string;
 }
 
 export interface ListKBFilesResponse {
