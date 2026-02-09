@@ -1,10 +1,10 @@
 import i18n from 'i18next';
 import { initReactI18next } from 'react-i18next';
-import Backend from 'i18next-http-backend';
+import resourcesToBackend from 'i18next-resources-to-backend';
 import LanguageDetector from 'i18next-browser-languagedetector';
 
 i18n
-  .use(Backend)
+  .use(resourcesToBackend((lng: string, ns: string) => import(`../locales/${lng}/${ns}.json`)))
   .use(LanguageDetector)
   .use(initReactI18next)
   .init({
@@ -27,7 +27,6 @@ i18n
       'errors',
     ],
     interpolation: { escapeValue: false },
-    backend: { loadPath: `${import.meta.env.BASE_URL}locales/{{lng}}/{{ns}}.json` },
     detection: {
       order: ['localStorage', 'navigator'],
       caches: ['localStorage'],

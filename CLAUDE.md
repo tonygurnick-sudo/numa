@@ -69,7 +69,7 @@ Dev commands:
 
 The frontend uses `react-i18next` for internationalization:
 
-- **Translation files:** `public/locales/en/*.json` (organized by namespace)
+- **Translation files:** `src/locales/en/*.json` (organized by namespace)
 - **Hook:** `useTranslation('namespace')` returns a `t()` function
 - **Lint enforcement:** ESLint rule `i18next/no-literal-string` will error on hardcoded UI strings
 
@@ -98,7 +98,7 @@ const MyComponent = () => {
 ```
 
 **Adding new translations:**
-1. Add keys to the appropriate namespace in `public/locales/en/<namespace>.json`
+1. Add keys to the appropriate namespace in `src/locales/en/<namespace>.json`
 2. Use the `t()` function with the key path (e.g., `t('section.subsection.key')`)
 3. For interpolation, use `{{variable}}` in JSON: `"greeting": "Hello, {{name}}!"`
 4. Run `yarn lint` to verify no hardcoded strings remain
@@ -109,7 +109,7 @@ To add a new language option for users and ensure it reaches the LLM prompts, up
 
 1. **Picker options (UI):** `numa-frontend/src/Pages/UserProfile.tsx`
    Add a new `<option value="xx">` entry.
-2. **Picker label text (i18n):** `numa-frontend/public/locales/en/settings.json`
+2. **Picker label text (i18n):** `numa-frontend/src/locales/en/settings.json`
    Add a new `userProfile.defaults.language.<key>` label for the option.
 3. **Supported UI languages:** `numa-frontend/src/i18n/index.ts`
    Add the language code to `supportedLngs` so i18n does not overwrite the user's choice.

@@ -55,7 +55,7 @@
     "html-to-docx-lite": "^2.0.1",
     "i18next": "^23.16.8",
     "i18next-browser-languagedetector": "^8.2.0",
-    "i18next-http-backend": "^2.6.1",
+    "i18next-resources-to-backend": "^1.2.1",
     "jspdf": "^3.0.1",
     "jszip": "^3.10.1",
     "jwt-decode": "^4.0.0",
