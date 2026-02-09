@@ -2,7 +2,6 @@ import React, { useRef, useEffect, useState } from 'react';
 import { Button, Form, Spinner, Modal, Dropdown, Badge, OverlayTrigger, Tooltip } from 'react-bootstrap';
 import { Search, Robot, BarChart } from 'react-bootstrap-icons';
 import { useTranslation } from 'react-i18next';
-import i18n from '../../i18n';
 import { FeatureWrapper } from '../RequiredFeaturesWrapper';
 import {
   getConnectionIcon,
@@ -220,22 +219,6 @@ const ChatInput = ({
             disabled={isTextInputDisabled}
             className="chat-textarea"
           />
-          {/* Character count positioned absolutely in bottom right of textarea */}
-          <small
-            className="text-muted"
-            style={{
-              position: 'absolute',
-              bottom: '8px',
-              right: '8px',
-              fontSize: '0.75rem',
-              pointerEvents: 'none',
-              backgroundColor: 'var(--brand-inputBackground, #F7F9FB)',
-              padding: '2px 4px',
-              borderRadius: '2px',
-            }}
-          >
-            {inputMessage.length.toLocaleString(i18n.language)} / {MAX_MESSAGE_LENGTH.toLocaleString(i18n.language)}
-          </small>
         </div>
 
         {/* Row 2: Buttons & Toggles */}

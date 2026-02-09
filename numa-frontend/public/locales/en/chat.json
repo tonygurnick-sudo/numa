@@ -335,6 +335,9 @@
     "json": {
       "invalid": "Invalid JSON:"
     },
+    "vtt": {
+      "summary": "{{entries}} transcript entries \u2022 Duration: {{duration}}"
+    },
     "markdown": {
       "showLess": "Show Less",
       "showMore": "Show More"

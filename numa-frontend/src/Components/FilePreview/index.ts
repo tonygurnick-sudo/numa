@@ -7,3 +7,4 @@ export { HtmlPreview } from './HtmlPreview';
 export { MarkdownPreview } from './MarkdownPreview';
 export { FolderTreePreview } from './FolderTreePreview';
 export { JsonPreview } from './JsonPreview';
+export { VttPreview } from './VttPreview';
