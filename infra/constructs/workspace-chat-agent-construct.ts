@@ -76,7 +76,8 @@ export class WorkspaceChatAgentConstruct extends Construct {
   constructor(scope: Construct, id: string, props: WorkspaceChatAgentConstructProps) {
     super(scope, id);
 
-    // Region-aware model configuration (matches data-analysis-construct.ts)
+    // Region-aware model configuration
+    // us-east-1 uses us.* prefix, ap-southeast-2 uses au.* for 4.5 models, apac.* for older
     const REGIONAL_MODEL_MAP: Record<
       string,
       {
@@ -86,14 +87,14 @@ export class WorkspaceChatAgentConstruct extends Construct {
       }
     > = {
       'us-east-1': {
-        default: { model_id: 'us.anthropic.claude-sonnet-4-20250514-v1:0', max_tokens: 64000 },
-        fallback: { model_id: 'us.anthropic.claude-3-5-sonnet-20240620-v1:0', max_tokens: 4096 },
-        haiku: { model_id: 'anthropic.claude-3-haiku-20240307-v1:0', max_tokens: 4096 },
+        default: { model_id: 'us.anthropic.claude-sonnet-4-5-20250929-v1:0', max_tokens: 64000 },
+        fallback: { model_id: 'us.anthropic.claude-haiku-4-5-20251001-v1:0', max_tokens: 64000 },
+        haiku: { model_id: 'us.anthropic.claude-haiku-4-5-20251001-v1:0', max_tokens: 64000 },
       },
       'ap-southeast-2': {
-        default: { model_id: 'apac.anthropic.claude-sonnet-4-20250514-v1:0', max_tokens: 64000 },
-        fallback: { model_id: 'anthropic.claude-3-5-sonnet-20241022-v2:0', max_tokens: 8192 },
-        haiku: { model_id: 'anthropic.claude-3-haiku-20240307-v1:0', max_tokens: 4096 },
+        default: { model_id: 'au.anthropic.claude-sonnet-4-5-20250929-v1:0', max_tokens: 64000 },
+        fallback: { model_id: 'au.anthropic.claude-haiku-4-5-20251001-v1:0', max_tokens: 64000 },
+        haiku: { model_id: 'au.anthropic.claude-haiku-4-5-20251001-v1:0', max_tokens: 64000 },
       },
     };
     const regionModel = REGIONAL_MODEL_MAP[props.region] ?? REGIONAL_MODEL_MAP['us-east-1'];
@@ -487,8 +488,7 @@ echo "Successfully pushed image to ${this.ecrRepository.repositoryUrl}:${imageTa
         MAX_THINKING_TOKENS: '10000',
         // Model configuration
         ANTHROPIC_MODEL: regionModel.default.model_id,
-        ANTHROPIC_DEFAULT_SONNET_MODEL: regionModel.default.model_id,
-        ANTHROPIC_DEFAULT_HAIKU_MODEL: regionModel.haiku.model_id,
+        ANTHROPIC_SMALL_FAST_MODEL: regionModel.haiku.model_id,
         CLAUDE_CODE_SUBAGENT_MODEL: regionModel.default.model_id,
         // Workspace tools Lambda for KB queries etc. (used by tool wrappers)
         ...(props.workspaceToolsLambdaName && {
