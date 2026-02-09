@@ -1771,7 +1771,11 @@ const NumaWorkspaceChatAgents = () => {
       {/* Desktop header */}
       {!isMobile && (
         <PageHeader
-          title="Numa Chat V2"
+          title={
+            <>
+              {t('common:nav.expanded.numaChatV2')} <span className="beta-badge">{t('common:badges.beta')}</span>
+            </>
+          }
           actions={renderActionButtons()}
           className={shouldShowNewChatView ? 'new-chat-page-header' : ''}
         />

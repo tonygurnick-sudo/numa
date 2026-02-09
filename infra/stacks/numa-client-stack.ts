@@ -463,7 +463,7 @@ export class NumaClientStack extends TerraformStack {
             default: undefined,
           }[source.split('.')?.pop() ?? 'default'];
           const key = path.relative(folderPath, source);
-          const shouldBypassCache = key === 'index.html';
+          const shouldBypassCache = key === 'index.html' || key.startsWith('locales/');
           return new S3Object(this, `website-file-${source}`, {
             bucket: fe.frontendBucket.bucket,
             contentType,

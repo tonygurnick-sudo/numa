@@ -25,6 +25,9 @@
     "numa": "Numa",
     "numaAlt": "Numa"
   },
+  "badges": {
+    "beta": "Beta"
+  },
   "inputs": {
     "selectOption": "Select an option...",
     "enterValue": "Enter a value",

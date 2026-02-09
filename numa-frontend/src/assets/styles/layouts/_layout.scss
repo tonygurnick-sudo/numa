@@ -78,6 +78,24 @@
   }
 }
 
+// Reusable beta badge pill (used in nav, page headers, modals)
+.beta-badge {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.65rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #0d6efd;
+  background-color: rgba(13, 110, 253, 0.1);
+  border: 1px solid rgba(13, 110, 253, 0.25);
+  border-radius: 999px;
+  padding: 0.15em 0.55em;
+  line-height: 1.4;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
 // Standard page header - use this for all new and updated pages
 .page-header {
   padding-top: 45px;

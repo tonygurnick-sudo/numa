@@ -3,6 +3,7 @@ import { copyFileSync, existsSync, mkdirSync, readdirSync } from 'fs';
 import fsExtra from 'fs-extra';
 import { resolve } from 'path';
 import { defineConfig } from 'vite';
+import { coverageConfigDefaults } from 'vitest/config';
 import { fileURLToPath, URL } from 'node:url';
 import config from './public/config.json' with { type: 'json' };
 const { CLIENT_NAME } = config as { CLIENT_NAME: string };
@@ -114,17 +115,13 @@ export default defineConfig({
     ],
     coverage: {
       exclude: [
-        '**/node_modules/**',
-        '**/dist/**',
-        '**/.{idea,git,cache,output,temp}/**',
+        ...coverageConfigDefaults.exclude,
         '**/Fixtures/**',
         '**/__tests__/**',
-        '**/*.config.{js,ts}',
-        '**/eslint.config.js',
-        '**/vite.config.js',
         '**/index.{js,jsx}',
         '**/*TestProvider.{jsx,js}',
         'e2e-tests/**',
+        '**/locales/**',
       ],
     },
   },

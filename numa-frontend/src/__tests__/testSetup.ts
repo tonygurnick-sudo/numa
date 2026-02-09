@@ -1,15 +1,15 @@
 import { vi } from 'vitest';
 import i18n from '../i18n';
-import common from '../../public/locales/en/common.json';
-import auth from '../../public/locales/en/auth.json';
-import settings from '../../public/locales/en/settings.json';
-import chat from '../../public/locales/en/chat.json';
-import agents from '../../public/locales/en/agents.json';
-import knowledgeBase from '../../public/locales/en/knowledgeBase.json';
-import userManagement from '../../public/locales/en/userManagement.json';
-import integrations from '../../public/locales/en/integrations.json';
-import apps from '../../public/locales/en/apps.json';
-import errors from '../../public/locales/en/errors.json';
+import common from '../locales/en/common.json';
+import auth from '../locales/en/auth.json';
+import settings from '../locales/en/settings.json';
+import chat from '../locales/en/chat.json';
+import agents from '../locales/en/agents.json';
+import knowledgeBase from '../locales/en/knowledgeBase.json';
+import userManagement from '../locales/en/userManagement.json';
+import integrations from '../locales/en/integrations.json';
+import apps from '../locales/en/apps.json';
+import errors from '../locales/en/errors.json';
 
 const createStorageMock = () => {
   let store: Record<string, string> = {};
