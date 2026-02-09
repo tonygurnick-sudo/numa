@@ -253,6 +253,47 @@ def _save_result(
                 error=str(dl_err),
             )
 
+    # Auto-download Zoom transcript VTT files from recordings API responses.
+    # Zoom's /v2/meetings/{id}/transcript endpoint is bugged (always returns
+    # error 3322), so transcripts are fetched via the recordings API with
+    # include_fields=download_access_token.  The download URL points to
+    # zoom.us (not api.zoom.us) which Pipedream's proxy cannot reach, so we
+    # download directly using the short-lived JWT as a query parameter.
+    if (
+        isinstance(inner_result, dict)
+        and isinstance(inner_result.get("download_access_token"), str)
+        and isinstance(inner_result.get("recording_files"), list)
+    ):
+        access_token = inner_result["download_access_token"]
+        for rec_file in inner_result["recording_files"]:
+            if not isinstance(rec_file, dict):
+                continue
+            if rec_file.get("file_type") != "TRANSCRIPT":
+                continue
+
+            download_url = rec_file.get("download_url", "")
+            if not download_url:
+                continue
+
+            separator = "&" if "?" in download_url else "?"
+            authenticated_url = f"{download_url}{separator}access_token={access_token}"
+
+            meeting_id = inner_result.get("id", rec_file.get("meeting_id", "unknown"))
+            ext = rec_file.get("file_extension", "VTT").lower()
+            dest = results_dir / f"transcript-{meeting_id}.{ext}"
+
+            try:
+                urllib.request.urlretrieve(authenticated_url, str(dest))
+                downloaded_files.append(str(dest))
+            except Exception as dl_err:
+                import structlog
+
+                structlog.get_logger().warning(
+                    "Failed to download Zoom transcript",
+                    meeting_id=str(meeting_id),
+                    error=str(dl_err),
+                )
+
     download_summary = ""
     if downloaded_files:
         paths = "\n".join(f"  - {p}" for p in downloaded_files)

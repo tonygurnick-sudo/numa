@@ -14,6 +14,7 @@ import {
   MarkdownPreview,
   FolderTreePreview,
   JsonPreview,
+  VttPreview,
 } from './FilePreview';
 import type { FilePreview as FilePreviewType, FolderPreview } from '../hooks/useFilePreviewProcessor';
 
@@ -186,7 +187,7 @@ export const FilePreviewPanel: React.FC<FilePreviewPanelProps> = ({
           }
 
           // Load based on file type
-          if (['md', 'markdown', 'csv', 'html', 'json', 'txt'].includes(ext)) {
+          if (['md', 'markdown', 'csv', 'html', 'json', 'txt', 'vtt'].includes(ext)) {
             const content = await fetchTextContent(s3Key);
             setTextContent(content);
           } else if (['pdf', 'xlsx', 'xls', 'docx'].includes(ext)) {
@@ -370,6 +371,14 @@ export const FilePreviewPanel: React.FC<FilePreviewPanelProps> = ({
 
     if (['png', 'jpg', 'jpeg', 'gif'].includes(ext) && imageUrl) {
       return <ImagePreview src={imageUrl} filename={preview.filename} />;
+    }
+
+    if (ext === 'vtt' && textContent) {
+      return (
+        <div className="p-3 h-100">
+          <VttPreview content={textContent} />
+        </div>
+      );
     }
 
     // Plain text fallback
