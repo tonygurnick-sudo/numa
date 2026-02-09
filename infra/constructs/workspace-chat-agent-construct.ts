@@ -14,6 +14,7 @@ import { CloudwatchLogDeliverySource } from '@cdktf/provider-aws/lib/cloudwatch-
 import { CloudwatchLogDeliveryDestination } from '@cdktf/provider-aws/lib/cloudwatch-log-delivery-destination';
 import { CloudwatchLogDelivery } from '@cdktf/provider-aws/lib/cloudwatch-log-delivery';
 import { CloudwatchLogResourcePolicy } from '@cdktf/provider-aws/lib/cloudwatch-log-resource-policy';
+import { DataAwsRegion } from '@cdktf/provider-aws/lib/data-aws-region';
 
 // Null provider for skopeo push
 import { Resource as NullResource } from '@cdktf/provider-null/lib/resource';
@@ -362,9 +363,12 @@ echo "Successfully pushed image to ${this.ecrRepository.repositoryUrl}:${imageTa
     // Required for CloudWatch Log Delivery to write to the log groups.
     // Without these policies, log delivery creates a validation stream but no actual logs flow.
 
-    // Policy for vendedlogs log group (AgentCore APPLICATION_LOGS delivery)
+    // Shared vendedlogs resource policy — uses a fixed name so all client stacks
+    // in the same account share one policy (AWS limit: 10 resource policies per account).
+    // PutResourcePolicy is idempotent, so concurrent deploys are safe.
+    const region = new DataAwsRegion(this, 'current-region', {}).region;
     const vendedlogsDeliveryPolicy = new CloudwatchLogResourcePolicy(this, 'vendedlogs-delivery-policy', {
-      policyName: `numa-${props.clientName}-workspace-chat-vendedlogs-delivery`,
+      policyName: 'numa-vendedlogs-resource-policy',
       policyDocument: JSON.stringify({
         Version: '2012-10-17',
         Statement: [
@@ -375,13 +379,13 @@ echo "Successfully pushed image to ${this.ecrRepository.repositoryUrl}:${imageTa
               Service: 'delivery.logs.amazonaws.com',
             },
             Action: ['logs:CreateLogStream', 'logs:PutLogEvents'],
-            Resource: `${this.logGroup.arn}:*`,
+            Resource: `arn:aws:logs:${region}:${callerIdentity.accountId}:log-group:/aws/vendedlogs/*`,
             Condition: {
               StringEquals: {
                 'aws:SourceAccount': callerIdentity.accountId,
               },
               ArnLike: {
-                'aws:SourceArn': `arn:aws:logs:${props.region}:${callerIdentity.accountId}:*`,
+                'aws:SourceArn': `arn:aws:logs:${region}:${callerIdentity.accountId}:*`,
               },
             },
           },
