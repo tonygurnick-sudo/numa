@@ -53,6 +53,7 @@ export const ROUTE_CONFIG = [
       labelKey: 'nav.items.chatV2',
       icon: 'bi bi-chat-square-dots-fill',
       featureFlag: 'NUMA_WORKSPACE_CHAT',
+      badge: 'Beta',
       order: 2,
     },
   },

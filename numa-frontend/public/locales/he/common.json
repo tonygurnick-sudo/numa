@@ -24,6 +24,9 @@
     "numa": "נומא",
     "numaAlt": "נומא"
   },
+  "badges": {
+    "beta": "Beta"
+  },
   "inputs": {
     "selectOption": "סהלהכט אנ ופטיונ...",
     "enterValue": "הנטהר א באלוה",

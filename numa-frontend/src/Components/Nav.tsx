@@ -74,6 +74,7 @@ const Nav = ({ isCollapsed = false, onToggleCollapse }: NavProps) => {
           footerOnly: r.nav.footerOnly,
           section: r.nav.sectionKey ?? r.nav.section,
           sectionLabelKey: r.nav.sectionKey,
+          badge: r.nav.badge,
         });
       });
       setNavItems(items);
@@ -147,6 +148,7 @@ const Nav = ({ isCollapsed = false, onToggleCollapse }: NavProps) => {
                     <Dropdown.Item onClick={() => navigate(item.to)}>
                       <i className={`${item.icon} me-2`}></i>
                       {item.labelKey ? t(item.labelKey) : item.label}
+                      {item.badge && <span className="beta-badge ms-2">{t(`badges.${item.badge.toLowerCase()}`)}</span>}
                     </Dropdown.Item>
                   </FeatureWrapper>
                 );
@@ -336,22 +338,38 @@ function getExpandedLabel(item, t) {
   }
 
   const labelKey = item.labelKey ?? item.label;
+  let text;
   switch (labelKey) {
     case 'nav.items.files':
-      return t('nav.expanded.knowledgeBase');
+      text = t('nav.expanded.knowledgeBase');
+      break;
     case 'nav.items.knowledgeBase':
-      return t('nav.expanded.knowledgeBaseManagement');
+      text = t('nav.expanded.knowledgeBaseManagement');
+      break;
     case 'nav.items.chat':
-      return t('nav.expanded.numaChat');
+      text = t('nav.expanded.numaChat');
+      break;
     case 'nav.items.chatV2':
-      return t('nav.expanded.numaChatV2', 'Numa Chat V2');
+      text = t('nav.expanded.numaChatV2', 'Numa Chat V2');
+      break;
     case 'nav.items.apps':
-      return t('nav.expanded.applications');
+      text = t('nav.expanded.applications');
+      break;
     case 'nav.items.company':
-      return t('nav.expanded.companyInformation');
+      text = t('nav.expanded.companyInformation');
+      break;
     default:
-      return item.labelKey ? t(item.labelKey) : item.label;
+      text = item.labelKey ? t(item.labelKey) : item.label;
   }
+
+  if (item.badge) {
+    return (
+      <>
+        {text} <span className="beta-badge">{t(`badges.${item.badge.toLowerCase()}`)}</span>
+      </>
+    );
+  }
+  return text;
 }
 
 export { Nav };

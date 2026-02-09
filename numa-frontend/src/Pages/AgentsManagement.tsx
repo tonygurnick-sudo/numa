@@ -932,7 +932,10 @@ export const AgentsManagement = () => {
                       <i className="bi bi-chat-square-dots text-white"></i>
                     </div>
                     <div>
-                      <div className="fw-semibold">{t('management.chatVersion.v2.title')}</div>
+                      <div className="fw-semibold">
+                        {t('management.chatVersion.v2.title')}{' '}
+                        <span className="beta-badge">{t('common:badges.beta')}</span>
+                      </div>
                       <small className="text-muted">{t('management.chatVersion.v2.description')}</small>
                     </div>
                   </div>
