@@ -230,6 +230,7 @@ def serialize_message(message: Any) -> dict[str, Any]:
             "type": "StreamEvent",
             "timestamp": timestamp,
             "event": event_dict,
+            "parent_tool_use_id": getattr(message, "parent_tool_use_id", None),
         }
     elif hasattr(message, "__dict__"):
         return {
@@ -456,6 +457,8 @@ async def stream_claude_sdk(
     yield format_sse_event(user_event)
 
     message_count = 0
+    # Track streaming tool_use blocks that may need approval.
+    # When the SDK streams sub-agent tool calls, it yields StreamEvents
     try:
         # 6. Use ClaudeSDKClient for hooks support (query() doesn't fire hooks)
         async with ClaudeSDKClient(options=options) as client:
@@ -598,6 +601,15 @@ async def stream_claude_sdk(
                         if isinstance(block, ToolUseBlock) and any(
                             t in block.name for t in APPROVAL_REQUIRED_TOOLS
                         ):
+                            logger.info(
+                                "AssistantMessage approval check",
+                                _name="AM_APPROVAL_CHECK",
+                                tool_name=block.name,
+                                block_id=block.id,
+                                parent_tool_use_id=getattr(
+                                    message, "parent_tool_use_id", None
+                                ),
+                            )
                             tool_input = (
                                 block.input if isinstance(block.input, dict) else {}
                             )
@@ -694,10 +706,31 @@ async def stream_claude_sdk(
                                 ),
                                 "request_id": approval_id,
                                 "auto_approved": auto_approved,
+                                "parent_tool_use_id": getattr(
+                                    message, "parent_tool_use_id", None
+                                ),
                             }
+                            logger.info(
+                                "AssistantMessage approval event emitting",
+                                _name="AM_APPROVAL_EMIT",
+                                tool_use_id=block.id,
+                                tool_name=block.name,
+                                action_key=approval_event["action_key"],
+                                request_id=approval_id,
+                                parent_tool_use_id=approval_event.get(
+                                    "parent_tool_use_id"
+                                ),
+                                auto_approved=auto_approved,
+                            )
                             with trace_path.open("a", encoding="utf-8") as f:
                                 f.write(json.dumps(approval_event) + "\n")
                             yield format_sse_event(approval_event)
+
+                            # Yield large SSE comment to force-flush the tool_approval
+                            # through AgentCore's transport buffer. The buffer holds
+                            # data until enough accumulates; 128KB of padding ensures
+                            # any reasonable buffer is filled and flushed.
+                            yield b": " + b"x" * 131072 + b"\n\n"
 
             # If we exited loop due to stop, emit a terminal event for the frontend/trace
             if stop_reason:

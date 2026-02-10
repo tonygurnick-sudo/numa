@@ -221,7 +221,6 @@ export async function streamWorkspaceChatAgent(
 
               // SSE comment (heartbeat) - starts with ':'
               if (trimmedLine.startsWith(':')) {
-                console.log('[WorkspaceChat] SSE heartbeat:', trimmedLine);
                 continue;
               }
 
