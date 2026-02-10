@@ -61,6 +61,7 @@ export class DataAnalysis extends BaseNumaApp {
             payload: {
               uploaded_files: '@upload-files-to-s3',
               prompt: '@analysis-prompt',
+              analysis_mode: 'full',
             },
           },
           order: 3,
@@ -157,14 +158,14 @@ export class DataAnalysis extends BaseNumaApp {
       }
     > = {
       'us-east-1': {
-        default: { model_id: 'us.anthropic.claude-sonnet-4-20250514-v1:0', max_tokens: 64000 },
-        fallback: { model_id: 'us.anthropic.claude-3-5-sonnet-20240620-v1:0', max_tokens: 4096 },
-        haiku: { model_id: 'anthropic.claude-3-haiku-20240307-v1:0', max_tokens: 4096 },
+        default: { model_id: 'us.anthropic.claude-sonnet-4-5-20250929-v1:0', max_tokens: 64000 },
+        fallback: { model_id: 'us.anthropic.claude-haiku-4-5-20251001-v1:0', max_tokens: 64000 },
+        haiku: { model_id: 'us.anthropic.claude-haiku-4-5-20251001-v1:0', max_tokens: 64000 },
       },
       'ap-southeast-2': {
-        default: { model_id: 'apac.anthropic.claude-sonnet-4-20250514-v1:0', max_tokens: 64000 },
-        fallback: { model_id: 'anthropic.claude-3-5-sonnet-20241022-v2:0', max_tokens: 8192 },
-        haiku: { model_id: 'anthropic.claude-3-haiku-20240307-v1:0', max_tokens: 4096 },
+        default: { model_id: 'au.anthropic.claude-sonnet-4-5-20250929-v1:0', max_tokens: 64000 },
+        fallback: { model_id: 'au.anthropic.claude-haiku-4-5-20251001-v1:0', max_tokens: 64000 },
+        haiku: { model_id: 'au.anthropic.claude-haiku-4-5-20251001-v1:0', max_tokens: 64000 },
       },
     };
     const regionModel = REGIONAL_MODEL_MAP[props.region] ?? REGIONAL_MODEL_MAP['us-east-1'];

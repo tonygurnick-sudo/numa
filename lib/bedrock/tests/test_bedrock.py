@@ -424,7 +424,7 @@ class TestBedrockFallback(unittest.TestCase):
             model_type=ModelTypes.DEFAULT, model_args=model_args, enable_fallback=True
         )
 
-        # Force fallback to Nova model by making first two Claude models fail
+        # Force fallback to Nova model by making first three Claude models fail
         quota_error = ClientError(
             error_response={
                 "Error": {"Code": "ThrottlingException", "Message": "Throttled"}
@@ -432,18 +432,19 @@ class TestBedrockFallback(unittest.TestCase):
             operation_name="InvokeModel",
         )
         mock_bedrock.invoke_model.side_effect = [
-            quota_error,  # Claude 3.7 Sonnet fails (index 0)
-            quota_error,  # Claude 3.5 Sonnet V2 fails (index 1)
-            mock_bedrock.invoke_model.return_value,  # Nova Premier succeeds (index 2)
+            quota_error,  # Claude Sonnet 4.5 fails (index 0)
+            quota_error,  # Claude Haiku 4.5 fails (index 1)
+            quota_error,  # Claude Sonnet 4 fails (index 2)
+            mock_bedrock.invoke_model.return_value,  # Nova Pro succeeds (index 3)
         ]
 
         model.run("Test message with tools")
 
-        # Should have called invoke_model three times (two Claude fails, Nova success)
-        self.assertEqual(mock_bedrock.invoke_model.call_count, 3)
+        # Should have called invoke_model four times (three Claude fails, Nova success)
+        self.assertEqual(mock_bedrock.invoke_model.call_count, 4)
 
-        # Check that the third call (Nova Premier) has proper tool conversion
-        third_call = mock_bedrock.invoke_model.call_args_list[2]
+        # Check that the fourth call (Nova Pro) has proper tool conversion
+        third_call = mock_bedrock.invoke_model.call_args_list[3]
         request_body = json.loads(third_call[1]["body"])
 
         # Nova request should have toolConfig instead of tools

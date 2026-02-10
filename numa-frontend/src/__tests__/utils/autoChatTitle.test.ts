@@ -8,7 +8,7 @@ import type { BedrockRuntimeClient, InvokeModelCommandOutput } from '@aws-sdk/cl
 
 // Mock bedrockModelConfig to avoid env dependencies
 vi.mock('../../utils/bedrockModelConfig', () => ({
-  getModelId: vi.fn().mockReturnValue('anthropic.claude-3-haiku-20240307-v1:0'),
+  getModelId: vi.fn().mockReturnValue('us.anthropic.claude-haiku-4-5-20251001-v1:0'),
   MODEL_TYPES: { CLAUDE_HAIKU: 'CLAUDE_HAIKU' },
 }));
 

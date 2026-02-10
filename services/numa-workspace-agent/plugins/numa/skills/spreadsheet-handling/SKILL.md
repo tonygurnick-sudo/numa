@@ -559,7 +559,63 @@ for sheet_name, df in sheets.items():
 
 ## Working with Large Files
 
+### Decision Tree
+
+```
+Is your file > 50MB?
+├── YES → Convert to SQLite first (100-180x faster queries)
+└── NO  → Use pandas directly (examples above)
+```
+
+**Key insight:** For large spreadsheets, converting to SQLite provides **100-180x query speedups** (0.3s vs 45-60s per query). This should be your default approach for any file over 50MB.
+
+### SQLite Conversion (Recommended for Large Files)
+
+```python
+import pandas as pd
+import sqlite3
+import os
+
+# 1. Sample first to understand the data
+df_sample = pd.read_csv('/workdir/uploads/large_data.csv', nrows=1000)
+print(f"Columns: {list(df_sample.columns)}")
+print(f"Data types:\n{df_sample.dtypes}")
+print(f"Sample:\n{df_sample.head()}")
+
+# 2. Load and convert to SQLite
+df = pd.read_csv('/workdir/uploads/large_data.csv')
+print(f"Loaded {len(df):,} rows, {len(df.columns)} columns")
+
+db_path = '/workdir/session/analysis.db'
+conn = sqlite3.connect(db_path)
+df.to_sql('data', conn, index=False, if_exists='replace')
+print(f"Converted to SQLite: {os.path.getsize(db_path) / 1024 / 1024:.1f} MB")
+
+# 3. Create indexes on columns you'll filter/group by (makes queries fast)
+conn.execute('CREATE INDEX IF NOT EXISTS idx_category ON data(category)')
+conn.execute('CREATE INDEX IF NOT EXISTS idx_date ON data(date)')
+conn.commit()
+
+# 4. Query with SQL — runs in 0.3s instead of 45s
+result = pd.read_sql_query('''
+    SELECT category,
+           COUNT(*) as count,
+           SUM(amount) as total,
+           AVG(amount) as average
+    FROM data
+    GROUP BY category
+    ORDER BY total DESC
+''', conn)
+print(result)
+
+conn.close()
+```
+
+For more advanced SQL patterns (date analysis, window functions, percentiles, joins, charting from SQLite), load the **data-analysis** skill.
+
 ### Read in Chunks
+
+When SQLite is overkill (single pass, simple filter):
 
 ```python
 import pandas as pd

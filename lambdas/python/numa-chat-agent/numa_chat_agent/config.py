@@ -24,30 +24,30 @@ REGION = os.getenv("AWS_REGION", "us-east-1")
 REGIONAL_MODEL_MAP = {
     "us-east-1": {
         "primary": {
-            "model_id": "us.anthropic.claude-sonnet-4-20250514-v1:0",
-            "max_tokens": 64000,  # Sonnet 4 limit
+            "model_id": "us.anthropic.claude-sonnet-4-5-20250929-v1:0",
+            "max_tokens": 64000,
         },
         "fallback": {
-            "model_id": "us.anthropic.claude-3-5-sonnet-20240620-v1:0",
-            "max_tokens": 4096,  # Claude 3.5 v1 limit
+            "model_id": "us.anthropic.claude-haiku-4-5-20251001-v1:0",
+            "max_tokens": 64000,
         },
         "fast": {
             "model_id": "global.amazon.nova-2-lite-v1:0",
-            "max_tokens": 100000,  # Nova 2 Lite limit
+            "max_tokens": 100000,
         },
     },
     "ap-southeast-2": {
         "primary": {
-            "model_id": "apac.anthropic.claude-sonnet-4-20250514-v1:0",
-            "max_tokens": 64000,  # Sonnet 4 limit
+            "model_id": "au.anthropic.claude-sonnet-4-5-20250929-v1:0",
+            "max_tokens": 64000,
         },
         "fallback": {
-            "model_id": "anthropic.claude-3-5-sonnet-20241022-v2:0",
-            "max_tokens": 8192,  # Claude 3.5 v2 limit
+            "model_id": "au.anthropic.claude-haiku-4-5-20251001-v1:0",
+            "max_tokens": 64000,
         },
         "fast": {
             "model_id": "global.amazon.nova-2-lite-v1:0",
-            "max_tokens": 100000,  # Nova 2 Lite limit
+            "max_tokens": 100000,
         },
     },
 }

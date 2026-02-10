@@ -47,86 +47,70 @@ class ModelInfo:
 FALLBACK_SEQUENCES = {
     Region.US_EAST_1: [
         ModelInfo(
-            model_id="us.anthropic.claude-3-7-sonnet-20250219-v1:0",
+            model_id="us.anthropic.claude-sonnet-4-5-20250929-v1:0",
             provider="anthropic",
-            name="Claude 3.7 Sonnet",
-            input_cost=0.003,  # $3.00 per 1 M → $0.003 per 1 k tokens
-            output_cost=0.015,  # $15.00 per 1 M → $0.015 per 1 k tokens
+            name="Claude Sonnet 4.5",
+            input_cost=0.003,
+            output_cost=0.015,
             max_tokens=64000,
         ),
         ModelInfo(
-            model_id="us.anthropic.claude-3-5-sonnet-20241022-v2:0",
+            model_id="us.anthropic.claude-haiku-4-5-20251001-v1:0",
             provider="anthropic",
-            name="Claude 3.5 Sonnet V2",
-            input_cost=0.003,  # $3.00 per 1 M → $0.003 per 1 k tokens
-            output_cost=0.015,  # $15.00 per 1 M → $0.015 per 1 k tokens
-            max_tokens=8192,
+            name="Claude Haiku 4.5",
+            input_cost=0.001,
+            output_cost=0.005,
+            max_tokens=64000,
         ),
         ModelInfo(
-            model_id="us.amazon.nova-premier-v1:0",  # Primary model (most preferred)
-            provider="amazon",
-            name="Nova Premier (Primary)",
-            input_cost=0.0025,  # $2.50 per 1 M → $0.0025 per 1 k tokens
-            output_cost=0.0125,  # $12.50 per 1 M → $0.0125 per 1 k tokens
-            max_tokens=10000,
+            model_id="us.anthropic.claude-sonnet-4-20250514-v1:0",
+            provider="anthropic",
+            name="Claude Sonnet 4",
+            input_cost=0.003,
+            output_cost=0.015,
+            max_tokens=64000,
         ),
         ModelInfo(
             model_id="us.amazon.nova-pro-v1:0",
             provider="amazon",
             name="Nova Pro",
-            input_cost=0.0008,  # $0.80 per 1 M → $0.0008 per 1 k
-            output_cost=0.0032,  # $3.20 per 1 M → $0.0032 per 1 k
+            input_cost=0.0008,
+            output_cost=0.0032,
             max_tokens=10000,
-        ),
-        ModelInfo(
-            model_id="us.anthropic.claude-3-5-sonnet-20240620-v1:0",
-            provider="anthropic",
-            name="Claude 3.5 Sonnet (v1)",
-            input_cost=0.003,  # $3.00 per 1 M → $0.003 per 1 k tokens
-            output_cost=0.015,  # $15.00 per 1 M → $0.015 per 1 k tokens
-            max_tokens=4096,
         ),
     ],
     Region.AP_SOUTHEAST_2: [
         ModelInfo(
-            model_id="apac.anthropic.claude-3-7-sonnet-20250219-v1:0",
+            model_id="au.anthropic.claude-sonnet-4-5-20250929-v1:0",
             provider="anthropic",
-            name="Claude 3.7 Sonnet",
-            input_cost=0.003,  # $3.00 per 1 M → $0.003 per 1 k tokens
-            output_cost=0.015,  # $15.00 per 1 M → $0.015 per 1 k tokens
+            name="Claude Sonnet 4.5",
+            input_cost=0.003,
+            output_cost=0.015,
             max_tokens=64000,
         ),
         ModelInfo(
-            model_id="apac.anthropic.claude-3-5-sonnet-20241022-v2:0",
+            model_id="au.anthropic.claude-haiku-4-5-20251001-v1:0",
             provider="anthropic",
-            name="Claude 3.5 Sonnet V2",
-            input_cost=0.003,  # $3.00 per 1 M → $0.003 per 1 k tokens
-            output_cost=0.015,  # $15.00 per 1 M → $0.015 per 1 k tokens
-            max_tokens=8192,
+            name="Claude Haiku 4.5",
+            input_cost=0.001,
+            output_cost=0.005,
+            max_tokens=64000,
         ),
         ModelInfo(
-            model_id="apac.amazon.nova-pro-v1:0",  # Primary model (most preferred)
+            model_id="apac.anthropic.claude-sonnet-4-20250514-v1:0",
+            provider="anthropic",
+            name="Claude Sonnet 4",
+            input_cost=0.003,
+            output_cost=0.015,
+            max_tokens=64000,
+        ),
+        ModelInfo(
+            model_id="apac.amazon.nova-pro-v1:0",
             provider="amazon",
-            name="Nova Pro (Primary)",
-            input_cost=0.0008,  # $0.80 per 1 M → $0.0008 per 1 k tokens
-            output_cost=0.0032,  # $3.20 per 1 M → $0.0032 per 1 k tokens
+            name="Nova Pro",
+            input_cost=0.0008,
+            output_cost=0.0032,
             max_tokens=10000,
-        ),
-        ModelInfo(
-            model_id="apac.anthropic.claude-3-5-sonnet-20240620-v1:0",
-            provider="anthropic",
-            name="Claude 3.5 Sonnet (v1)",
-            input_cost=0.003,  # $3.00 per 1 M → $0.003 per 1 k tokens
-            output_cost=0.015,  # $15.00 per 1 M → $0.015 per 1 k tokens
-            max_tokens=4096,
-        ),
-        ModelInfo(
-            model_id="anthropic.claude-3-haiku-20240307-v1:0",
-            provider="anthropic",
-            name="Claude 3 Haiku",
-            input_cost=0.00025,  # $0.25 per 1 M → $0.00025 per 1 k tokens
-            output_cost=0.00125,  # $1.25 per 1 M → $0.00125 per 1 k tokens
-            max_tokens=4096,
         ),
     ],
 }
@@ -137,13 +121,13 @@ MODEL_MAP = {
         ModelTypes.DEFAULT: FALLBACK_SEQUENCES[Region.US_EAST_1][
             0
         ].model_id,  # Primary model (first in sequence)
-        ModelTypes.CLAUDE_HAIKU: "anthropic.claude-3-haiku-20240307-v1:0",
+        ModelTypes.CLAUDE_HAIKU: "us.anthropic.claude-haiku-4-5-20251001-v1:0",
     },
     Region.AP_SOUTHEAST_2: {
         ModelTypes.DEFAULT: FALLBACK_SEQUENCES[Region.AP_SOUTHEAST_2][
             0
         ].model_id,  # Primary model (first in sequence)
-        ModelTypes.CLAUDE_HAIKU: "anthropic.claude-3-haiku-20240307-v1:0",
+        ModelTypes.CLAUDE_HAIKU: "au.anthropic.claude-haiku-4-5-20251001-v1:0",
     },
 }
 
