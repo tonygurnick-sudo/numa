@@ -7,10 +7,8 @@ import { useTranslation } from 'react-i18next';
 import type {
   WorkspaceChatSegment,
   WorkspaceChatInlineToolSegment,
-  WorkspaceChatThinkingSegment,
-  WorkspaceChatAssistantAdviceSegment,
-  WorkspaceChatFolderAttachmentSegment,
   WorkspaceChatInlineThinkingSegment,
+  WorkspaceChatFolderAttachmentSegment,
   WorkspaceChatCompactionSegment,
   WorkspaceChatToolApprovalSegment,
 } from '@/types/workspaceChatTypes';
@@ -21,8 +19,6 @@ import { WorkspaceChatInlineThinking } from './WorkspaceChatInlineThinking';
 import { WorkspaceChatCompactionBlock } from './WorkspaceChatCompactionBlock';
 import { WorkspaceChatToolApproval } from './WorkspaceChatToolApproval';
 import { UnifiedToolCard } from '../UnifiedToolCard';
-import { ThinkingBlock } from '../Chat/ThinkingBlock';
-import { AssistantAdviceBlock } from '../Chat/AssistantAdviceBlock';
 import WorkspaceChatMarkdown, { type FileReference, type FolderReference } from '../Renderers/WorkspaceChatMarkdown';
 import { useAuth } from '../../Providers/AuthProvider';
 
@@ -105,20 +101,12 @@ export function WorkspaceChatSegmentRenderer({
               />
             );
 
-          case 'thinking':
-            return <ThinkingBlock key={`thinking-${index}`} segment={segment as WorkspaceChatThinkingSegment} />;
-
           case 'inline_thinking':
             return (
               <WorkspaceChatInlineThinking
                 key={`inline-thinking-${index}`}
                 isStreaming={(segment as WorkspaceChatInlineThinkingSegment).isStreaming}
               />
-            );
-
-          case 'assistant_advice':
-            return (
-              <AssistantAdviceBlock key={`advice-${index}`} segment={segment as WorkspaceChatAssistantAdviceSegment} />
             );
 
           case 'subagent':

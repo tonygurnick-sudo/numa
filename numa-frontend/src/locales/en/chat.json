@@ -245,11 +245,27 @@
     "documentTitle": "Document"
   },
   "workspace": {
-    "thinkingBlock": {
-      "label": "Extended Thinking"
-    },
-    "assistantAdvice": {
-      "label": "Pre-Analysis"
+    "export": {
+      "button": "Export",
+      "title": "Conversation Export",
+      "exportedOn": "Exported: {{date}}",
+      "html": "HTML",
+      "htmlDesc": "Styled, readable format",
+      "text": "Plain Text",
+      "textDesc": "Simple text file",
+      "roles": {
+        "user": "You",
+        "assistant": "Numa"
+      },
+      "segments": {
+        "callingTool": "Calling {{tool}} tool: {{description}}",
+        "toolError": "Tool error: {{description}}",
+        "task": "Task ({{type}}): {{description}}",
+        "taskList": "Task List",
+        "uploaded": "Uploaded: {{filename}}",
+        "file": "{{filename}} ({{size}})",
+        "folder": "{{name}} ({{count}} files, {{size}})"
+      }
     },
     "compaction": {
       "summarizing": "Summarizing conversation...",
@@ -268,16 +284,6 @@
     "userAttachments": {
       "moreFiles": "+{{count}} more files",
       "showLess": "Show less"
-    },
-    "trace": {
-      "button": "Trace",
-      "downloadTitle": "Download trace as HTML",
-      "cleanTrace": "Clean Trace",
-      "cleanTraceDesc": "Excludes streaming deltas",
-      "fullTrace": "Full Trace",
-      "fullTraceDesc": "All events including deltas",
-      "rawTrace": "Raw Trace",
-      "rawTraceDesc": "Download as NDJSON file"
     },
     "todo": {
       "title": "Task List",

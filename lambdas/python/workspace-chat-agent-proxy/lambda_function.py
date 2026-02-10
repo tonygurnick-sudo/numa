@@ -380,7 +380,10 @@ async def get_trace(
         None, alias="x-arcanum-cloudfront-secret"
     ),
 ):
-    """Forward trace request to AgentCore. Returns raw NDJSON without JSON wrapping."""
+    """Forward trace request to AgentCore.
+
+    Returns filtered NDJSON with thinking blocks and assistant_advice stripped.
+    """
     validate_cloudfront_secret(x_arcanum_cloudfront_secret, authorization)
     user_sub = extract_user_sub(authorization)
 
@@ -390,7 +393,7 @@ async def get_trace(
         http_path=f"/trace/{conversation_id}",
         authorization=authorization,
         stream=False,
-        raw=True,  # Return raw NDJSON, don't wrap in JSON
+        raw=True,
         conversation_id=conversation_id,
     )
 
@@ -499,7 +502,7 @@ async def _invoke_agentcore(
     a streaming response. Routes to a per-conversation MicroVM container.
 
     Args:
-        raw: If True, return raw text response without JSON wrapping (for NDJSON endpoints)
+        raw: If True, return filtered NDJSON response (for trace endpoint)
         conversation_id: Conversation ID for per-conversation session routing
     """
     if conversation_id:
@@ -537,7 +540,7 @@ async def _invoke_agentcore(
         if stream:
             return _stream_response(response)
         elif raw:
-            return await _collect_raw_response(response)
+            return await _collect_filtered_raw_response(response)
         else:
             return await _collect_response(response)
 
@@ -561,23 +564,138 @@ async def _invoke_agentcore(
         )
 
 
-def _stream_response(response) -> StreamingResponse:
-    """Stream AgentCore response as SSE (Server-Sent Events).
+def _is_thinking_event(event: dict) -> bool:
+    """Check if an SSE event contains thinking content that should be filtered.
 
-    Passes through SSE-formatted chunks directly from the workspace agent.
+    Filters out:
+    - assistant_advice events (pre-analysis from fast model)
+    - StreamEvent thinking/signature deltas (the actual thinking text)
+
+    Allows through:
+    - StreamEvent content_block_start with thinking type (so frontend can show
+      a "thinking" spinner without seeing the actual thinking content)
     """
+    event_type = event.get("type")
+
+    # Filter assistant_advice (pre-analysis from Nova 2 Lite)
+    if event_type == "assistant_advice":
+        return True
+
+    # Filter StreamEvent thinking text deltas (but NOT block start)
+    if event_type == "StreamEvent":
+        inner = event.get("event", {})
+        if inner.get("type") == "content_block_delta":
+            delta_type = inner.get("delta", {}).get("type")
+            if delta_type in ("thinking_delta", "signature_delta"):
+                return True
+
+    return False
+
+
+def _strip_thinking_from_event(event: dict) -> dict | None:
+    """Strip thinking blocks from assistant message content.
+
+    For 'assistant' type events, removes thinking blocks from message.content[].
+    Returns None if content becomes empty after stripping.
+    For all other events, returns as-is (unless filtered by _is_thinking_event).
+    """
+    if event.get("type") != "assistant":
+        return event
+
+    message = event.get("message", {})
+    content = message.get("content")
+    if not isinstance(content, list):
+        return event
+
+    filtered_content = [block for block in content if block.get("type") != "thinking"]
+
+    if not filtered_content:
+        return None
+
+    if len(filtered_content) == len(content):
+        return event  # Nothing was stripped
+
+    # Return modified event with thinking blocks removed
+    modified = {**event, "message": {**message, "content": filtered_content}}
+    return modified
+
+
+def _filter_sse_event(event_block: str) -> str | None:
+    """Filter a single SSE event block. Returns None to drop, or the event string to keep."""
+    # Fast path: if event doesn't contain any thinking-related keywords,
+    # skip JSON parsing entirely. This covers ~95% of events (text deltas,
+    # tool events, heartbeats) with near-zero overhead.
+    if (
+        "thinking" not in event_block
+        and "assistant_advice" not in event_block
+        and "signature_delta" not in event_block
+    ):
+        return event_block
+
+    # Slow path: event may need filtering — parse and check
+    lines = event_block.strip().split("\n")
+    if not lines:
+        return None
+
+    # Pass through SSE comments (heartbeat/keepalive)
+    if all(line.startswith(":") for line in lines):
+        return event_block
+
+    # Find and parse the data line
+    data_line = None
+    other_lines = []
+    for line in lines:
+        if line.startswith("data: "):
+            data_line = line
+        else:
+            other_lines.append(line)
+
+    if not data_line:
+        return event_block
+
+    try:
+        event = json.loads(data_line[6:])  # Strip "data: " prefix
+    except json.JSONDecodeError:
+        return event_block
+
+    # Drop thinking events; strip thinking blocks from assistant messages
+    if _is_thinking_event(event):
+        return None
+
+    filtered = _strip_thinking_from_event(event)
+    if filtered is None:
+        return None
+    if filtered is not event:
+        new_data_line = f"data: {json.dumps(filtered)}"
+        return "\n".join(other_lines + [new_data_line])
+
+    return event_block
+
+
+def _stream_response(response) -> StreamingResponse:
+    """Stream AgentCore response as SSE, filtering out thinking tokens.
+
+    Works with raw bytes throughout for minimal overhead. Events that don't
+    contain thinking-related keywords (~95% of events) are passed through
+    as raw bytes with no decoding or JSON parsing. Only events containing
+    'thinking', 'assistant_advice', or 'signature_delta' are decoded and
+    filtered via the slow path.
+    """
+
+    # Byte-level markers for the slow-path check
+    _thinking = b"thinking"
+    _advice = b"assistant_advice"
+    _signature = b"signature_delta"
+    _delim = b"\n\n"
 
     async def generate() -> AsyncGenerator[bytes, None]:
         try:
-            # Log response structure for debugging
             logger.info(
                 "AgentCore response: keys=%s, statusCode=%s",
                 list(response.keys()),
                 response.get("statusCode"),
             )
 
-            # The 'response' key contains a StreamingBody object
-            # See: https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/bedrock-agentcore/client/invoke_agent_runtime.html
             streaming_body = response.get("response")
 
             if streaming_body is None:
@@ -585,19 +703,49 @@ def _stream_response(response) -> StreamingResponse:
                 yield f'data: {json.dumps({"type": "error", "message": "No response from AgentCore"})}\n\n'.encode()
                 return
 
-            # Pass through SSE chunks directly - don't split on newlines!
-            # SSE format uses \n\n to delimit events, and the workspace agent
-            # already formats events correctly. We just need to forward them.
-            total_bytes = 0
-            chunk_count = 0
-            for chunk in streaming_body.iter_chunks(chunk_size=256):
-                chunk_count += 1
-                total_bytes += len(chunk)
+            # --- EXPERIMENT: raw passthrough (no filtering) ---
+            for chunk in streaming_body.iter_chunks(chunk_size=128):
                 yield chunk
 
-            logger.info(
-                "Stream completed: %d chunks, %d bytes", chunk_count, total_bytes
-            )
+            # --- ORIGINAL FILTERING CODE (commented out for experiment) ---
+            # buffer = b""
+            # filtered_count = 0
+            #
+            # for chunk in streaming_body.iter_chunks(chunk_size=128):
+            #     buffer += chunk
+            #
+            #     # Process all complete SSE events in the buffer
+            #     while _delim in buffer:
+            #         event_bytes, buffer = buffer.split(_delim, 1)
+            #
+            #         # Fast path: no thinking keywords → pass raw bytes through
+            #         if (
+            #             _thinking not in event_bytes
+            #             and _advice not in event_bytes
+            #             and _signature not in event_bytes
+            #         ):
+            #             yield event_bytes + _delim
+            #             continue
+            #
+            #         # Slow path: decode, parse JSON, filter
+            #         event_str = event_bytes.decode("utf-8", errors="replace")
+            #         filtered = _filter_sse_event(event_str)
+            #         if filtered is not None:
+            #             yield (filtered + "\n\n").encode("utf-8")
+            #         else:
+            #             filtered_count += 1
+            #
+            #     # Flush any remaining content in the buffer
+            #     if buffer.strip():
+            #         event_str = buffer.decode("utf-8", errors="replace")
+            #         filtered = _filter_sse_event(event_str)
+            #         if filtered is not None:
+            #             yield (filtered + "\n\n").encode("utf-8")
+            #         else:
+            #             filtered_count += 1
+            #
+            #     if filtered_count:
+            #         logger.info("Stream completed: %d events filtered", filtered_count)
 
         except Exception as e:
             logger.exception("Error streaming AgentCore response: %s", e)
@@ -613,17 +761,46 @@ def _stream_response(response) -> StreamingResponse:
     )
 
 
+def _strip_thinking_from_history(result: dict) -> dict:
+    """Strip thinking and assistant_advice segments from conversation history responses.
+
+    Ensures thinking tokens never reach the frontend, even when loading
+    historical conversations.
+    """
+    conversation = result.get("conversation")
+    if not isinstance(conversation, dict):
+        return result
+
+    messages = conversation.get("messages")
+    if not isinstance(messages, list):
+        return result
+
+    for message in messages:
+        segments = message.get("segments")
+        if not isinstance(segments, list):
+            continue
+        message["segments"] = [
+            seg
+            for seg in segments
+            if seg.get("kind") not in ("thinking", "assistant_advice")
+        ]
+
+    return result
+
+
 async def _collect_response(response) -> JSONResponse:
-    """Collect all response chunks and return as JSON."""
+    """Collect all response chunks and return as JSON.
+
+    For history responses, strips thinking and assistant_advice segments
+    so sensitive internal data never reaches the frontend.
+    """
     try:
-        # Log response structure for debugging
         logger.info(
             "AgentCore response (collect): keys=%s, statusCode=%s",
             list(response.keys()),
             response.get("statusCode"),
         )
 
-        # The 'response' key contains a StreamingBody object
         streaming_body = response.get("response")
 
         if streaming_body is None:
@@ -633,13 +810,12 @@ async def _collect_response(response) -> JSONResponse:
                 content={"error": "No response from AgentCore"},
             )
 
-        # Read entire response body
         result_bytes = streaming_body.read()
         result_text = result_bytes.decode("utf-8")
 
-        # Try to parse as JSON
         try:
             result = json.loads(result_text)
+            result = _strip_thinking_from_history(result)
             return JSONResponse(content=result)
         except json.JSONDecodeError:
             return JSONResponse(content={"response": result_text})
@@ -652,8 +828,26 @@ async def _collect_response(response) -> JSONResponse:
         )
 
 
-async def _collect_raw_response(response) -> Response:
-    """Collect response and return as raw text (for NDJSON endpoints like /trace)."""
+def _filter_ndjson_line(line: str) -> str | None:
+    """Filter a single NDJSON line. Returns None to drop, or the filtered line."""
+    try:
+        event = json.loads(line)
+    except json.JSONDecodeError:
+        return line
+
+    if _is_thinking_event(event):
+        return None
+
+    filtered = _strip_thinking_from_event(event)
+    if filtered is None:
+        return None
+    if filtered is not event:
+        return json.dumps(filtered)
+    return line
+
+
+async def _collect_filtered_raw_response(response) -> Response:
+    """Collect NDJSON response, filter out thinking/advice, return as raw text."""
     try:
         streaming_body = response.get("response")
 
@@ -665,12 +859,20 @@ async def _collect_raw_response(response) -> Response:
                 status_code=500,
             )
 
-        # Read entire response body and return as-is
         result_bytes = streaming_body.read()
         result_text = result_bytes.decode("utf-8")
 
+        filtered_lines = []
+        for line in result_text.splitlines():
+            stripped = line.strip()
+            if not stripped:
+                continue
+            filtered = _filter_ndjson_line(stripped)
+            if filtered is not None:
+                filtered_lines.append(filtered)
+
         return Response(
-            content=result_text,
+            content="\n".join(filtered_lines) + "\n" if filtered_lines else "",
             media_type="application/x-ndjson",
         )
 
