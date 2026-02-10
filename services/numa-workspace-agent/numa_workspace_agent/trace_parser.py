@@ -281,7 +281,6 @@ def _parse_events_to_messages(
             # Initialize or get existing collected content for this message
             if msg_id not in assistant_messages:
                 assistant_messages[msg_id] = {
-                    "thinking": None,
                     "text_parts": [],
                     "tool_uses": {},  # tool_id -> tool_use data
                 }
@@ -307,14 +306,7 @@ def _parse_events_to_messages(
                             "input": content.get("input", {}),
                         }
 
-                elif content_type == "thinking":
-                    thinking_text = content.get("thinking", "")
-                    if thinking_text.strip():
-                        # Keep the longest thinking (later partials may be more complete)
-                        if not collected["thinking"] or len(thinking_text) > len(
-                            collected["thinking"]
-                        ):
-                            collected["thinking"] = thinking_text
+                # Skip thinking blocks — not exposed to frontend
 
     # Build ordered events list for proper message sequencing
     ordered_events: list[tuple[str, Any]] = []
@@ -388,16 +380,6 @@ def _parse_events_to_messages(
                     continue
 
                 collected = assistant_messages[msg_id]
-
-                # Add thinking first if present
-                if collected["thinking"]:
-                    combined_segments.append(
-                        {
-                            "kind": "thinking",
-                            "text": collected["thinking"],
-                            "collapsed": True,
-                        }
-                    )
 
                 # Add text segments
                 for text in collected["text_parts"]:

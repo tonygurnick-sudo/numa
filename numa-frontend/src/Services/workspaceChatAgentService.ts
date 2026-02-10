@@ -373,10 +373,10 @@ export async function getWorkspaceChatConversation(
 }
 
 /**
- * Get raw trace.jsonl content for a conversation.
+ * Get filtered trace content for a conversation.
  *
- * This is a lightweight GET endpoint that returns the raw NDJSON trace file
- * without parsing. Used for downloading/viewing the full trace.
+ * Returns NDJSON with thinking blocks and assistant_advice stripped by the proxy.
+ * Used for loading conversation history with the frontend's rich trace parser.
  *
  * Includes a 30-second timeout to prevent infinite loading if AgentCore is slow or hung.
  */

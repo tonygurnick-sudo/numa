@@ -18,7 +18,6 @@ import type {
   WorkspaceChatMessage,
   WorkspaceChatSegment,
   WorkspaceChatTextSegment,
-  WorkspaceChatThinkingSegment,
   WorkspaceChatInlineToolSegment,
   WorkspaceChatSubagentSegment,
   WorkspaceChatTodoSegment,
@@ -56,7 +55,6 @@ import {
   isSDKTextBlock,
   isSDKToolUseBlock,
   isSDKToolResultBlock,
-  isSDKThinkingBlock,
   isCompactionStatusEvent,
   isCompactBoundaryEvent,
 } from '@/types/workspaceChatTypes';
@@ -676,40 +674,6 @@ function replaceTextSegment(helpers: WorkspaceChatMessageHelpers, newText: strin
 }
 
 /**
- * Update or create thinking segment.
- */
-function updateThinkingSegment(helpers: WorkspaceChatMessageHelpers, thinkingText: string): void {
-  helpers.setMessages((prev) => {
-    const updated = ensureAssistantMessage(prev);
-    const lastIdx = updated.length - 1;
-    const lastMsg = { ...updated[lastIdx] };
-    const segments = [...(lastMsg.segments || [])] as WorkspaceChatSegment[];
-
-    // Find existing thinking segment (should be first or early)
-    const thinkingIdx = segments.findIndex((s) => s.kind === 'thinking');
-
-    if (thinkingIdx >= 0) {
-      const seg = segments[thinkingIdx] as WorkspaceChatThinkingSegment;
-      segments[thinkingIdx] = {
-        ...seg,
-        text: thinkingText,
-      };
-    } else {
-      // Insert thinking at the beginning
-      segments.unshift({
-        kind: 'thinking',
-        text: thinkingText,
-        collapsed: true,
-      });
-    }
-
-    lastMsg.segments = segments;
-    updated[lastIdx] = lastMsg;
-    return updated;
-  });
-}
-
-/**
  * Add an inline tool segment.
  */
 function addInlineToolSegment(
@@ -1313,10 +1277,6 @@ function handleAssistantEvent(
         // New text block after other content
         appendTextSegment(helpers, block.text);
       }
-    } else if (isSDKThinkingBlock(block)) {
-      if (!HIDDEN_ITEMS.has('redacted_thinking')) {
-        updateThinkingSegment(helpers, block.thinking);
-      }
     } else if (isSDKToolUseBlock(block)) {
       handleToolUseBlock(block, event.parent_tool_use_id, context, helpers);
     } else if (isSDKToolResultBlock(block)) {
@@ -1741,10 +1701,6 @@ export function parseRawTraceToMessages(traceContent: string): WorkspaceChatMess
   // These get added to the next user message
   let pendingAttachments: Array<{ filename: string; path: string; size: number }> = [];
 
-  // Track pending assistant advice from 'assistant_advice' events
-  // This gets added to the next assistant message
-  let pendingAdvice: string | null = null;
-
   // Track compaction state for trace replay
   let isAwaitingCompactionSummary = false;
   let compactionMetadata: { preTokens?: number; trigger?: 'auto' | 'manual' } | null = null;
@@ -1866,15 +1822,6 @@ export function parseRawTraceToMessages(traceContent: string): WorkspaceChatMess
       const attachmentsEvent = event as { files?: Array<{ filename: string; path: string; size: number }> };
       if (attachmentsEvent.files) {
         pendingAttachments = attachmentsEvent.files;
-      }
-      continue;
-    }
-
-    // Handle assistant_advice events - store for next assistant message
-    if (event.type === 'assistant_advice') {
-      const adviceEvent = event as { content?: string };
-      if (adviceEvent.content) {
-        pendingAdvice = adviceEvent.content;
       }
       continue;
     }
@@ -2021,16 +1968,6 @@ export function parseRawTraceToMessages(traceContent: string): WorkspaceChatMess
           content: '',
           segments: [],
         };
-
-        // Add pending assistant advice as first segment
-        if (pendingAdvice) {
-          currentAssistantMessage.segments.push({
-            kind: 'assistant_advice',
-            text: pendingAdvice,
-            collapsed: true,
-          });
-          pendingAdvice = null; // Clear after use
-        }
       }
 
       // Add content to current assistant message (grouping consecutive assistant events)
@@ -2141,16 +2078,6 @@ function processAssistantContent(
           finalized: true,
         });
         message.content += block.text;
-      }
-    } else if (isSDKThinkingBlock(block)) {
-      // Check if we already have thinking
-      const existingThinking = segments.find((s) => s.kind === 'thinking');
-      if (!existingThinking && block.thinking.trim()) {
-        segments.unshift({
-          kind: 'thinking',
-          text: block.thinking,
-          collapsed: true,
-        });
       }
     } else if (isSDKToolUseBlock(block)) {
       // Skip if already tracked

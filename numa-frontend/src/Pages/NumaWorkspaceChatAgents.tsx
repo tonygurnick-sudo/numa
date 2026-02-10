@@ -50,7 +50,7 @@ import { WorkspaceChatFileUpload } from '../Components/WorkspaceChat/WorkspaceCh
 import { WorkspaceChatSettingsPanel } from '../Components/WorkspaceChat/WorkspaceChatSettingsPanel';
 import { useWorkspaceChatSettingsPanel } from '../hooks/useWorkspaceChatSettingsPanel';
 import { PendingFilesBar } from '../Components/Chat/PendingFilesBar';
-import { OpenTraceButton } from '../Components/Chat/OpenTraceButton';
+import { ExportConversationButton } from '../Components/Chat/ExportConversationButton';
 import { deleteWorkspaceChatUploads } from '../Services/workspaceChatAgentService';
 import {
   loadStagedItems,
@@ -1714,8 +1714,7 @@ const NumaWorkspaceChatAgents = () => {
 
   const renderActionButtons = () => (
     <>
-      {/* Dev tool: Download trace as HTML */}
-      {conversationId && <OpenTraceButton conversationId={conversationId} />}
+      {conversationId && <ExportConversationButton messages={messages} conversationId={conversationId} />}
       {agentsFeatureEnabled && agentsMode !== 'off' && (
         <AgentsSidebar
           ref={agentsSidebarRef}

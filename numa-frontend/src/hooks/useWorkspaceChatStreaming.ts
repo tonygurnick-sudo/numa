@@ -237,7 +237,7 @@ export function useWorkspaceChatStreaming({
 
                 const segments = [...(lastMsg.segments || [])];
 
-                // Remove inline_thinking segment when text starts (thinking is done)
+                // Remove inline_thinking spinner when text starts (thinking is done)
                 const inlineThinkingIdx = segments.findIndex((s) => s.kind === 'inline_thinking');
                 if (inlineThinkingIdx >= 0) {
                   segments.splice(inlineThinkingIdx, 1);
@@ -261,7 +261,7 @@ export function useWorkspaceChatStreaming({
               });
             }
 
-            // === THINKING BLOCK START ===
+            // === THINKING BLOCK START (spinner only, text is filtered by proxy) ===
             if (streamEvent?.type === 'content_block_start' && streamEvent.content_block?.type === 'thinking') {
               setMessages((prev) => {
                 const updated = [...prev];
@@ -275,62 +275,17 @@ export function useWorkspaceChatStreaming({
                   updated[updated.length - 1] = lastMsg;
                 }
 
-                // Transition from processing to thinking
                 if (lastMsg.status === 'processing') {
                   lastMsg.status = 'thinking';
                 }
 
                 const segments = [...(lastMsg.segments || [])];
-
-                // Add inline thinking spinner if not already present
                 const hasInlineThinking = segments.some((s) => s.kind === 'inline_thinking');
                 if (!hasInlineThinking) {
-                  segments.push({
-                    kind: 'inline_thinking',
-                    isStreaming: true,
-                  });
+                  segments.push({ kind: 'inline_thinking', isStreaming: true });
                 }
-
-                // Add the thinking block for content storage
-                segments.push({
-                  kind: 'thinking',
-                  text: '',
-                  collapsed: true,
-                  _blockIndex: blockIndex,
-                });
 
                 lastMsg.segments = segments;
-                return updated;
-              });
-            }
-
-            // === THINKING DELTAS ===
-            if (
-              streamEvent?.type === 'content_block_delta' &&
-              streamEvent.delta?.type === 'thinking_delta' &&
-              streamEvent.delta?.thinking
-            ) {
-              const thinkingDelta = streamEvent.delta.thinking;
-              setMessages((prev) => {
-                const updated = [...prev];
-                const lastIdx = updated.length - 1;
-                if (lastIdx < 0) return prev;
-
-                const lastMsg = { ...updated[lastIdx] };
-                const segments = [...(lastMsg.segments || [])];
-
-                const thinkingIdx = segments.findIndex((s) => s.kind === 'thinking' && s._blockIndex === blockIndex);
-
-                if (thinkingIdx >= 0) {
-                  const thinkingSeg = segments[thinkingIdx];
-                  segments[thinkingIdx] = {
-                    ...thinkingSeg,
-                    text: (thinkingSeg.text || '') + thinkingDelta,
-                  };
-                  lastMsg.segments = segments;
-                  updated[lastIdx] = lastMsg;
-                }
-
                 return updated;
               });
             }
@@ -422,7 +377,7 @@ export function useWorkspaceChatStreaming({
 
                     const segments = [...(lastMsg.segments || [])];
 
-                    // Remove inline_thinking segment when tool starts
+                    // Remove inline_thinking spinner when tool starts
                     const inlineThinkingIdx = segments.findIndex((s) => s.kind === 'inline_thinking');
                     if (inlineThinkingIdx >= 0) {
                       segments.splice(inlineThinkingIdx, 1);
@@ -741,34 +696,6 @@ export function useWorkspaceChatStreaming({
             }
           }
 
-          if (event.type === 'assistant_advice') {
-            const adviceEvent = event as { type: 'assistant_advice'; content: string };
-            console.log('[WorkspaceChat] Assistant advice:', adviceEvent.content);
-
-            setMessages((prev) => {
-              const updated = [...prev];
-              let lastMsg = updated[updated.length - 1];
-
-              if (!lastMsg || lastMsg.role !== 'assistant') {
-                lastMsg = { role: 'assistant', content: '', segments: [] };
-                updated.push(lastMsg);
-              } else {
-                lastMsg = { ...lastMsg };
-                updated[updated.length - 1] = lastMsg;
-              }
-
-              const segments = [...(lastMsg.segments || [])];
-              segments.unshift({
-                kind: 'assistant_advice',
-                text: adviceEvent.content,
-                collapsed: true,
-              });
-
-              lastMsg.segments = segments;
-              updated[updated.length - 1] = lastMsg;
-              return updated;
-            });
-          }
           console.log('[WorkspaceChat] Session event:', event.type);
         },
       );
