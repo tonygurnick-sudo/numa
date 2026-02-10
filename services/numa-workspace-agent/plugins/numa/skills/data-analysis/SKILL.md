@@ -12,7 +12,7 @@ Performance optimization techniques for analyzing large datasets. Key insight: c
 ## Quick Decision Tree
 
 ```
-Is your file > 50MB or > 100,000 rows?
+Is your file > 50MB?
 ├── YES → Will you run multiple queries?
 │   ├── YES → Convert to SQLite (this skill)
 │   └── NO  → Use pandas with memory optimization

@@ -1383,6 +1383,7 @@ export const NumaAppProvider = ({ children }) => {
         prompt: prompt,
         uploaded_files: uploaded_files,
         resume_session: true, // Enable session continuity
+        analysis_mode: 'full', // Required by the Step Function Initialize state
         user_timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
         language,
       };

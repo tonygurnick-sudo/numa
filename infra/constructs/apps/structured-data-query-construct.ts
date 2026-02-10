@@ -52,7 +52,7 @@ export class StructuredDataQueryApp extends BaseNumaApp {
       memorySize: 2048,
       environment: {
         OUTPUTS_BUCKET: props.outputsBucket.bucket,
-        BEDROCK_MODEL_ID: 'anthropic.claude-3-haiku-20240307-v1:0',
+        BEDROCK_MODEL_ID: 'anthropic.claude-haiku-4-5-20251001-v1:0',
         AGENT_MAX_STEPS: '5',
         AGENT_MAX_TOKENS: '1024',
         AGENT_SQL_LIMIT: '20',
