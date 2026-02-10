@@ -61,6 +61,8 @@ type Status = 'pending' | 'indexed' | 'failed' | 'warning';
 interface KBFileExplorerProps {
   kbId: string;
   role?: 'VIEWER' | 'EDITOR' | 'OWNER';
+  onOpenFilePreview?: (ref: { filename: string; fullPath: string; relativePath: string; extension: string }) => void;
+  onDownloadFile?: (s3Key: string, filename: string) => void;
 }
 
 export interface KBFileExplorerHandle {
@@ -495,7 +497,7 @@ function adjustChildDepth(children: TableRow[]): TableRow[] {
  * KBFileExplorer Component
  */
 export const KBFileExplorer = forwardRef<KBFileExplorerHandle, KBFileExplorerProps>(
-  ({ kbId, role = 'VIEWER' }, ref): React.JSX.Element => {
+  ({ kbId, role = 'VIEWER', onOpenFilePreview, onDownloadFile }, ref): React.JSX.Element => {
     const { t } = useTranslation('knowledgeBase');
     // Use KB state from context
     const { kbState, isLoading: kbStateLoading, error: kbStateError, refreshKBState, invalidateCache } = useKBState();
@@ -1106,8 +1108,8 @@ export const KBFileExplorer = forwardRef<KBFileExplorerHandle, KBFileExplorerPro
 
         {/* Action Bar */}
         <div className="mb-3 p-3 bg-light rounded">
-          {/* Responsive Layout: Single row on larger screens, stacked on smaller screens */}
-          <div className="d-flex flex-column flex-xl-row justify-content-xl-between align-items-start align-items-xl-center gap-3">
+          {/* Responsive Layout: wraps based on available container width */}
+          <div className="d-flex flex-wrap justify-content-between align-items-center gap-3">
             {/* Search and Filter Group */}
             <div className="d-flex align-items-center gap-3 flex-wrap">
               {/* Search */}
@@ -1136,7 +1138,7 @@ export const KBFileExplorer = forwardRef<KBFileExplorerHandle, KBFileExplorerPro
             </div>
 
             {/* Button Toolbar Group */}
-            <div className="d-flex flex-column flex-lg-row justify-content-lg-end align-items-start align-items-lg-center gap-2">
+            <div className="d-flex flex-wrap align-items-center gap-2">
               {/* Selection Buttons Group */}
               {canEdit && (
                 <div className="d-flex align-items-center gap-2">
@@ -1179,7 +1181,7 @@ export const KBFileExplorer = forwardRef<KBFileExplorerHandle, KBFileExplorerPro
               )}
 
               {/* Action Buttons Group */}
-              <div className="d-flex gap-2 flex-nowrap">
+              <div className="d-flex gap-2 flex-wrap">
                 {canEdit && (
                   <Button
                     variant="outline-secondary"
@@ -1306,6 +1308,7 @@ export const KBFileExplorer = forwardRef<KBFileExplorerHandle, KBFileExplorerPro
                       )}
                     </div>
                   </th>
+                  {(onOpenFilePreview || onDownloadFile) && <th style={{ width: '70px', minWidth: '60px' }}></th>}
                   {canEdit && (
                     <th style={{ width: '60px', minWidth: '50px' }}>
                       <span className="d-none d-sm-inline">{t('fileExplorer.table.select')}</span>
@@ -1469,6 +1472,57 @@ export const KBFileExplorer = forwardRef<KBFileExplorerHandle, KBFileExplorerPro
                       </td>
                       <td className="d-none d-md-table-cell">{row.uploadDate}</td>
                       <td className="d-none d-sm-table-cell">{row.size}</td>
+                      {(onOpenFilePreview || onDownloadFile) && (
+                        <td>
+                          {!isFolder && row.originalKey && (
+                            <div className="d-flex align-items-center gap-1">
+                              {onOpenFilePreview && (
+                                <OverlayTrigger
+                                  placement="top"
+                                  overlay={
+                                    <Tooltip id={`preview-${row.id}`}>
+                                      {t('fileExplorer.actions.previewInPanel')}
+                                    </Tooltip>
+                                  }
+                                >
+                                  <button
+                                    className="btn btn-sm btn-link p-0 kb-file-action-btn"
+                                    onClick={() => {
+                                      const filename = row.name;
+                                      const extension = filename.includes('.') ? filename.split('.').pop() || '' : '';
+                                      onOpenFilePreview({
+                                        filename,
+                                        fullPath: row.originalKey!,
+                                        relativePath: row.originalKey!,
+                                        extension,
+                                      });
+                                    }}
+                                  >
+                                    <i className="bi bi-eye"></i>
+                                  </button>
+                                </OverlayTrigger>
+                              )}
+                              {onDownloadFile && (
+                                <OverlayTrigger
+                                  placement="top"
+                                  overlay={
+                                    <Tooltip id={`download-${row.id}`}>
+                                      {t('fileExplorer.actions.downloadFile')}
+                                    </Tooltip>
+                                  }
+                                >
+                                  <button
+                                    className="btn btn-sm btn-link p-0 kb-file-action-btn"
+                                    onClick={() => onDownloadFile(row.originalKey!, row.name)}
+                                  >
+                                    <i className="bi bi-download"></i>
+                                  </button>
+                                </OverlayTrigger>
+                              )}
+                            </div>
+                          )}
+                        </td>
+                      )}
                       {canEdit && (
                         <td>
                           <input

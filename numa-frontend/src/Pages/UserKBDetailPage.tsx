@@ -3,9 +3,9 @@
  * Shows detailed view of a single user knowledge base with tabs
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Button, Alert, Spinner } from 'react-bootstrap';
+import { Button, Alert, Spinner, Modal } from 'react-bootstrap';
 import { useTranslation } from 'react-i18next';
 import { LayoutDashboard } from '../Layouts/LayoutDashboard';
 import { PageHeader } from '../Components/PageHeader';
@@ -15,9 +15,13 @@ import { useKnowledgeBase } from '../Providers/KnowledgeBaseProvider';
 import { FileUploader } from '../Components/FileUploader';
 import { NotificationModal } from '../Components/NotificationModal';
 import { isFileTypeValidForBedrockKB, shouldShowLargeDataFileWarning, formatFileSize } from '../utils/fileUtils';
-import { listFoldersInKB } from '../utils/s3Utils';
+import { listFoldersInKB, downloadFileFromS3 } from '../utils/s3Utils';
 import FolderSelector from '../Components/KnowledgeBase/FolderSelector';
 import { useAuth } from '../Providers/AuthProvider';
+import { useFilePreviewProcessor } from '../hooks/useFilePreviewProcessor';
+import type { FileReference } from '../hooks/useFilePreviewProcessor';
+import ResizableSplitView from '../Components/ResizableSplitView';
+import { FilePreviewPanel } from '../Components/FilePreviewPanel';
 
 export function UserKBDetailPage(): React.JSX.Element {
   const { t } = useTranslation('knowledgeBase');
@@ -36,6 +40,50 @@ export function UserKBDetailPage(): React.JSX.Element {
   const [selectedFolder, setSelectedFolder] = useState<string>('');
   const [folderOptions, setFolderOptions] = useState<string[]>([]);
   const [loadingFolders, setLoadingFolders] = useState<boolean>(false);
+
+  // File preview state
+  const {
+    filePreview,
+    showFilePreview,
+    leftFraction: filePreviewLeftFraction,
+    setLeftFraction: setFilePreviewLeftFraction,
+    openFilePreview,
+    closeFilePreview,
+  } = useFilePreviewProcessor();
+  const [isMobile, setIsMobile] = useState(() => (typeof window !== 'undefined' ? window.innerWidth <= 768 : false));
+  const [showFilePreviewModal, setShowFilePreviewModal] = useState(false);
+
+  const region = authRegion || window.sessionStorage.getItem('REGION') || 'ap-southeast-2';
+  const CLIENT_NAME = window.sessionStorage.getItem('CLIENT_NAME');
+  const dataBucket = `numa-${CLIENT_NAME}-data`;
+
+  // Track window resize for mobile detection
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth <= 768);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  const handleOpenFilePreview = useCallback(
+    (ref: FileReference) => {
+      openFilePreview(ref);
+      if (isMobile) {
+        setShowFilePreviewModal(true);
+      }
+    },
+    [openFilePreview, isMobile],
+  );
+
+  const handleDownloadFile = useCallback(
+    async (s3Key: string, filename: string) => {
+      try {
+        await downloadFileFromS3(s3Key, dataBucket, region, getCredentials, filename);
+      } catch (err) {
+        console.error('Error downloading file:', err);
+      }
+    },
+    [dataBucket, region, getCredentials],
+  );
 
   // Find the current KB
   const currentKB = availableKBs.find((kb) => kb.kb_id === kbId);
@@ -209,14 +257,70 @@ export function UserKBDetailPage(): React.JSX.Element {
           </Alert>
         )}
 
-        <KBTabLayout
-          kbId={kbId!}
-          kbType="user"
-          role={currentKB.role}
-          onUploadSuccess={handleUploadSuccess}
-          fileExplorerRef={fileExplorerRef}
+        <ResizableSplitView
+          left={
+            <KBTabLayout
+              kbId={kbId!}
+              kbType="user"
+              role={currentKB.role}
+              onUploadSuccess={handleUploadSuccess}
+              fileExplorerRef={fileExplorerRef}
+              onOpenFilePreview={handleOpenFilePreview}
+              onDownloadFile={handleDownloadFile}
+            />
+          }
+          right={
+            showFilePreview && filePreview ? (
+              <FilePreviewPanel
+                preview={filePreview}
+                onClose={closeFilePreview}
+                bucket={dataBucket}
+                region={region}
+                getCredentials={getCredentials}
+              />
+            ) : (
+              <div />
+            )
+          }
+          showRight={showFilePreview && !!filePreview && !isMobile}
+          leftFraction={filePreviewLeftFraction}
+          onLeftFractionChange={setFilePreviewLeftFraction}
+          minLeft={300}
+          minRight={300}
+          rightPadding="0"
         />
       </LayoutDashboard>
+
+      {/* Mobile file preview modal */}
+      <Modal
+        show={isMobile && showFilePreviewModal && !!filePreview}
+        onHide={() => {
+          setShowFilePreviewModal(false);
+          closeFilePreview();
+        }}
+        fullscreen
+        centered
+        scrollable
+      >
+        <Modal.Header closeButton>
+          <Modal.Title>{filePreview?.type === 'file' ? filePreview.filename : ''}</Modal.Title>
+        </Modal.Header>
+        <Modal.Body className="p-0">
+          {filePreview && (
+            <FilePreviewPanel
+              preview={filePreview}
+              onClose={() => {
+                setShowFilePreviewModal(false);
+                closeFilePreview();
+              }}
+              bucket={dataBucket}
+              region={region}
+              getCredentials={getCredentials}
+              embedded
+            />
+          )}
+        </Modal.Body>
+      </Modal>
 
       {/* Upload Modal */}
       {showUploadModal && (
