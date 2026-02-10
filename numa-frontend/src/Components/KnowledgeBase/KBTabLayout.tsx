@@ -14,6 +14,8 @@ interface KBTabLayoutProps {
   role?: 'VIEWER' | 'EDITOR' | 'OWNER';
   onUploadSuccess?: () => void;
   fileExplorerRef?: React.Ref<KBFileExplorerHandle>;
+  onOpenFilePreview?: (ref: { filename: string; fullPath: string; relativePath: string; extension: string }) => void;
+  onDownloadFile?: (s3Key: string, filename: string) => void;
 }
 
 /**
@@ -25,6 +27,8 @@ function KBTabLayoutInner({
   role,
   onUploadSuccess,
   fileExplorerRef,
+  onOpenFilePreview,
+  onDownloadFile,
 }: KBTabLayoutProps): React.JSX.Element {
   const { t } = useTranslation('knowledgeBase');
   const [activeTab, setActiveTab] = useState<string>('knowledge-base');
@@ -55,7 +59,13 @@ function KBTabLayoutInner({
             }
           >
             <div className="p-4">
-              <KBFileExplorer kbId={kbId} role={role} ref={fileExplorerRef} />
+              <KBFileExplorer
+                kbId={kbId}
+                role={role}
+                ref={fileExplorerRef}
+                onOpenFilePreview={onOpenFilePreview}
+                onDownloadFile={onDownloadFile}
+              />
             </div>
           </Tab>
 

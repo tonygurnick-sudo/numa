@@ -950,6 +950,9 @@ export interface WorkspaceChatInlineToolSegment {
   iconName?: string;
   /** Image URL for branded icons (e.g., integration logos) */
   iconImage?: string;
+  /** When true, only render the approval panel — skip the tool indicator line.
+   *  Used for sub-agent approvals where the tool call is already shown inside the subagent card. */
+  approvalOnly?: boolean;
   /** Approval data for integration tools requiring human-in-the-loop confirmation */
   approval?: {
     actionKey: string;

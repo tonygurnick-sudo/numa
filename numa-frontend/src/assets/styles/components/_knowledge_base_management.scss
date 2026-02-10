@@ -330,3 +330,16 @@
       }
     }
   }
+
+// File preview action buttons in KB file table rows
+.kb-file-action-btn {
+  line-height: 1;
+  color: var(--bs-secondary);
+  opacity: 0.6;
+  transition: opacity 0.15s ease, color 0.15s ease;
+
+  &:hover {
+    opacity: 1;
+    color: var(--brand-primary, var(--color-primary));
+  }
+}

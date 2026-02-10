@@ -253,7 +253,7 @@ export function resetSDKEventContext(context: SDKEventContext): void {
 // ============================================================
 
 /** MCP integration tool names that should get branded rendering */
-const INTEGRATION_MCP_TOOLS = new Set([
+export const INTEGRATION_MCP_TOOLS = new Set([
   'mcp__integrations__run_action',
   'mcp__integrations__configure_props',
   'mcp__integrations__proxy_request',
@@ -263,7 +263,7 @@ const INTEGRATION_MCP_TOOLS = new Set([
  * Format integration MCP tool calls into branded labels and toolName overrides.
  * Returns null if the tool is not an integration MCP tool.
  */
-function formatIntegrationToolLabel(
+export function formatIntegrationToolLabel(
   toolName: string,
   input: Record<string, unknown>,
 ): { label: string; actionName: string; description: string; integrationToolName: string } | null {
@@ -1441,11 +1441,86 @@ function handleToolApprovalEvent(event: SDKToolApprovalEvent, helpers: Workspace
 }
 
 /**
+ * Handle a tool_approval event from a sub-agent.
+ * Creates an inline_tool segment with approval data so it renders through the same
+ * WorkspaceChatInlineTool component used by main-agent approvals (branded icons,
+ * countdown timer, styled approve/deny buttons).
+ */
+function handleSubagentToolApprovalEvent(event: SDKToolApprovalEvent, helpers: WorkspaceChatMessageHelpers): void {
+  helpers.setMessages((prev) => {
+    const updated = ensureAssistantMessage(prev);
+    const lastIdx = updated.length - 1;
+    const lastMsg = { ...updated[lastIdx] };
+    const segments = [...(lastMsg.segments || [])] as WorkspaceChatSegment[];
+
+    // Build the same branded display as main-agent integration tools
+    const inputObj: Record<string, unknown> = {
+      action_key: event.action_key,
+      description: event.description,
+    };
+    const integrationInfo = formatIntegrationToolLabel(event.tool_name, inputObj);
+    let displayText = event.description || event.action_key;
+    let iconImage: string | undefined;
+    let iconName: string | undefined;
+    let toolName = event.tool_name;
+
+    if (integrationInfo) {
+      displayText = integrationInfo.description
+        ? `Calling ${integrationInfo.actionName} tool: ${integrationInfo.description}`
+        : `Calling ${integrationInfo.actionName} tool`;
+      toolName = integrationInfo.integrationToolName || event.tool_name;
+      const visual = resolveToolVisual(integrationInfo.integrationToolName);
+      iconImage = visual.kind === 'image' ? visual.src : undefined;
+      iconName = visual.kind === 'icon' ? visual.className.replace('bi ', '') : undefined;
+    }
+
+    const inlineToolSegment: WorkspaceChatInlineToolSegment = {
+      kind: 'inline_tool',
+      toolUseId: event.tool_use_id,
+      toolName,
+      displayText,
+      isComplete: false,
+      category: 'important' as ToolCategory,
+      iconName,
+      iconImage,
+      approvalOnly: true,
+      approval: {
+        actionKey: event.action_key,
+        description: event.description,
+        propsPreview: event.props_preview,
+        requestId: event.request_id,
+        autoApproved: event.auto_approved,
+      },
+    };
+
+    segments.push(inlineToolSegment);
+    lastMsg.segments = segments;
+    updated[lastIdx] = lastMsg;
+
+    return updated;
+  });
+}
+
+/**
  * Process a single SDK event.
  *
  * Routes the event to the appropriate handler based on type.
  */
 export function processSDKEvent(event: SDKEvent, context: SDKEventContext, helpers: WorkspaceChatMessageHelpers): void {
+  // Tool approval events FIRST — before subagent routing, since approvals
+  // need a standalone UI card even when the tool runs inside a subagent.
+  if (event.type === 'tool_approval') {
+    const approval = event as SDKToolApprovalEvent;
+    if (approval.parent_tool_use_id) {
+      // Sub-agent approval: create standalone tool_approval segment at message level
+      handleSubagentToolApprovalEvent(approval, helpers);
+    } else {
+      // Main agent approval: attach to existing inline_tool segment
+      handleToolApprovalEvent(approval, helpers);
+    }
+    return;
+  }
+
   // Route subagent events to their container
   if (isSubagentEvent(event)) {
     const parentId = event.parent_tool_use_id!;
@@ -1486,12 +1561,6 @@ export function processSDKEvent(event: SDKEvent, context: SDKEventContext, helpe
     context.compactionMetadata = undefined;
 
     // Skip creating a user message bubble - this is an injected summary, not user input
-    return;
-  }
-
-  // Tool approval events (integration actions needing user approval)
-  if (event.type === 'tool_approval') {
-    handleToolApprovalEvent(event as SDKToolApprovalEvent, helpers);
     return;
   }
 

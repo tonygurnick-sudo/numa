@@ -2,7 +2,9 @@
  * WorkspaceChatSubagentCard - Collapsible container for Task subagent activity
  *
  * Displays a card with the task description and a scrollable list of
- * subagent events, rendered recursively using the segment renderer.
+ * subagent events, rendered using the shared tool formatting utilities
+ * so integration icons, skill labels, and display text stay consistent
+ * with the main agent's inline tool rendering.
  */
 import { useState } from 'react';
 import { Spinner } from 'react-bootstrap';
@@ -11,7 +13,15 @@ import type {
   SDKEvent,
   SDKAssistantEvent,
   SDKContentBlock,
+  ToolCategory,
 } from '@/types/workspaceChatTypes';
+import {
+  getInlineToolDisplay,
+  getToolCategoryAndIcon,
+  formatIntegrationToolLabel,
+  INTEGRATION_MCP_TOOLS,
+} from '@/utils/workspaceChatEventHandlers';
+import { resolveToolVisual } from '@/utils/ToolConfig';
 
 interface Props {
   segment: WorkspaceChatSubagentSegment;
@@ -33,36 +43,14 @@ function getSubagentTypeLabel(subagentType: string): string {
 interface ToolSummary {
   text: string;
   icon: string;
-}
-
-/**
- * Get icon for a tool name.
- * Handles multiple naming conventions (PascalCase, snake_case, kebab-case).
- */
-function getToolIcon(toolName: string): string {
-  const iconMap: Record<string, string> = {
-    // File operations
-    Read: 'bi-file-earmark-text',
-    Write: 'bi-file-earmark-plus',
-    Edit: 'bi-pencil-square',
-    // Search/explore
-    Grep: 'bi-search',
-    Glob: 'bi-folder2-open',
-    Bash: 'bi-terminal',
-    // Web search variants
-    WebSearch: 'bi-search',
-    web_search: 'bi-search',
-    'web-search': 'bi-search',
-    // Web fetch variants
-    WebFetch: 'bi-globe',
-    web_fetch: 'bi-globe',
-    'web-fetch': 'bi-globe',
-  };
-  return iconMap[toolName] || 'bi-tools';
+  iconImage?: string;
+  category?: ToolCategory;
 }
 
 /**
  * Extract summary of what the subagent did from its events.
+ * Uses the same formatting utilities as the main agent's inline tools
+ * so integration icons, skill labels, and display text stay consistent.
  */
 function getSubagentSummary(events: SDKEvent[]): ToolSummary[] {
   const summaries: ToolSummary[] = [];
@@ -76,47 +64,44 @@ function getSubagentSummary(events: SDKEvent[]): ToolSummary[] {
       if (block.type === 'tool_use') {
         const toolBlock = block as SDKContentBlock & { name: string; input: unknown };
         const input = toolBlock.input as Record<string, unknown> | undefined;
-        let text = '';
-        const icon = getToolIcon(toolBlock.name);
 
-        switch (toolBlock.name) {
-          case 'Read': {
-            const path = input?.file_path as string;
-            if (path) {
-              const filename = path.split('/').pop() || path;
-              text = `Reading ${filename}`;
-            }
-            break;
+        let text: string;
+        let icon: string | undefined;
+        let iconImage: string | undefined;
+        let category: ToolCategory | undefined;
+
+        // Integration MCP tools get branded display (logos, formatted labels)
+        if (INTEGRATION_MCP_TOOLS.has(toolBlock.name) && input) {
+          const integrationInfo = formatIntegrationToolLabel(toolBlock.name, input);
+          if (integrationInfo) {
+            const visual = resolveToolVisual(integrationInfo.integrationToolName);
+            iconImage = visual.kind === 'image' ? visual.src : undefined;
+            icon = visual.kind === 'icon' ? visual.className.replace('bi ', '') : undefined;
+            text = integrationInfo.description
+              ? `${integrationInfo.actionName}: ${integrationInfo.description}`
+              : integrationInfo.actionName;
+            category = 'important';
+          } else {
+            // Fallback for unrecognized integration tool format
+            const display = getInlineToolDisplay(toolBlock.name, input);
+            const catAndIcon = getToolCategoryAndIcon(toolBlock.name, input);
+            text = display.text;
+            icon = catAndIcon.iconName;
+            category = catAndIcon.category;
           }
-          case 'Write': {
-            const path = input?.file_path as string;
-            if (path) {
-              const filename = path.split('/').pop() || path;
-              text = `Created ${filename}`;
-            }
-            break;
-          }
-          case 'Grep':
-          case 'Glob':
-            text = 'Searching files';
-            break;
-          case 'Bash': {
-            const desc = input?.description as string;
-            if (desc) {
-              text = desc;
-            } else {
-              text = 'Running command';
-            }
-            break;
-          }
-          default:
-            text = `Using ${toolBlock.name}`;
+        } else {
+          // All other tools use shared display + category utilities
+          const display = getInlineToolDisplay(toolBlock.name, input);
+          const catAndIcon = getToolCategoryAndIcon(toolBlock.name, input);
+          text = display.text;
+          icon = catAndIcon.iconName;
+          category = catAndIcon.category;
         }
 
         // Deduplicate by text
         if (text && !seenTexts.has(text)) {
           seenTexts.add(text);
-          summaries.push({ text, icon });
+          summaries.push({ text, icon: icon || 'bi-tools', iconImage, category });
         }
       }
     }
@@ -171,6 +156,8 @@ export function WorkspaceChatSubagentCard({ segment }: Props) {
                     <span className={`activity-icon ${isRunning ? 'running' : 'complete'}`}>
                       {isRunning ? (
                         <Spinner animation="border" size="sm" className="activity-spinner" />
+                      ) : summary.iconImage ? (
+                        <img src={summary.iconImage} alt="" className="inline-tool-icon-img" loading="lazy" />
                       ) : (
                         <i className={`bi ${summary.icon}`} />
                       )}

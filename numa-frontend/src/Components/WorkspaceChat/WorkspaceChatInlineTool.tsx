@@ -90,7 +90,7 @@ function formatActionName(actionKey: string): string {
  */
 function WorkspaceChatInlineTool({ segment, conversationId }: Props) {
   const { t } = useTranslation('integrations');
-  const { displayText, isComplete, isError, iconName, iconImage, approval } = segment;
+  const { displayText, isComplete, isError, iconName, iconImage, approval, approvalOnly } = segment;
   const [submitting, setSubmitting] = useState(false);
   const [localDecision, setLocalDecision] = useState<string | undefined>(undefined);
   const [secondsLeft, setSecondsLeft] = useState(APPROVAL_TIMEOUT_SECONDS);
@@ -138,36 +138,44 @@ function WorkspaceChatInlineTool({ segment, conversationId }: Props) {
     return () => clearInterval(timer);
   }, [showApprovalPanel, secondsLeft]);
 
+  // For approvalOnly segments (sub-agent approvals), hide entirely once decided
+  // since the tool call info is already visible inside the subagent card.
+  if (approvalOnly && decision) return null;
+
   return (
     <div className="workspace-chat-inline-tool-wrapper">
-      <div className={classNames}>
-        <span className={`inline-tool-icon ${statusClass}`}>
-          {iconImage ? (
-            <img src={iconImage} alt="" className="inline-tool-icon-img" loading="lazy" />
-          ) : (
-            <i className={`bi ${effectiveIcon}`} />
-          )}
-        </span>
-        <div className="inline-tool-content">
-          <span className="inline-tool-text" style={{ whiteSpace: 'pre-line' }}>
-            {displayText.replace(/\\n/g, '\n')}
+      {/* Tool indicator line — hidden for approvalOnly (sub-agent) since the
+          tool call is already shown inside the subagent card */}
+      {!approvalOnly && (
+        <div className={classNames}>
+          <span className={`inline-tool-icon ${statusClass}`}>
+            {iconImage ? (
+              <img src={iconImage} alt="" className="inline-tool-icon-img" loading="lazy" />
+            ) : (
+              <i className={`bi ${effectiveIcon}`} />
+            )}
           </span>
-          {isRunning && !showApprovalPanel && (
-            <Spinner animation="border" size="sm" className="inline-tool-trailing-spinner" />
-          )}
-          {decision && (
-            <span className={`inline-tool-decision-badge ${decision}`}>
-              {approval?.autoApproved
-                ? t('approval.autoApproved')
-                : decision === 'approved'
-                  ? t('approval.approved')
-                  : decision === 'denied'
-                    ? t('approval.denied')
-                    : t('approval.timeout')}
+          <div className="inline-tool-content">
+            <span className="inline-tool-text" style={{ whiteSpace: 'pre-line' }}>
+              {displayText.replace(/\\n/g, '\n')}
             </span>
-          )}
+            {isRunning && !showApprovalPanel && (
+              <Spinner animation="border" size="sm" className="inline-tool-trailing-spinner" />
+            )}
+            {decision && (
+              <span className={`inline-tool-decision-badge ${decision}`}>
+                {approval?.autoApproved
+                  ? t('approval.autoApproved')
+                  : decision === 'approved'
+                    ? t('approval.approved')
+                    : decision === 'denied'
+                      ? t('approval.denied')
+                      : t('approval.timeout')}
+              </span>
+            )}
+          </div>
         </div>
-      </div>
+      )}
 
       {showApprovalPanel && (
         <div className="inline-tool-approval-panel">
