@@ -31,7 +31,7 @@ export default function UserProfilePage() {
   const { numaGet, numaPut } = useNumaRequest();
   const { availableKBs, isLoadingKBs, kbError } = useKnowledgeBase();
 
-  const [activeKey, setActiveKey] = useState<string>('user-defaults');
+  const [activeKey, setActiveKey] = useState<string>('user-settings');
 
   const [globalAllowUserDefaults, setGlobalAllowUserDefaults] = useState<boolean>(false);
   const [globalLoaded, setGlobalLoaded] = useState<boolean>(false);
@@ -272,7 +272,12 @@ export default function UserProfilePage() {
   };
 
   const resetToBrowserDefaults = () => {
-    setUserDefaults((prev) => ({ ...prev, language: LANGUAGE_BROWSER_DEFAULT }));
+    setUserDefaults((prev) => ({
+      ...prev,
+      language: LANGUAGE_BROWSER_DEFAULT,
+      emailSignatureEnabled: DEFAULT_CHAT_SETTINGS.emailSignatureEnabled,
+      emailSignatureText: DEFAULT_CHAT_SETTINGS.emailSignatureText,
+    }));
     setDirty(true);
   };
 
@@ -298,7 +303,14 @@ export default function UserProfilePage() {
     try {
       setSaving(true);
       setError(null);
-      await ChatSettingsService.updateForProfile({ language: userDefaults.language }, numaPut);
+      await ChatSettingsService.updateForProfile(
+        {
+          language: userDefaults.language,
+          emailSignatureEnabled: userDefaults.emailSignatureEnabled,
+          emailSignatureText: userDefaults.emailSignatureText,
+        },
+        numaPut,
+      );
       const refreshed = await ChatSettingsService.getForProfile(numaGet);
       setUserDefaults(refreshed.settings);
       setUserDefaultsEnabled(refreshed.userDefaultsEnabled);
@@ -393,6 +405,45 @@ export default function UserProfilePage() {
                       <option value="en">{t('userProfile.defaults.language.english')}</option>
                     </Form.Select>
                     <div className="text-muted small mt-1">{t('userProfile.defaults.language.help')}</div>
+                  </Form.Group>
+
+                  <hr className="my-4" />
+
+                  <Form.Group className="mb-3">
+                    <Form.Label className="fw-semibold">{t('userProfile.defaults.emailSignature.label')}</Form.Label>
+                    <div className="text-muted small mb-2">{t('userProfile.defaults.emailSignature.help')}</div>
+                    <div className="d-flex align-items-center gap-2 mb-2">
+                      <Form.Check
+                        type="switch"
+                        id="profile-email-signature-enabled"
+                        label=""
+                        checked={userDefaults.emailSignatureEnabled}
+                        disabled={disableProfileForm}
+                        onChange={(e) => {
+                          setUserDefaults((prev) => ({ ...prev, emailSignatureEnabled: e.target.checked }));
+                          setDirty(true);
+                        }}
+                      />
+                      <span>{t('userProfile.defaults.emailSignature.enableTitle')}</span>
+                    </div>
+                    {userDefaults.emailSignatureEnabled && (
+                      <>
+                        <Form.Label className="fw-semibold">
+                          {t('userProfile.defaults.emailSignature.textLabel')}
+                        </Form.Label>
+                        <Form.Control
+                          as="textarea"
+                          rows={2}
+                          value={userDefaults.emailSignatureText}
+                          disabled={disableProfileForm}
+                          placeholder={DEFAULT_CHAT_SETTINGS.emailSignatureText}
+                          onChange={(e) => {
+                            setUserDefaults((prev) => ({ ...prev, emailSignatureText: e.target.value }));
+                            setDirty(true);
+                          }}
+                        />
+                      </>
+                    )}
                   </Form.Group>
                   {renderSaveActions(
                     'userProfile.actions.resetBrowser',

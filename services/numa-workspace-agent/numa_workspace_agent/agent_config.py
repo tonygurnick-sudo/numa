@@ -394,6 +394,50 @@ def fetch_user_approval_mode(user_sub: str) -> str:
         return DEFAULT_APPROVAL_MODE
 
 
+DEFAULT_EMAIL_SIGNATURE_TEXT = "Sent by my AI assistant, Numa (https://www.arcanum.ai)"
+
+
+def fetch_user_email_signature(user_sub: str) -> dict:
+    """
+    Fetch the user's email signature settings from the chat settings table.
+
+    Returns a dict with 'enabled' (bool) and 'text' (str), defaulting to
+    enabled with the standard Numa signature if not set or table unavailable.
+
+    Args:
+        user_sub: The user's Cognito sub (partition key in chat settings table)
+
+    Returns:
+        {"enabled": bool, "text": str}
+    """
+    defaults = {"enabled": True, "text": DEFAULT_EMAIL_SIGNATURE_TEXT}
+    table_name = os.environ.get("CHAT_SETTINGS_TABLE_NAME")
+    if not table_name:
+        logger.debug(
+            "CHAT_SETTINGS_TABLE_NAME not configured, using default email signature"
+        )
+        return defaults
+
+    try:
+        dynamo = _get_dynamodb_client()
+        response = dynamo.get_item(
+            TableName=table_name,
+            Key={"user_id": {"S": user_sub}},
+            ProjectionExpression="emailSignatureEnabled, emailSignatureText",
+        )
+        item = response.get("Item", {})
+        enabled = item.get("emailSignatureEnabled", {}).get("BOOL", True)
+        text = item.get("emailSignatureText", {}).get("S", DEFAULT_EMAIL_SIGNATURE_TEXT)
+        return {"enabled": enabled, "text": text}
+    except Exception as e:
+        logger.warning(
+            "Failed to fetch user email signature, using default",
+            user_sub=user_sub[:8] + "...",
+            error=str(e),
+        )
+        return defaults
+
+
 def resolve_approval_mode(
     user_sub: str,
     agent_config: Optional[AgentConfig] = None,

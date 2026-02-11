@@ -644,11 +644,18 @@ def build_agent_context(
     return "\n".join(lines)
 
 
-def _build_integrations_context(enabled_integrations: list[str]) -> str:
+_EMAIL_INTEGRATION_SLUGS = {"gmail", "microsoft_outlook"}
+
+
+def _build_integrations_context(
+    enabled_integrations: list[str],
+    email_signature: Optional[dict] = None,
+) -> str:
     """Build system prompt section for Pipedream Connect integrations.
 
     Args:
         enabled_integrations: List of app slugs (e.g., ["google_drive", "slack"])
+        email_signature: Optional user email signature settings
 
     Returns:
         Integrations context string for the system prompt
@@ -699,7 +706,49 @@ Important notes:
             content = prompt_file.read_text().strip()
             context += f"\n\n### {slug} — Integration Guide\n{content}\n"
 
+    # Append email signature when an email integration is connected
+    has_email_integration = any(
+        slug in _EMAIL_INTEGRATION_SLUGS for slug in enabled_integrations
+    )
+    if has_email_integration:
+        sig_context = _build_email_signature_context(email_signature)
+        if sig_context:
+            context += f"\n\n{sig_context}"
+
     return context
+
+
+def _build_email_signature_context(email_signature: Optional[dict]) -> str:
+    """
+    Build the email signature system prompt section.
+
+    When enabled, instructs the AI to append a PS signature line to all
+    outgoing emails sent via integrations (Gmail, Outlook).
+
+    Args:
+        email_signature: Dict with 'enabled' (bool) and 'text' (str)
+
+    Returns:
+        Prompt section string, or empty string if disabled/missing
+    """
+    if not email_signature or not email_signature.get("enabled"):
+        return ""
+
+    sig_text = email_signature.get("text", "").strip()
+    if not sig_text:
+        return ""
+
+    return f"""## Email Signature
+When sending emails on behalf of the user (via Gmail, Outlook, or any email integration),
+you MUST append the following signature as a PS line at the very end of the email body:
+
+PS: {sig_text}
+
+Rules:
+- Always append to outgoing emails (send, reply, draft actions)
+- Place after the main content, separated by a blank line
+- For HTML emails, format as: <p>PS: {sig_text}</p> (make any URLs clickable with <a> tags)
+- Do NOT include in non-email contexts (chat responses, documents, etc.)"""
 
 
 def build_workspace_system_prompt(
@@ -711,6 +760,7 @@ def build_workspace_system_prompt(
     agent_config: Optional["AgentConfig"] = None,
     agent_file_paths: Optional[list[str]] = None,
     enabled_integrations: Optional[list[str]] = None,
+    email_signature: Optional[dict] = None,
 ) -> str:
     """
     Build the complete system prompt for workspace context.
@@ -762,8 +812,11 @@ def build_workspace_system_prompt(
         base_prompt = f"{base_prompt}\n\n{agent_context}"
 
     # Append integrations context if integrations are enabled
+    # Email signature is injected here too (only when email integrations are connected)
     if enabled_integrations:
-        integrations_context = _build_integrations_context(enabled_integrations)
+        integrations_context = _build_integrations_context(
+            enabled_integrations, email_signature
+        )
         base_prompt = f"{base_prompt}\n\n{integrations_context}"
 
     return base_prompt

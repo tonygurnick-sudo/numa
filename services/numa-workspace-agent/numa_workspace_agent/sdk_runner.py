@@ -269,6 +269,7 @@ async def stream_claude_sdk(
     external_user_id: Optional[str] = None,
     enabled_integrations: Optional[list[str]] = None,
     approval_mode: str = "always",
+    email_signature: Optional[dict] = None,
 ) -> AsyncIterator[bytes]:
     """
     Stream Claude SDK output for a conversation.
@@ -402,6 +403,7 @@ async def stream_claude_sdk(
         external_user_id=external_user_id,
         enabled_integrations=enabled_integrations,
         request_id=request_id,
+        email_signature=email_signature,
     )
 
     logger.info(

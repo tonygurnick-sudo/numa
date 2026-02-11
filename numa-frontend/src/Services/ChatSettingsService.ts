@@ -16,6 +16,8 @@ export type ChatSettings = {
   defaultConnectionIds: string[];
   language: string | null;
   approvalMode: ApprovalMode;
+  emailSignatureEnabled: boolean;
+  emailSignatureText: string;
 };
 
 export type ChatSettingsUpdate = {
@@ -43,6 +45,8 @@ export const DEFAULT_CHAT_SETTINGS: ChatSettings = {
   defaultConnectionIds: [],
   language: 'browser',
   approvalMode: 'non_destructive',
+  emailSignatureEnabled: true,
+  emailSignatureText: 'Sent by my AI assistant, Numa (https://www.arcanum.ai)',
 };
 
 // Helper types for RequestProvider integration
@@ -182,6 +186,12 @@ function validateSettings(data: unknown): ChatSettings {
       typeof obj.approvalMode === 'string' && VALID_APPROVAL_MODES.includes(obj.approvalMode as ApprovalMode)
         ? (obj.approvalMode as ApprovalMode)
         : DEFAULT_CHAT_SETTINGS.approvalMode,
+    emailSignatureEnabled:
+      typeof obj.emailSignatureEnabled === 'boolean'
+        ? obj.emailSignatureEnabled
+        : DEFAULT_CHAT_SETTINGS.emailSignatureEnabled,
+    emailSignatureText:
+      typeof obj.emailSignatureText === 'string' ? obj.emailSignatureText : DEFAULT_CHAT_SETTINGS.emailSignatureText,
   };
 }
 
