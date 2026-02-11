@@ -306,6 +306,14 @@ const BrandingAdminPanel: React.FC<BrandingAdminPanelProps> = ({ onDirtyChange }
     void loadConfig();
   }, [loadConfig]);
 
+  // Live preview: push branding changes to the service in real-time as the admin edits.
+  // This applies CSS variables immediately so the entire app reflects changes live.
+  useEffect(() => {
+    if (loading) return;
+    const runtimeBranding: BrandingTheme = enabled ? { ...branding } : { ...DEFAULT_BRANDING_THEME };
+    brandingService.applyExternalBranding(runtimeBranding, {}, { persist: false, tenantEnabled: enabled });
+  }, [branding, enabled, loading]);
+
   const previewColors = useMemo(() => {
     const getColor = (key: string, fallback: string) => resolveColorValue(branding.colors, key, fallback);
 

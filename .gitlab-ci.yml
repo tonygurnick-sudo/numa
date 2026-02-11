@@ -538,7 +538,6 @@ build-deployment-container:
   needs: ["claude-cli-artifact-build"]
   script:
     - yarn exec cdktf deploy --auto-approve numa-${CLIENT_NAME}
-  needs:
   environment:
     name: $CLIENT_NAME
     url: https://$CLIENT_NAME.numa.arcanum.ai

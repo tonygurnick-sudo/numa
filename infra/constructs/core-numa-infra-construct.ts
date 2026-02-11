@@ -75,6 +75,9 @@ export class CoreNumaInfra extends Construct {
   readonly dataConnectorsTable: DynamodbTable;
   readonly dataConnectorsSettingsTable: DynamodbTable;
   readonly dataConnectorsSyncConfigsTable: DynamodbTable;
+  readonly sharedTable: DynamodbTable;
+  readonly sharedChatHistoryTable: DynamodbTable;
+  readonly filesTable: DynamodbTable;
   readonly webCrawler: WebCrawlerConstruct;
   readonly cognitoGroups!: CognitoGroupsConstruct;
   readonly pipedreamRelayLambdaArn?: string;
@@ -213,7 +216,7 @@ export class CoreNumaInfra extends Construct {
       userPoolId: userPool.id,
       name: numaClient,
       generateSecret: true,
-      callbackUrls: ['https://localhost'], // Placeholder, must be provided, but is replaced later.
+      callbackUrls: [`https://${props.domainName}/`],
       allowedOauthFlowsUserPoolClient: true,
       allowedOauthFlows: ['code'],
       allowedOauthScopes: ['openid', 'email', 'profile'],
@@ -222,8 +225,19 @@ export class CoreNumaInfra extends Construct {
       idTokenValidity: 60,
       tokenValidityUnits: [{ accessToken: 'minutes', refreshToken: 'days', idToken: 'minutes' }],
       supportedIdentityProviders: ['COGNITO'],
+      // DANGER: Conditional lifecycle management for Cognito OAuth callback URLs
+      //
+      // PROBLEM: The previous unconditional `ignoreChanges: ['callback_urls']` was preventing
+      // Terraform from setting initial OAuth callback URLs, causing deployment failures with:
+      // "CallbackUrls can not be empty when code flow or implicit flow is selected"
+      //
+      // SOLUTION: Only ignore callback_urls changes when Q Business is provisioned, because
+      // in that case the SetCallbackUrl construct's Lambda will manage them dynamically.
+      // For non-Q Business clients, Terraform should manage callback URLs normally.
+      //
+      // RISK: This change affects OAuth flow initialization. Test thoroughly before production.
       lifecycle: {
-        ignoreChanges: ['callback_urls'],
+        ignoreChanges: props.provisionQResources ? ['callback_urls'] : [],
       },
     });
 
@@ -650,6 +664,73 @@ export class CoreNumaInfra extends Construct {
         Name: `${numaClient}-data-connector-sync-configs`,
         Environment: props.environmentName,
         Purpose: 'data-connector-sync-configs',
+      },
+    });
+
+    // Shared document Q&A table for public sharing feature
+    this.sharedTable = new DynamodbTable(this, 'numa-shared-table', {
+      name: `${numaClient}-shared`,
+      billingMode: 'PAY_PER_REQUEST',
+      hashKey: 'uuid',
+      attribute: [
+        { name: 'uuid', type: 'S' },
+        { name: 'created_by', type: 'S' },
+        { name: 'created_at', type: 'N' },
+      ],
+      globalSecondaryIndex: [
+        {
+          name: 'created_by-created_at-index',
+          hashKey: 'created_by',
+          rangeKey: 'created_at',
+          projectionType: 'ALL',
+        },
+      ],
+      ttl: {
+        attributeName: 'expiry',
+        enabled: false,
+      },
+      tags: {
+        Name: `${numaClient}-shared`,
+        Environment: props.environmentName,
+        Purpose: 'shared-document-qa',
+      },
+    });
+
+    // Shared chat history table for public sharing feature with TTL auto-cleanup
+    this.sharedChatHistoryTable = new DynamodbTable(this, 'numa-shared-chat-history-table', {
+      name: `${numaClient}-shared-chat-history`,
+      billingMode: 'PAY_PER_REQUEST',
+      hashKey: 'uuid',
+      rangeKey: 'sk',
+      attribute: [
+        { name: 'uuid', type: 'S' },
+        { name: 'sk', type: 'S' },
+      ],
+      ttl: {
+        attributeName: 'expiry',
+        enabled: true,
+      },
+      tags: {
+        Name: `${numaClient}-shared-chat-history`,
+        Environment: props.environmentName,
+        Purpose: 'shared-document-chat-history',
+      },
+    });
+
+    // Files table for per-user virtual file system (My Files, Company, Projects)
+    this.filesTable = new DynamodbTable(this, 'numa-files-table', {
+      name: `${numaClient}-files`,
+      billingMode: 'PAY_PER_REQUEST',
+      hashKey: 'scope_key',
+      rangeKey: 'sk',
+      attribute: [
+        { name: 'scope_key', type: 'S' },
+        { name: 'sk', type: 'S' },
+      ],
+      tags: {
+        Name: `${numaClient}-files`,
+        Environment: props.environmentName,
+        Purpose: 'user-file-system',
       },
     });
 

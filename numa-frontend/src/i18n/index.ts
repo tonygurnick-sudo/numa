@@ -25,6 +25,8 @@ i18n
       'integrations',
       'apps',
       'errors',
+      'shared',
+      'files',
     ],
     interpolation: { escapeValue: false },
     detection: {

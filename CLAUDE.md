@@ -2,6 +2,22 @@
 
 I am a new developer. I am intrested in what you do so please explaing what you are doing and why
 
+# Guiding Primciples
+
+These 9 principles guide the high-performance, functional architecture:
+
+1. Pure Functional Programming - No Classes: Business logic as pure functions, classes only
+   for infrastructure
+2. Pipeline Architecture - Linear Data Flow: Data flows through sequence of transformations
+3. Explicit Contracts - Type-Safe Schemas: Full type hints, dataclasses for schemas
+4. Async-First - Non-Blocking I/O: All I/O operations async to prevent event loop blocking
+5. Encapsulation - One Module = One Responsibility: Clear separation of concerns
+6. Testability - Pure Functions = Easy Tests: No mocking required for business logic
+7. No Magic - Explicit > Implicit: Clear, documented behavior, no hidden transformations
+8. Performance-Aware - Optimize for Throughput: Target 1,000+ requests/second
+9. Debuggability - Logs + Metrics at Boundaries: Observability at key decision points
+10. Idempotent systems - Safe, repeatable, well thought out, Idempotent and logical side effects.
+
 # context 7
 
 Always use context7 when I need code generation, setup or configuration steps, or

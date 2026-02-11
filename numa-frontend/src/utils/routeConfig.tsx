@@ -23,6 +23,7 @@ const AgentsManagement = lazy(() => import('../Pages/AgentsManagement').then((m)
 const CompanyInfo = lazy(() => import('../Pages/CompanyInfo').then((m) => ({ default: m.CompanyInfo })));
 const NumaIntegrations = lazy(() => import('../Pages/NumaIntegrations').then((m) => ({ default: m.NumaIntegrations })));
 const JobHistoryManager = lazy(() => import('../Pages/JobHistoryManager'));
+const FilesPage = lazy(() => import('../Pages/Files').then((m) => ({ default: m.FilesPage })));
 const SchedulingPage = lazy(() => import('../Pages/SchedulingPage').then((m) => ({ default: m.SchedulingPage })));
 const DataConnectorsPage = lazy(() =>
   import('../Pages/DataConnectorsPage').then((m) => ({ default: m.DataConnectorsPage })),
@@ -93,6 +94,19 @@ export const ROUTE_CONFIG = [
       section: 'workflows',
       sectionKey: 'nav.sections.workflows',
       order: 5,
+    },
+  },
+
+  {
+    path: '/files',
+    element: () => <FilesPage />,
+    nav: {
+      label: 'Files',
+      labelKey: 'nav.items.files',
+      icon: 'bi bi-folder-fill',
+      section: 'workflows',
+      sectionKey: 'nav.sections.workflows',
+      order: 5.5,
     },
   },
 

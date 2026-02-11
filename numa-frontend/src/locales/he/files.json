@@ -1,0 +1,82 @@
+{
+  "title": "קבצים",
+  "subtitle": "עיין בקבצים ובפרויקטים שלך",
+  "tabs": {
+    "projects": "פרויקטים",
+    "company": "חברה",
+    "myFiles": "הקבצים שלי",
+    "shared": "משותפים"
+  },
+  "toolbar": {
+    "up": "למעלה",
+    "newFolder": "תיקייה חדשה",
+    "upload": "העלאה",
+    "listView": "תצוגת רשימה",
+    "gridView": "תצוגת תיקיות"
+  },
+  "status": {
+    "ready": "מוכן",
+    "processing": "מחלץ...",
+    "queued": "בתור",
+    "error": "שגיאה",
+    "uploading": "מעלה...",
+    "notApplicable": ""
+  },
+  "dropZone": {
+    "message": "גרור קבצים להעלאה"
+  },
+  "empty": {
+    "title": "תיקייה זו ריקה",
+    "message": "גרור ושחרר קבצים כאן או לחץ על העלאה"
+  },
+  "actions": {
+    "rename": "שנה שם",
+    "move": "הזז",
+    "copy": "העתק",
+    "delete": "מחק",
+    "download": "הורד"
+  },
+  "projects": {
+    "create": "פרויקט חדש",
+    "nameLabel": "שם הפרויקט",
+    "namePlaceholder": "הזן שם פרויקט",
+    "members": "חברים",
+    "addMember": "הוסף חבר",
+    "removeMember": "הסר",
+    "roles": {
+      "owner": "בעלים",
+      "editor": "עורך",
+      "viewer": "צופה"
+    },
+    "empty": "אין פרויקטים עדיין",
+    "createFirst": "צור פרויקט כדי לשתף קבצים עם הצוות שלך"
+  },
+  "shared": {
+    "empty": "אין מסמכים משותפים",
+    "emptyMessage": "מסמכים שתשתף יופיעו כאן",
+    "expires": "פג תוקף {{date}}",
+    "expired": "פג תוקף",
+    "conversations": "{{count}} שיחות",
+    "viewAnalytics": "ניתוח",
+    "viewShare": "צפה בשיתוף",
+    "rootLabel": "משותפים",
+    "description": "תיאור",
+    "created": "נוצר"
+  },
+  "headers": {
+    "name": "שם",
+    "size": "גודל",
+    "status": "סטטוס"
+  },
+  "confirm": {
+    "deleteFile": "האם אתה בטוח שברצונך למחוק קובץ זה?",
+    "deleteFolder": "האם אתה בטוח שברצונך למחוק תיקייה זו?"
+  },
+  "errors": {
+    "loadFailed": "טעינת הקבצים נכשלה",
+    "uploadFailed": "ההעלאה נכשלה: {{error}}",
+    "deleteFailed": "המחיקה נכשלה",
+    "renameFailed": "שינוי השם נכשל",
+    "folderExists": "תיקייה עם שם זה כבר קיימת"
+  }
+}

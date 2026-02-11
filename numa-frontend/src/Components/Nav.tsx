@@ -341,7 +341,7 @@ function getExpandedLabel(item, t) {
   let text;
   switch (labelKey) {
     case 'nav.items.files':
-      text = t('nav.expanded.knowledgeBase');
+      text = t('nav.expanded.files', 'Files');
       break;
     case 'nav.items.knowledgeBase':
       text = t('nav.expanded.knowledgeBaseManagement');

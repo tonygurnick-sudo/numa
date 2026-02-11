@@ -1,0 +1,37 @@
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.coverage.run]
+omit = ["**/tests/**/*"]
+source = ["."]
+
+[tool.poetry]
+name = "shared-nova-api"
+version = "0.1.0"
+description = "Public shared document Q&A API using Nova 2 Lite"
+authors = ["ArcanumAI"]
+packages = [{ include = "shared_nova_api" }]
+
+[tool.poetry.dependencies]
+python = "~3.13.0"
+prm = {path = "../../../lib/prm", develop = true}
+boto3 = "^1.37.0"
+structlog = "^25.2.0"
+requests = "^2.31.0"
+fastapi = "^0.115.0"
+uvicorn = "^0.30.0"
+h11 = "^0.14.0"
+pyjwt = {extras = ["crypto"], version = "^2.8.0"}
+
+[tool.poetry.group.dev.dependencies]
+mypy = "1.16.1"
+pylint = "3.3.7"
+pyright = "1.1.402"
+boto3-stubs = { version = "^1.37.0", extras = ["dynamodb", "bedrock-runtime"] }
+pytest = "^8.4.2"
+
+[tool.pyright]
+typeCheckingMode = "basic"
+reportMissingImports = "none"
+exclude = ["tests"]

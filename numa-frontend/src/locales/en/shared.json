@@ -1,0 +1,91 @@
+{
+  "loading": "Loading shared document...",
+  "documentTitle": "Shared Document",
+  "errors": {
+    "noUuid": "No share ID provided",
+    "notFound": "Share not found",
+    "expired": "This share has expired",
+    "loadFailed": "Failed to load share",
+    "extractionFailed": "Document processing failed. Please try creating a new share.",
+    "tryAgain": "Please check the link and try again."
+  },
+  "processing": {
+    "title": "Preparing Document",
+    "message": "Analyzing your document for Q&A. You can read the document while you wait."
+  },
+  "document": {
+    "errorTitle": "Document Unavailable",
+    "errorMessage": "The document could not be loaded. The link may have expired.",
+    "tryDownload": "Try Direct Download"
+  },
+  "nav": {
+    "title": "Shared Document Q&A",
+    "tagline": "Ask questions about your document",
+    "expiresAt": "Expires",
+    "poweredBy": "Powered by Numa",
+    "poweredByLabel": "Powered by",
+    "poweredByBrandName": "Numa",
+    "expiresInDays": "Expires in {{count}} day",
+    "expiresInDays_other": "Expires in {{count}} days",
+    "expiresInHours": "Expires in {{count}} hour",
+    "expiresInHours_other": "Expires in {{count}} hours",
+    "expiresInMinutes": "Expires in {{count}} minute",
+    "expiresInMinutes_other": "Expires in {{count}} minutes",
+    "expired": "Expired"
+  },
+  "chat": {
+    "title": "Ask a Question",
+    "subtitle": "Ask questions about this document",
+    "emptyState": "Ask a question about the document to get started",
+    "placeholder": "Type your question...",
+    "error": "An error occurred: {{error}}"
+  },
+  "analytics": {
+    "title": "Share Analytics",
+    "loading": "Loading analytics...",
+    "error": "Failed to load analytics",
+    "noData": "No analytics data available",
+    "backToDashboard": "Back to Dashboard",
+    "viewShare": "View Share",
+    "overallSummary": "Overall Summary",
+    "questionsSummary": "Questions Summary",
+    "totalSessions": "Total Sessions",
+    "totalMessages": "Total Messages",
+    "uniqueVisitors": "Unique Visitors",
+    "overallSentiment": "Overall Sentiment",
+    "summaryLabel": "Summary:",
+    "conversations": "Conversations",
+    "noConversations": "No conversations yet",
+    "time": "Time",
+    "messages": "Messages",
+    "sentiment": "Sentiment",
+    "summary": "Summary",
+    "topics": "Topics",
+    "tabs": {
+      "analytics": "Analytics",
+      "activity": "Activity Feed"
+    },
+    "engagement": {
+      "title": "Engagement Insights",
+      "score": "Engagement Score",
+      "signals": "Interest Signals",
+      "action": "Recommended Action",
+      "pending": "Pending",
+      "waitingForActivity": "Waiting for activity..."
+    },
+    "activity": {
+      "title": "Live Activity Feed",
+      "empty": "No activity yet",
+      "emptyMessage": "Create and send a share link to see real-time notifications",
+      "viewedDocument": "Viewed document",
+      "askedQuestion": "Asked a question"
+    },
+    "quoteStats": {
+      "title": "Quote Stats",
+      "totalViews": "Total Views",
+      "uniqueViewers": "Unique Viewers",
+      "questionsAsked": "Questions Asked",
+      "timeOnPage": "Time on Page"
+    }
+  }
+}

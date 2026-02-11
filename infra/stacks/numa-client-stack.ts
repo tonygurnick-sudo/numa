@@ -39,6 +39,7 @@ import { CoreNumaInfra, coreNumaInfraPropsSchema } from '../constructs/core-numa
 import { InvalidateCloudfront } from '../constructs/invalidate-cloudfront-construct';
 import { NumaFrontendInfra } from '../constructs/numa-frontend-infra-construct';
 import { NumaChatAgent } from '../constructs/numa-chat-agent-construct';
+import { SharedChatConstruct } from '../constructs/shared-chat-construct';
 import { SsmParameter } from '@cdktf/provider-aws/lib/ssm-parameter';
 import { E2ETestNumaApp } from '../constructs/apps/e2e-test-numa-app-construct';
 import { v4 as uuidv4 } from 'uuid';
@@ -239,6 +240,26 @@ export class NumaClientStack extends TerraformStack {
       scheduleRunnerSecret: agentScheduleSecretParam.value,
     });
 
+    // Shared Document Q&A - public API for sharing documents with Nova 2 Lite
+    // Compute the expected extract-content Lambda ARN (created later in coreApis)
+    const sharedChatExtractLambdaName = awsNameWithHashedPrefix(props.clientName, '_extract-content', 64);
+    const sharedChatExtractLambdaArn = `arn:aws:lambda:${clientConfig.region}:${clientConfig.clientAccountId}:function:${sharedChatExtractLambdaName}`;
+
+    const sharedChat = new SharedChatConstruct(this, 'shared-chat', {
+      clientName: props.clientName,
+      region: clientConfig.region,
+      sharedTableName: core.sharedTable.name,
+      sharedTableArn: core.sharedTable.arn,
+      sharedChatHistoryTableName: core.sharedChatHistoryTable.name,
+      sharedChatHistoryTableArn: core.sharedChatHistoryTable.arn,
+      logGroup: core.logGroup,
+      userPoolId: core.userPoolId,
+      userPoolClientId: core.userPoolClient.id,
+      extractionLambdaArn: sharedChatExtractLambdaArn,
+      outputsBucketArn: core.outputsBucket.bucket.arn,
+      outputsBucketName: core.outputsBucket.bucket.bucket,
+    });
+
     // Numa Workspace Chat Agent (AgentCore runtime + proxy Lambda, routed through main CloudFront)
     // Created before frontend so we can pass proxy URL for CloudFront routing
     let workspaceChatAgent: WorkspaceChatAgentConstruct | undefined;
@@ -373,6 +394,8 @@ export class NumaClientStack extends TerraformStack {
       // Workspace chat agent proxy Lambda Function URL is routed through main CloudFront
       // (AgentCore has no public HTTP endpoint, so we use a proxy Lambda)
       workspaceChatAgentProxyUrl: workspaceChatAgentProxy?.functionUrl,
+      // Shared document Q&A Lambda Function URL for public sharing feature
+      sharedChatFunctionUrl: sharedChat.functionUrl,
     });
 
     // Resources can't start with a number, so prefix with an underscore if required.
@@ -414,6 +437,8 @@ export class NumaClientStack extends TerraformStack {
       agentScheduleRunnerSecret: agentScheduleSecretParam.value,
       bedrockKbId: knowledgeBase.knowledgeBaseId,
       bedrockDataSourceId: knowledgeBase.dataSourceId,
+      filesTableName: core.filesTable.name,
+      filesTableArn: core.filesTable.arn,
     });
 
     const appConfigsToDeploy = getAppConfigsToDeploy(

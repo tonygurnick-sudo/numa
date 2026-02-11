@@ -4,6 +4,7 @@
     "style",
     "infra",
     "tools",
+    "numa-cli",
     "numa-frontend",
     "numa-customer-success-portal",
     "lib/client-config-node",
