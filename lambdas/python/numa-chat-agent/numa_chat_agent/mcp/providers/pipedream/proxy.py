@@ -518,7 +518,6 @@ def invoke_pipedream_proxy(operation: str, external_user_id: str, **kwargs) -> D
                 "RELIABILITY_CRITICAL: Cross-account Lambda invocation is SINGLE "
                 "POINT OF FAILURE with zero resilience"
             ),
-            "RELIABILITY_CRITICAL: Cross-account Lambda invocation is SINGLE POINT OF FAILURE with zero resilience",
             proxy_arn=PIPEDREAM_PROXY_LAMBDA_ARN,
             operation=operation,
             user_id=(
