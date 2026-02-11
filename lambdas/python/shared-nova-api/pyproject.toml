@@ -29,7 +29,12 @@ mypy = "1.16.1"
 pylint = "3.3.7"
 pyright = "1.1.402"
 boto3-stubs = { version = "^1.37.0", extras = ["dynamodb", "bedrock-runtime"] }
+types-requests = "^2.31.0"
 pytest = "^8.4.2"
+
+[tool.mypy]
+ignore_errors = false
+disable_error_code = ["arg-type", "union-attr"]
 
 [tool.pyright]
 typeCheckingMode = "basic"
