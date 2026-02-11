@@ -387,6 +387,12 @@
         "loading": "Loading integrations...",
         "empty": "No connected integrations available.",
         "help": "Select one or more integrations to enable by default."
+      },
+      "emailSignature": {
+        "label": "Email signature",
+        "help": "When enabled, a signature line is appended to emails sent by Numa on your behalf (via Gmail or Outlook).",
+        "enableTitle": "Append signature to outgoing emails",
+        "textLabel": "Signature text"
       }
     },
     "approval": {

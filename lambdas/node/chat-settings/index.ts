@@ -20,6 +20,8 @@ export type ChatSettings = {
   defaultConnectionIds: string[];
   language: string | null;
   approvalMode: ApprovalMode;
+  emailSignatureEnabled: boolean;
+  emailSignatureText: string;
 };
 
 export type UserChatSettings = ChatSettings & {
@@ -50,6 +52,8 @@ const DEFAULT_SETTINGS: ChatSettings = {
   defaultConnectionIds: [],
   language: 'browser',
   approvalMode: 'non_destructive',
+  emailSignatureEnabled: true,
+  emailSignatureText: 'Sent by my AI assistant, Numa (https://www.arcanum.ai)',
 };
 
 const GLOBAL_SETTINGS_KEY = '__global__';
@@ -130,6 +134,8 @@ async function loadGlobalSettings(): Promise<GlobalChatSettings> {
       defaultConnectionIds: DEFAULT_SETTINGS.defaultConnectionIds,
       language: DEFAULT_SETTINGS.language,
       approvalMode: DEFAULT_SETTINGS.approvalMode,
+      emailSignatureEnabled: DEFAULT_SETTINGS.emailSignatureEnabled,
+      emailSignatureText: DEFAULT_SETTINGS.emailSignatureText,
       allowUserDefaults: false,
     };
   }
@@ -162,6 +168,12 @@ async function loadGlobalSettings(): Promise<GlobalChatSettings> {
       : DEFAULT_SETTINGS.defaultConnectionIds,
     language: DEFAULT_SETTINGS.language,
     approvalMode,
+    emailSignatureEnabled:
+      typeof item?.emailSignatureEnabled === 'boolean'
+        ? item!.emailSignatureEnabled
+        : DEFAULT_SETTINGS.emailSignatureEnabled,
+    emailSignatureText:
+      typeof item?.emailSignatureText === 'string' ? item!.emailSignatureText : DEFAULT_SETTINGS.emailSignatureText,
     allowUserDefaults,
   };
 }
@@ -209,6 +221,14 @@ function mergeUserSettings(globalSettings: ChatSettings, userItem: Record<string
     typeof userItem?.approvalMode === 'string' && VALID_APPROVAL_MODES.includes(userItem.approvalMode as ApprovalMode)
       ? (userItem.approvalMode as ApprovalMode)
       : globalSettings.approvalMode;
+  const emailSignatureEnabled =
+    typeof userItem?.emailSignatureEnabled === 'boolean'
+      ? (userItem!.emailSignatureEnabled as boolean)
+      : globalSettings.emailSignatureEnabled;
+  const emailSignatureText =
+    typeof userItem?.emailSignatureText === 'string'
+      ? (userItem!.emailSignatureText as string)
+      : globalSettings.emailSignatureText;
   const userDefaultsEnabled =
     parseBoolean(userItem?.userDefaultsEnabled) ?? parseBoolean(userItem?.user_defaults_enabled) ?? true;
 
@@ -221,6 +241,8 @@ function mergeUserSettings(globalSettings: ChatSettings, userItem: Record<string
     defaultConnectionIds,
     language,
     approvalMode,
+    emailSignatureEnabled,
+    emailSignatureText,
     userDefaultsEnabled,
   };
 }
@@ -309,6 +331,8 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
           VALID_APPROVAL_MODES.includes(body.approvalMode as ApprovalMode)
             ? (body.approvalMode as ApprovalMode)
             : currentGlobal.approvalMode,
+        emailSignatureEnabled: currentGlobal.emailSignatureEnabled,
+        emailSignatureText: currentGlobal.emailSignatureText,
         allowUserDefaults,
         updatedAt: new Date().toISOString(),
       };
@@ -331,6 +355,8 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
         defaultConnectionIds: updatedSettings.defaultConnectionIds,
         language: updatedSettings.language,
         approvalMode: updatedSettings.approvalMode,
+        emailSignatureEnabled: updatedSettings.emailSignatureEnabled,
+        emailSignatureText: updatedSettings.emailSignatureText,
         allowUserDefaults: updatedSettings.allowUserDefaults,
       };
 
@@ -340,21 +366,6 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
     // GET /chat/settings - Get user's chat settings
     if (method === 'GET' && /\/chat\/settings\/?$/.test(path)) {
       const globalSettings = await loadGlobalSettings();
-      if (!globalSettings.allowUserDefaults) {
-        // Company policy disables per-user defaults; always return company defaults
-        const settings: ChatSettings = {
-          defaultKBIds: globalSettings.defaultKBIds,
-          autoToolsEnabled: globalSettings.autoToolsEnabled,
-          webSearchEnabled: globalSettings.webSearchEnabled,
-          createAgentEnabled: globalSettings.createAgentEnabled,
-          dataAnalysisEnabled: globalSettings.dataAnalysisEnabled,
-          defaultConnectionIds: globalSettings.defaultConnectionIds,
-          language: globalSettings.language,
-          approvalMode: globalSettings.approvalMode,
-        };
-        return { statusCode: 200, headers: HEADERS, body: JSON.stringify(settings) };
-      }
-
       const userItem = await loadUserItem(userId);
       const merged = mergeUserSettings(globalSettings, userItem);
 
@@ -367,6 +378,8 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
         defaultConnectionIds: merged.defaultConnectionIds,
         language: merged.language,
         approvalMode: merged.approvalMode,
+        emailSignatureEnabled: merged.emailSignatureEnabled,
+        emailSignatureText: merged.emailSignatureText,
       };
 
       if (profileView) {
@@ -377,19 +390,21 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
         };
       }
 
-      // Only apply user defaults in chat when the user has explicitly enabled them.
-      const effective: ChatSettings = merged.userDefaultsEnabled
-        ? mergedSettings
-        : {
-            defaultKBIds: globalSettings.defaultKBIds,
-            autoToolsEnabled: globalSettings.autoToolsEnabled,
-            webSearchEnabled: globalSettings.webSearchEnabled,
-            createAgentEnabled: globalSettings.createAgentEnabled,
-            dataAnalysisEnabled: globalSettings.dataAnalysisEnabled,
-            defaultConnectionIds: globalSettings.defaultConnectionIds,
-            language: globalSettings.language,
-            approvalMode: globalSettings.approvalMode,
-          };
+      // Only apply user chat defaults when the user has explicitly enabled them.
+      // Profile fields (language, email signature, approval mode) always use user values.
+      const useUserChatDefaults = merged.userDefaultsEnabled && globalSettings.allowUserDefaults;
+      const effective: ChatSettings = {
+        defaultKBIds: useUserChatDefaults ? merged.defaultKBIds : globalSettings.defaultKBIds,
+        autoToolsEnabled: useUserChatDefaults ? merged.autoToolsEnabled : globalSettings.autoToolsEnabled,
+        webSearchEnabled: useUserChatDefaults ? merged.webSearchEnabled : globalSettings.webSearchEnabled,
+        createAgentEnabled: useUserChatDefaults ? merged.createAgentEnabled : globalSettings.createAgentEnabled,
+        dataAnalysisEnabled: useUserChatDefaults ? merged.dataAnalysisEnabled : globalSettings.dataAnalysisEnabled,
+        defaultConnectionIds: useUserChatDefaults ? merged.defaultConnectionIds : globalSettings.defaultConnectionIds,
+        language: merged.language,
+        approvalMode: merged.approvalMode,
+        emailSignatureEnabled: merged.emailSignatureEnabled,
+        emailSignatureText: merged.emailSignatureText,
+      };
 
       return {
         statusCode: 200,
@@ -401,15 +416,27 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
     // PUT /chat/settings - Update user's chat settings
     if (method === 'PUT' && /\/chat\/settings\/?$/.test(path)) {
       const globalSettings = await loadGlobalSettings();
-      if (!globalSettings.allowUserDefaults) {
+      const body = JSON.parse(event.body || '{}') as UserChatSettingsUpdate;
+
+      // Profile fields (language, email signature, approval mode) are always saveable.
+      // Chat default fields (KBs, tools, integrations) require admin allowUserDefaults.
+      const CHAT_DEFAULT_KEYS = [
+        'defaultKBIds',
+        'autoToolsEnabled',
+        'webSearchEnabled',
+        'createAgentEnabled',
+        'dataAnalysisEnabled',
+        'defaultConnectionIds',
+        'userDefaultsEnabled',
+      ];
+      const hasChatDefaultFields = CHAT_DEFAULT_KEYS.some((k) => k in body);
+      if (!globalSettings.allowUserDefaults && hasChatDefaultFields) {
         return {
           statusCode: 403,
           headers: HEADERS,
           body: JSON.stringify({ error: 'User defaults are disabled by admin policy' }),
         };
       }
-
-      const body = JSON.parse(event.body || '{}') as UserChatSettingsUpdate;
 
       const existing = await loadUserItem(userId);
       const current = (existing as (Partial<UserChatSettings> & { user_id: string }) | null) ?? { user_id: userId };
@@ -516,6 +543,28 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
         next.approvalMode = current.approvalMode as ApprovalMode;
       }
 
+      // emailSignatureEnabled
+      if ('emailSignatureEnabled' in body) {
+        if (body.emailSignatureEnabled === null) {
+          // clear override
+        } else if (typeof body.emailSignatureEnabled === 'boolean') {
+          next.emailSignatureEnabled = body.emailSignatureEnabled;
+        }
+      } else if (typeof current.emailSignatureEnabled === 'boolean') {
+        next.emailSignatureEnabled = current.emailSignatureEnabled;
+      }
+
+      // emailSignatureText
+      if ('emailSignatureText' in body) {
+        if (body.emailSignatureText === null) {
+          // clear override
+        } else if (typeof body.emailSignatureText === 'string') {
+          next.emailSignatureText = body.emailSignatureText;
+        }
+      } else if (typeof current.emailSignatureText === 'string') {
+        next.emailSignatureText = current.emailSignatureText;
+      }
+
       // userDefaultsEnabled
       if ('userDefaultsEnabled' in body) {
         if (body.userDefaultsEnabled === null) {
@@ -544,6 +593,8 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
         'defaultConnectionIds' in next ||
         'language' in next ||
         'approvalMode' in next ||
+        'emailSignatureEnabled' in next ||
+        'emailSignatureText' in next ||
         'userDefaultsEnabled' in next;
 
       const itemToStore = hasOverrides ? next : { user_id: userId, updatedAt: next.updatedAt };

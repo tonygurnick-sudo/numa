@@ -25,7 +25,12 @@ import structlog
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse, Response, StreamingResponse
 
-from .agent_config import AgentConfig, fetch_agent_config, resolve_approval_mode
+from .agent_config import (
+    AgentConfig,
+    fetch_agent_config,
+    fetch_user_email_signature,
+    resolve_approval_mode,
+)
 from .assistant import (
     AssistantContext,
     build_workspace_tree,
@@ -1403,6 +1408,7 @@ async def _handle_chat(
             # during long-running tool executions (CloudFront has 60s timeout)
             # Resolve integration approval mode (agent config > user setting > default)
             effective_approval_mode = resolve_approval_mode(user_sub, agent_config)
+            email_signature = fetch_user_email_signature(user_sub)
 
             sdk_stream = stream_claude_sdk(
                 conversation_id,
@@ -1427,6 +1433,7 @@ async def _handle_chat(
                 external_user_id=external_user_id,  # Pipedream integrations user ID
                 enabled_integrations=enabled_integrations,  # Connected integration app slugs
                 approval_mode=effective_approval_mode,  # Integration approval mode
+                email_signature=email_signature,  # Email signature settings
             )
             async for chunk in sdk_stream:
                 # Stream chunk directly to frontend via HTTP SSE

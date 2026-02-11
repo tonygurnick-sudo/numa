@@ -316,6 +316,7 @@ def create_agent_options(
     external_user_id: Optional[str] = None,
     enabled_integrations: Optional[list[str]] = None,
     request_id: Optional[str] = None,
+    email_signature: Optional[dict] = None,
 ) -> ClaudeAgentOptions:
     """
     Create ClaudeAgentOptions for the Numa Workspace Agent.
@@ -346,6 +347,7 @@ def create_agent_options(
         agent_config=agent_config,
         agent_file_paths=agent_file_paths,
         enabled_integrations=enabled_integrations,
+        email_signature=email_signature,
     )
 
     # Build environment variables for SDK subprocess
