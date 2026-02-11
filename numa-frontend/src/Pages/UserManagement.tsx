@@ -330,64 +330,6 @@ const UserManagement = ({ embedded = false }: UserManagementProps) => {
     }
   };
 
-  // Check if MFA is globally enabled
-  const mfaGloballyEnabled = window.sessionStorage.getItem('MFA_ENABLED') === 'true';
-
-  // Get user MFA status
-  const handleGetUserMFAEnabled = async (username: string): Promise<boolean> => {
-    const REGION = window.sessionStorage.getItem('REGION');
-    const USER_POOL_ID = window.sessionStorage.getItem('USER_POOL_ID');
-    const credentials = await getCredentials();
-    if (!credentials) {
-      throw new Error(t('errors.credentials'));
-    }
-    const userManagementUtils = new UserManagementUtils(REGION, credentials);
-    return userManagementUtils.getUserMFAEnabled(username, USER_POOL_ID);
-  };
-
-  // Toggle MFA for a user (enable or disable)
-  const handleToggleUserMFA = async (userToToggle: User, enabled: boolean) => {
-    setUsersError(null);
-    try {
-      const REGION = window.sessionStorage.getItem('REGION');
-      const USER_POOL_ID = window.sessionStorage.getItem('USER_POOL_ID');
-      const credentials = await getCredentials();
-      if (!credentials) {
-        throw new Error(t('errors.credentials'));
-      }
-      const userManagementUtils = new UserManagementUtils(REGION, credentials);
-      if (enabled) {
-        await userManagementUtils.enableUserMFA(userToToggle.username, USER_POOL_ID);
-      } else {
-        await userManagementUtils.resetUserMFA(userToToggle.username, USER_POOL_ID);
-      }
-    } catch (err) {
-      console.error('Error toggling user MFA:', err);
-      setUsersError(err instanceof Error ? err.message : t('errors.mfaToggle'));
-      throw err;
-    }
-  };
-
-  // Reset user MFA
-  const handleResetUserMFA = async (userToReset: User) => {
-    setUsersError(null);
-
-    try {
-      if (!getCredentials) {
-        throw new Error(t('errors.webTokenCredentials'));
-      }
-
-      const REGION = window.sessionStorage.getItem('REGION');
-      const USER_POOL_ID = window.sessionStorage.getItem('USER_POOL_ID');
-      const userManagementUtils = new UserManagementUtils(REGION, await getCredentials());
-      await userManagementUtils.resetUserMFA(userToReset.username, USER_POOL_ID);
-    } catch (err) {
-      console.error('Error resetting user MFA:', err);
-      setUsersError(err instanceof Error ? err.message : t('errors.mfaReset'));
-      throw err;
-    }
-  };
-
   // View user handler
   const handleViewUser = (user: User) => {
     setSelectedUser(user);
@@ -588,7 +530,6 @@ const UserManagement = ({ embedded = false }: UserManagementProps) => {
         show={showDetailsModal}
         user={selectedUser}
         currentUserSub={currentUserSub}
-        mfaGloballyEnabled={mfaGloballyEnabled}
         onHide={() => {
           setShowDetailsModal(false);
           setSelectedUser(null);
@@ -596,9 +537,6 @@ const UserManagement = ({ embedded = false }: UserManagementProps) => {
         onPromoteToAdmin={handlePromoteToAdmin}
         onDemoteFromAdmin={handleDemoteFromAdmin}
         onDeleteUser={handleDeleteUser}
-        onResetUserMFA={handleResetUserMFA}
-        onGetUserMFAEnabled={handleGetUserMFAEnabled}
-        onToggleUserMFA={handleToggleUserMFA}
       />
     </>
   );

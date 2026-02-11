@@ -12,6 +12,16 @@ import { AuthProvider, useAuth, TestAuthProvider } from '../../Providers/AuthPro
 import { authTestTokens } from '../Fixtures/AuthTestTokens';
 import { fromWebToken } from '@aws-sdk/credential-providers';
 
+// Mock cognito-srp-helper for MFA tests (SRP flow must complete before MFA challenges)
+vi.mock('cognito-srp-helper', () => ({
+  createSrpSession: vi.fn().mockReturnValue({ largeA: 'mock-large-a' }),
+  signSrpSession: vi.fn().mockReturnValue({
+    secret: 'mock-secret-block',
+    passwordSignature: 'mock-password-signature',
+    timestamp: 'mock-timestamp',
+  }),
+}));
+
 setupAwsMocks();
 
 // Common test tokens
@@ -1007,5 +1017,176 @@ describe('AuthProvider', () => {
         body: JSON.stringify({ email: mockUser.username.toLowerCase() }),
       }),
     );
+  });
+
+  describe('MFA Challenge Payloads', () => {
+    // These tests verify the actual Cognito SDK commands built inside AuthProvider,
+    // not just the UI wiring. This catches regressions in the challenge response
+    // payloads (e.g. missing ANSWER field, session fallback).
+
+    const setupMfaSendMock = (verifySession: string | undefined) => {
+      let callIndex = 0;
+      const sendSpy = vi.fn().mockImplementation(() => {
+        callIndex++;
+        switch (callIndex) {
+          case 1: // InitiateAuthCommand — SRP step 1
+            return Promise.resolve({
+              ChallengeName: 'PASSWORD_VERIFIER',
+              ChallengeParameters: {
+                SALT: 'aa',
+                SECRET_BLOCK: 'bb',
+                SRP_B: 'cc',
+                USERNAME: 'testuser',
+                USER_ID_FOR_SRP: 'testuser',
+              },
+              Session: 'init-session',
+            });
+          case 2: // RespondToAuthChallengeCommand — SRP step 2 → returns MFA_SETUP
+            return Promise.resolve({
+              ChallengeName: 'MFA_SETUP',
+              Session: 'mfa-setup-session',
+            });
+          case 3: // AssociateSoftwareTokenCommand — get TOTP secret
+            return Promise.resolve({
+              SecretCode: 'MOCK_SECRET_CODE',
+              Session: 'associate-session',
+            });
+          case 4: // VerifySoftwareTokenCommand — verify TOTP code
+            return Promise.resolve({
+              Status: 'SUCCESS',
+              Session: verifySession,
+            });
+          case 5: // RespondToAuthChallengeCommand — MFA_SETUP completion (this is what we assert)
+            return Promise.resolve({
+              AuthenticationResult: {
+                AccessToken: TEST_TOKENS.valid.accessToken,
+                IdToken: TEST_TOKENS.valid.idToken,
+                RefreshToken: TEST_TOKENS.valid.refreshToken,
+              },
+            });
+          default:
+            return Promise.resolve({});
+        }
+      });
+
+      vi.mocked(mockCognitoIdentityProviderClient.CognitoIdentityProviderClient).mockImplementation(() => ({
+        send: sendSpy,
+      }));
+
+      return sendSpy;
+    };
+
+    it('completeMfaSetup sends ANSWER: SOFTWARE_TOKEN_MFA in the MFA_SETUP challenge response', async () => {
+      const sendSpy = setupMfaSendMock('verify-session');
+
+      // Mock fetch for secret hash
+      vi.mocked(global.fetch).mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve({ hash: 'mock-secret-hash' }),
+      } as Response);
+
+      const onAuth = vi.fn();
+      render(
+        <AuthProvider initialTokens={null}>
+          <TestComponent onAuth={onAuth} />
+        </AuthProvider>,
+      );
+
+      await waitFor(() => expect(onAuth).toHaveBeenCalled());
+      const auth = onAuth.mock.calls[onAuth.mock.calls.length - 1][0];
+
+      // Step 1: Login — triggers SRP flow → MFA_SETUP challenge → AssociateSoftwareToken
+      // This populates mfaSessionRef and mfaUsernameRef inside the provider
+      let loginResult;
+      await act(async () => {
+        loginResult = await auth.login('testuser', 'password123');
+      });
+
+      expect(loginResult).toMatchObject({ requiresMfaSetup: true, secretCode: 'MOCK_SECRET_CODE' });
+
+      // Step 2: Complete MFA setup — sends VerifySoftwareToken then RespondToAuthChallenge
+      await act(async () => {
+        await auth.completeMfaSetup('123456');
+      });
+
+      // The 5th send call is the MFA_SETUP completion (RespondToAuthChallengeCommand)
+      // Grab the input that was passed to the command constructor
+      const mfaSetupCompletionCall = sendSpy.mock.calls[4][0];
+      const payload = mfaSetupCompletionCall.input;
+
+      expect(payload.ChallengeName).toBe('MFA_SETUP');
+      expect(payload.ChallengeResponses).toHaveProperty('ANSWER', 'SOFTWARE_TOKEN_MFA');
+      expect(payload.ChallengeResponses).toHaveProperty('USERNAME', 'testuser');
+      expect(payload.ChallengeResponses).toHaveProperty('SECRET_HASH', 'mock-secret-hash');
+    });
+
+    it('completeMfaSetup falls back to original session when VerifySoftwareToken returns no session', async () => {
+      // Pass undefined as verifySession to simulate Cognito not returning a session
+      const sendSpy = setupMfaSendMock(undefined);
+
+      vi.mocked(global.fetch).mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve({ hash: 'mock-secret-hash' }),
+      } as Response);
+
+      const onAuth = vi.fn();
+      render(
+        <AuthProvider initialTokens={null}>
+          <TestComponent onAuth={onAuth} />
+        </AuthProvider>,
+      );
+
+      await waitFor(() => expect(onAuth).toHaveBeenCalled());
+      const auth = onAuth.mock.calls[onAuth.mock.calls.length - 1][0];
+
+      await act(async () => {
+        await auth.login('testuser', 'password123');
+      });
+
+      await act(async () => {
+        await auth.completeMfaSetup('123456');
+      });
+
+      // The 5th send call is the MFA_SETUP completion
+      const mfaSetupCompletionCall = sendSpy.mock.calls[4][0];
+      const payload = mfaSetupCompletionCall.input;
+
+      // When verifyResponse.Session is undefined, it should fall back to the stored session
+      // The stored session is 'associate-session' (from AssociateSoftwareTokenCommand, call 3)
+      expect(payload.Session).toBe('associate-session');
+    });
+
+    it('completeMfaSetup uses verify session when VerifySoftwareToken returns one', async () => {
+      const sendSpy = setupMfaSendMock('verify-returned-session');
+
+      vi.mocked(global.fetch).mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve({ hash: 'mock-secret-hash' }),
+      } as Response);
+
+      const onAuth = vi.fn();
+      render(
+        <AuthProvider initialTokens={null}>
+          <TestComponent onAuth={onAuth} />
+        </AuthProvider>,
+      );
+
+      await waitFor(() => expect(onAuth).toHaveBeenCalled());
+      const auth = onAuth.mock.calls[onAuth.mock.calls.length - 1][0];
+
+      await act(async () => {
+        await auth.login('testuser', 'password123');
+      });
+
+      await act(async () => {
+        await auth.completeMfaSetup('123456');
+      });
+
+      const mfaSetupCompletionCall = sendSpy.mock.calls[4][0];
+      const payload = mfaSetupCompletionCall.input;
+
+      // When verifyResponse.Session is present, it should use it (not the fallback)
+      expect(payload.Session).toBe('verify-returned-session');
+    });
   });
 });
