@@ -122,7 +122,7 @@ def validate_jwt(authorization: str | None) -> str:
         # Verify and decode the token
         payload = jwt.decode(
             token,
-            rsa_key,
+            rsa_key,  # pyright: ignore[reportArgumentType]
             algorithms=["RS256"],
             audience=USER_POOL_CLIENT_ID,
             issuer=f"https://cognito-idp.{REGION}.amazonaws.com/{USER_POOL_ID}",
@@ -213,7 +213,8 @@ def parse_s3_url(signed_url: str) -> tuple[str, str]:
         Tuple of (bucket, key)
     """
     parsed = urlparse(signed_url)
-    hostname_parts = parsed.hostname.split(".")
+    hostname = parsed.hostname or ""
+    hostname_parts = hostname.split(".")
     bucket = hostname_parts[0]
     key = unquote(parsed.path.lstrip("/"))
     return bucket, key

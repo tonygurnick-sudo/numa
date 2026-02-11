@@ -32,10 +32,6 @@ boto3-stubs = { version = "^1.37.0", extras = ["dynamodb", "bedrock-runtime"] }
 types-requests = "^2.31.0"
 pytest = "^8.4.2"
 
-[tool.mypy]
-ignore_errors = false
-disable_error_code = ["arg-type", "union-attr"]
-
 [tool.pyright]
 typeCheckingMode = "basic"
 reportMissingImports = "none"
