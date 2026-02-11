@@ -535,7 +535,7 @@ build-deployment-container:
     TF_ENVIRONMENT: prod
     AWS_REGION: us-east-1
     CLIENT_OVERRIDE: $CLIENT_NAME
-  needs: ["claude-cli-artifact-build"]
+  # No explicit `needs` so deploy receives all packaging artifacts
   script:
     - yarn exec cdktf deploy --auto-approve numa-${CLIENT_NAME}
   environment:
