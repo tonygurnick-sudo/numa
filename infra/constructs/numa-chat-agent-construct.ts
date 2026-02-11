@@ -131,6 +131,12 @@ export class NumaChatAgent extends Construct {
       resourceNameSuffix: '_chat_agent',
       additionalLayers: [`arn:aws:lambda:${props.region}:753240598075:layer:LambdaAdapterLayerX86:25`],
       additionalPolicyStatements: [
+        // AWS Marketplace permissions for Bedrock model auto-subscription (one-time per account per model)
+        {
+          effect: 'Allow',
+          actions: ['aws-marketplace:ViewSubscriptions', 'aws-marketplace:Subscribe'],
+          resources: ['*'],
+        },
         {
           effect: 'Allow',
           actions: ['bedrock:InvokeModelWithResponseStream', 'bedrock:InvokeModel'],

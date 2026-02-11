@@ -59,6 +59,7 @@ export class InvalidateCloudfront extends Construct {
       handler: 'index.handler',
       filename: invalidaterFilename,
       sourceCodeHash: Fn.filebase64sha256(invalidaterFilename),
+      timeout: 30,
     });
     func.addMoveTarget('invalidater_function');
 

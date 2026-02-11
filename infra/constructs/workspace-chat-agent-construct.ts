@@ -227,6 +227,12 @@ echo "Successfully pushed image to ${this.ecrRepository.repositoryUrl}:${imageTa
             resources: ['*'],
           },
           {
+            sid: 'MarketplaceModelAccess',
+            effect: 'Allow',
+            actions: ['aws-marketplace:ViewSubscriptions', 'aws-marketplace:Subscribe'],
+            resources: ['*'],
+          },
+          {
             sid: 'S3WorkspaceAccess',
             effect: 'Allow',
             actions: ['s3:GetObject', 's3:PutObject', 's3:DeleteObject', 's3:ListBucket'],
