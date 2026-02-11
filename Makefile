@@ -29,7 +29,7 @@ STACK := numa-arcanum-demo-tony
 SYSTEM_USER_FUNCTION_RESOURCE := aws_lambda_function.numa_system-user_function_38BDAEEC
 SYSTEM_USER_FUNCTION_NAME := system-user-creator---TfToken-TOKEN-81--
 
-.PHONY: init get plan import deploy clean pipelinefix
+.PHONY: init get plan import deploy clean pipelinefix cli
 .DEFAULT_GOAL := deploy
 
 init:
@@ -109,3 +109,23 @@ pipelinefix:
 	@echo "   • Run 'pre-commit run' to check only staged files"
 	@echo "   • Use conventional commit format: feat:/fix:/docs: etc."
 	@echo ""
+
+# ---- CLI Installation ----
+cli:
+	@echo "🔧 Building and installing Numa CLI..."
+	yarn --cwd numa-cli install
+	yarn --cwd numa-cli build
+	@echo "📦 Linking CLI globally..."
+	cd numa-cli && npm link
+	@echo ""
+	@echo "✅ Numa CLI installed! You can now use:"
+	@echo "   numa init                         - Initialize CLI"
+	@echo "   numa env list                     - List environments"
+	@echo "   numa env use <name>               - Switch environment"
+	@echo "   numa env add <name> -c <client>   - Add environment"
+	@echo "   numa login                        - Log in to Numa"
+	@echo "   numa logout                       - Log out"
+	@echo "   numa whoami                       - Show current user"
+	@echo "   numa create shared doc <file>     - Create shared document"
+	@echo ""
+	@echo "Run 'numa --help' for more information."

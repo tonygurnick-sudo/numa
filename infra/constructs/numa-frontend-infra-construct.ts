@@ -370,6 +370,24 @@ export class NumaFrontendInfra extends Construct {
       });
     }
 
+    // Shared document Q&A Lambda Function URL origin (if enabled)
+    // Public API for sharing documents with Nova 2 Lite - no CloudFront secret required
+    if (props.sharedChatFunctionUrl) {
+      const sharedChatDomain = Fn.replace(Fn.replace(props.sharedChatFunctionUrl, '/^https?:\/{2}/', ''), '/\/$/', '');
+      origins.push({
+        // No CloudFront secret - this is a public API
+        customOriginConfig: {
+          httpPort: 80,
+          httpsPort: 443,
+          originProtocolPolicy: 'https-only',
+          originSslProtocols: ['TLSv1.2'],
+          originReadTimeout: 120, // Long timeout for document fetch + streaming
+        },
+        domainName: sharedChatDomain,
+        originId: 'shared-chat-fnurl',
+      });
+    }
+
     // Build ordered cache behaviors (more specific routes before generic /api/*)
     const orderedCacheBehavior: CloudfrontDistributionOrderedCacheBehavior[] = [
       {
@@ -482,6 +500,20 @@ export class NumaFrontendInfra extends Construct {
         allowedMethods: ['GET', 'HEAD', 'OPTIONS', 'PUT', 'POST', 'PATCH', 'DELETE'],
         cachedMethods: ['GET', 'HEAD'],
         pathPattern: '/api/workspace-chat-agent/*',
+        viewerProtocolPolicy: 'redirect-to-https',
+        compress: false, // IMPORTANT: Disable compression for streaming - compression buffers responses
+        cachePolicyId: cachingDisabledPolicyId, // No caching for streaming
+        originRequestPolicyId: 'b689b0a8-53d0-40ab-baf2-68738e2966ac', // AllViewerExceptHostHeader
+      });
+    }
+
+    // Shared document Q&A cache behavior (if enabled) - must come before /api/* catch-all
+    if (props.sharedChatFunctionUrl) {
+      orderedCacheBehavior.push({
+        targetOriginId: 'shared-chat-fnurl',
+        allowedMethods: ['GET', 'HEAD', 'OPTIONS', 'PUT', 'POST', 'PATCH', 'DELETE'],
+        cachedMethods: ['GET', 'HEAD'],
+        pathPattern: '/api/shared/*',
         viewerProtocolPolicy: 'redirect-to-https',
         compress: false, // IMPORTANT: Disable compression for streaming - compression buffers responses
         cachePolicyId: cachingDisabledPolicyId, // No caching for streaming
@@ -615,4 +647,6 @@ export interface NumaFrontendInfraProps {
   logGroup?: import('@cdktf/provider-aws/lib/cloudwatch-log-group').CloudwatchLogGroup;
   /** Optional workspace chat agent proxy Lambda Function URL (if enabled) */
   workspaceChatAgentProxyUrl?: string;
+  /** Optional shared document Q&A Lambda Function URL for public sharing feature */
+  sharedChatFunctionUrl?: string;
 }

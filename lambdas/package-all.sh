@@ -9,10 +9,10 @@ pushd "${SCRIPT_DIRECTORY}/.."
 yarn  # Install workspace dependencies
 popd
 
-# Handle Node.js Lambda packages independently (no longer in workspace)
-NODE_LAMBDA_DIRS=$(find "${SCRIPT_DIRECTORY}/node" -maxdepth 1 -type d -name "*-scheduler")
+# Handle ALL Node.js Lambda packages that have a bundle script
+NODE_LAMBDA_DIRS=$(find "${SCRIPT_DIRECTORY}/node" -maxdepth 1 -type d)
 for dir in $NODE_LAMBDA_DIRS; do
-  if [ -f "$dir/package.json" ]; then
+  if [ -f "$dir/package.json" ] && grep -q '"bundle"' "$dir/package.json"; then
     echo "Installing and bundling Node.js Lambda: $dir"
     pushd "$dir"
     yarn install  # Install dependencies independently (no longer in workspace)

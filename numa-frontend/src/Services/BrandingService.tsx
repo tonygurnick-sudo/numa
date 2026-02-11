@@ -15,7 +15,6 @@ const BRANDING_TENANT_FLAG = 'BRANDING_THEME_ENABLED';
 
 const BRANDING_CACHE_KEY = 'BRANDING_CONFIG_CACHE';
 const BRANDING_CACHE_TS_KEY = 'BRANDING_CONFIG_CACHE_TS';
-const BRANDING_CACHE_TTL_MS = 60 * 15 * 1000; // 15 minute
 
 // Key for preview mode - stores temporary branding data for preview in new tab
 export const BRANDING_PREVIEW_KEY = 'BRANDING_PREVIEW_DATA';
@@ -227,9 +226,9 @@ class BrandingService {
     }
 
     try {
-      window.sessionStorage.setItem(BRANDING_CACHE_KEY, JSON.stringify(config));
+      window.localStorage.setItem(BRANDING_CACHE_KEY, JSON.stringify(config));
       this._saveCacheTimestamp(Date.now());
-      console.debug('Branding: cached config persisted');
+      console.debug('Branding: cached config persisted to localStorage');
     } catch (error) {
       console.warn('Branding: failed to persist cache', error);
     }
@@ -242,18 +241,8 @@ class BrandingService {
     }
 
     try {
-      const cached = window.sessionStorage.getItem(BRANDING_CACHE_KEY);
+      const cached = window.localStorage.getItem(BRANDING_CACHE_KEY);
       if (!cached) {
-        return false;
-      }
-
-      const tsValue = window.sessionStorage.getItem(BRANDING_CACHE_TS_KEY);
-      if (!tsValue) {
-        return false;
-      }
-
-      const timestamp = Number.parseInt(tsValue, 10);
-      if (Number.isFinite(timestamp) && Date.now() - timestamp > BRANDING_CACHE_TTL_MS) {
         return false;
       }
 
@@ -271,9 +260,11 @@ class BrandingService {
         { persist: false, tenantEnabled: parsed.tenantEnabled },
       );
 
-      console.debug('Branding: hydrated config from cache', {
+      const tsValue = window.localStorage.getItem(BRANDING_CACHE_TS_KEY);
+      const timestamp = tsValue ? Number.parseInt(tsValue, 10) : 0;
+      console.debug('Branding: hydrated config from localStorage', {
         name: parsed.branding.name,
-        cachedAt: new Date(timestamp).toISOString(),
+        cachedAt: timestamp ? new Date(timestamp).toISOString() : 'unknown',
       });
       return true;
     } catch (error) {
@@ -288,7 +279,7 @@ class BrandingService {
     }
 
     try {
-      window.sessionStorage.setItem(BRANDING_CACHE_TS_KEY, ts.toString());
+      window.localStorage.setItem(BRANDING_CACHE_TS_KEY, ts.toString());
     } catch (error) {
       console.warn('Branding: failed to persist cache timestamp', error);
     }
@@ -517,8 +508,12 @@ class BrandingService {
           return;
         }
 
-        if (!forceRemote && this._hydrateFromCache()) {
+        // Stale-while-revalidate: apply cache immediately, then fetch fresh in background
+        const hydratedFromCache = !forceRemote && this._hydrateFromCache();
+        if (hydratedFromCache) {
           this.initialized = true;
+          // Still fetch fresh config from API in background to keep cache up to date
+          this._revalidateFromApi();
           return;
         }
 
@@ -560,6 +555,33 @@ class BrandingService {
 
     this.initializePromise = promise;
     return promise;
+  }
+
+  /**
+   * Background revalidation: fetch fresh branding from API and update cache + UI if changed.
+   */
+  private _revalidateFromApi(): void {
+    this._loadBrandingConfigFromApi()
+      .then((apiConfig) => {
+        if (!apiConfig) {
+          return;
+        }
+        const tenantEnabled =
+          typeof apiConfig.tenantEnabled === 'boolean' ? apiConfig.tenantEnabled : this._getTenantFlag();
+        const configToApply: BrandingConfig = tenantEnabled
+          ? apiConfig
+          : {
+              branding: DEFAULT_BRANDING_THEME,
+              features: apiConfig.features ?? {},
+              tenantEnabled,
+            };
+        this._applyConfig(configToApply, { persist: tenantEnabled, tenantEnabled });
+        this.hasLoadedRemote = true;
+        console.debug('Branding: revalidated from API');
+      })
+      .catch((error) => {
+        console.warn('Branding: background revalidation failed', error);
+      });
   }
 
   private _isBrandingEnabled(): boolean {

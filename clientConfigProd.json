@@ -32,7 +32,9 @@
     },
     "agents": true,
     "brandingProviderEnabled": true,
-    "numaWorkspaceChat": true
+    "bedrockAccount": "552162429805",
+    "numaWorkspaceChat": true,
+    "mfa": false
   },
   "nd-labs": {
     "clientAccountId": "905418183804",

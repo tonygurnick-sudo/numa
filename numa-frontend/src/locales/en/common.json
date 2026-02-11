@@ -51,7 +51,8 @@
       "userKnowledgeBase": "User Knowledge Base",
       "profile": "Profile",
       "adminSettings": "Admin Settings",
-      "integrations": "Integrations"
+      "integrations": "Integrations",
+      "files": "Files"
     },
     "sections": {
       "workflows": "Workflows",
@@ -59,6 +60,7 @@
       "knowledgeBases": "Knowledge Bases"
     },
     "expanded": {
+      "files": "Files",
       "knowledgeBase": "Knowledge Base",
       "knowledgeBaseManagement": "Knowledge Base Management",
       "numaChat": "Numa Chat",

@@ -79,6 +79,7 @@ describe('BrandingService', () => {
       configurable: true,
     });
 
+    window.localStorage.clear();
     window.localStorage.setItem('accessToken', 'fakeAccessToken');
 
     document.head.innerHTML = '<link rel="icon" href="/favicon.ico" />';

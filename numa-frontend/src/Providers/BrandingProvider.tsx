@@ -1,6 +1,6 @@
 import React, { useEffect, useState, type ReactNode } from 'react';
 import { brandingService } from '../Services/BrandingService';
-import { BrandingContext, DEFAULT_BRANDING_THEME } from './BrandingContext';
+import { BrandingContext } from './BrandingContext';
 import type { BrandingTheme } from './BrandingContext';
 import i18n from '../i18n';
 
@@ -9,9 +9,19 @@ import i18n from '../i18n';
  * Makes client-specific branding available throughout the app
  */
 export const BrandingProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const [clientName, setClientName] = useState<string>('numa');
-  const [branding, setBranding] = useState<BrandingTheme>(DEFAULT_BRANDING_THEME);
-  const [initialized, setInitialized] = useState<boolean>(false);
+  // Check localStorage synchronously to avoid FOUC — if cached branding exists,
+  // start with it applied so we never show the loading placeholder on repeat visits.
+  const hasCachedBranding = () => {
+    try {
+      return Boolean(window.localStorage.getItem('BRANDING_CONFIG_CACHE'));
+    } catch {
+      return false;
+    }
+  };
+
+  const [clientName, setClientName] = useState<string>(brandingService.getClientName());
+  const [branding, setBranding] = useState<BrandingTheme>(brandingService.getBranding());
+  const [initialized, setInitialized] = useState<boolean>(hasCachedBranding);
 
   // Initialize client branding on mount
   useEffect(() => {

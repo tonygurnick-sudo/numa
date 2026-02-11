@@ -1,0 +1,11 @@
+.expiry-countdown {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--bs-secondary);
+  font-size: 0.875rem;
+
+  i {
+    font-size: 1rem;
+  }
+}
