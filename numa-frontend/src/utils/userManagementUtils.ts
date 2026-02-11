@@ -10,7 +10,6 @@ import {
   DescribeUserPoolCommand,
   ListUsersInGroupCommand,
   AdminUserGlobalSignOutCommand,
-  AdminSetUserMFAPreferenceCommand,
 } from '@aws-sdk/client-cognito-identity-provider';
 import { DeleteUserCommand, GetUserCommand } from '@aws-sdk/client-qbusiness';
 import { withPRM } from './prmUtils';
@@ -330,76 +329,6 @@ export class UserManagementUtils {
       setUsersError(err.message || 'Failed to delete user');
     } finally {
       setDeletingUser(null);
-    }
-  }
-
-  /**
-   * Resets MFA for a user so they can re-enroll their authenticator app
-   * @param {string} username - Username of the user
-   * @param {string} userPoolId - Cognito User Pool ID
-   * @returns {Promise<void>}
-   */
-  async resetUserMFA(username, userPoolId) {
-    try {
-      const command = new AdminSetUserMFAPreferenceCommand({
-        UserPoolId: userPoolId,
-        Username: username,
-        SoftwareTokenMfaSettings: {
-          Enabled: false,
-          PreferredMfa: false,
-        },
-      });
-
-      await this.cognitoClient.send(command);
-    } catch (error) {
-      console.error(`Error resetting MFA for user ${username}:`, error);
-      throw error;
-    }
-  }
-
-  /**
-   * Gets a user's MFA status from Cognito
-   * @param {string} username - Username of the user
-   * @param {string} userPoolId - Cognito User Pool ID
-   * @returns {Promise<boolean>} - Whether MFA is enabled for this user
-   */
-  async getUserMFAEnabled(username, userPoolId) {
-    try {
-      const command = new AdminGetUserCommand({
-        UserPoolId: userPoolId,
-        Username: username,
-      });
-
-      const response = await this.cognitoClient.send(command);
-      const mfaSettings = response.UserMFASettingList ?? [];
-      return mfaSettings.includes('SOFTWARE_TOKEN_MFA');
-    } catch (error) {
-      console.error(`Error getting MFA status for user ${username}:`, error);
-      throw error;
-    }
-  }
-
-  /**
-   * Enables MFA preference for a user (admin action)
-   * @param {string} username - Username of the user
-   * @param {string} userPoolId - Cognito User Pool ID
-   * @returns {Promise<void>}
-   */
-  async enableUserMFA(username, userPoolId) {
-    try {
-      const command = new AdminSetUserMFAPreferenceCommand({
-        UserPoolId: userPoolId,
-        Username: username,
-        SoftwareTokenMfaSettings: {
-          Enabled: true,
-          PreferredMfa: true,
-        },
-      });
-
-      await this.cognitoClient.send(command);
-    } catch (error) {
-      console.error(`Error enabling MFA for user ${username}:`, error);
-      throw error;
     }
   }
 }

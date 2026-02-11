@@ -155,11 +155,28 @@ export const mockCognitoIdentityProviderClient = {
       });
     }),
   })),
-  RespondToAuthChallengeCommand: vi.fn(),
-  InitiateAuthCommand: vi.fn(),
-  ForgotPasswordCommand: vi.fn(),
-  ConfirmForgotPasswordCommand: vi.fn(),
-  GetUserCommand: vi.fn(),
+  // Command constructors store input like real AWS SDK v3 commands
+  RespondToAuthChallengeCommand: vi.fn().mockImplementation(function (input) {
+    this.input = input;
+  }),
+  InitiateAuthCommand: vi.fn().mockImplementation(function (input) {
+    this.input = input;
+  }),
+  ForgotPasswordCommand: vi.fn().mockImplementation(function (input) {
+    this.input = input;
+  }),
+  ConfirmForgotPasswordCommand: vi.fn().mockImplementation(function (input) {
+    this.input = input;
+  }),
+  GetUserCommand: vi.fn().mockImplementation(function (input) {
+    this.input = input;
+  }),
+  AssociateSoftwareTokenCommand: vi.fn().mockImplementation(function (input) {
+    this.input = input;
+  }),
+  VerifySoftwareTokenCommand: vi.fn().mockImplementation(function (input) {
+    this.input = input;
+  }),
 };
 
 // Setup all mocks

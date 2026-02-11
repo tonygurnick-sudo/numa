@@ -282,7 +282,7 @@ const createFeatureSets = (props: {
     selfService: [
       {
         effect: 'Allow',
-        actions: ['cognito-idp:GetUser', 'cognito-idp:SetUserMFAPreference'],
+        actions: ['cognito-idp:GetUser'],
         resources: [`arn:aws:cognito-idp:${props.region}:${props.callerAccountId}:userpool/${props.userPoolId}`],
       },
     ],

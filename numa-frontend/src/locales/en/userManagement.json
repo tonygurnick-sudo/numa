@@ -7,7 +7,6 @@
     "createUser": "Create User",
     "view": "View",
     "deleteUser": "Delete User",
-    "resetMFA": "Reset MFA",
     "close": "Close",
     "cancel": "Cancel",
     "done": "Done"
@@ -93,9 +92,7 @@
     "qBusinessClient": "Q Business client not found",
     "webTokenCredentials": "Get web token credentials not found",
     "delete": "Failed to delete user",
-    "create": "Failed to create user",
-    "mfaReset": "Failed to reset MFA",
-    "mfaToggle": "Failed to toggle MFA"
+    "create": "Failed to create user"
   },
   "createModal": {
     "title": "Create New User",
@@ -153,13 +150,6 @@
         "admin": "Admin users can manage users, upload documents, and configure system settings.",
         "standard": "Standard users can use Numa chat and apps but cannot manage the system."
       }
-    },
-    "mfa": {
-      "label": "Two-Factor Authentication",
-      "enabled": "MFA enabled",
-      "disabled": "MFA disabled",
-      "loading": "Checking MFA status...",
-      "description": "Enable or disable two-factor authentication for this user."
     },
     "currentUserNotice": "This is your account. You cannot modify your own permissions.",
     "systemUserNotice": "System users cannot be modified.",
@@ -239,13 +229,5 @@
     "beforeBody": "Account deletion is permanent and irreversible.",
     "deleting": "Deleting Account...",
     "confirm": "Yes, Delete Account"
-  },
-  "mfaReset": {
-    "title": "Reset Two-Factor Authentication",
-    "warningTitle": "Reset MFA for this user?",
-    "warningBody": "This will remove the current authenticator app enrollment. The user will need to set up their authenticator again on their next login.",
-    "confirm": "Yes, Reset MFA",
-    "resetting": "Resetting MFA...",
-    "success": "MFA has been reset. The user will be prompted to set up their authenticator on next login."
   }
 }
