@@ -122,7 +122,7 @@ def validate_jwt(authorization: str | None) -> str:
         # Verify and decode the token
         payload = jwt.decode(
             token,
-            rsa_key,  # pyright: ignore[reportArgumentType]
+            rsa_key,  # type: ignore[arg-type]  # pyright: ignore[reportArgumentType]
             algorithms=["RS256"],
             audience=USER_POOL_CLIENT_ID,
             issuer=f"https://cognito-idp.{REGION}.amazonaws.com/{USER_POOL_ID}",
