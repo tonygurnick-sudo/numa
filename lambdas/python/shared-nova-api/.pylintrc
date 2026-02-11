@@ -5,6 +5,7 @@ disable=
     duplicate-code,
     fixme,
     format,
+    global-variable-not-assigned,
     import-outside-toplevel,
     invalid-name,
     logging-fstring-interpolation,
