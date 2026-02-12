@@ -100,12 +100,14 @@ export const ROUTE_CONFIG = [
   {
     path: '/files',
     element: () => <FilesPage />,
+    featureFlag: 'NUMA_FILES',
     nav: {
       label: 'Files',
       labelKey: 'nav.items.files',
       icon: 'bi bi-folder-fill',
       section: 'workflows',
       sectionKey: 'nav.sections.workflows',
+      featureFlag: 'NUMA_FILES',
       order: 5.5,
     },
   },

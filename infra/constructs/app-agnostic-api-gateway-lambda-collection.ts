@@ -607,58 +607,60 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
       ],
     });
 
-    // User Files API — per-user virtual file system with scoped access
-    this.addLambdaFunction(this, 'user-files', {
-      addAuthorizer: true,
-      lambdaDirectory: 'node/user-files',
-      runtime: 'nodejs22.x',
-      handler: 'index.handler',
-      environment: {
-        CLIENT_NAME: props.clientName,
-        REGION: props.region,
-        FILES_TABLE_NAME: props.filesTableName,
-        OUTPUTS_BUCKET_NAME: props.outputsBucketName,
-        EXTRACTION_LAMBDA_ARN: this.extractContentLambda.arn,
-        MAX_CONCURRENT_EXTRACTIONS: '5',
-      },
-      additionalPolicyStatements: [
-        {
-          effect: 'Allow',
-          actions: [
-            'dynamodb:Query',
-            'dynamodb:GetItem',
-            'dynamodb:PutItem',
-            'dynamodb:UpdateItem',
-            'dynamodb:DeleteItem',
-          ],
-          resources: [props.filesTableArn],
+    // User Files API — per-user virtual file system with scoped access (behind NUMA_FILES flag)
+    if (props.filesTableName && props.filesTableArn) {
+      this.addLambdaFunction(this, 'user-files', {
+        addAuthorizer: true,
+        lambdaDirectory: 'node/user-files',
+        runtime: 'nodejs22.x',
+        handler: 'index.handler',
+        environment: {
+          CLIENT_NAME: props.clientName,
+          REGION: props.region,
+          FILES_TABLE_NAME: props.filesTableName,
+          OUTPUTS_BUCKET_NAME: props.outputsBucketName,
+          EXTRACTION_LAMBDA_ARN: this.extractContentLambda.arn,
+          MAX_CONCURRENT_EXTRACTIONS: '5',
         },
-        {
-          effect: 'Allow',
-          actions: ['s3:PutObject', 's3:DeleteObject'],
-          resources: [`${props.outputsBucketArn}/files/*`],
-        },
-        {
-          effect: 'Allow',
-          actions: ['s3:GetObject'],
-          resources: [`${props.outputsBucketArn}/*`],
-        },
-        {
-          effect: 'Allow',
-          actions: ['s3:ListBucket'],
-          resources: [props.outputsBucketArn],
-        },
-        {
-          effect: 'Allow',
-          actions: ['lambda:InvokeFunction'],
-          resources: [this.extractContentLambda.arn],
-        },
-      ],
-      route: [
-        { verb: 'ANY', path: 'files' },
-        { verb: 'ANY', path: 'files/{proxy+}' },
-      ],
-    });
+        additionalPolicyStatements: [
+          {
+            effect: 'Allow',
+            actions: [
+              'dynamodb:Query',
+              'dynamodb:GetItem',
+              'dynamodb:PutItem',
+              'dynamodb:UpdateItem',
+              'dynamodb:DeleteItem',
+            ],
+            resources: [props.filesTableArn],
+          },
+          {
+            effect: 'Allow',
+            actions: ['s3:PutObject', 's3:DeleteObject'],
+            resources: [`${props.outputsBucketArn}/files/*`],
+          },
+          {
+            effect: 'Allow',
+            actions: ['s3:GetObject'],
+            resources: [`${props.outputsBucketArn}/*`],
+          },
+          {
+            effect: 'Allow',
+            actions: ['s3:ListBucket'],
+            resources: [props.outputsBucketArn],
+          },
+          {
+            effect: 'Allow',
+            actions: ['lambda:InvokeFunction'],
+            resources: [this.extractContentLambda.arn],
+          },
+        ],
+        route: [
+          { verb: 'ANY', path: 'files' },
+          { verb: 'ANY', path: 'files/{proxy+}' },
+        ],
+      });
+    }
 
     // Runner Lambda handles EventBridge + manual executions
     this.agentScheduleRunnerLambda = this.addLambdaFunction(this, 'agent-schedule-runner', {
@@ -1052,7 +1054,7 @@ export interface AppAgnosticApiGatewayLambdaCollectionProps
   /** Bedrock Knowledge Base data source ID for data sync scheduling (optional). */
   bedrockDataSourceId?: string;
   /** Files table name for per-user virtual file system. */
-  filesTableName: string;
+  filesTableName?: string;
   /** Files table ARN for IAM policy. */
-  filesTableArn: string;
+  filesTableArn?: string;
 }
