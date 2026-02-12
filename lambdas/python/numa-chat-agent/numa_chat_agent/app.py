@@ -890,29 +890,6 @@ async def http_stream(request: Request) -> Response:
                         chunk_count += 1
                         total_bytes += len(chunk_bytes)
 
-                        logger.info(
-                            "STREAM_CHUNK_GENERATED: Generated stream chunk without backpressure control",
-                            chunk_number=chunk_count,
-                            chunk_size_bytes=len(chunk_bytes),
-                            total_bytes=total_bytes,
-                            backpressure_control="NONE",
-                            rate_limiting="DISABLED",
-                        )
-
-                        if chunk_count % 50 == 0:  # Log every 50 chunks to avoid spam
-                            logger.debug(
-                                "STREAM_PROGRESS: Streaming in progress without flow control",
-                                chunks_sent=chunk_count,
-                                total_bytes=total_bytes,
-                                stream_duration_ms=round(
-                                    (time.time() - stream_start) * 1000, 2
-                                ),
-                                avg_chunk_size_bytes=round(total_bytes / chunk_count),
-                                streaming_rate_control="NONE",
-                            )
-
-                        # RELIABILITY RISK: Yielding chunk without backpressure control
-                        # Could cause memory pressure if client consumption is slow
                         yield chunk_bytes
 
                     stream_duration = time.time() - stream_start

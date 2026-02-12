@@ -9,7 +9,6 @@ import uuid
 from typing import Any, Dict
 
 import structlog
-from botocore.config import Config
 from botocore.exceptions import ClientError
 from botocore.session import Session
 
@@ -275,19 +274,6 @@ def _invoke_lambda_with_retry(
     Raises:
         Exception: After all retries are exhausted
     """
-    # Configure resilient client with timeouts
-    resilient_config = Config(
-        retries={"max_attempts": 1},  # We handle retries manually
-        read_timeout=base_timeout,
-        connect_timeout=10,
-        max_pool_connections=10,
-    )
-
-    # Create a new client with timeout configuration
-    resilient_lambda_client = lambda_client.__class__(
-        lambda_client.meta.region_name, config=resilient_config
-    )
-
     last_exception = None
     total_start = time.time()
 
@@ -310,7 +296,7 @@ def _invoke_lambda_with_retry(
         )
 
         try:
-            response = resilient_lambda_client.invoke(
+            response = lambda_client.invoke(
                 FunctionName=function_arn,
                 Payload=json.dumps(payload),
                 InvocationType="RequestResponse",
@@ -782,7 +768,7 @@ def invoke_pipedream_proxy(operation: str, external_user_id: str, **kwargs) -> D
         #         )
         #
         #         try:
-        #             response = resilient_lambda_client.invoke(
+        #             response = lambda_client.invoke(
         #                 FunctionName=function_arn,
         #                 Payload=json.dumps(payload),
         #                 InvocationType="RequestResponse"
@@ -909,20 +895,11 @@ def invoke_pipedream_proxy(operation: str, external_user_id: str, **kwargs) -> D
         #     lambda_client, PIPEDREAM_PROXY_LAMBDA_ARN, payload, invocation_id
         # )
 
-        # RELIABILITY IMPROVEMENT: Resilient Lambda invocation with timeout and retry
         response = _invoke_lambda_with_retry(
             lambda_client=lambda_client,
             function_arn=PIPEDREAM_PROXY_LAMBDA_ARN,
             payload=payload,
             invocation_id=invocation_id,
-        )
-
-        response = lambda_client.invoke(
-            FunctionName=PIPEDREAM_PROXY_LAMBDA_ARN,
-            Payload=json.dumps(payload),
-            InvocationType="RequestResponse",
-            max_retries=3,
-            base_timeout=30,
         )
         lambda_invocation_duration = time.time() - lambda_invocation_start
 

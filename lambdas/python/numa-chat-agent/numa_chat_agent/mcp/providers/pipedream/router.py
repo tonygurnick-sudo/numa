@@ -18,10 +18,8 @@ from __future__ import annotations
 
 import json
 import os
-import signal
 import time
 import uuid
-from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, Iterable, List, Optional
@@ -58,32 +56,6 @@ except ImportError:  # pragma: no cover
     BedrockClaude3Model = None  # type: ignore
 
 logger = structlog.get_logger(__name__)
-
-# ── Timeout Protection ──────────────────────────────────────────────────────
-
-
-@contextmanager
-def timeout_context(seconds):
-    """Context manager for timeout protection using signals.
-
-    Args:
-        seconds: Timeout duration in seconds
-    """
-
-    def timeout_handler(signum, frame):
-        raise TimeoutError(f"MCP operation timed out after {seconds} seconds")
-
-    # Set the signal handler
-    old_handler = signal.signal(signal.SIGALRM, timeout_handler)
-    signal.alarm(seconds)
-
-    try:
-        yield
-    finally:
-        # Restore the old signal handler
-        signal.signal(signal.SIGALRM, old_handler)
-        signal.alarm(0)
-
 
 # ── Material Tool Verification Configuration ──────────────────────────────────
 
@@ -1985,36 +1957,11 @@ class ToolsOnlyIntegrationRouter:
             #     )
             #     raise RuntimeError(f"MCP tool call timed out after {MCP_CALL_TIMEOUT_SECONDS}s")
 
-            # CURRENT IMPLEMENTATION - NO TIMEOUT PROTECTION
-            logger.info(
-                "RELIABILITY_IMPROVEMENT: MCP call executing with timeout protection",
-                integration=self.integration_name,
-                tool=definition.name,
-                timeout_seconds=30,
-                current_time=time.time(),
-                risk_assessment="HIGH",
-                reliability_status="UNPROTECTED",
-                protection="TIMEOUT_ENABLED",
+            result = self._mcp_client.call_tool_sync(
+                tool_use_id=tool_use_id,
+                name=definition.name,
+                arguments=payload,
             )
-
-            try:
-                with timeout_context(30):  # 30-second timeout
-                    result = self._mcp_client.call_tool_sync(
-                        tool_use_id=tool_use_id,
-                        name=definition.name,
-                        arguments=payload,
-                    )
-            except TimeoutError as e:
-                logger.error(
-                    "MCP_CALL_TIMEOUT: MCP tool call timed out",
-                    integration=self.integration_name,
-                    tool=definition.name,
-                    timeout_seconds=30,
-                    error=str(e),
-                )
-                raise Exception(
-                    f"Tool call timed out after 30 seconds: {definition.name}"
-                ) from e
             mcp_call_duration = time.time() - mcp_call_start
 
             logger.warning(
