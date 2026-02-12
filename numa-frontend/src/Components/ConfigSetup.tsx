@@ -34,6 +34,7 @@ const CONFIG_OPTIONAL_PROPERTIES = [
   'WORKSPACE_CHAT_AGENT_FUNCTION_URL', // Direct Lambda URL for streaming (bypasses CloudFront buffering)
   'SCHEDULING', // Feature flag for agent scheduling and notifications
   'NUMA_FILES', // Feature flag for Numa Files (file management)
+  'WORKSPACE_CHAT_MODEL_SELECTION', // Feature flag for model selection in Chat V2
 ];
 const CONFIG_PROPERTIES = [...CONFIG_REQUIRED_PROPERTIES, ...CONFIG_OPTIONAL_PROPERTIES];
 

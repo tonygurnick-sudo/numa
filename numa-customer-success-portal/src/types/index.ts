@@ -84,6 +84,7 @@ export const clientConfigSchema = z.object({
   brandingProviderEnabled: z.boolean().optional(), // default: false
   numaWorkspaceChat: z.boolean().optional(), // default: false
   scheduling: z.boolean().optional(), // default: false
+  workspaceChatModelSelection: z.boolean().optional(), // default: false
 
   // Data source configurations
   webCrawlerConfigs: z.array(webCrawlerConfigSchema).optional(),
@@ -123,6 +124,7 @@ export const getDefaultClientConfigValues = () => ({
   brandingProviderEnabled: false,
   numaWorkspaceChat: false,
   scheduling: false,
+  workspaceChatModelSelection: false,
   mfa: false,
 })
 

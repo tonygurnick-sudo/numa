@@ -78,6 +78,7 @@ export default function UpdateClientConfig() {
   const [brandingProviderEnabled, setBrandingProviderEnabled] = useState<boolean>(false)
   const [numaWorkspaceChat, setNumaWorkspaceChat] = useState<boolean>(false)
   const [scheduling, setScheduling] = useState<boolean>(false)
+  const [workspaceChatModelSelection, setWorkspaceChatModelSelection] = useState<boolean>(false)
   const [mfa, setMfa] = useState<boolean>(false)
   const [groupAdmin, setGroupAdmin] = useState(featuresListToString(DEFAULT_ADMIN_FEATURES))
   const [groupStandard, setGroupStandard] = useState(featuresListToString(DEFAULT_STANDARD_FEATURES))
@@ -139,6 +140,7 @@ export default function UpdateClientConfig() {
     setBrandingProviderEnabled(Boolean((cfg as any).brandingProviderEnabled))
     setNumaWorkspaceChat(Boolean((cfg as any).numaWorkspaceChat))
     setScheduling(Boolean((cfg as any).scheduling))
+    setWorkspaceChatModelSelection(Boolean((cfg as any).workspaceChatModelSelection))
     setMfa(Boolean((cfg as any).mfa))
     const groups = (cfg as unknown as Record<string, unknown>)['groups'] as { admin?: string[]; standard?: string[] } | undefined
     const adminList = (groups?.admin && groups.admin.length > 0) ? groups.admin : DEFAULT_ADMIN_FEATURES
@@ -163,6 +165,7 @@ export default function UpdateClientConfig() {
       brandingProviderEnabled: (current as any)?.brandingProviderEnabled ?? defaults.brandingProviderEnabled,
       numaWorkspaceChat: (current as any)?.numaWorkspaceChat ?? defaults.numaWorkspaceChat,
       scheduling: (current as any)?.scheduling ?? defaults.scheduling,
+      workspaceChatModelSelection: (current as any)?.workspaceChatModelSelection ?? defaults.workspaceChatModelSelection,
       provisionQResources: (current as any)?.provisionQResources ?? defaults.provisionQResources,
       preferredKnowledgeBase: ((current as any)?.preferredKnowledgeBase as 'q' | 'bedrock') ?? defaults.preferredKnowledgeBase,
       mfa: (current as any)?.mfa ?? defaults.mfa,
@@ -224,6 +227,7 @@ export default function UpdateClientConfig() {
     if (eff.brandingProviderEnabled !== brandingProviderEnabled) updates.brandingProviderEnabled = brandingProviderEnabled
     if (eff.numaWorkspaceChat !== numaWorkspaceChat) updates.numaWorkspaceChat = numaWorkspaceChat
     if (eff.scheduling !== scheduling) updates.scheduling = scheduling
+    if (eff.workspaceChatModelSelection !== workspaceChatModelSelection) updates.workspaceChatModelSelection = workspaceChatModelSelection
     if (eff.mfa !== mfa) updates.mfa = mfa
 
     // Ensure these new fields are written even if default and currently missing
@@ -472,6 +476,14 @@ export default function UpdateClientConfig() {
                       onChange={setScheduling}
                       type="switch"
                       helpText="Enable agent scheduling and notifications features"
+                    />
+                    <ConfigField
+                      label="Workspace Chat Model Selection"
+                      value={workspaceChatModelSelection}
+                      defaultValue={defaults.workspaceChatModelSelection}
+                      onChange={setWorkspaceChatModelSelection}
+                      type="switch"
+                      helpText="Allow users to select AI models in Chat V2"
                     />
                     <ConfigField
                       label="Multi-Factor Authentication (MFA)"

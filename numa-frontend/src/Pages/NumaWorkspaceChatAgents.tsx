@@ -719,6 +719,9 @@ const NumaWorkspaceChatAgents = () => {
     }
   };
 
+  // Model selection feature flag — when OFF (default), always use Sonnet 4.5
+  const modelSelectionEnabled = window.sessionStorage.getItem('WORKSPACE_CHAT_MODEL_SELECTION') === 'true';
+
   // Pipedream integration feature flags - check config instead of Cognito groups
   const hasPipedreamFeature = window.sessionStorage.getItem('PIPEDREAM_INTEGRATIONS') === 'true';
   const relayLambdaArn = window.sessionStorage.getItem('PIPEDREAM_RELAY_LAMBDA_ARN');
@@ -2002,7 +2005,7 @@ const NumaWorkspaceChatAgents = () => {
                               // Model selector props
                               selectedModelId={selectedModelId}
                               setSelectedModelId={setSelectedModelId}
-                              showModelSelector={true}
+                              showModelSelector={modelSelectionEnabled}
                               // Quick actions props
                               onQuickAction={handleQuickAction}
                               connectedIntegrations={connectedSet}
@@ -2123,7 +2126,7 @@ const NumaWorkspaceChatAgents = () => {
                               setEnabledKBIds={handleUserSetEnabledKBIds}
                               selectedModelId={selectedModelId}
                               setSelectedModelId={setSelectedModelId}
-                              showModelSelector={true}
+                              showModelSelector={modelSelectionEnabled}
                               onStop={stopStream}
                               isStopping={isStopping}
                               // V2 variant props
