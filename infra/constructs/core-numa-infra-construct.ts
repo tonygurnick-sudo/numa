@@ -77,7 +77,7 @@ export class CoreNumaInfra extends Construct {
   readonly dataConnectorsSyncConfigsTable: DynamodbTable;
   readonly sharedTable: DynamodbTable;
   readonly sharedChatHistoryTable: DynamodbTable;
-  readonly filesTable: DynamodbTable;
+  readonly filesTable?: DynamodbTable;
   readonly webCrawler: WebCrawlerConstruct;
   readonly cognitoGroups!: CognitoGroupsConstruct;
   readonly pipedreamRelayLambdaArn?: string;
@@ -718,21 +718,23 @@ export class CoreNumaInfra extends Construct {
     });
 
     // Files table for per-user virtual file system (My Files, Company, Projects)
-    this.filesTable = new DynamodbTable(this, 'numa-files-table', {
-      name: `${numaClient}-files`,
-      billingMode: 'PAY_PER_REQUEST',
-      hashKey: 'scope_key',
-      rangeKey: 'sk',
-      attribute: [
-        { name: 'scope_key', type: 'S' },
-        { name: 'sk', type: 'S' },
-      ],
-      tags: {
-        Name: `${numaClient}-files`,
-        Environment: props.environmentName,
-        Purpose: 'user-file-system',
-      },
-    });
+    if (props.numaFiles) {
+      this.filesTable = new DynamodbTable(this, 'numa-files-table', {
+        name: `${numaClient}-files`,
+        billingMode: 'PAY_PER_REQUEST',
+        hashKey: 'scope_key',
+        rangeKey: 'sk',
+        attribute: [
+          { name: 'scope_key', type: 'S' },
+          { name: 'sk', type: 'S' },
+        ],
+        tags: {
+          Name: `${numaClient}-files`,
+          Environment: props.environmentName,
+          Purpose: 'user-file-system',
+        },
+      });
+    }
 
     // Create config bucket and otel config
     const otelConfigKey = 'otel-config.yaml';
@@ -1492,6 +1494,12 @@ const _coreNumaInfraPropsSchema = z
      * @default false
      */
     agents: z.boolean().optional().default(false),
+    /**
+     * Whether to enable the Numa Files feature (file management page and backend).
+     *
+     * @default false
+     */
+    numaFiles: z.boolean().optional().default(false),
     /**
      * Additional origins to allow in the S3 bucket CORS policies.
      * Useful for whitelabel frontends that need to access the same S3 buckets.

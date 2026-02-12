@@ -437,8 +437,8 @@ export class NumaClientStack extends TerraformStack {
       agentScheduleRunnerSecret: agentScheduleSecretParam.value,
       bedrockKbId: knowledgeBase.knowledgeBaseId,
       bedrockDataSourceId: knowledgeBase.dataSourceId,
-      filesTableName: core.filesTable.name,
-      filesTableArn: core.filesTable.arn,
+      filesTableName: core.filesTable?.name,
+      filesTableArn: core.filesTable?.arn,
     });
 
     const appConfigsToDeploy = getAppConfigsToDeploy(
@@ -538,6 +538,7 @@ export class NumaClientStack extends TerraformStack {
         AGENTS: clientConfig.agents ?? false,
         NUMA_WORKSPACE_CHAT: clientConfig.numaWorkspaceChat ?? false,
         SCHEDULING: clientConfig.scheduling ?? false,
+        NUMA_FILES: clientConfig.numaFiles ?? false,
         // Direct Lambda Function URL for workspace chat agent (bypasses CloudFront buffering for streaming)
         WORKSPACE_CHAT_AGENT_FUNCTION_URL: workspaceChatAgentProxy?.functionUrl,
         NUMA_VERSION: siteVersion,
@@ -854,6 +855,13 @@ export const clientConfigSchema = coreNumaInfraPropsSchema
          * @default false
          */
         scheduling: z.boolean().optional().default(false),
+
+        /**
+         * Whether to enable the Numa Files feature (file management page and backend).
+         *
+         * @default false
+         */
+        numaFiles: z.boolean().optional().default(false),
       })
       .strict(),
   );
