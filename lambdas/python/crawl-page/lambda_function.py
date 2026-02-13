@@ -50,7 +50,7 @@ FALLBACK_USER_AGENT = (
 USER_AGENT = PRIMARY_USER_AGENT
 HTTP_TIMEOUT_SECONDS = 8
 MAX_CONTENT_BYTES = 5_242_880  # 5 MiB
-MAX_SAME_HOST_LINKS = 40  # Maximum number of same-host links to collect
+MAX_SAME_HOST_LINKS = 5000  # Maximum number of same-host links to collect
 
 # File streaming constants
 CHUNK_SIZE = 8 * 1024 * 1024  # 8MB chunks for faster downloads
