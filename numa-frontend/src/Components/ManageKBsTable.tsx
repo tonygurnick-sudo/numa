@@ -9,6 +9,7 @@ import { useTranslation } from 'react-i18next';
 import i18n from '../i18n';
 import { knowledgeBaseService, KnowledgeBase } from '../Services/knowledgeBaseService';
 import { useKnowledgeBase } from '../Providers/KnowledgeBaseProvider';
+import { SYSTEM_KB_IDS } from '../constants/knowledgeBase';
 
 interface ManageKBsTableProps {
   refreshKey?: number;
@@ -196,7 +197,7 @@ export function ManageKBsTable({ refreshKey = 0 }: ManageKBsTableProps): React.J
 
       // Fetch full details for each KB (only for editors)
       const detailsPromises = userKBs
-        .filter((kb) => kb.role === 'EDITOR')
+        .filter((kb) => kb.role === 'EDITOR' && !SYSTEM_KB_IDS.has(kb.kb_id))
         .map((kb) =>
           knowledgeBaseService.getKB(kb.kb_id).catch((err) => {
             console.error(`Error fetching KB ${kb.kb_id}:`, err);

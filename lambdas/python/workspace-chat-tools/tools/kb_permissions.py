@@ -18,6 +18,9 @@ logger = structlog.get_logger()
 REGION = os.getenv("AWS_REGION", "us-east-1")
 CLIENT_NAME = os.getenv("CLIENT_NAME", "")
 
+# System KBs that are accessible to all authenticated users.
+SYSTEM_KB_IDS = {"company", "numa-support"}
+
 # DynamoDB client (lazy initialization)
 _dynamodb_client = None
 
@@ -28,6 +31,20 @@ def _get_dynamodb_client():
     if _dynamodb_client is None:
         _dynamodb_client = prm_client("dynamodb", region=REGION)
     return _dynamodb_client
+
+
+def _extract_string_list(attr: dict) -> list:
+    """Extract a list of strings from a DynamoDB attribute.
+
+    Handles both SS (String Set) and L (List of Maps) types:
+      {"SS": ["*"]}         -> ["*"]
+      {"L": [{"S": "abc"}]} -> ["abc"]
+    """
+    if "SS" in attr:
+        return list(attr["SS"])
+    if "L" in attr:
+        return [v["S"] for v in attr["L"] if isinstance(v, dict) and "S" in v]
+    return []
 
 
 def verify_kb_access(
@@ -67,9 +84,13 @@ def verify_kb_access(
         )
         return False
 
-    # Company KB is accessible to all authenticated users
-    if kb_id == "company":
-        logger.debug("Company KB access granted", user_sub=user_sub[:8] + "...")
+    # System KBs (company, numa-support) are accessible to all authenticated users.
+    if kb_id in SYSTEM_KB_IDS:
+        logger.debug(
+            "System KB access granted",
+            kb_id=kb_id,
+            user_sub=user_sub[:8] + "...",
+        )
         return True
 
     # Look up KB permissions in DynamoDB
@@ -96,14 +117,19 @@ def verify_kb_access(
 
         item = response["Item"]
 
-        # Extract permission lists
-        viewers = [v["S"] for v in item.get("viewers", {}).get("L", [])]
-        editors = [e["S"] for e in item.get("editors", {}).get("L", [])]
+        # Extract permission lists.
+        # Viewers/editors may be stored as SS (String Set) or L (List of Maps).
+        # The seed-default-kb Lambda writes SS; user KBs may use L.
+        viewers = _extract_string_list(item.get("viewers", {}))
+        editors = _extract_string_list(item.get("editors", {}))
         created_by = item.get("created_by", {}).get("S", "")
 
-        # Check if user has access
+        # Wildcard "*" means all authenticated users have access.
         has_access = (
-            user_sub in viewers or user_sub in editors or user_sub == created_by
+            "*" in viewers
+            or user_sub in viewers
+            or user_sub in editors
+            or user_sub == created_by
         )
 
         logger.info(

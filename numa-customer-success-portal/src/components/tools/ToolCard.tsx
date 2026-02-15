@@ -35,6 +35,8 @@ export function ToolCard({ tool, disabled = false }: ToolCardProps) {
         return '/tools/get-system-user-secret'
       case 'bulk-update-client-config':
         return '/tools/bulk-update-client-config'
+      case 'support-docs-manager':
+        return '/tools/support-docs-manager'
       default:
         return '/'
     }
@@ -63,6 +65,7 @@ export function ToolCard({ tool, disabled = false }: ToolCardProps) {
       case 'delete-client-config':
       case 'get-system-user-secret':
       case 'bulk-update-client-config':
+      case 'support-docs-manager':
         return <Play className="me-2" />
       default:
         return <Play className="me-2" />

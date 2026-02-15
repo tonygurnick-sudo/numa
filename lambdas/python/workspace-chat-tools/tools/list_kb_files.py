@@ -29,6 +29,7 @@ DATA_BUCKET_NAME = os.getenv("DATA_BUCKET_NAME", "")
 
 # Constants
 MAX_ITEMS_PER_KB = 30  # Limit items shown per KB to keep prompts concise
+SYSTEM_KB_IDS = {"company", "numa-support"}
 
 
 def _get_s3_kb_id(kb_id: str) -> str:
@@ -38,7 +39,7 @@ def _get_s3_kb_id(kb_id: str) -> str:
     S3 paths use 'documents/company/' for company KB
     and 'documents/kb-{uuid}/' for user KBs.
     """
-    if kb_id == "company":
+    if kb_id in SYSTEM_KB_IDS:
         return kb_id
     if kb_id.startswith("kb-"):
         return kb_id

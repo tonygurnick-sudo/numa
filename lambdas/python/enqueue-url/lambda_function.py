@@ -37,6 +37,7 @@ dynamodb = prm_resource("dynamodb")
 
 REQUIRED_EVENT_FIELDS: Sequence[str] = ("url", "userId")
 MIN_DEPTH, MAX_DEPTH = 1, 5
+READ_ONLY_KB_IDS = {"numa-support"}
 
 
 class CrawlUrlRequest(TypedDict):
@@ -69,6 +70,13 @@ def _validate_depth(depth: int) -> None:
         )
 
 
+def _validate_kb_id(kb_id: str) -> str:
+    normalized = str(kb_id).strip() or "company"
+    if normalized in READ_ONLY_KB_IDS:
+        raise ValueError(f"Web crawler cannot target read-only KB '{normalized}'")
+    return normalized
+
+
 def _validate_request(
     event: Dict[str, Any] | EnqueueUrlEvent,
 ) -> Optional[CrawlUrlRequest]:
@@ -92,6 +100,7 @@ def _validate_request(
 
     depth = int(event.get("crawlDepth", MIN_DEPTH))
     _validate_depth(depth)
+    kb_id = _validate_kb_id(str(event.get("kbId", "company")))
 
     return {
         "url": url,
@@ -99,7 +108,7 @@ def _validate_request(
         "crawlDepth": depth,
         "userId": str(event["userId"]),
         "crawlSessionId": str(event.get("crawlSessionId", "unknown")),
-        "kbId": str(event.get("kbId", "company")),
+        "kbId": kb_id,
         "isSeedUrl": bool(event.get("isSeedUrl", False)),
         "limitToPath": bool(event.get("limitToPath", True)),
         "seedUrlPrefix": event.get("seedUrlPrefix"),

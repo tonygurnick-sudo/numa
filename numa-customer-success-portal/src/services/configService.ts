@@ -21,6 +21,7 @@ const CONFIG_OPTIONAL_PROPERTIES = [
   'ACTIVITY_TABLE',
   'NEXTGEN_BROKER_LAMBDA',
   'NEXTGEN_BROKER_REGION',
+  'SUPPORT_DOCS_BUCKET',
 ];
 
 const CONFIG_PROPERTIES = [...CONFIG_REQUIRED_PROPERTIES, ...CONFIG_OPTIONAL_PROPERTIES];
@@ -43,6 +44,7 @@ export interface PortalConfig {
   ACTIVITY_TABLE?: string;
   NEXTGEN_BROKER_LAMBDA?: string;
   NEXTGEN_BROKER_REGION?: string;
+  SUPPORT_DOCS_BUCKET?: string;
 }
 
 export const fetchConfigAndAddToSession = async (forceRefresh = false): Promise<void> => {

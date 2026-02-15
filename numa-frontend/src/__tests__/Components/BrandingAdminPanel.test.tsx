@@ -140,11 +140,7 @@ describe('BrandingAdminPanel', () => {
   it('saves changes without creating a version from the primary button', async () => {
     renderWithProviders(<BrandingAdminPanel />);
 
-    await waitFor(() => {
-      expect(serviceMocks.mockFetchConfig).toHaveBeenCalled();
-    });
-
-    const nameInput = screen.getByLabelText('Brand Name') as HTMLInputElement;
+    const nameInput = (await screen.findByLabelText('Brand Name')) as HTMLInputElement;
     fireEvent.change(nameInput, { target: { value: 'Updated Brand' } });
 
     // Find the Save Changes button that is NOT disabled (the one that becomes enabled after making changes)

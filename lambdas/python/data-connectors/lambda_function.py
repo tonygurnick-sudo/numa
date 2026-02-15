@@ -36,6 +36,7 @@ CLIENT_NAME = os.environ.get("CLIENT_NAME")
 SECRETS_PREFIX = os.environ.get("DATA_CONNECTORS_SECRETS_PREFIX")
 SETTINGS_TABLE_NAME = os.environ.get("DATA_CONNECTORS_SETTINGS_TABLE_NAME")
 SYNC_CONFIGS_TABLE_NAME = os.environ.get("DATA_CONNECTORS_SYNC_CONFIGS_TABLE_NAME")
+SYSTEM_KB_IDS = {"company", "numa-support"}
 
 
 def _response(status: int, body: Dict[str, Any]) -> Dict[str, Any]:
@@ -99,6 +100,16 @@ def _parse_body(event: Dict[str, Any]) -> Dict[str, Any]:
         return json.loads(body)
     except json.JSONDecodeError:
         return {}
+
+
+def _validate_target_kb_id(target_kb_id: Any) -> Optional[str]:
+    """Reject system-managed KB IDs as connector targets."""
+    normalized = str(target_kb_id).strip() if target_kb_id is not None else ""
+    if not normalized:
+        return "target_kb_id is required"
+    if normalized in SYSTEM_KB_IDS:
+        return f"target_kb_id '{normalized}' is read-only and cannot be used for data connectors"
+    return None
 
 
 def _handle_status(user_id: str, table_name: str) -> Dict[str, Any]:
@@ -290,6 +301,9 @@ def _handle_sync_configs_create(
             400,
             {"error": "synergy_job_id, synergy_job_name, target_kb_id are required"},
         )
+    kb_validation_error = _validate_target_kb_id(target_kb_id)
+    if kb_validation_error:
+        return _response(403, {"error": kb_validation_error})
     selected_folders = body.get("selected_folders") or []
     skip_unsupported_files = bool(body.get("skip_unsupported_files"))
     include_all_folders = bool(body.get("include_all_folders"))
@@ -319,6 +333,9 @@ def _handle_sync_configs_update(
             400,
             {"error": "synergy_job_id, synergy_job_name, target_kb_id are required"},
         )
+    kb_validation_error = _validate_target_kb_id(target_kb_id)
+    if kb_validation_error:
+        return _response(403, {"error": kb_validation_error})
     selected_folders = body.get("selected_folders") or []
     skip_unsupported_files = bool(body.get("skip_unsupported_files"))
     include_all_folders = bool(body.get("include_all_folders"))

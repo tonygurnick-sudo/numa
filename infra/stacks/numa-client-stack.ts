@@ -179,8 +179,16 @@ export class NumaClientStack extends TerraformStack {
             bedrockParserModel: clientConfig.bedrockParserModel,
           });
 
+    // Include CS Portal origin in data bucket CORS so the Support Docs Manager
+    // tool can write support docs into client buckets from the browser.
+    const portalOrigin = `https://customer-success-portal.${props.domainSuffix}`;
+    const coreAdditionalOrigins = clientConfig.additionalOrigins
+      ? [...clientConfig.additionalOrigins, portalOrigin]
+      : [portalOrigin];
+
     const core = new CoreNumaInfra(this, 'numa', {
       ...clientConfig,
+      additionalOrigins: coreAdditionalOrigins,
       environmentName: props.environmentName,
       qBusinessProvider: qBusinessProvider,
       knowledgeBase: knowledgeBase,

@@ -26,6 +26,7 @@ MAX_PAGES = 10000
 MAX_STATS_LIMIT = 2000
 DEFAULT_KB_ID = "company"
 DEFAULT_INDEX_NAME = "kbId-status-index"
+READ_ONLY_KB_IDS = {"numa-support"}
 
 logger = structlog.get_logger()
 step_function_client = prm_client("stepfunctions")
@@ -125,14 +126,35 @@ def _fetch_crawler_stats(
     }
 
 
+def _validate_writable_kb_id(kb_id: Any) -> tuple[bool, str]:
+    """Validate the requested KB ID for crawler write operations."""
+    normalized = str(kb_id or DEFAULT_KB_ID).strip() or DEFAULT_KB_ID
+    if normalized in READ_ONLY_KB_IDS:
+        return False, normalized
+    return True, normalized
+
+
 def _start_crawler(body: Dict[str, Any], headers: Dict[str, str]) -> Dict[str, Any]:
     user_id = body.get("userId", "anonymous")
     urls = body.get("urls", [])
     max_pages = MAX_PAGES
     max_depth = min(body.get("maxDepth", 5), 5)
     url_depth_map = body.get("urlDepthMap", {})
-    kb_id = body.get("kb_id", DEFAULT_KB_ID)
+    kb_allowed, kb_id = _validate_writable_kb_id(body.get("kb_id", DEFAULT_KB_ID))
     limit_to_path = body.get("limitToPath", True)
+
+    if not kb_allowed:
+        return {
+            "statusCode": 403,
+            "headers": headers,
+            "body": json.dumps(
+                {
+                    "success": False,
+                    "error": "Read-only knowledge base",
+                    "message": f"Web crawler cannot target read-only KB '{kb_id}'",
+                }
+            ),
+        }
 
     if not urls:
         return {
@@ -251,7 +273,21 @@ def handler(
 
         if http_method == "GET":
             query_params = raw_event.get("queryStringParameters") or {}
-            kb_id = query_params.get("kb_id", DEFAULT_KB_ID)
+            kb_allowed, kb_id = _validate_writable_kb_id(
+                query_params.get("kb_id", DEFAULT_KB_ID)
+            )
+            if not kb_allowed:
+                return {
+                    "statusCode": 403,
+                    "headers": headers,
+                    "body": json.dumps(
+                        {
+                            "success": False,
+                            "error": "Read-only knowledge base",
+                            "message": f"Web crawler stats are not available for read-only KB '{kb_id}'",
+                        }
+                    ),
+                }
             limit = int(query_params.get("limit", MAX_STATS_LIMIT))
             next_token = query_params.get("nextToken")
 
