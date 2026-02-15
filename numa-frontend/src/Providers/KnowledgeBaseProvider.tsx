@@ -7,6 +7,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback, use
 import { knowledgeBaseService, UserKB } from '../Services/knowledgeBaseService';
 import i18n from '../i18n';
 import { useAuth } from './AuthProvider';
+import { COMPANY_KB_ID, NUMA_SUPPORT_KB_ID, SYSTEM_KB_IDS } from '../constants/knowledgeBase';
 
 interface KnowledgeBaseContextType {
   // Current selected KB
@@ -36,8 +37,16 @@ const KB_STORAGE_KEY = 'numa_selected_kb';
  */
 function getDefaultCompanyKB(): UserKB {
   return {
-    kb_id: 'company',
+    kb_id: COMPANY_KB_ID,
     kb_name: i18n.t('knowledgeBase:selector.companyKbName'),
+    role: 'VIEWER',
+  };
+}
+
+function getDefaultNumaSupportKB(): UserKB {
+  return {
+    kb_id: NUMA_SUPPORT_KB_ID,
+    kb_name: i18n.t('knowledgeBase:selector.numaSupportKbName'),
     role: 'VIEWER',
   };
 }
@@ -51,15 +60,18 @@ function sanitizeUserKB(kb: UserKB | null | undefined): UserKB | null {
     return null;
   }
   const companyName = i18n.t('knowledgeBase:selector.companyKbName');
+  const numaSupportName = i18n.t('knowledgeBase:selector.numaSupportKbName');
   const isShared = typeof kb.is_shared === 'boolean' ? kb.is_shared : kb.role === 'VIEWER';
   return {
     kb_id: kbId,
     kb_name:
-      kbId === 'company'
+      kbId === COMPANY_KB_ID
         ? companyName
-        : typeof kb.kb_name === 'string' && kb.kb_name.trim().length > 0
-          ? kb.kb_name
-          : kbId,
+        : kbId === NUMA_SUPPORT_KB_ID
+          ? numaSupportName
+          : typeof kb.kb_name === 'string' && kb.kb_name.trim().length > 0
+            ? kb.kb_name
+            : kbId,
     role: kb.role === 'EDITOR' || kb.role === 'OWNER' ? kb.role : 'VIEWER',
     is_shared: isShared,
     document_count: kb.document_count,
@@ -152,17 +164,25 @@ export function KnowledgeBaseProvider({ children }: { children: React.ReactNode 
       }
       const sanitizedKbs = kbs.map((kb) => sanitizeUserKB(kb)).filter((kb): kb is UserKB => kb !== null);
 
-      // Ensure the default "company" knowledge base is always present so users can
-      // select it even if the API only returns user-specific KBs.
-      const hasCompanyKb = sanitizedKbs.some((kb) => kb.kb_id === 'company');
-      const augmentedKbs: UserKB[] = hasCompanyKb ? sanitizedKbs : [getDefaultCompanyKB(), ...sanitizedKbs];
+      // Ensure system KBs are always present for chat selection, even if backend listing
+      // is temporarily stale or missing.
+      const hasCompanyKb = sanitizedKbs.some((kb) => kb.kb_id === COMPANY_KB_ID);
+      const hasNumaSupportKb = sanitizedKbs.some((kb) => kb.kb_id === NUMA_SUPPORT_KB_ID);
+      const systemKbsToAdd: UserKB[] = [];
+      if (!hasCompanyKb) {
+        systemKbsToAdd.push(getDefaultCompanyKB());
+      }
+      if (!hasNumaSupportKb) {
+        systemKbsToAdd.push(getDefaultNumaSupportKB());
+      }
+      const augmentedKbs: UserKB[] = [...systemKbsToAdd, ...sanitizedKbs];
 
       setAvailableKBs(augmentedKbs);
 
       // Use setSelectedKB with a function to avoid dependency on selectedKB state
       setSelectedKBState((currentSelected) => {
-        // Always ensure "company" KB exists and set it as default if no KB is selected
-        const companyKB = augmentedKbs.find((kb) => kb.kb_id === 'company');
+        // Always ensure "company" KB exists and set it as default if no KB is selected.
+        const companyKB = augmentedKbs.find((kb) => kb.kb_id === COMPANY_KB_ID);
         if (companyKB) {
           // If no KB is selected, or selected KB no longer exists, default to company KB
           if (!currentSelected || !augmentedKbs.find((kb) => kb.kb_id === currentSelected.kb_id)) {
@@ -198,7 +218,7 @@ export function KnowledgeBaseProvider({ children }: { children: React.ReactNode 
       setKbError(errorMessage);
 
       // On error, default to company KB
-      setAvailableKBs([getDefaultCompanyKB()]);
+      setAvailableKBs([getDefaultCompanyKB(), getDefaultNumaSupportKB()]);
       setSelectedKBState((currentSelected) => {
         if (!currentSelected) {
           setSelectedKbId(getDefaultCompanyKB().kb_id);
@@ -238,8 +258,8 @@ export function KnowledgeBaseProvider({ children }: { children: React.ReactNode 
   const fetchKBDetails = useCallback(
     async (kbId: string) => {
       const normalizedId = typeof kbId === 'string' ? kbId.trim() : '';
-      if (!normalizedId || normalizedId === 'company') {
-        // Skip for company KB or invalid IDs
+      if (!normalizedId || SYSTEM_KB_IDS.has(normalizedId)) {
+        // Skip for system KBs or invalid IDs
         return;
       }
 

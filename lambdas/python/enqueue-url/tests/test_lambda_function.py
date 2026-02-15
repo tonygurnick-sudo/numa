@@ -67,6 +67,17 @@ class TestEnqueueUrl(unittest.TestCase):
                 }
             )
 
+    def test_validate_request_rejects_read_only_kb(self):
+        """Read-only KBs should not be accepted as crawl targets."""
+        with self.assertRaises(ValueError):
+            _validate_request(
+                {
+                    "url": "https://example.com",
+                    "userId": "user123",
+                    "kbId": "numa-support",
+                }
+            )
+
     @patch("lambda_function._validate_request")
     def test_handler_validation_error(self, mock_validate):
         """Test handler handles validation errors"""

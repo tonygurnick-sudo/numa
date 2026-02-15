@@ -106,6 +106,35 @@ class TestWebCrawlerStart(TestCase):
         mock_step_function_client.start_execution.assert_not_called()
 
     @mock.patch("lambda_function.step_function_client")
+    def test_handler_rejects_read_only_kb(self, mock_step_function_client):
+        event = APIGatewayProxyEvent(
+            {
+                "body": json.dumps(
+                    {
+                        "urls": ["https://example.com"],
+                        "kb_id": "numa-support",
+                        "userId": "test-user-id",
+                    }
+                ),
+                "requestContext": {
+                    "authorizer": {
+                        "claims": {
+                            "sub": "test-user-id",
+                        }
+                    }
+                },
+            }
+        )
+
+        response = lambda_function.handler(event, None)
+        payload = json.loads(response["body"])
+
+        self.assertEqual(response["statusCode"], 403)
+        self.assertFalse(payload["success"])
+        self.assertIn("Read-only knowledge base", payload["error"])
+        mock_step_function_client.start_execution.assert_not_called()
+
+    @mock.patch("lambda_function.step_function_client")
     def test_handler_url_depth_map(self, mock_step_function_client):
         # Mock the step function client response
         mock_step_function_client.start_execution.return_value = {
@@ -252,3 +281,20 @@ class TestWebCrawlerStart(TestCase):
         self.assertEqual(domains["example.com"]["pageCount"], 2)
         self.assertEqual(domains["example.com"]["lastCrawled"], "2024-01-02T00:00:00Z")
         self.assertEqual(domains["example.org"]["pageCount"], 1)
+
+    @mock.patch("lambda_function.dynamodb")
+    def test_handler_stats_rejects_read_only_kb(self, mock_dynamodb):
+        event = APIGatewayProxyEvent(
+            {
+                "requestContext": {"http": {"method": "GET"}},
+                "queryStringParameters": {"kb_id": "numa-support", "limit": "10"},
+            }
+        )
+
+        response = lambda_function.handler(event, None)
+        payload = json.loads(response["body"])
+
+        self.assertEqual(response["statusCode"], 403)
+        self.assertFalse(payload["success"])
+        self.assertIn("Read-only knowledge base", payload["error"])
+        mock_dynamodb.Table.assert_not_called()

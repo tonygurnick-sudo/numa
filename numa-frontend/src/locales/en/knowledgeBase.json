@@ -22,6 +22,7 @@
     "label": "Knowledge Base:",
     "defaultBadge": "Default",
     "companyKbName": "Company Knowledge Base",
+    "numaSupportKbName": "Numa Support",
     "selectPlaceholder": "Select KB",
     "header": "Your Knowledge Bases",
     "empty": "No KBs available",

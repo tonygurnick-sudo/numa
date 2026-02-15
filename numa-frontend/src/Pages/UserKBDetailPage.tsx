@@ -22,6 +22,7 @@ import { useFilePreviewProcessor } from '../hooks/useFilePreviewProcessor';
 import type { FileReference } from '../hooks/useFilePreviewProcessor';
 import ResizableSplitView from '../Components/ResizableSplitView';
 import { FilePreviewPanel } from '../Components/FilePreviewPanel';
+import { SYSTEM_KB_IDS } from '../constants/knowledgeBase';
 
 export function UserKBDetailPage(): React.JSX.Element {
   const { t } = useTranslation('knowledgeBase');
@@ -90,6 +91,10 @@ export function UserKBDetailPage(): React.JSX.Element {
 
   // Redirect if KB not found
   useEffect(() => {
+    if (kbId && SYSTEM_KB_IDS.has(kbId)) {
+      navigate('/user-knowledge-bases');
+      return;
+    }
     if (!currentKB && availableKBs.length > 0 && kbId) {
       console.error('KB not found:', kbId);
       navigate('/user-knowledge-bases');

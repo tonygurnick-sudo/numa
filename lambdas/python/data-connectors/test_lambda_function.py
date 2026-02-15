@@ -23,17 +23,20 @@ class TestLambdaFunction(unittest.TestCase):
         self._prev_client = lambda_function.CLIENT_NAME
         self._prev_prefix = lambda_function.SECRETS_PREFIX
         self._prev_settings = lambda_function.SETTINGS_TABLE_NAME
+        self._prev_sync_configs = lambda_function.SYNC_CONFIGS_TABLE_NAME
 
         lambda_function.TABLE_NAME = "table-name"
         lambda_function.CLIENT_NAME = "client-name"
         lambda_function.SECRETS_PREFIX = "prefix"
         lambda_function.SETTINGS_TABLE_NAME = None
+        lambda_function.SYNC_CONFIGS_TABLE_NAME = "sync-configs-table"
 
     def tearDown(self) -> None:
         lambda_function.TABLE_NAME = self._prev_table
         lambda_function.CLIENT_NAME = self._prev_client
         lambda_function.SECRETS_PREFIX = self._prev_prefix
         lambda_function.SETTINGS_TABLE_NAME = self._prev_settings
+        lambda_function.SYNC_CONFIGS_TABLE_NAME = self._prev_sync_configs
 
     def _event(
         self, method: str, path: str, body: Dict[str, Any] | None = None
@@ -144,6 +147,49 @@ class TestLambdaFunction(unittest.TestCase):
         )
         response = lambda_function.handler(event, None)  # type: ignore[arg-type]
         self.assertEqual(response["statusCode"], 400)
+
+    @patch("lambda_function.create_sync_config")
+    def test_sync_config_rejects_system_kb(self, mock_create_sync_config) -> None:
+        event = self._event(
+            "POST",
+            "/data-connectors/sync-configs",
+            body={
+                "synergy_job_id": "job-123",
+                "synergy_job_name": "Job 123",
+                "target_kb_id": "numa-support",
+                "selected_folders": [],
+                "skip_unsupported_files": False,
+                "include_all_folders": True,
+            },
+        )
+        response = lambda_function.handler(event, None)  # type: ignore[arg-type]
+        self.assertEqual(response["statusCode"], 403)
+        payload = json.loads(response["body"])
+        self.assertIn("read-only", payload["error"])
+        mock_create_sync_config.assert_not_called()
+
+    @patch("lambda_function.create_sync_config")
+    def test_sync_config_create_success_for_user_kb(
+        self, mock_create_sync_config
+    ) -> None:
+        mock_create_sync_config.return_value = {"sync_config_id": "cfg-1"}
+        event = self._event(
+            "POST",
+            "/data-connectors/sync-configs",
+            body={
+                "synergy_job_id": "job-123",
+                "synergy_job_name": "Job 123",
+                "target_kb_id": "kb-uuid-1",
+                "selected_folders": [],
+                "skip_unsupported_files": False,
+                "include_all_folders": True,
+            },
+        )
+        response = lambda_function.handler(event, None)  # type: ignore[arg-type]
+        self.assertEqual(response["statusCode"], 200)
+        payload = json.loads(response["body"])
+        self.assertEqual(payload["item"]["sync_config_id"], "cfg-1")
+        mock_create_sync_config.assert_called_once()
 
 
 def _write_placeholder_coverage() -> None:

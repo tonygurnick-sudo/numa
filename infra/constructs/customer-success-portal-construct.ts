@@ -75,6 +75,10 @@ export interface CustomerSuccessPortalConstructProps {
   nextgenBrokerLambdaName?: string;
   /** Optional: NextGen broker region */
   nextgenBrokerRegion?: string;
+  /** Optional: support docs master bucket ARN for CS docs management */
+  supportDocsBucketArn?: string;
+  /** Optional: support docs master bucket name exposed to portal config */
+  supportDocsBucketName?: string;
 }
 
 export class CustomerSuccessPortalConstruct extends Construct {
@@ -516,6 +520,18 @@ export class CustomerSuccessPortalConstruct extends Construct {
         ],
       });
     }
+    if (props.supportDocsBucketArn) {
+      baseStatements.push({
+        effect: 'Allow',
+        actions: ['s3:ListBucket'],
+        resources: [props.supportDocsBucketArn],
+      });
+      baseStatements.push({
+        effect: 'Allow',
+        actions: ['s3:GetObject', 's3:PutObject', 's3:DeleteObject'],
+        resources: [`${props.supportDocsBucketArn}/*`],
+      });
+    }
 
     new IamRolePolicy(this, 'authenticated-policy', {
       name: 'customer-success-portal-authenticated-policy',
@@ -618,6 +634,9 @@ export class CustomerSuccessPortalConstruct extends Construct {
     }
     if (props.deploymentGroupMaxConcurrency !== undefined) {
       portalConfig['DEPLOYMENT_GROUP_MAX_CONCURRENCY'] = props.deploymentGroupMaxConcurrency;
+    }
+    if (props.supportDocsBucketName) {
+      portalConfig['SUPPORT_DOCS_BUCKET'] = props.supportDocsBucketName;
     }
 
     new S3Object(this, 'portal-config', {

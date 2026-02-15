@@ -13,6 +13,7 @@ import type { DataConnectorStatus } from '../types/dataConnectors';
 import type { SynergyFolderItemsResponse, SynergyJob, SyncConfig } from '../types/synergySync';
 import { LayoutDashboard } from '../Layouts/LayoutDashboard';
 import { SynergyIcon } from '../Components/DataConnectors/SynergyConnectorCard';
+import { SYSTEM_KB_IDS } from '../constants/knowledgeBase';
 
 export const DataConnectorsPage = () => {
   const { t } = useTranslation('integrations');
@@ -106,9 +107,9 @@ export const DataConnectorsPage = () => {
       setLoadError(null);
       setLoadingKbs(true);
       const items = await knowledgeBaseService.listUserKBs();
-      const filtered = items.filter((kb) => kb.kb_id !== 'company');
+      const filtered = items.filter((kb) => !SYSTEM_KB_IDS.has(kb.kb_id));
       setKbs(filtered);
-      if (selectedKbId === 'company') {
+      if (selectedKbId && SYSTEM_KB_IDS.has(selectedKbId)) {
         setSelectedKbId(null);
       }
       if (!selectedKbId) {

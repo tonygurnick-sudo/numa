@@ -43,6 +43,7 @@ QB_APPLICATION_ID = os.getenv("Q_APPLICATION_ID")
 QB_RETRIEVER_ID = os.getenv("Q_RETRIEVER_ID")
 BEDROCK_KNOWLEDGE_BASE_ID = os.getenv("BEDROCK_KNOWLEDGE_BASE_ID")
 FAST_MODEL_ID = os.getenv("FAST_MODEL_ID", "global.amazon.nova-2-lite-v1:0")
+SYSTEM_KB_IDS = {"company", "numa-support"}
 
 
 # =============================================================================
@@ -653,6 +654,10 @@ def verify_kb_write_access(user_sub: str, kb_id: str) -> bool:
     Returns:
         True if user can write to the KB, False otherwise
     """
+    # Numa Support KB is read-only and managed by the CS portal.
+    if kb_id == "numa-support":
+        return False
+
     # Company KB: only admins can upload (check Cognito group)
     if kb_id == "company":
         return is_user_admin(user_sub)
@@ -676,7 +681,15 @@ def verify_kb_write_access(user_sub: str, kb_id: str) -> bool:
             return False
 
         item = response["Item"]
-        editors = [e["S"] for e in item.get("editors", {}).get("L", [])]
+        editors_attr = item.get("editors", {})
+        if "SS" in editors_attr:
+            editors = list(editors_attr.get("SS", []))
+        else:
+            editors = [
+                editor.get("S", "")
+                for editor in editors_attr.get("L", [])
+                if isinstance(editor, dict) and editor.get("S")
+            ]
         created_by = item.get("created_by", {}).get("S", "")
 
         has_access = user_sub in editors or user_sub == created_by
@@ -764,11 +777,8 @@ def handle_add_to_kb(params: Dict[str, Any]) -> Dict[str, Any]:
         logger.warning("KB write access denied - no user_sub provided", kb_id=kb_id)
         raise ValueError("Access denied: User identity required for uploads")
 
-    # Build S3 key - use "kb-" prefix for user KBs (company KB is special case)
-    if kb_id == "company":
-        prefix_part = "company"
-    else:
-        prefix_part = f"kb-{kb_id}"
+    # Build S3 key - keep system KB ids as-is, prefix user KBs with "kb-".
+    prefix_part = _get_s3_kb_id(kb_id)
 
     if kb_path:
         s3_key = f"documents/{prefix_part}/{kb_path}/{filename}"
@@ -927,7 +937,7 @@ def _get_s3_kb_id(kb_id: str) -> str:
     Returns:
         S3-compatible KB ID with 'kb-' prefix for user KBs
     """
-    if kb_id == "company":
+    if kb_id in SYSTEM_KB_IDS:
         return kb_id
     # If already has prefix, return as-is
     if kb_id.startswith("kb-"):

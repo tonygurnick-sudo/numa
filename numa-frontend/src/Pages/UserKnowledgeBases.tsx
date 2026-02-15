@@ -13,6 +13,7 @@ import { CreateKBModal } from '../Components/CreateKBModal';
 import { StickyToolbar } from '../Components/StickyToolbar';
 import { useKnowledgeBase } from '../Providers/KnowledgeBaseProvider';
 import type { UserKB } from '../Services/knowledgeBaseService';
+import { SYSTEM_KB_IDS } from '../constants/knowledgeBase';
 
 type FilterType = 'all' | 'shared' | 'personal';
 
@@ -24,8 +25,8 @@ export function UserKnowledgeBases(): React.JSX.Element {
   const [filter, setFilter] = useState<FilterType>('all');
   const { availableKBs, isLoadingKBs, refreshKBs } = useKnowledgeBase();
 
-  // Filter out company KB
-  const userKBs = availableKBs.filter((kb) => kb.kb_id !== 'company');
+  // System KBs are managed separately and should not appear in user-managed KB pages.
+  const userKBs = availableKBs.filter((kb) => !SYSTEM_KB_IDS.has(kb.kb_id));
 
   // Helper function to determine if a KB is shared
   function isKBShared(kb: UserKB): boolean {

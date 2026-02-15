@@ -3,6 +3,7 @@ import { Construct } from 'constructs';
 import { PublicS3Bucket } from '../constructs/public-s3-bucket-construct';
 import { PrivateBucket } from '@arcanumai/private-bucket-construct';
 import { DynamodbTable } from '@cdktf/provider-aws/lib/dynamodb-table';
+import { S3BucketCorsConfiguration } from '@cdktf/provider-aws/lib/s3-bucket-cors-configuration';
 import { DynamodbResourcePolicy } from '@cdktf/provider-aws/lib/dynamodb-resource-policy';
 import { DataAwsIamPolicyDocument } from '@cdktf/provider-aws/lib/data-aws-iam-policy-document';
 import { Route53Zone } from '@cdktf/provider-aws/lib/route53-zone';
@@ -34,6 +35,26 @@ export class QAppsDeployerStack extends ArcanumStack {
     // CI publishes s3://<bucket>/claude-artifacts/<version>/claude-x86_64.zip
     const claudeArtifactBucket = new PrivateBucket(this, 'claude-cli-artifact-bucket', {
       bucket: 'numa-claude-cli-artifacts',
+    });
+
+    const supportDocsMasterBucket = new PrivateBucket(this, 'numa-support-docs-master-bucket', {
+      bucket: 'numa-support-docs-master',
+    });
+
+    // CORS is required because the CS Portal (browser) calls S3 directly via
+    // presigned URLs and the AWS SDK. Without this, ListObjects / PutObject /
+    // DeleteObject calls are blocked by the browser's same-origin policy.
+    new S3BucketCorsConfiguration(this, 'support-docs-master-cors', {
+      bucket: supportDocsMasterBucket.bucket.id,
+      corsRule: [
+        {
+          allowedHeaders: ['*'],
+          allowedMethods: ['GET', 'HEAD', 'PUT', 'DELETE'],
+          allowedOrigins: [`https://customer-success-portal.${props.domainSuffix}`],
+          exposeHeaders: ['ETag', 'Content-Type', 'Content-Length', 'x-amz-meta-uploaded_by'],
+          maxAgeSeconds: 3600,
+        },
+      ],
     });
 
     const zone = new Route53Zone(this, 'route53-zone', {
@@ -109,6 +130,10 @@ export class QAppsDeployerStack extends ArcanumStack {
       value: claudeArtifactBucket.bucket,
     });
 
+    new TerraformOutput(this, 'numa-support-docs-master-bucket-name', {
+      value: supportDocsMasterBucket.bucket.bucket,
+    });
+
     // Customer Success Portal and Deployments orchestration (POC)
     if (props.enableCustomerSuccessPortal) {
       // Optional: portal-triggered deployments construct (keeps this stack light)
@@ -148,6 +173,8 @@ export class QAppsDeployerStack extends ArcanumStack {
         deploymentGroupMaxConcurrency: portalDeployments?.groupMaxConcurrency,
         nextgenBrokerLambdaName: broker.functionName,
         nextgenBrokerRegion: 'us-east-1',
+        supportDocsBucketArn: supportDocsMasterBucket.bucket.arn,
+        supportDocsBucketName: supportDocsMasterBucket.bucket.bucket,
       });
 
       // Useful outputs
