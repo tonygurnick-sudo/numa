@@ -200,7 +200,9 @@ def _invoke_relay(
         Parsed response from the relay
     """
     relay_arn = _get_relay_lambda_arn()
-    lambda_client = prm_client("lambda", region="us-east-1")
+    lambda_client = prm_client(
+        "lambda", region=os.environ.get("AWS_REGION", "us-east-1")
+    )
 
     payload = {
         "operation": operation,
