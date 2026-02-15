@@ -81,6 +81,12 @@ const BULK_UPDATABLE_FIELDS: FieldConfig[] = [
     description: 'Enable agent scheduling and notifications features',
   },
   {
+    key: 'workspaceChatModelSelection',
+    label: 'Workspace Chat Model Selection',
+    type: 'boolean',
+    description: 'Allow users to select AI models in Chat V2',
+  },
+  {
     key: 'allowBedrockQuotaSharing',
     label: 'Allow Bedrock Quota Sharing',
     type: 'boolean',

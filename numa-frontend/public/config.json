@@ -52,6 +52,7 @@
   "NUMA_WORKSPACE_CHAT": true,
   "SCHEDULING": false,
   "NUMA_FILES": false,
+  "WORKSPACE_CHAT_MODEL_SELECTION": true,
   "WORKSPACE_CHAT_AGENT_FUNCTION_URL": "https://ozagqbxjgy5jnzpillhnn2hewe0phrka.lambda-url.us-east-1.on.aws/",
   "NUMA_VERSION": "ec1d2b93-1770089413492"
 }

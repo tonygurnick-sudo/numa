@@ -539,6 +539,7 @@ export class NumaClientStack extends TerraformStack {
         NUMA_WORKSPACE_CHAT: clientConfig.numaWorkspaceChat ?? false,
         SCHEDULING: clientConfig.scheduling ?? false,
         NUMA_FILES: clientConfig.numaFiles ?? false,
+        WORKSPACE_CHAT_MODEL_SELECTION: clientConfig.workspaceChatModelSelection ?? false,
         // Direct Lambda Function URL for workspace chat agent (bypasses CloudFront buffering for streaming)
         WORKSPACE_CHAT_AGENT_FUNCTION_URL: workspaceChatAgentProxy?.functionUrl,
         NUMA_VERSION: siteVersion,
@@ -862,6 +863,14 @@ export const clientConfigSchema = coreNumaInfraPropsSchema
          * @default false
          */
         numaFiles: z.boolean().optional().default(false),
+
+        /**
+         * Whether to allow users to select AI models in Chat V2.
+         * When false, Sonnet 4.5 is always used.
+         *
+         * @default false
+         */
+        workspaceChatModelSelection: z.boolean().optional().default(false),
       })
       .strict(),
   );

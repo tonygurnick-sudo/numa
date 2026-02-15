@@ -71,6 +71,7 @@ export default function CreateClientConfig() {
   const [agents, setAgents] = useState(defaults.agents)
   const [brandingProviderEnabled, setBrandingProviderEnabled] = useState(defaults.brandingProviderEnabled)
   const [numaWorkspaceChat, setNumaWorkspaceChat] = useState(defaults.numaWorkspaceChat)
+  const [workspaceChatModelSelection, setWorkspaceChatModelSelection] = useState(defaults.workspaceChatModelSelection)
   const [groupAdmin, setGroupAdmin] = useState(featuresListToString(DEFAULT_ADMIN_FEATURES))
   const [groupStandard, setGroupStandard] = useState(featuresListToString(DEFAULT_STANDARD_FEATURES))
   const [showAdvanced, setShowAdvanced] = useState(false)
@@ -147,6 +148,7 @@ export default function CreateClientConfig() {
     if (agents) minimal['agents'] = true
     if (brandingProviderEnabled !== defaults.brandingProviderEnabled) minimal['brandingProviderEnabled'] = brandingProviderEnabled
     if (numaWorkspaceChat) minimal['numaWorkspaceChat'] = true
+    if (workspaceChatModelSelection) minimal['workspaceChatModelSelection'] = true
 
     // Always include these two fields so defaults are written explicitly
     minimal['provisionQResources'] = provisionQResources
@@ -387,6 +389,14 @@ export default function CreateClientConfig() {
                   onChange={setNumaWorkspaceChat}
                   type="switch"
                   helpText="Feature flag for Numa Chat V2 testing"
+                />
+                <ConfigField
+                  label="Workspace Chat Model Selection"
+                  value={workspaceChatModelSelection}
+                  defaultValue={defaults.workspaceChatModelSelection}
+                  onChange={setWorkspaceChatModelSelection}
+                  type="switch"
+                  helpText="Allow users to select AI models in Chat V2"
                 />
                 <ConfigField
                   label="Provision Q Resources"

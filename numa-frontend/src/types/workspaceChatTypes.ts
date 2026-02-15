@@ -14,8 +14,7 @@
 export type WorkspaceChatModelId =
   | 'anthropic.claude-sonnet-4-5-20250929-v1:0'
   | 'anthropic.claude-opus-4-5-20251101-v1:0'
-  | 'anthropic.claude-haiku-4-5-20251001-v1:0'
-  | 'anthropic.claude-sonnet-4-20250514-v1:0';
+  | 'anthropic.claude-haiku-4-5-20251001-v1:0';
 
 /** Model option for display in the UI */
 export interface WorkspaceChatModelOption {
@@ -37,17 +36,12 @@ export const WORKSPACE_MODEL_OPTIONS: WorkspaceChatModelOption[] = [
   {
     id: 'anthropic.claude-opus-4-5-20251101-v1:0',
     label: 'Claude Opus 4.5',
-    description: 'Complex - 66% more expensive then sonnet',
+    description: 'Complex',
   },
   {
     id: 'anthropic.claude-haiku-4-5-20251001-v1:0',
     label: 'Claude Haiku 4.5',
-    description: 'Fast - 3x cheaper than sonnet',
-  },
-  {
-    id: 'anthropic.claude-sonnet-4-20250514-v1:0',
-    label: 'Numa Chat V1 Model',
-    description: 'Claude Sonnet 4',
+    description: 'Fast',
   },
 ];
 
