@@ -317,6 +317,9 @@ export const ChatFileUpload = ({
                 // Documents
                 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
                 'text/plain',
+                'application/vnd.ms-outlook',
+                'message/rfc822',
+                '.msg',
                 // Spreadsheets
                 'text/csv',
                 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',

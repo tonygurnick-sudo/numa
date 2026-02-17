@@ -165,7 +165,7 @@
     "supportedFileTypesTitle": "Supported File Types:",
     "supportedFileTypes": {
       "pdf": "PDF (pdf)",
-      "documents": "Documents (docx, txt)",
+      "documents": "Documents (docx, txt, msg)",
       "spreadsheets": "Spreadsheets (csv, xlsx)",
       "images": "Images (jpg, jpeg, png)",
       "audioVideo": "Audio/Video (mp3, mp4, wav, flac, ogg, amr, webm, m4a)",

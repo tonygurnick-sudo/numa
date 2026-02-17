@@ -210,6 +210,57 @@ class TestLambdaFunction(unittest.TestCase):
             # Should be called 3 times: initial status, main output, final status
             self.assertEqual(mock_s3_client.put_object.call_count, 3)
 
+    @patch("lambda_function._extract_msg_text")
+    @patch("lambda_function.s3_client")
+    def test_handler_msg_file(self, mock_s3_client, mock_extract_msg_text):
+        """Test processing of Outlook .msg files"""
+        mock_s3_client.get_object.return_value = {
+            "Body": MagicMock(read=lambda: b"fake msg bytes")
+        }
+        mock_extract_msg_text.return_value = "Converted email body"
+
+        event = {
+            "input_bucket": "test-bucket",
+            "input_key": "test.msg",
+            "return_content": True,
+        }
+
+        response = lambda_function.handler(event, {})
+
+        self.assertEqual(response["content"], "Converted email body\n")
+        mock_s3_client.get_object.assert_called_once_with(
+            Bucket="test-bucket",
+            Key="test.msg",
+        )
+        mock_extract_msg_text.assert_called_once_with(b"fake msg bytes")
+        # Should be called 3 times: initial status, main output, final status
+        self.assertEqual(mock_s3_client.put_object.call_count, 3)
+
+    @patch("lambda_function.extract_msg")
+    def test_extract_msg_text_prefers_plain_body(self, mock_extract_msg):
+        """MSG parsing should prefer plain text body when present."""
+        mock_message = MagicMock()
+        mock_message.body = "Plain body"
+        mock_message.htmlBody = "<p>HTML body</p>"
+        mock_extract_msg.Message.return_value = mock_message
+
+        result = lambda_function._extract_msg_text(b"fake msg bytes")
+
+        self.assertEqual(result, "Plain body")
+        mock_extract_msg.Message.assert_called_once()
+
+    @patch("lambda_function.extract_msg")
+    def test_extract_msg_text_falls_back_to_html(self, mock_extract_msg):
+        """MSG parsing should use HTML body when plain text is unavailable."""
+        mock_message = MagicMock()
+        mock_message.body = ""
+        mock_message.htmlBody = "<p>Hello <b>team</b></p><p>Second line</p>"
+        mock_extract_msg.Message.return_value = mock_message
+
+        result = lambda_function._extract_msg_text(b"fake msg bytes")
+
+        self.assertEqual(result, "Hello team\nSecond line")
+
     def test_extract_docx_pages_includes_table_text(self):
         """DOCX extraction should capture table content."""
         if not DOCX_AVAILABLE:

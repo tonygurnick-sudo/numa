@@ -7,11 +7,15 @@ import json
 import math
 import os
 import pathlib
+import re
+import tempfile
 import time
 import uuid
+from html import unescape
 from typing import Any, Dict, Iterator, List, Sequence, TypeVar
 
 import docx
+import extract_msg
 import structlog
 from docx.document import Document as DocxDocument
 from docx.oxml.ns import qn
@@ -365,6 +369,12 @@ def _extract_content(
 
         return _excel_structure_to_document(excel_structure, input_key, file_name)
 
+    elif suffix == ".msg":
+        s3_file_object = s3_client.get_object(Bucket=input_bucket, Key=input_key)
+        file_content = s3_file_object["Body"].read()
+        extracted_text = _extract_msg_text(file_content)
+        return _text_to_document(extracted_text, input_key, file_name)
+
     # Vision extraction supported formats - direct processing
     elif suffix in VISION_SUPPORTED_FORMATS:
         return fm_vision_extraction.extract_content(input_bucket, input_key, file_name)
@@ -399,6 +409,55 @@ def _text_to_document(text: str, key: str, file_name: str | None) -> Document:
         pages=[page],
         total_num_words=page.num_words,
     )
+
+
+def _extract_msg_text(file_content: bytes) -> str:
+    """Extract plain text content from an Outlook .msg file."""
+    temp_path: str | None = None
+    message = None
+    try:
+        with tempfile.NamedTemporaryFile(suffix=".msg", delete=False) as temp_file:
+            temp_file.write(file_content)
+            temp_path = temp_file.name
+
+        message = extract_msg.Message(temp_path)
+
+        raw_body = message.body
+        body_text = ""
+        if isinstance(raw_body, bytes):
+            body_text = raw_body.decode("utf-8", errors="ignore")
+        elif isinstance(raw_body, str):
+            body_text = raw_body
+        if body_text.strip():
+            return body_text
+
+        raw_html_body = message.htmlBody
+        html_text = ""
+        if isinstance(raw_html_body, bytes):
+            html_text = raw_html_body.decode("utf-8", errors="ignore")
+        elif isinstance(raw_html_body, str):
+            html_text = raw_html_body
+        if html_text:
+            return _html_to_text(html_text)
+
+        return ""
+    finally:
+        if message is not None:
+            close_method = getattr(message, "close", None)
+            if callable(close_method):
+                close_method()
+        if temp_path and os.path.exists(temp_path):
+            os.remove(temp_path)
+
+
+def _html_to_text(html_content: str) -> str:
+    """Convert basic HTML into readable plain text."""
+    text = re.sub(r"(?i)<\s*br\s*/?\s*>", "\n", html_content)
+    text = re.sub(r"(?i)</\s*(p|div|li|tr|h[1-6])\s*>", "\n", text)
+    text = re.sub(r"<[^>]+>", "", text)
+    text = unescape(text)
+    lines = [" ".join(line.split()) for line in text.splitlines()]
+    return "\n".join(line for line in lines if line)
 
 
 def _document_to_string(document: Document) -> str:

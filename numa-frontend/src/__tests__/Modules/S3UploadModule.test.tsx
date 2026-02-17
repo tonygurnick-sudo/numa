@@ -143,6 +143,21 @@ describe('S3UploadModule Component', () => {
     await screen.findByText(`${invalidFile.name}: Invalid file type. Accepted types: application/pdf`);
   });
 
+  it('should accept extension-based allow rules when mime type is empty', async () => {
+    renderWithProviders(<S3UploadModule task={{ id: 'test-task-id', parameters: { allowedFileTypes: ['.msg'] } }} />);
+
+    await waitForConfigReady();
+
+    const fileInput = screen.getByTestId('file-upload-input') as HTMLInputElement;
+    const msgFile = new File(['test content'], 'sample.msg', { type: '' });
+
+    fireEvent.change(fileInput, { target: { files: [msgFile] } });
+
+    await waitFor(() => {
+      expect(screen.queryByText(/Invalid file type/i)).not.toBeInTheDocument();
+    });
+  });
+
   it('should handle single file upload (UI lists file)', async () => {
     renderWithProviders(<S3UploadModule task={{ id: 'test-task-id', title: 'Test Task' }} />);
 

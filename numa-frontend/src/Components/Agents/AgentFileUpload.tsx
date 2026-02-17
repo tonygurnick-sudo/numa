@@ -171,7 +171,7 @@ export const AgentFileUpload = ({
           type="file"
           ref={fileInputRef}
           multiple
-          accept=".pdf,.docx,.xlsx,.txt,.md,.markdown,.csv,.json,.xml,.yaml,.yml,.html,.log,.ini,.cfg,.conf,.py,.js,.ts,.sh,.bash,.sql,.tex,.css,.scss,.less,.png,.jpg,.jpeg,.mp3,.mp4,.wav,.flac,.ogg,.amr,.webm,.m4a"
+          accept=".pdf,.docx,.xlsx,.msg,.txt,.md,.markdown,.csv,.json,.xml,.yaml,.yml,.html,.log,.ini,.cfg,.conf,.py,.js,.ts,.sh,.bash,.sql,.tex,.css,.scss,.less,.png,.jpg,.jpeg,.mp3,.mp4,.wav,.flac,.ogg,.amr,.webm,.m4a"
           style={{ display: 'none' }}
           onChange={handleSelectFiles}
           disabled={disabled || isUploading}

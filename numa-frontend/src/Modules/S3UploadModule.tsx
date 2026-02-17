@@ -115,6 +115,7 @@ const SUPPORTED_EXTENSIONS = [
   // Documents
   '.docx',
   '.xlsx',
+  '.msg',
   '.pdf',
   // Images
   '.png',
@@ -134,6 +135,27 @@ const SUPPORTED_EXTENSIONS = [
 const getFileExtension = (fileName: string): string => {
   const lastDot = fileName.lastIndexOf('.');
   return lastDot >= 0 ? fileName.substring(lastDot).toLowerCase() : '';
+};
+
+const matchesAllowedFileType = (fileType: string, fileExtension: string, allowedTypes: string[]): boolean => {
+  if (!allowedTypes || allowedTypes.length === 0) return true;
+
+  const normalized = allowedTypes.map((t) => t.trim().toLowerCase()).filter(Boolean);
+  const allowedExtensions = normalized.filter((t) => t.startsWith('.'));
+  const allowedMimes = normalized.filter((t) => !t.startsWith('.'));
+  const normalizedFileType = (fileType || '').toLowerCase();
+
+  const matchesExtension = allowedExtensions.includes(fileExtension);
+  const matchesMime = normalizedFileType
+    ? allowedMimes.some((allowedMime) => {
+        if (allowedMime.endsWith('/*')) {
+          return normalizedFileType.startsWith(allowedMime.slice(0, -1));
+        }
+        return allowedMime === normalizedFileType;
+      })
+    : false;
+
+  return matchesExtension || matchesMime;
 };
 
 /** Convert assorted inputs to a StandardizedFile */
@@ -366,7 +388,7 @@ const S3UploadModuleInner: ForwardRefRenderFunction<UploaderHandle, S3UploadModu
 
     // Task-specific type check (if specified)
     if (acceptedFileTypes && acceptedFileTypes.length > 0) {
-      if (!acceptedFileTypes.includes(file.type)) {
+      if (!matchesAllowedFileType(file.type, ext, acceptedFileTypes)) {
         return {
           validFile: null as File | null,
           error: t('uploads.invalidFileType', { name: file.name, types: acceptedFileTypes.join(', ') }),
