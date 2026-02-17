@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { useCallback, useMemo } from 'react';
+import { useCallback, useMemo, useRef } from 'react';
 import { useAuth } from './AuthProvider';
 import { NumaRequestContext } from './NumaRequestContext';
 
@@ -32,14 +32,22 @@ const parseNestedJson = (data) => {
 export const NumaRequestProvider = ({ children }) => {
   const { user } = useAuth();
 
-  const defaultHeaders = useMemo(
-    () => ({
+  // Store the current access token in a ref so request functions can always
+  // read the latest token without needing to be recreated on every refresh.
+  // This prevents the cascade: token refresh → new numaGet identity →
+  // all consumers re-run effects / refetch data.
+  const accessTokenRef = useRef(user?.tokens?.accessToken);
+  accessTokenRef.current = user?.tokens?.accessToken;
+
+  const getHeaders = useCallback(
+    (extra = {}) => ({
       'Content-Type': 'application/json',
-      ...(user?.tokens?.accessToken && {
-        authorization: user.tokens.accessToken,
+      ...(accessTokenRef.current && {
+        authorization: accessTokenRef.current,
       }),
+      ...extra,
     }),
-    [user],
+    [],
   );
 
   const axiosConfig = useMemo(
@@ -49,14 +57,15 @@ export const NumaRequestProvider = ({ children }) => {
     [], // No dependencies needed since parseNestedJson is stable
   );
 
-  // Common request methods
+  // Common request methods — stable identities (never recreated on token refresh).
+  // They read the latest token via accessTokenRef at call time.
   const numaGet = useCallback(
     async (url, params, headers = {}) => {
       try {
         const response = await axios.get(url, {
           ...axiosConfig,
           params,
-          headers: { ...defaultHeaders, ...headers },
+          headers: getHeaders(headers),
         });
         return response.data;
       } catch (error) {
@@ -66,7 +75,7 @@ export const NumaRequestProvider = ({ children }) => {
         throw error;
       }
     },
-    [axiosConfig, defaultHeaders],
+    [axiosConfig, getHeaders],
   );
 
   const numaPost = useCallback(
@@ -74,7 +83,7 @@ export const NumaRequestProvider = ({ children }) => {
       try {
         const response = await axios.post(url, data, {
           ...axiosConfig,
-          headers: { ...defaultHeaders, ...headers },
+          headers: getHeaders(headers),
         });
         return response.data;
       } catch (error) {
@@ -84,29 +93,29 @@ export const NumaRequestProvider = ({ children }) => {
         throw error;
       }
     },
-    [axiosConfig, defaultHeaders],
+    [axiosConfig, getHeaders],
   );
 
   const numaPut = useCallback(
     async (url, data, headers = {}) => {
       const response = await axios.put(url, data, {
         ...axiosConfig,
-        headers: { ...defaultHeaders, ...headers },
+        headers: getHeaders(headers),
       });
       return response.data;
     },
-    [axiosConfig, defaultHeaders],
+    [axiosConfig, getHeaders],
   );
 
   const numaDelete = useCallback(
     async (url, headers = {}) => {
       const response = await axios.delete(url, {
         ...axiosConfig,
-        headers: { ...defaultHeaders, ...headers },
+        headers: getHeaders(headers),
       });
       return response.data;
     },
-    [axiosConfig, defaultHeaders],
+    [axiosConfig, getHeaders],
   );
 
   const value = useMemo(

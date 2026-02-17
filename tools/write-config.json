@@ -1,6 +1,7 @@
 {
   "clientAccountId": "905418183804",
   "createServiceLinkedRole": false,
+  "mfa": true,
   "devInstance": true,
   "provisionQResources": false,
   "pipedreamIntegrations": true,
@@ -18,5 +19,6 @@
   "bedrockAccount": "552162429805",
   "allowBedrockQuotaSharing": true,
   "brandingProviderEnabled": true,
-  "numaWorkspaceChat": true
+  "numaWorkspaceChat": true,
+  "scheduling": true
 }

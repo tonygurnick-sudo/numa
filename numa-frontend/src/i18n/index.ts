@@ -27,6 +27,7 @@ i18n
       'errors',
       'shared',
       'files',
+      'ops',
     ],
     interpolation: { escapeValue: false },
     detection: {

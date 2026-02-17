@@ -35,6 +35,7 @@ const CONFIG_OPTIONAL_PROPERTIES = [
   'SCHEDULING', // Feature flag for agent scheduling and notifications
   'NUMA_FILES', // Feature flag for Numa Files (file management)
   'WORKSPACE_CHAT_MODEL_SELECTION', // Feature flag for model selection in Chat V2
+  'NUMA_OPS', // Feature flag for Numa Ops work management
 ];
 const CONFIG_PROPERTIES = [...CONFIG_REQUIRED_PROPERTIES, ...CONFIG_OPTIONAL_PROPERTIES];
 

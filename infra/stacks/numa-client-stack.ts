@@ -50,6 +50,7 @@ import { S3VectorsKnowledgeBase } from '../constructs/s3-vectors-knowledge-base-
 import { LambdaInvocation } from '@cdktf/provider-aws/lib/lambda-invocation';
 import { DataAwsSsmParameter } from '@cdktf/provider-aws/lib/data-aws-ssm-parameter';
 import { NumaLambda } from '../constructs/numa-lambda';
+import { OpsConstruct } from '../constructs/ops-construct';
 import { WorkspaceChatAgentConstruct } from '../constructs/workspace-chat-agent-construct';
 import { WorkspaceChatAgentProxy } from '../constructs/workspace-chat-agent-proxy-construct';
 import { WorkspaceChatToolsConstruct } from '../constructs/workspace-chat-tools-construct';
@@ -449,6 +450,24 @@ export class NumaClientStack extends TerraformStack {
       filesTableArn: core.filesTable?.arn,
     });
 
+    // Numa Ops (work management, kanban boards, CRM, supplier management)
+    if (clientConfig.numaOps) {
+      new OpsConstruct(this, safeConstructId + '-ops', {
+        apiGatewayAuthorizerId: fe.authorizer.id,
+        apiGatewayId: fe.apiGateway.id,
+        clientName: props.clientName,
+        environmentName: props.environmentName,
+        region: clientConfig.region,
+        outputsBucketArn: core.outputsBucket.bucket.arn,
+        outputsBucketName: core.outputsBucket.bucket.bucket,
+        otelConfig: {
+          otelConfigPath: core.otelConfigPath,
+          honeycombIngestKey: honeycombBackendKey,
+          region: clientConfig.region,
+        },
+      });
+    }
+
     const appConfigsToDeploy = getAppConfigsToDeploy(
       appLibrary,
       clientConfig.apps ?? {},
@@ -548,6 +567,8 @@ export class NumaClientStack extends TerraformStack {
         SCHEDULING: clientConfig.scheduling ?? false,
         NUMA_FILES: clientConfig.numaFiles ?? false,
         WORKSPACE_CHAT_MODEL_SELECTION: clientConfig.workspaceChatModelSelection ?? false,
+        NUMA_OPS: clientConfig.numaOps ?? false,
+        MFA_ENABLED: clientConfig.mfa ?? false,
         // Direct Lambda Function URL for workspace chat agent (bypasses CloudFront buffering for streaming)
         WORKSPACE_CHAT_AGENT_FUNCTION_URL: workspaceChatAgentProxy?.functionUrl,
         NUMA_VERSION: siteVersion,
@@ -879,6 +900,13 @@ export const clientConfigSchema = coreNumaInfraPropsSchema
          * @default false
          */
         workspaceChatModelSelection: z.boolean().optional().default(false),
+
+        /**
+         * Whether to enable Numa Ops (work management, kanban boards, CRM, supplier management).
+         *
+         * @default false
+         */
+        numaOps: z.boolean().optional().default(false),
       })
       .strict(),
   );

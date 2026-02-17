@@ -1,0 +1,260 @@
+import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import { useAuth } from '../../Providers/AuthProvider';
+import { useBranding } from '../../Providers/BrandingContext';
+import { useBrandingAsset } from '../../hooks/useBrandingAsset';
+import DefaultLogo from '../../../public/numa-logo.svg';
+import { useOps } from './OpsContext';
+import { CreateTicketModal } from './Modals/CreateTicketModal';
+import { TicketSuccessModal } from './Modals/TicketSuccessModal';
+import { TicketDetailModal } from './Modals/TicketDetailModal';
+import { GlobalSettingsModal } from './Modals/GlobalSettingsModal';
+import { TeamSettingsModal } from './Modals/TeamSettingsModal';
+import { CreateTeamWizard } from './Modals/CreateTeamWizard';
+import TeamSelector from './TeamSelector';
+import ZoneSprintStrip from './ZoneSprintStrip';
+import AllTeamsStrip from './AllTeamsStrip';
+import type { Ticket } from '../../types/ops';
+import type { OpsTopView } from './useOpsData';
+import './BoardView/kanban.css';
+
+// ── Top-level navigation tabs ────────────────────────────────────────────────
+
+const OPS_TOP_VIEWS: { key: OpsTopView; labelKey: string; icon: string }[] = [
+  { key: 'board', labelKey: 'tabs.board', icon: 'bi-grid-3x3-gap' },
+  { key: 'customers', labelKey: 'tabs.customers', icon: 'bi-people' },
+  { key: 'allTickets', labelKey: 'tabs.allTickets', icon: 'bi-list-task' },
+  { key: 'suppliers', labelKey: 'tabs.suppliers', icon: 'bi-truck' },
+  { key: 'roadmap', labelKey: 'tabs.roadmap', icon: 'bi-signpost-split' },
+];
+
+// ── Component ────────────────────────────────────────────────────────────────
+
+const OpsHeader = () => {
+  const { t } = useTranslation('ops');
+  const { user } = useAuth();
+  const { branding } = useBranding();
+  const rawNavLogo = branding.resolvedAssets?.logoNav || branding.assets?.logoNav || branding.logo || DefaultLogo;
+  const navLogo = useBrandingAsset(rawNavLogo, DefaultLogo);
+  const {
+    teams,
+    selectedTeamId,
+    topView,
+    setTopView,
+    boardViewMode,
+    setBoardViewMode,
+    selectTeam,
+    refreshTeam,
+    refreshTeams,
+  } = useOps();
+
+  // ── Modal state ──────────────────────────────────────────────────────────
+  const [showCreateTicket, setShowCreateTicket] = useState(false);
+  const [showCreateTeam, setShowCreateTeam] = useState(false);
+  const [showBoardSettings, setShowBoardSettings] = useState(false);
+  const [showGlobalSettings, setShowGlobalSettings] = useState(false);
+  const [showTicketSuccess, setShowTicketSuccess] = useState(false);
+  const [showTicketDetail, setShowTicketDetail] = useState(false);
+  const [successTicket, setSuccessTicket] = useState<Ticket | null>(null);
+  const [detailTicketId, setDetailTicketId] = useState<string | null>(null);
+
+  const canManage = Boolean(user?.features?.includes('manageUsers'));
+
+  return (
+    <>
+      {/* ── Row 1: Title + Team Selector | Nav Tabs + Actions ── */}
+      <div
+        className="d-flex align-items-center justify-content-between px-3 border-bottom bg-white"
+        style={{ height: 56, minHeight: 56 }}
+      >
+        {/* Left: Page Title + Team Selector */}
+        <div className="d-flex align-items-center gap-3 flex-shrink-0">
+          <div
+            className="d-flex align-items-center gap-2"
+            style={{ cursor: canManage ? 'pointer' : 'default' }}
+            onClick={() => {
+              if (canManage) setTopView('home');
+            }}
+            role={canManage ? 'button' : undefined}
+            tabIndex={canManage ? 0 : undefined}
+            onKeyDown={
+              canManage
+                ? (e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      setTopView('home');
+                    }
+                  }
+                : undefined
+            }
+          >
+            <img src={navLogo} alt={t('title')} style={{ height: 32, width: 32, objectFit: 'contain' }} />
+            <div className="d-flex flex-column lh-sm">
+              <span className="fw-bold text-dark" style={{ fontSize: '1rem' }}>
+                {t('title')}
+              </span>
+              <span className="text-muted d-none d-md-inline" style={{ fontSize: '0.72rem' }}>
+                {t('subtitle')}
+              </span>
+            </div>
+          </div>
+
+          {/* Team / All Teams selector dropdown */}
+          {teams.length > 0 && (
+            <>
+              <div className="vr" style={{ height: 28 }} />
+              <TeamSelector
+                currentTeam={teams.find((tm) => tm.id === selectedTeamId) ?? null}
+                teams={teams}
+                isAllTeams={boardViewMode === 'allTeams'}
+                onSelectTeam={(teamId) => {
+                  selectTeam(teamId);
+                  setBoardViewMode('singleTeam');
+                }}
+                onSelectAllTeams={() => setBoardViewMode('allTeams')}
+                onCreateTeam={() => setShowCreateTeam(true)}
+              />
+            </>
+          )}
+        </div>
+
+        {/* Right: Nav tabs + actions grouped together */}
+        <div className="d-flex align-items-center gap-3 flex-shrink-0">
+          <div className="ops-nav-tabs">
+            {OPS_TOP_VIEWS.map(({ key, labelKey, icon }) => (
+              <button
+                key={key}
+                type="button"
+                className={`ops-nav-tab ${topView === key ? 'active' : ''}`}
+                onClick={() => setTopView(key)}
+              >
+                <i className={`bi ${icon}`} />
+                {t(labelKey)}
+              </button>
+            ))}
+          </div>
+
+          <button
+            type="button"
+            className="btn btn-primary rounded-pill"
+            style={{ fontSize: '0.85rem', padding: '6px 18px' }}
+            onClick={() => setShowCreateTicket(true)}
+          >
+            <i className="bi bi-plus-lg me-1" />
+            {t('tickets.newTicket')}
+          </button>
+
+          {canManage && (
+            <button
+              type="button"
+              className="btn btn-link text-muted p-1"
+              onClick={() => setShowGlobalSettings(true)}
+              title={t('settings.title')}
+              style={{ fontSize: '1.1rem' }}
+            >
+              <i className="bi bi-gear" />
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* ── Row 2: Zone/Sprint strip or All Teams strip (Board view only) ── */}
+      {topView === 'board' && (
+        <div
+          className="d-flex align-items-center px-3 gap-3 border-bottom bg-white"
+          style={{ minHeight: 48, padding: '8px 0' }}
+        >
+          {boardViewMode === 'singleTeam' ? (
+            <>
+              {/* Zone / Sprint strip */}
+              <ZoneSprintStrip />
+
+              {/* Right-side controls */}
+              <div className="d-flex align-items-center gap-2 flex-shrink-0 ms-auto">
+                {/* Team settings gear */}
+                {selectedTeamId && canManage && (
+                  <button
+                    type="button"
+                    className="btn btn-outline-secondary btn-sm"
+                    onClick={() => setShowBoardSettings(true)}
+                    title={t('teams.settings')}
+                  >
+                    <i className="bi bi-sliders" />
+                  </button>
+                )}
+              </div>
+            </>
+          ) : (
+            <>
+              {/* All Teams strip */}
+              <AllTeamsStrip />
+            </>
+          )}
+        </div>
+      )}
+
+      {/* ── Modals ── */}
+      <CreateTicketModal
+        show={showCreateTicket}
+        onHide={() => setShowCreateTicket(false)}
+        onSuccess={(ticket) => {
+          setShowCreateTicket(false);
+          setSuccessTicket(ticket);
+          setShowTicketSuccess(true);
+        }}
+      />
+      <TicketSuccessModal
+        show={showTicketSuccess}
+        ticket={successTicket}
+        onHide={() => setShowTicketSuccess(false)}
+        onViewOnBoard={() => setShowTicketSuccess(false)}
+        onOpenTicket={() => {
+          setShowTicketSuccess(false);
+          if (successTicket) {
+            setDetailTicketId(successTicket.id);
+            setShowTicketDetail(true);
+          }
+        }}
+        onCreateAnother={() => {
+          setShowTicketSuccess(false);
+          setShowCreateTicket(true);
+        }}
+      />
+      <TicketDetailModal
+        show={showTicketDetail}
+        ticketId={detailTicketId}
+        onHide={() => {
+          setShowTicketDetail(false);
+          setDetailTicketId(null);
+        }}
+      />
+      <TeamSettingsModal
+        show={showBoardSettings}
+        onHide={() => setShowBoardSettings(false)}
+        onSaved={() => {
+          setShowBoardSettings(false);
+          refreshTeam();
+        }}
+      />
+      <GlobalSettingsModal
+        show={showGlobalSettings}
+        onHide={() => setShowGlobalSettings(false)}
+        onSaved={() => {
+          setShowGlobalSettings(false);
+          refreshTeam();
+        }}
+      />
+      <CreateTeamWizard
+        show={showCreateTeam}
+        onHide={() => setShowCreateTeam(false)}
+        onCreated={(team) => {
+          setShowCreateTeam(false);
+          refreshTeams();
+          selectTeam(team.id);
+        }}
+      />
+    </>
+  );
+};
+
+export default OpsHeader;

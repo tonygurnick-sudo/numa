@@ -34,6 +34,7 @@
     "brandingProviderEnabled": true,
     "bedrockAccount": "552162429805",
     "numaWorkspaceChat": true,
+    "numaOps": true,
     "mfa": false
   },
   "nd-labs": {
@@ -53,6 +54,8 @@
     "vectorStorageType": "s3vectors",
     "agents": true,
     "brandingProviderEnabled": true,
-    "numaWorkspaceChat": true
+    "numaWorkspaceChat": true,
+    "numaOps": true,
+    "bedrockAccount": "978450690680"
   }
 }

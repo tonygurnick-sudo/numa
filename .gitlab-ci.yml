@@ -48,10 +48,15 @@ variables:
         - lambdas/node/document-converter
         - lambdas/node/notifications-api
         - lambdas/node/notifications-stream
+        - lambdas/node/numa-ops-api
+        - lambdas/node/numa-ops-config-api
+        - lambdas/node/numa-ops-crm-api
         - lambdas/node/q-business-chat-control-configurer
         - lambdas/node/s3-kb-file-migrator
         - lambdas/node/s3-vectors-manager
+        - lambdas/node/seed-ops-config
         - lambdas/node/srp-hasher
+        - lambdas/node/step-function-shim
         - lambdas/node/system-user-creator
         - lambdas/node/token-adjuster
         - lambdas/node/user-files
@@ -75,10 +80,18 @@ variables:
         - lambdas/node/chat-settings
         - lambdas/node/cloudfront-invalidator
         - lambdas/node/data-sync-scheduler
+        - lambdas/node/document-converter
         - lambdas/node/notifications-api
         - lambdas/node/notifications-stream
+        - lambdas/node/numa-ops-api
+        - lambdas/node/numa-ops-config-api
+        - lambdas/node/numa-ops-crm-api
         - lambdas/node/q-business-chat-control-configurer
+        - lambdas/node/s3-kb-file-migrator
+        - lambdas/node/s3-vectors-manager
+        - lambdas/node/seed-ops-config
         - lambdas/node/srp-hasher
+        - lambdas/node/step-function-shim
         - lambdas/node/system-user-creator
         - lambdas/node/token-adjuster
         - lambdas/node/user-files
