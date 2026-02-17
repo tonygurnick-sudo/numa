@@ -1,0 +1,300 @@
+import React, { useState, useEffect, useCallback } from 'react';
+import Button from 'react-bootstrap/Button';
+import Form from 'react-bootstrap/Form';
+import Spinner from 'react-bootstrap/Spinner';
+import { useTranslation } from 'react-i18next';
+import { useNumaRequest } from '../../../Providers/NumaRequestContext';
+import { useAuth } from '../../../Providers/AuthProvider';
+import * as OpsService from '../../../Services/OpsService';
+import type { Comment } from '../../../types/ops';
+
+interface CommentSectionProps {
+  ticketId: string;
+}
+
+/**
+ * Calculates a simple numeric hash from a string.
+ * Used to deterministically assign avatar colors to authors.
+ */
+function hashString(str: string): number {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    hash = str.charCodeAt(i) + ((hash << 5) - hash);
+    hash |= 0; // Convert to 32-bit integer
+  }
+  return Math.abs(hash);
+}
+
+/**
+ * Returns a hex color deterministically derived from a name string.
+ */
+function avatarColor(name: string): string {
+  const colors = [
+    '#3b82f6',
+    '#ef4444',
+    '#22c55e',
+    '#f59e0b',
+    '#8b5cf6',
+    '#ec4899',
+    '#06b6d4',
+    '#f97316',
+    '#14b8a6',
+    '#6366f1',
+  ];
+  return colors[hashString(name) % colors.length];
+}
+
+/**
+ * Extracts initials from a name (first letter of first two words, uppercase).
+ */
+function getInitials(name: string): string {
+  const parts = name.trim().split(/\s+/);
+  if (parts.length === 0) return '?';
+  if (parts.length === 1) return parts[0].charAt(0).toUpperCase();
+  return (parts[0].charAt(0) + parts[1].charAt(0)).toUpperCase();
+}
+
+/**
+ * Computes a relative time string like "2h ago" or "3d ago" from an ISO date string.
+ */
+function relativeTime(dateStr: string, t: (key: string, opts?: Record<string, unknown>) => string): string {
+  const now = Date.now();
+  const then = new Date(dateStr).getTime();
+  const diffMs = now - then;
+
+  const seconds = Math.floor(diffMs / 1000);
+  const minutes = Math.floor(seconds / 60);
+  const hours = Math.floor(minutes / 60);
+  const days = Math.floor(hours / 24);
+  const weeks = Math.floor(days / 7);
+  const months = Math.floor(days / 30);
+  const years = Math.floor(days / 365);
+
+  if (years > 0) return t('comments.timeAgo.yearsAgo', { count: years });
+  if (months > 0) return t('comments.timeAgo.monthsAgo', { count: months });
+  if (weeks > 0) return t('comments.timeAgo.weeksAgo', { count: weeks });
+  if (days > 0) return t('comments.timeAgo.daysAgo', { count: days });
+  if (hours > 0) return t('comments.timeAgo.hoursAgo', { count: hours });
+  if (minutes > 0) return t('comments.timeAgo.minutesAgo', { count: minutes });
+  return t('comments.timeAgo.justNow');
+}
+
+/**
+ * Displays a list of comments for a ticket with the ability to add, edit, and delete comments.
+ * Comments are sorted ascending by creation date.
+ * The current user can edit or delete their own comments inline.
+ */
+export function CommentSection({ ticketId }: CommentSectionProps): React.JSX.Element {
+  const { t } = useTranslation('ops');
+  const { numaGet, numaPost, numaPut, numaDelete } = useNumaRequest();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { user } = useAuth() as { user: any };
+
+  const [comments, setComments] = useState<Comment[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [newContent, setNewContent] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editContent, setEditContent] = useState('');
+
+  const currentUserId: string = user?.decoded_tokens?.idToken?.sub ?? '';
+
+  const loadComments = useCallback(async () => {
+    try {
+      const response = await OpsService.listComments(numaGet, ticketId);
+      const sorted = [...response.comments].sort(
+        (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+      );
+      setComments(sorted);
+    } catch (err) {
+      console.error('[CommentSection] Failed to load comments', err);
+    } finally {
+      setLoading(false);
+    }
+  }, [numaGet, ticketId]);
+
+  useEffect(() => {
+    void loadComments();
+  }, [loadComments]);
+
+  const handleAdd = async () => {
+    const trimmed = newContent.trim();
+    if (!trimmed) return;
+    setSubmitting(true);
+    try {
+      await OpsService.createComment(numaPost, ticketId, { content: trimmed });
+      setNewContent('');
+      await loadComments();
+    } catch (err) {
+      console.error('[CommentSection] Failed to create comment', err);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleEditSave = async (commentId: string) => {
+    const trimmed = editContent.trim();
+    if (!trimmed) return;
+    try {
+      await OpsService.updateComment(numaPut, ticketId, commentId, { content: trimmed });
+      setEditingId(null);
+      setEditContent('');
+      await loadComments();
+    } catch (err) {
+      console.error('[CommentSection] Failed to update comment', err);
+    }
+  };
+
+  const handleDelete = async (commentId: string) => {
+    if (!window.confirm(t('comments.deleteConfirm'))) return;
+    try {
+      await OpsService.deleteComment(numaDelete, ticketId, commentId);
+      await loadComments();
+    } catch (err) {
+      console.error('[CommentSection] Failed to delete comment', err);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="text-center py-3">
+        <Spinner animation="border" size="sm" />
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      {/* Comment list */}
+      {comments.length === 0 ? (
+        <p className="text-muted small mb-3">{t('empty.noComments')}</p>
+      ) : (
+        <div className="mb-3">
+          {comments.map((comment) => {
+            const isOwn = comment.authorId === currentUserId;
+            const isEditing = editingId === comment.id;
+
+            return (
+              <div key={comment.id} className="d-flex gap-2 mb-3">
+                {/* Avatar */}
+                <div
+                  className="d-flex align-items-center justify-content-center flex-shrink-0"
+                  style={{
+                    width: 32,
+                    height: 32,
+                    borderRadius: '50%',
+                    backgroundColor: avatarColor(comment.authorName),
+                    color: '#fff',
+                    fontSize: '0.75rem',
+                    fontWeight: 600,
+                  }}
+                >
+                  {getInitials(comment.authorName)}
+                </div>
+
+                {/* Content */}
+                <div className="flex-grow-1" style={{ minWidth: 0 }}>
+                  <div className="d-flex align-items-center gap-2 mb-1">
+                    <span className="fw-semibold small">{comment.authorName}</span>
+                    {comment.isSystem && (
+                      <span className="badge bg-light text-muted border" style={{ fontSize: '0.7rem' }}>
+                        {t('comments.system')}
+                      </span>
+                    )}
+                    <span className="text-muted" style={{ fontSize: '0.75rem' }}>
+                      {relativeTime(comment.createdAt, t)}
+                    </span>
+
+                    {isOwn && !isEditing && (
+                      <span className="ms-auto d-flex gap-1">
+                        <Button
+                          variant="link"
+                          size="sm"
+                          className="p-0 text-muted"
+                          onClick={() => {
+                            setEditingId(comment.id);
+                            setEditContent(comment.content);
+                          }}
+                          title={t('common.edit')}
+                        >
+                          <i className="bi bi-pencil" style={{ fontSize: '0.8rem' }} />
+                        </Button>
+                        <Button
+                          variant="link"
+                          size="sm"
+                          className="p-0 text-muted"
+                          onClick={() => void handleDelete(comment.id)}
+                          title={t('common.delete')}
+                        >
+                          <i className="bi bi-trash" style={{ fontSize: '0.8rem' }} />
+                        </Button>
+                      </span>
+                    )}
+                  </div>
+
+                  {isEditing ? (
+                    <div>
+                      <Form.Control
+                        as="textarea"
+                        rows={2}
+                        value={editContent}
+                        onChange={(e) => setEditContent(e.target.value)}
+                        className="mb-1"
+                        style={{ fontSize: '0.875rem' }}
+                      />
+                      <div className="d-flex gap-1">
+                        <Button
+                          size="sm"
+                          variant="primary"
+                          onClick={() => void handleEditSave(comment.id)}
+                          disabled={!editContent.trim()}
+                        >
+                          {t('common.save')}
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline-secondary"
+                          onClick={() => {
+                            setEditingId(null);
+                            setEditContent('');
+                          }}
+                        >
+                          {t('common.cancel')}
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="mb-0 small" style={{ whiteSpace: 'pre-wrap' }}>
+                      {comment.content}
+                    </p>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Add comment form */}
+      <div className="d-flex gap-2">
+        <Form.Control
+          as="textarea"
+          rows={2}
+          placeholder={t('comments.placeholder')}
+          value={newContent}
+          onChange={(e) => setNewContent(e.target.value)}
+          style={{ fontSize: '0.875rem' }}
+        />
+        <Button
+          variant="primary"
+          size="sm"
+          className="align-self-end"
+          disabled={!newContent.trim() || submitting}
+          onClick={() => void handleAdd()}
+        >
+          {submitting ? <Spinner animation="border" size="sm" /> : t('common.add')}
+        </Button>
+      </div>
+    </div>
+  );
+}

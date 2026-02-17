@@ -29,6 +29,8 @@
     "@aws-sdk/s3-request-presigner": "^3.738.0",
     "@aws-sdk/util-dynamodb": "3.817.0",
     "@dnd-kit/core": "^6.3.1",
+    "@dnd-kit/sortable": "^10.0.0",
+    "@dnd-kit/utilities": "^3.2.2",
     "@honeycombio/opentelemetry-web": "^0.21.0",
     "@mdxeditor/editor": "^3.19.3",
     "@opentelemetry/auto-instrumentations-web": "^0.47.0",

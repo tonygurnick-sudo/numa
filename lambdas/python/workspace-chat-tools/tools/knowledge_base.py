@@ -21,6 +21,7 @@ import io
 import json
 import os
 import time
+import uuid as uuid_mod
 import zipfile
 from datetime import datetime
 from typing import Any, Dict, List, Optional
@@ -44,6 +45,12 @@ QB_RETRIEVER_ID = os.getenv("Q_RETRIEVER_ID")
 BEDROCK_KNOWLEDGE_BASE_ID = os.getenv("BEDROCK_KNOWLEDGE_BASE_ID")
 FAST_MODEL_ID = os.getenv("FAST_MODEL_ID", "global.amazon.nova-2-lite-v1:0")
 SYSTEM_KB_IDS = {"company", "numa-support"}
+
+# Threshold for switching from inline base64 to presigned URL.
+# Lambda response payload limit is 6 MB; base64 adds ~33% overhead.
+# 3.5 MB raw -> ~4.67 MB base64 -> safely under 6 MB with JSON wrapper.
+PRESIGNED_URL_THRESHOLD = 3.5 * 1024 * 1024  # 3.5 MB
+PRESIGNED_URL_EXPIRY = 300  # 5 minutes
 
 
 # =============================================================================
@@ -962,27 +969,60 @@ def _get_s3_prefix(kb_id: str) -> str:
 
 def _download_file(bucket: str, key: str) -> Dict[str, Any]:
     """
-    Download file from S3 and return as base64.
+    Download file from S3.
+
+    For small files (< PRESIGNED_URL_THRESHOLD): returns base64-encoded content inline.
+    For large files (>= PRESIGNED_URL_THRESHOLD): returns a presigned S3 GET URL
+    so the caller can download directly, bypassing Lambda payload limits.
 
     Args:
         bucket: S3 bucket name
         key: S3 object key
 
     Returns:
-        Dict with filename, size_bytes, content_base64
+        Dict with filename, size_bytes, s3_uri, and either content_base64 or presigned_url
     """
     logger.info("Downloading file", bucket=bucket, key=key)
 
     s3_client = prm_client("s3", region=REGION)
+    filename = key.split("/")[-1]
 
     try:
+        # Check file size first with a HEAD request (no data transfer)
+        head_response = s3_client.head_object(Bucket=bucket, Key=key)
+        file_size = head_response["ContentLength"]
+
+        logger.info(
+            "File size determined",
+            filename=filename,
+            size_bytes=file_size,
+            use_presigned_url=file_size >= PRESIGNED_URL_THRESHOLD,
+        )
+
+        if file_size >= PRESIGNED_URL_THRESHOLD:
+            # Large file: return presigned URL for direct download
+            presigned_url = s3_client.generate_presigned_url(
+                "get_object",
+                Params={"Bucket": bucket, "Key": key},
+                ExpiresIn=PRESIGNED_URL_EXPIRY,
+            )
+
+            logger.info(
+                "Generated presigned URL for large file",
+                filename=filename,
+                size_bytes=file_size,
+            )
+
+            return {
+                "filename": filename,
+                "size_bytes": file_size,
+                "presigned_url": presigned_url,
+                "s3_uri": f"s3://{bucket}/{key}",
+            }
+
+        # Small file: return inline base64 (existing behavior)
         response = s3_client.get_object(Bucket=bucket, Key=key)
         content = response["Body"].read()
-
-        # Extract filename from key
-        filename = key.split("/")[-1]
-
-        # Encode as base64 for JSON transport
         content_base64 = base64.b64encode(content).decode("utf-8")
 
         logger.info(
@@ -1141,10 +1181,6 @@ def _download_folder(
 
     zip_buffer.seek(0)
     zip_content = zip_buffer.read()
-
-    # Encode as base64 for JSON transport
-    content_base64 = base64.b64encode(zip_content).decode("utf-8")
-
     zip_filename = f"{folder_name}.zip"
 
     logger.info(
@@ -1154,6 +1190,40 @@ def _download_folder(
         zip_size_bytes=len(zip_content),
         total_uncompressed_size=total_size,
     )
+
+    if len(zip_content) >= PRESIGNED_URL_THRESHOLD:
+        # Large zip: upload to S3 temp location and return presigned URL
+        temp_key = f"tmp/kb-downloads/{uuid_mod.uuid4()}/{zip_filename}"
+        s3_client.put_object(
+            Bucket=bucket,
+            Key=temp_key,
+            Body=zip_content,
+            ContentType="application/zip",
+        )
+
+        presigned_url = s3_client.generate_presigned_url(
+            "get_object",
+            Params={"Bucket": bucket, "Key": temp_key},
+            ExpiresIn=PRESIGNED_URL_EXPIRY,
+        )
+
+        logger.info(
+            "Generated presigned URL for large zip",
+            filename=zip_filename,
+            zip_size_bytes=len(zip_content),
+            temp_key=temp_key,
+        )
+
+        return {
+            "filename": zip_filename,
+            "size_bytes": len(zip_content),
+            "presigned_url": presigned_url,
+            "file_count": downloaded_count,
+            "total_files_in_folder": len(files),
+        }
+
+    # Small zip: return inline base64 (existing behavior)
+    content_base64 = base64.b64encode(zip_content).decode("utf-8")
 
     return {
         "filename": zip_filename,

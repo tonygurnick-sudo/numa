@@ -20,6 +20,7 @@ const UserKnowledgeBases = lazy(() =>
 );
 const UserKBDetailPage = lazy(() => import('../Pages/UserKBDetailPage').then((m) => ({ default: m.UserKBDetailPage })));
 const AgentsManagement = lazy(() => import('../Pages/AgentsManagement').then((m) => ({ default: m.AgentsManagement })));
+const OpsPage = lazy(() => import('../Pages/OpsPage').then((m) => ({ default: m.OpsPage })));
 const CompanyInfo = lazy(() => import('../Pages/CompanyInfo').then((m) => ({ default: m.CompanyInfo })));
 const NumaIntegrations = lazy(() => import('../Pages/NumaIntegrations').then((m) => ({ default: m.NumaIntegrations })));
 const JobHistoryManager = lazy(() => import('../Pages/JobHistoryManager'));
@@ -109,6 +110,22 @@ export const ROUTE_CONFIG = [
       sectionKey: 'nav.sections.workflows',
       featureFlag: 'NUMA_FILES',
       order: 5.5,
+    },
+  },
+
+  // Ops
+  {
+    path: '/ops',
+    element: () => <OpsPage />,
+    featureFlag: 'NUMA_OPS',
+    nav: {
+      label: 'Ops',
+      labelKey: 'nav.items.ops',
+      icon: 'bi bi-kanban',
+      section: 'workflows',
+      sectionKey: 'nav.sections.workflows',
+      featureFlag: 'NUMA_OPS',
+      order: 6,
     },
   },
 

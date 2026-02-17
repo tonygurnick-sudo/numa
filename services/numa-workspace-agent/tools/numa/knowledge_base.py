@@ -58,13 +58,59 @@ import argparse
 import base64
 import json
 import os
+import shutil
 import sys
+import urllib.error
+import urllib.request
 from pathlib import Path
 
 from helpers.credentials import get_local_lambda_client
 
-# 4 MB limit to stay within Lambda payload limits (6 MB with base64 overhead)
-MAX_FILE_SIZE = 4 * 1024 * 1024
+# Upload size limit for Lambda payload (6 MB with base64 overhead).
+# Downloads no longer have this limit thanks to presigned URL fallback.
+MAX_UPLOAD_SIZE = 4 * 1024 * 1024
+
+
+def _download_from_presigned_url(
+    url: str, dest_path: Path, expected_size: int = 0
+) -> int:
+    """
+    Download a file from a presigned S3 URL to a local path.
+
+    Uses urllib.request (stdlib) to stream the download.
+
+    Args:
+        url: Presigned S3 GET URL
+        dest_path: Local file path to write to
+        expected_size: Expected file size in bytes (for logging; 0 = unknown)
+
+    Returns:
+        Number of bytes written
+    """
+    dest_path.parent.mkdir(parents=True, exist_ok=True)
+
+    try:
+        with urllib.request.urlopen(url) as response:
+            with open(dest_path, "wb") as out_file:
+                shutil.copyfileobj(response, out_file)
+
+        return dest_path.stat().st_size
+
+    except urllib.error.HTTPError as e:
+        raise ValueError(
+            f"Failed to download from presigned URL: HTTP {e.code} {e.reason}. "
+            "The URL may have expired (5 minute window). Try the download again."
+        ) from e
+    except urllib.error.URLError as e:
+        raise ValueError(
+            f"Failed to download from presigned URL: {e.reason}. "
+            "Check network connectivity."
+        ) from e
+    except Exception as e:
+        # Clean up partial download
+        if dest_path.exists():
+            dest_path.unlink()
+        raise ValueError(f"Failed to download file: {str(e)}") from e
 
 
 def get_lambda_client_and_config():
@@ -215,7 +261,7 @@ def cmd_upload(args):
 
     # Check file size
     file_size = file_path.stat().st_size
-    if file_size > MAX_FILE_SIZE:
+    if file_size > MAX_UPLOAD_SIZE:
         size_mb = file_size / 1024 / 1024
         print(
             json.dumps(
@@ -300,14 +346,36 @@ def cmd_download(args):
 
     # Save file to disk
     result = response_payload.get("result", {})
-    if result.get("content_base64"):
+    filename = result.get("filename", "downloaded_file")
+    output_dir = Path(args.output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    output_path = output_dir / filename
+
+    if result.get("presigned_url"):
+        # Large file: download directly from S3 via presigned URL
+        try:
+            actual_size = _download_from_presigned_url(
+                url=result["presigned_url"],
+                dest_path=output_path,
+                expected_size=result.get("size_bytes", 0),
+            )
+            output = {
+                "status": "success",
+                "message": f"File saved to {output_path}",
+                "filename": filename,
+                "size_bytes": actual_size,
+                "output_path": str(output_path),
+                "s3_uri": result.get("s3_uri"),
+            }
+            print(json.dumps(output, indent=2))
+        except ValueError as e:
+            print(json.dumps({"status": "error", "error": str(e)}, indent=2))
+            sys.exit(1)
+
+    elif result.get("content_base64"):
+        # Small file: decode from inline base64 (existing behavior)
         file_content = base64.b64decode(result["content_base64"])
-        filename = result.get("filename", "downloaded_file")
 
-        output_dir = Path(args.output_dir)
-        output_dir.mkdir(parents=True, exist_ok=True)
-
-        output_path = output_dir / filename
         with open(output_path, "wb") as f:
             f.write(file_content)
 
@@ -379,14 +447,37 @@ def cmd_download_folder(args):
 
     # Save zip file to disk
     result = response_payload.get("result", {})
-    if result.get("content_base64"):
+    filename = result.get("filename", "download.zip")
+    output_dir = Path(args.output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    output_path = output_dir / filename
+
+    if result.get("presigned_url"):
+        # Large zip: download directly from S3 via presigned URL
+        try:
+            actual_size = _download_from_presigned_url(
+                url=result["presigned_url"],
+                dest_path=output_path,
+                expected_size=result.get("size_bytes", 0),
+            )
+            output = {
+                "status": "success",
+                "message": f"Folder downloaded to {output_path}",
+                "filename": filename,
+                "size_bytes": actual_size,
+                "output_path": str(output_path),
+                "file_count": result.get("file_count", 0),
+                "total_files_in_folder": result.get("total_files_in_folder", 0),
+            }
+            print(json.dumps(output, indent=2))
+        except ValueError as e:
+            print(json.dumps({"status": "error", "error": str(e)}, indent=2))
+            sys.exit(1)
+
+    elif result.get("content_base64"):
+        # Small zip: decode from inline base64 (existing behavior)
         file_content = base64.b64decode(result["content_base64"])
-        filename = result.get("filename", "download.zip")
 
-        output_dir = Path(args.output_dir)
-        output_dir.mkdir(parents=True, exist_ok=True)
-
-        output_path = output_dir / filename
         with open(output_path, "wb") as f:
             f.write(file_content)
 
