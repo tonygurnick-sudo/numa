@@ -1,0 +1,27 @@
+#!/bin/sh
+# Warn developers when checking out main or branching from main instead of dev.
+
+old_ref=$1
+new_ref=$2
+branch_flag=$3
+
+# Only run on branch checkout (not file checkout)
+if [ "$branch_flag" != "1" ]; then
+  exit 0
+fi
+
+branch=$(git symbolic-ref --short HEAD 2>/dev/null)
+
+main_ref=$(git rev-parse main 2>/dev/null)
+
+if [ "$branch" = "main" ]; then
+  echo ""
+  echo "  You checked out main. Remember to branch from dev for feature work:"
+  echo "     git checkout dev && git checkout -b feat/your-branch"
+  echo ""
+elif [ "$branch" != "dev" ] && [ "$old_ref" = "$main_ref" ]; then
+  echo ""
+  echo "  You branched from main. Did you mean to branch from dev?"
+  echo "  To fix: git checkout dev && git checkout -b $branch"
+  echo ""
+fi
