@@ -16,7 +16,7 @@ workflow:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
     - if: $CI_COMMIT_BRANCH && $CI_OPEN_MERGE_REQUESTS
       when: never
-    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_COMMIT_BRANCH == "main"
     - if: $CI_COMMIT_BRANCH == "dev"
     - if: $CI_PIPELINE_SOURCE == "web"
 
@@ -28,9 +28,9 @@ variables:
 
 .rules:
   if-main:
-    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_COMMIT_BRANCH == "main"
   if-deployable:
-    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_COMMIT_BRANCH == "main"
     - if: $CI_COMMIT_BRANCH == "dev"
 
 # Blocking manual gate for dev branch — pipeline pauses here until someone clicks play.
@@ -195,7 +195,7 @@ install-common-dependencies:
     paths:
       - node_modules
   rules:
-    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_COMMIT_BRANCH == "main"
 
 
 .node-job-cdktf-get-before-script: &node-job-cdktf-get-before-script
@@ -252,7 +252,7 @@ infra-build:
   <<: *node-job-infra-overrides
   interruptible: true
   rules:
-    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_COMMIT_BRANCH == "main"
     - changes:
         paths:
           - lib/client-config-node/**/*
@@ -402,7 +402,7 @@ tools-build:
   <<: *node-job-tools-overrides
   interruptible: true
   rules:
-    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_COMMIT_BRANCH == "main"
     - changes:
         paths:
           - lib/client-config-node/**/*
@@ -425,7 +425,7 @@ node-build:
   interruptible: true
   parallel: !reference [.node-matrix]
   rules:
-    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_COMMIT_BRANCH == "main"
     - changes:
         paths:
           - $BUILD_DIR/**/*
@@ -478,7 +478,7 @@ frontend-build:
   artifacts:
     paths: [infra/build/numa-frontend]
   rules:
-    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_COMMIT_BRANCH == "main"
     - if: $CI_COMMIT_BRANCH == "dev"
     - changes:
         paths:
@@ -525,7 +525,7 @@ claude-cli-artifact-build:
   stage: package
   image: amazonlinux:2023
   rules:
-    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_COMMIT_BRANCH == "main"
     - if: $CI_COMMIT_BRANCH == "dev"
     - changes:
         paths:
@@ -683,7 +683,9 @@ deploy-to-arcanum-demo:
   environment:
     deployment_tier: testing
   rules:
-    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_COMMIT_BRANCH == "main"
+      when: on_success
+    - if: $CI_COMMIT_BRANCH == "dev"
       when: on_success
     - if: $CI_COMMIT_BRANCH == "dev"
       when: on_success
@@ -706,7 +708,7 @@ deploy-to-median:
     - (cd infra && yarn exec cdktf get)
     - cd infra
   rules:
-    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_COMMIT_BRANCH == "main"
       when: manual
 
 
@@ -719,8 +721,8 @@ deploy-to-client:
   environment:
     deployment_tier: production
   rules:
-    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $DEPLOY_ALL_CUSTOMERS == "1"'
-    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: '$CI_COMMIT_BRANCH == "main" && $DEPLOY_ALL_CUSTOMERS == "1"'
+    - if: $CI_COMMIT_BRANCH == "main"
       when: manual
   release:
     name: "Customer deploy [$CLIENT_NAME] ${CI_COMMIT_SHORT_SHA}"
@@ -740,7 +742,7 @@ deploy-to-client-custom:
     url:
     deployment_tier: production
   rules:
-    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_COMMIT_BRANCH == "main"
       when: manual
   release:
     name: "Customer deploy [custom:${CLIENT_NAME}] ${CI_COMMIT_SHORT_SHA}"
