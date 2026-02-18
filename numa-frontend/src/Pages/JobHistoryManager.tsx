@@ -1,25 +1,15 @@
-import { useState, useEffect, useContext } from 'react';
-import {
-  Container,
-  Row,
-  Col,
-  Card,
-  Table,
-  Button,
-  Form,
-  Pagination,
-  Spinner,
-  Badge,
-  ButtonGroup,
-} from 'react-bootstrap';
+import { useState, useEffect, useContext, useMemo } from 'react';
+import { Container, Row, Col, Card, Table, Button, Form, Pagination, Spinner, Badge, Dropdown } from 'react-bootstrap';
 import { useNumaApp } from '../Providers/NumaAppContext';
 import { useJobsApi } from '../Services/jobsApi';
 import { manifestService } from '../Services/manifestService';
 import { useAuth } from '../Providers/AuthProvider';
 import { useNavigate } from 'react-router-dom';
 import { Search, FileEarmarkArrowUp } from 'react-bootstrap-icons';
+import { Check, ChevronDown, RefreshCw } from 'lucide-react';
 import { JobStatusContext } from '../Providers/JobStatusContext';
 import { PageHeader } from '../Components/PageHeader';
+import { SubHeaderTabBar } from '../Components/SubHeaderTabBar';
 import { useTranslation } from 'react-i18next';
 import { StickyToolbar } from '../Components/StickyToolbar';
 import { useScheduledAgentJobs } from '../hooks/useScheduledAgentJobs';
@@ -33,6 +23,50 @@ const getJobSortTime = (job) => {
   const candidate = completed || started || 0;
   const parsed = new Date(candidate).getTime();
   return Number.isNaN(parsed) ? 0 : parsed;
+};
+
+type FilterOption = { value: string; label: string };
+
+interface FilterDropdownProps {
+  id: string;
+  ariaLabel: string;
+  value: string;
+  options: FilterOption[];
+  onChange: (nextValue: string) => void;
+  disabled?: boolean;
+}
+
+const FilterDropdown = ({ id, ariaLabel, value, options, onChange, disabled = false }: FilterDropdownProps) => {
+  const selectedOption = options.find((option) => option.value === value) ?? options[0];
+
+  return (
+    <Dropdown className="job-history-filter-dropdown">
+      <Dropdown.Toggle
+        id={id}
+        className="job-history-filter-dropdown-toggle"
+        aria-label={ariaLabel}
+        disabled={disabled}
+      >
+        <span className="job-history-filter-dropdown-label">{selectedOption?.label ?? ''}</span>
+        <ChevronDown size={16} className="job-history-filter-dropdown-chevron" aria-hidden="true" />
+      </Dropdown.Toggle>
+      <Dropdown.Menu className="job-history-filter-dropdown-menu">
+        {options.map((option) => (
+          <Dropdown.Item
+            key={option.value}
+            onClick={() => onChange(option.value)}
+            active={option.value === value}
+            className="job-history-filter-dropdown-item"
+          >
+            <span>{option.label}</span>
+            {option.value === value && (
+              <Check size={14} className="job-history-filter-dropdown-check" aria-hidden="true" />
+            )}
+          </Dropdown.Item>
+        ))}
+      </Dropdown.Menu>
+    </Dropdown>
+  );
 };
 
 const JobHistoryManager = () => {
@@ -64,6 +98,7 @@ const JobHistoryManager = () => {
   const [itemsPerPage] = useState(10);
   const [filterStatus, setFilterStatus] = useState('all');
   const [searchTerm, setSearchTerm] = useState('');
+  const [selectedAgent, setSelectedAgent] = useState('all');
 
   // Load apps from manifest on initial load
   useEffect(() => {
@@ -227,8 +262,7 @@ const JobHistoryManager = () => {
   };
 
   // Handle app selection change
-  const handleAppChange = (e) => {
-    const appId = e.target.value;
+  const handleAppChange = (appId) => {
     setSelectedApp(appId);
     setCurrentPage(1); // Reset to first page
 
@@ -280,10 +314,67 @@ const JobHistoryManager = () => {
   };
 
   // Handle status filter change
-  const handleStatusFilterChange = (e) => {
-    setFilterStatus(e.target.value);
+  const handleStatusFilterChange = (statusValue) => {
+    setFilterStatus(statusValue);
     setCurrentPage(1); // Reset to first page when filter changes
   };
+
+  const handleJobTypeChange = (nextJobType: 'all' | 'apps' | 'agents') => {
+    setJobType(nextJobType);
+    if (nextJobType === 'apps') {
+      setSelectedAgent('all');
+    }
+    setCurrentPage(1);
+  };
+
+  const jobTypeTabs = useMemo(
+    () => [
+      { key: 'all', label: t('jobHistory.filters.jobType.all') },
+      { key: 'apps', label: t('jobHistory.filters.jobType.apps') },
+      { key: 'agents', label: t('jobHistory.filters.jobType.agents') },
+    ],
+    [t],
+  );
+
+  const appFilterOptions = useMemo(
+    () => [
+      { value: 'all', label: t('jobHistory.filters.app.all') },
+      ...manifestApps
+        .filter((app) => app.id !== 'policy-builder-app' && app.id !== 'policy-reviewer-app')
+        .map((app) => ({ value: app.id, label: app.appName || app.id })),
+    ],
+    [manifestApps, t],
+  );
+
+  const statusFilterOptions = useMemo(
+    () => [
+      { value: 'all', label: t('jobHistory.filters.status.all') },
+      { value: 'completed', label: t('jobHistory.status.completed') },
+      { value: 'running', label: t('jobHistory.status.running') },
+      { value: 'failed', label: t('jobHistory.status.failed') },
+      { value: 'files-uploaded', label: t('jobHistory.status.filesUploaded') },
+    ],
+    [t],
+  );
+
+  const agentFilterOptions = useMemo(() => {
+    const map = new Map<string, string>();
+
+    jobs.forEach((job) => {
+      if (!job.isScheduledAgent) return;
+      const value = job.agentId || job.agentTitle || 'unknown';
+      const label = job.agentTitle || job.agentId || t('jobHistory.filters.agent.unknown');
+      if (!map.has(value)) {
+        map.set(value, label);
+      }
+    });
+
+    const sortedAgents = Array.from(map.entries())
+      .map(([value, label]) => ({ value, label }))
+      .sort((a, b) => a.label.localeCompare(b.label));
+
+    return [{ value: 'all', label: t('jobHistory.filters.agent.all') }, ...sortedAgents];
+  }, [jobs, t]);
 
   // Handle search
   const handleSearch = (e) => {
@@ -367,6 +458,14 @@ const JobHistoryManager = () => {
   // Filter and sort jobs
   const filteredJobs = jobs
     .filter((job) => {
+      // Apply agent filter
+      if (selectedAgent !== 'all' && jobType !== 'apps') {
+        const agentValue = job.agentId || job.agentTitle || 'unknown';
+        if (!job.isScheduledAgent || agentValue !== selectedAgent) {
+          return false;
+        }
+      }
+
       // Apply status filter
       if (filterStatus !== 'all') {
         const statusUpper = getDisplayStatusUpper(job);
@@ -494,7 +593,7 @@ const JobHistoryManager = () => {
     const statusInfo = getStatusInfo(status);
     return (
       <div className="d-flex align-items-center">
-        <Badge bg={statusInfo.variant} className="small">
+        <Badge bg={statusInfo.variant} className="job-history-status-badge">
           {statusInfo.text}
         </Badge>
         {hasFileUploads && <FileEarmarkArrowUp className="ms-2 text-primary" title={t('jobHistory.fileUploads')} />}
@@ -512,7 +611,7 @@ const JobHistoryManager = () => {
           variant="outline-primary"
           size="sm"
           onClick={() => navigate(`/scheduling/${job.scheduleId || job.results?.scheduleId}`)}
-          className="d-flex align-items-center"
+          className="d-flex align-items-center job-history-action-btn"
         >
           {t('jobHistory.actions.viewSchedule')}
         </Button>
@@ -542,7 +641,7 @@ const JobHistoryManager = () => {
         size="sm"
         onClick={() => handleViewResults(job.jobId, job.appId)}
         disabled={loadingJobId === job.jobId}
-        className="d-flex align-items-center"
+        className="d-flex align-items-center job-history-action-btn"
       >
         {loadingJobId === job.jobId ? (
           <div className="d-flex align-items-center">
@@ -576,32 +675,33 @@ const JobHistoryManager = () => {
   };
 
   return (
-    <div className="dashboard" data-testid="layout-dashboard">
+    <div className="dashboard job-history-page" data-testid="layout-dashboard">
       <PageHeader
         title={t('jobHistory.title')}
         subtitle={t('jobHistory.subtitle')}
+        actionsClassName="job-history-header-actions"
         actions={
           <>
             <Button
               variant="secondary"
               onClick={onRefreshClick}
               disabled={jobStatusLoading}
-              className="d-flex align-items-center"
+              className="standard-refresh-btn"
             >
               {jobStatusLoading ? (
                 <>
-                  <Spinner animation="border" size="sm" />
-                  <span className="ms-2">{t('jobHistory.loading')}</span>
+                  <Spinner animation="border" size="sm" className="me-2" />
+                  <span className="standard-refresh-btn__label">{t('jobHistory.loading')}</span>
                 </>
               ) : (
                 <>
-                  <i className="bi bi-arrow-clockwise me-1"></i>
-                  {t('jobHistory.actions.refresh')}
+                  <RefreshCw size={16} className="standard-refresh-btn__icon" aria-hidden="true" />
+                  <span className="standard-refresh-btn__label">{t('jobHistory.actions.refresh')}</span>
                 </>
               )}
             </Button>
             {nextRefreshIn && (
-              <small className="text-muted">
+              <small className="text-muted job-history-refresh-meta">
                 {t('jobHistory.autoRefresh', {
                   time: `${Math.floor(nextRefreshIn / 60)}:${(nextRefreshIn % 60).toString().padStart(2, '0')}`,
                 })}
@@ -610,88 +710,77 @@ const JobHistoryManager = () => {
           </>
         }
       />
+      <SubHeaderTabBar
+        items={jobTypeTabs}
+        activeKey={jobType}
+        onSelect={(key) => handleJobTypeChange((key as 'all' | 'apps' | 'agents') || 'all')}
+        ariaLabel={t('jobHistory.filters.jobType.label')}
+      />
 
-      <Container fluid>
-        <StickyToolbar>
-          <Row className="mb-0 px-3">
-            <Col md={2}>
-              <Form.Group>
-                <Form.Label>{t('jobHistory.filters.jobType.label')}</Form.Label>
-                <ButtonGroup className="w-100">
-                  <Button
-                    variant={jobType === 'all' ? 'primary' : 'outline-primary'}
-                    size="sm"
-                    onClick={() => setJobType('all')}
-                  >
-                    {t('jobHistory.filters.jobType.all')}
-                  </Button>
-                  <Button
-                    variant={jobType === 'apps' ? 'primary' : 'outline-primary'}
-                    size="sm"
-                    onClick={() => setJobType('apps')}
-                  >
-                    {t('jobHistory.filters.jobType.apps')}
-                  </Button>
-                  <Button
-                    variant={jobType === 'agents' ? 'primary' : 'outline-primary'}
-                    size="sm"
-                    onClick={() => setJobType('agents')}
-                  >
-                    {t('jobHistory.filters.jobType.agents')}
-                  </Button>
-                </ButtonGroup>
-              </Form.Group>
-            </Col>
-            <Col md={3}>
-              <Form.Group>
-                <Form.Label>{t('jobHistory.filters.app.label')}</Form.Label>
-                <Form.Select
-                  value={selectedApp}
-                  onChange={handleAppChange}
-                  disabled={isLoading || jobType === 'agents'}
-                  aria-label={t('jobHistory.filters.app.aria')}
-                >
-                  <option value="all">{t('jobHistory.filters.app.all')}</option>
-                  {manifestApps
-                    .filter((app) => app.id !== 'policy-builder-app' && app.id !== 'policy-reviewer-app')
-                    .map((app) => (
-                      <option key={app.id} value={app.id}>
-                        {app.appName || app.id}
-                      </option>
-                    ))}
-                </Form.Select>
-              </Form.Group>
-            </Col>
-            <Col md={3}>
-              <Form.Group>
-                <Form.Label>{t('jobHistory.filters.status.label')}</Form.Label>
-                <Form.Select value={filterStatus} onChange={handleStatusFilterChange}>
-                  <option value="all">{t('jobHistory.filters.status.all')}</option>
-                  <option value="completed">{t('jobHistory.status.completed')}</option>
-                  <option value="running">{t('jobHistory.status.running')}</option>
-                  <option value="failed">{t('jobHistory.status.failed')}</option>
-                  <option value="files-uploaded">{t('jobHistory.status.filesUploaded')}</option>
-                </Form.Select>
-              </Form.Group>
-            </Col>
-            <Col md={5}>
-              <Form.Group>
-                <Form.Label>{t('jobHistory.filters.search.label')}</Form.Label>
+      <Container fluid className="job-history-content">
+        <StickyToolbar className="job-history-toolbar">
+          <Row className="g-3 align-items-end mb-0 job-history-toolbar-row">
+            <Col md={jobType === 'all' ? 4 : 6}>
+              <Form.Group className="job-history-search-group">
                 <div className="position-relative">
                   <Form.Control
                     type="text"
-                    placeholder={t('jobHistory.filters.search.placeholder')}
+                    placeholder={t('jobHistory.filters.search.shortPlaceholder')}
                     value={searchTerm}
                     onChange={handleSearch}
+                    aria-label={t('jobHistory.filters.search.label')}
+                    className="job-history-search-input"
                   />
-                  <Search className="position-absolute" style={{ right: '10px', top: '10px', color: '#6c757d' }} />
+                  <Search className="job-history-search-icon" />
                 </div>
+              </Form.Group>
+            </Col>
+            {jobType !== 'agents' && (
+              <Col md={jobType === 'all' ? 3 : 4}>
+                <Form.Group>
+                  <FilterDropdown
+                    id="job-history-app-filter"
+                    ariaLabel={t('jobHistory.filters.app.aria')}
+                    value={selectedApp}
+                    onChange={handleAppChange}
+                    options={appFilterOptions}
+                    disabled={isLoading}
+                  />
+                </Form.Group>
+              </Col>
+            )}
+            {jobType !== 'apps' && (
+              <Col md={jobType === 'all' ? 3 : 4}>
+                <Form.Group>
+                  <FilterDropdown
+                    id="job-history-agent-filter"
+                    ariaLabel={t('jobHistory.filters.agent.aria')}
+                    value={selectedAgent}
+                    onChange={(agentValue) => {
+                      setSelectedAgent(agentValue);
+                      setCurrentPage(1);
+                    }}
+                    options={agentFilterOptions}
+                    disabled={isLoading}
+                  />
+                </Form.Group>
+              </Col>
+            )}
+            <Col md={2}>
+              <Form.Group>
+                <FilterDropdown
+                  id="job-history-status-filter"
+                  ariaLabel={t('jobHistory.filters.status.label')}
+                  value={filterStatus}
+                  onChange={handleStatusFilterChange}
+                  options={statusFilterOptions}
+                />
               </Form.Group>
             </Col>
           </Row>
         </StickyToolbar>
 
-        <Card>
+        <Card className="job-history-table-card">
           <Card.Body className="p-0">
             {isLoading ? (
               <div className="text-center p-4">
@@ -707,7 +796,7 @@ const JobHistoryManager = () => {
             ) : (
               <>
                 <div className="table-responsive file-table-container scrollable">
-                  <Table hover className="mb-0 file-table auto-layout">
+                  <Table hover className="mb-0 file-table auto-layout job-history-table">
                     <thead className="sticky-table-header numa-table-header">
                       <tr>
                         <th onClick={() => handleSort('startedAt')} className="sortable-header">

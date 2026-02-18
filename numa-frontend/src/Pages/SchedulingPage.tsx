@@ -10,12 +10,15 @@ import {
   Button,
   Spinner,
   Modal,
-  ButtonGroup,
   Form,
+  ButtonGroup,
+  Dropdown,
 } from 'react-bootstrap';
 import { useNavigate } from 'react-router-dom';
+import { Search, ChevronDown, Check, RefreshCw } from 'lucide-react';
 import { PageHeader } from '../Components/PageHeader';
 import { StickyToolbar } from '../Components/StickyToolbar';
+import { LayoutDashboard } from '../Layouts/LayoutDashboard';
 import { ScheduleService } from '../Services/ScheduleService';
 import type { AgentSchedule } from '../types/agentSchedules';
 import { AgentScheduleModal } from '../Components/Agents/AgentScheduleModal';
@@ -50,6 +53,43 @@ const formatDate = (date: Date | null, labels: { notAvailable: string }, timezon
 type ScheduleWithNextRun = AgentSchedule & { nextRun: Date | null };
 
 type SortField = 'name' | 'agent' | 'schedule' | 'nextRun' | 'lastRun' | 'status' | 'timezone';
+type FilterOption = { value: string; label: string };
+
+interface FilterDropdownProps {
+  id: string;
+  ariaLabel: string;
+  value: string;
+  options: FilterOption[];
+  onChange: (nextValue: string) => void;
+}
+
+const FilterDropdown: React.FC<FilterDropdownProps> = ({ id, ariaLabel, value, options, onChange }) => {
+  const selectedOption = options.find((option) => option.value === value) ?? options[0];
+
+  return (
+    <Dropdown className="scheduling-filter-dropdown">
+      <Dropdown.Toggle id={id} className="scheduling-filter-dropdown-toggle" aria-label={ariaLabel}>
+        <span className="scheduling-filter-dropdown-label">{selectedOption?.label ?? ''}</span>
+        <ChevronDown size={16} className="scheduling-filter-dropdown-chevron" aria-hidden="true" />
+      </Dropdown.Toggle>
+      <Dropdown.Menu className="scheduling-filter-dropdown-menu">
+        {options.map((option) => (
+          <Dropdown.Item
+            key={option.value}
+            onClick={() => onChange(option.value)}
+            active={option.value === value}
+            className="scheduling-filter-dropdown-item"
+          >
+            <span>{option.label}</span>
+            {option.value === value && (
+              <Check size={14} className="scheduling-filter-dropdown-check" aria-hidden="true" />
+            )}
+          </Dropdown.Item>
+        ))}
+      </Dropdown.Menu>
+    </Dropdown>
+  );
+};
 
 const isOneTimeCron = (cronExpression: string) => {
   if (!cronExpression?.startsWith('cron(') || !cronExpression.endsWith(')')) return false;
@@ -232,6 +272,33 @@ export const SchedulingPage: React.FC = () => {
       });
   }, [schedulesWithNextRun, t]);
 
+  const agentFilterOptions = useMemo<FilterOption[]>(
+    () => [{ value: 'all', label: t('scheduling.filters.agent.all') }, ...agentOptions],
+    [agentOptions, t],
+  );
+
+  const statusFilterOptions = useMemo<FilterOption[]>(
+    () => [
+      { value: 'all', label: t('scheduling.filters.status.all') },
+      { value: 'active', label: t('scheduling.status.active') },
+      { value: 'inactive', label: t('scheduling.status.inactive') },
+      { value: 'paused', label: t('scheduling.status.paused') },
+      { value: 'deleted', label: t('scheduling.status.deleted') },
+    ],
+    [t],
+  );
+
+  const timezoneFilterOptions = useMemo<FilterOption[]>(
+    () => [
+      { value: 'all', label: t('scheduling.filters.timezone.all') },
+      ...timezoneOptions.map((timezone) => ({
+        value: timezone,
+        label: timezone === 'unknown' ? t('scheduling.filters.timezone.unknown') : timezone,
+      })),
+    ],
+    [timezoneOptions, t],
+  );
+
   const filteredSchedules = useMemo(() => {
     let result = schedulesWithNextRun;
     const normalizedSearch = searchTerm.trim().toLowerCase();
@@ -348,278 +415,283 @@ export const SchedulingPage: React.FC = () => {
   }, [editingSchedule]);
 
   return (
-    <Container fluid>
-      <PageHeader title={t('scheduling.page.title')} subtitle={t('scheduling.page.subtitle')} />
-
-      {error && (
-        <Alert variant="danger" onClose={() => setError(null)} dismissible className="mb-4">
-          {error}
-        </Alert>
-      )}
-
-      <Row>
-        <Col>
-          <StickyToolbar>
-            <Row className="g-3 align-items-end px-3">
-              <Col md={4}>
-                <Form.Group>
-                  <Form.Label>{t('scheduling.filters.search.label')}</Form.Label>
-                  <div className="position-relative">
-                    <Form.Control
-                      type="text"
-                      placeholder={t('scheduling.filters.search.placeholder')}
-                      value={searchTerm}
-                      onChange={(e) => setSearchTerm(e.target.value)}
-                    />
-                    <i
-                      className="bi bi-search position-absolute"
-                      style={{ right: '10px', top: '10px', color: '#6c757d' }}
-                    ></i>
-                  </div>
-                </Form.Group>
-              </Col>
-              <Col md={2}>
-                <Form.Group>
-                  <Form.Label>{t('scheduling.filters.agent.label')}</Form.Label>
-                  <Form.Select
-                    value={agentFilter}
-                    onChange={(e) => setAgentFilter(e.target.value)}
-                    aria-label={t('scheduling.filters.agent.aria')}
-                  >
-                    <option value="all">{t('scheduling.filters.agent.all')}</option>
-                    {agentOptions.map((agent) => (
-                      <option key={agent.value} value={agent.value}>
-                        {agent.label}
-                      </option>
-                    ))}
-                  </Form.Select>
-                </Form.Group>
-              </Col>
-              <Col md={2}>
-                <Form.Group>
-                  <Form.Label>{t('scheduling.filters.status.label')}</Form.Label>
-                  <Form.Select
-                    value={statusFilter}
-                    onChange={(e) => setStatusFilter(e.target.value)}
-                    aria-label={t('scheduling.filters.status.aria')}
-                  >
-                    <option value="all">{t('scheduling.filters.status.all')}</option>
-                    <option value="active">{t('scheduling.status.active')}</option>
-                    <option value="inactive">{t('scheduling.status.inactive')}</option>
-                    <option value="paused">{t('scheduling.status.paused')}</option>
-                    <option value="deleted">{t('scheduling.status.deleted')}</option>
-                  </Form.Select>
-                </Form.Group>
-              </Col>
-              <Col md={2}>
-                <Form.Group>
-                  <Form.Label>{t('scheduling.filters.timezone.label')}</Form.Label>
-                  <Form.Select
-                    value={timezoneFilter}
-                    onChange={(e) => setTimezoneFilter(e.target.value)}
-                    aria-label={t('scheduling.filters.timezone.aria')}
-                  >
-                    <option value="all">{t('scheduling.filters.timezone.all')}</option>
-                    {timezoneOptions.map((timezone) => (
-                      <option key={timezone} value={timezone}>
-                        {timezone === 'unknown' ? t('scheduling.filters.timezone.unknown') : timezone}
-                      </option>
-                    ))}
-                  </Form.Select>
-                </Form.Group>
-              </Col>
-              <Col md={2} className="d-flex justify-content-md-end">
-                <ButtonGroup size="sm">
-                  <Button
-                    variant="outline-secondary"
-                    onClick={() => setShowDebugIds((current) => !current)}
-                    aria-pressed={showDebugIds}
-                  >
-                    <i className="bi bi-bug me-2"></i>
-                    {showDebugIds ? t('scheduling.debug.hideIds') : t('scheduling.debug.showIds')}
-                  </Button>
-                  <Button variant="outline-primary" onClick={loadSchedules} disabled={loading}>
-                    {loading ? <Spinner animation="border" size="sm" /> : <i className="bi bi-arrow-clockwise"></i>}
-                    <span className="ms-2">{t('scheduling.actions.refresh')}</span>
-                  </Button>
-                </ButtonGroup>
-              </Col>
-            </Row>
-          </StickyToolbar>
-          <Card>
-            <Card.Body className="p-0">
-              {loading && schedules.length === 0 ? (
-                <div className="text-center py-5">
-                  <Spinner animation="border" />
-                  <p className="mt-3 text-muted">{t('scheduling.loading')}</p>
-                </div>
-              ) : schedules.length === 0 ? (
-                <div className="text-center py-5">
-                  <i className="bi bi-calendar-x fs-1 text-muted"></i>
-                  <p className="mt-3 text-muted">{t('scheduling.page.empty')}</p>
-                </div>
-              ) : filteredSchedules.length === 0 ? (
-                <div className="text-center py-5">
-                  <i className="bi bi-funnel fs-1 text-muted"></i>
-                  <p className="mt-3 text-muted">{t('scheduling.page.emptyFiltered')}</p>
-                </div>
+    <div className="dashboard scheduling-page">
+      <PageHeader
+        title={t('scheduling.page.title')}
+        subtitle={t('scheduling.page.subtitle')}
+        actions={
+          <>
+            <Button
+              variant="secondary"
+              className="standard-refresh-btn text-nowrap"
+              onClick={() => setShowDebugIds((current) => !current)}
+            >
+              <i className="bi bi-bug standard-refresh-btn__icon" aria-hidden="true"></i>
+              <span className="standard-refresh-btn__label">
+                {showDebugIds ? t('scheduling.debug.hideIds') : t('scheduling.debug.showIds')}
+              </span>
+            </Button>
+            <Button
+              variant="secondary"
+              className="standard-refresh-btn text-nowrap"
+              onClick={loadSchedules}
+              disabled={loading}
+            >
+              {loading ? (
+                <>
+                  <Spinner animation="border" size="sm" className="me-2" />
+                  <span className="standard-refresh-btn__label">{t('scheduling.actions.refresh')}</span>
+                </>
               ) : (
-                <div className="table-responsive file-table-container scrollable">
-                  <Table hover className="mb-0 file-table auto-layout">
-                    <thead className="sticky-table-header numa-table-header">
-                      <tr>
-                        <th onClick={() => handleSort('name')} className="sortable-header">
-                          {t('scheduling.page.columns.name')}{' '}
-                          {sortField === 'name' && (
-                            <i className={`bi bi-caret-${sortDirection === 'asc' ? 'up' : 'down'}-fill ms-1`}></i>
-                          )}
-                        </th>
-                        <th onClick={() => handleSort('agent')} className="sortable-header">
-                          {t('scheduling.page.columns.agent')}{' '}
-                          {sortField === 'agent' && (
-                            <i className={`bi bi-caret-${sortDirection === 'asc' ? 'up' : 'down'}-fill ms-1`}></i>
-                          )}
-                        </th>
-                        <th onClick={() => handleSort('schedule')} className="sortable-header">
-                          {t('scheduling.page.columns.schedule')}{' '}
-                          {sortField === 'schedule' && (
-                            <i className={`bi bi-caret-${sortDirection === 'asc' ? 'up' : 'down'}-fill ms-1`}></i>
-                          )}
-                        </th>
-                        <th onClick={() => handleSort('nextRun')} className="sortable-header">
-                          {t('scheduling.page.columns.nextRun')}{' '}
-                          {sortField === 'nextRun' && (
-                            <i className={`bi bi-caret-${sortDirection === 'asc' ? 'up' : 'down'}-fill ms-1`}></i>
-                          )}
-                        </th>
-                        <th onClick={() => handleSort('lastRun')} className="sortable-header">
-                          {t('scheduling.page.columns.lastRun')}{' '}
-                          {sortField === 'lastRun' && (
-                            <i className={`bi bi-caret-${sortDirection === 'asc' ? 'up' : 'down'}-fill ms-1`}></i>
-                          )}
-                        </th>
-                        <th onClick={() => handleSort('status')} className="sortable-header">
-                          {t('scheduling.page.columns.status')}{' '}
-                          {sortField === 'status' && (
-                            <i className={`bi bi-caret-${sortDirection === 'asc' ? 'up' : 'down'}-fill ms-1`}></i>
-                          )}
-                        </th>
-                        <th onClick={() => handleSort('timezone')} className="sortable-header">
-                          {t('scheduling.page.columns.timezone')}{' '}
-                          {sortField === 'timezone' && (
-                            <i className={`bi bi-caret-${sortDirection === 'asc' ? 'up' : 'down'}-fill ms-1`}></i>
-                          )}
-                        </th>
-                        <th style={{ width: '120px' }}>{t('scheduling.page.columns.actions')}</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {sortedSchedules.map((schedule) => {
-                        const derivedStatus = getDerivedStatus(schedule);
-                        return (
-                          <tr
-                            key={schedule.scheduleId}
-                            onClick={() => handleScheduleClick(schedule)}
-                            style={{ cursor: 'pointer' }}
-                          >
-                            <td>
-                              <strong>{schedule.label || t('scheduling.labels.unnamed')}</strong>
-                              {showDebugIds && (
-                                <>
-                                  <br />
-                                  <small className="text-muted">{schedule.scheduleId}</small>
-                                </>
+                <>
+                  <RefreshCw size={16} className="standard-refresh-btn__icon" aria-hidden="true" />
+                  <span className="standard-refresh-btn__label">{t('scheduling.actions.refresh')}</span>
+                </>
+              )}
+            </Button>
+          </>
+        }
+      />
+      <LayoutDashboard>
+        <Container fluid className="scheduling-content">
+          {error && (
+            <Alert variant="danger" onClose={() => setError(null)} dismissible className="mb-4">
+              {error}
+            </Alert>
+          )}
+
+          <Row className="g-0">
+            <Col>
+              <StickyToolbar className="scheduling-toolbar">
+                <Row className="g-3 align-items-end scheduling-toolbar-row">
+                  <Col md={3}>
+                    <Form.Group className="scheduling-search-group">
+                      <div className="position-relative">
+                        <Form.Control
+                          type="text"
+                          placeholder={t('scheduling.filters.search.shortPlaceholder')}
+                          value={searchTerm}
+                          aria-label={t('scheduling.filters.search.label')}
+                          className="scheduling-search-input"
+                          onChange={(e) => setSearchTerm(e.target.value)}
+                        />
+                        <Search size={16} className="scheduling-search-icon" aria-hidden="true" />
+                      </div>
+                    </Form.Group>
+                  </Col>
+                  <Col md={3}>
+                    <Form.Group>
+                      <FilterDropdown
+                        id="scheduling-agent-filter"
+                        ariaLabel={t('scheduling.filters.agent.aria')}
+                        value={agentFilter}
+                        options={agentFilterOptions}
+                        onChange={setAgentFilter}
+                      />
+                    </Form.Group>
+                  </Col>
+                  <Col md={3}>
+                    <Form.Group>
+                      <FilterDropdown
+                        id="scheduling-status-filter"
+                        ariaLabel={t('scheduling.filters.status.aria')}
+                        value={statusFilter}
+                        options={statusFilterOptions}
+                        onChange={setStatusFilter}
+                      />
+                    </Form.Group>
+                  </Col>
+                  <Col md={3}>
+                    <Form.Group>
+                      <FilterDropdown
+                        id="scheduling-timezone-filter"
+                        ariaLabel={t('scheduling.filters.timezone.aria')}
+                        value={timezoneFilter}
+                        options={timezoneFilterOptions}
+                        onChange={setTimezoneFilter}
+                      />
+                    </Form.Group>
+                  </Col>
+                </Row>
+              </StickyToolbar>
+              <Card className="scheduling-table-card">
+                <Card.Body className="p-0">
+                  {loading && schedules.length === 0 ? (
+                    <div className="text-center py-5">
+                      <Spinner animation="border" />
+                      <p className="mt-3 text-muted">{t('scheduling.loading')}</p>
+                    </div>
+                  ) : schedules.length === 0 ? (
+                    <div className="text-center py-5">
+                      <i className="bi bi-calendar-x fs-1 text-muted"></i>
+                      <p className="mt-3 text-muted">{t('scheduling.page.empty')}</p>
+                    </div>
+                  ) : filteredSchedules.length === 0 ? (
+                    <div className="text-center py-5">
+                      <i className="bi bi-funnel fs-1 text-muted"></i>
+                      <p className="mt-3 text-muted">{t('scheduling.page.emptyFiltered')}</p>
+                    </div>
+                  ) : (
+                    <div className="table-responsive file-table-container scrollable scheduling-table-wrap">
+                      <Table hover className="mb-0 file-table auto-layout scheduling-table">
+                        <thead className="sticky-table-header numa-table-header">
+                          <tr>
+                            <th onClick={() => handleSort('name')} className="sortable-header">
+                              {t('scheduling.page.columns.name')}{' '}
+                              {sortField === 'name' && (
+                                <i className={`bi bi-caret-${sortDirection === 'asc' ? 'up' : 'down'}-fill ms-1`}></i>
                               )}
-                            </td>
-                            <td>{schedule.agentTitle || schedule.agentId || '-'}</td>
-                            <td>
-                              <span>{describeCronExpression(schedule.cronExpression)}</span>
-                              {showDebugIds && (
-                                <>
-                                  <br />
-                                  <small className="text-muted font-monospace">{schedule.cronExpression}</small>
-                                </>
+                            </th>
+                            <th onClick={() => handleSort('agent')} className="sortable-header">
+                              {t('scheduling.page.columns.agent')}{' '}
+                              {sortField === 'agent' && (
+                                <i className={`bi bi-caret-${sortDirection === 'asc' ? 'up' : 'down'}-fill ms-1`}></i>
                               )}
-                            </td>
-                            <td>
-                              {formatDate(
-                                schedule.nextRun,
-                                { notAvailable: t('scheduling.labels.notAvailable') },
-                                schedule.timezone,
+                            </th>
+                            <th onClick={() => handleSort('schedule')} className="sortable-header">
+                              {t('scheduling.page.columns.schedule')}{' '}
+                              {sortField === 'schedule' && (
+                                <i className={`bi bi-caret-${sortDirection === 'asc' ? 'up' : 'down'}-fill ms-1`}></i>
                               )}
-                            </td>
-                            <td>
-                              {schedule.lastRunEpoch
-                                ? formatDate(
-                                    new Date(schedule.lastRunEpoch),
+                            </th>
+                            <th onClick={() => handleSort('nextRun')} className="sortable-header">
+                              {t('scheduling.page.columns.nextRun')}{' '}
+                              {sortField === 'nextRun' && (
+                                <i className={`bi bi-caret-${sortDirection === 'asc' ? 'up' : 'down'}-fill ms-1`}></i>
+                              )}
+                            </th>
+                            <th onClick={() => handleSort('lastRun')} className="sortable-header">
+                              {t('scheduling.page.columns.lastRun')}{' '}
+                              {sortField === 'lastRun' && (
+                                <i className={`bi bi-caret-${sortDirection === 'asc' ? 'up' : 'down'}-fill ms-1`}></i>
+                              )}
+                            </th>
+                            <th onClick={() => handleSort('status')} className="sortable-header">
+                              {t('scheduling.page.columns.status')}{' '}
+                              {sortField === 'status' && (
+                                <i className={`bi bi-caret-${sortDirection === 'asc' ? 'up' : 'down'}-fill ms-1`}></i>
+                              )}
+                            </th>
+                            <th onClick={() => handleSort('timezone')} className="sortable-header">
+                              {t('scheduling.page.columns.timezone')}{' '}
+                              {sortField === 'timezone' && (
+                                <i className={`bi bi-caret-${sortDirection === 'asc' ? 'up' : 'down'}-fill ms-1`}></i>
+                              )}
+                            </th>
+                            <th className="scheduling-actions-column">{t('scheduling.page.columns.actions')}</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {sortedSchedules.map((schedule) => {
+                            const derivedStatus = getDerivedStatus(schedule);
+                            return (
+                              <tr
+                                key={schedule.scheduleId}
+                                onClick={() => handleScheduleClick(schedule)}
+                                className="scheduling-table-row"
+                              >
+                                <td>
+                                  <strong>{schedule.label || t('scheduling.labels.unnamed')}</strong>
+                                  {showDebugIds && (
+                                    <>
+                                      <br />
+                                      <small className="text-muted">{schedule.scheduleId}</small>
+                                    </>
+                                  )}
+                                </td>
+                                <td>{schedule.agentTitle || schedule.agentId || '-'}</td>
+                                <td>
+                                  <span>{describeCronExpression(schedule.cronExpression)}</span>
+                                  {showDebugIds && (
+                                    <>
+                                      <br />
+                                      <small className="text-muted font-monospace">{schedule.cronExpression}</small>
+                                    </>
+                                  )}
+                                </td>
+                                <td>
+                                  {formatDate(
+                                    schedule.nextRun,
                                     { notAvailable: t('scheduling.labels.notAvailable') },
                                     schedule.timezone,
-                                  )
-                                : t('scheduling.labels.never')}
-                              {schedule.lastStatus && (
-                                <>
-                                  <br />
-                                  <small className="text-muted">{schedule.lastStatus}</small>
-                                </>
-                              )}
-                            </td>
-                            <td>
-                              <Badge bg={getStatusBadgeVariant(derivedStatus)}>
-                                {t(`scheduling.status.${derivedStatus}`, derivedStatus)}
-                              </Badge>
-                            </td>
-                            <td>
-                              <small>{schedule.timezone}</small>
-                            </td>
-                            <td>
-                              <ButtonGroup size="sm">
-                                <Button
-                                  variant="outline-secondary"
-                                  onClick={(e) => handleEditSchedule(e, schedule)}
-                                  title={t('scheduling.actions.edit')}
-                                  disabled={actionLoading === schedule.scheduleId}
-                                >
-                                  <i className="bi bi-pencil"></i>
-                                </Button>
-                                <Button
-                                  variant={schedule.status === 'active' ? 'outline-warning' : 'outline-success'}
-                                  onClick={(e) => handleTogglePause(e, schedule)}
-                                  title={
-                                    schedule.status === 'active'
-                                      ? t('scheduling.actions.pause')
-                                      : t('scheduling.actions.resume')
-                                  }
-                                  disabled={actionLoading === schedule.scheduleId}
-                                >
-                                  {actionLoading === schedule.scheduleId ? (
-                                    <Spinner animation="border" size="sm" />
-                                  ) : (
-                                    <i
-                                      className={schedule.status === 'active' ? 'bi bi-pause-fill' : 'bi bi-play-fill'}
-                                    ></i>
                                   )}
-                                </Button>
-                                <Button
-                                  variant="outline-danger"
-                                  onClick={(e) => handleDeleteClick(e, schedule)}
-                                  title={t('scheduling.actions.delete')}
-                                  disabled={actionLoading === schedule.scheduleId}
-                                >
-                                  <i className="bi bi-trash"></i>
-                                </Button>
-                              </ButtonGroup>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </Table>
-                </div>
-              )}
-            </Card.Body>
-          </Card>
-        </Col>
-      </Row>
+                                </td>
+                                <td>
+                                  {schedule.lastRunEpoch
+                                    ? formatDate(
+                                        new Date(schedule.lastRunEpoch),
+                                        { notAvailable: t('scheduling.labels.notAvailable') },
+                                        schedule.timezone,
+                                      )
+                                    : t('scheduling.labels.never')}
+                                  {schedule.lastStatus && (
+                                    <>
+                                      <br />
+                                      <small className="text-muted">{schedule.lastStatus}</small>
+                                    </>
+                                  )}
+                                </td>
+                                <td>
+                                  <Badge bg={getStatusBadgeVariant(derivedStatus)}>
+                                    {t(`scheduling.status.${derivedStatus}`, derivedStatus)}
+                                  </Badge>
+                                </td>
+                                <td>
+                                  <small>{schedule.timezone}</small>
+                                </td>
+                                <td>
+                                  <ButtonGroup size="sm" className="scheduling-action-group">
+                                    <Button
+                                      variant="outline-secondary"
+                                      onClick={(e) => handleEditSchedule(e, schedule)}
+                                      title={t('scheduling.actions.edit')}
+                                      disabled={actionLoading === schedule.scheduleId}
+                                    >
+                                      <i className="bi bi-pencil"></i>
+                                    </Button>
+                                    <Button
+                                      variant={schedule.status === 'active' ? 'outline-warning' : 'outline-success'}
+                                      onClick={(e) => handleTogglePause(e, schedule)}
+                                      title={
+                                        schedule.status === 'active'
+                                          ? t('scheduling.actions.pause')
+                                          : t('scheduling.actions.resume')
+                                      }
+                                      disabled={actionLoading === schedule.scheduleId}
+                                    >
+                                      {actionLoading === schedule.scheduleId ? (
+                                        <Spinner animation="border" size="sm" />
+                                      ) : (
+                                        <i
+                                          className={
+                                            schedule.status === 'active' ? 'bi bi-pause-fill' : 'bi bi-play-fill'
+                                          }
+                                        ></i>
+                                      )}
+                                    </Button>
+                                    <Button
+                                      variant="outline-danger"
+                                      onClick={(e) => handleDeleteClick(e, schedule)}
+                                      title={t('scheduling.actions.delete')}
+                                      disabled={actionLoading === schedule.scheduleId}
+                                    >
+                                      <i className="bi bi-trash"></i>
+                                    </Button>
+                                  </ButtonGroup>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </Table>
+                    </div>
+                  )}
+                </Card.Body>
+              </Card>
+            </Col>
+          </Row>
+        </Container>
+      </LayoutDashboard>
 
       {editingAgent && (
         <AgentScheduleModal
@@ -669,7 +741,7 @@ export const SchedulingPage: React.FC = () => {
           </Button>
         </Modal.Footer>
       </Modal>
-    </Container>
+    </div>
   );
 };
 

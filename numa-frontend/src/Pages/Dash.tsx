@@ -7,6 +7,7 @@ import { AppSearch } from '../Components/Apps/AppSearch';
 import { AppItem } from '../Components/Apps/AppItem';
 import { Pagination } from '../Components/Pagination';
 import { Preloader } from '../Components/Preloader';
+import { PageHeader } from '../Components/PageHeader';
 import { StatusDashboard } from '../Components/Status/StatusDashboard';
 import { StarFill } from 'react-bootstrap-icons';
 import { useTranslation } from 'react-i18next';
@@ -16,7 +17,6 @@ import { useFavorites } from '../hooks/useFavorites';
 import { NicetyContext } from '../Providers/NicetyContext';
 import { manifestService } from '../Services/manifestService';
 import type { DashProps } from '../types/dash';
-import { PageHeader } from '../Components/PageHeader';
 
 export const Dash = ({ showFavorites = false, ...rest }: DashProps) => {
   const niceties = useContext(NicetyContext);
@@ -155,7 +155,7 @@ export const Dash = ({ showFavorites = false, ...rest }: DashProps) => {
   const currentItems = filteredApps.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
   return (
-    <div className="dashboard" data-testid="dashboard" {...rest}>
+    <div className="dashboard apps-grid-page" data-testid="dashboard" {...rest}>
       <PageHeader
         title={
           <>

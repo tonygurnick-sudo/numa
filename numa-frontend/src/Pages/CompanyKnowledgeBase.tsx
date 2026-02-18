@@ -189,7 +189,7 @@ export function CompanyKnowledgeBase(): React.JSX.Element {
   }
 
   return (
-    <div className="company-knowledge-base">
+    <div className="dashboard company-knowledge-base">
       <PageHeader
         title={t('companyKnowledgeBase.title')}
         subtitle={t('companyKnowledgeBase.subtitle')}

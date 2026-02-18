@@ -2284,6 +2284,25 @@ $border-radius-pill: 1rem;
   }
 }
 
+// Ensure Numa Chat send button always follows branding colors.
+.chat-input-container .send-button,
+.chat-input-container .send-button.spinner-button-bold {
+  background: var(--brand-buttonPrimary, var(--brand-primary, var(--color-primary))) !important;
+  border: 1px solid var(--brand-buttonPrimaryBorder, var(--brand-primary, var(--color-primary))) !important;
+  color: var(--brand-buttonPrimaryText, #ffffff) !important;
+}
+
+.chat-input-container .send-button:hover:not(:disabled) {
+  background: var(--brand-buttonPrimaryHover, var(--brand-hover, var(--color-primary-hover))) !important;
+  border-color: var(--brand-buttonPrimaryHover, var(--brand-hover, var(--color-primary-hover))) !important;
+}
+
+.chat-input-container .send-button i,
+.chat-input-container .send-button svg,
+.chat-input-container .send-button .spinner-border {
+  color: var(--brand-buttonPrimaryText, #ffffff) !important;
+}
+
 .chat-messages {
   .message {
     @include message-background;

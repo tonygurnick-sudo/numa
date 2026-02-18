@@ -2,7 +2,7 @@
  * @vitest-environment jsdom
  */
 
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import '@testing-library/jest-dom';
 
@@ -63,6 +63,17 @@ vi.mock('../../Pages/UserManagement', () => ({
   default: () => <div data-testid="user-management" />,
 }));
 
+vi.mock('../../Pages/UserProfile', () => ({
+  __esModule: true,
+  default: () => <div data-testid="user-profile" />,
+}));
+
+vi.mock('../../Services/manifestService', () => ({
+  manifestService: {
+    fetchAppsFromManifest: vi.fn().mockResolvedValue([]),
+  },
+}));
+
 describe('SettingsPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -86,10 +97,12 @@ describe('SettingsPage', () => {
     expect(await screen.findByTestId('branding-panel')).toBeInTheDocument();
   });
 
-  it('hides the Branding tab when branding feature is disabled', () => {
+  it('hides the Branding tab when branding feature is disabled', async () => {
     sessionStorage.setItem('BRANDING_PROVIDER_ENABLED', 'false');
     render(<SettingsPage />);
 
-    expect(screen.queryByTestId('branding-panel')).not.toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.queryByTestId('branding-panel')).not.toBeInTheDocument();
+    });
   });
 });

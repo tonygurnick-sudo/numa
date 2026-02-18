@@ -55,7 +55,7 @@ export function UserKnowledgeBases(): React.JSX.Element {
   }, [userKBs, filter, searchQuery]);
 
   return (
-    <div className="user-knowledge-bases">
+    <div className="dashboard user-knowledge-bases">
       <PageHeader
         title={t('userKnowledgeBases.title')}
         subtitle={t('userKnowledgeBases.subtitle')}

@@ -1,6 +1,13 @@
 {
   "header": {
-    "title": "Admin Settings"
+    "title": "Settings",
+    "adminSubtitle": "Manage company-wide controls and policies.",
+    "userSubtitle": "Manage your personal preferences and defaults."
+  },
+  "scope": {
+    "label": "Settings scope",
+    "user": "Your Settings",
+    "admin": "Admin Settings"
   },
   "tabs": {
     "users": "Users",

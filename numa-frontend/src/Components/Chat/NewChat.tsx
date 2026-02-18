@@ -126,6 +126,7 @@ type NewChatProps = {
 // Avatar for recent conversations
 const ConversationAvatar = ({
   convo,
+  variant = 'v1',
 }: {
   convo: {
     isAgentConversation?: boolean;
@@ -133,9 +134,15 @@ const ConversationAvatar = ({
     agentIcon?: string | null;
     agentTitle?: string | null;
   };
+  variant?: 'v1' | 'v2';
 }) => {
   const { t } = useTranslation('chat');
   const { agent } = useAgentById(convo.agentId || undefined);
+
+  if (variant === 'v2') {
+    return <i className="bi bi-chat-square-text" aria-hidden="true" />;
+  }
+
   if (convo.isAgentConversation) {
     return (
       <AgentAvatar
@@ -406,9 +413,12 @@ const NewChat = ({
     return t('newChat.greeting.evening');
   };
   const greetingBase = getTimeBasedGreeting();
-  const greeting = formattedName
-    ? t('newChat.greeting.withName', { greeting: greetingBase, name: formattedName })
-    : greetingBase;
+  const greeting =
+    variant === 'v2'
+      ? t('newChat.greeting.hiThere')
+      : formattedName
+        ? t('newChat.greeting.withName', { greeting: greetingBase, name: formattedName })
+        : greetingBase;
   const formatRelativeTime = (timestamp: number) => {
     const now = Date.now();
     const diff = now - timestamp;
@@ -423,6 +433,58 @@ const NewChat = ({
     return new Date(timestamp).toLocaleDateString(i18n.language);
   };
 
+  const inputComposer = (
+    <div className="chat-input-wrapper new-chat-input-wrapper" style={{ animation: 'fadeIn 0.8s ease-in-out' }}>
+      {dataAnalysisBanner}
+      {/* Show pending files indicator for pre-minted conversations (V2) */}
+      {variant === 'v2' && stagedItems.length > 0 && onRemoveStagedItem && (
+        <PendingFilesBar items={stagedItems} onRemove={onRemoveStagedItem} />
+      )}
+      <ChatInput
+        inputMessage={inputMessage}
+        setInputMessage={setInputMessage}
+        handleSubmit={handleSubmit}
+        setShowUploadModal={setShowUploadModal}
+        buttonStatus={buttonStatus}
+        webSearchEnabled={webSearchEnabled}
+        setWebSearchEnabled={setWebSearchEnabled}
+        createAgentEnabled={createAgentEnabled}
+        setCreateAgentEnabled={setCreateAgentEnabled}
+        dataAnalysisEnabled={dataAnalysisEnabled}
+        setDataAnalysisEnabled={setDataAnalysisEnabled}
+        dataAnalysisAvailable={dataAnalysisAvailable}
+        autoToolsEnabled={autoToolsEnabled}
+        setAutoToolsEnabled={setAutoToolsEnabled}
+        availableConnections={availableConnections}
+        enabledConnections={enabledConnections}
+        setEnabledConnections={setEnabledConnections}
+        connectionsLoading={connectionsLoading}
+        hasPipedreamFeature={hasPipedreamFeature}
+        uploadsInProgress={uploadsInProgress}
+        noToolsActive={noToolsActive}
+        externalInputRef={inputRef}
+        autoFocus={true}
+        placeholderOverride={variant === 'v2' ? t('input.placeholderV2') : t('newChat.placeholder')}
+        // Multi‑KB selection forwarded from parent when provided
+        enabledKBIds={enabledKBIds || []}
+        setEnabledKBIds={setEnabledKBIds}
+        dropdownDirection="down" // New chat hero sits higher; open menus downward to avoid clipping
+        uploadDisabledReason={uploadDisabledReason}
+        onStop={onStop}
+        isStopping={isStopping}
+        // V2 variant props
+        variant={variant as ChatInputVariant}
+        onSettingsClick={onSettingsClick}
+        isSettingsPanelOpen={isSettingsPanelOpen}
+        hasActiveSettings={hasActiveSettings}
+        // Model selector props
+        selectedModelId={selectedModelId}
+        setSelectedModelId={setSelectedModelId}
+        showModelSelector={showModelSelector}
+      />
+    </div>
+  );
+
   return (
     <div
       ref={wrapperRef}
@@ -435,7 +497,9 @@ const NewChat = ({
     >
       {/* Greeting */}
       <div className="new-chat-hero">
-        <img src={logoSrc} alt={logoAlt} className="new-chat-logo" />
+        <div className="new-chat-logo-shell">
+          <img src={logoSrc} alt={logoAlt} className="new-chat-logo" />
+        </div>
         <span className="new-chat-greeting-text">{greeting}</span>
       </div>
 
@@ -452,55 +516,7 @@ const NewChat = ({
         />
       )}
 
-      <div className="chat-input-wrapper new-chat-input-wrapper" style={{ animation: 'fadeIn 0.8s ease-in-out' }}>
-        {dataAnalysisBanner}
-        {/* Show pending files indicator for pre-minted conversations (V2) */}
-        {variant === 'v2' && stagedItems.length > 0 && onRemoveStagedItem && (
-          <PendingFilesBar items={stagedItems} onRemove={onRemoveStagedItem} />
-        )}
-        <ChatInput
-          inputMessage={inputMessage}
-          setInputMessage={setInputMessage}
-          handleSubmit={handleSubmit}
-          setShowUploadModal={setShowUploadModal}
-          buttonStatus={buttonStatus}
-          webSearchEnabled={webSearchEnabled}
-          setWebSearchEnabled={setWebSearchEnabled}
-          createAgentEnabled={createAgentEnabled}
-          setCreateAgentEnabled={setCreateAgentEnabled}
-          dataAnalysisEnabled={dataAnalysisEnabled}
-          setDataAnalysisEnabled={setDataAnalysisEnabled}
-          dataAnalysisAvailable={dataAnalysisAvailable}
-          autoToolsEnabled={autoToolsEnabled}
-          setAutoToolsEnabled={setAutoToolsEnabled}
-          availableConnections={availableConnections}
-          enabledConnections={enabledConnections}
-          setEnabledConnections={setEnabledConnections}
-          connectionsLoading={connectionsLoading}
-          hasPipedreamFeature={hasPipedreamFeature}
-          uploadsInProgress={uploadsInProgress}
-          noToolsActive={noToolsActive}
-          externalInputRef={inputRef}
-          autoFocus={true}
-          placeholderOverride={t('newChat.placeholder')}
-          // Multi‑KB selection forwarded from parent when provided
-          enabledKBIds={enabledKBIds || []}
-          setEnabledKBIds={setEnabledKBIds}
-          dropdownDirection="down" // New chat hero sits higher; open menus downward to avoid clipping
-          uploadDisabledReason={uploadDisabledReason}
-          onStop={onStop}
-          isStopping={isStopping}
-          // V2 variant props
-          variant={variant as ChatInputVariant}
-          onSettingsClick={onSettingsClick}
-          isSettingsPanelOpen={isSettingsPanelOpen}
-          hasActiveSettings={hasActiveSettings}
-          // Model selector props
-          selectedModelId={selectedModelId}
-          setSelectedModelId={setSelectedModelId}
-          showModelSelector={showModelSelector}
-        />
-      </div>
+      {variant !== 'v2' && inputComposer}
 
       {/* Personal Agents Row */}
       {personalAgents.length > 0 && (
@@ -642,6 +658,7 @@ const NewChat = ({
                         }
                       }}
                       onMouseEnter={(e) => {
+                        if (variant === 'v2') return;
                         const primaryColor =
                           getComputedStyle(document.documentElement).getPropertyValue('--brand-primary').trim() ||
                           '75, 0, 125';
@@ -652,73 +669,80 @@ const NewChat = ({
                         e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.08)';
                       }}
                       onMouseLeave={(e) => {
+                        if (variant === 'v2') return;
                         e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.8)';
                         e.currentTarget.style.borderColor = 'rgba(0,0,0,0.1)';
                         e.currentTarget.style.transform = 'translateY(0)';
                         e.currentTarget.style.boxShadow = 'none';
                       }}
                     >
-                      <ConversationAvatar convo={convo} />
-                      <div style={{ flex: 1, overflow: 'hidden' }}>
-                        <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      <div className="conversation-suggestion-icon-shell">
+                        <ConversationAvatar convo={convo} variant={variant} />
+                      </div>
+                      <div className="conversation-suggestion-meta" style={{ flex: 1, overflow: 'hidden' }}>
+                        <div className="conversation-suggestion-title">
                           {convo.conversationName || t('newChat.untitled')}
                         </div>
-                        <div style={{ fontSize: '0.75rem', color: '#6c757d', marginTop: '0.2rem' }}>
+                        <div className="conversation-suggestion-subtitle">
                           {convo.isAgentConversation && convo.agentTitle
                             ? `${convo.agentTitle} • ${formatRelativeTime(convo.latestTimestamp)}`
                             : formatRelativeTime(convo.latestTimestamp)}
                         </div>
                       </div>
-                      {(onRenameConversation || onDeleteConversation) && (
-                        <div
-                          className="conversation-actions d-flex flex-column align-items-center"
-                          style={{ gap: '0.25rem' }}
-                        >
-                          {onRenameConversation && (
-                            <OverlayTrigger
-                              placement="left"
-                              overlay={
-                                <Tooltip id={`rename-${convo.conversation_id}`}>{t('newChat.renameTooltip')}</Tooltip>
-                              }
-                            >
-                              <Button
-                                variant="link"
-                                size="sm"
-                                className="p-0 text-secondary"
-                                aria-label={t('newChat.renameAria')}
-                                onClick={(e) =>
-                                  handleRename(
-                                    e,
-                                    convo.conversation_id,
-                                    convo.conversationName || t('newChat.untitled'),
-                                  )
+                      {variant === 'v2' ? (
+                        <i className="bi bi-chevron-right conversation-suggestion-arrow" aria-hidden="true" />
+                      ) : (
+                        (onRenameConversation || onDeleteConversation) && (
+                          <div
+                            className="conversation-actions d-flex flex-column align-items-center"
+                            style={{ gap: '0.25rem' }}
+                          >
+                            {onRenameConversation && (
+                              <OverlayTrigger
+                                placement="left"
+                                overlay={
+                                  <Tooltip id={`rename-${convo.conversation_id}`}>{t('newChat.renameTooltip')}</Tooltip>
                                 }
-                                style={{ lineHeight: 1 }}
                               >
-                                <i className="bi bi-pencil" />
-                              </Button>
-                            </OverlayTrigger>
-                          )}
-                          {onDeleteConversation && (
-                            <OverlayTrigger
-                              placement="left"
-                              overlay={
-                                <Tooltip id={`delete-${convo.conversation_id}`}>{t('newChat.deleteTooltip')}</Tooltip>
-                              }
-                            >
-                              <Button
-                                variant="link"
-                                size="sm"
-                                className="p-0 text-danger"
-                                aria-label={t('newChat.deleteAria')}
-                                onClick={(e) => handleDelete(e, convo.conversation_id)}
-                                style={{ lineHeight: 1 }}
+                                <Button
+                                  variant="link"
+                                  size="sm"
+                                  className="p-0 text-secondary"
+                                  aria-label={t('newChat.renameAria')}
+                                  onClick={(e) =>
+                                    handleRename(
+                                      e,
+                                      convo.conversation_id,
+                                      convo.conversationName || t('newChat.untitled'),
+                                    )
+                                  }
+                                  style={{ lineHeight: 1 }}
+                                >
+                                  <i className="bi bi-pencil" />
+                                </Button>
+                              </OverlayTrigger>
+                            )}
+                            {onDeleteConversation && (
+                              <OverlayTrigger
+                                placement="left"
+                                overlay={
+                                  <Tooltip id={`delete-${convo.conversation_id}`}>{t('newChat.deleteTooltip')}</Tooltip>
+                                }
                               >
-                                <i className="bi bi-trash" />
-                              </Button>
-                            </OverlayTrigger>
-                          )}
-                        </div>
+                                <Button
+                                  variant="link"
+                                  size="sm"
+                                  className="p-0 text-danger"
+                                  aria-label={t('newChat.deleteAria')}
+                                  onClick={(e) => handleDelete(e, convo.conversation_id)}
+                                  style={{ lineHeight: 1 }}
+                                >
+                                  <i className="bi bi-trash" />
+                                </Button>
+                              </OverlayTrigger>
+                            )}
+                          </div>
+                        )
                       )}
                     </div>
                   ))}
@@ -798,7 +822,10 @@ const NewChat = ({
           return (
             <div className="new-chat-desktop-layout new-chat-desktop-layout-v2">
               <div className="new-chat-desktop-column history-column history-column-v2">
-                <div className="suggestions-header-v2">{t('newChat.continue')}</div>
+                <div className="suggestions-header-v2">
+                  <i className="bi bi-clock-history" aria-hidden="true" />
+                  <span>{t('newChat.continue')}</span>
+                </div>
                 <div className="new-chat-desktop-scroll conversation-suggestions">{historyPanelContent}</div>
               </div>
             </div>
@@ -863,10 +890,10 @@ const NewChat = ({
                       >
                         <ConversationAvatar convo={convo} />
                         <div style={{ flex: 1, overflow: 'hidden' }}>
-                          <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          <div className="conversation-suggestion-title">
                             {convo.conversationName || t('newChat.untitled')}
                           </div>
-                          <div style={{ fontSize: '0.75rem', color: '#6c757d', marginTop: '0.2rem' }}>
+                          <div className="conversation-suggestion-subtitle">
                             {convo.isAgentConversation && convo.agentTitle
                               ? `${convo.agentTitle} • ${formatRelativeTime(convo.latestTimestamp)}`
                               : formatRelativeTime(convo.latestTimestamp)}
@@ -934,6 +961,8 @@ const NewChat = ({
           </div>
         );
       })()}
+
+      {variant === 'v2' && inputComposer}
       <style>{`
         @keyframes fadeIn {
           from { opacity: 0; transform: translateY(10px); }

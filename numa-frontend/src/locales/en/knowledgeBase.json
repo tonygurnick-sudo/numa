@@ -21,7 +21,7 @@
     "loadingMessage": "Loading your knowledge bases...",
     "label": "Knowledge Base:",
     "defaultBadge": "Default",
-    "companyKbName": "Company Knowledge Base",
+    "companyKbName": "Company Files",
     "numaSupportKbName": "Numa Support",
     "selectPlaceholder": "Select KB",
     "header": "Your Knowledge Bases",
@@ -342,8 +342,8 @@
     }
   },
   "userKnowledgeBases": {
-    "title": "Your Knowledge Bases",
-    "subtitle": "Select a knowledge base to manage files and settings",
+    "title": "User Files",
+    "subtitle": "Select a file space to manage files and settings",
     "create": "Create Knowledge Base",
     "actions": {
       "refresh": "Refresh",
@@ -404,7 +404,7 @@
     }
   },
   "companyKnowledgeBase": {
-    "title": "Company Knowledge Base",
+    "title": "Company Files",
     "subtitle": "Shared knowledge across your organization",
     "actions": {
       "newFolder": "New Folder",
@@ -413,7 +413,7 @@
     "permissionWarning": "You do not have permission to view the company knowledge base. Contact your administrator for access.",
     "uploadSuccess": "Files uploaded successfully!",
     "uploadModal": {
-      "title": "Upload Files to Company Knowledge Base",
+      "title": "Upload Files to Company Files",
       "close": "Close",
       "body": "Files will be automatically indexed every 30 minutes and made available for querying in Numa Chat.",
       "noteLabel": "Note:",

@@ -38,6 +38,12 @@
   },
   "nav": {
     "items": {
+      "home": "הומה",
+      "create": "כרהאטה",
+      "analyse": "אנאליסה",
+      "research": "רהסהארכח",
+      "ops": "ופס",
+      "support": "סופורט",
       "apps": "אפפס",
       "favs": "פאבס",
       "jobHistory": "זוב חיסטורי",
@@ -46,18 +52,24 @@
       "agents": "אגהנטס",
       "scheduling": "סכחהדולינג",
       "company": "כומפאני",
-      "companyKnowledgeBase": "כומפאני קנוולהדגה באסה",
-      "userKnowledgeBase": "וסהר קנוולהדגה באסה",
+      "companyKnowledgeBase": "כומפאני פילהס",
+      "userKnowledgeBase": "וסהר פילהס",
       "profile": "פרופילה",
+      "settings": "סהטטינגס",
       "adminSettings": "אדמינ סהטטינגס",
-      "integrations": "ינטהגראטיונס"
+      "integrations": "ינטהגראטיונס",
+      "dataConnectors": "דאטא כוננהכטורס",
+      "marketplace": "מארככהטפלכה"
     },
     "sections": {
+      "build": "בילד",
+      "library": "ליברארי",
       "workflows": "וורקפלווס",
       "timeline": "טימהלינה",
       "knowledgeBases": "קנוולהדגה באסהס"
     },
     "expanded": {
+      "apps": "אפפס",
       "knowledgeBase": "קנוולהדגה באסה",
       "knowledgeBaseManagement": "קנוולהדגה באסה מאנאגהמהנט",
       "numaChat": "נומא כחאט",
@@ -66,6 +78,18 @@
       "companyInformation": "כומפאני ינפורמאטיונ"
     },
     "logout": "לוג ווט",
+    "user": "וסהר",
+    "interfaceLabel": "ינטהרפאכה",
+    "interfaceModes": {
+      "simple": "סימפלה",
+      "advanced": "אדבאנסהד"
+    },
+    "advancedModeLabel": "וורככ מוד",
+    "advancedModes": {
+      "work": "וורככ",
+      "build": "בילד"
+    },
+    "searchPlaceholder": "Search...",
     "expandSidebar": "השפאנד סידהבאר",
     "collapseSidebar": "כוללאפסה סידהבאר"
   },
@@ -598,6 +622,7 @@
   },
   "notifications": {
     "title": "נוטיפיכאטיונס",
+    "subtitle": "סטאי ופדאטהד און סכחהדול רונס אנד טאסק אקטיביטי.",
     "unreadCountTitle_one": "{{count}} ונרהאד נוטיפיכאטיונ",
     "unreadCountTitle_other": "{{count}} ונרהאד נוטיפיכאטיונס",
     "unreadCount_one": "{{count}} ונרהאד",
@@ -613,6 +638,7 @@
       "new": "נהו"
     },
     "actions": {
+      "refresh": "רהפרהסח",
       "markAllRead": "מארק אלל אס רהאד",
       "tryAgain": "טרי אגאינ",
       "viewSchedule": "ביהו סכחהדולה",

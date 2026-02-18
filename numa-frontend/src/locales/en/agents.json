@@ -378,7 +378,8 @@
     "filters": {
       "search": {
         "label": "Search",
-        "placeholder": "Search by schedule name or agent"
+        "placeholder": "Search by schedule name or agent",
+        "shortPlaceholder": "Search..."
       },
       "agent": {
         "label": "Agent",

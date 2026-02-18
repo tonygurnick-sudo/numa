@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Alert, Button, Col, Container, Form, Row, Spinner, Tab, Tabs } from 'react-bootstrap';
+import { Alert, Button, Form, Spinner, Tab } from 'react-bootstrap';
 import { LambdaClient } from '@aws-sdk/client-lambda';
 import { fromWebToken } from '@aws-sdk/credential-providers';
 import { useAuth } from '../Providers/AuthProvider';
@@ -19,19 +19,29 @@ import {
 import { PipedreamProxyService } from '../Services/PipedreamProxyService';
 import { withPRM } from '../utils/prmUtils';
 import ExpandableOverflowBox from '../Components/ExpandableOverflowBox';
+import { PageHeader } from '../Components/PageHeader';
+import { StyledTabs } from '../Components/StyledTabs';
 import { manifestService } from '../Services/manifestService';
 import { applyLanguagePreference, LANGUAGE_BROWSER_DEFAULT } from '../utils/languagePreference';
 import { getConnectionDisplayName } from '../config/integrationsConfig';
 
 type Connection = { id: string; isConnected: boolean; mcpServerUrl?: string };
 
-export default function UserProfilePage() {
+interface UserProfilePageProps {
+  embedded?: boolean;
+  activeTabKey?: string;
+  onActiveTabChange?: (tabKey: string) => void;
+}
+
+export default function UserProfilePage({ embedded = false, activeTabKey, onActiveTabChange }: UserProfilePageProps) {
   const { t } = useTranslation('settings');
   const { user } = useAuth();
   const { numaGet, numaPut } = useNumaRequest();
   const { availableKBs, isLoadingKBs, kbError } = useKnowledgeBase();
 
-  const [activeKey, setActiveKey] = useState<string>('user-settings');
+  const [localActiveKey, setLocalActiveKey] = useState<string>('user-settings');
+  const selectedTabKey = activeTabKey ?? localActiveKey;
+  const setSelectedTabKey = onActiveTabChange ?? setLocalActiveKey;
 
   const [globalAllowUserDefaults, setGlobalAllowUserDefaults] = useState<boolean>(false);
   const [globalLoaded, setGlobalLoaded] = useState<boolean>(false);
@@ -353,373 +363,373 @@ export default function UserProfilePage() {
     }
   };
 
-  return (
-    <div className="dashboard">
-      <header className="page-header">
-        <Container fluid>
-          <Row>
-            <Col>
-              <h1 className="page-title">{t('userProfile.title')}</h1>
-            </Col>
-          </Row>
-        </Container>
-      </header>
+  const profileContent = (
+    <>
+      {error && (
+        <Alert variant="danger" className="mb-3">
+          {error}
+        </Alert>
+      )}
 
-      <div className="app-content">
-        <div className="content-panel">
-          <div className="content-panel__body">
-            {error && (
-              <Alert variant="danger" className="mb-3">
-                {error}
-              </Alert>
+      {!globalLoaded ? (
+        <div className={embedded ? 'settings-embedded-user-loading' : 'text-center py-4'}>
+          <Spinner animation="border" />
+        </div>
+      ) : null}
+
+      <StyledTabs
+        activeKey={selectedTabKey}
+        onSelect={(k) => k && setSelectedTabKey(k)}
+        className={embedded ? 'mb-3 settings-subtabs--panels-only' : 'mb-3'}
+      >
+        <Tab
+          eventKey="user-settings"
+          title={
+            <span>
+              <i className="bi bi-person-gear me-2"></i>
+              {t('userProfile.tabs.userSettings')}
+            </span>
+          }
+        >
+          <Form>
+            <Form.Group className="mb-3">
+              <Form.Label className="fw-semibold">{t('userProfile.defaults.language.label')}</Form.Label>
+              <Form.Select
+                value={userDefaults.language ?? LANGUAGE_BROWSER_DEFAULT}
+                disabled={disableProfileForm}
+                onChange={(e) => {
+                  setUserDefaults((prev) => ({ ...prev, language: e.target.value }));
+                  setDirty(true);
+                }}
+              >
+                <option value={LANGUAGE_BROWSER_DEFAULT}>{t('userProfile.defaults.language.browser')}</option>
+                <option value="en">{t('userProfile.defaults.language.english')}</option>
+              </Form.Select>
+              <div className="text-muted small mt-1">{t('userProfile.defaults.language.help')}</div>
+            </Form.Group>
+
+            <hr className="my-4" />
+
+            <Form.Group className="mb-3">
+              <Form.Label className="fw-semibold">{t('userProfile.defaults.emailSignature.label')}</Form.Label>
+              <div className="text-muted small mb-2">{t('userProfile.defaults.emailSignature.help')}</div>
+              <div className="d-flex align-items-center gap-2 mb-2">
+                <Form.Check
+                  type="switch"
+                  id="profile-email-signature-enabled"
+                  label=""
+                  checked={userDefaults.emailSignatureEnabled}
+                  disabled={disableProfileForm}
+                  onChange={(e) => {
+                    setUserDefaults((prev) => ({ ...prev, emailSignatureEnabled: e.target.checked }));
+                    setDirty(true);
+                  }}
+                />
+                <span>{t('userProfile.defaults.emailSignature.enableTitle')}</span>
+              </div>
+              {userDefaults.emailSignatureEnabled && (
+                <>
+                  <Form.Label className="fw-semibold">{t('userProfile.defaults.emailSignature.textLabel')}</Form.Label>
+                  <Form.Control
+                    as="textarea"
+                    rows={2}
+                    value={userDefaults.emailSignatureText}
+                    disabled={disableProfileForm}
+                    placeholder={DEFAULT_CHAT_SETTINGS.emailSignatureText}
+                    onChange={(e) => {
+                      setUserDefaults((prev) => ({ ...prev, emailSignatureText: e.target.value }));
+                      setDirty(true);
+                    }}
+                  />
+                </>
+              )}
+            </Form.Group>
+            {renderSaveActions(
+              'userProfile.actions.resetBrowser',
+              resetToBrowserDefaults,
+              handleSaveProfileLanguage,
+              canEditProfile,
             )}
+          </Form>
+        </Tab>
+        <Tab
+          eventKey="user-defaults"
+          title={
+            <span>
+              <i className="bi bi-sliders me-2"></i>
+              {t('userProfile.tabs.chatDefaults')}
+            </span>
+          }
+        >
+          {globalLoaded && !globalAllowUserDefaults && (
+            <Alert variant="secondary" className="mb-3">
+              {t('userProfile.adminDisabled')}
+            </Alert>
+          )}
+          <Alert variant="secondary" className="mb-3">
+            {t('userProfile.defaults.description')}
+          </Alert>
 
-            {!globalLoaded ? (
+          <Form>
+            <div className="mb-3 p-3 border rounded-3 bg-light">
+              <div className="d-flex align-items-center justify-content-between gap-3">
+                <div className="fw-semibold">{t('userProfile.defaults.enableTitle')}</div>
+                <Form.Check
+                  type="switch"
+                  id="profile-defaults-enabled"
+                  label=""
+                  checked={userDefaultsEnabled}
+                  disabled={!canEditUserDefaults || saving || loading}
+                  onChange={(e) => {
+                    setUserDefaultsEnabled(e.target.checked);
+                    setDirty(true);
+                  }}
+                />
+              </div>
+              <div className="text-muted small">{t('userProfile.defaults.enableHelp')}</div>
+            </div>
+
+            {loading ? (
               <div className="text-center py-4">
                 <Spinner animation="border" />
               </div>
-            ) : null}
+            ) : (
+              <>
+                <Form.Group className="mb-3">
+                  <Form.Label className="fw-semibold">{t('userProfile.defaults.kbLabel')}</Form.Label>
+                  {kbError && <div className="text-danger small mb-2">{kbError}</div>}
 
-            <Tabs activeKey={activeKey} onSelect={(k) => k && setActiveKey(k)} className="mb-3">
-              <Tab
-                eventKey="user-settings"
-                title={
-                  <span>
-                    <i className="bi bi-person-gear me-2"></i>
-                    {t('userProfile.tabs.userSettings')}
-                  </span>
-                }
-              >
-                <Form>
-                  <Form.Group className="mb-3">
-                    <Form.Label className="fw-semibold">{t('userProfile.defaults.language.label')}</Form.Label>
-                    <Form.Select
-                      value={userDefaults.language ?? LANGUAGE_BROWSER_DEFAULT}
-                      disabled={disableProfileForm}
-                      onChange={(e) => {
-                        setUserDefaults((prev) => ({ ...prev, language: e.target.value }));
-                        setDirty(true);
-                      }}
-                    >
-                      <option value={LANGUAGE_BROWSER_DEFAULT}>{t('userProfile.defaults.language.browser')}</option>
-                      <option value="en">{t('userProfile.defaults.language.english')}</option>
-                    </Form.Select>
-                    <div className="text-muted small mt-1">{t('userProfile.defaults.language.help')}</div>
-                  </Form.Group>
-
-                  <hr className="my-4" />
-
-                  <Form.Group className="mb-3">
-                    <Form.Label className="fw-semibold">{t('userProfile.defaults.emailSignature.label')}</Form.Label>
-                    <div className="text-muted small mb-2">{t('userProfile.defaults.emailSignature.help')}</div>
-                    <div className="d-flex align-items-center gap-2 mb-2">
-                      <Form.Check
-                        type="switch"
-                        id="profile-email-signature-enabled"
-                        label=""
-                        checked={userDefaults.emailSignatureEnabled}
-                        disabled={disableProfileForm}
-                        onChange={(e) => {
-                          setUserDefaults((prev) => ({ ...prev, emailSignatureEnabled: e.target.checked }));
-                          setDirty(true);
-                        }}
-                      />
-                      <span>{t('userProfile.defaults.emailSignature.enableTitle')}</span>
-                    </div>
-                    {userDefaults.emailSignatureEnabled && (
-                      <>
-                        <Form.Label className="fw-semibold">
-                          {t('userProfile.defaults.emailSignature.textLabel')}
-                        </Form.Label>
-                        <Form.Control
-                          as="textarea"
-                          rows={2}
-                          value={userDefaults.emailSignatureText}
-                          disabled={disableProfileForm}
-                          placeholder={DEFAULT_CHAT_SETTINGS.emailSignatureText}
-                          onChange={(e) => {
-                            setUserDefaults((prev) => ({ ...prev, emailSignatureText: e.target.value }));
-                            setDirty(true);
-                          }}
-                        />
-                      </>
-                    )}
-                  </Form.Group>
-                  {renderSaveActions(
-                    'userProfile.actions.resetBrowser',
-                    resetToBrowserDefaults,
-                    handleSaveProfileLanguage,
-                    canEditProfile,
-                  )}
-                </Form>
-              </Tab>
-              <Tab
-                eventKey="user-defaults"
-                title={
-                  <span>
-                    <i className="bi bi-sliders me-2"></i>
-                    {t('userProfile.tabs.chatDefaults')}
-                  </span>
-                }
-              >
-                {!globalAllowUserDefaults && (
-                  <Alert variant="secondary" className="mb-3">
-                    {t('userProfile.adminDisabled')}
-                  </Alert>
-                )}
-                <Alert variant="secondary" className="mb-3">
-                  {t('userProfile.defaults.description')}
-                </Alert>
-
-                <Form>
-                  <div className="mb-3 p-3 border rounded-3 bg-light">
-                    <div className="d-flex align-items-center justify-content-between gap-3">
-                      <div className="fw-semibold">{t('userProfile.defaults.enableTitle')}</div>
-                      <Form.Check
-                        type="switch"
-                        id="profile-defaults-enabled"
-                        label=""
-                        checked={userDefaultsEnabled}
-                        disabled={!canEditUserDefaults || saving || loading}
-                        onChange={(e) => {
-                          setUserDefaultsEnabled(e.target.checked);
-                          setDirty(true);
-                        }}
-                      />
-                    </div>
-                    <div className="text-muted small">{t('userProfile.defaults.enableHelp')}</div>
-                  </div>
-
-                  {loading ? (
-                    <div className="text-center py-4">
-                      <Spinner animation="border" />
-                    </div>
-                  ) : (
-                    <>
-                      <Form.Group className="mb-3">
-                        <Form.Label className="fw-semibold">{t('userProfile.defaults.kbLabel')}</Form.Label>
-                        {kbError && <div className="text-danger small mb-2">{kbError}</div>}
-
-                        <ExpandableOverflowBox className="border rounded-3 p-2 bg-white" maxHeight={240}>
-                          {isLoadingKBs ? (
-                            <div className="text-muted small">{t('userProfile.defaults.kbLoading')}</div>
-                          ) : (
-                            kbIdsSorted.map((kbId) => {
-                              const kb = availableKBs.find((k) => k.kb_id === kbId);
-                              const label = getKBLabel(kbId, kb?.kb_name);
-                              const checked = enabledKBSet.has(kbId);
-                              return (
-                                <Form.Check
-                                  key={kbId}
-                                  type="checkbox"
-                                  id={`profile-defaults-kb-${kbId}`}
-                                  label={label}
-                                  checked={checked}
-                                  disabled={disableDefaultsForm}
-                                  onChange={(e) => {
-                                    const nextChecked = e.target.checked;
-                                    setUserDefaults((prev) => ({
-                                      ...prev,
-                                      defaultKBIds: nextChecked
-                                        ? Array.from(new Set([...prev.defaultKBIds, kbId]))
-                                        : prev.defaultKBIds.filter((id) => id !== kbId),
-                                    }));
-                                    setDirty(true);
-                                  }}
-                                />
-                              );
-                            })
-                          )}
-                          {!isLoadingKBs && kbIdsSorted.length === 0 && (
-                            <div className="text-muted small">{t('userProfile.defaults.kbEmpty')}</div>
-                          )}
-                        </ExpandableOverflowBox>
-                        <div className="text-muted small mt-1">{t('userProfile.defaults.kbHelp')}</div>
-                      </Form.Group>
-
-                      <div className="mb-3">
-                        <div className="d-flex align-items-center gap-2">
+                  <ExpandableOverflowBox className="border rounded-3 p-2 bg-white" maxHeight={240}>
+                    {isLoadingKBs ? (
+                      <div className="text-muted small">{t('userProfile.defaults.kbLoading')}</div>
+                    ) : (
+                      kbIdsSorted.map((kbId) => {
+                        const kb = availableKBs.find((k) => k.kb_id === kbId);
+                        const label = getKBLabel(kbId, kb?.kb_name);
+                        const checked = enabledKBSet.has(kbId);
+                        return (
                           <Form.Check
-                            type="switch"
-                            id="profile-defaults-all-tools"
-                            label=""
-                            checked={displayedSettings.autoToolsEnabled}
+                            key={kbId}
+                            type="checkbox"
+                            id={`profile-defaults-kb-${kbId}`}
+                            label={label}
+                            checked={checked}
                             disabled={disableDefaultsForm}
                             onChange={(e) => {
-                              const nextEnabled = e.target.checked;
+                              const nextChecked = e.target.checked;
                               setUserDefaults((prev) => ({
                                 ...prev,
-                                autoToolsEnabled: nextEnabled,
-                                ...(nextEnabled
-                                  ? { webSearchEnabled: true, dataAnalysisEnabled: true, createAgentEnabled: true }
-                                  : { webSearchEnabled: false, dataAnalysisEnabled: false, createAgentEnabled: false }),
+                                defaultKBIds: nextChecked
+                                  ? Array.from(new Set([...prev.defaultKBIds, kbId]))
+                                  : prev.defaultKBIds.filter((id) => id !== kbId),
                               }));
                               setDirty(true);
                             }}
                           />
-                          <div className="fw-semibold">{t('userProfile.defaults.allTools.title')}</div>
-                        </div>
-                        <div className="text-muted small ms-5">{t('userProfile.defaults.allTools.help')}</div>
+                        );
+                      })
+                    )}
+                    {!isLoadingKBs && kbIdsSorted.length === 0 && (
+                      <div className="text-muted small">{t('userProfile.defaults.kbEmpty')}</div>
+                    )}
+                  </ExpandableOverflowBox>
+                  <div className="text-muted small mt-1">{t('userProfile.defaults.kbHelp')}</div>
+                </Form.Group>
 
-                        <div className="mt-3 ms-4">
-                          <div className="d-flex align-items-center gap-2">
-                            <Form.Check
-                              type="switch"
-                              id="profile-defaults-web-search"
-                              label=""
-                              checked={displayedSettings.webSearchEnabled}
-                              disabled={disableDefaultsForm || displayedSettings.autoToolsEnabled}
-                              onChange={(e) => {
-                                setUserDefaults((prev) => ({ ...prev, webSearchEnabled: e.target.checked }));
-                                setDirty(true);
-                              }}
-                            />
-                            <div className="fw-semibold">{t('userProfile.defaults.webSearch.title')}</div>
-                          </div>
-                          <div className="text-muted small ms-5">{t('userProfile.defaults.webSearch.help')}</div>
-                        </div>
+                <div className="mb-3">
+                  <div className="d-flex align-items-center gap-2">
+                    <Form.Check
+                      type="switch"
+                      id="profile-defaults-all-tools"
+                      label=""
+                      checked={displayedSettings.autoToolsEnabled}
+                      disabled={disableDefaultsForm}
+                      onChange={(e) => {
+                        const nextEnabled = e.target.checked;
+                        setUserDefaults((prev) => ({
+                          ...prev,
+                          autoToolsEnabled: nextEnabled,
+                          ...(nextEnabled
+                            ? { webSearchEnabled: true, dataAnalysisEnabled: true, createAgentEnabled: true }
+                            : { webSearchEnabled: false, dataAnalysisEnabled: false, createAgentEnabled: false }),
+                        }));
+                        setDirty(true);
+                      }}
+                    />
+                    <div className="fw-semibold">{t('userProfile.defaults.allTools.title')}</div>
+                  </div>
+                  <div className="text-muted small ms-5">{t('userProfile.defaults.allTools.help')}</div>
 
-                        {dataAnalysisAvailable && (
-                          <div className="mt-3 ms-4">
-                            <div className="d-flex align-items-center gap-2">
+                  <div className="mt-3 ms-4">
+                    <div className="d-flex align-items-center gap-2">
+                      <Form.Check
+                        type="switch"
+                        id="profile-defaults-web-search"
+                        label=""
+                        checked={displayedSettings.webSearchEnabled}
+                        disabled={disableDefaultsForm || displayedSettings.autoToolsEnabled}
+                        onChange={(e) => {
+                          setUserDefaults((prev) => ({ ...prev, webSearchEnabled: e.target.checked }));
+                          setDirty(true);
+                        }}
+                      />
+                      <div className="fw-semibold">{t('userProfile.defaults.webSearch.title')}</div>
+                    </div>
+                    <div className="text-muted small ms-5">{t('userProfile.defaults.webSearch.help')}</div>
+                  </div>
+
+                  {dataAnalysisAvailable && (
+                    <div className="mt-3 ms-4">
+                      <div className="d-flex align-items-center gap-2">
+                        <Form.Check
+                          type="switch"
+                          id="profile-defaults-data-analysis"
+                          label=""
+                          checked={displayedSettings.dataAnalysisEnabled}
+                          disabled={disableDefaultsForm || displayedSettings.autoToolsEnabled}
+                          onChange={(e) => {
+                            setUserDefaults((prev) => ({ ...prev, dataAnalysisEnabled: e.target.checked }));
+                            setDirty(true);
+                          }}
+                        />
+                        <div className="fw-semibold">{t('userProfile.defaults.dataAnalysis.title')}</div>
+                      </div>
+                      <div className="text-muted small ms-5">{t('userProfile.defaults.dataAnalysis.help')}</div>
+                    </div>
+                  )}
+
+                  <div className="mt-3 ms-4">
+                    <div className="d-flex align-items-center gap-2">
+                      <Form.Check
+                        type="switch"
+                        id="profile-defaults-create-agent"
+                        label=""
+                        checked={displayedSettings.createAgentEnabled}
+                        disabled={disableDefaultsForm || displayedSettings.autoToolsEnabled}
+                        onChange={(e) => {
+                          setUserDefaults((prev) => ({ ...prev, createAgentEnabled: e.target.checked }));
+                          setDirty(true);
+                        }}
+                      />
+                      <div className="fw-semibold">{t('userProfile.defaults.agentCreation.title')}</div>
+                    </div>
+                    <div className="text-muted small ms-5">{t('userProfile.defaults.agentCreation.help')}</div>
+                  </div>
+                </div>
+
+                <Form.Group className="mb-3">
+                  <Form.Label className="fw-semibold">{t('userProfile.defaults.integrations.label')}</Form.Label>
+                  {previewMode ? (
+                    <div className="text-muted small">{t('userProfile.defaults.integrations.disabled')}</div>
+                  ) : connectionsLoading ? (
+                    <div className="text-muted small">{t('userProfile.defaults.integrations.loading')}</div>
+                  ) : (
+                    <>
+                      <ExpandableOverflowBox className="border rounded-3 p-2 bg-white" maxHeight={240}>
+                        {availableConnections
+                          .sort((a, b) => getConnectionDisplayName(a.id).localeCompare(getConnectionDisplayName(b.id)))
+                          .map((conn) => {
+                            const id = conn.id;
+                            const checked = enabledConnectionSet.has(id);
+                            return (
                               <Form.Check
-                                type="switch"
-                                id="profile-defaults-data-analysis"
-                                label=""
-                                checked={displayedSettings.dataAnalysisEnabled}
-                                disabled={disableDefaultsForm || displayedSettings.autoToolsEnabled}
+                                key={id}
+                                type="checkbox"
+                                id={`profile-defaults-integration-${id}`}
+                                label={getConnectionDisplayName(id)}
+                                checked={checked}
+                                disabled={disableDefaultsForm}
                                 onChange={(e) => {
-                                  setUserDefaults((prev) => ({ ...prev, dataAnalysisEnabled: e.target.checked }));
+                                  const nextChecked = e.target.checked;
+                                  setUserDefaults((prev) => ({
+                                    ...prev,
+                                    defaultConnectionIds: nextChecked
+                                      ? Array.from(new Set([...prev.defaultConnectionIds, id]))
+                                      : prev.defaultConnectionIds.filter((x) => x !== id),
+                                  }));
                                   setDirty(true);
                                 }}
                               />
-                              <div className="fw-semibold">{t('userProfile.defaults.dataAnalysis.title')}</div>
-                            </div>
-                            <div className="text-muted small ms-5">{t('userProfile.defaults.dataAnalysis.help')}</div>
-                          </div>
+                            );
+                          })}
+                        {availableConnections.length === 0 && (
+                          <div className="text-muted small">{t('userProfile.defaults.integrations.empty')}</div>
                         )}
-
-                        <div className="mt-3 ms-4">
-                          <div className="d-flex align-items-center gap-2">
-                            <Form.Check
-                              type="switch"
-                              id="profile-defaults-create-agent"
-                              label=""
-                              checked={displayedSettings.createAgentEnabled}
-                              disabled={disableDefaultsForm || displayedSettings.autoToolsEnabled}
-                              onChange={(e) => {
-                                setUserDefaults((prev) => ({ ...prev, createAgentEnabled: e.target.checked }));
-                                setDirty(true);
-                              }}
-                            />
-                            <div className="fw-semibold">{t('userProfile.defaults.agentCreation.title')}</div>
-                          </div>
-                          <div className="text-muted small ms-5">{t('userProfile.defaults.agentCreation.help')}</div>
-                        </div>
-                      </div>
-
-                      <Form.Group className="mb-3">
-                        <Form.Label className="fw-semibold">{t('userProfile.defaults.integrations.label')}</Form.Label>
-                        {previewMode ? (
-                          <div className="text-muted small">{t('userProfile.defaults.integrations.disabled')}</div>
-                        ) : connectionsLoading ? (
-                          <div className="text-muted small">{t('userProfile.defaults.integrations.loading')}</div>
-                        ) : (
-                          <>
-                            <ExpandableOverflowBox className="border rounded-3 p-2 bg-white" maxHeight={240}>
-                              {availableConnections
-                                .sort((a, b) =>
-                                  getConnectionDisplayName(a.id).localeCompare(getConnectionDisplayName(b.id)),
-                                )
-                                .map((conn) => {
-                                  const id = conn.id;
-                                  const checked = enabledConnectionSet.has(id);
-                                  return (
-                                    <Form.Check
-                                      key={id}
-                                      type="checkbox"
-                                      id={`profile-defaults-integration-${id}`}
-                                      label={getConnectionDisplayName(id)}
-                                      checked={checked}
-                                      disabled={disableDefaultsForm}
-                                      onChange={(e) => {
-                                        const nextChecked = e.target.checked;
-                                        setUserDefaults((prev) => ({
-                                          ...prev,
-                                          defaultConnectionIds: nextChecked
-                                            ? Array.from(new Set([...prev.defaultConnectionIds, id]))
-                                            : prev.defaultConnectionIds.filter((x) => x !== id),
-                                        }));
-                                        setDirty(true);
-                                      }}
-                                    />
-                                  );
-                                })}
-                              {availableConnections.length === 0 && (
-                                <div className="text-muted small">{t('userProfile.defaults.integrations.empty')}</div>
-                              )}
-                            </ExpandableOverflowBox>
-                            <div className="text-muted small mt-1">{t('userProfile.defaults.integrations.help')}</div>
-                          </>
-                        )}
-                      </Form.Group>
-
-                      {renderSaveActions(
-                        'userProfile.actions.reset',
-                        resetToCompanyDefaults,
-                        handleSaveUserDefaults,
-                        canEditUserDefaults,
-                      )}
+                      </ExpandableOverflowBox>
+                      <div className="text-muted small mt-1">{t('userProfile.defaults.integrations.help')}</div>
                     </>
                   )}
-                </Form>
-              </Tab>
+                </Form.Group>
 
-              {hasWorkspaceChat && (
-                <Tab
-                  eventKey="approval-settings"
-                  title={
-                    <span>
-                      <i className="bi bi-shield-check me-2"></i>
-                      {t('userProfile.tabs.approvalSettings')}
-                    </span>
-                  }
-                >
-                  <Form>
-                    <p className="text-muted mb-3">{t('userProfile.approval.description')}</p>
-                    <Form.Group className="mb-3">
-                      <Form.Label className="fw-semibold">{t('userProfile.approval.label')}</Form.Label>
-                      {(['always', 'non_destructive', 'never'] as const).map((mode) => (
-                        <Form.Check
-                          key={mode}
-                          type="radio"
-                          id={`approval-mode-${mode}`}
-                          name="approvalMode"
-                          label={t(`userProfile.approval.modes.${mode}.label`)}
-                          checked={userDefaults.approvalMode === mode}
-                          disabled={disableDefaultsForm}
-                          onChange={() => {
-                            setUserDefaults((prev) => ({ ...prev, approvalMode: mode }));
-                            setDirty(true);
-                          }}
-                          className="mb-2"
-                        />
-                      ))}
-                      <div className="text-muted small mt-1">
-                        {t(`userProfile.approval.modes.${userDefaults.approvalMode}.help`)}
-                      </div>
-                    </Form.Group>
-                    {renderSaveActions(
-                      'userProfile.actions.reset',
-                      resetToCompanyDefaults,
-                      handleSaveUserDefaults,
-                      canEditUserDefaults,
-                    )}
-                  </Form>
-                </Tab>
+                {renderSaveActions(
+                  'userProfile.actions.reset',
+                  resetToCompanyDefaults,
+                  handleSaveUserDefaults,
+                  canEditUserDefaults,
+                )}
+              </>
+            )}
+          </Form>
+        </Tab>
+
+        {hasWorkspaceChat && (
+          <Tab
+            eventKey="approval-settings"
+            title={
+              <span>
+                <i className="bi bi-shield-check me-2"></i>
+                {t('userProfile.tabs.approvalSettings')}
+              </span>
+            }
+          >
+            <Form>
+              <p className="text-muted mb-3">{t('userProfile.approval.description')}</p>
+              <Form.Group className="mb-3">
+                <Form.Label className="fw-semibold">{t('userProfile.approval.label')}</Form.Label>
+                {(['always', 'non_destructive', 'never'] as const).map((mode) => (
+                  <Form.Check
+                    key={mode}
+                    type="radio"
+                    id={`approval-mode-${mode}`}
+                    name="approvalMode"
+                    label={t(`userProfile.approval.modes.${mode}.label`)}
+                    checked={userDefaults.approvalMode === mode}
+                    disabled={disableDefaultsForm}
+                    onChange={() => {
+                      setUserDefaults((prev) => ({ ...prev, approvalMode: mode }));
+                      setDirty(true);
+                    }}
+                    className="mb-2"
+                  />
+                ))}
+                <div className="text-muted small mt-1">
+                  {t(`userProfile.approval.modes.${userDefaults.approvalMode}.help`)}
+                </div>
+              </Form.Group>
+              {renderSaveActions(
+                'userProfile.actions.reset',
+                resetToCompanyDefaults,
+                handleSaveUserDefaults,
+                canEditUserDefaults,
               )}
-            </Tabs>
-          </div>
+            </Form>
+          </Tab>
+        )}
+      </StyledTabs>
+    </>
+  );
+
+  if (embedded) {
+    return <div className="settings-embedded-user">{profileContent}</div>;
+  }
+
+  return (
+    <div className="dashboard">
+      <PageHeader title={t('userProfile.title')} />
+
+      <div className="app-content">
+        <div className="content-panel">
+          <div className="content-panel__body">{profileContent}</div>
         </div>
       </div>
     </div>

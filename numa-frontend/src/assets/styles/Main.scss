@@ -20,5 +20,6 @@
 @use 'components/file_tree' as *;
 @use 'components/kb_v2' as *;
 @use 'components/workspace_chat_markdown' as *;
+@use 'components/chat_v2_overrides' as *;
 
 @import '../fonts/Metropolis.css';

@@ -19,7 +19,7 @@ export interface QuickActionConfig {
   label: string;
   /** Longer description shown in tooltip */
   description: string;
-  /** Bootstrap icon class (e.g., 'bi-file-earmark-text') */
+  /** Icon key used by the quick action renderer */
   icon: string;
   /** The prompt text to use - either prefilled or sent immediately */
   prompt: string;
@@ -44,7 +44,7 @@ export const QUICK_ACTIONS_CONFIG: Record<string, QuickActionConfig> = {
     id: 'draftDocument',
     label: 'Draft a document',
     description: 'Get help writing documents, reports, or proposals',
-    icon: 'bi-file-earmark-text',
+    icon: 'file-text',
     prompt: 'Can you help me draft a document?',
     behavior: 'send',
     category: 'document',
@@ -54,7 +54,7 @@ export const QUICK_ACTIONS_CONFIG: Record<string, QuickActionConfig> = {
     id: 'analyzeFile',
     label: 'Analyze a file',
     description: 'Upload and analyze documents or data files',
-    icon: 'bi-bar-chart',
+    icon: 'bar-chart-2',
     prompt: "I have a file I'd like to upload and have you analyze.",
     behavior: 'send',
     category: 'document',
@@ -62,9 +62,9 @@ export const QUICK_ACTIONS_CONFIG: Record<string, QuickActionConfig> = {
   },
   searchKnowledgeBase: {
     id: 'searchKnowledgeBase',
-    label: 'Search knowledge base',
+    label: 'Search files',
     description: "Search your organization's documents and data",
-    icon: 'bi-folder2-open',
+    icon: 'search',
     prompt: 'I want help searching my knowledge base for something.',
     behavior: 'send',
     category: 'research',
@@ -75,7 +75,7 @@ export const QUICK_ACTIONS_CONFIG: Record<string, QuickActionConfig> = {
     id: 'prepMeeting',
     label: 'Prep for a meeting',
     description: 'Prepare agendas, talking points, and background research',
-    icon: 'bi-calendar-event',
+    icon: 'calendar',
     prompt: 'Can you help me prepare for an upcoming meeting?',
     behavior: 'send',
     category: 'productivity',
@@ -85,7 +85,7 @@ export const QUICK_ACTIONS_CONFIG: Record<string, QuickActionConfig> = {
     id: 'writeEmail',
     label: 'Write an email',
     description: 'Draft professional emails for any situation',
-    icon: 'bi-envelope',
+    icon: 'mail',
     prompt: 'Can you help me write an email?',
     behavior: 'send',
     category: 'productivity',
@@ -95,7 +95,7 @@ export const QUICK_ACTIONS_CONFIG: Record<string, QuickActionConfig> = {
     id: 'brainstorm',
     label: 'Brainstorm ideas',
     description: 'Generate creative ideas and explore possibilities',
-    icon: 'bi-lightbulb',
+    icon: 'lightbulb',
     prompt: 'Can you me brainstorm ideas?',
     behavior: 'send',
     category: 'productivity',
@@ -105,7 +105,7 @@ export const QUICK_ACTIONS_CONFIG: Record<string, QuickActionConfig> = {
     id: 'summarizeDocument',
     label: 'Summarize a document',
     description: 'Get a concise summary of any document',
-    icon: 'bi-file-earmark-break',
+    icon: 'file-text',
     prompt: "I have a document I'd like to upload for you to summarise.",
     behavior: 'send',
     category: 'document',
@@ -115,7 +115,7 @@ export const QUICK_ACTIONS_CONFIG: Record<string, QuickActionConfig> = {
     id: 'createAgent',
     label: 'Create an agent',
     description: 'Create a new AI agent for specific tasks',
-    icon: 'bi-robot',
+    icon: 'bot',
     prompt: "I'd like to create a Numa agent.",
     behavior: 'send',
     category: 'productivity',
@@ -126,7 +126,7 @@ export const QUICK_ACTIONS_CONFIG: Record<string, QuickActionConfig> = {
     id: 'checkCalendar',
     label: 'Check my calendar',
     description: 'View your upcoming meetings and schedule',
-    icon: 'bi-calendar-check',
+    icon: 'calendar-check',
     prompt: 'What meetings do I have scheduled for today and tomorrow?',
     behavior: 'send',
     category: 'integration',
@@ -137,7 +137,7 @@ export const QUICK_ACTIONS_CONFIG: Record<string, QuickActionConfig> = {
     id: 'checkEmails',
     label: 'Check my emails',
     description: 'Review your recent emails and inbox',
-    icon: 'bi-envelope-open',
+    icon: 'inbox',
     prompt: 'Can you show me my recent emails?',
     behavior: 'send',
     category: 'integration',

@@ -211,7 +211,7 @@ export function UserKBDetailPage(): React.JSX.Element {
 
   if (!currentKB) {
     return (
-      <div className="user-kb-detail-page">
+      <div className="dashboard user-kb-detail-page">
         <PageHeader title={t('userKnowledgeBase.loading.title')} subtitle={t('userKnowledgeBase.loading.subtitle')} />
         <LayoutDashboard>
           <div className="text-center p-5">
@@ -227,7 +227,7 @@ export function UserKBDetailPage(): React.JSX.Element {
   const isShared = currentKB.role === 'VIEWER';
 
   return (
-    <div className="user-kb-detail-page">
+    <div className="dashboard user-kb-detail-page">
       <PageHeader
         title={
           <>

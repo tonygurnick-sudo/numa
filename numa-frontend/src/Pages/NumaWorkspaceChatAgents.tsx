@@ -1,13 +1,13 @@
 import { useState, useRef, useEffect, useMemo, useCallback, type ReactNode, type SetStateAction } from 'react';
-import { Button, Alert, Modal, Collapse } from 'react-bootstrap';
+import { Button, Alert, Modal } from 'react-bootstrap';
+import { Clock, Plus, Settings } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { LambdaClient } from '@aws-sdk/client-lambda';
 import { fromWebToken } from '@aws-sdk/credential-providers';
 import { useAuth } from '../Providers/AuthProvider';
 import { LayoutDashboard } from '../Layouts/LayoutDashboard';
-import { ChatHistorySidebar, type ChatHistorySidebarRef } from '../Components/Chat/ChatHistorySidebar';
-import { AgentsSidebar, AgentsSidebarHandle } from '../Components/Agents/AgentsSidebar';
 import { PageHeader } from '../Components/PageHeader';
+import { ChatHistorySidebar, type ChatHistorySidebarRef } from '../Components/Chat/ChatHistorySidebar';
 import { ChatInput } from '../Components/Chat/ChatInput';
 import { DocumentPanel } from '../Components/DocumentPanel';
 import { ChatMessages } from '../Components/Chat/ChatMessages';
@@ -37,20 +37,21 @@ import { getAgent, listAgents } from '../Services/AgentsService';
 import { getConnectionConfig } from '../config/integrationsConfig';
 import type { QuickActionConfig } from '../config/quickActionsConfig';
 import { sortAgentsByPriority } from '../utils/agentSortingUtils';
-import { formatAgentDisplayName } from '../utils/agentUtils';
 import { AdminAgentsService, type AgentsMode } from '../Services/AdminAgentsService';
 import { ChatSettingsService, type ChatSettings, DEFAULT_CHAT_SETTINGS } from '../Services/ChatSettingsService';
-import { AgentAvatar } from '../Components/Agents/AgentAvatar';
 import { withPRM } from '../utils/prmUtils';
 // Workspace chat mode imports
 import { getWorkspaceChatRawTrace } from '../Services/workspaceChatAgentService';
 import { parseRawTraceToMessages } from '../utils/workspaceChatEventHandlers';
 // Note: SDK event handling moved to useWorkspaceChatStreaming hook
 import { WorkspaceChatFileUpload } from '../Components/WorkspaceChat/WorkspaceChatFileUpload';
+import {
+  WorkspaceChatHistoryPanel,
+  type WorkspaceChatHistoryPanelRef,
+} from '../Components/WorkspaceChat/WorkspaceChatHistoryPanel';
 import { WorkspaceChatSettingsPanel } from '../Components/WorkspaceChat/WorkspaceChatSettingsPanel';
 import { useWorkspaceChatSettingsPanel } from '../hooks/useWorkspaceChatSettingsPanel';
 import { PendingFilesBar } from '../Components/Chat/PendingFilesBar';
-import { ExportConversationButton } from '../Components/Chat/ExportConversationButton';
 import { deleteWorkspaceChatUploads } from '../Services/workspaceChatAgentService';
 import {
   loadStagedItems,
@@ -120,7 +121,7 @@ const NumaWorkspaceChatAgents = () => {
   );
   const [missingConfirm, setMissingConfirm] = useState<{ agent: AgentSummary; missing: string[] } | null>(null);
   const [isMobile, setIsMobile] = useState(() => (typeof window !== 'undefined' ? window.innerWidth <= 768 : false));
-  const [showMobileActions, setShowMobileActions] = useState(false);
+  const [isHistoryPanelOpen, setIsHistoryPanelOpen] = useState(false);
   const [showDocumentModal, setShowDocumentModal] = useState(false);
   const [showFilePreviewModal, setShowFilePreviewModal] = useState(false);
   const [userChatSettings, setUserChatSettings] = useState<ChatSettings>(DEFAULT_CHAT_SETTINGS);
@@ -133,15 +134,21 @@ const NumaWorkspaceChatAgents = () => {
   const [isInitializing, setIsInitializing] = useState(false);
   /** Selected model for workspace chat (global cross-region inference profile) */
   const [selectedModelId, setSelectedModelId] = useState<WorkspaceChatModelId>(DEFAULT_WORKSPACE_MODEL);
+  /** Whether model selection is enabled for workspace chat (from runtime config) */
+  const [workspaceModelSelectionEnabled] = useState(() =>
+    typeof window !== 'undefined' ? window.sessionStorage.getItem('WORKSPACE_CHAT_MODEL_SELECTION') === 'true' : false,
+  );
   /** Tracks when a conversation was pre-minted via file upload but user hasn't sent a message yet */
   const [isPreMintedConversation, setIsPreMintedConversation] = useState(false);
   /** Tracks when a V1 conversation needs to be migrated to V2 on first message */
   const [needsV1Migration, setNeedsV1Migration] = useState(false);
+  /** Allows users to hide the legacy migration notice for the current conversation */
+  const [dismissedLegacyMigrationNotice, setDismissedLegacyMigrationNotice] = useState(false);
 
   // Refs
   const messageEndRef = useRef(null);
   const chatHistoryRef = useRef<ChatHistorySidebarRef | null>(null);
-  const agentsSidebarRef = useRef<AgentsSidebarHandle | null>(null);
+  const historyPanelRef = useRef<WorkspaceChatHistoryPanelRef | null>(null);
   const preselectHandledRef = useRef(false);
   const preselectActivatedRef = useRef(false);
   const preselectTimerRef = useRef<number | null>(null);
@@ -212,6 +219,7 @@ const NumaWorkspaceChatAgents = () => {
     if (settingsPanel.isPanelOpen) {
       settingsPanel.closePanel();
     } else {
+      setIsHistoryPanelOpen(false);
       // Close any open panels first
       closeFilePreview();
       closeDocument();
@@ -219,6 +227,20 @@ const NumaWorkspaceChatAgents = () => {
       settingsPanel.openPanel();
     }
   }, [settingsPanel, closeFilePreview, closeDocument, setShowSplitView]);
+
+  const handleToggleHistory = useCallback(() => {
+    if (isMobile) {
+      chatHistoryRef.current?.toggleSidebar();
+      return;
+    }
+
+    if (isHistoryPanelOpen) {
+      setIsHistoryPanelOpen(false);
+    } else {
+      settingsPanel.closePanel();
+      setIsHistoryPanelOpen(true);
+    }
+  }, [isMobile, isHistoryPanelOpen, settingsPanel]);
 
   const markUserSettingsModified = useCallback(() => {
     setUserSettingsModified(true);
@@ -229,6 +251,7 @@ const NumaWorkspaceChatAgents = () => {
     (ref: { filename: string; fullPath: string; relativePath: string; extension: string }) => {
       // Close settings panel for mutual exclusivity
       settingsPanel.closePanel();
+      setIsHistoryPanelOpen(false);
       openFilePreview(ref);
       // Collapse main nav sidebar to give more room for preview
       window.dispatchEvent(new CustomEvent('numa-collapse-sidebar'));
@@ -243,6 +266,7 @@ const NumaWorkspaceChatAgents = () => {
     (ref: { name: string; fullPath: string; relativePath: string }) => {
       // Close settings panel for mutual exclusivity
       settingsPanel.closePanel();
+      setIsHistoryPanelOpen(false);
       openFolderPreview(ref);
       // Collapse main nav sidebar to give more room for preview
       window.dispatchEvent(new CustomEvent('numa-collapse-sidebar'));
@@ -481,13 +505,7 @@ const NumaWorkspaceChatAgents = () => {
 
     const handleResize = () => {
       const mobile = window.innerWidth <= 768;
-      setIsMobile((prev) => {
-        if (prev === mobile) return prev; // Prevent unnecessary updates
-        if (!mobile) {
-          setShowMobileActions(false);
-        }
-        return mobile;
-      });
+      setIsMobile((prev) => (prev === mobile ? prev : mobile));
     };
 
     window.addEventListener('resize', handleResize);
@@ -719,9 +737,6 @@ const NumaWorkspaceChatAgents = () => {
     }
   };
 
-  // Model selection feature flag — when OFF (default), always use Sonnet 4.5
-  const modelSelectionEnabled = window.sessionStorage.getItem('WORKSPACE_CHAT_MODEL_SELECTION') === 'true';
-
   // Pipedream integration feature flags - check config instead of Cognito groups
   const hasPipedreamFeature = window.sessionStorage.getItem('PIPEDREAM_INTEGRATIONS') === 'true';
   const relayLambdaArn = window.sessionStorage.getItem('PIPEDREAM_RELAY_LAMBDA_ARN');
@@ -911,6 +926,7 @@ const NumaWorkspaceChatAgents = () => {
 
     // Clear manual loading state to prevent conflicts
     setIsManuallyLoading(false);
+    setIsHistoryPanelOpen(false);
 
     // Clear V1 migration flag
     setNeedsV1Migration(false);
@@ -921,6 +937,11 @@ const NumaWorkspaceChatAgents = () => {
     // Use the hook's new chat handler
     await handleNewChat();
   }
+
+  const handleHeaderNewChat = async () => {
+    await handleNewChatOnExpired();
+    forceShowNewChatView();
+  };
 
   // Inactivity: centralized in hook
   const {
@@ -950,6 +971,12 @@ const NumaWorkspaceChatAgents = () => {
   // 1. Normal new chat flow (showContinueSuggestions && no messages), OR
   // 2. Conversation was pre-minted via upload but user hasn't sent a message yet
   const shouldShowNewChatView = (showContinueSuggestions && messages.length === 0) || isPreMintedConversation;
+  const showLegacyMigrationNotice = !shouldShowNewChatView && needsV1Migration && !dismissedLegacyMigrationNotice;
+
+  // Reset notice dismissal on conversation/migration state changes.
+  useEffect(() => {
+    setDismissedLegacyMigrationNotice(false);
+  }, [conversationId, needsV1Migration]);
 
   // Auto-load conversation when conversationId is set by useConversationManager
   // But skip auto-load if this conversation was just created in this session, messages already exist, or manual loading is in progress
@@ -1000,6 +1027,7 @@ const NumaWorkspaceChatAgents = () => {
   // Helper to refresh sidebar
   const refreshSidebar = () => {
     chatHistoryRef.current?.refreshConversations();
+    historyPanelRef.current?.refreshConversations();
   };
 
   // Auto-naming handler called after stream completes
@@ -1061,11 +1089,6 @@ const NumaWorkspaceChatAgents = () => {
     onStreamComplete: handleAutoNaming,
   });
 
-  // Toggle chat history sidebar
-  const toggleChatHistory = () => {
-    chatHistoryRef.current?.toggleSidebar();
-  };
-
   // Handle renaming a conversation from NewChat view
   const handleRenameConversation = async (conversationId: string, currentName: string) => {
     const newName = prompt(t('history.renamePrompt'), currentName);
@@ -1103,49 +1126,6 @@ const NumaWorkspaceChatAgents = () => {
     } catch (error) {
       console.error('Error deleting conversation:', error);
     }
-  };
-
-  // (Helper functions moved into hook)
-
-  // New chat handler that clears UI state
-  const handleNewChatClick = async () => {
-    // Stop any ongoing streaming response
-    setButtonStatus('idle');
-    resetStreamingState();
-    resetAgentState();
-    setPendingConversationChatConfig(null);
-    setUserSettingsModified(false);
-
-    // Clear all UI states
-    setMessages([]);
-    setUploadedFiles([]);
-    setInputMessage('');
-    closeDocument();
-
-    // Clear pre-minted state
-    setIsPreMintedConversation(false);
-
-    // Clear V1 migration flag
-    setNeedsV1Migration(false);
-
-    // Reset split view state - hide document panel
-    setShowSplitView(false);
-    setLeftFraction(0.99); // Reset to full chat view
-
-    // Clear manual loading state to prevent conflicts
-    setIsManuallyLoading(false);
-
-    // Clear auto-naming tracking for new conversation
-    autoNamingAttemptedRef.current.clear();
-
-    // Reset last loaded conversation to allow loading new conversations
-    lastLoadedConversationRef.current = null;
-
-    // Surface the enhanced new chat view immediately (with or without history)
-    forceShowNewChatView();
-
-    // Use the hook's new chat handler
-    await handleNewChat();
   };
 
   // Handle upload button click that silently mints a conversation for new chats
@@ -1483,6 +1463,7 @@ const NumaWorkspaceChatAgents = () => {
     });
 
     setIsManuallyLoading(true);
+    setIsHistoryPanelOpen(false);
     setIsConversationLoading(true);
     setUserSettingsModified(false); // Reset so save effect doesn't fire with stale state from previous conversation
     setMessages([]); // Clear current messages immediately
@@ -1715,531 +1696,443 @@ const NumaWorkspaceChatAgents = () => {
     }
   };
 
-  const renderActionButtons = () => (
-    <>
-      {conversationId && <ExportConversationButton messages={messages} conversationId={conversationId} />}
-      {agentsFeatureEnabled && agentsMode !== 'off' && (
-        <AgentsSidebar
-          ref={agentsSidebarRef}
-          onSelectAgent={handleAgentSelect}
-          currentAgentId={currentAgent?.agentId ?? null}
-          recentConversations={recentConversations}
-        />
-      )}
-      <Button variant="secondary" onClick={toggleChatHistory} title={t('page.chatHistory')}>
-        <i className="bi bi-clock-history me-1"></i>
-        {t('page.historyButton')}
-      </Button>
-      <Button variant="primary" onClick={handleNewChatClick}>
-        {t('page.newChat')}
-      </Button>
-    </>
-  );
-
-  const mobileActionsPanelId = 'mobile-chat-actions-panel';
-  const handleMobileActionClick = () => setShowMobileActions(false);
-
-  // Ensure mobile actions start collapsed on mount/navigation
-  useEffect(() => {
-    setShowMobileActions(false);
-  }, []);
-
-  // Auto-collapse sidebar when entering Chat V2 for more workspace
-  useEffect(() => {
-    window.dispatchEvent(new CustomEvent('numa-collapse-sidebar'));
-  }, []);
-
-  // Close mobile actions when clicking/tapping outside
-  useEffect(() => {
-    if (!isMobile || !showMobileActions) return;
-
-    const handleOutsideClick = (event: MouseEvent | TouchEvent) => {
-      const target = event.target as HTMLElement | null;
-      if (!target) return;
-      if (target.closest('.mobile-chat-actions')) return;
-      setShowMobileActions(false);
-    };
-
-    document.addEventListener('mousedown', handleOutsideClick);
-    document.addEventListener('touchstart', handleOutsideClick);
-    return () => {
-      document.removeEventListener('mousedown', handleOutsideClick);
-      document.removeEventListener('touchstart', handleOutsideClick);
-    };
-  }, [isMobile, showMobileActions]);
-
   return (
-    <div className="dashboard">
-      {/* Desktop header */}
-      {!isMobile && (
-        <PageHeader
-          title={
-            <>
-              {t('common:nav.expanded.numaChatV2')} <span className="beta-badge">{t('common:badges.beta')}</span>
-            </>
-          }
-          actions={renderActionButtons()}
-          className={shouldShowNewChatView ? 'new-chat-page-header' : ''}
-        />
-      )}
-
-      {/* Mobile action toggle lives just below the nav bar */}
-      {isMobile && !shouldShowNewChatView && (
-        <div className="mobile-chat-actions">
-          <button
-            type="button"
-            className={`mobile-actions-toggle ${showMobileActions ? 'open' : ''}`}
-            onClick={() => setShowMobileActions((open) => !open)}
-            aria-expanded={showMobileActions}
-            aria-controls={mobileActionsPanelId}
-            aria-label={showMobileActions ? 'Hide chat actions' : 'Show chat actions'}
-          >
-            <span className="toggle-icon">
-              <i className="bi bi-plus"></i>
-            </span>
-          </button>
-          <Collapse in={showMobileActions}>
-            <div id={mobileActionsPanelId} className="mobile-actions-panel">
-              <div className="d-flex flex-wrap gap-2" onClick={handleMobileActionClick}>
-                {renderActionButtons()}
-              </div>
-            </div>
-          </Collapse>
-        </div>
-      )}
-
-      {/* Main content */}
+    <div
+      className={`dashboard workspace-chat-v2 ${!isMobile && (settingsPanel.isPanelOpen || isHistoryPanelOpen) ? 'settings-drawer-open' : ''}`}
+    >
       <LayoutDashboard>
-        {/* Chat layout */}
-        <div className="chat-layout d-flex">
-          {/* Chat history sidebar */}
+        {isMobile && (
           <ChatHistorySidebar
             ref={chatHistoryRef}
             onSelectConversation={handleLoadConversation}
             currentConversationId={conversationId}
             setError={(error) => console.error('Chat history error:', error)}
           />
+        )}
 
-          {/* Main chat content */}
-          <div className="flex-grow-1 d-flex contain-width">
-            {/* White container wrapper */}
-            <div className="chat-white-container">
-              <div className="chat-content flex-grow-1 d-flex flex-column">
-                {/* Agent info section (if agent is selected) */}
-                {currentAgent && (
-                  <div className="chat-agent-info d-flex align-items-center gap-2 p-3 border-bottom">
-                    <AgentAvatar agent={currentAgent} size={32} />
-                    <div className="chat-agent-meta">
-                      <div
-                        className="fw-semibold"
-                        style={{ fontSize: '1.1rem', color: 'var(--brand-primary, var(--color-primary))' }}
-                      >
-                        {formatAgentDisplayName(currentAgent.title)}
-                      </div>
-                      <div className="small text-muted">{t('page.agentAssistant')}</div>
-                    </div>
-                  </div>
-                )}
-
-                {/* Missing integrations confirmation modal */}
-                <Modal show={!!missingConfirm} onHide={() => setMissingConfirm(null)} centered>
-                  <Modal.Header closeButton>
-                    <Modal.Title>{t('page.missingIntegrations.title')}</Modal.Title>
-                  </Modal.Header>
-                  <Modal.Body>
-                    <p className="mb-3">{t('page.missingIntegrations.body')}</p>
-                    <div className="d-flex flex-column gap-2 mb-3">
-                      {missingConfirm?.missing.map((id) => {
-                        const config = getConnectionConfig(id);
-                        return (
-                          <div
-                            key={id}
-                            className="d-flex align-items-center gap-3 p-3 border rounded-2 bg-light"
-                            style={{ transition: 'all 0.2s ease' }}
-                          >
-                            {config?.img_src ? (
-                              <img
-                                src={config.img_src}
-                                alt={config.name}
-                                style={{ width: 32, height: 32, objectFit: 'contain', flexShrink: 0 }}
-                              />
-                            ) : (
-                              <div
-                                className="rounded-2 bg-secondary bg-opacity-10 d-flex align-items-center justify-content-center"
-                                style={{ width: 32, height: 32, flexShrink: 0 }}
-                              >
-                                <i className="bi bi-link text-secondary"></i>
-                              </div>
-                            )}
-                            <span className="fw-medium">{config?.name || id}</span>
-                          </div>
-                        );
-                      })}
-                    </div>
-                    <p className="mb-0 text-muted small">{t('page.missingIntegrations.note')}</p>
-                  </Modal.Body>
-                  <Modal.Footer>
-                    <Button variant="outline-secondary" onClick={() => setMissingConfirm(null)} className="me-auto">
-                      <i className="bi bi-arrow-left me-2"></i>
-                      {t('page.missingIntegrations.back')}
-                    </Button>
-                    <a className="btn btn-outline-primary" href="/integrations">
-                      <i className="bi bi-link-45deg me-2"></i>
-                      {t('page.missingIntegrations.goToIntegrations')}
-                    </a>
-                    <Button
-                      variant="primary"
-                      onClick={async () => {
-                        const info = missingConfirm;
-                        setMissingConfirm(null);
-                        if (info) await doStartAgentSession(info.agent, info.missing);
+        <div className="chat-layout d-flex">
+          <div className="flex-grow-1 d-flex flex-column min-h-0">
+            <PageHeader
+              title={t('page.title')}
+              subtitle={t('page.subtitle', { defaultValue: 'Your AI workspace assistant' })}
+              actionsClassName="workspace-chat-header-actions"
+              actions={
+                <>
+                  {!shouldShowNewChatView && (
+                    <button
+                      type="button"
+                      className="workspace-chat-history-btn"
+                      onClick={() => {
+                        void handleHeaderNewChat();
                       }}
+                      title={t('page.newChat')}
+                      aria-label={t('page.newChat')}
                     >
-                      {t('page.missingIntegrations.continueWithout')}
-                    </Button>
-                  </Modal.Footer>
-                </Modal>
+                      <Plus size={14} className="workspace-chat-header-btn-icon" />
+                      <span>{t('page.newChat')}</span>
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    className={`workspace-chat-history-btn chat-history-btn ${isHistoryPanelOpen ? 'is-open' : ''}`}
+                    onClick={handleToggleHistory}
+                    title={t('page.chatHistory')}
+                    aria-label={t('page.chatHistory')}
+                  >
+                    <Clock size={14} className="workspace-chat-header-btn-icon" />
+                    <span>{t('page.historyButton')}</span>
+                  </button>
+                  {!isMobile && (
+                    <button
+                      type="button"
+                      className={`workspace-chat-settings-btn ${settingsPanel.isPanelOpen ? 'is-open' : ''}`}
+                      onClick={handleToggleSettings}
+                      title={t('input.tooltips.settings')}
+                      aria-label={t('input.tooltips.settings')}
+                      aria-pressed={settingsPanel.isPanelOpen}
+                    >
+                      <Settings size={18} />
+                    </button>
+                  )}
+                </>
+              }
+            />
 
-                {agentError && (
-                  <Alert variant="warning" className="py-2" onClose={() => setAgentError(null)} dismissible>
-                    {agentError}
-                  </Alert>
-                )}
-
-                <div className="chat-container position-relative" style={{ flex: '1 1 auto' }}>
-                  <ResizableSplitView
-                    left={
-                      /* LEFT PANE: chat messages + input */
-                      <div className="chat-left-pane d-flex flex-column h-100">
-                        {/* Initialization indicator - shown when workspace is syncing */}
-                        {isInitializing && (
-                          <div className="workspace-chat-initializing">
-                            <div className="spinner-border spinner-border-sm" role="status">
-                              <span className="visually-hidden">Initializing...</span>
-                            </div>
-                            <span>Initializing workspace...</span>
+            <Modal show={!!missingConfirm} onHide={() => setMissingConfirm(null)} centered>
+              <Modal.Header closeButton>
+                <Modal.Title>{t('page.missingIntegrations.title')}</Modal.Title>
+              </Modal.Header>
+              <Modal.Body>
+                <p className="mb-3">{t('page.missingIntegrations.body')}</p>
+                <div className="d-flex flex-column gap-2 mb-3">
+                  {missingConfirm?.missing.map((id) => {
+                    const config = getConnectionConfig(id);
+                    return (
+                      <div
+                        key={id}
+                        className="d-flex align-items-center gap-3 p-3 border rounded-2 bg-light"
+                        style={{ transition: 'all 0.2s ease' }}
+                      >
+                        {config?.img_src ? (
+                          <img
+                            src={config.img_src}
+                            alt={config.name}
+                            style={{ width: 32, height: 32, objectFit: 'contain', flexShrink: 0 }}
+                          />
+                        ) : (
+                          <div
+                            className="rounded-2 bg-secondary bg-opacity-10 d-flex align-items-center justify-content-center"
+                            style={{ width: 32, height: 32, flexShrink: 0 }}
+                          >
+                            <i className="bi bi-link text-secondary"></i>
                           </div>
                         )}
-                        <div className="chat-messages flex-grow-1 overflow-auto">
-                          {isConversationLoading ? (
-                            <div className="d-flex justify-content-center align-items-center h-100">
-                              <div className="text-center">
-                                <div className="spinner-border text-primary" role="status">
-                                  <span className="visually-hidden">Loading...</span>
-                                </div>
-                                <p className="mt-2 text-muted">Loading conversation...</p>
-                              </div>
-                            </div>
-                          ) : shouldShowNewChatView ? (
-                            <NewChat
-                              inputMessage={inputMessage}
-                              setInputMessage={setInputMessage}
-                              handleSubmit={handleSubmit}
-                              setShowUploadModal={() => handleUploadWithConversationMint()}
-                              buttonStatus={buttonStatus}
-                              webSearchEnabled={webSearchEnabled}
-                              setWebSearchEnabled={handleUserSetWebSearchEnabled}
-                              createAgentEnabled={agentsFeatureEnabled ? createAgentEnabled : false}
-                              setCreateAgentEnabled={handleUserSetCreateAgentEnabled}
-                              autoToolsEnabled={autoToolsEnabled}
-                              setAutoToolsEnabled={handleUserSetAutoToolsEnabled}
-                              availableConnections={availableConnections}
-                              enabledConnections={enabledConnections}
-                              setEnabledConnections={handleUserSetEnabledConnections}
-                              connectionsLoading={connectionsLoading}
-                              hasPipedreamFeature={hasPipedreamFeature}
-                              uploadsInProgress={isFileProcessing}
-                              noToolsActive={noToolsActive}
-                              inputRef={inputRef}
-                              recentConversations={recentConversations}
-                              hideSuggestions={hideSuggestions}
-                              onContinueConversation={handleLoadConversation}
-                              suggestionsLoading={suggestionsLoading}
-                              userName={userName}
-                              onRenameConversation={handleRenameConversation}
-                              onDeleteConversation={handleDeleteConversation}
-                              personalAgents={agentsFeatureEnabled ? sortedPersonalAgents : []}
-                              onSelectAgent={handleAgentSelect}
-                              agentsLoading={agentsFeatureEnabled ? personalAgentsLoading : false}
-                              enabledKBIds={enabledKBIds}
-                              setEnabledKBIds={handleUserSetEnabledKBIds}
-                              availableKBs={availableKBs}
-                              isLoadingKBs={isLoadingKBs}
-                              agentsFeatureEnabled={agentsFeatureEnabled}
-                              stagedItems={stagedItems}
-                              onRemoveStagedItem={async (item: StagedItem) => {
-                                // Get paths to delete from this item
-                                const pathsToDelete = getPathsFromStagedItem(item);
-                                // Delete from backend (local + S3)
-                                if (conversationId && pathsToDelete.length > 0) {
-                                  try {
-                                    await deleteWorkspaceChatUploads(conversationId, pathsToDelete);
-                                  } catch (err) {
-                                    console.error('Error deleting uploads:', err);
-                                  }
-                                }
-                                // Update staged items
-                                setStagedItems((prev) => {
-                                  const filtered = prev.filter((i) => {
-                                    if (item.kind === 'file' && i.kind === 'file') return i.path !== item.path;
-                                    if (item.kind === 'folder' && i.kind === 'folder')
-                                      return i.folderPath !== item.folderPath;
-                                    return true;
-                                  });
-                                  if (conversationId) saveStagedItems(conversationId, filtered);
-                                  return filtered;
-                                });
-                              }}
-                              onStop={stopStream}
-                              isStopping={isStopping}
-                              // V2 variant props
-                              variant="v2"
-                              onSettingsClick={handleToggleSettings}
-                              isSettingsPanelOpen={settingsPanel.isPanelOpen}
-                              hasActiveSettings={
-                                enabledKBIds.length > 0 ||
-                                webSearchEnabled ||
-                                createAgentEnabled ||
-                                enabledConnections.length > 0
-                              }
-                              // Model selector props
-                              selectedModelId={selectedModelId}
-                              setSelectedModelId={setSelectedModelId}
-                              showModelSelector={modelSelectionEnabled}
-                              // Quick actions props
-                              onQuickAction={handleQuickAction}
-                              connectedIntegrations={connectedSet}
-                            />
-                          ) : (
-                            <>
-                              {/* V1 to V2 Migration Banner */}
-                              {needsV1Migration && (
-                                <div
-                                  className="alert alert-info d-flex align-items-start gap-2 mx-3 mt-3 mb-0"
-                                  role="alert"
-                                  style={{ borderRadius: '8px' }}
-                                >
-                                  <i className="bi bi-info-circle-fill flex-shrink-0 mt-1" />
-                                  <div>
-                                    <strong>{t('page.legacyMigration.title')}</strong>
-                                    <p className="mb-0 small">{t('page.legacyMigration.description')}</p>
-                                  </div>
-                                </div>
-                              )}
-                              <ChatMessages
-                                messages={messages}
-                                messageEndRef={messageEndRef}
-                                loadingIndicatorStyle={{}}
-                                onOpenDocument={(title, content) => {
-                                  // Close settings panel for mutual exclusivity
-                                  settingsPanel.closePanel();
-                                  setInlineDocument({ title, content });
-                                  if (isMobile) {
-                                    setShowSplitView(false);
-                                    setLeftFraction(0.99);
-                                    setShowDocumentModal(true);
-                                  } else {
-                                    openDocument(title, content);
-                                  }
-                                }}
-                                isConversationLoading={false}
-                                currentAgent={currentAgent}
-                                conversationId={conversationId}
-                                sub={sub}
-                                numaChatDynamoUtils={numaChatDynamoUtils}
-                                setMessages={setMessages}
-                                isWorkspaceMode={true}
-                                outputsBucket={OUTPUTS_BUCKET || undefined}
-                                region={REGION || undefined}
-                                onOpenFilePreview={handleOpenFilePreviewForChat}
-                                onOpenFolderPreview={handleOpenFolderPreviewForChat}
-                              />
-                            </>
-                          )}
-                        </div>
-
-                        {/* pinned input at bottom (hide during initial new chat flow) */}
-                        {!shouldShowNewChatView && (
-                          <div className="chat-input-wrapper">
-                            {/* Show pending files indicator */}
-                            {stagedItems.length > 0 && (
-                              <PendingFilesBar
-                                items={stagedItems}
-                                onRemove={async (item: StagedItem) => {
-                                  // Get paths to delete from this item
-                                  const pathsToDelete = getPathsFromStagedItem(item);
-
-                                  // Delete from backend (local + S3)
-                                  if (conversationId && pathsToDelete.length > 0) {
-                                    try {
-                                      await deleteWorkspaceChatUploads(conversationId, pathsToDelete);
-                                    } catch (e) {
-                                      console.error('Failed to delete uploads:', e);
-                                      // Continue with UI removal even if backend fails
-                                    }
-                                  }
-
-                                  // Remove from state
-                                  setStagedItems((prev) => {
-                                    const filtered = prev.filter((i) => {
-                                      if (i.kind === 'folder' && item.kind === 'folder') {
-                                        return i.folderPath !== item.folderPath;
-                                      }
-                                      if (i.kind === 'file' && item.kind === 'file') {
-                                        return i.path !== item.path;
-                                      }
-                                      return true;
-                                    });
-
-                                    // Persist to localStorage
-                                    if (conversationId) {
-                                      saveStagedItems(conversationId, filtered);
-                                    }
-
-                                    return filtered;
-                                  });
-                                }}
-                              />
-                            )}
-                            <ChatInput
-                              inputMessage={inputMessage}
-                              setInputMessage={setInputMessage}
-                              handleSubmit={handleSubmit}
-                              setShowUploadModal={() => handleUploadWithConversationMint()}
-                              buttonStatus={buttonStatus}
-                              webSearchEnabled={webSearchEnabled}
-                              setWebSearchEnabled={handleUserSetWebSearchEnabled}
-                              createAgentEnabled={agentsFeatureEnabled ? createAgentEnabled : false}
-                              setCreateAgentEnabled={handleUserSetCreateAgentEnabled}
-                              autoToolsEnabled={autoToolsEnabled}
-                              setAutoToolsEnabled={handleUserSetAutoToolsEnabled}
-                              availableConnections={availableConnections}
-                              enabledConnections={enabledConnections}
-                              setEnabledConnections={handleUserSetEnabledConnections}
-                              connectionsLoading={connectionsLoading}
-                              hasPipedreamFeature={hasPipedreamFeature}
-                              uploadsInProgress={isFileProcessing}
-                              noToolsActive={noToolsActive}
-                              externalInputRef={inputRef}
-                              autoFocus={true}
-                              enabledKBIds={enabledKBIds}
-                              setEnabledKBIds={handleUserSetEnabledKBIds}
-                              selectedModelId={selectedModelId}
-                              setSelectedModelId={setSelectedModelId}
-                              showModelSelector={modelSelectionEnabled}
-                              onStop={stopStream}
-                              isStopping={isStopping}
-                              // V2 variant props
-                              variant="v2"
-                              onSettingsClick={handleToggleSettings}
-                              isSettingsPanelOpen={settingsPanel.isPanelOpen}
-                              hasActiveSettings={
-                                enabledKBIds.length > 0 ||
-                                webSearchEnabled ||
-                                createAgentEnabled ||
-                                enabledConnections.length > 0
-                              }
-                            />
-                          </div>
-                        )}
+                        <span className="fw-medium">{config?.name || id}</span>
                       </div>
-                    }
-                    right={
-                      /* RIGHT PANE: settings panel, file preview, or document panel */
-                      settingsPanel.isPanelOpen ? (
-                        <WorkspaceChatSettingsPanel
-                          isOpen={settingsPanel.isPanelOpen}
-                          isNewChat={shouldShowNewChatView}
-                          uploadsFiles={settingsPanel.uploadsFiles}
-                          sessionFiles={settingsPanel.sessionFiles}
-                          filesLoading={settingsPanel.filesLoading}
-                          filesError={settingsPanel.filesError}
-                          onRefreshFiles={settingsPanel.refreshFiles}
-                          onOpenFile={(file) => {
-                            // Build full S3 key from relative path
-                            // S3 structure: numa-chat/workspace/{user_sub}/conversations/{conversation_id}/{relative_path}
-                            const fullS3Key = `numa-chat/workspace/${sub}/conversations/${conversationId}/${file.path}`;
-                            openFilePreview({
-                              filename: file.name,
-                              fullPath: fullS3Key,
-                              relativePath: file.path,
-                              extension: file.name.split('.').pop() || '',
-                            });
-                            settingsPanel.closePanel();
-                          }}
-                          onDownloadFile={(file) => {
-                            // Download will be handled by opening preview with download action
-                            // Build full S3 key from relative path
-                            const fullS3Key = `numa-chat/workspace/${sub}/conversations/${conversationId}/${file.path}`;
-                            openFilePreview({
-                              filename: file.name,
-                              fullPath: fullS3Key,
-                              relativePath: file.path,
-                              extension: file.name.split('.').pop() || '',
-                            });
-                            settingsPanel.closePanel();
-                          }}
-                          autoToolsEnabled={autoToolsEnabled}
-                          setAutoToolsEnabled={handleUserSetAutoToolsEnabled}
+                    );
+                  })}
+                </div>
+                <p className="mb-0 text-muted small">{t('page.missingIntegrations.note')}</p>
+              </Modal.Body>
+              <Modal.Footer>
+                <Button variant="outline-secondary" onClick={() => setMissingConfirm(null)} className="me-auto">
+                  <i className="bi bi-arrow-left me-2"></i>
+                  {t('page.missingIntegrations.back')}
+                </Button>
+                <a className="btn btn-outline-primary" href="/integrations">
+                  <i className="bi bi-link-45deg me-2"></i>
+                  {t('page.missingIntegrations.goToIntegrations')}
+                </a>
+                <Button
+                  variant="primary"
+                  onClick={async () => {
+                    const info = missingConfirm;
+                    setMissingConfirm(null);
+                    if (info) await doStartAgentSession(info.agent, info.missing);
+                  }}
+                >
+                  {t('page.missingIntegrations.continueWithout')}
+                </Button>
+              </Modal.Footer>
+            </Modal>
+
+            {agentError && (
+              <Alert variant="warning" className="py-2" onClose={() => setAgentError(null)} dismissible>
+                {agentError}
+              </Alert>
+            )}
+
+            <div className="chat-container position-relative flex-grow-1">
+              <ResizableSplitView
+                left={
+                  <div className="chat-left-pane d-flex flex-column h-100">
+                    {isInitializing && (
+                      <div className="workspace-chat-initializing">
+                        <div className="spinner-border spinner-border-sm" role="status">
+                          <span className="visually-hidden">
+                            {t('page.initializing', { defaultValue: 'Initializing' })}
+                          </span>
+                        </div>
+                        <span>{t('page.initializingWorkspace', { defaultValue: 'Initializing workspace...' })}</span>
+                      </div>
+                    )}
+
+                    <div
+                      className={`chat-messages flex-grow-1 overflow-auto ${shouldShowNewChatView ? 'chat-messages--new-chat' : ''} ${
+                        showLegacyMigrationNotice ? 'chat-messages--with-legacy-migration-notice' : ''
+                      }`}
+                    >
+                      {isConversationLoading ? (
+                        <div className="d-flex justify-content-center align-items-center h-100">
+                          <div className="text-center">
+                            <div className="spinner-border text-primary" role="status">
+                              <span className="visually-hidden">{t('page.loading', { defaultValue: 'Loading' })}</span>
+                            </div>
+                            <p className="mt-2 text-muted">
+                              {t('page.loadingConversation', { defaultValue: 'Loading conversation...' })}
+                            </p>
+                          </div>
+                        </div>
+                      ) : shouldShowNewChatView ? (
+                        <NewChat
+                          inputMessage={inputMessage}
+                          setInputMessage={setInputMessage}
+                          handleSubmit={handleSubmit}
+                          setShowUploadModal={() => handleUploadWithConversationMint()}
+                          buttonStatus={buttonStatus}
                           webSearchEnabled={webSearchEnabled}
                           setWebSearchEnabled={handleUserSetWebSearchEnabled}
                           createAgentEnabled={agentsFeatureEnabled ? createAgentEnabled : false}
                           setCreateAgentEnabled={handleUserSetCreateAgentEnabled}
-                          agentsFeatureEnabled={agentsFeatureEnabled}
+                          autoToolsEnabled={autoToolsEnabled}
+                          setAutoToolsEnabled={handleUserSetAutoToolsEnabled}
+                          availableConnections={availableConnections}
+                          enabledConnections={enabledConnections}
+                          setEnabledConnections={handleUserSetEnabledConnections}
+                          connectionsLoading={connectionsLoading}
+                          hasPipedreamFeature={hasPipedreamFeature}
+                          uploadsInProgress={isFileProcessing}
+                          noToolsActive={noToolsActive}
+                          inputRef={inputRef}
+                          recentConversations={recentConversations}
+                          hideSuggestions={hideSuggestions}
+                          onContinueConversation={handleLoadConversation}
+                          suggestionsLoading={suggestionsLoading}
+                          userName={userName}
+                          onRenameConversation={handleRenameConversation}
+                          onDeleteConversation={handleDeleteConversation}
+                          personalAgents={agentsFeatureEnabled ? sortedPersonalAgents : []}
+                          onSelectAgent={handleAgentSelect}
+                          agentsLoading={agentsFeatureEnabled ? personalAgentsLoading : false}
                           enabledKBIds={enabledKBIds}
                           setEnabledKBIds={handleUserSetEnabledKBIds}
                           availableKBs={availableKBs}
                           isLoadingKBs={isLoadingKBs}
+                          agentsFeatureEnabled={agentsFeatureEnabled}
+                          stagedItems={stagedItems}
+                          onRemoveStagedItem={async (item: StagedItem) => {
+                            const pathsToDelete = getPathsFromStagedItem(item);
+                            if (conversationId && pathsToDelete.length > 0) {
+                              try {
+                                await deleteWorkspaceChatUploads(conversationId, pathsToDelete);
+                              } catch (err) {
+                                console.error('Error deleting uploads:', err);
+                              }
+                            }
+                            setStagedItems((prev) => {
+                              const filtered = prev.filter((i) => {
+                                if (item.kind === 'file' && i.kind === 'file') return i.path !== item.path;
+                                if (item.kind === 'folder' && i.kind === 'folder') {
+                                  return i.folderPath !== item.folderPath;
+                                }
+                                return true;
+                              });
+                              if (conversationId) saveStagedItems(conversationId, filtered);
+                              return filtered;
+                            });
+                          }}
+                          onStop={stopStream}
+                          isStopping={isStopping}
+                          variant="v2"
+                          selectedModelId={selectedModelId}
+                          setSelectedModelId={setSelectedModelId}
+                          showModelSelector={false}
+                          onQuickAction={handleQuickAction}
+                          connectedIntegrations={connectedSet}
+                        />
+                      ) : (
+                        <>
+                          {showLegacyMigrationNotice && (
+                            <div className="workspace-chat-legacy-migration-overlay" role="alert">
+                              <div className="workspace-chat-legacy-migration-card">
+                                <div className="workspace-chat-legacy-migration-main">
+                                  <i className="bi bi-info-circle-fill workspace-chat-legacy-migration-icon" />
+                                  <div className="workspace-chat-legacy-migration-text">
+                                    <strong>{t('page.legacyMigration.title')}</strong>
+                                    <p>{t('page.legacyMigration.description')}</p>
+                                  </div>
+                                </div>
+                                <button
+                                  type="button"
+                                  className="workspace-chat-legacy-migration-close"
+                                  onClick={() => setDismissedLegacyMigrationNotice(true)}
+                                  aria-label={t('input.aria.close')}
+                                >
+                                  <i className="bi bi-x-lg" />
+                                </button>
+                              </div>
+                            </div>
+                          )}
+                          <ChatMessages
+                            messages={messages}
+                            messageEndRef={messageEndRef}
+                            loadingIndicatorStyle={{}}
+                            onOpenDocument={(title, content) => {
+                              settingsPanel.closePanel();
+                              setInlineDocument({ title, content });
+                              if (isMobile) {
+                                setShowSplitView(false);
+                                setLeftFraction(0.99);
+                                setShowDocumentModal(true);
+                              } else {
+                                openDocument(title, content);
+                              }
+                            }}
+                            isConversationLoading={false}
+                            currentAgent={currentAgent}
+                            conversationId={conversationId}
+                            sub={sub}
+                            numaChatDynamoUtils={numaChatDynamoUtils}
+                            setMessages={setMessages}
+                            isWorkspaceMode={true}
+                            outputsBucket={OUTPUTS_BUCKET || undefined}
+                            region={REGION || undefined}
+                            onOpenFilePreview={handleOpenFilePreviewForChat}
+                            onOpenFolderPreview={handleOpenFolderPreviewForChat}
+                          />
+                        </>
+                      )}
+                    </div>
+
+                    {!shouldShowNewChatView && (
+                      <div className="chat-input-wrapper">
+                        {stagedItems.length > 0 && (
+                          <PendingFilesBar
+                            items={stagedItems}
+                            onRemove={async (item: StagedItem) => {
+                              const pathsToDelete = getPathsFromStagedItem(item);
+                              if (conversationId && pathsToDelete.length > 0) {
+                                try {
+                                  await deleteWorkspaceChatUploads(conversationId, pathsToDelete);
+                                } catch (e) {
+                                  console.error('Failed to delete uploads:', e);
+                                }
+                              }
+                              setStagedItems((prev) => {
+                                const filtered = prev.filter((i) => {
+                                  if (i.kind === 'folder' && item.kind === 'folder') {
+                                    return i.folderPath !== item.folderPath;
+                                  }
+                                  if (i.kind === 'file' && item.kind === 'file') {
+                                    return i.path !== item.path;
+                                  }
+                                  return true;
+                                });
+                                if (conversationId) {
+                                  saveStagedItems(conversationId, filtered);
+                                }
+                                return filtered;
+                              });
+                            }}
+                          />
+                        )}
+                        <ChatInput
+                          inputMessage={inputMessage}
+                          setInputMessage={setInputMessage}
+                          handleSubmit={handleSubmit}
+                          setShowUploadModal={() => handleUploadWithConversationMint()}
+                          buttonStatus={buttonStatus}
+                          webSearchEnabled={webSearchEnabled}
+                          setWebSearchEnabled={handleUserSetWebSearchEnabled}
+                          createAgentEnabled={agentsFeatureEnabled ? createAgentEnabled : false}
+                          setCreateAgentEnabled={handleUserSetCreateAgentEnabled}
+                          autoToolsEnabled={autoToolsEnabled}
+                          setAutoToolsEnabled={handleUserSetAutoToolsEnabled}
+                          availableConnections={availableConnections}
                           enabledConnections={enabledConnections}
                           setEnabledConnections={handleUserSetEnabledConnections}
-                          availableConnections={availableConnections}
                           connectionsLoading={connectionsLoading}
                           hasPipedreamFeature={hasPipedreamFeature}
-                          isDisabled={buttonStatus === 'streaming' || isFileProcessing}
+                          uploadsInProgress={isFileProcessing}
+                          noToolsActive={noToolsActive}
+                          externalInputRef={inputRef}
+                          autoFocus={true}
+                          enabledKBIds={enabledKBIds}
+                          setEnabledKBIds={handleUserSetEnabledKBIds}
+                          selectedModelId={selectedModelId}
+                          setSelectedModelId={setSelectedModelId}
+                          showModelSelector={false}
+                          onStop={stopStream}
+                          isStopping={isStopping}
+                          variant="v2"
                         />
-                      ) : showFilePreview && filePreview ? (
-                        <FilePreviewPanel
-                          preview={filePreview}
-                          onClose={closeFilePreview}
-                          bucket={OUTPUTS_BUCKET || ''}
-                          region={REGION || ''}
-                          getCredentials={getCredentials}
-                        />
-                      ) : showSplitView && inlineDocument ? (
-                        <DocumentPanel documentContent={inlineDocument} onClose={closeDocument} />
-                      ) : null
-                    }
-                    showRight={
-                      settingsPanel.isPanelOpen ||
-                      (showFilePreview && !!filePreview) ||
-                      (inlineDocument && showSplitView)
-                    }
-                    leftFraction={
-                      settingsPanel.isPanelOpen
-                        ? 0.7
-                        : showFilePreview && filePreview
-                          ? filePreviewLeftFraction
-                          : leftFraction
-                    }
-                    onLeftFractionChange={
-                      settingsPanel.isPanelOpen
-                        ? () => {}
-                        : showFilePreview && filePreview
-                          ? setFilePreviewLeftFraction
-                          : setLeftFraction
-                    }
-                    minLeft={200}
-                    minRight={settingsPanel.isPanelOpen ? 280 : 200}
-                    showDivider={!settingsPanel.isPanelOpen}
-                    rightPadding={settingsPanel.isPanelOpen ? '0.5rem' : '1rem'}
-                  />
-                </div>
-              </div>
-              {/* End white container */}
+                      </div>
+                    )}
+                  </div>
+                }
+                right={
+                  showFilePreview && filePreview ? (
+                    <FilePreviewPanel
+                      preview={filePreview}
+                      onClose={closeFilePreview}
+                      bucket={OUTPUTS_BUCKET || ''}
+                      region={REGION || ''}
+                      getCredentials={getCredentials}
+                    />
+                  ) : showSplitView && inlineDocument ? (
+                    <DocumentPanel documentContent={inlineDocument} onClose={closeDocument} />
+                  ) : null
+                }
+                showRight={(showFilePreview && !!filePreview) || (inlineDocument && showSplitView)}
+                leftFraction={showFilePreview && filePreview ? filePreviewLeftFraction : leftFraction}
+                onLeftFractionChange={showFilePreview && filePreview ? setFilePreviewLeftFraction : setLeftFraction}
+                minLeft={200}
+                minRight={200}
+              />
             </div>
           </div>
         </div>
       </LayoutDashboard>
+
+      {!isMobile && (
+        <aside
+          className={`workspace-chat-settings-drawer ${settingsPanel.isPanelOpen || isHistoryPanelOpen ? 'is-open' : ''}`}
+          aria-label={isHistoryPanelOpen ? t('history.title') : t('newChat.tabs.settings')}
+          aria-hidden={!(settingsPanel.isPanelOpen || isHistoryPanelOpen)}
+        >
+          <WorkspaceChatHistoryPanel
+            ref={historyPanelRef}
+            isOpen={isHistoryPanelOpen}
+            currentConversationId={conversationId}
+            onSelectConversation={handleLoadConversation}
+          />
+          <WorkspaceChatSettingsPanel
+            isOpen={settingsPanel.isPanelOpen}
+            isNewChat={shouldShowNewChatView}
+            uploadsFiles={settingsPanel.uploadsFiles}
+            sessionFiles={settingsPanel.sessionFiles}
+            filesLoading={settingsPanel.filesLoading}
+            filesError={settingsPanel.filesError}
+            onRefreshFiles={settingsPanel.refreshFiles}
+            onOpenFile={(file) => {
+              // Build full S3 key from relative path
+              // S3 structure: numa-chat/workspace/{user_sub}/conversations/{conversation_id}/{relative_path}
+              const fullS3Key = `numa-chat/workspace/${sub}/conversations/${conversationId}/${file.path}`;
+              openFilePreview({
+                filename: file.name,
+                fullPath: fullS3Key,
+                relativePath: file.path,
+                extension: file.name.split('.').pop() || '',
+              });
+              settingsPanel.closePanel();
+              setIsHistoryPanelOpen(false);
+            }}
+            onDownloadFile={(file) => {
+              // Download will be handled by opening preview with download action
+              // Build full S3 key from relative path
+              const fullS3Key = `numa-chat/workspace/${sub}/conversations/${conversationId}/${file.path}`;
+              openFilePreview({
+                filename: file.name,
+                fullPath: fullS3Key,
+                relativePath: file.path,
+                extension: file.name.split('.').pop() || '',
+              });
+              settingsPanel.closePanel();
+              setIsHistoryPanelOpen(false);
+            }}
+            autoToolsEnabled={autoToolsEnabled}
+            setAutoToolsEnabled={handleUserSetAutoToolsEnabled}
+            webSearchEnabled={webSearchEnabled}
+            setWebSearchEnabled={handleUserSetWebSearchEnabled}
+            createAgentEnabled={agentsFeatureEnabled ? createAgentEnabled : false}
+            setCreateAgentEnabled={handleUserSetCreateAgentEnabled}
+            agentsFeatureEnabled={agentsFeatureEnabled}
+            enabledKBIds={enabledKBIds}
+            setEnabledKBIds={handleUserSetEnabledKBIds}
+            availableKBs={availableKBs}
+            isLoadingKBs={isLoadingKBs}
+            enabledConnections={enabledConnections}
+            setEnabledConnections={handleUserSetEnabledConnections}
+            availableConnections={availableConnections}
+            connectionsLoading={connectionsLoading}
+            hasPipedreamFeature={hasPipedreamFeature}
+            isDisabled={buttonStatus === 'streaming' || isFileProcessing}
+            showModelSelector={workspaceModelSelectionEnabled}
+            selectedModelId={selectedModelId}
+            setSelectedModelId={setSelectedModelId}
+          />
+        </aside>
+      )}
 
       {/* Mobile document viewer */}
       <Modal

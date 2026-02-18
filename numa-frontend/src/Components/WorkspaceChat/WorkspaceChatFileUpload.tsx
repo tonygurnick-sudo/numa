@@ -581,10 +581,12 @@ export function WorkspaceChatFileUpload({
         {/* Info */}
         <Alert variant="info" className="mt-3 mb-0 small">
           <i className="bi bi-info-circle me-1" />
-          <Trans i18nKey="workspace.fileUpload.infoMessage" ns="chat">
-            Files are uploaded to this conversation&apos;s <code>uploads/</code> directory and are only available during
-            this conversation.
-          </Trans>
+          <Trans
+            i18nKey="workspace.fileUpload.infoMessage"
+            ns="chat"
+            values={{ directory: 'uploads/' }}
+            components={{ code: <code /> }}
+          />
         </Alert>
       </Modal.Body>
       <Modal.Footer>

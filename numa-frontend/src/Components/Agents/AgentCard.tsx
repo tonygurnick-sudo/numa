@@ -1,7 +1,24 @@
 import type { CSSProperties } from 'react';
 import { useState } from 'react';
 import { Card, Button, Badge, OverlayTrigger, Tooltip } from 'react-bootstrap';
-import { Search, Robot } from 'react-bootstrap-icons';
+import {
+  Bot,
+  ChevronDown,
+  ChevronUp,
+  Clock,
+  Copy,
+  Download,
+  FileText,
+  Folder,
+  FolderOpen,
+  MessageSquare,
+  Pencil,
+  Search,
+  Star,
+  Store,
+  Trash2,
+  User,
+} from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import i18n from '../../i18n';
 import type { AgentSummary } from '../../types/agents';
@@ -172,7 +189,7 @@ export const AgentCard = ({
 
     return (
       <Card
-        className={`shadow-sm agent-card ${highlight ? 'border-primary border-2' : ''}`}
+        className={`agent-card ${highlight ? 'border-primary border-2' : ''}`}
         style={{
           cursor: disabled ? 'not-allowed' : 'pointer',
           opacity: disabled ? 0.65 : 1,
@@ -197,10 +214,7 @@ export const AgentCard = ({
                       <Tooltip id={`schedules-indicator-${agent.agentId}`}>{t('card.schedules.active')}</Tooltip>
                     }
                   >
-                    <i
-                      className="bi bi-clock-fill"
-                      style={{ fontSize: '0.8rem', color: 'var(--brand-primary, var(--color-primary))' }}
-                    ></i>
+                    <Clock size={13} style={{ color: 'var(--brand-primary, var(--color-primary))' }} />
                   </OverlayTrigger>
                 )}
               </div>
@@ -209,12 +223,12 @@ export const AgentCard = ({
               <div className="d-flex align-items-center gap-2 mb-1" style={{ flexWrap: 'nowrap' }}>
                 {agent.visibility === 'public' ? (
                   <span className="text-muted small" style={{ fontSize: '0.7rem', flexShrink: 0 }}>
-                    <i className="bi bi-shop me-1"></i>
+                    <Store size={11} className="me-1" />
                     {t('card.visibility.company')}
                   </span>
                 ) : (
                   <span className="text-muted small" style={{ fontSize: '0.7rem', flexShrink: 0 }}>
-                    <i className="bi bi-person-fill me-1"></i>
+                    <User size={11} className="me-1" />
                     {t('card.visibility.personal')}
                   </span>
                 )}
@@ -257,10 +271,7 @@ export const AgentCard = ({
                   {/* Files Icon */}
                   {agent.referenceFiles?.length > 0 && (
                     <div className="d-flex align-items-center gap-1" style={{ flexShrink: 0 }}>
-                      <i
-                        className="bi bi-file-earmark-text"
-                        style={{ fontSize: '13px', color: 'var(--brand-primary, var(--color-primary))', lineHeight: 1 }}
-                      ></i>
+                      <FileText size={13} style={{ color: 'var(--brand-primary, var(--color-primary))' }} />
                       <span className="text-muted" style={{ fontSize: '0.7rem' }}>
                         {agent.referenceFiles.length}
                       </span>
@@ -275,10 +286,7 @@ export const AgentCard = ({
                           placement="top"
                           overlay={<Tooltip id="kb-all-collapsed">{t('card.knowledgeBases.all')}</Tooltip>}
                         >
-                          <i
-                            className="bi bi-folder-fill"
-                            style={{ fontSize: '14px', color: 'var(--brand-primary, var(--color-primary))' }}
-                          />
+                          <FolderOpen size={14} style={{ color: 'var(--brand-primary, var(--color-primary))' }} />
                         </OverlayTrigger>
                       ) : (
                         <>
@@ -288,10 +296,11 @@ export const AgentCard = ({
                               placement="top"
                               overlay={<Tooltip id={`kb-${kbId}-collapsed`}>{getKBDisplayName(kbId)}</Tooltip>}
                             >
-                              <i
-                                className={kbId === 'company' ? 'bi bi-folder-fill' : 'bi bi-folder'}
-                                style={{ fontSize: '14px', color: 'var(--brand-primary, var(--color-primary))' }}
-                              />
+                              {kbId === 'company' ? (
+                                <FolderOpen size={14} style={{ color: 'var(--brand-primary, var(--color-primary))' }} />
+                              ) : (
+                                <Folder size={14} style={{ color: 'var(--brand-primary, var(--color-primary))' }} />
+                              )}
                             </OverlayTrigger>
                           ))}
                           {(allowedKBs as string[]).length > 3 && (
@@ -308,7 +317,7 @@ export const AgentCard = ({
                   {(hasWeb || hasAgentCreation) && (
                     <div className="d-flex align-items-center gap-1" style={{ flexShrink: 0 }}>
                       {hasAgentCreation && (
-                        <Robot size={14} style={{ color: 'var(--brand-primary, var(--color-primary))' }} />
+                        <Bot size={14} style={{ color: 'var(--brand-primary, var(--color-primary))' }} />
                       )}
                       {hasWeb && <Search size={14} style={{ color: 'var(--brand-primary, var(--color-primary))' }} />}
                     </div>
@@ -325,13 +334,14 @@ export const AgentCard = ({
                 disabled={disabled}
                 aria-label={agent.isFavorite ? t('card.favorite.removeAria') : t('card.favorite.addAria')}
               >
-                <i
-                  className={agent.isFavorite ? 'bi bi-star-fill' : 'bi bi-star'}
-                  style={{ color: agent.isFavorite ? '#f0ad4e' : '#6c757d', fontSize: '1.1rem' }}
-                ></i>
+                <Star
+                  size={18}
+                  style={{ color: agent.isFavorite ? '#f0ad4e' : '#6c757d' }}
+                  fill={agent.isFavorite ? '#f0ad4e' : 'none'}
+                />
               </Button>
             )}
-            <i className="bi bi-chevron-down" style={{ fontSize: '1.2rem', color: '#6c757d', flexShrink: 0 }}></i>
+            <ChevronDown size={20} style={{ color: '#6c757d', flexShrink: 0 }} />
           </div>
         </Card.Body>
       </Card>
@@ -341,7 +351,7 @@ export const AgentCard = ({
   // Expanded view (default for public agents, toggleable for personal)
   return (
     <Card
-      className={`shadow-sm agent-card ${highlight ? 'border-primary border-2' : ''}`}
+      className={`agent-card ${highlight ? 'border-primary border-2' : ''}`}
       style={{
         cursor: disabled ? 'not-allowed' : 'default',
         opacity: disabled ? 0.65 : 1,
@@ -368,22 +378,19 @@ export const AgentCard = ({
                       </Tooltip>
                     }
                   >
-                    <i
-                      className="bi bi-clock-fill"
-                      style={{ fontSize: '0.9rem', color: 'var(--brand-primary, var(--color-primary))' }}
-                    ></i>
+                    <Clock size={14} style={{ color: 'var(--brand-primary, var(--color-primary))' }} />
                   </OverlayTrigger>
                 )}
               </div>
               <div className="d-flex align-items-center gap-2 flex-wrap">
                 {agent.visibility === 'public' ? (
                   <span className="text-muted small" style={{ fontSize: '0.75rem' }}>
-                    <i className="bi bi-shop me-1"></i>
+                    <Store size={12} className="me-1" />
                     {t('card.visibility.company')}
                   </span>
                 ) : (
                   <span className="text-muted small" style={{ fontSize: '0.75rem' }}>
-                    <i className="bi bi-person-fill me-1"></i>
+                    <User size={12} className="me-1" />
                     {t('card.visibility.personal')}
                   </span>
                 )}
@@ -407,10 +414,11 @@ export const AgentCard = ({
                   disabled={disabled}
                   aria-label={agent.isFavorite ? t('card.favorite.removeAria') : t('card.favorite.addAria')}
                 >
-                  <i
-                    className={agent.isFavorite ? 'bi bi-star-fill' : 'bi bi-star'}
-                    style={{ color: agent.isFavorite ? '#f0ad4e' : '#6c757d', fontSize: '1.25rem' }}
-                  ></i>
+                  <Star
+                    size={20}
+                    style={{ color: agent.isFavorite ? '#f0ad4e' : '#6c757d' }}
+                    fill={agent.isFavorite ? '#f0ad4e' : 'none'}
+                  />
                 </Button>
               </OverlayTrigger>
             )}
@@ -426,7 +434,7 @@ export const AgentCard = ({
                   disabled={disabled}
                   aria-label={t('card.collapseAria')}
                 >
-                  <i className="bi bi-chevron-up" style={{ fontSize: '1.25rem', color: '#6c757d' }}></i>
+                  <ChevronUp size={20} style={{ color: '#6c757d' }} />
                 </Button>
               </OverlayTrigger>
             )}
@@ -469,7 +477,7 @@ export const AgentCard = ({
                       overlay={<Tooltip id={`agent-${agent.agentId}-create`}>{t('card.tools.agentCreation')}</Tooltip>}
                     >
                       <div>
-                        <Robot size={18} style={{ color: 'var(--brand-primary, var(--color-primary))' }} />
+                        <Bot size={18} style={{ color: 'var(--brand-primary, var(--color-primary))' }} />
                       </div>
                     </OverlayTrigger>
                   )}
@@ -491,10 +499,7 @@ export const AgentCard = ({
                       placement="top"
                       overlay={<Tooltip id={`agent-${agent.agentId}-kb-all`}>{t('card.knowledgeBases.all')}</Tooltip>}
                     >
-                      <i
-                        className="bi bi-folder-fill"
-                        style={{ fontSize: '18px', color: 'var(--brand-primary, var(--color-primary))' }}
-                      />
+                      <FolderOpen size={18} style={{ color: 'var(--brand-primary, var(--color-primary))' }} />
                     </OverlayTrigger>
                   ) : (
                     (allowedKBs as string[]).map((kbId) => (
@@ -503,10 +508,11 @@ export const AgentCard = ({
                         placement="top"
                         overlay={<Tooltip id={`agent-${agent.agentId}-kb-${kbId}`}>{getKBDisplayName(kbId)}</Tooltip>}
                       >
-                        <i
-                          className={kbId === 'company' ? 'bi bi-folder-fill' : 'bi bi-folder'}
-                          style={{ fontSize: '18px', color: 'var(--brand-primary, var(--color-primary))' }}
-                        />
+                        {kbId === 'company' ? (
+                          <FolderOpen size={18} style={{ color: 'var(--brand-primary, var(--color-primary))' }} />
+                        ) : (
+                          <Folder size={18} style={{ color: 'var(--brand-primary, var(--color-primary))' }} />
+                        )}
                       </OverlayTrigger>
                     ))
                   )}
@@ -556,10 +562,7 @@ export const AgentCard = ({
                     }
                   >
                     <div className="d-flex align-items-center gap-1">
-                      <i
-                        className="bi bi-file-earmark-text"
-                        style={{ fontSize: '16px', color: 'var(--brand-primary, var(--color-primary))' }}
-                      ></i>
+                      <FileText size={16} style={{ color: 'var(--brand-primary, var(--color-primary))' }} />
                       <span className="text-muted small">{agent.referenceFiles.length}</span>
                     </div>
                   </OverlayTrigger>
@@ -608,7 +611,7 @@ export const AgentCard = ({
               className="flex-grow-1"
               style={{ minWidth: 80 }}
             >
-              <i className="bi bi-chat-dots me-1"></i> {t('card.actions.chat')}
+              <MessageSquare size={14} className="me-1" /> {t('card.actions.chat')}
             </Button>
           )}
           <div className="d-flex gap-1">
@@ -618,7 +621,7 @@ export const AgentCard = ({
                 overlay={<Tooltip id={`edit-${agent.agentId}`}>{t('card.actions.edit')}</Tooltip>}
               >
                 <Button variant="secondary" size="sm" onClick={() => onEdit(agent)} disabled={disabled}>
-                  <i className="bi bi-pencil-square"></i>
+                  <Pencil size={15} />
                 </Button>
               </OverlayTrigger>
             )}
@@ -628,7 +631,7 @@ export const AgentCard = ({
                 overlay={<Tooltip id={`copy-${agent.agentId}`}>{t('card.actions.duplicate')}</Tooltip>}
               >
                 <Button variant="secondary" size="sm" onClick={() => onDuplicate(agent)} disabled={disabled}>
-                  <i className="bi bi-files"></i>
+                  <Copy size={15} />
                 </Button>
               </OverlayTrigger>
             )}
@@ -642,7 +645,7 @@ export const AgentCard = ({
                 }
               >
                 <Button variant="secondary" size="sm" onClick={() => onSchedule(agent)} disabled={disabled}>
-                  <i className="bi bi-clock"></i>
+                  <Clock size={15} />
                 </Button>
               </OverlayTrigger>
             )}
@@ -658,7 +661,7 @@ export const AgentCard = ({
                 disabled={disabled}
                 aria-label={t('card.actions.exportAria')}
               >
-                <i className="bi bi-download"></i>
+                <Download size={15} />
               </Button>
             </OverlayTrigger>
             {onDelete && (
@@ -667,7 +670,7 @@ export const AgentCard = ({
                 overlay={<Tooltip id={`delete-${agent.agentId}`}>{t('card.actions.delete')}</Tooltip>}
               >
                 <Button variant="outline-danger" size="sm" onClick={() => onDelete(agent)} disabled={disabled}>
-                  <i className="bi bi-trash"></i>
+                  <Trash2 size={15} />
                 </Button>
               </OverlayTrigger>
             )}

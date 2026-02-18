@@ -1,5 +1,6 @@
 import { Button, Spinner } from 'react-bootstrap';
 import { useTranslation } from 'react-i18next';
+import { Link2, RotateCw, Settings, Zap } from 'lucide-react';
 import synergyIconUrl from '../../assets/icons/12d_Synergy-cube.svg';
 
 type SynergyConnectorCardProps = {
@@ -39,100 +40,91 @@ export const SynergyConnectorCard = ({
 
   return (
     <div
-      className="rounded-3 p-3 border"
+      className="integrations-row-card"
       style={{
-        boxShadow: '0 2px 8px rgba(0,0,0,0.06)',
         opacity: adminDisabled ? 0.55 : 1,
         filter: adminDisabled ? 'grayscale(20%)' : 'none',
       }}
     >
-      <div className="row align-items-center h-100">
-        <div className="col-md-6">
-          <div className="d-flex align-items-center">
-            <div
-              className="rounded-2 d-flex align-items-center justify-content-center me-3 flex-shrink-0"
-              style={{ width: '48px', height: '48px', backgroundColor: '#f8f9fa', border: '1px solid #dee2e6' }}
-            >
-              <SynergyIcon />
-            </div>
-            <div>
-              <h6 className="mb-1 fw-semibold">{t('dataConnectors.synergy.name')}</h6>
-              <p className="mb-0 small text-muted" style={{ fontSize: '0.85rem', lineHeight: '1.4' }}>
-                {t('dataConnectors.synergy.description')}
-              </p>
-            </div>
+      <div className="integrations-row-card__inner">
+        <div className="integrations-row-card__identity">
+          <div className="integrations-row-card__app-icon d-flex align-items-center justify-content-center">
+            <SynergyIcon />
+          </div>
+          <div className="integrations-row-card__text">
+            <h6 className="integrations-row-card__name">{t('dataConnectors.synergy.name')}</h6>
+            <p className="integrations-row-card__description">{t('dataConnectors.synergy.description')}</p>
           </div>
         </div>
-        <div className="col-md-2 text-center">
-          <div className="d-flex align-items-center justify-content-center">
-            {isConnected ? (
-              <>
-                <div className="rounded-circle bg-success me-2" style={{ width: '12px', height: '12px' }}></div>
-                <span className="text-success small fw-semibold">{t('status.connected')}</span>
-              </>
-            ) : (
-              <>
-                <div
-                  className="rounded-circle border border-secondary me-2"
-                  style={{ width: '12px', height: '12px' }}
-                ></div>
-                <span className="text-muted small">{t('status.notConnected')}</span>
-              </>
-            )}
-          </div>
-        </div>
-        <div className="col-md-4">
-          <div className="d-flex gap-2 justify-content-end">
+
+        <div className="integrations-row-card__controls">
+          {isConnected && (
+            <div className="integrations-row-status">
+              <span className="integrations-row-status__dot" aria-hidden="true" />
+              <span>{t('status.connected')}</span>
+            </div>
+          )}
+
+          <div className="integrations-row-actions">
             {isConnected ? (
               <>
                 <Button
-                  variant="primary"
+                  variant="light"
                   size="sm"
                   onClick={onTest}
                   disabled={isConnecting || adminDisabled}
-                  className="d-flex align-items-center"
+                  className="integrations-row-btn integrations-row-btn--primary"
                 >
-                  <i className="bi bi-lightning-fill me-2"></i>
-                  {t('dataConnectors.actions.test')}
+                  <Zap size={14} className="integrations-row-btn__icon" />
+                  <span className="integrations-row-btn__label">{t('dataConnectors.actions.test')}</span>
                 </Button>
                 <Button
-                  variant="primary"
+                  variant="light"
                   size="sm"
                   onClick={onSettings}
                   disabled={isConnecting || adminDisabled}
-                  className="d-flex align-items-center"
+                  className="integrations-row-btn integrations-row-btn--secondary"
                 >
-                  <i className="bi bi-sliders me-2"></i>
-                  {t('dataConnectors.actions.settings')}
+                  <Settings size={14} className="integrations-row-btn__icon" />
+                  <span className="integrations-row-btn__label">{t('dataConnectors.actions.settings')}</span>
                 </Button>
                 <Button
-                  variant="secondary"
+                  variant="light"
                   size="sm"
                   onClick={onConnect}
                   disabled={isConnecting || adminDisabled}
-                  className="d-flex align-items-center"
+                  className="integrations-row-btn integrations-row-btn--neutral"
                 >
-                  <i className="bi bi-arrow-repeat me-2"></i>
-                  {t('dataConnectors.actions.reconnect')}
+                  {isConnecting ? (
+                    <>
+                      <Spinner size="sm" className="integrations-row-btn__spinner" />
+                      <span className="integrations-row-btn__label">{t('dataConnectors.actions.connecting')}</span>
+                    </>
+                  ) : (
+                    <>
+                      <RotateCw size={14} className="integrations-row-btn__icon" />
+                      <span className="integrations-row-btn__label">{t('dataConnectors.actions.reconnect')}</span>
+                    </>
+                  )}
                 </Button>
               </>
             ) : (
               <Button
-                variant="primary"
+                variant="light"
                 size="sm"
                 onClick={onConnect}
                 disabled={isConnecting || adminDisabled}
-                className="px-4"
+                className="integrations-row-btn integrations-row-btn--primary"
               >
                 {isConnecting ? (
                   <>
-                    <Spinner size="sm" className="me-2" />
-                    {t('dataConnectors.actions.connecting')}
+                    <Spinner size="sm" className="integrations-row-btn__spinner" />
+                    <span className="integrations-row-btn__label">{t('dataConnectors.actions.connecting')}</span>
                   </>
                 ) : (
                   <>
-                    <i className="bi bi-plus-circle me-2"></i>
-                    {t('dataConnectors.actions.connect')}
+                    <Link2 size={14} className="integrations-row-btn__icon" />
+                    <span className="integrations-row-btn__label">{t('dataConnectors.actions.connect')}</span>
                   </>
                 )}
               </Button>

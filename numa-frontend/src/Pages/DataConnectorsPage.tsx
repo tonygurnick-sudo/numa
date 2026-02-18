@@ -335,7 +335,7 @@ export const DataConnectorsPage = () => {
       <LayoutDashboard>
         <Container fluid className="data-connectors-container">
           {activeConnector === 'list' && (
-            <Row className="g-4">
+            <Row className="g-4 data-connectors-list-grid">
               <Col lg={4} md={6}>
                 <Card className="h-100 shadow-sm">
                   <Card.Body className="d-flex flex-column gap-3">

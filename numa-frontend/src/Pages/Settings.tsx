@@ -1,20 +1,11 @@
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import {
-  Container,
-  Row,
-  Col,
-  Tabs,
-  Tab,
-  Button,
-  Spinner,
-  Modal,
-  Alert,
-  OverlayTrigger,
-  Tooltip,
-  Form,
-} from 'react-bootstrap';
+import { Tab, Button, Spinner, Modal, Alert, OverlayTrigger, Tooltip, Form } from 'react-bootstrap';
 import { useTranslation } from 'react-i18next';
 import UserManagement from './UserManagement';
+import UserProfilePage from './UserProfile';
+import { PageHeader } from '../Components/PageHeader';
+import { SubHeaderTabBar } from '../Components/SubHeaderTabBar';
+import { StyledTabs } from '../Components/StyledTabs';
 import { useAuth } from '../Providers/AuthProvider';
 import { AdminIntegrationsService, type GlobalIntegrationSettingsMap } from '../Services/AdminIntegrationsService';
 import {
@@ -74,16 +65,24 @@ export default function SettingsPage() {
   const { user, getCredentials } = useAuth();
   const { numaGet, numaPut } = useNumaRequest();
   const [activeKey, setActiveKey] = useState<string>('users');
+  const [settingsScope, setSettingsScope] = useState<'user' | 'admin'>('user');
   const brandingFlag =
     typeof window !== 'undefined' ? window.sessionStorage.getItem('BRANDING_PROVIDER_ENABLED') : null;
   const brandingApiEnabled = brandingFlag === 'true';
   const isAdmin = Boolean(user?.groups?.includes('admin'));
+  const currentScope: 'user' | 'admin' = isAdmin ? settingsScope : 'user';
   const allowBrandingTab = brandingApiEnabled && isAdmin;
   const agentsFeatureEnabled =
     typeof window !== 'undefined' ? window.sessionStorage.getItem('AGENTS') === 'true' : false;
   const dataConnectorsEnabled =
     typeof window !== 'undefined' ? window.sessionStorage.getItem('DATA_CONNECTORS_ENABLED') === 'true' : false;
   const availableIntegrations = useMemo<IntegrationListItem[]>(() => getIntegrationsListFormat(), [i18n.language]);
+
+  useEffect(() => {
+    if (!isAdmin) {
+      setSettingsScope('user');
+    }
+  }, [isAdmin]);
 
   // Global (admin) settings
   const [globalSettings, setGlobalSettings] = useState<GlobalIntegrationSettingsMap>({});
@@ -116,13 +115,14 @@ export default function SettingsPage() {
   const hasPipedreamFeature = window.sessionStorage.getItem('PIPEDREAM_INTEGRATIONS') === 'true';
   const relayLambdaArn = window.sessionStorage.getItem('PIPEDREAM_RELAY_LAMBDA_ARN');
   const previewMode = !hasPipedreamFeature || !relayLambdaArn;
+  const workspaceChatEnabled = window.sessionStorage.getItem('NUMA_WORKSPACE_CHAT') === 'true';
 
   // AWS Lambda client for listing tools (admin view)
   const [lambdaClient, setLambdaClient] = useState<LambdaClient | null>(null);
 
   useEffect(() => {
     const initLambda = async () => {
-      if (!user || previewMode) return;
+      if (!isAdmin || !user || previewMode) return;
       try {
         const REGION = window.sessionStorage.getItem('REGION') || 'us-east-1';
         const GROUPS = JSON.parse(window.sessionStorage.getItem('GROUPS') || '{}');
@@ -141,7 +141,7 @@ export default function SettingsPage() {
       }
     };
     initLambda();
-  }, [user, previewMode]);
+  }, [isAdmin, user, previewMode]);
 
   useEffect(() => {
     let isMounted = true;
@@ -173,6 +173,11 @@ export default function SettingsPage() {
   const loadGlobal = async () => {
     try {
       setLoadingSettings(true);
+      if (!isAdmin) {
+        setGlobalSettings({});
+        setError(null);
+        return;
+      }
       if (!user) return;
       const data = await AdminIntegrationsService.listWithNuma(numaGet);
       setGlobalSettings(data);
@@ -186,6 +191,10 @@ export default function SettingsPage() {
 
   const loadDataConnectorSettings = async () => {
     try {
+      if (!isAdmin) {
+        setDataConnectorSettings({ synergy: { status: 'disabled' } });
+        return;
+      }
       if (!dataConnectorsEnabled) {
         setDataConnectorSettings({ synergy: { status: 'disabled' } });
         return;
@@ -200,6 +209,11 @@ export default function SettingsPage() {
   };
 
   useEffect(() => {
+    if (!isAdmin) {
+      setGlobalSettings({});
+      setLoadingSettings(false);
+      return;
+    }
     if (previewMode) {
       // Feature disabled: avoid calling the API and clear loading state
       setGlobalSettings({});
@@ -207,16 +221,21 @@ export default function SettingsPage() {
       return;
     }
     loadGlobal();
-  }, [user, numaGet, previewMode]);
+  }, [isAdmin, user, numaGet, previewMode]);
 
   useEffect(() => {
+    if (!isAdmin) return;
     loadDataConnectorSettings();
-  }, [user, numaGet, dataConnectorsEnabled]);
+  }, [isAdmin, user, numaGet, dataConnectorsEnabled]);
 
   // Load Agents settings
   useEffect(() => {
     let cancelled = false;
     (async () => {
+      if (!isAdmin || !agentsFeatureEnabled) {
+        if (!cancelled) setAgentsLoading(false);
+        return;
+      }
       try {
         setAgentsLoading(true);
         const res = await AdminAgentsService.get(numaGet);
@@ -231,7 +250,7 @@ export default function SettingsPage() {
     return () => {
       cancelled = true;
     };
-  }, [user, numaGet]);
+  }, [isAdmin, agentsFeatureEnabled, user, numaGet]);
 
   // Load Company Profile
   useEffect(() => {
@@ -301,15 +320,22 @@ export default function SettingsPage() {
   const [toolList, setToolList] = useState<{ name: string; description?: string }[]>([]);
   const [toolToggles, setToolToggles] = useState<Record<string, boolean>>({});
   const [integrationsTabKey, setIntegrationsTabKey] = useState<'connected-apps' | 'data-connectors'>('connected-apps');
+  const [userSettingsTabKey, setUserSettingsTabKey] = useState<string>('user-settings');
 
   useEffect(() => {
     if (!dataConnectorsEnabled && integrationsTabKey === 'data-connectors') {
       setIntegrationsTabKey('connected-apps');
     }
   }, [dataConnectorsEnabled, integrationsTabKey]);
+
+  useEffect(() => {
+    if (!workspaceChatEnabled && userSettingsTabKey === 'approval-settings') {
+      setUserSettingsTabKey('user-settings');
+    }
+  }, [workspaceChatEnabled, userSettingsTabKey]);
   const [isBrandingDirty, setIsBrandingDirty] = useState<boolean>(false);
 
-  useNavigationConfirm(activeKey === 'branding' && isBrandingDirty, t('navigation.unsavedBranding'));
+  useNavigationConfirm(isAdmin && activeKey === 'branding' && isBrandingDirty, t('navigation.unsavedBranding'));
 
   // Chat defaults (company-wide)
   const [globalChatSettings, setGlobalChatSettings] = useState<GlobalChatSettings>(DEFAULT_GLOBAL_CHAT_SETTINGS);
@@ -323,11 +349,18 @@ export default function SettingsPage() {
     chatDefaultsDirtyRef.current = chatDefaultsDirty;
   }, [chatDefaultsDirty]);
 
-  useNavigationConfirm(activeKey === 'chat-defaults' && chatDefaultsDirty, t('navigation.unsavedChatDefaults'));
+  useNavigationConfirm(
+    isAdmin && activeKey === 'chat-defaults' && chatDefaultsDirty,
+    t('navigation.unsavedChatDefaults'),
+  );
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
+      if (!isAdmin) {
+        if (!cancelled) setChatDefaultsLoading(false);
+        return;
+      }
       try {
         setChatDefaultsLoading(true);
         const settings = await AdminChatSettingsService.getGlobal(numaGet);
@@ -347,7 +380,7 @@ export default function SettingsPage() {
     return () => {
       cancelled = true;
     };
-  }, [numaGet]);
+  }, [isAdmin, numaGet]);
 
   const openManageTools = async (integrationId: string) => {
     if (!lambdaClient || !user) return;
@@ -613,30 +646,96 @@ export default function SettingsPage() {
       description: t('dataConnectors.synergyDescription'),
     },
   ];
+  const adminTabs = useMemo(
+    () => [
+      { key: 'users', label: t('tabs.users'), iconClassName: 'bi bi-people' },
+      ...(allowBrandingTab ? [{ key: 'branding', label: t('tabs.branding'), iconClassName: 'bi bi-palette' }] : []),
+      { key: 'chat-defaults', label: t('tabs.chatDefaults'), iconClassName: 'bi bi-chat-dots' },
+      { key: 'company-profile', label: t('tabs.companyProfile'), iconClassName: 'bi bi-building' },
+      ...(agentsFeatureEnabled ? [{ key: 'agents', label: t('tabs.agents'), iconClassName: 'bi bi-robot' }] : []),
+      { key: 'integrations', label: t('tabs.integrations'), iconClassName: 'bi bi-plug' },
+    ],
+    [allowBrandingTab, agentsFeatureEnabled, t],
+  );
+  const userTabs = useMemo(
+    () => [
+      { key: 'user-settings', label: t('userProfile.tabs.userSettings'), iconClassName: 'bi bi-person-gear' },
+      { key: 'user-defaults', label: t('userProfile.tabs.chatDefaults'), iconClassName: 'bi bi-sliders' },
+      ...(workspaceChatEnabled
+        ? [
+            {
+              key: 'approval-settings',
+              label: t('userProfile.tabs.approvalSettings'),
+              iconClassName: 'bi bi-shield-check',
+            },
+          ]
+        : []),
+    ],
+    [workspaceChatEnabled, t],
+  );
 
   return (
-    <div className="dashboard">
-      <header className="page-header">
-        <Container fluid>
-          <Row>
-            <Col>
-              <h1 className="page-title">{t('header.title')}</h1>
-            </Col>
-          </Row>
-        </Container>
-      </header>
+    <div className="dashboard settings-page">
+      <PageHeader
+        title={t('header.title')}
+        subtitle={currentScope === 'admin' ? t('header.adminSubtitle') : t('header.userSubtitle')}
+        actions={
+          isAdmin ? (
+            <div className="settings-scope-toggle" role="group" aria-label={t('scope.label')}>
+              <button
+                type="button"
+                className={`settings-scope-toggle__button ${currentScope === 'user' ? 'active' : ''}`}
+                onClick={() => setSettingsScope('user')}
+              >
+                <i className="bi bi-person-circle" aria-hidden="true"></i>
+                {t('scope.user')}
+              </button>
+              <button
+                type="button"
+                className={`settings-scope-toggle__button ${currentScope === 'admin' ? 'active' : ''}`}
+                onClick={() => setSettingsScope('admin')}
+              >
+                <i className="bi bi-shield-lock" aria-hidden="true"></i>
+                {t('scope.admin')}
+              </button>
+            </div>
+          ) : undefined
+        }
+      />
 
-      <div className="app-content">
-        <div className="content-panel">
-          <div className="content-panel__body">
+      {isAdmin && currentScope === 'admin' && (
+        <SubHeaderTabBar
+          items={adminTabs}
+          activeKey={activeKey}
+          onSelect={(key) => handleTabSelect(key)}
+          ariaLabel={t('header.title')}
+          className="settings-admin-tabs-bar"
+        />
+      )}
+      {currentScope === 'user' && (
+        <SubHeaderTabBar
+          items={userTabs}
+          activeKey={userSettingsTabKey}
+          onSelect={setUserSettingsTabKey}
+          ariaLabel={t('scope.user')}
+          className="settings-user-tabs-bar"
+        />
+      )}
+
+      <div className="app-content settings-app-content">
+        <div hidden={currentScope !== 'user'} aria-hidden={currentScope !== 'user'}>
+          <UserProfilePage embedded activeTabKey={userSettingsTabKey} onActiveTabChange={setUserSettingsTabKey} />
+        </div>
+
+        {isAdmin && (
+          <div hidden={currentScope !== 'admin'} aria-hidden={currentScope !== 'admin'}>
             {/* Note: company-wide banner and preview notice moved into Integrations tab */}
-
             {error && (
               <Alert variant="danger" className="mb-3">
                 {error}
               </Alert>
             )}
-            <Tabs activeKey={activeKey} onSelect={handleTabSelect} className="mb-3">
+            <StyledTabs activeKey={activeKey} onSelect={handleTabSelect} className="mb-3 settings-subtabs--panels-only">
               <Tab
                 eventKey="users"
                 title={
@@ -706,7 +805,10 @@ export default function SettingsPage() {
                                   label=""
                                   checked={globalChatSettings.allowUserDefaults}
                                   onChange={(e) => {
-                                    setGlobalChatSettings((prev) => ({ ...prev, allowUserDefaults: e.target.checked }));
+                                    setGlobalChatSettings((prev) => ({
+                                      ...prev,
+                                      allowUserDefaults: e.target.checked,
+                                    }));
                                     setChatDefaultsDirty(true);
                                   }}
                                 />
@@ -778,7 +880,10 @@ export default function SettingsPage() {
                                 checked={globalChatSettings.webSearchEnabled}
                                 disabled={globalChatSettings.autoToolsEnabled}
                                 onChange={(e) => {
-                                  setGlobalChatSettings((prev) => ({ ...prev, webSearchEnabled: e.target.checked }));
+                                  setGlobalChatSettings((prev) => ({
+                                    ...prev,
+                                    webSearchEnabled: e.target.checked,
+                                  }));
                                   setChatDefaultsDirty(true);
                                 }}
                               />
@@ -819,7 +924,10 @@ export default function SettingsPage() {
                                 checked={globalChatSettings.createAgentEnabled}
                                 disabled={globalChatSettings.autoToolsEnabled}
                                 onChange={(e) => {
-                                  setGlobalChatSettings((prev) => ({ ...prev, createAgentEnabled: e.target.checked }));
+                                  setGlobalChatSettings((prev) => ({
+                                    ...prev,
+                                    createAgentEnabled: e.target.checked,
+                                  }));
                                   setChatDefaultsDirty(true);
                                 }}
                               />
@@ -1124,10 +1232,10 @@ export default function SettingsPage() {
                   </span>
                 }
               >
-                <Tabs
+                <StyledTabs
                   activeKey={integrationsTabKey}
                   onSelect={(key) => setIntegrationsTabKey((key as typeof integrationsTabKey) || 'connected-apps')}
-                  className="mb-3"
+                  className="mb-3 settings-subtabs--nested"
                 >
                   <Tab eventKey="connected-apps" title={t('tabs.connectedApps')}>
                     <Alert variant="secondary" className="mb-3">
@@ -1167,188 +1275,190 @@ export default function SettingsPage() {
                           </div>
                         </div>
                       </Alert>
-                      <div>{dataConnectors.map(renderDataConnectorRow)}</div>
+                      <div className="mt-3">{dataConnectors.map(renderDataConnectorRow)}</div>
                     </Tab>
                   )}
-                </Tabs>
+                </StyledTabs>
               </Tab>
-            </Tabs>
+            </StyledTabs>
           </div>
-        </div>
+        )}
       </div>
 
-      <Modal show={!!manageToolsFor} onHide={() => setManageToolsFor(null)} centered size="lg">
-        <Modal.Header closeButton className="border-0 pb-2">
-          <Modal.Title>
-            <div className="d-flex align-items-center">
-              <i className="bi bi-sliders me-2 text-primary"></i>
-              {t('manageTools.title', { integration: manageToolsFor || '' })}
-            </div>
-            <div className="small text-muted fw-normal mt-2" style={{ fontSize: '0.85rem' }}>
-              {t('manageTools.subtitle')}
-            </div>
-          </Modal.Title>
-        </Modal.Header>
-        <Modal.Body className="pt-2" style={{ maxHeight: '60vh', overflowY: 'auto' }}>
-          {toolsLoading ? (
-            <div className="text-center py-5">
-              <Spinner animation="border" variant="primary" />
-              <p className="mt-3 text-muted mb-0">{t('manageTools.loading')}</p>
-            </div>
-          ) : toolsError ? (
-            <Alert variant="danger" className="mb-0">
-              <i className="bi bi-exclamation-triangle-fill me-2"></i>
-              {toolsError}
-            </Alert>
-          ) : toolList.length === 0 ? (
-            <div className="text-center py-5">
-              <i className="bi bi-info-circle text-muted" style={{ fontSize: '2rem' }}></i>
-              <p className="text-muted mt-2 mb-0">{t('manageTools.empty')}</p>
-            </div>
-          ) : (
-            <div className="d-flex flex-column gap-2">
-              {toolList.map((tool) => {
-                const allowed = toolToggles[tool.name] ?? true;
+      {isAdmin && (
+        <Modal show={!!manageToolsFor} onHide={() => setManageToolsFor(null)} centered size="lg">
+          <Modal.Header closeButton className="border-0 pb-2">
+            <Modal.Title>
+              <div className="d-flex align-items-center">
+                <i className="bi bi-sliders me-2 text-primary"></i>
+                {t('manageTools.title', { integration: manageToolsFor || '' })}
+              </div>
+              <div className="small text-muted fw-normal mt-2" style={{ fontSize: '0.85rem' }}>
+                {t('manageTools.subtitle')}
+              </div>
+            </Modal.Title>
+          </Modal.Header>
+          <Modal.Body className="pt-2" style={{ maxHeight: '60vh', overflowY: 'auto' }}>
+            {toolsLoading ? (
+              <div className="text-center py-5">
+                <Spinner animation="border" variant="primary" />
+                <p className="mt-3 text-muted mb-0">{t('manageTools.loading')}</p>
+              </div>
+            ) : toolsError ? (
+              <Alert variant="danger" className="mb-0">
+                <i className="bi bi-exclamation-triangle-fill me-2"></i>
+                {toolsError}
+              </Alert>
+            ) : toolList.length === 0 ? (
+              <div className="text-center py-5">
+                <i className="bi bi-info-circle text-muted" style={{ fontSize: '2rem' }}></i>
+                <p className="text-muted mt-2 mb-0">{t('manageTools.empty')}</p>
+              </div>
+            ) : (
+              <div className="d-flex flex-column gap-2">
+                {toolList.map((tool) => {
+                  const allowed = toolToggles[tool.name] ?? true;
 
-                // Helper functions for formatting tool names
-                const stripPrefix = (name: string, prefix?: string | null) =>
-                  prefix && name.startsWith(prefix + '-') ? name.slice(prefix.length + 1) : name;
-                const toTitle = (s: string) =>
-                  s
-                    .split('-')
-                    .map((w) => (w ? w.charAt(0).toUpperCase() + w.slice(1) : w))
-                    .join(' ');
+                  // Helper functions for formatting tool names
+                  const stripPrefix = (name: string, prefix?: string | null) =>
+                    prefix && name.startsWith(prefix + '-') ? name.slice(prefix.length + 1) : name;
+                  const toTitle = (s: string) =>
+                    s
+                      .split('-')
+                      .map((w) => (w ? w.charAt(0).toUpperCase() + w.slice(1) : w))
+                      .join(' ');
 
-                // Parse markdown links in description and clean up display
-                const parseDescription = (desc: string | undefined) => {
-                  if (!desc) return null;
+                  // Parse markdown links in description and clean up display
+                  const parseDescription = (desc: string | undefined) => {
+                    if (!desc) return null;
 
-                  // Match markdown links: [text](url)
-                  const linkRegex = /\[([^\]]+)\]\(([^)]+)\)/g;
-                  const parts: (string | React.ReactElement)[] = [];
-                  let lastIndex = 0;
-                  let match: RegExpExecArray | null;
+                    // Match markdown links: [text](url)
+                    const linkRegex = /\[([^\]]+)\]\(([^)]+)\)/g;
+                    const parts: (string | React.ReactElement)[] = [];
+                    let lastIndex = 0;
+                    let match: RegExpExecArray | null;
 
-                  while ((match = linkRegex.exec(desc)) !== null) {
-                    // Add text before the link
-                    if (match.index > lastIndex) {
-                      parts.push(desc.substring(lastIndex, match.index));
+                    while ((match = linkRegex.exec(desc)) !== null) {
+                      // Add text before the link
+                      if (match.index > lastIndex) {
+                        parts.push(desc.substring(lastIndex, match.index));
+                      }
+
+                      // Replace "See the docs" with "see documentation"
+                      const linkText = match[1].toLowerCase().includes('see')
+                        ? t('manageTools.seeDocumentation')
+                        : match[1];
+
+                      // Add the link as JSX
+                      parts.push(
+                        <a
+                          key={match.index}
+                          href={match[2]}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-decoration-none"
+                        >
+                          [{linkText}]
+                        </a>,
+                      );
+
+                      lastIndex = match.index + match[0].length;
                     }
 
-                    // Replace "See the docs" with "see documentation"
-                    const linkText = match[1].toLowerCase().includes('see')
-                      ? t('manageTools.seeDocumentation')
-                      : match[1];
+                    // Add any remaining text
+                    if (lastIndex < desc.length) {
+                      parts.push(desc.substring(lastIndex));
+                    }
 
-                    // Add the link as JSX
-                    parts.push(
-                      <a
-                        key={match.index}
-                        href={match[2]}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-decoration-none"
-                      >
-                        [{linkText}]
-                      </a>,
-                    );
+                    return parts.length > 0 ? parts : desc;
+                  };
 
-                    lastIndex = match.index + match[0].length;
-                  }
+                  const displayName = toTitle(stripPrefix(tool.name, manageToolsFor));
 
-                  // Add any remaining text
-                  if (lastIndex < desc.length) {
-                    parts.push(desc.substring(lastIndex));
-                  }
-
-                  return parts.length > 0 ? parts : desc;
-                };
-
-                const displayName = toTitle(stripPrefix(tool.name, manageToolsFor));
-
-                return (
-                  <div
-                    key={tool.name}
-                    className={`d-flex align-items-start justify-content-between p-3 border rounded-3 ${allowed ? 'bg-light bg-opacity-25' : 'bg-light bg-opacity-50'}`}
-                    style={{
-                      transition: 'all 0.2s ease',
-                      borderColor: allowed ? 'var(--bs-border-color)' : 'var(--bs-border-color-translucent)',
-                    }}
-                  >
-                    <div className="flex-grow-1 me-3">
-                      <div className="d-flex align-items-center mb-1">
-                        <div
-                          className={`rounded-circle me-2 ${allowed ? 'bg-success' : 'bg-secondary'}`}
-                          style={{ width: '8px', height: '8px', transition: 'all 0.2s ease' }}
-                        ></div>
-                        <span className={`fw-semibold ${allowed ? 'text-dark' : 'text-muted'}`}>{displayName}</span>
-                      </div>
-                      {tool.description && (
-                        <div
-                          className={`small ${allowed ? 'text-muted' : 'text-secondary'}`}
-                          style={{
-                            maxWidth: 720,
-                            whiteSpace: 'normal',
-                            wordBreak: 'break-word',
-                            lineHeight: '1.4',
-                            fontSize: '0.85rem',
-                          }}
-                        >
-                          {parseDescription(tool.description)}
+                  return (
+                    <div
+                      key={tool.name}
+                      className={`d-flex align-items-start justify-content-between p-3 border rounded-3 ${allowed ? 'bg-light bg-opacity-25' : 'bg-light bg-opacity-50'}`}
+                      style={{
+                        transition: 'all 0.2s ease',
+                        borderColor: allowed ? 'var(--bs-border-color)' : 'var(--bs-border-color-translucent)',
+                      }}
+                    >
+                      <div className="flex-grow-1 me-3">
+                        <div className="d-flex align-items-center mb-1">
+                          <div
+                            className={`rounded-circle me-2 ${allowed ? 'bg-success' : 'bg-secondary'}`}
+                            style={{ width: '8px', height: '8px', transition: 'all 0.2s ease' }}
+                          ></div>
+                          <span className={`fw-semibold ${allowed ? 'text-dark' : 'text-muted'}`}>{displayName}</span>
                         </div>
-                      )}
+                        {tool.description && (
+                          <div
+                            className={`small ${allowed ? 'text-muted' : 'text-secondary'}`}
+                            style={{
+                              maxWidth: 720,
+                              whiteSpace: 'normal',
+                              wordBreak: 'break-word',
+                              lineHeight: '1.4',
+                              fontSize: '0.85rem',
+                            }}
+                          >
+                            {parseDescription(tool.description)}
+                          </div>
+                        )}
+                      </div>
+                      <div className="form-check form-switch ms-2">
+                        <input
+                          className="form-check-input"
+                          type="checkbox"
+                          checked={allowed}
+                          onChange={(e) => setToolToggles({ ...toolToggles, [tool.name]: e.target.checked })}
+                          style={{
+                            transform: 'scale(1.1)',
+                          }}
+                        />
+                      </div>
                     </div>
-                    <div className="form-check form-switch ms-2">
-                      <input
-                        className="form-check-input"
-                        type="checkbox"
-                        checked={allowed}
-                        onChange={(e) => setToolToggles({ ...toolToggles, [tool.name]: e.target.checked })}
-                        style={{
-                          transform: 'scale(1.1)',
-                        }}
-                      />
-                    </div>
-                  </div>
-                );
-              })}
+                  );
+                })}
+              </div>
+            )}
+          </Modal.Body>
+          <Modal.Footer
+            className="border-top pt-3"
+            style={{
+              position: 'sticky',
+              bottom: 0,
+              backgroundColor: 'white',
+              zIndex: 1050,
+              boxShadow: '0 -2px 8px rgba(0,0,0,0.05)',
+            }}
+          >
+            <div className="d-flex justify-content-between align-items-center w-100">
+              <small className="text-muted">
+                {toolList.length > 0 && (
+                  <span>
+                    <i className="bi bi-info-circle me-1"></i>
+                    {t('manageTools.enabledCount', {
+                      enabled: Object.values(toolToggles).filter(Boolean).length,
+                      total: toolList.length,
+                    })}
+                  </span>
+                )}
+              </small>
+              <div>
+                <Button variant="secondary" onClick={() => setManageToolsFor(null)} className="me-2">
+                  {t('actions.cancel')}
+                </Button>
+                <Button variant="primary" onClick={saveManageTools} disabled={toolsLoading || !!toolsError}>
+                  <i className="bi bi-check-lg me-2"></i>
+                  {t('actions.saveChanges')}
+                </Button>
+              </div>
             </div>
-          )}
-        </Modal.Body>
-        <Modal.Footer
-          className="border-top pt-3"
-          style={{
-            position: 'sticky',
-            bottom: 0,
-            backgroundColor: 'white',
-            zIndex: 1050,
-            boxShadow: '0 -2px 8px rgba(0,0,0,0.05)',
-          }}
-        >
-          <div className="d-flex justify-content-between align-items-center w-100">
-            <small className="text-muted">
-              {toolList.length > 0 && (
-                <span>
-                  <i className="bi bi-info-circle me-1"></i>
-                  {t('manageTools.enabledCount', {
-                    enabled: Object.values(toolToggles).filter(Boolean).length,
-                    total: toolList.length,
-                  })}
-                </span>
-              )}
-            </small>
-            <div>
-              <Button variant="secondary" onClick={() => setManageToolsFor(null)} className="me-2">
-                {t('actions.cancel')}
-              </Button>
-              <Button variant="primary" onClick={saveManageTools} disabled={toolsLoading || !!toolsError}>
-                <i className="bi bi-check-lg me-2"></i>
-                {t('actions.saveChanges')}
-              </Button>
-            </div>
-          </div>
-        </Modal.Footer>
-      </Modal>
+          </Modal.Footer>
+        </Modal>
+      )}
     </div>
   );
 }

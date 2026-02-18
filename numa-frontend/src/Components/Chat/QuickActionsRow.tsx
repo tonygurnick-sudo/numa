@@ -1,5 +1,17 @@
 import React, { useMemo, useState, useEffect, memo } from 'react';
 import { OverlayTrigger, Tooltip } from 'react-bootstrap';
+import {
+  BarChart2,
+  Bot,
+  Calendar,
+  CalendarCheck,
+  FileText,
+  Inbox,
+  Lightbulb,
+  Mail,
+  Search,
+  type LucideIcon,
+} from 'lucide-react';
 import { getVisibleQuickActions, type QuickActionConfig } from '../../config/quickActionsConfig';
 
 interface QuickActionsRowProps {
@@ -36,6 +48,18 @@ const QuickActionsRow: React.FC<QuickActionsRowProps> = ({
   disabled = false,
   maxVisible = 6,
 }) => {
+  const iconMap: Record<string, LucideIcon> = {
+    'file-text': FileText,
+    'bar-chart-2': BarChart2,
+    search: Search,
+    calendar: Calendar,
+    mail: Mail,
+    lightbulb: Lightbulb,
+    bot: Bot,
+    inbox: Inbox,
+    'calendar-check': CalendarCheck,
+  };
+
   // Track viewport width for responsive behavior
   const [isMobile, setIsMobile] = useState(() => (typeof window !== 'undefined' ? window.innerWidth <= 768 : false));
   const [isSmallMobile, setIsSmallMobile] = useState(() =>
@@ -83,25 +107,34 @@ const QuickActionsRow: React.FC<QuickActionsRowProps> = ({
   return (
     <div className="quick-actions-row" role="group" aria-label="Quick actions">
       <div className="quick-actions-scroll">
-        {visibleActions.map((action) => (
-          <OverlayTrigger
-            key={action.id}
-            placement="top"
-            overlay={<Tooltip id={`quick-action-${action.id}`}>{action.description}</Tooltip>}
-          >
-            <button
-              type="button"
-              className={`quick-action-btn ${disabled ? 'disabled' : ''}`}
-              onClick={() => handleClick(action)}
-              onKeyDown={(e) => handleKeyDown(e, action)}
-              disabled={disabled}
-              aria-label={action.label}
+        {visibleActions.map((action) => {
+          const ActionIcon = iconMap[action.icon];
+          return (
+            <OverlayTrigger
+              key={action.id}
+              placement="top"
+              overlay={<Tooltip id={`quick-action-${action.id}`}>{action.description}</Tooltip>}
             >
-              <i className={`bi ${action.icon}`} aria-hidden="true" />
-              {!isSmallMobile && <span className="quick-action-label">{action.label}</span>}
-            </button>
-          </OverlayTrigger>
-        ))}
+              <button
+                type="button"
+                className={`quick-action-btn ${disabled ? 'disabled' : ''}`}
+                onClick={() => handleClick(action)}
+                onKeyDown={(e) => handleKeyDown(e, action)}
+                disabled={disabled}
+                aria-label={action.label}
+              >
+                <span className="quick-action-icon-shell">
+                  {ActionIcon ? (
+                    <ActionIcon size={16} strokeWidth={1.9} aria-hidden="true" />
+                  ) : (
+                    <i className={`bi ${action.icon}`} aria-hidden="true" />
+                  )}
+                </span>
+                {!isSmallMobile && <span className="quick-action-label">{action.label}</span>}
+              </button>
+            </OverlayTrigger>
+          );
+        })}
       </div>
     </div>
   );

@@ -1,9 +1,11 @@
 {
   "input": {
     "placeholder": "חוו כאנ י חהלפ יוו טודאי?",
+    "placeholderV2": "Ask me anything...",
+    "submitHint": "Press Enter to send · Shift+Enter for new line",
     "tooltips": {
       "upload": "פילה ופלואד",
-      "knowledgeBases": "קנוולהדגה באסהס",
+      "knowledgeBases": "פילהס",
       "tools": "טוולס",
       "integrations": "ינטהגראטיונס",
       "settings": "כחאט סהטטינגס",
@@ -131,7 +133,7 @@
     "deleteAria": "דהלהטה כונבהרסאטיונ"
   },
   "settingsPanel": {
-    "knowledgeBases": "קנוולהדגה באסהס",
+    "knowledgeBases": "פילהס",
     "loadingKnowledgeBases": "לואדינג קנוולהדגה באסהס...",
     "noKnowledgeBases": "נו קנוולהדגה באסהס אבאילאבלה",
     "selectKnowledgeBases": "סהלהכט קנוולהדגה באסהס טו קוהרי דורינג טחיס כחאט",
@@ -190,7 +192,8 @@
       "morning": "גווד מורנינג",
       "afternoon": "גווד אפטהרנוונ",
       "evening": "גווד הבהנינג",
-      "withName": "{{greeting}}, {{name}}"
+      "withName": "{{greeting}}, {{name}}",
+      "hiThere": "האי טהרה! 👋"
     },
     "placeholder": "חוו כאנ י חהלפ יוו טודאי?",
     "loadingAgents": "לואדינג אגהנטס...",
@@ -220,6 +223,7 @@
   },
   "page": {
     "title": "נומא כחאט",
+    "subtitle": "יור אי איי וורקספייס אסיסטנט",
     "historyButton": "חיסטורי",
     "newChat": "נהו כחאט",
     "chatHistory": "כחאט חיסטורי",
@@ -309,7 +313,7 @@
       "success_other": "{{count}} פילהס ופלואדהד סוככהסספוללי!",
       "allFailed": "אלל ופלואדס פאילהד. פלהאסה טרי אגאינ.",
       "partialSuccess": "{{success}} ופלואדהד, {{failed}} פאילהד.",
-      "infoMessage": "פילהס ארה ופלואדהד טו טחיס כונבהרסאטיונ'ס <כודה>ופלואדס/</כודה> דירהכטורי אנד ארה ונלי אבאילאבלה דורינג טחיס כונבהרסאטיונ.",
+      "infoMessage": "פילהס ארה ופלואדהד טו טחיס כונבהרסאטיונ'ס <code>{{directory}}</code> דירהכטורי אנד ארה ונלי אבאילאבלה דורינג טחיס כונבהרסאטיונ.",
       "clear": "כלהאר",
       "uploadCount_one": "ופלואד {{count}} פילה",
       "uploadCount_other": "ופלואד {{count}} פילהס",
@@ -379,20 +383,24 @@
     "noUploads": "נו ופלואדהד פילהס",
     "noSessionFiles": "נו פילהס גהנהראטהד יהט",
     "refreshFiles": "רהפרהסח פילהס",
-    "knowledgeBases": "קנוולהדגה באסהס",
+    "knowledgeBases": "פילהס",
     "selectKBs": "סהלהכט קנוולהדגה באסהס טו סהארכח",
     "loading": "לואדינג...",
     "noKBs": "נו קנוולהדגה באסהס אבאילאבלה",
     "tools": "טוולס",
     "toolsHelper": "הנאבלה כאפאביליטיהס פור טחיס כחאט",
+    "all": "אלל",
     "allTools": "אלל טוולס",
     "allToolsHelper": "הנאבלה אלל טוולס אוטומאטיכאללי",
     "webSearch": "והב סהארכח",
     "agentCreation": "אגהנט כרהאטיונ",
+    "model": "מודהל",
     "integrations": "ינטהגראטיונס",
     "integrationsHelper": "כוננהכט השטהרנאל סהרביכהס",
     "integrationsDisabled": "נוט הנאבלהד יהט פור ב2 כחאט",
     "noIntegrations": "נו ינטהגראטיונס כוננהכטהד",
+    "connect": "כוננהכט",
+    "connected": "כוננהכטהד",
     "preview": "פרהביהו",
     "download": "דוונלואד"
   },

@@ -1020,7 +1020,7 @@ const NumaChatAgents = () => {
     buttonStatus,
     isProcessingRef,
     onExpired: handleNewChatOnExpired,
-    excludeWorkspaceConversations: true, // V1 chat should only show V1 conversations
+    excludeWorkspaceConversations: false,
     // DO NOT pass inputMessage: keep suggestions visible while typing; hide on submit instead
   });
 
@@ -2114,7 +2114,7 @@ const NumaChatAgents = () => {
             onSelectConversation={handleLoadConversation}
             currentConversationId={conversationId}
             setError={(error) => console.error('Chat history error:', error)}
-            excludeWorkspaceConversations={true}
+            excludeWorkspaceConversations={false}
           />
 
           {/* Main chat content */}
