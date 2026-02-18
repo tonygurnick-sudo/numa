@@ -1568,12 +1568,13 @@ export const AuthProvider = ({ children, initialTokens }) => {
 
   const confirmPasswordReset = useCallback(async (email, code, newPassword) => {
     try {
-      const SECRET_HASH = await fetchSecretHash(email);
+      const lowercaseEmail = email.toLowerCase();
+      const SECRET_HASH = await fetchSecretHash(lowercaseEmail);
       const REGION = window.sessionStorage.getItem('REGION');
       const CLIENT_ID = window.sessionStorage.getItem('CLIENT_ID');
 
       const command = new ConfirmForgotPasswordCommand({
-        Username: email,
+        Username: lowercaseEmail,
         ClientId: CLIENT_ID,
         ConfirmationCode: code,
         Password: newPassword,
