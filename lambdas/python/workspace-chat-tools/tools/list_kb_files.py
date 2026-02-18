@@ -10,6 +10,7 @@ and called directly, NOT copied to /workdir/tools/ like the CLI tools.
 Security:
 - All operations validate kb_id against allowed_kbs list (fail-closed)
 - Server-side DynamoDB permission verification via verify_kb_access
+- Requires authenticated user context for all KB listing operations
 """
 
 import os
@@ -30,6 +31,7 @@ DATA_BUCKET_NAME = os.getenv("DATA_BUCKET_NAME", "")
 # Constants
 MAX_ITEMS_PER_KB = 30  # Limit items shown per KB to keep prompts concise
 SYSTEM_KB_IDS = {"company", "numa-support"}
+MAX_KB_ID_LENGTH = 128
 
 
 def _get_s3_kb_id(kb_id: str) -> str:
@@ -44,6 +46,32 @@ def _get_s3_kb_id(kb_id: str) -> str:
     if kb_id.startswith("kb-"):
         return kb_id
     return f"kb-{kb_id}"
+
+
+def _contains_control_chars(value: str) -> bool:
+    """Check whether a string contains ASCII control characters."""
+    return any(ord(char) < 32 or ord(char) == 127 for char in value)
+
+
+def _validate_kb_id(kb_id: Any, field_name: str = "kb_id") -> str:
+    """Validate KB IDs before using them in permission checks and S3 prefixes."""
+    if not isinstance(kb_id, str):
+        raise ValueError(f"{field_name} must be a string")
+
+    normalized = kb_id.strip()
+    if not normalized:
+        raise ValueError(f"{field_name} cannot be empty")
+
+    if len(normalized) > MAX_KB_ID_LENGTH:
+        raise ValueError(f"{field_name} is too long")
+
+    if "/" in normalized or "\\" in normalized or ".." in normalized:
+        raise ValueError(f"Invalid {field_name}: path separators are not allowed")
+
+    if _contains_control_chars(normalized):
+        raise ValueError(f"Invalid {field_name}: contains control characters")
+
+    return normalized
 
 
 def _get_s3_prefix(kb_id: str) -> str:
@@ -213,6 +241,12 @@ def handle_list_kb_files(params: Dict[str, Any]) -> Dict[str, Any]:
 
     if not kb_ids:
         raise ValueError("Missing required parameter: kb_ids")
+    if not isinstance(kb_ids, list):
+        raise ValueError("kb_ids must be a list")
+
+    if not isinstance(user_sub, str) or not user_sub.strip():
+        raise ValueError("Access denied: User identity required for KB operations")
+    user_sub = user_sub.strip()
 
     if not DATA_BUCKET_NAME:
         raise ValueError("DATA_BUCKET_NAME not configured")
@@ -226,10 +260,12 @@ def handle_list_kb_files(params: Dict[str, Any]) -> Dict[str, Any]:
     listings: Dict[str, Dict[str, Any]] = {}
     errors: List[Dict[str, str]] = []
 
-    for kb_id in kb_ids:
+    for raw_kb_id in kb_ids:
         try:
+            kb_id = _validate_kb_id(raw_kb_id, "kb_id")
+
             # Server-side permission verification
-            if user_sub and not verify_kb_access(user_sub, kb_id):
+            if not verify_kb_access(user_sub, kb_id):
                 logger.warning(
                     "KB access denied for listing",
                     user_sub=user_sub[:8] + "...",

@@ -3,22 +3,24 @@
 import unittest
 from unittest.mock import MagicMock, patch
 
-# Patch env vars before importing the module
-ENV_PATCHES = {
-    "OUTPUTS_BUCKET_NAME": "test-bucket",
-    "FILE_REDIRECT_SECRET": "",
-    "FILE_REDIRECT_BASE_URL": "",
-    "PIPEDREAM_RELAY_LAMBDA_ARN": "",
-    "INTEGRATIONS_APPROVAL_TABLE_NAME": "",
-}
-
-
-with patch.dict("os.environ", ENV_PATCHES):
-    from tools.pipedream_integration import _preprocess_file_paths
+from tools.pipedream_integration import _preprocess_file_paths
 
 
 class TestPreprocessFilePaths(unittest.TestCase):
     """Test workspace path → presigned URL conversion for integration props."""
+
+    def setUp(self):
+        # Ensure tests don't depend on import ordering across test modules.
+        self.module_patcher = patch.multiple(
+            "tools.pipedream_integration",
+            OUTPUTS_BUCKET_NAME="test-bucket",
+            FILE_REDIRECT_SECRET="",
+            FILE_REDIRECT_BASE_URL="",
+        )
+        self.module_patcher.start()
+
+    def tearDown(self):
+        self.module_patcher.stop()
 
     def _make_s3_client(self, existing_keys=None):
         """Create a mock S3 client that recognises specific keys."""

@@ -256,6 +256,17 @@ def handler(event: Dict[str, Any], context: LambdaContext) -> Dict[str, Any]:
                 "result": None,
                 "error": "No knowledge bases are enabled for this conversation",
             }
+
+        if not user_sub:
+            logger.warning(
+                "KB file access denied - no user identity provided",
+            )
+            return {
+                "status": "error",
+                "result": None,
+                "error": "User authentication required for KB file operations",
+            }
+
         logger.info(
             "KB file access permitted (client-side list)", allowed_kbs=allowed_kbs
         )
@@ -263,28 +274,27 @@ def handler(event: Dict[str, Any], context: LambdaContext) -> Dict[str, Any]:
         # Server-side verification for file retrieval
         # For list mode: verify access to the specified kb_id
         # For download mode: the handler extracts kb_id from URI and validates
-        if user_sub:
-            mode = params.get("mode", "download")
-            if mode == "list":
-                kb_id = params.get("kb_id", "company")
-                if not verify_kb_access(user_sub, kb_id):
-                    logger.warning(
-                        "KB file access denied - server-side verification failed",
-                        user_sub=user_sub[:8] + "...",
-                        kb_id=kb_id,
-                    )
-                    return {
-                        "status": "error",
-                        "result": None,
-                        "error": f"Access denied to knowledge base '{kb_id}'",
-                    }
-                logger.info(
-                    "KB file access validated (server-side DynamoDB)",
-                    kb_id=kb_id,
+        mode = params.get("mode", "download")
+        if mode == "list":
+            kb_id = params.get("kb_id", "company")
+            if not verify_kb_access(user_sub, kb_id):
+                logger.warning(
+                    "KB file access denied - server-side verification failed",
                     user_sub=user_sub[:8] + "...",
+                    kb_id=kb_id,
                 )
-            # For download mode, pass user_sub to handler for URI-based verification
-            params["__user_sub"] = user_sub
+                return {
+                    "status": "error",
+                    "result": None,
+                    "error": f"Access denied to knowledge base '{kb_id}'",
+                }
+            logger.info(
+                "KB file access validated (server-side DynamoDB)",
+                kb_id=kb_id,
+                user_sub=user_sub[:8] + "...",
+            )
+        # Pass user_sub to handler for server-side KB permission verification
+        params["__user_sub"] = user_sub
 
     # Security: Validate web_search tool access (fail-closed)
     if tool_name == "web_search":
@@ -358,6 +368,17 @@ def handler(event: Dict[str, Any], context: LambdaContext) -> Dict[str, Any]:
                 "status": "error",
                 "result": None,
                 "error": "No knowledge bases are enabled for this conversation",
+            }
+
+        if not user_sub:
+            logger.warning(
+                "KB file listing denied - no user identity provided",
+                kb_ids=kb_ids,
+            )
+            return {
+                "status": "error",
+                "result": None,
+                "error": "User authentication required for KB file operations",
             }
 
         # Filter requested kb_ids to only allowed ones
