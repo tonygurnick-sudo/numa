@@ -20,6 +20,7 @@ import fnmatch
 import io
 import json
 import os
+import re
 import time
 import uuid as uuid_mod
 import zipfile
@@ -45,6 +46,9 @@ QB_RETRIEVER_ID = os.getenv("Q_RETRIEVER_ID")
 BEDROCK_KNOWLEDGE_BASE_ID = os.getenv("BEDROCK_KNOWLEDGE_BASE_ID")
 FAST_MODEL_ID = os.getenv("FAST_MODEL_ID", "global.amazon.nova-2-lite-v1:0")
 SYSTEM_KB_IDS = {"company", "numa-support"}
+MAX_KB_ID_LENGTH = 128
+MAX_FILENAME_LENGTH = 255
+MAX_RELATIVE_PATH_LENGTH = 1024
 
 # Threshold for switching from inline base64 to presigned URL.
 # Lambda response payload limit is 6 MB; base64 adds ~33% overhead.
@@ -721,6 +725,131 @@ def verify_kb_write_access(user_sub: str, kb_id: str) -> bool:
         return False  # Fail closed
 
 
+def _contains_control_chars(value: str) -> bool:
+    """Check whether a string contains ASCII control characters."""
+    return any(ord(char) < 32 or ord(char) == 127 for char in value)
+
+
+def _validate_kb_id(kb_id: Any, field_name: str = "kb_id") -> str:
+    """
+    Validate a KB ID used for permissions and S3 path construction.
+
+    KB IDs are expected to be system IDs ("company", "numa-support")
+    or UUID-like identifiers. We reject separators and traversal tokens.
+    """
+    if not isinstance(kb_id, str):
+        raise ValueError(f"{field_name} must be a string")
+
+    normalized = kb_id.strip()
+    if not normalized:
+        raise ValueError(f"{field_name} cannot be empty")
+
+    if len(normalized) > MAX_KB_ID_LENGTH:
+        raise ValueError(f"{field_name} is too long")
+
+    if "/" in normalized or "\\" in normalized or ".." in normalized:
+        raise ValueError(f"Invalid {field_name}: path separators are not allowed")
+
+    if _contains_control_chars(normalized):
+        raise ValueError(f"Invalid {field_name}: contains control characters")
+
+    if not re.fullmatch(r"[A-Za-z0-9_-]+", normalized):
+        raise ValueError(
+            f"Invalid {field_name}: only letters, numbers, '-' and '_' are allowed"
+        )
+
+    return normalized
+
+
+def _validate_filename(filename: Any, field_name: str = "filename") -> str:
+    """Validate a single file name (no path segments)."""
+    if not isinstance(filename, str):
+        raise ValueError(f"{field_name} must be a string")
+
+    normalized = filename.strip()
+    if not normalized:
+        raise ValueError(f"{field_name} cannot be empty")
+
+    if len(normalized) > MAX_FILENAME_LENGTH:
+        raise ValueError(f"{field_name} is too long")
+
+    if "/" in normalized or "\\" in normalized:
+        raise ValueError(f"Invalid {field_name}: path separators are not allowed")
+
+    if normalized in {".", ".."}:
+        raise ValueError(f"Invalid {field_name}")
+
+    if normalized.endswith(".metadata.json"):
+        raise ValueError(
+            f"Invalid {field_name}: metadata sidecar files are not allowed"
+        )
+
+    if _contains_control_chars(normalized):
+        raise ValueError(f"Invalid {field_name}: contains control characters")
+
+    return normalized
+
+
+def _validate_relative_path(
+    path_value: Any,
+    field_name: str,
+    *,
+    allow_empty: bool = True,
+) -> str:
+    """
+    Validate and normalize a relative S3 path.
+
+    This allows nested folders but blocks traversal and unsafe characters.
+    """
+    if path_value is None:
+        if allow_empty:
+            return ""
+        raise ValueError(f"{field_name} cannot be empty")
+
+    if not isinstance(path_value, str):
+        raise ValueError(f"{field_name} must be a string")
+
+    trimmed = path_value.strip().strip("/")
+    if not trimmed:
+        if allow_empty:
+            return ""
+        raise ValueError(f"{field_name} cannot be empty")
+
+    if len(trimmed) > MAX_RELATIVE_PATH_LENGTH:
+        raise ValueError(f"{field_name} is too long")
+
+    if "\\" in trimmed:
+        raise ValueError(f"Invalid {field_name}: backslashes are not allowed")
+
+    if _contains_control_chars(trimmed):
+        raise ValueError(f"Invalid {field_name}: contains control characters")
+
+    parts = trimmed.split("/")
+    normalized_parts: List[str] = []
+    for part in parts:
+        if part in {"", ".", ".."}:
+            raise ValueError(f"Invalid {field_name}: path traversal is not allowed")
+        normalized_parts.append(part)
+
+    return "/".join(normalized_parts)
+
+
+def _require_user_sub(params: Dict[str, Any], operation: str) -> str:
+    """
+    Require authenticated user context for KB operations.
+
+    All KB file operations must enforce server-side permission checks.
+    """
+    user_sub = params.get("__user_sub", "")
+    if not isinstance(user_sub, str) or not user_sub.strip():
+        logger.warning(
+            "KB operation denied - missing user identity",
+            operation=operation,
+        )
+        raise ValueError("Access denied: User identity required for KB operations")
+    return user_sub.strip()
+
+
 def handle_add_to_kb(params: Dict[str, Any]) -> Dict[str, Any]:
     """
     Upload file to knowledge base S3 storage.
@@ -737,17 +866,15 @@ def handle_add_to_kb(params: Dict[str, Any]) -> Dict[str, Any]:
     Returns:
         Dict with message, s3_uri, kb_id, filename, size_bytes, and note
     """
-    filename = params.get("filename")
-    kb_id = params.get("kb_id", "company")
-    kb_path = params.get("kb_path", "").strip("/")
+    filename = _validate_filename(params.get("filename"), "filename")
+    kb_id = _validate_kb_id(params.get("kb_id", "company"), "kb_id")
+    kb_path = _validate_relative_path(params.get("kb_path", ""), "kb_path")
     content_base64 = params.get("content_base64")
     size_bytes = params.get("size_bytes", 0)
     allowed_kbs = params.get("__allowed_kbs", [])
-    user_sub = params.get("__user_sub", "")
+    user_sub = _require_user_sub(params, "add_to_kb")
 
     # Validate required params
-    if not filename:
-        raise ValueError("Missing required parameter: filename")
     if not content_base64:
         raise ValueError("Missing required parameter: content_base64")
 
@@ -769,20 +896,15 @@ def handle_add_to_kb(params: Dict[str, Any]) -> Dict[str, Any]:
         )
 
     # Server-side permission check (must have EDITOR access to upload)
-    if user_sub:
-        if not verify_kb_write_access(user_sub, kb_id):
-            logger.warning(
-                "KB write access denied",
-                user_sub=user_sub[:8] + "...",
-                kb_id=kb_id,
-            )
-            raise ValueError(
-                f"Access denied: You don't have permission to add to this knowledge base '{kb_id}'"
-            )
-    else:
-        # If no user_sub, we can't verify - fail closed
-        logger.warning("KB write access denied - no user_sub provided", kb_id=kb_id)
-        raise ValueError("Access denied: User identity required for uploads")
+    if not verify_kb_write_access(user_sub, kb_id):
+        logger.warning(
+            "KB write access denied",
+            user_sub=user_sub[:8] + "...",
+            kb_id=kb_id,
+        )
+        raise ValueError(
+            f"Access denied: You don't have permission to add to this knowledge base '{kb_id}'"
+        )
 
     # Build S3 key - keep system KB ids as-is, prefix user KBs with "kb-".
     prefix_part = _get_s3_kb_id(kb_id)
@@ -902,10 +1024,7 @@ def _extract_kb_id_from_uri(uri: str) -> str:
         if parts[0] != "documents":
             raise ValueError(f"Path doesn't start with 'documents/': {path}")
 
-        kb_id = parts[1]
-        if not kb_id:
-            raise ValueError(f"Empty kb_id in path: {path}")
-
+        kb_id = _validate_kb_id(parts[1], "uri kb_id")
         return kb_id
 
     except Exception as e:
@@ -965,6 +1084,39 @@ def _get_s3_prefix(kb_id: str) -> str:
     """
     s3_kb_id = _get_s3_kb_id(kb_id)
     return f"documents/{s3_kb_id}/"
+
+
+def _validate_download_path(path_value: Any, field_name: str) -> str:
+    """Validate a download target path and block metadata sidecar access."""
+    normalized = _validate_relative_path(path_value, field_name, allow_empty=False)
+    if normalized.endswith(".metadata.json"):
+        raise ValueError(
+            f"Invalid {field_name}: metadata sidecar files are not allowed"
+        )
+    return normalized
+
+
+def _parse_and_validate_uri_key(uri: str, kb_id: str, bucket: str) -> str:
+    """
+    Parse an S3 URI and ensure it points to the expected KB prefix.
+
+    This prevents cross-KB key access by validating both bucket and prefix.
+    """
+    parsed = urlparse(uri)
+    if parsed.scheme != "s3":
+        raise ValueError(f"Not an S3 URI: {uri}")
+
+    if parsed.netloc and parsed.netloc != bucket:
+        raise ValueError("Invalid URI bucket for this tenant")
+
+    raw_key = parsed.path.lstrip("/")
+    expected_prefix = _get_s3_prefix(kb_id)
+    if not raw_key.startswith(expected_prefix):
+        raise ValueError("Invalid URI path for the requested knowledge base")
+
+    relative_path = raw_key[len(expected_prefix) :]
+    validated_relative_path = _validate_download_path(relative_path, "uri path")
+    return f"{expected_prefix}{validated_relative_path}"
 
 
 def _download_file(bucket: str, key: str) -> Dict[str, Any]:
@@ -1250,14 +1402,17 @@ def handle_retrieve_kb_file(params: Dict[str, Any]) -> Dict[str, Any]:
         folder_path (str, download_folder mode): Folder path within KB
         pattern (str, optional, list mode): Filename pattern filter
         __allowed_kbs (list, internal): Allowed KB IDs for security validation
+        __user_sub (str, internal): User identity required for server-side validation
 
     Returns:
         Download mode: Dict with filename, size_bytes, content_base64
         List mode: Dict with files list, kb_id, count
         Download folder mode: Dict with filename, size_bytes, content_base64, file_count
     """
-    mode = params.get("mode", "download")
+    mode_raw = params.get("mode", "download")
+    mode = mode_raw.strip().lower() if isinstance(mode_raw, str) else "download"
     allowed_kbs = params.get("__allowed_kbs", [])
+    user_sub = _require_user_sub(params, "retrieve_kb_file")
 
     # Fail-closed: require allowed_kbs
     if not allowed_kbs:
@@ -1272,14 +1427,14 @@ def handle_retrieve_kb_file(params: Dict[str, Any]) -> Dict[str, Any]:
         # Download mode - supports either URI or file+kb_id
         uri = params.get("uri")
         filename = params.get("file")
-        kb_id = params.get("kb_id", "company")
+        kb_id = _validate_kb_id(params.get("kb_id", "company"), "kb_id")
 
         if uri:
             # URI-based download (existing flow)
             # Extract kb_id from URI (includes 'kb-' prefix for user KBs)
             kb_id_from_uri = _extract_kb_id_from_uri(uri)
             # Normalize for permission check (strip 'kb-' prefix to match allowed_kbs format)
-            kb_id = _normalize_kb_id(kb_id_from_uri)
+            kb_id = _validate_kb_id(_normalize_kb_id(kb_id_from_uri), "kb_id")
             if kb_id not in allowed_kbs:
                 logger.warning(
                     "KB access denied for download",
@@ -1292,23 +1447,21 @@ def handle_retrieve_kb_file(params: Dict[str, Any]) -> Dict[str, Any]:
                 )
 
             # Server-side verification: Check DynamoDB for actual KB permissions
-            user_sub = params.get("__user_sub", "")
-            if user_sub:
-                if not verify_kb_access(user_sub, kb_id):
-                    logger.warning(
-                        "KB download denied - server-side verification failed",
-                        user_sub=user_sub[:8] + "...",
-                        kb_id=kb_id,
-                        uri=uri,
-                    )
-                    raise ValueError(f"Access denied to knowledge base '{kb_id}'")
+            if not verify_kb_access(user_sub, kb_id):
+                logger.warning(
+                    "KB download denied - server-side verification failed",
+                    user_sub=user_sub[:8] + "...",
+                    kb_id=kb_id,
+                    uri=uri,
+                )
+                raise ValueError(f"Access denied to knowledge base '{kb_id}'")
 
-            # Parse S3 URI to get key
-            parsed = urlparse(uri)
-            key = parsed.path.lstrip("/")
+            # Parse URI and validate key is constrained to this KB prefix
+            key = _parse_and_validate_uri_key(uri, kb_id, bucket)
 
         elif filename:
             # Filename + kb_id based download (new flow)
+            filename = _validate_filename(filename, "file")
             if kb_id not in allowed_kbs:
                 logger.warning(
                     "KB access denied for download",
@@ -1321,16 +1474,14 @@ def handle_retrieve_kb_file(params: Dict[str, Any]) -> Dict[str, Any]:
                 )
 
             # Server-side verification: Check DynamoDB for actual KB permissions
-            user_sub = params.get("__user_sub", "")
-            if user_sub:
-                if not verify_kb_access(user_sub, kb_id):
-                    logger.warning(
-                        "KB download denied - server-side verification failed",
-                        user_sub=user_sub[:8] + "...",
-                        kb_id=kb_id,
-                        filename=filename,
-                    )
-                    raise ValueError(f"Access denied to knowledge base '{kb_id}'")
+            if not verify_kb_access(user_sub, kb_id):
+                logger.warning(
+                    "KB download denied - server-side verification failed",
+                    user_sub=user_sub[:8] + "...",
+                    kb_id=kb_id,
+                    filename=filename,
+                )
+                raise ValueError(f"Access denied to knowledge base '{kb_id}'")
 
             # Construct S3 key from kb_id + filename
             prefix = _get_s3_prefix(kb_id)  # e.g., "documents/company/"
@@ -1351,8 +1502,10 @@ def handle_retrieve_kb_file(params: Dict[str, Any]) -> Dict[str, Any]:
 
     elif mode == "list":
         # List mode
-        kb_id = params.get("kb_id", "company")
+        kb_id = _validate_kb_id(params.get("kb_id", "company"), "kb_id")
         pattern = params.get("pattern")
+        if pattern is not None and not isinstance(pattern, str):
+            raise ValueError("pattern must be a string")
 
         # Validate kb_id
         if kb_id not in allowed_kbs:
@@ -1364,6 +1517,14 @@ def handle_retrieve_kb_file(params: Dict[str, Any]) -> Dict[str, Any]:
             raise ValueError(
                 f"Access denied: KB '{kb_id}' is not enabled. Enabled KBs: {allowed_kbs}"
             )
+
+        if not verify_kb_access(user_sub, kb_id):
+            logger.warning(
+                "KB list denied - server-side verification failed",
+                user_sub=user_sub[:8] + "...",
+                kb_id=kb_id,
+            )
+            raise ValueError(f"Access denied to knowledge base '{kb_id}'")
 
         # Get prefix and list files
         prefix = _get_s3_prefix(kb_id)
@@ -1378,8 +1539,10 @@ def handle_retrieve_kb_file(params: Dict[str, Any]) -> Dict[str, Any]:
 
     elif mode == "download_folder":
         # Download folder as zip
-        kb_id = params.get("kb_id", "company")
-        folder_path = params.get("folder_path", "")
+        kb_id = _validate_kb_id(params.get("kb_id", "company"), "kb_id")
+        folder_path = _validate_relative_path(
+            params.get("folder_path", ""), "folder_path"
+        )
 
         # Validate kb_id
         if kb_id not in allowed_kbs:
@@ -1393,29 +1556,25 @@ def handle_retrieve_kb_file(params: Dict[str, Any]) -> Dict[str, Any]:
             )
 
         # Server-side verification: Check DynamoDB for actual KB permissions
-        user_sub = params.get("__user_sub", "")
-        if user_sub:
-            if not verify_kb_access(user_sub, kb_id):
-                logger.warning(
-                    "KB folder download denied - server-side verification failed",
-                    user_sub=user_sub[:8] + "...",
-                    kb_id=kb_id,
-                )
-                raise ValueError(f"Access denied to knowledge base '{kb_id}'")
+        if not verify_kb_access(user_sub, kb_id):
+            logger.warning(
+                "KB folder download denied - server-side verification failed",
+                user_sub=user_sub[:8] + "...",
+                kb_id=kb_id,
+            )
+            raise ValueError(f"Access denied to knowledge base '{kb_id}'")
 
         # Build prefix for the folder
         base_prefix = _get_s3_prefix(kb_id)
         # Add folder path if specified
         if folder_path:
-            # Normalize folder path
-            folder_path = folder_path.strip("/")
             prefix = f"{base_prefix}{folder_path}/"
         else:
             prefix = base_prefix
 
         # Derive folder name for zip
         if folder_path:
-            folder_name = folder_path.split("/")[-1] or kb_id
+            folder_name = folder_path.rsplit("/", maxsplit=1)[-1] or kb_id
         else:
             folder_name = kb_id
 
