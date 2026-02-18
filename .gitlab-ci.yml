@@ -10,11 +10,14 @@ include:
   - .gitlab-ci-clients.yml
 
 workflow:
+  auto_cancel:
+    on_new_commit: interruptible
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
     - if: $CI_COMMIT_BRANCH && $CI_OPEN_MERGE_REQUESTS
       when: never
-    - if: $CI_PIPELINE_SOURCE == "push"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_COMMIT_BRANCH == "dev"
     - if: $CI_PIPELINE_SOURCE == "web"
 
 services:
@@ -26,41 +29,21 @@ variables:
 .rules:
   if-main:
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+  if-deployable:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_COMMIT_BRANCH == "dev"
 
-.node-lambdas-matrix:
-  matrix:
-    - BUILD_DIR:
-        - lambdas/node/admin-data-connector-settings
-        - lambdas/node/admin-agents-settings
-        - lambdas/node/admin-integration-settings
-        - lambdas/node/agent-schedule-runner
-        - lambdas/node/agent-schedules
-        - lambdas/node/agents
-        - lambdas/node/api-gateway-authorizer
-        - lambdas/node/application-scheduler
-        - lambdas/node/bedrock-cleanup-failed-files
-        - lambdas/node/budget-forwarder
-        - lambdas/node/branding-config
-        - lambdas/node/callback-renamer
-        - lambdas/node/chat-settings
-        - lambdas/node/cloudfront-invalidator
-        - lambdas/node/data-sync-scheduler
-        - lambdas/node/document-converter
-        - lambdas/node/notifications-api
-        - lambdas/node/notifications-stream
-        - lambdas/node/numa-ops-api
-        - lambdas/node/numa-ops-config-api
-        - lambdas/node/numa-ops-crm-api
-        - lambdas/node/q-business-chat-control-configurer
-        - lambdas/node/s3-kb-file-migrator
-        - lambdas/node/s3-vectors-manager
-        - lambdas/node/seed-ops-config
-        - lambdas/node/srp-hasher
-        - lambdas/node/step-function-shim
-        - lambdas/node/system-user-creator
-        - lambdas/node/token-adjuster
-        - lambdas/node/user-files
-        - lambdas/node/vector-db-init
+# Blocking manual gate for dev branch — pipeline pauses here until someone clicks play.
+# Only appears on dev push. Main and MR pipelines are unaffected.
+deploy-dev-gate:
+  stage: .pre
+  image: alpine:latest
+  rules:
+    - if: $CI_COMMIT_BRANCH == "dev"
+      when: manual
+      allow_failure: false
+  script:
+    - echo "Dev deploy to arcanum-demo approved. Pipeline proceeding..."
 
 .node-matrix:
   matrix:
@@ -169,6 +152,14 @@ variables:
         - lib/s3_helpers
 
 .node_job:
+  cache:
+    - key:
+        files:
+          - yarn.lock
+      fallback_keys:
+        - yarn-cache-$CI_DEFAULT_BRANCH
+      paths:
+        - .yarn/cache/
   before_script:
     - !reference [.yarn, setup-private-auth]
     - corepack enable
@@ -187,6 +178,15 @@ variables:
 install-common-dependencies:
   stage: setup
   image: node:lts
+  interruptible: true
+  cache:
+    - key:
+        files:
+          - yarn.lock
+      fallback_keys:
+        - yarn-cache-$CI_DEFAULT_BRANCH
+      paths:
+        - .yarn/cache/
   before_script:
     - !reference [.yarn, setup-private-auth]
   script:
@@ -226,6 +226,7 @@ install-common-dependencies:
 infra-lint:
   extends: .node-lint
   <<: *node-job-infra-overrides
+  interruptible: true
   rules:
     - changes:
         paths:
@@ -237,6 +238,7 @@ infra-lint:
 infra-test:
   extends: .node-test
   <<: *node-job-infra-overrides
+  interruptible: true
   rules:
     - changes:
         paths:
@@ -248,6 +250,7 @@ infra-test:
 infra-build:
   extends: .node-build
   <<: *node-job-infra-overrides
+  interruptible: true
   rules:
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
     - changes:
@@ -260,6 +263,15 @@ infra-build:
 .python-lint-base:
   extends: .poetry-job
   needs: []
+  interruptible: true
+  cache:
+    - key:
+        files:
+          - $PYTHON_WORKING_DIRECTORY/poetry.lock
+      fallback_keys:
+        - poetry-cache-$CI_DEFAULT_BRANCH-$PYTHON_WORKING_DIRECTORY
+      paths:
+        - $PYTHON_WORKING_DIRECTORY/.venv/
   script:
     - poetry run pylint . --verbose --recursive yes --ignore .venv,.poetry
     - poetry run mypy .
@@ -281,6 +293,15 @@ python-lambdas-lint:
 
 python-libraries-test:
   extends: .python-unittest
+  interruptible: true
+  cache:
+    - key:
+        files:
+          - $PYTHON_WORKING_DIRECTORY/poetry.lock
+      fallback_keys:
+        - poetry-cache-$CI_DEFAULT_BRANCH-$PYTHON_WORKING_DIRECTORY
+      paths:
+        - $PYTHON_WORKING_DIRECTORY/.venv/
   parallel: !reference [.python-libraries-matrix]
   rules:
     - changes:
@@ -289,6 +310,15 @@ python-libraries-test:
 
 python-lambdas-test:
   extends: .python-unittest
+  interruptible: true
+  cache:
+    - key:
+        files:
+          - $PYTHON_WORKING_DIRECTORY/poetry.lock
+      fallback_keys:
+        - poetry-cache-$CI_DEFAULT_BRANCH-$PYTHON_WORKING_DIRECTORY
+      paths:
+        - $PYTHON_WORKING_DIRECTORY/.venv/
   parallel: !reference [.python-lambdas-matrix]
   rules:
     - changes:
@@ -299,6 +329,7 @@ python-lambdas-test:
 frontend-lint:
   extends: .node-lint
   image: registry.gitlab.com/arcanumai/ci/cdktf:latest
+  interruptible: true
   before_script:
     - !reference [.yarn, setup-private-auth]
     - corepack enable
@@ -316,6 +347,7 @@ frontend-lint:
 node-lambdas-lint:
   extends: .node-lint
   image: registry.gitlab.com/arcanumai/ci/cdktf:latest
+  interruptible: true
   before_script:
     - !reference [.yarn, setup-private-auth]
     - corepack enable
@@ -336,6 +368,7 @@ node-lambdas-lint:
 node-shared-lint:
   extends: .node-lint
   image: registry.gitlab.com/arcanumai/ci/cdktf:latest
+  interruptible: true
   before_script:
     - !reference [.yarn, setup-private-auth]
     - corepack enable
@@ -356,6 +389,7 @@ node-shared-lint:
 tools-test:
   extends: .node-test
   <<: *node-job-tools-overrides
+  interruptible: true
   rules:
     - changes:
         - lib/client-config-node/**/*
@@ -366,6 +400,7 @@ tools-test:
 tools-build:
   extends: .node-build
   <<: *node-job-tools-overrides
+  interruptible: true
   rules:
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
     - changes:
@@ -377,6 +412,7 @@ tools-build:
 
 node-test:
   extends: .node-test
+  interruptible: true
   parallel: !reference [.node-matrix]
   rules:
     - changes:
@@ -386,6 +422,7 @@ node-test:
 
 node-build:
   extends: .node-build
+  interruptible: true
   parallel: !reference [.node-matrix]
   rules:
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
@@ -398,6 +435,7 @@ node-build:
 
 frontend-test:
   extends: node-test
+  interruptible: true
   parallel:
     matrix:
       - BUILD_DIR: [numa-frontend]
@@ -425,6 +463,7 @@ frontend-test:
 
 frontend-build:
   extends: node-build
+  interruptible: true
   parallel:
     matrix:
       - BUILD_DIR: [numa-frontend]
@@ -440,6 +479,7 @@ frontend-build:
     paths: [infra/build/numa-frontend]
   rules:
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_COMMIT_BRANCH == "dev"
     - changes:
         paths:
           - numa-frontend/**/*
@@ -455,7 +495,7 @@ python-lambdas-package:
   artifacts:
     paths: [$PYTHON_WORKING_DIRECTORY/lambda_function.zip]
   rules:
-    - !reference [.rules, if-main]
+    - !reference [.rules, if-deployable]
 
 
 node-package:
@@ -466,14 +506,19 @@ node-package:
     - cd $BUILD_DIR
     - apt update && apt install -y zip
   script:
+    - |
+      if [[ "$BUILD_DIR" == lib/* ]]; then
+        echo "Skipping library directory (not a packaged lambda)"
+        exit 0
+      fi
     - yarn bundle
-  parallel: !reference [.node-lambdas-matrix]
+  parallel: !reference [.node-matrix]
   artifacts:
     paths:
       - $BUILD_DIR/dist
       - $BUILD_DIR/lambda_function.zip
   rules:
-    - !reference [.rules, if-main]
+    - !reference [.rules, if-deployable]
 
 # Build Claude CLI artifact ZIP (main + CI config changes only)
 claude-cli-artifact-build:
@@ -481,6 +526,7 @@ claude-cli-artifact-build:
   image: amazonlinux:2023
   rules:
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_COMMIT_BRANCH == "dev"
     - changes:
         paths:
           - .gitlab-ci.yml
@@ -525,7 +571,7 @@ workspace-agent-package:
   tags:
     - aws  # Runs on AWS workers with Docker
   rules:
-    - !reference [.rules, if-main]
+    - !reference [.rules, if-deployable]
   variables:
     DOCKER_TLS_CERTDIR: "/certs"
   before_script:
@@ -638,6 +684,8 @@ deploy-to-arcanum-demo:
     deployment_tier: testing
   rules:
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      when: on_success
+    - if: $CI_COMMIT_BRANCH == "dev"
       when: on_success
 
 deploy-to-median:

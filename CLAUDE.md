@@ -363,6 +363,10 @@ CloudFront routing: The frontend distribution forwards `/api/*` to API Gateway a
   - Ensure frontend is built and Lambdas are packaged before `cdktf deploy`.
   - Deploy to a target client (example env vars + stack name) using `yarn cdktf deploy --auto-approve <stack>`.
 
+## Branching Strategy
+
+Feature branches → `dev` (default MR target) → `main` (release). No pipeline runs on push to `dev`. Full pipeline (package, build, deploy) runs on push to `main`. Hotfixes can target `main` directly — merge `main` back into `dev` afterwards to stay aligned.
+
 ---
 
 ## Folder Guide
