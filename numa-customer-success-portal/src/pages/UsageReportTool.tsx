@@ -22,6 +22,8 @@ import { FileExportService } from '@/utils/fileExport'
 import { DateUtils } from '@/utils/dateUtils'
 import { clientService } from '@/services/clientService'
 import type { Client } from '@/types'
+import { CLIENT_STATUS_DISPLAY } from '@/types'
+import type { ClientStatusValue } from '@/types'
 import type {
   AgentRecord,
   AgentUsageRecord,
@@ -45,6 +47,7 @@ const DEFAULT_REPORT_TYPES: UsageReportType[] = [
   'chat-messages',
   'agents',
   'agent-usage',
+  'scheduled-agent-usage',
   'integrations',
   'integration-chat-usage',
   'agent-integration-usage',
@@ -56,7 +59,8 @@ const REPORT_OPTIONS: { value: UsageReportType; label: string; description: stri
   { value: 'app-runs', label: 'App Runs', description: 'Raw application run records across selected clients' },
   { value: 'chat-messages', label: 'Chat Messages', description: 'Chat message activity (including meta/tool events)' },
   { value: 'agents', label: 'Agents Directory', description: 'All public and personal agents with creator details' },
-  { value: 'agent-usage', label: 'Agent Usage', description: 'Conversations per agent and user (meta events only)' },
+  { value: 'agent-usage', label: 'Agent Usage', description: 'User-initiated agent conversations (excludes scheduled runs)' },
+  { value: 'scheduled-agent-usage', label: 'Scheduled Agent Runs', description: 'Agent conversations triggered by automated schedules' },
   { value: 'integrations', label: 'Integrations', description: 'Integration settings per client with statuses and deny tool lists' },
   { value: 'integration-chat-usage', label: 'Chat With Integrations', description: 'Tool calls to integrations in chat conversations' },
   { value: 'agent-integration-usage', label: 'Agents With Integrations', description: 'Agent conversations that invoked integration tools' },
@@ -370,6 +374,9 @@ export default function UsageReportTool() {
     if (metadata.agentConversationCount !== undefined) {
       cards.push({ label: 'Agent Conversations', value: metadata.agentConversationCount.toLocaleString(), variant: 'warning' })
     }
+    if (metadata.scheduledAgentConversationCount !== undefined) {
+      cards.push({ label: 'Scheduled Agent Runs', value: metadata.scheduledAgentConversationCount.toLocaleString(), variant: 'info' })
+    }
     if (metadata.uniqueAgentUsers !== undefined) {
       cards.push({ label: 'Agent Users', value: metadata.uniqueAgentUsers.toLocaleString(), variant: 'dark' })
     }
@@ -400,10 +407,17 @@ export default function UsageReportTool() {
   const chatRows = execution?.result?.data?.chatMessages || []
   const agentRows = execution?.result?.data?.agents || []
   const agentUsageRows = execution?.result?.data?.agentUsage || []
+  const scheduledAgentUsageRows = execution?.result?.data?.scheduledAgentUsage || []
   const integrationRows = execution?.result?.data?.integrations || []
   const integrationChatRows = execution?.result?.data?.integrationChatUsage || []
   const agentIntegrationRows = execution?.result?.data?.agentIntegrationUsage || []
   const knowledgeBaseRows = execution?.result?.data?.knowledgeBases || []
+
+  const renderStatusBadge = (status?: string) => {
+    if (!status) return <span className="text-muted">-</span>
+    const display = CLIENT_STATUS_DISPLAY[status as ClientStatusValue]
+    return display ? <Badge bg={display.variant}>{display.label}</Badge> : <span>{status}</span>
+  }
 
   const renderSummaryTable = () => (
     <div className="table-responsive" style={{ maxHeight: '60vh' }}>
@@ -411,6 +425,7 @@ export default function UsageReportTool() {
         <thead className="table-light" style={{ position: 'sticky', top: 0, zIndex: 1 }}>
           <tr>
             <th>Client</th>
+            <th>Status</th>
             <th>User ID</th>
             <th>User Email</th>
             <th>Date</th>
@@ -423,7 +438,7 @@ export default function UsageReportTool() {
         <tbody>
           {summaryRows.length === 0 && (
             <tr>
-              <td colSpan={8} className="text-center text-muted">
+              <td colSpan={9} className="text-center text-muted">
                 No summary records found.
               </td>
             </tr>
@@ -431,6 +446,7 @@ export default function UsageReportTool() {
           {summaryRows.map((row: UsageSummary, i: number) => (
             <tr key={i}>
               <td><Badge bg="secondary">{row.clientName}</Badge></td>
+              <td>{renderStatusBadge(row.clientStatus)}</td>
               <td>{row.userId}</td>
               <td>{row.userEmail}</td>
               <td>{row.month}</td>
@@ -451,6 +467,7 @@ export default function UsageReportTool() {
         <thead className="table-light" style={{ position: 'sticky', top: 0, zIndex: 1 }}>
           <tr>
             <th>Client</th>
+            <th>Client Status</th>
             <th>User ID</th>
             <th>User Email</th>
             <th>App ID</th>
@@ -464,7 +481,7 @@ export default function UsageReportTool() {
         <tbody>
           {appRunRows.length === 0 && (
             <tr>
-              <td colSpan={9} className="text-center text-muted">
+              <td colSpan={10} className="text-center text-muted">
                 No app runs found for the selected period.
               </td>
             </tr>
@@ -472,6 +489,7 @@ export default function UsageReportTool() {
           {appRunRows.map((row: AppRunRecord, i: number) => (
             <tr key={i}>
               <td><Badge bg="secondary">{row.clientName}</Badge></td>
+              <td>{renderStatusBadge(row.clientStatus)}</td>
               <td>{row.userId}</td>
               <td>{row.userEmail}</td>
               <td>{row.appId}</td>
@@ -493,6 +511,7 @@ export default function UsageReportTool() {
         <thead className="table-light" style={{ position: 'sticky', top: 0, zIndex: 1 }}>
           <tr>
             <th>Client</th>
+            <th>Status</th>
             <th>User ID</th>
             <th>User Email</th>
             <th>Date</th>
@@ -505,7 +524,7 @@ export default function UsageReportTool() {
         <tbody>
           {chatRows.length === 0 && (
             <tr>
-              <td colSpan={8} className="text-center text-muted">
+              <td colSpan={9} className="text-center text-muted">
                 No chat messages found for the selected period.
               </td>
             </tr>
@@ -513,6 +532,7 @@ export default function UsageReportTool() {
           {chatRows.map((row: ChatMessageRecord, i: number) => (
             <tr key={i}>
               <td><Badge bg="secondary">{row.clientName}</Badge></td>
+              <td>{renderStatusBadge(row.clientStatus)}</td>
               <td>{row.userId}</td>
               <td>{row.userEmail}</td>
               <td>{row.month}</td>
@@ -533,6 +553,7 @@ export default function UsageReportTool() {
         <thead className="table-light" style={{ position: 'sticky', top: 0, zIndex: 1 }}>
           <tr>
             <th>Client</th>
+            <th>Status</th>
             <th>Agent ID</th>
             <th>Agent Name</th>
             <th>Visibility</th>
@@ -546,7 +567,7 @@ export default function UsageReportTool() {
         <tbody>
           {agentRows.length === 0 && (
             <tr>
-              <td colSpan={9} className="text-center text-muted">
+              <td colSpan={10} className="text-center text-muted">
                 No agents found for the selected clients.
               </td>
             </tr>
@@ -554,6 +575,7 @@ export default function UsageReportTool() {
           {agentRows.map((row: AgentRecord, i: number) => (
             <tr key={i}>
               <td><Badge bg="secondary">{row.clientName}</Badge></td>
+              <td>{renderStatusBadge(row.clientStatus)}</td>
               <td>{row.agentId}</td>
               <td>{row.agentName}</td>
               <td>{row.visibility}</td>
@@ -575,6 +597,7 @@ export default function UsageReportTool() {
         <thead className="table-light" style={{ position: 'sticky', top: 0, zIndex: 1 }}>
           <tr>
             <th>Client</th>
+            <th>Status</th>
             <th>Agent ID</th>
             <th>Agent Name</th>
             <th>User ID</th>
@@ -588,7 +611,7 @@ export default function UsageReportTool() {
         <tbody>
           {agentUsageRows.length === 0 && (
             <tr>
-              <td colSpan={9} className="text-center text-muted">
+              <td colSpan={10} className="text-center text-muted">
                 No agent usage found for the selected period.
               </td>
             </tr>
@@ -596,6 +619,51 @@ export default function UsageReportTool() {
           {agentUsageRows.map((row: AgentUsageRecord, i: number) => (
             <tr key={i}>
               <td><Badge bg="secondary">{row.clientName}</Badge></td>
+              <td>{renderStatusBadge(row.clientStatus)}</td>
+              <td>{row.agentId}</td>
+              <td>{row.agentName}</td>
+              <td>{row.userId}</td>
+              <td>{row.userEmail}</td>
+              <td>{row.month}</td>
+              <td>{row.conversationCount}</td>
+              <td>{row.visibility}</td>
+              <td>{row.agentType}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+
+  const renderScheduledAgentUsageTable = () => (
+    <div className="table-responsive" style={{ maxHeight: '60vh' }}>
+      <table className="table table-sm table-hover align-middle">
+        <thead className="table-light" style={{ position: 'sticky', top: 0, zIndex: 1 }}>
+          <tr>
+            <th>Client</th>
+            <th>Status</th>
+            <th>Agent ID</th>
+            <th>Agent Name</th>
+            <th>User ID</th>
+            <th>User Email</th>
+            <th>Date</th>
+            <th>Conversations</th>
+            <th>Visibility</th>
+            <th>Agent Type</th>
+          </tr>
+        </thead>
+        <tbody>
+          {scheduledAgentUsageRows.length === 0 && (
+            <tr>
+              <td colSpan={10} className="text-center text-muted">
+                No scheduled agent runs found for the selected period.
+              </td>
+            </tr>
+          )}
+          {scheduledAgentUsageRows.map((row: AgentUsageRecord, i: number) => (
+            <tr key={i}>
+              <td><Badge bg="secondary">{row.clientName}</Badge></td>
+              <td>{renderStatusBadge(row.clientStatus)}</td>
               <td>{row.agentId}</td>
               <td>{row.agentName}</td>
               <td>{row.userId}</td>
@@ -617,6 +685,7 @@ export default function UsageReportTool() {
         <thead className="table-light" style={{ position: 'sticky', top: 0, zIndex: 1 }}>
           <tr>
             <th>Client</th>
+            <th>Client Status</th>
             <th>Integration</th>
             <th>Status</th>
             <th>Deny Tools</th>
@@ -627,7 +696,7 @@ export default function UsageReportTool() {
         <tbody>
           {integrationRows.length === 0 && (
             <tr>
-              <td colSpan={6} className="text-center text-muted">
+              <td colSpan={7} className="text-center text-muted">
                 No integrations found for the selected clients.
               </td>
             </tr>
@@ -635,6 +704,7 @@ export default function UsageReportTool() {
           {integrationRows.map((row: IntegrationRecord, i: number) => (
             <tr key={i}>
               <td><Badge bg="secondary">{row.clientName}</Badge></td>
+              <td>{renderStatusBadge(row.clientStatus)}</td>
               <td>{row.integration}</td>
               <td>{row.status}</td>
               <td><code className="text-muted">{row.denyTools?.join('; ')}</code></td>
@@ -653,6 +723,7 @@ export default function UsageReportTool() {
         <thead className="table-light" style={{ position: 'sticky', top: 0, zIndex: 1 }}>
           <tr>
             <th>Client</th>
+            <th>Status</th>
             <th>Integration</th>
             <th>User ID</th>
             <th>User Email</th>
@@ -664,7 +735,7 @@ export default function UsageReportTool() {
         <tbody>
           {integrationChatRows.length === 0 && (
             <tr>
-              <td colSpan={7} className="text-center text-muted">
+              <td colSpan={8} className="text-center text-muted">
                 No integration tool calls found in chat for the selected period.
               </td>
             </tr>
@@ -672,6 +743,7 @@ export default function UsageReportTool() {
           {integrationChatRows.map((row: IntegrationChatUsageRecord, i: number) => (
             <tr key={i}>
               <td><Badge bg="secondary">{row.clientName}</Badge></td>
+              <td>{renderStatusBadge(row.clientStatus)}</td>
               <td>{row.integration}</td>
               <td>{row.userId}</td>
               <td>{row.userEmail}</td>
@@ -691,6 +763,7 @@ export default function UsageReportTool() {
         <thead className="table-light" style={{ position: 'sticky', top: 0, zIndex: 1 }}>
           <tr>
             <th>Client</th>
+            <th>Status</th>
             <th>Integration</th>
             <th>Agent ID</th>
             <th>Agent Name</th>
@@ -704,7 +777,7 @@ export default function UsageReportTool() {
         <tbody>
           {agentIntegrationRows.length === 0 && (
             <tr>
-              <td colSpan={9} className="text-center text-muted">
+              <td colSpan={10} className="text-center text-muted">
                 No agent conversations invoking integrations for the selected period.
               </td>
             </tr>
@@ -712,6 +785,7 @@ export default function UsageReportTool() {
           {agentIntegrationRows.map((row: AgentIntegrationUsageRecord, i: number) => (
             <tr key={i}>
               <td><Badge bg="secondary">{row.clientName}</Badge></td>
+              <td>{renderStatusBadge(row.clientStatus)}</td>
               <td>{row.integration}</td>
               <td>{row.agentId}</td>
               <td>{row.agentName}</td>
@@ -733,6 +807,7 @@ export default function UsageReportTool() {
         <thead className="table-light" style={{ position: 'sticky', top: 0, zIndex: 1 }}>
           <tr>
             <th>Client</th>
+            <th>Status</th>
             <th>KB Type</th>
             <th>Scope</th>
             <th>Name</th>
@@ -747,7 +822,7 @@ export default function UsageReportTool() {
         <tbody>
           {knowledgeBaseRows.length === 0 && (
             <tr>
-              <td colSpan={9} className="text-center text-muted">
+              <td colSpan={11} className="text-center text-muted">
                 No knowledge bases found for the selected clients.
               </td>
             </tr>
@@ -755,6 +830,7 @@ export default function UsageReportTool() {
           {knowledgeBaseRows.map((row: KnowledgeBaseRecord, i: number) => (
             <tr key={i}>
               <td><Badge bg="secondary">{row.clientName}</Badge></td>
+              <td>{renderStatusBadge(row.clientStatus)}</td>
               <td>{row.kbType}</td>
               <td>{row.scope}</td>
               <td>{row.name}</td>
@@ -806,6 +882,13 @@ export default function UsageReportTool() {
       key: 'agent-usage',
       title: `Agent Usage (${agentUsageRows.length})`,
       content: renderAgentUsageTable(),
+    })
+  }
+  if (selectedReportsFromResult.includes('scheduled-agent-usage')) {
+    tabConfigs.push({
+      key: 'scheduled-agent-usage',
+      title: `Scheduled Agent Runs (${scheduledAgentUsageRows.length})`,
+      content: renderScheduledAgentUsageTable(),
     })
   }
   if (selectedReportsFromResult.includes('integrations')) {

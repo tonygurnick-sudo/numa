@@ -1,6 +1,7 @@
-import { Table, Button } from 'react-bootstrap'
+import { Table, Button, Badge } from 'react-bootstrap'
 import { PencilSquare } from 'react-bootstrap-icons'
-import { Client } from '@/types'
+import { Client, getStatusBadgeInfo } from '@/types'
+import type { ClientMetadata } from '@/types'
 import { groupClientsByType } from '@/services/clientService'
 
 interface ClientTableGroupProps {
@@ -9,6 +10,7 @@ interface ClientTableGroupProps {
   onSelectClient?: (client: Client) => void
   onUpdateClient?: (client: Client) => void
   searchTerm?: string
+  metadataMap?: Map<string, ClientMetadata>
 }
 
 export function ClientTableGroup({
@@ -16,7 +18,8 @@ export function ClientTableGroup({
   selectedClient,
   onSelectClient,
   onUpdateClient,
-  searchTerm = ''
+  searchTerm = '',
+  metadataMap,
 }: ClientTableGroupProps) {
   // Filter clients by search term if provided
   const filteredClients = searchTerm
@@ -25,7 +28,9 @@ export function ClientTableGroup({
 
   const { devClients, productionClients } = groupClientsByType(filteredClients)
 
-  const renderClientRow = (client: Client) => (
+  const renderClientRow = (client: Client) => {
+    const badgeInfo = getStatusBadgeInfo(metadataMap?.get(client.name))
+    return (
     <tr
       key={client.name}
       className={selectedClient?.name === client.name ? 'table-primary' : ''}
@@ -37,6 +42,11 @@ export function ClientTableGroup({
         onClick={() => onSelectClient?.(client)}
       >
         {client.name}
+        {badgeInfo && (
+          <Badge bg={badgeInfo.variant} className="ms-2" style={{ fontSize: '0.65rem' }}>
+            {badgeInfo.label}
+          </Badge>
+        )}
       </td>
       <td
         role="button"
@@ -57,7 +67,8 @@ export function ClientTableGroup({
         </Button>
       </td>
     </tr>
-  )
+    )
+  }
 
   const renderSectionHeader = (title: string) => (
     <tr style={{ backgroundColor: 'var(--bs-primary-bg-subtle)' }}>

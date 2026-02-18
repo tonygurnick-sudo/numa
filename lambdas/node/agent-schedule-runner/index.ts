@@ -382,6 +382,8 @@ const executeRun = async ({
       conversationName,
       agentMeta,
       timestamp: now,
+      isScheduledRun: true,
+      scheduleId: schedule.schedule_id,
     });
   }
 
@@ -393,6 +395,8 @@ const executeRun = async ({
       content: runPrompt,
       timestamp: now,
       agentMeta,
+      isScheduledRun: !adHoc ? true : undefined,
+      scheduleId: !adHoc ? schedule.schedule_id : undefined,
     });
   }
 
@@ -460,6 +464,8 @@ const executeRun = async ({
       content: assistantText,
       timestamp: assistantTimestamp,
       agentMeta,
+      isScheduledRun: !adHoc ? true : undefined,
+      scheduleId: !adHoc ? schedule.schedule_id : undefined,
     });
     await updateConversationMeta(runConversationId, schedule.user_id, assistantText);
 
@@ -610,6 +616,8 @@ const appendMessage = async ({
   content,
   timestamp,
   agentMeta,
+  isScheduledRun,
+  scheduleId,
 }: {
   conversationId: string;
   userId: string;
@@ -617,6 +625,8 @@ const appendMessage = async ({
   content: string;
   timestamp: number;
   agentMeta?: AgentSnapshot;
+  isScheduledRun?: boolean;
+  scheduleId?: string;
 }): Promise<void> => {
   if (!CHAT_HISTORY_TABLE) return;
   const sk = `${conversationId}#${timestamp}`;
@@ -637,6 +647,8 @@ const appendMessage = async ({
         agentIcon: agentMeta?.icon,
         agentVisibility: agentMeta?.visibility,
         isAgentConversation: Boolean(agentMeta?.agentId),
+        isScheduledRun,
+        scheduleId,
       },
     }),
   );
@@ -686,12 +698,16 @@ const ensureConversationMeta = async ({
   conversationName,
   agentMeta,
   timestamp,
+  isScheduledRun,
+  scheduleId,
 }: {
   conversationId: string;
   userId: string;
   conversationName?: string;
   agentMeta?: AgentSnapshot;
   timestamp: number;
+  isScheduledRun?: boolean;
+  scheduleId?: string;
 }): Promise<void> => {
   if (!CHAT_HISTORY_TABLE) return;
   const sk = `${conversationId}#${timestamp}`;
@@ -715,6 +731,8 @@ const ensureConversationMeta = async ({
         agentIcon: agentMeta?.icon,
         agentVisibility: agentMeta?.visibility,
         isAgentConversation: Boolean(agentMeta?.agentId),
+        isScheduledRun,
+        scheduleId,
       },
     }),
   );

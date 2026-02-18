@@ -1,11 +1,16 @@
 import { useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { Card, Form, Button, Row, Col, Alert, Spinner, Modal } from 'react-bootstrap'
+import { Card, Form, Button, Row, Col, Alert, Spinner, Modal, Tab, Nav } from 'react-bootstrap'
+import DatePicker from 'react-datepicker'
+import 'react-datepicker/dist/react-datepicker.css'
 import { ClientSelectGroup } from '@/components/ClientSelectGroup'
 import { FeatureChecklist } from '@/components/FeatureChecklist'
 import { ConfigField } from '@/components/ConfigField'
+import { QuotaCheckCard } from '@/components/tools/QuotaCheckCard'
 import { clientService } from '@/services/clientService'
-import { Client, ClientConfig, clientConfigSchema, getDefaultClientConfigValues } from '@/types'
+import { clientMetadataService } from '@/services/clientMetadataService'
+import { Client, ClientConfig, clientConfigSchema, getDefaultClientConfigValues, CLIENT_STATUS_VALUES, CLIENT_STATUS_DISPLAY } from '@/types'
+import type { ClientStatusValue } from '@/types'
 import { FileExportService } from '@/utils/fileExport'
 import { DEFAULT_ADMIN_FEATURES, DEFAULT_STANDARD_FEATURES, featuresListToString, sameMembers, stringToFeatures } from '@/constants/features'
 
@@ -70,7 +75,6 @@ export default function UpdateClientConfig() {
   const [dataConnectorsEnabled, setDataConnectorsEnabled] = useState<boolean>(false)
   const [agents, setAgents] = useState<boolean>(false)
   const [devInstance, setDevInstance] = useState<boolean>(false)
-  const [customDomain, setCustomDomain] = useState<string>('')
   const [allowQuotaSharing, setAllowQuotaSharing] = useState<boolean>(false)
   const [bedrockAccount, setBedrockAccount] = useState<string>('')
   const [provisionQResources, setProvisionQResources] = useState<boolean>(false)
@@ -79,9 +83,15 @@ export default function UpdateClientConfig() {
   const [numaWorkspaceChat, setNumaWorkspaceChat] = useState<boolean>(false)
   const [scheduling, setScheduling] = useState<boolean>(false)
   const [workspaceChatModelSelection, setWorkspaceChatModelSelection] = useState<boolean>(false)
+  const [numaOps, setNumaOps] = useState<boolean>(false)
   const [mfa, setMfa] = useState<boolean>(false)
   const [groupAdmin, setGroupAdmin] = useState(featuresListToString(DEFAULT_ADMIN_FEATURES))
   const [groupStandard, setGroupStandard] = useState(featuresListToString(DEFAULT_STANDARD_FEATURES))
+  // Client metadata (non-deployment)
+  const [metaStatus, setMetaStatus] = useState<ClientStatusValue>('unclear')
+  const [trialStartDate, setTrialStartDate] = useState('')
+  const [trialEndDate, setTrialEndDate] = useState('')
+  const [metaNotes, setMetaNotes] = useState('')
   const [showAdvanced, setShowAdvanced] = useState(false)
   const [showPreview, setShowPreview] = useState(false)
   const [beforeJson, setBeforeJson] = useState('')
@@ -132,7 +142,6 @@ export default function UpdateClientConfig() {
     const ag = (cfg as unknown as Record<string, unknown>)['agents']
     setAgents(Boolean(ag))
     setDevInstance(Boolean(cfg.devInstance))
-    setCustomDomain(cfg.customDomain || '')
     setAllowQuotaSharing(Boolean(cfg.allowBedrockQuotaSharing))
     setBedrockAccount(cfg.bedrockAccount || '')
     setProvisionQResources(Boolean((cfg as any).provisionQResources))
@@ -141,12 +150,28 @@ export default function UpdateClientConfig() {
     setNumaWorkspaceChat(Boolean((cfg as any).numaWorkspaceChat))
     setScheduling(Boolean((cfg as any).scheduling))
     setWorkspaceChatModelSelection(Boolean((cfg as any).workspaceChatModelSelection))
+    setNumaOps(Boolean((cfg as any).numaOps))
     setMfa(Boolean((cfg as any).mfa))
     const groups = (cfg as unknown as Record<string, unknown>)['groups'] as { admin?: string[]; standard?: string[] } | undefined
     const adminList = (groups?.admin && groups.admin.length > 0) ? groups.admin : DEFAULT_ADMIN_FEATURES
     const standardList = (groups?.standard && groups.standard.length > 0) ? groups.standard : DEFAULT_STANDARD_FEATURES
     setGroupAdmin(featuresListToString(adminList))
     setGroupStandard(featuresListToString(standardList))
+
+    // Load metadata for the selected client
+    clientMetadataService.getMetadata(selectedClientName).then(meta => {
+      if (meta) {
+        setMetaStatus(meta.status)
+        setTrialStartDate(meta.trialStartDate || '')
+        setTrialEndDate(meta.trialEndDate || '')
+        setMetaNotes(meta.notes || '')
+      } else {
+        setMetaStatus('unclear')
+        setTrialStartDate('')
+        setTrialEndDate('')
+        setMetaNotes('')
+      }
+    })
   }, [selectedClientName, clients])
 
   const buildUpdates = (current?: ClientConfig): Partial<ClientConfig> => {
@@ -156,7 +181,6 @@ export default function UpdateClientConfig() {
       allApps: (current as any)?.allApps ?? false,
       apps: current?.apps,
       devInstance: current?.devInstance ?? defaults.devInstance,
-      customDomain: current?.customDomain ?? '',
       allowBedrockQuotaSharing: current?.allowBedrockQuotaSharing ?? defaults.allowBedrockQuotaSharing,
       bedrockAccount: current?.bedrockAccount ?? '',
       pipedreamIntegrations: current?.pipedreamIntegrations ?? false,
@@ -166,6 +190,7 @@ export default function UpdateClientConfig() {
       numaWorkspaceChat: (current as any)?.numaWorkspaceChat ?? defaults.numaWorkspaceChat,
       scheduling: (current as any)?.scheduling ?? defaults.scheduling,
       workspaceChatModelSelection: (current as any)?.workspaceChatModelSelection ?? defaults.workspaceChatModelSelection,
+      numaOps: (current as any)?.numaOps ?? defaults.numaOps,
       provisionQResources: (current as any)?.provisionQResources ?? defaults.provisionQResources,
       preferredKnowledgeBase: ((current as any)?.preferredKnowledgeBase as 'q' | 'bedrock') ?? defaults.preferredKnowledgeBase,
       mfa: (current as any)?.mfa ?? defaults.mfa,
@@ -207,14 +232,6 @@ export default function UpdateClientConfig() {
 
     // Only include other flags if changed vs effective current
     if (eff.devInstance !== devInstance) updates.devInstance = devInstance
-    if (eff.customDomain !== customDomain.trim()) {
-      if (customDomain.trim()) {
-        updates.customDomain = customDomain.trim()
-      } else if (current?.customDomain) {
-        // Remove customDomain if it was set but now cleared
-        updates.customDomain = undefined as any
-      }
-    }
     if (eff.allowBedrockQuotaSharing !== allowQuotaSharing) updates.allowBedrockQuotaSharing = allowQuotaSharing
     if (eff.bedrockAccount !== bedrockAccount.trim()) {
       if (bedrockAccount.trim()) {
@@ -228,6 +245,7 @@ export default function UpdateClientConfig() {
     if (eff.numaWorkspaceChat !== numaWorkspaceChat) updates.numaWorkspaceChat = numaWorkspaceChat
     if (eff.scheduling !== scheduling) updates.scheduling = scheduling
     if (eff.workspaceChatModelSelection !== workspaceChatModelSelection) updates.workspaceChatModelSelection = workspaceChatModelSelection
+    if (eff.numaOps !== numaOps) updates.numaOps = numaOps
     if (eff.mfa !== mfa) updates.mfa = mfa
 
     // Ensure these new fields are written even if default and currently missing
@@ -275,311 +293,226 @@ export default function UpdateClientConfig() {
 
   return (
     <div>
-      <Card className="border-0 shadow-sm">
+      {/* Client Selection - always visible above tabs */}
+      <Card className="border-0 shadow-sm mb-3">
         <Card.Header>
           <h5 className="mb-0">Update Client Config</h5>
           <p className="text-muted small mb-0 mt-2">
             Modify an existing client configuration. Values that differ from defaults are highlighted.
-            For advanced features like data sources or custom domains, contact a developer.
           </p>
         </Card.Header>
         <Card.Body>
-          <Form onSubmit={onSubmit}>
-            {/* Client Selection */}
-            <Form.Group className="mb-4">
-              <Form.Label className="fw-semibold">Select Client</Form.Label>
-              <ClientSelectGroup
-                value={selectedClientName}
-                onChange={setSelectedClientName}
-                clients={clients}
-              />
-              {selectedClient && (
-                <Form.Text className="text-muted">
-                  Account: {selectedClient.config.clientAccountId} |
-                  Type: {selectedClient.config.devInstance ? 'Development' : 'Production'}
-                </Form.Text>
-              )}
-            </Form.Group>
-
-            {selectedClientName && (
-              <>
-                {/* Core Settings Row */}
-                <Row className="mb-4">
-                  <Col md={6}>
-                    <ConfigField
-                      label="Region"
-                      value={region}
-                      defaultValue={defaults.qBusinessRegion}
-                      onChange={setRegion}
-                      type="select"
-                      options={REGION_OPTIONS}
-                      helpText="AWS region for deployment"
-                    />
-                  </Col>
-                  <Col md={6}>
-                    <ConfigField
-                      label="Development Instance"
-                      value={devInstance}
-                      defaultValue={defaults.devInstance}
-                      onChange={setDevInstance}
-                      type="switch"
-                      helpText="Mark as development/demo environment"
-                    />
-                  </Col>
-                </Row>
-
-                {/* Custom Domain Row */}
-                <Row className="mb-4">
-                  <Col md={12}>
-                    <ConfigField
-                      label="Custom Domain"
-                      value={customDomain}
-                      defaultValue=""
-                      onChange={setCustomDomain}
-                      type="text"
-                      helpText="Custom domain name (e.g., acme.numa.arcanum.ai). Leave empty for auto-generated domain based on client name."
-                    />
-                  </Col>
-                </Row>
-
-                {/* App Configuration Row */}
-                <Row className="mb-4">
-                  <Col md={6}>
-                    {devInstance && (
-                      <ConfigField
-                        label="All Apps (Dev)"
-                        value={allApps}
-                        defaultValue={true}
-                        onChange={setAllApps}
-                        type="switch"
-                        helpText="Enable all applications when using a development instance"
-                      />
-                    )}
-                    <ConfigField
-                      label="All Production Apps"
-                      value={allProdApps}
-                      defaultValue={defaults.allProdApps}
-                      onChange={setAllProdApps}
-                      type="switch"
-                      helpText="Enable all production applications"
-                    >
-                      <Form.Group className="mt-3">
-                        <Form.Label className="small">
-                          {allProdApps || allApps ? 'Included Apps' : 'Select Specific Apps'}
-                        </Form.Label>
-                        {allApps && (
-                          <Alert variant="info" className="py-2 px-3 mb-2 small">
-                            All apps are automatically enabled when 'All Apps (Dev)' is selected
-                          </Alert>
-                        )}
-                        {allProdApps && !allApps && (
-                          <Alert variant="info" className="py-2 px-3 mb-2 small">
-                            All production apps are automatically enabled when 'All Production Apps' is selected
-                          </Alert>
-                        )}
-                        <div className="d-flex flex-column gap-1">
-                          {ALL_APPS.map(a => {
-                            const isProdApp = PROD_APPS.includes(a)
-                            const isChecked = allApps || (allProdApps && isProdApp) || selectedApps.includes(a)
-                            const isDisabled = allApps || (allProdApps && isProdApp)
-                            return (
-                              <Form.Check
-                                key={a}
-                                type="checkbox"
-                                id={`app-${a}`}
-                                label={a}
-                                checked={isChecked}
-                                disabled={isDisabled}
-                                onChange={e => {
-                                  const checked = e.currentTarget.checked
-                                  setSelectedApps(prev =>
-                                    checked
-                                      ? Array.from(new Set([...prev, a]))
-                                      : prev.filter(x => x !== a)
-                                  )
-                                }}
-                              />
-                            )
-                          })}
-                        </div>
-                        <Form.Text className="text-muted">
-                          {allApps
-                            ? 'All applications are included'
-                            : allProdApps
-                            ? 'All production apps are included (dev apps can be selected individually)'
-                            : 'Tick one or more applications'}
-                        </Form.Text>
-                      </Form.Group>
-                    </ConfigField>
-                  </Col>
-                  <Col md={6}>
-                    <ConfigField
-                      label="Pipedream Integrations"
-                      value={pipedream}
-                      defaultValue={false}
-                      onChange={setPipedream}
-                      type="switch"
-                      helpText="Enable external API integrations"
-                    />
-                    <ConfigField
-                      label="Data Connectors"
-                      value={dataConnectorsEnabled}
-                      defaultValue={defaults.dataConnectorsEnabled}
-                      onChange={setDataConnectorsEnabled}
-                      type="switch"
-                      helpText="Show data connectors in the frontend"
-                    />
-                    <ConfigField
-                      label="Agents"
-                      value={agents}
-                      defaultValue={defaults.agents}
-                      onChange={setAgents}
-                      type="switch"
-                      helpText="Enable Agents UI and related functionality"
-                    />
-                    <ConfigField
-                      label="Allow Bedrock Quota Sharing"
-                      value={allowQuotaSharing}
-                      defaultValue={defaults.allowBedrockQuotaSharing}
-                      onChange={setAllowQuotaSharing}
-                      type="switch"
-                      helpText="When enabled, OTHER Numa accounts can use THIS account's Bedrock quotas"
-                    />
-                    <ConfigField
-                      label="Bedrock Account"
-                      value={bedrockAccount}
-                      defaultValue=""
-                      onChange={setBedrockAccount}
-                      type="text"
-                      helpText="AWS account ID that THIS account will use for Bedrock quotas (instead of its own). Leave empty to use this account's own quota."
-                    />
-                    <ConfigField
-                      label="Branding Provider"
-                      value={brandingProviderEnabled}
-                      defaultValue={defaults.brandingProviderEnabled}
-                      onChange={setBrandingProviderEnabled}
-                      type="switch"
-                      helpText="Enable custom branding UI and runtime asset loading"
-                    />
-                    <ConfigField
-                      label="Numa Workspace Chat"
-                      value={numaWorkspaceChat}
-                      defaultValue={defaults.numaWorkspaceChat}
-                      onChange={setNumaWorkspaceChat}
-                      type="switch"
-                      helpText="Feature flag for Numa Chat V2 testing"
-                    />
-                    <ConfigField
-                      label="Agent Scheduling"
-                      value={scheduling}
-                      defaultValue={defaults.scheduling}
-                      onChange={setScheduling}
-                      type="switch"
-                      helpText="Enable agent scheduling and notifications features"
-                    />
-                    <ConfigField
-                      label="Workspace Chat Model Selection"
-                      value={workspaceChatModelSelection}
-                      defaultValue={defaults.workspaceChatModelSelection}
-                      onChange={setWorkspaceChatModelSelection}
-                      type="switch"
-                      helpText="Allow users to select AI models in Chat V2"
-                    />
-                    <ConfigField
-                      label="Multi-Factor Authentication (MFA)"
-                      value={mfa}
-                      defaultValue={defaults.mfa}
-                      onChange={setMfa}
-                      type="switch"
-                      helpText="Require TOTP-based two-factor authentication for all users"
-                    />
-                    <ConfigField
-                      label="Provision Q Resources"
-                      value={provisionQResources}
-                      defaultValue={defaults.provisionQResources}
-                      onChange={setProvisionQResources}
-                      type="switch"
-                      helpText="Provision Q Business resources in this account"
-                    />
-                    <ConfigField
-                      label="Preferred Knowledge Base"
-                      value={preferredKnowledgeBase}
-                      defaultValue={defaults.preferredKnowledgeBase}
-                      onChange={(v: any) => setPreferredKnowledgeBase(v as 'q' | 'bedrock')}
-                      type="select"
-                      options={[
-                        { label: 'Bedrock', value: 'bedrock' },
-                        { label: 'Q Business', value: 'q' },
-                      ]}
-                      helpText="Select knowledge base service to use by default"
-                    />
-                  </Col>
-                </Row>
-
-                {error && <Alert variant="danger">{error}</Alert>}
-                {success && <Alert variant="success">{success}</Alert>}
-
-                {/* Actions */}
-                <div className="d-flex align-items-center gap-3 mb-4">
-                  <Button
-                    type="submit"
-                    disabled={working}
-                    className="px-4"
-                  >
-                    {working ? (
-                      <>
-                        <Spinner size="sm" className="me-2"/>
-                        Saving...
-                      </>
-                    ) : (
-                      'Save Changes'
-                    )}
-                  </Button>
-                  <div className="text-muted small">
-                    Only modified values will be updated in the configuration
-                  </div>
-                </div>
-
-                {/* Advanced Section */}
-                <div className="border-top pt-3">
-                  <Form.Check
-                    type="switch"
-                    id="showAdvanced"
-                    label="Advanced Configuration"
-                    checked={showAdvanced}
-                    onChange={e => setShowAdvanced(e.currentTarget.checked)}
-                    className="mb-3"
-                  />
-                  {showAdvanced && (
-                    <div className="bg-light rounded p-3">
-                      <Row>
-                        <Col md={6}>
-                          <Form.Group className="mb-3">
-                            <Form.Label>Standard User Features</Form.Label>
-                            <FeatureChecklist value={groupStandard} onChange={setGroupStandard} />
-                          </Form.Group>
-                        </Col>
-                        <Col md={6}>
-                          <Form.Group className="mb-3">
-                            <Form.Label>Admin User Features</Form.Label>
-                            <FeatureChecklist value={groupAdmin} onChange={setGroupAdmin} />
-                          </Form.Group>
-                        </Col>
-                      </Row>
-                      <div className="text-muted small">
-                        Leave unchanged to use system defaults. Modify only if you need to override the recommended groups.
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </>
+          <Form.Group>
+            <Form.Label className="fw-semibold">Select Client</Form.Label>
+            <ClientSelectGroup
+              value={selectedClientName}
+              onChange={setSelectedClientName}
+              clients={clients}
+            />
+            {selectedClient && (
+              <Form.Text className="text-muted">
+                Account: {selectedClient.config.clientAccountId} |
+                Type: {selectedClient.config.devInstance ? 'Development' : 'Production'}
+              </Form.Text>
             )}
-          </Form>
+          </Form.Group>
         </Card.Body>
       </Card>
 
-      {/* Developer JSON Replace */}
-      <Card className="border-0 shadow-sm mt-4">
+      {error && <Alert variant="danger" dismissible onClose={() => setError(null)}>{error}</Alert>}
+      {success && <Alert variant="success" dismissible onClose={() => setSuccess(null)}>{success}</Alert>}
+
+      {selectedClientName && (
+        <Tab.Container defaultActiveKey="config">
+          <Nav variant="tabs" className="mb-3">
+            <Nav.Item>
+              <Nav.Link eventKey="config">Deployment Configuration</Nav.Link>
+            </Nav.Item>
+            <Nav.Item>
+              <Nav.Link eventKey="metadata">Client Metadata</Nav.Link>
+            </Nav.Item>
+            <Nav.Item>
+              <Nav.Link eventKey="quotas">Quota Check</Nav.Link>
+            </Nav.Item>
+          </Nav>
+
+          <Tab.Content>
+            {/* Tab 1: Deployment Configuration */}
+            <Tab.Pane eventKey="config">
+              <Card className="border-0 shadow-sm">
+                <Card.Body>
+                  <Form onSubmit={onSubmit}>
+                    {/* Core Settings Row */}
+                    <Row className="mb-4">
+                      <Col md={6}>
+                        <ConfigField
+                          label="Region"
+                          value={region}
+                          defaultValue={defaults.qBusinessRegion}
+                          onChange={setRegion}
+                          type="select"
+                          options={REGION_OPTIONS}
+                          helpText="AWS region for deployment"
+                        />
+                      </Col>
+                      <Col md={6}>
+                        <ConfigField
+                          label="Development Instance"
+                          value={devInstance}
+                          defaultValue={defaults.devInstance}
+                          onChange={setDevInstance}
+                          type="switch"
+                          helpText="Mark as development/demo environment"
+                        />
+                      </Col>
+                    </Row>
+
+                    {/* App Configuration Row */}
+                    <Row className="mb-4">
+                      <Col md={6}>
+                        {devInstance && (
+                          <ConfigField
+                            label="All Apps (Dev)"
+                            value={allApps}
+                            defaultValue={true}
+                            onChange={setAllApps}
+                            type="switch"
+                            helpText="Enable all applications when using a development instance"
+                          />
+                        )}
+                        <ConfigField
+                          label="All Production Apps"
+                          value={allProdApps}
+                          defaultValue={defaults.allProdApps}
+                          onChange={setAllProdApps}
+                          type="switch"
+                          helpText="Enable all production applications"
+                        >
+                          <Form.Group className="mt-3">
+                            <Form.Label className="small">
+                              {allProdApps || allApps ? 'Included Apps' : 'Select Specific Apps'}
+                            </Form.Label>
+                            {allApps && (
+                              <Alert variant="info" className="py-2 px-3 mb-2 small">
+                                All apps are automatically enabled when &apos;All Apps (Dev)&apos; is selected
+                              </Alert>
+                            )}
+                            {allProdApps && !allApps && (
+                              <Alert variant="info" className="py-2 px-3 mb-2 small">
+                                All production apps are automatically enabled when &apos;All Production Apps&apos; is selected
+                              </Alert>
+                            )}
+                            <div className="d-flex flex-column gap-1">
+                              {ALL_APPS.map(a => {
+                                const isProdApp = PROD_APPS.includes(a)
+                                const isChecked = allApps || (allProdApps && isProdApp) || selectedApps.includes(a)
+                                const isDisabled = allApps || (allProdApps && isProdApp)
+                                return (
+                                  <Form.Check
+                                    key={a}
+                                    type="checkbox"
+                                    id={`app-${a}`}
+                                    label={a}
+                                    checked={isChecked}
+                                    disabled={isDisabled}
+                                    onChange={e => {
+                                      const checked = e.currentTarget.checked
+                                      setSelectedApps(prev =>
+                                        checked
+                                          ? Array.from(new Set([...prev, a]))
+                                          : prev.filter(x => x !== a)
+                                      )
+                                    }}
+                                  />
+                                )
+                              })}
+                            </div>
+                            <Form.Text className="text-muted">
+                              {allApps
+                                ? 'All applications are included'
+                                : allProdApps
+                                ? 'All production apps are included (dev apps can be selected individually)'
+                                : 'Tick one or more applications'}
+                            </Form.Text>
+                          </Form.Group>
+                        </ConfigField>
+                      </Col>
+                      <Col md={6}>
+                        <ConfigField label="Pipedream Integrations" value={pipedream} defaultValue={false} onChange={setPipedream} type="switch" helpText="Enable external API integrations" />
+                        <ConfigField label="Data Connectors" value={dataConnectorsEnabled} defaultValue={defaults.dataConnectorsEnabled} onChange={setDataConnectorsEnabled} type="switch" helpText="Show data connectors in the frontend" />
+                        <ConfigField label="Agents" value={agents} defaultValue={defaults.agents} onChange={setAgents} type="switch" helpText="Enable Agents UI and related functionality" />
+                        <ConfigField label="Allow Bedrock Quota Sharing" value={allowQuotaSharing} defaultValue={defaults.allowBedrockQuotaSharing} onChange={setAllowQuotaSharing} type="switch" helpText="When enabled, OTHER Numa accounts can use THIS account's Bedrock quotas" />
+                        <ConfigField label="Bedrock Account" value={bedrockAccount} defaultValue="" onChange={setBedrockAccount} type="text" helpText="AWS account ID that THIS account will use for Bedrock quotas (instead of its own). Leave empty to use this account's own quota." />
+                        <ConfigField label="Branding Provider" value={brandingProviderEnabled} defaultValue={defaults.brandingProviderEnabled} onChange={setBrandingProviderEnabled} type="switch" helpText="Enable custom branding UI and runtime asset loading" />
+                        <ConfigField label="Numa Workspace Chat" value={numaWorkspaceChat} defaultValue={defaults.numaWorkspaceChat} onChange={setNumaWorkspaceChat} type="switch" helpText="Feature flag for Numa Chat V2 testing" />
+                        <ConfigField label="Agent Scheduling" value={scheduling} defaultValue={defaults.scheduling} onChange={setScheduling} type="switch" helpText="Enable agent scheduling and notifications features" />
+                        <ConfigField label="Workspace Chat Model Selection" value={workspaceChatModelSelection} defaultValue={defaults.workspaceChatModelSelection} onChange={setWorkspaceChatModelSelection} type="switch" helpText="Allow users to select AI models in Chat V2" />
+                        <ConfigField label="Numa Ops" value={numaOps} defaultValue={defaults.numaOps} onChange={setNumaOps} type="switch" helpText="Enable Numa Ops (work management, kanban boards, CRM)" />
+                        <ConfigField label="Multi-Factor Authentication (MFA)" value={mfa} defaultValue={defaults.mfa} onChange={setMfa} type="switch" helpText="Require TOTP-based two-factor authentication for all users" />
+                        <ConfigField label="Provision Q Resources" value={provisionQResources} defaultValue={defaults.provisionQResources} onChange={setProvisionQResources} type="switch" helpText="Provision Q Business resources in this account" />
+                        <ConfigField
+                          label="Preferred Knowledge Base"
+                          value={preferredKnowledgeBase}
+                          defaultValue={defaults.preferredKnowledgeBase}
+                          onChange={(v: any) => setPreferredKnowledgeBase(v as 'q' | 'bedrock')}
+                          type="select"
+                          options={[
+                            { label: 'Bedrock', value: 'bedrock' },
+                            { label: 'Q Business', value: 'q' },
+                          ]}
+                          helpText="Select knowledge base service to use by default"
+                        />
+                      </Col>
+                    </Row>
+
+                    {/* Actions */}
+                    <div className="d-flex align-items-center gap-3 mb-4">
+                      <Button type="submit" disabled={working} className="px-4">
+                        {working ? (<><Spinner size="sm" className="me-2"/>Saving...</>) : 'Save Changes'}
+                      </Button>
+                      <div className="text-muted small">
+                        Only modified values will be updated in the configuration
+                      </div>
+                    </div>
+
+                    {/* Advanced Section */}
+                    <div className="border-top pt-3">
+                      <Form.Check
+                        type="switch"
+                        id="showAdvanced"
+                        label="Advanced Configuration"
+                        checked={showAdvanced}
+                        onChange={e => setShowAdvanced(e.currentTarget.checked)}
+                        className="mb-3"
+                      />
+                      {showAdvanced && (
+                        <div className="bg-light rounded p-3">
+                          <Row>
+                            <Col md={6}>
+                              <Form.Group className="mb-3">
+                                <Form.Label>Standard User Features</Form.Label>
+                                <FeatureChecklist value={groupStandard} onChange={setGroupStandard} />
+                              </Form.Group>
+                            </Col>
+                            <Col md={6}>
+                              <Form.Group className="mb-3">
+                                <Form.Label>Admin User Features</Form.Label>
+                                <FeatureChecklist value={groupAdmin} onChange={setGroupAdmin} />
+                              </Form.Group>
+                            </Col>
+                          </Row>
+                          <div className="text-muted small">
+                            Leave unchanged to use system defaults. Modify only if you need to override the recommended groups.
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </Form>
+                </Card.Body>
+              </Card>
+
+              {/* Developer JSON Replace */}
+              <Card className="border-0 shadow-sm mt-4">
         <Card.Header>
           <h6 className="mb-0">Replace Config from JSON (Developers)</h6>
           <p className="text-muted small mb-0 mt-2">
@@ -652,6 +585,114 @@ export default function UpdateClientConfig() {
           {jsonError && <Alert variant="danger" className="mt-3">{jsonError}</Alert>}
         </Card.Body>
       </Card>
+            </Tab.Pane>
+
+            {/* Tab 2: Client Metadata */}
+            <Tab.Pane eventKey="metadata">
+              <Card className="border-0 shadow-sm">
+                <Card.Header>
+                  <h6 className="mb-0">Client Metadata (Non-Deployment)</h6>
+                  <p className="text-muted small mb-0 mt-2">
+                    Track trial status, dates, and notes. This data is stored separately
+                    from the deployment config and does not affect infrastructure.
+                  </p>
+                </Card.Header>
+                <Card.Body>
+                  <Row>
+                    <Col md={4}>
+                      <Form.Group className="mb-3">
+                        <Form.Label className="fw-semibold">Status</Form.Label>
+                        <Form.Select value={metaStatus} onChange={e => setMetaStatus(e.target.value as ClientStatusValue)}>
+                          {CLIENT_STATUS_VALUES.map(s => (
+                            <option key={s} value={s}>{CLIENT_STATUS_DISPLAY[s].label}</option>
+                          ))}
+                        </Form.Select>
+                      </Form.Group>
+                    </Col>
+                    <Col md={4}>
+                      <Form.Group className="mb-3">
+                        <Form.Label className={metaStatus !== 'trial' ? 'text-muted' : ''}>Trial Start Date</Form.Label>
+                        <DatePicker
+                          selected={trialStartDate ? new Date(trialStartDate) : null}
+                          onChange={(date: Date | null) => setTrialStartDate(date ? date.toISOString().split('T')[0] : '')}
+                          dateFormat="yyyy-MM-dd"
+                          className="form-control"
+                          placeholderText="Select start date"
+                          disabled={metaStatus !== 'trial'}
+                          showMonthDropdown
+                          showYearDropdown
+                          dropdownMode="select"
+                        />
+                      </Form.Group>
+                    </Col>
+                    <Col md={4}>
+                      <Form.Group className="mb-3">
+                        <Form.Label className={metaStatus !== 'trial' ? 'text-muted' : ''}>Trial End Date</Form.Label>
+                        <DatePicker
+                          selected={trialEndDate ? new Date(trialEndDate) : null}
+                          onChange={(date: Date | null) => setTrialEndDate(date ? date.toISOString().split('T')[0] : '')}
+                          dateFormat="yyyy-MM-dd"
+                          className="form-control"
+                          placeholderText="Select end date"
+                          disabled={metaStatus !== 'trial'}
+                          showMonthDropdown
+                          showYearDropdown
+                          dropdownMode="select"
+                          minDate={trialStartDate ? new Date(trialStartDate) : undefined}
+                        />
+                      </Form.Group>
+                    </Col>
+                  </Row>
+                  <Form.Group className="mb-3">
+                    <Form.Label>Notes</Form.Label>
+                    <Form.Control
+                      as="textarea"
+                      rows={3}
+                      value={metaNotes}
+                      onChange={e => setMetaNotes(e.target.value)}
+                      placeholder="Free text notes about this client..."
+                    />
+                  </Form.Group>
+                  <Button
+                    variant="outline-primary"
+                    disabled={working}
+                    onClick={async () => {
+                      try {
+                        setWorking(true)
+                        await clientMetadataService.saveMetadata({
+                          clientName: selectedClientName,
+                          status: metaStatus,
+                          ...(trialStartDate ? { trialStartDate } : {}),
+                          ...(trialEndDate ? { trialEndDate } : {}),
+                          ...(metaNotes ? { notes: metaNotes } : {}),
+                        })
+                        setSuccess('Metadata saved')
+                      } catch (err) {
+                        setError(err instanceof Error ? err.message : 'Failed to save metadata')
+                      } finally {
+                        setWorking(false)
+                      }
+                    }}
+                  >
+                    {working ? (<><Spinner size="sm" className="me-2"/>Saving...</>) : 'Save Metadata'}
+                  </Button>
+                </Card.Body>
+              </Card>
+            </Tab.Pane>
+
+            {/* Tab 3: Quota Check */}
+            <Tab.Pane eventKey="quotas">
+              {selectedClient && (
+                <QuotaCheckCard
+                  accountId={selectedClient.config.clientAccountId}
+                  region={region}
+                  disabled={working}
+                />
+              )}
+            </Tab.Pane>
+          </Tab.Content>
+        </Tab.Container>
+      )}
 
     <Modal show={showPreview} onHide={() => setShowPreview(false)} size="lg" centered>
       <Modal.Header closeButton>
@@ -681,6 +722,17 @@ export default function UpdateClientConfig() {
               const current = clients.find(c => c.name === selectedClientName)?.config
               const finalUpdates = buildUpdates(current)
               await clientService.updateClientConfig(selectedClientName, finalUpdates)
+              try {
+                await clientMetadataService.saveMetadata({
+                  clientName: selectedClientName,
+                  status: metaStatus,
+                  ...(trialStartDate ? { trialStartDate } : {}),
+                  ...(trialEndDate ? { trialEndDate } : {}),
+                  ...(metaNotes ? { notes: metaNotes } : {}),
+                })
+              } catch (metaErr) {
+                console.error('Failed to save metadata alongside config update:', metaErr)
+              }
               setSuccess('Configuration updated')
               setShowPreview(false)
             } catch (err) {

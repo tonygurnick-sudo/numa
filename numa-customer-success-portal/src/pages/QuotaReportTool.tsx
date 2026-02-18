@@ -28,7 +28,7 @@ import type {
   QuotaType,
 } from '@/types/tools'
 
-const DEFAULT_TYPES: QuotaType[] = ['On-demand', 'Cross-region']
+const DEFAULT_TYPES: QuotaType[] = ['On-demand', 'Cross-region', 'Global cross-region']
 const DEFAULT_FAMILIES: ModelFamily[] = ['sonnet', 'opus', 'haiku', 'nova']
 const DEFAULT_METRICS: QuotaMetric[] = ['requests-per-minute', 'tokens-per-minute']
 
@@ -305,6 +305,17 @@ export default function QuotaReportTool() {
                         }}
                         disabled={isRunning}
                       />
+                      <Form.Check
+                        type="checkbox"
+                        label="Global cross-region"
+                        checked={parameters.types.includes('Global cross-region')}
+                        onChange={(e) => {
+                          const next = new Set(parameters.types)
+                          if (e.target.checked) next.add('Global cross-region'); else next.delete('Global cross-region')
+                          handleParamChange({ types: Array.from(next) as QuotaType[] })
+                        }}
+                        disabled={isRunning}
+                      />
                     </div>
                   </Form.Group>
 
@@ -444,6 +455,15 @@ export default function QuotaReportTool() {
             <h5 className="mb-0">Quota Report Table</h5>
           </Card.Header>
           <Card.Body>
+            {resultQuotas.some(q => q.isPriority) && (
+              <Alert variant="success" className="mb-3">
+                <strong>Key Models (4.5/4.6)</strong>{' '}
+                <span className="text-muted">
+                  {resultQuotas.filter(q => q.isPriority).map(q => q.Model).filter((v, i, a) => a.indexOf(v) === i).join(', ')}
+                  {' \u2014 '}{resultQuotas.filter(q => q.isPriority).length} quota column{resultQuotas.filter(q => q.isPriority).length !== 1 ? 's' : ''} highlighted in green
+                </span>
+              </Alert>
+            )}
             <div className="table-responsive" style={{ maxHeight: '60vh' }}>
               <table className="table table-sm table-hover align-middle">
                 <thead className="table-light" style={{ position: 'sticky', top: 0, zIndex: 1 }}>
@@ -455,7 +475,14 @@ export default function QuotaReportTool() {
                     <th>Dev?</th>
                     <th>Quota Sharing</th>
                     {quotaColumns.map((name, i) => (
-                      <th key={i} style={{ whiteSpace: 'nowrap' }}>{name}</th>
+                      <th
+                        key={i}
+                        style={{ whiteSpace: 'nowrap' }}
+                        className={resultQuotas[i]?.isPriority ? 'table-success fw-bold' : ''}
+                      >
+                        {resultQuotas[i]?.isPriority && <span className="me-1">*</span>}
+                        {name}
+                      </th>
                     ))}
                   </tr>
                 </thead>
@@ -469,7 +496,9 @@ export default function QuotaReportTool() {
                       <td>{row.isDev ? <Badge bg="info">Dev</Badge> : '—'}</td>
                       <td>{row.bedrockAccount ? <Badge bg="success" title={row.bedrockAccount}>Enabled</Badge> : '—'}</td>
                       {resultQuotas.map((q, j) => (
-                        <td key={j}>{row.values[q.QuotaCode] ?? ''}</td>
+                        <td key={j} className={q.isPriority ? 'fw-semibold' : ''}>
+                          {row.values[q.QuotaCode] ?? ''}
+                        </td>
                       ))}
                     </tr>
                   ))}

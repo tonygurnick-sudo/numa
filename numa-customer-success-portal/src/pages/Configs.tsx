@@ -3,7 +3,9 @@ import { Alert, Badge, Button, Card, Col, Dropdown, Form, InputGroup, Modal, Row
 import { Search, FileEarmarkText, Download } from 'react-bootstrap-icons'
 import { useNavigate } from 'react-router-dom'
 import { Client, getDefaultClientConfigValues } from '@/types'
+import type { ClientMetadata } from '@/types'
 import { clientService } from '@/services/clientService'
+import { clientMetadataService } from '@/services/clientMetadataService'
 import { ClientTableGroup } from '@/components/ClientTableGroup'
 import { FileExportService } from '@/utils/fileExport'
 import { listAllRecentDeployments } from '@/services/deploymentService'
@@ -15,6 +17,7 @@ export default function Configs() {
   const [error, setError] = useState<string | null>(null)
   const [search, setSearch] = useState('')
   const [selected, setSelected] = useState<Client | null>(null)
+  const [metadataMap, setMetadataMap] = useState<Map<string, ClientMetadata>>(new Map())
   const [showExportModal, setShowExportModal] = useState(false)
   const [exportFormat, setExportFormat] = useState<'csv' | 'json'>('csv')
 
@@ -23,8 +26,12 @@ export default function Configs() {
       setLoading(true)
       setError(null)
       try {
-        const data = await clientService.getAllClients()
+        const [data, metadata] = await Promise.all([
+          clientService.getAllClients(),
+          clientMetadataService.getAllMetadata(),
+        ])
         setClients(data)
+        setMetadataMap(metadata)
         if (data.length > 0) setSelected(data[0])
       } catch (e) {
         setError(e instanceof Error ? e.message : 'Failed to load clients')
@@ -91,9 +98,15 @@ export default function Configs() {
 
       if (format === 'csv') {
         // Prepare CSV data
-        const exportData = enrichedClients.map(client => ({
+        const exportData = enrichedClients.map(client => {
+          const clientMetadata = metadataMap.get(client.name)
+          return {
       name: client.name,
       status: client.status,
+      metadataStatus: clientMetadata?.status || '',
+      trialStartDate: clientMetadata?.trialStartDate || '',
+      trialEndDate: clientMetadata?.trialEndDate || '',
+      metadataNotes: clientMetadata?.notes || '',
       deploymentCount: client.deploymentCount,
       clientAccountId: client.config.clientAccountId,
       region: client.config.region,
@@ -122,7 +135,7 @@ export default function Configs() {
       teamsConfigs: JSON.stringify(client.config.teamsConfigs || []),
       s3Configs: JSON.stringify(client.config.s3Configs || []),
       budget: JSON.stringify(client.config.budget || null),
-    }))
+    }})
 
         // Define columns for CSV export
         const columns = exportData.length > 0 ? Object.keys(exportData[0]) as (keyof typeof exportData[0])[] : []
@@ -144,6 +157,7 @@ export default function Configs() {
           status: client.status,
           deploymentCount: client.deploymentCount,
           config: client.config,
+          metadata: metadataMap.get(client.name) || null,
           lastDeployment: client.lastDeployment,
         }))
 
@@ -242,6 +256,7 @@ export default function Configs() {
                   onSelectClient={setSelected}
                   onUpdateClient={(client) => navigate(`/tools/update-client-config?clientName=${encodeURIComponent(client.name)}`)}
                   searchTerm={search}
+                  metadataMap={metadataMap}
                 />
               </div>
             </Card.Body>
@@ -260,9 +275,19 @@ export default function Configs() {
             </Card.Header>
             <Card.Body>
               {selected ? (
-                <pre className="bg-light p-3 rounded" style={{ height: 'calc(100vh - 280px)', overflow: 'auto' }}>
+                <div style={{ height: 'calc(100vh - 280px)', overflow: 'auto' }}>
+                  <pre className="bg-light p-3 rounded">
 {JSON.stringify(selected.config, null, 2)}
-                </pre>
+                  </pre>
+                  {metadataMap.get(selected.name) && (
+                    <>
+                      <h6 className="text-muted mt-3">Client Metadata</h6>
+                      <pre className="bg-light p-3 rounded">
+{JSON.stringify(metadataMap.get(selected.name), null, 2)}
+                      </pre>
+                    </>
+                  )}
+                </div>
               ) : (
                 <div className="text-muted">Select a client to view its configuration.</div>
               )}

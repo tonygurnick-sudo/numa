@@ -54,7 +54,7 @@ export interface ToolResultFile {
 }
 
 // Quota Report specific interfaces
-export type QuotaType = 'On-demand' | 'Cross-region'
+export type QuotaType = 'On-demand' | 'Cross-region' | 'Global cross-region'
 export type ModelFamily = 'sonnet' | 'opus' | 'haiku' | 'nova'
 export type QuotaMetric = 'requests-per-minute' | 'tokens-per-minute'
 
@@ -65,6 +65,7 @@ export interface QuotaDescriptor {
   Type: QuotaType
   Metric: QuotaMetric
   InferenceProfile?: string  // e.g., 'US', 'Global', 'APAC' - to distinguish regional quotas
+  isPriority?: boolean  // True for Claude 4.5, 4.6+ models
 }
 
 export interface QuotaReportRow {
@@ -103,9 +104,17 @@ export interface QuotaReportResult {
   message?: string
 }
 
+// Client metadata fields included in usage report records for filtering/analysis
+interface ClientMetadataFields {
+  clientStatus?: string
+  clientTrialStart?: string
+  clientTrialEnd?: string
+  clientNotes?: string
+}
+
 // Usage Report specific interfaces
-export interface AppRunRecord {
-  clientName: string  // Added for multi-client support
+export interface AppRunRecord extends ClientMetadataFields {
+  clientName: string
   userId: string
   userEmail?: string
   appId: string
@@ -116,8 +125,8 @@ export interface AppRunRecord {
   status: string
 }
 
-export interface ChatMessageRecord {
-  clientName: string  // Added for multi-client support
+export interface ChatMessageRecord extends ClientMetadataFields {
+  clientName: string
   userId: string
   userEmail?: string
   month: string
@@ -133,10 +142,12 @@ export interface ChatMessageRecord {
   agentVersion?: number
   agentVisibility?: string
   isAgentConversation?: boolean
+  isScheduledRun?: boolean
+  scheduleId?: string
 }
 
-export interface UsageSummary {
-  clientName: string  // Added for multi-client support
+export interface UsageSummary extends ClientMetadataFields {
+  clientName: string
   userId: string
   userEmail?: string
   month: string
@@ -152,12 +163,13 @@ export type UsageReportType =
   | 'chat-messages'
   | 'agents'
   | 'agent-usage'
+  | 'scheduled-agent-usage'
   | 'integrations'
   | 'integration-chat-usage'
   | 'agent-integration-usage'
   | 'knowledge-bases'
 
-export interface KnowledgeBaseRecord {
+export interface KnowledgeBaseRecord extends ClientMetadataFields {
   clientName: string
   kbType: 'bedrock' | 'q-business' | 'unknown'
   name: string
@@ -173,7 +185,7 @@ export interface KnowledgeBaseRecord {
   notes?: string
 }
 
-export interface AgentRecord {
+export interface AgentRecord extends ClientMetadataFields {
   clientName: string
   agentId: string
   agentName: string
@@ -185,7 +197,7 @@ export interface AgentRecord {
   scope: 'workspace' | 'user'
 }
 
-export interface AgentUsageRecord {
+export interface AgentUsageRecord extends ClientMetadataFields {
   clientName: string
   agentId: string
   agentName: string
@@ -197,7 +209,7 @@ export interface AgentUsageRecord {
   agentType?: string
 }
 
-export interface IntegrationRecord {
+export interface IntegrationRecord extends ClientMetadataFields {
   clientName: string
   integration: string
   status: string
@@ -207,7 +219,7 @@ export interface IntegrationRecord {
   raw?: Record<string, unknown>
 }
 
-export interface IntegrationChatUsageRecord {
+export interface IntegrationChatUsageRecord extends ClientMetadataFields {
   clientName: string
   integration: string
   userId: string
@@ -217,7 +229,7 @@ export interface IntegrationChatUsageRecord {
   toolName?: string
 }
 
-export interface AgentIntegrationUsageRecord {
+export interface AgentIntegrationUsageRecord extends ClientMetadataFields {
   clientName: string
   integration: string
   userId: string
@@ -297,6 +309,7 @@ export interface UsageReportResult {
     totalAgentUsage?: number
     uniqueAgentUsers?: number
     agentConversationCount?: number
+    scheduledAgentConversationCount?: number
     totalIntegrations?: number
     totalIntegrationChats?: number
     totalAgentIntegrationRuns?: number
@@ -308,6 +321,7 @@ export interface UsageReportResult {
   summary?: UsageSummary[]
   agents?: AgentRecord[]
   agentUsage?: AgentUsageRecord[]
+  scheduledAgentUsage?: AgentUsageRecord[]
   integrations?: IntegrationRecord[]
   integrationChatUsage?: IntegrationChatUsageRecord[]
   agentIntegrationUsage?: AgentIntegrationUsageRecord[]

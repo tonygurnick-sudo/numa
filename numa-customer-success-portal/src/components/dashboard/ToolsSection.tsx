@@ -34,6 +34,8 @@ export function ToolsSection({
           'setup-nextgen-client',
           'setup-non-nextgen-client',
           'get-system-user-secret',
+          'bulk-update-client-config',
+          'support-docs-manager',
         ].includes(tool.id)
       ),
       priority: 1

@@ -9,6 +9,7 @@ import { S3Client, ListObjectsV2Command } from '@aws-sdk/client-s3'
 import { awsCredentialsService } from './awsCredentialsService'
 import type { AWSClientConfig } from './awsCredentialsService'
 import { clientService } from './clientService'
+import { clientMetadataService } from './clientMetadataService'
 import { DateUtils } from '@/utils/dateUtils'
 import { FileExportService } from '@/utils/fileExport'
 import type {
@@ -35,6 +36,7 @@ const ALL_USAGE_REPORT_TYPES: UsageReportType[] = [
   'chat-messages',
   'agents',
   'agent-usage',
+  'scheduled-agent-usage',
   'integrations',
   'integration-chat-usage',
   'agent-integration-usage',
@@ -47,6 +49,7 @@ interface ClientResult {
   chatMessages: ChatMessageRecord[]
   agents: AgentRecord[]
   agentUsage: AgentUsageRecord[]
+  scheduledAgentUsage: AgentUsageRecord[]
   integrations: IntegrationRecord[]
   integrationChatUsage: IntegrationChatUsageRecord[]
   agentIntegrationUsage: AgentIntegrationUsageRecord[]
@@ -83,8 +86,11 @@ export class UsageReportService {
 
       onProgress?.({ current: 5, total: 100, message: 'Loading client configurations...' })
 
-      // Get all clients
-      const allClients = await clientService.getAllClients()
+      // Get all clients and metadata
+      const [allClients, metadataMap] = await Promise.all([
+        clientService.getAllClients(),
+        clientMetadataService.getAllMetadata(),
+      ])
 
       // Determine which clients to process
       let clientsToProcess: Client[]
@@ -145,6 +151,7 @@ export class UsageReportService {
       const allChatMessages: ChatMessageRecord[] = []
       const allAgents: AgentRecord[] = []
       const allAgentUsage: AgentUsageRecord[] = []
+      const allScheduledAgentUsage: AgentUsageRecord[] = []
       const allIntegrations: IntegrationRecord[] = []
       const allIntegrationChatUsage: IntegrationChatUsageRecord[] = []
       const allAgentIntegrationUsage: AgentIntegrationUsageRecord[] = []
@@ -155,11 +162,34 @@ export class UsageReportService {
         allChatMessages.push(...result.chatMessages)
         allAgents.push(...result.agents)
         allAgentUsage.push(...result.agentUsage)
+        allScheduledAgentUsage.push(...result.scheduledAgentUsage)
         allIntegrations.push(...result.integrations)
         allIntegrationChatUsage.push(...result.integrationChatUsage)
         allAgentIntegrationUsage.push(...result.agentIntegrationUsage)
         allKnowledgeBases.push(...result.knowledgeBases)
       }
+
+      // Enrich all records with client metadata (status, trial dates, notes)
+      const enrichRecord = <T extends { clientName: string }>(record: T): T => {
+        const meta = metadataMap.get(record.clientName)
+        if (!meta) return record
+        return {
+          ...record,
+          clientStatus: meta.status,
+          clientTrialStart: meta.trialStartDate || '',
+          clientTrialEnd: meta.trialEndDate || '',
+          clientNotes: meta.notes || '',
+        }
+      }
+      allAppRuns.forEach((r, i) => { allAppRuns[i] = enrichRecord(r) })
+      allChatMessages.forEach((r, i) => { allChatMessages[i] = enrichRecord(r) })
+      allAgents.forEach((r, i) => { allAgents[i] = enrichRecord(r) })
+      allAgentUsage.forEach((r, i) => { allAgentUsage[i] = enrichRecord(r) })
+      allScheduledAgentUsage.forEach((r, i) => { allScheduledAgentUsage[i] = enrichRecord(r) })
+      allIntegrations.forEach((r, i) => { allIntegrations[i] = enrichRecord(r) })
+      allIntegrationChatUsage.forEach((r, i) => { allIntegrationChatUsage[i] = enrichRecord(r) })
+      allAgentIntegrationUsage.forEach((r, i) => { allAgentIntegrationUsage[i] = enrichRecord(r) })
+      allKnowledgeBases.forEach((r, i) => { allKnowledgeBases[i] = enrichRecord(r) })
 
       onProgress?.({ current: 90, total: 100, message: 'Generating summary and files...' })
 
@@ -177,6 +207,9 @@ export class UsageReportService {
         : undefined
       const totalAgentConversations = selectedReports.includes('agent-usage')
         ? allAgentUsage.reduce((sum, record) => sum + record.conversationCount, 0)
+        : undefined
+      const totalScheduledAgentConversations = selectedReports.includes('scheduled-agent-usage')
+        ? allScheduledAgentUsage.reduce((sum, record) => sum + record.conversationCount, 0)
         : undefined
       const totalIntegrationChats = selectedReports.includes('integration-chat-usage')
         ? allIntegrationChatUsage.length
@@ -210,6 +243,7 @@ export class UsageReportService {
             ? new Set(allAgentUsage.map(r => r.userId)).size
             : undefined,
           agentConversationCount: totalAgentConversations,
+          scheduledAgentConversationCount: totalScheduledAgentConversations,
           totalIntegrations: selectedReports.includes('integrations') ? allIntegrations.length : undefined,
           totalIntegrationChats,
           totalAgentIntegrationRuns,
@@ -221,6 +255,7 @@ export class UsageReportService {
         summary: selectedReports.includes('summary') ? summary : undefined,
         agents: selectedReports.includes('agents') ? allAgents : undefined,
         agentUsage: selectedReports.includes('agent-usage') ? allAgentUsage : undefined,
+        scheduledAgentUsage: selectedReports.includes('scheduled-agent-usage') ? allScheduledAgentUsage : undefined,
         integrations: selectedReports.includes('integrations') ? allIntegrations : undefined,
         integrationChatUsage: selectedReports.includes('integration-chat-usage') ? allIntegrationChatUsage : undefined,
         agentIntegrationUsage: selectedReports.includes('agent-integration-usage') ? allAgentIntegrationUsage : undefined,
@@ -242,6 +277,7 @@ export class UsageReportService {
             summary,
             agents: allAgents,
             agentUsage: allAgentUsage,
+            scheduledAgentUsage: allScheduledAgentUsage,
             integrations: allIntegrations,
             integrationChatUsage: allIntegrationChatUsage,
             agentIntegrationUsage: allAgentIntegrationUsage,
@@ -261,6 +297,7 @@ export class UsageReportService {
             summary,
             agents: allAgents,
             agentUsage: allAgentUsage,
+            scheduledAgentUsage: allScheduledAgentUsage,
             integrations: allIntegrations,
             integrationChatUsage: allIntegrationChatUsage,
             agentIntegrationUsage: allAgentIntegrationUsage,
@@ -282,6 +319,7 @@ export class UsageReportService {
         selectedReports.includes('summary') ? summary.length : 0,
         selectedReports.includes('agents') ? allAgents.length : 0,
         selectedReports.includes('agent-usage') ? allAgentUsage.length : 0,
+        selectedReports.includes('scheduled-agent-usage') ? allScheduledAgentUsage.length : 0,
         selectedReports.includes('integrations') ? allIntegrations.length : 0,
         selectedReports.includes('integration-chat-usage') ? allIntegrationChatUsage.length : 0,
         selectedReports.includes('agent-integration-usage') ? allAgentIntegrationUsage.length : 0,
@@ -327,9 +365,10 @@ export class UsageReportService {
     const dynamoClient = DynamoDBDocumentClient.from(new DynamoDBClient(awsClientConfig))
 
     const needsAppRuns = selectedReports.some(r => ['app-runs', 'summary'].includes(r))
-    const needsChatMessages = selectedReports.some(r => ['chat-messages', 'summary', 'agent-usage'].includes(r))
+    const needsChatMessages = selectedReports.some(r => ['chat-messages', 'summary', 'agent-usage', 'scheduled-agent-usage'].includes(r))
     const needsAgents = selectedReports.includes('agents')
     const needsAgentUsage = selectedReports.includes('agent-usage')
+    const needsScheduledAgentUsage = selectedReports.includes('scheduled-agent-usage')
     const needsIntegrations = selectedReports.includes('integrations')
     const needsIntegrationUsage = selectedReports.includes('integration-chat-usage') || selectedReports.includes('agent-integration-usage')
     const needsKnowledgeBases = selectedReports.includes('knowledge-bases')
@@ -361,6 +400,9 @@ export class UsageReportService {
     const agentUsage = needsAgentUsage
       ? this.extractAgentUsageFromMessages(chatMessages, clientName)
       : []
+    const scheduledAgentUsage = needsScheduledAgentUsage
+      ? this.extractScheduledAgentUsageFromMessages(chatMessages, clientName)
+      : []
     const { integrationChatUsage, agentIntegrationUsage } = needsIntegrationUsage
       ? this.extractIntegrationUsageFromMessages(chatMessages, clientName)
       : { integrationChatUsage: [], agentIntegrationUsage: [] }
@@ -375,6 +417,7 @@ export class UsageReportService {
       ...userChatMessages.map(m => m.userId),
       ...agents.map(a => a.createdBy),
       ...agentUsage.map(a => a.userId),
+      ...scheduledAgentUsage.map(a => a.userId),
       ...integrationChatUsage.map(i => i.userId),
       ...agentIntegrationUsage.map(i => i.userId),
     ].filter(Boolean))]
@@ -383,6 +426,7 @@ export class UsageReportService {
     let enrichedChatMessages = userChatMessages
     let enrichedAgents = agents
     let enrichedAgentUsage = agentUsage
+    let enrichedScheduledAgentUsage = scheduledAgentUsage
     let enrichedIntegrationChatUsage = integrationChatUsage
     let enrichedAgentIntegrationUsage = agentIntegrationUsage
 
@@ -395,6 +439,10 @@ export class UsageReportService {
         enrichedChatMessages = enrichedData.chatMessages
         enrichedAgents = enrichedData.agents
         enrichedAgentUsage = enrichedData.agentUsage
+        enrichedScheduledAgentUsage = scheduledAgentUsage.map(usage => ({
+          ...usage,
+          userEmail: userEmails[usage.userId] || `${usage.userId}@unknown`,
+        }))
         enrichedIntegrationChatUsage = integrationChatUsage.map(item => ({
           ...item,
           userEmail: userEmails[item.userId] || `${item.userId}@unknown`,
@@ -415,6 +463,7 @@ export class UsageReportService {
       chatMessages: enrichedChatMessages,
       agents: enrichedAgents,
       agentUsage: enrichedAgentUsage,
+      scheduledAgentUsage: enrichedScheduledAgentUsage,
       integrations,
       integrationChatUsage: enrichedIntegrationChatUsage,
       agentIntegrationUsage: enrichedAgentIntegrationUsage,
@@ -535,11 +584,12 @@ export class UsageReportService {
                 year: 'numeric',
               })
 
+              const conversationId = item.conversation_id || 'unknown'
               allMessages.push({
                 clientName,
                 userId: item.user_id || 'unknown',
                 month: DateUtils.getPeriodKey(messageDate, timeGranularity),
-                conversationId: item.conversation_id || 'unknown',
+                conversationId,
                 messageType: item.message_type || 'unknown',
                 role: item.role || 'unknown',
                 timestamp: nzDate,
@@ -551,6 +601,10 @@ export class UsageReportService {
                 agentVersion: item.agentVersion,
                 agentVisibility: item.agentVisibility || item.visibility,
                 isAgentConversation: item.isAgentConversation === true || item.isAgentConversation === 'true',
+                // Explicit field from new data, with fallback to conversation ID prefix for old data
+                isScheduledRun: item.isScheduledRun === true || item.isScheduledRun === 'true'
+                  || (typeof conversationId === 'string' && conversationId.startsWith('schedule-')),
+                scheduleId: item.scheduleId,
               })
             }
           }
@@ -954,6 +1008,56 @@ export class UsageReportService {
     for (const message of chatMessages) {
       if (message.messageType !== 'meta') continue
       if (!message.isAgentConversation) continue
+      if (message.isScheduledRun) continue // Exclude scheduled runs
+      if (!message.agentId) continue
+
+      const key = `${message.agentId}-${message.userId}-${message.month}`
+      const conversationId = message.conversationId || 'unknown'
+
+      if (!usageMap.has(key)) {
+        usageMap.set(key, {
+          record: {
+            clientName,
+            agentId: message.agentId,
+            agentName: message.agentTitle || 'Unknown Agent',
+            userId: message.userId,
+            userEmail: message.userEmail,
+            month: message.month,
+            conversationCount: 0,
+            visibility: message.agentVisibility,
+            agentType: message.agentType,
+          },
+          conversations: new Set<string>(),
+        })
+      }
+
+      const entry = usageMap.get(key)!
+      if (!entry.conversations.has(conversationId)) {
+        entry.conversations.add(conversationId)
+        entry.record.conversationCount += 1
+      }
+    }
+
+    return Array.from(usageMap.values())
+      .map(({ record }) => record)
+      .sort((a, b) => {
+        if (a.clientName !== b.clientName) return a.clientName.localeCompare(b.clientName)
+        if (a.agentName !== b.agentName) return a.agentName.localeCompare(b.agentName)
+        if (a.userId !== b.userId) return a.userId.localeCompare(b.userId)
+        return a.month.localeCompare(b.month)
+      })
+  }
+
+  private static extractScheduledAgentUsageFromMessages(
+    chatMessages: ChatMessageRecord[],
+    clientName: string
+  ): AgentUsageRecord[] {
+    const usageMap = new Map<string, { record: AgentUsageRecord; conversations: Set<string> }>()
+
+    for (const message of chatMessages) {
+      if (message.messageType !== 'meta') continue
+      if (!message.isAgentConversation) continue
+      if (!message.isScheduledRun) continue // Only scheduled runs
       if (!message.agentId) continue
 
       const key = `${message.agentId}-${message.userId}-${message.month}`
@@ -1185,6 +1289,10 @@ export class UsageReportService {
           chatMessages: 0,
           appRunsByApp: {},
           chatMessagesByType: {},
+          clientStatus: run.clientStatus,
+          clientTrialStart: run.clientTrialStart,
+          clientTrialEnd: run.clientTrialEnd,
+          clientNotes: run.clientNotes,
         })
       }
 
@@ -1207,6 +1315,10 @@ export class UsageReportService {
           chatMessages: 0,
           appRunsByApp: {},
           chatMessagesByType: {},
+          clientStatus: message.clientStatus,
+          clientTrialStart: message.clientTrialStart,
+          clientTrialEnd: message.clientTrialEnd,
+          clientNotes: message.clientNotes,
         })
       }
 

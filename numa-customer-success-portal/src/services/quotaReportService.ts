@@ -343,6 +343,7 @@ export class QuotaReportService {
             Type: classified.type,
             Metric: classified.metric,
             InferenceProfile: classified.inferenceProfile,
+            isPriority: this.isPriorityModel(classified.label),
           })
         }
       }
@@ -356,9 +357,14 @@ export class QuotaReportService {
       return 3 // Nova and others
     }
     const metricRank = (m: QuotaMetric): number => (m === 'requests-per-minute' ? 0 : 1)
-    const typeRank = (t: QuotaType): number => (t === 'On-demand' ? 0 : 1)
+    const typeRank = (t: QuotaType): number => (t === 'On-demand' ? 0 : t === 'Cross-region' ? 1 : 2)
 
     found.sort((a, b) => {
+      // Priority models (4.5/4.6+) first
+      const pa = a.isPriority ? 0 : 1
+      const pb = b.isPriority ? 0 : 1
+      if (pa !== pb) return pa - pb
+
       const fa = familyRank(a.Model)
       const fb = familyRank(b.Model)
       if (fa !== fb) return fa - fb
@@ -378,7 +384,7 @@ export class QuotaReportService {
    */
   private static classifyQuota(name: string): ClassifiedQuota | null {
     const raw = name
-    const type: QuotaType = /^On-demand/i.test(name) ? 'On-demand' : 'Cross-region'
+    const type: QuotaType = /^On-demand/i.test(name) ? 'On-demand' : /^Global\s+cross-region/i.test(name) ? 'Global cross-region' : 'Cross-region'
     const metric: QuotaMetric = /tokens per minute/i.test(name) ? 'tokens-per-minute' : 'requests-per-minute'
     const inferenceProfile = this.extractInferenceProfile(name)
 
@@ -481,6 +487,75 @@ export class QuotaReportService {
       }
     }
     return label
+  }
+
+  /**
+   * Check if a model label represents a priority (latest generation) model.
+   * Models with version 4.5 or higher are considered priority.
+   */
+  private static isPriorityModel(label: string): boolean {
+    const versionMatch = label.match(/\b(\d+)\.(\d+)\b/)
+    if (!versionMatch) return false
+    const major = parseInt(versionMatch[1], 10)
+    const minor = parseInt(versionMatch[2], 10)
+    return major > 4 || (major === 4 && minor >= 5)
+  }
+
+  /**
+   * Quick quota check for a single account/region. Discovers quotas and fetches
+   * their values. Lighter-weight than generateReport() — no multi-account grouping,
+   * no CSV export, no client-service lookups.
+   */
+  static async checkSingleAccountQuotas(args: {
+    accountId: string
+    region: string
+    families?: ModelFamily[]
+    onProgress?: (progress: ToolProgress) => void
+  }): Promise<{
+    quotas: QuotaDescriptor[]
+    values: Record<string, number | null>
+  }> {
+    const { accountId, region, families = ['sonnet', 'opus', 'haiku'], onProgress } = args
+
+    onProgress?.({ current: 0, total: 100, message: 'Discovering quota definitions...' })
+
+    const quotas = await this.discoverQuotasInClient({
+      families,
+      types: ['On-demand', 'Cross-region'],
+      metrics: ['requests-per-minute', 'tokens-per-minute'],
+      accountId,
+      region,
+    })
+
+    if (quotas.length === 0) {
+      onProgress?.({ current: 100, total: 100, message: 'No quotas found' })
+      return { quotas: [], values: {} }
+    }
+
+    onProgress?.({ current: 30, total: 100, message: 'Fetching quota values...' })
+
+    const values: Record<string, number | null> = {}
+    const awsConfig = await awsCredentialsService.getClientConfig(accountId, region)
+    const sq = new ServiceQuotas(awsConfig)
+
+    for (let i = 0; i < quotas.length; i++) {
+      const q = quotas[i]
+      try {
+        const res = await sq.send(
+          new GetServiceQuotaCommand({ ServiceCode: SERVICE_CODE, QuotaCode: q.QuotaCode })
+        )
+        values[q.QuotaCode] = res.Quota?.Value ?? null
+      } catch {
+        values[q.QuotaCode] = null
+      }
+      onProgress?.({
+        current: 30 + Math.floor(((i + 1) / quotas.length) * 70),
+        total: 100,
+        message: `Fetched ${i + 1}/${quotas.length} quotas`,
+      })
+    }
+
+    return { quotas, values }
   }
 
   private static async runWithConcurrency(tasks: Array<() => Promise<void>>, limit: number): Promise<void> {
