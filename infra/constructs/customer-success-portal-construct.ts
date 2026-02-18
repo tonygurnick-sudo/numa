@@ -88,6 +88,7 @@ export class CustomerSuccessPortalConstruct extends Construct {
   readonly userPoolClient: CognitoUserPoolClient;
   readonly identityPool: CognitoIdentityPool;
   readonly activityTable: DynamodbTable;
+  readonly clientMetadataTable: DynamodbTable;
   /** Expose the authenticated role for further policy attachments if needed */
   readonly authenticatedRole: IamRole;
 
@@ -120,6 +121,25 @@ export class CustomerSuccessPortalConstruct extends Construct {
           hashKey: 'type',
           rangeKey: 'timestamp',
           projectionType: 'ALL',
+        },
+      ],
+      pointInTimeRecovery: {
+        enabled: true,
+      },
+      lifecycle: {
+        preventDestroy: true,
+      },
+    });
+
+    // Client metadata table for non-deployment data (trial status, dates, notes)
+    this.clientMetadataTable = new DynamodbTable(this, 'client-metadata-table', {
+      name: 'numa-client-metadata',
+      billingMode: 'PAY_PER_REQUEST',
+      hashKey: 'clientName',
+      attribute: [
+        {
+          name: 'clientName',
+          type: 'S',
         },
       ],
       pointInTimeRecovery: {
@@ -389,6 +409,18 @@ export class CustomerSuccessPortalConstruct extends Construct {
       {
         effect: 'Allow',
         actions: [
+          'dynamodb:GetItem',
+          'dynamodb:Query',
+          'dynamodb:Scan',
+          'dynamodb:PutItem',
+          'dynamodb:UpdateItem',
+          'dynamodb:DeleteItem',
+        ],
+        resources: [this.clientMetadataTable.arn],
+      },
+      {
+        effect: 'Allow',
+        actions: [
           'ecr:DescribeImages',
           'ecr:ListImages',
           // Optional for future repository metadata reads from UI
@@ -573,10 +605,11 @@ export class CustomerSuccessPortalConstruct extends Construct {
             default: 'binary/octet-stream',
           }[source.split('.')?.pop() ?? 'default'];
 
-          new S3Object(this, `portal-file-${source.replace(/[^a-zA-Z0-9]/g, '-')}`, {
+          const relativePath = path.relative(frontendPath, source);
+          new S3Object(this, `portal-file-${relativePath.replace(/[^a-zA-Z0-9]/g, '-')}`, {
             bucket: this.frontendBucket.bucket,
             contentType,
-            key: path.relative(frontendPath, source),
+            key: relativePath,
             source,
             sourceHash: Fn.filemd5(source),
           });
@@ -597,6 +630,7 @@ export class CustomerSuccessPortalConstruct extends Construct {
       ECR_REPOSITORY_URI: 'https://826326270637.dkr.ecr.ap-southeast-2.amazonaws.com/numa-deploy',
       CLIENT_CONFIG_TABLE: props.clientConfigTable.name,
       ACTIVITY_TABLE: this.activityTable.name,
+      CLIENT_METADATA_TABLE: this.clientMetadataTable.name,
     };
 
     if (props.deploymentsTableName) {

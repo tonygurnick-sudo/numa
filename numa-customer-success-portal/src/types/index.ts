@@ -85,6 +85,7 @@ export const clientConfigSchema = z.object({
   numaWorkspaceChat: z.boolean().optional(), // default: false
   scheduling: z.boolean().optional(), // default: false
   workspaceChatModelSelection: z.boolean().optional(), // default: false
+  numaOps: z.boolean().optional(), // default: false
 
   // Data source configurations
   webCrawlerConfigs: z.array(webCrawlerConfigSchema).optional(),
@@ -102,6 +103,39 @@ export const clientConfigSchema = z.object({
 })
 
 export type ClientConfig = z.infer<typeof clientConfigSchema>
+
+// Client metadata (non-deployment) — stored in a separate table from client config
+export const CLIENT_STATUS_VALUES = ['trial', 'paying', 'partner', 'internal', 'other', 'unclear'] as const
+export type ClientStatusValue = typeof CLIENT_STATUS_VALUES[number]
+
+export const clientMetadataSchema = z.object({
+  clientName: z.string(),
+  status: z.enum(CLIENT_STATUS_VALUES),
+  trialStartDate: z.string().optional(),
+  trialEndDate: z.string().optional(),
+  notes: z.string().optional(),
+  updatedAt: z.string().optional(),
+  updatedBy: z.string().optional(),
+})
+
+export type ClientMetadata = z.infer<typeof clientMetadataSchema>
+
+export const CLIENT_STATUS_DISPLAY: Record<ClientStatusValue, { label: string; variant: string }> = {
+  trial: { label: 'Trial', variant: 'warning' },
+  paying: { label: 'Paying', variant: 'success' },
+  partner: { label: 'Partner', variant: 'info' },
+  internal: { label: 'Internal', variant: 'primary' },
+  other: { label: 'Other', variant: 'secondary' },
+  unclear: { label: 'Unclear', variant: 'light' },
+}
+
+export function getStatusBadgeInfo(metadata?: ClientMetadata): { label: string; variant: string } | null {
+  if (!metadata) return null
+  if (metadata.status === 'trial' && metadata.trialEndDate && new Date(metadata.trialEndDate) < new Date()) {
+    return { label: 'Trial - Expired', variant: 'danger' }
+  }
+  return CLIENT_STATUS_DISPLAY[metadata.status]
+}
 
 // Helper to get default values for display
 export const getDefaultClientConfigValues = () => ({
@@ -125,6 +159,7 @@ export const getDefaultClientConfigValues = () => ({
   numaWorkspaceChat: false,
   scheduling: false,
   workspaceChatModelSelection: false,
+  numaOps: false,
   mfa: false,
 })
 

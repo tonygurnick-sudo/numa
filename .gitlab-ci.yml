@@ -391,7 +391,7 @@ node-build:
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
     - changes:
         paths:
-          - lambdas/node/**/*
+          - $BUILD_DIR/**/*
           - lib/**/*
           - style/**/*
           - .gitlab-ci.yml

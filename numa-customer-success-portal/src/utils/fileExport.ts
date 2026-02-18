@@ -78,7 +78,8 @@ export class FileExportService {
         parts.push(q.InferenceProfile)
       }
       parts.push(metricSuffix(q.Metric))
-      return parts.join('-')
+      const header = parts.join('-')
+      return q.isPriority ? `* ${header}` : header
     }
     const headers = [
       'accountName',
@@ -129,6 +130,7 @@ export class FileExportService {
       summary: UsageSummary[]
       agents: AgentRecord[]
       agentUsage: AgentUsageRecord[]
+      scheduledAgentUsage: AgentUsageRecord[]
       integrations: IntegrationRecord[]
       integrationChatUsage: IntegrationChatUsageRecord[]
       agentIntegrationUsage: AgentIntegrationUsageRecord[]
@@ -145,6 +147,7 @@ export class FileExportService {
       summary,
       agents,
       agentUsage,
+      scheduledAgentUsage,
       integrations,
       integrationChatUsage,
       agentIntegrationUsage,
@@ -154,8 +157,8 @@ export class FileExportService {
     const files: ToolResultFile[] = []
 
     if (selectedReports.includes('app-runs')) {
-      const columns = ['clientName', 'userId', 'userEmail', 'appId', 'appName', 'month', 'jobId', 'startedAt', 'status'] as const
-      const headers = ['Client', 'User ID', 'User Email', 'App ID', 'App Name', 'Date', 'Job ID', 'Started At', 'Status']
+      const columns = ['clientName', 'clientStatus', 'clientTrialStart', 'clientTrialEnd', 'clientNotes', 'userId', 'userEmail', 'appId', 'appName', 'month', 'jobId', 'startedAt', 'status'] as const
+      const headers = ['Client', 'Client Status', 'Trial Start', 'Trial End', 'Client Notes', 'User ID', 'User Email', 'App ID', 'App Name', 'Date', 'Job ID', 'Started At', 'Status']
       const content = appRuns.length > 0
         ? this.arrayToCSV(appRuns, columns, headers)
         : headers.join(',')
@@ -169,8 +172,8 @@ export class FileExportService {
     }
 
     if (selectedReports.includes('chat-messages')) {
-      const columns = ['clientName', 'userId', 'userEmail', 'month', 'conversationId', 'messageType', 'role', 'timestamp'] as const
-      const headers = ['Client', 'User ID', 'User Email', 'Date', 'Conversation ID', 'Message Type', 'Role', 'Timestamp']
+      const columns = ['clientName', 'clientStatus', 'clientTrialStart', 'clientTrialEnd', 'clientNotes', 'userId', 'userEmail', 'month', 'conversationId', 'messageType', 'role', 'timestamp'] as const
+      const headers = ['Client', 'Client Status', 'Trial Start', 'Trial End', 'Client Notes', 'User ID', 'User Email', 'Date', 'Conversation ID', 'Message Type', 'Role', 'Timestamp']
       const content = chatMessages.length > 0
         ? this.arrayToCSV(chatMessages, columns, headers)
         : headers.join(',')
@@ -184,7 +187,7 @@ export class FileExportService {
     }
 
     if (selectedReports.includes('summary')) {
-      const headers = ['Client', 'User ID', 'User Email', 'Date', 'App Runs', 'Chat Messages', 'App Runs by App', 'Chat Messages by Type']
+      const headers = ['Client', 'Client Status', 'Trial Start', 'Trial End', 'Client Notes', 'User ID', 'User Email', 'Date', 'App Runs', 'Chat Messages', 'App Runs by App', 'Chat Messages by Type']
       let content: string
       if (summary.length > 0) {
         const summaryData = summary.map(s => ({
@@ -194,7 +197,7 @@ export class FileExportService {
         }))
         content = this.arrayToCSV(
           summaryData,
-          ['clientName', 'userId', 'userEmail', 'month', 'appRuns', 'chatMessages', 'appRunsByApp', 'chatMessagesByType'],
+          ['clientName', 'clientStatus', 'clientTrialStart', 'clientTrialEnd', 'clientNotes', 'userId', 'userEmail', 'month', 'appRuns', 'chatMessages', 'appRunsByApp', 'chatMessagesByType'],
           headers,
         )
       } else {
@@ -210,8 +213,8 @@ export class FileExportService {
     }
 
     if (selectedReports.includes('agents')) {
-      const columns = ['clientName', 'agentId', 'agentName', 'visibility', 'agentType', 'createdBy', 'createdByEmail', 'createdAt', 'scope'] as const
-      const headers = ['Client', 'Agent ID', 'Agent Name', 'Visibility', 'Agent Type', 'Created By (ID)', 'Created By (Email)', 'Created At', 'Scope']
+      const columns = ['clientName', 'clientStatus', 'clientTrialStart', 'clientTrialEnd', 'clientNotes', 'agentId', 'agentName', 'visibility', 'agentType', 'createdBy', 'createdByEmail', 'createdAt', 'scope'] as const
+      const headers = ['Client', 'Client Status', 'Trial Start', 'Trial End', 'Client Notes', 'Agent ID', 'Agent Name', 'Visibility', 'Agent Type', 'Created By (ID)', 'Created By (Email)', 'Created At', 'Scope']
       const content = agents.length > 0
         ? this.arrayToCSV(agents, columns, headers)
         : headers.join(',')
@@ -225,8 +228,8 @@ export class FileExportService {
     }
 
     if (selectedReports.includes('agent-usage')) {
-      const columns = ['clientName', 'agentId', 'agentName', 'userId', 'userEmail', 'month', 'conversationCount', 'visibility', 'agentType'] as const
-      const headers = ['Client', 'Agent ID', 'Agent Name', 'User ID', 'User Email', 'Date', 'Conversations', 'Visibility', 'Agent Type']
+      const columns = ['clientName', 'clientStatus', 'clientTrialStart', 'clientTrialEnd', 'clientNotes', 'agentId', 'agentName', 'userId', 'userEmail', 'month', 'conversationCount', 'visibility', 'agentType'] as const
+      const headers = ['Client', 'Client Status', 'Trial Start', 'Trial End', 'Client Notes', 'Agent ID', 'Agent Name', 'User ID', 'User Email', 'Date', 'Conversations', 'Visibility', 'Agent Type']
       const content = agentUsage.length > 0
         ? this.arrayToCSV(agentUsage, columns, headers)
         : headers.join(',')
@@ -239,9 +242,24 @@ export class FileExportService {
       })
     }
 
+    if (selectedReports.includes('scheduled-agent-usage')) {
+      const columns = ['clientName', 'clientStatus', 'clientTrialStart', 'clientTrialEnd', 'clientNotes', 'agentId', 'agentName', 'userId', 'userEmail', 'month', 'conversationCount', 'visibility', 'agentType'] as const
+      const headers = ['Client', 'Client Status', 'Trial Start', 'Trial End', 'Client Notes', 'Agent ID', 'Agent Name', 'User ID', 'User Email', 'Date', 'Conversations', 'Visibility', 'Agent Type']
+      const content = scheduledAgentUsage.length > 0
+        ? this.arrayToCSV(scheduledAgentUsage, columns, headers)
+        : headers.join(',')
+
+      files.push({
+        name: `${filePrefix}-scheduled-agent-usage-${period}-${timestamp}.csv`,
+        content,
+        mimeType: 'text/csv',
+        size: new Blob([content]).size,
+      })
+    }
+
     if (selectedReports.includes('integrations')) {
-      const columns = ['clientName', 'integration', 'status', 'denyTools', 'updatedAt', 'updatedBy'] as const
-      const headers = ['Client', 'Integration', 'Status', 'Deny Tools', 'Updated At', 'Updated By']
+      const columns = ['clientName', 'clientStatus', 'clientTrialStart', 'clientTrialEnd', 'clientNotes', 'integration', 'status', 'denyTools', 'updatedAt', 'updatedBy'] as const
+      const headers = ['Client', 'Client Status', 'Trial Start', 'Trial End', 'Client Notes', 'Integration', 'Status', 'Deny Tools', 'Updated At', 'Updated By']
       const flattened = integrations.map(i => ({
         ...i,
         denyTools: i.denyTools?.join('; ') || '',
@@ -259,8 +277,8 @@ export class FileExportService {
     }
 
     if (selectedReports.includes('integration-chat-usage')) {
-      const columns = ['clientName', 'integration', 'userId', 'userEmail', 'conversationId', 'month', 'toolName'] as const
-      const headers = ['Client', 'Integration', 'User ID', 'User Email', 'Conversation ID', 'Date', 'Tool Name']
+      const columns = ['clientName', 'clientStatus', 'clientTrialStart', 'clientTrialEnd', 'clientNotes', 'integration', 'userId', 'userEmail', 'conversationId', 'month', 'toolName'] as const
+      const headers = ['Client', 'Client Status', 'Trial Start', 'Trial End', 'Client Notes', 'Integration', 'User ID', 'User Email', 'Conversation ID', 'Date', 'Tool Name']
       const content = integrationChatUsage.length > 0
         ? this.arrayToCSV(integrationChatUsage, columns, headers)
         : headers.join(',')
@@ -274,8 +292,8 @@ export class FileExportService {
     }
 
     if (selectedReports.includes('agent-integration-usage')) {
-      const columns = ['clientName', 'integration', 'userId', 'userEmail', 'agentId', 'agentName', 'conversationId', 'month', 'toolName'] as const
-      const headers = ['Client', 'Integration', 'User ID', 'User Email', 'Agent ID', 'Agent Name', 'Conversation ID', 'Date', 'Tool Name']
+      const columns = ['clientName', 'clientStatus', 'clientTrialStart', 'clientTrialEnd', 'clientNotes', 'integration', 'userId', 'userEmail', 'agentId', 'agentName', 'conversationId', 'month', 'toolName'] as const
+      const headers = ['Client', 'Client Status', 'Trial Start', 'Trial End', 'Client Notes', 'Integration', 'User ID', 'User Email', 'Agent ID', 'Agent Name', 'Conversation ID', 'Date', 'Tool Name']
       const content = agentIntegrationUsage.length > 0
         ? this.arrayToCSV(agentIntegrationUsage, columns, headers)
         : headers.join(',')
@@ -289,8 +307,8 @@ export class FileExportService {
     }
 
     if (selectedReports.includes('knowledge-bases')) {
-      const columns = ['clientName', 'kbType', 'scope', 'name', 'kbId', 'bucket', 'prefix', 'fileCount', 'createdBy', 'isDefault', 'isShared', 'isPublic', 'notes'] as const
-      const headers = ['Client', 'KB Type', 'Scope', 'Name', 'KB ID', 'Bucket', 'Prefix', 'File Count', 'Created By', 'Is Default', 'Is Shared', 'Is Public', 'Notes']
+      const columns = ['clientName', 'clientStatus', 'clientTrialStart', 'clientTrialEnd', 'clientNotes', 'kbType', 'scope', 'name', 'kbId', 'bucket', 'prefix', 'fileCount', 'createdBy', 'isDefault', 'isShared', 'isPublic', 'notes'] as const
+      const headers = ['Client', 'Client Status', 'Trial Start', 'Trial End', 'Client Notes', 'KB Type', 'Scope', 'Name', 'KB ID', 'Bucket', 'Prefix', 'File Count', 'Created By', 'Is Default', 'Is Shared', 'Is Public', 'Notes']
       const content = knowledgeBases.length > 0
         ? this.arrayToCSV(knowledgeBases, columns, headers)
         : headers.join(',')
@@ -316,6 +334,7 @@ export class FileExportService {
       summary: UsageSummary[]
       agents: AgentRecord[]
       agentUsage: AgentUsageRecord[]
+      scheduledAgentUsage: AgentUsageRecord[]
       integrations: IntegrationRecord[]
       integrationChatUsage: IntegrationChatUsageRecord[]
       agentIntegrationUsage: AgentIntegrationUsageRecord[]
@@ -333,6 +352,7 @@ export class FileExportService {
       summary,
       agents,
       agentUsage,
+      scheduledAgentUsage,
       integrations,
       integrationChatUsage,
       agentIntegrationUsage,
@@ -362,6 +382,9 @@ export class FileExportService {
     if (selectedReports.includes('knowledge-bases')) {
       knowledgeBases.forEach(a => clientNames.add(a.clientName))
     }
+    if (selectedReports.includes('scheduled-agent-usage')) {
+      scheduledAgentUsage.forEach(a => clientNames.add(a.clientName))
+    }
 
     const uniqueUsers = selectedReports.some(r => ['app-runs', 'chat-messages', 'summary'].includes(r))
       ? new Set([...appRuns.map(r => r.userId), ...chatMessages.map(m => m.userId)]).size
@@ -386,6 +409,9 @@ export class FileExportService {
       totalAgentUsage: selectedReports.includes('agent-usage') ? agentUsage.length : undefined,
       uniqueAgentUsers,
       agentConversationCount,
+      scheduledAgentConversationCount: selectedReports.includes('scheduled-agent-usage')
+        ? scheduledAgentUsage.reduce((sum, record) => sum + record.conversationCount, 0)
+        : undefined,
       totalIntegrations: selectedReports.includes('integrations') ? integrations.length : undefined,
       totalIntegrationChats: selectedReports.includes('integration-chat-usage') ? integrationChatUsage.length : undefined,
       totalAgentIntegrationRuns: selectedReports.includes('agent-integration-usage') ? agentIntegrationUsage.length : undefined,
@@ -413,6 +439,9 @@ export class FileExportService {
     }
     if (selectedReports.includes('agent-usage')) {
       exportData.agentUsage = agentUsage
+    }
+    if (selectedReports.includes('scheduled-agent-usage')) {
+      exportData.scheduledAgentUsage = scheduledAgentUsage
     }
     if (selectedReports.includes('integrations')) {
       exportData.integrations = integrations
