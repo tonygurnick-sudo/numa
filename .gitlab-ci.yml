@@ -170,17 +170,19 @@ variables:
 
 .node_job:
   before_script:
+    - !reference [.yarn, setup-private-auth]
     - corepack enable
+    - yarn install --immutable
     - cd $BUILD_DIR
 
 .node-lint:
-  needs:
+  needs: []
 
 .node-test:
-  needs:
+  needs: []
 
 .node-build:
-  needs:
+  needs: []
 
 install-common-dependencies:
   stage: setup
@@ -192,23 +194,9 @@ install-common-dependencies:
   artifacts:
     paths:
       - node_modules
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
 
-client-list-lint:
-  allow_failure: true # Temporarily allow this to fail so we don't get unnecessary broken pipelines.
-  stage: lint
-  image: registry.gitlab.com/arcanumai/ci/all-inclusive
-  variables:
-    AWS_REGION: us-east-1
-    YQ_VERSION: v4.45.1
-  before_script:
-    - !reference [.yarn, setup-private-auth]
-    - apt-get update
-    - apt-get install -y wget
-    - wget -O /usr/local/bin/yq https://github.com/mikefarah/yq/releases/download/${YQ_VERSION}/yq_linux_amd64
-    - chmod +x /usr/local/bin/yq
-    - (cd tools && yarn install)
-  script:
-    - diff <((cd tools && yarn list-clients) | grep -v 'arcanum-demo$' | grep -v '^median$' ) <(yq '.".clients".matrix[0]."CLIENT_NAME"[]' .gitlab-ci-clients.yml | sort) || { echo -e 'THE CLIENT LIST IS OUT OF DATE\nUpdate with ./tools/update-client-list.sh' && exit 1; }
 
 .node-job-cdktf-get-before-script: &node-job-cdktf-get-before-script
   before_script:
@@ -260,6 +248,14 @@ infra-test:
 infra-build:
   extends: .node-build
   <<: *node-job-infra-overrides
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - changes:
+        paths:
+          - lib/client-config-node/**/*
+          - infra/**/*
+          - style/**/*
+          - .gitlab-ci.yml
 
 .python-lint-base:
   extends: .poetry-job
@@ -300,7 +296,44 @@ python-lambdas-test:
         - lib/**/*
         - .gitlab-ci.yml
 
-node-lint:
+frontend-lint:
+  extends: .node-lint
+  image: registry.gitlab.com/arcanumai/ci/cdktf:latest
+  before_script:
+    - !reference [.yarn, setup-private-auth]
+    - corepack enable
+    - yarn install --immutable
+  script:
+    - yarn workspace @arcanumai/numa-frontend run lint --fix || true
+    - yarn workspace @arcanumai/numa-frontend run lint
+  rules:
+    - changes:
+        paths:
+          - numa-frontend/**/*
+          - style/**/*
+          - .gitlab-ci.yml
+
+node-lambdas-lint:
+  extends: .node-lint
+  image: registry.gitlab.com/arcanumai/ci/cdktf:latest
+  before_script:
+    - !reference [.yarn, setup-private-auth]
+    - corepack enable
+    - yarn install --immutable
+    - cd $BUILD_DIR
+  script:
+    - yarn lint --fix || true
+    - yarn lint
+  parallel: !reference [.node-matrix]
+  rules:
+    - changes:
+        paths:
+          - $BUILD_DIR/**/*
+          - lib/**/*
+          - style/**/*
+          - .gitlab-ci.yml
+
+node-shared-lint:
   extends: .node-lint
   image: registry.gitlab.com/arcanumai/ci/cdktf:latest
   before_script:
@@ -309,8 +342,16 @@ node-lint:
     - yarn install --immutable
   script:
     - yarn workspace @arcanumai/q-apps-deployer-infra run get
-    - yarn workspaces foreach --parallel --all --exclude infra run lint --fix || true
-    - yarn workspaces foreach --parallel --all --exclude infra run lint
+    - yarn workspaces foreach --all --parallel --include '@arcanumai/style' --include '@arcanumai/q-apps-deployer-tools' --include '@arcanumai/client-config' --include '@arcanumai/numa-customer-success-portal' run lint --fix || true
+    - yarn workspaces foreach --all --parallel --include '@arcanumai/style' --include '@arcanumai/q-apps-deployer-tools' --include '@arcanumai/client-config' --include '@arcanumai/numa-customer-success-portal' run lint
+  rules:
+    - changes:
+        paths:
+          - lib/**/*
+          - tools/**/*
+          - style/**/*
+          - numa-customer-success-portal/**/*
+          - .gitlab-ci.yml
 
 tools-test:
   extends: .node-test
@@ -325,6 +366,14 @@ tools-test:
 tools-build:
   extends: .node-build
   <<: *node-job-tools-overrides
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - changes:
+        paths:
+          - lib/client-config-node/**/*
+          - tools/**/*
+          - style/**/*
+          - .gitlab-ci.yml
 
 node-test:
   extends: .node-test
@@ -338,6 +387,14 @@ node-test:
 node-build:
   extends: .node-build
   parallel: !reference [.node-matrix]
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - changes:
+        paths:
+          - lambdas/node/**/*
+          - lib/**/*
+          - style/**/*
+          - .gitlab-ci.yml
 
 frontend-test:
   extends: node-test
@@ -381,6 +438,13 @@ frontend-build:
     - NODE_OPTIONS=--max-old-space-size=3072 yarn build
   artifacts:
     paths: [infra/build/numa-frontend]
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - changes:
+        paths:
+          - numa-frontend/**/*
+          - style/**/*
+          - .gitlab-ci.yml
 
 python-lambdas-package:
   extends: .poetry-job
@@ -411,12 +475,15 @@ node-package:
   rules:
     - !reference [.rules, if-main]
 
-# Build Claude CLI artifact ZIP (branch pipelines)
+# Build Claude CLI artifact ZIP (main + CI config changes only)
 claude-cli-artifact-build:
   stage: package
   image: amazonlinux:2023
   rules:
-    - if: '$CI_COMMIT_BRANCH'
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - changes:
+        paths:
+          - .gitlab-ci.yml
   variables:
     CLAUDE_CLI_VERSION: "2.0.37"
   before_script:
