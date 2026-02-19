@@ -602,7 +602,7 @@ export const AgentsManagement = () => {
           </Container>
         )}
 
-        <Container className="px-0 pt-0 pb-4">
+        <Container fluid className="px-0 pt-0 pb-4">
           {!agentsFeatureEnabled && (
             <>
               <Alert variant="info" className="mb-3">

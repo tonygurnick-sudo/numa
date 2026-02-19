@@ -447,8 +447,7 @@
   display: flex;
   flex-direction: column;
   width: 100%;
-  max-width: 900px;
-  margin: 0 auto;
+  margin: 0;
   padding: 0.28rem 0.75rem;
   border: 1px solid #e4e4e7;
   background: #fafafa;
@@ -707,13 +706,11 @@
 }
 
 .workspace-chat-v2 .new-chat-wrapper.new-chat-wrapper-v2 .new-chat-input-wrapper {
-  margin: auto 0 0;
+  margin-top: auto;
+  margin-bottom: 0;
   width: 100%;
-  max-width: var(--workspace-chat-v2-newchat-content-max-width);
-  margin-left: auto;
-  margin-right: auto;
-  padding-left: var(--workspace-chat-v2-newchat-side-pad);
-  padding-right: var(--workspace-chat-v2-newchat-side-pad);
+  padding-left: 1rem;
+  padding-right: 1rem;
   box-sizing: border-box;
 }
 
@@ -1830,10 +1827,10 @@
   }
 
   .workspace-chat-v2 .new-chat-wrapper.new-chat-wrapper-v2 .new-chat-input-wrapper {
-    padding:
-      0.65rem
-      var(--workspace-chat-v2-newchat-side-pad)
-      calc(0.6rem + env(safe-area-inset-bottom, 0px));
+    padding-top: 0.65rem;
+    padding-right: 1rem;
+    padding-bottom: calc(0.6rem + env(safe-area-inset-bottom, 0px));
+    padding-left: 1rem;
   }
 
   .workspace-chat-v2 .chat-left-pane > .chat-messages.chat-messages--new-chat {

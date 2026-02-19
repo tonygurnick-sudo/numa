@@ -630,7 +630,7 @@ label {
 
   // --- Search row --------------------------------------------------------
   .nav-search-wrapper {
-    padding: 0 0.75rem;
+    padding: 0.25rem 0.75rem 0;
     margin-bottom: 0.5rem; // Match plans: mb-2 below search before nav links
   }
 
@@ -889,6 +889,12 @@ label {
         color: var(--nav-active-text);
       }
     }
+  }
+
+  // --- Divider above user profile -----------------------------------------
+  .nav-divider {
+    border-top: 1px solid var(--nav-divider);
+    margin: 0 0.75rem;
   }
 
   // --- User profile row --------------------------------------------------

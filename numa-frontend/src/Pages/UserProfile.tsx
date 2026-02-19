@@ -393,7 +393,7 @@ export default function UserProfilePage({ embedded = false, activeTabKey, onActi
         >
           <Form>
             <Form.Group className="mb-3">
-              <Form.Label className="fw-semibold">{t('userProfile.defaults.language.label')}</Form.Label>
+              <Form.Label className="settings-section-title">{t('userProfile.defaults.language.label')}</Form.Label>
               <Form.Select
                 value={userDefaults.language ?? LANGUAGE_BROWSER_DEFAULT}
                 disabled={disableProfileForm}
@@ -411,7 +411,9 @@ export default function UserProfilePage({ embedded = false, activeTabKey, onActi
             <hr className="my-4" />
 
             <Form.Group className="mb-3">
-              <Form.Label className="fw-semibold">{t('userProfile.defaults.emailSignature.label')}</Form.Label>
+              <Form.Label className="settings-section-title">
+                {t('userProfile.defaults.emailSignature.label')}
+              </Form.Label>
               <div className="text-muted small mb-2">{t('userProfile.defaults.emailSignature.help')}</div>
               <div className="d-flex align-items-center gap-2 mb-2">
                 <Form.Check
@@ -429,7 +431,9 @@ export default function UserProfilePage({ embedded = false, activeTabKey, onActi
               </div>
               {userDefaults.emailSignatureEnabled && (
                 <>
-                  <Form.Label className="fw-semibold">{t('userProfile.defaults.emailSignature.textLabel')}</Form.Label>
+                  <Form.Label className="settings-secondary-label">
+                    {t('userProfile.defaults.emailSignature.textLabel')}
+                  </Form.Label>
                   <Form.Control
                     as="textarea"
                     rows={2}
@@ -473,7 +477,7 @@ export default function UserProfilePage({ embedded = false, activeTabKey, onActi
           <Form>
             <div className="mb-3 p-3 border rounded-3 bg-light">
               <div className="d-flex align-items-center justify-content-between gap-3">
-                <div className="fw-semibold">{t('userProfile.defaults.enableTitle')}</div>
+                <div className="settings-secondary-label">{t('userProfile.defaults.enableTitle')}</div>
                 <Form.Check
                   type="switch"
                   id="profile-defaults-enabled"
@@ -496,7 +500,7 @@ export default function UserProfilePage({ embedded = false, activeTabKey, onActi
             ) : (
               <>
                 <Form.Group className="mb-3">
-                  <Form.Label className="fw-semibold">{t('userProfile.defaults.kbLabel')}</Form.Label>
+                  <Form.Label className="settings-section-title">{t('userProfile.defaults.kbLabel')}</Form.Label>
                   {kbError && <div className="text-danger small mb-2">{kbError}</div>}
 
                   <ExpandableOverflowBox className="border rounded-3 p-2 bg-white" maxHeight={240}>
@@ -537,6 +541,7 @@ export default function UserProfilePage({ embedded = false, activeTabKey, onActi
                 </Form.Group>
 
                 <div className="mb-3">
+                  <div className="settings-section-title mb-2">{t('userProfile.defaults.toolsSectionTitle')}</div>
                   <div className="d-flex align-items-center gap-2">
                     <Form.Check
                       type="switch"
@@ -556,7 +561,7 @@ export default function UserProfilePage({ embedded = false, activeTabKey, onActi
                         setDirty(true);
                       }}
                     />
-                    <div className="fw-semibold">{t('userProfile.defaults.allTools.title')}</div>
+                    <div className="settings-secondary-label">{t('userProfile.defaults.allTools.title')}</div>
                   </div>
                   <div className="text-muted small ms-5">{t('userProfile.defaults.allTools.help')}</div>
 
@@ -573,7 +578,7 @@ export default function UserProfilePage({ embedded = false, activeTabKey, onActi
                           setDirty(true);
                         }}
                       />
-                      <div className="fw-semibold">{t('userProfile.defaults.webSearch.title')}</div>
+                      <div className="settings-secondary-label">{t('userProfile.defaults.webSearch.title')}</div>
                     </div>
                     <div className="text-muted small ms-5">{t('userProfile.defaults.webSearch.help')}</div>
                   </div>
@@ -592,7 +597,7 @@ export default function UserProfilePage({ embedded = false, activeTabKey, onActi
                             setDirty(true);
                           }}
                         />
-                        <div className="fw-semibold">{t('userProfile.defaults.dataAnalysis.title')}</div>
+                        <div className="settings-secondary-label">{t('userProfile.defaults.dataAnalysis.title')}</div>
                       </div>
                       <div className="text-muted small ms-5">{t('userProfile.defaults.dataAnalysis.help')}</div>
                     </div>
@@ -611,14 +616,16 @@ export default function UserProfilePage({ embedded = false, activeTabKey, onActi
                           setDirty(true);
                         }}
                       />
-                      <div className="fw-semibold">{t('userProfile.defaults.agentCreation.title')}</div>
+                      <div className="settings-secondary-label">{t('userProfile.defaults.agentCreation.title')}</div>
                     </div>
                     <div className="text-muted small ms-5">{t('userProfile.defaults.agentCreation.help')}</div>
                   </div>
                 </div>
 
                 <Form.Group className="mb-3">
-                  <Form.Label className="fw-semibold">{t('userProfile.defaults.integrations.label')}</Form.Label>
+                  <Form.Label className="settings-section-title">
+                    {t('userProfile.defaults.integrations.label')}
+                  </Form.Label>
                   {previewMode ? (
                     <div className="text-muted small">{t('userProfile.defaults.integrations.disabled')}</div>
                   ) : connectionsLoading ? (
@@ -685,7 +692,7 @@ export default function UserProfilePage({ embedded = false, activeTabKey, onActi
             <Form>
               <p className="text-muted mb-3">{t('userProfile.approval.description')}</p>
               <Form.Group className="mb-3">
-                <Form.Label className="fw-semibold">{t('userProfile.approval.label')}</Form.Label>
+                <Form.Label className="settings-section-title">{t('userProfile.approval.label')}</Form.Label>
                 {(['always', 'non_destructive', 'never'] as const).map((mode) => (
                   <Form.Check
                     key={mode}

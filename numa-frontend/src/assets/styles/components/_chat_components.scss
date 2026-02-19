@@ -2217,9 +2217,8 @@ $border-radius-pill: 1rem;
   &.new-chat-wrapper-v2 {
     padding-top: max(18vh, 6rem);
 
-    // Match chat input width to history section
     .new-chat-input-wrapper {
-      max-width: 900px;
+      width: 100%;
     }
   }
 

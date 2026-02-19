@@ -135,11 +135,11 @@ describe('Nav Component', () => {
         { timeout: 5000 },
       );
 
-      expect(screen.getByText('Interface')).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: 'Simple' })).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: 'Advanced' })).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: 'Work' })).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: 'Build' })).toBeInTheDocument();
+      expect(screen.queryByText('Interface')).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Simple' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Advanced' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Work' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Build' })).not.toBeInTheDocument();
 
       // Check for logout button which should always be present
       const logoutButton = document.querySelector('.nav-link[title="Log out"]');
@@ -186,7 +186,7 @@ describe('Nav Component', () => {
       expect(mockLogout).toHaveBeenCalled();
     });
 
-    it('shows only Numa Chat in simple mode', async () => {
+    it('does not render simple/advanced mode controls', async () => {
       renderWithProviders(<Nav />);
 
       await waitFor(
@@ -197,28 +197,14 @@ describe('Nav Component', () => {
         { timeout: 3000 },
       );
 
-      fireEvent.click(screen.getByRole('button', { name: 'Simple' }));
-
-      await waitFor(() => {
-        expect(document.querySelector('.nav-link[title="Chat"]')).not.toBeNull();
-        expect(document.querySelector('.nav-link[title="Apps"]')).not.toBeNull();
-        expect(document.querySelector('.nav-link[title="Ops"]')).not.toBeNull();
-        expect(document.querySelector('.nav-link[title="Favs"]')).toBeNull();
-        const sectionLabels = Array.from(document.querySelectorAll('.nav-section-label')).map(
-          (node) => node.textContent,
-        );
-        expect(sectionLabels).toContain('Build');
-        expect(sectionLabels).toContain('Library');
-        expect(document.querySelector('.nav-link[title="Create"]')).not.toBeNull();
-        expect(document.querySelector('.nav-link[title="Analyse"]')).not.toBeNull();
-        expect(document.querySelector('.nav-link[title="Research"]')).not.toBeNull();
-        expect(document.querySelector('.nav-link[title="Company Files"]')).not.toBeNull();
-        expect(document.querySelector('.nav-link[title="User Files"]')).not.toBeNull();
-        expect(document.querySelector('.nav-link[title="Data Connectors"]')).toBeNull();
-      });
+      expect(screen.queryByText('Interface')).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Simple' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Advanced' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Build' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Work' })).not.toBeInTheDocument();
     });
 
-    it('shows build placeholders in advanced build mode', async () => {
+    it('keeps standard navigation items visible without build mode controls', async () => {
       renderWithProviders(<Nav />);
 
       await waitFor(
@@ -229,21 +215,16 @@ describe('Nav Component', () => {
         { timeout: 3000 },
       );
 
-      fireEvent.click(screen.getByRole('button', { name: 'Build' }));
-
-      await waitFor(() => {
-        expect(document.querySelector('.nav-link[title="Home"]')).toBeNull();
-        expect(document.querySelector('.nav-link[title="Ops"]')).toBeNull();
-        expect(document.querySelector('.nav-link[title="Create"]')).not.toBeNull();
-        expect(document.querySelector('.nav-link[title="Analyse"]')).not.toBeNull();
-        expect(document.querySelector('.nav-link[title="Research"]')).not.toBeNull();
-        expect(document.querySelector('.nav-link[title="Marketplace"]')).not.toBeNull();
-        expect(document.querySelector('.nav-link[title="Company"]')).toBeNull();
-        const sectionLabels = Array.from(document.querySelectorAll('.nav-section-label')).map(
-          (node) => node.textContent,
-        );
-        expect(sectionLabels).not.toContain('Build');
-      });
+      expect(screen.queryByRole('button', { name: 'Build' })).not.toBeInTheDocument();
+      expect(document.querySelector('.nav-link[title="Home"]')).not.toBeNull();
+      expect(document.querySelector('.nav-link[title="Apps"]')).not.toBeNull();
+      expect(document.querySelector('.nav-link[title="Ops"]')).not.toBeNull();
+      expect(document.querySelector('.nav-link[title="Agents"]')).not.toBeNull();
+      expect(document.querySelector('.nav-link[title="Chat"]')).not.toBeNull();
+      expect(document.querySelector('.nav-link[title="Create"]')).toBeNull();
+      expect(document.querySelector('.nav-link[title="Analyse"]')).toBeNull();
+      expect(document.querySelector('.nav-link[title="Research"]')).toBeNull();
+      expect(document.querySelector('.nav-link[title="Marketplace"]')).toBeNull();
     });
 
     it('shows Ops under Apps and before Agents in advanced work mode', async () => {
@@ -296,9 +277,9 @@ describe('Nav Component', () => {
       expect(document.querySelector('.nav-link[title="Company"]')).not.toBeNull();
       expect(document.querySelector('.nav-link[title="Log out"]')).not.toBeNull();
 
-      expect(screen.getByText('Interface')).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: 'Simple' })).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: 'Advanced' })).toBeInTheDocument();
+      expect(screen.queryByText('Interface')).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Simple' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Advanced' })).not.toBeInTheDocument();
     });
 
     it('renders navigation items in correct order: Apps, Chat, Company, Knowledge Base', async () => {

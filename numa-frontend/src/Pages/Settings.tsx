@@ -525,12 +525,8 @@ export default function SettingsPage() {
               />
             </div>
             <div>
-              <div className="fw-semibold" style={{ fontSize: '0.95rem' }}>
-                {integration.name}
-              </div>
-              <div className="text-muted small" style={{ fontSize: '0.85rem', lineHeight: '1.4' }}>
-                {integration.description}
-              </div>
+              <div className="fw-semibold settings-item-title">{integration.name}</div>
+              <div className="text-muted small settings-item-description">{integration.description}</div>
             </div>
           </div>
           <div className="col-md-6 d-flex justify-content-end gap-2 align-items-center">
@@ -573,7 +569,7 @@ export default function SettingsPage() {
               <i className="bi bi-sliders me-2"></i>
               {t('integrations.manageTools')}{' '}
               {deniedCount > 0 && (
-                <span className="ms-1 badge bg-light text-dark" style={{ fontSize: '0.7rem' }}>
+                <span className="ms-1 badge bg-light text-dark settings-item-badge">
                   {t('integrations.toolsOff', { count: deniedCount })}
                 </span>
               )}
@@ -613,12 +609,8 @@ export default function SettingsPage() {
               <SynergyIcon />
             </div>
             <div>
-              <div className="fw-semibold" style={{ fontSize: '0.95rem' }}>
-                {connector.name}
-              </div>
-              <div className="text-muted small" style={{ fontSize: '0.85rem', lineHeight: '1.4' }}>
-                {connector.description}
-              </div>
+              <div className="fw-semibold settings-item-title">{connector.name}</div>
+              <div className="text-muted small settings-item-description">{connector.description}</div>
             </div>
           </div>
           <div className="col-md-6 d-flex justify-content-end gap-2 align-items-center">
@@ -775,7 +767,7 @@ export default function SettingsPage() {
                       <div className="d-flex align-items-start">
                         <i className="bi bi-building-gear me-2 mt-1"></i>
                         <div>
-                          <div className="fw-semibold">{t('chatDefaults.title')}</div>
+                          <div className="settings-section-title">{t('chatDefaults.title')}</div>
                           <div className="small text-muted">{t('chatDefaults.description')}</div>
                         </div>
                       </div>
@@ -798,7 +790,9 @@ export default function SettingsPage() {
                             <i className="bi bi-shield-lock-fill text-primary mt-1"></i>
                             <div className="flex-grow-1">
                               <div className="d-flex align-items-center justify-content-between gap-3">
-                                <div className="fw-semibold">{t('chatDefaults.allowUserOverridesTitle')}</div>
+                                <div className="settings-secondary-label">
+                                  {t('chatDefaults.allowUserOverridesTitle')}
+                                </div>
                                 <Form.Check
                                   type="switch"
                                   id="chat-defaults-allow-user-defaults"
@@ -819,7 +813,9 @@ export default function SettingsPage() {
                         </div>
 
                         <Form.Group className="mb-3">
-                          <Form.Label className="fw-semibold">{t('chatDefaults.defaultKnowledgeBases')}</Form.Label>
+                          <Form.Label className="settings-section-title">
+                            {t('chatDefaults.defaultKnowledgeBases')}
+                          </Form.Label>
                           <div className="d-flex align-items-center gap-2">
                             <Form.Check
                               type="switch"
@@ -835,12 +831,13 @@ export default function SettingsPage() {
                                 setChatDefaultsDirty(true);
                               }}
                             />
-                            <div className="fw-semibold">{t('chatDefaults.companyKnowledgeBase')}</div>
+                            <div className="settings-secondary-label">{t('chatDefaults.companyKnowledgeBase')}</div>
                           </div>
                           <div className="text-muted small ms-5">{t('chatDefaults.companyKnowledgeBaseHelp')}</div>
                         </Form.Group>
 
                         <div className="mb-3">
+                          <div className="settings-section-title mb-2">{t('chatDefaults.toolsTitle')}</div>
                           <div className="d-flex align-items-center gap-2">
                             <Form.Check
                               type="switch"
@@ -867,7 +864,7 @@ export default function SettingsPage() {
                                 setChatDefaultsDirty(true);
                               }}
                             />
-                            <div className="fw-semibold">{t('chatDefaults.allTools')}</div>
+                            <div className="settings-secondary-label">{t('chatDefaults.allTools')}</div>
                           </div>
                           <div className="text-muted small ms-5">{t('chatDefaults.allToolsHelp')}</div>
 
@@ -887,7 +884,7 @@ export default function SettingsPage() {
                                   setChatDefaultsDirty(true);
                                 }}
                               />
-                              <div className="fw-semibold">{t('chatDefaults.webSearch')}</div>
+                              <div className="settings-secondary-label">{t('chatDefaults.webSearch')}</div>
                             </div>
                             <div className="text-muted small ms-5">{t('chatDefaults.webSearchHelp')}</div>
                           </div>
@@ -909,7 +906,7 @@ export default function SettingsPage() {
                                     setChatDefaultsDirty(true);
                                   }}
                                 />
-                                <div className="fw-semibold">{t('chatDefaults.dataAnalysis')}</div>
+                                <div className="settings-secondary-label">{t('chatDefaults.dataAnalysis')}</div>
                               </div>
                               <div className="text-muted small ms-5">{t('chatDefaults.dataAnalysisHelp')}</div>
                             </div>
@@ -931,14 +928,16 @@ export default function SettingsPage() {
                                   setChatDefaultsDirty(true);
                                 }}
                               />
-                              <div className="fw-semibold">{t('chatDefaults.agentCreation')}</div>
+                              <div className="settings-secondary-label">{t('chatDefaults.agentCreation')}</div>
                             </div>
                             <div className="text-muted small ms-5">{t('chatDefaults.agentCreationHelp')}</div>
                           </div>
                         </div>
 
                         <Form.Group className="mb-3">
-                          <Form.Label className="fw-semibold">{t('chatDefaults.defaultIntegrations')}</Form.Label>
+                          <Form.Label className="settings-section-title">
+                            {t('chatDefaults.defaultIntegrations')}
+                          </Form.Label>
                           {previewMode ? (
                             <div className="text-muted small">{t('chatDefaults.integrationsDisabled')}</div>
                           ) : (
@@ -1054,7 +1053,7 @@ export default function SettingsPage() {
                       <div className="d-flex align-items-start">
                         <i className="bi bi-building-gear me-2 mt-1"></i>
                         <div>
-                          <div className="fw-semibold">{t('companyInfo.adminTitle')}</div>
+                          <div className="settings-section-title">{t('companyInfo.adminTitle')}</div>
                           <div className="small text-muted">{t('companyInfo.adminDescription')}</div>
                         </div>
                       </div>
@@ -1078,7 +1077,7 @@ export default function SettingsPage() {
                     ) : (
                       <Form>
                         <Form.Group className="mb-3">
-                          <Form.Label className="fw-semibold">{t('companyInfo.form.label')}</Form.Label>
+                          <Form.Label className="settings-section-title">{t('companyInfo.form.label')}</Form.Label>
                           <Form.Control
                             as="textarea"
                             rows={15}
@@ -1137,7 +1136,7 @@ export default function SettingsPage() {
                       <div className="d-flex align-items-start">
                         <i className="bi bi-building-gear me-2 mt-1"></i>
                         <div>
-                          <div className="fw-semibold">{t('agents.title')}</div>
+                          <div className="settings-section-title">{t('agents.title')}</div>
                           <div className="small text-muted">{t('agents.description')}</div>
                         </div>
                       </div>
@@ -1200,9 +1199,7 @@ export default function SettingsPage() {
                               }}
                             >
                               <div className="me-3">
-                                <div className="fw-semibold" style={{ fontSize: '0.95rem' }}>
-                                  {opt.label}
-                                </div>
+                                <div className="fw-semibold settings-item-title">{opt.label}</div>
                                 <div className="text-muted small" style={{ maxWidth: 720 }}>
                                   {opt.desc}
                                 </div>
@@ -1242,7 +1239,7 @@ export default function SettingsPage() {
                       <div className="d-flex align-items-start">
                         <i className="bi bi-building-gear me-2 mt-1"></i>
                         <div>
-                          <div className="fw-semibold">{t('integrations.companySettingsTitle')}</div>
+                          <div className="settings-section-title">{t('integrations.companySettingsTitle')}</div>
                           <div className="small text-muted">{t('integrations.companySettingsDescription')}</div>
                         </div>
                       </div>
@@ -1270,7 +1267,7 @@ export default function SettingsPage() {
                         <div className="d-flex align-items-start">
                           <i className="bi bi-building-gear me-2 mt-1"></i>
                           <div>
-                            <div className="fw-semibold">{t('dataConnectors.companySettingsTitle')}</div>
+                            <div className="settings-section-title">{t('dataConnectors.companySettingsTitle')}</div>
                             <div className="small text-muted">{t('dataConnectors.companySettingsDescription')}</div>
                           </div>
                         </div>
@@ -1293,9 +1290,7 @@ export default function SettingsPage() {
                 <i className="bi bi-sliders me-2 text-primary"></i>
                 {t('manageTools.title', { integration: manageToolsFor || '' })}
               </div>
-              <div className="small text-muted fw-normal mt-2" style={{ fontSize: '0.85rem' }}>
-                {t('manageTools.subtitle')}
-              </div>
+              <div className="small text-muted fw-normal mt-2 settings-modal-subtitle">{t('manageTools.subtitle')}</div>
             </Modal.Title>
           </Modal.Header>
           <Modal.Body className="pt-2" style={{ maxHeight: '60vh', overflowY: 'auto' }}>
@@ -1311,7 +1306,7 @@ export default function SettingsPage() {
               </Alert>
             ) : toolList.length === 0 ? (
               <div className="text-center py-5">
-                <i className="bi bi-info-circle text-muted" style={{ fontSize: '2rem' }}></i>
+                <i className="bi bi-info-circle text-muted settings-empty-state-icon"></i>
                 <p className="text-muted mt-2 mb-0">{t('manageTools.empty')}</p>
               </div>
             ) : (
@@ -1394,13 +1389,11 @@ export default function SettingsPage() {
                         </div>
                         {tool.description && (
                           <div
-                            className={`small ${allowed ? 'text-muted' : 'text-secondary'}`}
+                            className={`small settings-tool-description ${allowed ? 'text-muted' : 'text-secondary'}`}
                             style={{
                               maxWidth: 720,
                               whiteSpace: 'normal',
                               wordBreak: 'break-word',
-                              lineHeight: '1.4',
-                              fontSize: '0.85rem',
                             }}
                           >
                             {parseDescription(tool.description)}

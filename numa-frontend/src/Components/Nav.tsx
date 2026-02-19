@@ -18,14 +18,12 @@ import {
   History,
   MessageSquare,
   Microscope,
-  Play,
   Plug,
   PlusCircle,
   Settings,
   Store,
   Star,
   UserRound,
-  Wrench,
 } from 'lucide-react';
 import { FeatureWrapper } from './RequiredFeaturesWrapper';
 import { useBranding } from '../Providers/BrandingContext';
@@ -40,8 +38,6 @@ interface NavProps {
 
 type InterfaceMode = 'simple' | 'advanced';
 type AdvancedNavMode = 'work' | 'build';
-const INTERFACE_MODE_STORAGE_KEY = 'numaNavInterfaceMode';
-const ADVANCED_NAV_MODE_STORAGE_KEY = 'numaAdvancedNavMode';
 const HOME_NAV_ITEM = {
   to: '__home__',
   labelKey: 'nav.items.home',
@@ -139,20 +135,8 @@ const Nav = ({ isCollapsed = false, onToggleCollapse }: NavProps) => {
   const userEmail = user?.decoded_tokens?.idToken?.email || 'user@example.com';
 
   const [navItems, setNavItems] = useState([]);
-  const [interfaceMode, setInterfaceMode] = useState<InterfaceMode>(() => {
-    if (typeof window === 'undefined') {
-      return 'advanced';
-    }
-    const savedMode = window.localStorage.getItem(INTERFACE_MODE_STORAGE_KEY);
-    return savedMode === 'simple' ? 'simple' : 'advanced';
-  });
-  const [advancedNavMode, setAdvancedNavMode] = useState<AdvancedNavMode>(() => {
-    if (typeof window === 'undefined') {
-      return 'work';
-    }
-    const savedMode = window.localStorage.getItem(ADVANCED_NAV_MODE_STORAGE_KEY);
-    return savedMode === 'build' ? 'build' : 'work';
-  });
+  const [interfaceMode] = useState<InterfaceMode>('advanced');
+  const [advancedNavMode] = useState<AdvancedNavMode>('work');
   const [showMobileDropdown, setShowMobileDropdown] = useState(false);
   const isExpanded = !isCollapsed;
   const skipBackOnMobileCloseRef = useRef(false);
@@ -214,19 +198,6 @@ const Nav = ({ isCollapsed = false, onToggleCollapse }: NavProps) => {
       isMounted = false;
     };
   }, []);
-
-  const handleInterfaceModeChange = (mode: InterfaceMode) => {
-    setInterfaceMode(mode);
-    if (typeof window !== 'undefined') {
-      window.localStorage.setItem(INTERFACE_MODE_STORAGE_KEY, mode);
-    }
-  };
-  const handleAdvancedNavModeChange = (mode: AdvancedNavMode) => {
-    setAdvancedNavMode(mode);
-    if (typeof window !== 'undefined') {
-      window.localStorage.setItem(ADVANCED_NAV_MODE_STORAGE_KEY, mode);
-    }
-  };
 
   const visibleMainNavItems = navItems.filter((item) => {
     if (item.footerOnly || item.sectionOnly) {
@@ -313,39 +284,6 @@ const Nav = ({ isCollapsed = false, onToggleCollapse }: NavProps) => {
         </div>
         <Dropdown show={showMobileDropdown} className="w-100" id="nav-dropdown" autoClose={false}>
           <Dropdown.Menu className="w-100 mt-0">
-            {interfaceMode === 'advanced' && (
-              <>
-                <div className="mobile-advanced-mode-section">
-                  <div className="mobile-advanced-mode-toggle" role="group" aria-label={t('nav.advancedModeLabel')}>
-                    <button
-                      type="button"
-                      className={`mobile-advanced-mode-button ${advancedNavMode === 'work' ? 'active' : ''}`}
-                      onClick={(event) => {
-                        event.preventDefault();
-                        event.stopPropagation();
-                        handleAdvancedNavModeChange('work');
-                      }}
-                    >
-                      <Play size={14} className="mobile-advanced-mode-icon" aria-hidden="true" />
-                      {t('nav.advancedModes.work')}
-                    </button>
-                    <button
-                      type="button"
-                      className={`mobile-advanced-mode-button ${advancedNavMode === 'build' ? 'active' : ''}`}
-                      onClick={(event) => {
-                        event.preventDefault();
-                        event.stopPropagation();
-                        handleAdvancedNavModeChange('build');
-                      }}
-                    >
-                      <Wrench size={14} className="mobile-advanced-mode-icon" aria-hidden="true" />
-                      {t('nav.advancedModes.build')}
-                    </button>
-                  </div>
-                </div>
-                <Dropdown.Divider />
-              </>
-            )}
             {visibleMobileMainNavItemsWithHome.map((item) => {
               // Handle section headers
               if (item.sectionOnly) {
@@ -415,34 +353,6 @@ const Nav = ({ isCollapsed = false, onToggleCollapse }: NavProps) => {
               );
             })}
             <Dropdown.Divider />
-            <div className="mobile-interface-mode-section">
-              <div className="mobile-interface-mode-label">{t('nav.interfaceLabel')}</div>
-              <div className="mobile-interface-mode-toggle" role="group" aria-label={t('nav.interfaceLabel')}>
-                <button
-                  type="button"
-                  className={`mobile-interface-mode-button ${interfaceMode === 'simple' ? 'active' : ''}`}
-                  onClick={(event) => {
-                    event.preventDefault();
-                    event.stopPropagation();
-                    handleInterfaceModeChange('simple');
-                  }}
-                >
-                  {t('nav.interfaceModes.simple')}
-                </button>
-                <button
-                  type="button"
-                  className={`mobile-interface-mode-button ${interfaceMode === 'advanced' ? 'active' : ''}`}
-                  onClick={(event) => {
-                    event.preventDefault();
-                    event.stopPropagation();
-                    handleInterfaceModeChange('advanced');
-                  }}
-                >
-                  {t('nav.interfaceModes.advanced')}
-                </button>
-              </div>
-            </div>
-            <Dropdown.Divider />
             <Dropdown.Item
               onClick={() => {
                 closeMobileDropdownForNavigation();
@@ -484,29 +394,6 @@ const Nav = ({ isCollapsed = false, onToggleCollapse }: NavProps) => {
           >
             <i className={`bi ${isCollapsed ? 'bi-chevron-right' : 'bi-chevron-left'}`}></i>
           </button>
-        )}
-
-        {isExpanded && interfaceMode === 'advanced' && (
-          <div className="work-build-mode-section">
-            <div className="work-build-mode-toggle" role="group" aria-label={t('nav.advancedModeLabel')}>
-              <button
-                type="button"
-                className={`work-build-mode-button ${advancedNavMode === 'work' ? 'active' : ''}`}
-                onClick={() => handleAdvancedNavModeChange('work')}
-              >
-                <Play size={14} className="work-build-mode-icon" aria-hidden="true" />
-                {t('nav.advancedModes.work')}
-              </button>
-              <button
-                type="button"
-                className={`work-build-mode-button ${advancedNavMode === 'build' ? 'active' : ''}`}
-                onClick={() => handleAdvancedNavModeChange('build')}
-              >
-                <Wrench size={14} className="work-build-mode-icon" aria-hidden="true" />
-                {t('nav.advancedModes.build')}
-              </button>
-            </div>
-          </div>
         )}
 
         {isExpanded && (
@@ -621,29 +508,7 @@ const Nav = ({ isCollapsed = false, onToggleCollapse }: NavProps) => {
             </li>
           </ul>
 
-          {isExpanded && (
-            <div className="interface-mode-section">
-              <div className="interface-mode-header">
-                <div className="interface-mode-label">{t('nav.interfaceLabel')}</div>
-                <div className="interface-mode-toggle" role="group" aria-label={t('nav.interfaceLabel')}>
-                  <button
-                    type="button"
-                    className={`interface-mode-button ${interfaceMode === 'simple' ? 'active' : ''}`}
-                    onClick={() => handleInterfaceModeChange('simple')}
-                  >
-                    {t('nav.interfaceModes.simple')}
-                  </button>
-                  <button
-                    type="button"
-                    className={`interface-mode-button ${interfaceMode === 'advanced' ? 'active' : ''}`}
-                    onClick={() => handleInterfaceModeChange('advanced')}
-                  >
-                    {t('nav.interfaceModes.advanced')}
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
+          <div className="nav-divider" />
 
           <div className="user-profile-section">
             <div className="user-avatar">

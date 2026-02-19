@@ -233,6 +233,68 @@
   min-height: 100%;
   background-color: #f8fafc;
   padding: 0;
+  color: #18181b;
+
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6,
+  .form-label,
+  .fw-semibold,
+  .styled-tabs-nav.nav-tabs .nav-link {
+    text-transform: none !important;
+    letter-spacing: normal !important;
+  }
+
+  .settings-item-title {
+    font-family: 'Metropolis Semi Bold';
+    font-size: 0.95rem;
+    line-height: 1.35;
+    text-transform: none;
+    letter-spacing: normal;
+  }
+
+  .settings-section-title {
+    font-family: 'Metropolis Semi Bold';
+    font-size: 1.125rem;
+    line-height: 1.5rem;
+    font-weight: normal !important;
+    color: #18181b;
+    margin: 0;
+    text-transform: none;
+    letter-spacing: normal;
+  }
+
+  .settings-item-description,
+  .settings-tool-description,
+  .settings-modal-subtitle {
+    font-family: 'Metropolis Regular';
+    font-size: 0.875rem;
+    line-height: 1.25rem;
+  }
+
+  .settings-secondary-label {
+    font-family: 'Metropolis Regular';
+    font-size: 0.8125rem;
+    font-weight: 500;
+    color: #52525b;
+    line-height: 1.25rem;
+    margin-bottom: 0.25rem;
+    text-transform: none;
+    letter-spacing: normal;
+  }
+
+  .settings-item-badge {
+    font-family: 'Metropolis Semi Bold';
+    font-size: 0.75rem;
+    line-height: 1;
+  }
+
+  .settings-empty-state-icon {
+    font-size: 2rem;
+  }
 }
 
 .dashboard.settings-page {
