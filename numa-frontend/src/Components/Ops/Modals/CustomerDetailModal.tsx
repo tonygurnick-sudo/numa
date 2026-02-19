@@ -17,11 +17,15 @@ import type {
   CrmLifecycleStage,
   Contact,
   UpdateCustomerPayload,
+  Ticket,
 } from '../../../types/ops';
 import { ContactSection } from '../Shared/ContactSection';
 import { ActivitySection } from '../Shared/ActivitySection';
 import { DocumentSection } from '../Shared/DocumentSection';
 import { getColorForPosition, getContrastTextColor } from '../Shared/colorUtils';
+import { PriorityIndicator } from '../Shared/PriorityIndicator';
+import { CreateTicketModal } from './CreateTicketModal';
+import { TicketDetailModal } from './TicketDetailModal';
 
 // ─── Props ──────────────────────────────────────────────────────────────────
 
@@ -81,7 +85,10 @@ export function CustomerDetailModal({
   const [customer, setCustomer] = useState<Customer | null>(null);
   const [activities, setActivities] = useState<Activity[]>([]);
   const [documents, setDocuments] = useState<OpsDocument[]>([]);
-  const [linkedTicketCount, setLinkedTicketCount] = useState(0);
+  const [linkedTickets, setLinkedTickets] = useState<Ticket[]>([]);
+  const [loadingTickets, setLoadingTickets] = useState(false);
+  const [showCreateTicket, setShowCreateTicket] = useState(false);
+  const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -110,7 +117,6 @@ export function CustomerDetailModal({
       setCustomer(response.customer);
       setActivities(response.activities ?? []);
       setDocuments(response.documents ?? []);
-      setLinkedTicketCount(response.linkedTicketCount ?? 0);
     } catch (err) {
       console.error('[CustomerDetailModal] Failed to load customer', err);
       setError(String(err));
@@ -123,15 +129,23 @@ export function CustomerDetailModal({
     if (show && customerId) {
       void loadCustomer();
       setEditingField(null);
+      // Load linked tickets
+      setLoadingTickets(true);
+      void OpsService.listTickets(numaGet, { customerId })
+        .then((res) => setLinkedTickets(res.tickets))
+        .catch((err) => console.error('[CustomerDetailModal] Failed to load linked tickets', err))
+        .finally(() => setLoadingTickets(false));
     }
     if (!show) {
       setCustomer(null);
       setActivities([]);
       setDocuments([]);
-      setLinkedTicketCount(0);
+      setLinkedTickets([]);
+      setSelectedTicket(null);
+      setShowCreateTicket(false);
       setError(null);
     }
-  }, [show, customerId, loadCustomer]);
+  }, [show, customerId, loadCustomer, numaGet]);
 
   // ── Generic update handler ────────────────────────────────────────────
 
@@ -644,21 +658,70 @@ export function CustomerDetailModal({
         {/* ── Section 6: Linked Work ───────────────────────────────────── */}
         <Accordion.Item eventKey="5">
           <Accordion.Header>
-            {t('crm.linkedWork')}
-            {linkedTicketCount > 0 && (
-              <Badge bg="secondary" className="ms-2" style={{ fontSize: '0.7rem' }}>
-                {linkedTicketCount}
-              </Badge>
-            )}
+            <div className="d-flex align-items-center gap-2 w-100 pe-2">
+              {t('crm.linkedWork')}
+              {linkedTickets.length > 0 && (
+                <Badge bg="secondary" className="ms-1" style={{ fontSize: '0.7rem' }}>
+                  {linkedTickets.length}
+                </Badge>
+              )}
+              <Button
+                variant="outline-primary"
+                size="sm"
+                className="ms-auto"
+                style={{ fontSize: '0.72rem', padding: '1px 8px', flexShrink: 0 }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowCreateTicket(true);
+                }}
+              >
+                <i className="bi bi-plus me-1" />
+                {t('tickets.newTicket')}
+              </Button>
+            </div>
           </Accordion.Header>
           <Accordion.Body className="p-3">
-            {linkedTicketCount > 0 ? (
-              <div className="d-flex align-items-center gap-2">
-                <i className="bi bi-ticket-detailed text-muted" />
-                <span className="small">{t('tickets.count', { count: linkedTicketCount })}</span>
+            {loadingTickets ? (
+              <div className="d-flex justify-content-center py-3">
+                <Spinner animation="border" size="sm" />
               </div>
-            ) : (
+            ) : linkedTickets.length === 0 ? (
               <div className="text-muted small">{t('empty.noTickets')}</div>
+            ) : (
+              <div>
+                {linkedTickets.map((ticket) => (
+                  <div
+                    key={ticket.id}
+                    className="d-flex align-items-center gap-2 py-2 border-bottom"
+                    style={{ cursor: 'pointer', fontSize: '0.85rem' }}
+                    onClick={() => setSelectedTicket(ticket)}
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') setSelectedTicket(ticket);
+                    }}
+                  >
+                    <Badge
+                      bg="light"
+                      text="dark"
+                      className="border"
+                      style={{ fontFamily: 'monospace', flexShrink: 0, fontSize: '0.72rem' }}
+                    >
+                      {ticket.displayId}
+                    </Badge>
+                    <span className="text-truncate flex-grow-1" title={ticket.title}>
+                      {ticket.title}
+                    </span>
+                    <PriorityIndicator priority={ticket.priority} />
+                    {ticket.assigneeName && (
+                      <span className="text-muted small flex-shrink-0" style={{ fontSize: '0.75rem' }}>
+                        {ticket.assigneeName}
+                      </span>
+                    )}
+                    <i className="bi bi-chevron-right text-muted" style={{ fontSize: '0.65rem', flexShrink: 0 }} />
+                  </div>
+                ))}
+              </div>
             )}
           </Accordion.Body>
         </Accordion.Item>
@@ -722,25 +785,26 @@ export function CustomerDetailModal({
   // ── Render: modal ─────────────────────────────────────────────────────
 
   return (
-    <Modal
-      show={show}
-      onHide={onHide}
-      size="xl"
-      scrollable
-      dialogClassName="customer-detail-modal"
-      contentClassName="d-flex flex-column"
-    >
-      {loading && renderLoading()}
-      {!loading && error && renderError()}
-      {!loading && !error && customer && (
-        <>
-          {renderHeader()}
-          <Modal.Body style={{ overflowY: 'auto' }}>{renderBody()}</Modal.Body>
-        </>
-      )}
+    <>
+      <Modal
+        show={show}
+        onHide={onHide}
+        size="xl"
+        scrollable
+        dialogClassName="customer-detail-modal"
+        contentClassName="d-flex flex-column"
+      >
+        {loading && renderLoading()}
+        {!loading && error && renderError()}
+        {!loading && !error && customer && (
+          <>
+            {renderHeader()}
+            <Modal.Body style={{ overflowY: 'auto' }}>{renderBody()}</Modal.Body>
+          </>
+        )}
 
-      {/* Inline style for modal height */}
-      <style>{`
+        {/* Inline style for modal height */}
+        <style>{`
         .customer-detail-modal {
           max-height: 90vh;
         }
@@ -748,6 +812,32 @@ export function CustomerDetailModal({
           max-height: 90vh;
         }
       `}</style>
-    </Modal>
+      </Modal>
+
+      {/* Create ticket pre-linked to this customer */}
+      <CreateTicketModal
+        show={showCreateTicket}
+        onHide={() => setShowCreateTicket(false)}
+        onSuccess={(ticket) => {
+          setShowCreateTicket(false);
+          setLinkedTickets((prev) => [ticket, ...prev]);
+        }}
+        prefilledCustomerId={customerId}
+        prefilledCustomerName={customer?.companyName}
+      />
+
+      {/* Open a linked ticket's detail modal */}
+      {selectedTicket && (
+        <TicketDetailModal
+          show={!!selectedTicket}
+          ticketId={selectedTicket.id}
+          onHide={() => setSelectedTicket(null)}
+          onDeleted={() => {
+            setLinkedTickets((prev) => prev.filter((t) => t.id !== selectedTicket.id));
+            setSelectedTicket(null);
+          }}
+        />
+      )}
+    </>
   );
 }

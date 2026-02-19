@@ -65,10 +65,10 @@ const OpsHeader = () => {
       {/* ── Row 1: Title + Team Selector | Nav Tabs + Actions ── */}
       <div
         className="d-flex align-items-center justify-content-between px-3 border-bottom bg-white"
-        style={{ height: 56, minHeight: 56 }}
+        style={{ height: 92, minHeight: 92 }}
       >
         {/* Left: Page Title + Team Selector */}
-        <div className="d-flex align-items-center gap-3 flex-shrink-0">
+        <div className="d-flex align-items-center flex-shrink-0" style={{ gap: '2.25rem' }}>
           <div
             className="d-flex align-items-center gap-2"
             style={{ cursor: canManage ? 'pointer' : 'default' }}
@@ -88,12 +88,12 @@ const OpsHeader = () => {
                 : undefined
             }
           >
-            <img src={navLogo} alt={t('title')} style={{ height: 32, width: 32, objectFit: 'contain' }} />
+            <img src={navLogo} alt={t('title')} style={{ height: 40, width: 40, objectFit: 'contain' }} />
             <div className="d-flex flex-column lh-sm">
-              <span className="fw-bold text-dark" style={{ fontSize: '1rem' }}>
+              <span className="fw-bold text-dark" style={{ fontSize: '1.15rem' }}>
                 {t('title')}
               </span>
-              <span className="text-muted d-none d-md-inline" style={{ fontSize: '0.72rem' }}>
+              <span className="text-muted d-none d-md-inline" style={{ fontSize: '0.78rem' }}>
                 {t('subtitle')}
               </span>
             </div>
@@ -102,7 +102,7 @@ const OpsHeader = () => {
           {/* Team / All Teams selector dropdown */}
           {teams.length > 0 && (
             <>
-              <div className="vr" style={{ height: 28 }} />
+              <div className="vr" style={{ height: 32 }} />
               <TeamSelector
                 currentTeam={teams.find((tm) => tm.id === selectedTeamId) ?? null}
                 teams={teams}
@@ -137,7 +137,7 @@ const OpsHeader = () => {
           <button
             type="button"
             className="btn btn-primary rounded-pill"
-            style={{ fontSize: '0.85rem', padding: '6px 18px' }}
+            style={{ fontSize: '0.85rem', padding: '7px 20px' }}
             onClick={() => setShowCreateTicket(true)}
           >
             <i className="bi bi-plus-lg me-1" />
@@ -162,7 +162,7 @@ const OpsHeader = () => {
       {topView === 'board' && (
         <div
           className="d-flex align-items-center px-3 gap-3 border-bottom bg-white"
-          style={{ minHeight: 48, padding: '8px 0' }}
+          style={{ minHeight: 68, padding: '14px 0' }}
         >
           {boardViewMode === 'singleTeam' ? (
             <>

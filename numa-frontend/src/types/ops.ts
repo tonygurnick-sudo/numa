@@ -29,14 +29,20 @@ export type FieldType =
   | 'richtext'
   | 'number'
   | 'select'
-  | 'multi_select'
+  | 'multiselect'
+  | 'multi_select' // legacy alias
   | 'date'
   | 'user'
   | 'url'
   | 'email'
   | 'phone'
   | 'currency'
-  | 'boolean';
+  | 'boolean'
+  | 'percentage'
+  | 'customer'
+  | 'supplier'
+  | 'workunit'
+  | 'project';
 
 export type FieldCategory = 'common' | 'development' | 'support' | 'crm' | 'operations';
 
@@ -207,13 +213,13 @@ export type Ticket = {
   ticketTypeId: string;
   title: string;
   description: string;
-  /** @deprecated Use stageId — statusId is no longer the source of truth */
-  statusId?: string;
   statusType: StatusType;
   zoneId: string;
   stageId: string;
   assigneeId?: string | null;
   assigneeName?: string | null;
+  reporterId?: string | null;
+  reporterName?: string | null;
   priority: TicketPriority;
   projectId?: string | null;
   customerId?: string | null;
@@ -221,8 +227,8 @@ export type Ticket = {
   supplierId?: string | null;
   supplierName?: string | null;
   workUnitId?: string | null;
+  effortPoints?: number | null;
   fields: Record<string, unknown>;
-  customFields?: Record<string, unknown>;
   tags: string[];
   dueDate?: string | null;
   sourceType?: TicketSourceType | null;
@@ -269,6 +275,7 @@ export type TicketLink = {
   ticketId: string;
   linkedTicketId: string;
   linkedTicketDisplayId: string;
+  linkedTicketTitle?: string;
   linkType: TicketLinkType;
   createdBy: string;
   createdAt: string;
@@ -431,11 +438,17 @@ export type CreateTicketPayload = {
   zoneId?: string;
   stageId?: string;
   assigneeId?: string | null;
+  assigneeName?: string | null;
+  reporterId?: string | null;
+  reporterName?: string | null;
   priority?: TicketPriority;
   projectId?: string | null;
   customerId?: string | null;
+  customerName?: string | null;
   supplierId?: string | null;
+  supplierName?: string | null;
   workUnitId?: string | null;
+  effortPoints?: number | null;
   fields?: Record<string, unknown>;
   tags?: string[];
   dueDate?: string | null;
@@ -447,19 +460,23 @@ export type CreateTicketPayload = {
 export type UpdateTicketPayload = {
   title?: string;
   description?: string;
-  /** @deprecated Use stageId instead */
-  statusId?: string;
   statusType?: StatusType | 'deleted';
   zoneId?: string;
   stageId?: string;
   teamId?: string;
   archived?: boolean;
   assigneeId?: string | null;
+  assigneeName?: string | null;
+  reporterId?: string | null;
+  reporterName?: string | null;
   priority?: TicketPriority;
   projectId?: string | null;
   customerId?: string | null;
+  customerName?: string | null;
   supplierId?: string | null;
+  supplierName?: string | null;
   workUnitId?: string | null;
+  effortPoints?: number | null;
   fields?: Record<string, unknown>;
   tags?: string[];
   dueDate?: string | null;
@@ -485,7 +502,11 @@ export type CreateCommentPayload = {
 
 export type CreateLinkPayload = {
   linkedTicketId: string;
+  linkedTicketDisplayId: string;
+  linkedTicketTitle?: string;
   linkType: TicketLinkType;
+  teamId?: string;
+  linkedTeamId?: string;
 };
 
 export type PresignedUrlPayload = {
@@ -627,6 +648,8 @@ export type WorkUnitListResponse = {
 
 export type WorkUnitResponse = {
   workUnit: WorkUnit;
+  movedCount?: number;
+  rolloverCount?: number;
 };
 
 export type MetricsResponse = {
@@ -643,6 +666,12 @@ export type MetricsResponse = {
 
 export type PresignedUrlResponse = {
   uploadUrl: string;
+  s3Key: string;
+  fileId?: string;
+};
+
+export type PresignedDownloadUrlResponse = {
+  downloadUrl: string;
   s3Key: string;
 };
 

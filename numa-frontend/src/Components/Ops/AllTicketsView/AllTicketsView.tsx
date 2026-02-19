@@ -171,7 +171,7 @@ export function AllTicketsView(): React.JSX.Element {
   const { t } = useTranslation('ops');
   const { user } = useAuth();
   const { numaPut } = useNumaRequest();
-  const { config, tickets, ticketsLoading, refreshTickets, teamData } = useOps();
+  const { config, tickets, ticketsLoading, refreshTickets, teamData, workUnits } = useOps();
 
   // ── State ───────────────────────────────────────────────────────────────
   const [scope, setScope] = useState<Scope>('thisTeam');
@@ -220,6 +220,7 @@ export function AllTicketsView(): React.JSX.Element {
   // ── Config lookups ──────────────────────────────────────────────────────
   const ticketTypes = config?.ticketTypes ?? [];
   const staff = config?.staff ?? [];
+  const projects = config?.projects ?? [];
 
   // ── Column definitions ──────────────────────────────────────────────────
   const columns: ColumnDef[] = useMemo(
@@ -338,8 +339,53 @@ export function AllTicketsView(): React.JSX.Element {
         accessor: (tk) => tk.updatedAt,
         render: (tk) => formatDate(tk.updatedAt),
       },
+      {
+        key: 'supplierName',
+        label: t('tickets.supplier'),
+        sortable: true,
+        filterType: 'text',
+        accessor: (tk) => tk.supplierName ?? '',
+      },
+      {
+        key: 'workUnit',
+        label: t('tickets.sprint'),
+        sortable: true,
+        filterType: 'enum',
+        filterOptions: () => workUnits.map((wu) => ({ value: wu.id, label: wu.name })),
+        accessor: (tk) => {
+          const wu = workUnits.find((w) => w.id === tk.workUnitId);
+          return wu?.name ?? '';
+        },
+        render: (tk) => {
+          const wu = workUnits.find((w) => w.id === tk.workUnitId);
+          return wu ? <span>{wu.name}</span> : null;
+        },
+      },
+      {
+        key: 'project',
+        label: t('tickets.project'),
+        sortable: true,
+        filterType: 'text',
+        accessor: (tk) => {
+          const proj = projects.find((p) => p.id === tk.projectId);
+          return proj?.name ?? '';
+        },
+        render: (tk) => {
+          const proj = projects.find((p) => p.id === tk.projectId);
+          return proj ? <span>{proj.name}</span> : null;
+        },
+      },
+      {
+        key: 'reporterName',
+        label: t('tickets.reporter'),
+        sortable: true,
+        filterType: 'enum',
+        filterOptions: () => staff.map((s) => ({ value: s.id, label: s.name })),
+        accessor: (tk) => tk.reporterName ?? '',
+        render: (tk) => tk.reporterName || <span className="text-muted">{t('fields.unknown')}</span>,
+      },
     ],
-    [t, ticketTypes, teamData?.stages, staff],
+    [t, ticketTypes, teamData?.stages, staff, workUnits, projects],
   );
 
   // ── Build column lookup for filter type ─────────────────────────────────

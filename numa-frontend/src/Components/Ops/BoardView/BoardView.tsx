@@ -1,6 +1,15 @@
 import { useState, useMemo, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
-import { DndContext, closestCenter, DragOverlay, type DragEndEvent, type DragStartEvent } from '@dnd-kit/core';
+import {
+  DndContext,
+  closestCenter,
+  DragOverlay,
+  type DragEndEvent,
+  type DragStartEvent,
+  useSensor,
+  useSensors,
+  PointerSensor,
+} from '@dnd-kit/core';
 import { useNumaRequest } from '../../../Providers/NumaRequestContext';
 import { useAuth } from '../../../Providers/AuthProvider';
 import { useOps } from '../OpsContext';
@@ -49,8 +58,17 @@ const BoardView = () => {
   const { t } = useTranslation('ops');
   const { numaPost, numaPut } = useNumaRequest();
   const { user } = useAuth();
-  const { teamData, tickets, ticketsLoading, workUnits, selectedWorkUnitId, activeZoneId, refreshTickets, config } =
-    useOps();
+  const {
+    teamData,
+    tickets,
+    setTickets,
+    ticketsLoading,
+    workUnits,
+    selectedWorkUnitId,
+    activeZoneId,
+    refreshTickets,
+    config,
+  } = useOps();
 
   const [activeTicket, setActiveTicket] = useState<Ticket | null>(null);
 
@@ -120,6 +138,14 @@ const BoardView = () => {
     return map;
   }, [zones, stages]);
 
+  // ── DnD sensors: PointerSensor with distance:8 so short taps register as
+  //    clicks and only deliberate movement begins a drag ──────────────────────
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: { distance: 8 },
+    }),
+  );
+
   // ── DnD Handlers ───────────────────────────────────────────────────
 
   const handleDragStart = useCallback(
@@ -162,6 +188,13 @@ const BoardView = () => {
       // Insert at the end of the destination column
       const newOrder = calculateNewOrder(destStageTickets, destStageTickets.length);
 
+      // Optimistic update: move ticket in local state immediately
+      setTickets((prev) =>
+        prev.map((tk) =>
+          tk.id === ticketId ? { ...tk, stageId: newStageId, zoneId: newZoneId, order: newOrder } : tk,
+        ),
+      );
+
       try {
         await OpsService.updateTicket(numaPut, ticketId, {
           teamId: ticket.teamId,
@@ -170,12 +203,15 @@ const BoardView = () => {
           order: newOrder,
           version: ticket.version,
         });
+        // Sync version numbers and server-derived fields (e.g. statusType)
         await refreshTickets();
       } catch (err) {
         console.error('[BoardView] Failed to move ticket:', err);
+        // Revert to server state on failure
+        await refreshTickets();
       }
     },
-    [filteredTickets, stageZoneMap, numaPut, refreshTickets],
+    [filteredTickets, stageZoneMap, numaPut, refreshTickets, setTickets],
   );
 
   // ── Ticket interaction callbacks ──────────────────────────────────
@@ -366,15 +402,11 @@ const BoardView = () => {
     <DragOverlay>
       {activeTicket ? (
         <div
-          className="kanban-ticket-card"
-          style={{ width: 260, opacity: 0.95, boxShadow: '0 8px 24px rgba(0,0,0,0.15)' }}
+          className="ticket-card"
+          style={{ width: 272, opacity: 0.96, boxShadow: '0 12px 28px rgba(0,0,0,0.18)', rotate: '2deg' }}
         >
-          <div className="kanban-ticket-content">
-            <div className="kanban-ticket-title">{activeTicket.title}</div>
-            <div className="kanban-ticket-meta">
-              <span className="kanban-ticket-id">{activeTicket.displayId}</span>
-            </div>
-          </div>
+          <p className="ticket-title mb-1">{activeTicket.title}</p>
+          <span className="ticket-id">{activeTicket.displayId}</span>
         </div>
       ) : null}
     </DragOverlay>
@@ -382,7 +414,12 @@ const BoardView = () => {
 
   return (
     <>
-      <DndContext collisionDetection={closestCenter} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
+      <DndContext
+        sensors={sensors}
+        collisionDetection={closestCenter}
+        onDragStart={handleDragStart}
+        onDragEnd={handleDragEnd}
+      >
         <div className="p-3">
           <KanbanZone
             zone={activeZone}

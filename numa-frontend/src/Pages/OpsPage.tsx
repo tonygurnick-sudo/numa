@@ -1,8 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Spinner } from 'react-bootstrap';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../Providers/AuthProvider';
+import { useNumaRequest } from '../Providers/NumaRequestContext';
 import { OpsProvider, useOps } from '../Components/Ops/OpsContext';
+import * as OpsService from '../Services/OpsService';
 import OpsHeader from '../Components/Ops/OpsHeader';
 import BoardView from '../Components/Ops/BoardView/BoardView';
 import BacklogView from '../Components/Ops/BacklogView/BacklogView';
@@ -14,6 +16,7 @@ import { OpsHomeView } from '../Components/Ops/HomeView/OpsHomeView';
 import { CreateTeamWizard } from '../Components/Ops/Modals/CreateTeamWizard';
 import { GlobalSettingsModal } from '../Components/Ops/Modals/GlobalSettingsModal';
 import { TeamSettingsModal } from '../Components/Ops/Modals/TeamSettingsModal';
+import { TicketDetailModal } from '../Components/Ops/Modals/TicketDetailModal';
 
 // ─── Inner Content ──────────────────────────────────────────────────────────
 
@@ -26,8 +29,8 @@ const OpsPageContent: React.FC = () => {
   const { t } = useTranslation('ops');
   const { user } = useAuth();
   const {
+    config,
     configLoading,
-    teamsLoading,
     teamLoading,
     teamData,
     teams,
@@ -48,8 +51,10 @@ const OpsPageContent: React.FC = () => {
   const [globalSettingsTab, setGlobalSettingsTab] = useState<string | undefined>();
   const [showTeamSettings, setShowTeamSettings] = useState(false);
 
-  // ── Loading State (initial config + teams) ───────────────────────────
-  if (configLoading || teamsLoading) {
+  // ── Loading State (only show spinner if we have no data at all) ──────
+  // When cached data is available, config/teams are already populated so
+  // the page renders instantly while fresh data loads in the background.
+  if (!config && configLoading) {
     return (
       <div className="d-flex flex-column align-items-center justify-content-center flex-grow-1">
         <Spinner animation="border" />
@@ -247,6 +252,82 @@ const OpsPageContent: React.FC = () => {
 // ─── Page Component (named export for lazy loading) ─────────────────────────
 
 /**
+ * DeepLinkHandler resolves a ?ticket=DISPLAY_ID query parameter and opens
+ * the ticket detail modal. Lives inside OpsProvider so it can use numaGet.
+ */
+const DeepLinkHandler: React.FC = () => {
+  const { numaGet } = useNumaRequest();
+  const { tickets, refreshTickets } = useOps();
+
+  const [ticketId, setTicketId] = useState<string | null>(null);
+  const [show, setShow] = useState(false);
+  const displayIdRef = useRef<string | null>(null);
+  const resolved = useRef(false);
+
+  // Capture the display ID once on mount (before anything can strip it)
+  if (displayIdRef.current === null) {
+    displayIdRef.current = new URLSearchParams(window.location.search).get('ticket') ?? '';
+  }
+
+  const stripParam = () => {
+    const url = new URL(window.location.href);
+    if (url.searchParams.has('ticket')) {
+      url.searchParams.delete('ticket');
+      window.history.replaceState(null, '', url.pathname + url.search);
+    }
+  };
+
+  // Try to resolve from locally loaded tickets first (works with cached data),
+  // then fall back to the API call.
+  useEffect(() => {
+    const displayId = displayIdRef.current;
+    if (!displayId || resolved.current) return;
+
+    // Check if the ticket is already in the local tickets array
+    const local = tickets.find((t) => t.displayId === displayId);
+    if (local) {
+      resolved.current = true;
+      setTicketId(local.id);
+      setShow(true);
+      stripParam();
+      return;
+    }
+
+    // Only try the API once tickets have had a chance to load (non-empty)
+    // or if we have no tickets at all, go straight to the API
+    if (tickets.length > 0) {
+      // Tickets loaded but this one isn't in them — try API (different team)
+      resolved.current = true;
+      stripParam();
+      OpsService.getTicketByDisplayId(numaGet, displayId)
+        .then((response) => {
+          setTicketId(response.ticket.id);
+          setShow(true);
+        })
+        .catch((err) => {
+          console.error('[OpsPage] Failed to resolve ticket deep link:', err);
+        });
+    }
+  }, [tickets, numaGet]);
+
+  return (
+    <TicketDetailModal
+      show={show}
+      ticketId={ticketId}
+      onHide={() => {
+        setShow(false);
+        setTicketId(null);
+      }}
+      onDeleted={() => {
+        setShow(false);
+        setTicketId(null);
+        refreshTickets();
+      }}
+    />
+  );
+};
+
+/**
  * OpsPage is the top-level page component for the Numa Ops module.
  * It wraps everything in the <OpsProvider> so all children can access the
  * Ops context, and delegates rendering to OpsPageContent.
@@ -257,6 +338,7 @@ export const OpsPage: React.FC = () => {
       <div className="d-flex flex-column h-100">
         <OpsPageContent />
       </div>
+      <DeepLinkHandler />
     </OpsProvider>
   );
 };

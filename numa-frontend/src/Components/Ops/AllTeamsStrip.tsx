@@ -94,7 +94,7 @@ const AllTeamsStrip = () => {
   }
 
   return (
-    <div className="d-flex align-items-stretch gap-2 flex-grow-1" style={{ overflowX: 'auto' }}>
+    <div className="d-flex align-items-stretch gap-3 flex-grow-1" style={{ overflowX: 'auto' }}>
       {teams.map((team) => {
         const isSelected = team.id === selectedTeamId;
         const zones = getZonesForTeam(team.id);
@@ -129,15 +129,10 @@ interface TeamBoxProps {
 const TeamBox = ({ team, isSelected, zones, activeZoneId, onSelectTeam, onSelectZone }: TeamBoxProps) => {
   return (
     <div
-      className="d-flex flex-column flex-shrink-0"
+      className={`ops-team-box ${isSelected ? 'selected' : ''}`}
       style={{
-        border: isSelected ? `2px solid ${team.color || '#0d6efd'}` : '1px solid #e9ecef',
-        borderRadius: 10,
-        backgroundColor: isSelected ? `${team.color || '#0d6efd'}10` : '#fff',
-        padding: '8px 12px',
-        minWidth: 130,
-        cursor: 'pointer',
-        transition: 'border-color 0.15s, background-color 0.15s',
+        borderColor: isSelected ? team.color || '#0d6efd' : undefined,
+        backgroundColor: isSelected ? `${team.color || '#0d6efd'}10` : undefined,
       }}
       onClick={onSelectTeam}
       role="button"
@@ -150,7 +145,7 @@ const TeamBox = ({ team, isSelected, zones, activeZoneId, onSelectTeam, onSelect
       }}
     >
       {/* Team name row */}
-      <div className="d-flex align-items-center gap-2 mb-1">
+      <div className="d-flex align-items-center gap-2">
         <span
           className="d-inline-block rounded-circle flex-shrink-0"
           style={{
@@ -167,7 +162,7 @@ const TeamBox = ({ team, isSelected, zones, activeZoneId, onSelectTeam, onSelect
         </span>
       </div>
 
-      {/* Zone pills (always shown if zone data is available) */}
+      {/* Zone pills */}
       {zones.length > 0 && (
         <div className="d-flex align-items-center gap-1 flex-wrap">
           {zones.map((zone) => {
@@ -176,8 +171,7 @@ const TeamBox = ({ team, isSelected, zones, activeZoneId, onSelectTeam, onSelect
               <button
                 key={zone.id}
                 type="button"
-                className={`btn btn-sm py-0 px-2 ${isActive ? 'btn-primary' : 'btn-outline-secondary'}`}
-                style={{ fontSize: '0.72rem', lineHeight: '1.7', borderRadius: 6 }}
+                className={`ops-team-zone-pill ${isActive ? 'active' : ''}`}
                 onClick={(e) => {
                   e.stopPropagation();
                   onSelectZone(zone.id);

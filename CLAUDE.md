@@ -2,6 +2,28 @@
 
 I am a new developer. I am intrested in what you do so please explaing what you are doing and why
 
+---
+
+## Arcanum AI Team
+
+Numa is built by Arcanum AI, a New Zealand-based company founded in 2016. Here's the team:
+
+| Name | Role | Email |
+|------|------|-------|
+| Asa Cox | CEO | asa@arcanum.ai |
+| Scott Houston | Chairman | scott@arcanum.ai |
+| Ian Dougherty | COO | ian@arcanum.ai |
+| Jayson Satya | CRO | jayson@arcanum.ai |
+| Connor Nickel | Business Development & Sales Officer | connor@arcanum.ai |
+| Tony Gurnick | Engineering Lead | tony.gurnick@arcanum.ai |
+| Nathan Douglas | Senior AI Engineer | nathan@arcanum.ai |
+| Greg Frantzen | Software Engineer | greg.frantzen@arcanum.ai |
+| Tom Wiltshire | Junior AI Engineer | tom.wiltshire@arcanum.ai |
+| Prasanna Ramachandran | Customer Success | pras@arcanum.ai |
+| Lily Coats | Business Development | lily.coats@arcanum.ai |
+
+---
+
 # Guiding Primciples
 
 These 9 principles guide the high-performance, functional architecture:
@@ -383,6 +405,44 @@ Feature branches → `dev` (default MR target) → `main` (release). No pipeline
 - `/initial-account-setup/` – CloudFormation templates for initial AWS account bootstrapping.
 - `/docs/` – Architecture documentation and task specs.
 - `/style/` – Shared ESLint configuration base.
+
+---
+
+## Numa Ops
+
+Numa Ops is a work management / project ops module built into the Numa platform. It was designed by Ian (Product Manager) and is being implemented as a first-class Numa feature. Think of it as a lightweight Jira/Linear-style ops tool, purpose-built for enterprise teams using Numa.
+
+### Concepts
+
+- **Tickets** — The core unit of work. Each ticket has a title, description, status, priority, assignee, due date, and more. Tickets live on kanban boards and in a backlog.
+- **Teams** — What Ian's original POC called "boards". A team owns a set of tickets and has its own kanban board.
+- **Projects** — Groupings of tickets, linked to a team. Tickets can belong to a project.
+- **Customers** — First-class entity. Tickets and projects can be linked to a customer. Has its own tab (not mirrored from CRM — standalone).
+- **Suppliers** — Similar to customers. Tickets can be linked to suppliers.
+- **Backlog** — A list view of all tickets not yet assigned to an active sprint/board column.
+- **Kanban board** — Column-based view of tickets by status (e.g. To Do, In Progress, Done).
+
+### Key Differences from Ian's POC
+
+- Ian called "teams" → "boards". Numa calls them **teams**.
+- Customers are their own standalone tab (Ian's version had a CRM mirror concept — we removed that).
+- Suppliers are tracked similarly to customers.
+- Ian's original design had a "Work Centre" hierarchy above teams. This was removed (with Ian's approval) — companies will only ever have one work centre, so the hierarchy is flat: Ticket → Team.
+
+### Ian's POC
+
+Ian (PM) built a reference implementation called "The actual Work Ops App" — it is the **gold standard** for feature parity. If you have it locally, it lives under `docs/tasks/numa-ops-feature/The actual Work Ops App/` and contains the full field library, status model, and domain logic. The accompanying doc `Numa-Ops-Business-Capabilities.docx` describes the full business vision.
+
+### Implementation
+
+- **Backend**: Node Lambdas in `/lambdas/node/` prefixed with `numa-ops-*` (e.g. `numa-ops-tickets`, `numa-ops-projects`, `numa-ops-teams`, `numa-ops-customers`).
+- **Frontend**: Components and pages under `numa-frontend/src/` — look for `NumaOps`, `Ops`, or `ops` in filenames.
+
+### Mental Model for Ops Tasks
+
+- Ian's POC is the gold standard — when in doubt, match his design.
+- The structure (lambdas, infra, routing) is largely in place — most work is filling in missing fields, functionality, and UI/UX polish.
+- Tickets are the most complex entity — they have many fields, link to other entities (projects, customers, suppliers, other tickets), and appear in multiple views (kanban card, backlog row, ticket detail modal).
 
 ---
 

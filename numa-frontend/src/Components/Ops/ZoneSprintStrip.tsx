@@ -118,29 +118,45 @@ const ZoneSprintStrip = () => {
     }
   }, [teamId, teamData?.team?.workUnitSeries?.label, workUnits.length, numaPost, refreshTeam]);
 
+  // ── Zone ticket counts (Mode A) ──────────────────────────────────────
+  const zoneTicketCounts = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const zone of zones) {
+      map.set(zone.id, 0);
+    }
+    for (const tk of tickets) {
+      if (map.has(tk.zoneId)) {
+        map.set(tk.zoneId, (map.get(tk.zoneId) ?? 0) + 1);
+      }
+    }
+    return map;
+  }, [zones, tickets]);
+
   // ═══════════════════════════════════════════════════════════════════════
   // Mode A — Plain zone pills (no work units)
   // ═══════════════════════════════════════════════════════════════════════
   if (!hasWorkUnits) {
     return (
       <div className="d-flex align-items-center gap-2 flex-grow-1" style={{ overflowX: 'auto' }}>
-        <span
-          className="text-muted text-uppercase flex-shrink-0 fw-semibold"
-          style={{ fontSize: '0.7rem', letterSpacing: '0.5px' }}
-        >
+        <span className="ops-strip-label">
+          <i className="bi bi-gear" />
           {t('header.zonesLabel')}
         </span>
-        {zones.map((zone) => (
-          <button
-            key={zone.id}
-            type="button"
-            className={`btn btn-sm flex-shrink-0 ${activeZoneId === zone.id ? 'btn-primary' : 'btn-outline-secondary'}`}
-            onClick={() => setActiveZone(zone.id)}
-          >
-            <i className={`bi ${zone.zoneType === 'board' ? 'bi-kanban' : 'bi-list-task'} me-1`} />
-            {zone.name}
-          </button>
-        ))}
+        {zones.map((zone) => {
+          const count = zoneTicketCounts.get(zone.id) ?? 0;
+          return (
+            <button
+              key={zone.id}
+              type="button"
+              className={`ops-pill ${activeZoneId === zone.id ? 'active' : ''}`}
+              onClick={() => setActiveZone(zone.id)}
+            >
+              <i className={`bi ${zone.zoneType === 'board' ? 'bi-kanban' : 'bi-list-task'}`} />
+              {zone.name}
+              <span className="ops-pill-count">{count}</span>
+            </button>
+          );
+        })}
       </div>
     );
   }
@@ -153,19 +169,15 @@ const ZoneSprintStrip = () => {
       <div className="d-flex flex-column flex-grow-1" style={{ minWidth: 0 }}>
         {/* ── Pill Row ─────────────────────────────────────────────────── */}
         <div className="d-flex align-items-center gap-2" style={{ overflowX: 'auto' }}>
-          <span
-            className="text-muted text-uppercase flex-shrink-0 fw-semibold"
-            style={{ fontSize: '0.7rem', letterSpacing: '0.5px' }}
-          >
+          <span className="ops-strip-label">
+            <i className="bi bi-gear" />
             {t('header.sprintsLabel')}
           </span>
 
           {/* "All" pill */}
           <button
             type="button"
-            className={`btn btn-sm flex-shrink-0 ${
-              selectedWorkUnitId === null ? 'btn-primary' : 'btn-outline-secondary'
-            }`}
+            className={`ops-pill-text ${selectedWorkUnitId === null ? 'active' : ''}`}
             onClick={() => selectWorkUnit(null)}
           >
             {t('sprints.all')}
@@ -174,16 +186,16 @@ const ZoneSprintStrip = () => {
           {/* Backlog pill */}
           <button
             type="button"
-            className={`btn btn-sm flex-shrink-0 btn-outline-secondary`}
+            className="ops-pill"
             onClick={() => {
               selectWorkUnit(null);
               const firstBacklog = zones.find((z) => z.zoneType === 'backlog');
               if (firstBacklog) setActiveZone(firstBacklog.id);
             }}
           >
-            <i className="bi bi-inbox me-1" />
+            <i className="bi bi-inbox" />
             {t('sprints.backlog')}
-            <span className="badge bg-secondary bg-opacity-25 text-secondary ms-1">{backlogCount}</span>
+            {backlogCount > 0 && <span className="ops-backlog-badge">{backlogCount}</span>}
           </button>
 
           {/* Work-unit pills */}
@@ -196,32 +208,22 @@ const ZoneSprintStrip = () => {
               <button
                 key={wu.id}
                 type="button"
-                className={`btn btn-sm flex-shrink-0 position-relative ${
-                  isSelected ? 'btn-primary' : 'btn-outline-secondary'
-                }`}
+                className={`ops-pill ${isSelected ? 'active' : ''}`}
                 style={{ paddingBottom: wu.status === 'active' ? 10 : undefined }}
                 onClick={() => selectWorkUnit(wu.id)}
               >
-                <span
-                  className="d-inline-block rounded-circle me-1"
-                  style={{
-                    width: 8,
-                    height: 8,
-                    backgroundColor: statusDotColor(wu.status),
-                  }}
-                />
+                <span className="ops-sprint-dot" style={{ backgroundColor: statusDotColor(wu.status) }} />
                 {wu.name}{' '}
-                <span className="opacity-75">{t('sprints.progress', { done: stats.done, total: stats.total })}</span>
+                <span className="ops-sprint-fraction">
+                  {t('sprints.progress', { done: stats.done, total: stats.total })}
+                </span>
                 {/* Thin progress bar for active sprints */}
                 {wu.status === 'active' && (
                   <span
-                    className="position-absolute bottom-0 start-0"
+                    className="ops-sprint-progress"
                     style={{
-                      height: 3,
                       width: `${pct}%`,
                       backgroundColor: isSelected ? '#fff' : '#0d6efd',
-                      borderRadius: '0 0 4px 4px',
-                      transition: 'width 0.3s ease',
                     }}
                   />
                 )}
@@ -230,13 +232,8 @@ const ZoneSprintStrip = () => {
           })}
 
           {/* + New Sprint */}
-          <button
-            type="button"
-            className="btn btn-sm btn-link text-muted text-decoration-none flex-shrink-0"
-            style={{ fontSize: '0.82rem' }}
-            onClick={handleNewSprint}
-          >
-            <i className="bi bi-plus me-1" />
+          <button type="button" className="ops-new-link" onClick={handleNewSprint}>
+            <i className="bi bi-plus" />
             {t('sprints.new')}
           </button>
 

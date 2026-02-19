@@ -166,12 +166,12 @@ export const createWorkUnit = async (
   payload: CreateWorkUnitPayload,
 ): Promise<WorkUnit> => {
   console.info(`${LOG_PREFIX} createWorkUnit`, { teamId, name: payload.name });
-  const response = (await numaPost(`${BASE_URL}/teams/${encodeURIComponent(teamId)}/work-units`, payload)) as
-    | WorkUnitResponse
-    | WorkUnit;
-  const workUnit = 'workUnit' in response ? response.workUnit : (response as WorkUnit);
-  console.info(`${LOG_PREFIX} createWorkUnit: success`, { id: workUnit.id });
-  return workUnit;
+  const response = (await numaPost(
+    `${BASE_URL}/teams/${encodeURIComponent(teamId)}/work-units`,
+    payload,
+  )) as WorkUnitResponse;
+  console.info(`${LOG_PREFIX} createWorkUnit: success`, { id: response.workUnit.id });
+  return response.workUnit;
 };
 
 export const updateWorkUnit = async (
@@ -184,10 +184,9 @@ export const updateWorkUnit = async (
   const response = (await numaPut(
     `${BASE_URL}/teams/${encodeURIComponent(teamId)}/work-units/${encodeURIComponent(workUnitId)}`,
     payload,
-  )) as WorkUnitResponse | WorkUnit;
-  const workUnit = 'workUnit' in response ? response.workUnit : (response as WorkUnit);
-  console.info(`${LOG_PREFIX} updateWorkUnit: success`, { id: workUnit.id });
-  return workUnit;
+  )) as WorkUnitResponse;
+  console.info(`${LOG_PREFIX} updateWorkUnit: success`, { id: response.workUnit.id });
+  return response.workUnit;
 };
 
 // ─── Tickets ───────────────────────────────────────────────────────────────
@@ -273,11 +272,8 @@ export const deleteTicket = async (numaDelete: NumaDelete, ticketId: string, tea
 
 export const restoreTicket = async (numaPost: NumaPost, ticketId: string): Promise<Ticket> => {
   console.info(`${LOG_PREFIX} restoreTicket`, { ticketId });
-  const response = (await numaPost(`${BASE_URL}/tickets/${encodeURIComponent(ticketId)}/restore`)) as
-    | TicketResponse
-    | Ticket;
-  // Backend returns raw item (not wrapped), handle both shapes
-  const ticket = 'ticket' in response ? response.ticket : (response as Ticket);
+  const response = (await numaPost(`${BASE_URL}/tickets/${encodeURIComponent(ticketId)}/restore`)) as TicketResponse;
+  const ticket = response.ticket;
   console.info(`${LOG_PREFIX} restoreTicket: success`, { id: ticket.id });
   return ticket;
 };
@@ -338,11 +334,9 @@ export const updateComment = async (
   const response = (await numaPut(
     `${BASE_URL}/tickets/${encodeURIComponent(ticketId)}/comments/${encodeURIComponent(commentId)}`,
     payload,
-  )) as CommentResponse | Comment;
-  // Backend returns raw item (not wrapped), handle both shapes
-  const comment = 'comment' in response ? response.comment : (response as Comment);
-  console.info(`${LOG_PREFIX} updateComment: success`, { id: comment.id });
-  return comment;
+  )) as CommentResponse;
+  console.info(`${LOG_PREFIX} updateComment: success`, { id: response.comment.id });
+  return response.comment;
 };
 
 export const deleteComment = async (numaDelete: NumaDelete, ticketId: string, commentId: string): Promise<void> => {
@@ -400,6 +394,11 @@ export const getPresignedUrl = async (
   console.info(`${LOG_PREFIX} getPresignedUrl`, { context: payload.context, contextId: payload.contextId });
   const response = (await numaPost(`${BASE_URL}/uploads/presigned-url`, payload)) as PresignedUrlResponse;
   return response;
+};
+
+export const getPresignedDownloadUrl = async (numaGet: NumaGet, s3Key: string): Promise<string> => {
+  const response = (await numaGet(`${BASE_URL}/uploads/presigned-url`, { s3Key })) as { downloadUrl: string };
+  return response.downloadUrl;
 };
 
 // ─── User Preferences ──────────────────────────────────────────────────────
@@ -471,7 +470,7 @@ export const updateCustomer = async (
     `${BASE_URL}/customers/${encodeURIComponent(customerId)}`,
     payload,
   )) as CustomerResponse;
-  console.info(`${LOG_PREFIX} updateCustomer: success`, { id: response.customer.id });
+  console.info(`${LOG_PREFIX} updateCustomer: success`, { id: response.customer?.id });
   return response.customer;
 };
 

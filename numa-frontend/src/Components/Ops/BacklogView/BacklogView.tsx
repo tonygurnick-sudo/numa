@@ -2,6 +2,7 @@ import { useState, useMemo, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useOps } from '../OpsContext';
 import { TicketDetailModal } from '../Modals/TicketDetailModal';
+import { formatDueDate } from '../Shared/ticketUtils';
 import type { WorkUnit, Ticket } from '../../../types/ops';
 
 /**
@@ -15,7 +16,7 @@ import type { WorkUnit, Ticket } from '../../../types/ops';
  */
 const BacklogView = () => {
   const { t } = useTranslation('ops');
-  const { teamData, workUnits, tickets } = useOps();
+  const { teamData, workUnits, tickets, config } = useOps();
 
   const [filter, setFilter] = useState<string | null>(null);
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
@@ -207,8 +208,55 @@ const BacklogView = () => {
                               setShowDetail(true);
                             }}
                           >
+                            {/* Type colour dot */}
+                            {(() => {
+                              const ticketType = config?.ticketTypes.find((tt) => tt.id === ticket.ticketTypeId);
+                              return ticketType ? (
+                                <span
+                                  style={{
+                                    display: 'inline-block',
+                                    width: 8,
+                                    height: 8,
+                                    borderRadius: '50%',
+                                    backgroundColor: ticketType.color ?? '#6c757d',
+                                    flexShrink: 0,
+                                  }}
+                                  title={ticketType.name}
+                                />
+                              ) : null;
+                            })()}
                             <small className="text-muted flex-shrink-0">{ticket.displayId}</small>
-                            <span className="text-truncate">{ticket.title}</span>
+                            <span className="text-truncate flex-grow-1">{ticket.title}</span>
+                            {/* Customer badge */}
+                            {ticket.customerName && (
+                              <span
+                                className="badge bg-primary bg-opacity-10 text-primary flex-shrink-0"
+                                style={{ fontSize: '0.65rem' }}
+                              >
+                                <i className="bi bi-building me-1" />
+                                {ticket.customerName}
+                              </span>
+                            )}
+                            {/* Assignee */}
+                            {ticket.assigneeName && (
+                              <span className="text-muted flex-shrink-0" style={{ fontSize: '0.75rem' }}>
+                                <i className="bi bi-person me-1" />
+                                {ticket.assigneeName}
+                              </span>
+                            )}
+                            {/* Due date */}
+                            {(() => {
+                              const dueDateInfo = formatDueDate(ticket.dueDate);
+                              return dueDateInfo ? (
+                                <span
+                                  className={`flex-shrink-0 ${dueDateInfo.className}`}
+                                  style={{ fontSize: '0.72rem', fontWeight: 500 }}
+                                >
+                                  <i className="bi bi-calendar3 me-1" style={{ fontSize: '0.65rem' }} />
+                                  {dueDateInfo.text}
+                                </span>
+                              ) : null;
+                            })()}
                             {ticket.priority && (
                               <span className={`ms-auto badge ${priorityColor(ticket.priority)} small flex-shrink-0`}>
                                 {ticket.priority}

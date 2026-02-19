@@ -1,9 +1,8 @@
 import React from 'react';
-import { Card, Badge } from 'react-bootstrap';
 import { useDraggable } from '@dnd-kit/core';
 import { useTranslation } from 'react-i18next';
-import type { Customer, CrmConfig, CrmLifecycleStage } from '../../../types/ops';
-import { getColorForPosition, getContrastTextColor } from '../Shared/colorUtils';
+import type { Customer, CrmConfig, CrmLifecycleStage, Contact } from '../../../types/ops';
+import { getColorForPosition } from '../Shared/colorUtils';
 
 // ─── Props ──────────────────────────────────────────────────────────────────
 
@@ -15,77 +14,58 @@ interface CustomerCardProps {
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
-/**
- * Formats a number as currency (USD). Returns an empty string for null/undefined.
- */
-function formatCurrency(value: number | null | undefined): string {
-  if (value == null) return '';
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: 'USD',
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  }).format(value);
+function formatLastContact(dateStr: string | null | undefined): string {
+  if (!dateStr) return 'No contact';
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+  if (days === 0) return 'Today';
+  if (days === 1) return '1 day ago';
+  if (days < 30) return `${String(days)} days ago`;
+  const months = Math.floor(days / 30);
+  return months === 1 ? '1 month ago' : `${String(months)} months ago`;
 }
 
 // ─── Component ──────────────────────────────────────────────────────────────
 
-/**
- * CustomerCard renders a compact draggable card for a customer within a
- * kanban column.
- *
- * Shows the company name (bold, truncated), flag icons, industry, contract
- * value, open ticket badge, and primary contact name/role. The bottom border
- * is colored according to the customer's lifecycle stage position.
- *
- * The card is a DnD-kit draggable using the customer's ID as the drag
- * identifier. Clicking (without dragging) opens the detail modal.
- */
 export function CustomerCard({ customer, crmConfig, onClick }: CustomerCardProps): React.JSX.Element {
   const { t } = useTranslation('ops');
-
-  // ── DnD-kit draggable ────────────────────────────────────────────────
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
     id: customer.id,
   });
+
+  const stage: CrmLifecycleStage | undefined = crmConfig.lifecycleStages.find((s) => s.id === customer.lifecycleStage);
+  const stageColor = stage ? getColorForPosition(stage.colorPosition) : '#6c757d';
+
+  const primaryContact: Contact | undefined = customer.contacts.find((c) => c.isPrimary);
 
   const dragStyle: React.CSSProperties = transform
     ? { transform: `translate3d(${String(transform.x)}px, ${String(transform.y)}px, 0)` }
     : {};
 
-  // Resolve the lifecycle stage for the bottom border color.
-  const stage: CrmLifecycleStage | undefined = crmConfig.lifecycleStages.find((s) => s.id === customer.lifecycleStage);
-  const stageColor = stage ? getColorForPosition(stage.colorPosition) : '#6c757d';
-
-  // Find the primary contact (first one flagged as primary).
-  const primaryContact = customer.contacts.find((c) => c.isPrimary) ?? null;
-
-  // Resolve flags from config.
-  const resolvedFlags = customer.flags
-    .map((flagId) => crmConfig.customerFlags.find((f) => f.id === flagId))
-    .filter((f): f is NonNullable<typeof f> => f != null);
+  const lastContact = formatLastContact(customer.lastContactDate);
 
   return (
-    <div ref={setNodeRef} style={dragStyle} {...attributes} {...listeners}>
-      <Card
-        className="mb-2 border"
+    <div ref={setNodeRef} style={{ ...dragStyle, marginBottom: 8 }} {...attributes} {...listeners}>
+      <div
         style={{
-          width: 220,
-          cursor: isDragging ? 'grabbing' : 'grab',
-          borderBottom: `3px solid ${stageColor}`,
-          transition: isDragging ? 'none' : 'box-shadow 0.15s ease',
+          background: '#fff',
+          borderRadius: 10,
+          border: '1px solid #e5e7eb',
+          padding: '12px 14px',
+          cursor: isDragging ? 'grabbing' : 'pointer',
           opacity: isDragging ? 0.5 : 1,
+          boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
+          transition: 'box-shadow 0.15s',
+          userSelect: 'none',
         }}
         onClick={() => {
           if (!isDragging) onClick(customer);
         }}
         onMouseEnter={(e) => {
-          if (!isDragging) {
-            (e.currentTarget as HTMLElement).style.boxShadow = '0 2px 8px rgba(0,0,0,0.15)';
-          }
+          (e.currentTarget as HTMLElement).style.boxShadow = '0 4px 12px rgba(0,0,0,0.1)';
         }}
         onMouseLeave={(e) => {
-          (e.currentTarget as HTMLElement).style.boxShadow = 'none';
+          (e.currentTarget as HTMLElement).style.boxShadow = '0 1px 2px rgba(0,0,0,0.05)';
         }}
         role="button"
         tabIndex={0}
@@ -96,59 +76,82 @@ export function CustomerCard({ customer, crmConfig, onClick }: CustomerCardProps
           }
         }}
       >
-        <Card.Body className="p-2">
-          {/* Company name */}
-          <div className="fw-bold small text-truncate mb-1" title={customer.companyName}>
+        {/* Row 1: Company name + open ticket count */}
+        <div className="d-flex align-items-start justify-content-between gap-2 mb-1">
+          <span
+            className="fw-bold"
+            style={{
+              fontSize: '0.9rem',
+              color: '#111827',
+              lineHeight: '1.3',
+              overflow: 'hidden',
+              display: '-webkit-box',
+              WebkitLineClamp: 2,
+              WebkitBoxOrient: 'vertical',
+            }}
+            title={customer.companyName}
+          >
             {customer.companyName}
-          </div>
-
-          {/* Flag icons */}
-          {resolvedFlags.length > 0 && (
-            <div className="d-flex flex-wrap gap-1 mb-1">
-              {resolvedFlags.map((flag) => (
-                <span
-                  key={flag.id}
-                  title={flag.name}
-                  className="d-inline-flex align-items-center justify-content-center rounded-1"
-                  style={{
-                    backgroundColor: flag.color,
-                    color: getContrastTextColor(flag.color),
-                    width: 20,
-                    height: 20,
-                    fontSize: '0.7rem',
-                  }}
-                >
-                  {flag.icon ? <i className={`bi bi-${flag.icon}`} /> : flag.name.charAt(0).toUpperCase()}
-                </span>
-              ))}
-            </div>
-          )}
-
-          {/* Industry */}
-          {customer.industry && <div className="text-muted small text-truncate mb-1">{customer.industry}</div>}
-
-          {/* Contract value */}
-          {customer.contractValue != null && customer.contractValue > 0 && (
-            <div className="small fw-semibold mb-1">{formatCurrency(customer.contractValue)}</div>
-          )}
-
-          {/* Open ticket count */}
+          </span>
           {customer.openTicketCount > 0 && (
-            <Badge bg="warning" text="dark" className="me-1 mb-1" style={{ fontSize: '0.7rem' }}>
-              {customer.openTicketCount} {t('tickets.count', { count: customer.openTicketCount })}
-            </Badge>
+            <span
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                flexShrink: 0,
+                backgroundColor: '#eff6ff',
+                border: '1px solid #bfdbfe',
+                borderRadius: 6,
+                padding: '2px 7px',
+                fontSize: '0.72rem',
+                color: '#2563eb',
+                fontWeight: 600,
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {t('tickets.open', { count: customer.openTicketCount })}
+            </span>
           )}
+        </div>
 
-          {/* Primary contact */}
-          {primaryContact && (
-            <div className="small text-muted text-truncate">
-              <i className="bi bi-person me-1" />
+        {/* Row 2: Primary contact with star */}
+        {primaryContact ? (
+          <div
+            className="d-flex align-items-center gap-1"
+            style={{ fontSize: '0.8rem', color: '#374151', marginBottom: 4 }}
+          >
+            <i className="bi bi-star-fill" style={{ color: '#f59e0b', fontSize: '0.65rem', flexShrink: 0 }} />
+            <span className="text-truncate">
               {primaryContact.name}
-              {primaryContact.role && <span className="ms-1">({primaryContact.role})</span>}
-            </div>
-          )}
-        </Card.Body>
-      </Card>
+              {primaryContact.role && <span style={{ color: '#9ca3af', marginLeft: 3 }}>({primaryContact.role})</span>}
+            </span>
+          </div>
+        ) : (
+          <div style={{ fontSize: '0.8rem', color: '#9ca3af', marginBottom: 4, fontStyle: 'italic' }}>
+            {t('crm.noContactAdded')}
+          </div>
+        )}
+
+        {/* Row 3: Industry · Size */}
+        {(customer.industry || customer.companySize) && (
+          <div style={{ fontSize: '0.76rem', color: '#9ca3af', marginBottom: 4 }}>
+            {[customer.industry, customer.companySize].filter(Boolean).join(' · ')}
+          </div>
+        )}
+
+        {/* Row 4: Last contact */}
+        <div
+          style={{
+            fontSize: '0.74rem',
+            color: lastContact === 'No contact' ? '#d1d5db' : '#9ca3af',
+          }}
+        >
+          {lastContact}
+        </div>
+
+        {/* Bottom stage color bar */}
+        <div style={{ height: 3, borderRadius: 2, backgroundColor: stageColor, marginTop: 10 }} />
+      </div>
     </div>
   );
 }

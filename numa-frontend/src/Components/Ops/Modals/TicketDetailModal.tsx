@@ -3,8 +3,6 @@ import Modal from 'react-bootstrap/Modal';
 import Button from 'react-bootstrap/Button';
 import Badge from 'react-bootstrap/Badge';
 import Form from 'react-bootstrap/Form';
-import Tab from 'react-bootstrap/Tab';
-import Nav from 'react-bootstrap/Nav';
 import Spinner from 'react-bootstrap/Spinner';
 import { useTranslation } from 'react-i18next';
 import { useNumaRequest } from '../../../Providers/NumaRequestContext';
@@ -13,9 +11,11 @@ import * as OpsService from '../../../Services/OpsService';
 import type { Ticket, TicketLink, TicketPriority, TicketType, FieldDefinition } from '../../../types/ops';
 import { CommentSection } from '../Shared/CommentSection';
 import { LinkedTicketsSection } from '../Shared/LinkedTicketsSection';
+import { AttachmentsSection } from '../Shared/AttachmentsSection';
+import { RichTextEditor } from '../Shared/RichTextEditor';
+import type { RichTextEditorHandle } from '../Shared/RichTextEditor';
 import { DynamicField } from '../Shared/DynamicField';
 import { ConfirmModal } from './ConfirmModal';
-import { getContrastTextColor } from '../Shared/colorUtils';
 import { getTicketTypeIconClass } from '../../../constants/opsConstants';
 
 // ─── Props ──────────────────────────────────────────────────────────────────
@@ -48,6 +48,17 @@ function formatDate(dateStr: string | null | undefined): string {
     hour: '2-digit',
     minute: '2-digit',
   });
+}
+
+/**
+ * Formats an ISO date string to a compact display string (no time component).
+ * Used for the lifecycle dates strip.
+ */
+function formatDateShort(dateStr: string | null | undefined): string {
+  if (!dateStr) return '\u2014';
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return '\u2014';
+  return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
 }
 
 /**
@@ -106,25 +117,27 @@ export function TicketDetailModal({ show, ticketId, onHide, onDeleted }: TicketD
   const [links, setLinks] = useState<TicketLink[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState('description');
 
   // ── Inline editing state ────────────────────────────────────────────────
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleDraft, setTitleDraft] = useState('');
-  const [editingDescription, setEditingDescription] = useState(false);
-  const [descriptionDraft, setDescriptionDraft] = useState('');
   const [editingTags, setEditingTags] = useState(false);
   const [tagsDraft, setTagsDraft] = useState('');
-  const [editingDueDate, setEditingDueDate] = useState(false);
-  const [dueDateDraft, setDueDateDraft] = useState('');
   const [saving, setSaving] = useState(false);
+
+  // ── CRM lists for selector dropdowns ───────────────────────────────────
+  const [customers, setCustomers] = useState<import('../../../types/ops').Customer[]>([]);
+  const [suppliers, setSuppliers] = useState<import('../../../types/ops').Supplier[]>([]);
 
   // ── Delete confirmation ─────────────────────────────────────────────────
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
+  // ── Share / copy link feedback ────────────────────────────────────────
+  const [copied, setCopied] = useState(false);
+
   // ── Ref for title input auto-focus ──────────────────────────────────────
   const titleInputRef = useRef<HTMLInputElement>(null);
-  const descriptionRef = useRef<HTMLTextAreaElement>(null);
+  const descriptionEditorRef = useRef<RichTextEditorHandle>(null);
 
   // ── Derived data ────────────────────────────────────────────────────────
   const ticketType: TicketType | undefined = ticket
@@ -154,19 +167,29 @@ export function TicketDetailModal({ show, ticketId, onHide, onDeleted }: TicketD
   useEffect(() => {
     if (show && ticketId) {
       void loadTicket();
+      // Load CRM lists for selector dropdowns
+      void OpsService.listCustomers(numaGet)
+        .then(setCustomers)
+        .catch(() => {
+          /* non-fatal */
+        });
+      void OpsService.listSuppliers(numaGet)
+        .then(setSuppliers)
+        .catch(() => {
+          /* non-fatal */
+        });
       // Reset editing states when opening
       setEditingTitle(false);
-      setEditingDescription(false);
       setEditingTags(false);
-      setEditingDueDate(false);
-      setActiveTab('description');
     }
     if (!show) {
       setTicket(null);
       setLinks([]);
       setError(null);
+      setCustomers([]);
+      setSuppliers([]);
     }
-  }, [show, ticketId, loadTicket]);
+  }, [show, ticketId, loadTicket, numaGet]);
 
   // ── Auto-focus title input ──────────────────────────────────────────────
 
@@ -176,12 +199,6 @@ export function TicketDetailModal({ show, ticketId, onHide, onDeleted }: TicketD
       titleInputRef.current.select();
     }
   }, [editingTitle]);
-
-  useEffect(() => {
-    if (editingDescription && descriptionRef.current) {
-      descriptionRef.current.focus();
-    }
-  }, [editingDescription]);
 
   // ── Generic update handler with optimistic locking ──────────────────────
 
@@ -235,27 +252,6 @@ export function TicketDetailModal({ show, ticketId, onHide, onDeleted }: TicketD
     setEditingTitle(false);
   };
 
-  // ── Description editing handlers ────────────────────────────────────────
-
-  const startEditDescription = () => {
-    if (!ticket) return;
-    setDescriptionDraft(ticket.description);
-    setEditingDescription(true);
-  };
-
-  const saveDescription = async () => {
-    if (descriptionDraft === ticket?.description) {
-      setEditingDescription(false);
-      return;
-    }
-    await handleUpdate({ description: descriptionDraft });
-    setEditingDescription(false);
-  };
-
-  const cancelDescription = () => {
-    setEditingDescription(false);
-  };
-
   // ── Tags editing handlers ──────────────────────────────────────────────
 
   const startEditTags = () => {
@@ -275,24 +271,6 @@ export function TicketDetailModal({ show, ticketId, onHide, onDeleted }: TicketD
 
   const cancelTags = () => {
     setEditingTags(false);
-  };
-
-  // ── Due date editing handlers ─────────────────────────────────────────
-
-  const startEditDueDate = () => {
-    if (!ticket) return;
-    setDueDateDraft(toDateInputValue(ticket.dueDate));
-    setEditingDueDate(true);
-  };
-
-  const saveDueDate = async () => {
-    const value = dueDateDraft || null;
-    await handleUpdate({ dueDate: value });
-    setEditingDueDate(false);
-  };
-
-  const cancelDueDate = () => {
-    setEditingDueDate(false);
   };
 
   // ── Archive handler ──────────────────────────────────────────────────
@@ -339,7 +317,7 @@ export function TicketDetailModal({ show, ticketId, onHide, onDeleted }: TicketD
   const handleCustomFieldChange = useCallback(
     async (fieldId: string, value: unknown) => {
       if (!ticket) return;
-      const updatedFields = { ...(ticket.fields ?? ticket.customFields ?? {}), [fieldId]: value };
+      const updatedFields = { ...(ticket.fields ?? {}), [fieldId]: value };
       await handleUpdate({ fields: updatedFields });
     },
     [ticket, handleUpdate],
@@ -353,8 +331,29 @@ export function TicketDetailModal({ show, ticketId, onHide, onDeleted }: TicketD
   }[] => {
     if (!ticketType || !config) return [];
     const fieldOverrides = team?.fieldOverrides ?? {};
+    const hasWorkUnits = team?.workUnitSeries?.enabled === true;
+
+    // Fields that already have dedicated sidebar rows or are rendered elsewhere.
+    // These are excluded from "Additional Fields" to prevent duplication.
+    const excluded = new Set([
+      'field-name', // title in modal header
+      'field-description', // description tab
+      'field-priority', // Priority sidebar row
+      'field-assignee', // Assignee sidebar row
+      'field-reporter', // Reporter sidebar row
+      'field-due-date', // Due Date sidebar row
+      'field-project', // Project sidebar row
+      'field-client', // Customer sidebar row
+      'field-supplier', // Supplier sidebar row
+      'field-labels', // Tags sidebar row
+      'field-watchers', // not yet implemented
+      // Hide sprint & effort when work units are not enabled for this team
+      ...(!hasWorkUnits ? ['field-work-unit-id', 'field-effort-points'] : []),
+    ]);
+
     return ticketType.defaultFields
       .map((fieldId) => {
+        if (excluded.has(fieldId)) return null;
         const field = config.fields.find((f) => f.id === fieldId);
         if (!field) return null;
         const override = fieldOverrides[fieldId];
@@ -386,93 +385,44 @@ export function TicketDetailModal({ show, ticketId, onHide, onDeleted }: TicketD
     </div>
   );
 
-  // ── Render: Sidebar field row ─────────────────────────────────────────
-
-  const renderSidebarRow = (label: string, value: React.ReactNode, onClickEdit?: () => void) => (
-    <div
-      className="d-flex align-items-start justify-content-between py-2 border-bottom"
-      style={{ fontSize: '0.875rem' }}
-    >
-      <span className="text-muted fw-semibold me-2" style={{ minWidth: 90, flexShrink: 0 }}>
-        {label}
-      </span>
-      <span
-        className="text-end flex-grow-1"
-        style={{ cursor: onClickEdit ? 'pointer' : 'default', minWidth: 0 }}
-        onClick={onClickEdit}
-        role={onClickEdit ? 'button' : undefined}
-        tabIndex={onClickEdit ? 0 : undefined}
-        onKeyDown={
-          onClickEdit
-            ? (e) => {
-                if (e.key === 'Enter' || e.key === ' ') onClickEdit();
-              }
-            : undefined
-        }
-      >
-        {value}
-      </span>
-    </div>
-  );
-
-  // ── Render: Lifecycle dates ───────────────────────────────────────────
+  // ── Render: Lifecycle dates strip ────────────────────────────────────────
 
   const renderLifecycleDates = () => {
     if (!ticket) return null;
-    const dates = [
-      { label: t('tickets.created'), value: ticket.createdAt },
-      { label: t('tickets.started'), value: ticket.startedAt },
-      { label: t('tickets.scoped'), value: ticket.scopedAt },
-      { label: t('tickets.completed'), value: ticket.completedAt },
-      { label: t('tickets.ended'), value: ticket.endedAt },
+
+    const events: { label: string; date: string | null | undefined }[] = [
+      { label: t('tickets.created'), date: ticket.createdAt },
+      { label: t('tickets.scoped'), date: ticket.scopedAt },
+      { label: t('tickets.started'), date: ticket.startedAt },
+      { label: t('tickets.completed'), date: ticket.completedAt },
+      { label: t('tickets.ended'), date: ticket.endedAt },
     ];
 
     return (
-      <div className="d-flex flex-wrap gap-3 px-3 py-2 border-top bg-light" style={{ fontSize: '0.8rem' }}>
-        {dates.map(({ label, value }) => (
-          <div key={label} className="d-flex gap-1">
-            <span className="text-muted fw-semibold">{label}:</span>
-            <span>{formatDate(value)}</span>
+      <div
+        className="d-flex align-items-center gap-3 flex-wrap border-top px-3"
+        style={{
+          backgroundColor: '#f9fafb',
+          fontSize: '0.72rem',
+          color: '#6b7280',
+          flexShrink: 0,
+          paddingTop: 7,
+          paddingBottom: 7,
+        }}
+      >
+        {events.map(({ label, date }) => (
+          <div key={label} className="d-flex align-items-center gap-1">
+            <span style={{ fontWeight: 600 }}>{label}:</span>
+            <span>{formatDateShort(date)}</span>
           </div>
         ))}
-      </div>
-    );
-  };
-
-  // ── Render: History tab ───────────────────────────────────────────────
-
-  const renderHistory = () => {
-    if (!ticket) return null;
-
-    // For now, show the ticket lifecycle dates as a timeline
-    const events: { label: string; date: string | null | undefined; icon: string }[] = [
-      { label: t('tickets.created'), date: ticket.createdAt, icon: 'bi-plus-circle' },
-      { label: t('tickets.scoped'), date: ticket.scopedAt, icon: 'bi-bullseye' },
-      { label: t('tickets.started'), date: ticket.startedAt, icon: 'bi-play-circle' },
-      { label: t('tickets.completed'), date: ticket.completedAt, icon: 'bi-check-circle' },
-      { label: t('tickets.ended'), date: ticket.endedAt, icon: 'bi-stop-circle' },
-    ];
-
-    return (
-      <div className="py-2">
-        {events.map(({ label, date, icon }) => (
-          <div key={label} className="d-flex align-items-center gap-2 mb-2">
-            <i className={`bi ${icon} text-muted`} />
-            <span className="fw-semibold small">{label}</span>
-            <span className="text-muted small ms-auto">{date ? formatDate(date) : '\u2014'}</span>
+        {ticket.createdByName && (
+          <div className="d-flex align-items-center gap-1 ms-auto">
+            <i className="bi bi-person" />
+            <span>{ticket.createdByName}</span>
+            <span style={{ opacity: 0.7 }}>· {relativeTimeShort(ticket.createdAt)}</span>
           </div>
-        ))}
-
-        {/* Show created by info */}
-        <div className="mt-3 pt-2 border-top">
-          <div className="d-flex align-items-center gap-2">
-            <i className="bi bi-person text-muted" />
-            <span className="small">
-              <span className="fw-semibold">{ticket.createdByName}</span>
-              <span className="text-muted ms-2">{relativeTimeShort(ticket.createdAt)}</span>
-            </span>
-          </div>
-        </div>
+        )}
       </div>
     );
   };
@@ -487,144 +437,194 @@ export function TicketDetailModal({ show, ticketId, onHide, onDeleted }: TicketD
     const hasWorkUnits = team?.workUnitSeries?.enabled === true;
     const allZones = teamData?.zones ?? [];
     const allStages = teamData?.stages ?? [];
+    const selectStyle: React.CSSProperties = { fontSize: '0.85rem' };
 
     return (
       <div style={{ fontSize: '0.875rem' }}>
-        {/* Status (stage selector grouped by zone) */}
-        {renderSidebarRow(
-          t('tickets.status'),
-          <Form.Select
-            size="sm"
-            value={ticket.stageId}
-            onChange={(e) => {
-              const newStageId = e.target.value;
-              const stage = allStages.find((s) => s.id === newStageId);
-              void handleUpdate({ stageId: newStageId, zoneId: stage?.zoneId });
-            }}
-            style={{ fontSize: '0.85rem' }}
-          >
-            {allZones.map((zone) => (
-              <optgroup key={zone.id} label={zone.name}>
-                {allStages
-                  .filter((s) => s.zoneId === zone.id)
-                  .sort((a, b) => a.order - b.order)
-                  .map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name}
-                    </option>
-                  ))}
-              </optgroup>
-            ))}
-          </Form.Select>,
-        )}
+        {/* Status — full width */}
+        <div className="ticket-sidebar-section-title">{t('tickets.status')}</div>
+        <Form.Select
+          size="sm"
+          value={ticket.stageId}
+          onChange={(e) => {
+            const newStageId = e.target.value;
+            const stage = allStages.find((s) => s.id === newStageId);
+            void handleUpdate({ stageId: newStageId, zoneId: stage?.zoneId });
+          }}
+          style={selectStyle}
+        >
+          {allZones.map((zone) => (
+            <optgroup key={zone.id} label={zone.name}>
+              {allStages
+                .filter((s) => s.zoneId === zone.id)
+                .sort((a, b) => a.order - b.order)
+                .map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name}
+                  </option>
+                ))}
+            </optgroup>
+          ))}
+        </Form.Select>
 
-        {/* Priority */}
-        {renderSidebarRow(
-          t('tickets.priority'),
-          <Form.Select
-            size="sm"
-            value={ticket.priority}
-            onChange={(e) => void handleUpdate({ priority: e.target.value as TicketPriority })}
-            style={{ fontSize: '0.85rem' }}
-          >
-            {PRIORITY_OPTIONS.map((p) => (
-              <option key={p} value={p}>
-                {t(`priority.${p}`)}
-              </option>
-            ))}
-          </Form.Select>,
-        )}
+        {/* Priority + Assignee — 2 column */}
+        <div className="ticket-sidebar-grid-row" style={{ marginTop: 16 }}>
+          <div>
+            <div className="ticket-sidebar-field-label">{t('tickets.priority')}</div>
+            <Form.Select
+              size="sm"
+              value={ticket.priority}
+              onChange={(e) => void handleUpdate({ priority: e.target.value as TicketPriority })}
+              style={selectStyle}
+            >
+              {PRIORITY_OPTIONS.map((p) => (
+                <option key={p} value={p}>
+                  {t(`priority.${p}`)}
+                </option>
+              ))}
+            </Form.Select>
+          </div>
+          <div>
+            <div className="ticket-sidebar-field-label">{t('tickets.assignee')}</div>
+            <Form.Select
+              size="sm"
+              value={ticket.assigneeId ?? ''}
+              onChange={(e) => void handleUpdate({ assigneeId: e.target.value || null })}
+              style={selectStyle}
+            >
+              <option value="">{t('fields.unassigned')}</option>
+              {staff
+                .filter((s) => s.isActive)
+                .map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name}
+                  </option>
+                ))}
+            </Form.Select>
+          </div>
+        </div>
 
-        {/* Assignee */}
-        {renderSidebarRow(
-          t('tickets.assignee'),
-          <Form.Select
-            size="sm"
-            value={ticket.assigneeId ?? ''}
-            onChange={(e) => void handleUpdate({ assigneeId: e.target.value || null })}
-            style={{ fontSize: '0.85rem' }}
-          >
-            <option value="">{t('fields.unassigned')}</option>
-            {staff
-              .filter((s) => s.isActive)
-              .map((s) => (
+        {/* Reporter + Created by — 2 column */}
+        <div className="ticket-sidebar-grid-row">
+          <div>
+            <div className="ticket-sidebar-field-label">{t('tickets.reporter')}</div>
+            <Form.Select
+              size="sm"
+              value={ticket.reporterId ?? ''}
+              onChange={(e) => {
+                const selectedStaff = config?.staff.find((s) => s.id === e.target.value);
+                void handleUpdate({
+                  reporterId: e.target.value || null,
+                  reporterName: selectedStaff?.name ?? null,
+                });
+              }}
+              style={selectStyle}
+            >
+              <option value="">{t('fields.unassigned')}</option>
+              {(config?.staff ?? [])
+                .filter((s) => s.isActive)
+                .map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name}
+                  </option>
+                ))}
+            </Form.Select>
+          </div>
+          <div>
+            <div className="ticket-sidebar-field-label">{t('tickets.createdBy')}</div>
+            <span style={{ fontSize: '0.85rem', display: 'block', paddingTop: 6 }}>{ticket.createdByName}</span>
+          </div>
+        </div>
+
+        {/* Due Date + Project — 2 column */}
+        <div className="ticket-sidebar-grid-row">
+          <div>
+            <div className="ticket-sidebar-field-label">{t('tickets.dueDate')}</div>
+            <Form.Control
+              type="date"
+              size="sm"
+              value={toDateInputValue(ticket.dueDate)}
+              onChange={(e) => void handleUpdate({ dueDate: e.target.value || null })}
+              style={selectStyle}
+            />
+          </div>
+          <div>
+            <div className="ticket-sidebar-field-label">{t('tickets.project')}</div>
+            <Form.Select
+              size="sm"
+              value={ticket.projectId ?? ''}
+              onChange={(e) => void handleUpdate({ projectId: e.target.value || null })}
+              style={selectStyle}
+            >
+              <option value="">{t('common.none')}</option>
+              {projects
+                .filter((p) => p.isActive)
+                .map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
+                ))}
+            </Form.Select>
+          </div>
+        </div>
+
+        {/* Customer + Supplier — 2 column */}
+        <div className="ticket-sidebar-grid-row">
+          <div>
+            <div className="ticket-sidebar-field-label">{t('tickets.customer')}</div>
+            <Form.Select
+              size="sm"
+              value={ticket.customerId ?? ''}
+              onChange={(e) => {
+                const selected = customers.find((c) => c.id === e.target.value);
+                void handleUpdate({
+                  customerId: e.target.value || null,
+                  customerName: selected?.companyName ?? null,
+                });
+              }}
+              style={selectStyle}
+            >
+              <option value="">{t('common.none')}</option>
+              {customers.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.companyName}
+                </option>
+              ))}
+            </Form.Select>
+          </div>
+          <div>
+            <div className="ticket-sidebar-field-label">{t('tickets.supplier')}</div>
+            <Form.Select
+              size="sm"
+              value={ticket.supplierId ?? ''}
+              onChange={(e) => {
+                const selected = suppliers.find((s) => s.id === e.target.value);
+                void handleUpdate({
+                  supplierId: e.target.value || null,
+                  supplierName: selected?.companyName ?? null,
+                });
+              }}
+              style={selectStyle}
+            >
+              <option value="">{t('common.none')}</option>
+              {suppliers.map((s) => (
                 <option key={s.id} value={s.id}>
-                  {s.name}
+                  {s.companyName}
                 </option>
               ))}
-          </Form.Select>,
-        )}
+            </Form.Select>
+          </div>
+        </div>
 
-        {/* Created by (read-only) */}
-        {renderSidebarRow(t('tickets.createdBy'), <span>{ticket.createdByName}</span>)}
-
-        {/* Due Date */}
-        {renderSidebarRow(
-          t('tickets.dueDate'),
-          editingDueDate ? (
-            <div className="d-flex gap-1 align-items-center">
-              <Form.Control
-                type="date"
-                size="sm"
-                value={dueDateDraft}
-                onChange={(e) => setDueDateDraft(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') void saveDueDate();
-                  if (e.key === 'Escape') cancelDueDate();
-                }}
-                style={{ fontSize: '0.85rem' }}
-                autoFocus
-              />
-              <Button variant="link" size="sm" className="p-0" onClick={() => void saveDueDate()}>
-                <i className="bi bi-check text-success" />
-              </Button>
-              <Button variant="link" size="sm" className="p-0" onClick={cancelDueDate}>
-                <i className="bi bi-x text-danger" />
-              </Button>
-            </div>
-          ) : (
-            <span className="text-decoration-underline-hover">
-              {ticket.dueDate ? new Date(ticket.dueDate).toLocaleDateString() : t('common.none')}
-            </span>
-          ),
-          editingDueDate ? undefined : startEditDueDate,
-        )}
-
-        {/* Project */}
-        {renderSidebarRow(
-          t('tickets.project'),
-          <Form.Select
-            size="sm"
-            value={ticket.projectId ?? ''}
-            onChange={(e) => void handleUpdate({ projectId: e.target.value || null })}
-            style={{ fontSize: '0.85rem' }}
-          >
-            <option value="">{t('common.none')}</option>
-            {projects
-              .filter((p) => p.isActive)
-              .map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                </option>
-              ))}
-          </Form.Select>,
-        )}
-
-        {/* Customer (read-only) */}
-        {ticket.customerName && renderSidebarRow(t('tickets.customer'), <span>{ticket.customerName}</span>)}
-
-        {/* Supplier (read-only) */}
-        {ticket.supplierName && renderSidebarRow(t('tickets.supplier'), <span>{ticket.supplierName}</span>)}
-
-        {/* Work Unit (sprint) */}
-        {hasWorkUnits &&
-          renderSidebarRow(
-            t('tickets.workUnit'),
+        {/* Sprint — full width (only if work units enabled) */}
+        {hasWorkUnits && (
+          <div className="mb-3">
+            <div className="ticket-sidebar-field-label">{t('tickets.workUnit')}</div>
             <Form.Select
               size="sm"
               value={ticket.workUnitId ?? ''}
               onChange={(e) => void handleUpdate({ workUnitId: e.target.value || null })}
-              style={{ fontSize: '0.85rem' }}
+              style={selectStyle}
             >
               <option value="">{t('common.none')}</option>
               {workUnits.map((wu) => (
@@ -632,30 +632,42 @@ export function TicketDetailModal({ show, ticketId, onHide, onDeleted }: TicketD
                   {wu.name}
                 </option>
               ))}
-            </Form.Select>,
-          )}
+            </Form.Select>
+          </div>
+        )}
 
         {/* Tags */}
-        {renderSidebarRow(
-          t('tickets.tags'),
-          editingTags ? (
-            <div>
-              <Form.Control
-                type="text"
-                size="sm"
-                value={tagsDraft}
-                onChange={(e) => setTagsDraft(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') void saveTags();
-                  if (e.key === 'Escape') cancelTags();
-                }}
-                onBlur={() => void saveTags()}
-                style={{ fontSize: '0.85rem' }}
-                autoFocus
-              />
-            </div>
+        <div
+          className="mb-3"
+          style={{ cursor: editingTags ? 'default' : 'pointer' }}
+          onClick={editingTags ? undefined : startEditTags}
+          role={editingTags ? undefined : 'button'}
+          tabIndex={editingTags ? undefined : 0}
+          onKeyDown={
+            editingTags
+              ? undefined
+              : (e) => {
+                  if (e.key === 'Enter' || e.key === ' ') startEditTags();
+                }
+          }
+        >
+          <div className="ticket-sidebar-field-label">{t('tickets.tags')}</div>
+          {editingTags ? (
+            <Form.Control
+              type="text"
+              size="sm"
+              value={tagsDraft}
+              onChange={(e) => setTagsDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') void saveTags();
+                if (e.key === 'Escape') cancelTags();
+              }}
+              onBlur={() => void saveTags()}
+              style={{ fontSize: '0.85rem' }}
+              autoFocus
+            />
           ) : (
-            <div className="d-flex flex-wrap gap-1 justify-content-end">
+            <div className="d-flex flex-wrap gap-1">
               {ticket.tags.length > 0 ? (
                 ticket.tags.map((tag) => (
                   <Badge key={tag} bg="light" text="dark" className="border" style={{ fontSize: '0.75rem' }}>
@@ -663,22 +675,23 @@ export function TicketDetailModal({ show, ticketId, onHide, onDeleted }: TicketD
                   </Badge>
                 ))
               ) : (
-                <span className="text-muted">{t('common.none')}</span>
+                <span className="text-muted" style={{ fontSize: '0.85rem' }}>
+                  {t('common.none')}
+                </span>
               )}
             </div>
-          ),
-          editingTags ? undefined : startEditTags,
-        )}
+          )}
+        </div>
 
         {/* Custom / Dynamic Fields */}
         {getVisibleFields().length > 0 && (
-          <div className="mt-3 pt-2 border-top">
-            <div className="text-muted fw-semibold small mb-2">{t('fields.dynamicFields')}</div>
+          <div className="pt-2 border-top">
+            <div className="ticket-sidebar-section-title">{t('fields.dynamicFields')}</div>
             {getVisibleFields().map(({ field, override }) => (
               <DynamicField
                 key={field.id}
                 field={field}
-                value={(ticket.fields ?? ticket.customFields)?.[field.id] ?? field.defaultValue ?? null}
+                value={ticket.fields?.[field.id] ?? field.defaultValue ?? null}
                 onChange={(value) => void handleCustomFieldChange(field.id, value)}
                 compact
                 fieldOverride={override}
@@ -687,24 +700,6 @@ export function TicketDetailModal({ show, ticketId, onHide, onDeleted }: TicketD
             ))}
           </div>
         )}
-
-        {/* Archive / Unarchive + Delete */}
-        <div className="mt-4 pt-3 border-top d-flex flex-column gap-2">
-          <Button
-            variant={ticket.archived ? 'outline-success' : 'outline-warning'}
-            size="sm"
-            className="w-100"
-            disabled={archiving}
-            onClick={() => void handleToggleArchive()}
-          >
-            <i className={`bi ${ticket.archived ? 'bi-arrow-counterclockwise' : 'bi-archive'} me-1`} />
-            {ticket.archived ? t('archive.unarchive') : t('archive.archive')}
-          </Button>
-          <Button variant="outline-danger" size="sm" className="w-100" onClick={() => setShowDeleteConfirm(true)}>
-            <i className="bi bi-trash me-1" />
-            {t('common.delete')}
-          </Button>
-        </div>
       </div>
     );
   };
@@ -715,66 +710,109 @@ export function TicketDetailModal({ show, ticketId, onHide, onDeleted }: TicketD
     if (!ticket) return null;
 
     const typeColor = ticketType?.color ?? '#6c757d';
-    const typeTextColor = getContrastTextColor(typeColor);
+    const currentStage = (teamData?.stages ?? []).find((s) => s.id === ticket.stageId);
 
     return (
-      <Modal.Header closeButton className="align-items-start">
-        <div className="d-flex align-items-center gap-2 flex-grow-1 me-2" style={{ minWidth: 0 }}>
-          {/* Display ID badge colored by ticket type */}
-          <Badge
-            pill
-            style={{
-              backgroundColor: typeColor,
-              color: typeTextColor,
-              fontSize: '0.8rem',
-              flexShrink: 0,
-            }}
-          >
-            {ticketType?.icon && <i className={`${getTicketTypeIconClass(ticketType.icon)} me-1`} />}
-            {ticket.displayId}
-          </Badge>
+      <Modal.Header closeButton className="align-items-start pb-2">
+        <div className="flex-grow-1" style={{ minWidth: 0 }}>
+          {/* Line 1: ID badge + Title */}
+          <div className="d-flex align-items-center gap-2">
+            <span className="ticket-detail-id">{ticket.displayId}</span>
 
-          {/* Archived badge */}
-          {ticket.archived && (
-            <Badge bg="warning" text="dark" className="flex-shrink-0">
-              <i className="bi bi-archive me-1" />
-              {t('archive.archived')}
-            </Badge>
-          )}
+            {ticket.archived && (
+              <Badge bg="warning" text="dark" style={{ fontSize: '0.7rem' }}>
+                <i className="bi bi-archive me-1" />
+                {t('archive.archived')}
+              </Badge>
+            )}
 
-          {/* Title: inline-editable */}
-          {editingTitle ? (
-            <Form.Control
-              ref={titleInputRef}
-              type="text"
-              value={titleDraft}
-              onChange={(e) => setTitleDraft(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') void saveTitle();
-                if (e.key === 'Escape') cancelTitle();
+            {editingTitle ? (
+              <Form.Control
+                ref={titleInputRef}
+                type="text"
+                value={titleDraft}
+                onChange={(e) => setTitleDraft(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') void saveTitle();
+                  if (e.key === 'Escape') cancelTitle();
+                }}
+                onBlur={() => void saveTitle()}
+                className="fw-bold flex-grow-1"
+                style={{ fontSize: '1.15rem' }}
+                disabled={saving}
+              />
+            ) : (
+              <h5
+                className="mb-0 fw-bold text-truncate flex-grow-1"
+                style={{ cursor: 'pointer', fontSize: '1.15rem' }}
+                onClick={startEditTitle}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') startEditTitle();
+                }}
+                title={ticket.title}
+              >
+                {ticket.title}
+              </h5>
+            )}
+
+            {saving && <Spinner animation="border" size="sm" className="flex-shrink-0" />}
+
+            {/* Share button — copies ticket link to clipboard */}
+            <button
+              type="button"
+              className="btn btn-sm btn-outline-secondary d-inline-flex align-items-center gap-1 flex-shrink-0"
+              style={{ fontSize: '0.75rem', padding: '2px 8px', borderRadius: 6 }}
+              onClick={() => {
+                const url = `${window.location.origin}${window.location.pathname}?ticket=${ticket.displayId}`;
+                void navigator.clipboard.writeText(url).then(() => {
+                  setCopied(true);
+                  setTimeout(() => setCopied(false), 2000);
+                });
               }}
-              onBlur={() => void saveTitle()}
-              className="fw-bold"
-              style={{ fontSize: '1.1rem' }}
-              disabled={saving}
-            />
-          ) : (
-            <h5
-              className="mb-0 fw-bold text-truncate"
-              style={{ cursor: 'pointer', flexGrow: 1, minWidth: 0 }}
-              onClick={startEditTitle}
-              role="button"
-              tabIndex={0}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' || e.key === ' ') startEditTitle();
-              }}
-              title={ticket.title}
             >
-              {ticket.title}
-            </h5>
-          )}
+              <i className={`bi ${copied ? 'bi-check-lg text-success' : 'bi-link-45deg'}`} />
+              {copied ? t('common.copied', 'Copied!') : t('common.share', 'Share')}
+            </button>
+          </div>
 
-          {saving && <Spinner animation="border" size="sm" className="ms-2 flex-shrink-0" />}
+          {/* Line 2: Type + Team breadcrumb */}
+          <div className="d-flex align-items-center gap-2 mt-1" style={{ fontSize: '0.8rem' }}>
+            {ticketType && (
+              <span
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 4,
+                  color: typeColor,
+                  fontSize: '0.78rem',
+                  fontWeight: 500,
+                }}
+              >
+                {ticketType.icon && (
+                  <i className={getTicketTypeIconClass(ticketType.icon)} style={{ fontSize: '0.7rem' }} />
+                )}
+                {ticketType.name}
+              </span>
+            )}
+            {teamData?.team?.name && (
+              <span className="text-muted" style={{ fontSize: '0.78rem' }}>
+                {teamData.team.name}
+                {currentStage && (
+                  <>
+                    {' '}
+                    <i className="bi bi-chevron-right" style={{ fontSize: '0.55rem' }} /> {currentStage.name}
+                  </>
+                )}
+              </span>
+            )}
+          </div>
+
+          {/* Line 3: Created date */}
+          <div className="ticket-detail-header-meta">
+            {t('tickets.created')} {formatDate(ticket.createdAt)}
+          </div>
         </div>
       </Modal.Header>
     );
@@ -787,106 +825,61 @@ export function TicketDetailModal({ show, ticketId, onHide, onDeleted }: TicketD
 
     return (
       <div className="d-flex" style={{ minHeight: 0, flex: 1, overflow: 'hidden' }}>
-        {/* Left column: tabbed content (~65%) */}
-        <div className="flex-grow-1 pe-3 border-end" style={{ flex: '0 0 65%', maxWidth: '65%', overflowY: 'auto' }}>
-          <Tab.Container activeKey={activeTab} onSelect={(k) => setActiveTab(k ?? 'description')}>
-            <Nav variant="tabs" className="mb-3">
-              <Nav.Item>
-                <Nav.Link eventKey="description">{t('tickets.description')}</Nav.Link>
-              </Nav.Item>
-              <Nav.Item>
-                <Nav.Link eventKey="comments">
-                  {t('tickets.comments')}
-                  {ticket.commentCount > 0 && (
-                    <Badge bg="secondary" className="ms-1" style={{ fontSize: '0.7rem' }}>
-                      {ticket.commentCount}
-                    </Badge>
-                  )}
-                </Nav.Link>
-              </Nav.Item>
-              <Nav.Item>
-                <Nav.Link eventKey="links">
-                  {t('tickets.links')}
-                  {ticket.linkCount > 0 && (
-                    <Badge bg="secondary" className="ms-1" style={{ fontSize: '0.7rem' }}>
-                      {ticket.linkCount}
-                    </Badge>
-                  )}
-                </Nav.Link>
-              </Nav.Item>
-              <Nav.Item>
-                <Nav.Link eventKey="history">{t('tickets.history')}</Nav.Link>
-              </Nav.Item>
-            </Nav>
+        {/* Left column: stacked sections (65%) */}
+        <div
+          style={{
+            flex: '0 0 65%',
+            maxWidth: '65%',
+            overflowY: 'auto',
+            paddingRight: '1.5rem',
+            borderRight: '1px solid #f0f0f0',
+          }}
+        >
+          {/* Description — rich text editor, saves on blur */}
+          <div className="mb-4">
+            <div className="ticket-section-heading">{t('tickets.description')}</div>
+            <RichTextEditor
+              ref={descriptionEditorRef}
+              value={ticket.description ?? ''}
+              onSave={(html) => {
+                if (html !== ticket.description) {
+                  void handleUpdate({ description: html });
+                }
+              }}
+              placeholder={t('common.description') + '\u2026'}
+              minHeight={120}
+              disabled={saving}
+            />
+          </div>
 
-            <Tab.Content>
-              {/* Description Tab */}
-              <Tab.Pane eventKey="description">
-                {editingDescription ? (
-                  <div>
-                    <Form.Control
-                      as="textarea"
-                      ref={descriptionRef}
-                      rows={10}
-                      value={descriptionDraft}
-                      onChange={(e) => setDescriptionDraft(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) void saveDescription();
-                        if (e.key === 'Escape') cancelDescription();
-                      }}
-                      style={{ fontSize: '0.9rem', resize: 'vertical' }}
-                      disabled={saving}
-                    />
-                    <div className="d-flex gap-2 mt-2">
-                      <Button size="sm" variant="primary" onClick={() => void saveDescription()} disabled={saving}>
-                        {t('common.save')}
-                      </Button>
-                      <Button size="sm" variant="outline-secondary" onClick={cancelDescription}>
-                        {t('common.cancel')}
-                      </Button>
-                    </div>
-                  </div>
-                ) : (
-                  <div
-                    className="p-2 rounded"
-                    style={{
-                      cursor: 'pointer',
-                      minHeight: 100,
-                      whiteSpace: 'pre-wrap',
-                      fontSize: '0.9rem',
-                      backgroundColor: '#f8f9fa',
-                    }}
-                    onClick={startEditDescription}
-                    role="button"
-                    tabIndex={0}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' || e.key === ' ') startEditDescription();
-                    }}
-                  >
-                    {ticket.description || <span className="text-muted">{t('common.description')}</span>}
-                  </div>
-                )}
-              </Tab.Pane>
+          {/* Attachments */}
+          <div className="mb-4">
+            <div className="ticket-section-heading">{t('tickets.attachments')}</div>
+            <AttachmentsSection ticketId={ticket.id} />
+          </div>
 
-              {/* Comments Tab */}
-              <Tab.Pane eventKey="comments">
-                <CommentSection ticketId={ticket.id} />
-              </Tab.Pane>
-
-              {/* Links Tab */}
-              <Tab.Pane eventKey="links">
-                <LinkedTicketsSection ticketId={ticket.id} links={links} onRefresh={reloadTicket} />
-              </Tab.Pane>
-
-              {/* History Tab */}
-              <Tab.Pane eventKey="history">{renderHistory()}</Tab.Pane>
-            </Tab.Content>
-          </Tab.Container>
+          {/* Activity / Comments */}
+          <div className="mb-4">
+            <div className="ticket-section-heading">
+              {t('tickets.activity')}
+              {ticket.commentCount > 0 && (
+                <span className="text-muted ms-1" style={{ fontWeight: 400, fontSize: '0.8rem' }}>
+                  ({ticket.commentCount})
+                </span>
+              )}
+            </div>
+            <CommentSection ticketId={ticket.id} />
+          </div>
         </div>
 
-        {/* Right column: sidebar fields (~35%) */}
-        <div className="ps-3" style={{ flex: '0 0 35%', maxWidth: '35%', overflowY: 'auto' }}>
-          {renderSidebar()}
+        {/* Right column: sidebar fields + linked tickets + history (35%) */}
+        <div style={{ flex: '0 0 35%', maxWidth: '35%', overflowY: 'auto', paddingLeft: '1.5rem' }}>
+          <div className="ticket-detail-sidebar">{renderSidebar()}</div>
+
+          {/* Linked Tickets — rendered directly (component has its own heading + Add Link button) */}
+          <div className="mt-3">
+            <LinkedTicketsSection ticketId={ticket.id} links={links} onRefresh={reloadTicket} />
+          </div>
         </div>
       </div>
     );
@@ -900,10 +893,8 @@ export function TicketDetailModal({ show, ticketId, onHide, onDeleted }: TicketD
         show={show}
         onHide={onHide}
         size="xl"
-        scrollable
         dialogClassName="ticket-detail-modal"
         contentClassName="d-flex flex-column"
-        style={{ maxHeight: '90vh' }}
       >
         {loading && renderLoading()}
         {!loading && error && renderError()}
@@ -913,7 +904,51 @@ export function TicketDetailModal({ show, ticketId, onHide, onDeleted }: TicketD
             <Modal.Body className="d-flex flex-column" style={{ overflow: 'hidden', flex: 1 }}>
               {renderBody()}
             </Modal.Body>
+            {/* Lifecycle dates — always-visible strip between body and footer */}
             {renderLifecycleDates()}
+            {/* Footer: archive/delete on left, close on right — pinned by Bootstrap */}
+            <Modal.Footer
+              className="d-flex align-items-center justify-content-between py-2"
+              style={{ backgroundColor: '#f9fafb', flexShrink: 0 }}
+            >
+              <div className="d-flex align-items-center gap-2">
+                <Button
+                  variant="outline-secondary"
+                  size="sm"
+                  disabled={archiving}
+                  onClick={() => void handleToggleArchive()}
+                  style={{ fontSize: '0.8rem' }}
+                >
+                  <i className={`bi ${ticket.archived ? 'bi-arrow-counterclockwise' : 'bi-archive'} me-1`} />
+                  {ticket.archived ? t('archive.unarchive') : t('archive.archive')}
+                </Button>
+                <Button
+                  variant="outline-danger"
+                  size="sm"
+                  onClick={() => setShowDeleteConfirm(true)}
+                  style={{ fontSize: '0.8rem' }}
+                >
+                  <i className="bi bi-trash me-1" />
+                  {t('common.delete')}
+                </Button>
+              </div>
+              <div className="d-flex align-items-center gap-2">
+                <Button variant="outline-secondary" size="sm" onClick={onHide} style={{ fontSize: '0.8rem' }}>
+                  {t('common.close')}
+                </Button>
+                <Button
+                  variant="primary"
+                  size="sm"
+                  style={{ fontSize: '0.8rem', minWidth: 70 }}
+                  onClick={() => {
+                    descriptionEditorRef.current?.flush();
+                    onHide();
+                  }}
+                >
+                  {t('common.save')}
+                </Button>
+              </div>
+            </Modal.Footer>
           </>
         )}
       </Modal>
@@ -931,16 +966,6 @@ export function TicketDetailModal({ show, ticketId, onHide, onDeleted }: TicketD
           typeToConfirm={ticket.displayId}
         />
       )}
-
-      {/* Inline style for the modal height override */}
-      <style>{`
-        .ticket-detail-modal {
-          max-height: 90vh;
-        }
-        .ticket-detail-modal .modal-content {
-          max-height: 90vh;
-        }
-      `}</style>
     </>
   );
 }

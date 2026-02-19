@@ -61,6 +61,8 @@ export function LinkedTicketsSection({ ticketId, links, onRefresh }: LinkedTicke
 
       await OpsService.createLink(numaPost, ticketId, {
         linkedTicketId: ticketResponse.ticket.id,
+        linkedTicketDisplayId: ticketResponse.ticket.displayId,
+        linkedTicketTitle: ticketResponse.ticket.title,
         linkType: addLinkType,
       });
 
@@ -160,12 +162,14 @@ export function LinkedTicketsSection({ ticketId, links, onRefresh }: LinkedTicke
                     key={`${link.linkType}-${link.linkedTicketId}`}
                     className="d-flex align-items-center gap-2 mb-1 ps-2"
                   >
-                    <Badge bg="light" text="dark" className="border" style={{ fontFamily: 'monospace' }}>
+                    <Badge bg="light" text="dark" className="border" style={{ fontFamily: 'monospace', flexShrink: 0 }}>
                       {link.linkedTicketDisplayId}
                     </Badge>
-                    <span className="text-muted" style={{ fontSize: '0.75rem' }}>
-                      {new Date(link.createdAt).toLocaleDateString()}
-                    </span>
+                    {link.linkedTicketTitle && (
+                      <span className="text-truncate" style={{ fontSize: '0.8rem' }} title={link.linkedTicketTitle}>
+                        {link.linkedTicketTitle}
+                      </span>
+                    )}
                     <Button
                       variant="link"
                       size="sm"

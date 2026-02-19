@@ -28,8 +28,8 @@ const TeamSelector = ({
   const { t } = useTranslation('ops');
 
   return (
-    <Dropdown>
-      <Dropdown.Toggle variant="outline-secondary" size="sm" id="team-selector-dropdown">
+    <Dropdown className="ops-team-selector">
+      <Dropdown.Toggle variant="outline-secondary" id="team-selector-dropdown">
         {isAllTeams ? (
           <span className="d-flex align-items-center gap-1">
             <i className="bi bi-grid me-1" style={{ fontSize: '0.75rem' }} />

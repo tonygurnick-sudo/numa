@@ -5,7 +5,7 @@ import { useNumaRequest } from '../../../Providers/NumaRequestContext';
 import { useOps } from '../OpsContext';
 import * as OpsService from '../../../Services/OpsService';
 import type { Supplier } from '../../../types/ops';
-import { getColorForPosition, getContrastTextColor } from '../Shared/colorUtils';
+import { getCached, setCache } from '../../../utils/opsCache';
 import { SupplierCard } from './SupplierCard';
 import { SupplierDetailModal } from '../Modals/SupplierDetailModal';
 
@@ -36,8 +36,8 @@ export function SupplierMirrorView(): React.JSX.Element {
 
   // ── State ──────────────────────────────────────────────────────────────
 
-  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [suppliers, setSuppliers] = useState<Supplier[]>(() => getCached<Supplier[]>('suppliers') ?? []);
+  const [loading, setLoading] = useState(() => !getCached('suppliers'));
   const [searchQuery, setSearchQuery] = useState('');
   const [filterMode, setFilterMode] = useState<FilterMode>('all');
 
@@ -57,6 +57,7 @@ export function SupplierMirrorView(): React.JSX.Element {
       setLoading(true);
       const data = await OpsService.listSuppliers(numaGet);
       setSuppliers(data);
+      setCache('suppliers', data);
     } catch (err) {
       console.error('[SupplierMirrorView] Failed to load suppliers', err);
     } finally {
@@ -143,7 +144,10 @@ export function SupplierMirrorView(): React.JSX.Element {
   return (
     <div className="d-flex flex-column h-100">
       {/* ── Toolbar ────────────────────────────────────────────────────────── */}
-      <div className="d-flex flex-wrap align-items-center gap-2 px-3 py-2 border-bottom">
+      <div
+        className="d-flex flex-wrap align-items-center gap-2 px-3 border-bottom bg-white"
+        style={{ minHeight: 68, paddingTop: 14, paddingBottom: 14 }}
+      >
         {/* Filter toggles */}
         <div className="d-flex gap-1">
           <Button
@@ -255,60 +259,57 @@ export function SupplierMirrorView(): React.JSX.Element {
       )}
 
       {/* ── Kanban Columns ─────────────────────────────────────────────────── */}
-      <div className="flex-grow-1 d-flex overflow-auto" style={{ gap: 12, padding: '12px 12px 12px 12px' }}>
+      <div className="flex-grow-1 d-flex overflow-auto" style={{ gap: 16, padding: '12px' }}>
         {stages.map((stage) => {
-          const stageColor = getColorForPosition(stage.colorPosition);
-          const textColor = getContrastTextColor(stageColor);
           const stageSuppliers = filteredSuppliers.filter((s) => s.lifecycleStage === stage.id);
 
           return (
-            <div
-              key={stage.id}
-              className="d-flex flex-column flex-shrink-0"
-              style={{
-                width: 280,
-                minHeight: 0,
-              }}
-            >
-              {/* Column header */}
-              <div
-                className="d-flex justify-content-between align-items-center px-2 py-1 rounded-top"
-                style={{
-                  backgroundColor: stageColor,
-                  color: textColor,
-                  fontSize: '0.8rem',
-                  fontWeight: 600,
-                }}
-              >
-                <span>{stage.name}</span>
-                <Badge
-                  bg=""
+            <div key={stage.id} className="d-flex flex-column flex-shrink-0" style={{ width: 270, minHeight: 0 }}>
+              {/* Column header — plain text + gray count badge */}
+              <div className="d-flex align-items-center justify-content-between mb-2 px-1">
+                <span
                   style={{
-                    backgroundColor: 'rgba(255,255,255,0.25)',
-                    color: textColor,
+                    fontWeight: 700,
+                    fontSize: '0.75rem',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.06em',
+                    color: '#374151',
+                  }}
+                >
+                  {stage.name}
+                </span>
+                <span
+                  style={{
+                    backgroundColor: '#f3f4f6',
+                    color: '#6b7280',
                     fontSize: '0.7rem',
+                    fontWeight: 600,
+                    borderRadius: 10,
+                    padding: '1px 8px',
+                    minWidth: 22,
+                    textAlign: 'center',
                   }}
                 >
                   {stageSuppliers.length}
-                </Badge>
+                </span>
               </div>
 
               {/* Column body */}
               <div
-                className="flex-grow-1 overflow-auto d-flex flex-column gap-2 p-2"
+                className="flex-grow-1 overflow-auto"
                 style={{
-                  backgroundColor: '#f8f9fa',
-                  borderLeft: `2px solid ${stageColor}20`,
-                  borderRight: `2px solid ${stageColor}20`,
-                  borderBottom: `2px solid ${stageColor}20`,
-                  borderRadius: '0 0 6px 6px',
+                  borderRadius: 10,
+                  padding: 8,
+                  backgroundColor: 'transparent',
                   minHeight: 100,
                 }}
               >
                 {stageSuppliers.length === 0 && (
-                  <div className="text-muted small text-center py-3">{t('empty.noSuppliers')}</div>
+                  <div className="text-center py-4">
+                    <i className="bi bi-truck" style={{ fontSize: '1.5rem', color: '#d1d5db' }} />
+                    <div style={{ fontSize: '0.78rem', color: '#9ca3af', marginTop: 4 }}>{t('empty.noSuppliers')}</div>
+                  </div>
                 )}
-
                 {stageSuppliers.map((supplier) => (
                   <SupplierCard
                     key={supplier.id}
