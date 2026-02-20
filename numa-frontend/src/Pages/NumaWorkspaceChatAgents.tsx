@@ -9,6 +9,7 @@ import { LayoutDashboard } from '../Layouts/LayoutDashboard';
 import { PageHeader } from '../Components/PageHeader';
 import { ChatHistorySidebar, type ChatHistorySidebarRef } from '../Components/Chat/ChatHistorySidebar';
 import { ChatInput } from '../Components/Chat/ChatInput';
+import { ExportConversationButton } from '../Components/Chat/ExportConversationButton';
 import { DocumentPanel } from '../Components/DocumentPanel';
 import { ChatMessages } from '../Components/Chat/ChatMessages';
 import { NewChat } from '../Components/Chat/NewChat';
@@ -132,6 +133,8 @@ const NumaWorkspaceChatAgents = () => {
   );
   /** Initialization state - true when workspace is syncing files */
   const [isInitializing, setIsInitializing] = useState(false);
+  /** True from when user sends first message in new conversation until first assistant content arrives */
+  const [isFirstMessagePending, setIsFirstMessagePending] = useState(false);
   /** Selected model for workspace chat (global cross-region inference profile) */
   const [selectedModelId, setSelectedModelId] = useState<WorkspaceChatModelId>(DEFAULT_WORKSPACE_MODEL);
   /** Whether model selection is enabled for workspace chat (from runtime config) */
@@ -174,6 +177,16 @@ const NumaWorkspaceChatAgents = () => {
       if (inputDraftTimerRef.current) clearTimeout(inputDraftTimerRef.current);
     };
   }, [inputMessage]);
+
+  // Clear first-message banner once the assistant starts streaming real content
+  useEffect(() => {
+    if (
+      isFirstMessagePending &&
+      messages.some((m) => m.role === 'assistant' && m.segments?.some((s) => s.kind === 'text' && s.text))
+    ) {
+      setIsFirstMessagePending(false);
+    }
+  }, [messages, isFirstMessagePending]);
 
   // Custom hooks
   // Use -v2 suffix to keep conversation state separate from V1 chat page
@@ -1285,6 +1298,11 @@ const NumaWorkspaceChatAgents = () => {
     }
     setButtonStatus('loading');
 
+    // Show workspace init notice on the very first message in a new conversation
+    if (messages.length === 0) {
+      setIsFirstMessagePending(true);
+    }
+
     try {
       /* ────────────────────────────────
          Chat Agent Primary Interface - Stateful Backend Design
@@ -1735,19 +1753,20 @@ const NumaWorkspaceChatAgents = () => {
               actionsClassName="workspace-chat-header-actions"
               actions={
                 <>
-                  {!shouldShowNewChatView && (
-                    <button
-                      type="button"
-                      className="workspace-chat-history-btn"
-                      onClick={() => {
-                        void handleHeaderNewChat();
-                      }}
-                      title={t('page.newChat')}
-                      aria-label={t('page.newChat')}
-                    >
-                      <Plus size={14} className="workspace-chat-header-btn-icon" />
-                      <span>{t('page.newChat')}</span>
-                    </button>
+                  <button
+                    type="button"
+                    className="workspace-chat-history-btn"
+                    onClick={() => {
+                      void handleHeaderNewChat();
+                    }}
+                    title={t('page.newChat')}
+                    aria-label={t('page.newChat')}
+                  >
+                    <Plus size={14} className="workspace-chat-header-btn-icon" />
+                    <span>{t('page.newChat')}</span>
+                  </button>
+                  {conversationId && (
+                    <ExportConversationButton messages={messages} conversationId={conversationId} />
                   )}
                   <button
                     type="button"
@@ -1851,6 +1870,15 @@ const NumaWorkspaceChatAgents = () => {
                           </span>
                         </div>
                         <span>{t('page.initializingWorkspace', { defaultValue: 'Initializing workspace...' })}</span>
+                      </div>
+                    )}
+
+                    {isFirstMessagePending && (
+                      <div className="workspace-chat-first-message-banner" role="status">
+                        <div className="spinner-border spinner-border-sm" role="status">
+                          <span className="visually-hidden">{t('page.loading')}</span>
+                        </div>
+                        <span>{t('page.firstMessageInitializing')}</span>
                       </div>
                     )}
 

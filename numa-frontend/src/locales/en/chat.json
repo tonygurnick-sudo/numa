@@ -246,7 +246,8 @@
     },
     "loading": "Loading...",
     "loadingConversation": "Loading conversation...",
-    "documentTitle": "Document"
+    "documentTitle": "Document",
+    "firstMessageInitializing": "Your workspace is being set up. The first response may take a few extra seconds."
   },
   "workspace": {
     "export": {
@@ -415,6 +416,7 @@
     "kbSelected": "{{count}} selected",
     "noneSelected": "None",
     "allToolsEnabledSummary": "All enabled",
+    "toolsPartialSummary": "{{count}} enabled",
     "noneEnabled": "None enabled"
   },
   "agents": {

@@ -1,4 +1,4 @@
-import React, { useMemo, Dispatch, SetStateAction } from 'react';
+import React, { useMemo, useState, useCallback, Dispatch, SetStateAction } from 'react';
 import { Button, Form, Spinner } from 'react-bootstrap';
 import { useTranslation } from 'react-i18next';
 import {
@@ -6,6 +6,8 @@ import {
   Building2,
   Bot,
   Check,
+  ChevronDown,
+  ChevronRight,
   Cpu,
   Download,
   Eye,
@@ -134,6 +136,38 @@ export const WorkspaceChatSettingsPanel: React.FC<WorkspaceChatSettingsPanelProp
 }) => {
   const { t } = useTranslation('chat');
 
+  // Collapsible section state — persisted to localStorage
+  const STORAGE_KEY = 'workspace-chat-settings-collapsed';
+  const DEFAULTS: Record<string, boolean> = {
+    knowledgeBases: true,
+    tools: true,
+    integrations: true,
+    model: true,
+    chatUploads: true,
+    sessionFiles: true,
+  };
+  const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved) return { ...DEFAULTS, ...JSON.parse(saved) };
+    } catch {
+      /* ignore */
+    }
+    return DEFAULTS;
+  });
+
+  const toggleSection = useCallback((section: string) => {
+    setCollapsedSections((prev) => {
+      const updated = { ...prev, [section]: !prev[section] };
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+      } catch {
+        /* ignore */
+      }
+      return updated;
+    });
+  }, []);
+
   // Connected integrations only
   const connectedIntegrations = availableConnections.filter((conn) => conn.isConnected);
 
@@ -172,212 +206,305 @@ export const WorkspaceChatSettingsPanel: React.FC<WorkspaceChatSettingsPanelProp
     <div className="workspace-chat-settings-panel workspace-settings-modern-panel">
       <div className="workspace-chat-settings-panel-body workspace-settings-modern-body">
         <div className="workspace-settings-card">
-          <div className="workspace-settings-card-header">
+          <button
+            type="button"
+            className="workspace-settings-card-header workspace-settings-card-header--collapsible"
+            onClick={() => toggleSection('knowledgeBases')}
+            aria-expanded={!collapsedSections.knowledgeBases}
+          >
             <div className="workspace-settings-card-title">
               <FolderOpen size={16} />
               <span>{t('workspaceSettings.knowledgeBases')}</span>
             </div>
-          </div>
-          <div className="workspace-settings-card-body">
-            <div className="workspace-settings-helper-text">{t('workspaceSettings.selectKBs')}</div>
-            {isLoadingKBs ? (
-              <div className="text-muted small d-flex align-items-center gap-2">
-                <Spinner animation="border" size="sm" />
-                {t('workspaceSettings.loading')}
-              </div>
-            ) : availableKBs.length === 0 ? (
-              <div className="text-muted small fst-italic">{t('workspaceSettings.noKBs')}</div>
-            ) : (
-              <div className="workspace-settings-list">
-                {availableKBs.map((kb) => (
-                  <Form.Check
-                    type="checkbox"
-                    key={kb.kb_id}
-                    id={`panel-kb-${kb.kb_id}`}
-                    className="workspace-settings-list-item workspace-settings-kb-list-item"
-                    label={
-                      <span className="workspace-settings-kb-label">
-                        {kb.kb_id === 'company' ? <Building2 size={14} /> : <UserIcon size={14} />}
-                        <span className="workspace-settings-kb-name">{kb.kb_name}</span>
-                      </span>
-                    }
-                    checked={enabledKBIds.includes(kb.kb_id)}
-                    onChange={(e) => handleKBToggle(kb.kb_id, e.target.checked)}
-                    disabled={isDisabled}
-                  />
-                ))}
-              </div>
-            )}
-          </div>
+            <div className="workspace-settings-card-header-right">
+              {collapsedSections.knowledgeBases && (
+                <span className="workspace-settings-collapsed-summary">
+                  {enabledKBIds.length > 0
+                    ? t('workspaceSettings.kbSelected', { count: enabledKBIds.length })
+                    : t('workspaceSettings.noneSelected')}
+                </span>
+              )}
+              {collapsedSections.knowledgeBases ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
+            </div>
+          </button>
+          {!collapsedSections.knowledgeBases && (
+            <div className="workspace-settings-card-body">
+              <div className="workspace-settings-helper-text">{t('workspaceSettings.selectKBs')}</div>
+              {isLoadingKBs ? (
+                <div className="text-muted small d-flex align-items-center gap-2">
+                  <Spinner animation="border" size="sm" />
+                  {t('workspaceSettings.loading')}
+                </div>
+              ) : availableKBs.length === 0 ? (
+                <div className="text-muted small fst-italic">{t('workspaceSettings.noKBs')}</div>
+              ) : (
+                <div className="workspace-settings-list">
+                  {availableKBs.map((kb) => (
+                    <Form.Check
+                      type="checkbox"
+                      key={kb.kb_id}
+                      id={`panel-kb-${kb.kb_id}`}
+                      className="workspace-settings-list-item workspace-settings-kb-list-item"
+                      label={
+                        <span className="workspace-settings-kb-label">
+                          {kb.kb_id === 'company' ? <Building2 size={14} /> : <UserIcon size={14} />}
+                          <span className="workspace-settings-kb-name">{kb.kb_name}</span>
+                        </span>
+                      }
+                      checked={enabledKBIds.includes(kb.kb_id)}
+                      onChange={(e) => handleKBToggle(kb.kb_id, e.target.checked)}
+                      disabled={isDisabled}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         <div className="workspace-settings-card">
-          <div className="workspace-settings-card-header">
+          <button
+            type="button"
+            className="workspace-settings-card-header workspace-settings-card-header--collapsible"
+            onClick={() => toggleSection('tools')}
+            aria-expanded={!collapsedSections.tools}
+          >
             <div className="workspace-settings-card-title">
               <Wrench size={16} />
               <span>{t('workspaceSettings.tools')}</span>
             </div>
-            <div className="workspace-settings-tools-master">
-              <span className="workspace-settings-tools-master-label">{t('workspaceSettings.all')}</span>
-              <Form.Check
-                type="switch"
-                id="panel-auto-tools"
-                className="workspace-settings-master-switch"
-                label=""
-                checked={autoToolsEnabled}
-                onChange={(e) => handleAutoToolsToggle(e.target.checked)}
-                disabled={isDisabled}
-              />
+            <div className="workspace-settings-card-header-right">
+              {collapsedSections.tools && (
+                <span className="workspace-settings-collapsed-summary">
+                  {autoToolsEnabled
+                    ? t('workspaceSettings.allToolsEnabledSummary')
+                    : [webSearchEnabled, createAgentEnabled].filter(Boolean).length > 0
+                      ? t('workspaceSettings.toolsPartialSummary', {
+                          count: [webSearchEnabled, createAgentEnabled].filter(Boolean).length,
+                        })
+                      : t('workspaceSettings.noneEnabled')}
+                </span>
+              )}
+              {collapsedSections.tools ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
             </div>
-          </div>
-          <div className="workspace-settings-card-body">
-            <div className="workspace-settings-list workspace-settings-tools-list">
-              <Form.Check
-                type="checkbox"
-                id="panel-web-search"
-                className="workspace-settings-list-item"
-                checked={webSearchEnabled}
-                onChange={(e) => setWebSearchEnabled(e.target.checked)}
-                disabled={isDisabled || autoToolsEnabled}
-                label={
-                  <span className={`d-flex align-items-center gap-2 ${autoToolsEnabled ? 'text-muted' : ''}`}>
-                    <Globe size={14} />
-                    {t('workspaceSettings.webSearch')}
-                  </span>
-                }
-              />
-
-              {agentsFeatureEnabled && (
+          </button>
+          {!collapsedSections.tools && (
+            <div className="workspace-settings-card-body">
+              <div className="workspace-settings-tools-master" style={{ marginBottom: '0.5rem' }}>
+                <span className="workspace-settings-tools-master-label">{t('workspaceSettings.all')}</span>
+                <Form.Check
+                  type="switch"
+                  id="panel-auto-tools"
+                  className="workspace-settings-master-switch"
+                  label=""
+                  checked={autoToolsEnabled}
+                  onChange={(e) => handleAutoToolsToggle(e.target.checked)}
+                  disabled={isDisabled}
+                />
+              </div>
+              <div className="workspace-settings-list workspace-settings-tools-list">
                 <Form.Check
                   type="checkbox"
-                  id="panel-create-agent"
+                  id="panel-web-search"
                   className="workspace-settings-list-item"
-                  checked={createAgentEnabled}
-                  onChange={(e) => setCreateAgentEnabled(e.target.checked)}
+                  checked={webSearchEnabled}
+                  onChange={(e) => setWebSearchEnabled(e.target.checked)}
                   disabled={isDisabled || autoToolsEnabled}
                   label={
                     <span className={`d-flex align-items-center gap-2 ${autoToolsEnabled ? 'text-muted' : ''}`}>
-                      <Bot size={14} />
-                      {t('workspaceSettings.agentCreation')}
+                      <Globe size={14} />
+                      {t('workspaceSettings.webSearch')}
                     </span>
                   }
                 />
-              )}
+
+                {agentsFeatureEnabled && (
+                  <Form.Check
+                    type="checkbox"
+                    id="panel-create-agent"
+                    className="workspace-settings-list-item"
+                    checked={createAgentEnabled}
+                    onChange={(e) => setCreateAgentEnabled(e.target.checked)}
+                    disabled={isDisabled || autoToolsEnabled}
+                    label={
+                      <span className={`d-flex align-items-center gap-2 ${autoToolsEnabled ? 'text-muted' : ''}`}>
+                        <Bot size={14} />
+                        {t('workspaceSettings.agentCreation')}
+                      </span>
+                    }
+                  />
+                )}
+              </div>
             </div>
-          </div>
+          )}
         </div>
 
         {/* Integrations */}
         {hasPipedreamFeature && (
           <div className="workspace-settings-card workspace-settings-integrations-card">
-            <div className="workspace-settings-card-header">
+            <button
+              type="button"
+              className="workspace-settings-card-header workspace-settings-card-header--collapsible"
+              onClick={() => toggleSection('integrations')}
+              aria-expanded={!collapsedSections.integrations}
+            >
               <div className="workspace-settings-card-title">
                 <Plug size={16} />
                 <span>{t('workspaceSettings.integrations')}</span>
               </div>
-            </div>
-            <div className="workspace-settings-card-body">
-              {connectionsLoading ? (
-                <div className="text-muted small d-flex align-items-center gap-2">
-                  <Spinner animation="border" size="sm" />
-                  {t('workspaceSettings.loading')}
-                </div>
-              ) : connectedIntegrations.length === 0 ? (
-                <div className="text-muted small fst-italic">
-                  <Info size={12} className="me-1" />
-                  {t('workspaceSettings.noIntegrations')}
-                </div>
-              ) : (
-                <div className="workspace-settings-list workspace-settings-integrations-list">
-                  {connectedIntegrations
-                    .sort((a, b) => a.name.localeCompare(b.name))
-                    .map((conn) => {
-                      const iconSrc = getConnectionIcon(conn.id);
-                      const fallbackIcon = getConnectionFallbackIcon(conn.id);
-                      const displayName = getConnectionDisplayName(conn.id);
-                      const isEnabled = enabledConnections.includes(conn.id);
+              <div className="workspace-settings-card-header-right">
+                {collapsedSections.integrations && (
+                  <span className="workspace-settings-collapsed-summary workspace-settings-collapsed-integrations">
+                    {enabledConnections.length > 0 ? (
+                      <>
+                        {enabledConnections.slice(0, 3).map((id) => {
+                          const iconSrc = getConnectionIcon(id);
+                          const displayName = getConnectionDisplayName(id);
+                          return iconSrc ? (
+                            <img
+                              key={id}
+                              src={iconSrc}
+                              alt={displayName}
+                              className="workspace-settings-collapsed-icon"
+                            />
+                          ) : null;
+                        })}
+                        {enabledConnections.length > 3 && (
+                          <span className="workspace-settings-collapsed-more">+{enabledConnections.length - 3}</span>
+                        )}
+                      </>
+                    ) : (
+                      t('workspaceSettings.noneEnabled')
+                    )}
+                  </span>
+                )}
+                {collapsedSections.integrations ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
+              </div>
+            </button>
+            {!collapsedSections.integrations && (
+              <div className="workspace-settings-card-body">
+                {connectionsLoading ? (
+                  <div className="text-muted small d-flex align-items-center gap-2">
+                    <Spinner animation="border" size="sm" />
+                    {t('workspaceSettings.loading')}
+                  </div>
+                ) : connectedIntegrations.length === 0 ? (
+                  <div className="text-muted small fst-italic">
+                    <Info size={12} className="me-1" />
+                    {t('workspaceSettings.noIntegrations')}
+                  </div>
+                ) : (
+                  <div className="workspace-settings-list workspace-settings-integrations-list">
+                    {connectedIntegrations
+                      .sort((a, b) => a.name.localeCompare(b.name))
+                      .map((conn) => {
+                        const iconSrc = getConnectionIcon(conn.id);
+                        const fallbackIcon = getConnectionFallbackIcon(conn.id);
+                        const displayName = getConnectionDisplayName(conn.id);
+                        const isEnabled = enabledConnections.includes(conn.id);
 
-                      return (
-                        <div key={conn.id} className="workspace-settings-integration-item">
-                          <div className="workspace-settings-integration-main">
-                            <span className="workspace-settings-integration-label">
-                              {iconSrc ? (
-                                <img
-                                  src={iconSrc}
-                                  alt={displayName}
-                                  style={{ width: 18, height: 18, objectFit: 'contain' }}
-                                  onError={(e) => {
-                                    e.currentTarget.style.display = 'none';
-                                  }}
-                                />
+                        return (
+                          <div key={conn.id} className="workspace-settings-integration-item">
+                            <div className="workspace-settings-integration-main">
+                              <span className="workspace-settings-integration-label">
+                                {iconSrc ? (
+                                  <img
+                                    src={iconSrc}
+                                    alt={displayName}
+                                    style={{ width: 18, height: 18, objectFit: 'contain' }}
+                                    onError={(e) => {
+                                      e.currentTarget.style.display = 'none';
+                                    }}
+                                  />
+                                ) : (
+                                  <i className={fallbackIcon} />
+                                )}
+                                {displayName}
+                              </span>
+                            </div>
+                            <button
+                              type="button"
+                              className={`workspace-settings-integration-state ${isEnabled ? 'is-connected' : 'is-connect'}`}
+                              onClick={() => handleIntegrationToggle(conn.id, !isEnabled)}
+                              disabled={isDisabled}
+                            >
+                              {isEnabled ? (
+                                <>
+                                  <Check size={12} />
+                                  {t('workspaceSettings.connected')}
+                                </>
                               ) : (
-                                <i className={fallbackIcon} />
+                                t('workspaceSettings.connect')
                               )}
-                              {displayName}
-                            </span>
+                            </button>
                           </div>
-                          <button
-                            type="button"
-                            className={`workspace-settings-integration-state ${isEnabled ? 'is-connected' : 'is-connect'}`}
-                            onClick={() => handleIntegrationToggle(conn.id, !isEnabled)}
-                            disabled={isDisabled}
-                          >
-                            {isEnabled ? (
-                              <>
-                                <Check size={12} />
-                                {t('workspaceSettings.connected')}
-                              </>
-                            ) : (
-                              t('workspaceSettings.connect')
-                            )}
-                          </button>
-                        </div>
-                      );
-                    })}
-                </div>
-              )}
-            </div>
+                        );
+                      })}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )}
 
         {showModelSelector && selectedModelId && setSelectedModelId && (
           <div className="workspace-settings-card workspace-settings-model-card">
-            <div className="workspace-settings-card-header">
+            <button
+              type="button"
+              className="workspace-settings-card-header workspace-settings-card-header--collapsible"
+              onClick={() => toggleSection('model')}
+              aria-expanded={!collapsedSections.model}
+            >
               <div className="workspace-settings-card-title">
                 <Cpu size={16} />
                 <span>{t('workspaceSettings.model')}</span>
               </div>
-            </div>
-            <div className="workspace-settings-card-body">
-              <div className="workspace-settings-list workspace-settings-model-list">
-                {WORKSPACE_MODEL_OPTIONS.map((model) => {
-                  const isActive = selectedModelId === model.id;
-                  return (
-                    <button
-                      key={model.id}
-                      type="button"
-                      className={`workspace-settings-model-item ${isActive ? 'is-active' : ''}`}
-                      onClick={() => setSelectedModelId(model.id)}
-                      disabled={isDisabled}
-                      aria-pressed={isActive}
-                    >
-                      <span className="workspace-settings-model-main">
-                        <span className="workspace-settings-model-name">{model.label}</span>
-                        <span className="workspace-settings-model-description">{model.description}</span>
-                      </span>
-                      {isActive && <Check size={14} />}
-                    </button>
-                  );
-                })}
+              <div className="workspace-settings-card-header-right">
+                {collapsedSections.model && (
+                  <span className="workspace-settings-collapsed-summary">
+                    {WORKSPACE_MODEL_OPTIONS.find((m) => m.id === selectedModelId)?.label ?? selectedModelId}
+                  </span>
+                )}
+                {collapsedSections.model ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
               </div>
-            </div>
+            </button>
+            {!collapsedSections.model && (
+              <div className="workspace-settings-card-body">
+                <div className="workspace-settings-list workspace-settings-model-list">
+                  {WORKSPACE_MODEL_OPTIONS.map((model) => {
+                    const isActive = selectedModelId === model.id;
+                    return (
+                      <button
+                        key={model.id}
+                        type="button"
+                        className={`workspace-settings-model-item ${isActive ? 'is-active' : ''}`}
+                        onClick={() => setSelectedModelId(model.id)}
+                        disabled={isDisabled}
+                        aria-pressed={isActive}
+                      >
+                        <span className="workspace-settings-model-main">
+                          <span className="workspace-settings-model-name">{model.label}</span>
+                          <span className="workspace-settings-model-description">{model.description}</span>
+                        </span>
+                        {isActive && <Check size={14} />}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
           </div>
         )}
 
         {/* Chat files - shown below integrations */}
         {!isNewChat && (
           <div className="workspace-settings-card">
-            <div className="workspace-settings-card-header">
+            <button
+              type="button"
+              className="workspace-settings-card-header workspace-settings-card-header--collapsible"
+              onClick={() => toggleSection('chatUploads')}
+              aria-expanded={!collapsedSections.chatUploads}
+            >
               <div className="workspace-settings-card-title">
                 <Upload size={16} />
                 <span>{t('workspaceSettings.chatUploads')}</span>
@@ -385,50 +512,71 @@ export const WorkspaceChatSettingsPanel: React.FC<WorkspaceChatSettingsPanelProp
                   <span className="workspace-settings-count-badge">{uploadsFiles.length}</span>
                 )}
               </div>
-              <div className="workspace-settings-card-actions">
-                <Button
-                  variant="link"
-                  size="sm"
+              <div className="workspace-settings-card-header-right">
+                {collapsedSections.chatUploads && (
+                  <span className="workspace-settings-collapsed-summary">
+                    {uploadsFiles.length > 0 ? `${uploadsFiles.length}` : t('workspaceSettings.noneSelected')}
+                  </span>
+                )}
+                <span
+                  role="button"
+                  tabIndex={0}
                   className="workspace-settings-icon-btn"
-                  onClick={onRefreshFiles}
-                  disabled={filesLoading}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onRefreshFiles();
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.stopPropagation();
+                      onRefreshFiles();
+                    }
+                  }}
                   title={t('workspaceSettings.refreshFiles')}
                 >
                   <RefreshCw size={14} className={filesLoading ? 'spinning' : ''} />
-                </Button>
+                </span>
+                {collapsedSections.chatUploads ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
               </div>
-            </div>
-            <div className="workspace-settings-card-body">
-              {filesLoading ? (
-                <div className="text-muted small d-flex align-items-center gap-2 py-2">
-                  <Spinner animation="border" size="sm" />
-                  {t('workspaceSettings.loadingFiles')}
-                </div>
-              ) : filesError ? (
-                <div className="text-danger small py-2">
-                  <AlertTriangle size={14} className="me-1" />
-                  {filesError}
-                  <Button variant="link" size="sm" onClick={onRefreshFiles} className="ms-2 p-0">
-                    {t('workspaceSettings.retry')}
-                  </Button>
-                </div>
-              ) : uploadsFiles.length === 0 ? (
-                <div className="text-muted small fst-italic py-2">{t('workspaceSettings.noUploads')}</div>
-              ) : (
-                <WorkspaceSettingsFileList
-                  files={uploadsFiles}
-                  rootPrefix="uploads/"
-                  onOpen={onOpenFile}
-                  onDownload={onDownloadFile}
-                />
-              )}
-            </div>
+            </button>
+            {!collapsedSections.chatUploads && (
+              <div className="workspace-settings-card-body">
+                {filesLoading ? (
+                  <div className="text-muted small d-flex align-items-center gap-2 py-2">
+                    <Spinner animation="border" size="sm" />
+                    {t('workspaceSettings.loadingFiles')}
+                  </div>
+                ) : filesError ? (
+                  <div className="text-danger small py-2">
+                    <AlertTriangle size={14} className="me-1" />
+                    {filesError}
+                    <Button variant="link" size="sm" onClick={onRefreshFiles} className="ms-2 p-0">
+                      {t('workspaceSettings.retry')}
+                    </Button>
+                  </div>
+                ) : uploadsFiles.length === 0 ? (
+                  <div className="text-muted small fst-italic py-2">{t('workspaceSettings.noUploads')}</div>
+                ) : (
+                  <WorkspaceSettingsFileList
+                    files={uploadsFiles}
+                    rootPrefix="uploads/"
+                    onOpen={onOpenFile}
+                    onDownload={onDownloadFile}
+                  />
+                )}
+              </div>
+            )}
           </div>
         )}
 
         {!isNewChat && (
           <div className="workspace-settings-card">
-            <div className="workspace-settings-card-header">
+            <button
+              type="button"
+              className="workspace-settings-card-header workspace-settings-card-header--collapsible"
+              onClick={() => toggleSection('sessionFiles')}
+              aria-expanded={!collapsedSections.sessionFiles}
+            >
               <div className="workspace-settings-card-title">
                 <FileText size={16} />
                 <span>{t('workspaceSettings.sessionFiles')}</span>
@@ -436,41 +584,57 @@ export const WorkspaceChatSettingsPanel: React.FC<WorkspaceChatSettingsPanelProp
                   <span className="workspace-settings-count-badge">{sessionFiles.length}</span>
                 )}
               </div>
-              <div className="workspace-settings-card-actions">
-                <Button
-                  variant="link"
-                  size="sm"
+              <div className="workspace-settings-card-header-right">
+                {collapsedSections.sessionFiles && (
+                  <span className="workspace-settings-collapsed-summary">
+                    {sessionFiles.length > 0 ? `${sessionFiles.length}` : t('workspaceSettings.noneSelected')}
+                  </span>
+                )}
+                <span
+                  role="button"
+                  tabIndex={0}
                   className="workspace-settings-icon-btn"
-                  onClick={onRefreshFiles}
-                  disabled={filesLoading}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onRefreshFiles();
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.stopPropagation();
+                      onRefreshFiles();
+                    }
+                  }}
                   title={t('workspaceSettings.refreshFiles')}
                 >
                   <RefreshCw size={14} className={filesLoading ? 'spinning' : ''} />
-                </Button>
+                </span>
+                {collapsedSections.sessionFiles ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
               </div>
-            </div>
-            <div className="workspace-settings-card-body">
-              {filesLoading ? (
-                <div className="text-muted small d-flex align-items-center gap-2 py-2">
-                  <Spinner animation="border" size="sm" />
-                  {t('workspaceSettings.loadingFiles')}
-                </div>
-              ) : filesError ? (
-                <div className="text-danger small py-2">
-                  <AlertTriangle size={14} className="me-1" />
-                  {filesError}
-                </div>
-              ) : sessionFiles.length === 0 ? (
-                <div className="text-muted small fst-italic py-2">{t('workspaceSettings.noSessionFiles')}</div>
-              ) : (
-                <WorkspaceSettingsFileList
-                  files={sessionFiles}
-                  rootPrefix="session/"
-                  onOpen={onOpenFile}
-                  onDownload={onDownloadFile}
-                />
-              )}
-            </div>
+            </button>
+            {!collapsedSections.sessionFiles && (
+              <div className="workspace-settings-card-body">
+                {filesLoading ? (
+                  <div className="text-muted small d-flex align-items-center gap-2 py-2">
+                    <Spinner animation="border" size="sm" />
+                    {t('workspaceSettings.loadingFiles')}
+                  </div>
+                ) : filesError ? (
+                  <div className="text-danger small py-2">
+                    <AlertTriangle size={14} className="me-1" />
+                    {filesError}
+                  </div>
+                ) : sessionFiles.length === 0 ? (
+                  <div className="text-muted small fst-italic py-2">{t('workspaceSettings.noSessionFiles')}</div>
+                ) : (
+                  <WorkspaceSettingsFileList
+                    files={sessionFiles}
+                    rootPrefix="session/"
+                    onOpen={onOpenFile}
+                    onDownload={onDownloadFile}
+                  />
+                )}
+              </div>
+            )}
           </div>
         )}
       </div>
