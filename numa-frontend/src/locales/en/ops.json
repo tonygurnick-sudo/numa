@@ -412,6 +412,8 @@
     "thisMonth": "This Month",
     "thisQuarter": "This Quarter",
     "empty": "(Empty)",
+    "sortAZ": "Sort A \u2192 Z",
+    "sortZA": "Sort Z \u2192 A",
     "apply": "Apply",
     "savedViews": "Saved Views",
     "saveView": "Save View",
@@ -419,6 +421,14 @@
     "modified": "(modified)",
     "clearView": "Clear View",
     "resetDefaults": "Reset to Defaults"
+  },
+  "allTicketsView": {
+    "allStatus": "All Status",
+    "allSprints": "All Sprints",
+    "customerFilters": "Customer Filters",
+    "saveViewPrompt": "View name...",
+    "deleteView": "Delete View",
+    "noSavedViews": "Save a view to quickly restore your filters and columns."
   },
   "columns": {
     "manage": "Columns",

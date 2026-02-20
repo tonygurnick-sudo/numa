@@ -9,6 +9,7 @@ import { getCached, setCache } from '../../utils/opsCache';
 const LS_ACTIVE_TEAM = 'numa_ops_active_team';
 const LS_ACTIVE_ZONE = 'numa_ops_active_zone';
 const LS_BOARD_VIEW_MODE = 'numa_ops_board_view_mode';
+const LS_TOP_VIEW = 'numa_ops_top_view';
 
 // ─── View Types ─────────────────────────────────────────────────────────────
 
@@ -113,7 +114,17 @@ export const useOpsData = (): OpsDataState => {
   const [selectedWorkUnitId, setSelectedWorkUnitId] = useState<string | null>(null);
 
   // ── View State ──────────────────────────────────────────────────────────
-  const [topView, setTopViewState] = useState<OpsTopView>('board');
+  const [topView, setTopViewState] = useState<OpsTopView>(() => {
+    try {
+      const saved = localStorage.getItem(LS_TOP_VIEW);
+      if (saved && ['home', 'board', 'allTickets', 'customers', 'suppliers', 'roadmap'].includes(saved)) {
+        return saved as OpsTopView;
+      }
+    } catch {
+      /* quota or private mode */
+    }
+    return 'board';
+  });
   const [boardViewMode, setBoardViewModeState] = useState<BoardViewMode>(() => {
     try {
       const saved = localStorage.getItem(LS_BOARD_VIEW_MODE);
@@ -323,6 +334,11 @@ export const useOpsData = (): OpsDataState => {
 
   const setTopView = useCallback((view: OpsTopView) => {
     setTopViewState(view);
+    try {
+      localStorage.setItem(LS_TOP_VIEW, view);
+    } catch {
+      /* quota or private mode */
+    }
   }, []);
 
   const setBoardViewMode = useCallback(
