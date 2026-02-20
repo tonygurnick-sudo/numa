@@ -1,7 +1,7 @@
 import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../Providers/AuthProvider';
 import { Container, Row, Col, Card, Button } from 'react-bootstrap';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 
 // Hook to safely use location outside of router context
@@ -66,37 +66,32 @@ export const FeatureWrapper = ({
   showAccessDenied = false, // Default to false to maintain existing behavior for components
 }) => {
   const { user, loading, tokenValidationComplete, forceTokenValidation } = useAuth();
-  const [isValidatingTokens, setIsValidatingTokens] = useState(false);
   const location = useSafeLocation();
 
   // Check if user has the required feature (calculated early for hooks)
   const hasFeature = user?.features?.includes(requiredFeature);
 
-  // Force token validation on navigation to protected routes
+  // Keep a stable ref to forceTokenValidation so the navigation effect only
+  // fires on actual route changes, not on every callback reference change
+  // (which happens whenever AuthProvider refreshes tokens and calls setUser).
+  const forceTokenValidationRef = useRef(forceTokenValidation);
   useEffect(() => {
-    const validateTokensOnNavigation = async () => {
-      // Validate tokens for any protected route that requires auth
-      // Only validate tokens if user is properly loaded and we have the validation function
-      if (requireAuth && forceTokenValidation && user && tokenValidationComplete) {
-        setIsValidatingTokens(true);
-        try {
-          const isValid = await forceTokenValidation();
-          if (!isValid) {
-            // forceTokenValidation already calls logout() internally if tokens are invalid
-          }
-        } catch (error) {
-          console.error('❌ FeatureWrapper: Token validation failed on navigation:', error);
-        } finally {
-          setIsValidatingTokens(false);
-        }
-      }
-    };
+    forceTokenValidationRef.current = forceTokenValidation;
+  }, [forceTokenValidation]);
 
-    validateTokensOnNavigation();
-  }, [requireAuth, forceTokenValidation, tokenValidationComplete, location.pathname]); // Include location.pathname to trigger on navigation
+  // Validate tokens on navigation to protected routes.
+  // Runs in the background — children stay mounted. If validation fails,
+  // forceTokenValidation() calls logout() internally which redirects to /login.
+  useEffect(() => {
+    if (requireAuth && forceTokenValidationRef.current && user && tokenValidationComplete) {
+      forceTokenValidationRef.current().catch((error) => {
+        console.error('❌ FeatureWrapper: Token validation failed on navigation:', error);
+      });
+    }
+  }, [requireAuth, user, tokenValidationComplete, location.pathname]);
 
-  // Handle loading states
-  if (loading || !tokenValidationComplete || isValidatingTokens) {
+  // Handle loading states — only gate on initial load, not background re-validation
+  if (loading || !tokenValidationComplete) {
     return loadingFallback;
   }
 

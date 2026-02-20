@@ -93,7 +93,7 @@ const NumaWorkspaceChatAgents = () => {
   const { t } = useTranslation('chat');
   // Basic UI state
   const [messages, setMessages] = useState([]);
-  const [inputMessage, setInputMessage] = useState('');
+  const [inputMessage, setInputMessage] = useState(() => sessionStorage.getItem('numa-chat-draft') || '');
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [uploadedFiles, setUploadedFiles] = useState([]);
   const [stagedItems, setStagedItems] = useState<StagedItem[]>([]);
@@ -157,6 +157,23 @@ const NumaWorkspaceChatAgents = () => {
   const conversationChatConfigSaveTimeoutRef = useRef<number | null>(null);
   const isApplyingConversationChatConfigRef = useRef(false);
   // Note: Workspace streaming refs moved to useWorkspaceStreaming hook
+  const inputDraftTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Persist the chat input draft to sessionStorage so it survives component remounts
+  // (e.g. from background token re-validation). Debounced to avoid excessive writes.
+  useEffect(() => {
+    if (inputDraftTimerRef.current) clearTimeout(inputDraftTimerRef.current);
+    inputDraftTimerRef.current = setTimeout(() => {
+      if (inputMessage) {
+        sessionStorage.setItem('numa-chat-draft', inputMessage);
+      } else {
+        sessionStorage.removeItem('numa-chat-draft');
+      }
+    }, 300);
+    return () => {
+      if (inputDraftTimerRef.current) clearTimeout(inputDraftTimerRef.current);
+    };
+  }, [inputMessage]);
 
   // Custom hooks
   // Use -v2 suffix to keep conversation state separate from V1 chat page

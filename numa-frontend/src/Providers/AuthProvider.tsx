@@ -23,6 +23,7 @@ import { NumaBedrockUtils } from '../utils/NumaBedrockUtils';
 import Notification from '../Components/Notification';
 import { withPRM } from '../utils/prmUtils';
 import { useTranslation } from 'react-i18next';
+import { hasConfigInSession, fetchConfigAddtoSession } from '../Components/ConfigSetup';
 
 const AuthContext = createContext(null);
 
@@ -93,6 +94,24 @@ export const AuthProvider = ({ children, initialTokens }) => {
   // MFA state exposed via context so the Login page can display setup/code forms
   const [mfaSetupData, setMfaSetupData] = useState<MfaSetupRequired | null>(null);
   const [mfaCodeData, setMfaCodeData] = useState<MfaCodeRequired | null>(null);
+
+  // Wait for config.json values (CLIENT_ID, REGION, etc.) to be in sessionStorage.
+  // Prevents race condition where AuthProvider tries to refresh tokens before config is loaded.
+  const ensureConfigLoaded = async (): Promise<boolean> => {
+    if (hasConfigInSession()) return true;
+
+    console.debug('⏳ Config not in session, waiting for config to load...');
+    try {
+      await Promise.race([
+        fetchConfigAddtoSession(true),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Config load timeout')), 5000)),
+      ]);
+    } catch (error) {
+      console.warn('⚠️ Config load failed or timed out:', error);
+    }
+
+    return hasConfigInSession();
+  };
 
   const clearScheduledRefresh = useCallback(() => {
     if (refreshTimeoutRef.current) {
@@ -361,136 +380,187 @@ export const AuthProvider = ({ children, initialTokens }) => {
     refreshInProgressRef.current = true;
 
     const refreshOperation = async () => {
+      const MAX_RETRIES = 3;
+      const BASE_DELAY_MS = 1000;
+
       try {
-        const refreshToken = tokensRef.current.refreshToken;
-        const CLIENT_ID = window.sessionStorage.getItem('CLIENT_ID');
-        const REGION = window.sessionStorage.getItem('REGION');
+        for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+          try {
+            const refreshToken = tokensRef.current.refreshToken;
+            const CLIENT_ID = window.sessionStorage.getItem('CLIENT_ID');
+            const REGION = window.sessionStorage.getItem('REGION');
 
-        if (!refreshToken) {
-          console.error('No refresh token available');
-          logout();
-          return false;
-        }
+            if (!CLIENT_ID || !REGION) {
+              const err = new Error('Config not loaded: CLIENT_ID or REGION missing from sessionStorage');
+              (err as Record<string, unknown>).isTransient = true;
+              throw err;
+            }
 
-        const idToken = tokensRef.current.idToken;
-        const decodedIdToken = jwtDecode(idToken);
-        const username = decodedIdToken.sub;
-        if (!username) {
-          console.error('No username available');
-          logout();
-          return false;
-        }
-
-        const SECRET_HASH = await fetchSecretHash(username);
-
-        const cognitoClient = withPRM(CognitoIdentityProviderClient, { region: REGION });
-
-        const params = {
-          AuthFlow: 'REFRESH_TOKEN_AUTH',
-          ClientId: CLIENT_ID,
-          AuthParameters: {
-            REFRESH_TOKEN: refreshToken,
-            SECRET_HASH: SECRET_HASH,
-          },
-        };
-
-        const command = new InitiateAuthCommand(params);
-        const response = await cognitoClient.send(command);
-
-        if (!response.AuthenticationResult) throw new Error('Token refresh failed');
-
-        const { AccessToken, IdToken } = response.AuthenticationResult;
-
-        // Update tokensRef directly
-        tokensRef.current = {
-          ...tokensRef.current,
-          accessToken: AccessToken,
-          idToken: IdToken,
-        };
-
-        // Update localStorage and decode tokens
-        await updateTokens({
-          accessToken: AccessToken,
-          idToken: IdToken,
-          refreshToken,
-        });
-
-        // Decode the new tokens to update the decoded token references
-        const newDecodedAccessToken = jwtDecode(AccessToken);
-        const newDecodedIdToken = jwtDecode(IdToken);
-
-        const { groups, features } = extractGroupsAndFeatures(newDecodedIdToken, setAuthError);
-
-        // Save old tokens before comparison to prevent race condition
-        const oldGroups = user?.groups || [];
-
-        // Check if groups actually changed, not just tokens refreshed
-        const groupsChanged = JSON.stringify(oldGroups.sort()) !== JSON.stringify(groups.sort());
-
-        // Handle group changes (admin promotion/demotion)
-        if (groupsChanged && user) {
-          const hasAdmin = groups.includes('admin');
-          const hadAdmin = oldGroups.includes('admin');
-
-          if (hasAdmin !== hadAdmin) {
-            if (!hasAdmin && hadAdmin) {
-              // Demoted from admin - logout immediately
-              showTokenRevocationNotification('revocation');
+            if (!refreshToken) {
+              console.error('No refresh token available');
               logout();
               return false;
-            } else if (hasAdmin && !hadAdmin) {
-              // Promoted - refresh tokens to get new permissions immediately
-              console.log('🔄 User promoted to admin, refreshing tokens for new permissions');
-              console.log('Previous groups:', oldGroups);
-              console.log('Current groups from token:', groups);
-              await refreshTokens();
-
-              // Log the user state after refresh to verify the promotion took effect
-              setTimeout(() => {
-                console.log('📊 User state after promotion refresh:', {
-                  userGroups: user?.groups,
-                  userFeatures: user?.features,
-                  hasAdminGroup: user?.groups?.includes('admin'),
-                  totalFeatures: user?.features?.length,
-                });
-              }, 100);
             }
+
+            const idToken = tokensRef.current.idToken;
+            const decodedIdToken = jwtDecode(idToken);
+            const username = decodedIdToken.sub;
+            if (!username) {
+              console.error('No username available');
+              logout();
+              return false;
+            }
+
+            const SECRET_HASH = await fetchSecretHash(username);
+
+            const cognitoClient = withPRM(CognitoIdentityProviderClient, { region: REGION });
+
+            const params = {
+              AuthFlow: 'REFRESH_TOKEN_AUTH',
+              ClientId: CLIENT_ID,
+              AuthParameters: {
+                REFRESH_TOKEN: refreshToken,
+                SECRET_HASH: SECRET_HASH,
+              },
+            };
+
+            const command = new InitiateAuthCommand(params);
+            const response = await cognitoClient.send(command);
+
+            if (!response.AuthenticationResult) {
+              // Cognito responded but without tokens — this is a permanent auth failure, not a network issue
+              const err = new Error('Token refresh failed - no AuthenticationResult in response');
+              err.name = 'TokenRefreshException';
+              throw err;
+            }
+
+            const { AccessToken, IdToken } = response.AuthenticationResult;
+
+            // Update tokensRef directly
+            tokensRef.current = {
+              ...tokensRef.current,
+              accessToken: AccessToken,
+              idToken: IdToken,
+            };
+
+            // Update localStorage and decode tokens
+            await updateTokens({
+              accessToken: AccessToken,
+              idToken: IdToken,
+              refreshToken,
+            });
+
+            // Decode the new tokens to update the decoded token references
+            const newDecodedAccessToken = jwtDecode(AccessToken);
+            const newDecodedIdToken = jwtDecode(IdToken);
+
+            const { groups, features } = extractGroupsAndFeatures(newDecodedIdToken, setAuthError);
+
+            // Save old tokens before comparison to prevent race condition
+            const oldGroups = user?.groups || [];
+
+            // Check if groups actually changed, not just tokens refreshed
+            const groupsChanged = JSON.stringify(oldGroups.sort()) !== JSON.stringify(groups.sort());
+
+            // Handle group changes (admin promotion/demotion)
+            if (groupsChanged && user) {
+              const hasAdmin = groups.includes('admin');
+              const hadAdmin = oldGroups.includes('admin');
+
+              if (hasAdmin !== hadAdmin) {
+                if (!hasAdmin && hadAdmin) {
+                  // Demoted from admin - logout immediately
+                  showTokenRevocationNotification('revocation');
+                  logout();
+                  return false;
+                } else if (hasAdmin && !hadAdmin) {
+                  // Promoted - refresh tokens to get new permissions immediately
+                  console.log('🔄 User promoted to admin, refreshing tokens for new permissions');
+                  console.log('Previous groups:', oldGroups);
+                  console.log('Current groups from token:', groups);
+                  await refreshTokens();
+
+                  // Log the user state after refresh to verify the promotion took effect
+                  setTimeout(() => {
+                    console.log('📊 User state after promotion refresh:', {
+                      userGroups: user?.groups,
+                      userFeatures: user?.features,
+                      hasAdminGroup: user?.groups?.includes('admin'),
+                      totalFeatures: user?.features?.length,
+                    });
+                  }, 100);
+                }
+              }
+            }
+
+            // Update user state with fresh tokens and groups/features
+            const userUpdate = {
+              tokens: {
+                accessToken: AccessToken,
+                idToken: IdToken,
+                refreshToken,
+              },
+              decoded_tokens: {
+                accessToken: newDecodedAccessToken,
+                idToken: newDecodedIdToken,
+              },
+              groups,
+              features,
+            };
+
+            // Update decoded tokens ref for future comparisons
+            decodedTokensRef.current = {
+              accessToken: newDecodedAccessToken,
+              idToken: newDecodedIdToken,
+            };
+
+            setUser((prevUser) => ({
+              ...prevUser,
+              ...userUpdate,
+            }));
+
+            lastRefreshTimeRef.current = Date.now();
+            scheduleRefreshBeforeExpiry();
+            return true;
+          } catch (error) {
+            const isLastAttempt = attempt === MAX_RETRIES;
+
+            if (isTransientError(error) && !isLastAttempt) {
+              const delay = BASE_DELAY_MS * Math.pow(2, attempt);
+              console.warn(
+                `⚠️ Transient error during token refresh (attempt ${attempt + 1}/${MAX_RETRIES + 1}), ` +
+                  `retrying in ${delay}ms:`,
+                (error as Error).message,
+              );
+
+              // If offline, wait for the network to come back (with a timeout)
+              if (typeof navigator !== 'undefined' && !navigator.onLine) {
+                await new Promise<void>((resolve) => {
+                  const onOnline = () => {
+                    window.removeEventListener('online', onOnline);
+                    resolve();
+                  };
+                  window.addEventListener('online', onOnline);
+                  setTimeout(() => {
+                    window.removeEventListener('online', onOnline);
+                    resolve();
+                  }, delay * 2);
+                });
+              }
+
+              await new Promise((resolve) => setTimeout(resolve, delay));
+              continue;
+            }
+
+            // Permanent error or retries exhausted
+            console.error('❌ Token refresh failed permanently:', error);
+            showTokenRevocationNotification('expired');
+            logout();
+            return false;
           }
         }
 
-        // Update user state with fresh tokens and groups/features
-        const userUpdate = {
-          tokens: {
-            accessToken: AccessToken,
-            idToken: IdToken,
-            refreshToken,
-          },
-          decoded_tokens: {
-            accessToken: newDecodedAccessToken,
-            idToken: newDecodedIdToken,
-          },
-          groups,
-          features,
-        };
-
-        // Update decoded tokens ref for future comparisons
-        decodedTokensRef.current = {
-          accessToken: newDecodedAccessToken,
-          idToken: newDecodedIdToken,
-        };
-
-        setUser((prevUser) => ({
-          ...prevUser,
-          ...userUpdate,
-        }));
-
-        lastRefreshTimeRef.current = Date.now();
-        scheduleRefreshBeforeExpiry();
-        return true;
-      } catch (error) {
-        console.error('❌ Error refreshing tokens:', error);
-        showTokenRevocationNotification('expired');
-        logout();
+        // Should not reach here, but safety net
         return false;
       } finally {
         refreshInProgressRef.current = false;
@@ -1020,8 +1090,7 @@ export const AuthProvider = ({ children, initialTokens }) => {
           lastRefreshTimeRef.current = now;
           return true;
         }
-        showTokenRevocationNotification('expired');
-        logout();
+        // refreshTokens() already handles logout on permanent failure
         return false;
       }
 
@@ -1038,13 +1107,15 @@ export const AuthProvider = ({ children, initialTokens }) => {
               lastRefreshTimeRef.current = now;
               return true;
             }
-            showTokenRevocationNotification('expired');
+            // refreshTokens() already handles logout on permanent failure
+            return false;
           } else {
+            // Genuine revocation — this is a permanent auth failure, logout immediately
             console.error('Token has been revoked during periodic check, forcing logout');
             showTokenRevocationNotification('revocation');
+            logout();
+            return false;
           }
-          logout();
-          return false;
         }
         localStorage.setItem('lastTokenValidation', now.toString());
       }
@@ -1069,7 +1140,7 @@ export const AuthProvider = ({ children, initialTokens }) => {
           lastRefreshTimeRef.current = now;
           return true;
         }
-        logout();
+        // refreshTokens() already handles logout on permanent failure
         return false;
       }
 
@@ -1096,15 +1167,41 @@ export const AuthProvider = ({ children, initialTokens }) => {
   }, [user, checkAndRefreshTokens]);
 
   useEffect(() => {
+    let visibilityTimer: ReturnType<typeof setTimeout> | null = null;
+
     const handleVisibilityChange = () => {
+      // Debounce: clear any pending timer from rapid tab switches
+      if (visibilityTimer) {
+        clearTimeout(visibilityTimer);
+        visibilityTimer = null;
+      }
+
       if (document.visibilityState === 'visible') {
-        checkAndRefreshTokens();
+        // Delay to allow network stack to re-establish after laptop wake.
+        // Combined with retry logic in refreshTokens(), this prevents false logouts
+        // from transient network errors during wake-up.
+        visibilityTimer = setTimeout(() => {
+          visibilityTimer = null;
+          if (navigator.onLine) {
+            checkAndRefreshTokens();
+          } else {
+            // Wait for network to come back, then check
+            const onOnline = () => {
+              window.removeEventListener('online', onOnline);
+              checkAndRefreshTokens();
+            };
+            window.addEventListener('online', onOnline);
+          }
+        }, 2000);
       }
     };
 
     document.addEventListener('visibilitychange', handleVisibilityChange);
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
+      if (visibilityTimer) {
+        clearTimeout(visibilityTimer);
+      }
     };
   }, [checkAndRefreshTokens]);
 
@@ -1115,6 +1212,16 @@ export const AuthProvider = ({ children, initialTokens }) => {
   }, [clearScheduledRefresh]);
 
   const loadUserFromTokens = async () => {
+    // Ensure config (CLIENT_ID, REGION, API_ENDPOINT) is in sessionStorage before
+    // attempting any token operations that depend on it.
+    const configReady = await ensureConfigLoaded();
+    if (!configReady) {
+      console.warn('⚠️ Config not available after waiting, cannot initialize auth');
+      setLoading(false);
+      setTokenValidationComplete(true);
+      return;
+    }
+
     const accessToken = localStorage.getItem('accessToken');
     const idToken = localStorage.getItem('idToken');
     const refreshToken = localStorage.getItem('refreshToken');
@@ -1766,6 +1873,39 @@ export const TestAuthProvider = ({ children, refreshHandler, initialTokens }) =>
       {children}
     </AuthProvider>
   );
+};
+
+// Classify whether an error from refreshTokens() is transient (retry-able) or permanent (logout).
+// Transient: network hiccups, DNS failures, fetch timeouts, config not loaded yet.
+// Permanent: Cognito explicitly rejected the token (revoked, user deleted, etc.).
+const isTransientError = (error: unknown): boolean => {
+  if (typeof navigator !== 'undefined' && !navigator.onLine) return true;
+
+  if (error && typeof error === 'object') {
+    const err = error as Record<string, unknown>;
+
+    // Explicitly marked as transient (e.g., config not loaded yet)
+    if (err.isTransient === true) return true;
+
+    // Cognito permanent errors — these should NOT retry
+    const permanentNames = ['NotAuthorizedException', 'UserNotFoundException', 'TokenRefreshException'];
+    if (typeof err.name === 'string' && permanentNames.includes(err.name)) return false;
+
+    const msg = typeof err.message === 'string' ? err.message.toLowerCase() : '';
+
+    // TypeError from fetch() rejection specifically says "failed to fetch" or "network"
+    if (error instanceof TypeError) {
+      return ['failed to fetch', 'network', 'abort'].some((kw) => msg.includes(kw));
+    }
+
+    // Other errors with network-related messages
+    if (['network', 'timeout', 'abort', 'dns', 'econnrefused', 'enotfound'].some((kw) => msg.includes(kw))) {
+      return true;
+    }
+  }
+
+  // Default: treat unknown errors as permanent to avoid silent retry loops
+  return false;
 };
 
 // Helper function to extract groups from principal tags
