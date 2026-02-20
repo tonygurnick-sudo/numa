@@ -4,6 +4,7 @@ import { useNumaRequest } from '../../Providers/NumaRequestContext';
 import { useOps } from './OpsContext';
 import * as OpsService from '../../Services/OpsService';
 import type { TeamSummary, TeamResponse } from '../../types/ops';
+import { getCached, setCache } from '../../utils/opsCache';
 
 /**
  * AllTeamsStrip — header strip for "All Teams" board view mode.
@@ -18,8 +19,19 @@ const AllTeamsStrip = () => {
   const { teams, selectedTeamId, selectTeam, teamData, activeZoneId, setActiveZone } = useOps();
 
   // Cache of team data for non-selected teams: teamId → TeamResponse
-  const [teamDataCache, setTeamDataCache] = useState<Map<string, TeamResponse>>(new Map());
-  const fetchedRef = useRef<Set<string>>(new Set());
+  // Initialized from localStorage so zone names render instantly on remount.
+  const [teamDataCache, setTeamDataCache] = useState<Map<string, TeamResponse>>(() => {
+    const cached = getCached<Record<string, TeamResponse>>('allTeamsZones');
+    return cached ? new Map(Object.entries(cached)) : new Map();
+  });
+  const fetchedRef = useRef<Set<string>>(
+    new Set(
+      (() => {
+        const cached = getCached<Record<string, TeamResponse>>('allTeamsZones');
+        return cached ? Object.keys(cached) : [];
+      })(),
+    ),
+  );
 
   // Fetch zone data for all teams that aren't currently selected
   useEffect(() => {
@@ -42,6 +54,12 @@ const AllTeamsStrip = () => {
             fetchedRef.current.add(tm.id);
           }
         });
+        // Persist to localStorage for instant rendering on remount
+        const obj: Record<string, TeamResponse> = {};
+        next.forEach((v, k) => {
+          obj[k] = v;
+        });
+        setCache('allTeamsZones', obj);
         return next;
       });
     };
@@ -177,6 +195,7 @@ const TeamBox = ({ team, isSelected, zones, activeZoneId, onSelectTeam, onSelect
                   onSelectZone(zone.id);
                 }}
               >
+                <i className={`bi ${zone.zoneType === 'board' ? 'bi-kanban' : 'bi-list-task'}`} />
                 {zone.name}
               </button>
             );

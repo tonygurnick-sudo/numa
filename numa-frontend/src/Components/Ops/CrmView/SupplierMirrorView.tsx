@@ -4,8 +4,9 @@ import { useTranslation } from 'react-i18next';
 import { useNumaRequest } from '../../../Providers/NumaRequestContext';
 import { useOps } from '../OpsContext';
 import * as OpsService from '../../../Services/OpsService';
-import type { Supplier } from '../../../types/ops';
+import type { Supplier, SupplierConfig } from '../../../types/ops';
 import { getCached, setCache } from '../../../utils/opsCache';
+import { getColorForPosition, getContrastTextColor } from '../Shared/colorUtils';
 import { SupplierCard } from './SupplierCard';
 import { SupplierDetailModal } from '../Modals/SupplierDetailModal';
 
@@ -14,18 +15,203 @@ import { SupplierDetailModal } from '../Modals/SupplierDetailModal';
 const TEAL_ACCENT = '#0d9488';
 
 type FilterMode = 'all' | 'with-tickets';
+type ViewMode = 'board' | 'list';
+
+// ─── Helpers ────────────────────────────────────────────────────────────────
+
+function formatLastContact(dateStr: string | null | undefined): string {
+  if (!dateStr) return 'No contact';
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+  if (days === 0) return 'Today';
+  if (days === 1) return '1 day ago';
+  if (days < 30) return `${String(days)} days ago`;
+  const months = Math.floor(days / 30);
+  return months === 1 ? '1 month ago' : `${String(months)} months ago`;
+}
+
+function formatCurrency(value: number): string {
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  }).format(value);
+}
+
+// ─── Supplier List View ─────────────────────────────────────────────────────
+
+interface SupplierListViewProps {
+  suppliers: Supplier[];
+  supplierConfig: SupplierConfig;
+  onSupplierClick: (supplier: Supplier) => void;
+}
+
+function SupplierListView({ suppliers, supplierConfig, onSupplierClick }: SupplierListViewProps): React.JSX.Element {
+  const { t } = useTranslation('ops');
+
+  if (suppliers.length === 0) {
+    return (
+      <div className="text-center py-5">
+        <i className="bi bi-truck fs-1 d-block mb-2" style={{ color: '#d1d5db' }} />
+        <span style={{ color: '#9ca3af', fontSize: '0.9rem' }}>{t('empty.noSuppliers')}</span>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ borderRadius: 10, border: '1px solid #e5e7eb', overflow: 'hidden', backgroundColor: '#fff' }}>
+      {/* Header row */}
+      <div
+        className="d-flex align-items-center px-3 py-2"
+        style={{
+          backgroundColor: '#f9fafb',
+          borderBottom: '1px solid #e5e7eb',
+          fontSize: '0.7rem',
+          fontWeight: 700,
+          color: '#6b7280',
+          textTransform: 'uppercase',
+          letterSpacing: '0.05em',
+        }}
+      >
+        <span style={{ flex: '0 0 26%' }}>{t('common.name')}</span>
+        <span style={{ flex: '0 0 16%' }}>{t('crm.lifecycleStage')}</span>
+        <span style={{ flex: '0 0 20%' }}>{t('crm.primaryContact')}</span>
+        <span style={{ flex: '0 0 14%' }}>{t('crm.industry')}</span>
+        <span style={{ flex: '0 0 12%' }}>{t('crm.lastContact')}</span>
+        <span style={{ flex: '0 0 6%', textAlign: 'right' }}>{t('suppliers.annualSpend')}</span>
+        <span style={{ flex: '0 0 6%', textAlign: 'right' }}>{t('tickets.links')}</span>
+      </div>
+
+      {/* Data rows */}
+      {suppliers.map((supplier) => {
+        const stage = supplierConfig.lifecycleStages.find((s) => s.id === supplier.lifecycleStage);
+        const stageColor = stage ? getColorForPosition(stage.colorPosition) : '#6c757d';
+        const stageTextColor = getContrastTextColor(stageColor);
+        const primaryContact = supplier.contacts.find((c) => c.isPrimary);
+        const lastContact = formatLastContact(supplier.lastContactDate);
+
+        return (
+          <div
+            key={supplier.id}
+            className="d-flex align-items-center px-3 py-2"
+            style={{
+              borderBottom: '1px solid #f3f4f6',
+              cursor: 'pointer',
+              transition: 'background-color 0.1s',
+            }}
+            onClick={() => onSupplierClick(supplier)}
+            onMouseEnter={(e) => {
+              (e.currentTarget as HTMLElement).style.backgroundColor = '#f9fafb';
+            }}
+            onMouseLeave={(e) => {
+              (e.currentTarget as HTMLElement).style.backgroundColor = 'transparent';
+            }}
+            role="button"
+            tabIndex={0}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') onSupplierClick(supplier);
+            }}
+          >
+            {/* Company name */}
+            <div style={{ flex: '0 0 26%', minWidth: 0, paddingRight: 12 }}>
+              <span
+                className="fw-semibold d-block text-truncate"
+                style={{ fontSize: '0.85rem', color: '#111827' }}
+                title={supplier.companyName}
+              >
+                {supplier.companyName}
+              </span>
+            </div>
+
+            {/* Stage badge */}
+            <div style={{ flex: '0 0 16%', paddingRight: 12 }}>
+              <Badge pill bg="" style={{ backgroundColor: stageColor, color: stageTextColor, fontSize: '0.72rem' }}>
+                {stage?.name ?? '\u2014'}
+              </Badge>
+            </div>
+
+            {/* Primary contact */}
+            <div style={{ flex: '0 0 20%', minWidth: 0, paddingRight: 12 }}>
+              {primaryContact ? (
+                <div className="d-flex align-items-center gap-1">
+                  <i className="bi bi-star-fill" style={{ color: '#f59e0b', fontSize: '0.6rem', flexShrink: 0 }} />
+                  <span className="text-truncate" style={{ fontSize: '0.82rem', color: '#374151' }}>
+                    {primaryContact.name}
+                    {primaryContact.role && (
+                      <span style={{ color: '#9ca3af', marginLeft: 3 }}>({primaryContact.role})</span>
+                    )}
+                  </span>
+                </div>
+              ) : (
+                <span style={{ color: '#d1d5db', fontStyle: 'italic', fontSize: '0.8rem' }}>{'\u2014'}</span>
+              )}
+            </div>
+
+            {/* Industry */}
+            <div style={{ flex: '0 0 14%', minWidth: 0, paddingRight: 12 }}>
+              <span
+                className="text-truncate d-block"
+                style={{ fontSize: '0.8rem', color: '#6b7280' }}
+                title={[supplier.industry, supplier.companySize].filter(Boolean).join(' \u00B7 ')}
+              >
+                {[supplier.industry, supplier.companySize].filter(Boolean).join(' \u00B7 ') || '\u2014'}
+              </span>
+            </div>
+
+            {/* Last contact */}
+            <div style={{ flex: '0 0 12%' }}>
+              <span style={{ fontSize: '0.78rem', color: lastContact === 'No contact' ? '#d1d5db' : '#6b7280' }}>
+                {lastContact}
+              </span>
+            </div>
+
+            {/* Annual spend */}
+            <div style={{ flex: '0 0 6%', textAlign: 'right' }}>
+              {supplier.annualSpend != null && supplier.annualSpend > 0 ? (
+                <span style={{ fontSize: '0.75rem', color: '#0d9488', fontWeight: 600 }}>
+                  {formatCurrency(supplier.annualSpend)}
+                </span>
+              ) : (
+                <span style={{ color: '#d1d5db', fontSize: '0.78rem' }}>{'\u2014'}</span>
+              )}
+            </div>
+
+            {/* Open tickets */}
+            <div style={{ flex: '0 0 6%', textAlign: 'right' }}>
+              {supplier.openTicketCount > 0 ? (
+                <span
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    backgroundColor: '#f0fdfa',
+                    border: '1px solid #99f6e4',
+                    borderRadius: 6,
+                    padding: '1px 6px',
+                    fontSize: '0.7rem',
+                    color: '#0f766e',
+                    fontWeight: 600,
+                  }}
+                >
+                  {supplier.openTicketCount}
+                </span>
+              ) : (
+                <span style={{ color: '#d1d5db', fontSize: '0.78rem' }}>{'\u2014'}</span>
+              )}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
 
 // ─── Component ──────────────────────────────────────────────────────────────
 
 /**
- * SupplierMirrorView renders a Kanban-style board of suppliers grouped by
- * lifecycle stage. Each column represents a stage from the supplier config,
- * colored via `getColorForPosition`. Suppliers can be filtered by name search
- * and by active ticket status.
- *
- * Clicking "+ New Supplier" prompts for a company name, creates the supplier
- * via OpsService, and refreshes the list. Clicking a supplier card opens the
- * SupplierDetailModal.
+ * SupplierMirrorView renders suppliers grouped by lifecycle stage.
+ * Supports both a Kanban board view and a tabular list view, with the
+ * user's preference persisted to localStorage.
  */
 export function SupplierMirrorView(): React.JSX.Element {
   const { t } = useTranslation('ops');
@@ -40,6 +226,25 @@ export function SupplierMirrorView(): React.JSX.Element {
   const [loading, setLoading] = useState(() => !getCached('suppliers'));
   const [searchQuery, setSearchQuery] = useState('');
   const [filterMode, setFilterMode] = useState<FilterMode>('all');
+
+  // View mode with localStorage persistence (default: list)
+  const [viewMode, setViewMode] = useState<ViewMode>(() => {
+    try {
+      const saved = localStorage.getItem('numa_ops_suppliers_view_mode');
+      return saved === 'board' ? 'board' : 'list';
+    } catch {
+      return 'list';
+    }
+  });
+
+  const handleSetViewMode = useCallback((mode: ViewMode) => {
+    setViewMode(mode);
+    try {
+      localStorage.setItem('numa_ops_suppliers_view_mode', mode);
+    } catch {
+      /* quota exceeded */
+    }
+  }, []);
 
   // New supplier creation
   const [showNewInput, setShowNewInput] = useState(false);
@@ -195,6 +400,45 @@ export function SupplierMirrorView(): React.JSX.Element {
         {/* Spacer */}
         <div className="flex-grow-1" />
 
+        {/* Board / List toggle */}
+        <div
+          style={{ display: 'flex', border: '1px solid #e5e7eb', borderRadius: 8, overflow: 'hidden', flexShrink: 0 }}
+        >
+          <button
+            type="button"
+            title={t('common.boardView')}
+            onClick={() => handleSetViewMode('board')}
+            style={{
+              padding: '5px 10px',
+              border: 'none',
+              background: viewMode === 'board' ? TEAL_ACCENT : '#fff',
+              color: viewMode === 'board' ? '#fff' : '#6b7280',
+              cursor: 'pointer',
+              fontSize: '0.85rem',
+              transition: 'all 0.12s',
+            }}
+          >
+            <i className="bi bi-kanban" />
+          </button>
+          <button
+            type="button"
+            title={t('common.listView')}
+            onClick={() => handleSetViewMode('list')}
+            style={{
+              padding: '5px 10px',
+              border: 'none',
+              borderLeft: '1px solid #e5e7eb',
+              background: viewMode === 'list' ? TEAL_ACCENT : '#fff',
+              color: viewMode === 'list' ? '#fff' : '#6b7280',
+              cursor: 'pointer',
+              fontSize: '0.85rem',
+              transition: 'all 0.12s',
+            }}
+          >
+            <i className="bi bi-list-ul" />
+          </button>
+        </div>
+
         {/* New supplier */}
         {showNewInput ? (
           <div className="d-flex gap-1 align-items-center">
@@ -258,70 +502,86 @@ export function SupplierMirrorView(): React.JSX.Element {
         </div>
       )}
 
-      {/* ── Kanban Columns ─────────────────────────────────────────────────── */}
-      <div className="flex-grow-1 d-flex overflow-auto" style={{ gap: 16, padding: '12px' }}>
-        {stages.map((stage) => {
-          const stageSuppliers = filteredSuppliers.filter((s) => s.lifecycleStage === stage.id);
+      {/* ── Board or List content ─────────────────────────────────────────── */}
+      <div className="flex-grow-1 overflow-auto px-3 pb-3 pt-1">
+        {viewMode === 'list' ? (
+          <SupplierListView
+            suppliers={filteredSuppliers}
+            supplierConfig={supplierConfig!}
+            onSupplierClick={openDetail}
+          />
+        ) : (
+          <div className="d-flex overflow-auto h-100" style={{ gap: 16 }}>
+            {stages.map((stage) => {
+              const stageSuppliers = filteredSuppliers.filter((s) => s.lifecycleStage === stage.id);
 
-          return (
-            <div key={stage.id} className="d-flex flex-column flex-shrink-0" style={{ width: 270, minHeight: 0 }}>
-              {/* Column header — plain text + gray count badge */}
-              <div className="d-flex align-items-center justify-content-between mb-2 px-1">
-                <span
-                  style={{
-                    fontWeight: 700,
-                    fontSize: '0.75rem',
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.06em',
-                    color: '#374151',
-                  }}
+              return (
+                <div
+                  key={stage.id}
+                  className="d-flex flex-column"
+                  style={{ flex: '1 1 0', minWidth: 140, minHeight: 0 }}
                 >
-                  {stage.name}
-                </span>
-                <span
-                  style={{
-                    backgroundColor: '#f3f4f6',
-                    color: '#6b7280',
-                    fontSize: '0.7rem',
-                    fontWeight: 600,
-                    borderRadius: 10,
-                    padding: '1px 8px',
-                    minWidth: 22,
-                    textAlign: 'center',
-                  }}
-                >
-                  {stageSuppliers.length}
-                </span>
-              </div>
-
-              {/* Column body */}
-              <div
-                className="flex-grow-1 overflow-auto"
-                style={{
-                  borderRadius: 10,
-                  padding: 8,
-                  backgroundColor: 'transparent',
-                  minHeight: 100,
-                }}
-              >
-                {stageSuppliers.length === 0 && (
-                  <div className="text-center py-4">
-                    <i className="bi bi-truck" style={{ fontSize: '1.5rem', color: '#d1d5db' }} />
-                    <div style={{ fontSize: '0.78rem', color: '#9ca3af', marginTop: 4 }}>{t('empty.noSuppliers')}</div>
+                  {/* Column header */}
+                  <div className="d-flex align-items-center justify-content-between mb-2 px-1">
+                    <span
+                      style={{
+                        fontWeight: 700,
+                        fontSize: '0.75rem',
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.06em',
+                        color: '#374151',
+                      }}
+                    >
+                      {stage.name}
+                    </span>
+                    <span
+                      style={{
+                        backgroundColor: '#f3f4f6',
+                        color: '#6b7280',
+                        fontSize: '0.7rem',
+                        fontWeight: 600,
+                        borderRadius: 10,
+                        padding: '1px 8px',
+                        minWidth: 22,
+                        textAlign: 'center',
+                      }}
+                    >
+                      {stageSuppliers.length}
+                    </span>
                   </div>
-                )}
-                {stageSuppliers.map((supplier) => (
-                  <SupplierCard
-                    key={supplier.id}
-                    supplier={supplier}
-                    supplierConfig={supplierConfig!}
-                    onClick={openDetail}
-                  />
-                ))}
-              </div>
-            </div>
-          );
-        })}
+
+                  {/* Column body */}
+                  <div
+                    className="flex-grow-1 overflow-auto"
+                    style={{
+                      borderRadius: 10,
+                      padding: 8,
+                      backgroundColor: 'transparent',
+                      minHeight: 100,
+                    }}
+                  >
+                    {stageSuppliers.length === 0 && (
+                      <div className="text-center py-4">
+                        <i className="bi bi-truck" style={{ fontSize: '1.5rem', color: '#d1d5db' }} />
+                        <div style={{ fontSize: '0.78rem', color: '#9ca3af', marginTop: 4 }}>
+                          {t('empty.noSuppliers')}
+                        </div>
+                      </div>
+                    )}
+                    {stageSuppliers.map((supplier) => (
+                      <SupplierCard
+                        key={supplier.id}
+                        supplier={supplier}
+                        supplierConfig={supplierConfig!}
+                        onClick={openDetail}
+                      />
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {/* ── Detail Modal ───────────────────────────────────────────────────── */}

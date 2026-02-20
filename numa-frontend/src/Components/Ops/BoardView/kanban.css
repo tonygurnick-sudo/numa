@@ -1,4 +1,18 @@
 /* ═══════════════════════════════════════════════════════════════════════════
+   Ops Design Tokens — inherit from nav theme with safe fallbacks
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+:root {
+  --ops-border: var(--nav-divider, #e4e4e7);
+  --ops-text-muted: var(--nav-icon-default, #71717a);
+  --ops-text-secondary: var(--nav-section-text, #a1a1aa);
+  --ops-hover-bg: var(--nav-hover-bg, #f4f4f5);
+  --ops-text-default: var(--nav-text-default, #3f3f46);
+  --ops-radius: 10px;
+  --ops-transition: all 0.15s ease;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
    Kanban Board Styles — Ian-inspired clean design
    ═══════════════════════════════════════════════════════════════════════════ */
 
@@ -9,14 +23,15 @@
   gap: 16px;
   height: 100%;
   align-items: flex-start;
+  overflow-x: auto;
 }
 
 .kanban-column {
   flex: 1 1 0;
-  min-width: 272px;
+  min-width: 140px;
   display: flex;
   flex-direction: column;
-  border-radius: 10px;
+  border-radius: var(--ops-radius);
 }
 
 /* ── Column Header ────────────────────────────────────────────────────────── */
@@ -52,7 +67,7 @@
   padding: 0 5px;
   font-size: 11px;
   font-weight: 600;
-  color: #9ca3af;
+  color: var(--ops-text-secondary);
   background-color: #f3f4f6;
   border-radius: 10px;
 }
@@ -67,10 +82,10 @@
   border: none;
   border-radius: 6px;
   background: transparent;
-  color: #9ca3af;
+  color: var(--ops-text-secondary);
   font-size: 18px;
   cursor: pointer;
-  transition: background-color 0.12s, color 0.12s;
+  transition: background-color 0.15s, color 0.15s;
   flex-shrink: 0;
 }
 
@@ -120,7 +135,7 @@
   border-radius: 8px;
   margin-bottom: 8px;
   cursor: grab;
-  border: 1px solid #e5e7eb;
+  border: 1px solid var(--ops-border);
   padding: 12px 14px;
   transition: box-shadow 0.15s, border-color 0.15s, transform 0.1s;
   position: relative;
@@ -207,7 +222,7 @@
   border-radius: 4px;
   background: #f3f4f6;
   color: #6b7280;
-  border: 1px solid #e5e7eb;
+  border: 1px solid var(--ops-border);
 }
 
 /* Footer row */
@@ -224,7 +239,7 @@
   font-size: 0.68rem;
   font-weight: 500;
   font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
-  color: #9ca3af;
+  color: var(--ops-text-secondary);
 }
 
 /* Effort points pill */
@@ -252,7 +267,7 @@
   align-items: center;
   gap: 2px;
   font-size: 0.68rem;
-  color: #9ca3af;
+  color: var(--ops-text-secondary);
 }
 
 /* Assignee avatar */
@@ -272,7 +287,7 @@
 
 .ticket-avatar-empty {
   background: #e5e7eb;
-  color: #9ca3af;
+  color: var(--ops-text-secondary);
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -284,7 +299,7 @@
   border-radius: 8px;
   margin-bottom: 8px;
   cursor: grab;
-  border: 1px solid #e5e7eb;
+  border: 1px solid var(--ops-border);
   padding: 12px 14px;
 }
 
@@ -309,7 +324,7 @@
 .kanban-ticket-id {
   font-size: 0.68rem;
   font-family: monospace;
-  color: #9ca3af;
+  color: var(--ops-text-secondary);
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -318,7 +333,7 @@
 
 .kanban-zone-collapsible {
   background: #f9fafb;
-  border-radius: 10px;
+  border-radius: var(--ops-radius);
   margin-bottom: 12px;
 }
 
@@ -332,12 +347,12 @@
   background: transparent;
   color: #4b5563;
   cursor: pointer;
-  border-radius: 10px;
-  transition: background-color 0.12s;
+  border-radius: var(--ops-radius);
+  transition: background-color 0.15s;
 }
 
 .kanban-zone-toggle:hover {
-  background-color: #f3f4f6;
+  background-color: var(--ops-hover-bg);
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -349,7 +364,7 @@
   align-items: center;
   gap: 2px;
   background-color: #eee;
-  border-radius: 10px;
+  border-radius: var(--ops-radius);
   padding: 3px;
 }
 
@@ -365,7 +380,7 @@
   font-size: 0.85rem;
   font-weight: 500;
   cursor: pointer;
-  transition: background-color 0.15s, color 0.15s, box-shadow 0.15s;
+  transition: var(--ops-transition);
   white-space: nowrap;
 }
 
@@ -465,7 +480,7 @@
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  color: #9ca3af;
+  color: var(--ops-text-secondary);
   margin-top: 16px;
   margin-bottom: 8px;
 }
@@ -478,7 +493,7 @@
 
 .ticket-detail-header-meta {
   font-size: 0.78rem;
-  color: #9ca3af;
+  color: var(--ops-text-secondary);
   margin-top: 4px;
 }
 
@@ -490,7 +505,7 @@
   font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
   color: #6b7280;
   background: #f3f4f6;
-  border: 1px solid #e5e7eb;
+  border: 1px solid var(--ops-border);
   border-radius: 4px;
   padding: 2px 8px;
   flex-shrink: 0;
@@ -536,7 +551,7 @@
   border-radius: 8px;
   border: 2px solid transparent;
   cursor: pointer;
-  transition: all 0.15s;
+  transition: var(--ops-transition);
   background: #fff;
   font-size: 0.875rem;
   font-weight: 500;
@@ -559,7 +574,7 @@
 .ops-team-selector .dropdown-toggle {
   background: #fff !important;
   border: 1px solid #d1d5db !important;
-  border-radius: 10px !important;
+  border-radius: var(--ops-radius) !important;
   color: #1f2937 !important;
   font-size: 0.9rem;
   font-weight: 500;
@@ -585,7 +600,7 @@
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: #9ca3af;
+  color: var(--ops-text-secondary);
   display: inline-flex;
   align-items: center;
   gap: 5px;
@@ -595,7 +610,7 @@
 
 .ops-strip-label i {
   font-size: 0.95rem;
-  color: #9ca3af;
+  color: var(--ops-text-secondary);
 }
 
 /* Base pill */
@@ -604,14 +619,14 @@
   align-items: center;
   gap: 5px;
   padding: 9px 16px;
-  border: 1px solid #e2e5ea;
-  border-radius: 10px;
+  border: 1px solid var(--ops-border);
+  border-radius: var(--ops-radius);
   background: #fff;
-  color: #4b5563;
+  color: var(--ops-text-default);
   font-size: 0.82rem;
   font-weight: 500;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: var(--ops-transition);
   white-space: nowrap;
   position: relative;
   line-height: 1.5;
@@ -619,7 +634,7 @@
 }
 
 .ops-pill:hover {
-  background: #f8f9fa;
+  background: var(--ops-hover-bg);
   border-color: #ced4da;
   color: #1f2937;
 }
@@ -638,6 +653,25 @@
 
 .ops-pill i {
   font-size: 0.9rem;
+}
+
+/* Pill count badge (used in filter pills) */
+.ops-pill-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  font-size: 0.68rem;
+  font-weight: 600;
+  background: rgba(0, 0, 0, 0.06);
+  border-radius: 10px;
+  line-height: 1;
+}
+
+.ops-pill.active .ops-pill-count {
+  background: rgba(255, 255, 255, 0.25);
 }
 
 /* "All" text-style pill (borderless) */
@@ -713,7 +747,7 @@
   padding: 5px 8px;
   background: transparent;
   border: none;
-  color: #9ca3af;
+  color: var(--ops-text-secondary);
   font-size: 0.82rem;
   font-weight: 500;
   cursor: pointer;
@@ -732,14 +766,14 @@
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
-  border: 1px solid #e9ecef;
-  border-radius: 10px;
+  border: 1px solid var(--ops-border);
+  border-radius: var(--ops-radius);
   background: #fff;
   padding: 14px 18px;
   gap: 10px;
   min-width: 130px;
   cursor: pointer;
-  transition: border-color 0.15s, background-color 0.15s;
+  transition: var(--ops-transition);
 }
 
 .ops-team-box.selected {
@@ -750,21 +784,22 @@
 .ops-team-zone-pill {
   display: inline-flex;
   align-items: center;
+  gap: 4px;
   padding: 5px 10px;
-  border: 1px solid #e2e5ea;
-  border-radius: 5px;
+  border: 1px solid var(--ops-border);
+  border-radius: 6px;
   background: #fff;
-  color: #4b5563;
+  color: var(--ops-text-default);
   font-size: 0.72rem;
   font-weight: 500;
   cursor: pointer;
-  transition: all 0.12s ease;
+  transition: var(--ops-transition);
   white-space: nowrap;
   line-height: 1.7;
 }
 
 .ops-team-zone-pill:hover {
-  background: #f8f9fa;
+  background: var(--ops-hover-bg);
   border-color: #ced4da;
 }
 
@@ -772,4 +807,405 @@
   background: var(--brand-primary, var(--color-primary, #8e50a7));
   color: #fff;
   border-color: var(--brand-primary, var(--color-primary, #8e50a7));
+}
+
+.ops-team-zone-pill i {
+  font-size: 0.78rem;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Backlog View — Jira-Style Design
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Filter Bar ──────────────────────────────────────────────────────────── */
+
+.backlog-filter-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 0 12px;
+  flex-wrap: wrap;
+  position: relative;
+  z-index: 10;
+}
+
+.backlog-search-input {
+  width: 180px;
+  min-width: 140px;
+  padding: 6px 10px 6px 32px;
+  border: 1px solid var(--ops-border);
+  border-radius: var(--ops-radius);
+  background: #fff;
+  font-size: 0.82rem;
+  color: var(--ops-text-default);
+  transition: var(--ops-transition);
+  outline: none;
+}
+
+.backlog-search-input::placeholder {
+  color: var(--ops-text-secondary);
+}
+
+.backlog-search-input:focus {
+  border-color: var(--brand-primary, #8e50a7);
+  box-shadow: 0 0 0 2px rgba(142, 80, 167, 0.1);
+}
+
+.backlog-search-wrapper {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.backlog-search-wrapper i {
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 0.82rem;
+  color: var(--ops-text-secondary);
+  pointer-events: none;
+}
+
+/* Assignee avatar filter */
+.backlog-assignee-filter {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  cursor: pointer;
+  transition: var(--ops-transition);
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: #fff;
+  flex-shrink: 0;
+}
+
+.backlog-assignee-filter:hover {
+  opacity: 0.85;
+}
+
+.backlog-assignee-filter.active {
+  border-color: var(--brand-primary, #8e50a7);
+  box-shadow: 0 0 0 2px rgba(142, 80, 167, 0.25);
+}
+
+/* Filter dropdown button */
+.backlog-filter-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 12px;
+  border: 1px solid var(--ops-border);
+  border-radius: var(--ops-radius);
+  background: #fff;
+  color: var(--ops-text-default);
+  font-size: 0.82rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: var(--ops-transition);
+  white-space: nowrap;
+  flex-shrink: 0;
+  position: relative;
+}
+
+.backlog-filter-btn:hover {
+  background: var(--ops-hover-bg);
+  border-color: #ced4da;
+}
+
+.backlog-filter-btn.active {
+  background: var(--brand-primary, #8e50a7);
+  color: #fff;
+  border-color: var(--brand-primary, #8e50a7);
+}
+
+.backlog-filter-btn i.bi-chevron-down {
+  font-size: 0.7rem;
+  opacity: 0.6;
+}
+
+/* Filter dropdown menu */
+.backlog-filter-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  min-width: 160px;
+  background: #fff;
+  border: 1px solid var(--ops-border);
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+  z-index: 1000;
+  padding: 4px 0;
+}
+
+.backlog-filter-dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 12px;
+  border: none;
+  background: transparent;
+  width: 100%;
+  text-align: left;
+  font-size: 0.82rem;
+  color: var(--ops-text-default);
+  cursor: pointer;
+  transition: background-color 0.1s;
+}
+
+.backlog-filter-dropdown-item:hover {
+  background: var(--ops-hover-bg);
+}
+
+.backlog-filter-dropdown-item.active {
+  color: var(--brand-primary, #8e50a7);
+  font-weight: 600;
+}
+
+/* Separator between filter bar sections */
+.backlog-filter-divider {
+  width: 1px;
+  height: 20px;
+  background: var(--ops-border);
+  flex-shrink: 0;
+}
+
+/* ── Group Card ──────────────────────────────────────────────────────────── */
+
+.backlog-group-card {
+  background: #fff;
+  border: 1px solid var(--ops-border);
+  border-radius: var(--ops-radius);
+  margin-bottom: 12px;
+  overflow: hidden;
+}
+
+/* Group header */
+.backlog-group-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  background: #f9fafb;
+  cursor: pointer;
+  user-select: none;
+  transition: background-color 0.15s;
+}
+
+.backlog-group-header:hover {
+  background: var(--ops-hover-bg);
+}
+
+.backlog-group-name {
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: #1f2937;
+  white-space: nowrap;
+}
+
+.backlog-group-meta {
+  font-size: 0.78rem;
+  color: var(--ops-text-secondary);
+  white-space: nowrap;
+}
+
+/* Status summary badges (Jira-style colored count pills) */
+.backlog-status-summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.backlog-status-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 6px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  border-radius: 4px;
+  line-height: 1;
+}
+
+.backlog-status-badge--backlog {
+  background: #e5e7eb;
+  color: #4b5563;
+}
+
+.backlog-status-badge--active {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
+.backlog-status-badge--done {
+  background: #d1fae5;
+  color: #065f46;
+}
+
+/* Add ticket button in group header */
+.backlog-add-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ops-text-secondary);
+  font-size: 16px;
+  cursor: pointer;
+  transition: background-color 0.15s, color 0.15s;
+  flex-shrink: 0;
+}
+
+.backlog-add-btn:hover {
+  background: #e5e7eb;
+  color: #4b5563;
+}
+
+/* Group subheader (goal text, team avatars) */
+.backlog-group-subheader {
+  padding: 8px 16px 4px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border-bottom: 1px solid var(--ops-border);
+}
+
+.backlog-group-goal {
+  font-size: 0.78rem;
+  color: var(--ops-text-muted);
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.backlog-group-avatars {
+  display: flex;
+  align-items: center;
+}
+
+.backlog-group-avatars .ticket-avatar {
+  margin-left: -4px;
+  border: 2px solid #fff;
+}
+
+.backlog-group-avatars .ticket-avatar:first-child {
+  margin-left: 0;
+}
+
+/* Group body */
+.backlog-group-body {
+  padding: 2px 0;
+}
+
+/* ── Ticket Row ──────────────────────────────────────────────────────────── */
+
+.backlog-ticket-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 16px;
+  background: #fff;
+  cursor: pointer;
+  transition: background-color 0.1s;
+  font-size: 0.85rem;
+  text-align: left;
+  width: 100%;
+  border: none;
+  border-bottom: 1px solid #f3f4f6;
+}
+
+.backlog-ticket-row:last-child {
+  border-bottom: none;
+}
+
+.backlog-ticket-row:hover {
+  background: var(--ops-hover-bg);
+}
+
+/* Status pill inside ticket row */
+.backlog-status-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  white-space: nowrap;
+  flex-shrink: 0;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.backlog-status-pill--backlog {
+  background: #f3f4f6;
+  color: #6b7280;
+}
+
+.backlog-status-pill--scoped {
+  background: #e0e7ff;
+  color: #4338ca;
+}
+
+.backlog-status-pill--queued {
+  background: #e0e7ff;
+  color: #4338ca;
+}
+
+.backlog-status-pill--active {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
+.backlog-status-pill--completed {
+  background: #d1fae5;
+  color: #065f46;
+}
+
+.backlog-status-pill--ended {
+  background: #f3f4f6;
+  color: #9ca3af;
+}
+
+/* Effort points */
+.backlog-effort {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--ops-text-muted);
+  flex-shrink: 0;
+}
+
+/* Assignee avatar in ticket row */
+.backlog-row-avatar {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.6rem;
+  font-weight: 700;
+  color: #fff;
+  flex-shrink: 0;
+}
+
+.backlog-row-avatar--empty {
+  background: #e5e7eb;
+  color: var(--ops-text-secondary);
+  font-size: 0.72rem;
 }

@@ -65,7 +65,7 @@ function DroppableColumn({ stage, customers, crmConfig, onCustomerClick }: Dropp
   const textColor = getContrastTextColor(stageColor);
 
   return (
-    <div className="d-flex flex-column" style={{ minWidth: 255, maxWidth: 275, flexShrink: 0, height: '100%' }}>
+    <div className="d-flex flex-column" style={{ minWidth: 140, flex: '1 1 0', height: '100%' }}>
       {/* Colored column header */}
       <div
         style={{
@@ -298,7 +298,23 @@ const CrmMirrorView = (): React.JSX.Element => {
   const [loading, setLoading] = useState(() => !getCached('customers'));
   const [activeFilter, setActiveFilter] = useState<FilterType>('all');
   const [search, setSearch] = useState('');
-  const [viewMode, setViewMode] = useState<ViewMode>('board');
+  const [viewMode, setViewMode] = useState<ViewMode>(() => {
+    try {
+      const saved = localStorage.getItem('numa_ops_customers_view_mode');
+      return saved === 'board' ? 'board' : 'list';
+    } catch {
+      return 'list';
+    }
+  });
+
+  const handleSetViewMode = useCallback((mode: ViewMode) => {
+    setViewMode(mode);
+    try {
+      localStorage.setItem('numa_ops_customers_view_mode', mode);
+    } catch {
+      /* quota exceeded */
+    }
+  }, []);
   const [showNewForm, setShowNewForm] = useState(false);
   const [newCompanyName, setNewCompanyName] = useState('');
   const [creating, setCreating] = useState(false);
@@ -513,7 +529,7 @@ const CrmMirrorView = (): React.JSX.Element => {
             <button
               type="button"
               title={t('common.boardView')}
-              onClick={() => setViewMode('board')}
+              onClick={() => handleSetViewMode('board')}
               style={{
                 padding: '5px 10px',
                 border: 'none',
@@ -529,7 +545,7 @@ const CrmMirrorView = (): React.JSX.Element => {
             <button
               type="button"
               title={t('common.listView')}
-              onClick={() => setViewMode('list')}
+              onClick={() => handleSetViewMode('list')}
               style={{
                 padding: '5px 10px',
                 border: 'none',
@@ -620,7 +636,7 @@ const CrmMirrorView = (): React.JSX.Element => {
               onDragStart={handleDragStart}
               onDragEnd={(e) => void handleDragEnd(e)}
             >
-              <div className="d-flex gap-3 h-100" style={{ minHeight: 300 }}>
+              <div className="d-flex gap-3 h-100 overflow-auto" style={{ minHeight: 300 }}>
                 {stages.map((stage) => (
                   <DroppableColumn
                     key={stage.id}

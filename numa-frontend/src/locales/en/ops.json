@@ -276,7 +276,17 @@
   "backlogView": {
     "noTickets": "No tickets in this group",
     "empty": "Backlog is empty",
-    "unassigned": "Unassigned"
+    "emptyHint": "Create a ticket or drag items here to get started",
+    "unassigned": "Unassigned",
+    "listView": "List",
+    "kanbanView": "Kanban",
+    "searchPlaceholder": "Search backlog...",
+    "workItems": "({{count}} work items)",
+    "type": "Type",
+    "priority": "Priority",
+    "addTicket": "Add ticket",
+    "allTypes": "All Types",
+    "allPriorities": "All Priorities"
   },
   "teams": {
     "settings": "Team Settings",

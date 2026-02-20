@@ -29,6 +29,8 @@ interface CreateTicketModalProps {
   /** Pre-fill the supplier field (e.g. when opening from a supplier modal) */
   prefilledSupplierId?: string | null;
   prefilledSupplierName?: string | null;
+  /** Pre-fill the zone (e.g. when creating from a backlog group "+" button) */
+  prefilledZoneId?: string;
 }
 
 // ─── Constants ───────────────────────────────────────────────────────────────
@@ -95,6 +97,7 @@ export function CreateTicketModal({
   prefilledCustomerName,
   prefilledSupplierId,
   prefilledSupplierName,
+  prefilledZoneId,
 }: CreateTicketModalProps): React.JSX.Element {
   const { t } = useTranslation('ops');
   const { numaPost, numaGet } = useNumaRequest();
@@ -204,7 +207,7 @@ export function CreateTicketModal({
     setTagsInput('');
     setError(null);
     setValidated(false);
-    const defaultZone = teamData?.team?.defaultZoneId ?? '';
+    const defaultZone = prefilledZoneId ?? teamData?.team?.defaultZoneId ?? '';
     setZoneId(defaultZone);
     if (defaultZone && teamData) {
       const first = teamData.stages.filter((s) => s.zoneId === defaultZone).sort((a, b) => a.order - b.order)[0];
@@ -212,7 +215,7 @@ export function CreateTicketModal({
     } else {
       setStageId('');
     }
-  }, [teamData, prefilledCustomerId, prefilledSupplierId]);
+  }, [teamData, prefilledCustomerId, prefilledSupplierId, prefilledZoneId]);
 
   useEffect(() => {
     if (!show) resetForm();
