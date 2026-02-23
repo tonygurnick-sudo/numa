@@ -72,7 +72,7 @@ const BULK_UPDATABLE_FIELDS: FieldConfig[] = [
     key: 'numaWorkspaceChat',
     label: 'Numa Workspace Chat',
     type: 'boolean',
-    description: 'Feature flag for Numa Chat V2 testing',
+    description: 'Enable Numa Workspace Chat (V2). On by default.',
   },
   {
     key: 'scheduling',

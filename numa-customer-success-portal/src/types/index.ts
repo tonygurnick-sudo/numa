@@ -82,7 +82,7 @@ export const clientConfigSchema = z.object({
   dataConnectorsEnabled: z.boolean().optional(), // default: false
   agents: z.boolean().optional(), // default: false
   brandingProviderEnabled: z.boolean().optional(), // default: false
-  numaWorkspaceChat: z.boolean().optional(), // default: false
+  numaWorkspaceChat: z.boolean().optional(), // default: true
   scheduling: z.boolean().optional(), // default: false
   workspaceChatModelSelection: z.boolean().optional(), // default: false
   numaOps: z.boolean().optional(), // default: false
@@ -156,7 +156,7 @@ export const getDefaultClientConfigValues = () => ({
   dataConnectorsEnabled: false,
   agents: false,
   brandingProviderEnabled: false,
-  numaWorkspaceChat: false,
+  numaWorkspaceChat: true,
   scheduling: false,
   workspaceChatModelSelection: false,
   numaOps: false,

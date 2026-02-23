@@ -566,7 +566,7 @@ export class NumaClientStack extends TerraformStack {
         PIPEDREAM_INTEGRATIONS: clientConfig.pipedreamIntegrations ?? false,
         DATA_CONNECTORS_ENABLED: clientConfig.dataConnectorsEnabled ?? false,
         AGENTS: clientConfig.agents ?? false,
-        NUMA_WORKSPACE_CHAT: clientConfig.numaWorkspaceChat ?? false,
+        NUMA_WORKSPACE_CHAT: clientConfig.numaWorkspaceChat ?? true,
         SCHEDULING: clientConfig.scheduling ?? false,
         NUMA_FILES: clientConfig.numaFiles ?? false,
         WORKSPACE_CHAT_MODEL_SELECTION: clientConfig.workspaceChatModelSelection ?? false,
@@ -871,9 +871,9 @@ export const clientConfigSchema = coreNumaInfraPropsSchema
          * Whether to provision the Numa Workspace Chat Agent (AgentCore runtime).
          * This provides a persistent workspace with Claude Code CLI for complex tasks.
          *
-         * @default false
+         * @default true
          */
-        numaWorkspaceChat: z.boolean().optional().default(false),
+        numaWorkspaceChat: z.boolean().optional().default(true),
 
         /**
          * Whether to enable Data Connectors functionality in the frontend.
