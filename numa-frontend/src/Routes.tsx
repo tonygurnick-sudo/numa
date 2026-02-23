@@ -64,15 +64,17 @@ const AppRoutes = () => {
         <Route
           path="/"
           element={
-            <Navigate to={user ? (user?.features?.includes('chat') ? '/chat-v2' : '/dash') : '/login'} replace />
+            <Navigate to={user ? (user?.features?.includes('chat') ? '/chat' : '/dash') : '/login'} replace />
           }
         />
         <Route
           path="/login"
           element={
-            user ? <Navigate to={user?.features?.includes('chat') ? '/chat-v2' : '/dash'} replace /> : <NumaLogin />
+            user ? <Navigate to={user?.features?.includes('chat') ? '/chat' : '/dash'} replace /> : <NumaLogin />
           }
         />
+        {/* Redirect legacy /chat-v2 to /chat */}
+        <Route path="/chat-v2" element={<Navigate to="/chat" replace />} />
         <Route path="/reset-password" element={<ResetPassword />} />
         <Route path="/create-password" element={<ResetPassword />} />
         <Route path="/ian" element={<Ian />} />

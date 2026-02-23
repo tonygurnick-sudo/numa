@@ -35,14 +35,9 @@ const NotificationsPage = lazy(() =>
 );
 
 export const ROUTE_CONFIG = [
-  // Chat - moved to top
+  // Chat
   {
     path: '/chat',
-    element: () => <NumaWorkspaceChatAgents />,
-    requiredFeature: 'chat',
-  },
-  {
-    path: '/chat-v2',
     element: () => <NumaWorkspaceChatAgents />,
     requiredFeature: 'chat',
     nav: {

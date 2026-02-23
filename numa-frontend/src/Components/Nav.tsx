@@ -281,7 +281,7 @@ const Nav = ({ isCollapsed = false, onToggleCollapse }: NavProps) => {
           <div className="d-flex align-items-center">
             <div
               className="btn-home-logo-mobile navbar-brand"
-              onClick={() => navigate(interfaceMode === 'simple' ? '/chat-v2' : '/dash')}
+              onClick={() => navigate(interfaceMode === 'simple' ? '/chat' : '/dash')}
               role="button"
             >
               <img
@@ -642,7 +642,6 @@ function renderNavItemIcon(item, interfaceMode, className, size) {
 function isSimpleModeNavItem(item): boolean {
   return (
     item?.to === '/chat' ||
-    item?.to === '/chat-v2' ||
     item?.labelKey === 'nav.items.chat' ||
     item?.to === '/dash' ||
     item?.labelKey === 'nav.items.apps'

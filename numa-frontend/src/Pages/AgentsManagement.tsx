@@ -74,9 +74,6 @@ export const AgentsManagement = () => {
 
   const [agentScheduleMap, setAgentScheduleMap] = useState<Map<string, boolean>>(new Map());
 
-  const workspaceChatEnabled =
-    typeof window !== 'undefined' && window.sessionStorage.getItem('NUMA_WORKSPACE_CHAT') === 'true';
-
   const userId = user?.decoded_tokens?.idToken?.sub ?? '';
 
   const loadSchedules = async () => {
@@ -223,17 +220,16 @@ export const AgentsManagement = () => {
     }
   };
 
-  const proceedToChat = (agent: AgentSummary, chatVersion: 'v1' | 'v2' = 'v1') => {
+  const proceedToChat = (agent: AgentSummary) => {
     const token = String(Date.now());
     sessionStorage.setItem('numa_preselected_agent', JSON.stringify(agent));
     sessionStorage.setItem('numa_preselected_agent_token', token);
     sessionStorage.removeItem('numa_preselected_agent_consumed');
-    navigate(chatVersion === 'v2' ? '/chat-v2' : '/chat');
+    navigate('/chat');
   };
 
-  // Go directly to V2 if enabled, otherwise V1
   const initiateChat = (agent: AgentSummary) => {
-    proceedToChat(agent, workspaceChatEnabled ? 'v2' : 'v1');
+    proceedToChat(agent);
   };
 
   const handleStartChat = async (agent: AgentSummary) => {
