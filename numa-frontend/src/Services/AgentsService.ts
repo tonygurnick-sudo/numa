@@ -1,5 +1,6 @@
 import type { AgentListResponse, AgentPayload, AgentResponse, AgentSummary, AgentUpdatePayload } from '../types/agents';
 import i18n from '../i18n';
+import { getSwrCache, setSwrCache } from '../utils/swrCache';
 
 type NumaGet = (url: string, params?: Record<string, unknown>) => Promise<unknown>;
 type NumaPost = (url: string, data?: unknown, headers?: Record<string, string>) => Promise<unknown>;
@@ -19,6 +20,12 @@ const cleanParams = (params: Record<string, unknown>): Record<string, unknown> =
   return cleaned;
 };
 
+const agentsCacheKey = (scope: string) => `agents_${scope}`;
+
+/** Read cached agents list from localStorage (instant, synchronous). */
+export const getCachedAgents = (scope: 'owned' | 'public' | 'all' = 'owned'): AgentSummary[] | null =>
+  getSwrCache<AgentSummary[]>(agentsCacheKey(scope));
+
 export const listAgents = async (
   numaGet: NumaGet,
   options?: { scope?: 'owned' | 'public' | 'all'; agentType?: string },
@@ -28,7 +35,10 @@ export const listAgents = async (
     agentType: options?.agentType,
   });
   const response = (await numaGet(`${BASE_URL}`, params)) as AgentListResponse;
-  return response?.agents ?? [];
+  const agents = response?.agents ?? [];
+  // Persist to localStorage for instant load on next page refresh
+  setSwrCache(agentsCacheKey(options?.scope ?? 'owned'), agents);
+  return agents;
 };
 
 export const getAgent = async (numaGet: NumaGet, agentId: string): Promise<AgentSummary> => {

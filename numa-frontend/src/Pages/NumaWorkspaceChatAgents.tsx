@@ -125,8 +125,11 @@ const NumaWorkspaceChatAgents = () => {
   const [isHistoryPanelOpen, setIsHistoryPanelOpen] = useState(false);
   const [showDocumentModal, setShowDocumentModal] = useState(false);
   const [showFilePreviewModal, setShowFilePreviewModal] = useState(false);
-  const [userChatSettings, setUserChatSettings] = useState<ChatSettings>(DEFAULT_CHAT_SETTINGS);
-  const [chatSettingsLoaded, setChatSettingsLoaded] = useState(false);
+  // SWR: initialize from localStorage cache so chat settings are available instantly
+  const [userChatSettings, setUserChatSettings] = useState<ChatSettings>(
+    () => ChatSettingsService.getCached() ?? DEFAULT_CHAT_SETTINGS,
+  );
+  const [chatSettingsLoaded, setChatSettingsLoaded] = useState(() => !!ChatSettingsService.getCached());
   const [userSettingsModified, setUserSettingsModified] = useState(false);
   const [pendingConversationChatConfig, setPendingConversationChatConfig] = useState<ConversationChatConfig | null>(
     null,

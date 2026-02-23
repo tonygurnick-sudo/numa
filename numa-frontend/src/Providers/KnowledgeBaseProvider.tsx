@@ -8,6 +8,9 @@ import { knowledgeBaseService, UserKB } from '../Services/knowledgeBaseService';
 import i18n from '../i18n';
 import { useAuth } from './AuthProvider';
 import { COMPANY_KB_ID, NUMA_SUPPORT_KB_ID, SYSTEM_KB_IDS } from '../constants/knowledgeBase';
+import { getSwrCache, setSwrCache } from '../utils/swrCache';
+
+const KB_LIST_SWR_KEY = 'kbList';
 
 interface KnowledgeBaseContextType {
   // Current selected KB
@@ -127,7 +130,8 @@ export function KnowledgeBaseProvider({ children }: { children: React.ReactNode 
     const initial = loadSelectedKBFromStorage();
     return initial?.kb_id ?? null;
   });
-  const [availableKBs, setAvailableKBs] = useState<UserKB[]>([]);
+  // SWR: initialize from localStorage cache so the KB selector renders instantly
+  const [availableKBs, setAvailableKBs] = useState<UserKB[]>(() => getSwrCache<UserKB[]>(KB_LIST_SWR_KEY) ?? []);
   const [isLoadingKBs, setIsLoadingKBs] = useState<boolean>(true); // Start loading immediately
   const [kbError, setKbError] = useState<string | null>(null);
 
@@ -154,7 +158,10 @@ export function KnowledgeBaseProvider({ children }: { children: React.ReactNode 
     if (!isMountedRef.current) {
       return;
     }
-    setIsLoadingKBs(true);
+    // Only show loading spinner if we have no cached data
+    if (availableKBs.length === 0) {
+      setIsLoadingKBs(true);
+    }
     setKbError(null);
 
     try {
@@ -178,6 +185,8 @@ export function KnowledgeBaseProvider({ children }: { children: React.ReactNode 
       const augmentedKbs: UserKB[] = [...systemKbsToAdd, ...sanitizedKbs];
 
       setAvailableKBs(augmentedKbs);
+      // Persist to localStorage for instant load on next page refresh
+      setSwrCache(KB_LIST_SWR_KEY, augmentedKbs);
 
       // Use setSelectedKB with a function to avoid dependency on selectedKB state
       setSelectedKBState((currentSelected) => {

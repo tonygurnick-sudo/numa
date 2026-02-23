@@ -5,6 +5,7 @@
  */
 import i18n from '../i18n';
 import { setCachedUserProfile } from '../utils/userProfileCache';
+import { getSwrCache, setSwrCache } from '../utils/swrCache';
 
 export type ApprovalMode = 'always' | 'non_destructive' | 'never';
 
@@ -94,7 +95,14 @@ export const DEFAULT_CHAT_SETTINGS: ChatSettings = {
 type NumaGet = (url: string, params?: unknown, headers?: Record<string, string>) => Promise<unknown>;
 type NumaPut = (url: string, data?: unknown, headers?: Record<string, string>) => Promise<unknown>;
 
+const CHAT_SETTINGS_SWR_KEY = 'chatSettings';
+
 export const ChatSettingsService = {
+  /** Read cached chat settings from localStorage (instant, synchronous). */
+  getCached(): ChatSettings | null {
+    return getSwrCache<ChatSettings>(CHAT_SETTINGS_SWR_KEY);
+  },
+
   /**
    * Get the current user's chat settings.
    * Returns default settings if the API call fails or user has no saved settings.
@@ -103,7 +111,9 @@ export const ChatSettingsService = {
     try {
       if (numaGet) {
         const res = (await numaGet('/api/chat/settings')) as unknown;
-        return validateSettings(res);
+        const settings = validateSettings(res);
+        setSwrCache(CHAT_SETTINGS_SWR_KEY, settings);
+        return settings;
       }
 
       const API_ENDPOINT = sessionStorage.getItem('API_ENDPOINT') || '/api';
@@ -122,7 +132,9 @@ export const ChatSettingsService = {
       }
 
       const json = (await resp.json()) as unknown;
-      return validateSettings(json);
+      const settings = validateSettings(json);
+      setSwrCache(CHAT_SETTINGS_SWR_KEY, settings);
+      return settings;
     } catch (error) {
       console.warn('Error fetching chat settings, using defaults', error);
       return { ...DEFAULT_CHAT_SETTINGS };

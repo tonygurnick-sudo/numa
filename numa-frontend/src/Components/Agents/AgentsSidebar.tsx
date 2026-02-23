@@ -11,7 +11,7 @@ import { Button, Offcanvas, Spinner, Alert } from 'react-bootstrap';
 import { useTranslation } from 'react-i18next';
 import { useNumaRequest } from '../../Providers/NumaRequestContext';
 import { AdminAgentsService, type AgentsMode } from '../../Services/AdminAgentsService';
-import { listAgents } from '../../Services/AgentsService';
+import { listAgents, getCachedAgents } from '../../Services/AgentsService';
 import type { AgentSummary } from '../../types/agents';
 import type { ConversationMeta } from '../../hooks/useChatInactivity';
 import { useNavigate } from 'react-router-dom';
@@ -38,7 +38,8 @@ const AgentsSidebarComponent: ForwardRefRenderFunction<AgentsSidebarHandle, Agen
   const { t } = useTranslation('agents');
   const navigate = useNavigate();
   const [show, setShow] = useState(false);
-  const [agents, setAgents] = useState<AgentSummary[]>([]);
+  // SWR: initialize from localStorage cache so agents render instantly
+  const [agents, setAgents] = useState<AgentSummary[]>(() => getCachedAgents('owned') ?? []);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [agentsMode, setAgentsMode] = useState<AgentsMode>('full');
@@ -56,7 +57,9 @@ const AgentsSidebarComponent: ForwardRefRenderFunction<AgentsSidebarHandle, Agen
 
   const loadAgents = async () => {
     try {
-      setLoading(true);
+      if (agents.length === 0) {
+        setLoading(true);
+      }
       setError(null);
       const ownedAgents = await listAgents(numaGet, { scope: 'owned' });
 

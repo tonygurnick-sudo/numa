@@ -1,10 +1,16 @@
 import i18n from '../i18n';
+import { getSwrCache, setSwrCache } from '../utils/swrCache';
+
+const SWR_KEY = 'manifest';
 
 let manifestCache = null;
 let lastFetchTime = 0;
 const CACHE_DURATION = 300000; // 5 minutes
 
 export const manifestService = {
+  /** Read cached manifest from localStorage (instant, synchronous). */
+  getCachedManifest: () => getSwrCache<unknown[]>(SWR_KEY),
+
   // Fetch all apps from manifest
   fetchAppsFromManifest: async (forceRefresh = false) => {
     const now = Date.now();
@@ -36,12 +42,12 @@ export const manifestService = {
       const dataHasChanged = !manifestCache || JSON.stringify(manifestCache) !== JSON.stringify(appsData);
 
       if (dataHasChanged) {
-        // console.log('Manifest data has changed, updating cache');
         // Update cache
         manifestCache = appsData;
         lastFetchTime = now;
+        // Persist to localStorage for instant load on next page refresh
+        setSwrCache(SWR_KEY, appsData);
       } else {
-        // console.log('Manifest data unchanged, keeping existing cache');
         // Update timestamp even if data hasn't changed
         lastFetchTime = now;
       }

@@ -3,7 +3,7 @@ import { Button, Col, Container, Row, Spinner, Alert, Modal } from 'react-bootst
 import { useNavigate } from 'react-router-dom';
 import { useNumaRequest } from '../Providers/NumaRequestContext';
 import { useAuth } from '../Providers/AuthProvider';
-import { listAgents, deleteAgent, duplicateAgent, updateAgent } from '../Services/AgentsService';
+import { listAgents, getCachedAgents, deleteAgent, duplicateAgent, updateAgent } from '../Services/AgentsService';
 import { AdminAgentsService, type AgentsMode } from '../Services/AdminAgentsService';
 import type { AgentSummary } from '../types/agents';
 import { AgentCard } from '../Components/Agents/AgentCard';
@@ -56,10 +56,11 @@ export const AgentsManagement = () => {
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingAgent, setEditingAgent] = useState<AgentSummary | null>(null);
-  const [loading, setLoading] = useState(true);
+  // SWR: initialize from localStorage cache so agents render instantly
+  const [loading, setLoading] = useState(() => !getCachedAgents('owned'));
   const [error, setError] = useState<string | null>(null);
-  const [myAgents, setMyAgents] = useState<AgentSummary[]>([]);
-  const [workspaceAgents, setWorkspaceAgents] = useState<AgentSummary[]>([]);
+  const [myAgents, setMyAgents] = useState<AgentSummary[]>(() => getCachedAgents('owned') ?? []);
+  const [workspaceAgents, setWorkspaceAgents] = useState<AgentSummary[]>(() => getCachedAgents('public') ?? []);
   const [filter, setFilter] = useState<FilterOption>('all');
   const [agentsMode, setAgentsMode] = useState<AgentsMode>('full');
   const [missingModal, setMissingModal] = useState<{
@@ -116,7 +117,10 @@ export const AgentsManagement = () => {
 
   const loadAgents = async () => {
     try {
-      setLoading(true);
+      // Only show spinner if we have no cached data — avoids flash when SWR is active
+      if (myAgents.length === 0 && workspaceAgents.length === 0) {
+        setLoading(true);
+      }
       setError(null);
       const [ownedAgents, companyAgents] = await Promise.all([
         listAgents(numaGet, { scope: 'owned' }),

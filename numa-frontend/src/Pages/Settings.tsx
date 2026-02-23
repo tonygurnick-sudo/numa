@@ -84,10 +84,12 @@ export default function SettingsPage() {
     }
   }, [isAdmin]);
 
-  // Global (admin) settings
-  const [globalSettings, setGlobalSettings] = useState<GlobalIntegrationSettingsMap>({});
+  // Global (admin) settings — SWR: initialize from cache for instant render
+  const [globalSettings, setGlobalSettings] = useState<GlobalIntegrationSettingsMap>(
+    () => AdminIntegrationsService.getCached() ?? {},
+  );
   const [dataConnectorSettings, setDataConnectorSettings] = useState<GlobalDataConnectorSettingsMap>({});
-  const [loadingSettings, setLoadingSettings] = useState<boolean>(true);
+  const [loadingSettings, setLoadingSettings] = useState<boolean>(() => !AdminIntegrationsService.getCached());
   const [error, setError] = useState<string | null>(null);
 
   // Agents (admin) settings
@@ -172,7 +174,10 @@ export default function SettingsPage() {
 
   const loadGlobal = async () => {
     try {
-      setLoadingSettings(true);
+      // Only show spinner if we have no cached data
+      if (Object.keys(globalSettings).length === 0) {
+        setLoadingSettings(true);
+      }
       if (!isAdmin) {
         setGlobalSettings({});
         setError(null);

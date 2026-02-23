@@ -504,8 +504,24 @@ export const KBFileExplorer = forwardRef<KBFileExplorerHandle, KBFileExplorerPro
     const kbDocuments = kbState?.documents || [];
     const failedDocuments = kbState?.failedDocuments || [];
 
-    const [files, setFiles] = useState<S3Object[]>([]);
-    const [allObjectKeys, setAllObjectKeys] = useState<Set<string>>(new Set());
+    // SWR: hydrate file list from localStorage cache so it renders instantly
+    const [files, setFiles] = useState<S3Object[]>(() => {
+      const cached = knowledgeBaseService.getCachedKBFiles(kbId);
+      if (!cached?.files?.length) return [];
+      return cached.files.map((f: S3FileInfo) => ({
+        Key: f.key,
+        LastModified: f.lastModified ? new Date(f.lastModified) : new Date(),
+        Size: f.size,
+        urlTag: f.urlTag,
+        uploadedBy: f.uploadedBy,
+        uploadedAt: f.uploadedAt,
+      }));
+    });
+    const [allObjectKeys, setAllObjectKeys] = useState<Set<string>>(() => {
+      const cached = knowledgeBaseService.getCachedKBFiles(kbId);
+      if (!cached?.files?.length) return new Set<string>();
+      return new Set<string>(cached.files.map((f: S3FileInfo) => f.key));
+    });
     const [showCreateFolderModal, setShowCreateFolderModal] = useState<boolean>(false);
     const [newFolderName, setNewFolderName] = useState<string>('');
     const [newFolderParent, setNewFolderParent] = useState<string>(''); // relative to base prefix
@@ -513,7 +529,8 @@ export const KBFileExplorer = forwardRef<KBFileExplorerHandle, KBFileExplorerPro
     const [isCreatingFolder, setIsCreatingFolder] = useState<boolean>(false);
     const [isLoadingFiles, setIsLoadingFiles] = useState<boolean>(false);
     const [isUserInitiatedRefresh, setIsUserInitiatedRefresh] = useState<boolean>(false);
-    const [isInitialLoad, setIsInitialLoad] = useState<boolean>(true);
+    // If we have cached files, skip the initial loading state
+    const [isInitialLoad, setIsInitialLoad] = useState<boolean>(() => files.length === 0);
 
     const [searchValue, setSearchValue] = useState<string>('');
     const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
@@ -547,10 +564,14 @@ export const KBFileExplorer = forwardRef<KBFileExplorerHandle, KBFileExplorerPro
 
     /**
      * Determine if status indicators are ready to show.
-     * We wait for both file listing AND KB state to be loaded to avoid
-     * showing false WARNING status when KB state is still loading.
+     * When cached files are present (isInitialLoad is false from SWR), don't show
+     * per-row spinners — just leave the status column empty until KB state arrives.
+     * On a true cold load (no cache), wait for both file listing AND KB state.
      */
-    const isStatusReady = !isLoadingFiles && !isInitialLoad && !kbStateLoading && kbState !== null;
+    const hasCachedFiles = !isInitialLoad && files.length > 0;
+    const isStatusReady = hasCachedFiles
+      ? kbState !== null
+      : !isLoadingFiles && !isInitialLoad && !kbStateLoading && kbState !== null;
 
     /**
      * Build folder options from existing keys (relative to basePrefix)
@@ -584,8 +605,9 @@ export const KBFileExplorer = forwardRef<KBFileExplorerHandle, KBFileExplorerPro
      * The backend also updates the document count in DynamoDB
      */
     async function fetchFiles(): Promise<void> {
-      // Set loading state for user-initiated refresh or initial load
-      if (isUserInitiatedRefresh || isInitialLoad) {
+      // Set loading state for user-initiated refresh or initial load,
+      // but only if we have no cached files to show
+      if (isUserInitiatedRefresh || (isInitialLoad && files.length === 0)) {
         setIsLoadingFiles(true);
       }
       try {
@@ -1383,7 +1405,6 @@ export const KBFileExplorer = forwardRef<KBFileExplorerHandle, KBFileExplorerPro
                       </td>
                       <td>
                         {!isStatusReady ? (
-                          // Show loading spinner while waiting for KB state
                           <Spinner animation="border" size="sm" variant="secondary" />
                         ) : isFolder ? (
                           // Show status for web crawler folders

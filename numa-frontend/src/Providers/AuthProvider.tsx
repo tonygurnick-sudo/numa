@@ -1,6 +1,6 @@
 import { createContext, useState, useContext, useRef, useEffect, useCallback, useMemo } from 'react';
 import { jwtDecode } from 'jwt-decode';
-import { clearCachedUserProfile } from '../utils/userProfileCache';
+import { clearAllSwrCaches } from '../utils/swrCache';
 import { QBusinessClient } from '@aws-sdk/client-qbusiness';
 import { BedrockRuntimeClient } from '@aws-sdk/client-bedrock-runtime';
 import { BedrockAgentRuntimeClient } from '@aws-sdk/client-bedrock-agent-runtime';
@@ -353,7 +353,7 @@ export const AuthProvider = ({ children, initialTokens }) => {
     localStorage.removeItem('refreshToken');
     localStorage.removeItem('idToken');
     localStorage.removeItem('lastTokenValidation');
-    clearCachedUserProfile();
+    clearAllSwrCaches();
     tokensRef.current = { accessToken: null, idToken: null, refreshToken: null };
     decodedTokensRef.current = { accessToken: null, idToken: null };
     clearScheduledRefresh();
@@ -1134,8 +1134,6 @@ export const AuthProvider = ({ children, initialTokens }) => {
           return true;
         }
 
-        console.log('🔄 Periodic group check: Refreshing tokens to check for group changes');
-        console.log('Current user groups before check:', user?.groups);
         localStorage.setItem('lastGroupCheck', now.toString());
         const refreshed = await refreshTokens();
         if (refreshed) {
@@ -1923,13 +1921,6 @@ const extractGroupsAndFeatures = (decodedIdToken) => {
   // Extract groups from AWS Tags principal_tags.Groups
   const groups = getGroupsFromToken(decodedIdToken);
 
-  console.log('🔍 extractGroupsAndFeatures called with:', {
-    decodedIdToken: decodedIdToken,
-    principalTagGroups: groups,
-    availableGroupsConfig: Object.keys(GROUPS),
-    allTokenClaims: Object.keys(decodedIdToken),
-  });
-
   if (!groups || groups.length === 0) {
     // If the user is not in any groups, they should have no access - don't default to standard
     console.error('🚫 No groups found for user - access denied');
@@ -1940,11 +1931,8 @@ const extractGroupsAndFeatures = (decodedIdToken) => {
 
   const features = groups.reduce((acc, group) => {
     const groupFeatures = GROUPS[group]?.features || [];
-    console.log(`🔍 Group "${group}" features:`, groupFeatures);
     return [...acc, ...groupFeatures];
   }, []);
-
-  console.log('✅ Groups and features extracted successfully:', { groups, features });
 
   return { groups, features };
 };

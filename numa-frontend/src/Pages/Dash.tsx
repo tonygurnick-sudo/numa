@@ -47,7 +47,10 @@ export const Dash = ({ showFavorites = false, ...rest }: DashProps) => {
   // Fetch apps data and get unique categories
   useEffect(() => {
     const loadApps = async () => {
-      setLoading(true);
+      // Only show spinner if we have no cached data
+      if (numaApps.length === 0) {
+        setLoading(true);
+      }
       try {
         const appsData = await manifestService.forceRefreshManifest();
         setNumaApps(appsData);

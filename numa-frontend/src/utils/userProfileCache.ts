@@ -7,34 +7,21 @@
  * on every page refresh.
  */
 import type { UserProfile } from '../Services/ChatSettingsService';
+import { getSwrCache, setSwrCache, clearSwrCache } from './swrCache';
 
-const STORAGE_KEY = 'numaUserProfileCache';
+const CACHE_NAME = 'userProfile';
 
 /** Read the cached profile from localStorage (returns null if absent/corrupt). */
 export function getCachedUserProfile(): UserProfile | null {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return null;
-    return JSON.parse(raw) as UserProfile;
-  } catch {
-    return null;
-  }
+  return getSwrCache<UserProfile>(CACHE_NAME);
 }
 
 /** Write a profile to the localStorage cache. */
 export function setCachedUserProfile(profile: UserProfile): void {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(profile));
-  } catch {
-    // Storage full or unavailable — non-critical, silently ignore.
-  }
+  setSwrCache(CACHE_NAME, profile);
 }
 
 /** Clear the cached profile (e.g. on logout). */
 export function clearCachedUserProfile(): void {
-  try {
-    localStorage.removeItem(STORAGE_KEY);
-  } catch {
-    // Non-critical.
-  }
+  clearSwrCache(CACHE_NAME);
 }
