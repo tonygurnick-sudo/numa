@@ -376,6 +376,7 @@ Activate skills using the Skill tool. Available skills:
 | Skill | When to use |
 |-------|-------------|
 | `agents` | Managing the user's saved Numa Agents (custom AI personas) — listing, creating, updating, duplicating agents |
+| `memories` | Listing, updating, or detailed management of the user's persistent memories. For quick adds you can use the tool directly without loading the skill. |
 | `integrations` | Working with connected external apps (Google Drive, Slack, Gmail, HubSpot, Jira, Notion, etc.) |
 | `knowledge-search` | Querying, uploading, downloading, or listing files in company knowledge bases |
 | `web-search` | Searching the internet for current information not available in the knowledge base |
@@ -468,6 +469,7 @@ You have access to Numa-specific tools in `/workdir/tools/numa/`. These tools al
 - `/workdir/tools/numa/extract_content.py` — Extract text content from files using advanced OCR/vision AI. Supports PDFs (including scanned), images, DOCX, Excel, audio/video transcription, and 80+ formats.
 - `/workdir/tools/numa/convert_document.py` — Convert documents between formats. Supports direct DOCX↔PDF conversion (--mode file) and markdown→PDF/DOCX conversion (--mode markdown).
 - `/workdir/tools/numa/numa-agents.py` — Manage the user's saved Numa Agents (list, get, create, update, duplicate). Load the `agents` skill first for full details.
+- `/workdir/tools/numa/numa-memories.py` — Manage the user's persistent memories (list, add, update). For quick adds, run the command directly. Load the `memories` skill for listing, updating, or more complex memory management.
 
 To use a tool, run it with Python. You can read the tool file itself for detailed usage and parameters.
 
@@ -532,6 +534,28 @@ This makes the reference clickable in the chat interface, allowing users to veri
 ```bash
 python3 /workdir/tools/numa/numa-agents.py list --scope owned
 ```
+
+**Example — Quick Add a General Memory:**
+```bash
+python3 /workdir/tools/numa/numa-memories.py add --content "Prefers concise responses" --scope general
+```
+
+**Example — Quick Add an Integration Memory:**
+```bash
+python3 /workdir/tools/numa/numa-memories.py add --content "Jira Cloud ID: abc123-def456" --scope "integration:jira"
+```
+
+**Memory Rules:**
+- **ALWAYS ask the user before adding or updating a memory.** For example: "I'd like to save a memory that you prefer concise responses — shall I go ahead?" or "I noticed your Jira Cloud ID is abc123. Want me to remember that for future Jira tasks?" Only run the add/update command after the user confirms.
+- For quick adds ("remember this", "keep this in mind"), confirm what you'll save, then run the add command directly — no need to load the skill
+- For listing, updating, or complex memory management, load the `memories` skill first
+- DO proactively suggest saving memories when the user says "remember this", "keep this in mind for next time", or semantically similar — but always confirm first
+- DO suggest saving useful operational details when working with integrations (e.g., Jira cloud ID, Slack channel IDs, preferred project boards) to save time on future requests
+- DO NOT add memories for every interaction — only when the user signals persistence or when integration details would clearly save time
+- DO NOT update or add memories about the user's profile (name, job title, etc.) — direct them to the Profile page for that
+- To delete a memory, direct the user to manage it from their Profile page in Settings
+- Keep memories concise and factual (max 300 characters)
+- Use appropriate scopes: "general" for general preferences/facts, "integration:{{slug}}" for integration-specific info, "agent:{{agentId}}" for agent-specific info
 
 **Example — Extract Content from Scanned PDF:**
 ```bash
@@ -686,15 +710,28 @@ def _build_user_profile_context(user_profile: Optional[dict]) -> str:
             f"{user_profile['customInstructions']}"
         )
 
-    # General memories
+    # User memories — show ALL memories grouped by scope so the model has a
+    # complete picture when the user asks "what are my memories?"
+    # This is the single source of truth for all user memories in the prompt.
     memories = user_profile.get("memories", [])
-    general_memories = [
-        m for m in memories if isinstance(m, dict) and m.get("scope") == "general"
-    ]
-    if general_memories:
-        parts.append("\n**User Memories (General):**")
-        for mem in general_memories:
+    valid_memories = [m for m in memories if isinstance(m, dict) and m.get("scope")]
+    if valid_memories:
+        # Group by scope
+        general = [m for m in valid_memories if m.get("scope") == "general"]
+        integration = [
+            m for m in valid_memories if m.get("scope", "").startswith("integration:")
+        ]
+        agent = [m for m in valid_memories if m.get("scope", "").startswith("agent:")]
+
+        parts.append("\n**User Memories:**")
+        for mem in general:
             parts.append(f"- {mem.get('content', '')}")
+        for mem in integration:
+            scope_label = mem.get("scope", "").replace("integration:", "")
+            parts.append(f"- [{scope_label}] {mem.get('content', '')}")
+        for mem in agent:
+            scope_label = mem.get("scope", "").replace("agent:", "")
+            parts.append(f"- [agent:{scope_label}] {mem.get('content', '')}")
 
     parts.append("</user-profile>")
     return "\n".join(parts)
@@ -703,14 +740,12 @@ def _build_user_profile_context(user_profile: Optional[dict]) -> str:
 def _build_integrations_context(
     enabled_integrations: list[str],
     email_signature: Optional[dict] = None,
-    memories: Optional[list[dict]] = None,
 ) -> str:
     """Build system prompt section for Pipedream Connect integrations.
 
     Args:
         enabled_integrations: List of app slugs (e.g., ["google_drive", "slack"])
         email_signature: Optional user email signature settings
-        memories: Optional list of user memory dicts (filtered for integration scope)
 
     Returns:
         Integrations context string for the system prompt
@@ -760,18 +795,6 @@ Important notes:
         if prompt_file.is_file():
             content = prompt_file.read_text().strip()
             context += f"\n\n### {slug} — Integration Guide\n{content}\n"
-
-        # Append user's integration-scoped memories if present
-        if memories:
-            slug_memories = [
-                m
-                for m in memories
-                if isinstance(m, dict) and m.get("scope") == f"integration:{slug}"
-            ]
-            if slug_memories:
-                context += f"\n\n### {slug} — User Memories\n"
-                for mem in slug_memories:
-                    context += f"- {mem.get('content', '')}\n"
 
     # Append email signature when an email integration is connected
     has_email_integration = any(
@@ -925,11 +948,9 @@ def build_workspace_system_prompt(
             base_prompt = f"{base_prompt}\n" + "\n".join(agent_memory_lines)
 
     # Append integrations context if integrations are enabled
-    # Email signature and user memories are injected here too
     if enabled_integrations:
-        memories = user_profile.get("memories", []) if user_profile else None
         integrations_context = _build_integrations_context(
-            enabled_integrations, email_signature, memories
+            enabled_integrations, email_signature
         )
         base_prompt = f"{base_prompt}\n\n{integrations_context}"
 

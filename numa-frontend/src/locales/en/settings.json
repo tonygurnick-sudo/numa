@@ -60,6 +60,8 @@
     "dataAnalysisHelp": "Analyze CSV, Excel, or JSON data files",
     "agentCreation": "Agent Creation",
     "agentCreationHelp": "Allow me to create saved agents when you explicitly ask.",
+    "memoryManagement": "Update Memory",
+    "memoryManagementHelp": "Allow Numa to save and update memories about you and your integrations.",
     "defaultIntegrations": "Default integrations",
     "integrationsDisabled": "Integrations are not enabled in this environment.",
     "noIntegrations": "No integrations are enabled for this environment.",
@@ -431,6 +433,7 @@
             "placeholder": "What should Numa remember?"
           },
           "empty": "No memories yet. Add memories to help Numa work better for you.",
+          "limitReached": "Memory limit reached (50/50)",
           "source": {
             "user": "Added by you",
             "ai": "Added by AI"
@@ -480,6 +483,10 @@
       "agentCreation": {
         "title": "Agent Creation",
         "help": "Allow me to create saved agents when you explicitly ask."
+      },
+      "memoryManagement": {
+        "title": "Update Memory",
+        "help": "Allow Numa to save and update memories about you and your integrations."
       },
       "integrations": {
         "label": "Default integrations",

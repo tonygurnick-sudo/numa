@@ -417,6 +417,7 @@ export default function UserProfilePage({ embedded = false, activeTabKey, onActi
         autoToolsEnabled: companyDefaults.autoToolsEnabled,
         webSearchEnabled: companyDefaults.webSearchEnabled,
         createAgentEnabled: companyDefaults.createAgentEnabled,
+        memoriesEnabled: companyDefaults.memoriesEnabled,
         dataAnalysisEnabled: companyDefaults.dataAnalysisEnabled,
         defaultConnectionIds: companyDefaults.defaultConnectionIds,
       };
@@ -445,6 +446,7 @@ export default function UserProfilePage({ embedded = false, activeTabKey, onActi
       autoToolsEnabled: companyDefaults.autoToolsEnabled,
       webSearchEnabled: companyDefaults.webSearchEnabled,
       createAgentEnabled: companyDefaults.createAgentEnabled,
+      memoriesEnabled: companyDefaults.memoriesEnabled,
       dataAnalysisEnabled: companyDefaults.dataAnalysisEnabled,
       defaultConnectionIds: companyDefaults.defaultConnectionIds,
       language: LANGUAGE_BROWSER_DEFAULT,
@@ -515,6 +517,7 @@ export default function UserProfilePage({ embedded = false, activeTabKey, onActi
         autoToolsEnabled: userDefaults.autoToolsEnabled,
         webSearchEnabled: userDefaults.webSearchEnabled,
         createAgentEnabled: userDefaults.createAgentEnabled,
+        memoriesEnabled: userDefaults.memoriesEnabled,
         dataAnalysisEnabled: userDefaults.dataAnalysisEnabled,
         defaultConnectionIds: userDefaults.defaultConnectionIds,
         language: userDefaults.language,
@@ -1132,11 +1135,13 @@ export default function UserProfilePage({ embedded = false, activeTabKey, onActi
                 ) : (
                   <Button
                     className="profile-add-memory-btn"
-                    disabled={profileSaving}
+                    disabled={profileSaving || userProfile.memories.length >= 50}
                     onClick={() => setAddingMemory(true)}
                   >
                     <i className="bi bi-plus-lg"></i>
-                    {t('userProfile.profile.fields.memories.addMemory')}
+                    {userProfile.memories.length >= 50
+                      ? t('userProfile.profile.fields.memories.limitReached')
+                      : t('userProfile.profile.fields.memories.addMemory')}
                   </Button>
                 )}
               </div>
@@ -1328,8 +1333,18 @@ export default function UserProfilePage({ embedded = false, activeTabKey, onActi
                           ...prev,
                           autoToolsEnabled: nextEnabled,
                           ...(nextEnabled
-                            ? { webSearchEnabled: true, dataAnalysisEnabled: true, createAgentEnabled: true }
-                            : { webSearchEnabled: false, dataAnalysisEnabled: false, createAgentEnabled: false }),
+                            ? {
+                                webSearchEnabled: true,
+                                dataAnalysisEnabled: true,
+                                createAgentEnabled: true,
+                                memoriesEnabled: true,
+                              }
+                            : {
+                                webSearchEnabled: false,
+                                dataAnalysisEnabled: false,
+                                createAgentEnabled: false,
+                                memoriesEnabled: false,
+                              }),
                         }));
                         setDirty(true);
                       }}
@@ -1394,6 +1409,26 @@ export default function UserProfilePage({ embedded = false, activeTabKey, onActi
                       <div className="profile-tool-row__text">
                         <div className="profile-tool-row__label">{t('userProfile.defaults.agentCreation.title')}</div>
                         <div className="profile-tool-row__help">{t('userProfile.defaults.agentCreation.help')}</div>
+                      </div>
+                    </div>
+
+                    <div className="profile-tool-row">
+                      <Form.Check
+                        type="switch"
+                        id="profile-defaults-memories"
+                        label=""
+                        checked={displayedSettings.memoriesEnabled}
+                        disabled={disableDefaultsForm || displayedSettings.autoToolsEnabled}
+                        onChange={(e) => {
+                          setUserDefaults((prev) => ({ ...prev, memoriesEnabled: e.target.checked }));
+                          setDirty(true);
+                        }}
+                      />
+                      <div className="profile-tool-row__text">
+                        <div className="profile-tool-row__label">
+                          {t('userProfile.defaults.memoryManagement.title')}
+                        </div>
+                        <div className="profile-tool-row__help">{t('userProfile.defaults.memoryManagement.help')}</div>
                       </div>
                     </div>
                   </div>

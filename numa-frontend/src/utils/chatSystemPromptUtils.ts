@@ -74,6 +74,7 @@ export const getEnabledTools = (
   createAgentEnabled = false,
   enabledKBIds: string[] = [],
   dataAnalysisAvailable = true,
+  memoriesEnabled = true,
 ) => {
   const enabledTools: string[] = [];
   const agentsFeatureEnabled =
@@ -85,12 +86,14 @@ export const getEnabledTools = (
     enabledTools.push('web_search');
     if (dataAnalysisAvailable) enabledTools.push('data_analysis');
     if (agentsFeatureEnabled) enabledTools.push('create_agent_tool');
+    enabledTools.push('memories_tool');
   } else {
     // In manual mode, only enable selected tools based on what's selected
     if (Array.isArray(enabledKBIds) && enabledKBIds.length > 0) enabledTools.push('query_knowledge_base');
     if (webSearchEnabled) enabledTools.push('web_search');
     if (dataAnalysisEnabled && dataAnalysisAvailable) enabledTools.push('data_analysis');
     if (agentsFeatureEnabled && createAgentEnabled) enabledTools.push('create_agent_tool');
+    if (memoriesEnabled) enabledTools.push('memories_tool');
   }
 
   return enabledTools;

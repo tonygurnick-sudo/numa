@@ -136,6 +136,13 @@ function isBashAgentCommand(cmd: string): boolean {
 }
 
 /**
+ * Check if Bash command is a memory management command.
+ */
+function isBashMemoryCommand(cmd: string): boolean {
+  return cmd.includes('numa-memories.py');
+}
+
+/**
  * Check if Bash command is transient (file system navigation).
  */
 function isBashTransient(cmd: string): boolean {
@@ -171,6 +178,9 @@ export function getToolCategoryAndIcon(
     }
     if (isBashAgentCommand(cmd)) {
       return { category: 'important', iconName: 'bi-robot' };
+    }
+    if (isBashMemoryCommand(cmd)) {
+      return { category: 'important', iconName: 'bi-lightbulb' };
     }
     if (isBashTransient(cmd)) {
       return { category: 'transient' };
@@ -352,8 +362,16 @@ export function getInlineToolDisplay(toolName: string, input: unknown): { text: 
       if (bashInput.description && typeof bashInput.description === 'string') {
         return { text: bashInput.description };
       }
+      // Friendly labels for known Numa tool commands
+      const bashCmd = bashInput.command || '';
+      if (bashCmd.includes('numa-memories.py')) {
+        if (bashCmd.includes(' add ')) return { text: 'Saving memory — manage in Settings' };
+        if (bashCmd.includes(' update ')) return { text: 'Updating memory — manage in Settings' };
+        if (bashCmd.includes(' list')) return { text: 'Reading memories — manage in Settings' };
+        return { text: 'Managing memories — manage in Settings' };
+      }
       // Fallback to truncated command
-      const cmd = (bashInput.command || '').slice(0, 50);
+      const cmd = bashCmd.slice(0, 50);
       return { text: `Running: ${cmd}${cmd.length >= 50 ? '...' : ''}` };
     }
     case 'mcp__scripts__execute_script': {

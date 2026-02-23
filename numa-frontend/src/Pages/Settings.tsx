@@ -860,11 +860,13 @@ export default function SettingsPage() {
                                         webSearchEnabled: true,
                                         dataAnalysisEnabled: true,
                                         createAgentEnabled: true,
+                                        memoriesEnabled: true,
                                       }
                                     : {
                                         webSearchEnabled: false,
                                         dataAnalysisEnabled: false,
                                         createAgentEnabled: false,
+                                        memoriesEnabled: false,
                                       }),
                                 }));
                                 setChatDefaultsDirty(true);
@@ -938,6 +940,27 @@ export default function SettingsPage() {
                             </div>
                             <div className="text-muted small ms-5">{t('chatDefaults.agentCreationHelp')}</div>
                           </div>
+
+                          <div className="mt-3 ms-4">
+                            <div className="d-flex align-items-center gap-2">
+                              <Form.Check
+                                type="switch"
+                                id="chat-defaults-memories"
+                                label=""
+                                checked={globalChatSettings.memoriesEnabled}
+                                disabled={globalChatSettings.autoToolsEnabled}
+                                onChange={(e) => {
+                                  setGlobalChatSettings((prev) => ({
+                                    ...prev,
+                                    memoriesEnabled: e.target.checked,
+                                  }));
+                                  setChatDefaultsDirty(true);
+                                }}
+                              />
+                              <div className="settings-secondary-label">{t('chatDefaults.memoryManagement')}</div>
+                            </div>
+                            <div className="text-muted small ms-5">{t('chatDefaults.memoryManagementHelp')}</div>
+                          </div>
                         </div>
 
                         <Form.Group className="mb-3">
@@ -1003,6 +1026,7 @@ export default function SettingsPage() {
                                     autoToolsEnabled: globalChatSettings.autoToolsEnabled,
                                     webSearchEnabled: globalChatSettings.webSearchEnabled,
                                     createAgentEnabled: globalChatSettings.createAgentEnabled,
+                                    memoriesEnabled: globalChatSettings.memoriesEnabled,
                                     dataAnalysisEnabled: globalChatSettings.dataAnalysisEnabled,
                                     defaultConnectionIds: globalChatSettings.defaultConnectionIds,
                                     allowUserDefaults: globalChatSettings.allowUserDefaults,

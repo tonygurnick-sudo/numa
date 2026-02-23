@@ -21,18 +21,7 @@ import { getConnectionConfig } from '../config/integrationsConfig';
 import { useBranding } from '../Providers/BrandingContext';
 import { withPRM } from '../utils/prmUtils';
 import { useTranslation } from 'react-i18next';
-import {
-  ArrowLeft,
-  Bot,
-  ChevronRight,
-  ExternalLink,
-  Link2,
-  MessageSquare,
-  PlusCircle,
-  RefreshCw,
-  Store,
-  User,
-} from 'lucide-react';
+import { ArrowLeft, Bot, ExternalLink, Link2, PlusCircle, RefreshCw, Store, User } from 'lucide-react';
 
 type FilterOption = 'all' | 'personal' | 'public';
 
@@ -70,12 +59,6 @@ export const AgentsManagement = () => {
     missing: string[];
     error?: string | null;
   }>({ show: false, loading: false, agent: null, missing: [], error: null });
-
-  // Chat version selection modal (V1 vs V2)
-  const [chatVersionModal, setChatVersionModal] = useState<{
-    show: boolean;
-    agent: AgentSummary | null;
-  }>({ show: false, agent: null });
 
   // Schedule management state
   const [scheduleModal, setScheduleModal] = useState<{
@@ -248,20 +231,9 @@ export const AgentsManagement = () => {
     navigate(chatVersion === 'v2' ? '/chat-v2' : '/chat');
   };
 
-  // Show chat version selection modal if V2 is enabled, otherwise go directly to V1
+  // Go directly to V2 if enabled, otherwise V1
   const initiateChat = (agent: AgentSummary) => {
-    if (workspaceChatEnabled) {
-      setChatVersionModal({ show: true, agent });
-    } else {
-      proceedToChat(agent, 'v1');
-    }
-  };
-
-  const handleChatVersionSelect = (version: 'v1' | 'v2') => {
-    if (chatVersionModal.agent) {
-      proceedToChat(chatVersionModal.agent, version);
-    }
-    setChatVersionModal({ show: false, agent: null });
+    proceedToChat(agent, workspaceChatEnabled ? 'v2' : 'v1');
   };
 
   const handleStartChat = async (agent: AgentSummary) => {
@@ -834,97 +806,6 @@ export const AgentsManagement = () => {
                 </Button>
               </Modal.Footer>
             )}
-          </Modal>
-
-          {/* Chat version selection modal (V1 vs V2) */}
-          <Modal show={chatVersionModal.show} onHide={() => setChatVersionModal({ show: false, agent: null })} centered>
-            <Modal.Header closeButton>
-              <Modal.Title>{t('management.chatVersion.title')}</Modal.Title>
-            </Modal.Header>
-            <Modal.Body>
-              <p
-                className="mb-3"
-                dangerouslySetInnerHTML={{
-                  __html: t('management.chatVersion.prompt', {
-                    agentTitle: chatVersionModal.agent?.title || t('management.chatVersion.agentFallback'),
-                    interpolation: { escapeValue: false },
-                  }),
-                }}
-              />
-              <div className="d-flex flex-column gap-3">
-                <div
-                  role="button"
-                  tabIndex={0}
-                  className="d-flex align-items-center justify-content-between p-3 border rounded-3"
-                  style={{
-                    cursor: 'pointer',
-                    backgroundColor: 'var(--bs-body-bg)',
-                    transition: 'all 0.15s ease-in-out',
-                  }}
-                  onClick={() => handleChatVersionSelect('v1')}
-                  onKeyDown={(e) => e.key === 'Enter' && handleChatVersionSelect('v1')}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.backgroundColor = 'var(--bs-tertiary-bg)';
-                    e.currentTarget.style.borderColor = 'var(--bs-primary)';
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.backgroundColor = 'var(--bs-body-bg)';
-                    e.currentTarget.style.borderColor = '';
-                  }}
-                >
-                  <div className="d-flex align-items-center gap-3">
-                    <div
-                      className="rounded-2 d-flex align-items-center justify-content-center"
-                      style={{ width: 40, height: 40, backgroundColor: '#6c757d' }}
-                    >
-                      <MessageSquare size={18} className="text-white" aria-hidden="true" />
-                    </div>
-                    <div>
-                      <div className="fw-semibold">{t('management.chatVersion.v1.title')}</div>
-                      <small className="text-muted">{t('management.chatVersion.v1.description')}</small>
-                    </div>
-                  </div>
-                  <ChevronRight size={18} className="text-muted" aria-hidden="true" />
-                </div>
-                <div
-                  role="button"
-                  tabIndex={0}
-                  className="d-flex align-items-center justify-content-between p-3 border rounded-3"
-                  style={{
-                    cursor: 'pointer',
-                    backgroundColor: 'var(--bs-body-bg)',
-                    transition: 'all 0.15s ease-in-out',
-                  }}
-                  onClick={() => handleChatVersionSelect('v2')}
-                  onKeyDown={(e) => e.key === 'Enter' && handleChatVersionSelect('v2')}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.backgroundColor = 'var(--bs-tertiary-bg)';
-                    e.currentTarget.style.borderColor = 'var(--bs-primary)';
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.backgroundColor = 'var(--bs-body-bg)';
-                    e.currentTarget.style.borderColor = '';
-                  }}
-                >
-                  <div className="d-flex align-items-center gap-3">
-                    <div
-                      className="rounded-2 d-flex align-items-center justify-content-center"
-                      style={{ width: 40, height: 40, backgroundColor: '#0d6efd' }}
-                    >
-                      <MessageSquare size={18} className="text-white" aria-hidden="true" />
-                    </div>
-                    <div>
-                      <div className="fw-semibold">
-                        {t('management.chatVersion.v2.title')}{' '}
-                        <span className="beta-badge">{t('common:badges.beta')}</span>
-                      </div>
-                      <small className="text-muted">{t('management.chatVersion.v2.description')}</small>
-                    </div>
-                  </div>
-                  <ChevronRight size={18} className="text-muted" aria-hidden="true" />
-                </div>
-              </div>
-            </Modal.Body>
           </Modal>
         </Container>
       </LayoutDashboard>

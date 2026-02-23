@@ -16,6 +16,7 @@ export type ChatSettings = {
   autoToolsEnabled: boolean;
   webSearchEnabled: boolean;
   createAgentEnabled: boolean;
+  memoriesEnabled: boolean;
   dataAnalysisEnabled: boolean;
   defaultConnectionIds: string[];
   language: string | null;
@@ -152,6 +153,7 @@ const DEFAULT_SETTINGS: ChatSettings = {
   autoToolsEnabled: true,
   webSearchEnabled: true,
   createAgentEnabled: false,
+  memoriesEnabled: true,
   dataAnalysisEnabled: true,
   defaultConnectionIds: [],
   language: 'browser',
@@ -234,6 +236,7 @@ async function loadGlobalSettings(): Promise<GlobalChatSettings> {
       autoToolsEnabled: DEFAULT_SETTINGS.autoToolsEnabled,
       webSearchEnabled: DEFAULT_SETTINGS.webSearchEnabled,
       createAgentEnabled: DEFAULT_SETTINGS.createAgentEnabled,
+      memoriesEnabled: DEFAULT_SETTINGS.memoriesEnabled,
       dataAnalysisEnabled: DEFAULT_SETTINGS.dataAnalysisEnabled,
       defaultConnectionIds: DEFAULT_SETTINGS.defaultConnectionIds,
       language: DEFAULT_SETTINGS.language,
@@ -265,6 +268,8 @@ async function loadGlobalSettings(): Promise<GlobalChatSettings> {
       typeof item?.webSearchEnabled === 'boolean' ? item!.webSearchEnabled : DEFAULT_SETTINGS.webSearchEnabled,
     createAgentEnabled:
       typeof item?.createAgentEnabled === 'boolean' ? item!.createAgentEnabled : DEFAULT_SETTINGS.createAgentEnabled,
+    memoriesEnabled:
+      typeof item?.memoriesEnabled === 'boolean' ? item!.memoriesEnabled : DEFAULT_SETTINGS.memoriesEnabled,
     dataAnalysisEnabled:
       typeof item?.dataAnalysisEnabled === 'boolean' ? item!.dataAnalysisEnabled : DEFAULT_SETTINGS.dataAnalysisEnabled,
     defaultConnectionIds: Array.isArray(item?.defaultConnectionIds)
@@ -310,6 +315,10 @@ function mergeUserSettings(globalSettings: ChatSettings, userItem: Record<string
     typeof userItem?.createAgentEnabled === 'boolean'
       ? (userItem!.createAgentEnabled as boolean)
       : globalSettings.createAgentEnabled;
+  const memoriesEnabled =
+    typeof userItem?.memoriesEnabled === 'boolean'
+      ? (userItem!.memoriesEnabled as boolean)
+      : globalSettings.memoriesEnabled;
   const dataAnalysisEnabled =
     typeof userItem?.dataAnalysisEnabled === 'boolean'
       ? (userItem!.dataAnalysisEnabled as boolean)
@@ -341,6 +350,7 @@ function mergeUserSettings(globalSettings: ChatSettings, userItem: Record<string
     autoToolsEnabled,
     webSearchEnabled,
     createAgentEnabled,
+    memoriesEnabled,
     dataAnalysisEnabled,
     defaultConnectionIds,
     language,
@@ -418,6 +428,10 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
           'createAgentEnabled' in body && typeof body.createAgentEnabled === 'boolean'
             ? body.createAgentEnabled
             : currentGlobal.createAgentEnabled,
+        memoriesEnabled:
+          'memoriesEnabled' in body && typeof body.memoriesEnabled === 'boolean'
+            ? body.memoriesEnabled
+            : currentGlobal.memoriesEnabled,
         dataAnalysisEnabled:
           'dataAnalysisEnabled' in body && typeof body.dataAnalysisEnabled === 'boolean'
             ? body.dataAnalysisEnabled
@@ -455,6 +469,7 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
         autoToolsEnabled: updatedSettings.autoToolsEnabled,
         webSearchEnabled: updatedSettings.webSearchEnabled,
         createAgentEnabled: updatedSettings.createAgentEnabled,
+        memoriesEnabled: updatedSettings.memoriesEnabled,
         dataAnalysisEnabled: updatedSettings.dataAnalysisEnabled,
         defaultConnectionIds: updatedSettings.defaultConnectionIds,
         language: updatedSettings.language,
@@ -503,6 +518,7 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
         autoToolsEnabled: merged.autoToolsEnabled,
         webSearchEnabled: merged.webSearchEnabled,
         createAgentEnabled: merged.createAgentEnabled,
+        memoriesEnabled: merged.memoriesEnabled,
         dataAnalysisEnabled: merged.dataAnalysisEnabled,
         defaultConnectionIds: merged.defaultConnectionIds,
         language: merged.language,
@@ -527,6 +543,7 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
         autoToolsEnabled: useUserChatDefaults ? merged.autoToolsEnabled : globalSettings.autoToolsEnabled,
         webSearchEnabled: useUserChatDefaults ? merged.webSearchEnabled : globalSettings.webSearchEnabled,
         createAgentEnabled: useUserChatDefaults ? merged.createAgentEnabled : globalSettings.createAgentEnabled,
+        memoriesEnabled: useUserChatDefaults ? merged.memoriesEnabled : globalSettings.memoriesEnabled,
         dataAnalysisEnabled: useUserChatDefaults ? merged.dataAnalysisEnabled : globalSettings.dataAnalysisEnabled,
         defaultConnectionIds: useUserChatDefaults ? merged.defaultConnectionIds : globalSettings.defaultConnectionIds,
         language: merged.language,
@@ -554,6 +571,7 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
         'autoToolsEnabled',
         'webSearchEnabled',
         'createAgentEnabled',
+        'memoriesEnabled',
         'dataAnalysisEnabled',
         'defaultConnectionIds',
         'userDefaultsEnabled',
@@ -620,6 +638,17 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
         }
       } else if (typeof current.createAgentEnabled === 'boolean') {
         next.createAgentEnabled = current.createAgentEnabled;
+      }
+
+      // memoriesEnabled
+      if ('memoriesEnabled' in body) {
+        if (body.memoriesEnabled === null) {
+          // clear override
+        } else if (typeof body.memoriesEnabled === 'boolean') {
+          next.memoriesEnabled = body.memoriesEnabled;
+        }
+      } else if (typeof current.memoriesEnabled === 'boolean') {
+        next.memoriesEnabled = current.memoriesEnabled;
       }
 
       // dataAnalysisEnabled
@@ -718,6 +747,7 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
         'autoToolsEnabled' in next ||
         'webSearchEnabled' in next ||
         'createAgentEnabled' in next ||
+        'memoriesEnabled' in next ||
         'dataAnalysisEnabled' in next ||
         'defaultConnectionIds' in next ||
         'language' in next ||

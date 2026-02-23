@@ -37,6 +37,7 @@ import structlog
 from aws_lambda_powertools.utilities.typing import LambdaContext
 
 from tools import (
+    handle_add_memory,
     handle_add_to_kb,
     handle_approve_action,
     handle_configure_props,
@@ -48,11 +49,13 @@ from tools import (
     handle_list_actions,
     handle_list_agents,
     handle_list_kb_files,
+    handle_list_memories,
     handle_proxy_request,
     handle_query_knowledgebase,
     handle_retrieve_kb_file,
     handle_run_action,
     handle_update_agent,
+    handle_update_memory,
     handle_web_search,
 )
 from tools.kb_permissions import verify_kb_access
@@ -117,6 +120,9 @@ TOOL_HANDLERS: Dict[str, Callable[[Dict[str, Any]], Dict[str, Any]]] = {
     "pipedream_configure_props": handle_configure_props,
     "pipedream_proxy_request": handle_proxy_request,
     "pipedream_approve_action": handle_approve_action,
+    "user_profile_list_memories": handle_list_memories,
+    "user_profile_add_memory": handle_add_memory,
+    "user_profile_update_memory": handle_update_memory,
 }
 
 
@@ -487,6 +493,47 @@ def handler(event: Dict[str, Any], context: LambdaContext) -> Dict[str, Any]:
             user_sub=user_sub[:8] + "..." if user_sub else "",
             has_admin=("admin" in user_groups),
             has_conversation_id=bool(conversation_id),
+        )
+
+    # Security: Validate user profile memory tool access (require authentication)
+    user_profile_tools = {
+        "user_profile_list_memories",
+        "user_profile_add_memory",
+        "user_profile_update_memory",
+    }
+    if tool_name in user_profile_tools:
+        # Check that memories_tool is in the allowed tools list
+        allowed_tools = event.get("allowed_tools", [])
+        if "memories_tool" not in allowed_tools:
+            logger.warning(
+                "Memory tool access denied - not in allowed tools",
+                tool=tool_name,
+                allowed_tools=allowed_tools,
+            )
+            return {
+                "status": "error",
+                "result": None,
+                "error": "Memory management is not enabled for this conversation. "
+                "Enable 'Update Memory' in settings.",
+            }
+
+        if not user_sub:
+            logger.warning(
+                "User profile tool access denied - no user_sub provided",
+                tool=tool_name,
+            )
+            return {
+                "status": "error",
+                "result": None,
+                "error": "User authentication required for memory operations",
+            }
+
+        params["__user_sub"] = user_sub
+
+        logger.info(
+            "User profile tool invoked",
+            tool=tool_name,
+            user_sub=user_sub[:8] + "..." if user_sub else "",
         )
 
     # Security: Validate pipedream integration tool access (fail-closed)

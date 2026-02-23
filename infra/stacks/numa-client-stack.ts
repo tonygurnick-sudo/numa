@@ -327,6 +327,9 @@ export class NumaClientStack extends TerraformStack {
         integrationsApprovalTableName: core.integrationsApprovalTable?.name,
         integrationsApprovalTableArn: core.integrationsApprovalTable?.arn,
         pipedreamRelayLambdaArn: core.pipedreamRelayLambdaArn,
+        // Chat settings table (for user profile memory management)
+        chatSettingsTableName: core.chatSettingsTable.name,
+        chatSettingsTableArn: core.chatSettingsTable.arn,
         // File redirect for integration uploads (clean URLs to avoid Slack filename length issues)
         fileRedirectSecret: fileRedirectSecret.value,
         fileRedirectBaseUrl: `https://${domainName}/api/workspace-chat-agent`,

@@ -15,6 +15,7 @@ import {
   FolderOpen,
   Globe,
   Info,
+  Lightbulb,
   Plug,
   RefreshCw,
   Upload,
@@ -71,6 +72,8 @@ export interface WorkspaceChatSettingsPanelProps {
   setWebSearchEnabled: Dispatch<SetStateAction<boolean>>;
   createAgentEnabled: boolean;
   setCreateAgentEnabled: Dispatch<SetStateAction<boolean>>;
+  memoriesEnabled: boolean;
+  setMemoriesEnabled: Dispatch<SetStateAction<boolean>>;
   agentsFeatureEnabled: boolean;
 
   // Knowledge Bases
@@ -119,6 +122,8 @@ export const WorkspaceChatSettingsPanel: React.FC<WorkspaceChatSettingsPanelProp
   setWebSearchEnabled,
   createAgentEnabled,
   setCreateAgentEnabled,
+  memoriesEnabled,
+  setMemoriesEnabled,
   agentsFeatureEnabled,
   enabledKBIds,
   setEnabledKBIds,
@@ -192,6 +197,7 @@ export const WorkspaceChatSettingsPanel: React.FC<WorkspaceChatSettingsPanelProp
     setAutoToolsEnabled(checked);
     if (checked) {
       setWebSearchEnabled(true);
+      setMemoriesEnabled(true);
       if (agentsFeatureEnabled) {
         setCreateAgentEnabled(true);
       }
@@ -278,9 +284,9 @@ export const WorkspaceChatSettingsPanel: React.FC<WorkspaceChatSettingsPanelProp
                 <span className="workspace-settings-collapsed-summary">
                   {autoToolsEnabled
                     ? t('workspaceSettings.allToolsEnabledSummary')
-                    : [webSearchEnabled, createAgentEnabled].filter(Boolean).length > 0
+                    : [webSearchEnabled, createAgentEnabled, memoriesEnabled].filter(Boolean).length > 0
                       ? t('workspaceSettings.toolsPartialSummary', {
-                          count: [webSearchEnabled, createAgentEnabled].filter(Boolean).length,
+                          count: [webSearchEnabled, createAgentEnabled, memoriesEnabled].filter(Boolean).length,
                         })
                       : t('workspaceSettings.noneEnabled')}
                 </span>
@@ -334,6 +340,21 @@ export const WorkspaceChatSettingsPanel: React.FC<WorkspaceChatSettingsPanelProp
                     }
                   />
                 )}
+
+                <Form.Check
+                  type="checkbox"
+                  id="panel-memories"
+                  className="workspace-settings-list-item"
+                  checked={memoriesEnabled}
+                  onChange={(e) => setMemoriesEnabled(e.target.checked)}
+                  disabled={isDisabled || autoToolsEnabled}
+                  label={
+                    <span className={`d-flex align-items-center gap-2 ${autoToolsEnabled ? 'text-muted' : ''}`}>
+                      <Lightbulb size={14} />
+                      {t('workspaceSettings.memoryManagement')}
+                    </span>
+                  }
+                />
               </div>
             </div>
           )}

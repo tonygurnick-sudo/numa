@@ -76,6 +76,7 @@ type ConversationChatConfig = {
   autoToolsEnabled?: boolean;
   webSearchEnabled?: boolean;
   createAgentEnabled?: boolean;
+  memoriesEnabled?: boolean;
   enabledKBIds?: string[];
   enabledConnectionIds?: string[];
 };
@@ -100,6 +101,7 @@ const NumaWorkspaceChatAgents = () => {
   const [stagedItems, setStagedItems] = useState<StagedItem[]>([]);
   const [webSearchEnabled, setWebSearchEnabled] = useState(false);
   const [createAgentEnabled, setCreateAgentEnabled] = useState(false);
+  const [memoriesEnabled, setMemoriesEnabled] = useState(true);
   const [availableConnections, setAvailableConnections] = useState<
     Array<{ id: string; name: string; isConnected: boolean; mcpServerUrl?: string }>
   >([]);
@@ -331,6 +333,9 @@ const NumaWorkspaceChatAgents = () => {
       if (typeof parsed.createAgentEnabled === 'boolean') {
         setCreateAgentEnabled(agentsFeatureEnabled ? parsed.createAgentEnabled : false);
       }
+      if (typeof parsed.memoriesEnabled === 'boolean') {
+        setMemoriesEnabled(parsed.memoriesEnabled);
+      }
 
       if (Array.isArray(parsed.enabledKBIds)) {
         if (availableKBs.length > 0) {
@@ -370,6 +375,14 @@ const NumaWorkspaceChatAgents = () => {
     (value: SetStateAction<boolean>) => {
       markUserSettingsModified();
       setCreateAgentEnabled(value);
+    },
+    [markUserSettingsModified],
+  );
+
+  const handleUserSetMemoriesEnabled = useCallback(
+    (value: SetStateAction<boolean>) => {
+      markUserSettingsModified();
+      setMemoriesEnabled(value);
     },
     [markUserSettingsModified],
   );
@@ -417,6 +430,7 @@ const NumaWorkspaceChatAgents = () => {
         autoToolsEnabled,
         webSearchEnabled,
         createAgentEnabled: agentsFeatureEnabled ? createAgentEnabled : false,
+        memoriesEnabled,
         enabledKBIds,
         enabledConnectionIds: enabledConnections,
       };
@@ -436,6 +450,7 @@ const NumaWorkspaceChatAgents = () => {
     autoToolsEnabled,
     conversationId,
     createAgentEnabled,
+    memoriesEnabled,
     enabledConnections,
     enabledKBIds,
     agentsFeatureEnabled,
@@ -470,6 +485,7 @@ const NumaWorkspaceChatAgents = () => {
         // When autoTools is enabled, individual tools should also be enabled
         setWebSearchEnabled(autoTools || userChatSettings.webSearchEnabled);
         setCreateAgentEnabled(autoTools || userChatSettings.createAgentEnabled);
+        setMemoriesEnabled(autoTools || userChatSettings.memoriesEnabled);
         setEnabledConnections(defaultConnectionIdsFromSettings);
         // Apply user's default KB selection, filtered by what's available
         setEnabledKBIds(defaultKBIdsFromSettings);
@@ -482,6 +498,7 @@ const NumaWorkspaceChatAgents = () => {
       // When autoTools is enabled, individual tools should also be enabled
       setWebSearchEnabled(autoTools || (config.webSearchEnabled ?? false));
       setCreateAgentEnabled(autoTools || (config.createAgentEnabled ?? false));
+      setMemoriesEnabled(autoTools || (config.memoriesEnabled ?? true));
       setEnabledConnections(config.enabledConnections ?? []);
 
       // Apply KB constraints from agent
@@ -1028,7 +1045,7 @@ const NumaWorkspaceChatAgents = () => {
       !isManuallyLoading
     ) {
       // Read isWorkspaceConversation from sessionStorage for auto-load (per-tab)
-      const storedIsWorkspace = sessionStorage.getItem('isWorkspaceConversation-v2') === 'true';
+      const storedIsWorkspace = sessionStorage.getItem('isWorkspaceConversation-v2') !== 'false';
       console.log('[NumaChat] Auto-loading conversation:', conversationId, 'isWorkspace:', storedIsWorkspace);
       handleLoadConversation(conversationId, storedIsWorkspace);
     } else if (conversationId && hasUserStartedNewChat) {
@@ -1206,8 +1223,11 @@ const NumaWorkspaceChatAgents = () => {
     const enabledTools = getEnabledTools(
       autoToolsEnabled,
       webSearchEnabled,
+      false, // dataAnalysisEnabled — not used in V2
       agentsFeatureEnabled ? createAgentEnabled : false,
       enabledKBIds,
+      true, // dataAnalysisAvailable
+      memoriesEnabled,
     );
 
     // Create the system prompt based on tool availability
@@ -1490,7 +1510,7 @@ const NumaWorkspaceChatAgents = () => {
   );
 
   // Load single conversation from DB using extracted utility
-  const handleLoadConversation = async (selectedConversationId: string, isWorkspaceConversation = false) => {
+  const handleLoadConversation = async (selectedConversationId: string, isWorkspaceConversation = true) => {
     if (!numaChatDynamoUtils) return;
 
     console.log('[NumaChat] handleLoadConversation called:', {
@@ -1660,7 +1680,12 @@ const NumaWorkspaceChatAgents = () => {
 
   // Derived flag to show warning when no tools active in manual mode
   const noToolsActive =
-    !currentAgent && !autoToolsEnabled && enabledKBIds.length === 0 && !webSearchEnabled && !createAgentEnabled;
+    !currentAgent &&
+    !autoToolsEnabled &&
+    enabledKBIds.length === 0 &&
+    !webSearchEnabled &&
+    !createAgentEnabled &&
+    !memoriesEnabled;
 
   // Legacy helper: push buffered text as its own segment then clear buffer, and save to DynamoDB
   // Kept for V1 compatibility but unused in workspace mode (handled by useWorkspaceStreaming hook)
@@ -2162,6 +2187,8 @@ const NumaWorkspaceChatAgents = () => {
             setWebSearchEnabled={handleUserSetWebSearchEnabled}
             createAgentEnabled={agentsFeatureEnabled ? createAgentEnabled : false}
             setCreateAgentEnabled={handleUserSetCreateAgentEnabled}
+            memoriesEnabled={memoriesEnabled}
+            setMemoriesEnabled={handleUserSetMemoriesEnabled}
             agentsFeatureEnabled={agentsFeatureEnabled}
             enabledKBIds={enabledKBIds}
             setEnabledKBIds={handleUserSetEnabledKBIds}

@@ -404,6 +404,7 @@
     "allToolsHelper": "Enable all tools automatically",
     "webSearch": "Web Search",
     "agentCreation": "Agent Creation",
+    "memoryManagement": "Update Memory",
     "model": "Model",
     "integrations": "Integrations",
     "integrationsHelper": "Connect external services",

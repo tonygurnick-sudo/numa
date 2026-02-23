@@ -88,6 +88,7 @@ NUMA_CHAT = AgentTypeConfig(
         "knowledge_search",
         "web_search",
         "agents",
+        "memories",
         "convert_document",
         "extract_content",
     ],

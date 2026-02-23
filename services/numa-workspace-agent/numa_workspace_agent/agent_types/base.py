@@ -161,6 +161,7 @@ TOOL_FILE_MAP: dict[str, list[str]] = {
     "knowledge_search": ["knowledge_base.py"],
     "web_search": ["web_search.py"],
     "agents": ["numa-agents.py"],
+    "memories": ["numa-memories.py"],
     "convert_document": ["convert_document.py"],
     "extract_content": ["extract_content.py"],
     # helpers/ is always copied when any tool is enabled (see ALWAYS_COPY)

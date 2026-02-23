@@ -163,6 +163,10 @@
       "agentCreation": {
         "title": "Agent creation",
         "description": "Allow this agent to create new agents."
+      },
+      "updateMemory": {
+        "title": "Update memory",
+        "description": "Allow this agent to save and update memories."
       }
     },
     "integrations": {
