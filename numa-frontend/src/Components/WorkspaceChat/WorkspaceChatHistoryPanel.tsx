@@ -1,6 +1,7 @@
 import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useState } from 'react';
 import { Button, Spinner } from 'react-bootstrap';
 import { useTranslation } from 'react-i18next';
+import { Bot, Pencil, Trash2 } from 'lucide-react';
 import i18n from '../../i18n';
 import { useAuth } from '../../Providers/AuthProvider';
 
@@ -75,6 +76,31 @@ export const WorkspaceChatHistoryPanel = forwardRef<WorkspaceChatHistoryPanelRef
       }
     }, [numaChatDynamoUtils, user, sub, t]);
 
+    const handleRename = async (conversationId: string, currentName?: string | null) => {
+      const newName = prompt(t('history.renamePrompt'), currentName || '');
+      if (newName === null) return;
+      if (!numaChatDynamoUtils) return;
+      try {
+        await numaChatDynamoUtils.updateConversationName(conversationId, sub, newName, 'manual');
+        fetchConversations();
+      } catch (error) {
+        console.error('Error renaming conversation:', error);
+        setLocalError(t('history.renameFailed'));
+      }
+    };
+
+    const handleDelete = async (conversationId: string) => {
+      if (!numaChatDynamoUtils) return;
+      if (!window.confirm(t('history.deleteConfirm'))) return;
+      try {
+        await numaChatDynamoUtils.deleteConversation(conversationId, sub);
+        fetchConversations();
+      } catch (error) {
+        console.error('Error deleting conversation:', error);
+        setLocalError(t('history.deleteFailed'));
+      }
+    };
+
     useImperativeHandle(ref, () => ({
       refreshConversations: () => {
         fetchConversations();
@@ -111,22 +137,58 @@ export const WorkspaceChatHistoryPanel = forwardRef<WorkspaceChatHistoryPanelRef
           ) : (
             <div className="workspace-history-list">
               {conversations.map((convo) => (
-                <button
+                <div
                   key={convo.conversation_id}
-                  type="button"
-                  className={`workspace-history-item ${convo.conversation_id === currentConversationId ? 'is-active' : ''}`}
-                  onClick={() => onSelectConversation(convo.conversation_id, convo.isWorkspaceConversation)}
+                  className={`workspace-history-item ${convo.conversation_id === currentConversationId ? 'is-active' : ''} ${convo.isAgentConversation ? 'is-agent' : ''}`}
                 >
-                  <div className="workspace-history-item-title">{convo.conversationName || t('history.untitled')}</div>
-                  {convo.isAgentConversation && convo.agentTitle && (
-                    <div className="workspace-history-item-agent">
-                      {t('history.agentPrefix', { name: convo.agentTitle })}
+                  <button
+                    type="button"
+                    className="workspace-history-item-content"
+                    onClick={() => onSelectConversation(convo.conversation_id, convo.isWorkspaceConversation)}
+                  >
+                    <div className="workspace-history-item-title">
+                      {convo.conversationName || t('history.untitled')}
                     </div>
-                  )}
-                  <div className="workspace-history-item-time">
-                    {formatRelativeTime(convo.latestTimestamp, t as (key: string) => string)}
+                    {convo.isAgentConversation && convo.agentTitle && (
+                      <div className="workspace-history-item-agent">
+                        <Bot size={13} />
+                        {t('history.agentPrefix', { name: convo.agentTitle })}
+                      </div>
+                    )}
+                    <div className="workspace-history-item-meta">
+                      <span className="workspace-history-item-time">
+                        {formatRelativeTime(convo.latestTimestamp, t as (key: string) => string)}
+                      </span>
+                      {!convo.isWorkspaceConversation && (
+                        <span className="workspace-history-item-legacy">{t('history.legacyBadge')}</span>
+                      )}
+                    </div>
+                  </button>
+                  <div className="workspace-history-item-actions">
+                    <button
+                      type="button"
+                      className="workspace-history-action-btn"
+                      aria-label={t('history.renameAria')}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleRename(convo.conversation_id, convo.conversationName);
+                      }}
+                    >
+                      <Pencil size={13} />
+                    </button>
+                    <button
+                      type="button"
+                      className="workspace-history-action-btn workspace-history-action-btn--danger"
+                      aria-label={t('history.deleteAria')}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDelete(convo.conversation_id);
+                      }}
+                    >
+                      <Trash2 size={13} />
+                    </button>
                   </div>
-                </button>
+                </div>
               ))}
             </div>
           )}
