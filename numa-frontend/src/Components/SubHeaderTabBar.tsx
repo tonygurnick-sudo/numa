@@ -1,4 +1,5 @@
 import { Container, Nav } from 'react-bootstrap';
+import { Bot } from 'lucide-react';
 
 const joinClassNames = (...classes: Array<string | undefined>) => classes.filter(Boolean).join(' ');
 
@@ -38,7 +39,11 @@ export function SubHeaderTabBar({
           {items.map((item) => (
             <Nav.Item key={item.key}>
               <Nav.Link eventKey={item.key}>
-                {item.iconClassName ? <i className={item.iconClassName} aria-hidden="true"></i> : null}
+                {item.iconClassName === 'bi bi-robot' ? (
+                  <Bot size={16} aria-hidden="true" />
+                ) : item.iconClassName ? (
+                  <i className={item.iconClassName} aria-hidden="true"></i>
+                ) : null}
                 <span>{item.label}</span>
               </Nav.Link>
             </Nav.Item>

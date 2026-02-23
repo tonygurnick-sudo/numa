@@ -1,6 +1,7 @@
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { Tab, Button, Spinner, Modal, Alert, OverlayTrigger, Tooltip, Form } from 'react-bootstrap';
 import { useTranslation } from 'react-i18next';
+import { Bot } from 'lucide-react';
 import UserManagement from './UserManagement';
 import UserProfilePage from './UserProfile';
 import { PageHeader } from '../Components/PageHeader';
@@ -1156,7 +1157,7 @@ export default function SettingsPage() {
                   eventKey="agents"
                   title={
                     <span>
-                      <i className="bi bi-robot me-2"></i>
+                      <Bot size={16} className="me-2" />
                       {t('tabs.agents')}
                     </span>
                   }

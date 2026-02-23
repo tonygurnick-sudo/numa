@@ -10,6 +10,7 @@
 import { useState } from 'react';
 import { Collapse, Button } from 'react-bootstrap';
 import { useTranslation } from 'react-i18next';
+import { Bot } from 'lucide-react';
 import type { WorkspaceChatAssistantAdviceSegment } from '../../types/workspaceChatTypes';
 
 interface AssistantAdviceBlockProps {
@@ -37,7 +38,7 @@ export function AssistantAdviceBlock({ segment }: AssistantAdviceBlockProps) {
         aria-expanded={isOpen}
       >
         <i className={`bi ${isOpen ? 'bi-chevron-down' : 'bi-chevron-right'} me-1`} />
-        <i className="bi bi-robot me-1" />
+        <Bot size={14} className="me-1" />
         <span className="small">{t('workspace.assistantAdvice.label')}</span>
       </Button>
       <Collapse in={isOpen}>

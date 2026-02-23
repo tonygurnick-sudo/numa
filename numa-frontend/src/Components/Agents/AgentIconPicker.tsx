@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { Button, OverlayTrigger, Tooltip } from 'react-bootstrap';
 import { useTranslation } from 'react-i18next';
+import { Bot } from 'lucide-react';
 
 type AgentIconPickerProps = {
   value?: string;
@@ -36,7 +37,7 @@ export const AgentIconPicker = ({ value, onChange }: AgentIconPickerProps) => {
             onClick={() => onChange(icon.value)}
             aria-pressed={isActive}
           >
-            <i className={icon.value}></i>
+            {icon.value === 'bi bi-robot' ? <Bot size={16} /> : <i className={icon.value}></i>}
           </Button>
         );
         return (

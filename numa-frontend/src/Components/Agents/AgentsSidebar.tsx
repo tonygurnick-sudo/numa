@@ -9,6 +9,7 @@ import {
 } from 'react';
 import { Button, Offcanvas, Spinner, Alert } from 'react-bootstrap';
 import { useTranslation } from 'react-i18next';
+import { Bot } from 'lucide-react';
 import { useNumaRequest } from '../../Providers/NumaRequestContext';
 import { AdminAgentsService, type AgentsMode } from '../../Services/AdminAgentsService';
 import { listAgents, getCachedAgents } from '../../Services/AgentsService';
@@ -149,7 +150,7 @@ const AgentsSidebarComponent: ForwardRefRenderFunction<AgentsSidebarHandle, Agen
   return (
     <>
       <Button variant="secondary" className="btn" onClick={() => setShow(true)} disabled={agentsMode === 'off'}>
-        <i className="bi bi-robot me-1"></i> {t('sidebar.openButton')}
+        <Bot size={16} className="me-1" /> {t('sidebar.openButton')}
       </Button>
       <Offcanvas show={show} placement="end" onHide={() => setShow(false)} backdrop scroll style={offcanvasStyle}>
         <Offcanvas.Header closeButton closeVariant="dark">
@@ -181,7 +182,7 @@ const AgentsSidebarComponent: ForwardRefRenderFunction<AgentsSidebarHandle, Agen
             </Alert>
           ) : agents.length === 0 ? (
             <div className="text-center text-muted mt-4">
-              <i className="bi bi-robot display-6 d-block mb-2"></i>
+              <Bot size={48} className="d-block mb-2 mx-auto" />
               <p>{t('sidebar.empty')}</p>
             </div>
           ) : (

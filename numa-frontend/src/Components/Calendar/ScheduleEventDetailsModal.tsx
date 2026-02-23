@@ -7,6 +7,7 @@ import { useNumaRequest } from '../../Providers/NumaRequestContext';
 import { useAuth } from '../../Providers/AuthProvider';
 import { fetchFileFromS3 } from '../../utils/s3Utils';
 import { useTranslation } from 'react-i18next';
+import { Bot } from 'lucide-react';
 
 interface ScheduleEventDetailsModalProps {
   show: boolean;
@@ -62,16 +63,10 @@ const getStatusBadgeVariant = (status: string) => {
 };
 
 const getEventTypeIcon = (eventType: string) => {
-  switch (eventType) {
-    case 'agent':
-      return 'bi-robot';
-    case 'application':
-      return 'bi-app';
-    case 'data_sync':
-      return 'bi-arrow-repeat';
-    default:
-      return 'bi-calendar-event';
-  }
+  if (eventType === 'agent') return <Bot size={16} />;
+  const cls =
+    eventType === 'application' ? 'bi-app' : eventType === 'data_sync' ? 'bi-arrow-repeat' : 'bi-calendar-event';
+  return <i className={cls} />;
 };
 
 export const ScheduleEventDetailsModal: React.FC<ScheduleEventDetailsModalProps> = ({
@@ -270,7 +265,7 @@ export const ScheduleEventDetailsModal: React.FC<ScheduleEventDetailsModalProps>
     <Modal show={show} onHide={onHide} size="lg" centered>
       <Modal.Header closeButton>
         <Modal.Title className="d-flex align-items-center">
-          <i className={`${getEventTypeIcon(event.eventType)} me-2`}></i>
+          <span className="me-2">{getEventTypeIcon(event.eventType)}</span>
           {t('scheduling.details.cardTitle')}
         </Modal.Title>
       </Modal.Header>
@@ -316,7 +311,7 @@ export const ScheduleEventDetailsModal: React.FC<ScheduleEventDetailsModalProps>
               <div className="card border-success border-opacity-25">
                 <div className="card-body py-3">
                   <h6 className="card-title mb-2">
-                    <i className="bi bi-robot me-1"></i>
+                    <Bot size={16} className="me-1" />
                     {t('scheduling.details.fields.agent')}
                   </h6>
                   <p className="card-text mb-1">{resource.agentTitle}</p>
