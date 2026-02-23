@@ -138,7 +138,7 @@ export function CreateTeamWizard({ show, onHide, onCreated }: CreateTeamWizardPr
         customStages: customStages ?? undefined,
         workUnitSeries,
         allowedTicketTypes: resolvedTicketTypes.length > 0 ? resolvedTicketTypes : allTypeIds,
-        accessControl: { mode: accessMode, userIds: [] },
+        accessControl: { mode: accessMode, users: [] },
       });
 
       onCreated(team);

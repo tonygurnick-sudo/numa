@@ -44,6 +44,7 @@ export type OpsDataState = {
   topView: OpsTopView;
   boardViewMode: BoardViewMode;
   activeZoneId: string | null;
+  crmRefreshVersion: number;
 
   // Actions
   selectTeam: (teamId: string) => void;
@@ -55,6 +56,7 @@ export type OpsDataState = {
   refreshTeam: () => Promise<TeamResponse | null>;
   refreshTickets: () => Promise<void>;
   refreshTeams: () => Promise<void>;
+  refreshCrmData: () => void;
 };
 
 // ─── Hook ───────────────────────────────────────────────────────────────────
@@ -140,6 +142,7 @@ export const useOpsData = (): OpsDataState => {
       return null;
     }
   });
+  const [crmRefreshVersion, setCrmRefreshVersion] = useState(0);
 
   // ── Refs ─────────────────────────────────────────────────────────────────
   const initialLoadDone = useRef(false);
@@ -380,6 +383,10 @@ export const useOpsData = (): OpsDataState => {
     await loadTeams();
   }, [loadTeams]);
 
+  const refreshCrmData = useCallback(() => {
+    setCrmRefreshVersion((prev) => prev + 1);
+  }, []);
+
   // ── Return ────────────────────────────────────────────────────────────
 
   return {
@@ -402,6 +409,7 @@ export const useOpsData = (): OpsDataState => {
     topView,
     boardViewMode,
     activeZoneId,
+    crmRefreshVersion,
 
     selectTeam,
     setTopView,
@@ -411,5 +419,6 @@ export const useOpsData = (): OpsDataState => {
     refreshTeam,
     refreshTickets,
     refreshTeams,
+    refreshCrmData,
   };
 };

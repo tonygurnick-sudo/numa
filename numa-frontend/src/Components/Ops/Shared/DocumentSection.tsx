@@ -34,6 +34,34 @@ function formatFileSize(bytes: number): string {
   return `${value.toFixed(i === 0 ? 0 : 1)} ${units[i]}`;
 }
 
+const DOCUMENT_TYPE_ICONS: Record<string, string> = {
+  contract: '📜',
+  proposal: '📋',
+  invoice: '🧾',
+  sla: '⚖️',
+  specification: '📐',
+  nda: '🔒',
+  sow: '📑',
+  quote: '📝',
+  certificate: '📄',
+  other: '📄',
+};
+
+function formatRelativeDate(dateStr: string, t: (key: string, options?: Record<string, unknown>) => string): string {
+  const timestamp = new Date(dateStr).getTime();
+  if (Number.isNaN(timestamp)) return t('common.none');
+
+  const diffMs = Date.now() - timestamp;
+  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+
+  if (diffDays <= 0) return t('documents.today');
+  if (diffDays === 1) return t('documents.yesterday');
+  if (diffDays < 7) return t('documents.daysAgo', { count: diffDays });
+  if (diffDays < 30) return t('documents.weeksAgo', { count: Math.floor(diffDays / 7) });
+  if (diffDays < 365) return t('documents.monthsAgo', { count: Math.floor(diffDays / 30) });
+  return t('documents.yearsAgo', { count: Math.floor(diffDays / 365) });
+}
+
 /**
  * DocumentSection renders a table of uploaded documents for a customer or
  * supplier. It supports uploading new documents through a presigned-URL flow,
@@ -175,6 +203,8 @@ export function DocumentSection({
     return entry?.name ?? typeId.charAt(0).toUpperCase() + typeId.slice(1);
   };
 
+  const resolveTypeIcon = (typeId: string) => DOCUMENT_TYPE_ICONS[typeId.toLowerCase()] ?? DOCUMENT_TYPE_ICONS.other;
+
   // ── Render ────────────────────────────────────────────────────────────────
 
   return (
@@ -286,12 +316,17 @@ export function DocumentSection({
                 </td>
                 <td>
                   <Badge bg="light" text="dark">
+                    <span className="me-1" aria-hidden="true">
+                      {resolveTypeIcon(doc.type)}
+                    </span>
                     {resolveTypeName(doc.type)}
                   </Badge>
                 </td>
                 <td>{formatFileSize(doc.size)}</td>
                 <td>{doc.uploadedBy}</td>
-                <td>{formatDate(doc.uploadedAt)}</td>
+                <td title={formatDate(doc.uploadedAt)}>
+                  {t('documents.addedAgo', { time: formatRelativeDate(doc.uploadedAt, t) })}
+                </td>
                 <td>
                   {entityType === 'customer' && (
                     <Button

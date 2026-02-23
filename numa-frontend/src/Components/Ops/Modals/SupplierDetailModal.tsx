@@ -88,6 +88,7 @@ export function SupplierDetailModal({
   const [loadingTickets, setLoadingTickets] = useState(false);
   const [showCreateTicket, setShowCreateTicket] = useState(false);
   const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null);
+
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 

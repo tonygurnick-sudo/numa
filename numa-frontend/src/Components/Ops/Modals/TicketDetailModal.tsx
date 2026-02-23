@@ -8,7 +8,15 @@ import { useTranslation } from 'react-i18next';
 import { useNumaRequest } from '../../../Providers/NumaRequestContext';
 import { useOps } from '../OpsContext';
 import * as OpsService from '../../../Services/OpsService';
-import type { Ticket, TicketLink, TicketPriority, TicketType, FieldDefinition } from '../../../types/ops';
+import type {
+  Ticket,
+  TicketLink,
+  TicketPriority,
+  TicketType,
+  FieldDefinition,
+  Customer,
+  Supplier,
+} from '../../../types/ops';
 import { CommentSection } from '../Shared/CommentSection';
 import { LinkedTicketsSection } from '../Shared/LinkedTicketsSection';
 import { AttachmentsSection } from '../Shared/AttachmentsSection';
@@ -25,6 +33,7 @@ interface TicketDetailModalProps {
   ticketId: string | null;
   onHide: () => void;
   onDeleted?: () => void;
+  teamIdOverride?: string | null;
 }
 
 // ─── Priority Options ───────────────────────────────────────────────────────
@@ -106,17 +115,25 @@ function relativeTimeShort(dateStr: string): string {
  *   - Right (~35%): sidebar with inline-editable fields
  * - Footer: lifecycle dates row
  */
-export function TicketDetailModal({ show, ticketId, onHide, onDeleted }: TicketDetailModalProps): React.JSX.Element {
+export function TicketDetailModal({
+  show,
+  ticketId,
+  onHide,
+  onDeleted,
+  teamIdOverride = null,
+}: TicketDetailModalProps): React.JSX.Element {
   const { t } = useTranslation('ops');
   const { numaGet, numaPut, numaDelete } = useNumaRequest();
   const [archiving, setArchiving] = useState(false);
-  const { config, teamData, workUnits, refreshTickets } = useOps();
+  const { config, teamData, workUnits, refreshTickets, refreshCrmData } = useOps();
 
   // ── Core state ──────────────────────────────────────────────────────────
   const [ticket, setTicket] = useState<Ticket | null>(null);
   const [links, setLinks] = useState<TicketLink[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
 
   // ── Inline editing state ────────────────────────────────────────────────
   const [editingTitle, setEditingTitle] = useState(false);
@@ -126,8 +143,6 @@ export function TicketDetailModal({ show, ticketId, onHide, onDeleted }: TicketD
   const [saving, setSaving] = useState(false);
 
   // ── CRM lists for selector dropdowns ───────────────────────────────────
-  const [customers, setCustomers] = useState<import('../../../types/ops').Customer[]>([]);
-  const [suppliers, setSuppliers] = useState<import('../../../types/ops').Supplier[]>([]);
 
   // ── Delete confirmation ─────────────────────────────────────────────────
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -145,6 +160,7 @@ export function TicketDetailModal({ show, ticketId, onHide, onDeleted }: TicketD
     : undefined;
 
   const team = teamData?.team ?? null;
+  const effectiveTeamId = teamIdOverride ?? team?.id ?? null;
 
   // ── Load ticket ─────────────────────────────────────────────────────────
 
@@ -153,7 +169,7 @@ export function TicketDetailModal({ show, ticketId, onHide, onDeleted }: TicketD
     setLoading(true);
     setError(null);
     try {
-      const response = await OpsService.getTicket(numaGet, ticketId, team?.id);
+      const response = await OpsService.getTicket(numaGet, ticketId, effectiveTeamId ?? undefined);
       setTicket(response.ticket);
       setLinks(response.links ?? []);
     } catch (err) {
@@ -162,7 +178,7 @@ export function TicketDetailModal({ show, ticketId, onHide, onDeleted }: TicketD
     } finally {
       setLoading(false);
     }
-  }, [numaGet, ticketId, team?.id]);
+  }, [numaGet, ticketId, effectiveTeamId]);
 
   useEffect(() => {
     if (show && ticketId) {
@@ -191,6 +207,31 @@ export function TicketDetailModal({ show, ticketId, onHide, onDeleted }: TicketD
     }
   }, [show, ticketId, loadTicket, numaGet]);
 
+  useEffect(() => {
+    if (!show) return;
+    let cancelled = false;
+
+    const loadCrmEntities = async () => {
+      try {
+        const [customersResponse, suppliersResponse] = await Promise.all([
+          OpsService.listCustomers(numaGet),
+          OpsService.listSuppliers(numaGet),
+        ]);
+        if (cancelled) return;
+        setCustomers(customersResponse);
+        setSuppliers(suppliersResponse);
+      } catch (err) {
+        console.error('[TicketDetailModal] Failed to load CRM entities', err);
+      }
+    };
+
+    void loadCrmEntities();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [show, numaGet]);
+
   // ── Auto-focus title input ──────────────────────────────────────────────
 
   useEffect(() => {
@@ -214,6 +255,10 @@ export function TicketDetailModal({ show, ticketId, onHide, onDeleted }: TicketD
         });
         setTicket(updated);
         void refreshTickets();
+        const crmImpactingKeys = ['customerId', 'supplierId', 'statusType', 'stageId', 'archived'] as const;
+        if (crmImpactingKeys.some((key) => Object.prototype.hasOwnProperty.call(payload, key))) {
+          refreshCrmData();
+        }
       } catch (err: unknown) {
         // Check for 409 conflict
         const isConflict = err instanceof Error && (err.message.includes('409') || err.message.includes('conflict'));
@@ -227,7 +272,7 @@ export function TicketDetailModal({ show, ticketId, onHide, onDeleted }: TicketD
         setSaving(false);
       }
     },
-    [ticket, ticketId, numaPut, refreshTickets, loadTicket, t],
+    [ticket, ticketId, numaPut, refreshTickets, refreshCrmData, loadTicket, t],
   );
 
   // ── Title editing handlers ──────────────────────────────────────────────
@@ -284,6 +329,7 @@ export function TicketDetailModal({ show, ticketId, onHide, onDeleted }: TicketD
         : await OpsService.archiveTicket(numaPut, ticketId, ticket.version);
       setTicket(updated);
       void refreshTickets();
+      refreshCrmData();
     } catch (err) {
       console.error('[TicketDetailModal] Archive toggle failed', err);
     } finally {
@@ -301,6 +347,7 @@ export function TicketDetailModal({ show, ticketId, onHide, onDeleted }: TicketD
       onDeleted?.();
       onHide();
       void refreshTickets();
+      refreshCrmData();
     } catch (err) {
       console.error('[TicketDetailModal] Delete failed', err);
     }

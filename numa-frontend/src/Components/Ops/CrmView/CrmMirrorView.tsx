@@ -288,7 +288,7 @@ function CustomerListView({ customers, crmConfig, onCustomerClick }: CustomerLis
 const CrmMirrorView = (): React.JSX.Element => {
   const { t } = useTranslation('ops');
   const { numaGet, numaPost, numaPut } = useNumaRequest();
-  const { config } = useOps();
+  const { config, crmRefreshVersion } = useOps();
 
   // ── DnD: 8px movement before drag activates (so clicks work cleanly) ──────
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
@@ -341,7 +341,7 @@ const CrmMirrorView = (): React.JSX.Element => {
 
   useEffect(() => {
     void loadCustomers();
-  }, [loadCustomers]);
+  }, [loadCustomers, crmRefreshVersion]);
 
   // ── Filtering ─────────────────────────────────────────────────────────────
   const filteredCustomers = useMemo(() => {

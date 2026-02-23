@@ -14,6 +14,20 @@
       "meeting-analyser": {}
     }
   },
+  "arcanum-demo-greg":  {
+  "provisionQResources": false,
+  "numaWorkspaceChat": true,
+  "numaOps": true,
+  "devInstance": true,
+  "allowBedrockQuotaSharing": true,
+  "pipedreamIntegrations": true,
+  "dataConnectorsEnabled": false,
+  "clientAccountId": "905418183804",
+  "allApps": true,
+  "region": "us-east-1",
+  "preferredKnowledgeBase": "bedrock",
+  "agents": false
+},
   "arcanum-demo-sydney": {
     "clientAccountId": "905418183804",
     "createServiceLinkedRole": false,

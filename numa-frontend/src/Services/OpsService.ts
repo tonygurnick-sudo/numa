@@ -47,6 +47,7 @@ import type {
   WorkZone,
   WorkStage,
   TicketLinkType,
+  CrmConfig,
 } from '../types/ops';
 
 type NumaGet = (url: string, params?: Record<string, unknown>) => Promise<unknown>;
@@ -73,6 +74,14 @@ export const getConfig = async (numaGet: NumaGet): Promise<OpsConfigResponse> =>
   console.info(`${LOG_PREFIX} getConfig`);
   const response = (await numaGet(`${BASE_URL}/config`)) as OpsConfigResponse;
   return response;
+};
+
+export const updateCrmConfig = async (numaPut: NumaPut, payload: CrmConfig): Promise<CrmConfig> => {
+  console.info(`${LOG_PREFIX} updateCrmConfig`);
+  const response = (await numaPut(`${BASE_URL}/config/crm-settings`, payload)) as { crmConfig: CrmConfig } | CrmConfig;
+  const crmConfig = 'crmConfig' in response ? response.crmConfig : (response as CrmConfig);
+  console.info(`${LOG_PREFIX} updateCrmConfig: success`);
+  return crmConfig;
 };
 
 export const createTicketType = async (
@@ -450,14 +459,19 @@ export const listCustomers = async (
 
 export const getCustomer = async (numaGet: NumaGet, customerId: string): Promise<CustomerResponse> => {
   const response = (await numaGet(`${BASE_URL}/customers/${encodeURIComponent(customerId)}`)) as CustomerResponse;
-  return response;
+  const linkedTicketCount = response.linkedTicketCount ?? response.ticketCount;
+  return {
+    ...response,
+    linkedTicketCount,
+  };
 };
 
 export const createCustomer = async (numaPost: NumaPost, payload: CreateCustomerPayload): Promise<Customer> => {
   console.info(`${LOG_PREFIX} createCustomer`, { companyName: payload.companyName });
-  const response = (await numaPost(`${BASE_URL}/customers`, payload)) as CustomerResponse;
-  console.info(`${LOG_PREFIX} createCustomer: success`, { id: response.customer.id });
-  return response.customer;
+  const response = (await numaPost(`${BASE_URL}/customers`, payload)) as CustomerResponse | Customer;
+  const customer = 'customer' in response ? response.customer : (response as Customer);
+  console.info(`${LOG_PREFIX} createCustomer: success`, { id: customer.id });
+  return customer;
 };
 
 export const updateCustomer = async (
@@ -469,9 +483,10 @@ export const updateCustomer = async (
   const response = (await numaPut(
     `${BASE_URL}/customers/${encodeURIComponent(customerId)}`,
     payload,
-  )) as CustomerResponse;
-  console.info(`${LOG_PREFIX} updateCustomer: success`, { id: response.customer?.id });
-  return response.customer;
+  )) as CustomerResponse | Customer;
+  const customer = 'customer' in response ? response.customer : (response as Customer);
+  console.info(`${LOG_PREFIX} updateCustomer: success`, { id: customer.id });
+  return customer;
 };
 
 export const deleteCustomer = async (numaDelete: NumaDelete, customerId: string): Promise<void> => {
@@ -488,12 +503,12 @@ export const createCustomerActivity = async (
   payload: CreateActivityPayload,
 ): Promise<Activity> => {
   console.info(`${LOG_PREFIX} createCustomerActivity`, { customerId, type: payload.type });
-  const response = (await numaPost(
-    `${BASE_URL}/customers/${encodeURIComponent(customerId)}/activities`,
-    payload,
-  )) as ActivityResponse;
-  console.info(`${LOG_PREFIX} createCustomerActivity: success`, { id: response.activity.id });
-  return response.activity;
+  const response = (await numaPost(`${BASE_URL}/customers/${encodeURIComponent(customerId)}/activities`, payload)) as
+    | ActivityResponse
+    | Activity;
+  const activity = 'activity' in response ? response.activity : (response as Activity);
+  console.info(`${LOG_PREFIX} createCustomerActivity: success`, { id: activity.id });
+  return activity;
 };
 
 export const updateCustomerActivity = async (
@@ -506,9 +521,10 @@ export const updateCustomerActivity = async (
   const response = (await numaPut(
     `${BASE_URL}/customers/${encodeURIComponent(customerId)}/activities/${encodeURIComponent(activityId)}`,
     payload,
-  )) as ActivityResponse;
-  console.info(`${LOG_PREFIX} updateCustomerActivity: success`, { id: response.activity.id });
-  return response.activity;
+  )) as ActivityResponse | Activity;
+  const activity = 'activity' in response ? response.activity : (response as Activity);
+  console.info(`${LOG_PREFIX} updateCustomerActivity: success`, { id: activity.id });
+  return activity;
 };
 
 export const deleteCustomerActivity = async (
@@ -578,14 +594,19 @@ export const listSuppliers = async (
 
 export const getSupplier = async (numaGet: NumaGet, supplierId: string): Promise<SupplierResponse> => {
   const response = (await numaGet(`${BASE_URL}/suppliers/${encodeURIComponent(supplierId)}`)) as SupplierResponse;
-  return response;
+  const linkedTicketCount = response.linkedTicketCount ?? response.ticketCount;
+  return {
+    ...response,
+    linkedTicketCount,
+  };
 };
 
 export const createSupplier = async (numaPost: NumaPost, payload: CreateSupplierPayload): Promise<Supplier> => {
   console.info(`${LOG_PREFIX} createSupplier`, { companyName: payload.companyName });
-  const response = (await numaPost(`${BASE_URL}/suppliers`, payload)) as SupplierResponse;
-  console.info(`${LOG_PREFIX} createSupplier: success`, { id: response.supplier.id });
-  return response.supplier;
+  const response = (await numaPost(`${BASE_URL}/suppliers`, payload)) as SupplierResponse | Supplier;
+  const supplier = 'supplier' in response ? response.supplier : (response as Supplier);
+  console.info(`${LOG_PREFIX} createSupplier: success`, { id: supplier.id });
+  return supplier;
 };
 
 export const updateSupplier = async (
@@ -594,12 +615,12 @@ export const updateSupplier = async (
   payload: UpdateSupplierPayload,
 ): Promise<Supplier> => {
   console.info(`${LOG_PREFIX} updateSupplier`, { supplierId });
-  const response = (await numaPut(
-    `${BASE_URL}/suppliers/${encodeURIComponent(supplierId)}`,
-    payload,
-  )) as SupplierResponse;
-  console.info(`${LOG_PREFIX} updateSupplier: success`, { id: response.supplier.id });
-  return response.supplier;
+  const response = (await numaPut(`${BASE_URL}/suppliers/${encodeURIComponent(supplierId)}`, payload)) as
+    | SupplierResponse
+    | Supplier;
+  const supplier = 'supplier' in response ? response.supplier : (response as Supplier);
+  console.info(`${LOG_PREFIX} updateSupplier: success`, { id: supplier.id });
+  return supplier;
 };
 
 export const deleteSupplier = async (numaDelete: NumaDelete, supplierId: string): Promise<void> => {
@@ -616,12 +637,12 @@ export const createSupplierActivity = async (
   payload: CreateActivityPayload,
 ): Promise<Activity> => {
   console.info(`${LOG_PREFIX} createSupplierActivity`, { supplierId, type: payload.type });
-  const response = (await numaPost(
-    `${BASE_URL}/suppliers/${encodeURIComponent(supplierId)}/activities`,
-    payload,
-  )) as ActivityResponse;
-  console.info(`${LOG_PREFIX} createSupplierActivity: success`, { id: response.activity.id });
-  return response.activity;
+  const response = (await numaPost(`${BASE_URL}/suppliers/${encodeURIComponent(supplierId)}/activities`, payload)) as
+    | ActivityResponse
+    | Activity;
+  const activity = 'activity' in response ? response.activity : (response as Activity);
+  console.info(`${LOG_PREFIX} createSupplierActivity: success`, { id: activity.id });
+  return activity;
 };
 
 // ─── Supplier Documents ────────────────────────────────────────────────────

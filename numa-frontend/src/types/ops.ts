@@ -169,6 +169,7 @@ export type Team = {
   workUnitSeries: WorkUnitSeriesConfig;
   accessControl: AccessControl;
   defaultZoneId: string;
+  defaultStageId?: string;
   createdAt: string;
   updatedAt: string;
   order: number;
@@ -247,6 +248,19 @@ export type Ticket = {
   scopedAt?: string | null;
   completedAt?: string | null;
   endedAt?: string | null;
+};
+
+export type LinkedWorkTicket = {
+  id: string;
+  displayId: string;
+  teamId: string;
+  title: string;
+  statusType: StatusType;
+  priority: TicketPriority;
+  stageId: string;
+  zoneId: string;
+  createdAt: string;
+  updatedAt: string;
 };
 
 export type CommentAttachment = {
@@ -493,6 +507,8 @@ export type CreateTeamPayload = {
   fieldOverrides?: Record<string, FieldOverride>;
   workUnitSeries?: WorkUnitSeriesConfig;
   accessControl?: AccessControl;
+  defaultZoneId?: string;
+  defaultStageId?: string;
 };
 
 export type CreateCommentPayload = {
@@ -684,6 +700,8 @@ export type CustomerResponse = {
   activities?: Activity[];
   documents?: Document[];
   linkedTicketCount?: number;
+  ticketCount?: number;
+  linkedTickets?: LinkedWorkTicket[];
 };
 
 export type SupplierListResponse = {
@@ -695,6 +713,8 @@ export type SupplierResponse = {
   activities?: Activity[];
   documents?: Document[];
   linkedTicketCount?: number;
+  ticketCount?: number;
+  linkedTickets?: LinkedWorkTicket[];
 };
 
 export type ActivityResponse = {

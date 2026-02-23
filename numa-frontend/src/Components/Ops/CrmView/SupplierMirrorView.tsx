@@ -216,7 +216,7 @@ function SupplierListView({ suppliers, supplierConfig, onSupplierClick }: Suppli
 export function SupplierMirrorView(): React.JSX.Element {
   const { t } = useTranslation('ops');
   const { numaGet, numaPost } = useNumaRequest();
-  const { config } = useOps();
+  const { config, crmRefreshVersion } = useOps();
 
   const supplierConfig = config?.supplierConfig ?? null;
 
@@ -272,7 +272,7 @@ export function SupplierMirrorView(): React.JSX.Element {
 
   useEffect(() => {
     loadSuppliers();
-  }, [loadSuppliers]);
+  }, [loadSuppliers, crmRefreshVersion]);
 
   // ── Filtering ──────────────────────────────────────────────────────────
 

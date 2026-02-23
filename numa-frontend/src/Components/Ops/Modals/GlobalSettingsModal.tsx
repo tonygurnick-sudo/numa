@@ -201,7 +201,7 @@ export function GlobalSettingsModal({
   defaultTab,
 }: GlobalSettingsModalProps): React.JSX.Element {
   const { t } = useTranslation('ops');
-  const { numaGet, numaPost, numaDelete } = useNumaRequest();
+  const { numaGet, numaPost, numaPut, numaDelete } = useNumaRequest();
   const { config, teams, refreshTeams } = useOps();
 
   // ── Local state (edited copies of config) ──────────────────────────────────
@@ -347,6 +347,7 @@ export function GlobalSettingsModal({
         supplierConfig,
         linkConfig,
       };
+      await OpsService.updateCrmConfig(numaPut, crmConfig);
       console.info('[GlobalSettingsModal] Saving config:', updatedConfig);
       onSaved();
     } catch (err) {

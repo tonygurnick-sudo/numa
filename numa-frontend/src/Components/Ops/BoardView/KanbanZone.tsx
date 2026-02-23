@@ -21,11 +21,11 @@ const KanbanZone: React.FC<KanbanZoneProps> = ({
   onQuickAdd,
 }) => {
   const { t } = useTranslation('ops');
-  const [collapsed, setCollapsed] = useState(zone.zoneType === 'backlog' || zone.zoneType === 'completed');
+  const [collapsed, setCollapsed] = useState(zone.zoneType === 'backlog');
 
   const sortedStages = useMemo(() => [...stages].sort((a, b) => a.order - b.order), [stages]);
 
-  const isCollapsible = zone.zoneType === 'backlog' || zone.zoneType === 'completed';
+  const isCollapsible = zone.zoneType === 'backlog';
 
   const renderColumns = () => (
     <div className="kanban-columns">

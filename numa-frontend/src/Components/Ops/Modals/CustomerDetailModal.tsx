@@ -1,10 +1,11 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import Modal from 'react-bootstrap/Modal';
 import Button from 'react-bootstrap/Button';
 import Badge from 'react-bootstrap/Badge';
 import Form from 'react-bootstrap/Form';
 import Spinner from 'react-bootstrap/Spinner';
 import Accordion from 'react-bootstrap/Accordion';
+import Table from 'react-bootstrap/Table';
 import { useTranslation } from 'react-i18next';
 import { useNumaRequest } from '../../../Providers/NumaRequestContext';
 import { useOps } from '../OpsContext';
@@ -16,8 +17,10 @@ import type {
   CrmConfig,
   CrmLifecycleStage,
   Contact,
-  UpdateCustomerPayload,
   Ticket,
+  StatusType,
+  TicketPriority,
+  UpdateCustomerPayload,
 } from '../../../types/ops';
 import { ContactSection } from '../Shared/ContactSection';
 import { ActivitySection } from '../Shared/ActivitySection';
@@ -55,6 +58,60 @@ function toDateInputValue(dateStr: string | null | undefined): string {
   return d.toISOString().split('T')[0];
 }
 
+function formatRelativeDateLabel(
+  dateStr: string | null | undefined,
+  t: (key: string, options?: Record<string, unknown>) => string,
+): string {
+  if (!dateStr) return t('crm.noLastContact');
+
+  const timestamp = new Date(dateStr).getTime();
+  if (Number.isNaN(timestamp)) return t('crm.noLastContact');
+
+  const diffMs = Date.now() - timestamp;
+  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+
+  if (diffDays <= 0) return t('crm.lastContactToday');
+  if (diffDays === 1) return t('crm.lastContactYesterday');
+  if (diffDays < 7) return t('crm.lastContactDaysAgo', { count: diffDays });
+  if (diffDays < 30) return t('crm.lastContactWeeksAgo', { count: Math.floor(diffDays / 7) });
+  if (diffDays < 365) return t('crm.lastContactMonthsAgo', { count: Math.floor(diffDays / 30) });
+  return t('crm.lastContactYearsAgo', { count: Math.floor(diffDays / 365) });
+}
+
+function getRenewalUrgency(
+  renewalDate: string | null | undefined,
+  t: (key: string, options?: Record<string, unknown>) => string,
+): { className: string; label: string } | null {
+  if (!renewalDate) return null;
+  const timestamp = new Date(renewalDate).getTime();
+  if (Number.isNaN(timestamp)) return null;
+
+  const days = Math.ceil((timestamp - Date.now()) / (1000 * 60 * 60 * 24));
+  if (days < 0) {
+    return { className: 'text-danger fw-bold', label: t('crm.renewalOverdue', { count: Math.abs(days) }) };
+  }
+  if (days <= 30) {
+    return { className: 'text-warning fw-bold', label: t('crm.renewalInDays', { count: days }) };
+  }
+  if (days <= 90) {
+    return { className: 'text-warning', label: t('crm.renewalInDays', { count: days }) };
+  }
+  return { className: 'text-muted', label: t('crm.renewalInDays', { count: days }) };
+}
+
+type LinkedWorkSortBy = 'updatedAt' | 'createdAt' | 'priority' | 'statusType';
+type LinkedWorkStatusFilter = 'all' | StatusType;
+
+const LINKED_WORK_STATUS_OPTIONS: StatusType[] = ['backlog', 'scoped', 'queued', 'active', 'completed', 'ended'];
+
+const PRIORITY_RANK: Record<TicketPriority, number> = {
+  highest: 5,
+  high: 4,
+  medium: 3,
+  low: 2,
+  lowest: 1,
+};
+
 // ─── Component ──────────────────────────────────────────────────────────────
 
 /**
@@ -78,7 +135,7 @@ export function CustomerDetailModal({
 }: CustomerDetailModalProps): React.JSX.Element {
   const { t } = useTranslation('ops');
   const { numaGet, numaPut } = useNumaRequest();
-  const { config } = useOps();
+  const { config, selectedTeamId, teams, teamData } = useOps();
 
   // ── Core state ──────────────────────────────────────────────────────────
 
@@ -89,9 +146,14 @@ export function CustomerDetailModal({
   const [loadingTickets, setLoadingTickets] = useState(false);
   const [showCreateTicket, setShowCreateTicket] = useState(false);
   const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null);
+  const [linkedTicketCount, setLinkedTicketCount] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+
+  // Linked work view state
+  const [linkedWorkStatusFilter, setLinkedWorkStatusFilter] = useState<LinkedWorkStatusFilter>('all');
+  const [linkedWorkSortBy, setLinkedWorkSortBy] = useState<LinkedWorkSortBy>('updatedAt');
 
   // ── Inline editing state ──────────────────────────────────────────────
 
@@ -114,16 +176,77 @@ export function CustomerDetailModal({
     setError(null);
     try {
       const response = await OpsService.getCustomer(numaGet, customerId);
+
+      // Load linked work via tickets API (cross-team customer index).
+      // Tickets endpoint requires teamId even for customerId index queries.
+      const queryTeamId = selectedTeamId ?? teams[0]?.id;
+      let resolvedLinkedTickets: Ticket[] = [];
+      if (queryTeamId) {
+        try {
+          const linkedResponse = await OpsService.listTickets(numaGet, {
+            teamId: queryTeamId,
+            customerId,
+            includeArchived: true,
+          });
+          const rawTickets = linkedResponse.tickets as Array<
+            Ticket & { entityType?: string; ticketId?: string; teamId?: string }
+          >;
+
+          // Customer index queries can return lightweight TICKET_INDEX rows.
+          // Hydrate those rows into full tickets so linked work has complete fields.
+          const hydrated = await Promise.all(
+            rawTickets.map(async (row) => {
+              if (row.entityType === 'TICKET' || row.statusType) {
+                return row as Ticket;
+              }
+
+              const ticketId = row.ticketId || row.id;
+              const ticketTeamId = row.teamId || queryTeamId;
+              if (!ticketId || !ticketTeamId) return null;
+
+              try {
+                const response = await OpsService.getTicket(numaGet, ticketId, ticketTeamId);
+                return response.ticket;
+              } catch (hydrateErr) {
+                console.warn('[CustomerDetailModal] Failed to hydrate linked ticket', {
+                  ticketId,
+                  ticketTeamId,
+                  error: String(hydrateErr),
+                });
+                return null;
+              }
+            }),
+          );
+
+          // Deduplicate hydrated tickets and exclude deleted.
+          const deduped = new Map<string, Ticket>();
+          hydrated.forEach((ticket) => {
+            if (!ticket || !ticket.id) return;
+            if (ticket.statusType === 'deleted') return;
+            deduped.set(ticket.id, ticket);
+          });
+          resolvedLinkedTickets = Array.from(deduped.values());
+        } catch (linkedErr) {
+          console.error('[CustomerDetailModal] Failed to load linked tickets', linkedErr);
+        }
+      }
+
+      const fallbackCount = response.linkedTicketCount ?? response.ticketCount ?? 0;
+      const hasTicketData = resolvedLinkedTickets.length > 0;
+      const resolvedCount = hasTicketData || fallbackCount === 0 ? resolvedLinkedTickets.length : fallbackCount;
+
       setCustomer(response.customer);
       setActivities(response.activities ?? []);
       setDocuments(response.documents ?? []);
+      setLinkedTickets(resolvedLinkedTickets);
+      setLinkedTicketCount(resolvedCount);
     } catch (err) {
       console.error('[CustomerDetailModal] Failed to load customer', err);
       setError(String(err));
     } finally {
       setLoading(false);
     }
-  }, [numaGet, customerId]);
+  }, [numaGet, customerId, selectedTeamId, teams]);
 
   useEffect(() => {
     if (show && customerId) {
@@ -143,6 +266,10 @@ export function CustomerDetailModal({
       setLinkedTickets([]);
       setSelectedTicket(null);
       setShowCreateTicket(false);
+      setLinkedTicketCount(0);
+      setLinkedWorkStatusFilter('all');
+      setLinkedWorkSortBy('updatedAt');
+      setLinkedWorkSortBy('updatedAt');
       setError(null);
     }
   }, [show, customerId, loadCustomer, numaGet]);
@@ -228,6 +355,122 @@ export function CustomerDetailModal({
     },
     [customer, handleUpdate],
   );
+
+  const teamNameById = useMemo(() => {
+    const entries = teams.map((team) => [team.id, team.name] as const);
+    return new Map(entries);
+  }, [teams]);
+
+  const selectedTeamZoneNameById = useMemo(() => {
+    const entries = (teamData?.zones ?? []).map((zone) => [zone.id, zone.name] as const);
+    return new Map(entries);
+  }, [teamData?.zones]);
+
+  const selectedTeamStageNameById = useMemo(() => {
+    const entries = (teamData?.stages ?? []).map((stage) => [stage.id, stage.name] as const);
+    return new Map(entries);
+  }, [teamData?.stages]);
+
+  const openLinkedTicket = useCallback((ticket: Ticket) => {
+    setSelectedTicket(ticket);
+  }, []);
+
+  const visibleLinkedTickets = useMemo(() => {
+    const filtered = linkedTickets.filter((ticket) => {
+      if (linkedWorkStatusFilter === 'all') return true;
+      return ticket.statusType === linkedWorkStatusFilter;
+    });
+
+    const sorted = [...filtered];
+    sorted.sort((a, b) => {
+      if (linkedWorkSortBy === 'priority') {
+        const aRank = PRIORITY_RANK[a.priority] ?? 0;
+        const bRank = PRIORITY_RANK[b.priority] ?? 0;
+        return bRank - aRank;
+      }
+      if (linkedWorkSortBy === 'statusType') {
+        const aStatus = a.statusType ?? '';
+        const bStatus = b.statusType ?? '';
+        return aStatus.localeCompare(bStatus);
+      }
+      if (linkedWorkSortBy === 'createdAt') {
+        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+      }
+      return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
+    });
+
+    return sorted;
+  }, [linkedTickets, linkedWorkStatusFilter, linkedWorkSortBy]);
+
+  const resolveLinkedTicketZoneName = useCallback(
+    (ticket: Ticket) => {
+      if (ticket.teamId !== selectedTeamId) return ticket.zoneId || t('common.none');
+      return selectedTeamZoneNameById.get(ticket.zoneId) ?? t('common.none');
+    },
+    [selectedTeamId, selectedTeamZoneNameById, t],
+  );
+
+  const resolveLinkedTicketStageName = useCallback(
+    (ticket: Ticket) => {
+      if (ticket.teamId !== selectedTeamId) {
+        if (!ticket.statusType) return t('common.none');
+        return t(`globalSettings.statusTypes.${ticket.statusType}`);
+      }
+      const stageName = ticket.stageId ? selectedTeamStageNameById.get(ticket.stageId) : undefined;
+      if (stageName) return stageName;
+      if (!ticket.statusType) return t('common.none');
+      return t(`globalSettings.statusTypes.${ticket.statusType}`);
+    },
+    [selectedTeamId, selectedTeamStageNameById, t],
+  );
+
+  const resolveLinkedTicketStatusLabel = useCallback(
+    (ticket: Ticket) => {
+      if (!ticket.statusType) return t('common.none');
+      return t(`globalSettings.statusTypes.${ticket.statusType}`);
+    },
+    [t],
+  );
+
+  const resolveLinkedTicketStatusBadgeBg = useCallback((ticket: Ticket): string => {
+    if (ticket.statusType === 'active') return 'primary';
+    if (ticket.statusType === 'completed') return 'success';
+    if (ticket.statusType === 'ended') return 'secondary';
+    return 'light';
+  }, []);
+
+  const resolveLinkedTicketStatusBadgeText = useCallback((ticket: Ticket): string => {
+    if (ticket.statusType === 'active' || ticket.statusType === 'completed' || ticket.statusType === 'ended') {
+      return 'light';
+    }
+    return 'dark';
+  }, []);
+
+  const resolveLinkedTicketPriorityLabel = useCallback(
+    (ticket: Ticket) => {
+      if (!ticket.priority) return t('common.none');
+      return t(`priority.${ticket.priority}`);
+    },
+    [t],
+  );
+
+  const groupedLinkedTickets = useMemo(() => {
+    const byTeam = new Map<string, Ticket[]>();
+    visibleLinkedTickets.forEach((ticket) => {
+      const teamName = teamNameById.get(ticket.teamId) ?? ticket.teamId;
+      if (!byTeam.has(teamName)) byTeam.set(teamName, []);
+      byTeam.get(teamName)?.push(ticket);
+    });
+    return Array.from(byTeam.entries())
+      .map(([teamName, tickets]) => ({ teamName, tickets }))
+      .sort((a, b) => a.teamName.localeCompare(b.teamName));
+  }, [visibleLinkedTickets, teamNameById]);
+
+  const lastContactLabel = useMemo(
+    () => formatRelativeDateLabel(customer?.lastContactDate, t),
+    [customer?.lastContactDate, t],
+  );
+  const renewalUrgency = useMemo(() => getRenewalUrgency(customer?.renewalDate, t), [customer?.renewalDate, t]);
 
   // ── Render helpers ────────────────────────────────────────────────────
 
@@ -400,6 +643,10 @@ export function CustomerDetailModal({
                   backgroundColor: stageColor,
                   color: stageTextColor,
                   fontSize: '0.8rem',
+                  fontWeight: 600,
+                  padding: '6px 12px',
+                  letterSpacing: '0.02em',
+                  boxShadow: `0 2px 4px ${stageColor}40`,
                 }}
               >
                 {stage.name}
@@ -419,12 +666,15 @@ export function CustomerDetailModal({
                   role="button"
                   tabIndex={0}
                   style={{
-                    backgroundColor: isActive ? flag.color : '#e9ecef',
-                    color: isActive ? getContrastTextColor(flag.color) : '#6c757d',
+                    backgroundColor: isActive ? flag.color : '#e2e8f0',
+                    color: isActive ? getContrastTextColor(flag.color) : '#475569',
+                    border: 'none',
+                    fontWeight: isActive ? 700 : 500,
                     cursor: 'pointer',
                     fontSize: '0.75rem',
-                    opacity: isActive ? 1 : 0.6,
-                    transition: 'opacity 0.15s ease',
+                    padding: '6px 12px',
+                    opacity: 1,
+                    transition: 'all 0.15s ease-in-out',
                   }}
                   onClick={() => toggleFlag(flag.id)}
                   onKeyDown={(e) => {
@@ -489,6 +739,14 @@ export function CustomerDetailModal({
             {renderEditableRow(t('crm.contractTerm'), 'contractTerm', customer.contractTerm)}
             {renderEditableRow(t('crm.contractStart'), 'contractStartDate', customer.contractStartDate, 'date')}
             {renderEditableRow(t('crm.renewalDate'), 'renewalDate', customer.renewalDate, 'date')}
+            {renewalUrgency && (
+              <div className="d-flex align-items-start py-2 border-bottom" style={{ fontSize: '0.875rem' }}>
+                <span className="text-muted fw-semibold me-2" style={{ minWidth: 120, flexShrink: 0 }}>
+                  {t('crm.renewalStatus')}
+                </span>
+                <span className={renewalUrgency.className}>{renewalUrgency.label}</span>
+              </div>
+            )}
             {/* Products: comma-separated text */}
             {editingField === 'products' ? (
               <div className="d-flex align-items-start py-2 border-bottom" style={{ fontSize: '0.875rem' }}>
@@ -685,6 +943,124 @@ export function CustomerDetailModal({
               <div className="d-flex justify-content-center py-3">
                 <Spinner animation="border" size="sm" />
               </div>
+            ) : linkedTicketCount > 0 && linkedTickets.length > 0 ? (
+              <div>
+                <div className="d-flex flex-wrap align-items-end gap-2 mb-2">
+                  <div style={{ minWidth: 180 }}>
+                    <Form.Label className="small mb-1">{t('crm.filterStatus')}</Form.Label>
+                    <Form.Select
+                      size="sm"
+                      value={linkedWorkStatusFilter}
+                      onChange={(e) => setLinkedWorkStatusFilter(e.target.value as LinkedWorkStatusFilter)}
+                    >
+                      <option value="all">{t('crm.allStatuses')}</option>
+                      {LINKED_WORK_STATUS_OPTIONS.map((status) => (
+                        <option key={status} value={status}>
+                          {t(`globalSettings.statusTypes.${status}`)}
+                        </option>
+                      ))}
+                    </Form.Select>
+                  </div>
+
+                  <div style={{ minWidth: 180 }}>
+                    <Form.Label className="small mb-1">{t('crm.sortBy')}</Form.Label>
+                    <Form.Select
+                      size="sm"
+                      value={linkedWorkSortBy}
+                      onChange={(e) => setLinkedWorkSortBy(e.target.value as LinkedWorkSortBy)}
+                    >
+                      <option value="updatedAt">{t('crm.sortUpdated')}</option>
+                      <option value="createdAt">{t('crm.sortCreated')}</option>
+                      <option value="priority">{t('crm.sortPriority')}</option>
+                      <option value="statusType">{t('crm.sortStatus')}</option>
+                    </Form.Select>
+                  </div>
+
+                  <span className="small text-muted ms-auto">
+                    {t('tickets.count', { count: visibleLinkedTickets.length })}
+                  </span>
+                </div>
+
+                {visibleLinkedTickets.length === 0 ? (
+                  <div className="text-muted small">{t('crm.noLinkedWorkMatches')}</div>
+                ) : (
+                  <div className="d-flex flex-column gap-3">
+                    {groupedLinkedTickets.map((group) => (
+                      <div key={group.teamName}>
+                        <div className="d-flex align-items-center justify-content-between mb-1">
+                          <span className="small fw-semibold">{group.teamName}</span>
+                          <Badge bg="light" text="dark" pill>
+                            {group.tickets.length}
+                          </Badge>
+                        </div>
+                        <Table size="sm" hover responsive className="small mb-0">
+                          <thead>
+                            <tr>
+                              <th>{t('linkedTickets.ticketDisplayId')}</th>
+                              <th>{t('tickets.title')}</th>
+                              <th>{t('zones.zone')}</th>
+                              <th>{t('zones.stage')}</th>
+                              <th>{t('tickets.status')}</th>
+                              <th>{t('tickets.priority')}</th>
+                              <th>{t('tickets.updated')}</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {group.tickets.map((ticket) => (
+                              <tr
+                                key={ticket.id}
+                                role="button"
+                                tabIndex={0}
+                                onClick={() => openLinkedTicket(ticket)}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter' || e.key === ' ') {
+                                    e.preventDefault();
+                                    openLinkedTicket(ticket);
+                                  }
+                                }}
+                                style={{ cursor: 'pointer' }}
+                              >
+                                {/*
+                                  Guard against partially populated ticket rows.
+                                  The hydration path should provide full fields, but this keeps UI stable.
+                                */}
+                                <td className="font-monospace">
+                                  <span className="text-primary">{ticket.displayId || ticket.id}</span>
+                                </td>
+                                <td className="text-truncate" style={{ maxWidth: 320 }} title={ticket.title}>
+                                  {ticket.title || t('common.none')}
+                                </td>
+                                <td>{resolveLinkedTicketZoneName(ticket)}</td>
+                                <td>{resolveLinkedTicketStageName(ticket)}</td>
+                                <td>
+                                  <Badge
+                                    bg={resolveLinkedTicketStatusBadgeBg(ticket)}
+                                    text={resolveLinkedTicketStatusBadgeText(ticket)}
+                                  >
+                                    {resolveLinkedTicketStatusLabel(ticket)}
+                                  </Badge>
+                                </td>
+                                <td>{resolveLinkedTicketPriorityLabel(ticket)}</td>
+                                <td>
+                                  {ticket.updatedAt
+                                    ? new Date(ticket.updatedAt).toLocaleDateString()
+                                    : ticket.createdAt
+                                      ? new Date(ticket.createdAt).toLocaleDateString()
+                                      : t('common.none')}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </Table>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ) : linkedTicketCount > 0 ? (
+              <div className="d-flex align-items-center gap-2">
+                <i className="bi bi-ticket-detailed text-muted" />
+              </div>
             ) : linkedTickets.length === 0 ? (
               <div className="text-muted small">{t('empty.noTickets')}</div>
             ) : (
@@ -800,18 +1176,27 @@ export function CustomerDetailModal({
           <>
             {renderHeader()}
             <Modal.Body style={{ overflowY: 'auto' }}>{renderBody()}</Modal.Body>
+            <Modal.Footer className="d-flex justify-content-between small text-muted">
+              <span>
+                {t('crm.lastContactFooter')}: {lastContactLabel}
+              </span>
+              <span>
+                {t('tickets.created')}:{' '}
+                {customer.createdAt ? new Date(customer.createdAt).toLocaleDateString() : t('common.none')}
+              </span>
+            </Modal.Footer>
           </>
         )}
 
         {/* Inline style for modal height */}
         <style>{`
-        .customer-detail-modal {
-          max-height: 90vh;
-        }
-        .customer-detail-modal .modal-content {
-          max-height: 90vh;
-        }
-      `}</style>
+          .customer-detail-modal {
+            max-height: 90vh;
+          }
+          .customer-detail-modal .modal-content {
+            max-height: 90vh;
+          }
+        `}</style>
       </Modal>
 
       {/* Create ticket pre-linked to this customer */}

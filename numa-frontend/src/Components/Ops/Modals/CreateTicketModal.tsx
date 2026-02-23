@@ -101,7 +101,7 @@ export function CreateTicketModal({
 }: CreateTicketModalProps): React.JSX.Element {
   const { t } = useTranslation('ops');
   const { numaPost, numaGet } = useNumaRequest();
-  const { config, teamData, workUnits, refreshTickets } = useOps();
+  const { config, teamData, workUnits, refreshTickets, refreshCrmData } = useOps();
 
   // ── Form state ────────────────────────────────────────────────────────────
   const [selectedTypeId, setSelectedTypeId] = useState<string>('');
@@ -316,6 +316,7 @@ export function CreateTicketModal({
       }
 
       await refreshTickets();
+      refreshCrmData();
       onSuccess(ticket);
       onHide();
     } catch (err) {
