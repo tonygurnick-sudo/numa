@@ -1768,9 +1768,7 @@ const NumaWorkspaceChatAgents = () => {
                     <Plus size={14} className="workspace-chat-header-btn-icon" />
                     <span>{t('page.newChat')}</span>
                   </button>
-                  {conversationId && (
-                    <ExportConversationButton messages={messages} conversationId={conversationId} />
-                  )}
+                  {conversationId && <ExportConversationButton messages={messages} conversationId={conversationId} />}
                   <button
                     type="button"
                     className={`workspace-chat-history-btn chat-history-btn ${isHistoryPanelOpen ? 'is-open' : ''}`}
