@@ -1,0 +1,1465 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Numa Workspace Agent - Local Test UI</title>
+<style>
+:root {
+    --bg-primary: #0f1117;
+    --bg-secondary: #1a1d27;
+    --bg-tertiary: #242834;
+    --bg-hover: #2a2e3a;
+    --text-primary: #e4e4e7;
+    --text-secondary: #8b8d98;
+    --text-muted: #5c5e6a;
+    --accent: #3b82f6;
+    --accent-hover: #2563eb;
+    --success: #22c55e;
+    --error: #ef4444;
+    --warning: #f59e0b;
+    --border: #2a2e3a;
+    --thinking-bg: #1a2332;
+    --thinking-border: #1e3a5f;
+    --tool-bg: #1a2a1e;
+    --tool-border: #1e4a2a;
+    --user-bg: #1e293b;
+    --result-bg: #1a1a2e;
+    --font-mono: 'SF Mono', 'Fira Code', 'Cascadia Code', 'Consolas', monospace;
+    --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    --radius: 8px;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+    font-family: var(--font-sans);
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+/* Header */
+.header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 16px;
+    background: var(--bg-secondary);
+    border-bottom: 1px solid var(--border);
+    height: 44px;
+    flex-shrink: 0;
+}
+.header-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-primary);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.header-title .dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--text-muted);
+    transition: background 0.3s;
+}
+.header-title .dot.healthy { background: var(--success); }
+.header-title .dot.error { background: var(--error); }
+.header-status {
+    font-size: 11px;
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+}
+
+/* Main layout */
+.app-layout {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+}
+
+/* Sidebar */
+.sidebar {
+    width: 260px;
+    background: var(--bg-secondary);
+    border-right: 1px solid var(--border);
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    overflow-y: auto;
+    flex-shrink: 0;
+}
+.sidebar-section { display: flex; flex-direction: column; gap: 6px; }
+.sidebar-label {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-muted);
+}
+.sidebar select, .sidebar input[type="text"] {
+    width: 100%;
+    padding: 8px 10px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    color: var(--text-primary);
+    font-size: 13px;
+    font-family: var(--font-sans);
+    outline: none;
+    transition: border-color 0.2s;
+}
+.sidebar select:focus, .sidebar input[type="text"]:focus {
+    border-color: var(--accent);
+}
+.sidebar select option { background: var(--bg-tertiary); }
+.input-with-btn {
+    display: flex;
+    gap: 4px;
+}
+.input-with-btn input { flex: 1; min-width: 0; }
+.btn-small {
+    padding: 8px 10px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    color: var(--text-secondary);
+    font-size: 11px;
+    cursor: pointer;
+    white-space: nowrap;
+}
+.btn-small:hover { background: var(--bg-hover); color: var(--text-primary); }
+.sidebar-divider {
+    border: none;
+    border-top: 1px solid var(--border);
+    margin: 4px 0;
+}
+.init-info {
+    font-size: 11px;
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    line-height: 1.5;
+    padding: 8px;
+    background: var(--bg-primary);
+    border-radius: var(--radius);
+    max-height: 200px;
+    overflow-y: auto;
+    word-break: break-all;
+}
+.init-info .label { color: var(--text-secondary); }
+.init-info .value { color: var(--accent); }
+
+/* Chat center */
+.chat-center {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+.messages {
+    flex: 1;
+    overflow-y: auto;
+    padding: 16px 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+.messages::-webkit-scrollbar { width: 6px; }
+.messages::-webkit-scrollbar-track { background: transparent; }
+.messages::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+/* Message types */
+.msg { padding: 12px 16px; border-radius: var(--radius); font-size: 14px; line-height: 1.6; }
+.msg-user {
+    background: var(--user-bg);
+    border-left: 3px solid var(--accent);
+    max-width: 80%;
+}
+.msg-assistant { max-width: 100%; }
+.msg-assistant p { margin-bottom: 8px; }
+.msg-assistant p:last-child { margin-bottom: 0; }
+.msg-assistant .md-h1 { font-size: 18px; font-weight: 700; margin: 12px 0 6px; color: var(--text-primary); }
+.msg-assistant .md-h2 { font-size: 16px; font-weight: 700; margin: 10px 0 4px; color: var(--text-primary); }
+.msg-assistant .md-h3 { font-size: 14px; font-weight: 600; margin: 8px 0 4px; color: var(--text-primary); }
+.msg-assistant .md-h4 { font-size: 13px; font-weight: 600; margin: 6px 0 2px; color: var(--text-primary); }
+.msg-assistant .md-li { padding-left: 16px; position: relative; }
+.msg-assistant .md-li::before { content: '•'; position: absolute; left: 4px; color: var(--text-muted); }
+.msg-assistant .md-code-block {
+    background: var(--bg-primary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 10px 12px;
+    margin: 8px 0;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    overflow-x: auto;
+    white-space: pre;
+}
+.msg-assistant .md-inline-code {
+    background: var(--bg-tertiary);
+    padding: 1px 5px;
+    border-radius: 3px;
+    font-family: var(--font-mono);
+    font-size: 12px;
+}
+.msg-system {
+    font-size: 12px;
+    color: var(--text-muted);
+    text-align: center;
+    padding: 4px;
+}
+.msg-error {
+    background: rgba(239, 68, 68, 0.1);
+    border-left: 3px solid var(--error);
+    color: var(--error);
+    font-family: var(--font-mono);
+    font-size: 13px;
+}
+
+/* Thinking blocks */
+.thinking-block {
+    background: var(--thinking-bg);
+    border: 1px solid var(--thinking-border);
+    border-radius: var(--radius);
+    margin: 8px 0;
+    font-size: 13px;
+}
+.thinking-block summary {
+    padding: 8px 12px;
+    cursor: pointer;
+    color: var(--text-secondary);
+    font-size: 12px;
+    user-select: none;
+}
+.thinking-block summary:hover { color: var(--text-primary); }
+.thinking-content {
+    padding: 8px 12px 12px;
+    color: var(--text-secondary);
+    font-family: var(--font-mono);
+    font-size: 12px;
+    line-height: 1.5;
+    white-space: pre-wrap;
+    word-break: break-word;
+    max-height: 300px;
+    overflow-y: auto;
+    border-top: 1px solid var(--thinking-border);
+}
+
+/* Tool blocks */
+.tool-block {
+    background: var(--tool-bg);
+    border: 1px solid var(--tool-border);
+    border-radius: var(--radius);
+    margin: 8px 0;
+    font-size: 13px;
+}
+.tool-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    font-weight: 600;
+    font-size: 12px;
+    color: var(--success);
+}
+.tool-input {
+    padding: 8px 12px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-secondary);
+    white-space: pre-wrap;
+    word-break: break-word;
+    max-height: 200px;
+    overflow-y: auto;
+    border-top: 1px solid var(--tool-border);
+}
+.tool-result {
+    padding: 8px 12px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-secondary);
+    white-space: pre-wrap;
+    word-break: break-word;
+    max-height: 200px;
+    overflow-y: auto;
+    border-top: 1px solid var(--tool-border);
+}
+.tool-result.error { color: var(--error); }
+
+/* Streaming text cursor */
+.streaming-text::after {
+    content: '';
+    display: inline-block;
+    width: 2px;
+    height: 16px;
+    background: var(--accent);
+    margin-left: 2px;
+    animation: blink 0.8s infinite;
+    vertical-align: text-bottom;
+}
+@keyframes blink { 0%, 50% { opacity: 1; } 51%, 100% { opacity: 0; } }
+
+/* Result block */
+.result-block {
+    background: var(--result-bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 10px 14px;
+    margin: 8px 0;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-secondary);
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+}
+.result-stat { display: flex; flex-direction: column; gap: 2px; }
+.result-stat .stat-label { color: var(--text-muted); font-size: 10px; text-transform: uppercase; }
+.result-stat .stat-value { color: var(--text-primary); }
+
+/* Input area */
+.input-area {
+    padding: 12px 24px 16px;
+    border-top: 1px solid var(--border);
+    background: var(--bg-secondary);
+}
+.input-row {
+    display: flex;
+    gap: 8px;
+    align-items: flex-end;
+}
+.input-row textarea {
+    flex: 1;
+    padding: 10px 14px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    color: var(--text-primary);
+    font-size: 14px;
+    font-family: var(--font-sans);
+    resize: none;
+    outline: none;
+    min-height: 44px;
+    max-height: 200px;
+    line-height: 1.5;
+    transition: border-color 0.2s;
+}
+.input-row textarea:focus { border-color: var(--accent); }
+.btn {
+    padding: 10px 20px;
+    border: none;
+    border-radius: var(--radius);
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s;
+    white-space: nowrap;
+}
+.btn-primary { background: var(--accent); color: white; }
+.btn-primary:hover { background: var(--accent-hover); }
+.btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn-danger { background: var(--error); color: white; }
+.btn-danger:hover { background: #dc2626; }
+
+/* Right sidebar */
+.sidebar-right {
+    width: 300px;
+    background: var(--bg-secondary);
+    border-left: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+}
+.events-header {
+    padding: 12px 16px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-muted);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+.events-count {
+    background: var(--bg-tertiary);
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 10px;
+    color: var(--text-secondary);
+}
+.events-log {
+    flex: 1;
+    overflow-y: auto;
+    padding: 8px;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    line-height: 1.4;
+}
+.events-log::-webkit-scrollbar { width: 4px; }
+.events-log::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+.event-entry {
+    padding: 4px 6px;
+    border-radius: 4px;
+    margin-bottom: 2px;
+    cursor: pointer;
+    color: var(--text-muted);
+    word-break: break-all;
+}
+.event-entry:hover { background: var(--bg-hover); color: var(--text-secondary); }
+.event-entry .event-type {
+    font-weight: 600;
+    display: inline-block;
+    min-width: 80px;
+}
+.event-type-session_init { color: var(--warning); }
+.event-type-system { color: var(--accent); }
+.event-type-StreamEvent { color: var(--text-muted); }
+.event-type-assistant { color: var(--success); }
+.event-type-result { color: #a78bfa; }
+.event-type-error { color: var(--error); }
+.event-type-user { color: var(--accent); }
+
+/* Tool toggles */
+.tools-toggles { display: flex; flex-direction: column; gap: 4px; }
+.toggle-label {
+    font-size: 12px;
+    color: var(--text-secondary);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+    padding: 2px 0;
+}
+.toggle-label:hover { color: var(--text-primary); }
+.toggle-label input[type="checkbox"] { accent-color: var(--accent); }
+
+/* Artifacts list */
+.artifacts-list {
+    font-size: 12px;
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    line-height: 1.5;
+    max-height: 300px;
+    overflow-y: auto;
+}
+.artifact-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 8px;
+    border-radius: 4px;
+    cursor: pointer;
+    color: var(--text-secondary);
+    font-size: 11px;
+    word-break: break-all;
+    transition: background 0.15s;
+}
+.artifact-item:hover { background: var(--bg-hover); color: var(--text-primary); }
+.artifact-item.active { background: var(--accent); color: white; }
+.artifact-icon { flex-shrink: 0; font-size: 13px; }
+.artifact-size { color: var(--text-muted); font-size: 10px; margin-left: auto; flex-shrink: 0; }
+
+/* Pipeline step blocks */
+.pipeline-step {
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    margin: 8px 0;
+    font-size: 13px;
+}
+.pipeline-step-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--accent);
+    border-bottom: 1px solid var(--border);
+}
+.pipeline-step-header .step-status {
+    font-weight: 400;
+    font-size: 11px;
+    padding: 1px 6px;
+    border-radius: 4px;
+    margin-left: auto;
+}
+.pipeline-step-header .step-status.completed { color: var(--success); background: rgba(34, 197, 94, 0.1); }
+.pipeline-step-header .step-status.error { color: var(--error); background: rgba(239, 68, 68, 0.1); }
+.pipeline-step-text {
+    padding: 8px 12px;
+    font-size: 13px;
+    color: var(--text-secondary);
+    line-height: 1.5;
+    max-height: 300px;
+    overflow-y: auto;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+/* Sync result panel */
+.result-panel {
+    border-top: 1px solid var(--border);
+    max-height: 400px;
+    overflow-y: auto;
+    display: none;
+}
+.result-panel-header {
+    padding: 8px 16px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    background: var(--bg-tertiary);
+    position: sticky;
+    top: 0;
+}
+.result-panel-content {
+    padding: 12px 16px;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    white-space: pre-wrap;
+    color: var(--text-secondary);
+}
+</style>
+</head>
+<body>
+
+<div class="header">
+    <div class="header-title">
+        <span class="dot" id="statusDot"></span>
+        Numa Workspace Agent — Local Test
+    </div>
+    <div class="header-status" id="headerStatus">Connecting...</div>
+</div>
+
+<div class="app-layout">
+    <!-- Left sidebar: Configuration -->
+    <div class="sidebar">
+        <div class="sidebar-section">
+            <label class="sidebar-label">Agent Type</label>
+            <select id="agentType" onchange="onAgentTypeChange()">
+                <option value="numa-chat">numa-chat (stream)</option>
+                <option value="research-agent">research-agent (stream)</option>
+                <option value="document-summariser">document-summariser (sync)</option>
+                <option value="tony-comedian">tony-comedian (stream)</option>
+                <option value="profile-creator">profile-creator (pipeline)</option>
+            </select>
+        </div>
+
+        <div class="sidebar-section">
+            <label class="sidebar-label">Response Mode</label>
+            <select id="responseMode">
+                <option value="stream">Stream (SSE)</option>
+                <option value="sync">Sync (JSON)</option>
+            </select>
+        </div>
+
+        <div class="sidebar-section">
+            <label class="sidebar-label">User Sub</label>
+            <input type="text" id="userSub" value="nathan-local-test" />
+        </div>
+
+        <div class="sidebar-section">
+            <label class="sidebar-label">Conversation ID</label>
+            <div class="input-with-btn">
+                <input type="text" id="conversationId" />
+                <button class="btn-small" onclick="newConversation()">New</button>
+            </div>
+        </div>
+
+        <div class="sidebar-section">
+            <label class="sidebar-label">Model</label>
+            <select id="modelId">
+                <option value="">Default (Sonnet 4.5)</option>
+                <option value="us.anthropic.claude-sonnet-4-5-20250929-v1:0">Sonnet 4.5</option>
+                <option value="us.anthropic.claude-opus-4-5-20251101-v1:0">Opus 4.5</option>
+                <option value="us.anthropic.claude-haiku-4-5-20251001-v1:0">Haiku 4.5</option>
+            </select>
+        </div>
+
+        <div class="sidebar-section">
+            <label class="sidebar-label">Tools</label>
+            <div class="tools-toggles">
+                <label class="toggle-label"><input type="checkbox" id="tool_web_search" checked /> Web Search</label>
+                <label class="toggle-label"><input type="checkbox" id="tool_knowledge_search" /> Knowledge Search</label>
+                <label class="toggle-label"><input type="checkbox" id="tool_agents" /> Agent Creation</label>
+            </div>
+        </div>
+
+        <div class="sidebar-section">
+            <label class="sidebar-label">Knowledge Bases</label>
+            <div class="tools-toggles">
+                <label class="toggle-label"><input type="checkbox" id="kb_company" data-kb-id="IPYIGNYCGX" data-kb-name="nd-labs-kb-s3vectors" /> Company</label>
+            </div>
+        </div>
+
+        <div class="sidebar-section">
+            <label class="sidebar-label">Integrations</label>
+            <div class="tools-toggles">
+                <label class="toggle-label"><input type="checkbox" id="int_gmail" value="gmail" /> Gmail</label>
+                <label class="toggle-label"><input type="checkbox" id="int_google_calendar" value="google_calendar" /> Google Calendar</label>
+                <label class="toggle-label"><input type="checkbox" id="int_google_drive" value="google_drive" /> Google Drive</label>
+                <label class="toggle-label"><input type="checkbox" id="int_slack" value="slack" /> Slack</label>
+                <label class="toggle-label"><input type="checkbox" id="int_jira" value="jira" /> Jira</label>
+                <label class="toggle-label"><input type="checkbox" id="int_notion" value="notion" /> Notion</label>
+                <label class="toggle-label"><input type="checkbox" id="int_outlook" value="microsoft_outlook" /> Outlook</label>
+                <label class="toggle-label"><input type="checkbox" id="int_sharepoint" value="sharepoint" /> SharePoint</label>
+                <label class="toggle-label"><input type="checkbox" id="int_asana" value="asana" /> Asana</label>
+                <label class="toggle-label"><input type="checkbox" id="int_xero" value="xero_accounting_api" /> Xero</label>
+                <label class="toggle-label"><input type="checkbox" id="int_hubspot" value="hubspot" /> HubSpot</label>
+                <label class="toggle-label"><input type="checkbox" id="int_zoom" value="zoom" /> Zoom</label>
+            </div>
+        </div>
+
+        <hr class="sidebar-divider" />
+
+        <div class="sidebar-section">
+            <label class="sidebar-label">Session Info</label>
+            <div class="init-info" id="initInfo">
+                Waiting for first request...
+            </div>
+        </div>
+
+        <hr class="sidebar-divider" />
+
+        <div class="sidebar-section">
+            <div style="display:flex; align-items:center; justify-content:space-between;">
+                <label class="sidebar-label" style="margin:0;">Artifacts</label>
+                <button class="btn-small" onclick="refreshArtifacts()" title="Refresh">Refresh</button>
+            </div>
+            <div class="artifacts-list" id="artifactsList">
+                No artifacts yet
+            </div>
+        </div>
+    </div>
+
+    <!-- Center: Chat -->
+    <div class="chat-center">
+        <div class="messages" id="messages"></div>
+
+        <div class="result-panel" id="resultPanel">
+            <div class="result-panel-header">Sync Result (result.json)</div>
+            <pre class="result-panel-content" id="resultContent"></pre>
+        </div>
+
+        <div class="input-area">
+            <div class="input-row">
+                <textarea id="promptInput" rows="1" placeholder="Type a message..."
+                    onkeydown="handleInputKeydown(event)"
+                    oninput="autoResize(this)"></textarea>
+                <button class="btn btn-primary" id="sendBtn" onclick="sendMessage()">Send</button>
+                <button class="btn btn-danger" id="stopBtn" onclick="stopAgent()" style="display:none">Stop</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Right sidebar: Events log -->
+    <div class="sidebar-right">
+        <div class="events-header">
+            Raw Events
+            <span class="events-count" id="eventsCount">0</span>
+        </div>
+        <div class="events-log" id="eventsLog"></div>
+    </div>
+</div>
+
+<script>
+const API_BASE = 'http://localhost:8080';
+let isStreaming = false;
+let currentRequestId = null;
+let activeAbortController = null;
+let eventCount = 0;
+let currentStreamingEl = null;
+let currentThinkingEl = null;
+let currentToolInputEl = null;
+let healthCheckInterval = null;
+let hasStreamedContent = false; // Track if we streamed deltas (to skip duplicate assistant msg)
+let lastSyncResultJson = null; // Store last sync result for switching back from artifact view
+
+// --- Initialization ---
+
+function init() {
+    newConversation();
+    startHealthCheck();
+    document.getElementById('promptInput').focus();
+}
+
+function newConversation() {
+    const id = 'local-test-' + crypto.randomUUID().slice(0, 12);
+    document.getElementById('conversationId').value = id;
+    document.getElementById('messages').innerHTML = '';
+    document.getElementById('resultPanel').style.display = 'none';
+    document.getElementById('initInfo').textContent = 'Waiting for first request...';
+    eventCount = 0;
+    document.getElementById('eventsLog').innerHTML = '';
+    document.getElementById('eventsCount').textContent = '0';
+}
+
+function onAgentTypeChange() {
+    const type = document.getElementById('agentType').value;
+    const mode = document.getElementById('responseMode');
+    if (type === 'document-summariser' || type === 'profile-creator') {
+        mode.value = 'sync';
+    } else {
+        mode.value = 'stream';
+    }
+}
+
+// --- Health Check ---
+
+function startHealthCheck() {
+    checkHealth();
+    healthCheckInterval = setInterval(checkHealth, 5000);
+}
+
+async function checkHealth() {
+    const dot = document.getElementById('statusDot');
+    const status = document.getElementById('headerStatus');
+    try {
+        const res = await fetch(API_BASE + '/ping');
+        const data = await res.json();
+        if (data.status === 'Healthy') {
+            dot.className = 'dot healthy';
+            status.textContent = 'Healthy - ' + new Date().toLocaleTimeString();
+        } else {
+            dot.className = 'dot error';
+            status.textContent = 'Unhealthy';
+        }
+    } catch {
+        dot.className = 'dot error';
+        status.textContent = 'Disconnected';
+    }
+}
+
+// --- Input Handling ---
+
+function handleInputKeydown(e) {
+    if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        sendMessage();
+    }
+}
+
+function autoResize(el) {
+    el.style.height = 'auto';
+    el.style.height = Math.min(el.scrollHeight, 200) + 'px';
+}
+
+// --- Send Message ---
+
+async function sendMessage() {
+    const input = document.getElementById('promptInput');
+    const prompt = input.value.trim();
+    if (!prompt || isStreaming) return;
+
+    input.value = '';
+    input.style.height = 'auto';
+
+    const conversationId = document.getElementById('conversationId').value;
+    const userSub = document.getElementById('userSub').value;
+    const agentType = document.getElementById('agentType').value;
+    const responseMode = document.getElementById('responseMode').value;
+    const modelId = document.getElementById('modelId').value;
+
+    currentRequestId = crypto.randomUUID();
+
+    // Show user message
+    appendMessage('user', prompt);
+
+    // Reset streaming state
+    hasStreamedContent = false;
+
+    // Update UI state
+    setStreaming(true);
+
+    // Collect enabled tools
+    const enabledTools = [];
+    if (document.getElementById('tool_web_search').checked) enabledTools.push('web_search');
+    if (document.getElementById('tool_knowledge_search').checked) enabledTools.push('knowledge_search');
+    if (document.getElementById('tool_agents').checked) enabledTools.push('agents');
+
+    // Collect selected knowledge bases
+    const availableKBs = [];
+    document.querySelectorAll('[data-kb-id]').forEach(cb => {
+        if (cb.checked) availableKBs.push({ id: cb.dataset.kbId, name: cb.dataset.kbName });
+    });
+
+    // Collect enabled integrations
+    const enabledConnections = [];
+    document.querySelectorAll('.sidebar-section input[id^="int_"]').forEach(cb => {
+        if (cb.checked) enabledConnections.push(cb.value);
+    });
+
+    const payload = {
+        action: 'chat',
+        prompt: prompt,
+        conversationId: conversationId,
+        type: agentType,
+        responseMode: responseMode,
+        requestId: currentRequestId,
+        enabledTools: enabledTools,
+        availableKBs: availableKBs.length > 0 ? availableKBs : undefined,
+        enabledConnections: enabledConnections.length > 0 ? enabledConnections : undefined,
+    };
+    if (modelId) payload.modelId = modelId;
+
+    try {
+        activeAbortController = new AbortController();
+        const response = await fetch(API_BASE + '/invocations', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'x-user-sub': userSub,
+            },
+            body: JSON.stringify(payload),
+            signal: activeAbortController.signal,
+        });
+
+        if (!response.ok) {
+            const errorText = await response.text();
+            appendMessage('error', `HTTP ${response.status}: ${errorText}`);
+            setStreaming(false);
+            return;
+        }
+
+        const contentType = response.headers.get('content-type') || '';
+
+        if (contentType.includes('application/json')) {
+            // Sync response
+            const data = await response.json();
+            handleSyncResponse(data);
+        } else {
+            // SSE streaming
+            await parseSSEStream(response);
+        }
+    } catch (err) {
+        if (err.name !== 'AbortError') {
+            appendMessage('error', err.message);
+        }
+    }
+
+    setStreaming(false);
+    finalizeStreaming();
+    refreshArtifacts();
+}
+
+function setStreaming(active) {
+    isStreaming = active;
+    document.getElementById('sendBtn').style.display = active ? 'none' : '';
+    document.getElementById('stopBtn').style.display = active ? '' : 'none';
+    document.getElementById('sendBtn').disabled = active;
+}
+
+// --- Stop ---
+
+async function stopAgent() {
+    if (activeAbortController) {
+        activeAbortController.abort();
+    }
+
+    try {
+        await fetch(API_BASE + '/invocations', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'x-user-sub': document.getElementById('userSub').value,
+            },
+            body: JSON.stringify({
+                action: 'stop',
+                conversationId: document.getElementById('conversationId').value,
+                requestId: currentRequestId,
+            }),
+        });
+    } catch { /* ignore */ }
+
+    setStreaming(false);
+    finalizeStreaming();
+    appendMessage('system', 'Stopped by user');
+}
+
+// --- SSE Stream Parsing ---
+
+async function parseSSEStream(response) {
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+
+        let idx;
+        while ((idx = buffer.indexOf('\n\n')) >= 0) {
+            const block = buffer.slice(0, idx);
+            buffer = buffer.slice(idx + 2);
+
+            for (const line of block.split('\n')) {
+                const trimmed = line.trim();
+                if (!trimmed || trimmed.startsWith(':')) continue;
+                if (trimmed.startsWith('data: ')) {
+                    try {
+                        const event = JSON.parse(trimmed.slice(6));
+                        handleSSEEvent(event);
+                    } catch { /* skip malformed */ }
+                }
+            }
+        }
+    }
+
+    // Flush remaining
+    if (buffer.trim()) {
+        for (const line of buffer.split('\n')) {
+            const t = line.trim();
+            if (!t || t.startsWith(':')) continue;
+            if (t.startsWith('data: ')) {
+                try { handleSSEEvent(JSON.parse(t.slice(6))); } catch {}
+            }
+        }
+    }
+}
+
+// --- Event Handling ---
+
+function handleSSEEvent(event) {
+    logRawEvent(event);
+
+    switch (event.type) {
+        case 'session_init':
+            appendMessage('system', `Session init (new: ${event.isNewSession})`);
+            break;
+
+        case 'system':
+            if (event.subtype === 'init') {
+                handleInitEvent(event.data);
+            }
+            break;
+
+        case 'user':
+            // Echo of user prompt - skip (already shown)
+            break;
+
+        case 'assistant':
+            // Skip if we already rendered this via StreamEvent deltas (avoids duplicate)
+            if (!hasStreamedContent) {
+                handleAssistantMessage(event.message);
+            }
+            break;
+
+        case 'StreamEvent':
+            handleStreamEvent(event.event);
+            break;
+
+        case 'result':
+            handleResultEvent(event);
+            break;
+
+        case 'error':
+            appendMessage('error', `${event.error_type || 'Error'}: ${event.error}`);
+            break;
+
+        case 'assistant_advice':
+            appendMessage('system', `Advice: ${event.content || JSON.stringify(event)}`);
+            break;
+
+        case 'integrations_ready':
+            appendMessage('system', 'Integrations synced');
+            break;
+
+        default:
+            appendMessage('system', `[${event.type}]`);
+    }
+}
+
+function handleInitEvent(data) {
+    if (!data) return;
+    const info = document.getElementById('initInfo');
+    const tools = data.tools || [];
+    const mcps = (data.mcp_servers || []).map(s => s.name).join(', ') || 'none';
+    const model = data.model || 'unknown';
+    const skills = (data.skills || []).length;
+
+    info.innerHTML = `<span class="label">Model:</span> <span class="value">${escHtml(model)}</span>\n` +
+        `<span class="label">Tools:</span> <span class="value">${tools.length}</span>\n` +
+        `<span class="label">MCP:</span> <span class="value">${escHtml(mcps)}</span>\n` +
+        `<span class="label">Skills:</span> <span class="value">${skills}</span>\n` +
+        `<span class="label">Session:</span> <span class="value">${escHtml(data.session_id || '?')}</span>`;
+}
+
+function handleAssistantMessage(msg) {
+    if (!msg || !msg.content) return;
+    for (const block of msg.content) {
+        switch (block.type) {
+            case 'text':
+                appendAssistantText(block.text);
+                break;
+            case 'thinking':
+                appendThinking(block.thinking);
+                break;
+            case 'tool_use':
+                appendToolUse(block.name, block.input);
+                break;
+            case 'tool_result':
+                appendToolResult(block.content, block.is_error);
+                break;
+        }
+    }
+}
+
+function handleStreamEvent(evt) {
+    if (!evt) return;
+    switch (evt.type) {
+        case 'content_block_start':
+            if (evt.content_block?.type === 'thinking') {
+                startStreamingThinking();
+            } else if (evt.content_block?.type === 'text') {
+                startStreamingText();
+            } else if (evt.content_block?.type === 'tool_use') {
+                startStreamingTool(evt.content_block.name, evt.content_block.id);
+            }
+            break;
+
+        case 'content_block_delta':
+            hasStreamedContent = true;
+            if (evt.delta?.type === 'text_delta' && evt.delta.text) {
+                appendStreamingTextDelta(evt.delta.text);
+            } else if (evt.delta?.type === 'thinking_delta' && evt.delta.thinking) {
+                appendStreamingThinkingDelta(evt.delta.thinking);
+            } else if (evt.delta?.type === 'input_json_delta' && evt.delta.partial_json) {
+                appendStreamingToolDelta(evt.delta.partial_json);
+            }
+            break;
+
+        case 'content_block_stop':
+            finalizeCurrentBlock();
+            break;
+
+        case 'message_start':
+        case 'message_delta':
+        case 'message_stop':
+            break;
+    }
+}
+
+function handleResultEvent(event) {
+    const container = document.getElementById('messages');
+    const el = document.createElement('div');
+    el.className = 'result-block';
+
+    const stats = [
+        { label: 'Duration', value: event.duration_ms ? (event.duration_ms / 1000).toFixed(1) + 's' : '?' },
+        { label: 'Turns', value: event.num_turns ?? '?' },
+        { label: 'Cost', value: event.total_cost_usd ? '$' + event.total_cost_usd.toFixed(4) : '?' },
+        { label: 'Status', value: event.subtype || '?' },
+    ];
+
+    if (event.usage) {
+        const u = event.usage;
+        stats.push({ label: 'Input', value: (u.input_tokens || 0).toLocaleString() });
+        stats.push({ label: 'Output', value: (u.output_tokens || 0).toLocaleString() });
+
+        const cacheWrite = u.cache_creation_input_tokens || 0;
+        const cacheRead = u.cache_read_input_tokens || 0;
+        if (cacheWrite > 0) {
+            stats.push({ label: 'Cache Write', value: cacheWrite.toLocaleString() });
+        }
+        if (cacheRead > 0) {
+            stats.push({ label: 'Cache Read', value: cacheRead.toLocaleString() });
+        }
+        if (cacheWrite === 0 && cacheRead === 0) {
+            stats.push({ label: 'Cache', value: 'miss' });
+        }
+    }
+
+    el.innerHTML = stats.map(s =>
+        `<div class="result-stat"><span class="stat-label">${s.label}</span><span class="stat-value">${s.value}</span></div>`
+    ).join('');
+
+    container.appendChild(el);
+    scrollToBottom();
+}
+
+function handleSyncResponse(data) {
+    // Show in result panel
+    const panel = document.getElementById('resultPanel');
+    const content = document.getElementById('resultContent');
+    panel.style.display = 'block';
+    content.textContent = JSON.stringify(data, null, 2);
+
+    // Store for switching back from artifact view
+    lastSyncResultJson = JSON.stringify(data, null, 2);
+
+    // Render the response in the chat area
+    if (typeof data === 'string') {
+        appendAssistantText(data);
+    } else if (data.result) {
+        const result = data.result;
+
+        // If pipeline steps are present, show each step's output
+        if (result.steps && result.steps.length > 0) {
+            for (const step of result.steps) {
+                appendPipelineStep(step);
+            }
+        }
+
+        // Show the final text output
+        if (typeof result === 'string') {
+            appendAssistantText(result);
+        } else if (result.text) {
+            appendAssistantText(result.text);
+        }
+
+        // Show usage stats
+        if (result.usage) {
+            appendSyncUsage(result.usage, result.steps);
+        }
+    }
+}
+
+// --- Pipeline / Sync Helpers ---
+
+function appendPipelineStep(step) {
+    const container = document.getElementById('messages');
+    const el = document.createElement('div');
+    el.className = 'pipeline-step';
+
+    const statusClass = step.status === 'completed' ? 'completed' : 'error';
+    const header = `<div class="pipeline-step-header">` +
+        `Step ${step.step_number}: ${escHtml(step.step)}` +
+        `<span class="step-status ${statusClass}">${escHtml(step.status)}</span>` +
+        `</div>`;
+
+    const text = step.text
+        ? `<div class="pipeline-step-text">${escHtml(step.text)}</div>`
+        : '';
+
+    el.innerHTML = header + text;
+    container.appendChild(el);
+    scrollToBottom();
+}
+
+function appendSyncUsage(usage, steps) {
+    const container = document.getElementById('messages');
+    const el = document.createElement('div');
+    el.className = 'result-block';
+
+    const stats = [
+        { label: 'Duration', value: usage.duration_ms ? (usage.duration_ms / 1000).toFixed(1) + 's' : '?' },
+        { label: 'Turns', value: usage.num_turns ?? '?' },
+        { label: 'Cost', value: usage.total_cost_usd ? '$' + usage.total_cost_usd.toFixed(4) : '?' },
+    ];
+    if (steps && steps.length > 0) {
+        stats.push({ label: 'Steps', value: steps.length });
+    }
+
+    el.innerHTML = stats.map(s =>
+        `<div class="result-stat"><span class="stat-label">${s.label}</span><span class="stat-value">${s.value}</span></div>`
+    ).join('');
+
+    container.appendChild(el);
+    scrollToBottom();
+}
+
+// --- Streaming State ---
+
+function startStreamingText() {
+    finalizeCurrentBlock();
+    const el = document.createElement('div');
+    el.className = 'msg msg-assistant streaming-text';
+    document.getElementById('messages').appendChild(el);
+    currentStreamingEl = el;
+    scrollToBottom();
+}
+
+function appendStreamingTextDelta(text) {
+    if (!currentStreamingEl) startStreamingText();
+    currentStreamingEl.textContent += text;
+    scrollToBottom();
+}
+
+function startStreamingThinking() {
+    finalizeCurrentBlock();
+    const details = document.createElement('details');
+    details.className = 'thinking-block';
+    details.innerHTML = '<summary>Thinking...</summary><pre class="thinking-content"></pre>';
+    document.getElementById('messages').appendChild(details);
+    currentThinkingEl = details.querySelector('.thinking-content');
+    scrollToBottom();
+}
+
+function appendStreamingThinkingDelta(text) {
+    if (!currentThinkingEl) startStreamingThinking();
+    currentThinkingEl.textContent += text;
+}
+
+function startStreamingTool(name, id) {
+    finalizeCurrentBlock();
+    const el = document.createElement('div');
+    el.className = 'tool-block';
+    el.innerHTML = `<div class="tool-header">${escHtml(name)}</div><pre class="tool-input"></pre>`;
+    document.getElementById('messages').appendChild(el);
+    currentToolInputEl = el.querySelector('.tool-input');
+    scrollToBottom();
+}
+
+function appendStreamingToolDelta(json) {
+    if (currentToolInputEl) {
+        currentToolInputEl.textContent += json;
+    }
+}
+
+function finalizeCurrentBlock() {
+    if (currentStreamingEl) {
+        currentStreamingEl.classList.remove('streaming-text');
+        // Convert raw streamed text to rendered markdown
+        const raw = currentStreamingEl.textContent;
+        currentStreamingEl.innerHTML = renderMd(raw);
+        currentStreamingEl = null;
+    }
+    if (currentThinkingEl) {
+        currentThinkingEl = null;
+    }
+    if (currentToolInputEl) {
+        // Try to pretty-print the JSON
+        try {
+            const parsed = JSON.parse(currentToolInputEl.textContent);
+            currentToolInputEl.textContent = JSON.stringify(parsed, null, 2);
+        } catch { /* leave as-is */ }
+        currentToolInputEl = null;
+    }
+}
+
+function finalizeStreaming() {
+    finalizeCurrentBlock();
+}
+
+// --- Message Rendering ---
+
+function appendMessage(type, text) {
+    const container = document.getElementById('messages');
+    const el = document.createElement('div');
+    el.className = `msg msg-${type}`;
+    el.textContent = text;
+    container.appendChild(el);
+    scrollToBottom();
+}
+
+function appendAssistantText(text) {
+    finalizeCurrentBlock();
+    const container = document.getElementById('messages');
+    const el = document.createElement('div');
+    el.className = 'msg msg-assistant';
+    el.innerHTML = renderMd(text);
+    container.appendChild(el);
+    scrollToBottom();
+}
+
+function appendThinking(text) {
+    finalizeCurrentBlock();
+    const details = document.createElement('details');
+    details.className = 'thinking-block';
+    const preview = text.length > 80 ? text.slice(0, 80) + '...' : text;
+    details.innerHTML = `<summary>Thinking: ${escHtml(preview)}</summary><pre class="thinking-content">${escHtml(text)}</pre>`;
+    document.getElementById('messages').appendChild(details);
+    scrollToBottom();
+}
+
+function appendToolUse(name, input) {
+    const container = document.getElementById('messages');
+    const el = document.createElement('div');
+    el.className = 'tool-block';
+    const inputStr = typeof input === 'string' ? input : JSON.stringify(input, null, 2);
+    el.innerHTML = `<div class="tool-header">${escHtml(name)}</div><pre class="tool-input">${escHtml(inputStr)}</pre>`;
+    container.appendChild(el);
+    scrollToBottom();
+}
+
+function appendToolResult(content, isError) {
+    const container = document.getElementById('messages');
+    const el = document.createElement('div');
+    el.className = 'tool-block';
+    const text = typeof content === 'string' ? content :
+        Array.isArray(content) ? content.map(c => c.text || JSON.stringify(c)).join('\n') :
+        JSON.stringify(content, null, 2);
+    el.innerHTML = `<div class="tool-result${isError ? ' error' : ''}">${escHtml(text)}</div>`;
+    container.appendChild(el);
+    scrollToBottom();
+}
+
+// --- Raw Events Log ---
+
+function logRawEvent(event) {
+    eventCount++;
+    document.getElementById('eventsCount').textContent = eventCount;
+
+    const log = document.getElementById('eventsLog');
+    const entry = document.createElement('div');
+    entry.className = 'event-entry';
+
+    const typeClass = `event-type-${event.type}`;
+    const preview = getEventPreview(event);
+    entry.innerHTML = `<span class="event-type ${typeClass}">${escHtml(event.type)}</span> ${escHtml(preview)}`;
+    entry.title = JSON.stringify(event, null, 2);
+    entry.onclick = () => {
+        console.log('Event:', event);
+        navigator.clipboard?.writeText(JSON.stringify(event, null, 2));
+    };
+
+    log.appendChild(entry);
+    log.scrollTop = log.scrollHeight;
+}
+
+function getEventPreview(event) {
+    switch (event.type) {
+        case 'session_init': return `new=${event.isNewSession}`;
+        case 'system': return event.subtype || '';
+        case 'StreamEvent': return event.event?.type || '';
+        case 'assistant': {
+            const blocks = event.message?.content || [];
+            return blocks.map(b => b.type).join(', ');
+        }
+        case 'result': return `${event.subtype} ${event.duration_ms}ms`;
+        case 'error': return event.error?.slice(0, 40) || '';
+        default: return '';
+    }
+}
+
+// --- Markdown Rendering ---
+
+function renderMd(text) {
+    if (!text) return '';
+    // Escape HTML first, then apply markdown transforms
+    let html = escHtml(text);
+
+    // Code blocks (``` ... ```)
+    html = html.replace(/```(\w*)\n([\s\S]*?)```/g, '<pre class="md-code-block"><code>$2</code></pre>');
+
+    // Inline code
+    html = html.replace(/`([^`]+)`/g, '<code class="md-inline-code">$1</code>');
+
+    // Headings (## at start of line)
+    html = html.replace(/^#### (.+)$/gm, '<div class="md-h4">$1</div>');
+    html = html.replace(/^### (.+)$/gm, '<div class="md-h3">$1</div>');
+    html = html.replace(/^## (.+)$/gm, '<div class="md-h2">$1</div>');
+    html = html.replace(/^# (.+)$/gm, '<div class="md-h1">$1</div>');
+
+    // Bold and italic
+    html = html.replace(/\*\*\*(.+?)\*\*\*/g, '<strong><em>$1</em></strong>');
+    html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+    html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
+
+    // List items (- at start of line)
+    html = html.replace(/^- (.+)$/gm, '<div class="md-li">$1</div>');
+
+    // Numbered lists (1. at start of line)
+    html = html.replace(/^\d+\. (.+)$/gm, '<div class="md-li">$1</div>');
+
+    // Line breaks
+    html = html.replace(/\n/g, '<br>');
+
+    return html;
+}
+
+// --- Utilities ---
+
+function scrollToBottom() {
+    const el = document.getElementById('messages');
+    el.scrollTop = el.scrollHeight;
+}
+
+function escHtml(str) {
+    if (!str) return '';
+    return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+// --- Artifacts ---
+
+async function refreshArtifacts() {
+    const list = document.getElementById('artifactsList');
+    try {
+        const res = await fetch(API_BASE + '/workspace/files');
+        if (!res.ok) { list.textContent = 'Failed to load'; return; }
+        const data = await res.json();
+        const files = data.files || [];
+        if (files.length === 0 && !lastSyncResultJson) { list.textContent = 'No artifacts yet'; return; }
+        list.innerHTML = '';
+
+        // "Full Result" link to switch back to the sync response
+        if (lastSyncResultJson) {
+            const resultItem = document.createElement('div');
+            resultItem.className = 'artifact-item';
+            resultItem.innerHTML = `<span class="artifact-icon">R</span>Full Response<span class="artifact-size">result</span>`;
+            resultItem.onclick = () => showFullResult(resultItem);
+            list.appendChild(resultItem);
+        }
+
+        for (const f of files) {
+            const item = document.createElement('div');
+            item.className = 'artifact-item';
+            const icon = f.name.endsWith('.json') ? '{}' : 'F';
+            const sizeStr = f.size < 1024 ? f.size + 'B' : (f.size / 1024).toFixed(1) + 'KB';
+            item.innerHTML = `<span class="artifact-icon">${icon}</span>${escHtml(f.name)}<span class="artifact-size">${sizeStr}</span>`;
+            item.title = f.path;
+            item.onclick = () => viewArtifact(f.path, item);
+            list.appendChild(item);
+        }
+    } catch {
+        list.textContent = 'Error loading artifacts';
+    }
+}
+
+function showFullResult(clickedEl) {
+    document.querySelectorAll('.artifact-item.active').forEach(el => el.classList.remove('active'));
+    if (clickedEl) clickedEl.classList.add('active');
+
+    const panel = document.getElementById('resultPanel');
+    const header = panel.querySelector('.result-panel-header');
+    const content = document.getElementById('resultContent');
+
+    header.textContent = 'Sync Result (full response)';
+    content.textContent = lastSyncResultJson || 'No result available';
+    panel.style.display = 'block';
+}
+
+async function viewArtifact(path, clickedEl) {
+    // Highlight active item
+    document.querySelectorAll('.artifact-item.active').forEach(el => el.classList.remove('active'));
+    if (clickedEl) clickedEl.classList.add('active');
+
+    const panel = document.getElementById('resultPanel');
+    const header = panel.querySelector('.result-panel-header');
+    const content = document.getElementById('resultContent');
+
+    header.textContent = path;
+    content.textContent = 'Loading...';
+    panel.style.display = 'block';
+
+    try {
+        const res = await fetch(API_BASE + '/workspace/file?path=' + encodeURIComponent(path));
+        if (!res.ok) { content.textContent = `Error: ${res.status}`; return; }
+        const ct = res.headers.get('content-type') || '';
+        if (ct.includes('application/json')) {
+            const data = await res.json();
+            content.textContent = JSON.stringify(data, null, 2);
+        } else {
+            content.textContent = await res.text();
+        }
+    } catch (err) {
+        content.textContent = 'Failed to load: ' + err.message;
+    }
+}
+
+// --- Start ---
+init();
+</script>
+</body>
+</html>

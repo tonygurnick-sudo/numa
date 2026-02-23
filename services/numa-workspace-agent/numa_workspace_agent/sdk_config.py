@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING, Any, Optional
 os.environ["OTEL_SDK_DISABLED"] = "true"
 
 from claude_agent_sdk import ClaudeAgentOptions, HookMatcher, create_sdk_mcp_server
+from numa_workspace_agent.agent_types import AgentTypeConfig, get_agent_type_config
 from numa_workspace_agent.hooks import (
     audit_hook,
     security_hook,
@@ -46,9 +47,6 @@ OUTPUTS_BUCKET_NAME = os.environ.get("OUTPUTS_BUCKET_NAME", "")
 
 # Local workspace root (ephemeral storage in AgentCore, synced to S3)
 LOCAL_ROOT = Path(os.environ.get("LOCAL_WORKSPACE_ROOT", "/workdir"))
-
-# Plugin path (outside workspace for security)
-PLUGINS_PATH = "/app/plugins/numa"
 
 # ── SDK Configuration ──────────────────────────────────────────────────────────
 
@@ -317,6 +315,7 @@ def create_agent_options(
     enabled_integrations: Optional[list[str]] = None,
     request_id: Optional[str] = None,
     email_signature: Optional[dict] = None,
+    agent_type_config: Optional[AgentTypeConfig] = None,
 ) -> ClaudeAgentOptions:
     """
     Create ClaudeAgentOptions for the Numa Workspace Agent.
@@ -333,12 +332,19 @@ def create_agent_options(
         model: Model override (defaults to DEFAULT_MODEL)
         agent_config: Optional agent configuration for custom prompts and restrictions
         agent_file_paths: Optional list of downloaded agent reference file paths
+        agent_type_config: Optional agent type config. Defaults to "numa-chat".
 
     Returns:
         Configured ClaudeAgentOptions
     """
-    # Build system prompt with context (including agent context if configured)
-    system_prompt = build_workspace_system_prompt(
+    # Resolve agent type config (default to numa-chat)
+    type_config = agent_type_config or get_agent_type_config("numa-chat")
+
+    # Build system prompt with context (including agent context if configured).
+    # Agent types can supply a custom builder via system_prompt_builder; when
+    # None we fall back to the default build_workspace_system_prompt().
+    prompt_builder = type_config.system_prompt_builder or build_workspace_system_prompt
+    system_prompt = prompt_builder(
         working_dir=str(LOCAL_ROOT),
         user_timezone=user_timezone,
         platform="Numa Workspace",
@@ -348,6 +354,7 @@ def create_agent_options(
         agent_file_paths=agent_file_paths,
         enabled_integrations=enabled_integrations,
         email_signature=email_signature,
+        identity_override=type_config.identity_override,
     )
 
     # Build environment variables for SDK subprocess
@@ -364,8 +371,8 @@ def create_agent_options(
         # "DISABLE_PROMPT_CACHING": "1",
         # Disable OpenTelemetry in SDK subprocess (X-Ray OTLP not configured)
         "OTEL_SDK_DISABLED": "true",
-        # Thinking tokens
-        "MAX_THINKING_TOKENS": str(MAX_THINKING_TOKENS),
+        # Thinking tokens (from agent type config)
+        "MAX_THINKING_TOKENS": str(type_config.max_thinking_tokens),
         # Set HOME so SDK stores sessions in /workdir/.system/.claude
         # This ensures session persistence matches our archive/restore location
         "HOME": str(LOCAL_ROOT / ".system"),
@@ -436,19 +443,22 @@ def create_agent_options(
         logger = structlog.get_logger()
         logger.warning("SDK CLI stderr", message=msg)
 
-    # Create MCP server for script execution (replaces heredoc pattern)
-    scripts_mcp_server = create_sdk_mcp_server(
-        name="scripts",
-        version="1.0.0",
-        tools=[execute_script],
-    )
+    # Create MCP servers based on agent type config
+    mcp_servers: dict = {}
 
-    # Create MCP server for Pipedream integrations
-    integrations_mcp_server = create_sdk_mcp_server(
-        name="integrations",
-        version="1.0.0",
-        tools=[run_action, configure_props, proxy_request],
-    )
+    if type_config.enable_scripts_mcp:
+        mcp_servers["scripts"] = create_sdk_mcp_server(
+            name="scripts",
+            version="1.0.0",
+            tools=[execute_script],
+        )
+
+    if type_config.enable_integrations_mcp:
+        mcp_servers["integrations"] = create_sdk_mcp_server(
+            name="integrations",
+            version="1.0.0",
+            tools=[run_action, configure_props, proxy_request],
+        )
 
     import structlog as _structlog
 
@@ -457,36 +467,37 @@ def create_agent_options(
         "SDK env configured",
         _name="SDK_ENV_TOOLS",
         phase="sdk",
+        agent_type=type_config.type_id,
         numa_enabled_tools=env.get("NUMA_ENABLED_TOOLS", "NOT SET"),
         numa_enabled_integrations=env.get("NUMA_ENABLED_INTEGRATIONS", "NOT SET"),
         numa_external_user_id=env.get("NUMA_EXTERNAL_USER_ID", "NOT SET"),
     )
 
+    # Resolve effective model: request override > type config default > global default
+    effective_model = model or type_config.default_model or DEFAULT_MODEL
+
     return ClaudeAgentOptions(
         # Core settings
         system_prompt=system_prompt,
-        model=model or DEFAULT_MODEL,
-        max_turns=MAX_TURNS,
+        model=effective_model,
+        max_turns=type_config.max_turns,
         # Buffer size for multimodal content (images, PDFs)
         max_buffer_size=10 * 1024 * 1024,  # 10MB
         # Working directory
         cwd=str(LOCAL_ROOT),
-        # Tools - explicitly set which tools are available (reduces token overhead)
-        tools=TOOLS,
-        # MCP servers for custom tools
-        mcp_servers={
-            "scripts": scripts_mcp_server,
-            "integrations": integrations_mcp_server,
-        },
+        # Tools from agent type config (always populated via dataclass defaults)
+        tools=type_config.tools,
+        # MCP servers (conditionally built based on type config)
+        mcp_servers=mcp_servers,
         # Permissions - use acceptEdits mode with Python hooks for security
         # acceptEdits auto-approves file operations; hooks handle deny logic
         permission_mode="acceptEdits",
-        allowed_tools=ALLOWED_TOOLS,
-        disallowed_tools=DISALLOWED_TOOLS,
+        allowed_tools=type_config.allowed_tools,
+        disallowed_tools=type_config.disallowed_tools,
         # Session management
         resume=session_id,
-        # Plugin for skills and agents
-        plugins=[{"type": "local", "path": PLUGINS_PATH}],
+        # Plugin for skills and agents (from type config)
+        plugins=[{"type": "local", "path": type_config.plugins_path}],
         setting_sources=["project"],
         # Python hooks for security
         hooks={

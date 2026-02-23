@@ -761,6 +761,8 @@ def build_workspace_system_prompt(
     agent_file_paths: Optional[list[str]] = None,
     enabled_integrations: Optional[list[str]] = None,
     email_signature: Optional[dict] = None,
+    identity_override: Optional[str] = None,
+    **_kwargs,
 ) -> str:
     """
     Build the complete system prompt for workspace context.
@@ -773,6 +775,9 @@ def build_workspace_system_prompt(
         today_string: Pre-formatted date/time string from frontend (overrides today_date)
         agent_config: Optional agent configuration for specialized agents
         agent_file_paths: Optional list of downloaded agent reference file paths
+        identity_override: Optional string that replaces the IDENTITY_AND_ROLE
+            section. When provided, used instead of the default Numa identity.
+            All other prompt sections remain unchanged.
 
     Returns:
         Complete system prompt string
@@ -788,8 +793,24 @@ def build_workspace_system_prompt(
     # Format today's date for the env block
     today_date = datetime.now(tz).strftime("%A, %B %d, %Y")
 
+    # Choose identity section: override or default Numa identity
+    identity_section = (
+        identity_override if identity_override is not None else IDENTITY_AND_ROLE
+    )
+
+    # Compose prompt from modular sections (same order as SYSTEM_PROMPT)
+    composed = (
+        identity_section
+        + WORKSPACE_ENVIRONMENT
+        + STYLE_AND_COMMUNICATION
+        + TASK_EXECUTION
+        + TOOL_USAGE
+        + WORKSPACE_CAPABILITIES
+        + ENVIRONMENT_AND_META
+    )
+
     # Format the combined prompt with environment variables
-    base_prompt = SYSTEM_PROMPT.format(
+    base_prompt = composed.format(
         working_directory=working_dir,
         platform=platform,
         today_date=today_date,

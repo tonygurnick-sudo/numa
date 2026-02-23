@@ -6,6 +6,7 @@ Session is tied to conversation - each conversation gets its own MicroVM contain
 """
 
 import json
+import shutil
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional, TypedDict
@@ -337,3 +338,139 @@ def cleanup_session_files() -> int:
 
     logger.info("Cleaned up session files", deleted=deleted)
     return deleted
+
+
+# ── Selective Tool Copy ───────────────────────────────────────────────────────
+
+# Source directory where all tool scripts are baked into the Docker image
+# (read-only, copied from tools/ at build time via Dockerfile)
+_TOOLS_IMAGE_ROOT = (
+    Path("/app/tools") if Path("/app/tools").exists() else Path("/workdir/tools")
+)
+
+# Destination directory where Claude can access tools
+_TOOLS_WORKSPACE_ROOT = LOCAL_ROOT / "tools"
+
+
+def setup_agent_tools(
+    enabled_numa_tools: list[str],
+    tools_source_dirs: list[str],
+    tool_file_map: dict[str, list[str]],
+    always_copy: list[str],
+) -> dict:
+    """
+    Selectively copy tool scripts to /workdir/tools/ based on agent type config.
+
+    Only tools listed in enabled_numa_tools get copied. This is the "selective
+    copy at startup" approach — Claude can't call what doesn't exist in the
+    workspace.
+
+    The Dockerfile bakes ALL tools into the image (at /workdir/tools/ with
+    chmod 555). This function clears /workdir/tools/ and re-copies only what
+    the agent type needs.
+
+    Args:
+        enabled_numa_tools: List of tool names to enable (e.g. ["web_search", "knowledge_search"])
+        tools_source_dirs: Source directories under /app/tools/ (e.g. ["numa", "quoting"])
+        tool_file_map: Maps tool names to file paths relative to source dir
+        always_copy: Paths that are always copied when any tool is enabled (e.g. ["helpers/"])
+
+    Returns:
+        Dict with summary: {"copied": [...], "skipped": [...], "source": str}
+    """
+    copied: list[str] = []
+    skipped: list[str] = []
+
+    # Determine source root - in production /app/tools/ is separate from /workdir/tools/
+    # In current Docker setup, tools are baked directly into /workdir/tools/
+    # We work with the existing /workdir/tools/ contents
+    source_root = _TOOLS_IMAGE_ROOT
+
+    # If no tools are enabled, clear the tools workspace entirely
+    if not enabled_numa_tools and not tools_source_dirs:
+        if _TOOLS_WORKSPACE_ROOT.exists():
+            # Remove entire tools dir and recreate empty
+            shutil.rmtree(_TOOLS_WORKSPACE_ROOT, ignore_errors=True)
+            _TOOLS_WORKSPACE_ROOT.mkdir(parents=True, exist_ok=True)
+        logger.info(
+            "Agent tools cleared (no tools enabled)",
+            _name="AGENT_TOOLS_CLEARED",
+            phase="init",
+        )
+        return {"copied": [], "skipped": [], "source": str(source_root)}
+
+    # For each source directory, rebuild dest with only enabled tools.
+    # Strategy: remove dest dir entirely, then copy only what's needed from source.
+    # This avoids chmod issues (Dockerfile bakes tools with chmod 555).
+    for source_dir_name in tools_source_dirs:
+        source_dir = source_root / source_dir_name
+        dest_dir = _TOOLS_WORKSPACE_ROOT / source_dir_name
+
+        if not source_dir.exists():
+            logger.warning(
+                "Tools source directory not found",
+                source_dir=str(source_dir),
+            )
+            continue
+
+        # Build the set of files/dirs to copy
+        files_to_keep: set[str] = set()
+
+        # Always copy shared utilities (e.g. helpers/)
+        for always_path in always_copy:
+            files_to_keep.add(always_path.rstrip("/"))
+
+        # Add files for each enabled tool
+        for tool_name in enabled_numa_tools:
+            tool_files = tool_file_map.get(tool_name, [])
+            for tf in tool_files:
+                files_to_keep.add(tf)
+
+        # Determine what exists at source to know what we're skipping
+        source_items = (
+            {item.name for item in source_dir.iterdir()}
+            if source_dir.exists()
+            else set()
+        )
+        skipped.extend(
+            f"{source_dir_name}/{name}" for name in source_items - files_to_keep
+        )
+
+        # Remove existing dest dir (handles chmod 555 files from Dockerfile)
+        if dest_dir.exists():
+            shutil.rmtree(dest_dir, ignore_errors=True)
+
+        # Recreate and selectively copy from source
+        dest_dir.mkdir(parents=True, exist_ok=True)
+        for item_name in files_to_keep:
+            src = source_dir / item_name
+            dst = dest_dir / item_name
+            if src.exists():
+                if src.is_dir():
+                    shutil.copytree(src, dst, dirs_exist_ok=True)
+                else:
+                    shutil.copy2(src, dst)
+                copied.append(f"{source_dir_name}/{item_name}")
+
+    # Remove source dirs that aren't in the config
+    if _TOOLS_WORKSPACE_ROOT.exists():
+        enabled_dirs = set(tools_source_dirs)
+        for child in list(_TOOLS_WORKSPACE_ROOT.iterdir()):
+            if child.is_dir() and child.name not in enabled_dirs:
+                # Don't remove integrations dir (managed separately by _sync_integration_schemas)
+                if child.name == "integrations":
+                    continue
+                shutil.rmtree(child, ignore_errors=True)
+                skipped.append(f"{child.name}/ (entire directory)")
+
+    logger.info(
+        "Agent tools configured",
+        _name="AGENT_TOOLS_SETUP",
+        phase="init",
+        enabled_tools=enabled_numa_tools,
+        copied=copied,
+        skipped=skipped,
+        source_dirs=tools_source_dirs,
+    )
+
+    return {"copied": copied, "skipped": skipped, "source": str(source_root)}

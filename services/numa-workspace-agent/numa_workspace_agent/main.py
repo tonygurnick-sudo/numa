@@ -9,6 +9,7 @@ Session is tied to conversation - each conversation gets its own MicroVM contain
 Session ID = conv-{conversation_id} (set by the proxy Lambda).
 """
 
+import asyncio
 import base64
 import json
 import os
@@ -31,6 +32,12 @@ from .agent_config import (
     fetch_user_email_signature,
     resolve_approval_mode,
 )
+from .agent_types import (
+    ALWAYS_COPY,
+    TOOL_FILE_MAP,
+    AgentTypeConfig,
+    get_agent_type_config,
+)
 from .assistant import (
     AssistantContext,
     build_workspace_tree,
@@ -43,6 +50,7 @@ from .dynamo import (
     mark_conversation_as_v2,
     update_conversation_meta,
 )
+from .pipeline import run_pipeline
 from .prompts import format_v1_migration_context
 from .s3_workspace import (
     FileChecksum,
@@ -52,16 +60,19 @@ from .s3_workspace import (
     is_cold_start,
     list_conversation_files_from_s3,
     list_workspace_files_from_s3,
+    read_result_from_s3,
     sync_agent_reference_files,
     sync_from_s3,
     sync_to_s3,
     sync_uploads_from_s3,
+    write_result_to_s3,
 )
-from .sdk_config import CLIENT_NAME
+from .sdk_config import CLIENT_NAME, LOCAL_ROOT
 from .sdk_runner import (
     check_sdk_available,
     get_run,
     request_stop,
+    run_claude_sdk,
     stream_claude_sdk,
 )
 from .trace_parser import parse_trace_content_to_messages, parse_trace_to_messages
@@ -83,6 +94,19 @@ app = FastAPI(
     description="AgentCore-based workspace agent with Claude Agent SDK",
     version="0.5.0",
 )
+
+# Local development CORS — only active when LOCAL_DEV=1
+if os.environ.get("LOCAL_DEV") == "1":
+    from fastapi.middleware.cors import CORSMiddleware
+
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+        expose_headers=["X-Conversation-Id"],
+    )
 
 logger.info("FastAPI app created successfully")
 
@@ -549,6 +573,62 @@ async def list_conversation_files_endpoint(conversation_id: str, request: Reques
 
 
 # =============================================================================
+# LOCAL WORKSPACE FILE ENDPOINTS (for test UI / local dev)
+# These read directly from the container's /workdir filesystem, not from S3.
+# =============================================================================
+
+
+@app.get("/workspace/files")
+async def list_workspace_local_files():
+    """List files in /workdir/session/ and /workdir/uploads/ from the local filesystem."""
+    files = []
+    for subdir in ("session", "uploads"):
+        dir_path = LOCAL_ROOT / subdir
+        if not dir_path.exists():
+            continue
+        for file_path in sorted(dir_path.rglob("*")):
+            if not file_path.is_file():
+                continue
+            rel = file_path.relative_to(LOCAL_ROOT)
+            files.append(
+                {
+                    "path": str(rel),
+                    "name": file_path.name,
+                    "size": file_path.stat().st_size,
+                }
+            )
+    return {"files": files}
+
+
+@app.get("/workspace/file")
+async def read_workspace_local_file(path: str):
+    """Read a file from the local /workdir filesystem.
+
+    Query param ``path`` is relative to /workdir (e.g. ``session/result.json``).
+    Rejects paths containing ``..`` to prevent traversal.
+    """
+    if ".." in path:
+        raise HTTPException(status_code=400, detail="Invalid path")
+
+    file_path = (LOCAL_ROOT / path).resolve()
+    if not str(file_path).startswith(str(LOCAL_ROOT.resolve())):
+        raise HTTPException(status_code=400, detail="Invalid path")
+    if not file_path.is_file():
+        raise HTTPException(status_code=404, detail="File not found")
+
+    content = file_path.read_text(errors="replace")
+
+    # Return JSON for .json files so the UI can pretty-print
+    if file_path.suffix == ".json":
+        try:
+            return JSONResponse(content=json.loads(content))
+        except json.JSONDecodeError:
+            pass
+
+    return Response(content=content, media_type="text/plain")
+
+
+# =============================================================================
 # PROXY HANDLER FUNCTIONS
 # These handle requests routed through the workspace-agent-proxy Lambda.
 # AgentCore only POSTs to /invocations, so we route based on httpPath in payload.
@@ -689,6 +769,67 @@ async def _handle_proxy_trace(user_sub: str, conversation_id: str) -> Response:
         raise HTTPException(status_code=500, detail=str(e))
 
 
+async def _handle_list_types() -> JSONResponse:
+    """Handle /types — return all registered agent types.
+
+    Returns a lightweight summary of every registered agent type for
+    admin dashboards, auto-discovery UIs, or frontend type selectors.
+    """
+    from .agent_types import list_agent_types
+
+    return JSONResponse(
+        content={
+            "status": "ok",
+            "types": list_agent_types(),
+        }
+    )
+
+
+async def _handle_run_status(user_sub: str, run_id: str) -> JSONResponse:
+    """Handle /runs/{run_id}/status — poll for fire-and-forget result.
+
+    Checks S3 for a ``_result.json`` written by :func:`_handle_fire_and_forget`.
+    Returns ``{"status": "running"}`` if the file does not exist yet, or the
+    full result payload if the run has completed (or errored).
+
+    Note: ``s3_prefix`` is not passed here — the default template produces
+    the same path as the fallback. Agent types with custom ``s3_prefix_template``
+    values will need a future enhancement where the caller passes the agent
+    type (or stores the prefix alongside the run).
+    """
+    logger.debug(
+        "Polling run status",
+        phase="request",
+        user_sub=user_sub,
+        run_id=run_id,
+    )
+
+    # Uses the default S3 prefix. Custom agent types with non-default
+    # s3_prefix_template will need the type info passed through.
+    result = read_result_from_s3(user_sub, run_id)
+
+    if result is None:
+        return JSONResponse(
+            content={
+                "status": "running",
+                "run_id": run_id,
+            }
+        )
+
+    return JSONResponse(
+        content={
+            "status": result.get("status", "completed"),
+            "run_id": run_id,
+            "result": {
+                "text": result.get("text", ""),
+                "artifacts": result.get("artifacts", []),
+                "usage": result.get("usage", {}),
+                "steps": result.get("steps", []),
+            },
+        }
+    )
+
+
 # =============================================================================
 # AGENTCORE INVOCATION ENDPOINT
 # This triggers workspace sync and manages session state.
@@ -788,6 +929,16 @@ async def invocations(request: Request):
         elif http_path and http_path.startswith("/trace/"):
             conversation_id = http_path.replace("/trace/", "")
             return await _handle_proxy_trace(user_sub, conversation_id)
+        elif (
+            http_path
+            and http_path.startswith("/runs/")
+            and http_path.endswith("/status")
+        ):
+            # /runs/{run_id}/status — poll for fire-and-forget result
+            run_id = http_path.replace("/runs/", "").replace("/status", "")
+            return await _handle_run_status(user_sub, run_id)
+        elif http_path == "/types":
+            return await _handle_list_types()
     else:
         # Direct payload format
         body = raw_body
@@ -796,6 +947,10 @@ async def invocations(request: Request):
     user_sub = _extract_user_sub(request, payload_headers)
     conversation_id = body.get("conversationId") or str(uuid.uuid4())
     user_email = body.get("userEmail", "unknown")
+
+    # Resolve agent type config (defaults to "numa-chat")
+    agent_type_id = body.get("type", "numa-chat")
+    agent_type_config = get_agent_type_config(agent_type_id)
 
     # Export user context to environment for tools (they read from env vars)
     os.environ["NUMA_USER_SUB"] = user_sub or "unknown"
@@ -809,6 +964,7 @@ async def invocations(request: Request):
         user_email=user_email,
         user_sub=user_sub,
         conversation_id=conversation_id,
+        agent_type=agent_type_id,
     )
 
     # Check for cold start
@@ -825,21 +981,115 @@ async def invocations(request: Request):
     # Ensure directories exist
     ensure_directories()
 
+    # Selective tool copy: only copy tool scripts the agent type needs
+    # This runs on every request but is fast (just a directory listing + diff)
+    from .workspace import setup_agent_tools
+
+    setup_agent_tools(
+        enabled_numa_tools=agent_type_config.enabled_numa_tools,
+        tools_source_dirs=agent_type_config.tools_source_dirs,
+        tool_file_map=TOOL_FILE_MAP,
+        always_copy=ALWAYS_COPY,
+    )
+
     # Store checksums before request for change detection
     _checksums_cache = get_local_checksums(conversation_id)
 
     # Dispatch to appropriate handler
     # Note: read-only actions (get_history, list_files, status) have their own
     # lightweight GET endpoints and don't go through /invocations.
+    #
+    # Response mode routing: the agent type's response_mode determines how the
+    # result is delivered. A request-level "responseMode" override is also
+    # supported (useful for testing — e.g. stream a normally-sync agent).
     try:
         if action == "chat":
-            return await _handle_chat(
-                body,
-                request,
-                user_sub,
-                conversation_id,
-                cold_start,
-            )
+            # Response mode: explicit request field takes precedence.
+            # If omitted, fall back to the agent type config's default.
+            #
+            # IMPORTANT: the proxy Lambda also reads "responseMode" from
+            # the request body to decide stream-vs-collect. If the caller
+            # omits responseMode and the agent type defaults to "sync" or
+            # "fire-and-forget", the proxy would still stream (it can't
+            # see agent type config). To keep proxy and container in sync:
+            #   - If responseMode IS in the request → use it (proxy matches)
+            #   - If responseMode is NOT in the request → default to "stream"
+            #     even if agent type config says otherwise, and log a warning
+            #     so developers know to add responseMode to their requests.
+            request_mode = body.get("responseMode")
+            type_default = agent_type_config.response_mode
+
+            if request_mode:
+                effective_mode = request_mode
+            elif type_default != "stream":
+                # Agent type wants non-stream, but caller didn't specify.
+                # Default to stream to match the proxy. Log so devs notice.
+                logger.warning(
+                    "Agent type defaults to non-stream response mode but "
+                    "request did not include responseMode — defaulting to "
+                    "stream to match proxy. Add responseMode to the request "
+                    "body to use the agent type's preferred mode.",
+                    agent_type=agent_type_config.type_id,
+                    type_default=type_default,
+                )
+                effective_mode = "stream"
+            else:
+                effective_mode = "stream"
+
+            # Pipeline types cannot stream — streaming a multi-step pipeline
+            # is confusing (which step's tokens are you seeing?). Fall back to
+            # sync so the pipeline runs to completion and returns a single result.
+            if effective_mode == "stream" and agent_type_config.pipeline_steps:
+                logger.info(
+                    "Pipeline type cannot stream — falling back to sync",
+                    _name="PIPELINE_STREAM_FALLBACK",
+                    phase="request",
+                    agent_type=agent_type_config.type_id,
+                    pipeline_steps=agent_type_config.pipeline_steps,
+                )
+                effective_mode = "sync"
+
+            if effective_mode == "stream":
+                return await _handle_chat(
+                    body,
+                    request,
+                    user_sub,
+                    conversation_id,
+                    cold_start,
+                    agent_type_config=agent_type_config,
+                )
+            elif effective_mode == "sync":
+                return await _handle_sync(
+                    body,
+                    request,
+                    user_sub,
+                    conversation_id,
+                    cold_start,
+                    agent_type_config=agent_type_config,
+                )
+            elif effective_mode == "fire-and-forget":
+                return await _handle_fire_and_forget(
+                    body,
+                    request,
+                    user_sub,
+                    conversation_id,
+                    cold_start,
+                    agent_type_config=agent_type_config,
+                )
+            else:
+                logger.warning(
+                    "Unknown response_mode, falling back to stream",
+                    response_mode=effective_mode,
+                    agent_type=agent_type_config.type_id,
+                )
+                return await _handle_chat(
+                    body,
+                    request,
+                    user_sub,
+                    conversation_id,
+                    cold_start,
+                    agent_type_config=agent_type_config,
+                )
         elif action == "stop":
             return await _handle_stop(body, user_sub)
         elif action == "upload":
@@ -1020,9 +1270,14 @@ async def _handle_chat(
     user_sub: str,
     conversation_id: str,
     is_cold_start: bool,
+    agent_type_config: Optional[AgentTypeConfig] = None,
 ) -> StreamingResponse:
     """Handle chat action - stream Claude CLI response."""
     global _checksums_cache
+
+    # Resolve agent type config (default to numa-chat if not provided)
+    if agent_type_config is None:
+        agent_type_config = get_agent_type_config("numa-chat")
 
     prompt = (body.get("prompt") or "").strip()
     if not prompt:
@@ -1035,6 +1290,12 @@ async def _handle_chat(
     enabled_tools = body.get(
         "enabledTools", []
     )  # List of enabled tool names (e.g., ["web_search"])
+
+    # Apply agent type restrictions on KBs
+    if agent_type_config.restrict_kbs:
+        available_kbs = agent_type_config.default_kbs or []
+    elif agent_type_config.default_kbs and not available_kbs:
+        available_kbs = agent_type_config.default_kbs
 
     # Attachment handling - now supports both files and folders
     # Frontend sends: {files: [{path, filename, size}], folders?: [{name, path, fileCount, totalSize}]}
@@ -1051,6 +1312,13 @@ async def _handle_chat(
     # Pipedream integrations - construct external_user_id for the relay
     # Format: "{client_name}_{user_sub}" matching what the frontend uses
     enabled_integrations = body.get("enabledConnections", [])
+
+    # Apply agent type restrictions on integrations
+    if agent_type_config.restrict_integrations:
+        enabled_integrations = agent_type_config.default_integrations or []
+    elif agent_type_config.default_integrations and not enabled_integrations:
+        enabled_integrations = agent_type_config.default_integrations
+
     external_user_id = f"{CLIENT_NAME}_{user_sub}" if enabled_integrations else None
 
     # Add each connected integration slug to enabled_tools so the
@@ -1434,6 +1702,7 @@ async def _handle_chat(
                 enabled_integrations=enabled_integrations,  # Connected integration app slugs
                 approval_mode=effective_approval_mode,  # Integration approval mode
                 email_signature=email_signature,  # Email signature settings
+                agent_type_config=agent_type_config,  # Agent type configuration
             )
             async for chunk in sdk_stream:
                 # Stream chunk directly to frontend via HTTP SSE
@@ -1468,6 +1737,411 @@ async def _handle_chat(
             "Cache-Control": "no-cache",
             "Connection": "keep-alive",
             "X-Conversation-Id": conversation_id,
+        },
+    )
+
+
+async def _handle_sync(
+    body: dict[str, Any],
+    request: Request,
+    user_sub: str,
+    conversation_id: str,
+    is_cold_start: bool,
+    agent_type_config: Optional[AgentTypeConfig] = None,
+) -> JSONResponse:
+    """Handle chat with synchronous response mode.
+
+    Runs the full Claude SDK agent loop to completion — same workspace, same
+    tools, same trace — but returns the final result as a single JSON response
+    instead of streaming SSE events. Perfect for API callers, Step Functions,
+    and other backend systems that need the answer as structured data.
+
+    The response shape:
+        {
+            "status": "completed" | "error",
+            "result": {
+                "text": "...",
+                "artifacts": [...],
+                "usage": { "num_turns": N, "total_cost_usd": X, ... }
+            }
+        }
+    """
+    global _checksums_cache
+
+    if agent_type_config is None:
+        agent_type_config = get_agent_type_config("numa-chat")
+
+    prompt = (body.get("prompt") or "").strip()
+    if not prompt:
+        raise HTTPException(status_code=400, detail="Missing prompt")
+
+    logger.info(
+        "Sync chat request",
+        _name="SYNC_CHAT_REQUEST",
+        phase="request",
+        user_sub=user_sub,
+        conversation_id=conversation_id,
+        prompt_length=len(prompt),
+        agent_type=agent_type_config.type_id,
+    )
+
+    # Extract the same parameters as _handle_chat for SDK options
+    timezone = body.get("timezone")
+    user_email = body.get("userEmail")
+    today_string = body.get("todayString")
+    available_kbs = body.get("availableKBs")
+    enabled_tools = body.get("enabledTools", [])
+    model_id = body.get("modelId")
+    request_id = body.get("requestId") or str(uuid.uuid4())
+    attachments_data = body.get("attachments")
+    attached_files = attachments_data.get("files", []) if attachments_data else []
+    attached_folders = attachments_data.get("folders", []) if attachments_data else []
+
+    # Apply agent type restrictions on KBs
+    if agent_type_config.restrict_kbs:
+        available_kbs = agent_type_config.default_kbs or []
+    elif agent_type_config.default_kbs and not available_kbs:
+        available_kbs = agent_type_config.default_kbs
+
+    # Integrations
+    enabled_integrations = body.get("enabledConnections", [])
+    if agent_type_config.restrict_integrations:
+        enabled_integrations = agent_type_config.default_integrations or []
+    elif agent_type_config.default_integrations and not enabled_integrations:
+        enabled_integrations = agent_type_config.default_integrations
+
+    external_user_id = f"{CLIENT_NAME}_{user_sub}" if enabled_integrations else None
+
+    # KB listings
+    kb_listings = None
+    if available_kbs:
+        kb_listings = _get_cached_kb_listings(
+            conversation_id,
+            available_kbs,
+            user_sub,
+            force_refresh=is_cold_start,
+        )
+
+    # Run SDK — either as a pipeline (sequential steps) or single agent
+    if agent_type_config.pipeline_steps:
+        result = await run_pipeline(
+            pipeline_steps=agent_type_config.pipeline_steps,
+            prompt=prompt,
+            user_sub=user_sub,
+            conversation_id=conversation_id,
+            parent_type_config=agent_type_config,
+            timezone=timezone,
+            user_email=user_email,
+            today_string=today_string,
+            available_kbs=available_kbs,
+            enabled_tools=enabled_tools,
+            model_id=model_id,
+            request_id=request_id,
+            attached_files=attached_files,
+            attached_folders=attached_folders,
+            kb_listings=kb_listings,
+            external_user_id=external_user_id,
+            enabled_integrations=enabled_integrations,
+        )
+    else:
+        result = await run_claude_sdk(
+            conversation_id,
+            prompt,
+            user_sub,
+            timezone_str=timezone,
+            user_email=user_email,
+            today_string=today_string,
+            available_kbs=available_kbs,
+            enabled_tools=enabled_tools,
+            is_cold_start=is_cold_start,
+            attached_files=attached_files,
+            attached_folders=attached_folders,
+            original_prompt=prompt,
+            model_id=model_id,
+            kb_listings=kb_listings,
+            request_id=request_id,
+            agent_config=None,
+            external_user_id=external_user_id,
+            enabled_integrations=enabled_integrations,
+            agent_type_config=agent_type_config,
+        )
+
+    # If the agent type uses result_file mode, read /workdir/session/result.json
+    # and use it as the response text instead of the raw SDK output. This is the
+    # same convention used by pipelines, but here for single-step agent types
+    # (e.g. document-summariser) that write structured output to a known file.
+    if (
+        agent_type_config
+        and agent_type_config.pipeline_result_mode == "result_file"
+        and not agent_type_config.pipeline_steps  # Pipelines handle this themselves
+    ):
+        result_path = Path("/workdir/session/result.json")
+        if result_path.exists():
+            try:
+                structured = json.loads(result_path.read_text())
+                result["text"] = json.dumps(structured, indent=2, default=str)
+            except (json.JSONDecodeError, OSError) as e:
+                logger.warning(
+                    "Failed to read result.json, using SDK text",
+                    _name="RESULT_FILE_ERROR",
+                    phase="result",
+                    error=str(e),
+                )
+        else:
+            logger.warning(
+                "result.json not found, using SDK text",
+                _name="RESULT_FILE_MISSING",
+                phase="result",
+                expected_path=str(result_path),
+                agent_type=agent_type_config.type_id,
+            )
+
+    # Update conversation meta
+    update_conversation_meta(
+        user_sub=user_sub,
+        conversation_id=conversation_id,
+        latest_message=prompt,
+    )
+
+    # Sync workspace to S3
+    sync_to_s3(user_sub, conversation_id, _checksums_cache)
+
+    # Also persist result to S3 for retrieval via /runs endpoint
+    s3_prefix = agent_type_config.s3_prefix_template if agent_type_config else None
+    write_result_to_s3(user_sub, conversation_id, result, s3_prefix=s3_prefix)
+
+    status_code = 200 if result.get("status") == "completed" else 500
+    return JSONResponse(
+        status_code=status_code,
+        content={
+            "status": result.get("status", "completed"),
+            "result": {
+                "text": result.get("text", ""),
+                "artifacts": result.get("artifacts", []),
+                "usage": result.get("usage", {}),
+                "steps": result.get("steps", []),
+            },
+            "conversationId": conversation_id,
+        },
+    )
+
+
+async def _handle_fire_and_forget(
+    body: dict[str, Any],
+    request: Request,
+    user_sub: str,
+    conversation_id: str,
+    is_cold_start: bool,
+    agent_type_config: Optional[AgentTypeConfig] = None,
+) -> JSONResponse:
+    """Handle chat with fire-and-forget response mode.
+
+    Starts the Claude SDK agent loop as a background task and returns
+    immediately with a ``run_id`` the caller can poll for status. The result
+    is written to S3 (``_result.json``) when the agent finishes.
+
+    This mode is designed for long-running tasks that exceed the Lambda proxy
+    timeout (15 min). The AgentCore container can run for up to 8 hours.
+
+    Immediate response:
+        {
+            "status": "started",
+            "run_id": "<conversation_id>",
+            "poll_endpoint": "/runs/<conversation_id>/status"
+        }
+    """
+    global _checksums_cache
+
+    if agent_type_config is None:
+        agent_type_config = get_agent_type_config("numa-chat")
+
+    prompt = (body.get("prompt") or "").strip()
+    if not prompt:
+        raise HTTPException(status_code=400, detail="Missing prompt")
+
+    logger.info(
+        "Fire-and-forget chat request",
+        _name="ASYNC_CHAT_REQUEST",
+        phase="request",
+        user_sub=user_sub,
+        conversation_id=conversation_id,
+        prompt_length=len(prompt),
+        agent_type=agent_type_config.type_id,
+    )
+
+    # Extract the same parameters as _handle_chat
+    timezone = body.get("timezone")
+    user_email = body.get("userEmail")
+    today_string = body.get("todayString")
+    available_kbs = body.get("availableKBs")
+    enabled_tools = body.get("enabledTools", [])
+    model_id = body.get("modelId")
+    request_id = body.get("requestId") or str(uuid.uuid4())
+    attachments_data = body.get("attachments")
+    attached_files = attachments_data.get("files", []) if attachments_data else []
+    attached_folders = attachments_data.get("folders", []) if attachments_data else []
+
+    # Apply agent type restrictions
+    if agent_type_config.restrict_kbs:
+        available_kbs = agent_type_config.default_kbs or []
+    elif agent_type_config.default_kbs and not available_kbs:
+        available_kbs = agent_type_config.default_kbs
+
+    enabled_integrations = body.get("enabledConnections", [])
+    if agent_type_config.restrict_integrations:
+        enabled_integrations = agent_type_config.default_integrations or []
+    elif agent_type_config.default_integrations and not enabled_integrations:
+        enabled_integrations = agent_type_config.default_integrations
+
+    external_user_id = f"{CLIENT_NAME}_{user_sub}" if enabled_integrations else None
+
+    kb_listings = None
+    if available_kbs:
+        kb_listings = _get_cached_kb_listings(
+            conversation_id,
+            available_kbs,
+            user_sub,
+            force_refresh=is_cold_start,
+        )
+
+    # Capture current checksums before background task starts
+    pre_checksums = dict(_checksums_cache)
+    s3_prefix = agent_type_config.s3_prefix_template if agent_type_config else None
+
+    async def _background_run() -> None:
+        """Run the SDK (or pipeline) and write the result to S3 when done."""
+        try:
+            if agent_type_config.pipeline_steps:
+                result = await run_pipeline(
+                    pipeline_steps=agent_type_config.pipeline_steps,
+                    prompt=prompt,
+                    user_sub=user_sub,
+                    conversation_id=conversation_id,
+                    parent_type_config=agent_type_config,
+                    timezone=timezone,
+                    user_email=user_email,
+                    today_string=today_string,
+                    available_kbs=available_kbs,
+                    enabled_tools=enabled_tools,
+                    model_id=model_id,
+                    request_id=request_id,
+                    attached_files=attached_files,
+                    attached_folders=attached_folders,
+                    kb_listings=kb_listings,
+                    external_user_id=external_user_id,
+                    enabled_integrations=enabled_integrations,
+                )
+            else:
+                result = await run_claude_sdk(
+                    conversation_id,
+                    prompt,
+                    user_sub,
+                    timezone_str=timezone,
+                    user_email=user_email,
+                    today_string=today_string,
+                    available_kbs=available_kbs,
+                    enabled_tools=enabled_tools,
+                    is_cold_start=is_cold_start,
+                    attached_files=attached_files,
+                    attached_folders=attached_folders,
+                    original_prompt=prompt,
+                    model_id=model_id,
+                    kb_listings=kb_listings,
+                    request_id=request_id,
+                    agent_config=None,
+                    external_user_id=external_user_id,
+                    enabled_integrations=enabled_integrations,
+                    agent_type_config=agent_type_config,
+                )
+
+            # If the agent type uses result_file mode, read result.json
+            if (
+                agent_type_config
+                and agent_type_config.pipeline_result_mode == "result_file"
+                and not agent_type_config.pipeline_steps
+            ):
+                result_path = Path("/workdir/session/result.json")
+                if result_path.exists():
+                    try:
+                        structured = json.loads(result_path.read_text())
+                        result["text"] = json.dumps(
+                            structured,
+                            indent=2,
+                            default=str,
+                        )
+                    except (json.JSONDecodeError, OSError) as e:
+                        logger.warning(
+                            "Failed to read result.json, using SDK text",
+                            _name="RESULT_FILE_ERROR",
+                            phase="result",
+                            error=str(e),
+                        )
+                else:
+                    logger.warning(
+                        "result.json not found, using SDK text",
+                        _name="RESULT_FILE_MISSING",
+                        phase="result",
+                        expected_path=str(result_path),
+                        agent_type=agent_type_config.type_id,
+                    )
+
+            # Update conversation meta
+            update_conversation_meta(
+                user_sub=user_sub,
+                conversation_id=conversation_id,
+                latest_message=prompt,
+            )
+
+            # Sync workspace and write result to S3
+            sync_to_s3(user_sub, conversation_id, pre_checksums)
+            write_result_to_s3(
+                user_sub,
+                conversation_id,
+                result,
+                s3_prefix=s3_prefix,
+            )
+
+            logger.info(
+                "Fire-and-forget run completed",
+                _name="ASYNC_RUN_COMPLETE",
+                phase="result",
+                conversation_id=conversation_id,
+                status=result.get("status"),
+            )
+        except Exception as e:
+            logger.error(
+                "Fire-and-forget run failed",
+                _name="ASYNC_RUN_ERROR",
+                phase="result",
+                conversation_id=conversation_id,
+                error=str(e),
+                exc_info=True,
+            )
+            # Write error result so polling endpoint can report the failure
+            write_result_to_s3(
+                user_sub,
+                conversation_id,
+                {
+                    "status": "error",
+                    "text": "",
+                    "artifacts": [],
+                    "usage": {},
+                    "error": str(e),
+                },
+                s3_prefix=s3_prefix,
+            )
+
+    # Launch the background task — FastAPI / asyncio will keep it running
+    # even after we return the HTTP response
+    asyncio.create_task(_background_run())
+
+    return JSONResponse(
+        status_code=202,
+        content={
+            "status": "started",
+            "run_id": conversation_id,
+            "conversationId": conversation_id,
+            "poll_endpoint": f"/runs/{conversation_id}/status",
         },
     )
 

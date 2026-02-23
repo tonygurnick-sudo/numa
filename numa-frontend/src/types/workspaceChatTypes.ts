@@ -423,6 +423,12 @@ export interface WorkspaceChatFolderAttachmentSegment {
 // ============================================================
 
 /** Request body for POST /api/workspace-chat-agent/chat */
+/** Agent type identifier (e.g. "numa-chat", "document-summariser", "research-agent") */
+export type WorkspaceAgentTypeId = string;
+
+/** Response mode for non-streaming agent types */
+export type WorkspaceResponseMode = 'stream' | 'sync' | 'fire-and-forget';
+
 export interface WorkspaceChatRequest {
   prompt: string;
   conversationId?: string;
@@ -447,6 +453,41 @@ export interface WorkspaceChatRequest {
   migrateFromV1?: boolean;
   // Agent support - ID of the agent to use for this chat session
   agentId?: string;
+  // Agent type system — selects a registered agent type config (default: "numa-chat")
+  type?: WorkspaceAgentTypeId;
+  // Response mode override — controls how the response is delivered.
+  // When omitted, defaults to the agent type's configured mode.
+  responseMode?: WorkspaceResponseMode;
+}
+
+/** Sync response from a non-streaming agent invocation */
+export interface WorkspaceSyncResponse {
+  status: 'completed' | 'error';
+  result: {
+    text: string;
+    artifacts: Array<{ path: string; name: string; size: number }>;
+    usage: {
+      num_turns?: number;
+      total_cost_usd?: number;
+      duration_ms?: number;
+    };
+  };
+  conversationId: string;
+}
+
+/** Fire-and-forget response (returned immediately, poll for result) */
+export interface WorkspaceFireAndForgetResponse {
+  status: 'started';
+  run_id: string;
+  conversationId: string;
+  poll_endpoint: string;
+}
+
+/** Agent type metadata from GET /types */
+export interface WorkspaceAgentTypeInfo {
+  type_id: string;
+  display_name: string;
+  response_mode: WorkspaceResponseMode;
 }
 
 /** Response from GET /api/workspace-chat-agent/conversations */

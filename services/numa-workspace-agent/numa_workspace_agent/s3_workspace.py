@@ -1054,6 +1054,124 @@ def sync_agent_reference_files(
     return downloaded_paths
 
 
+# ---------------------------------------------------------------------------
+# Result persistence for sync / fire-and-forget response modes
+# ---------------------------------------------------------------------------
+
+
+def _build_result_key(
+    user_sub: str,
+    conversation_id: str,
+    s3_prefix: str | None = None,
+) -> str:
+    """Build the S3 key for a _result.json file.
+
+    When ``s3_prefix`` is provided (from ``AgentTypeConfig.s3_prefix_template``)
+    it is formatted with ``{user_sub}`` and ``{conversation_id}`` placeholders.
+    Falls back to the global ``S3_PREFIX``-based path.
+
+    This keeps result files co-located with workspace files for the same
+    conversation — regardless of whether the agent type uses a custom S3 path.
+    """
+    if s3_prefix:
+        prefix = s3_prefix.format(
+            user_sub=user_sub,
+            conversation_id=conversation_id,
+        )
+    else:
+        prefix = f"{S3_PREFIX}/{user_sub}/conversations/{conversation_id}"
+    return f"{prefix}/_result.json"
+
+
+def write_result_to_s3(
+    user_sub: str,
+    conversation_id: str,
+    result: dict,
+    s3_prefix: str | None = None,
+) -> str:
+    """Write a completed agent result to S3 as _result.json.
+
+    Used by sync and fire-and-forget response modes so callers can retrieve
+    the final result without streaming.
+
+    Args:
+        user_sub: Cognito user sub
+        conversation_id: Conversation ID
+        result: Dict with keys like ``status``, ``text``, ``artifacts``, ``usage``
+        s3_prefix: Optional S3 prefix template from ``AgentTypeConfig.s3_prefix_template``.
+            Supports ``{user_sub}`` and ``{conversation_id}`` placeholders.
+            When omitted, falls back to the global workspace prefix.
+
+    Returns:
+        The S3 key where the result was written
+    """
+    import json as _json
+
+    if not OUTPUTS_BUCKET:
+        logger.error("OUTPUTS_BUCKET_NAME not configured — cannot write result")
+        return ""
+
+    s3_key = _build_result_key(user_sub, conversation_id, s3_prefix)
+
+    s3 = _get_s3_client()
+    s3.put_object(
+        Bucket=OUTPUTS_BUCKET,
+        Key=s3_key,
+        Body=_json.dumps(result, default=str).encode("utf-8"),
+        ContentType="application/json",
+    )
+
+    logger.info(
+        "Result written to S3",
+        _name="RESULT_WRITTEN",
+        phase="result",
+        conversation_id=conversation_id,
+        s3_key=s3_key,
+        status=result.get("status"),
+    )
+    return s3_key
+
+
+def read_result_from_s3(
+    user_sub: str,
+    conversation_id: str,
+    s3_prefix: str | None = None,
+) -> dict | None:
+    """Read a completed agent result from S3.
+
+    Returns the parsed JSON if the result file exists, or ``None`` if the
+    agent is still running (file does not yet exist).
+
+    Args:
+        user_sub: Cognito user sub
+        conversation_id: Conversation ID (used as run_id)
+        s3_prefix: Optional S3 prefix template (see :func:`write_result_to_s3`).
+
+    Returns:
+        Parsed result dict, or None if not found
+    """
+    import json as _json
+
+    if not OUTPUTS_BUCKET:
+        return None
+
+    s3_key = _build_result_key(user_sub, conversation_id, s3_prefix)
+
+    s3 = _get_s3_client()
+    try:
+        obj = s3.get_object(Bucket=OUTPUTS_BUCKET, Key=s3_key)
+        return _json.loads(obj["Body"].read().decode("utf-8"))
+    except ClientError as e:
+        if e.response["Error"]["Code"] == "NoSuchKey":
+            return None
+        logger.warning(
+            "Failed to read result from S3",
+            s3_key=s3_key,
+            error=str(e),
+        )
+        return None
+
+
 # Type hint for AgentConfig (import at runtime would cause circular import)
 from typing import TYPE_CHECKING
 
