@@ -1120,8 +1120,10 @@
   pointer-events: auto;
 }
 
-.workspace-chat-v2 .workspace-chat-settings-drawer > .workspace-chat-settings-panel {
+.workspace-chat-v2 .workspace-chat-settings-drawer > .workspace-chat-settings-panel,
+.workspace-chat-v2 .workspace-chat-settings-drawer > .workspace-chat-history-panel {
   height: 100%;
+  min-height: 0;
   min-width: 0;
   width: 100%;
   background: transparent;
