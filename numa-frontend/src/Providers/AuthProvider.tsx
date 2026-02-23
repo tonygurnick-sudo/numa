@@ -1,5 +1,6 @@
 import { createContext, useState, useContext, useRef, useEffect, useCallback, useMemo } from 'react';
 import { jwtDecode } from 'jwt-decode';
+import { clearCachedUserProfile } from '../utils/userProfileCache';
 import { QBusinessClient } from '@aws-sdk/client-qbusiness';
 import { BedrockRuntimeClient } from '@aws-sdk/client-bedrock-runtime';
 import { BedrockAgentRuntimeClient } from '@aws-sdk/client-bedrock-agent-runtime';
@@ -352,6 +353,7 @@ export const AuthProvider = ({ children, initialTokens }) => {
     localStorage.removeItem('refreshToken');
     localStorage.removeItem('idToken');
     localStorage.removeItem('lastTokenValidation');
+    clearCachedUserProfile();
     tokensRef.current = { accessToken: null, idToken: null, refreshToken: null };
     decodedTokensRef.current = { accessToken: null, idToken: null };
     clearScheduledRefresh();

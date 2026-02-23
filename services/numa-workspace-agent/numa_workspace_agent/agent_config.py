@@ -438,6 +438,70 @@ def fetch_user_email_signature(user_sub: str) -> dict:
         return defaults
 
 
+def fetch_user_profile(user_sub: str) -> Optional[dict]:
+    """
+    Fetch the user's profile from the chat settings table.
+
+    Returns the user profile dict if available and enabled, or None if the
+    profile is disabled, empty, or the table is unavailable.
+
+    Args:
+        user_sub: The user's Cognito sub (partition key in chat settings table)
+
+    Returns:
+        User profile dict or None
+    """
+    table_name = os.environ.get("CHAT_SETTINGS_TABLE_NAME")
+    if not table_name:
+        logger.debug(
+            "CHAT_SETTINGS_TABLE_NAME not configured, skipping user profile fetch"
+        )
+        return None
+
+    try:
+        dynamo = _get_dynamodb_client()
+        response = dynamo.get_item(
+            TableName=table_name,
+            Key={"user_id": {"S": user_sub}},
+            ProjectionExpression="userProfile",
+        )
+        item = response.get("Item", {})
+        raw_profile = item.get("userProfile", {}).get("M")
+        if not raw_profile:
+            return None
+
+        # Parse DynamoDB Map to Python dict
+        profile = _dynamodb_item_to_dict(raw_profile)
+
+        # Check if profile is disabled
+        if not profile.get("useProfile", True):
+            return None
+
+        # Check if profile has any actual content
+        content_fields = [
+            "name",
+            "jobTitle",
+            "jobDescription",
+            "linkedInUrl",
+            "goalsAndObjectives",
+            "otherInformation",
+            "customInstructions",
+        ]
+        has_content = any(profile.get(f) for f in content_fields)
+        has_memories = bool(profile.get("memories"))
+        if not has_content and not has_memories:
+            return None
+
+        return profile
+    except Exception as e:
+        logger.warning(
+            "Failed to fetch user profile, continuing without profile",
+            user_sub=user_sub[:8] + "...",
+            error=str(e),
+        )
+        return None
+
+
 def resolve_approval_mode(
     user_sub: str,
     agent_config: Optional[AgentConfig] = None,

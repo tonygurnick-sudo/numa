@@ -30,6 +30,7 @@ from .agent_config import (
     AgentConfig,
     fetch_agent_config,
     fetch_user_email_signature,
+    fetch_user_profile,
     resolve_approval_mode,
 )
 from .agent_types import (
@@ -1677,6 +1678,7 @@ async def _handle_chat(
             # Resolve integration approval mode (agent config > user setting > default)
             effective_approval_mode = resolve_approval_mode(user_sub, agent_config)
             email_signature = fetch_user_email_signature(user_sub)
+            user_profile = fetch_user_profile(user_sub)
 
             sdk_stream = stream_claude_sdk(
                 conversation_id,
@@ -1703,6 +1705,7 @@ async def _handle_chat(
                 approval_mode=effective_approval_mode,  # Integration approval mode
                 email_signature=email_signature,  # Email signature settings
                 agent_type_config=agent_type_config,  # Agent type configuration
+                user_profile=user_profile,  # User profile for AI personalisation
             )
             async for chunk in sdk_stream:
                 # Stream chunk directly to frontend via HTTP SSE

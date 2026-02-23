@@ -911,15 +911,14 @@ label {
       height: 32px;
       min-width: 32px;
       border-radius: 50%;
-      background: var(--nav-avatar-bg);
+      background: transparent;
       display: flex;
       align-items: center;
       justify-content: center;
-      color: var(--nav-avatar-text);
+      overflow: hidden;
 
-      .user-avatar-icon {
-        font-size: 0.95rem;
-        line-height: 1;
+      .profile-avatar-fallback {
+        border: none;
       }
     }
 

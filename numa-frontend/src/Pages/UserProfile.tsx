@@ -1,7 +1,10 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Alert, Button, Form, Spinner, Tab } from 'react-bootstrap';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Alert, Button, Dropdown, Form, Spinner, Tab } from 'react-bootstrap';
 import { LambdaClient } from '@aws-sdk/client-lambda';
+import { PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { fromWebToken } from '@aws-sdk/credential-providers';
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+import axios from 'axios';
 import { useAuth } from '../Providers/AuthProvider';
 import { useKnowledgeBase } from '../Providers/KnowledgeBaseProvider';
 import { useNumaRequest } from '../Providers/NumaRequestContext';
@@ -14,7 +17,10 @@ import {
 import {
   ChatSettingsService,
   DEFAULT_CHAT_SETTINGS,
+  DEFAULT_USER_PROFILE,
+  type Memory,
   type UserChatSettingsUpdate,
+  type UserProfile,
 } from '../Services/ChatSettingsService';
 import { PipedreamProxyService } from '../Services/PipedreamProxyService';
 import { withPRM } from '../utils/prmUtils';
@@ -23,9 +29,32 @@ import { PageHeader } from '../Components/PageHeader';
 import { StyledTabs } from '../Components/StyledTabs';
 import { manifestService } from '../Services/manifestService';
 import { applyLanguagePreference, LANGUAGE_BROWSER_DEFAULT } from '../utils/languagePreference';
-import { getConnectionDisplayName } from '../config/integrationsConfig';
+import { getConnectionDisplayName, getConnectionIcon, getConnectionFallbackIcon } from '../config/integrationsConfig';
+import ProfileAvatar from '../Components/ProfileAvatar';
+import { invalidateProfileBlob } from '../utils/profileImageCache';
 
 type Connection = { id: string; isConnected: boolean; mcpServerUrl?: string };
+
+const IMAGE_TARGET_SIZE = 256;
+const IMAGE_MAX_BYTES = 4 * 1024 * 1024; // 4 MB
+
+// Character limits (match backend validation)
+const LIMIT_NAME = 100;
+const LIMIT_TITLE = 100;
+const LIMIT_URL = 200;
+const LIMIT_LONG = 500;
+const LIMIT_CUSTOM_INSTRUCTIONS = 1500;
+const LIMIT_MEMORY = 300;
+
+function CharCount({ value, max }: { value: string; max: number }) {
+  const len = value.length;
+  const isNear = len > max * 0.9;
+  return (
+    <div className={`profile-char-count ${isNear ? 'is-near' : ''}`}>
+      {len}/{max}
+    </div>
+  );
+}
 
 interface UserProfilePageProps {
   embedded?: boolean;
@@ -35,13 +64,20 @@ interface UserProfilePageProps {
 
 export default function UserProfilePage({ embedded = false, activeTabKey, onActiveTabChange }: UserProfilePageProps) {
   const { t } = useTranslation('settings');
-  const { user } = useAuth();
+  const { user, getCredentials } = useAuth();
   const { numaGet, numaPut } = useNumaRequest();
   const { availableKBs, isLoadingKBs, kbError } = useKnowledgeBase();
 
-  const [localActiveKey, setLocalActiveKey] = useState<string>('user-settings');
+  const [localActiveKey, setLocalActiveKey] = useState<string>('my-profile');
   const selectedTabKey = activeTabKey ?? localActiveKey;
   const setSelectedTabKey = onActiveTabChange ?? setLocalActiveKey;
+
+  // User profile (AI memory) state — independent from chat settings
+  const [userProfile, setUserProfile] = useState<UserProfile>({ ...DEFAULT_USER_PROFILE });
+  const [profileLoading, setProfileLoading] = useState<boolean>(true);
+  const [profileSaving, setProfileSaving] = useState<boolean>(false);
+  const [profileError, setProfileError] = useState<string | null>(null);
+  const [profileDirty, setProfileDirty] = useState<boolean>(false);
 
   const [globalAllowUserDefaults, setGlobalAllowUserDefaults] = useState<boolean>(false);
   const [globalLoaded, setGlobalLoaded] = useState<boolean>(false);
@@ -59,6 +95,118 @@ export default function UserProfilePage({ embedded = false, activeTabKey, onActi
   const relayLambdaArn = window.sessionStorage.getItem('PIPEDREAM_RELAY_LAMBDA_ARN');
   const previewMode = !hasPipedreamFeature || !relayLambdaArn;
   const REGION = window.sessionStorage.getItem('REGION') || 'us-east-1';
+
+  // Profile image upload state
+  const [imageUploading, setImageUploading] = useState(false);
+  const [imageError, setImageError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  // Memory editing state
+  const [editingMemoryId, setEditingMemoryId] = useState<string | null>(null);
+  const [editingMemoryContent, setEditingMemoryContent] = useState('');
+  const [editingMemoryScope, setEditingMemoryScope] = useState('general');
+  const [addingMemory, setAddingMemory] = useState(false);
+  const [newMemoryContent, setNewMemoryContent] = useState('');
+  const [newMemoryScope, setNewMemoryScope] = useState('general');
+
+  const resizeToCanvas = useCallback(
+    async (file: File): Promise<Blob> => {
+      const url = URL.createObjectURL(file);
+      try {
+        const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+          const image = new Image();
+          image.onload = () => resolve(image);
+          image.onerror = () => reject(new Error(t('userProfile.profile.fields.profileImage.errors.uploadFailed')));
+          image.src = url;
+        });
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        if (!ctx) throw new Error(t('userProfile.profile.fields.profileImage.errors.uploadFailed'));
+        canvas.width = IMAGE_TARGET_SIZE;
+        canvas.height = IMAGE_TARGET_SIZE;
+
+        const scale = Math.max(IMAGE_TARGET_SIZE / img.width, IMAGE_TARGET_SIZE / img.height);
+        const w = img.width * scale;
+        const h = img.height * scale;
+        const dx = (IMAGE_TARGET_SIZE - w) / 2;
+        const dy = (IMAGE_TARGET_SIZE - h) / 2;
+
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, IMAGE_TARGET_SIZE, IMAGE_TARGET_SIZE);
+        ctx.drawImage(img, dx, dy, w, h);
+        return await new Promise<Blob>((resolve) => canvas.toBlob((b) => resolve(b || new Blob()), 'image/png'));
+      } finally {
+        URL.revokeObjectURL(url);
+      }
+    },
+    [t],
+  );
+
+  const handleImageUpload = useCallback(
+    async (event: React.ChangeEvent<HTMLInputElement>) => {
+      const file = event.target.files?.[0];
+      if (!file) return;
+      setImageError(null);
+
+      if (!/^image\/(png|jpe?g)$/i.test(file.type)) {
+        setImageError(t('userProfile.profile.fields.profileImage.errors.invalidType'));
+        return;
+      }
+      if (file.size > IMAGE_MAX_BYTES) {
+        setImageError(t('userProfile.profile.fields.profileImage.errors.tooLarge'));
+        return;
+      }
+
+      setImageUploading(true);
+      try {
+        const blob = await resizeToCanvas(file);
+        const userId =
+          (user?.decoded_tokens?.idToken?.sub as string | undefined) ||
+          window.sessionStorage.getItem('USER_ID') ||
+          'anonymous';
+        const randomId = Math.random().toString(36).slice(2, 10);
+        const s3Key = `numa-chat/profile-images/${userId}/${Date.now()}_${randomId}.png`;
+        const clientName = window.sessionStorage.getItem('CLIENT_NAME');
+        const bucketName = `numa-${clientName}-outputs`;
+        const uploadRegion = window.sessionStorage.getItem('REGION') || 'us-east-1';
+
+        const credentials = await getCredentials();
+        if (!credentials) throw new Error(t('userProfile.profile.fields.profileImage.errors.credentials'));
+        const s3 = withPRM(S3Client, { region: uploadRegion, credentials });
+        const put = new PutObjectCommand({
+          Bucket: bucketName,
+          Key: s3Key,
+          ContentType: 'image/png',
+          CacheControl: 'public, max-age=31536000, immutable',
+        });
+        const url = await getSignedUrl(s3, put, { expiresIn: 60 * 10 });
+        await axios.put(url, blob, { headers: { 'Content-Type': 'image/png' } });
+
+        // Invalidate old blob cache entry if replacing an existing image
+        if (userProfile.profileImage) {
+          invalidateProfileBlob(userProfile.profileImage.s3Bucket, userProfile.profileImage.s3Key);
+        }
+
+        setUserProfile((prev) => ({ ...prev, profileImage: { s3Bucket: bucketName, s3Key } }));
+        setProfileDirty(true);
+      } catch (e) {
+        setImageError((e as Error)?.message || t('userProfile.profile.fields.profileImage.errors.uploadFailed'));
+      } finally {
+        setImageUploading(false);
+        if (fileInputRef.current) fileInputRef.current.value = '';
+      }
+    },
+    [getCredentials, resizeToCanvas, t, user, userProfile.profileImage],
+  );
+
+  const handleRemoveImage = useCallback(() => {
+    if (userProfile.profileImage) {
+      invalidateProfileBlob(userProfile.profileImage.s3Bucket, userProfile.profileImage.s3Key);
+    }
+    setUserProfile((prev) => ({ ...prev, profileImage: null }));
+    setImageError(null);
+    setProfileDirty(true);
+  }, [userProfile.profileImage]);
 
   const [lambdaClient, setLambdaClient] = useState<LambdaClient | null>(null);
   const [connectionsLoading, setConnectionsLoading] = useState<boolean>(false);
@@ -136,6 +284,29 @@ export default function UserProfilePage({ embedded = false, activeTabKey, onActi
         setError((e as Error).message || t('userProfile.errors.loadDefaults'));
       } finally {
         if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [numaGet]);
+
+  // Load user profile
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        setProfileLoading(true);
+        const profile = await ChatSettingsService.getUserProfile(numaGet);
+        if (cancelled) return;
+        setUserProfile(profile);
+        setProfileError(null);
+        setProfileDirty(false);
+      } catch (e) {
+        if (cancelled) return;
+        setProfileError((e as Error).message || t('userProfile.profile.errors.loadProfile'));
+      } finally {
+        if (!cancelled) setProfileLoading(false);
       }
     })();
     return () => {
@@ -292,7 +463,7 @@ export default function UserProfilePage({ embedded = false, activeTabKey, onActi
   };
 
   const renderSaveActions = (resetLabelKey: string, onReset: () => void, onSave: () => void, canSave: boolean) => (
-    <div className="d-flex gap-2">
+    <div className="profile-actions">
       <Button variant="primary" disabled={!dirty || saving || !canSave} onClick={onSave}>
         {saving ? (
           <>
@@ -363,25 +534,631 @@ export default function UserProfilePage({ embedded = false, activeTabKey, onActi
     }
   };
 
+  const handleSaveProfile = async () => {
+    try {
+      setProfileSaving(true);
+      setProfileError(null);
+      await ChatSettingsService.updateUserProfile(userProfile, numaPut);
+      const refreshed = await ChatSettingsService.getUserProfile(numaGet);
+      setUserProfile(refreshed);
+      setProfileDirty(false);
+    } catch (e) {
+      setProfileError((e as Error).message || t('userProfile.profile.errors.saveProfile'));
+    } finally {
+      setProfileSaving(false);
+    }
+  };
+
+  const handleClearProfile = () => {
+    setUserProfile({ ...DEFAULT_USER_PROFILE });
+    setProfileDirty(true);
+  };
+
   const profileContent = (
-    <>
+    <div className="user-profile-content">
       {error && (
         <Alert variant="danger" className="mb-3">
           {error}
         </Alert>
       )}
 
-      {!globalLoaded ? (
-        <div className={embedded ? 'settings-embedded-user-loading' : 'text-center py-4'}>
-          <Spinner animation="border" />
-        </div>
-      ) : null}
-
       <StyledTabs
         activeKey={selectedTabKey}
         onSelect={(k) => k && setSelectedTabKey(k)}
         className={embedded ? 'mb-3 settings-subtabs--panels-only' : 'mb-3'}
       >
+        <Tab
+          eventKey="my-profile"
+          title={
+            <span>
+              <i className="bi bi-person-circle me-2"></i>
+              {t('userProfile.tabs.myProfile')}
+            </span>
+          }
+        >
+          {profileError && (
+            <Alert variant="danger" className="mb-3">
+              {profileError}
+            </Alert>
+          )}
+
+          {profileLoading ? (
+            <div className="text-center py-4">
+              <Spinner animation="border" />
+            </div>
+          ) : (
+            <Form>
+              <p className="profile-page-intro">{t('userProfile.profile.description')}</p>
+
+              {/* Use Profile toggle */}
+              <div className="profile-toggle-card">
+                <div className="profile-toggle-card__text">
+                  <div className="profile-toggle-card__label">{t('userProfile.profile.fields.useProfile.label')}</div>
+                  <div className="profile-toggle-card__help">{t('userProfile.profile.fields.useProfile.help')}</div>
+                </div>
+                <Form.Check
+                  type="switch"
+                  id="profile-use-profile"
+                  label=""
+                  checked={userProfile.useProfile}
+                  disabled={profileSaving}
+                  onChange={(e) => {
+                    setUserProfile((prev) => ({ ...prev, useProfile: e.target.checked }));
+                    setProfileDirty(true);
+                  }}
+                />
+              </div>
+
+              {/* ── Section 1: About You ── */}
+              <div className="profile-section">
+                <div className="profile-section__title">{t('userProfile.profile.fields.aboutYou.sectionTitle')}</div>
+                <p className="profile-section__description">{t('userProfile.profile.fields.aboutYou.description')}</p>
+
+                {/* Avatar + core fields */}
+                <div className="profile-avatar-row">
+                  <div className="profile-avatar-col">
+                    <ProfileAvatar
+                      profileImage={userProfile.profileImage}
+                      name={userProfile.name}
+                      email={user?.decoded_tokens?.idToken?.email as string | undefined}
+                      size={72}
+                    />
+                    <input
+                      type="file"
+                      ref={fileInputRef}
+                      accept="image/png,image/jpeg"
+                      style={{ display: 'none' }}
+                      onChange={handleImageUpload}
+                      disabled={profileSaving || imageUploading}
+                    />
+                    <div className="profile-avatar-actions">
+                      <Button
+                        className="profile-avatar-btn"
+                        variant="outline-secondary"
+                        size="sm"
+                        onClick={() => fileInputRef.current?.click()}
+                        disabled={profileSaving || imageUploading}
+                      >
+                        {imageUploading ? (
+                          <>
+                            <Spinner animation="border" size="sm" style={{ width: '0.7rem', height: '0.7rem' }} />
+                            {t('userProfile.profile.fields.profileImage.uploading')}
+                          </>
+                        ) : (
+                          <>
+                            <i className="bi bi-camera"></i>
+                            {t('userProfile.profile.fields.profileImage.upload')}
+                          </>
+                        )}
+                      </Button>
+                      {userProfile.profileImage && (
+                        <Button
+                          className="profile-avatar-btn"
+                          variant="outline-danger"
+                          size="sm"
+                          onClick={handleRemoveImage}
+                          disabled={profileSaving || imageUploading}
+                        >
+                          <i className="bi bi-trash"></i>
+                          {t('userProfile.profile.fields.profileImage.remove')}
+                        </Button>
+                      )}
+                    </div>
+                    {imageError && <div className="profile-avatar-error">{imageError}</div>}
+                  </div>
+                  <div className="profile-avatar-fields">
+                    <Form.Group className="mb-2">
+                      <Form.Label className="profile-field-label">
+                        {t('userProfile.profile.fields.name.label')}
+                      </Form.Label>
+                      <Form.Control
+                        type="text"
+                        maxLength={LIMIT_NAME}
+                        value={userProfile.name}
+                        disabled={profileSaving}
+                        placeholder={t('userProfile.profile.fields.name.placeholder')}
+                        onChange={(e) => {
+                          setUserProfile((prev) => ({ ...prev, name: e.target.value }));
+                          setProfileDirty(true);
+                        }}
+                      />
+                    </Form.Group>
+                    <Form.Group className="mb-2">
+                      <Form.Label className="profile-field-label">
+                        {t('userProfile.profile.fields.jobTitle.label')}
+                      </Form.Label>
+                      <Form.Control
+                        type="text"
+                        maxLength={LIMIT_TITLE}
+                        value={userProfile.jobTitle}
+                        disabled={profileSaving}
+                        placeholder={t('userProfile.profile.fields.jobTitle.placeholder')}
+                        onChange={(e) => {
+                          setUserProfile((prev) => ({ ...prev, jobTitle: e.target.value }));
+                          setProfileDirty(true);
+                        }}
+                      />
+                    </Form.Group>
+                    <Form.Group>
+                      <Form.Label className="profile-field-label">
+                        {t('userProfile.profile.fields.jobDescription.label')}
+                      </Form.Label>
+                      <Form.Control
+                        as="textarea"
+                        rows={3}
+                        maxLength={LIMIT_LONG}
+                        value={userProfile.jobDescription}
+                        disabled={profileSaving}
+                        placeholder={t('userProfile.profile.fields.jobDescription.placeholder')}
+                        onChange={(e) => {
+                          setUserProfile((prev) => ({ ...prev, jobDescription: e.target.value }));
+                          setProfileDirty(true);
+                        }}
+                      />
+                      <CharCount value={userProfile.jobDescription} max={LIMIT_LONG} />
+                    </Form.Group>
+                  </div>
+                </div>
+
+                <Form.Group className="mb-3">
+                  <Form.Label className="profile-field-label">
+                    {t('userProfile.profile.fields.linkedInUrl.label')}
+                  </Form.Label>
+                  <Form.Control
+                    type="url"
+                    maxLength={LIMIT_URL}
+                    value={userProfile.linkedInUrl}
+                    disabled={profileSaving}
+                    placeholder={t('userProfile.profile.fields.linkedInUrl.placeholder')}
+                    onChange={(e) => {
+                      setUserProfile((prev) => ({ ...prev, linkedInUrl: e.target.value }));
+                      setProfileDirty(true);
+                    }}
+                  />
+                </Form.Group>
+                <Form.Group className="mb-3">
+                  <Form.Label className="profile-field-label">
+                    {t('userProfile.profile.fields.goalsAndObjectives.label')}
+                  </Form.Label>
+                  <Form.Control
+                    as="textarea"
+                    rows={3}
+                    maxLength={LIMIT_LONG}
+                    value={userProfile.goalsAndObjectives}
+                    disabled={profileSaving}
+                    placeholder={t('userProfile.profile.fields.goalsAndObjectives.placeholder')}
+                    onChange={(e) => {
+                      setUserProfile((prev) => ({ ...prev, goalsAndObjectives: e.target.value }));
+                      setProfileDirty(true);
+                    }}
+                  />
+                  <CharCount value={userProfile.goalsAndObjectives} max={LIMIT_LONG} />
+                </Form.Group>
+                <Form.Group>
+                  <Form.Label className="profile-field-label">
+                    {t('userProfile.profile.fields.otherInformation.label')}
+                  </Form.Label>
+                  <Form.Control
+                    as="textarea"
+                    rows={3}
+                    maxLength={LIMIT_LONG}
+                    value={userProfile.otherInformation}
+                    disabled={profileSaving}
+                    placeholder={t('userProfile.profile.fields.otherInformation.placeholder')}
+                    onChange={(e) => {
+                      setUserProfile((prev) => ({ ...prev, otherInformation: e.target.value }));
+                      setProfileDirty(true);
+                    }}
+                  />
+                  <CharCount value={userProfile.otherInformation} max={LIMIT_LONG} />
+                </Form.Group>
+              </div>
+
+              {/* ── Section 2: Custom Instructions ── */}
+              <div className="profile-section">
+                <div className="profile-section__title">
+                  {t('userProfile.profile.fields.customInstructions.sectionTitle')}
+                </div>
+                <p className="profile-section__description">
+                  {t('userProfile.profile.fields.customInstructions.help')}
+                </p>
+                <Form.Control
+                  as="textarea"
+                  rows={5}
+                  maxLength={LIMIT_CUSTOM_INSTRUCTIONS}
+                  value={userProfile.customInstructions}
+                  disabled={profileSaving}
+                  placeholder={t('userProfile.profile.fields.customInstructions.placeholder')}
+                  onChange={(e) => {
+                    setUserProfile((prev) => ({ ...prev, customInstructions: e.target.value }));
+                    setProfileDirty(true);
+                  }}
+                />
+                <CharCount value={userProfile.customInstructions} max={LIMIT_CUSTOM_INSTRUCTIONS} />
+              </div>
+
+              {/* ── Section 3: Memories ── */}
+              <div className="profile-section">
+                <div className="profile-section__title">{t('userProfile.profile.fields.memories.sectionTitle')}</div>
+                <p className="profile-section__description">{t('userProfile.profile.fields.memories.description')}</p>
+
+                {userProfile.memories.length === 0 && !addingMemory && (
+                  <div className="profile-empty-state">{t('userProfile.profile.fields.memories.empty')}</div>
+                )}
+
+                {/* Existing memories list */}
+                {userProfile.memories.map((memory) => (
+                  <div key={memory.id} className="profile-memory-item">
+                    {editingMemoryId === memory.id ? (
+                      <div
+                        className="profile-memory-form"
+                        style={{ border: 'none', background: 'transparent', padding: 0, margin: 0 }}
+                      >
+                        <Form.Control
+                          as="textarea"
+                          rows={2}
+                          maxLength={LIMIT_MEMORY}
+                          value={editingMemoryContent}
+                          onChange={(e) => setEditingMemoryContent(e.target.value)}
+                          className="mb-2"
+                          placeholder={t('userProfile.profile.fields.memories.content.placeholder')}
+                        />
+                        <div className="profile-memory-form__controls">
+                          <Dropdown className="memory-scope-dropdown">
+                            <Dropdown.Toggle
+                              variant="outline-secondary"
+                              size="sm"
+                              className="memory-scope-dropdown__toggle"
+                            >
+                              {editingMemoryScope === 'general' ? (
+                                <>
+                                  <i className="bi bi-globe2 memory-scope-dropdown__general-icon" />
+                                  {t('userProfile.profile.fields.memories.scope.general')}
+                                </>
+                              ) : (
+                                <>
+                                  <img
+                                    src={getConnectionIcon(editingMemoryScope.replace('integration:', ''))}
+                                    alt=""
+                                    className="memory-scope-dropdown__icon"
+                                    onError={(e) => {
+                                      e.currentTarget.style.display = 'none';
+                                    }}
+                                  />
+                                  {getConnectionDisplayName(editingMemoryScope.replace('integration:', ''))}
+                                </>
+                              )}
+                            </Dropdown.Toggle>
+                            <Dropdown.Menu className="memory-scope-dropdown__menu">
+                              <Dropdown.Item
+                                active={editingMemoryScope === 'general'}
+                                onClick={() => setEditingMemoryScope('general')}
+                                className="memory-scope-dropdown__item"
+                              >
+                                <i className="bi bi-globe2 memory-scope-dropdown__general-icon" />
+                                <div className="memory-scope-dropdown__item-text">
+                                  <span className="memory-scope-dropdown__item-name">
+                                    {t('userProfile.profile.fields.memories.scope.general')}
+                                  </span>
+                                  <span className="memory-scope-dropdown__item-desc">
+                                    {t('userProfile.profile.fields.memories.scope.generalDescription')}
+                                  </span>
+                                </div>
+                              </Dropdown.Item>
+                              {availableConnections.length > 0 && (
+                                <>
+                                  <Dropdown.Divider />
+                                  <div className="memory-scope-dropdown__group-header">
+                                    <span className="memory-scope-dropdown__group-title">
+                                      {t('userProfile.profile.fields.memories.scope.integrationsHeader')}
+                                    </span>
+                                    <span className="memory-scope-dropdown__group-desc">
+                                      {t('userProfile.profile.fields.memories.scope.integrationsDescription')}
+                                    </span>
+                                  </div>
+                                  {availableConnections
+                                    .sort((a, b) =>
+                                      getConnectionDisplayName(a.id).localeCompare(getConnectionDisplayName(b.id)),
+                                    )
+                                    .map((conn) => (
+                                      <Dropdown.Item
+                                        key={conn.id}
+                                        active={editingMemoryScope === `integration:${conn.id}`}
+                                        onClick={() => setEditingMemoryScope(`integration:${conn.id}`)}
+                                        className="memory-scope-dropdown__item"
+                                      >
+                                        <img
+                                          src={getConnectionIcon(conn.id)}
+                                          alt=""
+                                          className="memory-scope-dropdown__icon"
+                                          onError={(e) => {
+                                            e.currentTarget.style.display = 'none';
+                                          }}
+                                        />
+                                        <span className="memory-scope-dropdown__item-name">
+                                          {getConnectionDisplayName(conn.id)}
+                                        </span>
+                                      </Dropdown.Item>
+                                    ))}
+                                </>
+                              )}
+                            </Dropdown.Menu>
+                          </Dropdown>
+                          <Button
+                            variant="primary"
+                            size="sm"
+                            onClick={() => {
+                              if (!editingMemoryContent.trim()) return;
+                              setUserProfile((prev) => ({
+                                ...prev,
+                                memories: prev.memories.map((m) =>
+                                  m.id === memory.id
+                                    ? { ...m, content: editingMemoryContent.trim(), scope: editingMemoryScope }
+                                    : m,
+                                ),
+                              }));
+                              setEditingMemoryId(null);
+                              setProfileDirty(true);
+                            }}
+                          >
+                            {t('userProfile.profile.fields.memories.saveMemory')}
+                          </Button>
+                          <Button variant="outline-secondary" size="sm" onClick={() => setEditingMemoryId(null)}>
+                            {t('userProfile.profile.fields.memories.cancelMemory')}
+                          </Button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="d-flex justify-content-between align-items-start">
+                        <div className="flex-grow-1">
+                          <div className="profile-memory-item__content">{memory.content}</div>
+                          <div className="profile-memory-item__meta">
+                            <span className="profile-memory-badge">
+                              {memory.scope === 'general' ? (
+                                <>
+                                  <i className="bi bi-globe2 memory-scope-badge__icon" />
+                                  {t('userProfile.profile.fields.memories.scope.general')}
+                                </>
+                              ) : memory.scope.startsWith('integration:') ? (
+                                <>
+                                  <img
+                                    src={getConnectionIcon(memory.scope.replace('integration:', ''))}
+                                    alt=""
+                                    className="memory-scope-badge__img"
+                                    onError={(e) => {
+                                      e.currentTarget.style.display = 'none';
+                                    }}
+                                  />
+                                  {getConnectionDisplayName(memory.scope.replace('integration:', ''))}
+                                </>
+                              ) : memory.scope.startsWith('agent:') ? (
+                                `${t('userProfile.profile.fields.memories.scope.agentPrefix')}: ${memory.scope.replace('agent:', '').slice(0, 8)}`
+                              ) : (
+                                memory.scope
+                              )}
+                            </span>
+                            <span className="profile-memory-source">
+                              {memory.source === 'ai'
+                                ? t('userProfile.profile.fields.memories.source.ai')
+                                : t('userProfile.profile.fields.memories.source.user')}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="profile-memory-item__actions">
+                          <Button
+                            className="profile-memory-action-btn"
+                            variant="outline-secondary"
+                            size="sm"
+                            disabled={profileSaving}
+                            onClick={() => {
+                              setEditingMemoryId(memory.id);
+                              setEditingMemoryContent(memory.content);
+                              setEditingMemoryScope(memory.scope);
+                            }}
+                          >
+                            {t('userProfile.profile.fields.memories.editMemory')}
+                          </Button>
+                          <Button
+                            className="profile-memory-action-btn"
+                            variant="outline-danger"
+                            size="sm"
+                            disabled={profileSaving}
+                            onClick={() => {
+                              setUserProfile((prev) => ({
+                                ...prev,
+                                memories: prev.memories.filter((m) => m.id !== memory.id),
+                              }));
+                              setProfileDirty(true);
+                            }}
+                          >
+                            {t('userProfile.profile.fields.memories.deleteMemory')}
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ))}
+
+                {/* Add memory form */}
+                {addingMemory ? (
+                  <div className="profile-memory-form">
+                    <Form.Control
+                      as="textarea"
+                      rows={2}
+                      maxLength={LIMIT_MEMORY}
+                      value={newMemoryContent}
+                      onChange={(e) => setNewMemoryContent(e.target.value)}
+                      className="mb-2"
+                      placeholder={t('userProfile.profile.fields.memories.content.placeholder')}
+                    />
+                    <div className="profile-memory-form__controls">
+                      <Dropdown className="memory-scope-dropdown">
+                        <Dropdown.Toggle
+                          variant="outline-secondary"
+                          size="sm"
+                          className="memory-scope-dropdown__toggle"
+                        >
+                          {newMemoryScope === 'general' ? (
+                            <>
+                              <i className="bi bi-globe2 memory-scope-dropdown__general-icon" />
+                              {t('userProfile.profile.fields.memories.scope.general')}
+                            </>
+                          ) : (
+                            <>
+                              <img
+                                src={getConnectionIcon(newMemoryScope.replace('integration:', ''))}
+                                alt=""
+                                className="memory-scope-dropdown__icon"
+                                onError={(e) => {
+                                  e.currentTarget.style.display = 'none';
+                                }}
+                              />
+                              {getConnectionDisplayName(newMemoryScope.replace('integration:', ''))}
+                            </>
+                          )}
+                        </Dropdown.Toggle>
+                        <Dropdown.Menu className="memory-scope-dropdown__menu">
+                          <Dropdown.Item
+                            active={newMemoryScope === 'general'}
+                            onClick={() => setNewMemoryScope('general')}
+                            className="memory-scope-dropdown__item"
+                          >
+                            <i className="bi bi-globe2 memory-scope-dropdown__general-icon" />
+                            <div className="memory-scope-dropdown__item-text">
+                              <span className="memory-scope-dropdown__item-name">
+                                {t('userProfile.profile.fields.memories.scope.general')}
+                              </span>
+                              <span className="memory-scope-dropdown__item-desc">
+                                {t('userProfile.profile.fields.memories.scope.generalDescription')}
+                              </span>
+                            </div>
+                          </Dropdown.Item>
+                          {availableConnections.length > 0 && (
+                            <>
+                              <Dropdown.Divider />
+                              <div className="memory-scope-dropdown__group-header">
+                                <span className="memory-scope-dropdown__group-title">
+                                  {t('userProfile.profile.fields.memories.scope.integrationsHeader')}
+                                </span>
+                                <span className="memory-scope-dropdown__group-desc">
+                                  {t('userProfile.profile.fields.memories.scope.integrationsDescription')}
+                                </span>
+                              </div>
+                              {availableConnections
+                                .sort((a, b) =>
+                                  getConnectionDisplayName(a.id).localeCompare(getConnectionDisplayName(b.id)),
+                                )
+                                .map((conn) => (
+                                  <Dropdown.Item
+                                    key={conn.id}
+                                    active={newMemoryScope === `integration:${conn.id}`}
+                                    onClick={() => setNewMemoryScope(`integration:${conn.id}`)}
+                                    className="memory-scope-dropdown__item"
+                                  >
+                                    <img
+                                      src={getConnectionIcon(conn.id)}
+                                      alt=""
+                                      className="memory-scope-dropdown__icon"
+                                      onError={(e) => {
+                                        e.currentTarget.style.display = 'none';
+                                      }}
+                                    />
+                                    <span className="memory-scope-dropdown__item-name">
+                                      {getConnectionDisplayName(conn.id)}
+                                    </span>
+                                  </Dropdown.Item>
+                                ))}
+                            </>
+                          )}
+                        </Dropdown.Menu>
+                      </Dropdown>
+                      <Button
+                        variant="primary"
+                        size="sm"
+                        onClick={() => {
+                          if (!newMemoryContent.trim()) return;
+                          const newMemory: Memory = {
+                            id: crypto.randomUUID(),
+                            content: newMemoryContent.trim(),
+                            scope: newMemoryScope,
+                            createdAt: new Date().toISOString(),
+                            source: 'user',
+                          };
+                          setUserProfile((prev) => ({
+                            ...prev,
+                            memories: [...prev.memories, newMemory],
+                          }));
+                          setNewMemoryContent('');
+                          setNewMemoryScope('general');
+                          setAddingMemory(false);
+                          setProfileDirty(true);
+                        }}
+                      >
+                        {t('userProfile.profile.fields.memories.saveMemory')}
+                      </Button>
+                      <Button
+                        variant="outline-secondary"
+                        size="sm"
+                        onClick={() => {
+                          setAddingMemory(false);
+                          setNewMemoryContent('');
+                          setNewMemoryScope('general');
+                        }}
+                      >
+                        {t('userProfile.profile.fields.memories.cancelMemory')}
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <Button
+                    className="profile-add-memory-btn"
+                    disabled={profileSaving}
+                    onClick={() => setAddingMemory(true)}
+                  >
+                    <i className="bi bi-plus-lg"></i>
+                    {t('userProfile.profile.fields.memories.addMemory')}
+                  </Button>
+                )}
+              </div>
+
+              <div className="profile-actions">
+                <Button variant="primary" disabled={!profileDirty || profileSaving} onClick={handleSaveProfile}>
+                  {profileSaving ? (
+                    <>
+                      <Spinner as="span" animation="border" size="sm" className="me-2" />
+                      {t('userProfile.profile.actions.saving')}
+                    </>
+                  ) : (
+                    t('userProfile.profile.actions.save')
+                  )}
+                </Button>
+                <Button variant="outline-secondary" disabled={profileSaving} onClick={handleClearProfile}>
+                  {t('userProfile.profile.actions.reset')}
+                </Button>
+              </div>
+            </Form>
+          )}
+        </Tab>
         <Tab
           eventKey="user-settings"
           title={
@@ -392,8 +1169,9 @@ export default function UserProfilePage({ embedded = false, activeTabKey, onActi
           }
         >
           <Form>
-            <Form.Group className="mb-3">
-              <Form.Label className="settings-section-title">{t('userProfile.defaults.language.label')}</Form.Label>
+            <div className="profile-section">
+              <div className="profile-section__title">{t('userProfile.defaults.language.label')}</div>
+              <p className="profile-section__description">{t('userProfile.defaults.language.help')}</p>
               <Form.Select
                 value={userDefaults.language ?? LANGUAGE_BROWSER_DEFAULT}
                 disabled={disableProfileForm}
@@ -405,17 +1183,12 @@ export default function UserProfilePage({ embedded = false, activeTabKey, onActi
                 <option value={LANGUAGE_BROWSER_DEFAULT}>{t('userProfile.defaults.language.browser')}</option>
                 <option value="en">{t('userProfile.defaults.language.english')}</option>
               </Form.Select>
-              <div className="text-muted small mt-1">{t('userProfile.defaults.language.help')}</div>
-            </Form.Group>
+            </div>
 
-            <hr className="my-4" />
-
-            <Form.Group className="mb-3">
-              <Form.Label className="settings-section-title">
-                {t('userProfile.defaults.emailSignature.label')}
-              </Form.Label>
-              <div className="text-muted small mb-2">{t('userProfile.defaults.emailSignature.help')}</div>
-              <div className="d-flex align-items-center gap-2 mb-2">
+            <div className="profile-section">
+              <div className="profile-section__title">{t('userProfile.defaults.emailSignature.label')}</div>
+              <p className="profile-section__description">{t('userProfile.defaults.emailSignature.help')}</p>
+              <div className="profile-signature-toggle">
                 <Form.Check
                   type="switch"
                   id="profile-email-signature-enabled"
@@ -427,11 +1200,13 @@ export default function UserProfilePage({ embedded = false, activeTabKey, onActi
                     setDirty(true);
                   }}
                 />
-                <span>{t('userProfile.defaults.emailSignature.enableTitle')}</span>
+                <span className="profile-signature-toggle__label">
+                  {t('userProfile.defaults.emailSignature.enableTitle')}
+                </span>
               </div>
               {userDefaults.emailSignatureEnabled && (
                 <>
-                  <Form.Label className="settings-secondary-label">
+                  <Form.Label className="profile-field-label">
                     {t('userProfile.defaults.emailSignature.textLabel')}
                   </Form.Label>
                   <Form.Control
@@ -447,7 +1222,8 @@ export default function UserProfilePage({ embedded = false, activeTabKey, onActi
                   />
                 </>
               )}
-            </Form.Group>
+            </div>
+
             {renderSaveActions(
               'userProfile.actions.resetBrowser',
               resetToBrowserDefaults,
@@ -466,31 +1242,27 @@ export default function UserProfilePage({ embedded = false, activeTabKey, onActi
           }
         >
           {globalLoaded && !globalAllowUserDefaults && (
-            <Alert variant="secondary" className="mb-3">
-              {t('userProfile.adminDisabled')}
-            </Alert>
+            <div className="profile-info-banner">{t('userProfile.adminDisabled')}</div>
           )}
-          <Alert variant="secondary" className="mb-3">
-            {t('userProfile.defaults.description')}
-          </Alert>
+          <div className="profile-info-banner">{t('userProfile.defaults.description')}</div>
 
           <Form>
-            <div className="mb-3 p-3 border rounded-3 bg-light">
-              <div className="d-flex align-items-center justify-content-between gap-3">
-                <div className="settings-secondary-label">{t('userProfile.defaults.enableTitle')}</div>
-                <Form.Check
-                  type="switch"
-                  id="profile-defaults-enabled"
-                  label=""
-                  checked={userDefaultsEnabled}
-                  disabled={!canEditUserDefaults || saving || loading}
-                  onChange={(e) => {
-                    setUserDefaultsEnabled(e.target.checked);
-                    setDirty(true);
-                  }}
-                />
+            <div className="profile-toggle-card">
+              <div className="profile-toggle-card__text">
+                <div className="profile-toggle-card__label">{t('userProfile.defaults.enableTitle')}</div>
+                <div className="profile-toggle-card__help">{t('userProfile.defaults.enableHelp')}</div>
               </div>
-              <div className="text-muted small">{t('userProfile.defaults.enableHelp')}</div>
+              <Form.Check
+                type="switch"
+                id="profile-defaults-enabled"
+                label=""
+                checked={userDefaultsEnabled}
+                disabled={!canEditUserDefaults || saving || loading}
+                onChange={(e) => {
+                  setUserDefaultsEnabled(e.target.checked);
+                  setDirty(true);
+                }}
+              />
             </div>
 
             {loading ? (
@@ -499,13 +1271,13 @@ export default function UserProfilePage({ embedded = false, activeTabKey, onActi
               </div>
             ) : (
               <>
-                <Form.Group className="mb-3">
-                  <Form.Label className="settings-section-title">{t('userProfile.defaults.kbLabel')}</Form.Label>
+                <div className="profile-section">
+                  <div className="profile-section__title">{t('userProfile.defaults.kbLabel')}</div>
                   {kbError && <div className="text-danger small mb-2">{kbError}</div>}
 
-                  <ExpandableOverflowBox className="border rounded-3 p-2 bg-white" maxHeight={240}>
+                  <ExpandableOverflowBox className="profile-checkbox-list" maxHeight={240}>
                     {isLoadingKBs ? (
-                      <div className="text-muted small">{t('userProfile.defaults.kbLoading')}</div>
+                      <div className="profile-empty-state">{t('userProfile.defaults.kbLoading')}</div>
                     ) : (
                       kbIdsSorted.map((kbId) => {
                         const kb = availableKBs.find((k) => k.kb_id === kbId);
@@ -534,15 +1306,16 @@ export default function UserProfilePage({ embedded = false, activeTabKey, onActi
                       })
                     )}
                     {!isLoadingKBs && kbIdsSorted.length === 0 && (
-                      <div className="text-muted small">{t('userProfile.defaults.kbEmpty')}</div>
+                      <div className="profile-empty-state">{t('userProfile.defaults.kbEmpty')}</div>
                     )}
                   </ExpandableOverflowBox>
-                  <div className="text-muted small mt-1">{t('userProfile.defaults.kbHelp')}</div>
-                </Form.Group>
+                  <div className="profile-field-help">{t('userProfile.defaults.kbHelp')}</div>
+                </div>
 
-                <div className="mb-3">
-                  <div className="settings-section-title mb-2">{t('userProfile.defaults.toolsSectionTitle')}</div>
-                  <div className="d-flex align-items-center gap-2">
+                <div className="profile-section">
+                  <div className="profile-section__title">{t('userProfile.defaults.toolsSectionTitle')}</div>
+
+                  <div className="profile-tool-row">
                     <Form.Check
                       type="switch"
                       id="profile-defaults-all-tools"
@@ -561,12 +1334,14 @@ export default function UserProfilePage({ embedded = false, activeTabKey, onActi
                         setDirty(true);
                       }}
                     />
-                    <div className="settings-secondary-label">{t('userProfile.defaults.allTools.title')}</div>
+                    <div className="profile-tool-row__text">
+                      <div className="profile-tool-row__label">{t('userProfile.defaults.allTools.title')}</div>
+                      <div className="profile-tool-row__help">{t('userProfile.defaults.allTools.help')}</div>
+                    </div>
                   </div>
-                  <div className="text-muted small ms-5">{t('userProfile.defaults.allTools.help')}</div>
 
-                  <div className="mt-3 ms-4">
-                    <div className="d-flex align-items-center gap-2">
+                  <div className="profile-tool-sub-rows">
+                    <div className="profile-tool-row">
                       <Form.Check
                         type="switch"
                         id="profile-defaults-web-search"
@@ -578,14 +1353,14 @@ export default function UserProfilePage({ embedded = false, activeTabKey, onActi
                           setDirty(true);
                         }}
                       />
-                      <div className="settings-secondary-label">{t('userProfile.defaults.webSearch.title')}</div>
+                      <div className="profile-tool-row__text">
+                        <div className="profile-tool-row__label">{t('userProfile.defaults.webSearch.title')}</div>
+                        <div className="profile-tool-row__help">{t('userProfile.defaults.webSearch.help')}</div>
+                      </div>
                     </div>
-                    <div className="text-muted small ms-5">{t('userProfile.defaults.webSearch.help')}</div>
-                  </div>
 
-                  {dataAnalysisAvailable && (
-                    <div className="mt-3 ms-4">
-                      <div className="d-flex align-items-center gap-2">
+                    {dataAnalysisAvailable && (
+                      <div className="profile-tool-row">
                         <Form.Check
                           type="switch"
                           id="profile-defaults-data-analysis"
@@ -597,14 +1372,14 @@ export default function UserProfilePage({ embedded = false, activeTabKey, onActi
                             setDirty(true);
                           }}
                         />
-                        <div className="settings-secondary-label">{t('userProfile.defaults.dataAnalysis.title')}</div>
+                        <div className="profile-tool-row__text">
+                          <div className="profile-tool-row__label">{t('userProfile.defaults.dataAnalysis.title')}</div>
+                          <div className="profile-tool-row__help">{t('userProfile.defaults.dataAnalysis.help')}</div>
+                        </div>
                       </div>
-                      <div className="text-muted small ms-5">{t('userProfile.defaults.dataAnalysis.help')}</div>
-                    </div>
-                  )}
+                    )}
 
-                  <div className="mt-3 ms-4">
-                    <div className="d-flex align-items-center gap-2">
+                    <div className="profile-tool-row">
                       <Form.Check
                         type="switch"
                         id="profile-defaults-create-agent"
@@ -616,34 +1391,52 @@ export default function UserProfilePage({ embedded = false, activeTabKey, onActi
                           setDirty(true);
                         }}
                       />
-                      <div className="settings-secondary-label">{t('userProfile.defaults.agentCreation.title')}</div>
+                      <div className="profile-tool-row__text">
+                        <div className="profile-tool-row__label">{t('userProfile.defaults.agentCreation.title')}</div>
+                        <div className="profile-tool-row__help">{t('userProfile.defaults.agentCreation.help')}</div>
+                      </div>
                     </div>
-                    <div className="text-muted small ms-5">{t('userProfile.defaults.agentCreation.help')}</div>
                   </div>
                 </div>
 
-                <Form.Group className="mb-3">
-                  <Form.Label className="settings-section-title">
-                    {t('userProfile.defaults.integrations.label')}
-                  </Form.Label>
+                <div className="profile-section">
+                  <div className="profile-section__title">{t('userProfile.defaults.integrations.label')}</div>
                   {previewMode ? (
-                    <div className="text-muted small">{t('userProfile.defaults.integrations.disabled')}</div>
+                    <div className="profile-empty-state">{t('userProfile.defaults.integrations.disabled')}</div>
                   ) : connectionsLoading ? (
-                    <div className="text-muted small">{t('userProfile.defaults.integrations.loading')}</div>
+                    <div className="profile-empty-state">{t('userProfile.defaults.integrations.loading')}</div>
                   ) : (
                     <>
-                      <ExpandableOverflowBox className="border rounded-3 p-2 bg-white" maxHeight={240}>
+                      <ExpandableOverflowBox className="profile-checkbox-list" maxHeight={240}>
                         {availableConnections
                           .sort((a, b) => getConnectionDisplayName(a.id).localeCompare(getConnectionDisplayName(b.id)))
                           .map((conn) => {
                             const id = conn.id;
                             const checked = enabledConnectionSet.has(id);
+                            const iconSrc = getConnectionIcon(id);
+                            const fallbackIcon = getConnectionFallbackIcon(id);
                             return (
                               <Form.Check
                                 key={id}
                                 type="checkbox"
                                 id={`profile-defaults-integration-${id}`}
-                                label={getConnectionDisplayName(id)}
+                                label={
+                                  <span className="d-flex align-items-center gap-2">
+                                    {iconSrc ? (
+                                      <img
+                                        src={iconSrc}
+                                        alt={getConnectionDisplayName(id)}
+                                        className="profile-integration-icon"
+                                        onError={(e) => {
+                                          e.currentTarget.style.display = 'none';
+                                        }}
+                                      />
+                                    ) : (
+                                      <i className={fallbackIcon} />
+                                    )}
+                                    {getConnectionDisplayName(id)}
+                                  </span>
+                                }
                                 checked={checked}
                                 disabled={disableDefaultsForm}
                                 onChange={(e) => {
@@ -660,13 +1453,13 @@ export default function UserProfilePage({ embedded = false, activeTabKey, onActi
                             );
                           })}
                         {availableConnections.length === 0 && (
-                          <div className="text-muted small">{t('userProfile.defaults.integrations.empty')}</div>
+                          <div className="profile-empty-state">{t('userProfile.defaults.integrations.empty')}</div>
                         )}
                       </ExpandableOverflowBox>
-                      <div className="text-muted small mt-1">{t('userProfile.defaults.integrations.help')}</div>
+                      <div className="profile-field-help">{t('userProfile.defaults.integrations.help')}</div>
                     </>
                   )}
-                </Form.Group>
+                </div>
 
                 {renderSaveActions(
                   'userProfile.actions.reset',
@@ -690,29 +1483,48 @@ export default function UserProfilePage({ embedded = false, activeTabKey, onActi
             }
           >
             <Form>
-              <p className="text-muted mb-3">{t('userProfile.approval.description')}</p>
-              <Form.Group className="mb-3">
-                <Form.Label className="settings-section-title">{t('userProfile.approval.label')}</Form.Label>
-                {(['always', 'non_destructive', 'never'] as const).map((mode) => (
-                  <Form.Check
-                    key={mode}
-                    type="radio"
-                    id={`approval-mode-${mode}`}
-                    name="approvalMode"
-                    label={t(`userProfile.approval.modes.${mode}.label`)}
-                    checked={userDefaults.approvalMode === mode}
-                    disabled={disableDefaultsForm}
-                    onChange={() => {
-                      setUserDefaults((prev) => ({ ...prev, approvalMode: mode }));
-                      setDirty(true);
-                    }}
-                    className="mb-2"
-                  />
-                ))}
-                <div className="text-muted small mt-1">
-                  {t(`userProfile.approval.modes.${userDefaults.approvalMode}.help`)}
+              <p className="profile-page-intro">{t('userProfile.approval.description')}</p>
+
+              <div className="profile-section">
+                <div className="profile-section__title">{t('userProfile.approval.label')}</div>
+
+                <div className="profile-radio-group">
+                  {(['always', 'non_destructive', 'never'] as const).map((mode) => (
+                    <div
+                      key={mode}
+                      className={`profile-radio-option ${userDefaults.approvalMode === mode ? 'is-selected' : ''}`}
+                      onClick={() => {
+                        if (disableDefaultsForm) return;
+                        setUserDefaults((prev) => ({ ...prev, approvalMode: mode }));
+                        setDirty(true);
+                      }}
+                    >
+                      <div className="profile-radio-option__inner">
+                        <Form.Check
+                          type="radio"
+                          id={`approval-mode-${mode}`}
+                          name="approvalMode"
+                          checked={userDefaults.approvalMode === mode}
+                          disabled={disableDefaultsForm}
+                          onChange={() => {
+                            setUserDefaults((prev) => ({ ...prev, approvalMode: mode }));
+                            setDirty(true);
+                          }}
+                        />
+                        <div className="profile-radio-option__text">
+                          <div className="profile-radio-option__label">
+                            {t(`userProfile.approval.modes.${mode}.label`)}
+                          </div>
+                          <div className="profile-radio-option__help">
+                            {t(`userProfile.approval.modes.${mode}.help`)}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
                 </div>
-              </Form.Group>
+              </div>
+
               {renderSaveActions(
                 'userProfile.actions.reset',
                 resetToCompanyDefaults,
@@ -723,7 +1535,7 @@ export default function UserProfilePage({ embedded = false, activeTabKey, onActi
           </Tab>
         )}
       </StyledTabs>
-    </>
+    </div>
   );
 
   if (embedded) {

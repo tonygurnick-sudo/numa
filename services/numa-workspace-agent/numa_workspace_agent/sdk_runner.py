@@ -274,6 +274,7 @@ async def stream_claude_sdk(
     approval_mode: str = "always",
     email_signature: Optional[dict] = None,
     agent_type_config: Optional["AgentTypeConfig"] = None,
+    user_profile: Optional[dict] = None,
 ) -> AsyncIterator[bytes]:
     """
     Stream Claude SDK output for a conversation.
@@ -303,6 +304,7 @@ async def stream_claude_sdk(
         kb_listings: Optional dict mapping kb_id -> {files, folders, total_count} for prompt context
         agent_config: Optional agent configuration for custom system prompts and restrictions
         agent_file_paths: Optional list of downloaded agent reference file paths
+        user_profile: Optional user profile dict for AI personalisation
 
     Yields:
         SSE formatted events as bytes (SDK message types serialized)
@@ -409,6 +411,7 @@ async def stream_claude_sdk(
         request_id=request_id,
         email_signature=email_signature,
         agent_type_config=agent_type_config,
+        user_profile=user_profile,
     )
 
     logger.info(
@@ -861,6 +864,7 @@ async def run_claude_sdk(
     approval_mode: str = "always",
     email_signature: Optional[dict] = None,
     agent_type_config: Optional["AgentTypeConfig"] = None,
+    user_profile: Optional[dict] = None,
 ) -> dict[str, Any]:
     """Run Claude SDK to completion and return the collected result.
 
@@ -946,6 +950,7 @@ async def run_claude_sdk(
         request_id=request_id,
         email_signature=email_signature,
         agent_type_config=agent_type_config,
+        user_profile=user_profile,
     )
 
     logger.info(

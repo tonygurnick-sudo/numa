@@ -647,15 +647,70 @@ def build_agent_context(
 _EMAIL_INTEGRATION_SLUGS = {"gmail", "microsoft_outlook"}
 
 
+def _build_user_profile_context(user_profile: Optional[dict]) -> str:
+    """Build user profile context block for the system prompt.
+
+    Args:
+        user_profile: User profile dict from DynamoDB (or None if disabled/empty).
+
+    Returns:
+        Formatted profile context string, or empty string if no profile.
+    """
+    if not user_profile:
+        return ""
+
+    parts = [
+        "<user-profile>",
+        "## User Profile",
+        "The following is information the user has shared about themselves.",
+        "Use it to personalise your responses.\n",
+    ]
+
+    if user_profile.get("name"):
+        parts.append(f"**Name:** {user_profile['name']}")
+    if user_profile.get("jobTitle"):
+        parts.append(f"**Job Title:** {user_profile['jobTitle']}")
+    if user_profile.get("jobDescription"):
+        parts.append(f"\n**Job Description:**\n{user_profile['jobDescription']}")
+    if user_profile.get("linkedInUrl"):
+        parts.append(f"**LinkedIn:** {user_profile['linkedInUrl']}")
+    if user_profile.get("goalsAndObjectives"):
+        parts.append(f"\n**Goals & Objectives:**\n{user_profile['goalsAndObjectives']}")
+    if user_profile.get("otherInformation"):
+        parts.append(f"\n**Other Information:**\n{user_profile['otherInformation']}")
+
+    # Custom instructions get prominent placement
+    if user_profile.get("customInstructions"):
+        parts.append(
+            f"\n**Custom Instructions (follow these carefully):**\n"
+            f"{user_profile['customInstructions']}"
+        )
+
+    # General memories
+    memories = user_profile.get("memories", [])
+    general_memories = [
+        m for m in memories if isinstance(m, dict) and m.get("scope") == "general"
+    ]
+    if general_memories:
+        parts.append("\n**User Memories (General):**")
+        for mem in general_memories:
+            parts.append(f"- {mem.get('content', '')}")
+
+    parts.append("</user-profile>")
+    return "\n".join(parts)
+
+
 def _build_integrations_context(
     enabled_integrations: list[str],
     email_signature: Optional[dict] = None,
+    memories: Optional[list[dict]] = None,
 ) -> str:
     """Build system prompt section for Pipedream Connect integrations.
 
     Args:
         enabled_integrations: List of app slugs (e.g., ["google_drive", "slack"])
         email_signature: Optional user email signature settings
+        memories: Optional list of user memory dicts (filtered for integration scope)
 
     Returns:
         Integrations context string for the system prompt
@@ -705,6 +760,18 @@ Important notes:
         if prompt_file.is_file():
             content = prompt_file.read_text().strip()
             context += f"\n\n### {slug} — Integration Guide\n{content}\n"
+
+        # Append user's integration-scoped memories if present
+        if memories:
+            slug_memories = [
+                m
+                for m in memories
+                if isinstance(m, dict) and m.get("scope") == f"integration:{slug}"
+            ]
+            if slug_memories:
+                context += f"\n\n### {slug} — User Memories\n"
+                for mem in slug_memories:
+                    context += f"- {mem.get('content', '')}\n"
 
     # Append email signature when an email integration is connected
     has_email_integration = any(
@@ -762,6 +829,7 @@ def build_workspace_system_prompt(
     enabled_integrations: Optional[list[str]] = None,
     email_signature: Optional[dict] = None,
     identity_override: Optional[str] = None,
+    user_profile: Optional[dict] = None,
     **_kwargs,
 ) -> str:
     """
@@ -775,9 +843,12 @@ def build_workspace_system_prompt(
         today_string: Pre-formatted date/time string from frontend (overrides today_date)
         agent_config: Optional agent configuration for specialized agents
         agent_file_paths: Optional list of downloaded agent reference file paths
+        enabled_integrations: Optional list of enabled integration slugs
+        email_signature: Optional user email signature settings
         identity_override: Optional string that replaces the IDENTITY_AND_ROLE
             section. When provided, used instead of the default Numa identity.
             All other prompt sections remain unchanged.
+        user_profile: Optional user profile dict for AI personalisation
 
     Returns:
         Complete system prompt string
@@ -827,16 +898,38 @@ def build_workspace_system_prompt(
         user_context = "\n".join(user_context_parts)
         base_prompt = f"{base_prompt}\n\n{user_context}"
 
+    # Append user profile context if available
+    if user_profile:
+        profile_context = _build_user_profile_context(user_profile)
+        if profile_context:
+            base_prompt = f"{base_prompt}\n\n{profile_context}"
+
     # Append agent context if agent config is provided
     if agent_config:
         agent_context = build_agent_context(agent_config, agent_file_paths)
         base_prompt = f"{base_prompt}\n\n{agent_context}"
 
+    # Inject agent-scoped memories if an agent is active
+    if agent_config and user_profile:
+        memories = user_profile.get("memories", [])
+        agent_memories = [
+            m
+            for m in memories
+            if isinstance(m, dict)
+            and m.get("scope") == f"agent:{agent_config.agent_id}"
+        ]
+        if agent_memories:
+            agent_memory_lines = ["\n## Agent-Specific User Memories"]
+            for mem in agent_memories:
+                agent_memory_lines.append(f"- {mem.get('content', '')}")
+            base_prompt = f"{base_prompt}\n" + "\n".join(agent_memory_lines)
+
     # Append integrations context if integrations are enabled
-    # Email signature is injected here too (only when email integrations are connected)
+    # Email signature and user memories are injected here too
     if enabled_integrations:
+        memories = user_profile.get("memories", []) if user_profile else None
         integrations_context = _build_integrations_context(
-            enabled_integrations, email_signature
+            enabled_integrations, email_signature, memories
         )
         base_prompt = f"{base_prompt}\n\n{integrations_context}"
 

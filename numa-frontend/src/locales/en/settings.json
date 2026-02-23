@@ -352,9 +352,100 @@
     "title": "Profile",
     "adminDisabled": "Your admin has disabled personal defaults. You'll use company defaults when starting new chats.",
     "tabs": {
+      "myProfile": "My Profile",
       "userSettings": "User Settings",
       "chatDefaults": "Chat Defaults",
       "approvalSettings": "Integration Approval"
+    },
+    "profile": {
+      "title": "My Profile",
+      "description": "Tell Numa about yourself so it can personalise responses for you.",
+      "fields": {
+        "name": {
+          "label": "Name",
+          "placeholder": "Your full name"
+        },
+        "jobTitle": {
+          "label": "Job Title",
+          "placeholder": "e.g. Senior Engineer, Marketing Manager"
+        },
+        "jobDescription": {
+          "label": "Job Description",
+          "placeholder": "Describe what you do in your role..."
+        },
+        "useProfile": {
+          "label": "Share profile with AI",
+          "help": "When enabled, your profile information is included as context in your AI conversations."
+        },
+        "aboutYou": {
+          "sectionTitle": "About You",
+          "description": "Tell Numa who you are so it can personalise responses for you."
+        },
+        "linkedInUrl": {
+          "label": "LinkedIn Profile",
+          "placeholder": "https://linkedin.com/in/yourprofile"
+        },
+        "goalsAndObjectives": {
+          "label": "Goals & Objectives",
+          "placeholder": "What are your current goals and objectives? e.g. quarterly targets, project milestones, professional development goals..."
+        },
+        "otherInformation": {
+          "label": "Other Information",
+          "placeholder": "Anything else that helps Numa work better for you — working style, preferences, context..."
+        },
+        "customInstructions": {
+          "sectionTitle": "Custom Instructions",
+          "placeholder": "How would you like Numa to behave? e.g. always respond formally, prefer bullet points, focus on conciseness...",
+          "help": "These instructions guide how Numa interacts with you across all conversations."
+        },
+        "profileImage": {
+          "upload": "Upload photo",
+          "uploading": "Uploading...",
+          "remove": "Remove photo",
+          "errors": {
+            "invalidType": "Please upload a PNG or JPEG image.",
+            "tooLarge": "Image must be under 4 MB.",
+            "uploadFailed": "Failed to upload image.",
+            "credentials": "Unable to get upload credentials."
+          }
+        },
+        "memories": {
+          "sectionTitle": "Memories",
+          "description": "Memories help Numa remember important context about you, your integrations, and your agents.",
+          "addMemory": "Add Memory",
+          "editMemory": "Edit",
+          "deleteMemory": "Delete",
+          "saveMemory": "Save",
+          "cancelMemory": "Cancel",
+          "scope": {
+            "label": "Scope",
+            "general": "General",
+            "generalDescription": "Applies to all chats, agents, and contexts",
+            "integrationsHeader": "Integrations",
+            "integrationsDescription": "Applies when this integration is enabled",
+            "integrationPrefix": "Integration",
+            "agentPrefix": "Agent"
+          },
+          "content": {
+            "label": "Memory",
+            "placeholder": "What should Numa remember?"
+          },
+          "empty": "No memories yet. Add memories to help Numa work better for you.",
+          "source": {
+            "user": "Added by you",
+            "ai": "Added by AI"
+          }
+        }
+      },
+      "actions": {
+        "save": "Save Profile",
+        "saving": "Saving...",
+        "reset": "Clear Profile"
+      },
+      "errors": {
+        "loadProfile": "Failed to load profile",
+        "saveProfile": "Failed to save profile"
+      }
     },
     "defaults": {
       "description": "These defaults apply when you start a new chat without selecting an agent.",

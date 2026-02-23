@@ -320,7 +320,7 @@ export default function SettingsPage() {
   const [toolList, setToolList] = useState<{ name: string; description?: string }[]>([]);
   const [toolToggles, setToolToggles] = useState<Record<string, boolean>>({});
   const [integrationsTabKey, setIntegrationsTabKey] = useState<'connected-apps' | 'data-connectors'>('connected-apps');
-  const [userSettingsTabKey, setUserSettingsTabKey] = useState<string>('user-settings');
+  const [userSettingsTabKey, setUserSettingsTabKey] = useState<string>('my-profile');
 
   useEffect(() => {
     if (!dataConnectorsEnabled && integrationsTabKey === 'data-connectors') {
@@ -651,6 +651,7 @@ export default function SettingsPage() {
   );
   const userTabs = useMemo(
     () => [
+      { key: 'my-profile', label: t('userProfile.tabs.myProfile'), iconClassName: 'bi bi-person-circle' },
       { key: 'user-settings', label: t('userProfile.tabs.userSettings'), iconClassName: 'bi bi-person-gear' },
       { key: 'user-defaults', label: t('userProfile.tabs.chatDefaults'), iconClassName: 'bi bi-sliders' },
       ...(workspaceChatEnabled

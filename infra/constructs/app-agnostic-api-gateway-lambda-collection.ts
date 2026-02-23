@@ -396,7 +396,7 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
     const chatSettingsPolicy = [
       {
         effect: 'Allow',
-        actions: ['dynamodb:GetItem', 'dynamodb:PutItem'],
+        actions: ['dynamodb:GetItem', 'dynamodb:PutItem', 'dynamodb:UpdateItem'],
         resources: [`arn:aws:dynamodb:*:*:table/${props.chatSettingsTableName}`],
       },
     ];

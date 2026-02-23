@@ -1,7 +1,7 @@
 import { APIGatewayProxyHandlerV2 } from 'aws-lambda';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { withPRM } from '../../../lib/prm-node/prm';
-import { DynamoDBDocumentClient, GetCommand, PutCommand } from '@aws-sdk/lib-dynamodb';
+import { DynamoDBDocumentClient, GetCommand, PutCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
 
 const TABLE_NAME = process.env.CHAT_SETTINGS_TABLE_NAME as string;
 const CLIENT_NAME = process.env.CLIENT_NAME as string;
@@ -39,6 +39,110 @@ type ChatSettingsUpdate = {
 type UserChatSettingsUpdate = ChatSettingsUpdate & {
   userDefaultsEnabled?: boolean | null;
 };
+
+// Memory type — individual memory item scoped to general, integration, or agent
+export type Memory = {
+  id: string;
+  content: string;
+  scope: string; // "general" | "integration:{slug}" | "agent:{agentId}"
+  createdAt: string;
+  source: 'user' | 'ai';
+};
+
+// User profile type — structured "memory" sent to the AI
+export type UserProfile = {
+  // About You
+  name: string;
+  jobTitle: string;
+  jobDescription: string;
+  linkedInUrl: string;
+  goalsAndObjectives: string;
+  otherInformation: string;
+  profileImage: { s3Bucket: string; s3Key: string } | null;
+  // Custom Instructions
+  customInstructions: string;
+  // Memories
+  memories: Memory[];
+  // Toggle
+  useProfile: boolean;
+};
+
+const DEFAULT_USER_PROFILE: UserProfile = {
+  name: '',
+  jobTitle: '',
+  jobDescription: '',
+  linkedInUrl: '',
+  goalsAndObjectives: '',
+  otherInformation: '',
+  profileImage: null,
+  customInstructions: '',
+  memories: [],
+  useProfile: true,
+};
+
+const MAX_NAME = 100;
+const MAX_TITLE = 100;
+const MAX_URL = 200;
+const MAX_LONG_FIELD = 500;
+const MAX_CUSTOM_INSTRUCTIONS = 1500;
+const MAX_MEMORY_CONTENT = 300;
+const MAX_MEMORIES = 50;
+const VALID_SCOPE_PATTERN = /^(general|integration:.+|agent:.+)$/;
+
+function truncate(value: unknown, maxLen: number): string {
+  if (typeof value !== 'string') return '';
+  return value.slice(0, maxLen);
+}
+
+function validateMemory(raw: unknown): Memory | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const obj = raw as Record<string, unknown>;
+  const id = typeof obj.id === 'string' ? obj.id.slice(0, 100) : '';
+  const content = truncate(obj.content, MAX_MEMORY_CONTENT);
+  const scope = typeof obj.scope === 'string' ? obj.scope.slice(0, 200) : '';
+  const createdAt = typeof obj.createdAt === 'string' ? obj.createdAt : new Date().toISOString();
+  const source = obj.source === 'ai' ? 'ai' : 'user';
+  if (!id || !content || !VALID_SCOPE_PATTERN.test(scope)) return null;
+  return { id, content, scope, createdAt, source } as Memory;
+}
+
+function validateUserProfile(raw: unknown): UserProfile {
+  if (!raw || typeof raw !== 'object') return { ...DEFAULT_USER_PROFILE };
+  const obj = raw as Record<string, unknown>;
+
+  let profileImage: { s3Bucket: string; s3Key: string } | null = null;
+  if (obj.profileImage && typeof obj.profileImage === 'object' && !Array.isArray(obj.profileImage)) {
+    const img = obj.profileImage as Record<string, unknown>;
+    if (typeof img.s3Bucket === 'string' && typeof img.s3Key === 'string') {
+      profileImage = { s3Bucket: img.s3Bucket, s3Key: img.s3Key };
+    }
+  }
+
+  const customInstructions = truncate(obj.customInstructions, MAX_CUSTOM_INSTRUCTIONS);
+  const linkedInUrl = truncate(obj.linkedInUrl, MAX_URL);
+  const goalsAndObjectives = truncate(obj.goalsAndObjectives, MAX_LONG_FIELD);
+  const otherInformation = truncate(obj.otherInformation, MAX_LONG_FIELD);
+
+  const memories: Memory[] = Array.isArray(obj.memories)
+    ? obj.memories
+        .map((m: unknown) => validateMemory(m))
+        .filter((m): m is Memory => m !== null)
+        .slice(0, MAX_MEMORIES)
+    : [];
+
+  return {
+    name: truncate(obj.name, MAX_NAME),
+    jobTitle: truncate(obj.jobTitle, MAX_TITLE),
+    jobDescription: truncate(obj.jobDescription, MAX_LONG_FIELD),
+    linkedInUrl,
+    goalsAndObjectives,
+    otherInformation,
+    profileImage,
+    customInstructions,
+    memories,
+    useProfile: typeof obj.useProfile === 'boolean' ? obj.useProfile : DEFAULT_USER_PROFILE.useProfile,
+  };
+}
 
 // Default settings for new users
 const VALID_APPROVAL_MODES: ApprovalMode[] = ['always', 'non_destructive', 'never'];
@@ -363,6 +467,31 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
       return { statusCode: 200, headers: HEADERS, body: JSON.stringify(responseSettings) };
     }
 
+    // GET/PUT /chat/settings?scope=profile - user profile (AI memory)
+    if ((method === 'GET' || method === 'PUT') && /\/chat\/settings\/?$/.test(path) && scope === 'profile') {
+      if (method === 'GET') {
+        const userItem = await loadUserItem(userId);
+        const profile = validateUserProfile(userItem?.userProfile);
+        return { statusCode: 200, headers: HEADERS, body: JSON.stringify(profile) };
+      }
+
+      // PUT — use UpdateCommand to set only userProfile without clobbering other fields
+      const body = JSON.parse(event.body || '{}');
+      const validated = validateUserProfile(body);
+      await ddb.send(
+        new UpdateCommand({
+          TableName: TABLE_NAME,
+          Key: { user_id: userId },
+          UpdateExpression: 'SET userProfile = :p, updatedAt = :u',
+          ExpressionAttributeValues: {
+            ':p': validated,
+            ':u': new Date().toISOString(),
+          },
+        }),
+      );
+      return { statusCode: 200, headers: HEADERS, body: JSON.stringify({ ok: true }) };
+    }
+
     // GET /chat/settings - Get user's chat settings
     if (method === 'GET' && /\/chat\/settings\/?$/.test(path)) {
       const globalSettings = await loadGlobalSettings();
@@ -598,6 +727,12 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
         'userDefaultsEnabled' in next;
 
       const itemToStore = hasOverrides ? next : { user_id: userId, updatedAt: next.updatedAt };
+
+      // Preserve userProfile if it exists — PutCommand overwrites the entire item,
+      // so we carry forward the existing userProfile attribute to avoid clobbering it.
+      if (existing?.userProfile) {
+        (itemToStore as Record<string, unknown>).userProfile = existing.userProfile;
+      }
 
       await ddb.send(
         new PutCommand({

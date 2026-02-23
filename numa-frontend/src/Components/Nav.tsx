@@ -30,6 +30,10 @@ import { useBranding } from '../Providers/BrandingContext';
 import DefaultLogo from '../../public/numa-logo.svg';
 import { useBrandingAsset } from '../hooks/useBrandingAsset';
 import { useDrawerBackClose } from '../hooks/useDrawerBackClose';
+import { useNumaRequest } from '../Providers/NumaRequestContext';
+import { ChatSettingsService, type UserProfile } from '../Services/ChatSettingsService';
+import ProfileAvatar from './ProfileAvatar';
+import { getCachedUserProfile } from '../utils/userProfileCache';
 
 interface NavProps {
   isCollapsed?: boolean;
@@ -133,6 +137,27 @@ const Nav = ({ isCollapsed = false, onToggleCollapse }: NavProps) => {
 
   // Get user email from decoded token
   const userEmail = user?.decoded_tokens?.idToken?.email || 'user@example.com';
+  const { numaGet } = useNumaRequest();
+
+  // Stale-while-revalidate: show cached profile instantly, then update if the
+  // API returns something different.  This eliminates the "User" fallback flash.
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(() => getCachedUserProfile());
+
+  useEffect(() => {
+    let cancelled = false;
+    ChatSettingsService.getUserProfile(numaGet)
+      .then((profile) => {
+        if (!cancelled) setUserProfile(profile);
+      })
+      .catch(() => {
+        /* profile is optional — silently ignore */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [numaGet]);
+
+  const displayName = userProfile?.name || t('nav.user');
 
   const [navItems, setNavItems] = useState([]);
   const [interfaceMode] = useState<InterfaceMode>('advanced');
@@ -512,11 +537,16 @@ const Nav = ({ isCollapsed = false, onToggleCollapse }: NavProps) => {
 
           <div className="user-profile-section">
             <div className="user-avatar">
-              <i className="bi bi-person user-avatar-icon" aria-hidden="true"></i>
+              <ProfileAvatar
+                profileImage={userProfile?.profileImage ?? null}
+                name={displayName}
+                email={userEmail}
+                size={32}
+              />
             </div>
             {isExpanded && (
               <div className="user-info">
-                <div className="user-name">{t('nav.user')}</div>
+                <div className="user-name">{displayName}</div>
                 <div className="user-email">{userEmail}</div>
               </div>
             )}

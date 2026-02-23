@@ -316,6 +316,7 @@ def create_agent_options(
     request_id: Optional[str] = None,
     email_signature: Optional[dict] = None,
     agent_type_config: Optional[AgentTypeConfig] = None,
+    user_profile: Optional[dict] = None,
 ) -> ClaudeAgentOptions:
     """
     Create ClaudeAgentOptions for the Numa Workspace Agent.
@@ -333,6 +334,7 @@ def create_agent_options(
         agent_config: Optional agent configuration for custom prompts and restrictions
         agent_file_paths: Optional list of downloaded agent reference file paths
         agent_type_config: Optional agent type config. Defaults to "numa-chat".
+        user_profile: Optional user profile dict for AI personalisation
 
     Returns:
         Configured ClaudeAgentOptions
@@ -355,6 +357,7 @@ def create_agent_options(
         enabled_integrations=enabled_integrations,
         email_signature=email_signature,
         identity_override=type_config.identity_override,
+        user_profile=user_profile,
     )
 
     # Build environment variables for SDK subprocess
