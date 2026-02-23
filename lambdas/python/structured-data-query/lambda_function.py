@@ -38,7 +38,7 @@ import boto3
 SERVICE_VERSION = "1.5.1"
 DEFAULT_AWS_REGION = os.environ.get("AWS_REGION", "us-east-1")
 DEFAULT_BEDROCK_MODEL_ID = os.environ.get(
-    "BEDROCK_MODEL_ID", "us.anthropic.claude-sonnet-4-5-20250929-v1:0"
+    "BEDROCK_MODEL_ID", "us.anthropic.claude-sonnet-4-6"
 )
 
 # pylint: disable=broad-exception-caught,too-many-locals,too-many-branches,too-many-statements

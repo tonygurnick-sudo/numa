@@ -51,20 +51,19 @@ LOCAL_ROOT = Path(os.environ.get("LOCAL_WORKSPACE_ROOT", "/workdir"))
 # ── SDK Configuration ──────────────────────────────────────────────────────────
 
 # Regional inference profile prefixes
-# us-east-1 uses us.*, ap-southeast-2 uses au.* for 4.5 models, apac.* for older models
-# Opus 4.5 uses global.* in non-US regions
+# us-east-1 uses us.*, ap-southeast-2 uses au.* for 4.5+ models, apac.* for older models
 _KNOWN_PREFIXES = ("us.", "au.", "apac.", "eu.", "global.")
 
 REGIONAL_MODEL_MAP: dict[str, dict[str, str]] = {
     "us-east-1": {
-        "anthropic.claude-sonnet-4-5-20250929-v1:0": "us.anthropic.claude-sonnet-4-5-20250929-v1:0",
-        "anthropic.claude-opus-4-5-20251101-v1:0": "us.anthropic.claude-opus-4-5-20251101-v1:0",
+        "anthropic.claude-sonnet-4-6": "us.anthropic.claude-sonnet-4-6",
+        "anthropic.claude-opus-4-6-v1": "us.anthropic.claude-opus-4-6-v1",
         "anthropic.claude-haiku-4-5-20251001-v1:0": "us.anthropic.claude-haiku-4-5-20251001-v1:0",
         "anthropic.claude-sonnet-4-20250514-v1:0": "us.anthropic.claude-sonnet-4-20250514-v1:0",
     },
     "ap-southeast-2": {
-        "anthropic.claude-sonnet-4-5-20250929-v1:0": "au.anthropic.claude-sonnet-4-5-20250929-v1:0",
-        "anthropic.claude-opus-4-5-20251101-v1:0": "global.anthropic.claude-opus-4-5-20251101-v1:0",
+        "anthropic.claude-sonnet-4-6": "au.anthropic.claude-sonnet-4-6",
+        "anthropic.claude-opus-4-6-v1": "au.anthropic.claude-opus-4-6-v1",
         "anthropic.claude-haiku-4-5-20251001-v1:0": "au.anthropic.claude-haiku-4-5-20251001-v1:0",
         "anthropic.claude-sonnet-4-20250514-v1:0": "apac.anthropic.claude-sonnet-4-20250514-v1:0",
     },
@@ -87,7 +86,7 @@ def _regionalize(bare_model_id: str) -> str:
 
 # Default model — env var is set per-region by infra construct; fallback computes dynamically
 DEFAULT_MODEL = os.environ.get(
-    "ANTHROPIC_MODEL", _regionalize("anthropic.claude-sonnet-4-5-20250929-v1:0")
+    "ANTHROPIC_MODEL", _regionalize("anthropic.claude-sonnet-4-6")
 )
 
 # Allowed models for user selection (computed from regional map)

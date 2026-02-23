@@ -24,7 +24,7 @@ REGION = os.getenv("AWS_REGION", "us-east-1")
 REGIONAL_MODEL_MAP = {
     "us-east-1": {
         "primary": {
-            "model_id": "us.anthropic.claude-sonnet-4-5-20250929-v1:0",
+            "model_id": "us.anthropic.claude-sonnet-4-6",
             "max_tokens": 64000,
         },
         "fallback": {
@@ -38,7 +38,7 @@ REGIONAL_MODEL_MAP = {
     },
     "ap-southeast-2": {
         "primary": {
-            "model_id": "au.anthropic.claude-sonnet-4-5-20250929-v1:0",
+            "model_id": "au.anthropic.claude-sonnet-4-6",
             "max_tokens": 64000,
         },
         "fallback": {

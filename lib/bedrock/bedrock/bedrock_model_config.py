@@ -47,9 +47,9 @@ class ModelInfo:
 FALLBACK_SEQUENCES = {
     Region.US_EAST_1: [
         ModelInfo(
-            model_id="us.anthropic.claude-sonnet-4-5-20250929-v1:0",
+            model_id="us.anthropic.claude-sonnet-4-6",
             provider="anthropic",
-            name="Claude Sonnet 4.5",
+            name="Claude Sonnet 4.6",
             input_cost=0.003,
             output_cost=0.015,
             max_tokens=64000,
@@ -81,9 +81,9 @@ FALLBACK_SEQUENCES = {
     ],
     Region.AP_SOUTHEAST_2: [
         ModelInfo(
-            model_id="au.anthropic.claude-sonnet-4-5-20250929-v1:0",
+            model_id="au.anthropic.claude-sonnet-4-6",
             provider="anthropic",
-            name="Claude Sonnet 4.5",
+            name="Claude Sonnet 4.6",
             input_cost=0.003,
             output_cost=0.015,
             max_tokens=64000,

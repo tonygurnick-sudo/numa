@@ -1369,6 +1369,9 @@ export class CoreNumaInfra extends Construct {
       'anthropic.claude-haiku-4-5-20251001-v1:0',
       'anthropic.claude-sonnet-4-5-20250929-v1:0',
       'anthropic.claude-opus-4-5-20251101-v1:0',
+      // Claude 4.6 models
+      'anthropic.claude-sonnet-4-6',
+      'anthropic.claude-opus-4-6-v1',
       // Amazon models
       'amazon.titan-embed-text-v2:0',
       'amazon.nova-lite-v1:0',

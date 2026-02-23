@@ -199,9 +199,9 @@ class TestCreateAgentOptionsWithType:
         # Request-level model should take precedence
         options = create_agent_options(
             agent_type_config=config,
-            model="us.anthropic.claude-sonnet-4-5-20250929-v1:0",
+            model="us.anthropic.claude-sonnet-4-6",
         )
-        assert options.model == "us.anthropic.claude-sonnet-4-5-20250929-v1:0"
+        assert options.model == "us.anthropic.claude-sonnet-4-6"
 
     def test_thinking_tokens_from_type(self):
         config = AgentTypeConfig(
