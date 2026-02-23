@@ -24,6 +24,7 @@ vi.mock('../../Services/jobsApi', () => ({
 // Mock the manifestService
 vi.mock('../../Services/manifestService', () => ({
   manifestService: {
+    getCachedManifest: vi.fn().mockReturnValue(null),
     fetchAppsFromManifest: vi.fn().mockResolvedValue([]),
     getApps: vi.fn().mockReturnValue([{ id: 'meeting-analyser', appName: 'Meeting Analyser' }]),
   },

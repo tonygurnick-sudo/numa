@@ -93,6 +93,27 @@ vi.mock('../../Services/knowledgeBaseService', () => ({
   UserKB: {},
 }));
 
+// Mock KnowledgeBaseProvider — the provider now uses numaGet('/api/kb') instead
+// of knowledgeBaseService.listUserKBs, so we mock the provider directly.
+vi.mock('../../Providers/KnowledgeBaseProvider', () => ({
+  KnowledgeBaseProvider: ({ children }) => children,
+  useKnowledgeBase: () => ({
+    availableKBs: [
+      { kb_id: 'company', kb_name: 'Company Knowledge Base', role: 'VIEWER' },
+      { kb_id: 'user-kb-123', kb_name: 'My Personal KB', role: 'OWNER' },
+      { kb_id: 'shared-kb-456', kb_name: 'Shared Team KB', role: 'EDITOR' },
+    ],
+    isLoadingKBs: false,
+    selectedKB: null,
+    selectedKbId: null,
+    setSelectedKB: vi.fn(),
+    kbError: null,
+    refreshKBs: vi.fn().mockResolvedValue(undefined),
+    selectKBById: vi.fn(),
+    fetchKBDetails: vi.fn().mockResolvedValue(undefined),
+  }),
+}));
+
 describe('ResultActions Component', () => {
   beforeEach(() => {
     // Clear all mocks before each test

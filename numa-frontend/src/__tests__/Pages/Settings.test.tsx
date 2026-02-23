@@ -25,6 +25,7 @@ vi.mock('../../Providers/NumaRequestContext', () => ({
 
 vi.mock('../../Services/AdminIntegrationsService', () => ({
   AdminIntegrationsService: {
+    getCached: vi.fn().mockReturnValue(null),
     listWithNuma: vi.fn().mockResolvedValue({}),
     updateWithNuma: vi.fn(),
   },
