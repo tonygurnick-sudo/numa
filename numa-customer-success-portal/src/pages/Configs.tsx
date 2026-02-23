@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Alert, Badge, Button, Card, Col, Dropdown, Form, InputGroup, Modal, Row, Spinner } from 'react-bootstrap'
-import { Search, FileEarmarkText, Download } from 'react-bootstrap-icons'
+import { Alert, Badge, Button, Card, Col, Collapse, Dropdown, Form, InputGroup, Modal, Row, Spinner } from 'react-bootstrap'
+import { Search, FileEarmarkText, Download, Funnel, XCircle } from 'react-bootstrap-icons'
 import { useNavigate } from 'react-router-dom'
-import { Client, getDefaultClientConfigValues } from '@/types'
+import DatePicker from 'react-datepicker'
+import 'react-datepicker/dist/react-datepicker.css'
+import { Client, getDefaultClientConfigValues, CLIENT_STATUS_VALUES, CLIENT_STATUS_DISPLAY } from '@/types'
 import type { ClientMetadata } from '@/types'
 import { clientService } from '@/services/clientService'
 import { clientMetadataService } from '@/services/clientMetadataService'
@@ -20,6 +22,12 @@ export default function Configs() {
   const [metadataMap, setMetadataMap] = useState<Map<string, ClientMetadata>>(new Map())
   const [showExportModal, setShowExportModal] = useState(false)
   const [exportFormat, setExportFormat] = useState<'csv' | 'json'>('csv')
+  const [showFilters, setShowFilters] = useState(false)
+  const [statusFilter, setStatusFilter] = useState('')
+  const [trialStartFrom, setTrialStartFrom] = useState('')
+  const [trialStartTo, setTrialStartTo] = useState('')
+  const [trialEndFrom, setTrialEndFrom] = useState('')
+  const [trialEndTo, setTrialEndTo] = useState('')
 
   useEffect(() => {
     const load = async () => {
@@ -42,11 +50,73 @@ export default function Configs() {
     load()
   }, [])
 
+  const activeFilterCount = useMemo(() => {
+    let count = 0
+    if (statusFilter) count++
+    if (trialStartFrom || trialStartTo) count++
+    if (trialEndFrom || trialEndTo) count++
+    return count
+  }, [statusFilter, trialStartFrom, trialStartTo, trialEndFrom, trialEndTo])
+
+  const clearFilters = () => {
+    setStatusFilter('')
+    setTrialStartFrom('')
+    setTrialStartTo('')
+    setTrialEndFrom('')
+    setTrialEndTo('')
+  }
+
   const filtered = useMemo(() => {
+    let result = clients
+
+    // Text search (existing)
     const term = search.toLowerCase().trim()
-    if (!term) return clients
-    return clients.filter(c => c.name.toLowerCase().includes(term))
-  }, [search, clients])
+    if (term) {
+      result = result.filter(c => c.name.toLowerCase().includes(term))
+    }
+
+    // Status filter
+    if (statusFilter) {
+      result = result.filter(c => {
+        const meta = metadataMap.get(c.name)
+        if (!meta) return false
+        if (statusFilter === 'expired') {
+          return meta.status === 'trial' && meta.trialEndDate && new Date(meta.trialEndDate) < new Date()
+        }
+        return meta.status === statusFilter
+      })
+    }
+
+    // Trial start date range
+    if (trialStartFrom) {
+      result = result.filter(c => {
+        const meta = metadataMap.get(c.name)
+        return meta?.trialStartDate && meta.trialStartDate >= trialStartFrom
+      })
+    }
+    if (trialStartTo) {
+      result = result.filter(c => {
+        const meta = metadataMap.get(c.name)
+        return meta?.trialStartDate && meta.trialStartDate <= trialStartTo
+      })
+    }
+
+    // Trial end date range
+    if (trialEndFrom) {
+      result = result.filter(c => {
+        const meta = metadataMap.get(c.name)
+        return meta?.trialEndDate && meta.trialEndDate >= trialEndFrom
+      })
+    }
+    if (trialEndTo) {
+      result = result.filter(c => {
+        const meta = metadataMap.get(c.name)
+        return meta?.trialEndDate && meta.trialEndDate <= trialEndTo
+      })
+    }
+
+    return result
+  }, [search, clients, statusFilter, trialStartFrom, trialStartTo, trialEndFrom, trialEndTo, metadataMap])
 
   // Helper function to merge config with defaults
   const mergeConfigWithDefaults = (config: any): any => {
@@ -231,7 +301,7 @@ export default function Configs() {
             </Card.Header>
             <Card.Body className="p-0">
               <div className="p-3 border-bottom">
-                <InputGroup>
+                <InputGroup className="mb-2">
                   <InputGroup.Text>
                     <Search />
                   </InputGroup.Text>
@@ -241,6 +311,110 @@ export default function Configs() {
                     onChange={e => setSearch(e.target.value)}
                   />
                 </InputGroup>
+                <div className="d-flex align-items-center gap-2">
+                  <Button
+                    variant={activeFilterCount > 0 ? 'primary' : 'outline-secondary'}
+                    size="sm"
+                    onClick={() => setShowFilters(!showFilters)}
+                  >
+                    <Funnel size={12} className="me-1" />
+                    Filters
+                    {activeFilterCount > 0 && (
+                      <Badge bg="light" text="dark" pill className="ms-1">
+                        {activeFilterCount}
+                      </Badge>
+                    )}
+                  </Button>
+                  {activeFilterCount > 0 && (
+                    <Button
+                      variant="outline-danger"
+                      size="sm"
+                      onClick={clearFilters}
+                      title="Clear all filters"
+                    >
+                      <XCircle size={12} className="me-1" />
+                      Clear
+                    </Button>
+                  )}
+                </div>
+                <Collapse in={showFilters}>
+                  <div className="mt-2 p-2 bg-light rounded border">
+                    <Row className="g-2">
+                      <Col xs={12}>
+                        <Form.Label className="small fw-semibold text-muted mb-1">Status</Form.Label>
+                        <Form.Select
+                          size="sm"
+                          value={statusFilter}
+                          onChange={e => setStatusFilter(e.target.value)}
+                        >
+                          <option value="">All Statuses</option>
+                          {CLIENT_STATUS_VALUES.map(s => (
+                            <option key={s} value={s}>{CLIENT_STATUS_DISPLAY[s].label}</option>
+                          ))}
+                          <option value="expired">Trial - Expired</option>
+                        </Form.Select>
+                      </Col>
+                      <Col xs={6}>
+                        <Form.Label className="small fw-semibold text-muted mb-1">Trial Start From</Form.Label>
+                        <DatePicker
+                          selected={trialStartFrom ? new Date(trialStartFrom) : null}
+                          onChange={(date: Date | null) => setTrialStartFrom(date ? date.toISOString().split('T')[0] : '')}
+                          dateFormat="yyyy-MM-dd"
+                          className="form-control form-control-sm"
+                          placeholderText="Select date"
+                          isClearable
+                          showMonthDropdown
+                          showYearDropdown
+                          dropdownMode="select"
+                        />
+                      </Col>
+                      <Col xs={6}>
+                        <Form.Label className="small fw-semibold text-muted mb-1">Trial Start To</Form.Label>
+                        <DatePicker
+                          selected={trialStartTo ? new Date(trialStartTo) : null}
+                          onChange={(date: Date | null) => setTrialStartTo(date ? date.toISOString().split('T')[0] : '')}
+                          dateFormat="yyyy-MM-dd"
+                          className="form-control form-control-sm"
+                          placeholderText="Select date"
+                          isClearable
+                          showMonthDropdown
+                          showYearDropdown
+                          dropdownMode="select"
+                          minDate={trialStartFrom ? new Date(trialStartFrom) : undefined}
+                        />
+                      </Col>
+                      <Col xs={6}>
+                        <Form.Label className="small fw-semibold text-muted mb-1">Trial End From</Form.Label>
+                        <DatePicker
+                          selected={trialEndFrom ? new Date(trialEndFrom) : null}
+                          onChange={(date: Date | null) => setTrialEndFrom(date ? date.toISOString().split('T')[0] : '')}
+                          dateFormat="yyyy-MM-dd"
+                          className="form-control form-control-sm"
+                          placeholderText="Select date"
+                          isClearable
+                          showMonthDropdown
+                          showYearDropdown
+                          dropdownMode="select"
+                        />
+                      </Col>
+                      <Col xs={6}>
+                        <Form.Label className="small fw-semibold text-muted mb-1">Trial End To</Form.Label>
+                        <DatePicker
+                          selected={trialEndTo ? new Date(trialEndTo) : null}
+                          onChange={(date: Date | null) => setTrialEndTo(date ? date.toISOString().split('T')[0] : '')}
+                          dateFormat="yyyy-MM-dd"
+                          className="form-control form-control-sm"
+                          placeholderText="Select date"
+                          isClearable
+                          showMonthDropdown
+                          showYearDropdown
+                          dropdownMode="select"
+                          minDate={trialEndFrom ? new Date(trialEndFrom) : undefined}
+                        />
+                      </Col>
+                    </Row>
+                  </div>
+                </Collapse>
               </div>
 
               {error && (

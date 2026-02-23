@@ -506,6 +506,45 @@ class AuthService {
     }
   }
 
+  private isTransientError(error: unknown): boolean {
+    if (!navigator.onLine) return true
+    const message = error instanceof Error ? error.message : String(error)
+    const name = error instanceof Error ? error.name : ''
+    const transientPatterns = [
+      'fetch failed', 'network', 'dns', 'timeout', 'aborted',
+      'econnrefused', 'econnreset', 'enotfound', 'load failed',
+      'configuration not loaded',
+    ]
+    const lower = `${name} ${message}`.toLowerCase()
+    return transientPatterns.some(p => lower.includes(p))
+  }
+
+  private isPermanentAuthError(error: unknown): boolean {
+    const name = error instanceof Error ? error.name : ''
+    const message = error instanceof Error ? error.message : String(error)
+    const lower = `${name} ${message}`.toLowerCase()
+    return lower.includes('notauthorizedexception') ||
+      lower.includes('usernotfoundexception') ||
+      lower.includes('invalid refresh token') ||
+      lower.includes('refresh token has been revoked')
+  }
+
+  private waitForOnline(timeoutMs = 10000): Promise<boolean> {
+    if (navigator.onLine) return Promise.resolve(true)
+    return new Promise(resolve => {
+      const timer = setTimeout(() => {
+        window.removeEventListener('online', handler)
+        resolve(navigator.onLine)
+      }, timeoutMs)
+      const handler = () => {
+        clearTimeout(timer)
+        window.removeEventListener('online', handler)
+        resolve(true)
+      }
+      window.addEventListener('online', handler)
+    })
+  }
+
   async refreshTokens(): Promise<AuthSession | null> {
     if (!this.session) return null
     if (!this.updateConfig()) {
@@ -517,52 +556,87 @@ class AuthService {
       return this.refreshInFlight
     }
 
+    const MAX_RETRIES = 3
     const doRefresh = async (): Promise<AuthSession | null> => {
-      try {
-        const command = new InitiateAuthCommand({
-          AuthFlow: 'REFRESH_TOKEN_AUTH',
-          ClientId: this.clientId,
-          AuthParameters: {
-            REFRESH_TOKEN: this.session!.refreshToken,
-          },
-        })
+      for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+        try {
+          // Wait for network if offline
+          if (!navigator.onLine) {
+            const online = await this.waitForOnline()
+            if (!online) {
+              console.warn('[auth] Still offline after waiting, skipping refresh')
+              return this.session
+            }
+          }
 
-        const response = await this.client.send(command)
+          const command = new InitiateAuthCommand({
+            AuthFlow: 'REFRESH_TOKEN_AUTH',
+            ClientId: this.clientId,
+            AuthParameters: {
+              REFRESH_TOKEN: this.session!.refreshToken,
+            },
+          })
 
-        if (!response.AuthenticationResult) {
-          throw new Error('Token refresh failed')
+          const response = await this.client.send(command)
+
+          if (!response.AuthenticationResult) {
+            throw new Error('Token refresh failed')
+          }
+
+          const { AccessToken, IdToken, ExpiresIn } = response.AuthenticationResult
+          if (!AccessToken || !IdToken) {
+            throw new Error('Incomplete refresh response')
+          }
+
+          const userInfo = await this.getUserInfo(AccessToken)
+
+          const updated: AuthSession = {
+            accessToken: AccessToken,
+            idToken: IdToken,
+            refreshToken: this.session!.refreshToken,
+            expiresAt: Date.now() + (ExpiresIn! * 1000),
+            user: userInfo,
+          }
+
+          this.session = updated
+          this.storeSession(updated)
+          return updated
+        } catch (error) {
+          // Permanent auth errors — stop retrying and clear session
+          if (this.isPermanentAuthError(error)) {
+            console.error('[auth] Permanent auth error, clearing session:', error)
+            this.session = null
+            this.clearStoredSession()
+            return null
+          }
+
+          // Transient errors — retry with backoff
+          if (this.isTransientError(error) && attempt < MAX_RETRIES - 1) {
+            const delay = Math.pow(2, attempt) * 1000 // 1s, 2s, 4s
+            console.warn(`[auth] Transient refresh error (attempt ${attempt + 1}/${MAX_RETRIES}), retrying in ${delay}ms:`, error)
+            await new Promise(r => setTimeout(r, delay))
+            continue
+          }
+
+          // Final attempt failed or unknown error
+          console.error(`[auth] Refresh failed after ${attempt + 1} attempt(s):`, error)
+          // Don't clear session for transient errors — keep the existing session
+          // so the user stays logged in and we can retry on the next cycle
+          if (this.isTransientError(error)) {
+            console.warn('[auth] Keeping existing session despite transient refresh failure')
+            return this.session
+          }
+          this.session = null
+          this.clearStoredSession()
+          return null
         }
-
-        const { AccessToken, IdToken, ExpiresIn } = response.AuthenticationResult
-        if (!AccessToken || !IdToken) {
-          throw new Error('Incomplete refresh response')
-        }
-
-        const userInfo = await this.getUserInfo(AccessToken)
-
-        const updated: AuthSession = {
-          accessToken: AccessToken,
-          idToken: IdToken,
-          refreshToken: this.session!.refreshToken,
-          expiresAt: Date.now() + (ExpiresIn! * 1000),
-          user: userInfo,
-        }
-
-        this.session = updated
-        this.storeSession(updated)
-        return updated
-      } catch (error) {
-        console.error('❌ Error refreshing tokens:', error)
-        // Clear invalid session on refresh failure
-        this.session = null
-        this.clearStoredSession()
-        return null
-      } finally {
-        this.refreshInFlight = null
       }
+      return this.session
     }
 
-    this.refreshInFlight = doRefresh()
+    this.refreshInFlight = doRefresh().finally(() => {
+      this.refreshInFlight = null
+    })
     return this.refreshInFlight
   }
 
