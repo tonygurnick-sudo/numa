@@ -147,7 +147,7 @@ export default function UpdateClientConfig() {
     setProvisionQResources(Boolean((cfg as any).provisionQResources))
     setPreferredKnowledgeBase(((cfg as any).preferredKnowledgeBase as 'q' | 'bedrock') || defaults.preferredKnowledgeBase)
     setBrandingProviderEnabled(Boolean((cfg as any).brandingProviderEnabled))
-    setNumaWorkspaceChat(Boolean((cfg as any).numaWorkspaceChat))
+    setNumaWorkspaceChat((cfg as any).numaWorkspaceChat ?? defaults.numaWorkspaceChat)
     setScheduling(Boolean((cfg as any).scheduling))
     setWorkspaceChatModelSelection(Boolean((cfg as any).workspaceChatModelSelection))
     setNumaOps(Boolean((cfg as any).numaOps))
