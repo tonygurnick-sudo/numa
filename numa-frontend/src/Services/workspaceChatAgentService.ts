@@ -173,6 +173,8 @@ export async function streamWorkspaceChatAgent(
     migrateFromV1: request.migrateFromV1 || false,
     // Agent support - ID of agent for custom prompts/restrictions
     agentId: request.agentId,
+    // Company profile for system prompt context
+    companyProfile: request.companyProfile,
     // Agent type system — selects registered type config (default: "numa-chat")
     type: request.type,
     // Response mode override — "stream", "sync", or "fire-and-forget"

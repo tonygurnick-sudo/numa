@@ -1479,6 +1479,7 @@ const NumaWorkspaceChatAgents = () => {
         modelId: selectedModelId,
         migrateFromV1: needsV1Migration,
         agentId: activeAgent?.agentId,
+        companyProfile,
       });
       // Clear the V1 migration flag after first message (migration happens on first request)
       if (needsV1Migration) {

@@ -316,6 +316,7 @@ def create_agent_options(
     email_signature: Optional[dict] = None,
     agent_type_config: Optional[AgentTypeConfig] = None,
     user_profile: Optional[dict] = None,
+    company_profile: Optional[str] = None,
 ) -> ClaudeAgentOptions:
     """
     Create ClaudeAgentOptions for the Numa Workspace Agent.
@@ -357,6 +358,7 @@ def create_agent_options(
         email_signature=email_signature,
         identity_override=type_config.identity_override,
         user_profile=user_profile,
+        company_profile=company_profile,
     )
 
     # Build environment variables for SDK subprocess

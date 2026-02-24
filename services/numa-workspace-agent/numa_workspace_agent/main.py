@@ -1287,6 +1287,7 @@ async def _handle_chat(
     timezone = body.get("timezone")
     user_email = body.get("userEmail")
     today_string = body.get("todayString")
+    company_profile = body.get("companyProfile", "")
     available_kbs = body.get("availableKBs")  # List of {id, name} for KB tool
     enabled_tools = body.get(
         "enabledTools", []
@@ -1706,6 +1707,7 @@ async def _handle_chat(
                 email_signature=email_signature,  # Email signature settings
                 agent_type_config=agent_type_config,  # Agent type configuration
                 user_profile=user_profile,  # User profile for AI personalisation
+                company_profile=company_profile,  # Company profile for system prompt
             )
             async for chunk in sdk_stream:
                 # Stream chunk directly to frontend via HTTP SSE
@@ -1792,6 +1794,7 @@ async def _handle_sync(
     timezone = body.get("timezone")
     user_email = body.get("userEmail")
     today_string = body.get("todayString")
+    company_profile = body.get("companyProfile", "")
     available_kbs = body.get("availableKBs")
     enabled_tools = body.get("enabledTools", [])
     model_id = body.get("modelId")
@@ -1867,6 +1870,7 @@ async def _handle_sync(
             external_user_id=external_user_id,
             enabled_integrations=enabled_integrations,
             agent_type_config=agent_type_config,
+            company_profile=company_profile,
         )
 
     # If the agent type uses result_file mode, read /workdir/session/result.json
@@ -1976,6 +1980,7 @@ async def _handle_fire_and_forget(
     timezone = body.get("timezone")
     user_email = body.get("userEmail")
     today_string = body.get("todayString")
+    company_profile = body.get("companyProfile", "")
     available_kbs = body.get("availableKBs")
     enabled_tools = body.get("enabledTools", [])
     model_id = body.get("modelId")
@@ -2055,6 +2060,7 @@ async def _handle_fire_and_forget(
                     external_user_id=external_user_id,
                     enabled_integrations=enabled_integrations,
                     agent_type_config=agent_type_config,
+                    company_profile=company_profile,
                 )
 
             # If the agent type uses result_file mode, read result.json

@@ -275,6 +275,7 @@ async def stream_claude_sdk(
     email_signature: Optional[dict] = None,
     agent_type_config: Optional["AgentTypeConfig"] = None,
     user_profile: Optional[dict] = None,
+    company_profile: Optional[str] = None,
 ) -> AsyncIterator[bytes]:
     """
     Stream Claude SDK output for a conversation.
@@ -412,6 +413,7 @@ async def stream_claude_sdk(
         email_signature=email_signature,
         agent_type_config=agent_type_config,
         user_profile=user_profile,
+        company_profile=company_profile,
     )
 
     logger.info(
@@ -865,6 +867,7 @@ async def run_claude_sdk(
     email_signature: Optional[dict] = None,
     agent_type_config: Optional["AgentTypeConfig"] = None,
     user_profile: Optional[dict] = None,
+    company_profile: Optional[str] = None,
 ) -> dict[str, Any]:
     """Run Claude SDK to completion and return the collected result.
 
@@ -951,6 +954,7 @@ async def run_claude_sdk(
         email_signature=email_signature,
         agent_type_config=agent_type_config,
         user_profile=user_profile,
+        company_profile=company_profile,
     )
 
     logger.info(

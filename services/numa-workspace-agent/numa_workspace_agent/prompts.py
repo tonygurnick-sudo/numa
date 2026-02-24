@@ -841,6 +841,22 @@ Rules:
 - Do NOT include in non-email contexts (chat responses, documents, etc.)"""
 
 
+def _truncate_company_profile(profile: str, max_length: int = 3000) -> tuple[str, bool]:
+    """Truncate company profile to max_length, breaking at a sentence boundary.
+
+    Matches the V1 frontend truncation logic in chatSystemPromptUtils.ts.
+
+    Returns:
+        Tuple of (truncated_text, was_truncated).
+    """
+    if len(profile) <= max_length:
+        return profile, False
+    # Find last sentence boundary (period) before the limit
+    break_point = profile[:max_length].rfind(".")
+    actual_break = break_point + 1 if break_point > 0 else max_length
+    return profile[:actual_break].strip(), True
+
+
 def build_workspace_system_prompt(
     working_dir: str = ".",
     user_timezone: Optional[str] = None,
@@ -853,6 +869,7 @@ def build_workspace_system_prompt(
     email_signature: Optional[dict] = None,
     identity_override: Optional[str] = None,
     user_profile: Optional[dict] = None,
+    company_profile: Optional[str] = None,
     **_kwargs,
 ) -> str:
     """
@@ -920,6 +937,18 @@ def build_workspace_system_prompt(
     if user_context_parts:
         user_context = "\n".join(user_context_parts)
         base_prompt = f"{base_prompt}\n\n{user_context}"
+
+    # Append company profile if available (truncated to 3000 chars)
+    if company_profile and company_profile.strip():
+        truncated, was_truncated = _truncate_company_profile(company_profile)
+        truncation_note = (
+            "\n\n[Note: Company profile has been truncated for chat context]"
+            if was_truncated
+            else ""
+        )
+        base_prompt = (
+            f"{base_prompt}\n\n**Company Information:**\n{truncated}{truncation_note}"
+        )
 
     # Append user profile context if available
     if user_profile:
