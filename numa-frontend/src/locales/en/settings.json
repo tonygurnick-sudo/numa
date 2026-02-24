@@ -23,6 +23,7 @@
     "unsavedBranding": "You have unsaved branding changes. Leaving this page will discard them. Continue?",
     "unsavedChatDefaults": "You have unsaved chat default changes. Leaving this tab will discard them. Continue?"
   },
+  "unsavedBanner": "You have unsaved changes.",
   "errors": {
     "loadSettings": "Failed to load settings",
     "loadChatDefaults": "Failed to load chat defaults",

@@ -92,6 +92,11 @@ export default function UserProfilePage({ embedded = false, activeTabKey, onActi
   const [error, setError] = useState<string | null>(null);
   const [dirty, setDirty] = useState<boolean>(false);
 
+  // Snapshots of last-saved state — auto-clear dirty when user undoes changes
+  const savedDefaultsRef = useRef('');
+  const savedDefaultsEnabledRef = useRef(false);
+  const savedProfileRef = useRef('');
+
   const hasWorkspaceChat = window.sessionStorage.getItem('NUMA_WORKSPACE_CHAT') === 'true';
   const hasPipedreamFeature = window.sessionStorage.getItem('PIPEDREAM_INTEGRATIONS') === 'true';
   const relayLambdaArn = window.sessionStorage.getItem('PIPEDREAM_RELAY_LAMBDA_ARN');
@@ -282,6 +287,8 @@ export default function UserProfilePage({ embedded = false, activeTabKey, onActi
         if (cancelled) return;
         setUserDefaults(res.settings);
         setUserDefaultsEnabled(res.userDefaultsEnabled);
+        savedDefaultsRef.current = JSON.stringify(res.settings);
+        savedDefaultsEnabledRef.current = res.userDefaultsEnabled;
         setError(null);
         setDirty(false);
       } catch (e) {
@@ -305,6 +312,7 @@ export default function UserProfilePage({ embedded = false, activeTabKey, onActi
         const profile = await ChatSettingsService.getUserProfile(numaGet);
         if (cancelled) return;
         setUserProfile(profile);
+        savedProfileRef.current = JSON.stringify(profile);
         setProfileError(null);
         setProfileDirty(false);
       } catch (e) {
@@ -318,6 +326,20 @@ export default function UserProfilePage({ embedded = false, activeTabKey, onActi
       cancelled = true;
     };
   }, [numaGet]);
+
+  // Auto-clear dirty flags when current state matches the last-saved snapshot
+  useEffect(() => {
+    if (!dirty) return;
+    const matches =
+      JSON.stringify(userDefaults) === savedDefaultsRef.current &&
+      userDefaultsEnabled === savedDefaultsEnabledRef.current;
+    if (matches) setDirty(false);
+  }, [userDefaults, userDefaultsEnabled, dirty]);
+
+  useEffect(() => {
+    if (!profileDirty) return;
+    if (JSON.stringify(userProfile) === savedProfileRef.current) setProfileDirty(false);
+  }, [userProfile, profileDirty]);
 
   const kbIdsSorted = useMemo(
     () => availableKBs.map((kb) => kb.kb_id).filter((id) => typeof id === 'string'),
@@ -502,6 +524,8 @@ export default function UserProfilePage({ embedded = false, activeTabKey, onActi
       const refreshed = await ChatSettingsService.getForProfile(numaGet);
       setUserDefaults(refreshed.settings);
       setUserDefaultsEnabled(refreshed.userDefaultsEnabled);
+      savedDefaultsRef.current = JSON.stringify(refreshed.settings);
+      savedDefaultsEnabledRef.current = refreshed.userDefaultsEnabled;
       await applyLanguagePreference(refreshed.settings.language);
       setDirty(false);
     } catch (e) {
@@ -533,6 +557,8 @@ export default function UserProfilePage({ embedded = false, activeTabKey, onActi
       const refreshed = await ChatSettingsService.getForProfile(numaGet);
       setUserDefaults(refreshed.settings);
       setUserDefaultsEnabled(refreshed.userDefaultsEnabled);
+      savedDefaultsRef.current = JSON.stringify(refreshed.settings);
+      savedDefaultsEnabledRef.current = refreshed.userDefaultsEnabled;
       await applyLanguagePreference(refreshed.settings.language);
       setDirty(false);
     } catch (e) {
@@ -549,6 +575,7 @@ export default function UserProfilePage({ embedded = false, activeTabKey, onActi
       await ChatSettingsService.updateUserProfile(userProfile, numaPut);
       const refreshed = await ChatSettingsService.getUserProfile(numaGet);
       setUserProfile(refreshed);
+      savedProfileRef.current = JSON.stringify(refreshed);
       setProfileDirty(false);
     } catch (e) {
       setProfileError((e as Error).message || t('userProfile.profile.errors.saveProfile'));
@@ -562,8 +589,16 @@ export default function UserProfilePage({ embedded = false, activeTabKey, onActi
     setProfileDirty(true);
   };
 
+  const hasUnsavedChanges = dirty || profileDirty;
+
   const profileContent = (
     <div className="user-profile-content">
+      {hasUnsavedChanges && (
+        <div className="settings-unsaved-banner">
+          <i className="bi bi-exclamation-circle" />
+          {t('unsavedBanner')}
+        </div>
+      )}
       {error && (
         <Alert variant="danger" className="mb-3">
           {error}

@@ -350,10 +350,17 @@ export default function SettingsPage() {
   const [chatDefaultsError, setChatDefaultsError] = useState<string | null>(null);
   const [chatDefaultsDirty, setChatDefaultsDirty] = useState<boolean>(false);
   const chatDefaultsDirtyRef = useRef<boolean>(chatDefaultsDirty);
+  const savedChatDefaultsRef = useRef<string>('');
 
   useEffect(() => {
     chatDefaultsDirtyRef.current = chatDefaultsDirty;
   }, [chatDefaultsDirty]);
+
+  // Auto-clear dirty when admin undoes chat defaults changes
+  useEffect(() => {
+    if (!chatDefaultsDirty) return;
+    if (JSON.stringify(globalChatSettings) === savedChatDefaultsRef.current) setChatDefaultsDirty(false);
+  }, [globalChatSettings, chatDefaultsDirty]);
 
   useNavigationConfirm(
     isAdmin && activeKey === 'chat-defaults' && chatDefaultsDirty,
@@ -373,6 +380,7 @@ export default function SettingsPage() {
         if (!cancelled) {
           if (!chatDefaultsDirtyRef.current) {
             setGlobalChatSettings(settings);
+            savedChatDefaultsRef.current = JSON.stringify(settings);
             setChatDefaultsError(null);
             setChatDefaultsDirty(false);
           }
@@ -728,7 +736,12 @@ export default function SettingsPage() {
 
         {isAdmin && (
           <div hidden={currentScope !== 'admin'} aria-hidden={currentScope !== 'admin'}>
-            {/* Note: company-wide banner and preview notice moved into Integrations tab */}
+            {(chatDefaultsDirty || isBrandingDirty) && (
+              <div className="settings-unsaved-banner">
+                <i className="bi bi-exclamation-circle" />
+                {t('unsavedBanner')}
+              </div>
+            )}
             {error && (
               <Alert variant="danger" className="mb-3">
                 {error}
@@ -1035,6 +1048,7 @@ export default function SettingsPage() {
                                   numaPut,
                                 );
                                 setGlobalChatSettings(saved);
+                                savedChatDefaultsRef.current = JSON.stringify(saved);
                                 setChatDefaultsError(null);
                                 setChatDefaultsDirty(false);
                               } catch (e) {
