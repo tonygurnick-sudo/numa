@@ -964,10 +964,15 @@ const NumaWorkspaceChatAgents = () => {
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
   const isProcessingRef = useRef(false);
 
-  // Auto-scroll to bottom on messages or ephemeral changes
+  // Auto-scroll to bottom on new messages (streaming) or after conversation finishes loading.
+  // We skip scrolling while isConversationLoading is true because ChatMessages renders a
+  // loading spinner during that phase — messageEndRef is inside the spinner, not after messages.
+  // Adding isConversationLoading to deps ensures we scroll once it flips to false and messages render.
   useEffect(() => {
-    messageEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+    if (!isConversationLoading) {
+      messageEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [messages, isConversationLoading]);
 
   // Inactivity: when expired, start a new chat and show suggestions (hook will fetch suggestions)
   async function handleNewChatOnExpired() {
