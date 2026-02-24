@@ -41,6 +41,8 @@ export function useChatInactivity({
   const [recentConversations, setRecentConversations] = useState<ConversationMeta[]>([]);
   const [suggestionsLoading, setSuggestionsLoading] = useState(false);
   const newChatActiveRef = useRef(false);
+  const buttonStatusRef = useRef(buttonStatus);
+  buttonStatusRef.current = buttonStatus;
 
   const INACTIVITY_KEY = `numa_chat_lastInteraction${storageKeySuffix}`;
   const INACTIVITY_MS = 20 * 60 * 1000; // 20 minutes
@@ -113,7 +115,7 @@ export function useChatInactivity({
     }
   };
 
-  // Check inactivity on mount/focus and periodic polling
+  // Check inactivity on mount/focus/visibility and periodic polling
   useEffect(() => {
     // Wait until we have the user's identity and Dynamo helpers before running inactivity logic.
     // Otherwise we can mark the timer as "fresh" too early and skip the real new-chat flow
@@ -123,11 +125,14 @@ export function useChatInactivity({
     }
 
     const checkAndMaybeReset = async () => {
-      if (newChatActiveRef.current) {
+      // Skip if we've already activated new chat view AND inactivity hasn't expired again.
+      // This allows re-triggering if the user returns after another inactivity period
+      // (e.g. tab left open overnight, first reset fires at 20min, user returns 8hrs later).
+      if (newChatActiveRef.current && !hasInactivityExpired()) {
         return;
       }
 
-      if (hasInactivityExpired() && buttonStatus === 'idle' && !isProcessingRef.current) {
+      if (hasInactivityExpired() && buttonStatusRef.current === 'idle' && !isProcessingRef.current) {
         activateNewChatView();
         try {
           await onExpired();
@@ -151,14 +156,25 @@ export function useChatInactivity({
     };
     window.addEventListener('focus', onFocus);
 
+    // Check when tab becomes visible again (handles frozen/discarded tabs returning)
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        checkAndMaybeReset();
+      }
+    };
+    document.addEventListener('visibilitychange', onVisibilityChange);
+
     // Periodic check every 30s
     const interval = setInterval(checkAndMaybeReset, 30000);
 
     return () => {
       window.removeEventListener('focus', onFocus);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
       clearInterval(interval);
     };
-  }, [buttonStatus, numaChatDynamoUtils, sub]);
+    // buttonStatus is read via buttonStatusRef to avoid effect teardown on every status change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [numaChatDynamoUtils, sub]);
 
   const forceShowNewChatView = () => {
     activateNewChatView();
