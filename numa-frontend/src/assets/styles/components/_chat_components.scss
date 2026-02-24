@@ -4156,6 +4156,7 @@ $border-radius-pill: 1rem;
     display: inline-flex;
     align-items: center;
     margin-top: 0.1875rem; // Align spinner with text baseline
+    overflow: hidden; // Prevent scrollbar flicker from spinner animation
 
     .spinner-border {
       width: 14px;

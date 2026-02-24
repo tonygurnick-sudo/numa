@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useMemo, useCallback, type ReactNode, type SetStateAction } from 'react';
 import { Button, Alert, Modal } from 'react-bootstrap';
-import { Clock, Plus, Settings } from 'lucide-react';
+import { Bot, Clock, Plus, Settings } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { LambdaClient } from '@aws-sdk/client-lambda';
 import { fromWebToken } from '@aws-sdk/credential-providers';
@@ -8,6 +8,7 @@ import { useAuth } from '../Providers/AuthProvider';
 import { LayoutDashboard } from '../Layouts/LayoutDashboard';
 import { PageHeader } from '../Components/PageHeader';
 import { ChatHistorySidebar, type ChatHistorySidebarRef } from '../Components/Chat/ChatHistorySidebar';
+import { AgentAvatar } from '../Components/Agents/AgentAvatar';
 import { ChatInput } from '../Components/Chat/ChatInput';
 import { ExportConversationButton } from '../Components/Chat/ExportConversationButton';
 import { DocumentPanel } from '../Components/DocumentPanel';
@@ -51,6 +52,7 @@ import {
   type WorkspaceChatHistoryPanelRef,
 } from '../Components/WorkspaceChat/WorkspaceChatHistoryPanel';
 import { WorkspaceChatSettingsPanel } from '../Components/WorkspaceChat/WorkspaceChatSettingsPanel';
+import { WorkspaceChatAgentsPanel } from '../Components/WorkspaceChat/WorkspaceChatAgentsPanel';
 import { useWorkspaceChatSettingsPanel } from '../hooks/useWorkspaceChatSettingsPanel';
 import { PendingFilesBar } from '../Components/Chat/PendingFilesBar';
 import { deleteWorkspaceChatUploads } from '../Services/workspaceChatAgentService';
@@ -125,6 +127,7 @@ const NumaWorkspaceChatAgents = () => {
   const [missingConfirm, setMissingConfirm] = useState<{ agent: AgentSummary; missing: string[] } | null>(null);
   const [isMobile, setIsMobile] = useState(() => (typeof window !== 'undefined' ? window.innerWidth <= 768 : false));
   const [isHistoryPanelOpen, setIsHistoryPanelOpen] = useState(false);
+  const [isAgentsPanelOpen, setIsAgentsPanelOpen] = useState(false);
   const [showDocumentModal, setShowDocumentModal] = useState(false);
   const [showFilePreviewModal, setShowFilePreviewModal] = useState(false);
   // SWR: initialize from localStorage cache so chat settings are available instantly
@@ -255,6 +258,7 @@ const NumaWorkspaceChatAgents = () => {
       settingsPanel.closePanel();
     } else {
       setIsHistoryPanelOpen(false);
+      setIsAgentsPanelOpen(false);
       // Close any open panels first
       closeFilePreview();
       closeDocument();
@@ -273,9 +277,20 @@ const NumaWorkspaceChatAgents = () => {
       setIsHistoryPanelOpen(false);
     } else {
       settingsPanel.closePanel();
+      setIsAgentsPanelOpen(false);
       setIsHistoryPanelOpen(true);
     }
   }, [isMobile, isHistoryPanelOpen, settingsPanel]);
+
+  const handleToggleAgents = useCallback(() => {
+    if (isAgentsPanelOpen) {
+      setIsAgentsPanelOpen(false);
+    } else {
+      settingsPanel.closePanel();
+      setIsHistoryPanelOpen(false);
+      setIsAgentsPanelOpen(true);
+    }
+  }, [isAgentsPanelOpen, settingsPanel]);
 
   const markUserSettingsModified = useCallback(() => {
     setUserSettingsModified(true);
@@ -287,6 +302,7 @@ const NumaWorkspaceChatAgents = () => {
       // Close settings panel for mutual exclusivity
       settingsPanel.closePanel();
       setIsHistoryPanelOpen(false);
+      setIsAgentsPanelOpen(false);
       openFilePreview(ref);
       // Collapse main nav sidebar to give more room for preview
       window.dispatchEvent(new CustomEvent('numa-collapse-sidebar'));
@@ -302,6 +318,7 @@ const NumaWorkspaceChatAgents = () => {
       // Close settings panel for mutual exclusivity
       settingsPanel.closePanel();
       setIsHistoryPanelOpen(false);
+      setIsAgentsPanelOpen(false);
       openFolderPreview(ref);
       // Collapse main nav sidebar to give more room for preview
       window.dispatchEvent(new CustomEvent('numa-collapse-sidebar'));
@@ -977,6 +994,7 @@ const NumaWorkspaceChatAgents = () => {
     // Clear manual loading state to prevent conflicts
     setIsManuallyLoading(false);
     setIsHistoryPanelOpen(false);
+    setIsAgentsPanelOpen(false);
 
     // Clear V1 migration flag
     setNeedsV1Migration(false);
@@ -1522,6 +1540,7 @@ const NumaWorkspaceChatAgents = () => {
 
     setIsManuallyLoading(true);
     setIsHistoryPanelOpen(false);
+    setIsAgentsPanelOpen(false);
     setIsConversationLoading(true);
     setUserSettingsModified(false); // Reset so save effect doesn't fire with stale state from previous conversation
     setMessages([]); // Clear current messages immediately
@@ -1687,6 +1706,9 @@ const NumaWorkspaceChatAgents = () => {
     !createAgentEnabled &&
     !memoriesEnabled;
 
+  // Derived active agent for header display (pending takes priority during transitions)
+  const activeAgent = pendingAgent || currentAgent;
+
   // Legacy helper: push buffered text as its own segment then clear buffer, and save to DynamoDB
   // Kept for V1 compatibility but unused in workspace mode (handled by useWorkspaceStreaming hook)
   const _flushPendingText = (currentConversationId = null, preserveContent = false) => {
@@ -1761,7 +1783,7 @@ const NumaWorkspaceChatAgents = () => {
 
   return (
     <div
-      className={`dashboard workspace-chat-v2 ${!isMobile && (settingsPanel.isPanelOpen || isHistoryPanelOpen) ? 'settings-drawer-open' : ''}`}
+      className={`dashboard workspace-chat-v2 ${!isMobile && (settingsPanel.isPanelOpen || isHistoryPanelOpen || isAgentsPanelOpen) ? 'settings-drawer-open' : ''}`}
     >
       <LayoutDashboard>
         {isMobile && (
@@ -1776,8 +1798,15 @@ const NumaWorkspaceChatAgents = () => {
         <div className="chat-layout d-flex">
           <div className="flex-grow-1 d-flex flex-column min-h-0">
             <PageHeader
-              title={t('page.title')}
-              subtitle={t('page.subtitle', { defaultValue: 'Your AI workspace assistant' })}
+              title={activeAgent?.title || t('page.title')}
+              subtitle={activeAgent?.description || t('page.subtitle', { defaultValue: 'Your AI workspace assistant' })}
+              icon={
+                activeAgent
+                  ? {
+                      element: <AgentAvatar agent={activeAgent} size={36} />,
+                    }
+                  : undefined
+              }
               actionsClassName="workspace-chat-header-actions"
               actions={
                 <>
@@ -1793,7 +1822,6 @@ const NumaWorkspaceChatAgents = () => {
                     <Plus size={14} className="workspace-chat-header-btn-icon" />
                     <span>{t('page.newChat')}</span>
                   </button>
-                  {conversationId && <ExportConversationButton messages={messages} conversationId={conversationId} />}
                   <button
                     type="button"
                     className={`workspace-chat-history-btn chat-history-btn ${isHistoryPanelOpen ? 'is-open' : ''}`}
@@ -1804,6 +1832,19 @@ const NumaWorkspaceChatAgents = () => {
                     <Clock size={14} className="workspace-chat-header-btn-icon" />
                     <span>{t('page.historyButton')}</span>
                   </button>
+                  {agentsFeatureEnabled && (
+                    <button
+                      type="button"
+                      className={`workspace-chat-history-btn ${isAgentsPanelOpen ? 'is-open' : ''}`}
+                      onClick={handleToggleAgents}
+                      title={t('page.agentsButton')}
+                      aria-label={t('page.agentsButton')}
+                    >
+                      <Bot size={14} className="workspace-chat-header-btn-icon" />
+                      <span>{t('page.agentsButton')}</span>
+                    </button>
+                  )}
+                  {conversationId && <ExportConversationButton messages={messages} conversationId={conversationId} />}
                   {!isMobile && (
                     <button
                       type="button"
@@ -1990,6 +2031,16 @@ const NumaWorkspaceChatAgents = () => {
                           showModelSelector={false}
                           onQuickAction={handleQuickAction}
                           connectedIntegrations={connectedSet}
+                          onOpenHistory={() => {
+                            settingsPanel.closePanel();
+                            setIsAgentsPanelOpen(false);
+                            setIsHistoryPanelOpen(true);
+                          }}
+                          onOpenAgents={() => {
+                            settingsPanel.closePanel();
+                            setIsHistoryPanelOpen(false);
+                            setIsAgentsPanelOpen(true);
+                          }}
                         />
                       ) : (
                         <>
@@ -2137,15 +2188,30 @@ const NumaWorkspaceChatAgents = () => {
 
       {!isMobile && (
         <aside
-          className={`workspace-chat-settings-drawer ${settingsPanel.isPanelOpen || isHistoryPanelOpen ? 'is-open' : ''}`}
-          aria-label={isHistoryPanelOpen ? t('history.title') : t('newChat.tabs.settings')}
-          aria-hidden={!(settingsPanel.isPanelOpen || isHistoryPanelOpen)}
+          className={`workspace-chat-settings-drawer ${settingsPanel.isPanelOpen || isHistoryPanelOpen || isAgentsPanelOpen ? 'is-open' : ''}`}
+          aria-label={
+            isHistoryPanelOpen
+              ? t('history.title')
+              : isAgentsPanelOpen
+                ? t('agentsPanel.title')
+                : t('newChat.tabs.settings')
+          }
+          aria-hidden={!(settingsPanel.isPanelOpen || isHistoryPanelOpen || isAgentsPanelOpen)}
         >
           <WorkspaceChatHistoryPanel
             ref={historyPanelRef}
             isOpen={isHistoryPanelOpen}
             currentConversationId={conversationId}
             onSelectConversation={handleLoadConversation}
+          />
+          <WorkspaceChatAgentsPanel
+            isOpen={isAgentsPanelOpen}
+            agents={personalAgents}
+            agentsLoading={personalAgentsLoading}
+            onSelectAgent={(agent) => {
+              setIsAgentsPanelOpen(false);
+              handleAgentSelect(agent);
+            }}
           />
           <WorkspaceChatSettingsPanel
             isOpen={settingsPanel.isPanelOpen}
@@ -2167,6 +2233,7 @@ const NumaWorkspaceChatAgents = () => {
               });
               settingsPanel.closePanel();
               setIsHistoryPanelOpen(false);
+              setIsAgentsPanelOpen(false);
             }}
             onDownloadFile={(file) => {
               // Download will be handled by opening preview with download action
@@ -2180,6 +2247,7 @@ const NumaWorkspaceChatAgents = () => {
               });
               settingsPanel.closePanel();
               setIsHistoryPanelOpen(false);
+              setIsAgentsPanelOpen(false);
             }}
             autoToolsEnabled={autoToolsEnabled}
             setAutoToolsEnabled={handleUserSetAutoToolsEnabled}

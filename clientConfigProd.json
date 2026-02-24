@@ -8,7 +8,6 @@
     "provisionQResources": false,
     "preferredKnowledgeBase": "bedrock",
     "allowBedrockQuotaSharing": true,
-    "bedrockAccount": "905418183804",
     "apps": {
       "data-analysis": {},
       "meeting-analyser": {}
@@ -46,7 +45,6 @@
     },
     "agents": true,
     "brandingProviderEnabled": true,
-    "bedrockAccount": "552162429805",
     "numaWorkspaceChat": true,
     "numaOps": true,
     "mfa": false
@@ -70,7 +68,6 @@
     "brandingProviderEnabled": true,
     "numaWorkspaceChat": true,
     "numaOps": true,
-    "bedrockAccount": "978450690680",
     "workspaceChatModelSelection": true
   }
 }

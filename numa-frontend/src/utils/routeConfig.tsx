@@ -33,6 +33,7 @@ const ScheduleDetailPage = lazy(() =>
 const NotificationsPage = lazy(() =>
   import('../Pages/NotificationsPage').then((m) => ({ default: m.NotificationsPage })),
 );
+const SupportPage = lazy(() => import('../Pages/SupportPage').then((m) => ({ default: m.SupportPage })));
 
 export const ROUTE_CONFIG = [
   // Chat
@@ -237,6 +238,19 @@ export const ROUTE_CONFIG = [
       order: 11,
     },
     featureFlag: 'DATA_CONNECTORS_ENABLED',
+  },
+
+  // Support
+  {
+    path: '/support',
+    element: () => <SupportPage />,
+    nav: {
+      label: 'Support',
+      labelKey: 'nav.items.support',
+      icon: 'bi bi-question-circle',
+      footerOnly: true,
+      order: 13,
+    },
   },
 
   // Hidden routes (no nav)

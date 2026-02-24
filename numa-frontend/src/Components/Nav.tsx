@@ -53,12 +53,6 @@ const SIMPLE_BUILD_SECTION_ITEM = {
   sectionOnly: true,
   sectionLabelKey: 'nav.sections.build',
 };
-const SUPPORT_NAV_ITEM = {
-  to: '__support__',
-  labelKey: 'nav.items.support',
-  staticIcon: 'support',
-  staticItem: true,
-};
 const SIMPLE_BUILD_NAV_ITEMS = [
   {
     to: '__build_create__',
@@ -255,7 +249,7 @@ const Nav = ({ isCollapsed = false, onToggleCollapse }: NavProps) => {
       ? insertNavItemAfterApps(visibleMainNavItems, opsNavItem)
       : visibleMainNavItems;
   const showHomeNavItem = !(interfaceMode === 'advanced' && advancedNavMode === 'build');
-  const footerNavItems = [SUPPORT_NAV_ITEM, ...navItems.filter((item) => item.footerOnly && !item.sectionOnly)];
+  const footerNavItems = navItems.filter((item) => item.footerOnly && !item.sectionOnly);
   const visibleMainNavItemsWithHome = [
     ...(showHomeNavItem ? [HOME_NAV_ITEM] : []),
     ...advancedWorkMainNavItems,

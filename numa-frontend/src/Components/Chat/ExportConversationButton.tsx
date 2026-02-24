@@ -7,6 +7,7 @@
 import { micromark } from 'micromark';
 import { gfm, gfmHtml } from 'micromark-extension-gfm';
 import { Dropdown } from 'react-bootstrap';
+import { Share } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
 import type { WorkspaceChatSegment } from '@/types/workspaceChatTypes';
@@ -449,9 +450,13 @@ export function ExportConversationButton({ messages, conversationId }: ExportCon
 
   return (
     <Dropdown>
-      <Dropdown.Toggle variant="outline-secondary" size="sm" className="d-flex align-items-center">
-        <i className="bi bi-box-arrow-up me-1"></i>
-        {t('workspace.export.button')}
+      <Dropdown.Toggle
+        as="button"
+        className="workspace-chat-settings-btn"
+        title={t('workspace.export.button')}
+        aria-label={t('workspace.export.button')}
+      >
+        <Share size={18} />
       </Dropdown.Toggle>
 
       <Dropdown.Menu>

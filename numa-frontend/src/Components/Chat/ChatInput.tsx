@@ -344,11 +344,11 @@ const ChatInput = ({
         style={
           variant === 'v2'
             ? {
-                width: isMobile ? '40px' : '44px',
-                height: isMobile ? '40px' : '44px',
-                minWidth: isMobile ? '40px' : '44px',
-                minHeight: isMobile ? '40px' : '44px',
-                flex: `0 0 ${isMobile ? '40px' : '44px'}`,
+                width: isMobile ? '40px' : '52px',
+                height: isMobile ? '40px' : '52px',
+                minWidth: isMobile ? '40px' : '52px',
+                minHeight: isMobile ? '40px' : '52px',
+                flex: `0 0 ${isMobile ? '40px' : '52px'}`,
               }
             : undefined
         }

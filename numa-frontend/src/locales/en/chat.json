@@ -133,6 +133,11 @@
     "deleteFailed": "Failed to delete conversation",
     "deleteAria": "Delete conversation"
   },
+  "agentsPanel": {
+    "title": "Your Agents",
+    "loading": "Loading agents...",
+    "empty": "No agents yet"
+  },
   "settingsPanel": {
     "knowledgeBases": "Files",
     "loadingKnowledgeBases": "Loading knowledge bases...",
@@ -206,6 +211,8 @@
     "renameAria": "Rename conversation",
     "deleteAria": "Delete conversation",
     "noRecent": "No recent conversations",
+    "openHistory": "Open history",
+    "openAgents": "Agents",
     "tabs": {
       "settings": "Settings",
       "history": "History"
@@ -226,6 +233,7 @@
     "title": "Numa Chat",
     "subtitle": "Your AI workspace assistant",
     "historyButton": "History",
+    "agentsButton": "Agents",
     "newChat": "New Chat",
     "chatHistory": "Chat History",
     "mobileActions": {

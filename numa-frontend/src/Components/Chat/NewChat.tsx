@@ -121,6 +121,10 @@ type NewChatProps = {
   onQuickAction?: (action: QuickActionConfig) => void;
   /** Set of connected integration IDs for conditional quick actions */
   connectedIntegrations?: Set<string>;
+  /** Callback to open the full history sidebar (V2 only) */
+  onOpenHistory?: () => void;
+  /** Callback to open the agents sidebar (V2 only) */
+  onOpenAgents?: () => void;
 };
 
 // Avatar for recent conversations
@@ -227,6 +231,8 @@ const NewChat = ({
   // Quick actions props
   onQuickAction,
   connectedIntegrations = new Set<string>(),
+  onOpenHistory,
+  onOpenAgents,
 }: NewChatProps) => {
   const { t } = useTranslation('chat');
   // ------- Mobile detection and tab state -------
@@ -644,7 +650,7 @@ const NewChat = ({
             ) : recentConversations.length > 0 ? (
               <div className="conversation-suggestions" style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
                 <div className="d-flex flex-column" style={{ gap: '0.75rem', paddingBottom: '0.75rem' }}>
-                  {recentConversations.map((convo) => (
+                  {(variant === 'v2' ? recentConversations.slice(0, 3) : recentConversations).map((convo) => (
                     <div
                       key={convo.conversation_id}
                       className="text-start conversation-suggestion-btn"
@@ -746,6 +752,23 @@ const NewChat = ({
                       )}
                     </div>
                   ))}
+                  {variant === 'v2' &&
+                    (recentConversations.length > 3 || (personalAgents.length > 0 && onOpenAgents)) && (
+                      <div className="open-panel-buttons">
+                        {recentConversations.length > 3 && onOpenHistory && (
+                          <button type="button" className="open-history-btn" onClick={onOpenHistory}>
+                            <i className="bi bi-clock-history" aria-hidden="true" />
+                            {t('newChat.openHistory')}
+                          </button>
+                        )}
+                        {personalAgents.length > 0 && onOpenAgents && (
+                          <button type="button" className="open-history-btn" onClick={onOpenAgents}>
+                            <i className="bi bi-robot" aria-hidden="true" />
+                            {t('newChat.openAgents')}
+                          </button>
+                        )}
+                      </div>
+                    )}
                 </div>
               </div>
             ) : (
