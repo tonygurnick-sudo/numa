@@ -685,6 +685,7 @@
     "eventTypes": {
       "started": "Started",
       "completed": "Completed",
+      "partial": "Partial",
       "failed": "Failed",
       "cancelled": "Cancelled"
     },

@@ -679,7 +679,7 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
         CHAT_HISTORY_TABLE_NAME: props.chatHistoryTableName,
         AGENT_SCHEDULES_TABLE_NAME: props.agentSchedulesTableName,
         NOTIFICATIONS_TABLE_NAME: props.notificationsTableName,
-        CHAT_AGENT_FUNCTION_URL: props.chatAgentFunctionUrl,
+        WORKSPACE_AGENT_PROXY_URL: props.workspaceAgentProxyUrl,
         CLOUDFRONT_SHARED_SECRET: props.cloudfrontSharedSecret,
         SCHEDULE_RUNNER_SECRET: props.agentScheduleRunnerSecret,
         OUTPUTS_BUCKET_NAME: props.outputsBucketName,
@@ -710,6 +710,11 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
           effect: 'Allow',
           actions: ['s3:PutObject'],
           resources: [`arn:aws:s3:::${props.outputsBucketName}/numa-chat/scheduled-runs/*`],
+        },
+        {
+          effect: 'Allow',
+          actions: ['s3:GetObject'],
+          resources: [`arn:aws:s3:::${props.outputsBucketName}/numa-chat/workspace/*/session/status.json`],
         },
         {
           effect: 'Allow',
@@ -1043,8 +1048,10 @@ export interface AppAgnosticApiGatewayLambdaCollectionProps
   dataConnectorsSettingsTableName: string;
   /** Data connector selection configs table name. */
   dataConnectorsSyncConfigsTableName: string;
-  /** Chat agent function URL for internal invocations. */
+  /** Chat agent function URL for internal invocations (V1 — retained for other callers). */
   chatAgentFunctionUrl: string;
+  /** Workspace agent proxy function URL for scheduled agent runs (V2 sync mode). */
+  workspaceAgentProxyUrl: string;
   /** CloudFront shared secret for internal agent calls. */
   cloudfrontSharedSecret: string;
   /** Secret shared with chat agent for schedule runner auth. */

@@ -548,7 +548,7 @@ const NumaWorkspaceChatAgents = () => {
   }, [applyAgentConfiguration]);
 
   // Simple direct access - no need for useMemo for primitive values
-  const userId = user?.attributes?.sub;
+  const userId = sub;
   const userExists = !!user;
 
   // If feature disabled, ensure no agent is selected and agent-specific flags are off
@@ -1012,6 +1012,7 @@ const NumaWorkspaceChatAgents = () => {
     showContinueSuggestions,
     recentConversations,
     resetInactivityTimer,
+    touchInactivityTimer,
     hideSuggestions,
     forceShowNewChatView,
     suggestionsLoading,
@@ -1024,6 +1025,14 @@ const NumaWorkspaceChatAgents = () => {
     // DO NOT pass inputMessage: keep suggestions visible while typing; hide on submit instead
     storageKeySuffix: '-v2', // Isolate inactivity timer from V1 chat
   });
+
+  // Typing is user activity — prevent the inactivity handler from wiping the input
+  // while the user is composing a message.
+  useEffect(() => {
+    if (inputMessage) {
+      touchInactivityTimer();
+    }
+  }, [inputMessage, touchInactivityTimer]);
 
   // Sort agents by favorites first, then most recently used, then updatedAt
   const sortedPersonalAgents = useMemo(() => {

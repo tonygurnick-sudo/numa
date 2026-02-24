@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Container, Card, Button, Badge, Alert, Spinner } from 'react-bootstrap';
 import {
+  AlertTriangle,
   Check,
   CheckCheck,
   CheckCircle2,
@@ -52,6 +53,8 @@ const getEventTypeColor = (eventType: string): string => {
       return 'primary';
     case 'completed':
       return 'success';
+    case 'partial':
+      return 'warning';
     case 'failed':
       return 'danger';
     case 'cancelled':
@@ -67,6 +70,8 @@ const getEventTypeIcon = (eventType: string) => {
       return PlayCircle;
     case 'completed':
       return CheckCircle2;
+    case 'partial':
+      return AlertTriangle;
     case 'failed':
       return XCircle;
     case 'cancelled':
@@ -262,6 +267,39 @@ export const NotificationsPage: React.FC = () => {
                           )}
                         </div>
                         <p className="mb-2">{notification.message}</p>
+                        {/* Result preview for completed / partial runs */}
+                        {(notification.event_type === 'completed' || notification.event_type === 'partial') &&
+                          notification.metadata?.result && (
+                            <div className="notifications-result-preview mb-2">
+                              {notification.event_type === 'partial' ? (
+                                <AlertTriangle
+                                  size={13}
+                                  className="notifications-result-preview__icon text-warning"
+                                  aria-hidden="true"
+                                />
+                              ) : (
+                                <CheckCircle2
+                                  size={13}
+                                  className="notifications-result-preview__icon text-success"
+                                  aria-hidden="true"
+                                />
+                              )}
+                              <span className="notifications-result-preview__text">
+                                {String(notification.metadata.result).substring(0, 200)}
+                                {String(notification.metadata.result).length > 200 ? '…' : ''}
+                              </span>
+                            </div>
+                          )}
+                        {/* Error detail for failed runs */}
+                        {notification.event_type === 'failed' && notification.metadata?.error && (
+                          <div className="notifications-error-preview mb-2">
+                            <AlertTriangle size={13} className="notifications-error-preview__icon" aria-hidden="true" />
+                            <span className="notifications-error-preview__text">
+                              {String(notification.metadata.error).substring(0, 200)}
+                              {String(notification.metadata.error).length > 200 ? '…' : ''}
+                            </span>
+                          </div>
+                        )}
                         <small className="text-muted notifications-meta">
                           <Clock3 size={14} aria-hidden="true" />
                           {formatRelativeTime(notification.created_at)}
@@ -284,7 +322,9 @@ export const NotificationsPage: React.FC = () => {
                               if (notification.status === 'unread') {
                                 await markAsRead(notification.notification_id);
                               }
-                              navigate(`/scheduling/${encodeURIComponent(notification.schedule_id)}`);
+                              const runId = notification.metadata?.runId as string | undefined;
+                              const path = `/scheduling/${encodeURIComponent(notification.schedule_id)}`;
+                              navigate(runId ? `${path}?run=${encodeURIComponent(runId)}` : path);
                             }}
                           >
                             <Eye size={14} aria-hidden="true" />

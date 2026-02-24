@@ -379,6 +379,9 @@ export class NumaClientStack extends TerraformStack {
         fileRedirectSecret: fileRedirectSecret.value,
         outputsBucketName: core.outputsBucket.bucket.bucket,
         outputsBucketArn: core.outputsBucket.bucket.arn,
+        // Schedule runner secret so the proxy can authenticate server-to-server calls
+        // from the agent-schedule-runner Lambda (scheduled agents use V2 sync mode)
+        scheduleRunnerSecret: agentScheduleSecretParam.value,
       });
 
       new TerraformOutput(this, 'workspace-chat-agent-proxy-url', {
@@ -448,6 +451,7 @@ export class NumaClientStack extends TerraformStack {
       agentSchedulesTableName: core.agentSchedulesTable.name,
       notificationsTableName: core.notificationsTable.name,
       chatAgentFunctionUrl: chatAgent.functionUrl,
+      workspaceAgentProxyUrl: workspaceChatAgentProxy?.functionUrl ?? '',
       cloudfrontSharedSecret: cfSecretParam.value,
       agentScheduleRunnerSecret: agentScheduleSecretParam.value,
       bedrockKbId: knowledgeBase.knowledgeBaseId,

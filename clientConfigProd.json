@@ -68,6 +68,7 @@
     "brandingProviderEnabled": true,
     "numaWorkspaceChat": true,
     "numaOps": true,
-    "workspaceChatModelSelection": true
+    "workspaceChatModelSelection": true,
+    "scheduling": true
   }
 }

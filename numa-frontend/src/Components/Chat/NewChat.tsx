@@ -204,7 +204,7 @@ const NewChat = ({
   onRenameConversation,
   onDeleteConversation,
   personalAgents = [],
-  onSelectAgent,
+  onSelectAgent: _onSelectAgent,
   agentsLoading: _agentsLoading = false,
   uploadDisabledReason = '',
   onFilesDropped,
@@ -523,70 +523,6 @@ const NewChat = ({
       )}
 
       {variant !== 'v2' && inputComposer}
-
-      {/* Personal Agents Row */}
-      {personalAgents.length > 0 && (
-        <div
-          className="agents-row-container"
-          style={{
-            width: '100%',
-            maxWidth: '1200px',
-            marginLeft: 'auto',
-            marginRight: 'auto',
-            marginBottom: '1rem',
-            animation: 'fadeIn 0.6s ease-in-out',
-          }}
-        >
-          {_agentsLoading ? (
-            <div className="d-flex justify-content-center align-items-center" style={{ minHeight: 80 }}>
-              <Spinner animation="border" role="status" size="sm" style={{ color: 'var(--brand-primary, #4b007d)' }}>
-                <span className="visually-hidden">{t('newChat.loadingAgents')}</span>
-              </Spinner>
-            </div>
-          ) : (
-            <div className="agents-horizontal-scroll">
-              <div
-                className="d-flex align-items-center"
-                style={{ gap: '1rem', overflowX: 'auto', paddingBottom: '0.5rem' }}
-              >
-                {personalAgents.map((agent) => (
-                  <OverlayTrigger
-                    key={agent.agentId}
-                    placement="top"
-                    overlay={<Tooltip id={`agent-${agent.agentId}`}>{agent.title}</Tooltip>}
-                  >
-                    <div
-                      className="agent-icon-wrapper"
-                      role="button"
-                      tabIndex={0}
-                      onClick={() => onSelectAgent?.(agent)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' || e.key === ' ') {
-                          e.preventDefault();
-                          onSelectAgent?.(agent);
-                        }
-                      }}
-                      style={{
-                        cursor: 'pointer',
-                        transition: 'all 0.2s ease-in-out',
-                        transform: 'scale(1)',
-                      }}
-                      onMouseEnter={(e) => {
-                        e.currentTarget.style.transform = 'scale(1.1)';
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.transform = 'scale(1)';
-                      }}
-                    >
-                      <AgentAvatar agent={agent} size={48} rounded={true} alt={agent.title} />
-                    </div>
-                  </OverlayTrigger>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-      )}
 
       {/* Settings Panel and Conversation History */}
       {(() => {

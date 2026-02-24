@@ -36,6 +36,9 @@ type BackendScheduleResponse = {
   last_run_s3_key?: string;
   run_config?: ScheduledRunConfig;
   agent_snapshot?: AgentScheduleSnapshot;
+  max_runs?: number;
+  total_runs?: number;
+  email_notifications?: boolean;
 };
 
 // Transform backend response to frontend format
@@ -58,6 +61,9 @@ const transformScheduleResponse = (backendSchedule: BackendScheduleResponse): Ag
   lastRunConversationId: backendSchedule.last_run_conversation_id,
   lastRunS3Key: backendSchedule.last_run_s3_key,
   runConfig: backendSchedule.run_config,
+  maxRuns: backendSchedule.max_runs,
+  totalRuns: backendSchedule.total_runs,
+  emailNotifications: backendSchedule.email_notifications,
 });
 
 type RunScheduleResponse = {

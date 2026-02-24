@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 export type ConversationMeta = {
   conversation_id: string;
@@ -64,6 +64,17 @@ export function useChatInactivity({
     }
     deactivateNewChatView();
   };
+
+  /** Stamp the inactivity timer without deactivating the new-chat view.
+   *  Call this on user activity (e.g. typing) to prevent the inactivity handler
+   *  from firing while the user is actively composing a message. */
+  const touchInactivityTimer = useCallback(() => {
+    try {
+      localStorage.setItem(INACTIVITY_KEY, Date.now().toString());
+    } catch {
+      // best-effort
+    }
+  }, [INACTIVITY_KEY]);
 
   const hideSuggestions = () => {
     setShowContinueSuggestions(false);
@@ -134,6 +145,13 @@ export function useChatInactivity({
 
       if (hasInactivityExpired() && buttonStatusRef.current === 'idle' && !isProcessingRef.current) {
         activateNewChatView();
+        // Stamp the timer so this handler doesn't re-fire every 30s while the user is typing.
+        // It will re-trigger after another INACTIVITY_MS period (e.g. user returns hours later).
+        try {
+          localStorage.setItem(INACTIVITY_KEY, Date.now().toString());
+        } catch {
+          // best-effort; ignore storage failures
+        }
         try {
           await onExpired();
         } catch (error) {
@@ -193,6 +211,7 @@ export function useChatInactivity({
     showContinueSuggestions,
     recentConversations,
     resetInactivityTimer,
+    touchInactivityTimer,
     hideSuggestions,
     forceShowNewChatView,
     suggestionsLoading,

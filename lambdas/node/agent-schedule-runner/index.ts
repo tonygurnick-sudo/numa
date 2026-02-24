@@ -1,7 +1,7 @@
 import type { APIGatewayProxyEventV2, APIGatewayProxyResultV2 } from 'aws-lambda';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { InvokeCommand, LambdaClient } from '@aws-sdk/client-lambda';
-import { PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import { GetObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { DynamoDBDocumentClient, PutCommand, QueryCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
 import { withPRM } from '../../../lib/prm-node/prm';
 import { NotificationService } from '../../../lib/notification-service';
@@ -10,7 +10,7 @@ import { v4 as uuidv4 } from 'uuid';
 const REGION = process.env.REGION ?? 'us-east-1';
 const CHAT_HISTORY_TABLE = process.env.CHAT_HISTORY_TABLE_NAME ?? '';
 const SCHEDULES_TABLE = process.env.AGENT_SCHEDULES_TABLE_NAME ?? '';
-const CHAT_AGENT_FUNCTION_URL = (process.env.CHAT_AGENT_FUNCTION_URL ?? '').replace(/\/$/, '');
+const WORKSPACE_AGENT_PROXY_URL = (process.env.WORKSPACE_AGENT_PROXY_URL ?? '').replace(/\/$/, '');
 const CLOUDFRONT_SHARED_SECRET = process.env.CLOUDFRONT_SHARED_SECRET ?? '';
 const SCHEDULE_RUNNER_SECRET = process.env.SCHEDULE_RUNNER_SECRET ?? '';
 const OUTPUTS_BUCKET = process.env.OUTPUTS_BUCKET_NAME ?? '';
@@ -39,7 +39,6 @@ type AuthContext = {
 };
 
 type ScheduledRunConfig = {
-  systemPrompt?: string;
   modelId?: string;
   enabledTools?: string[];
   enabledConnections?: string[];
@@ -82,6 +81,9 @@ type ScheduleRecord = {
   agent_snapshot?: AgentSnapshot;
   run_config?: ScheduledRunConfig;
   label?: string;
+  max_runs?: number;
+  total_runs?: number;
+  email_notifications?: boolean;
   last_status?: string;
   last_error?: string;
   last_run_epoch?: number;
@@ -120,6 +122,70 @@ type ScheduledJobRecord = {
   startedAt: string;
   completedAt?: string;
 };
+
+/**
+ * Structured self-evaluation written by the workspace agent at the end of each
+ * scheduled run to /workdir/session/status.json. Read from S3 after the run.
+ */
+type AgentStatus = {
+  status: 'success' | 'partial' | 'failed';
+  summary: string;
+  artifacts: string[];
+  errors: string[];
+  warnings: string[];
+};
+
+/**
+ * Preamble prepended to the user's prompt for scheduled (non-interactive) runs.
+ *
+ * Tells the agent it's running autonomously and MUST write a status.json file
+ * summarising the outcome — regardless of whether the task succeeded or failed.
+ */
+const SCHEDULED_RUN_PREAMBLE = `<scheduled-run>
+You are running as a SCHEDULED AGENT — not in an interactive chat session.
+
+Key behaviour differences:
+- You CANNOT ask the user for clarification or feedback. Complete the task end-to-end autonomously.
+- Do your best with the information available. If something is ambiguous, make a reasonable choice and note it.
+- If you encounter errors, try alternative approaches before giving up.
+- Do not use the TodoWrite tool — there is no user watching your progress.
+- If you get an error like "Approval timed out for proxy request to integration API — human-in-the-loop approval is required but no user was available to respond." then you need to let the user know they need to update their agent config to enable auto-approval for the relevant integration.
+
+MANDATORY — STATUS REPORT:
+After completing your work — whether successful, partially successful, or failed — you MUST write a JSON status report as the VERY LAST action before your final response. This is required on EVERY scheduled run, no exceptions.
+
+Write the file to: /workdir/session/status.json
+
+The file must contain valid JSON with exactly these fields:
+- "status" (string): one of "success", "partial", or "failed"
+- "summary" (string): one sentence describing what you accomplished or why you failed
+- "artifacts" (array of strings): filenames of any files you created (empty array if none)
+- "errors" (array of strings): any error messages encountered (empty array if none)
+- "warnings" (array of strings): non-fatal issues or assumptions you made (empty array if none)
+
+Success example:
+{
+  "status": "success",
+  "summary": "Generated daily progress report with 15 KPIs from the sales dashboard",
+  "artifacts": ["report.pdf", "summary.csv"],
+  "errors": [],
+  "warnings": ["Could not access marketing API — used cached data from yesterday"]
+}
+
+Failure example:
+{
+  "status": "failed",
+  "summary": "Could not retrieve data — the API returned 404 for the dashboard endpoint",
+  "artifacts": [],
+  "errors": ["HTTP 404 from https://api.example.com/dashboard"],
+  "warnings": []
+}
+
+This status report is used to notify the user of the outcome. Be honest and specific in your summary.
+Even if the task failed entirely, you MUST still write status.json with status "failed" and an explanation.
+</scheduled-run>
+
+`;
 
 const isApiEvent = (event: unknown): event is APIGatewayProxyEventV2 => {
   const requestContext = (event as { requestContext?: { http?: { method?: unknown } } })?.requestContext;
@@ -177,7 +243,7 @@ const respond = (statusCode: number, payload: unknown): APIGatewayProxyResultV2 
 });
 
 const ensureConfigured = (): boolean =>
-  Boolean(CHAT_HISTORY_TABLE && SCHEDULES_TABLE && CHAT_AGENT_FUNCTION_URL && SCHEDULE_RUNNER_SECRET);
+  Boolean(CHAT_HISTORY_TABLE && SCHEDULES_TABLE && WORKSPACE_AGENT_PROXY_URL && SCHEDULE_RUNNER_SECRET);
 
 export const handler = async (event: unknown): Promise<APIGatewayProxyResultV2 | void> => {
   if (isApiEvent(event)) {
@@ -306,6 +372,18 @@ const handleSchedulerEvent = async (rawEvent: RunnerEvent | unknown): Promise<vo
       console.info('Skipping schedule because status is not active', schedule.schedule_id, schedule.status);
       return;
     }
+
+    // maxRuns enforcement: skip if total_runs has reached the limit
+    if (schedule.max_runs && (schedule.total_runs ?? 0) >= schedule.max_runs) {
+      console.info(
+        'Skipping schedule because maxRuns reached',
+        schedule.schedule_id,
+        `${schedule.total_runs}/${schedule.max_runs}`,
+      );
+      await pauseScheduleForMaxRuns(schedule);
+      return;
+    }
+
     await executeRun({
       schedule,
       prompt: schedule.prompt_text,
@@ -403,7 +481,7 @@ const executeRun = async ({
   let assistantText: string;
   try {
     const mergedRunConfig = mergeRunConfig(runConfig, agentSnapshot);
-    assistantText = await invokeChatAgent({
+    assistantText = await invokeWorkspaceAgent({
       prompt: apiPrompt,
       conversationId: runConversationId,
       runConfig: mergedRunConfig,
@@ -470,6 +548,29 @@ const executeRun = async ({
     await updateConversationMeta(runConversationId, schedule.user_id, assistantText);
 
     if (!adHoc) {
+      // Read the agent's structured self-evaluation from the workspace.
+      // The workspace agent syncs /workdir/session/ to S3 before returning,
+      // so status.json should be available by this point.
+      const agentStatus = await readWorkspaceStatus(schedule.user_id, runConversationId);
+      if (agentStatus) {
+        console.log('Agent self-evaluation read successfully', {
+          status: agentStatus.status,
+          summary: agentStatus.summary,
+          artifactCount: agentStatus.artifacts.length,
+          errorCount: agentStatus.errors.length,
+          warningCount: agentStatus.warnings.length,
+        });
+      } else {
+        console.warn('No status.json from agent — falling back to assistant text preview');
+      }
+
+      // Determine effective status from the agent's self-evaluation.
+      // "failed" = agent couldn't do the core task, "partial" = some parts worked,
+      // "success" (or no status.json) = everything worked.
+      const agentReportedStatus = agentStatus?.status ?? 'success';
+      const effectiveStatus = agentReportedStatus === 'success' ? 'success' : agentReportedStatus;
+      const notificationMessage = agentStatus?.summary || assistantText.substring(0, 200);
+
       runLogKey = await writeRunLogToS3({
         schedule,
         runId,
@@ -478,25 +579,77 @@ const executeRun = async ({
         agentMeta,
         prompt: runPrompt,
         assistantText,
+        agentStatus: agentStatus ?? undefined,
         startedAt: now,
         completedAt: assistantTimestamp,
       });
-      await markScheduleStatus(schedule.user_id, schedule.schedule_id, 'success', null, runConversationId, runLogKey);
-      await NotificationService.notifyScheduleCompleted(
+
+      await markScheduleStatus(
         schedule.user_id,
         schedule.schedule_id,
-        'agent',
-        scheduleName,
-        assistantText.substring(0, 100), // First 100 chars as preview
+        effectiveStatus,
+        effectiveStatus !== 'success' ? notificationMessage : null,
+        runConversationId,
+        runLogKey,
       );
-      await createJobRecord(
-        schedule.user_id,
-        schedule.schedule_id,
-        scheduleName,
-        runPrompt,
-        'COMPLETED',
-        assistantText.substring(0, 200), // First 200 chars as result
-      );
+
+      // Notification metadata includes runId so the frontend can deeplink
+      // directly to this specific run in the schedule detail page.
+      const notifExtra = { runId };
+
+      if (agentReportedStatus === 'failed') {
+        await NotificationService.notifyScheduleFailed(
+          schedule.user_id,
+          schedule.schedule_id,
+          'agent',
+          scheduleName,
+          notificationMessage,
+          notifExtra,
+        );
+        await createJobRecord(
+          schedule.user_id,
+          schedule.schedule_id,
+          scheduleName,
+          runPrompt,
+          'FAILED',
+          undefined,
+          notificationMessage,
+        );
+      } else if (agentReportedStatus === 'partial') {
+        await NotificationService.notifySchedulePartial(
+          schedule.user_id,
+          schedule.schedule_id,
+          'agent',
+          scheduleName,
+          notificationMessage,
+          notifExtra,
+        );
+        await createJobRecord(
+          schedule.user_id,
+          schedule.schedule_id,
+          scheduleName,
+          runPrompt,
+          'COMPLETED',
+          notificationMessage,
+        );
+      } else {
+        await NotificationService.notifyScheduleCompleted(
+          schedule.user_id,
+          schedule.schedule_id,
+          'agent',
+          scheduleName,
+          notificationMessage,
+          notifExtra,
+        );
+        await createJobRecord(
+          schedule.user_id,
+          schedule.schedule_id,
+          scheduleName,
+          runPrompt,
+          'COMPLETED',
+          notificationMessage,
+        );
+      }
     }
   } catch (err) {
     console.error('Failed to persist assistant response', err);
@@ -589,6 +742,11 @@ const markScheduleStatus = async (
     ':err': error,
   };
 
+  // Increment total_runs counter on each completed or failed run
+  updateExpressions.push('total_runs = if_not_exists(total_runs, :zero) + :one');
+  expressionAttributeValues[':zero'] = 0;
+  expressionAttributeValues[':one'] = 1;
+
   if (runConversationId) {
     updateExpressions.push('last_run_conversation_id = :conversationId');
     expressionAttributeValues[':conversationId'] = runConversationId;
@@ -607,6 +765,35 @@ const markScheduleStatus = async (
       ExpressionAttributeValues: expressionAttributeValues,
     }),
   );
+};
+
+/** Auto-pause a schedule that has reached its maxRuns limit. */
+const pauseScheduleForMaxRuns = async (schedule: ScheduleRecord): Promise<void> => {
+  try {
+    await dynamo.send(
+      new UpdateCommand({
+        TableName: SCHEDULES_TABLE,
+        Key: { user_id: schedule.user_id, schedule_id: schedule.schedule_id },
+        UpdateExpression: 'SET #status = :paused, updated_at = :ts',
+        ExpressionAttributeNames: { '#status': 'status' },
+        ExpressionAttributeValues: {
+          ':paused': 'paused',
+          ':ts': Date.now(),
+        },
+      }),
+    );
+    const scheduleName = schedule.label || schedule.agent_title || schedule.agent_id || 'Unknown Schedule';
+    await NotificationService.notifyScheduleCompleted(
+      schedule.user_id,
+      schedule.schedule_id,
+      'agent',
+      scheduleName,
+      `Schedule paused: reached maximum of ${schedule.max_runs} runs.`,
+    );
+    console.info('Schedule auto-paused due to maxRuns limit', schedule.schedule_id);
+  } catch (err) {
+    console.error('Failed to auto-pause schedule for maxRuns', err);
+  }
 };
 
 const appendMessage = async ({
@@ -746,6 +933,7 @@ const writeRunLogToS3 = async ({
   agentMeta,
   prompt: runPrompt,
   assistantText,
+  agentStatus,
   error,
   startedAt,
   completedAt,
@@ -757,6 +945,7 @@ const writeRunLogToS3 = async ({
   agentMeta?: AgentSnapshot;
   prompt: string;
   assistantText?: string;
+  agentStatus?: AgentStatus;
   error?: string;
   startedAt: number;
   completedAt: number;
@@ -790,6 +979,7 @@ const writeRunLogToS3 = async ({
     },
     ...(runPrompt ? { prompt: runPrompt } : {}),
     ...(error ? { error } : {}),
+    ...(agentStatus ? { agentStatus } : {}),
     startedAt: new Date(startedAt).toISOString(),
     completedAt: new Date(completedAt).toISOString(),
     messages,
@@ -811,7 +1001,104 @@ const writeRunLogToS3 = async ({
   }
 };
 
-const invokeChatAgent = async ({
+/**
+ * Small helper to sleep for a given number of milliseconds.
+ */
+const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * Read the agent's self-evaluation status.json from the workspace in S3.
+ *
+ * After a scheduled run, the workspace agent writes /workdir/session/status.json
+ * and syncs it to S3. This function reads that file to get structured outcome data
+ * (status, summary, artifacts, errors, warnings) for richer notifications.
+ *
+ * The workspace sync to S3 happens inside the agent container before it returns
+ * the HTTP response, but S3 eventual consistency or minor timing differences
+ * could mean the file isn't immediately visible. We retry up to 3 times with
+ * a short delay (2s, 4s) before giving up.
+ *
+ * Returns null if the file doesn't exist or is malformed — callers should
+ * fall back to the raw assistant text in that case.
+ */
+const readWorkspaceStatus = async (
+  userId: string,
+  conversationId: string,
+): Promise<AgentStatus | null> => {
+  if (!OUTPUTS_BUCKET) return null;
+
+  // S3 path mirrors the workspace agent's sync convention:
+  // numa-chat/workspace/{user_sub}/conversations/{conversation_id}/session/status.json
+  const key = `numa-chat/workspace/${userId}/conversations/${conversationId}/session/status.json`;
+
+  const MAX_ATTEMPTS = 3;
+  const RETRY_DELAYS_MS = [2_000, 4_000]; // delays between attempt 1→2 and 2→3
+
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    try {
+      const response = await s3.send(
+        new GetObjectCommand({
+          Bucket: OUTPUTS_BUCKET,
+          Key: key,
+        }),
+      );
+      const body = await response.Body?.transformToString();
+      if (!body) return null;
+
+      const parsed = JSON.parse(body);
+
+      // Validate required fields
+      if (!parsed.status || !parsed.summary) {
+        console.warn('status.json missing required fields', { key, parsed });
+        return null;
+      }
+
+      const validStatuses = ['success', 'partial', 'failed'];
+
+      return {
+        status: validStatuses.includes(parsed.status) ? parsed.status : 'partial',
+        summary: String(parsed.summary).substring(0, 500),
+        artifacts: Array.isArray(parsed.artifacts) ? parsed.artifacts.map(String) : [],
+        errors: Array.isArray(parsed.errors) ? parsed.errors.map(String) : [],
+        warnings: Array.isArray(parsed.warnings) ? parsed.warnings.map(String) : [],
+      };
+    } catch (err: unknown) {
+      const errorName = err instanceof Error ? (err as { name?: string }).name : undefined;
+      const isNotFound = errorName === 'NoSuchKey';
+
+      if (isNotFound && attempt < MAX_ATTEMPTS) {
+        // File may not have synced to S3 yet — wait and retry
+        const delayMs = RETRY_DELAYS_MS[attempt - 1];
+        console.log(`status.json not found yet, retrying in ${delayMs}ms (attempt ${attempt}/${MAX_ATTEMPTS})`, { key });
+        await sleep(delayMs);
+        continue;
+      }
+
+      // Final attempt or non-retryable error
+      if (isNotFound) {
+        console.warn('status.json not found after retries (agent may not have written it)', { key, attempts: attempt });
+      } else {
+        console.warn('Could not read workspace status.json', { key, error: err });
+      }
+      return null;
+    }
+  }
+
+  return null;
+};
+
+/**
+ * Invoke the V2 workspace agent proxy in sync mode.
+ *
+ * Calls the workspace-chat-agent-proxy Lambda's /invocations endpoint with
+ * responseMode: "sync". The V2 agent natively supports agent prompt injection
+ * via agentId — no manual system prompt building is needed.
+ *
+ * Auth: Uses SCHEDULE_RUNNER_SECRET as bearer token + x-schedule-runner-sub
+ * header for user identity (the proxy recognises this auth pattern for
+ * server-to-server calls).
+ */
+const invokeWorkspaceAgent = async ({
   prompt: runPrompt,
   conversationId,
   runConfig,
@@ -826,51 +1113,96 @@ const invokeChatAgent = async ({
   auth: AuthContext;
   scheduledRun?: boolean;
 }): Promise<string> => {
-  if (!CHAT_AGENT_FUNCTION_URL || !SCHEDULE_RUNNER_SECRET) {
-    throw new Error('Chat agent invocation unavailable');
+  if (!WORKSPACE_AGENT_PROXY_URL || !SCHEDULE_RUNNER_SECRET) {
+    throw new Error('Workspace agent invocation unavailable');
   }
-  const systemPrompt = buildSystemPrompt(runConfig?.systemPrompt, agentSnapshot, scheduledRun);
+
+  // For scheduled runs, prepend instructions so the agent knows to complete
+  // autonomously and write a structured status report when finished.
+  // V2 handles the agent's system prompt natively via agentId — we only add the scheduled-run context.
+  const prompt = scheduledRun
+    ? `${SCHEDULED_RUN_PREAMBLE}${runPrompt}`
+    : runPrompt;
+
   const requestBody = {
-    prompt: runPrompt,
+    action: 'chat',
+    responseMode: 'sync',
+    prompt,
     conversationId,
-    systemPrompt,
+    // V2 resolves the agent config (system prompt, tools, KBs) from agentId
+    agentId: agentSnapshot?.agentId,
+    // numa-chat is the default workspace agent type — it supports agent prompt injection natively
+    type: 'numa-chat',
     modelId: runConfig?.modelId,
-    enabledTools: runConfig?.enabledTools,
+    // Map V1 tool names to V2 equivalents
+    enabledTools: mapToolsToV2(runConfig?.enabledTools),
+    // Map V1 KB IDs to V2 availableKBs format
+    availableKBs: mapKBsToV2(runConfig?.enabledKBIds),
     enabledConnections: runConfig?.enabledConnections,
-    enabledKBIds: runConfig?.enabledKBIds,
-    autoToolsEnabled: runConfig?.autoToolsEnabled,
-    webSearchEnabled: runConfig?.webSearchEnabled,
-    createAgentEnabled: runConfig?.createAgentEnabled,
-    userAuth: {
-      sub: auth.sub,
-      email: auth.email,
-      groups: auth.groups,
-    },
-    internalUser: {
-      sub: auth.sub,
-      email: auth.email,
-      groups: auth.groups,
-    },
+    timezone: 'UTC',
+    userEmail: auth.email ?? '',
+    todayString: buildTodayString(),
   };
 
-  const response = await fetch(`${CHAT_AGENT_FUNCTION_URL}/api/numa-chat-agent/invoke`, {
+  const response = await fetch(`${WORKSPACE_AGENT_PROXY_URL}/api/workspace-chat-agent/invocations`, {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
       authorization: `Bearer ${SCHEDULE_RUNNER_SECRET}`,
       'x-arcanum-cloudfront-secret': CLOUDFRONT_SHARED_SECRET,
+      // The proxy uses this header to identify the user when schedule runner secret auth is used
+      'x-schedule-runner-sub': auth.sub,
     },
     body: JSON.stringify(requestBody),
   });
 
   if (!response.ok) {
     const text = await response.text();
-    throw new Error(`Agent invocation failed (${response.status}): ${text}`);
+    throw new Error(`Workspace agent invocation failed (${response.status}): ${text}`);
   }
 
-  const payload = (await response.json()) as { content?: string; error?: string };
-  if (payload.error) throw new Error(payload.error);
-  return payload.content ?? '';
+  const payload = (await response.json()) as {
+    status?: string;
+    result?: { text?: string; artifacts?: unknown[]; usage?: unknown };
+    error?: string;
+  };
+
+  if (payload.status === 'error' || payload.error) {
+    throw new Error(payload.error ?? 'Workspace agent returned error status');
+  }
+
+  return payload.result?.text ?? '';
+};
+
+/** Map V1 tool names to V2 equivalents. V2 uses "knowledge_search" instead of "query_knowledge_base". */
+const mapToolsToV2 = (tools?: string[]): string[] | undefined => {
+  if (!tools || tools.length === 0) return undefined;
+  return tools.map((tool) => {
+    if (tool === 'query_knowledge_base') return 'knowledge_search';
+    return tool;
+  });
+};
+
+/** Map V1 KB ID strings to V2 availableKBs format: [{id, name}]. */
+const mapKBsToV2 = (kbIds?: string[]): Array<{ id: string; name: string }> | undefined => {
+  if (!kbIds || kbIds.length === 0) return undefined;
+  const valid = kbIds.filter((id): id is string => Boolean(id));
+  if (valid.length === 0) return undefined;
+  return valid.map((id) => ({ id, name: id }));
+};
+
+/** Build a todayString for the workspace agent (provides local date/time context). */
+const buildTodayString = (): string => {
+  const now = new Date();
+  const options: Intl.DateTimeFormatOptions = {
+    weekday: 'long',
+    year: 'numeric',
+    month: 'numeric',
+    day: 'numeric',
+  };
+  const dateStr = now.toLocaleDateString('en-US', options);
+  const timeStr = now.toLocaleTimeString('en-US', { timeZone: 'UTC' });
+  return `Local date: ${dateStr}, Local time: ${timeStr} (UTC)`;
 };
 
 const invokeRunnerAsync = async (event: RunnerEvent): Promise<void> => {
@@ -890,6 +1222,13 @@ const invokeRunnerAsync = async (event: RunnerEvent): Promise<void> => {
 const buildRunLogKey = (userId: string, scheduleId: string, runId: string): string =>
   `${SCHEDULED_RUNS_PREFIX}/${userId}/${scheduleId}/${runId}.json`;
 
+/**
+ * Merge the run config from the schedule record with the agent snapshot's tools config.
+ *
+ * The V2 workspace agent resolves agent system prompts natively via agentId,
+ * so we no longer build system prompts here. We still merge enabled tools,
+ * connections, and KBs to pass as request parameters.
+ */
 const mergeRunConfig = (
   runConfig: ScheduledRunConfig | undefined,
   agentSnapshot?: AgentSnapshot,
@@ -923,7 +1262,6 @@ const mergeRunConfig = (
 
   return {
     ...base,
-    systemPrompt: buildSystemPrompt(base.systemPrompt, agentSnapshot),
     enabledTools,
     enabledConnections,
     enabledKBIds,
@@ -933,6 +1271,7 @@ const mergeRunConfig = (
   };
 };
 
+/** Build the list of enabled tools using V2 tool names. */
 const buildEnabledTools = ({
   autoToolsEnabled,
   webSearchEnabled,
@@ -951,46 +1290,16 @@ const buildEnabledTools = ({
   const auto = autoToolsEnabled ?? true;
 
   if (auto) {
-    if (hasKBs) enabledTools.push('query_knowledge_base');
+    if (hasKBs) enabledTools.push('knowledge_search');
     enabledTools.push('web_search');
     if (createAgentEnabled) enabledTools.push('create_agent_tool');
   } else {
-    if (hasKBs) enabledTools.push('query_knowledge_base');
+    if (hasKBs) enabledTools.push('knowledge_search');
     if (webSearchEnabled) enabledTools.push('web_search');
     if (createAgentEnabled) enabledTools.push('create_agent_tool');
   }
 
   return enabledTools;
-};
-
-const buildSystemPrompt = (
-  basePrompt: string | undefined,
-  agentSnapshot?: AgentSnapshot,
-  scheduledRun?: boolean,
-): string => {
-  let prompt = (basePrompt ?? '').trim();
-  if (scheduledRun) {
-    const scheduledNotice =
-      'This is a scheduled run. Do your best to complete the agent instructions with no further inputs.';
-    if (!prompt.includes(scheduledNotice)) {
-      if (prompt) prompt += '\n\n';
-      prompt += scheduledNotice;
-    }
-  }
-  const agentPrompt = agentSnapshot?.systemPrompt?.trim();
-  const agentNotes = agentSnapshot?.userWelcomeMessage?.trim();
-
-  if (agentPrompt && !prompt.includes(agentPrompt)) {
-    if (prompt) prompt += '\n\n';
-    prompt += `**Agent Instructions (${agentSnapshot?.title ?? 'Agent'}):**\n${agentPrompt}`;
-  }
-
-  if (agentNotes && !prompt.includes(agentNotes)) {
-    if (prompt) prompt += '\n\n';
-    prompt += `**Agent Notes:**\n${agentNotes}`;
-  }
-
-  return prompt;
 };
 
 const uniqStrings = (values: string[]): string[] => {

@@ -16,7 +16,7 @@ const dynamo = DynamoDBDocumentClient.from(withPRM(DynamoDBClient, { region: REG
 export class NotificationService {
   static async createNotification(
     userId: string,
-    eventType: 'started' | 'completed' | 'failed' | 'cancelled',
+    eventType: 'started' | 'completed' | 'partial' | 'failed' | 'cancelled',
     scheduleType: 'agent' | 'application' | 'data_sync',
     scheduleId: string,
     title: string,
@@ -83,7 +83,8 @@ export class NotificationService {
     scheduleId: string,
     scheduleType: 'agent' | 'application' | 'data_sync',
     scheduleName: string,
-    result?: string
+    result?: string,
+    extraMetadata?: Record<string, unknown>
   ): Promise<void> {
     await this.createNotification(
       userId,
@@ -92,7 +93,26 @@ export class NotificationService {
       scheduleId,
       'Schedule Completed',
       `${scheduleName} completed successfully`,
-      { scheduleId, scheduleName, result }
+      { scheduleId, scheduleName, result, ...extraMetadata }
+    );
+  }
+
+  static async notifySchedulePartial(
+    userId: string,
+    scheduleId: string,
+    scheduleType: 'agent' | 'application' | 'data_sync',
+    scheduleName: string,
+    result?: string,
+    extraMetadata?: Record<string, unknown>
+  ): Promise<void> {
+    await this.createNotification(
+      userId,
+      'partial',
+      scheduleType,
+      scheduleId,
+      'Schedule Partially Completed',
+      `${scheduleName} completed with warnings`,
+      { scheduleId, scheduleName, result, ...extraMetadata }
     );
   }
 
@@ -101,7 +121,8 @@ export class NotificationService {
     scheduleId: string,
     scheduleType: 'agent' | 'application' | 'data_sync',
     scheduleName: string,
-    error: string
+    error: string,
+    extraMetadata?: Record<string, unknown>
   ): Promise<void> {
     await this.createNotification(
       userId,
@@ -110,7 +131,7 @@ export class NotificationService {
       scheduleId,
       'Schedule Failed',
       `${scheduleName} failed: ${error}`,
-      { scheduleId, scheduleName, error }
+      { scheduleId, scheduleName, error, ...extraMetadata }
     );
   }
 

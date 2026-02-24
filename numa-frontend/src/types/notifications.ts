@@ -1,7 +1,7 @@
 export type EventNotification = {
   user_id: string;
   notification_id: string;
-  event_type: 'started' | 'completed' | 'failed' | 'cancelled';
+  event_type: 'started' | 'completed' | 'partial' | 'failed' | 'cancelled';
   schedule_type: 'agent' | 'application' | 'data_sync';
   schedule_id: string;
   title: string;
