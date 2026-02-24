@@ -18,7 +18,8 @@ import * as OpsService from '../../../Services/OpsService';
 import { TicketDetailModal } from '../Modals/TicketDetailModal';
 import { CreateTicketModal } from '../Modals/CreateTicketModal';
 import { PriorityIndicator } from '../Shared/PriorityIndicator';
-import type { WorkUnit, Ticket, WorkStage, TicketPriority, StatusType } from '../../../types/ops';
+import { StaffAvatar } from '../Shared/StaffAvatar';
+import type { WorkUnit, Ticket, WorkStage, TicketPriority, StatusType, StaffProfile } from '../../../types/ops';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -48,21 +49,6 @@ function calculateNewOrder(tickets: Ticket[], insertIndex: number): number {
   return Math.round((before + after) / 2);
 }
 
-function avatarColor(name: string): string {
-  let hash = 0;
-  for (let i = 0; i < name.length; i++) {
-    hash = name.charCodeAt(i) + ((hash << 5) - hash);
-  }
-  const hue = ((hash % 360) + 360) % 360;
-  return `hsl(${hue}, 55%, 50%)`;
-}
-
-function initials(name: string): string {
-  const parts = name.trim().split(/\s+/);
-  if (parts.length >= 2) return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
-  return name.slice(0, 2).toUpperCase();
-}
-
 function statusSummary(tickets: Ticket[]): { backlog: number; active: number; done: number } {
   let backlog = 0;
   let active = 0;
@@ -88,10 +74,11 @@ interface DraggableRowProps {
   ticket: Ticket;
   typeInfo: { name: string; color: string } | undefined;
   stageInfo: { name: string; statusType: StatusType } | undefined;
+  assigneeStaff?: StaffProfile;
   onClick: () => void;
 }
 
-function DraggableRow({ ticket, typeInfo, stageInfo, onClick }: DraggableRowProps) {
+function DraggableRow({ ticket, typeInfo, stageInfo, assigneeStaff, onClick }: DraggableRowProps) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
     id: ticket.id,
   });
@@ -143,13 +130,12 @@ function DraggableRow({ ticket, typeInfo, stageInfo, onClick }: DraggableRowProp
           <PriorityIndicator priority={ticket.priority as TicketPriority} />
         </span>
       )}
-      {ticket.assigneeName ? (
+      {assigneeStaff || ticket.assigneeName ? (
         <span
-          className="backlog-row-avatar flex-shrink-0"
-          style={{ backgroundColor: avatarColor(ticket.assigneeName) }}
-          title={ticket.assigneeName}
+          className="flex-shrink-0"
+          title={assigneeStaff ? assigneeStaff.name || assigneeStaff.email : (ticket.assigneeName ?? '')}
         >
-          {initials(ticket.assigneeName)}
+          <StaffAvatar staff={assigneeStaff} name={!assigneeStaff ? ticket.assigneeName : undefined} size={24} />
         </span>
       ) : (
         <span className="backlog-row-avatar backlog-row-avatar--empty flex-shrink-0">
@@ -383,6 +369,15 @@ const BacklogView = () => {
   const { numaPut } = useNumaRequest();
   const { teamData, workUnits, tickets, config, refreshTickets, setTickets } = useOps();
 
+  // ── Staff lookup map for avatars ────────────────────────────────
+  const staffMap = useMemo(() => {
+    const map = new Map<string, StaffProfile>();
+    if (config?.staff) {
+      for (const s of config.staff) map.set(s.id, s);
+    }
+    return map;
+  }, [config?.staff]);
+
   // ── Filters ────────────────────────────────────────────────────
   const [searchQuery, setSearchQuery] = useState('');
   const [assigneeFilter, setAssigneeFilter] = useState<Set<string>>(new Set());
@@ -484,8 +479,8 @@ const BacklogView = () => {
         seen.set(tk.assigneeId, tk.assigneeName);
       }
     }
-    return Array.from(seen.entries()).map(([id, name]) => ({ id, name }));
-  }, [backlogTickets]);
+    return Array.from(seen.entries()).map(([id, name]) => ({ id, name, staff: staffMap.get(id) }));
+  }, [backlogTickets, staffMap]);
 
   // ── Type options for filter ────────────────────────────────────
   const typeOptions = useMemo(() => {
@@ -716,11 +711,10 @@ const BacklogView = () => {
               key={a.id}
               type="button"
               className={`backlog-assignee-filter ${assigneeFilter.has(a.id) ? 'active' : ''}`}
-              style={{ backgroundColor: avatarColor(a.name) }}
               title={a.name}
               onClick={() => toggleAssignee(a.id)}
             >
-              {initials(a.name)}
+              <StaffAvatar staff={a.staff} name={!a.staff ? a.name : undefined} size={28} />
             </button>
           ))}
 
@@ -907,13 +901,12 @@ const BacklogView = () => {
                             {Array.from(groupAssignees.entries())
                               .slice(0, 5)
                               .map(([id, name]) => (
-                                <span
-                                  key={id}
-                                  className="ticket-avatar"
-                                  style={{ backgroundColor: avatarColor(name) }}
-                                  title={name}
-                                >
-                                  {initials(name)}
+                                <span key={id} title={name}>
+                                  <StaffAvatar
+                                    staff={staffMap.get(id)}
+                                    name={!staffMap.has(id) ? name : undefined}
+                                    size={22}
+                                  />
                                 </span>
                               ))}
                             {groupAssignees.size > 5 && (
@@ -939,6 +932,7 @@ const BacklogView = () => {
                                 ticket={ticket}
                                 typeInfo={typeMap.get(ticket.ticketTypeId)}
                                 stageInfo={stageMap.get(ticket.stageId)}
+                                assigneeStaff={ticket.assigneeId ? staffMap.get(ticket.assigneeId) : undefined}
                                 onClick={() => handleTicketClick(ticket.id)}
                               />
                             ))

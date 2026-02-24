@@ -131,7 +131,7 @@ function renderReadOnlyValue(
 
     case 'user': {
       const staffMember = staff?.find((s) => s.id === String(value));
-      return <span>{staffMember?.name ?? t('fields.unassigned')}</span>;
+      return <span>{staffMember ? staffMember.name || staffMember.email : t('fields.unassigned')}</span>;
     }
 
     case 'currency':
@@ -321,7 +321,7 @@ function renderEditControl(
             ?.filter((s) => s.isActive)
             .map((s) => (
               <option key={s.id} value={s.id}>
-                {s.name}
+                {s.name || s.email}
               </option>
             ))}
         </Form.Select>

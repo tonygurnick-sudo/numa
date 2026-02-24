@@ -180,7 +180,7 @@ const TeamBox = ({ team, isSelected, zones, activeZoneId, onSelectTeam, onSelect
         </span>
       </div>
 
-      {/* Zone pills */}
+      {/* Zone links */}
       {zones.length > 0 && (
         <div className="d-flex align-items-center gap-1 flex-wrap">
           {zones.map((zone) => {
@@ -189,7 +189,7 @@ const TeamBox = ({ team, isSelected, zones, activeZoneId, onSelectTeam, onSelect
               <button
                 key={zone.id}
                 type="button"
-                className={`ops-team-zone-pill ${isActive ? 'active' : ''}`}
+                className={`ops-team-zone-link ${isActive ? 'active' : ''}`}
                 onClick={(e) => {
                   e.stopPropagation();
                   onSelectZone(zone.id);

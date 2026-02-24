@@ -232,18 +232,40 @@ const handleTeams = async (
   body: Record<string, unknown>,
   auth: AuthContext,
 ): Promise<ReturnType<typeof jsonResponse>> => {
-  // GET /ops/teams — list all teams
+  // GET /ops/teams — list teams (filtered by access)
   if (method === 'GET' && segments.length === 0) {
     const { items } = await queryGSI1('TENANT', 'TEAM#');
-    return jsonResponse(200, { teams: items });
+
+    // Admins see all teams; non-admins see only teams they have access to
+    const visibleTeams = isAdmin(auth)
+      ? items
+      : items.filter((team) => {
+          const ac = team.accessControl as { mode?: string; users?: string[] } | undefined;
+          if (!ac || ac.mode === 'all') return true;
+          if (team.createdBy === auth.sub) return true; // owner always sees their team
+          return Array.isArray(ac.users) && ac.users.includes(auth.sub);
+        });
+
+    return jsonResponse(200, { teams: visibleTeams });
   }
 
-  // GET /ops/teams/{teamId}
+  // GET /ops/teams/{teamId} — with access control
   if (method === 'GET' && segments.length === 1) {
     const teamId = segments[0];
     const items = await queryByPK(`TEAM#${teamId}`);
     if (items.length === 0) return errorResponse(404, 'Team not found');
     const meta = items.find((i) => String(i.SK) === 'META');
+
+    // Verify user has access to this team
+    if (meta && !isAdmin(auth)) {
+      const ac = meta.accessControl as { mode?: string; users?: string[] } | undefined;
+      if (ac && ac.mode === 'specific' && meta.createdBy !== auth.sub) {
+        if (!Array.isArray(ac.users) || !ac.users.includes(auth.sub)) {
+          return errorResponse(403, 'You do not have access to this team');
+        }
+      }
+    }
+
     const zones = items
       .filter((i) => String(i.SK ?? '').startsWith('ZONE#'))
       .sort((a, b) => Number(a.order ?? 0) - Number(b.order ?? 0));
@@ -257,9 +279,8 @@ const handleTeams = async (
     return jsonResponse(200, { team: meta, zones, stages });
   }
 
-  // POST /ops/teams — create team with flexible zones from preset or custom zones
+  // POST /ops/teams — create team (any authenticated user can create)
   if (method === 'POST' && segments.length === 0) {
-    if (!isAdmin(auth)) return errorResponse(403, 'Admin access required');
     const {
       name,
       ticketTypeId,
@@ -409,14 +430,16 @@ const handleTeams = async (
     return jsonResponse(201, { team: teamMetaItem });
   }
 
-  // PUT /ops/teams/{teamId} — update team settings
+  // PUT /ops/teams/{teamId} — update team settings (admin or team owner)
   if (method === 'PUT' && segments.length === 1) {
-    if (!isAdmin(auth)) return errorResponse(403, 'Admin access required');
     const teamId = segments[0];
 
     const metaResults = await queryByPK(`TEAM#${teamId}`, 'META');
     const meta = metaResults[0];
     if (!meta) return errorResponse(404, 'Team not found');
+
+    const isOwner = meta.createdBy === auth.sub;
+    if (!isAdmin(auth) && !isOwner) return errorResponse(403, 'Admin or team owner access required');
 
     const updated: Record<string, unknown> = {
       ...meta,
@@ -432,21 +455,23 @@ const handleTeams = async (
     return jsonResponse(200, { team: updated });
   }
 
-  // DELETE /ops/teams/{teamId}
+  // DELETE /ops/teams/{teamId} — (admin or team owner)
   if (method === 'DELETE' && segments.length === 1) {
-    if (!isAdmin(auth)) return errorResponse(403, 'Admin access required');
     const teamId = segments[0];
+
+    // Find team meta first for ownership check
+    const metaResults = await queryByPK(`TEAM#${teamId}`, 'META');
+    const meta = metaResults[0];
+    if (!meta) return errorResponse(404, 'Team not found');
+
+    const isOwner = meta.createdBy === auth.sub;
+    if (!isAdmin(auth) && !isOwner) return errorResponse(403, 'Admin or team owner access required');
 
     const tickets = await queryByPK(`TEAM#${teamId}`, 'TICKET#');
     const activeTickets = tickets.filter((t) => t.statusType !== 'deleted');
     if (activeTickets.length > 0) {
       return errorResponse(409, 'Cannot delete team with active tickets');
     }
-
-    // Find team meta
-    const metaResults = await queryByPK(`TEAM#${teamId}`, 'META');
-    const meta = metaResults[0];
-    if (!meta) return errorResponse(404, 'Team not found');
 
     // Delete all team items (zones, stages, tickets, etc.)
     const teamItems = await queryByPK(`TEAM#${teamId}`);
@@ -456,10 +481,13 @@ const handleTeams = async (
     return jsonResponse(200, { deleted: true });
   }
 
-  // PUT /ops/teams/{teamId}/zones — batch update zones
+  // PUT /ops/teams/{teamId}/zones — batch update zones (admin or team owner)
   if (method === 'PUT' && segments.length === 2 && segments[1] === 'zones') {
-    if (!isAdmin(auth)) return errorResponse(403, 'Admin access required');
     const teamId = segments[0];
+    const teamMeta = (await queryByPK(`TEAM#${teamId}`, 'META'))[0];
+    if (!teamMeta) return errorResponse(404, 'Team not found');
+    if (!isAdmin(auth) && teamMeta.createdBy !== auth.sub)
+      return errorResponse(403, 'Admin or team owner access required');
     const zones = body.zones;
     if (!Array.isArray(zones)) return errorResponse(400, 'Missing required field: zones (array)');
 
@@ -487,10 +515,13 @@ const handleTeams = async (
     return jsonResponse(200, { updated: true });
   }
 
-  // DELETE /ops/teams/{teamId}/zones/{zoneId} — delete a zone (admin only)
+  // DELETE /ops/teams/{teamId}/zones/{zoneId} — delete a zone (admin or team owner)
   if (method === 'DELETE' && segments.length === 3 && segments[1] === 'zones') {
-    if (!isAdmin(auth)) return errorResponse(403, 'Admin access required');
     const teamId = segments[0];
+    const teamMetaForZoneDel = (await queryByPK(`TEAM#${teamId}`, 'META'))[0];
+    if (!teamMetaForZoneDel) return errorResponse(404, 'Team not found');
+    if (!isAdmin(auth) && teamMetaForZoneDel.createdBy !== auth.sub)
+      return errorResponse(403, 'Admin or team owner access required');
     const zoneId = segments[2];
 
     // Load team items to validate
@@ -522,10 +553,13 @@ const handleTeams = async (
     return jsonResponse(200, { deleted: true });
   }
 
-  // PUT /ops/teams/{teamId}/stages — batch update stages (with zone-status validation)
+  // PUT /ops/teams/{teamId}/stages — batch update stages (admin or team owner)
   if (method === 'PUT' && segments.length === 2 && segments[1] === 'stages') {
-    if (!isAdmin(auth)) return errorResponse(403, 'Admin access required');
     const teamId = segments[0];
+    const teamMetaForStages = (await queryByPK(`TEAM#${teamId}`, 'META'))[0];
+    if (!teamMetaForStages) return errorResponse(404, 'Team not found');
+    if (!isAdmin(auth) && teamMetaForStages.createdBy !== auth.sub)
+      return errorResponse(403, 'Admin or team owner access required');
     const stages = body.stages;
     if (!Array.isArray(stages)) return errorResponse(400, 'Missing required field: stages (array)');
 
@@ -1232,10 +1266,23 @@ const handleTickets = async (
     return jsonResponse(200, { results });
   }
 
-  // ── GET /ops/tickets — list tickets ─────────────────────────────────────────
+  // ── GET /ops/tickets — list tickets (with access check) ─────────────────────
   if (method === 'GET' && segments.length === 0) {
     const teamId = qp.teamId;
     if (!teamId) return errorResponse(400, 'Missing required query parameter: teamId');
+
+    // Verify user has access to the team
+    if (!isAdmin(auth)) {
+      const teamMeta = (await queryByPK(`TEAM#${teamId}`, 'META'))[0];
+      if (teamMeta) {
+        const ac = teamMeta.accessControl as { mode?: string; users?: string[] } | undefined;
+        if (ac && ac.mode === 'specific' && teamMeta.createdBy !== auth.sub) {
+          if (!Array.isArray(ac.users) || !ac.users.includes(auth.sub)) {
+            return errorResponse(403, 'You do not have access to this team');
+          }
+        }
+      }
+    }
 
     const limit = qp.limit ? parseInt(qp.limit, 10) : undefined;
     const cursor = qp.cursor ? JSON.parse(decodeURIComponent(qp.cursor)) : undefined;
@@ -1347,6 +1394,20 @@ const handleTickets = async (
       return errorResponse(400, 'Missing required fields: teamId, stageId, title');
 
     const teamId = String(rawTeamId);
+
+    // Verify user has access to create tickets in this team
+    if (!isAdmin(auth)) {
+      const teamMeta = (await queryByPK(`TEAM#${teamId}`, 'META'))[0];
+      if (teamMeta) {
+        const ac = teamMeta.accessControl as { mode?: string; users?: string[] } | undefined;
+        if (ac && ac.mode === 'specific' && teamMeta.createdBy !== auth.sub) {
+          if (!Array.isArray(ac.users) || !ac.users.includes(auth.sub)) {
+            return errorResponse(403, 'You do not have access to this team');
+          }
+        }
+      }
+    }
+
     const stageId = String(rawStageId);
     const ticketId = randomUUID();
     const ts = now();
@@ -1455,6 +1516,20 @@ const handleTickets = async (
     const isCrossTeamMove = teamId && teamId !== currentTeamId;
 
     const targetTeamId = isCrossTeamMove ? teamId! : currentTeamId;
+
+    // Verify user has access to the target team for cross-team moves
+    if (isCrossTeamMove && !isAdmin(auth)) {
+      const targetMeta = (await queryByPK(`TEAM#${targetTeamId}`, 'META'))[0];
+      if (targetMeta) {
+        const ac = targetMeta.accessControl as { mode?: string; users?: string[] } | undefined;
+        if (ac && ac.mode === 'specific' && targetMeta.createdBy !== auth.sub) {
+          if (!Array.isArray(ac.users) || !ac.users.includes(auth.sub)) {
+            return errorResponse(403, 'You do not have access to the target team');
+          }
+        }
+      }
+    }
+
     let stageId = body.stageId ? String(body.stageId) : (existing.stageId as string);
 
     // ── Derive statusType from stage when stageId changes ─────────────────

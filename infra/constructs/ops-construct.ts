@@ -25,6 +25,12 @@ export interface OpsConstructProps extends ApiGatewayLambdaCollectionProps {
   outputsBucketArn: string;
   outputsBucketName: string;
   otelConfig?: OTelConfig;
+  userPoolId?: string;
+  userPoolArn?: string;
+  /** Chat-settings table name — used to enrich staff profiles with user profile data (name, jobTitle, avatar). */
+  chatSettingsTableName?: string;
+  /** Chat-settings table ARN — used to grant read access for staff profile enrichment. */
+  chatSettingsTableArn?: string;
 }
 
 export class OpsConstruct extends ApiGatewayLambdaCollection {
@@ -158,7 +164,7 @@ export class OpsConstruct extends ApiGatewayLambdaCollection {
     ];
 
     // 1. Config API — manages ticket types, statuses, fields, staff, projects,
-    //    CRM/supplier settings
+    //    CRM/supplier settings, and Cognito staff sync
     this.addLambdaFunction(this, 'ops-config-api', {
       addAuthorizer: true,
       lambdaDirectory: 'node/numa-ops-config-api',
@@ -168,6 +174,8 @@ export class OpsConstruct extends ApiGatewayLambdaCollection {
       environment: {
         CLIENT_NAME: clientName,
         OPS_CONFIG_TABLE: this.opsConfigTable.name,
+        USER_POOL_ID: props.userPoolId ?? '',
+        CHAT_SETTINGS_TABLE: props.chatSettingsTableName ?? '',
         OTEL_METRICS_EXPORTER: 'none',
       },
       additionalPolicyStatements: [
@@ -175,6 +183,32 @@ export class OpsConstruct extends ApiGatewayLambdaCollection {
           effect: 'Allow',
           actions: dynamoFullActions,
           resources: [this.opsConfigTable.arn],
+        },
+        // Cognito ListUsers permission for staff sync
+        ...(props.userPoolArn
+          ? [
+              {
+                effect: 'Allow' as const,
+                actions: ['cognito-idp:ListUsers'],
+                resources: [props.userPoolArn],
+              },
+            ]
+          : []),
+        // Read-only access to chat-settings table for staff profile enrichment
+        ...(props.chatSettingsTableArn
+          ? [
+              {
+                effect: 'Allow' as const,
+                actions: ['dynamodb:BatchGetItem', 'dynamodb:GetItem'],
+                resources: [props.chatSettingsTableArn],
+              },
+            ]
+          : []),
+        // S3 read for generating presigned avatar URLs (profile images)
+        {
+          effect: 'Allow' as const,
+          actions: ['s3:GetObject'],
+          resources: [`${props.outputsBucketArn}/numa-chat/profile-images/*`],
         },
       ],
       route: [

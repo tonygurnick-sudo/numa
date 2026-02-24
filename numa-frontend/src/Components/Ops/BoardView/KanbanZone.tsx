@@ -9,6 +9,7 @@ type KanbanZoneProps = {
   tickets: Ticket[];
   onTicketClick: (ticket: Ticket) => void;
   onTicketContextMenu: (e: React.MouseEvent, ticket: Ticket) => void;
+  onTicketAssign?: (ticketId: string, assigneeId: string | null, version: number) => void;
   onQuickAdd: (stageId: string, title: string) => void;
 };
 
@@ -18,6 +19,7 @@ const KanbanZone: React.FC<KanbanZoneProps> = ({
   tickets,
   onTicketClick,
   onTicketContextMenu,
+  onTicketAssign,
   onQuickAdd,
 }) => {
   const { t } = useTranslation('ops');
@@ -39,6 +41,7 @@ const KanbanZone: React.FC<KanbanZoneProps> = ({
             tickets={stageTickets}
             onTicketClick={onTicketClick}
             onTicketContextMenu={onTicketContextMenu}
+            onTicketAssign={onTicketAssign}
             onQuickAdd={(title) => onQuickAdd(stage.id, title)}
           />
         );

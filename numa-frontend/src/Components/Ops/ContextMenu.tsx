@@ -106,7 +106,7 @@ const ContextMenu = ({
         {staff
           .filter((s) => s.isActive)
           .map((s) => (
-            <MenuItem key={s.id} label={s.name} onClick={() => onAction('assignTo', s.id)} />
+            <MenuItem key={s.id} label={s.name || s.email} onClick={() => onAction('assignTo', s.id)} />
           ))}
       </SubMenuItem>
 

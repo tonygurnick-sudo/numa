@@ -25,6 +25,7 @@ import type { RichTextEditorHandle } from '../Shared/RichTextEditor';
 import { DynamicField } from '../Shared/DynamicField';
 import { ConfirmModal } from './ConfirmModal';
 import { getTicketTypeIconClass } from '../../../constants/opsConstants';
+import { StaffAvatar } from '../Shared/StaffAvatar';
 
 // ─── Props ──────────────────────────────────────────────────────────────────
 
@@ -514,25 +515,32 @@ export function TicketDetailModal({
           ))}
         </Form.Select>
 
-        {/* Priority + Assignee — 2 column */}
-        <div className="ticket-sidebar-grid-row" style={{ marginTop: 16 }}>
-          <div>
-            <div className="ticket-sidebar-field-label">{t('tickets.priority')}</div>
-            <Form.Select
-              size="sm"
-              value={ticket.priority}
-              onChange={(e) => void handleUpdate({ priority: e.target.value as TicketPriority })}
-              style={selectStyle}
-            >
-              {PRIORITY_OPTIONS.map((p) => (
-                <option key={p} value={p}>
-                  {t(`priority.${p}`)}
-                </option>
-              ))}
-            </Form.Select>
-          </div>
-          <div>
-            <div className="ticket-sidebar-field-label">{t('tickets.assignee')}</div>
+        {/* Priority */}
+        <div style={{ marginTop: 16, marginBottom: 12 }}>
+          <div className="ticket-sidebar-field-label">{t('tickets.priority')}</div>
+          <Form.Select
+            size="sm"
+            value={ticket.priority}
+            onChange={(e) => void handleUpdate({ priority: e.target.value as TicketPriority })}
+            style={selectStyle}
+          >
+            {PRIORITY_OPTIONS.map((p) => (
+              <option key={p} value={p}>
+                {t(`priority.${p}`)}
+              </option>
+            ))}
+          </Form.Select>
+        </div>
+
+        {/* Assignee — full width row with avatar */}
+        <div style={{ marginBottom: 12 }}>
+          <div className="ticket-sidebar-field-label">{t('tickets.assignee')}</div>
+          <div className="d-flex align-items-center gap-2">
+            <StaffAvatar
+              staff={ticket.assigneeId ? staff.find((s) => s.id === ticket.assigneeId) : undefined}
+              name={ticket.assigneeName}
+              size={28}
+            />
             <Form.Select
               size="sm"
               value={ticket.assigneeId ?? ''}
@@ -544,17 +552,22 @@ export function TicketDetailModal({
                 .filter((s) => s.isActive)
                 .map((s) => (
                   <option key={s.id} value={s.id}>
-                    {s.name}
+                    {s.name || s.email}
                   </option>
                 ))}
             </Form.Select>
           </div>
         </div>
 
-        {/* Reporter + Created by — 2 column */}
-        <div className="ticket-sidebar-grid-row">
-          <div>
-            <div className="ticket-sidebar-field-label">{t('tickets.reporter')}</div>
+        {/* Reporter — full width row with avatar */}
+        <div style={{ marginBottom: 12 }}>
+          <div className="ticket-sidebar-field-label">{t('tickets.reporter')}</div>
+          <div className="d-flex align-items-center gap-2">
+            <StaffAvatar
+              staff={ticket.reporterId ? (config?.staff ?? []).find((s) => s.id === ticket.reporterId) : undefined}
+              name={ticket.reporterName}
+              size={28}
+            />
             <Form.Select
               size="sm"
               value={ticket.reporterId ?? ''}
@@ -562,7 +575,7 @@ export function TicketDetailModal({
                 const selectedStaff = config?.staff.find((s) => s.id === e.target.value);
                 void handleUpdate({
                   reporterId: e.target.value || null,
-                  reporterName: selectedStaff?.name ?? null,
+                  reporterName: selectedStaff?.name || selectedStaff?.email || null,
                 });
               }}
               style={selectStyle}
@@ -572,15 +585,17 @@ export function TicketDetailModal({
                 .filter((s) => s.isActive)
                 .map((s) => (
                   <option key={s.id} value={s.id}>
-                    {s.name}
+                    {s.name || s.email}
                   </option>
                 ))}
             </Form.Select>
           </div>
-          <div>
-            <div className="ticket-sidebar-field-label">{t('tickets.createdBy')}</div>
-            <span style={{ fontSize: '0.85rem', display: 'block', paddingTop: 6 }}>{ticket.createdByName}</span>
-          </div>
+        </div>
+
+        {/* Created by */}
+        <div style={{ marginBottom: 12 }}>
+          <div className="ticket-sidebar-field-label">{t('tickets.createdBy')}</div>
+          <span style={{ fontSize: '0.85rem', display: 'block', paddingTop: 6 }}>{ticket.createdByName}</span>
         </div>
 
         {/* Due Date + Project — 2 column */}

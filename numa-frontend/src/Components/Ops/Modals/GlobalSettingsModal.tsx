@@ -9,6 +9,7 @@ import { STATUS_TYPE_TO_ZONES } from '../../../constants/opsConstants';
 import { ConfirmModal } from './ConfirmModal';
 import { CustomerDetailModal } from './CustomerDetailModal';
 import { SupplierDetailModal } from './SupplierDetailModal';
+import { StaffAvatar } from '../Shared/StaffAvatar';
 import type {
   OpsConfigResponse,
   TicketType,
@@ -202,7 +203,7 @@ export function GlobalSettingsModal({
 }: GlobalSettingsModalProps): React.JSX.Element {
   const { t } = useTranslation('ops');
   const { numaGet, numaPost, numaPut, numaDelete } = useNumaRequest();
-  const { config, teams, refreshTeams } = useOps();
+  const { config, teams, refreshTeams, refreshStaff } = useOps();
 
   // ── Local state (edited copies of config) ──────────────────────────────────
   const [projects, setProjects] = useState<Project[]>([]);
@@ -291,6 +292,13 @@ export function GlobalSettingsModal({
       setShowingNewField(false);
     }
   }, [show, config]);
+
+  // ── Sync staff from Cognito when the modal opens ──────────────────────────
+  useEffect(() => {
+    if (show) {
+      refreshStaff();
+    }
+  }, [show, refreshStaff]);
 
   // ── Load customers & suppliers when their tabs are shown ──────────────────
   const loadCustomers = useCallback(async () => {
@@ -582,6 +590,7 @@ export function GlobalSettingsModal({
       <Table size="sm" hover>
         <thead>
           <tr>
+            <th style={{ width: 48 }} />
             <th>{t('common.name')}</th>
             <th>{t('contacts.email')}</th>
             <th>{t('globalSettings.role')}</th>
@@ -591,9 +600,12 @@ export function GlobalSettingsModal({
         <tbody>
           {staff.map((person) => (
             <tr key={person.id}>
-              <td>{person.name}</td>
+              <td>
+                <StaffAvatar staff={person} size={32} />
+              </td>
+              <td>{person.name || person.email}</td>
               <td>{person.email}</td>
-              <td>{person.role}</td>
+              <td>{person.role || <span className="text-muted">-</span>}</td>
               <td>
                 <Badge bg={person.isActive ? 'success' : 'secondary'}>
                   {person.isActive ? t('common.yes') : t('common.no')}

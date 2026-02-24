@@ -13,6 +13,7 @@ type KanbanColumnProps = {
   tickets: Ticket[];
   onTicketClick: (ticket: Ticket) => void;
   onTicketContextMenu: (e: React.MouseEvent, ticket: Ticket) => void;
+  onTicketAssign?: (ticketId: string, assigneeId: string | null, version: number) => void;
   onQuickAdd: (title: string) => void;
 };
 
@@ -21,6 +22,7 @@ const KanbanColumn: React.FC<KanbanColumnProps> = ({
   tickets,
   onTicketClick,
   onTicketContextMenu,
+  onTicketAssign,
   onQuickAdd,
 }) => {
   const { t } = useTranslation('ops');
@@ -83,7 +85,13 @@ const KanbanColumn: React.FC<KanbanColumnProps> = ({
       <div className="kanban-column-body">
         <SortableContext items={ticketIds} strategy={verticalListSortingStrategy}>
           {tickets.map((ticket) => (
-            <TicketCard key={ticket.id} ticket={ticket} onClick={onTicketClick} onContextMenu={onTicketContextMenu} />
+            <TicketCard
+              key={ticket.id}
+              ticket={ticket}
+              onClick={onTicketClick}
+              onContextMenu={onTicketContextMenu}
+              onAssign={onTicketAssign}
+            />
           ))}
         </SortableContext>
       </div>

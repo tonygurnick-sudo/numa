@@ -466,6 +466,10 @@ export class NumaClientStack extends TerraformStack {
         region: clientConfig.region,
         outputsBucketArn: core.outputsBucket.bucket.arn,
         outputsBucketName: core.outputsBucket.bucket.bucket,
+        userPoolId: core.userPoolId,
+        userPoolArn: `arn:aws:cognito-idp:${clientConfig.region}:${clientConfig.clientAccountId}:userpool/${core.userPoolId}`,
+        chatSettingsTableName: core.chatSettingsTable.name,
+        chatSettingsTableArn: core.chatSettingsTable.arn,
         otelConfig: {
           otelConfigPath: core.otelConfigPath,
           honeycombIngestKey: honeycombBackendKey,

@@ -1,8 +1,9 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Form, Row, Col } from 'react-bootstrap';
 import { useTranslation } from 'react-i18next';
 import { BOARD_COLORS } from '../../Shared/colorUtils';
-import type { WorkZone, WorkStage, WorkUnitSeriesConfig } from '../../../../types/ops';
+import { StaffAvatar } from '../../Shared/StaffAvatar';
+import type { WorkZone, WorkStage, WorkUnitSeriesConfig, StaffProfile } from '../../../../types/ops';
 
 interface GeneralTabProps {
   name: string;
@@ -17,6 +18,8 @@ interface GeneralTabProps {
   setDefaultStageId: (v: string) => void;
   zones: Partial<WorkZone>[];
   stages: Partial<WorkStage>[];
+  createdBy?: string;
+  staff?: StaffProfile[];
 }
 
 export function GeneralTab({
@@ -32,8 +35,15 @@ export function GeneralTab({
   setDefaultStageId,
   zones,
   stages,
+  createdBy,
+  staff,
 }: GeneralTabProps): React.JSX.Element {
   const { t } = useTranslation('ops');
+
+  const owner = useMemo(
+    () => (createdBy && staff ? staff.find((s) => s.id === createdBy) : undefined),
+    [createdBy, staff],
+  );
 
   const wuEnabled = Boolean(workUnitSeries?.enabled);
   const wuLabel = workUnitSeries?.label ?? 'Sprint';
@@ -75,6 +85,17 @@ export function GeneralTab({
 
   return (
     <>
+      {/* Team owner */}
+      {owner && (
+        <div className="d-flex align-items-center gap-2 mb-3 p-2 bg-light rounded">
+          <StaffAvatar staff={owner} size={28} />
+          <div>
+            <div className="small text-muted">{t('teams.owner')}</div>
+            <div style={{ fontSize: '0.85rem' }}>{owner.name || owner.email}</div>
+          </div>
+        </div>
+      )}
+
       {/* Team name & color */}
       <Form.Group className="mb-3">
         <Form.Label>{t('teams.name')}</Form.Label>

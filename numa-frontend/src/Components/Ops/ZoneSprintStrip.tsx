@@ -138,25 +138,23 @@ const ZoneSprintStrip = () => {
   if (!hasWorkUnits) {
     return (
       <div className="d-flex align-items-center gap-2 flex-grow-1" style={{ overflowX: 'auto' }}>
-        <span className="ops-strip-label">
-          <i className="bi bi-gear" />
-          {t('header.zonesLabel')}
-        </span>
-        {zones.map((zone) => {
-          const count = zoneTicketCounts.get(zone.id) ?? 0;
-          return (
-            <button
-              key={zone.id}
-              type="button"
-              className={`ops-pill ${activeZoneId === zone.id ? 'active' : ''}`}
-              onClick={() => setActiveZone(zone.id)}
-            >
-              <i className={`bi ${zone.zoneType === 'board' ? 'bi-kanban' : 'bi-list-task'}`} />
-              {zone.name}
-              <span className="ops-pill-count">{count}</span>
-            </button>
-          );
-        })}
+        <div className="ops-zone-tabs">
+          {zones.map((zone) => {
+            const count = zoneTicketCounts.get(zone.id) ?? 0;
+            return (
+              <button
+                key={zone.id}
+                type="button"
+                className={`ops-zone-tab ${activeZoneId === zone.id ? 'active' : ''}`}
+                onClick={() => setActiveZone(zone.id)}
+              >
+                <i className={`bi ${zone.zoneType === 'board' ? 'bi-kanban' : 'bi-list-task'}`} />
+                {zone.name}
+                <span className="ops-zone-tab-count">({count})</span>
+              </button>
+            );
+          })}
+        </div>
       </div>
     );
   }
