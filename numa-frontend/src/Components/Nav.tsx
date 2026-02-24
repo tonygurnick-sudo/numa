@@ -13,8 +13,6 @@ import {
   Database,
   FolderClosed,
   Grid3X3,
-  HelpCircle,
-  Home,
   History,
   MessageSquare,
   Microscope,
@@ -42,12 +40,6 @@ interface NavProps {
 
 type InterfaceMode = 'simple' | 'advanced';
 type AdvancedNavMode = 'work' | 'build';
-const HOME_NAV_ITEM = {
-  to: '__home__',
-  labelKey: 'nav.items.home',
-  staticIcon: 'home',
-  staticItem: true,
-};
 const SIMPLE_BUILD_SECTION_ITEM = {
   to: '__section_build__',
   sectionOnly: true,
@@ -248,15 +240,12 @@ const Nav = ({ isCollapsed = false, onToggleCollapse }: NavProps) => {
     interfaceMode === 'advanced' && advancedNavMode === 'work'
       ? insertNavItemAfterApps(visibleMainNavItems, opsNavItem)
       : visibleMainNavItems;
-  const showHomeNavItem = !(interfaceMode === 'advanced' && advancedNavMode === 'build');
   const footerNavItems = navItems.filter((item) => item.footerOnly && !item.sectionOnly);
-  const visibleMainNavItemsWithHome = [
-    ...(showHomeNavItem ? [HOME_NAV_ITEM] : []),
+  const visibleMainNavItems_all = [
     ...advancedWorkMainNavItems,
     ...simpleModeExtras,
     ...advancedBuildModeExtras,
   ];
-  const visibleMobileMainNavItemsWithHome = visibleMainNavItemsWithHome;
 
   useDrawerBackClose({
     isOpen: showMobileDropdown,
@@ -303,7 +292,7 @@ const Nav = ({ isCollapsed = false, onToggleCollapse }: NavProps) => {
         </div>
         <Dropdown show={showMobileDropdown} className="w-100" id="nav-dropdown" autoClose={false}>
           <Dropdown.Menu className="w-100 mt-0">
-            {visibleMobileMainNavItemsWithHome.map((item) => {
+            {visibleMainNavItems_all.map((item) => {
               // Handle section headers
               if (item.sectionOnly) {
                 return (
@@ -433,7 +422,7 @@ const Nav = ({ isCollapsed = false, onToggleCollapse }: NavProps) => {
 
         {/* Main nav items */}
         <ul className="nav-links">
-          {visibleMainNavItemsWithHome.map((item) => {
+          {visibleMainNavItems_all.map((item) => {
             if (item.sectionOnly) {
               if (!isExpanded) return null;
               return (
@@ -672,8 +661,6 @@ function isAdvancedHiddenNavItem(item): boolean {
 
 function getStaticNavIcon(iconKey) {
   switch (iconKey) {
-    case 'home':
-      return Home;
     case 'create':
       return PlusCircle;
     case 'analyse':
@@ -690,8 +677,6 @@ function getStaticNavIcon(iconKey) {
       return ClipboardList;
     case 'marketplace':
       return Store;
-    case 'support':
-      return HelpCircle;
     default:
       return null;
   }
