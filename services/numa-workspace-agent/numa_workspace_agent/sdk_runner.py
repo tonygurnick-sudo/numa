@@ -595,7 +595,7 @@ async def stream_claude_sdk(
                 #
                 # The approval_mode controls whether approval is required:
                 # - 'always': every integration tool call needs manual approval (default)
-                # - 'non_destructive': auto-approve read-only actions (readOnlyHint=true),
+                # - 'non_destructive': auto-approve read-only actions and draft actions,
                 #   require approval for writes/deletes or unknown actions (fail-closed)
                 # - 'never': auto-approve all integration tool calls
                 APPROVAL_REQUIRED_TOOLS = ("run_action", "proxy_request")
@@ -676,15 +676,25 @@ async def stream_claude_sdk(
                                         action_key=_approval_key,
                                         error=str(exc),
                                     )
-                                # Auto-approve only if annotations explicitly
-                                # mark this as read-only. Missing annotations
-                                # default to requiring approval (fail-closed).
-                                read_only = (
-                                    schema_annotations.get("readOnlyHint", False)
-                                    if isinstance(schema_annotations, dict)
-                                    else False
-                                )
-                                auto_approved = bool(read_only)
+                                # Auto-approve read-only actions and draft
+                                # actions that are explicitly non-destructive.
+                                # Drafts are saved locally and must be sent
+                                # separately by the user, so they're safe.
+                                # Missing annotations default to requiring
+                                # approval (fail-closed).
+                                if isinstance(schema_annotations, dict):
+                                    read_only = schema_annotations.get(
+                                        "readOnlyHint", False
+                                    )
+                                    is_draft = "draft" in _approval_key.lower()
+                                    non_destructive = not schema_annotations.get(
+                                        "destructiveHint", True
+                                    )
+                                    auto_approved = bool(
+                                        read_only or (is_draft and non_destructive)
+                                    )
+                                else:
+                                    auto_approved = False
 
                             # Set NUMA_APPROVAL_MODE env var so the tools Lambda
                             # knows whether to skip DynamoDB polling.
