@@ -263,6 +263,7 @@
       "button": "Export",
       "title": "Conversation Export",
       "exportedOn": "Exported: {{date}}",
+      "conversationId": "Conversation ID: {{id}}",
       "html": "HTML",
       "htmlDesc": "Styled, readable format",
       "text": "Plain Text",

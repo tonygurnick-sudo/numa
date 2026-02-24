@@ -253,7 +253,7 @@ function renderSegmentHtml(seg: ExportSegment): string {
   }
 }
 
-function generateHtml(exportedMessages: ExportedMessage[], dateStr: string, t: TFunction): string {
+function generateHtml(exportedMessages: ExportedMessage[], dateStr: string, conversationId: string, t: TFunction): string {
   const messagesHtml = exportedMessages
     .map((msg) => {
       const roleLabel = msg.role === 'user' ? t('workspace.export.roles.user') : t('workspace.export.roles.assistant');
@@ -354,6 +354,7 @@ function generateHtml(exportedMessages: ExportedMessage[], dateStr: string, t: T
 <body>
 <h1>${escapeHtml(t('workspace.export.title'))}</h1>
 <div class="meta">${escapeHtml(t('workspace.export.exportedOn', { date: dateStr }))}</div>
+<div class="meta">${escapeHtml(t('workspace.export.conversationId', { id: conversationId }))}</div>
 ${messagesHtml}
 </body>
 </html>`;
@@ -385,10 +386,11 @@ function renderSegmentText(seg: ExportSegment): string {
   }
 }
 
-function generatePlainText(exportedMessages: ExportedMessage[], dateStr: string, t: TFunction): string {
+function generatePlainText(exportedMessages: ExportedMessage[], dateStr: string, conversationId: string, t: TFunction): string {
   const title = t('workspace.export.title');
   const exportedOn = t('workspace.export.exportedOn', { date: dateStr });
-  const lines = [title, exportedOn, '', '---', ''];
+  const convId = t('workspace.export.conversationId', { id: conversationId });
+  const lines = [title, exportedOn, convId, '', '---', ''];
 
   for (const msg of exportedMessages) {
     const label = msg.role === 'user' ? t('workspace.export.roles.user') : t('workspace.export.roles.assistant');
@@ -434,10 +436,10 @@ export function ExportConversationButton({ messages, conversationId }: ExportCon
     const dateSlug = new Date().toISOString().slice(0, 10);
 
     if (format === 'html') {
-      const html = generateHtml(exportedMessages, dateStr, t);
+      const html = generateHtml(exportedMessages, dateStr, conversationId, t);
       downloadFile(html, `conversation-${shortId}-${dateSlug}.html`, 'text/html');
     } else {
-      const text = generatePlainText(exportedMessages, dateStr, t);
+      const text = generatePlainText(exportedMessages, dateStr, conversationId, t);
       downloadFile(text, `conversation-${shortId}-${dateSlug}.txt`, 'text/plain');
     }
   };

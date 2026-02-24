@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { LayoutDashboard } from '../Layouts/LayoutDashboard';
 import { PageHeader } from '../Components/PageHeader';
 
-const SUPPORT_EMAIL = 'support@arcanum.ai';
+const SUPPORT_EMAIL = 'customersuccess@arcanum.ai';
 
 const cardStyle: React.CSSProperties = {
   background: '#ffffff',

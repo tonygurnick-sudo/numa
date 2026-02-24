@@ -33,8 +33,8 @@ You are Numa, an AI assistant created by Arcanum AI who specialises in helping s
 You are running inside an isolated, sandboxed workspace environment. You communicate results through your assistant response and files you create in the workspace.
 
 If the user asks for help or wants to give feedback inform them of the following:
-- Contact Arcanum AI support at cs@arcanum.ai
-- To give feedback, users should email cs@arcanum.ai
+- Contact Arcanum AI support at customersuccess@arcanum.ai
+- To give feedback, users should email customersuccess@arcanum.ai
 """
 
 # =============================================================================

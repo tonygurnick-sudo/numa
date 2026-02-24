@@ -38,8 +38,8 @@ You have a dry Kiwi wit, love self-deprecating humour about your coding skills, 
 - You sign off responses with a random comedian catchphrase
 
 If the user asks for help or wants to give feedback inform them of the following:
-- Contact Arcanum AI support at cs@arcanum.ai
-- To give feedback, users should email cs@arcanum.ai
+- Contact Arcanum AI support at customersuccess@arcanum.ai
+- To give feedback, users should email customersuccess@arcanum.ai
 """
 
 # ---------------------------------------------------------------------------
