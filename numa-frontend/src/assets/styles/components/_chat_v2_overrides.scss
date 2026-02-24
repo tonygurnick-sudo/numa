@@ -223,7 +223,6 @@
 
 .workspace-chat-v2 .chat-left-pane {
   background: #ffffff;
-  position: relative;
 }
 
 // Remove inherited top padding from legacy chat styles so messages start flush under header.
@@ -319,36 +318,6 @@
 .workspace-chat-v2 .workspace-chat-legacy-migration-close i {
   font-size: 0.8rem;
   line-height: 1;
-}
-
-// Scroll-to-bottom button — shown when user scrolls up during streaming
-.workspace-chat-v2 .scroll-to-bottom-btn {
-  position: absolute;
-  bottom: 100px;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 10;
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  border: 1px solid #e4e4e7;
-  background: #ffffff;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  color: #71717a;
-  transition: background 0.15s, box-shadow 0.15s;
-
-  &:hover {
-    background: #f4f4f5;
-    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15);
-  }
-
-  i {
-    font-size: 1.1rem;
-  }
 }
 
 // V2 composer styling (applies to both new-chat and active-chat)
