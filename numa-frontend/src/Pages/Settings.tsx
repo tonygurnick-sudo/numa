@@ -723,7 +723,7 @@ export default function SettingsPage() {
 
       <div className="app-content settings-app-content">
         <div hidden={currentScope !== 'user'} aria-hidden={currentScope !== 'user'}>
-          <UserProfilePage embedded activeTabKey={userSettingsTabKey} onActiveTabChange={setUserSettingsTabKey} />
+          <UserProfilePage embedded activeTabKey={userSettingsTabKey} onActiveTabChange={setUserSettingsTabKey} settingsScope={currentScope} />
         </div>
 
         {isAdmin && (
@@ -883,7 +883,7 @@ export default function SettingsPage() {
                                 type="switch"
                                 id="chat-defaults-web-search"
                                 label=""
-                                checked={globalChatSettings.webSearchEnabled}
+                                checked={globalChatSettings.autoToolsEnabled || globalChatSettings.webSearchEnabled}
                                 disabled={globalChatSettings.autoToolsEnabled}
                                 onChange={(e) => {
                                   setGlobalChatSettings((prev) => ({
@@ -905,7 +905,7 @@ export default function SettingsPage() {
                                   type="switch"
                                   id="chat-defaults-data-analysis"
                                   label=""
-                                  checked={globalChatSettings.dataAnalysisEnabled}
+                                  checked={globalChatSettings.autoToolsEnabled || globalChatSettings.dataAnalysisEnabled}
                                   disabled={globalChatSettings.autoToolsEnabled}
                                   onChange={(e) => {
                                     setGlobalChatSettings((prev) => ({
@@ -927,7 +927,7 @@ export default function SettingsPage() {
                                 type="switch"
                                 id="chat-defaults-create-agent"
                                 label=""
-                                checked={globalChatSettings.createAgentEnabled}
+                                checked={globalChatSettings.autoToolsEnabled || globalChatSettings.createAgentEnabled}
                                 disabled={globalChatSettings.autoToolsEnabled}
                                 onChange={(e) => {
                                   setGlobalChatSettings((prev) => ({
@@ -948,7 +948,7 @@ export default function SettingsPage() {
                                 type="switch"
                                 id="chat-defaults-memories"
                                 label=""
-                                checked={globalChatSettings.memoriesEnabled}
+                                checked={globalChatSettings.autoToolsEnabled || globalChatSettings.memoriesEnabled}
                                 disabled={globalChatSettings.autoToolsEnabled}
                                 onChange={(e) => {
                                   setGlobalChatSettings((prev) => ({

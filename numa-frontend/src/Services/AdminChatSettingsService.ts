@@ -116,6 +116,8 @@ function validateGlobal(data: unknown): GlobalChatSettings {
       typeof obj.createAgentEnabled === 'boolean'
         ? obj.createAgentEnabled
         : DEFAULT_GLOBAL_CHAT_SETTINGS.createAgentEnabled,
+    memoriesEnabled:
+      typeof obj.memoriesEnabled === 'boolean' ? obj.memoriesEnabled : DEFAULT_GLOBAL_CHAT_SETTINGS.memoriesEnabled,
     dataAnalysisEnabled:
       typeof obj.dataAnalysisEnabled === 'boolean'
         ? obj.dataAnalysisEnabled
@@ -131,6 +133,14 @@ function validateGlobal(data: unknown): GlobalChatSettings {
       typeof obj.approvalMode === 'string' && VALID_APPROVAL_MODES.includes(obj.approvalMode as ApprovalMode)
         ? (obj.approvalMode as ApprovalMode)
         : DEFAULT_GLOBAL_CHAT_SETTINGS.approvalMode,
+    emailSignatureEnabled:
+      typeof obj.emailSignatureEnabled === 'boolean'
+        ? obj.emailSignatureEnabled
+        : DEFAULT_GLOBAL_CHAT_SETTINGS.emailSignatureEnabled,
+    emailSignatureText:
+      typeof obj.emailSignatureText === 'string'
+        ? obj.emailSignatureText
+        : DEFAULT_GLOBAL_CHAT_SETTINGS.emailSignatureText,
     allowUserDefaults,
   };
 }

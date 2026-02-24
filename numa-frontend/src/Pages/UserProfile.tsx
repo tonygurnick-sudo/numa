@@ -60,9 +60,11 @@ interface UserProfilePageProps {
   embedded?: boolean;
   activeTabKey?: string;
   onActiveTabChange?: (tabKey: string) => void;
+  /** When embedded in Settings, the current scope ('user' | 'admin'). Re-fetches data when switching back to 'user'. */
+  settingsScope?: 'user' | 'admin';
 }
 
-export default function UserProfilePage({ embedded = false, activeTabKey, onActiveTabChange }: UserProfilePageProps) {
+export default function UserProfilePage({ embedded = false, activeTabKey, onActiveTabChange, settingsScope = 'user' }: UserProfilePageProps) {
   const { t } = useTranslation('settings');
   const { user, getCredentials } = useAuth();
   const { numaGet, numaPut } = useNumaRequest();
@@ -217,6 +219,8 @@ export default function UserProfilePage({ embedded = false, activeTabKey, onActi
   >({});
 
   useEffect(() => {
+    // Skip fetching while the admin view is active — re-fetch when switching back to 'user'.
+    if (settingsScope !== 'user') return;
     let cancelled = false;
     (async () => {
       try {
@@ -241,7 +245,7 @@ export default function UserProfilePage({ embedded = false, activeTabKey, onActi
     return () => {
       cancelled = true;
     };
-  }, [numaGet]);
+  }, [numaGet, settingsScope]);
 
   useEffect(() => {
     let cancelled = false;
@@ -269,6 +273,7 @@ export default function UserProfilePage({ embedded = false, activeTabKey, onActi
   }, [dataAnalysisAvailable]);
 
   useEffect(() => {
+    if (settingsScope !== 'user') return;
     let cancelled = false;
     (async () => {
       try {
@@ -289,7 +294,7 @@ export default function UserProfilePage({ embedded = false, activeTabKey, onActi
     return () => {
       cancelled = true;
     };
-  }, [numaGet]);
+  }, [numaGet, settingsScope]);
 
   // Load user profile
   useEffect(() => {
@@ -1361,7 +1366,7 @@ export default function UserProfilePage({ embedded = false, activeTabKey, onActi
                         type="switch"
                         id="profile-defaults-web-search"
                         label=""
-                        checked={displayedSettings.webSearchEnabled}
+                        checked={displayedSettings.autoToolsEnabled || displayedSettings.webSearchEnabled}
                         disabled={disableDefaultsForm || displayedSettings.autoToolsEnabled}
                         onChange={(e) => {
                           setUserDefaults((prev) => ({ ...prev, webSearchEnabled: e.target.checked }));
@@ -1380,7 +1385,7 @@ export default function UserProfilePage({ embedded = false, activeTabKey, onActi
                           type="switch"
                           id="profile-defaults-data-analysis"
                           label=""
-                          checked={displayedSettings.dataAnalysisEnabled}
+                          checked={displayedSettings.autoToolsEnabled || displayedSettings.dataAnalysisEnabled}
                           disabled={disableDefaultsForm || displayedSettings.autoToolsEnabled}
                           onChange={(e) => {
                             setUserDefaults((prev) => ({ ...prev, dataAnalysisEnabled: e.target.checked }));
@@ -1399,7 +1404,7 @@ export default function UserProfilePage({ embedded = false, activeTabKey, onActi
                         type="switch"
                         id="profile-defaults-create-agent"
                         label=""
-                        checked={displayedSettings.createAgentEnabled}
+                        checked={displayedSettings.autoToolsEnabled || displayedSettings.createAgentEnabled}
                         disabled={disableDefaultsForm || displayedSettings.autoToolsEnabled}
                         onChange={(e) => {
                           setUserDefaults((prev) => ({ ...prev, createAgentEnabled: e.target.checked }));
@@ -1417,7 +1422,7 @@ export default function UserProfilePage({ embedded = false, activeTabKey, onActi
                         type="switch"
                         id="profile-defaults-memories"
                         label=""
-                        checked={displayedSettings.memoriesEnabled}
+                        checked={displayedSettings.autoToolsEnabled || displayedSettings.memoriesEnabled}
                         disabled={disableDefaultsForm || displayedSettings.autoToolsEnabled}
                         onChange={(e) => {
                           setUserDefaults((prev) => ({ ...prev, memoriesEnabled: e.target.checked }));
