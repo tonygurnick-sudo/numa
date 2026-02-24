@@ -428,6 +428,8 @@ async def stream_claude_sdk(
         has_attachments=bool(attached_files),
         has_folders=bool(attached_folders),
         request_id=request_id,
+        system_prompt_length=len(options.system_prompt) if options.system_prompt else 0,
+        has_company_profile="**Company Information:**" in (options.system_prompt or ""),
     )
 
     # 5a. Write attachment event if files are attached (before user event)

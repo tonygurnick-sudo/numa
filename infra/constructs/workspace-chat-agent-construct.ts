@@ -52,6 +52,10 @@ export interface WorkspaceChatAgentConstructProps {
   chatSettingsTableName?: string;
   /** Chat settings table ARN (for IAM permissions) */
   chatSettingsTableArn?: string;
+  /** Company bucket name (for loading company profile into system prompt) */
+  companyBucketName?: string;
+  /** Company bucket ARN (for IAM permissions) */
+  companyBucketArn?: string;
 }
 
 export class WorkspaceChatAgentConstruct extends Construct {
@@ -247,6 +251,17 @@ echo "Successfully pushed image to ${this.ecrRepository.repositoryUrl}:${imageTa
             // Path matches agent file storage: agents/{agent_id}/files/
             resources: [props.outputsBucketArn, `${props.outputsBucketArn}/numa-chat/agents/*`],
           },
+          // Company profile - read-only access for loading company profile into system prompt
+          ...(props.companyBucketArn
+            ? [
+                {
+                  sid: 'S3CompanyProfileRead',
+                  effect: 'Allow' as const,
+                  actions: ['s3:GetObject'],
+                  resources: [`${props.companyBucketArn}/company-data.json`],
+                },
+              ]
+            : []),
           {
             sid: 'XRayTracing',
             effect: 'Allow',
@@ -521,6 +536,10 @@ echo "Successfully pushed image to ${this.ecrRepository.repositoryUrl}:${imageTa
         // Chat settings table (for reading user approval mode preferences)
         ...(props.chatSettingsTableName && {
           CHAT_SETTINGS_TABLE_NAME: props.chatSettingsTableName,
+        }),
+        // Company bucket for loading company profile into system prompt
+        ...(props.companyBucketName && {
+          COMPANY_BUCKET_NAME: props.companyBucketName,
         }),
       },
     });

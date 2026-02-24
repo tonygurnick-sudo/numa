@@ -52,7 +52,7 @@ from .dynamo import (
     update_conversation_meta,
 )
 from .pipeline import run_pipeline
-from .prompts import format_v1_migration_context
+from .prompts import format_v1_migration_context, load_company_profile_from_s3
 from .s3_workspace import (
     FileChecksum,
     delete_uploads_from_s3,
@@ -1287,7 +1287,7 @@ async def _handle_chat(
     timezone = body.get("timezone")
     user_email = body.get("userEmail")
     today_string = body.get("todayString")
-    company_profile = body.get("companyProfile", "")
+    company_profile = load_company_profile_from_s3()
     available_kbs = body.get("availableKBs")  # List of {id, name} for KB tool
     enabled_tools = body.get(
         "enabledTools", []
@@ -1423,6 +1423,8 @@ async def _handle_chat(
         request_id=request_id,
         migrate_from_v1=migrate_from_v1,
         agent_id=agent_id,
+        has_company_profile=bool(company_profile and company_profile.strip()),
+        company_profile_length=len(company_profile) if company_profile else 0,
     )
 
     # Warm session sync guard: if uploads are expected but missing locally, fetch from S3
@@ -1794,7 +1796,7 @@ async def _handle_sync(
     timezone = body.get("timezone")
     user_email = body.get("userEmail")
     today_string = body.get("todayString")
-    company_profile = body.get("companyProfile", "")
+    company_profile = load_company_profile_from_s3()
     available_kbs = body.get("availableKBs")
     enabled_tools = body.get("enabledTools", [])
     model_id = body.get("modelId")
@@ -1980,7 +1982,7 @@ async def _handle_fire_and_forget(
     timezone = body.get("timezone")
     user_email = body.get("userEmail")
     today_string = body.get("todayString")
-    company_profile = body.get("companyProfile", "")
+    company_profile = load_company_profile_from_s3()
     available_kbs = body.get("availableKBs")
     enabled_tools = body.get("enabledTools", [])
     model_id = body.get("modelId")

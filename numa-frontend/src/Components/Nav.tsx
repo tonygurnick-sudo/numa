@@ -241,11 +241,7 @@ const Nav = ({ isCollapsed = false, onToggleCollapse }: NavProps) => {
       ? insertNavItemAfterApps(visibleMainNavItems, opsNavItem)
       : visibleMainNavItems;
   const footerNavItems = navItems.filter((item) => item.footerOnly && !item.sectionOnly);
-  const visibleMainNavItems_all = [
-    ...advancedWorkMainNavItems,
-    ...simpleModeExtras,
-    ...advancedBuildModeExtras,
-  ];
+  const visibleMainNavItems_all = [...advancedWorkMainNavItems, ...simpleModeExtras, ...advancedBuildModeExtras];
 
   useDrawerBackClose({
     isOpen: showMobileDropdown,

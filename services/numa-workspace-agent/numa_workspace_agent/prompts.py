@@ -6,10 +6,17 @@ The system prompt is built from modular sections, each stored as a named variabl
 They are combined at the bottom of this file into SYSTEM_PROMPT.
 """
 
+import json
+import os
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Optional
 from zoneinfo import ZoneInfo
+
+import boto3
+import structlog
+from botocore.exceptions import ClientError
 
 # Directory containing per-integration prompt markdown files (e.g., notion.md)
 _INTEGRATION_PROMPTS_DIR = Path(__file__).parent.parent / "integration-prompts"
@@ -839,6 +846,76 @@ Rules:
 - Place after the main content, separated by a blank line
 - For HTML emails, format as: <p>PS: {sig_text}</p> (make any URLs clickable with <a> tags)
 - Do NOT include in non-email contexts (chat responses, documents, etc.)"""
+
+
+# ── Company profile S3 loader with TTL cache ──────────────────────────────
+
+_logger = structlog.get_logger()
+
+# Module-level cache: {"profile": str, "loaded_at": float}
+_company_profile_cache: dict[str, object] = {}
+_COMPANY_PROFILE_TTL_SECONDS = 600  # 10 minutes
+
+
+def load_company_profile_from_s3() -> str:
+    """Load company profile from S3 with a 10-minute TTL cache.
+
+    Reads the company-data.json file from the COMPANY_BUCKET_NAME bucket
+    (set as an env var by infra). Returns the profile text, or empty string
+    on any error (missing bucket, missing file, parse error, etc.).
+    """
+    # Check TTL cache
+    cached_at = _company_profile_cache.get("loaded_at", 0)
+    if (
+        isinstance(cached_at, (int, float))
+        and (time.time() - cached_at) < _COMPANY_PROFILE_TTL_SECONDS
+    ):
+        return str(_company_profile_cache.get("profile", ""))
+
+    bucket = os.environ.get("COMPANY_BUCKET_NAME", "")
+    if not bucket:
+        _logger.debug("COMPANY_BUCKET_NAME not set, skipping company profile")
+        _company_profile_cache["profile"] = ""
+        _company_profile_cache["loaded_at"] = time.time()
+        return ""
+
+    try:
+        s3 = boto3.client("s3")
+        resp = s3.get_object(Bucket=bucket, Key="company-data.json")
+        data = json.loads(resp["Body"].read().decode("utf-8"))
+        profile = data.get("profile", "")
+        _logger.info(
+            "Company profile loaded from S3",
+            _name="COMPANY_PROFILE",
+            bucket=bucket,
+            profile_length=len(profile),
+        )
+    except ClientError as exc:
+        error_code = exc.response.get("Error", {}).get("Code", "")
+        if error_code in ("NoSuchKey", "NoSuchBucket", "AccessDenied"):
+            _logger.debug(
+                "Company profile not available",
+                bucket=bucket,
+                error_code=error_code,
+            )
+        else:
+            _logger.warning(
+                "Failed to load company profile from S3",
+                bucket=bucket,
+                error=str(exc),
+            )
+        profile = ""
+    except Exception as exc:  # pylint: disable=broad-except
+        _logger.warning(
+            "Failed to load company profile from S3",
+            bucket=bucket,
+            error=str(exc),
+        )
+        profile = ""
+
+    _company_profile_cache["profile"] = profile
+    _company_profile_cache["loaded_at"] = time.time()
+    return profile
 
 
 def _truncate_company_profile(profile: str, max_length: int = 3000) -> tuple[str, bool]:

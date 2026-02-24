@@ -87,11 +87,7 @@ const SupportPage = () => {
                 <h3 style={cardTitleStyle}>{t('exportTip.title')}</h3>
               </div>
               <p style={cardDescriptionStyle}>{t('exportTip.description')}</p>
-              <button
-                type="button"
-                className="btn btn-secondary align-self-start"
-                onClick={() => navigate('/chat')}
-              >
+              <button type="button" className="btn btn-secondary align-self-start" onClick={() => navigate('/chat')}>
                 <MessageSquare size={16} className="me-2" />
                 {t('exportTip.button')}
               </button>

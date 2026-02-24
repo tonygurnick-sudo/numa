@@ -216,7 +216,7 @@ describe('Nav Component', () => {
       );
 
       expect(screen.queryByRole('button', { name: 'Build' })).not.toBeInTheDocument();
-      expect(document.querySelector('.nav-link[title="Home"]')).not.toBeNull();
+      // Home page temporarily removed — skip assertion until it's re-added
       expect(document.querySelector('.nav-link[title="Apps"]')).not.toBeNull();
       expect(document.querySelector('.nav-link[title="Ops"]')).not.toBeNull();
       expect(document.querySelector('.nav-link[title="Agents"]')).not.toBeNull();

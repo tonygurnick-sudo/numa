@@ -167,10 +167,7 @@ export const AgentAvatar = ({
       aria-label={resolvedAlt}
     >
       {effectiveIconClass === DEFAULT_ICON ? (
-        <Bot
-          size={Math.round(size * 0.6)}
-          style={{ color: 'var(--brand-primary, var(--color-primary))' }}
-        />
+        <Bot size={Math.round(size * 0.6)} style={{ color: 'var(--brand-primary, var(--color-primary))' }} />
       ) : (
         <i
           className={effectiveIconClass}

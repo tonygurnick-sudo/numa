@@ -165,8 +165,10 @@ export const UnifiedToolCard = ({
             className="tool-icon-img me-2"
             loading="lazy"
           />
+        ) : visual.className === 'bi bi-robot' ? (
+          <Bot size={16} className="me-2" />
         ) : (
-          visual.className === 'bi bi-robot' ? <Bot size={16} className="me-2" /> : <i className={`${visual.className} me-2`} />
+          <i className={`${visual.className} me-2`} />
         )}
         <strong>{title}</strong>
         {isLoading && (

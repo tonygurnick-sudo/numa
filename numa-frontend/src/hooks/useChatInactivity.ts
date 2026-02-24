@@ -173,7 +173,6 @@ export function useChatInactivity({
       clearInterval(interval);
     };
     // buttonStatus is read via buttonStatusRef to avoid effect teardown on every status change.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [numaChatDynamoUtils, sub]);
 
   const forceShowNewChatView = () => {

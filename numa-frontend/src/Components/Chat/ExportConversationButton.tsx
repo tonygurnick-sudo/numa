@@ -253,7 +253,12 @@ function renderSegmentHtml(seg: ExportSegment): string {
   }
 }
 
-function generateHtml(exportedMessages: ExportedMessage[], dateStr: string, conversationId: string, t: TFunction): string {
+function generateHtml(
+  exportedMessages: ExportedMessage[],
+  dateStr: string,
+  conversationId: string,
+  t: TFunction,
+): string {
   const messagesHtml = exportedMessages
     .map((msg) => {
       const roleLabel = msg.role === 'user' ? t('workspace.export.roles.user') : t('workspace.export.roles.assistant');
@@ -386,7 +391,12 @@ function renderSegmentText(seg: ExportSegment): string {
   }
 }
 
-function generatePlainText(exportedMessages: ExportedMessage[], dateStr: string, conversationId: string, t: TFunction): string {
+function generatePlainText(
+  exportedMessages: ExportedMessage[],
+  dateStr: string,
+  conversationId: string,
+  t: TFunction,
+): string {
   const title = t('workspace.export.title');
   const exportedOn = t('workspace.export.exportedOn', { date: dateStr });
   const convId = t('workspace.export.conversationId', { id: conversationId });

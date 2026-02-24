@@ -159,8 +159,10 @@ export function WorkspaceChatSubagentCard({ segment }: Props) {
                         <Spinner animation="border" size="sm" className="activity-spinner" />
                       ) : summary.iconImage ? (
                         <img src={summary.iconImage} alt="" className="inline-tool-icon-img" loading="lazy" />
+                      ) : summary.icon === 'bi-robot' ? (
+                        <Bot size={14} />
                       ) : (
-                        summary.icon === 'bi-robot' ? <Bot size={14} /> : <i className={`bi ${summary.icon}`} />
+                        <i className={`bi ${summary.icon}`} />
                       )}
                     </span>
                     <span className="activity-text">{summary.text}</span>

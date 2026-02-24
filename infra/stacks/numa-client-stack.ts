@@ -357,6 +357,9 @@ export class NumaClientStack extends TerraformStack {
         // Chat settings table (for reading user approval mode preferences)
         chatSettingsTableName: core.chatSettingsTable.name,
         chatSettingsTableArn: core.chatSettingsTable.arn,
+        // Company bucket (for loading company profile into system prompt)
+        companyBucketName: core.companyBucket.bucket.bucket,
+        companyBucketArn: core.companyBucket.bucket.arn,
       });
 
       // Create the proxy Lambda that bridges CloudFront to AgentCore SDK

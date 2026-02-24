@@ -27,7 +27,6 @@ import { useStreamingHandler } from '../hooks/useStreamingHandler';
 import { useDocumentProcessor } from '../hooks/useDocumentProcessor';
 import { useFilePreviewProcessor } from '../hooks/useFilePreviewProcessor';
 import { FilePreviewPanel } from '../Components/FilePreviewPanel';
-import { useCompanyProfile } from '../hooks/useCompanyProfile';
 import { autoNameConversation } from '../utils/autoChatTitle';
 import { useChatInactivity } from '../hooks/useChatInactivity';
 import { useWorkspaceChatStreaming } from '../hooks/useWorkspaceChatStreaming';
@@ -203,7 +202,6 @@ const NumaWorkspaceChatAgents = () => {
   const streamingHandler = useStreamingHandler();
   const documentProcessor = useDocumentProcessor();
   const filePreviewProcessor = useFilePreviewProcessor();
-  const { companyProfile } = useCompanyProfile();
 
   const {
     conversationId,
@@ -1220,15 +1218,7 @@ const NumaWorkspaceChatAgents = () => {
   };
 
   // Configure model, tools, and system prompt for agent call
-  const configureAgentCall = (
-    autoToolsEnabled,
-    webSearchEnabled,
-    createAgentEnabled,
-    idToken,
-    companyProfile,
-    user,
-    sub,
-  ) => {
+  const configureAgentCall = (autoToolsEnabled, webSearchEnabled, createAgentEnabled, idToken, user, sub) => {
     // Determine which model to use based on fallback status
     const clientName = window.sessionStorage.getItem('CLIENT_NAME');
     const modelType = isInFallbackMode(clientName) ? MODEL_TYPES.FALLBACK : MODEL_TYPES.DEFAULT;
@@ -1259,7 +1249,7 @@ const NumaWorkspaceChatAgents = () => {
     let systemPrompt = generateSystemPrompt(
       enabledTools,
       email,
-      companyProfile,
+      null,
       enabledConnections,
       agentsFeatureEnabled ? createAgentEnabled : false,
       enabledKBMeta,
@@ -1451,7 +1441,6 @@ const NumaWorkspaceChatAgents = () => {
         webSearchEnabled,
         createAgentEnabled,
         idToken,
-        companyProfile,
         user,
         sub,
       );
@@ -1464,9 +1453,6 @@ const NumaWorkspaceChatAgents = () => {
       resetStreamingState();
 
       // Diagnostics: log prompt length and preview before calling the agent
-      console.log('[Diag] ChatAgent prompt length:', userMsg?.length ?? 0);
-      console.log('[Diag] ChatAgent prompt preview:', (userMsg || '').slice(0, 200));
-
       // Call workspace streaming hook
       await streamChat({
         prompt: userMsg,
@@ -1479,7 +1465,6 @@ const NumaWorkspaceChatAgents = () => {
         modelId: selectedModelId,
         migrateFromV1: needsV1Migration,
         agentId: activeAgent?.agentId,
-        companyProfile,
       });
       // Clear the V1 migration flag after first message (migration happens on first request)
       if (needsV1Migration) {

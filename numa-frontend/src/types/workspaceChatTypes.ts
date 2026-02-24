@@ -453,8 +453,6 @@ export interface WorkspaceChatRequest {
   migrateFromV1?: boolean;
   // Agent support - ID of the agent to use for this chat session
   agentId?: string;
-  // Company profile text for system prompt injection
-  companyProfile?: string;
   // Agent type system — selects a registered agent type config (default: "numa-chat")
   type?: WorkspaceAgentTypeId;
   // Response mode override — controls how the response is delivered.

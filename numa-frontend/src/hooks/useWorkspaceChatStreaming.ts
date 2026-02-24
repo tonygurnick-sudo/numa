@@ -56,8 +56,6 @@ type StreamConfig = {
   migrateFromV1?: boolean;
   /** Agent ID for custom agent prompts and restrictions */
   agentId?: string;
-  /** Company profile text for system prompt context */
-  companyProfile?: string;
 };
 
 type UseWorkspaceChatStreamingOptions = {
@@ -152,7 +150,6 @@ export function useWorkspaceChatStreaming({
         modelId,
         migrateFromV1,
         agentId,
-        companyProfile,
       } = config;
 
       // Reset workspace chat event context for new turn
@@ -192,7 +189,6 @@ export function useWorkspaceChatStreaming({
           expectedUploadPaths: attachments?.files?.map((a) => a.path),
           migrateFromV1: migrateFromV1 || false,
           agentId,
-          companyProfile,
           requestId, // Pass pre-generated requestId so stop works during streaming
         },
         // onEvent - handle SDK events and StreamEvents for real-time streaming

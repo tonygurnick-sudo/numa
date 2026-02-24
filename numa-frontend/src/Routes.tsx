@@ -63,9 +63,7 @@ const AppRoutes = () => {
       <Routes>
         <Route
           path="/"
-          element={
-            <Navigate to={user ? (user?.features?.includes('chat') ? '/chat' : '/dash') : '/login'} replace />
-          }
+          element={<Navigate to={user ? (user?.features?.includes('chat') ? '/chat' : '/dash') : '/login'} replace />}
         />
         <Route
           path="/login"

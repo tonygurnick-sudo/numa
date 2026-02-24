@@ -480,10 +480,9 @@ export const updateCustomer = async (
   payload: UpdateCustomerPayload,
 ): Promise<Customer> => {
   console.info(`${LOG_PREFIX} updateCustomer`, { customerId });
-  const response = (await numaPut(
-    `${BASE_URL}/customers/${encodeURIComponent(customerId)}`,
-    payload,
-  )) as CustomerResponse | Customer;
+  const response = (await numaPut(`${BASE_URL}/customers/${encodeURIComponent(customerId)}`, payload)) as
+    | CustomerResponse
+    | Customer;
   const customer = 'customer' in response ? response.customer : (response as Customer);
   console.info(`${LOG_PREFIX} updateCustomer: success`, { id: customer.id });
   return customer;
