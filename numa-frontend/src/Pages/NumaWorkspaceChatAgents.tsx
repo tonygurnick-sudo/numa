@@ -247,9 +247,7 @@ const NumaWorkspaceChatAgents = () => {
   const [enabledKBIds, setEnabledKBIds] = useState<string[]>([]);
 
   // Settings panel hook (V2 right-side panel)
-  const settingsPanel = useWorkspaceChatSettingsPanel(conversationId, {
-    defaultOpenOnNewChat: true, // Panel opens automatically for new chats
-  });
+  const settingsPanel = useWorkspaceChatSettingsPanel(conversationId);
 
   // Toggle settings panel with mutual exclusivity
   // Opening settings closes any file preview or document panel

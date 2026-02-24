@@ -2,10 +2,7 @@ import { useState, useCallback, useEffect, useRef } from 'react';
 import type { WorkspaceChatFileInfo } from '../types/workspaceChatTypes';
 import { listConversationFiles } from '../Services/workspaceChatAgentService';
 
-export interface UseWorkspaceChatSettingsPanelOptions {
-  /** Default open state for new chats */
-  defaultOpenOnNewChat?: boolean;
-}
+const SETTINGS_PANEL_KEY = 'numa-workspace-settings-panel-open';
 
 export interface UseWorkspaceChatSettingsPanelReturn {
   /** Whether the panel is currently open */
@@ -37,16 +34,14 @@ export interface UseWorkspaceChatSettingsPanelReturn {
  * - Auto-refresh when panel opens or conversation changes
  *
  * @param conversationId - Current conversation ID (null for new chat)
- * @param options - Configuration options
  */
-export function useWorkspaceChatSettingsPanel(
-  conversationId: string | null,
-  options: UseWorkspaceChatSettingsPanelOptions = {},
-): UseWorkspaceChatSettingsPanelReturn {
-  const { defaultOpenOnNewChat = true } = options;
-
-  // Panel state
-  const [isPanelOpen, setIsPanelOpen] = useState(false);
+export function useWorkspaceChatSettingsPanel(conversationId: string | null): UseWorkspaceChatSettingsPanelReturn {
+  // Panel state — restore from localStorage, default to open
+  const [isPanelOpen, setIsPanelOpen] = useState(() => {
+    const stored = localStorage.getItem(SETTINGS_PANEL_KEY);
+    if (stored !== null) return stored === 'true';
+    return true;
+  });
 
   // File state
   const [uploadsFiles, setUploadsFiles] = useState<WorkspaceChatFileInfo[]>([]);
@@ -56,6 +51,11 @@ export function useWorkspaceChatSettingsPanel(
 
   // Track last loaded conversation to avoid redundant fetches
   const lastLoadedConversationRef = useRef<string | null>(null);
+
+  // Persist panel state to localStorage
+  useEffect(() => {
+    localStorage.setItem(SETTINGS_PANEL_KEY, String(isPanelOpen));
+  }, [isPanelOpen]);
 
   // Panel controls
   const openPanel = useCallback(() => setIsPanelOpen(true), []);
@@ -114,12 +114,8 @@ export function useWorkspaceChatSettingsPanel(
     }
   }, [conversationId]);
 
-  // Auto-open panel on new chat view (when conversationId is null)
-  useEffect(() => {
-    if (conversationId === null && defaultOpenOnNewChat) {
-      setIsPanelOpen(true);
-    }
-  }, [conversationId, defaultOpenOnNewChat]);
+  // On new chat, respect stored preference (localStorage already handles this).
+  // No longer force-opening the panel — the user's last choice is preserved.
 
   // Load files when panel opens or conversation changes
   useEffect(() => {
