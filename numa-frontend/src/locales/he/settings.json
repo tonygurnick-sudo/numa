@@ -404,6 +404,21 @@
     "errors": {
       "loadDefaults": "פאילהד טו לואד דהפאולטס",
       "saveDefaults": "פאילהד טו סאבה דהפאולטס"
+    },
+    "welcomeSetup": {
+      "title": "Welcome to Numa",
+      "subtitle": "Numa has a new profile feature. Tell Numa about yourself and it will personalise every conversation to you.",
+      "highlights": {
+        "identity": "Your name and job title",
+        "role": "What you do and how you work",
+        "goals": "Your goals and objectives",
+        "instructions": "Custom instructions for how Numa should respond",
+        "memories": "Memories that Numa remembers about you"
+      },
+      "actions": {
+        "setUpProfile": "Set Up My Profile",
+        "skip": "Maybe Later"
+      }
     }
   }
 }

@@ -22,5 +22,6 @@
 @use 'components/workspace_chat_markdown' as *;
 @use 'components/chat_v2_overrides' as *;
 @use 'components/user_profile' as *;
+@use 'components/welcome_profile_setup' as *;
 
 @import '../fonts/Metropolis.css';

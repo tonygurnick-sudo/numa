@@ -953,11 +953,14 @@ label {
   }
 
   // --- Version display ----------------------------------------------------
-  .version {
-    color: var(--nav-section-text);
-    font-size: 0.75rem;
-    text-align: center;
-    padding: 0.25rem 0;
+  .nav-version-item {
+    list-style: none;
+    padding: 0.25rem 0.75rem 0;
+
+    .version {
+      color: var(--nav-section-text);
+      font-size: 0.6875rem;
+    }
   }
 
   // --- Badge (beta / new) -------------------------------------------------

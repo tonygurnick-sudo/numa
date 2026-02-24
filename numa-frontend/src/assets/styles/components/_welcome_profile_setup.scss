@@ -1,0 +1,169 @@
+@use '../abstracts/mixins' as *;
+
+// ---------------------------------------------------------------------------
+// Welcome Profile Setup Modal
+// Announcement-style modal shown after login when user has no name set.
+// Points users to the full profile page rather than embedding form fields.
+// ---------------------------------------------------------------------------
+
+.welcome-profile-setup-modal {
+  .modal-dialog {
+    max-width: 440px;
+  }
+
+  .modal-content {
+    border: 1px solid #e4e4e7;
+    border-radius: 16px;
+    overflow: hidden;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
+  }
+
+  // --- Header with subtle brand gradient ---
+  &__header {
+    padding: 2rem 2rem 1.25rem;
+    text-align: center;
+    background: linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--brand-primary, #8e50a7) 6%, white 94%),
+      color-mix(in srgb, var(--brand-primary, #8e50a7) 12%, white 88%)
+    );
+    border-bottom: 1px solid #e4e4e7;
+  }
+
+  &__icon {
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    background: color-mix(in srgb, var(--brand-primary, #8e50a7) 12%, white 88%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto 1rem;
+    color: var(--brand-primary, #8e50a7);
+    font-size: 1.5rem;
+  }
+
+  &__title {
+    font-family: 'Metropolis Semi Bold';
+    font-size: 1.25rem;
+    font-weight: normal;
+    color: #18181b;
+    margin: 0 0 0.375rem;
+  }
+
+  &__subtitle {
+    font-family: 'Metropolis Regular';
+    font-size: 0.875rem;
+    color: #71717a;
+    margin: 0;
+    line-height: 1.4;
+  }
+
+  // --- Body with feature highlights ---
+  &__body {
+    padding: 1.25rem 2rem;
+  }
+
+  &__highlights {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.625rem;
+  }
+
+  &__highlight-item {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.625rem 0.875rem;
+    border-radius: 0.625rem;
+    background: #fafafa;
+    border: 1px solid #f4f4f5;
+  }
+
+  &__highlight-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--brand-primary, #8e50a7) 10%, white 90%);
+    color: var(--brand-primary, #8e50a7);
+  }
+
+  &__highlight-text {
+    font-family: 'Metropolis Regular';
+    font-size: 0.8125rem;
+    color: #3f3f46;
+    line-height: 1.3;
+  }
+
+  // --- Footer with action buttons ---
+  &__footer {
+    padding: 0.25rem 2rem 1.5rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.625rem;
+  }
+
+  &__save-btn {
+    width: 100%;
+    height: 2.625rem;
+    border-radius: 0.625rem;
+    font-family: 'Metropolis Semi Bold';
+    font-size: 0.875rem;
+    font-weight: normal;
+    background: var(--brand-buttonPrimary, var(--brand-primary, #8e50a7));
+    border: none;
+    color: var(--brand-buttonPrimaryText, #ffffff);
+    transition: background 0.2s ease-in-out;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    &:hover {
+      background: var(--brand-buttonPrimaryHover, var(--color-primary-hover, #744188));
+    }
+  }
+
+  &__link-btn {
+    background: none;
+    border: none;
+    font-family: 'Metropolis Regular';
+    font-size: 0.8125rem;
+    color: #71717a;
+    padding: 0.25rem 0.5rem;
+    cursor: pointer;
+    transition: color 0.15s ease;
+
+    &:hover {
+      color: var(--brand-primary, #8e50a7);
+    }
+  }
+
+  // --- Mobile responsive ---
+  @include mobile {
+    .modal-dialog {
+      max-width: calc(100vw - 2rem);
+      margin: 1rem;
+    }
+
+    &__header {
+      padding: 1.5rem 1.5rem 1rem;
+    }
+
+    &__body {
+      padding: 1rem 1.5rem;
+    }
+
+    &__footer {
+      padding: 0.25rem 1.5rem 1.25rem;
+    }
+  }
+}
