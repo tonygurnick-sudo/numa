@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, ReactNode } from 'react';
 import { Nav } from '../Components/Nav';
+import { WelcomeProfileSetupModal } from '../Components/WelcomeProfileSetupModal';
 import '../assets/styles/layouts/AppLayout.scss';
 
 interface AppLayoutProps {
@@ -74,6 +75,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
       <div className="app-layout-mobile">
         <Nav isCollapsed={false} onToggleCollapse={toggleCollapse} />
         <div className="app-layout-mobile-content">{children}</div>
+        <WelcomeProfileSetupModal />
       </div>
     );
   }
@@ -84,6 +86,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
         <Nav isCollapsed={isCollapsed} onToggleCollapse={toggleCollapse} />
       </aside>
       <main className="app-layout-content">{children}</main>
+      <WelcomeProfileSetupModal />
     </div>
   );
 };

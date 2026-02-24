@@ -16,6 +16,7 @@ import type {
   Supplier,
 } from '../../../types/ops';
 import { getTicketTypeIconClass } from '../../../constants/opsConstants';
+import { StaffAvatar } from '../Shared/StaffAvatar';
 
 // ─── Props ──────────────────────────────────────────────────────────────────
 
@@ -291,9 +292,19 @@ export function CreateTicketModal({
         zoneId: zoneId || undefined,
         stageId: stageId || undefined,
         assigneeId: cfAssigneeId,
-        assigneeName: cfAssigneeId ? (activeStaff.find((s) => s.id === cfAssigneeId)?.name ?? null) : null,
+        assigneeName: cfAssigneeId
+          ? (() => {
+              const s = activeStaff.find((st) => st.id === cfAssigneeId);
+              return s ? s.name || s.email : null;
+            })()
+          : null,
         reporterId: cfReporterId,
-        reporterName: cfReporterId ? (activeStaff.find((s) => s.id === cfReporterId)?.name ?? null) : null,
+        reporterName: cfReporterId
+          ? (() => {
+              const s = activeStaff.find((st) => st.id === cfReporterId);
+              return s ? s.name || s.email : null;
+            })()
+          : null,
         customerId: cfCustomerId,
         customerName: cfCustomerId ? (customers.find((c) => c.id === cfCustomerId)?.companyName ?? null) : null,
         supplierId: cfSupplierId,
@@ -576,21 +587,29 @@ export function CreateTicketModal({
                   </div>
                   <div>
                     <div className="ticket-sidebar-field-label">{t('tickets.assignee')}</div>
-                    <Form.Select
-                      size="sm"
-                      value={(customFields['field-assignee'] as string) || ''}
-                      onChange={(e) => setFieldValue('field-assignee', e.target.value || null)}
-                      style={{ fontSize: '0.85rem' }}
-                    >
-                      <option value="">{t('fields.unassigned')}</option>
-                      {(config?.staff ?? [])
-                        .filter((s) => s.isActive)
-                        .map((s) => (
-                          <option key={s.id} value={s.id}>
-                            {s.name}
-                          </option>
-                        ))}
-                    </Form.Select>
+                    <div className="d-flex align-items-center gap-2">
+                      {customFields['field-assignee'] && (
+                        <StaffAvatar
+                          staff={(config?.staff ?? []).find((s) => s.id === customFields['field-assignee'])}
+                          size={28}
+                        />
+                      )}
+                      <Form.Select
+                        size="sm"
+                        value={(customFields['field-assignee'] as string) || ''}
+                        onChange={(e) => setFieldValue('field-assignee', e.target.value || null)}
+                        style={{ fontSize: '0.85rem' }}
+                      >
+                        <option value="">{t('fields.unassigned')}</option>
+                        {(config?.staff ?? [])
+                          .filter((s) => s.isActive)
+                          .map((s) => (
+                            <option key={s.id} value={s.id}>
+                              {s.name || s.email}
+                            </option>
+                          ))}
+                      </Form.Select>
+                    </div>
                   </div>
                 </div>
 

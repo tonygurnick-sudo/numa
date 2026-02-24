@@ -47,12 +47,7 @@ For any modified Python Lambda functions, navigate to the Lambda directory and r
 
 For any modified service code (e.g., `services/numa-workspace-agent`):
 
-1. **Linting**:
-   ```bash
-   poetry run pylint . --verbose --recursive yes --ignore .venv,.poetry
-   ```
-
-2. **Tests**:
+1. **Tests**:
    ```bash
    poetry run pytest tests/ -v
    ```

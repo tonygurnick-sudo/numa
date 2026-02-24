@@ -226,6 +226,24 @@ const BoardView = () => {
     setCtxMenu({ show: true, position: { x: e.clientX, y: e.clientY }, ticket });
   }, []);
 
+  const handleTicketAssign = useCallback(
+    async (ticketId: string, assigneeId: string | null, version: number) => {
+      const ticket = tickets.find((tk) => tk.id === ticketId);
+      if (!ticket) return;
+      try {
+        await OpsService.updateTicket(numaPut, ticketId, {
+          teamId: ticket.teamId,
+          assigneeId,
+          version,
+        });
+        await refreshTickets();
+      } catch (err) {
+        console.error('[BoardView] Failed to assign ticket:', err);
+      }
+    },
+    [tickets, numaPut, refreshTickets],
+  );
+
   const handleContextMenuAction = useCallback(
     async (action: string, payload?: unknown) => {
       const ticket = ctxMenu.ticket;
@@ -427,6 +445,7 @@ const BoardView = () => {
             tickets={filteredTickets}
             onTicketClick={handleTicketClick}
             onTicketContextMenu={handleTicketContextMenu}
+            onTicketAssign={handleTicketAssign}
             onQuickAdd={handleQuickAdd}
           />
         </div>

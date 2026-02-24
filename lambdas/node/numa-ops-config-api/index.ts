@@ -1,6 +1,20 @@
 import type { APIGatewayProxyEventV2, APIGatewayProxyHandlerV2 } from 'aws-lambda';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
-import { DynamoDBDocumentClient, GetCommand, PutCommand, QueryCommand, DeleteCommand } from '@aws-sdk/lib-dynamodb';
+import {
+  DynamoDBDocumentClient,
+  GetCommand,
+  PutCommand,
+  QueryCommand,
+  DeleteCommand,
+  BatchGetCommand,
+} from '@aws-sdk/lib-dynamodb';
+import {
+  CognitoIdentityProviderClient,
+  ListUsersCommand,
+  type AttributeType,
+} from '@aws-sdk/client-cognito-identity-provider';
+import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3';
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { randomUUID } from 'crypto';
 import { withPRM } from '../../../lib/prm-node/prm';
 
@@ -17,6 +31,49 @@ const HEADERS = {
 } as const;
 
 const OPS_CONFIG_TABLE = process.env.OPS_CONFIG_TABLE!;
+const USER_POOL_ID = process.env.USER_POOL_ID ?? '';
+const CHAT_SETTINGS_TABLE = process.env.CHAT_SETTINGS_TABLE ?? '';
+const REGION = process.env.AWS_REGION ?? 'us-east-1';
+
+const s3 = new S3Client({ region: REGION });
+const AVATAR_URL_EXPIRY = 12 * 60 * 60; // 12 hours
+
+/**
+ * Parse an s3://bucket/key URL into its components.
+ */
+const parseS3Url = (url: string): { bucket: string; key: string } | null => {
+  const match = url.match(/^s3:\/\/([^/]+)\/(.+)$/);
+  return match ? { bucket: match[1], key: match[2] } : null;
+};
+
+/**
+ * Generate presigned URLs for avatarUrl on each staff record.
+ * The Lambda's execution role has broad S3 read access, so it can
+ * sign URLs for any user's profile image (unlike frontend credentials
+ * which are scoped to the current user's prefix).
+ */
+const addAvatarPresignedUrls = async (staffRecords: Record<string, unknown>[]): Promise<void> => {
+  await Promise.all(
+    staffRecords.map(async (staff) => {
+      const avatarUrl = staff.avatarUrl as string | undefined;
+      if (!avatarUrl) return;
+      const parsed = parseS3Url(avatarUrl);
+      if (!parsed) return;
+      try {
+        staff.avatarPresignedUrl = await getSignedUrl(
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any -- SDK version mismatch between S3 and presigner
+          s3 as any,
+          new GetObjectCommand({ Bucket: parsed.bucket, Key: parsed.key }),
+          {
+            expiresIn: AVATAR_URL_EXPIRY,
+          },
+        );
+      } catch {
+        // If signing fails, leave avatarPresignedUrl unset — frontend shows initials
+      }
+    }),
+  );
+};
 
 // ─── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -111,6 +168,7 @@ interface OpsConfigResponse {
   crmConfig: Record<string, unknown> | null;
   supplierConfig: Record<string, unknown> | null;
   linkConfig: Record<string, unknown> | null;
+  lastStaffSyncedAt?: string | null;
 }
 
 const loadAllConfig = async (): Promise<OpsConfigResponse> => {
@@ -123,6 +181,7 @@ const loadAllConfig = async (): Promise<OpsConfigResponse> => {
     crmConfig: null,
     supplierConfig: null,
     linkConfig: null,
+    lastStaffSyncedAt: null,
   };
 
   let lastEvaluatedKey: Record<string, unknown> | undefined;
@@ -146,10 +205,14 @@ const loadAllConfig = async (): Promise<OpsConfigResponse> => {
       else if (sk === 'CRM_CONFIG') result.crmConfig = item;
       else if (sk === 'SUPPLIER_CONFIG') result.supplierConfig = item;
       else if (sk === 'LINK_CONFIG') result.linkConfig = item;
+      else if (sk === 'META#STAFF_SYNC') result.lastStaffSyncedAt = (item.lastSyncedAt as string) ?? null;
     }
 
     lastEvaluatedKey = response.LastEvaluatedKey as Record<string, unknown> | undefined;
   } while (lastEvaluatedKey);
+
+  // Generate presigned URLs so the frontend can display any user's avatar
+  await addAvatarPresignedUrls(result.staff);
 
   return result;
 };
@@ -394,6 +457,222 @@ const handleStaff = async (
   return errorResponse(404, 'Route not found');
 };
 
+// ─── Staff Sync from Cognito ─────────────────────────────────────────────────
+
+// No cooldown — always sync fresh from Cognito when called.
+
+const getCognitoAttr = (attrs: AttributeType[] | undefined, name: string): string | undefined =>
+  attrs?.find((a) => a.Name === name)?.Value;
+
+/**
+ * Resolve the best available display name from Cognito user attributes.
+ * Returns null when no real name is available (i.e. only a username/email prefix).
+ *
+ * Checks (in priority order):
+ *   1. `name` attribute — only if it looks like a real name (contains a space)
+ *   2. `given_name` + `family_name` attributes
+ *   3. null — no real name found
+ */
+const resolveCognitoName = (attrs: AttributeType[] | undefined): string | null => {
+  const name = getCognitoAttr(attrs, 'name');
+  if (name && name.includes(' ')) return name;
+
+  const given = getCognitoAttr(attrs, 'given_name');
+  const family = getCognitoAttr(attrs, 'family_name');
+  if (given && family) return `${given} ${family}`;
+  if (given) return given;
+  if (family) return family;
+
+  return null;
+};
+
+// ─── User Profile Enrichment from Chat Settings ─────────────────────────────
+
+/** Shape of the userProfile attribute stored in the chat-settings table. */
+interface ChatUserProfile {
+  name?: string;
+  jobTitle?: string;
+  profileImage?: { s3Bucket: string; s3Key: string } | null;
+}
+
+/**
+ * Batch-read user profiles from the chat-settings DynamoDB table.
+ * Returns a map of userId (Cognito sub) → ChatUserProfile.
+ * DynamoDB BatchGetItem supports up to 100 keys per request, so we chunk.
+ */
+const batchGetUserProfiles = async (userIds: string[]): Promise<Map<string, ChatUserProfile>> => {
+  const result = new Map<string, ChatUserProfile>();
+  if (!CHAT_SETTINGS_TABLE || userIds.length === 0) return result;
+
+  const BATCH_SIZE = 100;
+  for (let i = 0; i < userIds.length; i += BATCH_SIZE) {
+    const chunk = userIds.slice(i, i + BATCH_SIZE);
+    const keys = chunk.map((id) => ({ user_id: id }));
+
+    const response = await dynamo.send(
+      new BatchGetCommand({
+        RequestItems: {
+          [CHAT_SETTINGS_TABLE]: {
+            Keys: keys,
+            ProjectionExpression: 'user_id, userProfile',
+          },
+        },
+      }),
+    );
+
+    const items = response.Responses?.[CHAT_SETTINGS_TABLE] ?? [];
+    for (const item of items) {
+      const userId = item.user_id as string;
+      const profile = item.userProfile as ChatUserProfile | undefined;
+      if (profile) {
+        result.set(userId, profile);
+      }
+    }
+  }
+
+  return result;
+};
+
+/**
+ * handleStaffSync — POST /ops/config/staff/sync
+ *
+ * Syncs Cognito users into the ops-config DynamoDB staff records, then enriches
+ * each record with profile data from the chat-settings table (name, jobTitle,
+ * profile image). This gives Ops richer staff data without users having to
+ * re-enter it.
+ *
+ * - Creates new staff records for users not yet in DynamoDB
+ * - Enriches with user profile data: name (preferred over Cognito), jobTitle → role, profileImage → avatarUrl
+ * - Marks staff as isActive: false if the Cognito user is disabled
+ * - Always performs a fresh sync from Cognito (no cooldown)
+ */
+const handleStaffSync = async (
+  event: APIGatewayProxyEventV2,
+  auth: AuthContext,
+): Promise<ReturnType<typeof jsonResponse>> => {
+  if (!USER_POOL_ID) {
+    return errorResponse(500, 'USER_POOL_ID not configured — staff sync unavailable');
+  }
+
+  const force = event.queryStringParameters?.force === 'true';
+
+  // Force sync requires admin
+  if (force && !isAdmin(auth)) {
+    return errorResponse(403, 'Admin access required for force sync');
+  }
+
+  // Paginate through all Cognito users
+  const cognitoClient = withPRM(CognitoIdentityProviderClient, {});
+  const cognitoUsers: {
+    sub: string;
+    email: string;
+    name: string | null;
+    enabled: boolean;
+  }[] = [];
+
+  let paginationToken: string | undefined;
+  do {
+    const response = await cognitoClient.send(
+      new ListUsersCommand({
+        UserPoolId: USER_POOL_ID,
+        Limit: 60,
+        PaginationToken: paginationToken,
+      }),
+    );
+
+    for (const user of response.Users ?? []) {
+      const sub = user.Username ?? getCognitoAttr(user.Attributes, 'sub');
+      const email = getCognitoAttr(user.Attributes, 'email');
+      if (!sub || !email) continue;
+
+      cognitoUsers.push({
+        sub,
+        email,
+        name: resolveCognitoName(user.Attributes),
+        enabled: user.Enabled !== false,
+      });
+    }
+
+    paginationToken = response.PaginationToken;
+  } while (paginationToken);
+
+  // Load existing staff records
+  const existingStaff = await listConfigByPrefix('STAFF#');
+  const existingById = new Map(existingStaff.map((s) => [String(s.id), s]));
+
+  // Enrich from chat-settings user profiles (name, jobTitle, profileImage)
+  const userProfiles = await batchGetUserProfiles(cognitoUsers.map((u) => u.sub));
+
+  const ts = now();
+  const upsertedStaff: Record<string, unknown>[] = [];
+
+  for (const cu of cognitoUsers) {
+    const existing = existingById.get(cu.sub);
+    const profile = userProfiles.get(cu.sub);
+
+    // Prefer user-profile name over Cognito name (users set their display name
+    // in the profile settings — it's more accurate than the Cognito attribute).
+    // Returns null when no real name is available — frontend displays email.
+    const enrichedName = profile?.name?.trim() || cu.name || null;
+
+    // Map jobTitle from user profile → role field on staff record
+    const enrichedRole = profile?.jobTitle?.trim() || undefined;
+
+    // Build an S3 path string from the profile image reference so the frontend
+    // can generate a signed URL to display the avatar
+    const enrichedAvatarUrl = profile?.profileImage
+      ? `s3://${profile.profileImage.s3Bucket}/${profile.profileImage.s3Key}`
+      : undefined;
+
+    if (existing) {
+      const updated = {
+        ...existing,
+        name: enrichedName,
+        email: cu.email,
+        isActive: cu.enabled,
+        // Enrich role and avatarUrl from profile — but don't overwrite if
+        // an admin has manually set them and the profile has nothing
+        role: enrichedRole || (existing.role as string | undefined),
+        avatarUrl: enrichedAvatarUrl || (existing.avatarUrl as string | undefined),
+        updatedAt: ts,
+      };
+      await putConfigItem(updated);
+      upsertedStaff.push(updated);
+    } else {
+      // Create new staff record with enriched data
+      const newStaff = {
+        SK: `STAFF#${cu.sub}`,
+        entityType: 'STAFF',
+        id: cu.sub,
+        name: enrichedName,
+        email: cu.email,
+        role: enrichedRole,
+        avatarUrl: enrichedAvatarUrl,
+        isActive: cu.enabled,
+        createdAt: ts,
+        updatedAt: ts,
+      };
+      await putConfigItem(newStaff);
+      upsertedStaff.push(newStaff);
+    }
+  }
+
+  // Update sync metadata
+  const newSyncTs = now();
+  await putConfigItem({
+    SK: 'META#STAFF_SYNC',
+    entityType: 'META',
+    lastSyncedAt: newSyncTs,
+    syncedBy: auth.sub,
+    userCount: cognitoUsers.length,
+  });
+
+  // Generate presigned URLs so the frontend can display any user's avatar
+  await addAvatarPresignedUrls(upsertedStaff);
+
+  return jsonResponse(200, { staff: upsertedStaff, lastSyncedAt: newSyncTs });
+};
+
 const handleProjects = async (
   method: string,
   segments: string[],
@@ -526,6 +805,10 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
       case 'fields':
         return handleFields(method, entitySegments, body, auth);
       case 'staff':
+        // POST /ops/config/staff/sync — Cognito staff sync
+        if (method === 'POST' && entitySegments[0] === 'sync') {
+          return handleStaffSync(event, auth);
+        }
         return handleStaff(method, entitySegments, body, auth);
       case 'projects':
         return handleProjects(method, entitySegments, body, auth);

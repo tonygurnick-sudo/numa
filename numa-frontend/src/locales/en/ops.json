@@ -359,7 +359,13 @@
     },
     "tickets_one": "{{count}} ticket",
     "tickets_other": "{{count}} tickets",
-    "activeSprint": "Active sprint"
+    "activeSprint": "Active sprint",
+    "accessControlHelp": "Control who can see and work on this team's tickets.",
+    "selectMembers": "Select team members",
+    "owner": "Owner",
+    "deleteTeam": "Delete Team",
+    "deleteTeamConfirm": "Are you sure you want to delete \"{{name}}\"? This will remove all zones, stages, and configuration for this team. This action cannot be undone.",
+    "deleteTeamHasTickets": "This team has active tickets and cannot be deleted. Archive or move all tickets first."
   },
   "page": {
     "headerPlaceholder": "OpsHeader placeholder",

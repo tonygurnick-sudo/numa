@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNumaRequest } from '../../Providers/NumaRequestContext';
 import * as OpsService from '../../Services/OpsService';
-import type { OpsConfigResponse, TeamSummary, TeamResponse, Ticket, WorkUnit } from '../../types/ops';
+import type { OpsConfigResponse, TeamSummary, TeamResponse, Ticket, WorkUnit, StaffProfile } from '../../types/ops';
 import { getCached, setCache } from '../../utils/opsCache';
 
 // ─── localStorage Keys ──────────────────────────────────────────────────────
@@ -56,6 +56,7 @@ export type OpsDataState = {
   refreshTeam: () => Promise<TeamResponse | null>;
   refreshTickets: () => Promise<void>;
   refreshTeams: () => Promise<void>;
+  refreshStaff: () => Promise<void>;
   refreshCrmData: () => void;
 };
 
@@ -70,8 +71,10 @@ export type OpsDataState = {
  * 3. When selectedTeamId changes: loads team data, tickets, and work units.
  * 4. Persists team selection and view mode to localStorage.
  */
+// Staff sync is triggered on-demand (when settings modals open), not on a timer.
+
 export const useOpsData = (): OpsDataState => {
-  const { numaGet } = useNumaRequest();
+  const { numaGet, numaPost } = useNumaRequest();
 
   // ── Cache-aware initial state ─────────────────────────────────────────
   // Read cached data so the UI renders instantly; API fetches still happen
@@ -183,6 +186,10 @@ export const useOpsData = (): OpsDataState => {
     try {
       setTeamsLoading(true);
       const data = await OpsService.listTeams(numaGet);
+      console.log('[useOpsData] listTeams returned', {
+        count: data.length,
+        teams: data.map((t) => ({ id: t.id, name: t.name })),
+      });
       setTeams(data);
       setCache('teams', data);
       return data;
@@ -279,6 +286,27 @@ export const useOpsData = (): OpsDataState => {
       cancelled = true;
     };
   }, [loadConfig, loadTeams, persistTeam]);
+
+  // ── On-demand Staff Sync ────────────────────────────────────────────
+  // Called by settings modals when they open to ensure fresh staff data.
+
+  const refreshStaff = useCallback(async () => {
+    try {
+      const result = await OpsService.syncStaff(numaPost);
+      if (result.skipped) return;
+      setConfig((prev) =>
+        prev
+          ? {
+              ...prev,
+              staff: result.staff as StaffProfile[],
+              lastStaffSyncedAt: result.lastSyncedAt,
+            }
+          : prev,
+      );
+    } catch (err) {
+      console.warn('[useOpsData] Staff sync failed:', err);
+    }
+  }, [numaPost]);
 
   // ── React to Team Selection Changes ──────────────────────────────────
 
@@ -419,6 +447,7 @@ export const useOpsData = (): OpsDataState => {
     refreshTeam,
     refreshTickets,
     refreshTeams,
+    refreshStaff,
     refreshCrmData,
   };
 };

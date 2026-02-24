@@ -13,6 +13,7 @@ import {
   getTicketTypeIconClass,
 } from '../../../constants/opsConstants';
 import type { PresetZone } from '../../../constants/opsConstants';
+import { UserPicker } from '../../Inputs/UserPicker';
 import type { Team, WorkUnitSeriesConfig, StatusType, AccessControlMode } from '../../../types/ops';
 
 // ─── Props ───────────────────────────────────────────────────────────────────
@@ -64,6 +65,7 @@ export function CreateTeamWizard({ show, onHide, onCreated }: CreateTeamWizardPr
 
   // ── Step 4: Access Control ───────────────────────────────────────────────
   const [accessMode, setAccessMode] = useState<AccessControlMode>('all');
+  const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
 
   // ── General state ────────────────────────────────────────────────────────
   const [creating, setCreating] = useState(false);
@@ -91,6 +93,7 @@ export function CreateTeamWizard({ show, onHide, onCreated }: CreateTeamWizardPr
       setCustomStages(null);
       setNewStageByZone({});
       setAccessMode('all');
+      setSelectedUserIds([]);
       setError(null);
     }
   }, [show, allTypeIds]);
@@ -138,7 +141,7 @@ export function CreateTeamWizard({ show, onHide, onCreated }: CreateTeamWizardPr
         customStages: customStages ?? undefined,
         workUnitSeries,
         allowedTicketTypes: resolvedTicketTypes.length > 0 ? resolvedTicketTypes : allTypeIds,
-        accessControl: { mode: accessMode, users: [] },
+        accessControl: { mode: accessMode, users: accessMode === 'specific' ? selectedUserIds : [] },
       });
 
       onCreated(team);
@@ -159,6 +162,7 @@ export function CreateTeamWizard({ show, onHide, onCreated }: CreateTeamWizardPr
     selectedTicketTypes,
     allTypeIds,
     accessMode,
+    selectedUserIds,
     numaPost,
     onCreated,
     t,
@@ -539,6 +543,7 @@ export function CreateTeamWizard({ show, onHide, onCreated }: CreateTeamWizardPr
         {/* ── Step 4: Access Control ── */}
         {step === 4 && (
           <>
+            <p className="text-muted small mb-3">{t('teams.accessControlHelp')}</p>
             <Form.Check
               type="radio"
               id="access-all"
@@ -555,7 +560,19 @@ export function CreateTeamWizard({ show, onHide, onCreated }: CreateTeamWizardPr
               label={t('teams.specificUsers')}
               checked={accessMode === 'specific'}
               onChange={() => setAccessMode('specific')}
+              className="mb-3"
             />
+            {accessMode === 'specific' && config.staff && (
+              <div className="ps-4">
+                <Form.Label className="small text-muted">{t('teams.selectMembers')}</Form.Label>
+                <UserPicker
+                  staff={config.staff}
+                  selectedIds={selectedUserIds}
+                  onChange={setSelectedUserIds}
+                  mode="multi"
+                />
+              </div>
+            )}
           </>
         )}
       </Modal.Body>

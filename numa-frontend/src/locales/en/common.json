@@ -304,6 +304,11 @@
     "add": "Add",
     "remove": "Remove {{value}}"
   },
+  "userPicker": {
+    "placeholder": "Search users...",
+    "noResults": "No users found",
+    "removeUser": "Remove {{name}}"
+  },
   "createKB": {
     "title": "Create New Knowledge Base",
     "nameLabel": "Knowledge Base Name",

@@ -22,6 +22,7 @@ import { ColumnPicker, type ColumnDef as PickerColumnDef } from './ColumnPicker'
 import { BulkEditPanel } from './BulkEditPanel';
 import { TicketDetailModal } from '../Modals/TicketDetailModal';
 import ContextMenu from '../ContextMenu';
+import { StaffAvatar } from '../Shared/StaffAvatar';
 import type { Ticket, SavedFilter, Customer } from '../../../types/ops';
 import { getTicketTypeIconClass } from '../../../constants/opsConstants';
 
@@ -418,9 +419,19 @@ export function AllTicketsView(): React.JSX.Element {
         label: t('tickets.assignee'),
         sortable: true,
         filterType: 'enum',
-        filterOptions: () => staff.map((s) => ({ value: s.id, label: s.name })),
+        filterOptions: () => staff.map((s) => ({ value: s.id, label: s.name || s.email })),
         accessor: (tk) => tk.assigneeName ?? '',
-        render: (tk) => (tk.assigneeName ? <span>{tk.assigneeName}</span> : <span className="text-muted">-</span>),
+        render: (tk) => {
+          const s = tk.assigneeId ? staff.find((st) => st.id === tk.assigneeId) : undefined;
+          return s || tk.assigneeName ? (
+            <span className="d-inline-flex align-items-center gap-2">
+              <StaffAvatar staff={s} name={!s ? tk.assigneeName : undefined} size={24} />
+              <span>{s ? s.name || s.email : tk.assigneeName}</span>
+            </span>
+          ) : (
+            <span className="text-muted">-</span>
+          );
+        },
       },
       {
         key: 'customerName',
@@ -489,7 +500,7 @@ export function AllTicketsView(): React.JSX.Element {
         label: t('tickets.reporter'),
         sortable: true,
         filterType: 'enum',
-        filterOptions: () => staff.map((s) => ({ value: s.id, label: s.name })),
+        filterOptions: () => staff.map((s) => ({ value: s.id, label: s.name || s.email })),
         accessor: (tk) => tk.reporterName ?? '',
         render: (tk) => tk.reporterName || <span className="text-muted">{t('fields.unknown')}</span>,
       },

@@ -613,6 +613,57 @@
   color: var(--ops-text-secondary);
 }
 
+/* ── Zone Sub-Tabs (secondary nav tier matching top nav style) ─────────── */
+
+.ops-zone-tabs {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  background-color: #eee;
+  border-radius: 8px;
+  padding: 3px;
+}
+
+.ops-zone-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 14px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: #6b7280;
+  font-size: 0.8rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: var(--ops-transition);
+  white-space: nowrap;
+}
+
+.ops-zone-tab:hover {
+  color: #374151;
+}
+
+.ops-zone-tab.active {
+  background-color: #fff;
+  color: var(--brand-primary, var(--color-primary, #8e50a7));
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.ops-zone-tab.active:hover {
+  color: var(--brand-primary, var(--color-primary, #8e50a7));
+}
+
+.ops-zone-tab i {
+  font-size: 0.82rem;
+}
+
+.ops-zone-tab-count {
+  font-size: 0.72rem;
+  opacity: 0.55;
+  font-weight: 400;
+}
+
 /* Base pill */
 .ops-pill {
   display: inline-flex;
@@ -780,37 +831,34 @@
   border-width: 2px;
 }
 
-/* Zone pill inside team box (compact) */
-.ops-team-zone-pill {
+/* Zone link inside team box (subtle text style) */
+.ops-team-zone-link {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  padding: 5px 10px;
-  border: 1px solid var(--ops-border);
-  border-radius: 6px;
-  background: #fff;
-  color: var(--ops-text-default);
+  padding: 2px 4px;
+  border: none;
+  background: transparent;
+  color: var(--ops-text-muted);
   font-size: 0.72rem;
   font-weight: 500;
   cursor: pointer;
-  transition: var(--ops-transition);
+  transition: color 0.15s;
   white-space: nowrap;
   line-height: 1.7;
 }
 
-.ops-team-zone-pill:hover {
-  background: var(--ops-hover-bg);
-  border-color: #ced4da;
+.ops-team-zone-link:hover {
+  color: var(--ops-text-default);
 }
 
-.ops-team-zone-pill.active {
-  background: var(--brand-primary, var(--color-primary, #8e50a7));
-  color: #fff;
-  border-color: var(--brand-primary, var(--color-primary, #8e50a7));
+.ops-team-zone-link.active {
+  color: var(--brand-primary, var(--color-primary, #8e50a7));
+  font-weight: 600;
 }
 
-.ops-team-zone-pill i {
-  font-size: 0.78rem;
+.ops-team-zone-link i {
+  font-size: 0.72rem;
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════

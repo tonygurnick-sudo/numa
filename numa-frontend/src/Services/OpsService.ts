@@ -48,6 +48,7 @@ import type {
   WorkStage,
   TicketLinkType,
   CrmConfig,
+  StaffSyncResponse,
 } from '../types/ops';
 
 type NumaGet = (url: string, params?: Record<string, unknown>) => Promise<unknown>;
@@ -82,6 +83,14 @@ export const updateCrmConfig = async (numaPut: NumaPut, payload: CrmConfig): Pro
   const crmConfig = 'crmConfig' in response ? response.crmConfig : (response as CrmConfig);
   console.info(`${LOG_PREFIX} updateCrmConfig: success`);
   return crmConfig;
+};
+
+export const syncStaff = async (numaPost: NumaPost, force = false): Promise<StaffSyncResponse> => {
+  const url = force ? `${BASE_URL}/config/staff/sync?force=true` : `${BASE_URL}/config/staff/sync`;
+  console.info(`${LOG_PREFIX} syncStaff`, { force });
+  const response = (await numaPost(url)) as StaffSyncResponse;
+  console.info(`${LOG_PREFIX} syncStaff: success`, { count: response.staff?.length, skipped: response.skipped });
+  return response;
 };
 
 export const createTicketType = async (

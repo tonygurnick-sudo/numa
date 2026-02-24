@@ -413,7 +413,7 @@
         },
         "memories": {
           "sectionTitle": "Memories",
-          "description": "Memories help Numa remember important context about you, your integrations, and your agents.",
+          "description": "Memories help Numa remember important context about you. Just say \"Remember this for next time\" or \"Please remember that\" in any chat and Numa will save it automatically. You can manage all your saved memories here.",
           "addMemory": "Add Memory",
           "editMemory": "Edit",
           "deleteMemory": "Delete",
@@ -432,7 +432,7 @@
             "label": "Memory",
             "placeholder": "What should Numa remember?"
           },
-          "empty": "No memories yet. Add memories to help Numa work better for you.",
+          "empty": "No memories yet. Try saying \"Remember this\" in a chat, or add one manually below.",
           "limitReached": "Memory limit reached (50/50)",
           "source": {
             "user": "Added by you",
@@ -529,6 +529,21 @@
     "errors": {
       "loadDefaults": "Failed to load defaults",
       "saveDefaults": "Failed to save defaults"
+    },
+    "welcomeSetup": {
+      "title": "Welcome to Numa",
+      "subtitle": "Numa has a new profile feature. Tell Numa about yourself and it will personalise every conversation to you.",
+      "highlights": {
+        "identity": "Your name and job title",
+        "role": "What you do and how you work",
+        "goals": "Your goals and objectives",
+        "instructions": "Custom instructions for how Numa should respond",
+        "memories": "Memories that Numa remembers about you"
+      },
+      "actions": {
+        "setUpProfile": "Set Up My Profile",
+        "skip": "Maybe Later"
+      }
     }
   }
 }

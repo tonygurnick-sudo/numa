@@ -1,4 +1,5 @@
-import React, { useCallback, useMemo } from 'react';
+import React, { useCallback, useMemo, useState, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
@@ -6,12 +7,8 @@ import type { Ticket } from '../../../types/ops';
 import { useOps } from '../OpsContext';
 import { getTicketTypeIconClass } from '../../../constants/opsConstants';
 import { PriorityIndicator } from '../Shared/PriorityIndicator';
+import { StaffAvatar } from '../Shared/StaffAvatar';
 import { formatDueDate } from '../Shared/ticketUtils';
-
-// ─── Constants ───────────────────────────────────────────────────────────────
-
-/** Deterministic avatar background colors keyed by first char of name */
-const AVATAR_COLORS = ['#6366f1', '#8b5cf6', '#ec4899', '#f59e0b', '#10b981', '#3b82f6', '#ef4444', '#f97316'];
 
 // ─── Props ───────────────────────────────────────────────────────────────────
 
@@ -19,11 +16,12 @@ interface TicketCardProps {
   ticket: Ticket;
   onClick: (ticket: Ticket) => void;
   onContextMenu: (e: React.MouseEvent, ticket: Ticket) => void;
+  onAssign?: (ticketId: string, assigneeId: string | null, version: number) => void;
 }
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
-export function TicketCard({ ticket, onClick, onContextMenu }: TicketCardProps): React.JSX.Element {
+export function TicketCard({ ticket, onClick, onContextMenu, onAssign }: TicketCardProps): React.JSX.Element {
   const { t } = useTranslation('ops');
   const { config, workUnits } = useOps();
 
@@ -44,18 +42,10 @@ export function TicketCard({ ticket, onClick, onContextMenu }: TicketCardProps):
 
   const typeColor = ticketType?.color ?? '#6c757d';
 
-  // Assignee initials avatar
-  const assigneeInitials = ticket.assigneeName
-    ? ticket.assigneeName
-        .split(' ')
-        .map((n) => n[0])
-        .slice(0, 2)
-        .join('')
-        .toUpperCase()
-    : null;
-  const assigneeColor = ticket.assigneeName
-    ? AVATAR_COLORS[ticket.assigneeName.charCodeAt(0) % AVATAR_COLORS.length]
-    : undefined;
+  const assigneeStaff = useMemo(
+    () => (ticket.assigneeId ? config?.staff?.find((s) => s.id === ticket.assigneeId) : undefined),
+    [ticket.assigneeId, config?.staff],
+  );
 
   const handleClick = useCallback(() => {
     onClick(ticket);
@@ -67,6 +57,53 @@ export function TicketCard({ ticket, onClick, onContextMenu }: TicketCardProps):
     },
     [onContextMenu, ticket],
   );
+
+  // ── Avatar assign picker state ──────────────────────────────────────────
+  const [showAssignPicker, setShowAssignPicker] = useState(false);
+  const [pickerPos, setPickerPos] = useState<{ top: number; left: number }>({ top: 0, left: 0 });
+  const avatarRef = useRef<HTMLSpanElement>(null);
+  const pickerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!showAssignPicker) return;
+    const handler = (e: MouseEvent) => {
+      if (pickerRef.current && !pickerRef.current.contains(e.target as Node)) {
+        setShowAssignPicker(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [showAssignPicker]);
+
+  const handleAvatarClick = useCallback(
+    (e: React.MouseEvent) => {
+      e.stopPropagation();
+      if (!onAssign) return;
+      // Compute position from the avatar element
+      const rect = avatarRef.current?.getBoundingClientRect();
+      if (rect) {
+        const PICKER_HEIGHT = 240;
+        const spaceBelow = window.innerHeight - rect.bottom;
+        const openBelow = spaceBelow >= PICKER_HEIGHT;
+        setPickerPos({
+          top: openBelow ? rect.bottom + 4 : rect.top - PICKER_HEIGHT - 4,
+          left: Math.max(8, rect.right - 200),
+        });
+      }
+      setShowAssignPicker((prev) => !prev);
+    },
+    [onAssign],
+  );
+
+  const handlePickAssignee = useCallback(
+    (assigneeId: string | null) => {
+      setShowAssignPicker(false);
+      onAssign?.(ticket.id, assigneeId, ticket.version);
+    },
+    [onAssign, ticket.id, ticket.version],
+  );
+
+  const activeStaff = useMemo(() => config?.staff?.filter((s) => s.isActive) ?? [], [config?.staff]);
 
   return (
     <div
@@ -173,20 +210,106 @@ export function TicketCard({ ticket, onClick, onContextMenu }: TicketCardProps):
         <div className="d-flex align-items-center gap-1">
           <PriorityIndicator priority={ticket.priority} />
 
-          {assigneeInitials ? (
-            <div
-              className="ticket-avatar"
-              style={{ backgroundColor: assigneeColor }}
-              title={ticket.assigneeName ?? undefined}
-            >
-              {assigneeInitials}
-            </div>
-          ) : (
-            <div className="ticket-avatar ticket-avatar-empty" title={t('card.unassigned')}>
-              <i className="bi bi-person" style={{ fontSize: '0.72rem' }} />
-            </div>
-          )}
+          <span
+            ref={avatarRef}
+            role="button"
+            tabIndex={0}
+            title={
+              assigneeStaff ? assigneeStaff.name || assigneeStaff.email : (ticket.assigneeName ?? t('card.unassigned'))
+            }
+            style={{ cursor: onAssign ? 'pointer' : 'default' }}
+            onClick={handleAvatarClick}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') handleAvatarClick(e as unknown as React.MouseEvent);
+            }}
+          >
+            {assigneeStaff || ticket.assigneeName ? (
+              <StaffAvatar staff={assigneeStaff} name={!assigneeStaff ? ticket.assigneeName : undefined} size={22} />
+            ) : (
+              <div className="ticket-avatar ticket-avatar-empty">
+                <i className="bi bi-person" style={{ fontSize: '0.72rem' }} />
+              </div>
+            )}
+          </span>
         </div>
+
+        {/* ── Assignee quick-pick dropdown (portal) ──────────────── */}
+        {showAssignPicker &&
+          createPortal(
+            <div
+              ref={pickerRef}
+              className="bg-white border rounded shadow-sm"
+              style={{
+                position: 'fixed',
+                top: pickerPos.top,
+                left: pickerPos.left,
+                width: 200,
+                maxHeight: 240,
+                overflowY: 'auto',
+                zIndex: 9999,
+                fontSize: '0.82rem',
+              }}
+            >
+              <div
+                role="menuitem"
+                tabIndex={0}
+                className="px-2 py-1 text-muted"
+                style={{ cursor: 'pointer' }}
+                onMouseEnter={(e) => {
+                  (e.currentTarget as HTMLDivElement).style.backgroundColor = '#f8f9fa';
+                }}
+                onMouseLeave={(e) => {
+                  (e.currentTarget as HTMLDivElement).style.backgroundColor = 'transparent';
+                }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handlePickAssignee(null);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.stopPropagation();
+                    handlePickAssignee(null);
+                  }
+                }}
+              >
+                {t('fields.unassigned')}
+              </div>
+              {activeStaff.map((s) => (
+                <div
+                  key={s.id}
+                  role="menuitem"
+                  tabIndex={0}
+                  className="d-flex align-items-center gap-2 px-2 py-1"
+                  style={{
+                    cursor: 'pointer',
+                    backgroundColor: s.id === ticket.assigneeId ? '#eef2ff' : 'transparent',
+                  }}
+                  onMouseEnter={(e) => {
+                    (e.currentTarget as HTMLDivElement).style.backgroundColor =
+                      s.id === ticket.assigneeId ? '#eef2ff' : '#f8f9fa';
+                  }}
+                  onMouseLeave={(e) => {
+                    (e.currentTarget as HTMLDivElement).style.backgroundColor =
+                      s.id === ticket.assigneeId ? '#eef2ff' : 'transparent';
+                  }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handlePickAssignee(s.id);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.stopPropagation();
+                      handlePickAssignee(s.id);
+                    }
+                  }}
+                >
+                  <StaffAvatar staff={s} size={20} />
+                  <span className="text-truncate">{s.name || s.email}</span>
+                </div>
+              ))}
+            </div>,
+            document.body,
+          )}
       </div>
     </div>
   );

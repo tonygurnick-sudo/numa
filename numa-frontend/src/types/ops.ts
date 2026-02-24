@@ -59,10 +59,12 @@ export type FieldDefinition = {
 
 export type StaffProfile = {
   id: string;
-  name: string;
+  name: string | null;
   email: string;
   role: string;
   avatarUrl?: string | null;
+  /** Backend-generated presigned URL for the avatar (12h expiry). */
+  avatarPresignedUrl?: string | null;
   isActive: boolean;
 };
 
@@ -134,6 +136,7 @@ export type OpsConfigResponse = {
   crmConfig: CrmConfig;
   supplierConfig: SupplierConfig;
   linkConfig: LinkConfig;
+  lastStaffSyncedAt?: string | null;
 };
 
 // ─── Core Types ────────────────────────────────────────────────────────────
@@ -170,6 +173,7 @@ export type Team = {
   accessControl: AccessControl;
   defaultZoneId: string;
   defaultStageId?: string;
+  createdBy?: string;
   createdAt: string;
   updatedAt: string;
   order: number;
@@ -643,6 +647,14 @@ export type TeamSummary = {
   name: string;
   color?: string;
   order?: number;
+  createdBy?: string;
+  accessControl?: AccessControl;
+};
+
+export type StaffSyncResponse = {
+  staff: StaffProfile[];
+  lastSyncedAt: string;
+  skipped?: boolean;
 };
 
 export type TeamSummaryListResponse = {

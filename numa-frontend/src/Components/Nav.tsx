@@ -32,6 +32,7 @@ import { useNumaRequest } from '../Providers/NumaRequestContext';
 import { ChatSettingsService, type UserProfile } from '../Services/ChatSettingsService';
 import ProfileAvatar from './ProfileAvatar';
 import { getCachedUserProfile } from '../utils/userProfileCache';
+import { VersionDisplay } from './VersionDisplay';
 
 interface NavProps {
   isCollapsed?: boolean;
@@ -142,6 +143,16 @@ const Nav = ({ isCollapsed = false, onToggleCollapse }: NavProps) => {
       cancelled = true;
     };
   }, [numaGet]);
+
+  // Re-read cached profile when another component updates it (e.g. welcome modal)
+  useEffect(() => {
+    const handleProfileUpdate = () => {
+      const updated = getCachedUserProfile();
+      if (updated) setUserProfile(updated);
+    };
+    window.addEventListener('numa-profile-updated', handleProfileUpdate);
+    return () => window.removeEventListener('numa-profile-updated', handleProfileUpdate);
+  }, []);
 
   const displayName = userProfile?.name || t('nav.user');
 
@@ -510,6 +521,11 @@ const Nav = ({ isCollapsed = false, onToggleCollapse }: NavProps) => {
                 {isExpanded && <span className="nav-label">{t('nav.logout')}</span>}
               </div>
             </li>
+            {isExpanded && (
+              <li className="nav-version-item">
+                <VersionDisplay />
+              </li>
+            )}
           </ul>
 
           <div className="nav-divider" />

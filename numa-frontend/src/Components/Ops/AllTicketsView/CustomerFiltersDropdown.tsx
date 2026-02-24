@@ -76,7 +76,7 @@ export function CustomerFiltersDropdown({
   }, [crmConfig, customers]);
 
   const accountOwnerOptions = useMemo(
-    () => staff.map((s) => ({ value: s.id, label: s.name })).sort((a, b) => a.label.localeCompare(b.label)),
+    () => staff.map((s) => ({ value: s.id, label: s.name || s.email })).sort((a, b) => a.label.localeCompare(b.label)),
     [staff],
   );
 
