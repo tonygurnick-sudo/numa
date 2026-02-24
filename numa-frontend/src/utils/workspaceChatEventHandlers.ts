@@ -613,10 +613,10 @@ function appendTextSegment(helpers: WorkspaceChatMessageHelpers, text: string): 
     const lastMsg = { ...updated[lastIdx] };
     const segments = [...(lastMsg.segments || [])] as WorkspaceChatSegment[];
 
-    // Find the last text segment
+    // Find the last non-finalized text segment
     let textSegIdx = -1;
     for (let i = segments.length - 1; i >= 0; i--) {
-      if (segments[i].kind === 'text') {
+      if (segments[i].kind === 'text' && !segments[i].finalized) {
         textSegIdx = i;
         break;
       }
