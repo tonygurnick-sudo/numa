@@ -4,6 +4,8 @@
  * Settings are stored per-user in DynamoDB and loaded when starting a new conversation.
  */
 import i18n from '../i18n';
+import { setCachedUserProfile } from '../utils/userProfileCache';
+import { getSwrCache, setSwrCache } from '../utils/swrCache';
 
 export type ApprovalMode = 'always' | 'non_destructive' | 'never';
 
@@ -12,6 +14,7 @@ export type ChatSettings = {
   autoToolsEnabled: boolean;
   webSearchEnabled: boolean;
   createAgentEnabled: boolean;
+  memoriesEnabled: boolean;
   dataAnalysisEnabled: boolean;
   defaultConnectionIds: string[];
   language: string | null;
@@ -33,6 +36,46 @@ export type ProfileChatSettingsResponse = {
   settings: ChatSettings;
 };
 
+// Memory type — individual memory item scoped to general, integration, or agent
+export type Memory = {
+  id: string;
+  content: string;
+  scope: string; // "general" | "integration:{slug}" | "agent:{agentId}"
+  createdAt: string;
+  source: 'user' | 'ai';
+};
+
+// User profile type — structured "memory" sent to the AI
+export type UserProfile = {
+  // About You
+  name: string;
+  jobTitle: string;
+  jobDescription: string;
+  linkedInUrl: string;
+  goalsAndObjectives: string;
+  otherInformation: string;
+  profileImage: { s3Bucket: string; s3Key: string } | null;
+  // Custom Instructions
+  customInstructions: string;
+  // Memories
+  memories: Memory[];
+  // Toggle
+  useProfile: boolean;
+};
+
+export const DEFAULT_USER_PROFILE: UserProfile = {
+  name: '',
+  jobTitle: '',
+  jobDescription: '',
+  linkedInUrl: '',
+  goalsAndObjectives: '',
+  otherInformation: '',
+  profileImage: null,
+  customInstructions: '',
+  memories: [],
+  useProfile: true,
+};
+
 // Default settings for new users or when API is unavailable
 export const VALID_APPROVAL_MODES: ApprovalMode[] = ['always', 'non_destructive', 'never'];
 
@@ -41,6 +84,7 @@ export const DEFAULT_CHAT_SETTINGS: ChatSettings = {
   autoToolsEnabled: true,
   webSearchEnabled: true,
   createAgentEnabled: true, // Should be true when autoToolsEnabled is true
+  memoriesEnabled: true,
   dataAnalysisEnabled: true,
   defaultConnectionIds: [],
   language: 'browser',
@@ -53,7 +97,14 @@ export const DEFAULT_CHAT_SETTINGS: ChatSettings = {
 type NumaGet = (url: string, params?: unknown, headers?: Record<string, string>) => Promise<unknown>;
 type NumaPut = (url: string, data?: unknown, headers?: Record<string, string>) => Promise<unknown>;
 
+const CHAT_SETTINGS_SWR_KEY = 'chatSettings';
+
 export const ChatSettingsService = {
+  /** Read cached chat settings from localStorage (instant, synchronous). */
+  getCached(): ChatSettings | null {
+    return getSwrCache<ChatSettings>(CHAT_SETTINGS_SWR_KEY);
+  },
+
   /**
    * Get the current user's chat settings.
    * Returns default settings if the API call fails or user has no saved settings.
@@ -62,7 +113,9 @@ export const ChatSettingsService = {
     try {
       if (numaGet) {
         const res = (await numaGet('/api/chat/settings')) as unknown;
-        return validateSettings(res);
+        const settings = validateSettings(res);
+        setSwrCache(CHAT_SETTINGS_SWR_KEY, settings);
+        return settings;
       }
 
       const API_ENDPOINT = sessionStorage.getItem('API_ENDPOINT') || '/api';
@@ -81,7 +134,9 @@ export const ChatSettingsService = {
       }
 
       const json = (await resp.json()) as unknown;
-      return validateSettings(json);
+      const settings = validateSettings(json);
+      setSwrCache(CHAT_SETTINGS_SWR_KEY, settings);
+      return settings;
     } catch (error) {
       console.warn('Error fetching chat settings, using defaults', error);
       return { ...DEFAULT_CHAT_SETTINGS };
@@ -148,6 +203,63 @@ export const ChatSettingsService = {
   async updateForProfile(settings: UserChatSettingsUpdate, numaPut?: NumaPut): Promise<void> {
     await this.update(settings, numaPut);
   },
+
+  async getUserProfile(numaGet?: NumaGet): Promise<UserProfile> {
+    try {
+      if (numaGet) {
+        const res = (await numaGet('/api/chat/settings?scope=profile')) as unknown;
+        const profile = validateUserProfile(res);
+        setCachedUserProfile(profile);
+        return profile;
+      }
+
+      const API_ENDPOINT = sessionStorage.getItem('API_ENDPOINT') || '/api';
+      const idToken = localStorage.getItem('idToken');
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (idToken) headers.Authorization = `Bearer ${idToken}`;
+
+      const resp = await fetch(`${API_ENDPOINT}/chat/settings?scope=profile`, {
+        method: 'GET',
+        headers,
+      });
+
+      if (!resp.ok) {
+        console.warn('Failed to fetch user profile, using defaults', resp.status);
+        return { ...DEFAULT_USER_PROFILE };
+      }
+
+      const json = (await resp.json()) as unknown;
+      const profile = validateUserProfile(json);
+      setCachedUserProfile(profile);
+      return profile;
+    } catch (error) {
+      console.warn('Error fetching user profile, using defaults', error);
+      return { ...DEFAULT_USER_PROFILE };
+    }
+  },
+
+  async updateUserProfile(profile: UserProfile, numaPut?: NumaPut): Promise<void> {
+    if (numaPut) {
+      await numaPut('/api/chat/settings?scope=profile', profile);
+      return;
+    }
+
+    const API_ENDPOINT = sessionStorage.getItem('API_ENDPOINT') || '/api';
+    const idToken = localStorage.getItem('idToken');
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (idToken) headers.Authorization = `Bearer ${idToken}`;
+
+    const resp = await fetch(`${API_ENDPOINT}/chat/settings?scope=profile`, {
+      method: 'PUT',
+      headers,
+      body: JSON.stringify(profile),
+    });
+
+    if (!resp.ok) {
+      const text = await resp.text();
+      throw new Error(text || i18n.t('errors:chatSettings.updateFailed'));
+    }
+  },
 };
 
 /**
@@ -171,6 +283,8 @@ function validateSettings(data: unknown): ChatSettings {
       typeof obj.webSearchEnabled === 'boolean' ? obj.webSearchEnabled : DEFAULT_CHAT_SETTINGS.webSearchEnabled,
     createAgentEnabled:
       typeof obj.createAgentEnabled === 'boolean' ? obj.createAgentEnabled : DEFAULT_CHAT_SETTINGS.createAgentEnabled,
+    memoriesEnabled:
+      typeof obj.memoriesEnabled === 'boolean' ? obj.memoriesEnabled : DEFAULT_CHAT_SETTINGS.memoriesEnabled,
     dataAnalysisEnabled:
       typeof obj.dataAnalysisEnabled === 'boolean'
         ? obj.dataAnalysisEnabled
@@ -207,6 +321,55 @@ function parseBoolean(value: unknown): boolean | undefined {
     if (value === 0) return false;
   }
   return undefined;
+}
+
+const VALID_SCOPE_PATTERN = /^(general|integration:.+|agent:.+)$/;
+
+function validateMemory(raw: unknown): Memory | null {
+  if (typeof raw !== 'object' || raw === null) return null;
+  const obj = raw as Record<string, unknown>;
+  const id = typeof obj.id === 'string' ? obj.id : '';
+  const content = typeof obj.content === 'string' ? obj.content : '';
+  const scope = typeof obj.scope === 'string' ? obj.scope : '';
+  const createdAt = typeof obj.createdAt === 'string' ? obj.createdAt : new Date().toISOString();
+  const source = obj.source === 'ai' ? ('ai' as const) : ('user' as const);
+  if (!id || !content || !VALID_SCOPE_PATTERN.test(scope)) return null;
+  return { id, content, scope, createdAt, source };
+}
+
+function validateUserProfile(data: unknown): UserProfile {
+  if (typeof data !== 'object' || data === null) return { ...DEFAULT_USER_PROFILE };
+  const obj = data as Record<string, unknown>;
+
+  let profileImage: { s3Bucket: string; s3Key: string } | null = null;
+  if (obj.profileImage && typeof obj.profileImage === 'object' && !Array.isArray(obj.profileImage)) {
+    const img = obj.profileImage as Record<string, unknown>;
+    if (typeof img.s3Bucket === 'string' && typeof img.s3Key === 'string') {
+      profileImage = { s3Bucket: img.s3Bucket, s3Key: img.s3Key };
+    }
+  }
+
+  const customInstructions = typeof obj.customInstructions === 'string' ? obj.customInstructions : '';
+  const linkedInUrl = typeof obj.linkedInUrl === 'string' ? obj.linkedInUrl : '';
+  const goalsAndObjectives = typeof obj.goalsAndObjectives === 'string' ? obj.goalsAndObjectives : '';
+  const otherInformation = typeof obj.otherInformation === 'string' ? obj.otherInformation : '';
+
+  const memories: Memory[] = Array.isArray(obj.memories)
+    ? obj.memories.map((m: unknown) => validateMemory(m)).filter((m): m is Memory => m !== null)
+    : [];
+
+  return {
+    name: typeof obj.name === 'string' ? obj.name : DEFAULT_USER_PROFILE.name,
+    jobTitle: typeof obj.jobTitle === 'string' ? obj.jobTitle : DEFAULT_USER_PROFILE.jobTitle,
+    jobDescription: typeof obj.jobDescription === 'string' ? obj.jobDescription : DEFAULT_USER_PROFILE.jobDescription,
+    linkedInUrl,
+    goalsAndObjectives,
+    otherInformation,
+    profileImage,
+    customInstructions,
+    memories,
+    useProfile: typeof obj.useProfile === 'boolean' ? obj.useProfile : DEFAULT_USER_PROFILE.useProfile,
+  };
 }
 
 function validateProfile(data: unknown): ProfileChatSettingsResponse {

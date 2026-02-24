@@ -32,6 +32,7 @@ const CONFIG_OPTIONAL_PROPERTIES = [
   'BRANDING_ASSETS_PREFIX',
   'NUMA_VERSION',
   'WORKSPACE_CHAT_AGENT_FUNCTION_URL', // Direct Lambda URL for streaming (bypasses CloudFront buffering)
+  'WORKSPACE_CHAT_MODEL_SELECTION', // Feature flag for model selection in workspace chat settings drawer
   'SCHEDULING', // Feature flag for agent scheduling and notifications
   'NUMA_FILES', // Feature flag for Numa Files (file management)
   'WORKSPACE_CHAT_MODEL_SELECTION', // Feature flag for model selection in Chat V2
@@ -135,9 +136,16 @@ export const fetchConfigAddtoSession = async (forceRefresh = false) => {
 // Helper function to determine if config should be refreshed
 const shouldRefreshConfig = () => {
   const timestamp = sessionStorage.getItem(CONFIG_TIMESTAMP_KEY);
+  const workspaceModelFlag = sessionStorage.getItem('WORKSPACE_CHAT_MODEL_SELECTION');
 
   if (!hasConfigInSession()) {
     console.warn('Config is not in session, or is missing required properties');
+    return true;
+  }
+
+  // Backward compatibility: older sessions may not have newer optional flags.
+  // Force a refresh so feature flags from config.json are hydrated into sessionStorage.
+  if (workspaceModelFlag === null) {
     return true;
   }
 

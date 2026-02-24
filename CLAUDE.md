@@ -2,6 +2,28 @@
 
 I am a new developer. I am intrested in what you do so please explaing what you are doing and why
 
+---
+
+## Arcanum AI Team
+
+Numa is built by Arcanum AI, a New Zealand-based company founded in 2016. Here's the team:
+
+| Name | Role | Email |
+|------|------|-------|
+| Asa Cox | CEO | asa@arcanum.ai |
+| Scott Houston | Chairman | scott@arcanum.ai |
+| Ian Dougherty | COO | ian@arcanum.ai |
+| Jayson Satya | CRO | jayson@arcanum.ai |
+| Connor Nickel | Business Development & Sales Officer | connor@arcanum.ai |
+| Tony Gurnick | Engineering Lead | tony.gurnick@arcanum.ai |
+| Nathan Douglas | Senior AI Engineer | nathan@arcanum.ai |
+| Greg Frantzen | Software Engineer | greg.frantzen@arcanum.ai |
+| Tom Wiltshire | Junior AI Engineer | tom.wiltshire@arcanum.ai |
+| Prasanna Ramachandran | Customer Success | pras@arcanum.ai |
+| Lily Coats | Business Development | lily.coats@arcanum.ai |
+
+---
+
 # Guiding Primciples
 
 These 9 principles guide the high-performance, functional architecture:
@@ -39,16 +61,16 @@ This document orients AI agents and contributors to the Numa platform at a glanc
 
 Numa is a multi‑tenant, serverless enterprise AI platform on AWS. Each client has an isolated AWS account, with a dedicated frontend, AI Lambdas, knowledge bases, and orchestration. Key pillars:
 
-- Chat (V1): Real‑time AI chat via the core `numa-chat-agent` Lambda, integrated with Bedrock models and optional knowledge bases (Amazon Q Business or Bedrock KB). Supports web search and external integrations.
-- Workspace Chat (V2): Next‑generation AI chat powered by the Claude Agent SDK, running on AWS Bedrock AgentCore MicroVMs. Provides persistent workspaces with full Python/Bash code execution in a sandboxed environment, file management, a skills/plugins system, and extended thinking. Behind the `NUMA_WORKSPACE_CHAT` feature flag.
+- Chat: AI chat powered by the Claude Agent SDK, running on AWS Bedrock AgentCore MicroVMs. Provides persistent workspaces with full Python/Bash code execution in a sandboxed environment, file management, a skills/plugins system, and extended thinking. This is the `numa-workspace-agent` service (formerly "Chat V2" / "Workspace Chat").
+- Chat V1 (DEPRECATED): The legacy `numa-chat-agent` Lambda. No longer the default — replaced by the workspace agent above. Still exists in the codebase but is not the active chat experience.
 - Apps: Repeatable "input → process → output" flows implemented with Step Functions and specialized Lambdas (document analysis, policy generation, candidate screening, financial analysis, and more).
 - Integrations: Optional Pipedream Connect integrations (via a secure, Arcanum‑owned proxy account) to safely expose SaaS tools to chat.
 
 ## Architecture at a Glance
 
 - Frontend: React 19 + Vite + Bootstrap 5 (`/numa-frontend`)
-  - Chat V1: `NumaChatAgents` at `/chat` — traditional Bedrock/Strands streaming.
-  - Chat V2: `NumaWorkspaceChatAgents` at `/chat-v2` — workspace agent with Claude SDK streaming. Behind `NUMA_WORKSPACE_CHAT` flag.
+  - Chat: `NumaWorkspaceChatAgents` at `/chat` — workspace agent with Claude SDK streaming. This is the default and primary chat experience.
+  - Chat V1 (DEPRECATED): `NumaChatAgents` — legacy Bedrock/Strands streaming. No longer the default route.
 - Lambdas: 55+ Python and 29 Node specialized functions under `/lambdas`.
 - Services: Containerized agents under `/services/` deployed as Docker images on AWS Bedrock AgentCore MicroVMs (e.g., `numa-workspace-agent`).
 - Infrastructure: CDK for Terraform (CDKTF, TypeScript) in `/infra`, with stacks that create per‑client environments.
@@ -63,16 +85,16 @@ Numa is a multi‑tenant, serverless enterprise AI platform on AWS. Each client 
 
 - Tech stack: React 19 + Vite; Bootstrap 5 styling.
 - Entry points:
-  - Chat V1: `src/Pages/NumaChatAgents.tsx` at `/chat`.
-  - Chat V2 (workspace): `src/Pages/NumaWorkspaceChatAgents.tsx` at `/chat-v2`. Uses `Services/workspaceChatAgentService.ts`. Supports model selection (Sonnet 4.5, Opus 4.5, Haiku 4.5), direct S3 uploads up to 200MB, extended thinking, and workspace file management. Components in `src/Components/WorkspaceChat/`.
+  - Chat: `src/Pages/NumaWorkspaceChatAgents.tsx` at `/chat`. Uses `Services/workspaceChatAgentService.ts`. Supports model selection (Sonnet 4.5, Opus 4.5, Haiku 4.5), direct S3 uploads up to 200MB, extended thinking, and workspace file management. Components in `src/Components/WorkspaceChat/`.
+  - Chat V1 (DEPRECATED): `src/Pages/NumaChatAgents.tsx` — legacy chat page, no longer the default route.
   - Agents: `src/Pages/AgentsManagement.tsx` at `/agents` — agent builder, listing, scheduling.
   - Scheduling: `src/Pages/SchedulingPage.tsx` at `/scheduling` (behind `SCHEDULING` flag).
   - Data Connectors: `src/Pages/DataConnectorsPage.tsx` at `/data-connectors` (behind `DATA_CONNECTORS_ENABLED` flag).
   - Notifications: `src/Pages/NotificationsPage.tsx` at `/notifications` (behind `SCHEDULING` flag).
   - Job History: `src/Pages/JobHistoryManager.tsx` at `/job-history`.
   - Knowledge base management, app launchers, settings, user management, etc. are organized under `src/Pages` and `src/Components`.
-- Configuration: `public/config.json` injected at runtime (Cognito IDs, region, buckets, API base, feature flags, relay Lambda ARN, preferred knowledge base, etc.). Key feature flags: `PIPEDREAM_INTEGRATIONS`, `NUMA_WORKSPACE_CHAT`, `SCHEDULING`, `DATA_CONNECTORS_ENABLED`, `WORKSPACE_CHAT_AGENT_FUNCTION_URL`.
-- Chat transport: Uses HTTP streaming to `/api/numa-chat-agent/stream` with NDJSON frames. CloudFront injects an `x-arcanum-cloudfront-secret` header; the frontend attaches a Cognito bearer token.
+- Configuration: `public/config.json` injected at runtime (Cognito IDs, region, buckets, API base, feature flags, relay Lambda ARN, preferred knowledge base, etc.). Key feature flags: `PIPEDREAM_INTEGRATIONS`, `SCHEDULING`, `DATA_CONNECTORS_ENABLED`, `WORKSPACE_CHAT_AGENT_FUNCTION_URL`.
+- Chat transport: Workspace chat streams via the workspace-chat-agent-proxy Lambda (NDJSON). CloudFront injects an `x-arcanum-cloudfront-secret` header; the frontend attaches a Cognito bearer token.
 - Integrations UX: When enabled and configured, the chat UI can query connected integrations (via a cross‑account proxy relay). Admins can also set default allow/deny policies for tool usage.
 
 Dev commands:
@@ -137,9 +159,9 @@ To add a new language option for users and ensure it reaches the LLM prompts, up
 
 ---
 
-## Core Chat Agent — V1 (lambdas/python/numa-chat-agent)
+## Legacy Chat Agent — V1 (DEPRECATED) (lambdas/python/numa-chat-agent)
 
-The `numa-chat-agent` Python Lambda powers Numa Chat V1. **For Chat V2 (workspace agent with sandboxed code execution and persistent files), see the Workspace Chat Agent section below.**
+> **DEPRECATED**: Chat V1 has been replaced by the Workspace Chat Agent (see below) as the default chat experience. The `numa-chat-agent` Lambda still exists in the codebase but is no longer the active chat backend. The workspace agent is now at `/chat` in the nav.
 
 - Runtime & transport:
   - FastAPI app served via AWS Lambda Web Adapter (LWA) in ZIP mode.
@@ -154,17 +176,17 @@ The `numa-chat-agent` Python Lambda powers Numa Chat V1. **For Chat V2 (workspac
   - Reads conversation history from DynamoDB to maintain continuity.
 - Configuration (via environment): preferred knowledge base, Bedrock KB ID or Q app/retriever IDs, outputs/data bucket ARNs, supported integrations, optional global integration settings table, and CloudFront secret.
 
-Frontend integration: The chat page `NumaChatAgents` calls `Services/chatAgentService.ts` for request/stream handling, including tool event frames and chunk assembly.
+Frontend integration: The legacy chat page `NumaChatAgents` calls `Services/chatAgentService.ts` for request/stream handling.
 
 ---
 
-## Workspace Chat Agent — V2 (services/numa-workspace-agent)
+## Chat Agent (services/numa-workspace-agent)
 
-The `numa-workspace-agent` is the next‑generation chat backend (Chat V2), running as a containerized Python service on AWS Bedrock AgentCore MicroVMs. It is fundamentally different from V1 — instead of pre‑built tools only, it can **execute arbitrary Python and Bash code in a sandboxed workspace**, manage files, and use a skills/plugins system.
+The `numa-workspace-agent` is the **default and primary chat backend**, running as a containerized Python service on AWS Bedrock AgentCore MicroVMs. It is accessed at `/chat` in the nav. Unlike the deprecated V1, it can **execute arbitrary Python and Bash code in a sandboxed workspace**, manage files, and use a skills/plugins system.
 
-### How V2 differs from V1
+### How Chat differs from deprecated V1
 
-| Aspect | V1 (`numa-chat-agent`) | V2 (`numa-workspace-agent`) |
+| Aspect | V1 DEPRECATED (`numa-chat-agent`) | Chat (`numa-workspace-agent`) |
 |--------|------------------------|----------------------------|
 | Runtime | Lambda + LWA (ZIP) | AgentCore MicroVM (Docker on Graviton) |
 | AI Framework | Strands agents (Bedrock) | Claude Agent SDK |
@@ -209,12 +231,11 @@ Browser → CloudFront → workspace-chat-agent-proxy (Lambda) → AgentCore Mic
 
 ### Frontend integration
 
-- Page: `src/Pages/NumaWorkspaceChatAgents.tsx` at `/chat-v2`
+- Page: `src/Pages/NumaWorkspaceChatAgents.tsx` at `/chat`
 - Service: `src/Services/workspaceChatAgentService.ts`
 - Types: `src/types/workspaceChatTypes.ts`
 - Components: `src/Components/WorkspaceChat/`
 - Streaming hook: `src/hooks/useWorkspaceChatStreaming.ts`
-- Session storage uses `-v2` suffix to isolate from V1 conversations
 
 For the full reference (module structure, API contract, tools, skills, debugging, CloudWatch queries), see `services/numa-workspace-agent/README.md`.
 
@@ -283,7 +304,7 @@ Numa uses multiple stacks to support multi‑tenant deployment and secure integr
   - Provisions the client's Cognito, API Gateway + authorizer, CloudFront, S3 buckets (outputs, data, frontend), chat DynamoDB tables, Step Functions, Lambdas for apps, the `numa-chat-agent` function URL, and knowledge base(s).
   - Configurable preferred knowledge base: Amazon Q Business or Bedrock KB.
   - Can enable Pipedream integrations by wiring the cross‑account relay Lambda ARN.
-  - Workspace Chat constructs (when `NUMA_WORKSPACE_CHAT` is enabled):
+  - Workspace Chat constructs (default chat backend):
     - `workspace-chat-agent-construct.ts` — ECR repository, AgentCore runtime, IAM roles, vendedlogs CloudWatch log group.
     - `workspace-chat-agent-proxy-construct.ts` — Proxy Lambda bridging HTTP to AgentCore SDK invocations.
     - `workspace-chat-tools-construct.ts` — Support Lambda for KB queries, integration relay, and file operations.
@@ -320,8 +341,7 @@ CloudFront routing: The frontend distribution forwards `/api/*` to API Gateway a
 - Per‑client isolation: Each client deploys into its own AWS account. The deployer account assumes into the client account to deploy infra. Integrations use a separate proxy account.
 - Feature flags & FE config: `public/config.json` and session storage carry resolved values (client name, region, bucket names, relay ARN, preferred KB, etc.). Key flags:
   - `PIPEDREAM_INTEGRATIONS` — Enable Pipedream SaaS integrations.
-  - `NUMA_WORKSPACE_CHAT` — Enable Chat V2 (workspace agent).
-  - `WORKSPACE_CHAT_AGENT_FUNCTION_URL` — Direct Lambda URL for workspace streaming (bypasses CloudFront buffering).
+  - `WORKSPACE_CHAT_AGENT_FUNCTION_URL` — Direct Lambda URL for workspace chat streaming (bypasses CloudFront buffering).
   - `SCHEDULING` — Enable agent scheduling and notifications.
   - `DATA_CONNECTORS_ENABLED` — Enable data connectors (SharePoint, Teams, Box, Web, S3 sources).
 
@@ -371,7 +391,7 @@ Feature branches → `dev` (default MR target) → `main` (release). No pipeline
 
 ## Folder Guide
 
-- `/numa-frontend/` – React app (Pages, Components, Services), including `NumaChatAgents` (V1), `NumaWorkspaceChatAgents` (V2), and integrations UI.
+- `/numa-frontend/` – React app (Pages, Components, Services), including `NumaWorkspaceChatAgents` (chat at `/chat`), `NumaChatAgents` (deprecated V1), and integrations UI.
 - `/services/` – Containerized agents for Bedrock AgentCore (e.g., `numa-workspace-agent`). Packaged via `package-service.sh`.
 - `/lambdas/python/` – 55+ Python Lambdas (e.g., `numa-chat-agent`, `workspace-chat-agent-proxy`, `workspace-chat-tools`, `extract-content-from-file`, app‑specific steps, Pipedream proxy/relay, web search proxy, etc.).
 - `/lambdas/node/` – 29 Node Lambdas for infrastructure/system tasks (authorizers, agents API, scheduling, notifications, branding, cleanup, shims, etc.).
@@ -386,10 +406,48 @@ Feature branches → `dev` (default MR target) → `main` (release). No pipeline
 
 ---
 
+## Numa Ops
+
+Numa Ops is a work management / project ops module built into the Numa platform. It was designed by Ian (Product Manager) and is being implemented as a first-class Numa feature. Think of it as a lightweight Jira/Linear-style ops tool, purpose-built for enterprise teams using Numa.
+
+### Concepts
+
+- **Tickets** — The core unit of work. Each ticket has a title, description, status, priority, assignee, due date, and more. Tickets live on kanban boards and in a backlog.
+- **Teams** — What Ian's original POC called "boards". A team owns a set of tickets and has its own kanban board.
+- **Projects** — Groupings of tickets, linked to a team. Tickets can belong to a project.
+- **Customers** — First-class entity. Tickets and projects can be linked to a customer. Has its own tab (not mirrored from CRM — standalone).
+- **Suppliers** — Similar to customers. Tickets can be linked to suppliers.
+- **Backlog** — A list view of all tickets not yet assigned to an active sprint/board column.
+- **Kanban board** — Column-based view of tickets by status (e.g. To Do, In Progress, Done).
+
+### Key Differences from Ian's POC
+
+- Ian called "teams" → "boards". Numa calls them **teams**.
+- Customers are their own standalone tab (Ian's version had a CRM mirror concept — we removed that).
+- Suppliers are tracked similarly to customers.
+- Ian's original design had a "Work Centre" hierarchy above teams. This was removed (with Ian's approval) — companies will only ever have one work centre, so the hierarchy is flat: Ticket → Team.
+
+### Ian's POC
+
+Ian (PM) built a reference implementation called "The actual Work Ops App" — it is the **gold standard** for feature parity. If you have it locally, it lives under `docs/tasks/numa-ops-feature/The actual Work Ops App/` and contains the full field library, status model, and domain logic. The accompanying doc `Numa-Ops-Business-Capabilities.docx` describes the full business vision.
+
+### Implementation
+
+- **Backend**: Node Lambdas in `/lambdas/node/` prefixed with `numa-ops-*` (e.g. `numa-ops-tickets`, `numa-ops-projects`, `numa-ops-teams`, `numa-ops-customers`).
+- **Frontend**: Components and pages under `numa-frontend/src/` — look for `NumaOps`, `Ops`, or `ops` in filenames.
+
+### Mental Model for Ops Tasks
+
+- Ian's POC is the gold standard — when in doubt, match his design.
+- The structure (lambdas, infra, routing) is largely in place — most work is filling in missing fields, functionality, and UI/UX polish.
+- Tickets are the most complex entity — they have many fields, link to other entities (projects, customers, suppliers, other tickets), and appear in multiple views (kanban card, backlog row, ticket detail modal).
+
+---
+
 ## Mental Model for Agents
 
 1) If deploying to clients, it runs out of the numa-client-stack where we assume an ArcanumAIAccess role from the deployer accounts creds to be able to create all the resources in the client account. This is also useful for local dev to access/see resources in the client account.
-2) For V1 chat tasks, the `numa-chat-agent` Lambda is the hub: it streams tokens, invokes Bedrock, queries the selected knowledge base, and optionally calls MCP tools through the Pipedream proxy.
-3) For V2 workspace chat tasks, the `numa-workspace-agent` service runs in an AgentCore MicroVM per conversation. It uses the Claude Agent SDK for agentic loops, executes code in a sandboxed environment, and syncs workspace files to S3. The proxy Lambda routes requests; the tools Lambda handles KB queries and integration calls.
+2) For chat tasks, the `numa-workspace-agent` service is the primary chat backend. It runs in an AgentCore MicroVM per conversation, uses the Claude Agent SDK for agentic loops, executes code in a sandboxed environment, and syncs workspace files to S3. The proxy Lambda routes requests; the tools Lambda handles KB queries and integration calls. Accessible at `/chat` in the nav.
+3) The legacy `numa-chat-agent` Lambda (V1) is deprecated. It still exists in the codebase but is no longer the default chat experience.
 4) For app tasks, follow the app construct → Step Function → Lambda chain, with S3 prefixes in the outputs bucket and optional job status in DynamoDB.
 5) For integrations, treat Pipedream access as cross‑account and centrally secured; rely on the relay/proxy pattern.

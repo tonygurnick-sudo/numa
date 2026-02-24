@@ -327,6 +327,9 @@ export class NumaClientStack extends TerraformStack {
         integrationsApprovalTableName: core.integrationsApprovalTable?.name,
         integrationsApprovalTableArn: core.integrationsApprovalTable?.arn,
         pipedreamRelayLambdaArn: core.pipedreamRelayLambdaArn,
+        // Chat settings table (for user profile memory management)
+        chatSettingsTableName: core.chatSettingsTable.name,
+        chatSettingsTableArn: core.chatSettingsTable.arn,
         // File redirect for integration uploads (clean URLs to avoid Slack filename length issues)
         fileRedirectSecret: fileRedirectSecret.value,
         fileRedirectBaseUrl: `https://${domainName}/api/workspace-chat-agent`,
@@ -354,6 +357,9 @@ export class NumaClientStack extends TerraformStack {
         // Chat settings table (for reading user approval mode preferences)
         chatSettingsTableName: core.chatSettingsTable.name,
         chatSettingsTableArn: core.chatSettingsTable.arn,
+        // Company bucket (for loading company profile into system prompt)
+        companyBucketName: core.companyBucket.bucket.bucket,
+        companyBucketArn: core.companyBucket.bucket.arn,
       });
 
       // Create the proxy Lambda that bridges CloudFront to AgentCore SDK
@@ -563,7 +569,7 @@ export class NumaClientStack extends TerraformStack {
         PIPEDREAM_INTEGRATIONS: clientConfig.pipedreamIntegrations ?? false,
         DATA_CONNECTORS_ENABLED: clientConfig.dataConnectorsEnabled ?? false,
         AGENTS: clientConfig.agents ?? false,
-        NUMA_WORKSPACE_CHAT: clientConfig.numaWorkspaceChat ?? false,
+        NUMA_WORKSPACE_CHAT: clientConfig.numaWorkspaceChat ?? true,
         SCHEDULING: clientConfig.scheduling ?? false,
         NUMA_FILES: clientConfig.numaFiles ?? false,
         WORKSPACE_CHAT_MODEL_SELECTION: clientConfig.workspaceChatModelSelection ?? false,
@@ -868,9 +874,9 @@ export const clientConfigSchema = coreNumaInfraPropsSchema
          * Whether to provision the Numa Workspace Chat Agent (AgentCore runtime).
          * This provides a persistent workspace with Claude Code CLI for complex tasks.
          *
-         * @default false
+         * @default true
          */
-        numaWorkspaceChat: z.boolean().optional().default(false),
+        numaWorkspaceChat: z.boolean().optional().default(true),
 
         /**
          * Whether to enable Data Connectors functionality in the frontend.

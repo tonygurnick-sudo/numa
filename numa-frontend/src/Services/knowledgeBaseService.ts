@@ -3,6 +3,7 @@
  * Handles API calls for split user knowledge base management
  */
 import i18n from '../i18n';
+import { getSwrCache, setSwrCache } from '../utils/swrCache';
 
 export interface KnowledgeBase {
   kb_id: string;
@@ -304,6 +305,11 @@ class KnowledgeBaseService {
     }
   }
 
+  /** Read cached KB file listing from localStorage (instant, synchronous). */
+  getCachedKBFiles(kbId: string): ListKBFilesResponse | null {
+    return getSwrCache<ListKBFilesResponse>(`kbFiles_${kbId}`);
+  }
+
   /**
    * List files in a KB's S3 prefix
    * This also updates the document count in the backend
@@ -315,7 +321,14 @@ class KnowledgeBaseService {
         headers: this.getHeaders(),
       });
 
-      return this.parseJsonResponse<ListKBFilesResponse>(response, i18n.t('errors:knowledgeBase.listFilesFailed'));
+      const result = await this.parseJsonResponse<ListKBFilesResponse>(
+        response,
+        i18n.t('errors:knowledgeBase.listFilesFailed'),
+      );
+      // Persist to localStorage for instant load on next visit.
+      // Skip caching if payload is over 500KB to avoid filling localStorage for huge KBs.
+      setSwrCache(`kbFiles_${kbId}`, result, 500_000);
+      return result;
     } catch (error) {
       console.error('Error listing KB files:', error);
       throw error;

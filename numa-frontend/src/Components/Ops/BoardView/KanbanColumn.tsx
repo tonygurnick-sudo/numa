@@ -59,19 +59,10 @@ const KanbanColumn: React.FC<KanbanColumnProps> = ({
     }
   };
 
-  // Use stage's statusType to derive accent color for drop zone
-  const statusColor = getStatusTypeColor(stage.statusType ?? 'backlog');
+  const dragOverStyle = isOver ? { borderTop: `3px solid ${getStatusTypeColor(stage.statusType)}` } : undefined;
 
   return (
-    <div
-      ref={setNodeRef}
-      className="kanban-column"
-      style={{
-        backgroundColor: isOver ? '#eef2ff' : undefined,
-        boxShadow: isOver ? 'inset 0 0 0 2px #6366f1' : undefined,
-        borderTop: isOver ? `3px solid ${statusColor}` : undefined,
-      }}
-    >
+    <div ref={setNodeRef} className={`kanban-column${isOver ? ' kanban-column--drag-over' : ''}`} style={dragOverStyle}>
       {/* Header: Name + Count | + button */}
       <div className="kanban-column-header">
         <div className="kanban-column-header-left">

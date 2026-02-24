@@ -88,9 +88,11 @@ COPY numa_workspace_agent/ ./numa_workspace_agent/
 COPY integration-prompts/ ./integration-prompts/
 COPY run.sh ./
 
-# Copy tools directory inside /workdir (read+execute only)
-# Tools are now within workspace boundary for security
-COPY --chown=agent:agent --chmod=555 tools/ /workdir/tools/
+# Copy tools to /app/tools/ as read-only source (for selective copy at startup)
+# The agent type system copies only enabled tools from here to /workdir/tools/
+COPY --chown=agent:agent --chmod=555 tools/ /app/tools/
+# Also copy to /workdir/tools/ as default (backwards compatible, overwritten at startup)
+COPY --chown=agent:agent tools/ /workdir/tools/
 
 # Make all application files readable by all (required for non-root user)
 RUN chmod -R 755 /app

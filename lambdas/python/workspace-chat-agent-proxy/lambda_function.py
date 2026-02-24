@@ -282,6 +282,30 @@ async def ping():
     }
 
 
+@app.get(f"{PREFIX}/types")
+async def list_agent_types(
+    authorization: str | None = Header(None),
+    x_arcanum_cloudfront_secret: str | None = Header(
+        None, alias="x-arcanum-cloudfront-secret"
+    ),
+):
+    """List available agent types.
+
+    Routes to the AgentCore container which has the agent type registry.
+    Returns a list of type metadata (type_id, display_name, response_mode).
+    """
+    validate_cloudfront_secret(x_arcanum_cloudfront_secret, authorization)
+    user_sub = extract_user_sub(authorization)
+
+    return await _invoke_agentcore(
+        user_sub=user_sub,
+        http_method="GET",
+        http_path="/types",
+        authorization=authorization,
+        stream=False,
+    )
+
+
 @app.get(f"{PREFIX}/integration-file/{{token}}/{{filename}}")
 async def integration_file_redirect(
     token: str,
@@ -313,6 +337,33 @@ async def integration_file_redirect(
         ExpiresIn=30,
     )
     return RedirectResponse(url=presigned_url, status_code=302)
+
+
+@app.get(f"{PREFIX}/runs/{{run_id}}/status")
+async def run_status(
+    run_id: str,
+    authorization: str | None = Header(None),
+    x_arcanum_cloudfront_secret: str | None = Header(
+        None, alias="x-arcanum-cloudfront-secret"
+    ),
+):
+    """Poll for fire-and-forget run result.
+
+    Routes the request to the AgentCore container which checks S3 for
+    a ``_result.json`` file. Returns ``{"status": "running"}`` while the
+    agent is still working, or the full result when done.
+    """
+    validate_cloudfront_secret(x_arcanum_cloudfront_secret, authorization)
+    user_sub = extract_user_sub(authorization)
+
+    return await _invoke_agentcore(
+        user_sub=user_sub,
+        http_method="GET",
+        http_path=f"/runs/{run_id}/status",
+        authorization=authorization,
+        stream=False,
+        conversation_id=run_id,
+    )
 
 
 @app.get(f"{PREFIX}/files")
@@ -432,16 +483,49 @@ async def invocations(
     # Extract conversationId for per-conversation session routing
     conversation_id = body.get("conversationId")
 
-    # Chat action streams, others return JSON
-    return await _invoke_agentcore(
-        user_sub=user_sub,
-        http_method="POST",
-        http_path="/invocations",
-        http_body=body,
-        authorization=authorization,
-        stream=(action == "chat"),
-        conversation_id=conversation_id,
-    )
+    # Determine response mode:
+    # 1. Request-level override ("responseMode" in body)
+    # 2. Default: "stream" for chat, "collect" for everything else
+    #
+    # The container also reads response_mode from the agent type config,
+    # but the proxy needs to know so it can decide whether to stream or
+    # collect the response.
+    response_mode = body.get("responseMode", "")
+
+    if action == "chat":
+        if response_mode in ("sync", "fire-and-forget"):
+            # Non-streaming modes: collect the JSON response from the container
+            return await _invoke_agentcore(
+                user_sub=user_sub,
+                http_method="POST",
+                http_path="/invocations",
+                http_body=body,
+                authorization=authorization,
+                stream=False,
+                conversation_id=conversation_id,
+            )
+        else:
+            # Default: stream SSE (covers "stream" and empty/unset)
+            return await _invoke_agentcore(
+                user_sub=user_sub,
+                http_method="POST",
+                http_path="/invocations",
+                http_body=body,
+                authorization=authorization,
+                stream=True,
+                conversation_id=conversation_id,
+            )
+    else:
+        # Non-chat actions (upload, stop, etc.) always return JSON
+        return await _invoke_agentcore(
+            user_sub=user_sub,
+            http_method="POST",
+            http_path="/invocations",
+            http_body=body,
+            authorization=authorization,
+            stream=False,
+            conversation_id=conversation_id,
+        )
 
 
 async def _handle_approve(body: dict, user_sub: str) -> JSONResponse:

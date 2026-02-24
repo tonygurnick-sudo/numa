@@ -30,6 +30,7 @@ function formatFileSize(bytes: number): string {
  * File chip component
  */
 function FileChip({ file, onRemove }: { file: StagedFile; onRemove: () => void }) {
+  const { t } = useTranslation('chat');
   return (
     <div className="pending-file-chip">
       <i className={getFileIcon(file.filename)} />
@@ -37,7 +38,12 @@ function FileChip({ file, onRemove }: { file: StagedFile; onRemove: () => void }
         {file.filename}
       </span>
       <span className="pending-file-size">{formatFileSize(file.size)}</span>
-      <button className="pending-file-remove" onClick={onRemove} aria-label={`Remove ${file.filename}`} type="button">
+      <button
+        className="pending-file-remove"
+        onClick={onRemove}
+        aria-label={t('workspace.fileUpload.remove')}
+        type="button"
+      >
         <i className="bi bi-x" />
       </button>
     </div>
@@ -62,7 +68,7 @@ function FolderChip({ folder, onRemove }: { folder: StagedFolder; onRemove: () =
       <button
         className="pending-file-remove"
         onClick={onRemove}
-        aria-label={`Remove folder ${folder.folderName}`}
+        aria-label={t('workspace.fileUpload.remove')}
         type="button"
       >
         <i className="bi bi-x" />
@@ -90,14 +96,9 @@ export function PendingFilesBar({ items, onRemove, maxVisible = 5 }: PendingFile
           <i className="bi bi-paperclip me-1" />
           {t('workspace.pendingFiles.label', { count: totalFiles })}
         </span>
-        {hiddenCount > 0 && !expanded && (
-          <button className="pending-files-expand-btn" onClick={() => setExpanded(true)} type="button">
-            {t('workspace.pendingFiles.showAll')}
-          </button>
-        )}
-        {expanded && hiddenCount > 0 && (
-          <button className="pending-files-expand-btn" onClick={() => setExpanded(false)} type="button">
-            {t('workspace.pendingFiles.showLess')}
+        {hiddenCount > 0 && (
+          <button className="pending-files-expand-btn" onClick={() => setExpanded((prev) => !prev)} type="button">
+            {expanded ? t('workspace.pendingFiles.showLess') : t('workspace.pendingFiles.showAll')}
           </button>
         )}
       </div>
@@ -109,8 +110,10 @@ export function PendingFilesBar({ items, onRemove, maxVisible = 5 }: PendingFile
             <FileChip key={`file-${item.path}`} file={item} onRemove={() => onRemove(item)} />
           ),
         )}
-        {hiddenCount > 0 && !expanded && (
-          <span className="pending-files-more">{t('workspace.pendingFiles.moreFiles', { count: hiddenCount })}</span>
+        {!expanded && hiddenCount > 0 && (
+          <button className="pending-files-more" onClick={() => setExpanded(true)} type="button">
+            {t('workspace.pendingFiles.moreFiles', { count: hiddenCount })}
+          </button>
         )}
       </div>
     </div>

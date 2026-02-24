@@ -4,10 +4,14 @@
  */
 
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
-import { knowledgeBaseService, UserKB } from '../Services/knowledgeBaseService';
+import { UserKB, KnowledgeBase } from '../Services/knowledgeBaseService';
 import i18n from '../i18n';
 import { useAuth } from './AuthProvider';
+import { useNumaRequest } from './NumaRequestContext';
 import { COMPANY_KB_ID, NUMA_SUPPORT_KB_ID, SYSTEM_KB_IDS } from '../constants/knowledgeBase';
+import { getSwrCache, setSwrCache } from '../utils/swrCache';
+
+const KB_LIST_SWR_KEY = 'kbList';
 
 interface KnowledgeBaseContextType {
   // Current selected KB
@@ -121,13 +125,15 @@ function saveSelectedKBToStorage(kb: UserKB | null): void {
 
 export function KnowledgeBaseProvider({ children }: { children: React.ReactNode }): React.JSX.Element {
   const { user, tokenValidationComplete } = useAuth();
+  const { numaGet } = useNumaRequest();
   const isMountedRef = useRef(true);
   const [selectedKB, setSelectedKBState] = useState<UserKB | null>(loadSelectedKBFromStorage);
   const [selectedKbId, setSelectedKbId] = useState<string | null>(() => {
     const initial = loadSelectedKBFromStorage();
     return initial?.kb_id ?? null;
   });
-  const [availableKBs, setAvailableKBs] = useState<UserKB[]>([]);
+  // SWR: initialize from localStorage cache so the KB selector renders instantly
+  const [availableKBs, setAvailableKBs] = useState<UserKB[]>(() => getSwrCache<UserKB[]>(KB_LIST_SWR_KEY) ?? []);
   const [isLoadingKBs, setIsLoadingKBs] = useState<boolean>(true); // Start loading immediately
   const [kbError, setKbError] = useState<string | null>(null);
 
@@ -154,11 +160,15 @@ export function KnowledgeBaseProvider({ children }: { children: React.ReactNode 
     if (!isMountedRef.current) {
       return;
     }
-    setIsLoadingKBs(true);
+    // Only show loading spinner if we have no cached data
+    if (availableKBs.length === 0) {
+      setIsLoadingKBs(true);
+    }
     setKbError(null);
 
     try {
-      const kbs = await knowledgeBaseService.listUserKBs();
+      const result = (await numaGet('/api/kb')) as { kbs?: UserKB[] };
+      const kbs = result?.kbs ?? [];
       if (!isMountedRef.current) {
         return;
       }
@@ -178,6 +188,8 @@ export function KnowledgeBaseProvider({ children }: { children: React.ReactNode 
       const augmentedKbs: UserKB[] = [...systemKbsToAdd, ...sanitizedKbs];
 
       setAvailableKBs(augmentedKbs);
+      // Persist to localStorage for instant load on next page refresh
+      setSwrCache(KB_LIST_SWR_KEY, augmentedKbs);
 
       // Use setSelectedKB with a function to avoid dependency on selectedKB state
       setSelectedKBState((currentSelected) => {
@@ -232,7 +244,7 @@ export function KnowledgeBaseProvider({ children }: { children: React.ReactNode 
         setIsLoadingKBs(false);
       }
     }
-  }, []); // Remove selectedKB dependency to avoid loops
+  }, [numaGet]); // numaGet has a stable identity (reads token from a ref)
 
   /**
    * Select a KB by ID
@@ -264,7 +276,8 @@ export function KnowledgeBaseProvider({ children }: { children: React.ReactNode 
       }
 
       try {
-        const kbDetails = await knowledgeBaseService.getKB(normalizedId);
+        const result = (await numaGet(`/api/kb/${normalizedId}`)) as { kb: KnowledgeBase };
+        const kbDetails = result.kb;
 
         // Update the KB in availableKBs with fresh data
         setAvailableKBs((prev) =>
@@ -285,7 +298,7 @@ export function KnowledgeBaseProvider({ children }: { children: React.ReactNode 
         console.debug('Failed to fetch KB details for count update:', error);
       }
     },
-    [setAvailableKBs],
+    [numaGet, setAvailableKBs],
   );
 
   /**

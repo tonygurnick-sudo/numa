@@ -1,0 +1,236 @@
+---
+name: memories
+description: Manage user memories - list, add, and update persistent memories that help personalise AI responses across conversations. Use for listing existing memories, updating them, or detailed memory management. For quick adds, use the tool directly without loading this skill.
+---
+
+# Memory Management Skill
+
+List, add, and update the user's persistent memories. Memories are facts, preferences, and operational details that persist across conversations and help personalise responses.
+
+## Quick Reference
+
+```bash
+# List all memories
+python3 /workdir/tools/numa/numa-memories.py list
+
+# List memories filtered by scope
+python3 /workdir/tools/numa/numa-memories.py list --scope general
+python3 /workdir/tools/numa/numa-memories.py list --scope "integration:jira"
+
+# Add a general memory
+python3 /workdir/tools/numa/numa-memories.py add --content "Prefers concise responses"
+
+# Add an integration-scoped memory
+python3 /workdir/tools/numa/numa-memories.py add \
+    --content "Jira Cloud ID: abc123-def456" \
+    --scope "integration:jira"
+
+# Update a memory
+python3 /workdir/tools/numa/numa-memories.py update \
+    --memory-id mem_abc123 \
+    --content "Prefers concise bullet-point responses"
+```
+
+## Subcommands
+
+| Subcommand | Purpose |
+|------------|---------|
+| `list` | List memories (optionally filtered by scope) |
+| `add` | Add a new memory |
+| `update` | Update an existing memory's content |
+
+---
+
+## List Subcommand
+
+List the user's memories, optionally filtered by scope.
+
+### Parameters
+
+| Parameter | Required | Default | Description |
+|-----------|----------|---------|-------------|
+| `--scope, -s` | No | all | Filter: `general`, `integration:{slug}`, or `agent:{agentId}` |
+
+### Examples
+
+```bash
+# List all memories
+python3 /workdir/tools/numa/numa-memories.py list
+
+# List only general memories
+python3 /workdir/tools/numa/numa-memories.py list --scope general
+
+# List Jira integration memories
+python3 /workdir/tools/numa/numa-memories.py list --scope "integration:jira"
+
+# List memories for a specific agent
+python3 /workdir/tools/numa/numa-memories.py list --scope "agent:agt_abc123"
+```
+
+### Output Format
+
+JSON response with:
+- `memories` - Array of memory objects, each containing:
+  - `id` - Memory ID (e.g., `mem_abc123def456`)
+  - `content` - The memory text (max 300 characters)
+  - `scope` - Scope string (`general`, `integration:jira`, `agent:agt_xyz`)
+  - `createdAt` - ISO 8601 timestamp
+  - `source` - `"user"` (added via Profile page) or `"ai"` (added by Numa)
+
+---
+
+## Add Subcommand
+
+Add a new memory for the user.
+
+### Parameters
+
+| Parameter | Required | Default | Description |
+|-----------|----------|---------|-------------|
+| `--content, -c` | Yes | - | Memory content (max 300 characters) |
+| `--scope, -s` | No | `general` | Scope: `general`, `integration:{slug}`, or `agent:{agentId}` |
+
+### Examples
+
+```bash
+# Add a general preference
+python3 /workdir/tools/numa/numa-memories.py add \
+    --content "Prefers dark mode"
+
+# Add an integration memory
+python3 /workdir/tools/numa/numa-memories.py add \
+    --content "Slack workspace: acme-corp, main channel: #general" \
+    --scope "integration:slack"
+
+# Add a Jira memory
+python3 /workdir/tools/numa/numa-memories.py add \
+    --content "Jira Cloud ID: abc123-def456, default project: ENG" \
+    --scope "integration:jira"
+
+# Add an agent-specific memory
+python3 /workdir/tools/numa/numa-memories.py add \
+    --content "User wants weekly summaries from this agent" \
+    --scope "agent:agt_abc123"
+```
+
+### Limits
+
+- Maximum 300 characters per memory
+- Maximum 50 memories total per user
+- All memories added via this tool are tagged with `source: "ai"`
+
+---
+
+## Update Subcommand
+
+Update the content of an existing memory. The scope and creation date are preserved.
+
+### Parameters
+
+| Parameter | Required | Description |
+|-----------|----------|-------------|
+| `--memory-id, -m` | Yes | Memory ID to update |
+| `--content, -c` | Yes | New memory content (max 300 characters) |
+
+### Examples
+
+```bash
+# Update a memory's content
+python3 /workdir/tools/numa/numa-memories.py update \
+    --memory-id mem_abc123def456 \
+    --content "Prefers concise bullet-point responses with code examples"
+```
+
+### Notes
+
+- You can only update the content; scope and createdAt are preserved
+- Updated memories are tagged with `source: "ai"`
+- To find a memory's ID, use `list` first
+
+---
+
+## Scope Reference
+
+| Scope | When to use | Example |
+|-------|-------------|---------|
+| `general` | User preferences, facts, communication style | "Prefers concise responses" |
+| `integration:{slug}` | Integration-specific operational details | "Jira Cloud ID: abc123" |
+| `agent:{agentId}` | Agent-specific user preferences | "Wants weekly summaries" |
+
+Common integration slugs: `jira`, `slack`, `google_drive`, `gmail`, `notion`, `sharepoint`, `hubspot`, `xero`, `outlook`, `teams`
+
+---
+
+## Behavioral Rules
+
+### Always Confirm First
+
+**ALWAYS ask the user before adding or updating a memory.** Never silently save memories.
+
+Examples of good confirmation:
+- "I'd like to save a memory that you prefer concise bullet-point responses. Shall I go ahead?"
+- "I noticed your Jira Cloud ID is abc123-def456. Want me to remember that for future Jira tasks?"
+- "You mentioned you prefer dark mode — shall I save that as a memory so I remember next time?"
+
+Only run the add/update command **after the user confirms**.
+
+### When to Suggest Adding Memories
+
+**DO suggest adding memories when:**
+- The user explicitly says "remember this", "keep this in mind", "save this for next time", or semantically similar
+- Working with integrations and discovering useful operational details (cloud IDs, channel IDs, project boards, preferred settings)
+- The user shares a persistent preference about how they like to work
+
+**DO NOT suggest adding memories when:**
+- It's a one-off instruction for the current conversation only
+- The user is telling you about their profile (name, job title, etc.) - direct them to the Profile page in Settings
+- The information is already captured in an existing memory (update it instead)
+- Every interaction - memories should be intentional, not automatic
+
+### When to Update vs Add
+
+- If a memory on the same topic already exists, **update** it rather than adding a duplicate
+- List memories first to check for existing ones on the same topic
+
+### Deleting Memories
+
+You cannot delete memories. If the user wants to delete a memory, direct them to manage it from their **Profile page in Settings**.
+
+---
+
+## Common Workflows
+
+### Quick Memory Save
+
+When the user says "remember this" or similar:
+
+```bash
+# Just add it directly - no need to load the skill for quick adds
+python3 /workdir/tools/numa/numa-memories.py add \
+    --content "Prefers responses in British English"
+```
+
+### Review and Manage Memories
+
+When the user wants to see or manage their memories:
+
+```bash
+# 1. List all memories
+python3 /workdir/tools/numa/numa-memories.py list
+
+# 2. If updating, find the memory ID from the list, then:
+python3 /workdir/tools/numa/numa-memories.py update \
+    --memory-id mem_abc123 \
+    --content "Updated preference text"
+```
+
+### Save Integration Details
+
+When working with an integration and discovering useful details:
+
+```bash
+# After discovering the user's Jira Cloud ID during an integration task
+python3 /workdir/tools/numa/numa-memories.py add \
+    --content "Jira Cloud ID: abc123-def456, preferred project: ENG-board" \
+    --scope "integration:jira"
+```

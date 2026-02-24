@@ -1,5 +1,6 @@
 import { getAllConnections } from '../config/integrationsConfig';
 import i18n from '../i18n';
+import { getSwrCache, setSwrCache } from '../utils/swrCache';
 
 export type IntegrationStatus = 'enabled' | 'disabled';
 
@@ -29,7 +30,14 @@ function toMap(items: GlobalIntegrationSetting[]): GlobalIntegrationSettingsMap 
   return map;
 }
 
+const ADMIN_INTEGRATIONS_SWR_KEY = 'adminIntegrations';
+
 export const AdminIntegrationsService = {
+  /** Read cached admin integration settings from localStorage (instant, synchronous). */
+  getCached(): GlobalIntegrationSettingsMap | null {
+    return getSwrCache<GlobalIntegrationSettingsMap>(ADMIN_INTEGRATIONS_SWR_KEY);
+  },
+
   async list(getAccessToken?: () => Promise<string | null>): Promise<GlobalIntegrationSettingsMap> {
     const API_ENDPOINT = sessionStorage.getItem('API_ENDPOINT') || '/api';
     try {
@@ -40,7 +48,9 @@ export const AdminIntegrationsService = {
       const res = await fetch(`${API_ENDPOINT}/settings/integrations`, { method: 'GET', headers });
       if (!res.ok) throw new Error(`${res.status}`);
       const items = (await res.json()) as GlobalIntegrationSetting[];
-      return toMap(items || []);
+      const result = toMap(items || []);
+      setSwrCache(ADMIN_INTEGRATIONS_SWR_KEY, result);
+      return result;
     } catch {
       // Fallback: default everything to disabled
       return toMap([]);
@@ -52,7 +62,9 @@ export const AdminIntegrationsService = {
     numaGet: (url: string, params?: unknown, headers?: Record<string, string>) => Promise<unknown>,
   ): Promise<GlobalIntegrationSettingsMap> {
     const items = (await numaGet('/api/settings/integrations')) as GlobalIntegrationSetting[];
-    return toMap(items || []);
+    const result = toMap(items || []);
+    setSwrCache(ADMIN_INTEGRATIONS_SWR_KEY, result);
+    return result;
   },
 
   async update(

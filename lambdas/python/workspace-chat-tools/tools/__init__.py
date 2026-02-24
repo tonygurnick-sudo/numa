@@ -26,6 +26,11 @@ from .pipedream_integration import (
     handle_proxy_request,
     handle_run_action,
 )
+from .user_profile import (
+    handle_add_memory,
+    handle_list_memories,
+    handle_update_memory,
+)
 from .web_search import handle_web_search
 
 __all__ = [
@@ -46,4 +51,7 @@ __all__ = [
     "handle_list_actions",
     "handle_proxy_request",
     "handle_run_action",
+    "handle_add_memory",
+    "handle_list_memories",
+    "handle_update_memory",
 ]

@@ -210,12 +210,12 @@ export class Nolia extends BaseNumaApp {
       }
     > = {
       'us-east-1': {
-        default: { model_id: 'us.anthropic.claude-sonnet-4-5-20250929-v1:0', max_tokens: 64000 },
+        default: { model_id: 'us.anthropic.claude-sonnet-4-6', max_tokens: 64000 },
         fallback: { model_id: 'us.anthropic.claude-haiku-4-5-20251001-v1:0', max_tokens: 64000 },
         haiku: { model_id: 'us.anthropic.claude-haiku-4-5-20251001-v1:0', max_tokens: 64000 },
       },
       'ap-southeast-2': {
-        default: { model_id: 'au.anthropic.claude-sonnet-4-5-20250929-v1:0', max_tokens: 64000 },
+        default: { model_id: 'au.anthropic.claude-sonnet-4-6', max_tokens: 64000 },
         fallback: { model_id: 'au.anthropic.claude-haiku-4-5-20251001-v1:0', max_tokens: 64000 },
         haiku: { model_id: 'au.anthropic.claude-haiku-4-5-20251001-v1:0', max_tokens: 64000 },
       },

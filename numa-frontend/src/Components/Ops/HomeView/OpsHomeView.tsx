@@ -4,7 +4,8 @@ import { useTranslation } from 'react-i18next';
 import { useNumaRequest } from '../../../Providers/NumaRequestContext';
 import { useOps } from '../OpsContext';
 import * as OpsService from '../../../Services/OpsService';
-import type { MetricsResponse, StatusType } from '../../../types/ops';
+import type { Customer, MetricsResponse, StatusType, Supplier } from '../../../types/ops';
+import { getCached, setCache } from '../../../utils/opsCache';
 
 // ─── Props ──────────────────────────────────────────────────────────────────
 
@@ -52,11 +53,13 @@ export const OpsHomeView = ({
   const { numaGet } = useNumaRequest();
   const { teams } = useOps();
 
-  // ── Local data ──────────────────────────────────────────────────────────
-  const [metrics, setMetrics] = useState<MetricsResponse | null>(null);
-  const [customerCount, setCustomerCount] = useState<number>(0);
-  const [supplierCount, setSupplierCount] = useState<number>(0);
-  const [loading, setLoading] = useState(true);
+  // ── Local data (initialized from cache for instant render) ─────────────
+  const [metrics, setMetrics] = useState<MetricsResponse | null>(() => getCached('metrics'));
+  const [customerCount, setCustomerCount] = useState<number>(() => getCached<Customer[]>('customers')?.length ?? 0);
+  const [supplierCount, setSupplierCount] = useState<number>(() => getCached<Supplier[]>('suppliers')?.length ?? 0);
+  const [loading, setLoading] = useState(
+    () => !getCached('metrics') && !getCached('customers') && !getCached('suppliers'),
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -71,8 +74,11 @@ export const OpsHomeView = ({
         ]);
         if (!cancelled) {
           setMetrics(metricsData);
+          if (metricsData) setCache('metrics', metricsData);
           setCustomerCount(customerList.length);
+          if (customerList.length > 0) setCache('customers', customerList);
           setSupplierCount(supplierList.length);
+          if (supplierList.length > 0) setCache('suppliers', supplierList);
         }
       } catch (err) {
         console.error('[OpsHomeView] Failed to load dashboard data:', err);

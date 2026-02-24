@@ -1,12 +1,27 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Container, Row, Col, Card, Button, Badge, Alert, Spinner, Tabs, Tab } from 'react-bootstrap';
+import { Container, Card, Button, Badge, Alert, Spinner } from 'react-bootstrap';
+import {
+  Check,
+  CheckCheck,
+  CheckCircle2,
+  Clock3,
+  Eye,
+  Info,
+  PlayCircle,
+  RefreshCw,
+  StopCircle,
+  Trash2,
+  XCircle,
+} from 'lucide-react';
 import { PageHeader } from '../Components/PageHeader';
+import { LayoutDashboard } from '../Layouts/LayoutDashboard';
 import { NotificationService } from '../Services/NotificationService';
 import { useNumaRequest } from '../Providers/NumaRequestContext';
 import { useNotificationStream } from '../hooks/useNotificationStream';
 import type { EventNotification } from '../types/notifications';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
+import { SubHeaderTabBar } from '../Components/SubHeaderTabBar';
 
 const formatTimestamp = (
   timestamp: number,
@@ -46,18 +61,18 @@ const getEventTypeColor = (eventType: string): string => {
   }
 };
 
-const getEventTypeIcon = (eventType: string): string => {
+const getEventTypeIcon = (eventType: string) => {
   switch (eventType) {
     case 'started':
-      return 'bi-play-circle';
+      return PlayCircle;
     case 'completed':
-      return 'bi-check-circle';
+      return CheckCircle2;
     case 'failed':
-      return 'bi-x-circle';
+      return XCircle;
     case 'cancelled':
-      return 'bi-stop-circle';
+      return StopCircle;
     default:
-      return 'bi-info-circle';
+      return Info;
   }
 };
 
@@ -111,18 +126,6 @@ export const NotificationsPage: React.FC = () => {
     }
   };
 
-  const dismissNotification = async (notificationId: string) => {
-    try {
-      const updated = await NotificationService.dismiss(numaPut, notificationId);
-      setNotifications((prev) =>
-        prev.map((n) => (n.notification_id === notificationId ? { ...n, status: updated.status ?? 'dismissed' } : n)),
-      );
-      refreshUnreadCount(numaGet);
-    } catch (err) {
-      console.error('Failed to dismiss notification:', err);
-    }
-  };
-
   const deleteNotification = async (notificationId: string) => {
     try {
       await NotificationService.delete(numaDelete, notificationId);
@@ -144,6 +147,14 @@ export const NotificationsPage: React.FC = () => {
 
   const unreadCount = notifications.filter((n) => n.status === 'unread').length;
   const readCount = notifications.filter((n) => n.status !== 'unread').length;
+  const notificationTabs = useMemo(
+    () => [
+      { key: 'unread', label: t('notifications.tabs.unread', { count: unreadCount }) },
+      { key: 'read', label: t('notifications.tabs.read', { count: readCount }) },
+      { key: 'all', label: t('notifications.tabs.all', { count: notifications.length }) },
+    ],
+    [notifications.length, readCount, t, unreadCount],
+  );
 
   const filteredNotifications = useMemo(() => {
     const filtered = notifications.filter((notification) => {
@@ -156,36 +167,42 @@ export const NotificationsPage: React.FC = () => {
   }, [notifications, activeTab]);
 
   return (
-    <Container fluid className="py-4">
-      <PageHeader title={t('notifications.title')} />
-
-      <Row>
-        <Col>
-          <div className="d-flex justify-content-between align-items-center mb-3">
-            <h5>
-              {t('notifications.title')}
-              {unreadCount > 0 && (
-                <Badge bg="danger" className="ms-2">
-                  {t('notifications.unreadCount', { count: unreadCount })}
-                </Badge>
+    <div className="dashboard">
+      <PageHeader
+        title={t('notifications.title')}
+        subtitle={t('notifications.subtitle')}
+        actions={
+          <>
+            <Button variant="secondary" className="standard-refresh-btn" onClick={loadNotifications} disabled={loading}>
+              {loading ? (
+                <>
+                  <Spinner animation="border" size="sm" className="me-2" />
+                  <span className="standard-refresh-btn__label">{t('notifications.actions.refresh')}</span>
+                </>
+              ) : (
+                <>
+                  <RefreshCw size={16} className="standard-refresh-btn__icon" aria-hidden="true" />
+                  <span className="standard-refresh-btn__label">{t('notifications.actions.refresh')}</span>
+                </>
               )}
-            </h5>
+            </Button>
             {unreadCount > 0 && (
-              <Button variant="outline-primary" size="sm" onClick={markAllAsRead}>
-                {t('notifications.actions.markAllRead')}
+              <Button variant="secondary" className="standard-refresh-btn" onClick={markAllAsRead}>
+                <CheckCheck size={16} className="standard-refresh-btn__icon" aria-hidden="true" />
+                <span className="standard-refresh-btn__label">{t('notifications.actions.markAllRead')}</span>
               </Button>
             )}
-          </div>
-          <Tabs
-            activeKey={activeTab}
-            onSelect={(key) => key && setActiveTab(key as 'unread' | 'read' | 'all')}
-            className="mb-3"
-          >
-            <Tab eventKey="unread" title={t('notifications.tabs.unread', { count: unreadCount })} />
-            <Tab eventKey="read" title={t('notifications.tabs.read', { count: readCount })} />
-            <Tab eventKey="all" title={t('notifications.tabs.all', { count: notifications.length })} />
-          </Tabs>
-
+          </>
+        }
+      />
+      <SubHeaderTabBar
+        items={notificationTabs}
+        activeKey={activeTab}
+        onSelect={(key) => setActiveTab((key as 'unread' | 'read' | 'all') || 'unread')}
+        ariaLabel={t('notifications.title')}
+      />
+      <LayoutDashboard>
+        <Container fluid className="notifications-page-content px-0">
           {loading && (
             <div className="text-center py-4">
               <Spinner animation="border" />
@@ -204,14 +221,14 @@ export const NotificationsPage: React.FC = () => {
 
           {!loading && !error && notifications.length === 0 && (
             <Alert variant="info">
-              <i className="bi bi-info-circle me-2" />
+              <Info size={16} className="me-2" aria-hidden="true" />
               {t('notifications.empty')}
             </Alert>
           )}
 
           {!loading && !error && notifications.length > 0 && filteredNotifications.length === 0 && (
             <Alert variant="light">
-              <i className="bi bi-inbox me-2" />
+              <Info size={16} className="me-2" aria-hidden="true" />
               {t('notifications.emptyFiltered')}
             </Alert>
           )}
@@ -221,15 +238,22 @@ export const NotificationsPage: React.FC = () => {
               {filteredNotifications.map((notification) => (
                 <Card
                   key={notification.notification_id}
-                  className={`mb-3 ${notification.status === 'unread' ? 'border-primary' : ''}`}
+                  className={`mb-3 notifications-card ${notification.status === 'unread' ? 'is-unread' : ''}`}
                 >
                   <Card.Body>
-                    <div className="d-flex justify-content-between align-items-start">
+                    <div className="notifications-card-main">
                       <div className="flex-grow-1">
-                        <div className="d-flex align-items-center mb-2">
-                          <i
-                            className={`${getEventTypeIcon(notification.event_type)} text-${getEventTypeColor(notification.event_type)} me-2`}
-                          />
+                        <div className="notifications-event-title mb-2">
+                          {(() => {
+                            const EventIcon = getEventTypeIcon(notification.event_type);
+                            return (
+                              <EventIcon
+                                size={16}
+                                className={`notifications-event-icon text-${getEventTypeColor(notification.event_type)}`}
+                                aria-hidden="true"
+                              />
+                            );
+                          })()}
                           <strong>{notification.title}</strong>
                           {notification.status === 'unread' && (
                             <Badge bg="primary" className="ms-2">
@@ -238,8 +262,8 @@ export const NotificationsPage: React.FC = () => {
                           )}
                         </div>
                         <p className="mb-2">{notification.message}</p>
-                        <small className="text-muted">
-                          <i className="bi bi-clock me-1" />
+                        <small className="text-muted notifications-meta">
+                          <Clock3 size={14} aria-hidden="true" />
                           {formatRelativeTime(notification.created_at)}
                           <span className="mx-2">•</span>
                           <Badge bg="secondary" className="me-2">
@@ -250,11 +274,12 @@ export const NotificationsPage: React.FC = () => {
                           </Badge>
                         </small>
                       </div>
-                      <div className="d-flex flex-column gap-1">
+                      <div className="notifications-card-actions">
                         {notification.schedule_id && (
                           <Button
-                            variant="outline-primary"
+                            variant="secondary"
                             size="sm"
+                            className="notifications-action-btn"
                             onClick={async () => {
                               if (notification.status === 'unread') {
                                 await markAsRead(notification.notification_id);
@@ -262,30 +287,28 @@ export const NotificationsPage: React.FC = () => {
                               navigate(`/scheduling/${encodeURIComponent(notification.schedule_id)}`);
                             }}
                           >
+                            <Eye size={14} aria-hidden="true" />
                             {t('notifications.actions.viewSchedule')}
                           </Button>
                         )}
                         {notification.status === 'unread' && (
                           <Button
-                            variant="outline-primary"
+                            variant="secondary"
                             size="sm"
+                            className="notifications-action-btn"
                             onClick={() => markAsRead(notification.notification_id)}
                           >
+                            <Check size={14} aria-hidden="true" />
                             {t('notifications.actions.markRead')}
                           </Button>
                         )}
                         <Button
-                          variant="outline-secondary"
+                          variant="secondary"
                           size="sm"
-                          onClick={() => dismissNotification(notification.notification_id)}
-                        >
-                          {t('notifications.actions.dismiss')}
-                        </Button>
-                        <Button
-                          variant="outline-danger"
-                          size="sm"
+                          className="notifications-action-btn notifications-action-btn--danger"
                           onClick={() => deleteNotification(notification.notification_id)}
                         >
+                          <Trash2 size={14} aria-hidden="true" />
                           {t('notifications.actions.delete')}
                         </Button>
                       </div>
@@ -295,8 +318,8 @@ export const NotificationsPage: React.FC = () => {
               ))}
             </div>
           )}
-        </Col>
-      </Row>
-    </Container>
+        </Container>
+      </LayoutDashboard>
+    </div>
   );
 };

@@ -166,14 +166,11 @@ deploy-dev-gate:
     - yarn install --immutable
     - cd $BUILD_DIR
 
-.node-lint:
-  needs: []
+.node-lint: {}
 
-.node-test:
-  needs: []
+.node-test: {}
 
-.node-build:
-  needs: []
+.node-build: {}
 
 install-common-dependencies:
   stage: setup
@@ -195,7 +192,7 @@ install-common-dependencies:
     paths:
       - node_modules
   rules:
-    - if: $CI_COMMIT_BRANCH == "main"
+    - !reference [.rules, if-deployable]
 
 
 .node-job-cdktf-get-before-script: &node-job-cdktf-get-before-script
@@ -262,7 +259,6 @@ infra-build:
 
 .python-lint-base:
   extends: .poetry-job
-  needs: []
   interruptible: true
   cache:
     - key:
@@ -502,7 +498,9 @@ node-package:
   extends: .node_job
   stage: package
   before_script:
+    - !reference [.yarn, setup-private-auth]
     - corepack enable
+    - yarn install --immutable
     - cd $BUILD_DIR
     - apt update && apt install -y zip
   script:
@@ -684,8 +682,6 @@ deploy-to-arcanum-demo:
     deployment_tier: testing
   rules:
     - if: $CI_COMMIT_BRANCH == "main"
-      when: on_success
-    - if: $CI_COMMIT_BRANCH == "dev"
       when: on_success
     - if: $CI_COMMIT_BRANCH == "dev"
       when: on_success

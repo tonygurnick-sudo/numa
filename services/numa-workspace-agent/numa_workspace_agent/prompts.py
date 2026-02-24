@@ -6,10 +6,17 @@ The system prompt is built from modular sections, each stored as a named variabl
 They are combined at the bottom of this file into SYSTEM_PROMPT.
 """
 
+import json
+import os
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Optional
 from zoneinfo import ZoneInfo
+
+import boto3
+import structlog
+from botocore.exceptions import ClientError
 
 # Directory containing per-integration prompt markdown files (e.g., notion.md)
 _INTEGRATION_PROMPTS_DIR = Path(__file__).parent.parent / "integration-prompts"
@@ -33,8 +40,8 @@ You are Numa, an AI assistant created by Arcanum AI who specialises in helping s
 You are running inside an isolated, sandboxed workspace environment. You communicate results through your assistant response and files you create in the workspace.
 
 If the user asks for help or wants to give feedback inform them of the following:
-- Contact Arcanum AI support at cs@arcanum.ai
-- To give feedback, users should email cs@arcanum.ai
+- Contact Arcanum AI support at customersuccess@arcanum.ai
+- To give feedback, users should email customersuccess@arcanum.ai
 """
 
 # =============================================================================
@@ -376,6 +383,7 @@ Activate skills using the Skill tool. Available skills:
 | Skill | When to use |
 |-------|-------------|
 | `agents` | Managing the user's saved Numa Agents (custom AI personas) — listing, creating, updating, duplicating agents |
+| `memories` | Listing, updating, or detailed management of the user's persistent memories. For quick adds you can use the tool directly without loading the skill. |
 | `integrations` | Working with connected external apps (Google Drive, Slack, Gmail, HubSpot, Jira, Notion, etc.) |
 | `knowledge-search` | Querying, uploading, downloading, or listing files in company knowledge bases |
 | `web-search` | Searching the internet for current information not available in the knowledge base |
@@ -468,6 +476,7 @@ You have access to Numa-specific tools in `/workdir/tools/numa/`. These tools al
 - `/workdir/tools/numa/extract_content.py` — Extract text content from files using advanced OCR/vision AI. Supports PDFs (including scanned), images, DOCX, Excel, audio/video transcription, and 80+ formats.
 - `/workdir/tools/numa/convert_document.py` — Convert documents between formats. Supports direct DOCX↔PDF conversion (--mode file) and markdown→PDF/DOCX conversion (--mode markdown).
 - `/workdir/tools/numa/numa-agents.py` — Manage the user's saved Numa Agents (list, get, create, update, duplicate). Load the `agents` skill first for full details.
+- `/workdir/tools/numa/numa-memories.py` — Manage the user's persistent memories (list, add, update). For quick adds, run the command directly. Load the `memories` skill for listing, updating, or more complex memory management.
 
 To use a tool, run it with Python. You can read the tool file itself for detailed usage and parameters.
 
@@ -532,6 +541,28 @@ This makes the reference clickable in the chat interface, allowing users to veri
 ```bash
 python3 /workdir/tools/numa/numa-agents.py list --scope owned
 ```
+
+**Example — Quick Add a General Memory:**
+```bash
+python3 /workdir/tools/numa/numa-memories.py add --content "Prefers concise responses" --scope general
+```
+
+**Example — Quick Add an Integration Memory:**
+```bash
+python3 /workdir/tools/numa/numa-memories.py add --content "Jira Cloud ID: abc123-def456" --scope "integration:jira"
+```
+
+**Memory Rules:**
+- **ALWAYS ask the user before adding or updating a memory.** For example: "I'd like to save a memory that you prefer concise responses — shall I go ahead?" or "I noticed your Jira Cloud ID is abc123. Want me to remember that for future Jira tasks?" Only run the add/update command after the user confirms.
+- For quick adds ("remember this", "keep this in mind"), confirm what you'll save, then run the add command directly — no need to load the skill
+- For listing, updating, or complex memory management, load the `memories` skill first
+- DO proactively suggest saving memories when the user says "remember this", "keep this in mind for next time", or semantically similar — but always confirm first
+- DO suggest saving useful operational details when working with integrations (e.g., Jira cloud ID, Slack channel IDs, preferred project boards) to save time on future requests
+- DO NOT add memories for every interaction — only when the user signals persistence or when integration details would clearly save time
+- DO NOT update or add memories about the user's profile (name, job title, etc.) — direct them to the Profile page for that
+- To delete a memory, direct the user to manage it from their Profile page in Settings
+- Keep memories concise and factual (max 300 characters)
+- Use appropriate scopes: "general" for general preferences/facts, "integration:{{slug}}" for integration-specific info, "agent:{{agentId}}" for agent-specific info
 
 **Example — Extract Content from Scanned PDF:**
 ```bash
@@ -647,6 +678,72 @@ def build_agent_context(
 _EMAIL_INTEGRATION_SLUGS = {"gmail", "microsoft_outlook"}
 
 
+def _build_user_profile_context(user_profile: Optional[dict]) -> str:
+    """Build user profile context block for the system prompt.
+
+    Args:
+        user_profile: User profile dict from DynamoDB (or None if disabled/empty).
+
+    Returns:
+        Formatted profile context string, or empty string if no profile.
+    """
+    if not user_profile:
+        return ""
+
+    parts = [
+        "<user-profile>",
+        "## User Profile",
+        "The following is information the user has shared about themselves.",
+        "Use it to personalise your responses.\n",
+    ]
+
+    if user_profile.get("name"):
+        parts.append(f"**Name:** {user_profile['name']}")
+    if user_profile.get("jobTitle"):
+        parts.append(f"**Job Title:** {user_profile['jobTitle']}")
+    if user_profile.get("jobDescription"):
+        parts.append(f"\n**Job Description:**\n{user_profile['jobDescription']}")
+    if user_profile.get("linkedInUrl"):
+        parts.append(f"**LinkedIn:** {user_profile['linkedInUrl']}")
+    if user_profile.get("goalsAndObjectives"):
+        parts.append(f"\n**Goals & Objectives:**\n{user_profile['goalsAndObjectives']}")
+    if user_profile.get("otherInformation"):
+        parts.append(f"\n**Other Information:**\n{user_profile['otherInformation']}")
+
+    # Custom instructions get prominent placement
+    if user_profile.get("customInstructions"):
+        parts.append(
+            f"\n**Custom Instructions (follow these carefully):**\n"
+            f"{user_profile['customInstructions']}"
+        )
+
+    # User memories — show ALL memories grouped by scope so the model has a
+    # complete picture when the user asks "what are my memories?"
+    # This is the single source of truth for all user memories in the prompt.
+    memories = user_profile.get("memories", [])
+    valid_memories = [m for m in memories if isinstance(m, dict) and m.get("scope")]
+    if valid_memories:
+        # Group by scope
+        general = [m for m in valid_memories if m.get("scope") == "general"]
+        integration = [
+            m for m in valid_memories if m.get("scope", "").startswith("integration:")
+        ]
+        agent = [m for m in valid_memories if m.get("scope", "").startswith("agent:")]
+
+        parts.append("\n**User Memories:**")
+        for mem in general:
+            parts.append(f"- {mem.get('content', '')}")
+        for mem in integration:
+            scope_label = mem.get("scope", "").replace("integration:", "")
+            parts.append(f"- [{scope_label}] {mem.get('content', '')}")
+        for mem in agent:
+            scope_label = mem.get("scope", "").replace("agent:", "")
+            parts.append(f"- [agent:{scope_label}] {mem.get('content', '')}")
+
+    parts.append("</user-profile>")
+    return "\n".join(parts)
+
+
 def _build_integrations_context(
     enabled_integrations: list[str],
     email_signature: Optional[dict] = None,
@@ -751,6 +848,92 @@ Rules:
 - Do NOT include in non-email contexts (chat responses, documents, etc.)"""
 
 
+# ── Company profile S3 loader with TTL cache ──────────────────────────────
+
+_logger = structlog.get_logger()
+
+# Module-level cache: {"profile": str, "loaded_at": float}
+_company_profile_cache: dict[str, object] = {}
+_COMPANY_PROFILE_TTL_SECONDS = 600  # 10 minutes
+
+
+def load_company_profile_from_s3() -> str:
+    """Load company profile from S3 with a 10-minute TTL cache.
+
+    Reads the company-data.json file from the COMPANY_BUCKET_NAME bucket
+    (set as an env var by infra). Returns the profile text, or empty string
+    on any error (missing bucket, missing file, parse error, etc.).
+    """
+    # Check TTL cache
+    cached_at = _company_profile_cache.get("loaded_at", 0)
+    if (
+        isinstance(cached_at, (int, float))
+        and (time.time() - cached_at) < _COMPANY_PROFILE_TTL_SECONDS
+    ):
+        return str(_company_profile_cache.get("profile", ""))
+
+    bucket = os.environ.get("COMPANY_BUCKET_NAME", "")
+    if not bucket:
+        _logger.debug("COMPANY_BUCKET_NAME not set, skipping company profile")
+        _company_profile_cache["profile"] = ""
+        _company_profile_cache["loaded_at"] = time.time()
+        return ""
+
+    try:
+        s3 = boto3.client("s3")
+        resp = s3.get_object(Bucket=bucket, Key="company-data.json")
+        data = json.loads(resp["Body"].read().decode("utf-8"))
+        profile = data.get("profile", "")
+        _logger.info(
+            "Company profile loaded from S3",
+            _name="COMPANY_PROFILE",
+            bucket=bucket,
+            profile_length=len(profile),
+        )
+    except ClientError as exc:
+        error_code = exc.response.get("Error", {}).get("Code", "")
+        if error_code in ("NoSuchKey", "NoSuchBucket", "AccessDenied"):
+            _logger.debug(
+                "Company profile not available",
+                bucket=bucket,
+                error_code=error_code,
+            )
+        else:
+            _logger.warning(
+                "Failed to load company profile from S3",
+                bucket=bucket,
+                error=str(exc),
+            )
+        profile = ""
+    except Exception as exc:  # pylint: disable=broad-except
+        _logger.warning(
+            "Failed to load company profile from S3",
+            bucket=bucket,
+            error=str(exc),
+        )
+        profile = ""
+
+    _company_profile_cache["profile"] = profile
+    _company_profile_cache["loaded_at"] = time.time()
+    return profile
+
+
+def _truncate_company_profile(profile: str, max_length: int = 3000) -> tuple[str, bool]:
+    """Truncate company profile to max_length, breaking at a sentence boundary.
+
+    Matches the V1 frontend truncation logic in chatSystemPromptUtils.ts.
+
+    Returns:
+        Tuple of (truncated_text, was_truncated).
+    """
+    if len(profile) <= max_length:
+        return profile, False
+    # Find last sentence boundary (period) before the limit
+    break_point = profile[:max_length].rfind(".")
+    actual_break = break_point + 1 if break_point > 0 else max_length
+    return profile[:actual_break].strip(), True
+
+
 def build_workspace_system_prompt(
     working_dir: str = ".",
     user_timezone: Optional[str] = None,
@@ -761,6 +944,10 @@ def build_workspace_system_prompt(
     agent_file_paths: Optional[list[str]] = None,
     enabled_integrations: Optional[list[str]] = None,
     email_signature: Optional[dict] = None,
+    identity_override: Optional[str] = None,
+    user_profile: Optional[dict] = None,
+    company_profile: Optional[str] = None,
+    **_kwargs,
 ) -> str:
     """
     Build the complete system prompt for workspace context.
@@ -773,6 +960,12 @@ def build_workspace_system_prompt(
         today_string: Pre-formatted date/time string from frontend (overrides today_date)
         agent_config: Optional agent configuration for specialized agents
         agent_file_paths: Optional list of downloaded agent reference file paths
+        enabled_integrations: Optional list of enabled integration slugs
+        email_signature: Optional user email signature settings
+        identity_override: Optional string that replaces the IDENTITY_AND_ROLE
+            section. When provided, used instead of the default Numa identity.
+            All other prompt sections remain unchanged.
+        user_profile: Optional user profile dict for AI personalisation
 
     Returns:
         Complete system prompt string
@@ -788,8 +981,24 @@ def build_workspace_system_prompt(
     # Format today's date for the env block
     today_date = datetime.now(tz).strftime("%A, %B %d, %Y")
 
+    # Choose identity section: override or default Numa identity
+    identity_section = (
+        identity_override if identity_override is not None else IDENTITY_AND_ROLE
+    )
+
+    # Compose prompt from modular sections (same order as SYSTEM_PROMPT)
+    composed = (
+        identity_section
+        + WORKSPACE_ENVIRONMENT
+        + STYLE_AND_COMMUNICATION
+        + TASK_EXECUTION
+        + TOOL_USAGE
+        + WORKSPACE_CAPABILITIES
+        + ENVIRONMENT_AND_META
+    )
+
     # Format the combined prompt with environment variables
-    base_prompt = SYSTEM_PROMPT.format(
+    base_prompt = composed.format(
         working_directory=working_dir,
         platform=platform,
         today_date=today_date,
@@ -806,13 +1015,45 @@ def build_workspace_system_prompt(
         user_context = "\n".join(user_context_parts)
         base_prompt = f"{base_prompt}\n\n{user_context}"
 
+    # Append company profile if available (truncated to 3000 chars)
+    if company_profile and company_profile.strip():
+        truncated, was_truncated = _truncate_company_profile(company_profile)
+        truncation_note = (
+            "\n\n[Note: Company profile has been truncated for chat context]"
+            if was_truncated
+            else ""
+        )
+        base_prompt = (
+            f"{base_prompt}\n\n**Company Information:**\n{truncated}{truncation_note}"
+        )
+
+    # Append user profile context if available
+    if user_profile:
+        profile_context = _build_user_profile_context(user_profile)
+        if profile_context:
+            base_prompt = f"{base_prompt}\n\n{profile_context}"
+
     # Append agent context if agent config is provided
     if agent_config:
         agent_context = build_agent_context(agent_config, agent_file_paths)
         base_prompt = f"{base_prompt}\n\n{agent_context}"
 
+    # Inject agent-scoped memories if an agent is active
+    if agent_config and user_profile:
+        memories = user_profile.get("memories", [])
+        agent_memories = [
+            m
+            for m in memories
+            if isinstance(m, dict)
+            and m.get("scope") == f"agent:{agent_config.agent_id}"
+        ]
+        if agent_memories:
+            agent_memory_lines = ["\n## Agent-Specific User Memories"]
+            for mem in agent_memories:
+                agent_memory_lines.append(f"- {mem.get('content', '')}")
+            base_prompt = f"{base_prompt}\n" + "\n".join(agent_memory_lines)
+
     # Append integrations context if integrations are enabled
-    # Email signature is injected here too (only when email integrations are connected)
     if enabled_integrations:
         integrations_context = _build_integrations_context(
             enabled_integrations, email_signature

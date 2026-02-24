@@ -8,12 +8,25 @@
     "provisionQResources": false,
     "preferredKnowledgeBase": "bedrock",
     "allowBedrockQuotaSharing": true,
-    "bedrockAccount": "905418183804",
     "apps": {
       "data-analysis": {},
       "meeting-analyser": {}
     }
   },
+  "arcanum-demo-greg":  {
+  "provisionQResources": false,
+  "numaWorkspaceChat": true,
+  "numaOps": true,
+  "devInstance": true,
+  "allowBedrockQuotaSharing": true,
+  "pipedreamIntegrations": true,
+  "dataConnectorsEnabled": false,
+  "clientAccountId": "905418183804",
+  "allApps": true,
+  "region": "us-east-1",
+  "preferredKnowledgeBase": "bedrock",
+  "agents": false
+},
   "arcanum-demo-sydney": {
     "clientAccountId": "905418183804",
     "createServiceLinkedRole": false,
@@ -32,7 +45,6 @@
     },
     "agents": true,
     "brandingProviderEnabled": true,
-    "bedrockAccount": "552162429805",
     "numaWorkspaceChat": true,
     "numaOps": true,
     "mfa": false
@@ -56,6 +68,6 @@
     "brandingProviderEnabled": true,
     "numaWorkspaceChat": true,
     "numaOps": true,
-    "bedrockAccount": "978450690680"
+    "workspaceChatModelSelection": true
   }
 }

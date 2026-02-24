@@ -370,7 +370,8 @@
     "filters": {
       "search": {
         "label": "סהארכח",
-        "placeholder": "סהארכח בי סכחהדולה נאמה ור אגהנט"
+        "placeholder": "סהארכח בי סכחהדולה נאמה ור אגהנט",
+        "shortPlaceholder": "סהארכח..."
       },
       "agent": {
         "label": "אגהנט",

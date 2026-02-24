@@ -2,7 +2,15 @@ import React from 'react';
 import Form from 'react-bootstrap/Form';
 import Badge from 'react-bootstrap/Badge';
 import { useTranslation } from 'react-i18next';
-import type { FieldDefinition, FieldOverride, StaffProfile } from '../../../types/ops';
+import type {
+  FieldDefinition,
+  FieldOverride,
+  StaffProfile,
+  Customer,
+  Supplier,
+  WorkUnit,
+  Project,
+} from '../../../types/ops';
 
 interface DynamicFieldProps {
   field: FieldDefinition;
@@ -12,6 +20,10 @@ interface DynamicFieldProps {
   compact?: boolean;
   fieldOverride?: FieldOverride;
   staff?: StaffProfile[];
+  customers?: Customer[];
+  suppliers?: Supplier[];
+  workUnits?: WorkUnit[];
+  projects?: Project[];
 }
 
 /**
@@ -46,6 +58,10 @@ export function DynamicField({
   compact = false,
   fieldOverride,
   staff,
+  customers,
+  suppliers,
+  workUnits,
+  projects,
 }: DynamicFieldProps): React.JSX.Element | null {
   const { t } = useTranslation('ops');
 
@@ -79,7 +95,19 @@ export function DynamicField({
   return (
     <Form.Group className="mb-2">
       {label}
-      {renderEditControl(field, value, onChange, isRequired, compactStyle, staff, t)}
+      {renderEditControl(
+        field,
+        value,
+        onChange,
+        isRequired,
+        compactStyle,
+        staff,
+        customers,
+        suppliers,
+        workUnits,
+        projects,
+        t,
+      )}
     </Form.Group>
   );
 }
@@ -150,6 +178,10 @@ function renderEditControl(
   isRequired: boolean,
   style: React.CSSProperties,
   staff: StaffProfile[] | undefined,
+  customers: Customer[] | undefined,
+  suppliers: Supplier[] | undefined,
+  workUnits: WorkUnit[] | undefined,
+  projects: Project[] | undefined,
   t: (key: string) => string,
 ): React.ReactNode {
   switch (field.fieldType) {
@@ -298,6 +330,89 @@ function renderEditControl(
     case 'boolean':
       return (
         <Form.Check type="switch" checked={Boolean(value)} onChange={(e) => onChange(e.target.checked)} style={style} />
+      );
+
+    case 'percentage':
+      return (
+        <Form.Control
+          type="number"
+          value={value !== null && value !== undefined ? String(value) : ''}
+          onChange={(e) => onChange(e.target.value === '' ? null : Math.min(100, Math.max(0, Number(e.target.value))))}
+          required={isRequired}
+          min="0"
+          max="100"
+          style={style}
+        />
+      );
+
+    case 'customer':
+      return (
+        <Form.Select
+          value={String(value ?? '')}
+          onChange={(e) => onChange(e.target.value || null)}
+          required={isRequired}
+          style={style}
+        >
+          <option value="">{t('tickets.selectCustomer')}</option>
+          {customers?.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.companyName}
+            </option>
+          ))}
+        </Form.Select>
+      );
+
+    case 'supplier':
+      return (
+        <Form.Select
+          value={String(value ?? '')}
+          onChange={(e) => onChange(e.target.value || null)}
+          required={isRequired}
+          style={style}
+        >
+          <option value="">{t('tickets.selectSupplier')}</option>
+          {suppliers?.map((s) => (
+            <option key={s.id} value={s.id}>
+              {s.companyName}
+            </option>
+          ))}
+        </Form.Select>
+      );
+
+    case 'workunit':
+      return (
+        <Form.Select
+          value={String(value ?? '')}
+          onChange={(e) => onChange(e.target.value || null)}
+          required={isRequired}
+          style={style}
+        >
+          <option value="">{t('tickets.selectWorkUnit')}</option>
+          {workUnits?.map((wu) => (
+            <option key={wu.id} value={wu.id}>
+              {wu.name}
+            </option>
+          ))}
+        </Form.Select>
+      );
+
+    case 'project':
+      return (
+        <Form.Select
+          value={String(value ?? '')}
+          onChange={(e) => onChange(e.target.value || null)}
+          required={isRequired}
+          style={style}
+        >
+          <option value="">{t('tickets.selectProject')}</option>
+          {projects
+            ?.filter((p) => p.isActive)
+            .map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+              </option>
+            ))}
+        </Form.Select>
       );
 
     default:

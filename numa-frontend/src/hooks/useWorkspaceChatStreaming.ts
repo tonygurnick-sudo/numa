@@ -536,6 +536,14 @@ export function useWorkspaceChatStreaming({
 
                     // If transient tool, remove it entirely; otherwise mark complete
                     if (tool.category === 'transient') {
+                      // Finalize the preceding text segment so that subsequent
+                      // text starts a new segment instead of concatenating directly
+                      if (toolIdx > 0) {
+                        const prevSeg = segments[toolIdx - 1];
+                        if (prevSeg.kind === 'text') {
+                          segments[toolIdx - 1] = { ...prevSeg, finalized: true };
+                        }
+                      }
                       segments = segments.filter((_, idx) => idx !== toolIdx);
                     } else {
                       segments[toolIdx] = { ...tool, isComplete: true, isError };

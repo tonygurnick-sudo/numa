@@ -49,6 +49,10 @@ export interface WorkspaceChatToolsConstructProps {
   fileRedirectSecret?: string;
   /** File redirect base URL (e.g. https://domain/api/workspace-chat-agent) */
   fileRedirectBaseUrl?: string;
+  /** Chat settings table name (for user profile memory management) */
+  chatSettingsTableName?: string;
+  /** Chat settings table ARN (for IAM permissions) */
+  chatSettingsTableArn?: string;
 }
 
 /**
@@ -220,6 +224,16 @@ export class WorkspaceChatToolsConstruct extends Construct {
       });
     }
 
+    // DynamoDB permission for chat settings table (user profile memory management)
+    if (props.chatSettingsTableArn) {
+      policyStatements.push({
+        sid: 'DynamoDBChatSettingsAccess',
+        effect: 'Allow',
+        actions: ['dynamodb:GetItem', 'dynamodb:UpdateItem'],
+        resources: [props.chatSettingsTableArn],
+      });
+    }
+
     // Lambda invoke permission for Pipedream relay (integration actions)
     if (props.pipedreamRelayLambdaArn) {
       policyStatements.push({
@@ -269,6 +283,10 @@ export class WorkspaceChatToolsConstruct extends Construct {
         WORKSPACE_AGENTS_TABLE: `numa-${props.clientName}-agents`,
         USER_AGENTS_TABLE: `numa-${props.clientName}-user-agents`,
         AGENTS_SETTINGS_TABLE_NAME: `numa-${props.clientName}-agents-settings`,
+        // Chat settings table (for user profile memory management)
+        ...(props.chatSettingsTableName && {
+          CHAT_SETTINGS_TABLE_NAME: props.chatSettingsTableName,
+        }),
         // Pipedream integrations (optional)
         INTEGRATIONS_APPROVAL_TABLE_NAME: props.integrationsApprovalTableName ?? '',
         PIPEDREAM_RELAY_LAMBDA_ARN: props.pipedreamRelayLambdaArn ?? '',

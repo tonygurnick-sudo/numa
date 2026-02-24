@@ -236,12 +236,26 @@ def get_skill_hints(user_message: str, context: AssistantContext) -> list[str]:
     """
     skills: set[str] = set()
 
-    # 1. Regex skill hints disabled — producing too many false positives.
+    # 1. Most regex skill hints disabled — producing too many false positives.
     #    The Nova 2 Lite model handles skill recommendations via the skills table instead.
-    # message_lower = user_message.lower()
-    # for pattern, skill in MESSAGE_HINTS:
-    #     if re.search(pattern, message_lower, re.IGNORECASE):
-    #         skills.add(skill)
+    #    EXCEPTION: Integration app-name patterns are re-enabled because they are precise
+    #    (exact app names like "slack", "gmail", "jira") and Nova 2 Lite often confuses
+    #    integration requests with the "agents" skill.
+    INTEGRATION_PATTERNS = [
+        (r"\b(integrations?|connected\s+apps?|pipedream)\b", "integrations"),
+        (
+            r"\b(run[\s_]+action|proxy[\s_]+request|configure[\s_]+props)\b",
+            "integrations",
+        ),
+        (
+            r"\b(google[\s-]*drive|slack|gmail|hubspot|salesforce|jira|notion|asana|trello|github|outlook|teams|xero|apollo|pipedrive|linkedin|google[\s-]*sheets|google[\s-]*calendar|google[\s-]*docs|google[\s-]*forms|google[\s-]*analytics|sharepoint|onenote|whatsapp|mailchimp|freshdesk|rentman|podio|telegram|zoom|smartsheet|box|microsoft[\s-]*excel|microsoft[\s-]*outlook|microsoft[\s-]*teams)\b",
+            "integrations",
+        ),
+    ]
+    message_lower = user_message.lower()
+    for pattern, skill in INTEGRATION_PATTERNS:
+        if re.search(pattern, message_lower, re.IGNORECASE):
+            skills.add(skill)
 
     # 2. Check attached_files for file extensions (files attached to THIS request)
     if context.attached_files:
@@ -361,6 +375,11 @@ Here are a list of current integrations in Numa a user may use:
 
 **Default to activating** if the request seems related - better to load a skill and not need it than miss a recommendation.
 **Do NOT recommend skills already activated in this conversation** — they are listed in the context block as ACTIVATED_SKILLS.
+
+**CRITICAL DISAMBIGUATION — agents vs integrations:**
+- "agents" = Numa's saved AI personas (custom chat configurations). ONLY use when the user explicitly talks about creating/listing/managing Numa agents.
+- "integrations" = External SaaS apps (Slack, Gmail, Jira, Google Drive, etc.). When the user mentions ANY external app name or wants to interact with an external service, ALWAYS recommend "integrations", NEVER "agents".
+- Example: "find my Slack channels" → integrations (Slack is an external app). "create a new agent" → agents (managing Numa AI personas).
 
 Format: "Activate [skill-name] skill."
 

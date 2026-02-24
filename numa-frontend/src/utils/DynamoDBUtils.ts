@@ -326,10 +326,11 @@ class NumaChatDynamoUtils {
         const command = new QueryCommand({
           TableName: this.tableName,
           KeyConditionExpression: 'user_id = :u',
-          FilterExpression: 'message_type = :mtype',
+          FilterExpression: 'message_type = :mtype AND NOT begins_with(conversation_id, :schedPrefix)',
           ExpressionAttributeValues: marshall({
             ':u': userId,
             ':mtype': 'meta',
+            ':schedPrefix': 'schedule-',
           }),
           ProjectionExpression:
             'sk, conversation_id, user_id, conversationName, latestTimestamp, content, agentId, agentTitle, agentIcon, agentType, agentVisibility, agentVersion, isAgentConversation, isWorkspaceConversation',

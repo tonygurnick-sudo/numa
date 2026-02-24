@@ -28,6 +28,7 @@ i18n
       'shared',
       'files',
       'ops',
+      'support',
     ],
     interpolation: { escapeValue: false },
     detection: {

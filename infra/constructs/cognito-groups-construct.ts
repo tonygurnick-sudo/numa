@@ -88,6 +88,12 @@ const createFeatureSets = (props: {
         actions: ['s3:GetObject'],
         resources: [`${props.outputsBucket.bucket.arn}/numa-chat/agent-icons/public/*`],
       },
+      // Read ops ticket attachments (for FilePreviewPanel in ticket detail)
+      {
+        effect: 'Allow',
+        actions: ['s3:GetObject'],
+        resources: [`${props.outputsBucket.bucket.arn}/ops/*`],
+      },
       // Chat history permissions with row-level security
       {
         effect: 'Allow',
@@ -178,6 +184,12 @@ const createFeatureSets = (props: {
         effect: 'Allow',
         actions: ['s3:GetObject'],
         resources: [`${props.outputsBucket.bucket.arn}/numa-chat/agent-icons/public/*`],
+      },
+      // Read ops ticket attachments (for FilePreviewPanel in ticket detail)
+      {
+        effect: 'Allow',
+        actions: ['s3:GetObject'],
+        resources: [`${props.outputsBucket.bucket.arn}/ops/*`],
       },
     ],
 

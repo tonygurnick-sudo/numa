@@ -15,10 +15,10 @@ export const NotificationLabel: React.FC = () => {
   }, [refreshUnreadCount, numaGet]);
 
   return (
-    <span className="d-flex align-items-center">
+    <span className="d-inline-flex align-items-center notification-nav-label">
       {t('notifications.title')}
       {unreadCount > 0 && (
-        <Badge bg="danger" pill className="ms-2" style={{ fontSize: '0.7rem' }}>
+        <Badge bg="danger" pill className="ms-2 notification-nav-badge">
           {unreadCount > 99 ? '99+' : unreadCount}
         </Badge>
       )}

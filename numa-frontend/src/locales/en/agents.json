@@ -163,6 +163,10 @@
       "agentCreation": {
         "title": "Agent creation",
         "description": "Allow this agent to create new agents."
+      },
+      "updateMemory": {
+        "title": "Update memory",
+        "description": "Allow this agent to save and update memories."
       }
     },
     "integrations": {
@@ -378,7 +382,8 @@
     "filters": {
       "search": {
         "label": "Search",
-        "placeholder": "Search by schedule name or agent"
+        "placeholder": "Search by schedule name or agent",
+        "shortPlaceholder": "Search..."
       },
       "agent": {
         "label": "Agent",

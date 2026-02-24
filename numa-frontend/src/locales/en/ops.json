@@ -89,7 +89,9 @@
     "tags": "Tags",
     "status": "Status",
     "type": "Type",
+    "reporter": "Reporter",
     "createdBy": "Created by",
+    "sprint": "Sprint",
     "created": "Created",
     "updated": "Updated",
     "started": "Started",
@@ -99,6 +101,12 @@
     "creating": "Creating...",
     "tagsHelp": "Comma-separated",
     "selectType": "Select ticket type",
+    "selectTypeHint": "Choose the type of work to get started",
+    "attachments": "Attachments",
+    "attachmentHint": "Drop files here — or attach from the ticket detail after creating",
+    "activity": "Activity",
+    "addComment": "Add a comment",
+    "commentPlaceholder": "Add an initial comment or note…",
     "selectCustomer": "Select customer...",
     "selectSupplier": "Select supplier...",
     "selectProject": "Select project...",
@@ -106,7 +114,12 @@
   },
   "crm": {
     "newCustomer": "New Customer",
+    "searchCustomers": "Search customers...",
+    "creatingCustomer": "Creating...",
+    "newCustomerDefaultName": "New Customer",
     "healthOverview": "Health Overview",
+    "lastContact": "Last Contact",
+    "noContactAdded": "No contact added",
     "allCustomers": "All Customers",
     "withActiveTickets": "With Active Tickets",
     "atRisk": "At Risk",
@@ -119,6 +132,15 @@
     "activities": "Activities",
     "documents": "Documents",
     "linkedWork": "Linked Work",
+    "allStatuses": "All statuses",
+    "filterStatus": "Filter status",
+    "sortBy": "Sort by",
+    "sortUpdated": "Updated",
+    "sortCreated": "Created",
+    "sortPriority": "Priority",
+    "sortStatus": "Status",
+    "noLinkedWorkMatches": "No linked tickets match the current filter.",
+    "linkedWorkCountOnly": "{{count}} linked tickets",
     "accountNotes": "Account Notes",
     "companyDetails": "Company Details",
     "contract": "Contract",
@@ -134,11 +156,22 @@
     "contractTerm": "Contract Term",
     "contractStart": "Contract Start",
     "renewalDate": "Renewal Date",
+    "renewalStatus": "Renewal Status",
+    "renewalOverdue": "{{count}} days overdue",
+    "renewalInDays": "In {{count}} days",
     "products": "Products",
     "productNotes": "Product Notes",
     "lifecycleStage": "Lifecycle Stage",
     "flags": "Flags",
-    "noContacts": "No contacts added."
+    "noContacts": "No contacts added.",
+    "noLastContact": "No contact yet",
+    "lastContactToday": "Today",
+    "lastContactYesterday": "Yesterday",
+    "lastContactDaysAgo": "{{count}} days ago",
+    "lastContactWeeksAgo": "{{count}} weeks ago",
+    "lastContactMonthsAgo": "{{count}} months ago",
+    "lastContactYearsAgo": "{{count}} years ago",
+    "lastContactFooter": "Last Contact"
   },
   "contacts": {
     "role": "Role",
@@ -265,7 +298,17 @@
   "backlogView": {
     "noTickets": "No tickets in this group",
     "empty": "Backlog is empty",
-    "unassigned": "Unassigned"
+    "emptyHint": "Create a ticket or drag items here to get started",
+    "unassigned": "Unassigned",
+    "listView": "List",
+    "kanbanView": "Kanban",
+    "searchPlaceholder": "Search backlog...",
+    "workItems": "({{count}} work items)",
+    "type": "Type",
+    "priority": "Priority",
+    "addTicket": "Add ticket",
+    "allTypes": "All Types",
+    "allPriorities": "All Priorities"
   },
   "teams": {
     "settings": "Team Settings",
@@ -391,6 +434,8 @@
     "thisMonth": "This Month",
     "thisQuarter": "This Quarter",
     "empty": "(Empty)",
+    "sortAZ": "Sort A \u2192 Z",
+    "sortZA": "Sort Z \u2192 A",
     "apply": "Apply",
     "savedViews": "Saved Views",
     "saveView": "Save View",
@@ -398,6 +443,14 @@
     "modified": "(modified)",
     "clearView": "Clear View",
     "resetDefaults": "Reset to Defaults"
+  },
+  "allTicketsView": {
+    "allStatus": "All Status",
+    "allSprints": "All Sprints",
+    "customerFilters": "Customer Filters",
+    "saveViewPrompt": "View name...",
+    "deleteView": "Delete View",
+    "noSavedViews": "Save a view to quickly restore your filters and columns."
   },
   "columns": {
     "manage": "Columns",
@@ -445,7 +498,10 @@
     "nextActionDate": "Next Action Date",
     "nextActionType": "Next Action Type",
     "staff": "Staff",
-    "deleteConfirm": "Are you sure you want to delete this activity?"
+    "deleteConfirm": "Are you sure you want to delete this activity?",
+    "systemActor": "[System]",
+    "showAllCount": "Show all {{count}} activities",
+    "showRecentOnly": "Show recent 10"
   },
   "documents": {
     "upload": "Upload Document",
@@ -458,6 +514,13 @@
     "selectFile": "Select File",
     "uploading": "Uploading...",
     "uploadedAt": "Uploaded",
+    "addedAgo": "Added {{time}}",
+    "today": "today",
+    "yesterday": "yesterday",
+    "daysAgo": "{{count}} days ago",
+    "weeksAgo": "{{count}} weeks ago",
+    "monthsAgo": "{{count}} months ago",
+    "yearsAgo": "{{count}} years ago",
     "deleteConfirm": "Are you sure you want to delete this document?",
     "contract": "Contract",
     "proposal": "Proposal",
@@ -495,10 +558,20 @@
     "new": "New",
     "yes": "Yes",
     "no": "No",
-    "none": "None"
+    "none": "None",
+    "boardView": "Board view",
+    "listView": "List view"
+  },
+  "editor": {
+    "styleLabel": "Style",
+    "normal": "Normal",
+    "heading1": "Heading 1",
+    "heading2": "Heading 2",
+    "heading3": "Heading 3"
   },
   "fields": {
     "unassigned": "Unassigned",
+    "unknown": "Unknown",
     "selectUser": "Select user...",
     "dynamicFields": "Additional Fields"
   },
@@ -533,7 +606,7 @@
     "createdSuccessfully": "Ticket created successfully"
   },
   "comments": {
-    "addComment": "Add Comment",
+    "addComment": "Comment",
     "editComment": "Edit Comment",
     "deleteConfirm": "Are you sure you want to delete this comment?",
     "placeholder": "Write a comment...",

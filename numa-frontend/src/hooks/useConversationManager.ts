@@ -230,11 +230,14 @@ export const useConversationManager = (options: UseConversationManagerOptions = 
         if (savedConvoId && savedConvo) {
           setConversationId(savedConvoId);
           // Update sessionStorage with workspace status from metadata
-          sessionStorage.setItem(workspaceStorageKey, savedConvo.isWorkspaceConversation ? 'true' : 'false');
+          sessionStorage.setItem(workspaceStorageKey, savedConvo.isWorkspaceConversation === false ? 'false' : 'true');
         } else {
           setConversationId(metaItems[0].conversation_id);
           // Update sessionStorage with workspace status from first conversation
-          sessionStorage.setItem(workspaceStorageKey, metaItems[0].isWorkspaceConversation ? 'true' : 'false');
+          sessionStorage.setItem(
+            workspaceStorageKey,
+            metaItems[0].isWorkspaceConversation === false ? 'false' : 'true',
+          );
         }
       } catch (err) {
         if (!cancelled) {

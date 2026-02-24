@@ -10,10 +10,10 @@
 // ============================================================
 
 /** Available workspace chat model IDs (bare, without regional prefix).
- * The backend adds the correct regional prefix (us., apac., global.) based on deployment region. */
+ * The backend adds the correct regional prefix (us., au.) based on deployment region. */
 export type WorkspaceChatModelId =
-  | 'anthropic.claude-sonnet-4-5-20250929-v1:0'
-  | 'anthropic.claude-opus-4-5-20251101-v1:0'
+  | 'anthropic.claude-sonnet-4-6'
+  | 'anthropic.claude-opus-4-6-v1'
   | 'anthropic.claude-haiku-4-5-20251001-v1:0';
 
 /** Model option for display in the UI */
@@ -24,18 +24,18 @@ export interface WorkspaceChatModelOption {
 }
 
 /** Default model for workspace chat */
-export const DEFAULT_WORKSPACE_MODEL: WorkspaceChatModelId = 'anthropic.claude-sonnet-4-5-20250929-v1:0';
+export const DEFAULT_WORKSPACE_MODEL: WorkspaceChatModelId = 'anthropic.claude-sonnet-4-6';
 
 /** Available model options for the selector */
 export const WORKSPACE_MODEL_OPTIONS: WorkspaceChatModelOption[] = [
   {
-    id: 'anthropic.claude-sonnet-4-5-20250929-v1:0',
-    label: 'Claude Sonnet 4.5',
+    id: 'anthropic.claude-sonnet-4-6',
+    label: 'Claude Sonnet 4.6',
     description: 'Balanced',
   },
   {
-    id: 'anthropic.claude-opus-4-5-20251101-v1:0',
-    label: 'Claude Opus 4.5',
+    id: 'anthropic.claude-opus-4-6-v1',
+    label: 'Claude Opus 4.6',
     description: 'Complex',
   },
   {
@@ -423,6 +423,12 @@ export interface WorkspaceChatFolderAttachmentSegment {
 // ============================================================
 
 /** Request body for POST /api/workspace-chat-agent/chat */
+/** Agent type identifier (e.g. "numa-chat", "document-summariser", "research-agent") */
+export type WorkspaceAgentTypeId = string;
+
+/** Response mode for non-streaming agent types */
+export type WorkspaceResponseMode = 'stream' | 'sync' | 'fire-and-forget';
+
 export interface WorkspaceChatRequest {
   prompt: string;
   conversationId?: string;
@@ -447,6 +453,41 @@ export interface WorkspaceChatRequest {
   migrateFromV1?: boolean;
   // Agent support - ID of the agent to use for this chat session
   agentId?: string;
+  // Agent type system — selects a registered agent type config (default: "numa-chat")
+  type?: WorkspaceAgentTypeId;
+  // Response mode override — controls how the response is delivered.
+  // When omitted, defaults to the agent type's configured mode.
+  responseMode?: WorkspaceResponseMode;
+}
+
+/** Sync response from a non-streaming agent invocation */
+export interface WorkspaceSyncResponse {
+  status: 'completed' | 'error';
+  result: {
+    text: string;
+    artifacts: Array<{ path: string; name: string; size: number }>;
+    usage: {
+      num_turns?: number;
+      total_cost_usd?: number;
+      duration_ms?: number;
+    };
+  };
+  conversationId: string;
+}
+
+/** Fire-and-forget response (returned immediately, poll for result) */
+export interface WorkspaceFireAndForgetResponse {
+  status: 'started';
+  run_id: string;
+  conversationId: string;
+  poll_endpoint: string;
+}
+
+/** Agent type metadata from GET /types */
+export interface WorkspaceAgentTypeInfo {
+  type_id: string;
+  display_name: string;
+  response_mode: WorkspaceResponseMode;
 }
 
 /** Response from GET /api/workspace-chat-agent/conversations */

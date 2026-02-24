@@ -39,6 +39,12 @@
   },
   "nav": {
     "items": {
+      "home": "Home",
+      "create": "Create",
+      "analyse": "Analyse",
+      "research": "Research",
+      "ops": "Ops",
+      "support": "Support",
       "apps": "Apps",
       "favs": "Favs",
       "jobHistory": "Job History",
@@ -47,20 +53,25 @@
       "agents": "Agents",
       "scheduling": "Scheduling",
       "company": "Company",
-      "companyKnowledgeBase": "Company Knowledge Base",
-      "userKnowledgeBase": "User Knowledge Base",
+      "companyKnowledgeBase": "Company Files",
+      "userKnowledgeBase": "User Files",
       "profile": "Profile",
+      "settings": "Settings",
       "adminSettings": "Admin Settings",
       "integrations": "Integrations",
+      "dataConnectors": "Data Connectors",
       "files": "Files",
-      "ops": "Numa Ops"
+      "marketplace": "Marketplace"
     },
     "sections": {
+      "build": "Build",
+      "library": "Library",
       "workflows": "Workflows",
       "timeline": "Timeline",
       "knowledgeBases": "Knowledge Bases"
     },
     "expanded": {
+      "apps": "Apps",
       "files": "Files",
       "knowledgeBase": "Knowledge Base",
       "knowledgeBaseManagement": "Knowledge Base Management",
@@ -70,6 +81,18 @@
       "companyInformation": "Company Information"
     },
     "logout": "Log out",
+    "user": "User",
+    "interfaceLabel": "Interface",
+    "interfaceModes": {
+      "simple": "Simple",
+      "advanced": "Advanced"
+    },
+    "advancedModeLabel": "Work mode",
+    "advancedModes": {
+      "work": "Work",
+      "build": "Build"
+    },
+    "searchPlaceholder": "Search...",
     "expandSidebar": "Expand sidebar",
     "collapseSidebar": "Collapse sidebar"
   },
@@ -616,6 +639,7 @@
   },
   "notifications": {
     "title": "Notifications",
+    "subtitle": "Stay updated on schedule runs and task activity.",
     "unreadCountTitle_one": "{{count}} unread notification",
     "unreadCountTitle_other": "{{count}} unread notifications",
     "unreadCount_one": "{{count}} unread",
@@ -631,6 +655,7 @@
       "new": "New"
     },
     "actions": {
+      "refresh": "Refresh",
       "markAllRead": "Mark all as read",
       "tryAgain": "Try again",
       "viewSchedule": "View schedule",

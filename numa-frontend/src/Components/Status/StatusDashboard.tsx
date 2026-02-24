@@ -6,6 +6,7 @@ import { useNumaApp } from '../../Providers/NumaAppContext';
 import { NicetyContext } from '../../Providers/NicetyContext';
 import { useTranslation } from 'react-i18next';
 import i18n from '../../i18n';
+import { RefreshCw } from 'lucide-react';
 
 const JOB_DISPLAY_LIMIT = 5;
 
@@ -21,20 +22,20 @@ export const StatusDashboard = () => {
             <Card.Title className="mb-0">{t('statusDashboard.title')}</Card.Title>
             <div className="d-flex align-items-center">
               <Button
-                variant="primary"
-                size="sm"
+                variant="secondary"
                 onClick={refreshJobs}
                 disabled={loading && !hasLoaded}
-                className="d-flex align-items-center me-2"
+                className="standard-refresh-btn me-2"
               >
                 {loading && !hasLoaded ? (
-                  <div className="d-flex align-items-center">
+                  <>
                     <Spinner animation="border" size="sm" />
-                    <span className="ms-2">{t('statusDashboard.loading')}</span>
-                  </div>
+                    <span className="standard-refresh-btn__label">{t('statusDashboard.loading')}</span>
+                  </>
                 ) : (
                   <>
-                    <span className="ms-1">{t('statusDashboard.refresh')}</span>
+                    <RefreshCw size={16} className="standard-refresh-btn__icon" aria-hidden="true" />
+                    <span className="standard-refresh-btn__label">{t('statusDashboard.refresh')}</span>
                   </>
                 )}
               </Button>

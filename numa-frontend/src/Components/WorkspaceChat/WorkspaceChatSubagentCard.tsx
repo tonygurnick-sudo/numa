@@ -8,6 +8,7 @@
  */
 import { useState } from 'react';
 import { Spinner } from 'react-bootstrap';
+import { Bot } from 'lucide-react';
 import type {
   WorkspaceChatSubagentSegment,
   SDKEvent,
@@ -158,6 +159,8 @@ export function WorkspaceChatSubagentCard({ segment }: Props) {
                         <Spinner animation="border" size="sm" className="activity-spinner" />
                       ) : summary.iconImage ? (
                         <img src={summary.iconImage} alt="" className="inline-tool-icon-img" loading="lazy" />
+                      ) : summary.icon === 'bi-robot' ? (
+                        <Bot size={14} />
                       ) : (
                         <i className={`bi ${summary.icon}`} />
                       )}

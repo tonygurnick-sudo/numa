@@ -160,3 +160,6 @@ clientConfigProd.json
 !.claude/skills/
 
 infra/assets/artifacts/numa-workspace-agent/image.tar
+
+# Personal scripts
+claude-bedrock.sh

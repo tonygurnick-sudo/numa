@@ -28,6 +28,7 @@ describe('ConfigSetup', () => {
     PROVISION_Q_RESOURCES: true,
     PREFERRED_KNOWLEDGE_BASE: 'kb-1',
     BEDROCK_KNOWLEDGE_BASE_ID: 'bedrock-kb-1',
+    WORKSPACE_CHAT_MODEL_SELECTION: false,
     GROUPS: {
       admin: { roleArn: 'arn:aws:iam::123:role/admin', features: ['chat'] },
       standard: { roleArn: 'arn:aws:iam::123:role/standard', features: ['chat'] },

@@ -1,22 +1,30 @@
-import React, { useState, useCallback } from 'react';
-import Dropdown from 'react-bootstrap/Dropdown';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import Form from 'react-bootstrap/Form';
 import Button from 'react-bootstrap/Button';
 import { useTranslation } from 'react-i18next';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
-type FilterValue = { operator: string; value: unknown };
+export type FilterValue = { operator: string; value: unknown };
+
+type SortDirection = 'asc' | 'desc';
 
 interface FilterDropdownProps {
   column: string;
+  columnLabel: string;
   columnType: 'text' | 'enum' | 'date' | 'number';
   options?: { value: string; label: string }[];
   currentFilter?: FilterValue;
   onApply: (filter: FilterValue) => void;
   onClear: () => void;
-  children: React.ReactNode;
+  sortable: boolean;
+  currentSortColumn: string;
+  currentSortDirection: SortDirection;
+  onSort: (column: string, direction: SortDirection) => void;
 }
+
+// ─── Sentinel for "empty / null" enum filtering ─────────────────────────────
+export const EMPTY_SENTINEL = '__EMPTY__';
 
 // ─── Text Filter ────────────────────────────────────────────────────────────
 
@@ -68,10 +76,12 @@ function EnumFilter({
   options,
   currentFilter,
   onApply,
+  t,
 }: {
   options: { value: string; label: string }[];
   currentFilter?: FilterValue;
   onApply: (f: FilterValue) => void;
+  t: (key: string) => string;
 }) {
   const currentSelected = Array.isArray(currentFilter?.value) ? (currentFilter.value as string[]) : [];
 
@@ -87,6 +97,15 @@ function EnumFilter({
 
   return (
     <div className="p-2" style={{ minWidth: 200, maxHeight: 280, overflowY: 'auto' }}>
+      {/* (EMPTY) option */}
+      <Form.Check
+        type="checkbox"
+        id={`filter-enum-${EMPTY_SENTINEL}`}
+        label={<span className="fst-italic text-muted">{t('filters.empty')}</span>}
+        checked={currentSelected.includes(EMPTY_SENTINEL)}
+        onChange={() => handleToggle(EMPTY_SENTINEL)}
+        className="mb-1"
+      />
       {options.map((opt) => (
         <Form.Check
           key={opt.value}
@@ -223,36 +242,134 @@ function NumberFilter({
   );
 }
 
-// ─── Main Component ─────────────────────────────────────────────────────────
+// ─── Main Component — Unified Column Header Dropdown ────────────────────────
 
 export function FilterDropdown({
+  column,
+  columnLabel,
   columnType,
   options = [],
   currentFilter,
   onApply,
   onClear,
-  children,
+  sortable,
+  currentSortColumn,
+  currentSortDirection,
+  onSort,
 }: FilterDropdownProps): React.JSX.Element {
   const { t } = useTranslation('ops');
+  const [isOpen, setIsOpen] = useState(false);
+  const wrapperRef = useRef<HTMLDivElement>(null);
+
+  const isSorted = currentSortColumn === column;
+  const hasFilter = !!currentFilter;
+
+  // Close on outside click
+  useEffect(() => {
+    if (!isOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (wrapperRef.current && !wrapperRef.current.contains(e.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [isOpen]);
+
+  const handleSort = useCallback(
+    (dir: SortDirection) => {
+      onSort(column, dir);
+      setIsOpen(false);
+    },
+    [column, onSort],
+  );
+
+  const handleClear = useCallback(() => {
+    onClear();
+  }, [onClear]);
 
   return (
-    <Dropdown>
-      <Dropdown.Toggle as="span" bsPrefix="filter-toggle" style={{ cursor: 'pointer' }}>
-        {children}
-      </Dropdown.Toggle>
+    <div ref={wrapperRef} className="position-relative d-inline-block">
+      {/* ── Column Header Toggle ──────────────────────────────────────── */}
+      <div
+        className="d-flex align-items-center gap-1 user-select-none"
+        role="button"
+        tabIndex={0}
+        onClick={() => setIsOpen((prev) => !prev)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            setIsOpen((prev) => !prev);
+          }
+        }}
+        style={{ cursor: 'pointer', whiteSpace: 'nowrap' }}
+      >
+        <span>{columnLabel}</span>
+        {isSorted && (
+          <i
+            className={`bi bi-chevron-${currentSortDirection === 'asc' ? 'up' : 'down'}`}
+            style={{ fontSize: '0.7rem' }}
+          />
+        )}
+        {hasFilter && <i className="bi bi-funnel-fill text-primary" style={{ fontSize: '0.65rem' }} />}
+        <i className="bi bi-chevron-down text-muted" style={{ fontSize: '0.6rem' }} />
+      </div>
 
-      <Dropdown.Menu className="shadow-sm border" onClick={(e: React.MouseEvent) => e.stopPropagation()}>
-        {columnType === 'text' && <TextFilter currentFilter={currentFilter} onApply={onApply} t={t} />}
-        {columnType === 'enum' && <EnumFilter options={options} currentFilter={currentFilter} onApply={onApply} />}
-        {columnType === 'date' && <DateFilter currentFilter={currentFilter} onApply={onApply} t={t} />}
-        {columnType === 'number' && <NumberFilter currentFilter={currentFilter} onApply={onApply} t={t} />}
-        <Dropdown.Divider />
-        <div className="px-2 pb-1">
-          <Button size="sm" variant="outline-danger" className="w-100" onClick={onClear}>
-            {t('filters.clearAll')}
-          </Button>
+      {/* ── Dropdown Menu ─────────────────────────────────────────────── */}
+      {isOpen && (
+        <div
+          className="position-absolute bg-white border rounded shadow-sm"
+          style={{ top: '100%', left: 0, zIndex: 1050, minWidth: 220, marginTop: 4 }}
+          onClick={(e: React.MouseEvent) => e.stopPropagation()}
+        >
+          {/* Sort options */}
+          {sortable && (
+            <>
+              <div
+                className={`d-flex align-items-center gap-2 px-3 py-2 ${isSorted && currentSortDirection === 'asc' ? 'bg-light fw-semibold' : ''}`}
+                role="button"
+                onClick={() => handleSort('asc')}
+                style={{ cursor: 'pointer' }}
+              >
+                <i className="bi bi-sort-alpha-down" />
+                <span className="small">{t('filters.sortAZ')}</span>
+                {isSorted && currentSortDirection === 'asc' && <i className="bi bi-check ms-auto" />}
+              </div>
+              <div
+                className={`d-flex align-items-center gap-2 px-3 py-2 ${isSorted && currentSortDirection === 'desc' ? 'bg-light fw-semibold' : ''}`}
+                role="button"
+                onClick={() => handleSort('desc')}
+                style={{ cursor: 'pointer' }}
+              >
+                <i className="bi bi-sort-alpha-up" />
+                <span className="small">{t('filters.sortZA')}</span>
+                {isSorted && currentSortDirection === 'desc' && <i className="bi bi-check ms-auto" />}
+              </div>
+              <hr className="my-1" />
+            </>
+          )}
+
+          {/* Filter content */}
+          {columnType === 'text' && <TextFilter currentFilter={currentFilter} onApply={onApply} t={t} />}
+          {columnType === 'enum' && (
+            <EnumFilter options={options} currentFilter={currentFilter} onApply={onApply} t={t} />
+          )}
+          {columnType === 'date' && <DateFilter currentFilter={currentFilter} onApply={onApply} t={t} />}
+          {columnType === 'number' && <NumberFilter currentFilter={currentFilter} onApply={onApply} t={t} />}
+
+          {/* Clear filter button */}
+          {hasFilter && (
+            <>
+              <hr className="my-1" />
+              <div className="px-2 pb-2">
+                <Button size="sm" variant="outline-danger" className="w-100" onClick={handleClear}>
+                  {t('filters.clearAll')}
+                </Button>
+              </div>
+            </>
+          )}
         </div>
-      </Dropdown.Menu>
-    </Dropdown>
+      )}
+    </div>
   );
 }

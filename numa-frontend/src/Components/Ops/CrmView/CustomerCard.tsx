@@ -1,9 +1,8 @@
-import React from 'react';
-import { Card, Badge } from 'react-bootstrap';
+import React, { useMemo } from 'react';
+import { Card } from 'react-bootstrap';
 import { useDraggable } from '@dnd-kit/core';
 import { useTranslation } from 'react-i18next';
 import type { Customer, CrmConfig, CrmLifecycleStage } from '../../../types/ops';
-import { getColorForPosition, getContrastTextColor } from '../Shared/colorUtils';
 
 // ─── Props ──────────────────────────────────────────────────────────────────
 
@@ -26,6 +25,29 @@ function formatCurrency(value: number | null | undefined): string {
     minimumFractionDigits: 0,
     maximumFractionDigits: 0,
   }).format(value);
+}
+
+/**
+ * Formats an ISO date string into a human-friendly relative label.
+ */
+function formatLastContactLabel(
+  dateStr: string | null | undefined,
+  t: (key: string, options?: Record<string, unknown>) => string,
+): string {
+  if (!dateStr) return t('crm.noLastContact');
+
+  const timestamp = new Date(dateStr).getTime();
+  if (Number.isNaN(timestamp)) return t('crm.noLastContact');
+
+  const diffMs = Date.now() - timestamp;
+  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+
+  if (diffDays <= 0) return t('crm.lastContactToday');
+  if (diffDays === 1) return t('crm.lastContactYesterday');
+  if (diffDays < 7) return t('crm.lastContactDaysAgo', { count: diffDays });
+  if (diffDays < 30) return t('crm.lastContactWeeksAgo', { count: Math.floor(diffDays / 7) });
+  if (diffDays < 365) return t('crm.lastContactMonthsAgo', { count: Math.floor(diffDays / 30) });
+  return t('crm.lastContactYearsAgo', { count: Math.floor(diffDays / 365) });
 }
 
 // ─── Component ──────────────────────────────────────────────────────────────
@@ -55,37 +77,47 @@ export function CustomerCard({ customer, crmConfig, onClick }: CustomerCardProps
 
   // Resolve the lifecycle stage for the bottom border color.
   const stage: CrmLifecycleStage | undefined = crmConfig.lifecycleStages.find((s) => s.id === customer.lifecycleStage);
-  const stageColor = stage ? getColorForPosition(stage.colorPosition) : '#6c757d';
+  const lastContactLabel = useMemo(
+    () => formatLastContactLabel(customer.lastContactDate, t),
+    [customer.lastContactDate, t],
+  );
 
-  // Find the primary contact (first one flagged as primary).
-  const primaryContact = customer.contacts.find((c) => c.isPrimary) ?? null;
+  // Evaluate flags to display the orange dot
+  const hasUpdatesOrRisk = customer.flags && customer.flags.length > 0;
 
-  // Resolve flags from config.
-  const resolvedFlags = customer.flags
-    .map((flagId) => crmConfig.customerFlags.find((f) => f.id === flagId))
-    .filter((f): f is NonNullable<typeof f> => f != null);
+  // Let's create a progress percentage for the bottom bar based on stage.
+  // We'll mock it based on position (e.g. 1 out of 5 = 20%).
+  const stagePosition = stage?.colorPosition ?? 1;
+  const totalStages = Math.max(5, crmConfig.lifecycleStages.length);
+  const progressPercent = Math.min(100, Math.max(10, (stagePosition / totalStages) * 100));
 
   return (
-    <div ref={setNodeRef} style={dragStyle} {...attributes} {...listeners}>
+    <div ref={setNodeRef} style={dragStyle} className="mb-3">
       <Card
-        className="mb-2 border"
+        {...attributes}
+        {...listeners}
         style={{
-          width: 220,
+          width: 280,
+          border: isDragging ? '2px solid #fbbf24' : '2px solid transparent',
+          borderRadius: 12,
+          backgroundColor: '#ffffff',
           cursor: isDragging ? 'grabbing' : 'grab',
-          borderBottom: `3px solid ${stageColor}`,
-          transition: isDragging ? 'none' : 'box-shadow 0.15s ease',
-          opacity: isDragging ? 0.5 : 1,
+          transition: isDragging ? 'none' : 'all 0.15s ease',
+          opacity: isDragging ? 0.9 : 1,
+          boxShadow: isDragging ? '0 8px 24px rgba(251, 191, 36, 0.25)' : '0 2px 8px rgba(15, 23, 42, 0.04)',
+          outline: '1px solid #e2e8f0',
+          position: 'relative',
         }}
-        onClick={() => {
-          if (!isDragging) onClick(customer);
-        }}
+        onClick={() => onClick(customer)}
         onMouseEnter={(e) => {
           if (!isDragging) {
-            (e.currentTarget as HTMLElement).style.boxShadow = '0 2px 8px rgba(0,0,0,0.15)';
+            (e.currentTarget as HTMLElement).style.outline = '1px solid #fbbf24';
+            (e.currentTarget as HTMLElement).style.boxShadow = '0 0 0 2px #fef3c7, 0 4px 12px rgba(251, 191, 36, 0.15)';
           }
         }}
         onMouseLeave={(e) => {
-          (e.currentTarget as HTMLElement).style.boxShadow = 'none';
+          (e.currentTarget as HTMLElement).style.outline = '1px solid #e2e8f0';
+          (e.currentTarget as HTMLElement).style.boxShadow = '0 2px 8px rgba(15, 23, 42, 0.04)';
         }}
         role="button"
         tabIndex={0}
@@ -96,57 +128,108 @@ export function CustomerCard({ customer, crmConfig, onClick }: CustomerCardProps
           }
         }}
       >
-        <Card.Body className="p-2">
-          {/* Company name */}
-          <div className="fw-bold small text-truncate mb-1" title={customer.companyName}>
-            {customer.companyName}
+        <Card.Body className="p-3">
+          <div className="d-flex align-items-start gap-3 mb-3">
+            {/* Icon Box */}
+            <div
+              className="position-relative d-flex align-items-center justify-content-center flex-shrink-0"
+              style={{
+                width: 42,
+                height: 42,
+                backgroundColor: '#f3e8ff',
+                color: '#8b5cf6',
+                borderRadius: 10,
+                fontSize: '1.2rem',
+              }}
+            >
+              <i className="bi bi-building"></i>
+              {hasUpdatesOrRisk && (
+                <span
+                  className="position-absolute translate-middle rounded-circle"
+                  style={{
+                    top: 0,
+                    left: 0,
+                    width: 10,
+                    height: 10,
+                    backgroundColor: '#f97316',
+                    border: '2px solid #fff',
+                  }}
+                ></span>
+              )}
+            </div>
+
+            {/* Title & Subtitle */}
+            <div className="flex-grow-1 min-w-0">
+              <div className="d-flex align-items-start justify-content-between gap-2">
+                <div
+                  className="fw-bold text-truncate"
+                  title={customer.companyName}
+                  style={{ color: '#1e293b', fontSize: '0.95rem', lineHeight: 1.2 }}
+                >
+                  {customer.companyName}
+                </div>
+                {/* Tickets badge like mockup */}
+                {customer.openTicketCount > 0 && (
+                  <div
+                    className="flex-shrink-0 d-inline-flex align-items-center justify-content-center fw-bold"
+                    style={{
+                      backgroundColor: '#fef3c7',
+                      color: '#d97706',
+                      borderRadius: 6,
+                      padding: '2px 6px',
+                      fontSize: '0.7rem',
+                    }}
+                  >
+                    <i className="bi bi-file-earmark-text me-1"></i>
+                    {customer.openTicketCount}
+                  </div>
+                )}
+              </div>
+              <div className="text-muted small text-truncate mt-1" style={{ fontSize: '0.8rem' }}>
+                {customer.industry || customer.companySize || 'Business'}
+              </div>
+            </div>
           </div>
 
-          {/* Flag icons */}
-          {resolvedFlags.length > 0 && (
-            <div className="d-flex flex-wrap gap-1 mb-1">
-              {resolvedFlags.map((flag) => (
-                <span
-                  key={flag.id}
-                  title={flag.name}
-                  className="d-inline-flex align-items-center justify-content-center rounded-1"
-                  style={{
-                    backgroundColor: flag.color,
-                    color: getContrastTextColor(flag.color),
-                    width: 20,
-                    height: 20,
-                    fontSize: '0.7rem',
-                  }}
-                >
-                  {flag.icon ? <i className={`bi bi-${flag.icon}`} /> : flag.name.charAt(0).toUpperCase()}
-                </span>
-              ))}
+          {/* Footer stats: Contract Value & Last Contact */}
+          <div
+            className="d-flex align-items-center justify-content-between mb-3 text-muted"
+            style={{ minHeight: '1.2rem' }}
+          >
+            <div className="fw-bold" style={{ color: '#10b981', fontSize: '0.9rem' }}>
+              {customer.contractValue != null && customer.contractValue > 0
+                ? formatCurrency(customer.contractValue)
+                : ''}
             </div>
-          )}
+            {customer.lastContactDate ? (
+              <div style={{ fontSize: '0.75rem' }}>
+                <i className="bi bi-clock me-1"></i>
+                {lastContactLabel}
+              </div>
+            ) : (
+              <div style={{ fontSize: '0.75rem' }}>{lastContactLabel}</div>
+            )}
+          </div>
 
-          {/* Industry */}
-          {customer.industry && <div className="text-muted small text-truncate mb-1">{customer.industry}</div>}
-
-          {/* Contract value */}
-          {customer.contractValue != null && customer.contractValue > 0 && (
-            <div className="small fw-semibold mb-1">{formatCurrency(customer.contractValue)}</div>
-          )}
-
-          {/* Open ticket count */}
-          {customer.openTicketCount > 0 && (
-            <Badge bg="warning" text="dark" className="me-1 mb-1" style={{ fontSize: '0.7rem' }}>
-              {customer.openTicketCount} {t('tickets.count', { count: customer.openTicketCount })}
-            </Badge>
-          )}
-
-          {/* Primary contact */}
-          {primaryContact && (
-            <div className="small text-muted text-truncate">
-              <i className="bi bi-person me-1" />
-              {primaryContact.name}
-              {primaryContact.role && <span className="ms-1">({primaryContact.role})</span>}
-            </div>
-          )}
+          {/* Progress Line */}
+          <div
+            style={{
+              height: 4,
+              backgroundColor: '#f1f5f9',
+              borderRadius: 2,
+              width: '100%',
+              overflow: 'hidden',
+            }}
+          >
+            <div
+              style={{
+                height: '100%',
+                backgroundColor: '#f59e0b',
+                width: `${progressPercent}%`,
+                borderRadius: 2,
+              }}
+            />
+          </div>
         </Card.Body>
       </Card>
     </div>

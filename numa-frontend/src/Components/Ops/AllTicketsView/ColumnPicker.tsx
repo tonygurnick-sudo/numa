@@ -55,7 +55,17 @@ const categoryVariant = (cat: string): string => {
 
 // ─── Default column set ────────────────────────────────────────────────────
 
-const DEFAULT_VISIBLE_IDS = new Set(['displayId', 'title', 'status', 'priority', 'assignee', 'type', 'created']);
+const DEFAULT_VISIBLE_IDS = new Set([
+  'displayId',
+  'title',
+  'ticketTypeId',
+  'stageId',
+  'workUnit',
+  'priority',
+  'dueDate',
+  'assigneeName',
+  'customerName',
+]);
 
 // ─── Component ──────────────────────────────────────────────────────────────
 

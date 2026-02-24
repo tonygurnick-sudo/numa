@@ -147,7 +147,7 @@ export default function UpdateClientConfig() {
     setProvisionQResources(Boolean((cfg as any).provisionQResources))
     setPreferredKnowledgeBase(((cfg as any).preferredKnowledgeBase as 'q' | 'bedrock') || defaults.preferredKnowledgeBase)
     setBrandingProviderEnabled(Boolean((cfg as any).brandingProviderEnabled))
-    setNumaWorkspaceChat(Boolean((cfg as any).numaWorkspaceChat))
+    setNumaWorkspaceChat((cfg as any).numaWorkspaceChat ?? defaults.numaWorkspaceChat)
     setScheduling(Boolean((cfg as any).scheduling))
     setWorkspaceChatModelSelection(Boolean((cfg as any).workspaceChatModelSelection))
     setNumaOps(Boolean((cfg as any).numaOps))
@@ -444,7 +444,7 @@ export default function UpdateClientConfig() {
                         <ConfigField label="Allow Bedrock Quota Sharing" value={allowQuotaSharing} defaultValue={defaults.allowBedrockQuotaSharing} onChange={setAllowQuotaSharing} type="switch" helpText="When enabled, OTHER Numa accounts can use THIS account's Bedrock quotas" />
                         <ConfigField label="Bedrock Account" value={bedrockAccount} defaultValue="" onChange={setBedrockAccount} type="text" helpText="AWS account ID that THIS account will use for Bedrock quotas (instead of its own). Leave empty to use this account's own quota." />
                         <ConfigField label="Branding Provider" value={brandingProviderEnabled} defaultValue={defaults.brandingProviderEnabled} onChange={setBrandingProviderEnabled} type="switch" helpText="Enable custom branding UI and runtime asset loading" />
-                        <ConfigField label="Numa Workspace Chat" value={numaWorkspaceChat} defaultValue={defaults.numaWorkspaceChat} onChange={setNumaWorkspaceChat} type="switch" helpText="Feature flag for Numa Chat V2 testing" />
+                        <ConfigField label="Numa Workspace Chat" value={numaWorkspaceChat} defaultValue={defaults.numaWorkspaceChat} onChange={setNumaWorkspaceChat} type="switch" helpText="Enable Numa Workspace Chat (V2). On by default." />
                         <ConfigField label="Agent Scheduling" value={scheduling} defaultValue={defaults.scheduling} onChange={setScheduling} type="switch" helpText="Enable agent scheduling and notifications features" />
                         <ConfigField label="Workspace Chat Model Selection" value={workspaceChatModelSelection} defaultValue={defaults.workspaceChatModelSelection} onChange={setWorkspaceChatModelSelection} type="switch" helpText="Allow users to select AI models in Chat V2" />
                         <ConfigField label="Numa Ops" value={numaOps} defaultValue={defaults.numaOps} onChange={setNumaOps} type="switch" helpText="Enable Numa Ops (work management, kanban boards, CRM)" />

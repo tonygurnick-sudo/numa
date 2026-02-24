@@ -9,7 +9,7 @@ import {
   UpdateCommand,
   TransactWriteCommand,
 } from '@aws-sdk/lib-dynamodb';
-import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
+import { S3Client, PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { randomUUID } from 'crypto';
 import { withPRM } from '../../../lib/prm-node/prm';
@@ -615,7 +615,7 @@ const handleTeams = async (
       updatedAt: ts,
     };
     await putItem(item);
-    return jsonResponse(201, item);
+    return jsonResponse(201, { workUnit: item });
   }
 
   // PUT /ops/teams/{teamId}/work-units/{id} — update work unit
@@ -787,7 +787,7 @@ const handleTeams = async (
     };
     await putItem(updated);
 
-    return jsonResponse(200, { ...updated, movedCount, rolloverCount });
+    return jsonResponse(200, { workUnit: updated, movedCount, rolloverCount });
   }
 
   return errorResponse(404, 'Route not found');
@@ -960,7 +960,7 @@ const handleTickets = async (
       }
     }
 
-    return jsonResponse(201, commentItem);
+    return jsonResponse(201, { comment: commentItem });
   }
 
   // PUT /ops/tickets/{ticketId}/comments/{commentId}
@@ -980,7 +980,7 @@ const handleTickets = async (
       edited: true,
     };
     await putItem(updated);
-    return jsonResponse(200, updated);
+    return jsonResponse(200, { comment: updated });
   }
 
   // DELETE /ops/tickets/{ticketId}/comments/{commentId}
@@ -1016,17 +1016,34 @@ const handleTickets = async (
   // POST /ops/tickets/{ticketId}/links
   if (method === 'POST' && segments.length === 2 && segments[1] === 'links') {
     const ticketId = segments[0];
-    const { linkedTicketId, linkType } = body;
-    if (!linkedTicketId || !linkType) return errorResponse(400, 'Missing required fields: linkedTicketId, linkType');
+    const { linkedTicketId, linkedTicketDisplayId, linkedTicketTitle, linkType } = body;
+    if (!linkedTicketId || !linkedTicketDisplayId || !linkType)
+      return errorResponse(400, 'Missing required fields: linkedTicketId, linkedTicketDisplayId, linkType');
 
     const lt = String(linkType);
     const inverse = LINK_INVERSE[lt];
     if (!inverse) return errorResponse(400, `Invalid linkType: ${lt}`);
 
     const linkedId = String(linkedTicketId);
+    const linkedDisplayId = String(linkedTicketDisplayId);
+    const linkedTitle = linkedTicketTitle ? String(linkedTicketTitle) : undefined;
     const ts = now();
 
-    const transactItems = [
+    // Look up source ticket's displayId for the inverse link record
+    const srcTeamId = body.teamId ? String(body.teamId) : undefined;
+    const linkedTeamId = body.linkedTeamId ? String(body.linkedTeamId) : srcTeamId;
+
+    let srcDisplayId: string | undefined;
+    let srcTitle: string | undefined;
+    if (srcTeamId) {
+      const srcTicket = await getItem(`TEAM#${srcTeamId}`, `TICKET#${ticketId}`);
+      if (srcTicket) {
+        srcDisplayId = srcTicket.displayId ? String(srcTicket.displayId) : undefined;
+        srcTitle = srcTicket.title ? String(srcTicket.title) : undefined;
+      }
+    }
+
+    const transactItems: Record<string, unknown>[] = [
       {
         Put: {
           TableName: OPS_TABLE,
@@ -1036,6 +1053,8 @@ const handleTickets = async (
             entityType: 'LINK',
             ticketId,
             linkedTicketId: linkedId,
+            linkedTicketDisplayId: linkedDisplayId,
+            linkedTicketTitle: linkedTitle,
             linkType: lt,
             createdBy: auth.sub,
             createdAt: ts,
@@ -1051,6 +1070,8 @@ const handleTickets = async (
             entityType: 'LINK',
             ticketId: linkedId,
             linkedTicketId: ticketId,
+            linkedTicketDisplayId: srcDisplayId,
+            linkedTicketTitle: srcTitle,
             linkType: inverse,
             createdBy: auth.sub,
             createdAt: ts,
@@ -1059,35 +1080,29 @@ const handleTickets = async (
       },
     ];
 
-    await dynamo.send(new TransactWriteCommand({ TransactItems: transactItems as never }));
-
-    // Increment linkCount on both tickets (best-effort)
-    if (body.teamId) {
-      const teamId = String(body.teamId);
-      const linkedTeamId = body.linkedTeamId ? String(body.linkedTeamId) : teamId;
-      try {
-        await Promise.all([
-          dynamo.send(
-            new UpdateCommand({
-              TableName: OPS_TABLE,
-              Key: { PK: `TEAM#${teamId}`, SK: `TICKET#${ticketId}` },
-              UpdateExpression: 'ADD linkCount :inc',
-              ExpressionAttributeValues: { ':inc': 1 },
-            }),
-          ),
-          dynamo.send(
-            new UpdateCommand({
-              TableName: OPS_TABLE,
-              Key: { PK: `TEAM#${linkedTeamId}`, SK: `TICKET#${linkedId}` },
-              UpdateExpression: 'ADD linkCount :inc',
-              ExpressionAttributeValues: { ':inc': 1 },
-            }),
-          ),
-        ]);
-      } catch (e) {
-        console.warn('Failed to increment linkCount', (e as Error).message);
-      }
+    // Atomically increment linkCount on both tickets within the same transaction
+    if (srcTeamId) {
+      transactItems.push({
+        Update: {
+          TableName: OPS_TABLE,
+          Key: { PK: `TEAM#${srcTeamId}`, SK: `TICKET#${ticketId}` },
+          UpdateExpression: 'ADD linkCount :inc',
+          ExpressionAttributeValues: { ':inc': 1 },
+        },
+      });
     }
+    if (linkedTeamId) {
+      transactItems.push({
+        Update: {
+          TableName: OPS_TABLE,
+          Key: { PK: `TEAM#${linkedTeamId}`, SK: `TICKET#${linkedId}` },
+          UpdateExpression: 'ADD linkCount :inc',
+          ExpressionAttributeValues: { ':inc': 1 },
+        },
+      });
+    }
+
+    await dynamo.send(new TransactWriteCommand({ TransactItems: transactItems as never }));
 
     return jsonResponse(201, { created: true });
   }
@@ -1314,13 +1329,18 @@ const handleTickets = async (
       description,
       priority,
       assigneeId,
+      assigneeName,
+      reporterId,
+      reporterName,
       customerId,
+      customerName,
       supplierId,
+      supplierName,
       workUnitId,
       tags,
       fields,
       dueDate,
-      estimatedEffort,
+      effortPoints,
     } = body;
 
     if (!rawTeamId || !rawStageId || !title)
@@ -1365,9 +1385,13 @@ const handleTickets = async (
       priority: priority ? String(priority) : 'medium',
       statusType,
       assigneeId: assigneeId ? String(assigneeId) : undefined,
-      reporterId: auth.sub,
+      assigneeName: assigneeName ? String(assigneeName) : undefined,
+      reporterId: reporterId ? String(reporterId) : auth.sub,
+      reporterName: reporterName ? String(reporterName) : undefined,
       customerId: customerId ? String(customerId) : undefined,
+      customerName: customerName ? String(customerName) : undefined,
       supplierId: supplierId ? String(supplierId) : undefined,
+      supplierName: supplierName ? String(supplierName) : undefined,
       workUnitId: workUnitId ? String(workUnitId) : undefined,
       tags: Array.isArray(tags) ? tags : [],
       fields: fields ?? {},
@@ -1377,8 +1401,9 @@ const handleTickets = async (
       commentCount: 0,
       linkCount: 0,
       dueDate: dueDate ? String(dueDate) : undefined,
-      estimatedEffort: typeof estimatedEffort === 'number' ? estimatedEffort : undefined,
+      effortPoints: typeof effortPoints === 'number' ? effortPoints : undefined,
       createdBy: auth.sub,
+      createdByName: auth.name ?? undefined,
       createdAt: ts,
       updatedAt: ts,
     };
@@ -1445,13 +1470,42 @@ const handleTickets = async (
       statusType = existing.statusType as string;
     }
 
-    // Compute lifecycle timestamps
+    // Compute lifecycle timestamps — matches Ian's POC getLifecycleDateUpdates() logic
     const lifecycleUpdates: Record<string, unknown> = {};
     if (statusType !== existing.statusType) {
-      if (statusType === 'scoped' && !existing.scopedAt) lifecycleUpdates.scopedAt = ts;
-      if (statusType === 'active' && !existing.startedAt) lifecycleUpdates.startedAt = ts;
-      if (statusType === 'completed' && !existing.completedAt) lifecycleUpdates.completedAt = ts;
-      if (statusType === 'ended' && !existing.endedAt) lifecycleUpdates.endedAt = ts;
+      const prevStatus = existing.statusType as string;
+
+      // scopedAt: permanent, set on first entry to scoped, queued, or active
+      if (['scoped', 'queued', 'active'].includes(statusType) && !existing.scopedAt) {
+        lifecycleUpdates.scopedAt = ts;
+      }
+
+      // startedAt: permanent, set on first entry to queued or active
+      if (['queued', 'active'].includes(statusType) && !existing.startedAt) {
+        lifecycleUpdates.startedAt = ts;
+      }
+
+      // completedAt: set on entry to completed; cleared on exit; mutually exclusive with endedAt
+      if (statusType === 'completed') {
+        if (!existing.completedAt) lifecycleUpdates.completedAt = ts;
+        if (existing.endedAt) lifecycleUpdates.endedAt = null;
+      } else if (prevStatus === 'completed') {
+        lifecycleUpdates.completedAt = null;
+      }
+
+      // endedAt: set on entry to ended; cleared on exit; mutually exclusive with completedAt
+      if (statusType === 'ended') {
+        if (!existing.endedAt) lifecycleUpdates.endedAt = ts;
+        if (existing.completedAt) lifecycleUpdates.completedAt = null;
+      } else if (prevStatus === 'ended') {
+        lifecycleUpdates.endedAt = null;
+      }
+    }
+
+    // scopedAt: also triggered by workUnitId being assigned for the first time
+    const workUnitBeingAssigned = !existing.workUnitId && body.workUnitId && body.workUnitId !== null;
+    if (workUnitBeingAssigned && !existing.scopedAt && !lifecycleUpdates.scopedAt) {
+      lifecycleUpdates.scopedAt = ts;
     }
     let zoneIdOverride: string | undefined;
     const order = typeof body.order === 'number' ? body.order : ((existing.order as number) ?? ORDER_GAP);
@@ -1566,7 +1620,7 @@ const handleTickets = async (
         throw err;
       }
 
-      return jsonResponse(200, updated);
+      return jsonResponse(200, { ticket: updated });
     }
 
     // Same-team update
@@ -1658,7 +1712,7 @@ const handleTickets = async (
     indexOps.push(putItem(auditItem));
     if (indexOps.length > 0) await Promise.all(indexOps);
 
-    return jsonResponse(200, updated);
+    return jsonResponse(200, { ticket: updated });
   }
 
   // ── DELETE /ops/tickets/{ticketId} — soft delete ────────────────────────────
@@ -1726,7 +1780,7 @@ const handleTickets = async (
     await putItem(updated);
     await putItem(buildAuditItem(ticketId, auth, 'restored'));
 
-    return jsonResponse(200, updated);
+    return jsonResponse(200, { ticket: updated });
   }
 
   return errorResponse(404, 'Route not found');
@@ -1766,8 +1820,27 @@ const handleUploads = async (
   method: string,
   segments: string[],
   body: Record<string, unknown>,
+  queryParams: Record<string, string> = {},
 ): Promise<ReturnType<typeof jsonResponse>> => {
-  // POST /ops/uploads/presigned-url
+  // GET /ops/uploads/presigned-url?s3Key=... — generate a presigned download URL
+  if (method === 'GET' && segments.length === 1 && segments[0] === 'presigned-url') {
+    const s3Key = queryParams.s3Key ? String(queryParams.s3Key) : undefined;
+    if (!s3Key) return errorResponse(400, 'Missing required query param: s3Key');
+
+    // Validate the key belongs to the ops/tickets namespace to prevent arbitrary access
+    if (!s3Key.startsWith('ops/tickets/') && !s3Key.startsWith('ops/')) {
+      return errorResponse(403, 'Access denied: key outside allowed namespace');
+    }
+
+    const s3 = withPRM(S3Client, { region: REGION });
+    const command = new GetObjectCommand({ Bucket: OUTPUTS_BUCKET_NAME, Key: s3Key });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const downloadUrl = await getSignedUrl(s3 as any, command, { expiresIn: 900 });
+
+    return jsonResponse(200, { downloadUrl, s3Key });
+  }
+
+  // POST /ops/uploads/presigned-url — generate a presigned upload URL
   if (method === 'POST' && segments.length === 1 && segments[0] === 'presigned-url') {
     const { fileName, contentType, contextId } = body;
     if (!fileName || !contextId) return errorResponse(400, 'Missing required fields: fileName, contextId');
@@ -1783,9 +1856,9 @@ const handleUploads = async (
     });
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const url = await getSignedUrl(s3 as any, command, { expiresIn: 900 });
+    const uploadUrl = await getSignedUrl(s3 as any, command, { expiresIn: 900 });
 
-    return jsonResponse(200, { url, s3Key, fileId });
+    return jsonResponse(200, { uploadUrl, s3Key, fileId });
   }
 
   return errorResponse(404, 'Route not found');
@@ -1825,7 +1898,7 @@ const handleUserPreferences = async (
       updatedAt: now(),
     };
     await putItem(updated);
-    return jsonResponse(200, updated);
+    return jsonResponse(200, { preferences: updated });
   }
 
   return errorResponse(404, 'Route not found');
@@ -1872,7 +1945,7 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
         return handleMetrics(auth, event);
 
       case 'uploads':
-        return handleUploads(method, rest, body);
+        return handleUploads(method, rest, body, event.queryStringParameters ?? {});
 
       case 'user-preferences':
         return handleUserPreferences(method, rest, body, auth);

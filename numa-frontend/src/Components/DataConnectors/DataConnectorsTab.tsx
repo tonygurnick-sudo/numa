@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Alert, Button, Col, Form, Modal, Row, Spinner } from 'react-bootstrap';
 import { useTranslation } from 'react-i18next';
+import { Grid3X3 } from 'lucide-react';
 import { DataConnectorsService } from '../../Services/DataConnectorsService';
 import type { DataConnectorStatus } from '../../types/dataConnectors';
 import { useNumaRequest } from '../../Providers/NumaRequestContext';
@@ -111,20 +112,22 @@ export const DataConnectorsTab = ({ adminSettings }: DataConnectorsTabProps) => 
           {t('dataConnectors.disabled')}
         </Alert>
       )}
-      <div className="mb-4">
-        <h4 className="text-primary mb-0 d-flex align-items-center">
-          <i className="bi bi-grid-3x3-gap me-2"></i>
-          <span>{t('dataConnectors.available', { count: 1 })}</span>
-        </h4>
+      <div className="integrations-section-heading">
+        <div className="integrations-available-heading">
+          <Grid3X3 size={18} className="integrations-available-heading__icon" aria-hidden="true" />
+          <h4 className="integrations-available-heading__text mb-0">{t('dataConnectors.available', { count: 1 })}</h4>
+        </div>
       </div>
-      <SynergyConnectorCard
-        status={synergyStatus}
-        onConnect={() => openModal('connect')}
-        onTest={() => openModal('test')}
-        onSettings={() => openModal('settings')}
-        isConnecting={connecting}
-        adminDisabled={adminDisabled}
-      />
+      <div className="mt-3">
+        <SynergyConnectorCard
+          status={synergyStatus}
+          onConnect={() => openModal('connect')}
+          onTest={() => openModal('test')}
+          onSettings={() => openModal('settings')}
+          isConnecting={connecting}
+          adminDisabled={adminDisabled}
+        />
+      </div>
 
       <Modal show={!!modalMode} onHide={() => setModalMode(null)} centered>
         <Modal.Header closeButton>

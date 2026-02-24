@@ -43,8 +43,8 @@ const OUTCOMES: ActivityOutcome[] = ['positive', 'neutral', 'negative', 'info'];
  * ActivitySection renders a timeline of activities for a customer or supplier,
  * along with a "Log Activity" form for creating new entries.
  *
- * Activities are sorted by date descending. Creating and deleting activities
- * calls the appropriate OpsService method based on `entityType`.
+ * Activities are sorted by date descending. Customer activities support
+ * create, edit, and delete; supplier activities support create only.
  */
 export function ActivitySection({
   entityType,
@@ -52,13 +52,15 @@ export function ActivitySection({
   activities: activitiesProp,
 }: ActivitySectionProps): React.JSX.Element {
   const { t } = useTranslation('ops');
-  const { numaPost, numaDelete } = useNumaRequest();
+  const { numaPost, numaDelete, numaPut } = useNumaRequest();
 
   // ── Local state ───────────────────────────────────────────────────────────
 
   // Keep a local copy so we can optimistically append/remove items.
   const [localActivities, setLocalActivities] = useState<Activity[]>(activitiesProp ?? []);
   const [showForm, setShowForm] = useState(false);
+  const [editingActivityId, setEditingActivityId] = useState<string | null>(null);
+  const [showAllActivities, setShowAllActivities] = useState(false);
   const [saving, setSaving] = useState(false);
 
   // Form fields
@@ -76,12 +78,14 @@ export function ActivitySection({
   React.useEffect(() => {
     if (activitiesProp) {
       setLocalActivities(activitiesProp);
+      setShowAllActivities(false);
     }
   }, [activitiesProp]);
 
   // ── Derived ───────────────────────────────────────────────────────────────
 
   const sorted = [...localActivities].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  const visibleActivities = showAllActivities ? sorted : sorted.slice(0, 10);
 
   // ── Handlers ──────────────────────────────────────────────────────────────
 
@@ -94,6 +98,42 @@ export function ActivitySection({
     setFormOutcome('neutral');
     setFormNextActionDate('');
     setFormNextActionType('');
+  };
+
+  const toDateInput = (value: string | null | undefined): string => {
+    if (!value) return '';
+    const parsed = new Date(value);
+    if (isNaN(parsed.getTime())) return '';
+    return parsed.toISOString().split('T')[0];
+  };
+
+  const populateFormFromActivity = (activity: Activity) => {
+    setFormType(activity.type);
+    setFormDirection(activity.direction);
+    setFormDate(toDateInput(activity.date));
+    setFormDuration(activity.duration != null ? String(activity.duration) : '');
+    setFormSummary(activity.summary);
+    setFormOutcome(activity.outcome);
+    setFormNextActionDate(toDateInput(activity.nextActionDate));
+    setFormNextActionType(activity.nextActionType ?? '');
+  };
+
+  const handleStartCreate = () => {
+    resetForm();
+    setEditingActivityId(null);
+    setShowForm(true);
+  };
+
+  const handleStartEdit = (activity: Activity) => {
+    populateFormFromActivity(activity);
+    setEditingActivityId(activity.id);
+    setShowForm(true);
+  };
+
+  const handleCancelForm = () => {
+    resetForm();
+    setEditingActivityId(null);
+    setShowForm(false);
   };
 
   const handleSave = useCallback(async () => {
@@ -111,22 +151,26 @@ export function ActivitySection({
         nextActionType: formNextActionType || null,
       };
 
-      let created: Activity;
-      if (entityType === 'customer') {
-        created = await OpsService.createCustomerActivity(numaPost, entityId, payload);
+      if (editingActivityId && entityType === 'customer') {
+        const updated = await OpsService.updateCustomerActivity(numaPut, entityId, editingActivityId, payload);
+        setLocalActivities((prev) => prev.map((activity) => (activity.id === updated.id ? updated : activity)));
       } else {
-        created = await OpsService.createSupplierActivity(numaPost, entityId, payload);
+        let created: Activity;
+        if (entityType === 'customer') {
+          created = await OpsService.createCustomerActivity(numaPost, entityId, payload);
+        } else {
+          created = await OpsService.createSupplierActivity(numaPost, entityId, payload);
+        }
+        setLocalActivities((prev) => [created, ...prev]);
       }
-
-      setLocalActivities((prev) => [created, ...prev]);
-      resetForm();
-      setShowForm(false);
+      handleCancelForm();
     } catch (err) {
-      console.error('[ActivitySection] Failed to create activity', err);
+      console.error('[ActivitySection] Failed to save activity', err);
     } finally {
       setSaving(false);
     }
   }, [
+    editingActivityId,
     entityType,
     entityId,
     formType,
@@ -137,7 +181,9 @@ export function ActivitySection({
     formOutcome,
     formNextActionDate,
     formNextActionType,
+    handleCancelForm,
     numaPost,
+    numaPut,
   ]);
 
   const handleDelete = useCallback(
@@ -150,11 +196,14 @@ export function ActivitySection({
       try {
         await OpsService.deleteCustomerActivity(numaDelete, entityId, activityId);
         setLocalActivities((prev) => prev.filter((a) => a.id !== activityId));
+        if (editingActivityId === activityId) {
+          handleCancelForm();
+        }
       } catch (err) {
         console.error('[ActivitySection] Failed to delete activity', err);
       }
     },
-    [entityType, entityId, numaDelete, t],
+    [editingActivityId, entityType, entityId, handleCancelForm, numaDelete, t],
   );
 
   const formatDate = (dateStr: string) => {
@@ -177,7 +226,7 @@ export function ActivitySection({
       <div className="d-flex justify-content-between align-items-center mb-2">
         <span className="fw-semibold small">{t('crm.activities')}</span>
         {!showForm && (
-          <Button variant="outline-primary" size="sm" onClick={() => setShowForm(true)}>
+          <Button variant="outline-primary" size="sm" onClick={handleStartCreate}>
             <i className="bi bi-plus me-1" />
             {t('activities.logActivity')}
           </Button>
@@ -188,6 +237,9 @@ export function ActivitySection({
       {showForm && (
         <Card className="mb-3">
           <Card.Body className="p-2">
+            <div className="small fw-semibold mb-2">
+              {editingActivityId ? t('common.edit') : t('activities.logActivity')}
+            </div>
             <div className="row g-2">
               {/* Type */}
               <div className="col-sm-4">
@@ -299,15 +351,7 @@ export function ActivitySection({
             </div>
 
             <div className="d-flex gap-1 justify-content-end mt-2">
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={() => {
-                  resetForm();
-                  setShowForm(false);
-                }}
-                disabled={saving}
-              >
+              <Button variant="secondary" size="sm" onClick={handleCancelForm} disabled={saving}>
                 {t('common.cancel')}
               </Button>
               <Button variant="primary" size="sm" onClick={handleSave} disabled={saving || !formSummary.trim()}>
@@ -321,7 +365,7 @@ export function ActivitySection({
       {/* ── Timeline ─────────────────────────────────────────────────────── */}
       {sorted.length === 0 && !showForm && <div className="text-muted small">{t('empty.noActivities')}</div>}
 
-      {sorted.map((activity) => (
+      {visibleActivities.map((activity) => (
         <div key={activity.id} className="d-flex align-items-start gap-2 py-2 border-bottom">
           {/* Type icon */}
           <div className="flex-shrink-0 text-muted" style={{ width: 24, textAlign: 'center' }}>
@@ -371,7 +415,9 @@ export function ActivitySection({
 
             {/* Staff + next action */}
             <div className="d-flex gap-3 text-muted small mt-1">
-              <span>{activity.staffName}</span>
+              <span className={activity.source === 'system' ? 'fst-italic' : ''}>
+                {activity.source === 'system' ? t('activities.systemActor') : activity.staffName || t('common.none')}
+              </span>
               {activity.nextActionDate && (
                 <span>
                   {t('activities.nextAction')}: {formatDate(activity.nextActionDate)}
@@ -381,9 +427,18 @@ export function ActivitySection({
             </div>
           </div>
 
-          {/* Delete button — only for customers (supplier has no delete endpoint) */}
-          {entityType === 'customer' && (
-            <div className="flex-shrink-0">
+          {/* Edit/Delete controls — customer manual activities only */}
+          {entityType === 'customer' && activity.source !== 'system' && (
+            <div className="flex-shrink-0 d-flex gap-2">
+              <Button
+                variant="link"
+                size="sm"
+                className="p-0 text-secondary"
+                onClick={() => handleStartEdit(activity)}
+                title={t('common.edit')}
+              >
+                <i className="bi bi-pencil" />
+              </Button>
               <Button
                 variant="link"
                 size="sm"
@@ -397,6 +452,22 @@ export function ActivitySection({
           )}
         </div>
       ))}
+
+      {sorted.length > 10 && !showAllActivities && (
+        <div className="pt-2">
+          <Button variant="link" size="sm" className="p-0" onClick={() => setShowAllActivities(true)}>
+            {t('activities.showAllCount', { count: sorted.length })}
+          </Button>
+        </div>
+      )}
+
+      {sorted.length > 10 && showAllActivities && (
+        <div className="pt-2">
+          <Button variant="link" size="sm" className="p-0" onClick={() => setShowAllActivities(false)}>
+            {t('activities.showRecentOnly')}
+          </Button>
+        </div>
+      )}
     </div>
   );
 }

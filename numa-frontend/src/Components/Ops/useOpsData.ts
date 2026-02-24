@@ -2,11 +2,14 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNumaRequest } from '../../Providers/NumaRequestContext';
 import * as OpsService from '../../Services/OpsService';
 import type { OpsConfigResponse, TeamSummary, TeamResponse, Ticket, WorkUnit } from '../../types/ops';
+import { getCached, setCache } from '../../utils/opsCache';
 
 // ─── localStorage Keys ──────────────────────────────────────────────────────
 
 const LS_ACTIVE_TEAM = 'numa_ops_active_team';
+const LS_ACTIVE_ZONE = 'numa_ops_active_zone';
 const LS_BOARD_VIEW_MODE = 'numa_ops_board_view_mode';
+const LS_TOP_VIEW = 'numa_ops_top_view';
 
 // ─── View Types ─────────────────────────────────────────────────────────────
 
@@ -41,6 +44,7 @@ export type OpsDataState = {
   topView: OpsTopView;
   boardViewMode: BoardViewMode;
   activeZoneId: string | null;
+  crmRefreshVersion: number;
 
   // Actions
   selectTeam: (teamId: string) => void;
@@ -48,9 +52,11 @@ export type OpsDataState = {
   setBoardViewMode: (mode: BoardViewMode) => void;
   setActiveZone: (zoneId: string | null) => void;
   selectWorkUnit: (wuId: string | null) => void;
+  setTickets: React.Dispatch<React.SetStateAction<Ticket[]>>;
   refreshTeam: () => Promise<TeamResponse | null>;
   refreshTickets: () => Promise<void>;
   refreshTeams: () => Promise<void>;
+  refreshCrmData: () => void;
 };
 
 // ─── Hook ───────────────────────────────────────────────────────────────────
@@ -67,29 +73,60 @@ export type OpsDataState = {
 export const useOpsData = (): OpsDataState => {
   const { numaGet } = useNumaRequest();
 
+  // ── Cache-aware initial state ─────────────────────────────────────────
+  // Read cached data so the UI renders instantly; API fetches still happen
+  // in the background and overwrite with fresh data.
+
+  const [initialTeamId] = useState<string | null>(() => {
+    try {
+      const saved = localStorage.getItem(LS_ACTIVE_TEAM);
+      const cachedTeams = getCached<TeamSummary[]>('teams');
+      if (saved && cachedTeams?.some((t) => t.id === saved)) return saved;
+      return null;
+    } catch {
+      return null;
+    }
+  });
+
   // ── Config ──────────────────────────────────────────────────────────────
-  const [config, setConfig] = useState<OpsConfigResponse | null>(null);
-  const [configLoading, setConfigLoading] = useState(true);
+  const [config, setConfig] = useState<OpsConfigResponse | null>(() => getCached('config'));
+  const [configLoading, setConfigLoading] = useState(() => !getCached('config'));
 
   // ── Teams ───────────────────────────────────────────────────────────────
-  const [teams, setTeams] = useState<TeamSummary[]>([]);
-  const [teamsLoading, setTeamsLoading] = useState(true);
-  const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
+  const [teams, setTeams] = useState<TeamSummary[]>(() => getCached<TeamSummary[]>('teams') ?? []);
+  const [teamsLoading, setTeamsLoading] = useState(() => !getCached('teams'));
+  const [selectedTeamId, setSelectedTeamId] = useState<string | null>(initialTeamId);
 
   // ── Team Data ───────────────────────────────────────────────────────────
-  const [teamData, setTeamData] = useState<TeamResponse | null>(null);
+  const [teamData, setTeamData] = useState<TeamResponse | null>(() =>
+    initialTeamId ? getCached<TeamResponse>(`team_${initialTeamId}`) : null,
+  );
   const [teamLoading, setTeamLoading] = useState(false);
 
   // ── Tickets ─────────────────────────────────────────────────────────────
-  const [tickets, setTickets] = useState<Ticket[]>([]);
+  const [tickets, setTickets] = useState<Ticket[]>(
+    () => (initialTeamId ? getCached<Ticket[]>(`tickets_${initialTeamId}`) : null) ?? [],
+  );
   const [ticketsLoading, setTicketsLoading] = useState(false);
 
   // ── Work Units ──────────────────────────────────────────────────────────
-  const [workUnits, setWorkUnits] = useState<WorkUnit[]>([]);
+  const [workUnits, setWorkUnits] = useState<WorkUnit[]>(
+    () => (initialTeamId ? getCached<WorkUnit[]>(`workUnits_${initialTeamId}`) : null) ?? [],
+  );
   const [selectedWorkUnitId, setSelectedWorkUnitId] = useState<string | null>(null);
 
   // ── View State ──────────────────────────────────────────────────────────
-  const [topView, setTopViewState] = useState<OpsTopView>('board');
+  const [topView, setTopViewState] = useState<OpsTopView>(() => {
+    try {
+      const saved = localStorage.getItem(LS_TOP_VIEW);
+      if (saved && ['home', 'board', 'allTickets', 'customers', 'suppliers', 'roadmap'].includes(saved)) {
+        return saved as OpsTopView;
+      }
+    } catch {
+      /* quota or private mode */
+    }
+    return 'board';
+  });
   const [boardViewMode, setBoardViewModeState] = useState<BoardViewMode>(() => {
     try {
       const saved = localStorage.getItem(LS_BOARD_VIEW_MODE);
@@ -98,7 +135,14 @@ export const useOpsData = (): OpsDataState => {
       return 'allTeams';
     }
   });
-  const [activeZoneId, setActiveZoneId] = useState<string | null>(null);
+  const [activeZoneId, setActiveZoneId] = useState<string | null>(() => {
+    try {
+      return localStorage.getItem(LS_ACTIVE_ZONE);
+    } catch {
+      return null;
+    }
+  });
+  const [crmRefreshVersion, setCrmRefreshVersion] = useState(0);
 
   // ── Refs ─────────────────────────────────────────────────────────────────
   const initialLoadDone = useRef(false);
@@ -127,6 +171,7 @@ export const useOpsData = (): OpsDataState => {
       setConfigLoading(true);
       const data = await OpsService.getConfig(numaGet);
       setConfig(data);
+      setCache('config', data);
     } catch (err) {
       console.error('[useOpsData] Failed to load config:', err);
     } finally {
@@ -139,6 +184,7 @@ export const useOpsData = (): OpsDataState => {
       setTeamsLoading(true);
       const data = await OpsService.listTeams(numaGet);
       setTeams(data);
+      setCache('teams', data);
       return data;
     } catch (err) {
       console.error('[useOpsData] Failed to load teams:', err);
@@ -154,6 +200,7 @@ export const useOpsData = (): OpsDataState => {
         setTeamLoading(true);
         const data = await OpsService.getTeam(numaGet, teamId);
         setTeamData(data);
+        setCache(`team_${teamId}`, data);
         return data;
       } catch (err) {
         console.error('[useOpsData] Failed to load team:', err);
@@ -172,6 +219,7 @@ export const useOpsData = (): OpsDataState => {
         setTicketsLoading(true);
         const response = await OpsService.listTickets(numaGet, { teamId });
         setTickets(response.tickets);
+        setCache(`tickets_${teamId}`, response.tickets);
       } catch (err) {
         console.error('[useOpsData] Failed to load tickets:', err);
         setTickets([]);
@@ -187,6 +235,7 @@ export const useOpsData = (): OpsDataState => {
       try {
         const data = await OpsService.listWorkUnits(numaGet, teamId);
         setWorkUnits(data);
+        setCache(`workUnits_${teamId}`, data);
       } catch (err) {
         console.error('[useOpsData] Failed to load work units:', err);
         setWorkUnits([]);
@@ -242,7 +291,15 @@ export const useOpsData = (): OpsDataState => {
       return;
     }
 
-    // Load team data, tickets, and work units in parallel
+    // Show cached team data instantly while fresh data loads
+    const cachedTeam = getCached<TeamResponse>(`team_${selectedTeamId}`);
+    if (cachedTeam) setTeamData(cachedTeam);
+    const cachedTickets = getCached<Ticket[]>(`tickets_${selectedTeamId}`);
+    if (cachedTickets) setTickets(cachedTickets);
+    const cachedWorkUnits = getCached<WorkUnit[]>(`workUnits_${selectedTeamId}`);
+    if (cachedWorkUnits) setWorkUnits(cachedWorkUnits);
+
+    // Load fresh data in the background
     loadTeamData(selectedTeamId);
     loadTickets(selectedTeamId);
     loadWorkUnits(selectedTeamId);
@@ -280,6 +337,11 @@ export const useOpsData = (): OpsDataState => {
 
   const setTopView = useCallback((view: OpsTopView) => {
     setTopViewState(view);
+    try {
+      localStorage.setItem(LS_TOP_VIEW, view);
+    } catch {
+      /* quota or private mode */
+    }
   }, []);
 
   const setBoardViewMode = useCallback(
@@ -292,6 +354,12 @@ export const useOpsData = (): OpsDataState => {
 
   const setActiveZone = useCallback((zoneId: string | null) => {
     setActiveZoneId(zoneId);
+    try {
+      if (zoneId) localStorage.setItem(LS_ACTIVE_ZONE, zoneId);
+      else localStorage.removeItem(LS_ACTIVE_ZONE);
+    } catch {
+      /* quota or private mode */
+    }
   }, []);
 
   const selectWorkUnit = useCallback((wuId: string | null) => {
@@ -315,6 +383,10 @@ export const useOpsData = (): OpsDataState => {
     await loadTeams();
   }, [loadTeams]);
 
+  const refreshCrmData = useCallback(() => {
+    setCrmRefreshVersion((prev) => prev + 1);
+  }, []);
+
   // ── Return ────────────────────────────────────────────────────────────
 
   return {
@@ -328,6 +400,7 @@ export const useOpsData = (): OpsDataState => {
     teamData,
     teamLoading,
     tickets,
+    setTickets,
     ticketsLoading,
 
     workUnits,
@@ -336,6 +409,7 @@ export const useOpsData = (): OpsDataState => {
     topView,
     boardViewMode,
     activeZoneId,
+    crmRefreshVersion,
 
     selectTeam,
     setTopView,
@@ -345,5 +419,6 @@ export const useOpsData = (): OpsDataState => {
     refreshTeam,
     refreshTickets,
     refreshTeams,
+    refreshCrmData,
   };
 };

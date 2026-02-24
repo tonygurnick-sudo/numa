@@ -80,6 +80,7 @@ export class CoreNumaInfra extends Construct {
   readonly filesTable?: DynamodbTable;
   readonly webCrawler: WebCrawlerConstruct;
   readonly cognitoGroups!: CognitoGroupsConstruct;
+  readonly companyBucket: NumaCorsEnabledBucket;
   readonly pipedreamRelayLambdaArn?: string;
   readonly mcpPolicyTable?: DynamodbTable;
   readonly integrationsApprovalTable?: DynamodbTable;
@@ -256,7 +257,7 @@ export class CoreNumaInfra extends Construct {
     this.dataBucket.bucket.moveFromId('aws_s3_bucket.data-source-bucket_1F269801');
 
     // Create company bucket
-    const companyBucket = new NumaCorsEnabledBucket(this, 'company-data-bucket', {
+    this.companyBucket = new NumaCorsEnabledBucket(this, 'company-data-bucket', {
       bucketName: 'company',
       clientName: props.clientName,
       origin: props.domainName,
@@ -1186,7 +1187,7 @@ export class CoreNumaInfra extends Construct {
 
     // Always output bucket information
     new TerraformOutput(this, 'data-bucket', { value: this.dataBucket.bucket.bucket });
-    new TerraformOutput(this, 'company-bucket', { value: companyBucket.bucket.bucket });
+    new TerraformOutput(this, 'company-bucket', { value: this.companyBucket.bucket.bucket });
 
     // Create Pipedream relay lambda if Pipedream integrations are enabled
     let pipedreamRelayLambda: NumaLambda | undefined;
@@ -1305,7 +1306,7 @@ export class CoreNumaInfra extends Construct {
       callerAccountId: callerId.accountId,
       dataBucket: this.dataBucket,
       outputsBucket: this.outputsBucket,
-      companyBucket: companyBucket,
+      companyBucket: this.companyBucket,
       chatHistoryTable: this.chatHistoryTable,
       groups: props.groups,
       pipedreamIntegrations: props.pipedreamIntegrations,
@@ -1369,6 +1370,9 @@ export class CoreNumaInfra extends Construct {
       'anthropic.claude-haiku-4-5-20251001-v1:0',
       'anthropic.claude-sonnet-4-5-20250929-v1:0',
       'anthropic.claude-opus-4-5-20251101-v1:0',
+      // Claude 4.6 models
+      'anthropic.claude-sonnet-4-6',
+      'anthropic.claude-opus-4-6-v1',
       // Amazon models
       'amazon.titan-embed-text-v2:0',
       'amazon.nova-lite-v1:0',

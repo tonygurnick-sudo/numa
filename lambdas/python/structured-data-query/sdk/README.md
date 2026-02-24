@@ -87,7 +87,7 @@ ai:
   provider: anthropic
   api_key_env: ANTHROPIC_API_KEY
   agentic_model: claude-3-5-haiku-20241022
-  single_query_model: claude-sonnet-4-5-20250929
+  single_query_model: claude-sonnet-4-6
 
 # Named Datasources
 datasources:

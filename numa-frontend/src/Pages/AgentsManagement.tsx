@@ -3,13 +3,14 @@ import { Button, Col, Container, Row, Spinner, Alert, Modal } from 'react-bootst
 import { useNavigate } from 'react-router-dom';
 import { useNumaRequest } from '../Providers/NumaRequestContext';
 import { useAuth } from '../Providers/AuthProvider';
-import { listAgents, deleteAgent, duplicateAgent, updateAgent } from '../Services/AgentsService';
+import { listAgents, getCachedAgents, deleteAgent, duplicateAgent, updateAgent } from '../Services/AgentsService';
 import { AdminAgentsService, type AgentsMode } from '../Services/AdminAgentsService';
 import type { AgentSummary } from '../types/agents';
 import { AgentCard } from '../Components/Agents/AgentCard';
 import { AgentCreateModal } from '../Components/Agents/AgentCreateModal';
 import { AgentScheduleModal } from '../Components/Agents/AgentScheduleModal';
 import { AgentScheduleListModal } from '../Components/Agents/AgentScheduleListModal';
+import { PageHeader } from '../Components/PageHeader';
 import { ScheduleService } from '../Services/ScheduleService';
 import type { AgentSchedule } from '../types/agentSchedules';
 import { LayoutDashboard } from '../Layouts/LayoutDashboard';
@@ -18,9 +19,9 @@ import { fromWebToken } from '@aws-sdk/credential-providers';
 import { PipedreamProxyService } from '../Services/PipedreamProxyService';
 import { getConnectionConfig } from '../config/integrationsConfig';
 import { useBranding } from '../Providers/BrandingContext';
-import { PageHeader } from '../Components/PageHeader';
 import { withPRM } from '../utils/prmUtils';
 import { useTranslation } from 'react-i18next';
+import { ArrowLeft, Bot, ExternalLink, Link2, PlusCircle, RefreshCw, Store, User } from 'lucide-react';
 
 type FilterOption = 'all' | 'personal' | 'public';
 
@@ -41,14 +42,14 @@ export const AgentsManagement = () => {
   const brandPrimaryBorderColor =
     branding.colors.buttonPrimaryBorder ?? branding.colors.buttonPrimary ?? brandPrimaryColor;
   const brandPrimarySoftBackground = `color-mix(in srgb, ${brandPrimaryColor} 12%, transparent)`;
-  const brandSelectedShadow = `0 4px 12px color-mix(in srgb, ${brandPrimaryColor} 20%, transparent)`;
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingAgent, setEditingAgent] = useState<AgentSummary | null>(null);
-  const [loading, setLoading] = useState(true);
+  // SWR: initialize from localStorage cache so agents render instantly
+  const [loading, setLoading] = useState(() => !getCachedAgents('owned'));
   const [error, setError] = useState<string | null>(null);
-  const [myAgents, setMyAgents] = useState<AgentSummary[]>([]);
-  const [workspaceAgents, setWorkspaceAgents] = useState<AgentSummary[]>([]);
+  const [myAgents, setMyAgents] = useState<AgentSummary[]>(() => getCachedAgents('owned') ?? []);
+  const [workspaceAgents, setWorkspaceAgents] = useState<AgentSummary[]>(() => getCachedAgents('public') ?? []);
   const [filter, setFilter] = useState<FilterOption>('all');
   const [agentsMode, setAgentsMode] = useState<AgentsMode>('full');
   const [missingModal, setMissingModal] = useState<{
@@ -58,12 +59,6 @@ export const AgentsManagement = () => {
     missing: string[];
     error?: string | null;
   }>({ show: false, loading: false, agent: null, missing: [], error: null });
-
-  // Chat version selection modal (V1 vs V2)
-  const [chatVersionModal, setChatVersionModal] = useState<{
-    show: boolean;
-    agent: AgentSummary | null;
-  }>({ show: false, agent: null });
 
   // Schedule management state
   const [scheduleModal, setScheduleModal] = useState<{
@@ -78,9 +73,6 @@ export const AgentsManagement = () => {
   }>({ show: false, agent: null });
 
   const [agentScheduleMap, setAgentScheduleMap] = useState<Map<string, boolean>>(new Map());
-
-  const workspaceChatEnabled =
-    typeof window !== 'undefined' && window.sessionStorage.getItem('NUMA_WORKSPACE_CHAT') === 'true';
 
   const userId = user?.decoded_tokens?.idToken?.sub ?? '';
 
@@ -105,7 +97,10 @@ export const AgentsManagement = () => {
 
   const loadAgents = async () => {
     try {
-      setLoading(true);
+      // Only show spinner if we have no cached data — avoids flash when SWR is active
+      if (myAgents.length === 0 && workspaceAgents.length === 0) {
+        setLoading(true);
+      }
       setError(null);
       const [ownedAgents, companyAgents] = await Promise.all([
         listAgents(numaGet, { scope: 'owned' }),
@@ -225,28 +220,16 @@ export const AgentsManagement = () => {
     }
   };
 
-  const proceedToChat = (agent: AgentSummary, chatVersion: 'v1' | 'v2' = 'v1') => {
+  const proceedToChat = (agent: AgentSummary) => {
     const token = String(Date.now());
     sessionStorage.setItem('numa_preselected_agent', JSON.stringify(agent));
     sessionStorage.setItem('numa_preselected_agent_token', token);
     sessionStorage.removeItem('numa_preselected_agent_consumed');
-    navigate(chatVersion === 'v2' ? '/chat-v2' : '/chat');
+    navigate('/chat');
   };
 
-  // Show chat version selection modal if V2 is enabled, otherwise go directly to V1
   const initiateChat = (agent: AgentSummary) => {
-    if (workspaceChatEnabled) {
-      setChatVersionModal({ show: true, agent });
-    } else {
-      proceedToChat(agent, 'v1');
-    }
-  };
-
-  const handleChatVersionSelect = (version: 'v1' | 'v2') => {
-    if (chatVersionModal.agent) {
-      proceedToChat(chatVersionModal.agent, version);
-    }
-    setChatVersionModal({ show: false, agent: null });
+    proceedToChat(agent);
   };
 
   const handleStartChat = async (agent: AgentSummary) => {
@@ -472,149 +455,131 @@ export const AgentsManagement = () => {
   const totalAgents = myAgents.length + workspaceAgents.length;
   const personalCount = myAgents.filter((a) => a.scope === 'user').length;
   const publicCount = workspaceAgents.length;
+  const headerActions = (
+    <div className="agents-hero__actions">
+      <button type="button" className="agents-hero__action-btn" onClick={loadAgents} disabled={loading}>
+        <RefreshCw
+          size={16}
+          className={`agents-hero__action-icon ${loading ? 'is-spinning' : ''}`}
+          aria-hidden="true"
+        />
+        {t('management.actions.refresh')}
+      </button>
+      {agentsFeatureEnabled && agentsMode !== 'off' && (
+        <button
+          type="button"
+          className="agents-hero__action-btn agents-hero__action-btn--primary"
+          onClick={handleCreate}
+        >
+          <PlusCircle size={16} className="agents-hero__action-icon" aria-hidden="true" />
+          {t('management.actions.create')}
+        </button>
+      )}
+    </div>
+  );
 
   return (
-    <div className="dashboard">
-      <PageHeader
-        title={t('management.title')}
-        subtitle={t('management.subtitle')}
-        actions={
-          <>
-            <Button variant="secondary" onClick={loadAgents} disabled={loading}>
-              <i className="bi bi-arrow-clockwise me-1"></i> {t('management.actions.refresh')}
-            </Button>
-            {agentsFeatureEnabled && agentsMode !== 'off' && (
-              <Button variant="primary" onClick={handleCreate}>
-                <i className="bi bi-plus-circle me-1"></i> {t('management.actions.create')}
-              </Button>
-            )}
-          </>
-        }
-      />
-
-      {/* Stats Cards - moved outside header */}
-      {agentsFeatureEnabled && (
-        <Container fluid>
-          <Row className="g-3 mb-4">
-            <Col xs={6} md={4}>
-              <div
-                className="p-3 rounded-3 border bg-white"
-                role="button"
-                onClick={() => setFilter('all')}
-                style={{
-                  boxShadow: filter === 'all' ? brandSelectedShadow : '0 1px 3px rgba(0,0,0,0.05)',
-                  cursor: 'pointer',
-                  transition: 'all 0.2s ease',
-                  borderColor: filter === 'all' ? brandPrimaryBorderColor : undefined,
-                  borderWidth: filter === 'all' ? '2px' : '1px',
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.transform = 'translateY(-2px)';
-                  e.currentTarget.style.boxShadow = brandSelectedShadow;
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.transform = 'translateY(0)';
-                  e.currentTarget.style.boxShadow =
-                    filter === 'all' ? brandSelectedShadow : '0 1px 3px rgba(0,0,0,0.05)';
-                }}
-              >
-                <div className="d-flex align-items-center justify-content-between">
-                  <div>
-                    <div className="text-muted small mb-1">{t('management.stats.total')}</div>
-                    <div className="fs-4 fw-bold">{totalAgents}</div>
-                  </div>
-                  <div
-                    className="rounded-circle d-flex align-items-center justify-content-center"
-                    style={{ width: 48, height: 48, backgroundColor: brandPrimarySoftBackground }}
-                  >
-                    <i className="bi bi-robot fs-5" style={{ color: brandPrimaryColor }}></i>
-                  </div>
-                </div>
-              </div>
-            </Col>
-            <Col xs={6} md={4}>
-              <div
-                className="p-3 rounded-3 border bg-white"
-                role="button"
-                onClick={() => setFilter('personal')}
-                style={{
-                  boxShadow: filter === 'personal' ? brandSelectedShadow : '0 1px 3px rgba(0,0,0,0.05)',
-                  cursor: 'pointer',
-                  transition: 'all 0.2s ease',
-                  borderColor: filter === 'personal' ? brandPrimaryBorderColor : undefined,
-                  borderWidth: filter === 'personal' ? '2px' : '1px',
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.transform = 'translateY(-2px)';
-                  e.currentTarget.style.boxShadow = brandSelectedShadow;
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.transform = 'translateY(0)';
-                  e.currentTarget.style.boxShadow =
-                    filter === 'personal' ? brandSelectedShadow : '0 1px 3px rgba(0,0,0,0.05)';
-                }}
-              >
-                <div className="d-flex align-items-center justify-content-between">
-                  <div>
-                    <div className="text-muted small mb-1">{t('management.stats.personal')}</div>
-                    <div className="fs-4 fw-bold">{personalCount}</div>
-                  </div>
-                  <div
-                    className="rounded-circle bg-secondary bg-opacity-10 d-flex align-items-center justify-content-center"
-                    style={{ width: 48, height: 48 }}
-                  >
-                    <i className="bi bi-person-fill" style={{ color: brandPrimaryColor }}></i>
-                  </div>
-                </div>
-              </div>
-            </Col>
-            <Col xs={6} md={4}>
-              <div
-                className="p-3 rounded-3 border bg-white"
-                role="button"
-                onClick={() => setFilter('public')}
-                style={{
-                  boxShadow: filter === 'public' ? brandSelectedShadow : '0 1px 3px rgba(0,0,0,0.05)',
-                  cursor: 'pointer',
-                  transition: 'all 0.2s ease',
-                  borderColor: filter === 'public' ? brandPrimaryBorderColor : undefined,
-                  borderWidth: filter === 'public' ? '2px' : '1px',
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.transform = 'translateY(-2px)';
-                  e.currentTarget.style.boxShadow = brandSelectedShadow;
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.transform = 'translateY(0)';
-                  e.currentTarget.style.boxShadow =
-                    filter === 'public' ? brandSelectedShadow : '0 1px 3px rgba(0,0,0,0.05)';
-                }}
-              >
-                <div className="d-flex align-items-center justify-content-between">
-                  <div>
-                    <div className="text-muted small mb-1">{t('management.stats.company')}</div>
-                    <div className="fs-4 fw-bold">{publicCount}</div>
-                  </div>
-                  <div
-                    className="rounded-circle d-flex align-items-center justify-content-center"
-                    style={{ width: 48, height: 48, backgroundColor: brandPrimarySoftBackground }}
-                  >
-                    <i className="bi bi-shop fs-5" style={{ color: brandPrimaryColor }}></i>
-                  </div>
-                </div>
-              </div>
-            </Col>
-          </Row>
-        </Container>
-      )}
+    <div className="dashboard agents-page">
+      <PageHeader title={t('management.title')} subtitle={t('management.subtitle')} actions={headerActions} />
 
       <LayoutDashboard>
-        <Container className="py-4">
+        {agentsFeatureEnabled && (
+          <Container fluid className="px-0">
+            <Row className="g-3 mb-4">
+              <Col xs={6} md={4}>
+                <div
+                  className="p-3 rounded-3 border bg-white"
+                  role="button"
+                  onClick={() => setFilter('all')}
+                  style={{
+                    boxShadow: 'none',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s ease',
+                    borderColor: filter === 'all' ? brandPrimaryBorderColor : undefined,
+                    borderWidth: filter === 'all' ? '2px' : '1px',
+                    backgroundColor: filter === 'all' ? brandPrimarySoftBackground : '#ffffff',
+                  }}
+                >
+                  <div className="d-flex align-items-center justify-content-between">
+                    <div>
+                      <div className="text-muted small mb-1">{t('management.stats.total')}</div>
+                      <div className="fs-4 fw-bold">{totalAgents}</div>
+                    </div>
+                    <div
+                      className="rounded-circle d-flex align-items-center justify-content-center"
+                      style={{ width: 48, height: 48, backgroundColor: brandPrimarySoftBackground }}
+                    >
+                      <Bot size={20} style={{ color: brandPrimaryColor }} aria-hidden="true" />
+                    </div>
+                  </div>
+                </div>
+              </Col>
+              <Col xs={6} md={4}>
+                <div
+                  className="p-3 rounded-3 border bg-white"
+                  role="button"
+                  onClick={() => setFilter('personal')}
+                  style={{
+                    boxShadow: 'none',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s ease',
+                    borderColor: filter === 'personal' ? brandPrimaryBorderColor : undefined,
+                    borderWidth: filter === 'personal' ? '2px' : '1px',
+                    backgroundColor: filter === 'personal' ? brandPrimarySoftBackground : '#ffffff',
+                  }}
+                >
+                  <div className="d-flex align-items-center justify-content-between">
+                    <div>
+                      <div className="text-muted small mb-1">{t('management.stats.personal')}</div>
+                      <div className="fs-4 fw-bold">{personalCount}</div>
+                    </div>
+                    <div
+                      className="rounded-circle bg-secondary bg-opacity-10 d-flex align-items-center justify-content-center"
+                      style={{ width: 48, height: 48 }}
+                    >
+                      <User size={20} style={{ color: brandPrimaryColor }} aria-hidden="true" />
+                    </div>
+                  </div>
+                </div>
+              </Col>
+              <Col xs={6} md={4}>
+                <div
+                  className="p-3 rounded-3 border bg-white"
+                  role="button"
+                  onClick={() => setFilter('public')}
+                  style={{
+                    boxShadow: 'none',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s ease',
+                    borderColor: filter === 'public' ? brandPrimaryBorderColor : undefined,
+                    borderWidth: filter === 'public' ? '2px' : '1px',
+                    backgroundColor: filter === 'public' ? brandPrimarySoftBackground : '#ffffff',
+                  }}
+                >
+                  <div className="d-flex align-items-center justify-content-between">
+                    <div>
+                      <div className="text-muted small mb-1">{t('management.stats.company')}</div>
+                      <div className="fs-4 fw-bold">{publicCount}</div>
+                    </div>
+                    <div
+                      className="rounded-circle d-flex align-items-center justify-content-center"
+                      style={{ width: 48, height: 48, backgroundColor: brandPrimarySoftBackground }}
+                    >
+                      <Store size={20} style={{ color: brandPrimaryColor }} aria-hidden="true" />
+                    </div>
+                  </div>
+                </div>
+              </Col>
+            </Row>
+          </Container>
+        )}
+
+        <Container fluid className="px-0 pt-0 pb-4">
           {!agentsFeatureEnabled && (
             <>
               <Alert variant="info" className="mb-3">
                 <div className="d-flex align-items-start">
-                  <i className="bi bi-robot me-2 mt-1"></i>
+                  <Bot size={16} className="me-2 mt-1" aria-hidden="true" />
                   <div>
                     <div className="fw-semibold">{t('management.disabled.title')}</div>
                     <div className="small text-muted">{t('management.disabled.description')}</div>
@@ -623,7 +588,7 @@ export const AgentsManagement = () => {
               </Alert>
               <div className="text-center py-5">
                 <div className="mb-4">
-                  <i className="bi bi-robot text-muted" style={{ fontSize: '4rem' }}></i>
+                  <Bot size={64} className="text-muted" aria-hidden="true" />
                 </div>
                 <h3 className="h5 mb-2">{t('management.disabled.emptyTitle')}</h3>
                 <p className="text-muted mb-0" style={{ maxWidth: 640, margin: '0 auto' }}>
@@ -647,40 +612,31 @@ export const AgentsManagement = () => {
             ) : (
               <>
                 {filter !== 'public' && filteredMyAgents.length > 0 && (
-                  <section className="mb-5">
-                    <div className="mb-4">
+                  <section className="agents-section agents-section--my">
+                    <div className="agents-section__header">
                       <div className="d-flex align-items-center gap-3">
                         <div
-                          className="rounded-3 d-flex align-items-center justify-content-center"
+                          className="agents-section__icon rounded-3 d-flex align-items-center justify-content-center"
                           style={{
-                            width: 56,
-                            height: 56,
                             backgroundColor: brandPrimaryColor,
-                            flexShrink: 0,
                           }}
                         >
-                          <i
-                            className="bi bi-person-circle"
-                            style={{ fontSize: '28px', color: brandPrimaryContrast }}
-                          ></i>
+                          <User size={28} style={{ color: brandPrimaryContrast }} aria-hidden="true" />
                         </div>
                         <div className="flex-grow-1">
                           <div className="d-flex justify-content-between align-items-center mb-1">
-                            <h2 className="h4 mb-0 fw-bold">{t('management.sections.myAgents.title')}</h2>
+                            <h2 className="agents-section__title">{t('management.sections.myAgents.title')}</h2>
                             <span
-                              className="badge rounded-pill px-3 py-2"
+                              className="badge rounded-pill px-3 py-2 agents-section__count"
                               style={{
                                 backgroundColor: brandPrimaryColor,
                                 color: brandPrimaryContrast,
-                                fontSize: '0.9rem',
                               }}
                             >
                               {filteredMyAgents.length}
                             </span>
                           </div>
-                          <p className="text-muted mb-0" style={{ fontSize: '0.95rem' }}>
-                            {t('management.sections.myAgents.subtitle')}
-                          </p>
+                          <p className="agents-section__subtitle">{t('management.sections.myAgents.subtitle')}</p>
                         </div>
                       </div>
                     </div>
@@ -693,37 +649,31 @@ export const AgentsManagement = () => {
                 )}
 
                 {agentsMode !== 'personal_only' && filter !== 'personal' && filteredWorkspaceAgents.length > 0 && (
-                  <section>
-                    <div className="mb-4">
+                  <section className="agents-section agents-section--company">
+                    <div className="agents-section__header">
                       <div className="d-flex align-items-center gap-3">
                         <div
-                          className="rounded-3 d-flex align-items-center justify-content-center"
+                          className="agents-section__icon rounded-3 d-flex align-items-center justify-content-center"
                           style={{
-                            width: 56,
-                            height: 56,
                             backgroundColor: brandPrimaryColor,
-                            flexShrink: 0,
                           }}
                         >
-                          <i className="bi bi-shop" style={{ fontSize: '28px', color: brandPrimaryContrast }}></i>
+                          <Store size={28} style={{ color: brandPrimaryContrast }} aria-hidden="true" />
                         </div>
                         <div className="flex-grow-1">
                           <div className="d-flex justify-content-between align-items-center mb-1">
-                            <h2 className="h4 mb-0 fw-bold">{t('management.sections.company.title')}</h2>
+                            <h2 className="agents-section__title">{t('management.sections.company.title')}</h2>
                             <span
-                              className="badge rounded-pill px-3 py-2"
+                              className="badge rounded-pill px-3 py-2 agents-section__count"
                               style={{
                                 backgroundColor: brandPrimaryColor,
                                 color: brandPrimaryContrast,
-                                fontSize: '0.9rem',
                               }}
                             >
                               {filteredWorkspaceAgents.length}
                             </span>
                           </div>
-                          <p className="text-muted mb-0" style={{ fontSize: '0.95rem' }}>
-                            {t('management.sections.company.subtitle')}
-                          </p>
+                          <p className="agents-section__subtitle">{t('management.sections.company.subtitle')}</p>
                         </div>
                       </div>
                     </div>
@@ -734,7 +684,7 @@ export const AgentsManagement = () => {
                 {filteredMyAgents.length === 0 && filteredWorkspaceAgents.length === 0 && (
                   <div className="text-center py-5">
                     <div className="mb-4">
-                      <i className="bi bi-robot text-muted" style={{ fontSize: '4rem' }}></i>
+                      <Bot size={64} className="text-muted" aria-hidden="true" />
                     </div>
                     <h3 className="h5 mb-2">{t('management.empty.title')}</h3>
                     <p className="text-muted mb-4">
@@ -748,7 +698,7 @@ export const AgentsManagement = () => {
                     </p>
                     {agentsMode !== 'off' && (
                       <Button variant="primary" onClick={handleCreate}>
-                        <i className="bi bi-plus-circle me-2"></i>
+                        <PlusCircle size={16} className="me-2" aria-hidden="true" />
                         {t('management.actions.createFirst')}
                       </Button>
                     )}
@@ -814,7 +764,7 @@ export const AgentsManagement = () => {
                               className="rounded-2 bg-secondary bg-opacity-10 d-flex align-items-center justify-content-center"
                               style={{ width: 32, height: 32, flexShrink: 0 }}
                             >
-                              <i className="bi bi-link text-secondary"></i>
+                              <Link2 size={16} className="text-secondary" aria-hidden="true" />
                             </div>
                           )}
                           <span className="fw-medium">{config?.name || id}</span>
@@ -833,11 +783,11 @@ export const AgentsManagement = () => {
                   onClick={() => setMissingModal((m) => ({ ...m, show: false }))}
                   className="me-auto"
                 >
-                  <i className="bi bi-arrow-left me-2"></i>
+                  <ArrowLeft size={16} className="me-2" aria-hidden="true" />
                   {t('management.missingIntegrations.back')}
                 </Button>
                 <a className="btn btn-outline-primary" href="/integrations">
-                  <i className="bi bi-link-45deg me-2"></i>
+                  <ExternalLink size={16} className="me-2" aria-hidden="true" />
                   {t('management.missingIntegrations.goToIntegrations')}
                 </a>
                 <Button
@@ -852,97 +802,6 @@ export const AgentsManagement = () => {
                 </Button>
               </Modal.Footer>
             )}
-          </Modal>
-
-          {/* Chat version selection modal (V1 vs V2) */}
-          <Modal show={chatVersionModal.show} onHide={() => setChatVersionModal({ show: false, agent: null })} centered>
-            <Modal.Header closeButton>
-              <Modal.Title>{t('management.chatVersion.title')}</Modal.Title>
-            </Modal.Header>
-            <Modal.Body>
-              <p
-                className="mb-3"
-                dangerouslySetInnerHTML={{
-                  __html: t('management.chatVersion.prompt', {
-                    agentTitle: chatVersionModal.agent?.title || t('management.chatVersion.agentFallback'),
-                    interpolation: { escapeValue: false },
-                  }),
-                }}
-              />
-              <div className="d-flex flex-column gap-3">
-                <div
-                  role="button"
-                  tabIndex={0}
-                  className="d-flex align-items-center justify-content-between p-3 border rounded-3"
-                  style={{
-                    cursor: 'pointer',
-                    backgroundColor: 'var(--bs-body-bg)',
-                    transition: 'all 0.15s ease-in-out',
-                  }}
-                  onClick={() => handleChatVersionSelect('v1')}
-                  onKeyDown={(e) => e.key === 'Enter' && handleChatVersionSelect('v1')}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.backgroundColor = 'var(--bs-tertiary-bg)';
-                    e.currentTarget.style.borderColor = 'var(--bs-primary)';
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.backgroundColor = 'var(--bs-body-bg)';
-                    e.currentTarget.style.borderColor = '';
-                  }}
-                >
-                  <div className="d-flex align-items-center gap-3">
-                    <div
-                      className="rounded-2 d-flex align-items-center justify-content-center"
-                      style={{ width: 40, height: 40, backgroundColor: '#6c757d' }}
-                    >
-                      <i className="bi bi-chat-dots text-white"></i>
-                    </div>
-                    <div>
-                      <div className="fw-semibold">{t('management.chatVersion.v1.title')}</div>
-                      <small className="text-muted">{t('management.chatVersion.v1.description')}</small>
-                    </div>
-                  </div>
-                  <i className="bi bi-chevron-right text-muted"></i>
-                </div>
-                <div
-                  role="button"
-                  tabIndex={0}
-                  className="d-flex align-items-center justify-content-between p-3 border rounded-3"
-                  style={{
-                    cursor: 'pointer',
-                    backgroundColor: 'var(--bs-body-bg)',
-                    transition: 'all 0.15s ease-in-out',
-                  }}
-                  onClick={() => handleChatVersionSelect('v2')}
-                  onKeyDown={(e) => e.key === 'Enter' && handleChatVersionSelect('v2')}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.backgroundColor = 'var(--bs-tertiary-bg)';
-                    e.currentTarget.style.borderColor = 'var(--bs-primary)';
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.backgroundColor = 'var(--bs-body-bg)';
-                    e.currentTarget.style.borderColor = '';
-                  }}
-                >
-                  <div className="d-flex align-items-center gap-3">
-                    <div
-                      className="rounded-2 d-flex align-items-center justify-content-center"
-                      style={{ width: 40, height: 40, backgroundColor: '#0d6efd' }}
-                    >
-                      <i className="bi bi-chat-square-dots text-white"></i>
-                    </div>
-                    <div>
-                      <div className="fw-semibold">
-                        {t('management.chatVersion.v2.title')}{' '}
-                        <span className="beta-badge">{t('common:badges.beta')}</span>
-                      </div>
-                      <small className="text-muted">{t('management.chatVersion.v2.description')}</small>
-                    </div>
-                  </div>
-                  <i className="bi bi-chevron-right text-muted"></i>
-                </div>
-              </div>
-            </Modal.Body>
           </Modal>
         </Container>
       </LayoutDashboard>

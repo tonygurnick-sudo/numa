@@ -12,7 +12,10 @@ import uuid as uuid_mod
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, AsyncIterator, Awaitable, Callable, Optional
+from typing import TYPE_CHECKING, Any, AsyncIterator, Awaitable, Callable, Optional
+
+if TYPE_CHECKING:
+    from numa_workspace_agent.agent_types import AgentTypeConfig
 
 import structlog
 from claude_agent_sdk import (
@@ -270,6 +273,9 @@ async def stream_claude_sdk(
     enabled_integrations: Optional[list[str]] = None,
     approval_mode: str = "always",
     email_signature: Optional[dict] = None,
+    agent_type_config: Optional["AgentTypeConfig"] = None,
+    user_profile: Optional[dict] = None,
+    company_profile: Optional[str] = None,
 ) -> AsyncIterator[bytes]:
     """
     Stream Claude SDK output for a conversation.
@@ -299,6 +305,7 @@ async def stream_claude_sdk(
         kb_listings: Optional dict mapping kb_id -> {files, folders, total_count} for prompt context
         agent_config: Optional agent configuration for custom system prompts and restrictions
         agent_file_paths: Optional list of downloaded agent reference file paths
+        user_profile: Optional user profile dict for AI personalisation
 
     Yields:
         SSE formatted events as bytes (SDK message types serialized)
@@ -404,6 +411,9 @@ async def stream_claude_sdk(
         enabled_integrations=enabled_integrations,
         request_id=request_id,
         email_signature=email_signature,
+        agent_type_config=agent_type_config,
+        user_profile=user_profile,
+        company_profile=company_profile,
     )
 
     logger.info(
@@ -418,6 +428,8 @@ async def stream_claude_sdk(
         has_attachments=bool(attached_files),
         has_folders=bool(attached_folders),
         request_id=request_id,
+        system_prompt_length=len(options.system_prompt) if options.system_prompt else 0,
+        has_company_profile="**Company Information:**" in (options.system_prompt or ""),
     )
 
     # 5a. Write attachment event if files are attached (before user event)
@@ -585,7 +597,7 @@ async def stream_claude_sdk(
                 #
                 # The approval_mode controls whether approval is required:
                 # - 'always': every integration tool call needs manual approval (default)
-                # - 'non_destructive': auto-approve read-only actions (readOnlyHint=true),
+                # - 'non_destructive': auto-approve read-only actions and draft actions,
                 #   require approval for writes/deletes or unknown actions (fail-closed)
                 # - 'never': auto-approve all integration tool calls
                 APPROVAL_REQUIRED_TOOLS = ("run_action", "proxy_request")
@@ -666,15 +678,25 @@ async def stream_claude_sdk(
                                         action_key=_approval_key,
                                         error=str(exc),
                                     )
-                                # Auto-approve only if annotations explicitly
-                                # mark this as read-only. Missing annotations
-                                # default to requiring approval (fail-closed).
-                                read_only = (
-                                    schema_annotations.get("readOnlyHint", False)
-                                    if isinstance(schema_annotations, dict)
-                                    else False
-                                )
-                                auto_approved = bool(read_only)
+                                # Auto-approve read-only actions and draft
+                                # actions that are explicitly non-destructive.
+                                # Drafts are saved locally and must be sent
+                                # separately by the user, so they're safe.
+                                # Missing annotations default to requiring
+                                # approval (fail-closed).
+                                if isinstance(schema_annotations, dict):
+                                    read_only = schema_annotations.get(
+                                        "readOnlyHint", False
+                                    )
+                                    is_draft = "draft" in _approval_key.lower()
+                                    non_destructive = not schema_annotations.get(
+                                        "destructiveHint", True
+                                    )
+                                    auto_approved = bool(
+                                        read_only or (is_draft and non_destructive)
+                                    )
+                                else:
+                                    auto_approved = False
 
                             # Set NUMA_APPROVAL_MODE env var so the tools Lambda
                             # knows whether to skip DynamoDB polling.
@@ -830,6 +852,295 @@ async def stream_claude_sdk(
         request_id=request_id,
         stop_reason=stop_reason,
     )
+
+
+async def run_claude_sdk(
+    conversation_id: str,
+    prompt: str,
+    user_sub: str,
+    timezone_str: Optional[str] = None,
+    user_email: Optional[str] = None,
+    today_string: Optional[str] = None,
+    available_kbs: Optional[list[dict]] = None,
+    enabled_tools: Optional[list[str]] = None,
+    is_cold_start: bool = False,
+    attached_files: Optional[list[dict]] = None,
+    attached_folders: Optional[list[dict]] = None,
+    original_prompt: Optional[str] = None,
+    model_id: Optional[str] = None,
+    kb_listings: Optional[dict[str, dict]] = None,
+    request_id: Optional[str] = None,
+    v1_migration_context: Optional[str] = None,
+    agent_config: Optional[AgentConfig] = None,
+    agent_file_paths: Optional[list[str]] = None,
+    external_user_id: Optional[str] = None,
+    enabled_integrations: Optional[list[str]] = None,
+    approval_mode: str = "always",
+    email_signature: Optional[dict] = None,
+    agent_type_config: Optional["AgentTypeConfig"] = None,
+    user_profile: Optional[dict] = None,
+    company_profile: Optional[str] = None,
+) -> dict[str, Any]:
+    """Run Claude SDK to completion and return the collected result.
+
+    This is the non-streaming counterpart of :func:`stream_claude_sdk`.
+    Instead of yielding SSE events, it runs the full agent loop, writes the
+    trace to disk (same NDJSON format), and returns a result dict with the
+    final assistant text, artifacts list, and usage metadata.
+
+    Used by the ``sync`` and ``fire-and-forget`` response modes where the
+    caller does not need incremental SSE events — just the final answer.
+
+    Returns:
+        {
+            "status": "completed" | "error",
+            "text": "<final assistant text>",
+            "artifacts": [{"type": "file", "path": "..."}],
+            "usage": {"num_turns": N, "total_cost_usd": X, "duration_ms": Y},
+            "session_id": "...",
+            "error": "..."  # only present when status == "error"
+        }
+    """
+    paths = get_workspace_paths()
+    trace_path = paths["trace_file"]
+    session_id: Optional[str] = None
+    captured_session_id: Optional[str] = None
+
+    # Initialize stream log for debugging
+    stream_log = StreamLog(
+        conversation_id=conversation_id,
+        user_sub=user_sub,
+        prompt=prompt,
+    )
+
+    # 1. Restore session on cold start (same as streaming)
+    if is_cold_start:
+        restore_result = restore_claude_session(
+            user_sub, conversation_id, paths["system_dir"]
+        )
+        if restore_result and restore_result.get("session_id"):
+            session_id = restore_result["session_id"]
+        restore_trace_from_s3(user_sub, conversation_id)
+    else:
+        session_id = get_active_session_id()
+        if not session_id:
+            restore_result = restore_claude_session(
+                user_sub, conversation_id, paths["system_dir"]
+            )
+            if restore_result and restore_result.get("session_id"):
+                session_id = restore_result["session_id"]
+            restore_trace_from_s3(user_sub, conversation_id)
+
+    # 2. Uploaded files for prompt context
+    uploaded_files: list[str] = []
+    if paths["uploads"].exists():
+        uploaded_files = [f.name for f in paths["uploads"].iterdir() if f.is_file()]
+
+    # 3. Augment prompt
+    augmented_prompt = augment_prompt_with_context(
+        prompt,
+        uploaded_files,
+        available_kbs,
+        kb_listings,
+        attached_folders,
+        v1_migration_context,
+    )
+
+    # 4. Create SDK options
+    validated_model = validate_model_id(model_id)
+    options = create_agent_options(
+        session_id=session_id,
+        conversation_id=conversation_id,
+        user_sub=user_sub,
+        user_email=user_email,
+        user_timezone=timezone_str,
+        today_string=today_string,
+        allowed_kb_ids=available_kbs,
+        enabled_tools=enabled_tools,
+        model=validated_model,
+        agent_config=agent_config,
+        agent_file_paths=agent_file_paths,
+        external_user_id=external_user_id,
+        enabled_integrations=enabled_integrations,
+        request_id=request_id,
+        email_signature=email_signature,
+        agent_type_config=agent_type_config,
+        user_profile=user_profile,
+        company_profile=company_profile,
+    )
+
+    logger.info(
+        "Starting Claude SDK (non-streaming)",
+        _name="SDK_RUN_START",
+        phase="sdk",
+        conversation_id=conversation_id,
+        user_sub=user_sub,
+        session_id=session_id,
+        model_id=validated_model,
+        request_id=request_id,
+    )
+
+    # 5. Write user prompt to trace
+    trace_prompt = original_prompt if original_prompt else prompt
+    user_event = {
+        "type": "user",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "message": {
+            "role": "user",
+            "content": [{"type": "text", "text": trace_prompt}],
+        },
+        "session_id": session_id or "",
+        "uuid": str(uuid_mod.uuid4()),
+        "request_id": request_id or "",
+    }
+    with trace_path.open("a", encoding="utf-8") as f:
+        f.write(json.dumps(user_event) + "\n")
+
+    # Collect assistant text blocks and metadata
+    collected_text: list[str] = []
+    result_meta: dict[str, Any] = {}
+
+    try:
+        async with ClaudeSDKClient(options=options) as client:
+            await client.query(augmented_prompt)
+
+            async for message in client.receive_response():
+                msg_type = type(message).__name__
+
+                # Record in stream log
+                if isinstance(message, AssistantMessage):
+                    for block in message.content:
+                        if isinstance(block, TextBlock):
+                            stream_log.record_text(block.text)
+                            collected_text.append(block.text)
+                        elif isinstance(block, ThinkingBlock):
+                            stream_log.record_thinking(block.thinking)
+                        elif isinstance(block, ToolUseBlock):
+                            stream_log.record_tool_start(
+                                block.id,
+                                block.name,
+                                block.input if isinstance(block.input, dict) else None,
+                            )
+                elif isinstance(message, UserMessage):
+                    content = message.content
+                    if isinstance(content, list):
+                        for block in content:
+                            if isinstance(block, ToolResultBlock):
+                                stream_log.record_tool_result(
+                                    block.tool_use_id,
+                                    block.content,
+                                    block.is_error,
+                                )
+
+                # Serialize and write to trace
+                serialized = serialize_message(message)
+
+                if isinstance(message, ResultMessage):
+                    captured_session_id = message.session_id
+                    serialized["session_id"] = captured_session_id
+                    stream_log.finalize(message)
+                    result_meta = {
+                        "num_turns": message.num_turns,
+                        "total_cost_usd": message.total_cost_usd,
+                        "duration_ms": message.duration_ms,
+                        "is_error": message.is_error,
+                    }
+                    logger.info(
+                        "SDK run result",
+                        _name="SDK_RUN_RESULT",
+                        phase="sdk",
+                        conversation_id=conversation_id,
+                        duration_ms=message.duration_ms,
+                        num_turns=message.num_turns,
+                        total_cost_usd=message.total_cost_usd,
+                        is_error=message.is_error,
+                    )
+
+                if isinstance(message, SystemMessage) and message.subtype == "init":
+                    if "session_id" in message.data:
+                        captured_session_id = message.data["session_id"]
+
+                with trace_path.open("a", encoding="utf-8") as f:
+                    f.write(json.dumps(serialized) + "\n")
+
+    except Exception as e:
+        import traceback
+
+        error_tb = traceback.format_exc()
+        stream_log.is_error = True
+        stream_log.error_message = str(e)
+
+        logger.error(
+            "Claude SDK run error",
+            _name="SDK_RUN_ERROR",
+            phase="sdk",
+            error=str(e),
+            error_type=type(e).__name__,
+            traceback=error_tb,
+            conversation_id=conversation_id,
+        )
+
+        error_event = {
+            "type": "error",
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "error": str(e),
+            "error_type": type(e).__name__,
+        }
+        with trace_path.open("a", encoding="utf-8") as f:
+            f.write(json.dumps(error_event) + "\n")
+
+        return {
+            "status": "error",
+            "text": "",
+            "artifacts": [],
+            "usage": result_meta,
+            "session_id": captured_session_id or session_id or "",
+            "error": str(e),
+        }
+
+    finally:
+        if captured_session_id:
+            set_active_conversation(conversation_id, session_id=captured_session_id)
+
+        archive_claude_session(
+            user_sub,
+            conversation_id,
+            paths["system_dir"],
+            session_id=captured_session_id,
+        )
+
+        stream_log.log_summary()
+
+    # Gather artifacts from session directory
+    artifacts: list[dict[str, str]] = []
+    session_dir = paths["session"]
+    if session_dir.exists():
+        for f in session_dir.rglob("*"):
+            if f.is_file():
+                artifacts.append(
+                    {
+                        "type": "file",
+                        "path": f"session/{f.relative_to(session_dir)}",
+                    }
+                )
+
+    logger.info(
+        "Claude SDK run completed",
+        _name="SDK_RUN_COMPLETE",
+        phase="sdk",
+        conversation_id=conversation_id,
+        text_length=sum(len(t) for t in collected_text),
+        artifact_count=len(artifacts),
+        request_id=request_id,
+    )
+
+    return {
+        "status": "completed",
+        "text": "".join(collected_text),
+        "artifacts": artifacts,
+        "usage": result_meta,
+        "session_id": captured_session_id or session_id or "",
+    }
 
 
 def check_sdk_available() -> bool:

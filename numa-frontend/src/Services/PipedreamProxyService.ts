@@ -12,6 +12,7 @@ import type {
   DisconnectIntegrationData,
 } from '../types/pipedream';
 import i18n from '../i18n';
+import { getSwrCache, setSwrCache, clearSwrCache } from '../utils/swrCache';
 
 export class PipedreamProxyService {
   /**
@@ -30,6 +31,7 @@ export class PipedreamProxyService {
       this._statusCache.delete(externalUserId);
       const key = `NUMA_INTEGRATIONS_STATUS:${externalUserId}`;
       sessionStorage.removeItem(key);
+      clearSwrCache(`integrationStatus_${externalUserId}`);
     } catch {
       // no-op
     }
@@ -73,6 +75,24 @@ export class PipedreamProxyService {
         // ignore parse or storage errors
       }
     }
+
+    // localStorage SWR cache — survives page refresh (no TTL, just stale-while-revalidate)
+    if (!forceRefresh) {
+      const persisted = getSwrCache<IntegrationStatusResult>(`integrationStatus_${externalUserId}`);
+      if (persisted) {
+        // Hydrate in-memory + sessionStorage so the TTL governs from here
+        this._statusCache.set(externalUserId, { data: persisted, expiresAt: now + ttlMs });
+        try {
+          sessionStorage.setItem(storageKey, JSON.stringify({ data: persisted, expiresAt: now + ttlMs }));
+        } catch {
+          // ignore
+        }
+        // Return cached data immediately — the caller's component will still trigger a
+        // background refresh on next mount cycle since the in-memory TTL is fresh.
+        return persisted;
+      }
+    }
+
     const payload: PipedreamProxyRequest = {
       operation: 'get_integration_status',
       external_user_id: externalUserId,
@@ -98,6 +118,8 @@ export class PipedreamProxyService {
       } catch {
         // ignore storage quota issues
       }
+      // Persist to localStorage for instant load on next page refresh
+      setSwrCache(`integrationStatus_${externalUserId}`, data);
       return data;
     } catch (error) {
       console.error('PipedreamService.getIntegrationStatus failed:', error);
@@ -249,23 +271,11 @@ export class PipedreamProxyService {
     });
 
     try {
-      console.log('Invoking Pipedream relay lambda:', {
-        operation: payload.operation,
-        external_user_id: payload.external_user_id,
-        lambda_arn: relayLambdaArn,
-      });
-
       const lambdaResponse = await (lambdaClient as LambdaClient).send(command);
 
       // Parse lambda response
       const raw = new TextDecoder().decode(lambdaResponse.Payload);
       const responsePayload = JSON.parse(raw) as PipedreamLambdaHttpResponse<T>;
-
-      console.log('Relay lambda response:', {
-        statusCode: responsePayload.statusCode,
-        operation: payload.operation,
-        success: responsePayload.body?.success,
-      });
 
       // Handle lambda execution errors
       if (lambdaResponse.FunctionError) {
@@ -329,12 +339,6 @@ export class PipedreamProxyService {
 
     // Construct external user ID in expected format
     const externalUserId = `${clientId}_${cognitoUserId}`;
-
-    console.log('Derived external user ID:', {
-      clientId,
-      cognitoUserId: cognitoUserId.substring(0, 8) + '...', // Log partial ID for security
-      externalUserId: externalUserId.substring(0, 20) + '...', // Log partial external ID
-    });
 
     return externalUserId;
   }

@@ -46,6 +46,18 @@
   --color-error-bg: #ffebee;
   --color-error-text: #c62828;
 
+  /* Nav styling - matches V2.2 prototype (brand-aware with neutral defaults) */
+  --nav-active-bg: color-mix(in srgb, var(--brand-primary, #8e50a7) 8%, white 92%);
+  --nav-active-text: var(--brand-primary, var(--color-primary));
+  --nav-active-icon: var(--brand-primary, var(--color-primary));
+  --nav-hover-bg: #f4f4f5; /* zinc-100 */
+  --nav-icon-default: #71717a; /* zinc-500 */
+  --nav-text-default: #3f3f46; /* zinc-700 */
+  --nav-section-text: #a1a1aa; /* zinc-400 */
+  --nav-divider: #e4e4e7; /* zinc-200 */
+  --nav-avatar-bg: #e4e4e7; /* zinc-200 */
+  --nav-avatar-text: #71717a; /* zinc-500 */
+
   /* Common background colors */
   --bg-message-user: color-mix(in srgb, var(--brand-primary, var(--color-eggplant-200)) 20%, white 80%);
   --bg-message-assistant: white;

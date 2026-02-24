@@ -142,37 +142,49 @@ describe('chatSystemPromptUtils', () => {
   describe('getEnabledTools', () => {
     it('enables core tools in auto mode', () => {
       const tools = getEnabledTools(true, false, false, false, ['kb-test-123'], true);
-      expect(tools).toEqual(['query_knowledge_base', 'web_search', 'data_analysis', 'create_agent_tool']);
+      expect(tools).toEqual([
+        'query_knowledge_base',
+        'web_search',
+        'data_analysis',
+        'create_agent_tool',
+        'memories_tool',
+      ]);
     });
 
     it('includes create_agent_tool in auto mode when explicitly enabled', () => {
       const tools = getEnabledTools(true, false, false, true, ['kb-test-123'], true);
-      expect(tools).toEqual(['query_knowledge_base', 'web_search', 'data_analysis', 'create_agent_tool']);
+      expect(tools).toEqual([
+        'query_knowledge_base',
+        'web_search',
+        'data_analysis',
+        'create_agent_tool',
+        'memories_tool',
+      ]);
     });
 
     it('enables only query_knowledge_base when KBs are selected in manual mode', () => {
       const tools = getEnabledTools(false, false, false, false, ['kb-test-123'], true);
-      expect(tools).toEqual(['query_knowledge_base']);
+      expect(tools).toEqual(['query_knowledge_base', 'memories_tool']);
     });
 
     it('enables only web_search when selected in manual mode', () => {
       const tools = getEnabledTools(false, true, false, false, [], true);
-      expect(tools).toEqual(['web_search']);
+      expect(tools).toEqual(['web_search', 'memories_tool']);
     });
 
     it('enables both when both selected in manual mode', () => {
       const tools = getEnabledTools(false, true, false, false, ['kb-test-123'], true);
-      expect(tools).toEqual(['query_knowledge_base', 'web_search']);
+      expect(tools).toEqual(['query_knowledge_base', 'web_search', 'memories_tool']);
     });
 
     it('enables none when none selected in manual mode', () => {
-      const tools = getEnabledTools(false, false, false, false, [], true);
+      const tools = getEnabledTools(false, false, false, false, [], true, false);
       expect(tools).toEqual([]);
     });
 
     it('enables only create_agent_tool when toggled in manual mode', () => {
       const tools = getEnabledTools(false, false, false, true, [], true);
-      expect(tools).toEqual(['create_agent_tool']);
+      expect(tools).toEqual(['create_agent_tool', 'memories_tool']);
     });
   });
 

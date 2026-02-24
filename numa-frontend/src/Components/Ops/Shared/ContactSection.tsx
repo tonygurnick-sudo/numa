@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Card, Button, Form, Badge } from 'react-bootstrap';
 import { useTranslation } from 'react-i18next';
 import type { Contact } from '../../../types/ops';
@@ -95,6 +95,20 @@ export function ContactSection({ contacts, onChange }: ContactSectionProps): Rea
     onChange(updated);
   };
 
+  const sortedContacts = useMemo(
+    () =>
+      contacts
+        .map((contact, index) => ({ contact, index }))
+        .sort((a, b) => {
+          if (a.contact.isPrimary !== b.contact.isPrimary) return a.contact.isPrimary ? -1 : 1;
+          if (a.contact.isVip !== b.contact.isVip) return a.contact.isVip ? -1 : 1;
+          const byName = a.contact.name.localeCompare(b.contact.name, undefined, { sensitivity: 'base' });
+          if (byName !== 0) return byName;
+          return a.index - b.index;
+        }),
+    [contacts],
+  );
+
   // ── Render ────────────────────────────────────────────────────────────────
 
   if (contacts.length === 0 && editingIndex === -1) {
@@ -112,8 +126,8 @@ export function ContactSection({ contacts, onChange }: ContactSectionProps): Rea
   return (
     <div>
       <div className="row g-2">
-        {contacts.map((contact, index) => (
-          <div className="col-md-6 col-lg-4" key={index}>
+        {sortedContacts.map(({ contact, index }) => (
+          <div className="col-md-6 col-lg-4" key={`${contact.name}-${index}`}>
             {editingIndex === index ? (
               /* ── Inline Edit Mode ──────────────────────────────────────── */
               <Card className="h-100">
@@ -186,14 +200,14 @@ export function ContactSection({ contacts, onChange }: ContactSectionProps): Rea
               </Card>
             ) : (
               /* ── Display Mode ──────────────────────────────────────────── */
-              <Card className="h-100">
+              <Card className="h-100 ops-contact-card">
                 <Card.Body className="p-2">
                   <div className="d-flex justify-content-between align-items-start mb-1">
                     <div>
                       <span className="fw-bold small">{contact.name}</span>
                       {contact.role && <span className="text-muted small ms-1">{contact.role}</span>}
                     </div>
-                    <div className="d-flex gap-1">
+                    <div className="d-flex gap-1 contact-actions">
                       {/* Primary toggle (radio-style) */}
                       <Button
                         variant="link"
@@ -297,6 +311,17 @@ export function ContactSection({ contacts, onChange }: ContactSectionProps): Rea
           {t('contacts.addContact')}
         </Button>
       )}
+
+      <style>{`
+        .ops-contact-card .contact-actions {
+          opacity: 0;
+          transition: opacity 0.15s ease;
+        }
+        .ops-contact-card:hover .contact-actions,
+        .ops-contact-card:focus-within .contact-actions {
+          opacity: 1;
+        }
+      `}</style>
     </div>
   );
 }

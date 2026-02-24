@@ -42,9 +42,10 @@ export const NumaAppProvider = ({ children }) => {
     }
   };
 
-  const [loading, setLoading] = useState(false);
+  // SWR: initialize from localStorage cache so apps render instantly on page refresh
+  const [loading, setLoading] = useState(() => !manifestService.getCachedManifest());
   const [error, setError] = useState(null);
-  const [numaApps, setNumaApps] = useState([]);
+  const [numaApps, setNumaApps] = useState(() => manifestService.getCachedManifest() ?? []);
   const [numaAppData, setNumaAppData] = useState(null);
   const [numaAppId, setNumaAppId] = useState(null);
   const [jobHistorySidebarOpen, setJobHistorySidebarOpen] = useState(false);

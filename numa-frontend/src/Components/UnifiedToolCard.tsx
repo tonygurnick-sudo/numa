@@ -1,5 +1,6 @@
 import { useState, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
+import { Bot } from 'lucide-react';
 import { resolveToolDescriptor, resolveToolVisual } from '../utils/ToolConfig';
 import { WebSearchRenderer } from '../toolRenderers/WebSearchRenderer';
 import { KnowledgeBaseRenderer } from '../toolRenderers/KnowledgeBaseRenderer';
@@ -164,6 +165,8 @@ export const UnifiedToolCard = ({
             className="tool-icon-img me-2"
             loading="lazy"
           />
+        ) : visual.className === 'bi bi-robot' ? (
+          <Bot size={16} className="me-2" />
         ) : (
           <i className={`${visual.className} me-2`} />
         )}

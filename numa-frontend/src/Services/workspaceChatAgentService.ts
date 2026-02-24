@@ -173,6 +173,10 @@ export async function streamWorkspaceChatAgent(
     migrateFromV1: request.migrateFromV1 || false,
     // Agent support - ID of agent for custom prompts/restrictions
     agentId: request.agentId,
+    // Agent type system — selects registered type config (default: "numa-chat")
+    type: request.type,
+    // Response mode override — "stream", "sync", or "fire-and-forget"
+    responseMode: request.responseMode,
   };
 
   try {
@@ -680,4 +684,120 @@ export async function uploadWorkspaceChatFileDirect(
 
   // Notify backend that upload is complete (backend syncs from S3 to EFS)
   return notifyUploadComplete(conversationId, filename, s3Key, file.size);
+}
+
+// ============================================================
+// Agent Type System — sync invocation and polling
+// ============================================================
+
+/**
+ * Invoke a workspace agent synchronously (non-streaming).
+ *
+ * Sends the request with responseMode="sync" and waits for the full JSON
+ * response. Use this for agent types that return structured data (e.g.
+ * document-summariser) rather than streamed chat output.
+ */
+export async function invokeWorkspaceAgentSync(
+  request: WorkspaceChatRequest,
+): Promise<import('../types/workspaceChatTypes').WorkspaceSyncResponse> {
+  const requestId =
+    request.requestId ||
+    (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `req-${Date.now()}-${Math.random()}`);
+
+  const invocationPayload = {
+    action: 'chat',
+    prompt: request.prompt,
+    conversationId: request.conversationId,
+    timezone: request.timezone,
+    userEmail: request.userEmail || getUserEmailFromToken(),
+    todayString: request.todayString || generateTodayString(),
+    availableKBs: request.availableKBs,
+    enabledTools: request.enabledTools,
+    enabledConnections: request.enabledConnections,
+    modelId: request.modelId,
+    attachments: request.attachments,
+    hasUploads: request.hasUploads,
+    expectedUploadPaths: request.expectedUploadPaths,
+    requestId,
+    migrateFromV1: false,
+    agentId: request.agentId,
+    type: request.type,
+    responseMode: 'sync' as const,
+  };
+
+  const res = await fetch(`${getApiUrl()}/invocations`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...getAuthHeaders(),
+    },
+    body: JSON.stringify(invocationPayload),
+  });
+
+  if (!res.ok) {
+    const errorText = await res.text().catch(() => 'Unknown error');
+    throw new Error(`Sync invocation failed (${res.status}): ${errorText}`);
+  }
+
+  return res.json();
+}
+
+/**
+ * Poll for a fire-and-forget run result.
+ *
+ * Calls GET /runs/{runId}/status repeatedly until the run completes
+ * (or errors), or until the timeout is reached.
+ *
+ * @param runId - The run ID returned by the fire-and-forget invocation
+ * @param intervalMs - Polling interval in milliseconds (default: 2000)
+ * @param timeoutMs - Maximum time to poll in milliseconds (default: 300000 = 5 min)
+ * @returns The completed run result
+ */
+export async function pollWorkspaceAgentRun(
+  runId: string,
+  intervalMs = 2000,
+  timeoutMs = 300_000,
+): Promise<import('../types/workspaceChatTypes').WorkspaceSyncResponse> {
+  const startTime = Date.now();
+
+  while (Date.now() - startTime < timeoutMs) {
+    const res = await fetch(`${getApiUrl()}/runs/${encodeURIComponent(runId)}/status`, {
+      headers: getAuthHeaders(),
+    });
+
+    if (!res.ok) {
+      throw new Error(`Polling failed (${res.status})`);
+    }
+
+    const data = await res.json();
+
+    if (data.status !== 'running') {
+      return data;
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, intervalMs));
+  }
+
+  throw new Error(`Polling timed out after ${timeoutMs}ms`);
+}
+
+/**
+ * List available agent types from the backend registry.
+ *
+ * Returns metadata about all registered agent types (type_id,
+ * display_name, response_mode).
+ */
+export async function listWorkspaceAgentTypes(): Promise<
+  import('../types/workspaceChatTypes').WorkspaceAgentTypeInfo[]
+> {
+  const res = await fetch(`${getApiUrl()}/types`, {
+    headers: getAuthHeaders(),
+  });
+
+  if (!res.ok) {
+    throw new Error(`Failed to list agent types: ${res.status}`);
+  }
+
+  const data = await res.json();
+  return data.types || [];
 }

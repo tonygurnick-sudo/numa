@@ -21,12 +21,12 @@ const MODEL_TYPES = {
 };
 const MODEL_MAP = {
   [REGIONS.US_EAST_1]: {
-    [MODEL_TYPES.DEFAULT]: 'us.anthropic.claude-sonnet-4-5-20250929-v1:0',
+    [MODEL_TYPES.DEFAULT]: 'us.anthropic.claude-sonnet-4-6',
     [MODEL_TYPES.CLAUDE_HAIKU]: 'us.anthropic.claude-haiku-4-5-20251001-v1:0',
     [MODEL_TYPES.FALLBACK]: 'us.anthropic.claude-haiku-4-5-20251001-v1:0',
   },
   [REGIONS.AP_SOUTHEAST_2]: {
-    [MODEL_TYPES.DEFAULT]: 'au.anthropic.claude-sonnet-4-5-20250929-v1:0',
+    [MODEL_TYPES.DEFAULT]: 'au.anthropic.claude-sonnet-4-6',
     [MODEL_TYPES.CLAUDE_HAIKU]: 'au.anthropic.claude-haiku-4-5-20251001-v1:0',
     [MODEL_TYPES.FALLBACK]: 'au.anthropic.claude-haiku-4-5-20251001-v1:0',
   },

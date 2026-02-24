@@ -12,7 +12,6 @@ import { screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import '@testing-library/jest-dom';
 import { Nav } from '../../Components/Nav';
-import { MANUAL_VERSION_LABEL } from '../../utils/versionLabel';
 
 // Mock individual components to return null for testing
 vi.mock('../../Pages/Apps', () => ({
@@ -55,6 +54,15 @@ vi.mock('../../utils/routeConfig.jsx', () => ({
       nav: { label: 'Favs', icon: 'bi bi-star-fill' },
     },
     {
+      path: '/ops',
+      featureFlag: 'NUMA_OPS',
+      nav: { label: 'Ops', labelKey: 'nav.items.ops', icon: 'bi bi-kanban', featureFlag: 'NUMA_OPS' },
+    },
+    {
+      path: '/agents',
+      nav: { label: 'Agents', icon: 'bi bi-robot' },
+    },
+    {
       path: '/chat',
       requiredFeature: 'chat',
       nav: { label: 'Chat', icon: 'bi bi-chat-dots-fill' },
@@ -80,18 +88,14 @@ vi.mock('../../utils/routeConfig.jsx', () => ({
 describe('Nav Component', () => {
   const { mockNavigate } = setupNavigationMocks();
   const { logout: mockLogout } = setupAuthMocks();
-  const mockVersionInfo = {
-    version: 'test-build',
-    gitHash: 'abcdef1234567890',
-    gitBranch: 'main',
-    deployTime: Date.now(),
-    deployTimeHuman: 'Just now',
-  };
 
   beforeEach(() => {
     vi.clearAllMocks();
     clearNavigationMocks();
     clearAuthMocks();
+    window.localStorage.setItem('numaNavInterfaceMode', 'advanced');
+    window.localStorage.setItem('numaAdvancedNavMode', 'work');
+    window.sessionStorage.setItem('NUMA_OPS', 'true');
 
     // Mock window.innerWidth
     Object.defineProperty(window, 'innerWidth', {
@@ -99,14 +103,7 @@ describe('Nav Component', () => {
       value: 1024,
     });
 
-    global.fetch = vi.fn((input: RequestInfo | URL) => {
-      if (typeof input === 'string' && input.includes('version.json')) {
-        return Promise.resolve({
-          ok: true,
-          json: () => Promise.resolve(mockVersionInfo),
-        } as Response);
-      }
-
+    global.fetch = vi.fn(() => {
       return Promise.resolve({
         ok: true,
         text: () => Promise.resolve('{}'),
@@ -132,16 +129,17 @@ describe('Nav Component', () => {
       await waitFor(
         () => {
           const navLinks = document.querySelectorAll('.nav-link');
-          // Standard user should have at least 3 nav links (Apps, Favs, Chat)
+          // Standard user should have at least 3 nav links
           expect(navLinks.length).toBeGreaterThan(2);
         },
         { timeout: 5000 },
       );
 
-      await waitFor(() => {
-        const expectedVersion = MANUAL_VERSION_LABEL || mockVersionInfo.gitHash.slice(0, 7);
-        expect(screen.getByTestId('version-display')).toHaveTextContent(expectedVersion);
-      });
+      expect(screen.queryByText('Interface')).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Simple' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Advanced' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Work' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Build' })).not.toBeInTheDocument();
 
       // Check for logout button which should always be present
       const logoutButton = document.querySelector('.nav-link[title="Log out"]');
@@ -154,6 +152,7 @@ describe('Nav Component', () => {
       // Standard user should still see company data features
       expect(screen.queryByText('Knowledge Base')).toBeInTheDocument();
       expect(screen.queryByText('Company')).toBeInTheDocument();
+      expect(document.querySelector('.nav-link[title="Ops"]')).not.toBeNull();
     });
 
     it('handles navigation clicks correctly for standard user', async () => {
@@ -186,6 +185,71 @@ describe('Nav Component', () => {
       fireEvent.click(logoutLink);
       expect(mockLogout).toHaveBeenCalled();
     });
+
+    it('does not render simple/advanced mode controls', async () => {
+      renderWithProviders(<Nav />);
+
+      await waitFor(
+        () => {
+          const navLinks = document.querySelectorAll('.nav-link');
+          expect(navLinks.length).toBeGreaterThan(0);
+        },
+        { timeout: 3000 },
+      );
+
+      expect(screen.queryByText('Interface')).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Simple' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Advanced' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Build' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Work' })).not.toBeInTheDocument();
+    });
+
+    it('keeps standard navigation items visible without build mode controls', async () => {
+      renderWithProviders(<Nav />);
+
+      await waitFor(
+        () => {
+          const navLinks = document.querySelectorAll('.nav-link');
+          expect(navLinks.length).toBeGreaterThan(0);
+        },
+        { timeout: 3000 },
+      );
+
+      expect(screen.queryByRole('button', { name: 'Build' })).not.toBeInTheDocument();
+      // Home page temporarily removed — skip assertion until it's re-added
+      expect(document.querySelector('.nav-link[title="Apps"]')).not.toBeNull();
+      expect(document.querySelector('.nav-link[title="Ops"]')).not.toBeNull();
+      expect(document.querySelector('.nav-link[title="Agents"]')).not.toBeNull();
+      expect(document.querySelector('.nav-link[title="Chat"]')).not.toBeNull();
+      expect(document.querySelector('.nav-link[title="Create"]')).toBeNull();
+      expect(document.querySelector('.nav-link[title="Analyse"]')).toBeNull();
+      expect(document.querySelector('.nav-link[title="Research"]')).toBeNull();
+      expect(document.querySelector('.nav-link[title="Marketplace"]')).toBeNull();
+    });
+
+    it('shows Ops under Apps and before Agents in advanced work mode', async () => {
+      renderWithProviders(<Nav />);
+
+      await waitFor(
+        () => {
+          const navLinks = document.querySelectorAll('.nav-link');
+          expect(navLinks.length).toBeGreaterThan(0);
+        },
+        { timeout: 3000 },
+      );
+
+      const navLinks = Array.from(document.querySelectorAll('.nav-link'));
+      const titles = navLinks.map((item) => item.getAttribute('title'));
+      const appsIndex = titles.indexOf('Apps');
+      const opsIndex = titles.indexOf('Ops');
+      const agentsIndex = titles.indexOf('Agents');
+
+      expect(appsIndex).toBeGreaterThan(-1);
+      expect(opsIndex).toBeGreaterThan(-1);
+      expect(agentsIndex).toBeGreaterThan(-1);
+      expect(appsIndex).toBeLessThan(opsIndex);
+      expect(opsIndex).toBeLessThan(agentsIndex);
+    });
   });
 
   describe('Admin User Navigation', () => {
@@ -207,19 +271,18 @@ describe('Nav Component', () => {
 
       // Check for navigation items by title attribute
       expect(document.querySelector('.nav-link[title="Apps"]')).not.toBeNull();
-      expect(document.querySelector('.nav-link[title="Favs"]')).not.toBeNull();
       expect(document.querySelector('.nav-link[title="Chat"]')).not.toBeNull();
+      expect(document.querySelector('.nav-link[title="Ops"]')).not.toBeNull();
       expect(document.querySelector('.nav-link[title="Knowledge Base"]')).not.toBeNull();
       expect(document.querySelector('.nav-link[title="Company"]')).not.toBeNull();
       expect(document.querySelector('.nav-link[title="Log out"]')).not.toBeNull();
 
-      await waitFor(() => {
-        const expectedVersion = MANUAL_VERSION_LABEL || mockVersionInfo.gitHash.slice(0, 7);
-        expect(screen.getByTestId('version-display')).toHaveTextContent(expectedVersion);
-      });
+      expect(screen.queryByText('Interface')).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Simple' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Advanced' })).not.toBeInTheDocument();
     });
 
-    it('renders navigation items in correct order: Apps, Favs, Chat, Company, Knowledge Base', async () => {
+    it('renders navigation items in correct order: Apps, Chat, Company, Knowledge Base', async () => {
       renderWithProviders(<Nav />);
 
       // Wait for nav links to load
@@ -237,20 +300,19 @@ describe('Nav Component', () => {
       // Filter to only include main navigation items (excluding logout)
       const mainNavLinks = navLinks.filter((link) => {
         const title = link.getAttribute('title');
-        return ['Apps', 'Favs', 'Chat', 'Company', 'Knowledge Base'].includes(title);
+        return ['Apps', 'Chat', 'Company', 'Knowledge Base'].includes(title);
       });
 
       // Extract the title attributes to verify order
       const navItemTitles = mainNavLinks.map((item) => item.getAttribute('title'));
 
       // Filter out any missing items but verify the order of existing ones
-      const expectedOrder = ['Apps', 'Favs', 'Chat', 'Company', 'Knowledge Base'];
+      const expectedOrder = ['Apps', 'Chat', 'Company', 'Knowledge Base'];
       const expectedOrderFiltered = expectedOrder.filter((item) => navItemTitles.includes(item));
       expect(navItemTitles).toEqual(expectedOrderFiltered);
 
       // Verify specific items are present
       expect(navItemTitles).toContain('Apps');
-      expect(navItemTitles).toContain('Favs');
       expect(navItemTitles).toContain('Chat');
       expect(navItemTitles).toContain('Company');
       expect(navItemTitles).toContain('Knowledge Base');
@@ -351,8 +413,8 @@ describe('Nav Component', () => {
       const itemTexts = Array.from(dropdownItems).map((item) => item.textContent?.trim());
 
       expect(itemTexts).toContain('Apps');
-      expect(itemTexts).toContain('Favs');
       expect(itemTexts).toContain('Chat');
+      expect(itemTexts).toContain('Ops');
       expect(itemTexts).toContain('Knowledge Base');
       expect(itemTexts).toContain('Company');
     });
@@ -364,16 +426,25 @@ describe('Nav Component', () => {
       await waitFor(() => {
         expect(screen.getByTestId('mobile-menu-button')).toBeInTheDocument();
       });
+      await waitFor(() => {
+        const navLinks = document.querySelectorAll('.nav-link');
+        expect(navLinks.length).toBeGreaterThan(0);
+      });
+
+      const openMobileMenuIfNeeded = async () => {
+        const dropdownItems = document.querySelectorAll('.dropdown-item');
+        if (dropdownItems.length === 0) {
+          const liveMenuButton = screen.getByTestId('mobile-menu-button');
+          fireEvent.click(liveMenuButton);
+        }
+        await waitFor(() => {
+          const visibleDropdownItems = document.querySelectorAll('.dropdown-item');
+          expect(visibleDropdownItems.length).toBeGreaterThan(0);
+        });
+      };
 
       // Open mobile menu
-      const menuButton = screen.getByTestId('mobile-menu-button');
-      fireEvent.click(menuButton);
-
-      // Wait for dropdown items to be visible
-      await waitFor(() => {
-        const dropdownItems = document.querySelectorAll('.dropdown-item');
-        expect(dropdownItems.length).toBeGreaterThan(0);
-      });
+      await openMobileMenuIfNeeded();
 
       // Test dashboard navigation using dropdown items
       const appsItem = Array.from(document.querySelectorAll('.dropdown-item')).find((item) =>
@@ -383,12 +454,8 @@ describe('Nav Component', () => {
       fireEvent.click(appsItem);
       expect(mockNavigate).toHaveBeenCalledWith('/dash');
 
-      // Reopen menu for next test
-      fireEvent.click(menuButton);
-      await waitFor(() => {
-        const dropdownItems = document.querySelectorAll('.dropdown-item');
-        expect(dropdownItems.length).toBeGreaterThan(0);
-      });
+      // Ensure menu is open for next assertion
+      await openMobileMenuIfNeeded();
 
       // Test chat navigation
       const chatItem = Array.from(document.querySelectorAll('.dropdown-item')).find((item) =>
@@ -398,12 +465,8 @@ describe('Nav Component', () => {
       fireEvent.click(chatItem);
       expect(mockNavigate).toHaveBeenCalledWith('/chat');
 
-      // Reopen menu for knowledge base test
-      fireEvent.click(menuButton);
-      await waitFor(() => {
-        const dropdownItems = document.querySelectorAll('.dropdown-item');
-        expect(dropdownItems.length).toBeGreaterThan(0);
-      });
+      // Ensure menu is open for knowledge base test
+      await openMobileMenuIfNeeded();
 
       // Test Knowledge Base navigation
       const kbItem = Array.from(document.querySelectorAll('.dropdown-item')).find((item) =>

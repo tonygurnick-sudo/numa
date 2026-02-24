@@ -1,4 +1,4 @@
-import React, { useState, useEffect, ReactNode } from 'react';
+import React, { useState, useEffect, useRef, ReactNode } from 'react';
 import { Nav } from '../Components/Nav';
 import '../assets/styles/layouts/AppLayout.scss';
 
@@ -10,15 +10,19 @@ const SIDEBAR_COLLAPSE_BREAKPOINT = 1200;
 const SIDEBAR_COLLAPSE_KEY = 'numa-sidebar-collapsed';
 
 const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
-  // Initialize collapse state from localStorage or default to false
+  // Initialize collapse state from localStorage or default to expanded (false)
   const [isCollapsed, setIsCollapsed] = useState<boolean>(() => {
     const stored = localStorage.getItem(SIDEBAR_COLLAPSE_KEY);
-    return stored === 'true';
+    if (stored !== null) return stored === 'true';
+    return false;
   });
 
   const [windowWidth, setWindowWidth] = useState<number>(
     typeof window !== 'undefined' ? window.innerWidth : SIDEBAR_COLLAPSE_BREAKPOINT,
   );
+
+  // Skip auto-collapse on initial mount so localStorage preference is respected
+  const hasMounted = useRef(false);
 
   // Handle window resize
   useEffect(() => {
@@ -30,13 +34,15 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  // Auto-collapse/expand based on window width
+  // Auto-collapse/expand only on actual window resizes (not initial mount)
   useEffect(() => {
+    if (!hasMounted.current) {
+      hasMounted.current = true;
+      return;
+    }
     if (windowWidth < SIDEBAR_COLLAPSE_BREAKPOINT && windowWidth > 768) {
-      // Auto-collapse for medium screens (between mobile and large desktop)
       setIsCollapsed(true);
     } else if (windowWidth >= SIDEBAR_COLLAPSE_BREAKPOINT) {
-      // Auto-expand for large screens
       setIsCollapsed(false);
     }
   }, [windowWidth]);

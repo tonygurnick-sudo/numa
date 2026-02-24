@@ -226,10 +226,59 @@ export function AuthProvider({ children }: AuthProviderProps) {
     stopBackgroundRefresh()
     const id = window.setInterval(async () => {
       const ensured = await authService.ensureValidSession(5 * 60 * 1000)
-      setSession(ensured)
+      // Only update session state if we got a result (null means logged out by permanent error)
+      // If ensured is the same object reference (transient failure kept session), skip re-render
+      if (ensured !== null) {
+        setSession(ensured)
+      } else {
+        // Permanent failure — clear session in context to trigger login screen
+        setSession(null)
+      }
     }, 30000)
     refreshTimerRef.current = id
   }, [stopBackgroundRefresh])
+
+  // Visibility change handler — refresh tokens when user returns to the tab
+  // Uses a 2-second debounce to avoid false logouts from laptop wake-up network delays
+  const visibilityDebounceRef = useRef<number | null>(null)
+
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState !== 'visible') return
+      if (!authService.getCurrentSession()) return
+
+      // Clear any pending debounce
+      if (visibilityDebounceRef.current) {
+        window.clearTimeout(visibilityDebounceRef.current)
+      }
+
+      visibilityDebounceRef.current = window.setTimeout(async () => {
+        visibilityDebounceRef.current = null
+
+        // If offline, wait for the browser to come back online before refreshing
+        if (!navigator.onLine) {
+          const onlineHandler = async () => {
+            window.removeEventListener('online', onlineHandler)
+            const ensured = await authService.ensureValidSession(5 * 60 * 1000)
+            if (ensured) setSession(ensured)
+          }
+          window.addEventListener('online', onlineHandler)
+          return
+        }
+
+        const ensured = await authService.ensureValidSession(5 * 60 * 1000)
+        if (ensured) setSession(ensured)
+      }, 2000) // 2-second debounce for network to stabilize after wake
+    }
+
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+      if (visibilityDebounceRef.current) {
+        window.clearTimeout(visibilityDebounceRef.current)
+      }
+    }
+  }, [])
 
   // Check for existing session on mount
   useEffect(() => {

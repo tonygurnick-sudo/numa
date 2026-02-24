@@ -117,11 +117,23 @@
   "dash": {
     "title": {
       "favorites": "Favourite Apps",
-      "all": "Numa Apps"
+      "all": "Apps"
     },
     "subtitle": {
       "favorites": "Your favorite apps at a glance",
       "all": "Get started uncovering insights from your data with Numa."
+    },
+    "header": {
+      "summary": "{{appsCount}} apps across {{categoriesCount}} categories",
+      "stats": {
+        "active": "{{count}} active",
+        "setupNeeded": "{{count}} setup needed"
+      },
+      "view": {
+        "label": "Apps view mode",
+        "categories": "Categories",
+        "grid": "Grid"
+      }
     },
     "errors": {
       "loadApps": "Failed to load apps: {{message}}"
@@ -287,9 +299,16 @@
         "label": "Filter by Status",
         "all": "All Statuses"
       },
+      "agent": {
+        "label": "Filter by Agent",
+        "aria": "Filter by agent",
+        "all": "All Agents",
+        "unknown": "Unknown agent"
+      },
       "search": {
         "label": "Search",
-        "placeholder": "Search by run name or app name..."
+        "placeholder": "Search by run name or app name...",
+        "shortPlaceholder": "Search..."
       }
     }
   },

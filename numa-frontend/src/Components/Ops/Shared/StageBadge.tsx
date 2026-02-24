@@ -1,7 +1,6 @@
 import React from 'react';
-import Badge from 'react-bootstrap/Badge';
 import type { WorkStage } from '../../../types/ops';
-import { getStatusTypeColor, getContrastTextColor } from './colorUtils';
+import { getStatusTypeColor } from './colorUtils';
 
 interface StageBadgeProps {
   stageId: string;
@@ -9,27 +8,17 @@ interface StageBadgeProps {
 }
 
 /**
- * Renders a colored pill badge for a stage.
- * Looks up the stage by ID, uses the statusType color as background,
- * and shows the stage name.
+ * Renders a stage as plain colored text matching the CEO's design.
+ * Lowercase label, coloured by statusType.
  */
 export function StageBadge({ stageId, stages }: StageBadgeProps): React.JSX.Element {
   const stage = stages.find((s) => s.id === stageId);
 
   if (!stage) {
-    return (
-      <Badge pill style={{ backgroundColor: '#6c757d', color: '#fff' }}>
-        —
-      </Badge>
-    );
+    return <span className="text-muted">—</span>;
   }
 
-  const bgColor = getStatusTypeColor(stage.statusType ?? 'backlog');
-  const textColor = getContrastTextColor(bgColor);
+  const color = getStatusTypeColor(stage.statusType ?? 'backlog');
 
-  return (
-    <Badge pill style={{ backgroundColor: bgColor, color: textColor }}>
-      {stage.name}
-    </Badge>
-  );
+  return <span style={{ color, fontWeight: 500 }}>{stage.name.toLowerCase()}</span>;
 }

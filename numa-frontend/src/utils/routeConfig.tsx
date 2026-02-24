@@ -7,8 +7,6 @@ const Dash = lazy(() => import('../Pages/Dash').then((m) => ({ default: m.Dash }
 const AppDetail = lazy(() => import('../Pages/AppDetail'));
 const UserManagement = lazy(() => import('../Pages/UserManagement'));
 const SettingsPage = lazy(() => import('../Pages/Settings'));
-const UserProfilePage = lazy(() => import('../Pages/UserProfile'));
-const NumaChatAgents = lazy(() => import('../Pages/NumaChatAgents').then((m) => ({ default: m.NumaChatAgents })));
 const NumaWorkspaceChatAgents = lazy(() =>
   import('../Pages/NumaWorkspaceChatAgents').then((m) => ({ default: m.NumaWorkspaceChatAgents })),
 );
@@ -35,28 +33,19 @@ const ScheduleDetailPage = lazy(() =>
 const NotificationsPage = lazy(() =>
   import('../Pages/NotificationsPage').then((m) => ({ default: m.NotificationsPage })),
 );
+const SupportPage = lazy(() => import('../Pages/SupportPage').then((m) => ({ default: m.SupportPage })));
 
 export const ROUTE_CONFIG = [
-  // Chat - moved to top
+  // Chat
   {
     path: '/chat',
-    element: () => {
-      return <NumaChatAgents />;
-    },
-    requiredFeature: 'chat',
-    nav: { label: 'Numa Chat', labelKey: 'nav.items.chat', icon: 'bi bi-chat-dots-fill', order: 1 },
-  },
-  {
-    path: '/chat-v2',
     element: () => <NumaWorkspaceChatAgents />,
     requiredFeature: 'chat',
     nav: {
-      label: 'Numa Chat V2',
-      labelKey: 'nav.items.chatV2',
+      label: 'Chat',
+      labelKey: 'nav.items.chat',
       icon: 'bi bi-chat-square-dots-fill',
-      featureFlag: 'NUMA_WORKSPACE_CHAT',
-      badge: 'Beta',
-      order: 2,
+      order: 1,
     },
   },
 
@@ -176,7 +165,7 @@ export const ROUTE_CONFIG = [
     element: () => <CompanyKnowledgeBase />,
     requiredFeature: 'useCompanyData',
     nav: {
-      label: 'Company Knowledge Base',
+      label: 'Company Files',
       labelKey: 'nav.items.companyKnowledgeBase',
       icon: 'bi bi-file-earmark-text',
       section: 'knowledgeBases',
@@ -189,7 +178,7 @@ export const ROUTE_CONFIG = [
     element: () => <UserKnowledgeBases />,
     requiredFeature: 'useCompanyData',
     nav: {
-      label: 'User Knowledge Base',
+      label: 'User Files',
       labelKey: 'nav.items.userKnowledgeBase',
       icon: 'bi bi-person-lines-fill',
       section: 'knowledgeBases',
@@ -206,16 +195,14 @@ export const ROUTE_CONFIG = [
       label: 'Integrations',
       labelKey: 'nav.items.integrations',
       icon: 'bi bi-link-45deg',
-      footerOnly: true,
-      order: 11,
+      order: 12,
     },
   },
 
   // Profile
   {
     path: '/profile',
-    element: () => <UserProfilePage />,
-    nav: { label: 'Profile', labelKey: 'nav.items.profile', icon: 'bi bi-person-circle', footerOnly: true, order: 12 },
+    element: () => <SettingsPage />,
   },
 
   // Company Information (hidden — now managed via Admin Settings > Company Profile tab)
@@ -229,10 +216,9 @@ export const ROUTE_CONFIG = [
   {
     path: '/settings',
     element: () => <SettingsPage />,
-    requiredFeature: 'manageUsers',
     nav: {
-      label: 'Admin Settings',
-      labelKey: 'nav.items.adminSettings',
+      label: 'Settings',
+      labelKey: 'nav.items.settings',
       icon: 'bi bi-gear-fill',
       footerOnly: true,
       order: 14,
@@ -252,6 +238,19 @@ export const ROUTE_CONFIG = [
       order: 11,
     },
     featureFlag: 'DATA_CONNECTORS_ENABLED',
+  },
+
+  // Support
+  {
+    path: '/support',
+    element: () => <SupportPage />,
+    nav: {
+      label: 'Support',
+      labelKey: 'nav.items.support',
+      icon: 'bi bi-question-circle',
+      footerOnly: true,
+      order: 13,
+    },
   },
 
   // Hidden routes (no nav)

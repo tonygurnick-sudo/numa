@@ -2217,9 +2217,8 @@ $border-radius-pill: 1rem;
   &.new-chat-wrapper-v2 {
     padding-top: max(18vh, 6rem);
 
-    // Match chat input width to history section
     .new-chat-input-wrapper {
-      max-width: 900px;
+      width: 100%;
     }
   }
 
@@ -2282,6 +2281,25 @@ $border-radius-pill: 1rem;
     flex: 1;
     padding: 0;
   }
+}
+
+// Ensure Numa Chat send button always follows branding colors.
+.chat-input-container .send-button,
+.chat-input-container .send-button.spinner-button-bold {
+  background: var(--brand-buttonPrimary, var(--brand-primary, var(--color-primary))) !important;
+  border: 1px solid var(--brand-buttonPrimaryBorder, var(--brand-primary, var(--color-primary))) !important;
+  color: var(--brand-buttonPrimaryText, #ffffff) !important;
+}
+
+.chat-input-container .send-button:hover:not(:disabled) {
+  background: var(--brand-buttonPrimaryHover, var(--brand-hover, var(--color-primary-hover))) !important;
+  border-color: var(--brand-buttonPrimaryHover, var(--brand-hover, var(--color-primary-hover))) !important;
+}
+
+.chat-input-container .send-button i,
+.chat-input-container .send-button svg,
+.chat-input-container .send-button .spinner-border {
+  color: var(--brand-buttonPrimaryText, #ffffff) !important;
 }
 
 .chat-messages {
@@ -4138,6 +4156,7 @@ $border-radius-pill: 1rem;
     display: inline-flex;
     align-items: center;
     margin-top: 0.1875rem; // Align spinner with text baseline
+    overflow: hidden; // Prevent scrollbar flicker from spinner animation
 
     .spinner-border {
       width: 14px;

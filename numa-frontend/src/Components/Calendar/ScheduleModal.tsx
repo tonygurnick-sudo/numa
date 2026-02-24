@@ -5,6 +5,7 @@ import type { AgentSchedule, CreateAgentSchedulePayload } from '../../types/agen
 import type { EventTypeFilter } from './CalendarToolbar';
 import { useNumaRequest } from '../../Providers/NumaRequestContext';
 import { useTranslation } from 'react-i18next';
+import { Bot } from 'lucide-react';
 
 interface ScheduleModalProps {
   show: boolean;
@@ -262,7 +263,7 @@ export const ScheduleModal: React.FC<ScheduleModalProps> = ({
             <Nav variant="pills" className="mt-2">
               <Nav.Item>
                 <Nav.Link active={activeTab === 'agent'} onClick={() => handleEventTypeChange('agent')}>
-                  <i className="bi bi-robot me-2"></i>
+                  <Bot size={16} className="me-2" />
                   {t('scheduling.scheduleModal.eventType.agent')}
                 </Nav.Link>
               </Nav.Item>

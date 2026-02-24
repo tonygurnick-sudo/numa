@@ -124,8 +124,11 @@ const NumaChatAgents = () => {
   const [isMobile, setIsMobile] = useState(() => (typeof window !== 'undefined' ? window.innerWidth <= 768 : false));
   const [showMobileActions, setShowMobileActions] = useState(false);
   const [showDocumentModal, setShowDocumentModal] = useState(false);
-  const [userChatSettings, setUserChatSettings] = useState<ChatSettings>(DEFAULT_CHAT_SETTINGS);
-  const [chatSettingsLoaded, setChatSettingsLoaded] = useState(false);
+  // SWR: initialize from localStorage cache so chat settings are available instantly
+  const [userChatSettings, setUserChatSettings] = useState<ChatSettings>(
+    () => ChatSettingsService.getCached() ?? DEFAULT_CHAT_SETTINGS,
+  );
+  const [chatSettingsLoaded, setChatSettingsLoaded] = useState(() => !!ChatSettingsService.getCached());
   const [userSettingsModified, setUserSettingsModified] = useState(false);
   const [pendingConversationChatConfig, setPendingConversationChatConfig] = useState<ConversationChatConfig | null>(
     null,
@@ -1020,7 +1023,7 @@ const NumaChatAgents = () => {
     buttonStatus,
     isProcessingRef,
     onExpired: handleNewChatOnExpired,
-    excludeWorkspaceConversations: true, // V1 chat should only show V1 conversations
+    excludeWorkspaceConversations: false,
     // DO NOT pass inputMessage: keep suggestions visible while typing; hide on submit instead
   });
 
@@ -2114,7 +2117,7 @@ const NumaChatAgents = () => {
             onSelectConversation={handleLoadConversation}
             currentConversationId={conversationId}
             setError={(error) => console.error('Chat history error:', error)}
-            excludeWorkspaceConversations={true}
+            excludeWorkspaceConversations={false}
           />
 
           {/* Main chat content */}

@@ -1,5 +1,19 @@
 /* ═══════════════════════════════════════════════════════════════════════════
-   Kanban Board Styles — Clean, spacious design inspired by CEO mockup
+   Ops Design Tokens — inherit from nav theme with safe fallbacks
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+:root {
+  --ops-border: var(--nav-divider, #e4e4e7);
+  --ops-text-muted: var(--nav-icon-default, #71717a);
+  --ops-text-secondary: var(--nav-section-text, #a1a1aa);
+  --ops-hover-bg: var(--nav-hover-bg, #f4f4f5);
+  --ops-text-default: var(--nav-text-default, #3f3f46);
+  --ops-radius: 10px;
+  --ops-transition: all 0.15s ease;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Kanban Board Styles — Ian-inspired clean design
    ═══════════════════════════════════════════════════════════════════════════ */
 
 /* ── Column Layout ────────────────────────────────────────────────────────── */
@@ -9,17 +23,15 @@
   gap: 16px;
   height: 100%;
   align-items: flex-start;
+  overflow-x: auto;
 }
 
 .kanban-column {
   flex: 1 1 0;
-  min-width: 280px;
+  min-width: 140px;
   display: flex;
   flex-direction: column;
-  border-radius: 8px;
-  transition:
-    background-color 0.15s,
-    box-shadow 0.15s;
+  border-radius: var(--ops-radius);
 }
 
 /* ── Column Header ────────────────────────────────────────────────────────── */
@@ -39,23 +51,25 @@
 }
 
 .kanban-column-name {
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 700;
-  color: #1a1a1a;
+  color: #374151;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
 }
 
 .kanban-column-count {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 22px;
-  height: 22px;
-  padding: 0 6px;
-  font-size: 12px;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 5px;
+  font-size: 11px;
   font-weight: 600;
-  color: #6c757d;
-  background-color: #e9ecef;
-  border-radius: 11px;
+  color: var(--ops-text-secondary);
+  background-color: #f3f4f6;
+  border-radius: 10px;
 }
 
 /* "+" button in column header */
@@ -68,18 +82,16 @@
   border: none;
   border-radius: 6px;
   background: transparent;
-  color: #868e96;
+  color: var(--ops-text-secondary);
   font-size: 18px;
   cursor: pointer;
-  transition:
-    background-color 0.12s,
-    color 0.12s;
+  transition: background-color 0.15s, color 0.15s;
   flex-shrink: 0;
 }
 
 .kanban-column-add-btn:hover {
-  background-color: #e9ecef;
-  color: #495057;
+  background-color: #f3f4f6;
+  color: #4b5563;
 }
 
 /* ── Column Body (scrollable ticket area) ─────────────────────────────────── */
@@ -88,14 +100,22 @@
   flex: 1;
   overflow-y: auto;
   min-height: 60px;
+  padding: 2px 0;
+  transition: background-color 0.15s, box-shadow 0.15s;
 }
 
-/* Thin scrollbar */
+/* ── Drag-over highlight (scoped to body area only) ──────────────────────── */
+
+.kanban-column--drag-over .kanban-column-body {
+  background-color: #f0f4ff;
+  border-radius: 8px;
+}
+
 .kanban-column-body::-webkit-scrollbar {
   width: 4px;
 }
 .kanban-column-body::-webkit-scrollbar-thumb {
-  background: #ced4da;
+  background: #d1d5db;
   border-radius: 4px;
 }
 
@@ -107,79 +127,204 @@
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   Ticket Card
+   Ticket Card — Ian-inspired clean design
    ═══════════════════════════════════════════════════════════════════════════ */
 
-.kanban-ticket-card {
+.ticket-card {
   background: #fff;
-  border-radius: 10px;
-  margin-bottom: 10px;
+  border-radius: 8px;
+  margin-bottom: 8px;
   cursor: grab;
-  overflow: hidden;
-  border: 1px solid #e9ecef;
-  padding: 14px 16px;
-  transition:
-    box-shadow 0.15s,
-    border-color 0.15s;
+  border: 1px solid var(--ops-border);
+  padding: 12px 14px;
+  transition: box-shadow 0.15s, border-color 0.15s, transform 0.1s;
   position: relative;
+  user-select: none;
 }
 
-.kanban-ticket-card:hover {
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
-  border-color: #dee2e6;
+.ticket-card:hover {
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.09);
+  border-color: #d1d5db;
 }
 
-.kanban-ticket-card:active {
+.ticket-card:active {
   cursor: grabbing;
 }
 
-/* Card content area */
-.kanban-ticket-content {
-  flex: 1;
-  min-width: 0;
+/* Top row: type badge + meta counts */
+.ticket-card-top {
   display: flex;
-  flex-direction: column;
-  gap: 8px;
+  align-items: center;
+  margin-bottom: 8px;
+  min-height: 22px;
 }
 
-/* Ticket title */
-.kanban-ticket-title {
-  font-size: 14px;
+/* Type badge */
+.ticket-type-badge {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.68rem;
   font-weight: 600;
-  line-height: 1.4;
-  color: #1a1a1a;
+  padding: 2px 8px;
+  border-radius: 100px;
+  letter-spacing: 0.01em;
+  flex-shrink: 0;
+}
+
+/* Context badges */
+.ticket-badge {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.67rem;
+  font-weight: 500;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.ticket-badge-customer {
+  background: #dbeafe;
+  color: #1d4ed8;
+  border: 1px solid #bfdbfe;
+}
+
+.ticket-badge-supplier {
+  background: #f3e8ff;
+  color: #7c3aed;
+  border: 1px solid #e9d5ff;
+}
+
+.ticket-badge-sprint {
+  background: #d1fae5;
+  color: #065f46;
+  border: 1px solid #a7f3d0;
+}
+
+/* Title */
+.ticket-title {
+  font-size: 0.875rem;
+  font-weight: 500;
+  line-height: 1.45;
+  color: #111827;
+  margin: 0 0 10px 0;
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
 
-/* Metadata row (bottom of card) */
+/* Tags */
+.ticket-tag {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.64rem;
+  font-weight: 400;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: #f3f4f6;
+  color: #6b7280;
+  border: 1px solid var(--ops-border);
+}
+
+/* Footer row */
+.ticket-card-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 8px;
+  gap: 4px;
+}
+
+/* Ticket ID */
+.ticket-id {
+  font-size: 0.68rem;
+  font-weight: 500;
+  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+  color: var(--ops-text-secondary);
+}
+
+/* Effort points pill */
+.ticket-effort-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  font-size: 0.68rem;
+  font-weight: 500;
+  padding: 1px 5px;
+  background: #f3f4f6;
+  color: #6b7280;
+  border-radius: 100px;
+}
+
+/* Due date */
+.ticket-due-date {
+  font-size: 0.68rem;
+  font-weight: 500;
+}
+
+/* Link/comment chips */
+.ticket-meta-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  font-size: 0.68rem;
+  color: var(--ops-text-secondary);
+}
+
+/* Assignee avatar */
+.ticket-avatar {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.6rem;
+  font-weight: 700;
+  color: #fff;
+  flex-shrink: 0;
+  cursor: default;
+}
+
+.ticket-avatar-empty {
+  background: #e5e7eb;
+  color: var(--ops-text-secondary);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Legacy kanban-ticket-* classes — still used in drag overlay fallback
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.kanban-ticket-card {
+  background: #fff;
+  border-radius: 8px;
+  margin-bottom: 8px;
+  cursor: grab;
+  border: 1px solid var(--ops-border);
+  padding: 12px 14px;
+}
+
+.kanban-ticket-content {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.kanban-ticket-title {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #111827;
+}
+
 .kanban-ticket-meta {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 6px;
 }
 
 .kanban-ticket-id {
-  font-size: 11px;
-  font-weight: 500;
-  color: #868e96;
-}
-
-.kanban-ticket-meta-right {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.kanban-ticket-comments {
-  display: flex;
-  align-items: center;
-  gap: 3px;
-  font-size: 11px;
-  color: #868e96;
+  font-size: 0.68rem;
+  font-family: monospace;
+  color: var(--ops-text-secondary);
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -187,8 +332,8 @@
    ═══════════════════════════════════════════════════════════════════════════ */
 
 .kanban-zone-collapsible {
-  background: #f8f9fa;
-  border-radius: 10px;
+  background: #f9fafb;
+  border-radius: var(--ops-radius);
   margin-bottom: 12px;
 }
 
@@ -200,14 +345,14 @@
   padding: 10px 16px;
   border: none;
   background: transparent;
-  color: #495057;
+  color: #4b5563;
   cursor: pointer;
-  border-radius: 10px;
-  transition: background-color 0.12s;
+  border-radius: var(--ops-radius);
+  transition: background-color 0.15s;
 }
 
 .kanban-zone-toggle:hover {
-  background-color: #e9ecef;
+  background-color: var(--ops-hover-bg);
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -219,7 +364,7 @@
   align-items: center;
   gap: 2px;
   background-color: #eee;
-  border-radius: 10px;
+  border-radius: var(--ops-radius);
   padding: 3px;
 }
 
@@ -227,23 +372,20 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 6px 14px;
+  padding: 9px 16px;
   border: none;
   border-radius: 8px;
   background: transparent;
-  color: #6c757d;
+  color: #6b7280;
   font-size: 0.85rem;
   font-weight: 500;
   cursor: pointer;
-  transition:
-    background-color 0.15s,
-    color 0.15s,
-    box-shadow 0.15s;
+  transition: var(--ops-transition);
   white-space: nowrap;
 }
 
 .ops-nav-tab:hover {
-  color: #495057;
+  color: #374151;
 }
 
 .ops-nav-tab.active {
@@ -254,4 +396,816 @@
 
 .ops-nav-tab.active:hover {
   color: var(--brand-primary, var(--color-primary, #8e50a7));
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Ticket Detail Modal
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.ticket-section-heading {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #1f2937;
+  margin-bottom: 10px;
+  display: flex;
+  align-items: center;
+}
+
+
+.ticket-detail-modal .modal-dialog {
+  max-height: 90vh;
+  margin-top: 5vh;
+  margin-bottom: 5vh;
+}
+
+.ticket-detail-modal .modal-content {
+  max-height: 88vh;
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Modal.Body scrolls; header, lifecycle row and footer stay pinned */
+.ticket-detail-modal .modal-body {
+  overflow: hidden;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.ticket-detail-sidebar {
+  background: #f9fafb;
+  border-radius: 8px;
+  padding: 1rem;
+}
+
+.ticket-sidebar-row {
+  display: flex;
+  align-items: flex-start;
+  padding: 7px 0;
+  border-bottom: 1px solid #f3f4f6;
+  font-size: 0.84rem;
+}
+
+.ticket-sidebar-row:last-child {
+  border-bottom: none;
+}
+
+.ticket-sidebar-label {
+  font-size: 0.78rem;
+  font-weight: 500;
+  color: #6b7280;
+  min-width: 88px;
+  flex-shrink: 0;
+  padding-top: 4px;
+}
+
+/* ── Sidebar 2-column grid layout (Ian's POC style) ────────────────────── */
+
+.ticket-sidebar-grid-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.ticket-sidebar-field-label {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: #6b7280;
+  margin-bottom: 4px;
+}
+
+.ticket-sidebar-section-title {
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--ops-text-secondary);
+  margin-top: 16px;
+  margin-bottom: 8px;
+}
+
+.ticket-sidebar-section-title:first-child {
+  margin-top: 0;
+}
+
+/* ── Header metadata line (created/updated dates) ──────────────────────── */
+
+.ticket-detail-header-meta {
+  font-size: 0.78rem;
+  color: var(--ops-text-secondary);
+  margin-top: 4px;
+}
+
+.ticket-detail-id {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.78rem;
+  font-weight: 600;
+  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+  color: #6b7280;
+  background: #f3f4f6;
+  border: 1px solid var(--ops-border);
+  border-radius: 4px;
+  padding: 2px 8px;
+  flex-shrink: 0;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Create Ticket Modal — Two-panel layout
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.create-ticket-right-panel {
+  background: #f9fafb;
+  border-radius: 8px;
+  padding: 1rem 1.25rem;
+  height: 100%;
+}
+
+.create-ticket-section-label {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #1f2937;
+  margin-bottom: 8px;
+  margin-top: 16px;
+}
+
+.create-ticket-section-label:first-child {
+  margin-top: 0;
+}
+
+/* Right panel field labels should not inherit uppercase */
+.create-ticket-right-panel .form-label {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: #6b7280;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.ticket-type-tile {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  border: 2px solid transparent;
+  cursor: pointer;
+  transition: var(--ops-transition);
+  background: #fff;
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.ticket-type-tile:hover {
+  background: #f9fafb;
+}
+
+.ticket-type-tile.selected {
+  color: #fff !important;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Ops Header — Refined Design
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Team Selector Dropdown ─────────────────────────────────────────────── */
+
+.ops-team-selector .dropdown-toggle {
+  background: #fff !important;
+  border: 1px solid #d1d5db !important;
+  border-radius: var(--ops-radius) !important;
+  color: #1f2937 !important;
+  font-size: 0.9rem;
+  font-weight: 500;
+  padding: 8px 18px;
+  box-shadow: none !important;
+}
+
+.ops-team-selector .dropdown-toggle:hover,
+.ops-team-selector .dropdown-toggle:focus {
+  border-color: #9ca3af !important;
+  background: #fafafa !important;
+}
+
+.ops-team-selector .dropdown-toggle::after {
+  margin-left: 10px;
+  opacity: 0.4;
+}
+
+/* ── Zone / Sprint Strip ────────────────────────────────────────────────── */
+
+.ops-strip-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ops-text-secondary);
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.ops-strip-label i {
+  font-size: 0.95rem;
+  color: var(--ops-text-secondary);
+}
+
+/* Base pill */
+.ops-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 9px 16px;
+  border: 1px solid var(--ops-border);
+  border-radius: var(--ops-radius);
+  background: #fff;
+  color: var(--ops-text-default);
+  font-size: 0.82rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: var(--ops-transition);
+  white-space: nowrap;
+  position: relative;
+  line-height: 1.5;
+  flex-shrink: 0;
+}
+
+.ops-pill:hover {
+  background: var(--ops-hover-bg);
+  border-color: #ced4da;
+  color: #1f2937;
+}
+
+.ops-pill.active {
+  background: var(--brand-primary, var(--color-primary, #8e50a7));
+  color: #fff;
+  border-color: var(--brand-primary, var(--color-primary, #8e50a7));
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.ops-pill.active:hover {
+  opacity: 0.92;
+  color: #fff;
+}
+
+.ops-pill i {
+  font-size: 0.9rem;
+}
+
+/* Pill count badge (used in filter pills) */
+.ops-pill-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  font-size: 0.68rem;
+  font-weight: 600;
+  background: rgba(0, 0, 0, 0.06);
+  border-radius: 10px;
+  line-height: 1;
+}
+
+.ops-pill.active .ops-pill-count {
+  background: rgba(255, 255, 255, 0.25);
+}
+
+/* "All" text-style pill (borderless) */
+.ops-pill-text {
+  display: inline-flex;
+  align-items: center;
+  padding: 5px 8px;
+  background: transparent;
+  border: none;
+  color: #6b7280;
+  font-size: 0.82rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: color 0.15s;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.ops-pill-text:hover {
+  color: #374151;
+}
+
+.ops-pill-text.active {
+  color: var(--brand-primary, var(--color-primary, #8e50a7));
+  font-weight: 600;
+}
+
+/* Backlog count badge */
+.ops-backlog-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  background: #ef4444;
+  color: #fff;
+  border-radius: 10px;
+  line-height: 1;
+}
+
+/* Sprint status dot */
+.ops-sprint-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+/* Sprint fraction text */
+.ops-sprint-fraction {
+  font-size: 0.78rem;
+  opacity: 0.65;
+}
+
+/* Sprint progress bar at bottom of pill */
+.ops-sprint-progress {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  height: 3px;
+  border-radius: 0 0 5px 5px;
+  transition: width 0.3s ease;
+}
+
+/* New Sprint / New link */
+.ops-new-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 8px;
+  background: transparent;
+  border: none;
+  color: var(--ops-text-secondary);
+  font-size: 0.82rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: color 0.15s;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.ops-new-link:hover {
+  color: #6b7280;
+}
+
+/* ── All Teams Strip — Team Box ─────────────────────────────────────────── */
+
+.ops-team-box {
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  border: 1px solid var(--ops-border);
+  border-radius: var(--ops-radius);
+  background: #fff;
+  padding: 14px 18px;
+  gap: 10px;
+  min-width: 130px;
+  cursor: pointer;
+  transition: var(--ops-transition);
+}
+
+.ops-team-box.selected {
+  border-width: 2px;
+}
+
+/* Zone pill inside team box (compact) */
+.ops-team-zone-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 10px;
+  border: 1px solid var(--ops-border);
+  border-radius: 6px;
+  background: #fff;
+  color: var(--ops-text-default);
+  font-size: 0.72rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: var(--ops-transition);
+  white-space: nowrap;
+  line-height: 1.7;
+}
+
+.ops-team-zone-pill:hover {
+  background: var(--ops-hover-bg);
+  border-color: #ced4da;
+}
+
+.ops-team-zone-pill.active {
+  background: var(--brand-primary, var(--color-primary, #8e50a7));
+  color: #fff;
+  border-color: var(--brand-primary, var(--color-primary, #8e50a7));
+}
+
+.ops-team-zone-pill i {
+  font-size: 0.78rem;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Backlog View — Jira-Style Design
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Filter Bar ──────────────────────────────────────────────────────────── */
+
+.backlog-filter-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 0 12px;
+  flex-wrap: wrap;
+  position: relative;
+  z-index: 10;
+}
+
+.backlog-search-input {
+  width: 180px;
+  min-width: 140px;
+  padding: 6px 10px 6px 32px;
+  border: 1px solid var(--ops-border);
+  border-radius: var(--ops-radius);
+  background: #fff;
+  font-size: 0.82rem;
+  color: var(--ops-text-default);
+  transition: var(--ops-transition);
+  outline: none;
+}
+
+.backlog-search-input::placeholder {
+  color: var(--ops-text-secondary);
+}
+
+.backlog-search-input:focus {
+  border-color: var(--brand-primary, #8e50a7);
+  box-shadow: 0 0 0 2px rgba(142, 80, 167, 0.1);
+}
+
+.backlog-search-wrapper {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.backlog-search-wrapper i {
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 0.82rem;
+  color: var(--ops-text-secondary);
+  pointer-events: none;
+}
+
+/* Assignee avatar filter */
+.backlog-assignee-filter {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  cursor: pointer;
+  transition: var(--ops-transition);
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: #fff;
+  flex-shrink: 0;
+}
+
+.backlog-assignee-filter:hover {
+  opacity: 0.85;
+}
+
+.backlog-assignee-filter.active {
+  border-color: var(--brand-primary, #8e50a7);
+  box-shadow: 0 0 0 2px rgba(142, 80, 167, 0.25);
+}
+
+/* Filter dropdown button */
+.backlog-filter-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 12px;
+  border: 1px solid var(--ops-border);
+  border-radius: var(--ops-radius);
+  background: #fff;
+  color: var(--ops-text-default);
+  font-size: 0.82rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: var(--ops-transition);
+  white-space: nowrap;
+  flex-shrink: 0;
+  position: relative;
+}
+
+.backlog-filter-btn:hover {
+  background: var(--ops-hover-bg);
+  border-color: #ced4da;
+}
+
+.backlog-filter-btn.active {
+  background: var(--brand-primary, #8e50a7);
+  color: #fff;
+  border-color: var(--brand-primary, #8e50a7);
+}
+
+.backlog-filter-btn i.bi-chevron-down {
+  font-size: 0.7rem;
+  opacity: 0.6;
+}
+
+/* Filter dropdown menu */
+.backlog-filter-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  min-width: 160px;
+  background: #fff;
+  border: 1px solid var(--ops-border);
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+  z-index: 1000;
+  padding: 4px 0;
+}
+
+.backlog-filter-dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 12px;
+  border: none;
+  background: transparent;
+  width: 100%;
+  text-align: left;
+  font-size: 0.82rem;
+  color: var(--ops-text-default);
+  cursor: pointer;
+  transition: background-color 0.1s;
+}
+
+.backlog-filter-dropdown-item:hover {
+  background: var(--ops-hover-bg);
+}
+
+.backlog-filter-dropdown-item.active {
+  color: var(--brand-primary, #8e50a7);
+  font-weight: 600;
+}
+
+/* Separator between filter bar sections */
+.backlog-filter-divider {
+  width: 1px;
+  height: 20px;
+  background: var(--ops-border);
+  flex-shrink: 0;
+}
+
+/* ── Group Card ──────────────────────────────────────────────────────────── */
+
+.backlog-group-card {
+  background: #fff;
+  border: 1px solid var(--ops-border);
+  border-radius: var(--ops-radius);
+  margin-bottom: 12px;
+  overflow: hidden;
+}
+
+/* Group header */
+.backlog-group-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  background: #f9fafb;
+  cursor: pointer;
+  user-select: none;
+  transition: background-color 0.15s;
+}
+
+.backlog-group-header:hover {
+  background: var(--ops-hover-bg);
+}
+
+.backlog-group-name {
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: #1f2937;
+  white-space: nowrap;
+}
+
+.backlog-group-meta {
+  font-size: 0.78rem;
+  color: var(--ops-text-secondary);
+  white-space: nowrap;
+}
+
+/* Status summary badges (Jira-style colored count pills) */
+.backlog-status-summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.backlog-status-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 6px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  border-radius: 4px;
+  line-height: 1;
+}
+
+.backlog-status-badge--backlog {
+  background: #e5e7eb;
+  color: #4b5563;
+}
+
+.backlog-status-badge--active {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
+.backlog-status-badge--done {
+  background: #d1fae5;
+  color: #065f46;
+}
+
+/* Add ticket button in group header */
+.backlog-add-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ops-text-secondary);
+  font-size: 16px;
+  cursor: pointer;
+  transition: background-color 0.15s, color 0.15s;
+  flex-shrink: 0;
+}
+
+.backlog-add-btn:hover {
+  background: #e5e7eb;
+  color: #4b5563;
+}
+
+/* Group subheader (goal text, team avatars) */
+.backlog-group-subheader {
+  padding: 8px 16px 4px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border-bottom: 1px solid var(--ops-border);
+}
+
+.backlog-group-goal {
+  font-size: 0.78rem;
+  color: var(--ops-text-muted);
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.backlog-group-avatars {
+  display: flex;
+  align-items: center;
+}
+
+.backlog-group-avatars .ticket-avatar {
+  margin-left: -4px;
+  border: 2px solid #fff;
+}
+
+.backlog-group-avatars .ticket-avatar:first-child {
+  margin-left: 0;
+}
+
+/* Group body */
+.backlog-group-body {
+  padding: 2px 0;
+}
+
+/* ── Ticket Row ──────────────────────────────────────────────────────────── */
+
+.backlog-ticket-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 16px;
+  background: #fff;
+  cursor: pointer;
+  transition: background-color 0.1s;
+  font-size: 0.85rem;
+  text-align: left;
+  width: 100%;
+  border: none;
+  border-bottom: 1px solid #f3f4f6;
+}
+
+.backlog-ticket-row:last-child {
+  border-bottom: none;
+}
+
+.backlog-ticket-row:hover {
+  background: var(--ops-hover-bg);
+}
+
+/* Status pill inside ticket row */
+.backlog-status-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  white-space: nowrap;
+  flex-shrink: 0;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.backlog-status-pill--backlog {
+  background: #f3f4f6;
+  color: #6b7280;
+}
+
+.backlog-status-pill--scoped {
+  background: #e0e7ff;
+  color: #4338ca;
+}
+
+.backlog-status-pill--queued {
+  background: #e0e7ff;
+  color: #4338ca;
+}
+
+.backlog-status-pill--active {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
+.backlog-status-pill--completed {
+  background: #d1fae5;
+  color: #065f46;
+}
+
+.backlog-status-pill--ended {
+  background: #f3f4f6;
+  color: #9ca3af;
+}
+
+/* Effort points */
+.backlog-effort {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--ops-text-muted);
+  flex-shrink: 0;
+}
+
+/* Assignee avatar in ticket row */
+.backlog-row-avatar {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.6rem;
+  font-weight: 700;
+  color: #fff;
+  flex-shrink: 0;
+}
+
+.backlog-row-avatar--empty {
+  background: #e5e7eb;
+  color: var(--ops-text-secondary);
+  font-size: 0.72rem;
 }

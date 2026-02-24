@@ -16,11 +16,12 @@ interface CommentSectionProps {
  * Calculates a simple numeric hash from a string.
  * Used to deterministically assign avatar colors to authors.
  */
-function hashString(str: string): number {
+function hashString(str: string | null | undefined): number {
+  if (!str) return 0;
   let hash = 0;
   for (let i = 0; i < str.length; i++) {
     hash = str.charCodeAt(i) + ((hash << 5) - hash);
-    hash |= 0; // Convert to 32-bit integer
+    hash |= 0;
   }
   return Math.abs(hash);
 }
@@ -28,7 +29,7 @@ function hashString(str: string): number {
 /**
  * Returns a hex color deterministically derived from a name string.
  */
-function avatarColor(name: string): string {
+function avatarColor(name: string | null | undefined): string {
   const colors = [
     '#3b82f6',
     '#ef4444',
@@ -47,7 +48,8 @@ function avatarColor(name: string): string {
 /**
  * Extracts initials from a name (first letter of first two words, uppercase).
  */
-function getInitials(name: string): string {
+function getInitials(name: string | null | undefined): string {
+  if (!name) return '?';
   const parts = name.trim().split(/\s+/);
   if (parts.length === 0) return '?';
   if (parts.length === 1) return parts[0].charAt(0).toUpperCase();
@@ -103,7 +105,7 @@ export function CommentSection({ ticketId }: CommentSectionProps): React.JSX.Ele
     try {
       const response = await OpsService.listComments(numaGet, ticketId);
       const sorted = [...response.comments].sort(
-        (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+        (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
       );
       setComments(sorted);
     } catch (err) {
@@ -163,19 +165,69 @@ export function CommentSection({ ticketId }: CommentSectionProps): React.JSX.Ele
     );
   }
 
+  // Get current user's display name for the input avatar
+  const currentUserName: string =
+    (user?.decoded_tokens?.idToken?.name as string) ?? (user?.decoded_tokens?.idToken?.email as string) ?? '';
+
   return (
     <div>
-      {/* Comment list */}
+      {/* Add comment form — at top, Jira-style with avatar */}
+      <div
+        className="d-flex gap-3 mb-3 pb-3"
+        style={{ borderBottom: comments.length > 0 ? '1px solid #f3f4f6' : 'none' }}
+      >
+        <div
+          className="d-flex align-items-center justify-content-center flex-shrink-0"
+          style={{
+            width: 32,
+            height: 32,
+            borderRadius: '50%',
+            backgroundColor: avatarColor(currentUserName),
+            color: '#fff',
+            fontSize: '0.7rem',
+            fontWeight: 600,
+          }}
+        >
+          {getInitials(currentUserName)}
+        </div>
+        <div className="flex-grow-1">
+          <Form.Control
+            as="textarea"
+            rows={2}
+            placeholder={t('comments.placeholder')}
+            value={newContent}
+            onChange={(e) => setNewContent(e.target.value)}
+            style={{ fontSize: '0.875rem', border: '1px solid #e5e7eb', borderRadius: 8 }}
+          />
+          <div className="d-flex justify-content-end mt-2">
+            <Button
+              variant="primary"
+              size="sm"
+              disabled={!newContent.trim() || submitting}
+              onClick={() => void handleAdd()}
+              style={{ minWidth: 80 }}
+            >
+              {submitting ? <Spinner animation="border" size="sm" /> : t('comments.addComment')}
+            </Button>
+          </div>
+        </div>
+      </div>
+
+      {/* Comment list — newest first */}
       {comments.length === 0 ? (
-        <p className="text-muted small mb-3">{t('empty.noComments')}</p>
+        <p className="text-muted small mb-0">{t('empty.noComments')}</p>
       ) : (
-        <div className="mb-3">
+        <div>
           {comments.map((comment) => {
             const isOwn = comment.authorId === currentUserId;
             const isEditing = editingId === comment.id;
 
             return (
-              <div key={comment.id} className="d-flex gap-2 mb-3">
+              <div
+                key={comment.id ?? `${comment.authorId}-${comment.createdAt}`}
+                className="d-flex gap-3 mb-3 pb-3"
+                style={{ borderBottom: '1px solid #f3f4f6' }}
+              >
                 {/* Avatar */}
                 <div
                   className="d-flex align-items-center justify-content-center flex-shrink-0"
@@ -185,7 +237,7 @@ export function CommentSection({ ticketId }: CommentSectionProps): React.JSX.Ele
                     borderRadius: '50%',
                     backgroundColor: avatarColor(comment.authorName),
                     color: '#fff',
-                    fontSize: '0.75rem',
+                    fontSize: '0.7rem',
                     fontWeight: 600,
                   }}
                 >
@@ -195,9 +247,11 @@ export function CommentSection({ ticketId }: CommentSectionProps): React.JSX.Ele
                 {/* Content */}
                 <div className="flex-grow-1" style={{ minWidth: 0 }}>
                   <div className="d-flex align-items-center gap-2 mb-1">
-                    <span className="fw-semibold small">{comment.authorName}</span>
+                    <span className="fw-semibold" style={{ fontSize: '0.85rem' }}>
+                      {comment.authorName}
+                    </span>
                     {comment.isSystem && (
-                      <span className="badge bg-light text-muted border" style={{ fontSize: '0.7rem' }}>
+                      <span className="badge bg-light text-muted border" style={{ fontSize: '0.65rem' }}>
                         {t('comments.system')}
                       </span>
                     )}
@@ -206,7 +260,7 @@ export function CommentSection({ ticketId }: CommentSectionProps): React.JSX.Ele
                     </span>
 
                     {isOwn && !isEditing && (
-                      <span className="ms-auto d-flex gap-1">
+                      <span className="ms-auto d-flex gap-2">
                         <Button
                           variant="link"
                           size="sm"
@@ -217,7 +271,7 @@ export function CommentSection({ ticketId }: CommentSectionProps): React.JSX.Ele
                           }}
                           title={t('common.edit')}
                         >
-                          <i className="bi bi-pencil" style={{ fontSize: '0.8rem' }} />
+                          <i className="bi bi-pencil" style={{ fontSize: '0.75rem' }} />
                         </Button>
                         <Button
                           variant="link"
@@ -226,7 +280,7 @@ export function CommentSection({ ticketId }: CommentSectionProps): React.JSX.Ele
                           onClick={() => void handleDelete(comment.id)}
                           title={t('common.delete')}
                         >
-                          <i className="bi bi-trash" style={{ fontSize: '0.8rem' }} />
+                          <i className="bi bi-trash" style={{ fontSize: '0.75rem' }} />
                         </Button>
                       </span>
                     )}
@@ -239,10 +293,10 @@ export function CommentSection({ ticketId }: CommentSectionProps): React.JSX.Ele
                         rows={2}
                         value={editContent}
                         onChange={(e) => setEditContent(e.target.value)}
-                        className="mb-1"
+                        className="mb-2"
                         style={{ fontSize: '0.875rem' }}
                       />
-                      <div className="d-flex gap-1">
+                      <div className="d-flex gap-2">
                         <Button
                           size="sm"
                           variant="primary"
@@ -264,7 +318,7 @@ export function CommentSection({ ticketId }: CommentSectionProps): React.JSX.Ele
                       </div>
                     </div>
                   ) : (
-                    <p className="mb-0 small" style={{ whiteSpace: 'pre-wrap' }}>
+                    <p className="mb-0" style={{ fontSize: '0.875rem', whiteSpace: 'pre-wrap', color: '#374151' }}>
                       {comment.content}
                     </p>
                   )}
@@ -274,27 +328,6 @@ export function CommentSection({ ticketId }: CommentSectionProps): React.JSX.Ele
           })}
         </div>
       )}
-
-      {/* Add comment form */}
-      <div className="d-flex gap-2">
-        <Form.Control
-          as="textarea"
-          rows={2}
-          placeholder={t('comments.placeholder')}
-          value={newContent}
-          onChange={(e) => setNewContent(e.target.value)}
-          style={{ fontSize: '0.875rem' }}
-        />
-        <Button
-          variant="primary"
-          size="sm"
-          className="align-self-end"
-          disabled={!newContent.trim() || submitting}
-          onClick={() => void handleAdd()}
-        >
-          {submitting ? <Spinner animation="border" size="sm" /> : t('common.add')}
-        </Button>
-      </div>
     </div>
   );
 }

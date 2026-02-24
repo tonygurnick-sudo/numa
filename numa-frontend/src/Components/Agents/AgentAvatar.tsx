@@ -2,6 +2,7 @@ import { CSSProperties, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { GetObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+import { Bot } from 'lucide-react';
 import type { AgentSummary } from '../../types/agents';
 import { useAuth } from '../../Providers/AuthProvider';
 import { withPRM } from '../../utils/prmUtils';
@@ -165,10 +166,14 @@ export const AgentAvatar = ({
       }}
       aria-label={resolvedAlt}
     >
-      <i
-        className={effectiveIconClass}
-        style={{ fontSize: Math.round(size * 0.6), color: 'var(--brand-primary, var(--color-primary))' }}
-      />
+      {effectiveIconClass === DEFAULT_ICON ? (
+        <Bot size={Math.round(size * 0.6)} style={{ color: 'var(--brand-primary, var(--color-primary))' }} />
+      ) : (
+        <i
+          className={effectiveIconClass}
+          style={{ fontSize: Math.round(size * 0.6), color: 'var(--brand-primary, var(--color-primary))' }}
+        />
+      )}
     </div>
   );
 };

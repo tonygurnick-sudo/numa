@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Container, Row, Col, Card, Alert, Badge, Button, Spinner, Table, Modal } from 'react-bootstrap';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { PageHeader } from '../Components/PageHeader';
+import { LayoutDashboard } from '../Layouts/LayoutDashboard';
 import { ScheduleService } from '../Services/ScheduleService';
 import type { AgentSchedule } from '../types/agentSchedules';
 import { AgentScheduleModal } from '../Components/Agents/AgentScheduleModal';
@@ -489,368 +490,392 @@ export const ScheduleDetailPage: React.FC = () => {
   }
 
   return (
-    <Container fluid>
+    <div className="dashboard schedule-detail-page">
       <PageHeader
         title={schedule.label || t('scheduling.labels.unnamed')}
         subtitle={
-          <span>
-            <Badge bg={getStatusBadgeVariant(schedule.status)} className="me-2">
+          <span className="schedule-detail-header-subtitle">
+            <Badge bg={getStatusBadgeVariant(schedule.status)} className="me-2 schedule-detail-header-status-badge">
               {t(`scheduling.status.${schedule.status}`, schedule.status)}
             </Badge>
             {schedule.agentTitle || schedule.agentId}
           </span>
         }
-        backLink="/scheduling"
-        backLabel={t('scheduling.details.backToSchedules')}
+        actions={
+          <Button variant="secondary" onClick={() => navigate('/scheduling')}>
+            <i className="bi bi-arrow-left me-2" aria-hidden="true"></i>
+            {t('scheduling.details.backToSchedules')}
+          </Button>
+        }
       />
+      <LayoutDashboard>
+        <Container fluid className="schedule-detail-content">
+          {error && (
+            <Alert variant="danger" onClose={() => setError(null)} dismissible className="mb-4">
+              {error}
+            </Alert>
+          )}
 
-      {error && (
-        <Alert variant="danger" onClose={() => setError(null)} dismissible className="mb-4">
-          {error}
-        </Alert>
-      )}
-
-      {/* Action Buttons */}
-      <Row className="mb-4">
-        <Col>
-          <div className="d-flex gap-2 flex-wrap">
-            <Button
-              variant="primary"
-              onClick={handleRunNow}
-              disabled={schedule.status === 'deleted' || actionLoading !== null}
-            >
-              {actionLoading === 'run' ? (
-                <>
-                  <Spinner animation="border" size="sm" className="me-2" />
-                  {t('scheduling.actions.running')}
-                </>
-              ) : (
-                <>
-                  <i className="bi bi-play-fill me-2"></i>
-                  {t('scheduling.actions.runNow')}
-                </>
-              )}
-            </Button>
-            <Button
-              variant="outline-primary"
-              onClick={() => setShowEditModal(true)}
-              disabled={schedule.status === 'deleted' || actionLoading !== null}
-            >
-              <i className="bi bi-pencil me-2"></i>
-              {t('scheduling.actions.edit')}
-            </Button>
-            <Button
-              variant={schedule.status === 'active' ? 'outline-warning' : 'outline-success'}
-              onClick={handleTogglePause}
-              disabled={schedule.status === 'deleted' || actionLoading !== null}
-            >
-              {actionLoading === 'pause' ? (
-                <Spinner animation="border" size="sm" />
-              ) : (
-                <>
-                  <i className={schedule.status === 'active' ? 'bi bi-pause-fill me-2' : 'bi bi-play-fill me-2'}></i>
-                  {schedule.status === 'active' ? t('scheduling.actions.pause') : t('scheduling.actions.resume')}
-                </>
-              )}
-            </Button>
-            <Button
-              variant="outline-danger"
-              onClick={() => setShowDeleteConfirm(true)}
-              disabled={schedule.status === 'deleted' || actionLoading !== null}
-            >
-              <i className="bi bi-trash me-2"></i>
-              {t('scheduling.actions.delete')}
-            </Button>
-          </div>
-        </Col>
-      </Row>
-
-      {/* Schedule Details */}
-      <Row className="mb-4">
-        <Col lg={6}>
-          <Card className="h-100">
-            <Card.Header className="d-flex justify-content-between align-items-center">
-              <span>{t('scheduling.details.cardTitle')}</span>
-              <Button
-                variant="outline-secondary"
-                size="sm"
-                onClick={() => setShowDebugIds((current) => !current)}
-                aria-pressed={showDebugIds}
-              >
-                <i className="bi bi-bug me-2"></i>
-                {showDebugIds ? t('scheduling.debug.hideIds') : t('scheduling.debug.showIds')}
-              </Button>
-            </Card.Header>
-            <Card.Body>
-              <dl className="row mb-0">
-                {showDebugIds && (
-                  <>
-                    <dt className="col-sm-4">{t('scheduling.details.fields.scheduleId')}</dt>
-                    <dd className="col-sm-8 text-muted font-monospace small">{schedule.scheduleId}</dd>
-                  </>
-                )}
-
-                <dt className="col-sm-4">{t('scheduling.details.fields.agent')}</dt>
-                <dd className="col-sm-8">{schedule.agentTitle || schedule.agentId}</dd>
-
-                <dt className="col-sm-4">{t('scheduling.details.fields.frequency')}</dt>
-                <dd className="col-sm-8">
-                  {describeCronExpression(schedule.cronExpression)}
-                  {showDebugIds && (
+          {/* Action Buttons */}
+          <Row className="mb-4">
+            <Col>
+              <div className="d-flex gap-2 flex-wrap schedule-detail-actions">
+                <Button
+                  variant="primary"
+                  onClick={handleRunNow}
+                  disabled={schedule.status === 'deleted' || actionLoading !== null}
+                >
+                  {actionLoading === 'run' ? (
                     <>
-                      <br />
-                      <small className="text-muted font-monospace">{schedule.cronExpression}</small>
+                      <Spinner animation="border" size="sm" className="me-2" />
+                      {t('scheduling.actions.running')}
+                    </>
+                  ) : (
+                    <>
+                      <i className="bi bi-play-fill me-2"></i>
+                      {t('scheduling.actions.runNow')}
                     </>
                   )}
-                </dd>
-
-                <dt className="col-sm-4">{t('scheduling.details.fields.timezone')}</dt>
-                <dd className="col-sm-8">{schedule.timezone}</dd>
-
-                <dt className="col-sm-4">{t('scheduling.details.fields.nextRun')}</dt>
-                <dd className="col-sm-8">
-                  {formatDate(nextRun, { notAvailable: t('scheduling.labels.notAvailable') }, schedule.timezone)}
-                </dd>
-
-                <dt className="col-sm-4">{t('scheduling.details.fields.lastRun')}</dt>
-                <dd className="col-sm-8">
-                  {formatTimestamp(
-                    schedule.lastRunEpoch,
-                    { never: t('scheduling.labels.never'), invalid: t('scheduling.labels.invalidDate') },
-                    schedule.timezone,
+                </Button>
+                <Button
+                  variant="outline-primary"
+                  onClick={() => setShowEditModal(true)}
+                  disabled={schedule.status === 'deleted' || actionLoading !== null}
+                >
+                  <i className="bi bi-pencil me-2"></i>
+                  {t('scheduling.actions.edit')}
+                </Button>
+                <Button
+                  variant={schedule.status === 'active' ? 'outline-warning' : 'outline-success'}
+                  onClick={handleTogglePause}
+                  disabled={schedule.status === 'deleted' || actionLoading !== null}
+                >
+                  {actionLoading === 'pause' ? (
+                    <Spinner animation="border" size="sm" />
+                  ) : (
+                    <>
+                      <i
+                        className={schedule.status === 'active' ? 'bi bi-pause-fill me-2' : 'bi bi-play-fill me-2'}
+                      ></i>
+                      {schedule.status === 'active' ? t('scheduling.actions.pause') : t('scheduling.actions.resume')}
+                    </>
                   )}
-                  {schedule.lastStatus && <span className="ms-2 text-muted">({schedule.lastStatus})</span>}
-                </dd>
+                </Button>
+                <Button
+                  variant="outline-danger"
+                  onClick={() => setShowDeleteConfirm(true)}
+                  disabled={schedule.status === 'deleted' || actionLoading !== null}
+                >
+                  <i className="bi bi-trash me-2"></i>
+                  {t('scheduling.actions.delete')}
+                </Button>
+              </div>
+            </Col>
+          </Row>
 
-                <dt className="col-sm-4">{t('scheduling.details.fields.created')}</dt>
-                <dd className="col-sm-8">
-                  {formatTimestamp(
-                    schedule.createdAt,
-                    { never: t('scheduling.labels.never'), invalid: t('scheduling.labels.invalidDate') },
-                    schedule.timezone,
-                  )}
-                </dd>
-              </dl>
-            </Card.Body>
-          </Card>
-        </Col>
-        <Col lg={6}>
-          <Card className="h-100">
-            <Card.Header>{t('scheduling.details.instructionsTitle')}</Card.Header>
-            <Card.Body>
-              <p className="mb-0" style={{ whiteSpace: 'pre-wrap' }}>
-                {schedule.promptText || t('scheduling.details.instructionsEmpty')}
-              </p>
-            </Card.Body>
-          </Card>
-        </Col>
-      </Row>
+          {/* Schedule Details */}
+          <Row className="mb-4">
+            <Col lg={6}>
+              <Card className="h-100 schedule-detail-card">
+                <Card.Header className="d-flex justify-content-between align-items-center schedule-detail-card-header">
+                  <span>{t('scheduling.details.cardTitle')}</span>
+                  <Button
+                    variant="outline-secondary"
+                    size="sm"
+                    onClick={() => setShowDebugIds((current) => !current)}
+                    aria-pressed={showDebugIds}
+                  >
+                    <i className="bi bi-bug me-2"></i>
+                    {showDebugIds ? t('scheduling.debug.hideIds') : t('scheduling.debug.showIds')}
+                  </Button>
+                </Card.Header>
+                <Card.Body className="schedule-detail-card-body">
+                  <dl className="row mb-0 schedule-detail-definition-list">
+                    {showDebugIds && (
+                      <>
+                        <dt className="col-sm-4">{t('scheduling.details.fields.scheduleId')}</dt>
+                        <dd className="col-sm-8 text-muted font-monospace small">{schedule.scheduleId}</dd>
+                      </>
+                    )}
 
-      {/* Run History */}
-      <Row>
-        <Col>
-          <Card>
-            <Card.Header className="d-flex justify-content-between align-items-center">
-              <span>{t('scheduling.details.runHistory.title')}</span>
-              <Button variant="outline-primary" size="sm" onClick={loadRunHistory} disabled={runHistoryLoading}>
-                {runHistoryLoading ? (
-                  <Spinner animation="border" size="sm" />
-                ) : (
-                  <i className="bi bi-arrow-clockwise"></i>
-                )}
-                <span className="ms-2">{t('scheduling.actions.refresh')}</span>
-              </Button>
-            </Card.Header>
-            <Card.Body className="p-0">
-              {runHistoryLoading && runHistory.length === 0 ? (
-                <div className="text-center py-5">
-                  <Spinner animation="border" />
-                  <p className="mt-3 text-muted">{t('scheduling.details.runHistory.loading')}</p>
-                </div>
-              ) : runHistory.length === 0 ? (
-                <div className="text-center py-5">
-                  <i className="bi bi-clock-history fs-1 text-muted"></i>
-                  <p className="mt-3 text-muted">{t('scheduling.details.runHistory.empty')}</p>
-                </div>
-              ) : (
-                <Table hover responsive className="mb-0">
-                  <thead>
-                    <tr>
-                      <th style={{ width: '40px' }}></th>
-                      {showDebugIds && <th>{t('scheduling.details.runHistory.columns.runId')}</th>}
-                      <th>{t('scheduling.details.runHistory.columns.started')}</th>
-                      <th>{t('scheduling.details.runHistory.columns.completed')}</th>
-                      <th>{t('scheduling.details.runHistory.columns.status')}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {runHistory.map((run) => (
-                      <React.Fragment key={run.runId}>
-                        <tr
-                          onClick={() => handleToggleExpand(run)}
-                          style={{ cursor: 'pointer' }}
-                          className={expandedRun === run.runId ? 'table-active' : ''}
-                        >
-                          <td>
-                            <i
-                              className={`bi ${expandedRun === run.runId ? 'bi-chevron-down' : 'bi-chevron-right'}`}
-                            ></i>
-                          </td>
-                          {showDebugIds && (
-                            <td>
-                              <code className="small">{run.runId}</code>
-                            </td>
-                          )}
-                          <td>
-                            {run.log?.startedAt
-                              ? new Date(run.log.startedAt).toLocaleString(
-                                  undefined,
-                                  schedule.timezone ? { timeZone: schedule.timezone } : undefined,
-                                )
-                              : t('scheduling.details.runHistory.placeholder')}
-                          </td>
-                          <td>
-                            {run.log?.completedAt
-                              ? new Date(run.log.completedAt).toLocaleString(
-                                  undefined,
-                                  schedule.timezone ? { timeZone: schedule.timezone } : undefined,
-                                )
-                              : t('scheduling.details.runHistory.placeholder')}
-                          </td>
-                          <td>
-                            {run.loading ? (
-                              <Spinner animation="border" size="sm" />
-                            ) : run.error ? (
-                              <Badge bg="danger">{t('scheduling.details.runHistory.status.error')}</Badge>
-                            ) : run.log?.error ? (
-                              <Badge bg="danger">{t('scheduling.details.runHistory.status.failed')}</Badge>
-                            ) : run.log ? (
-                              <Badge bg="success">{t('scheduling.details.runHistory.status.completed')}</Badge>
-                            ) : (
-                              <Badge bg="secondary">{t('scheduling.details.runHistory.placeholder')}</Badge>
-                            )}
-                          </td>
+                    <dt className="col-sm-4">{t('scheduling.details.fields.agent')}</dt>
+                    <dd className="col-sm-8">{schedule.agentTitle || schedule.agentId}</dd>
+
+                    <dt className="col-sm-4">{t('scheduling.details.fields.frequency')}</dt>
+                    <dd className="col-sm-8">
+                      {describeCronExpression(schedule.cronExpression)}
+                      {showDebugIds && (
+                        <>
+                          <br />
+                          <small className="text-muted font-monospace">{schedule.cronExpression}</small>
+                        </>
+                      )}
+                    </dd>
+
+                    <dt className="col-sm-4">{t('scheduling.details.fields.timezone')}</dt>
+                    <dd className="col-sm-8">{schedule.timezone}</dd>
+
+                    <dt className="col-sm-4">{t('scheduling.details.fields.nextRun')}</dt>
+                    <dd className="col-sm-8">
+                      {formatDate(nextRun, { notAvailable: t('scheduling.labels.notAvailable') }, schedule.timezone)}
+                    </dd>
+
+                    <dt className="col-sm-4">{t('scheduling.details.fields.lastRun')}</dt>
+                    <dd className="col-sm-8">
+                      {formatTimestamp(
+                        schedule.lastRunEpoch,
+                        { never: t('scheduling.labels.never'), invalid: t('scheduling.labels.invalidDate') },
+                        schedule.timezone,
+                      )}
+                      {schedule.lastStatus && <span className="ms-2 text-muted">({schedule.lastStatus})</span>}
+                    </dd>
+
+                    <dt className="col-sm-4">{t('scheduling.details.fields.created')}</dt>
+                    <dd className="col-sm-8">
+                      {formatTimestamp(
+                        schedule.createdAt,
+                        { never: t('scheduling.labels.never'), invalid: t('scheduling.labels.invalidDate') },
+                        schedule.timezone,
+                      )}
+                    </dd>
+                  </dl>
+                </Card.Body>
+              </Card>
+            </Col>
+            <Col lg={6}>
+              <Card className="h-100 schedule-detail-card">
+                <Card.Header className="schedule-detail-card-header">
+                  {t('scheduling.details.instructionsTitle')}
+                </Card.Header>
+                <Card.Body className="schedule-detail-card-body">
+                  <p className="mb-0 schedule-detail-instructions-text">
+                    {schedule.promptText || t('scheduling.details.instructionsEmpty')}
+                  </p>
+                </Card.Body>
+              </Card>
+            </Col>
+          </Row>
+
+          {/* Run History */}
+          <Row>
+            <Col>
+              <Card className="schedule-detail-card">
+                <Card.Header className="d-flex justify-content-between align-items-center schedule-detail-card-header">
+                  <span>{t('scheduling.details.runHistory.title')}</span>
+                  <Button variant="outline-primary" size="sm" onClick={loadRunHistory} disabled={runHistoryLoading}>
+                    {runHistoryLoading ? (
+                      <Spinner animation="border" size="sm" />
+                    ) : (
+                      <i className="bi bi-arrow-clockwise"></i>
+                    )}
+                    <span className="ms-2">{t('scheduling.actions.refresh')}</span>
+                  </Button>
+                </Card.Header>
+                <Card.Body className="p-0">
+                  {runHistoryLoading && runHistory.length === 0 ? (
+                    <div className="text-center py-5">
+                      <Spinner animation="border" />
+                      <p className="mt-3 text-muted">{t('scheduling.details.runHistory.loading')}</p>
+                    </div>
+                  ) : runHistory.length === 0 ? (
+                    <div className="text-center py-5">
+                      <i className="bi bi-clock-history fs-1 text-muted"></i>
+                      <p className="mt-3 text-muted">{t('scheduling.details.runHistory.empty')}</p>
+                    </div>
+                  ) : (
+                    <Table hover responsive className="mb-0 schedule-detail-history-table">
+                      <thead>
+                        <tr>
+                          <th style={{ width: '40px' }}></th>
+                          {showDebugIds && <th>{t('scheduling.details.runHistory.columns.runId')}</th>}
+                          <th>{t('scheduling.details.runHistory.columns.started')}</th>
+                          <th>{t('scheduling.details.runHistory.columns.completed')}</th>
+                          <th>{t('scheduling.details.runHistory.columns.status')}</th>
                         </tr>
-                        {expandedRun === run.runId && (
-                          <tr>
-                            <td
-                              colSpan={showDebugIds ? 5 : 4}
-                              className="p-0 border-0"
-                              style={
-                                { backgroundColor: '#f8f9fa', '--bs-table-hover-bg': '#f8f9fa' } as React.CSSProperties
+                      </thead>
+                      <tbody>
+                        {runHistory.map((run) => (
+                          <React.Fragment key={run.runId}>
+                            <tr
+                              onClick={() => handleToggleExpand(run)}
+                              className={
+                                expandedRun === run.runId
+                                  ? 'table-active schedule-detail-history-row'
+                                  : 'schedule-detail-history-row'
                               }
                             >
-                              <div className="p-3">
+                              <td>
+                                <i
+                                  className={`bi ${expandedRun === run.runId ? 'bi-chevron-down' : 'bi-chevron-right'}`}
+                                ></i>
+                              </td>
+                              {showDebugIds && (
+                                <td>
+                                  <code className="small">{run.runId}</code>
+                                </td>
+                              )}
+                              <td>
+                                {run.log?.startedAt
+                                  ? new Date(run.log.startedAt).toLocaleString(
+                                      undefined,
+                                      schedule.timezone ? { timeZone: schedule.timezone } : undefined,
+                                    )
+                                  : t('scheduling.details.runHistory.placeholder')}
+                              </td>
+                              <td>
+                                {run.log?.completedAt
+                                  ? new Date(run.log.completedAt).toLocaleString(
+                                      undefined,
+                                      schedule.timezone ? { timeZone: schedule.timezone } : undefined,
+                                    )
+                                  : t('scheduling.details.runHistory.placeholder')}
+                              </td>
+                              <td>
                                 {run.loading ? (
-                                  <div className="text-center py-3">
-                                    <Spinner animation="border" size="sm" />
-                                    <span className="ms-2">{t('scheduling.details.runHistory.loadingDetails')}</span>
-                                  </div>
+                                  <Spinner animation="border" size="sm" />
                                 ) : run.error ? (
-                                  <Alert variant="danger" className="mb-0">
-                                    {run.error}
-                                  </Alert>
+                                  <Badge bg="danger">{t('scheduling.details.runHistory.status.error')}</Badge>
+                                ) : run.log?.error ? (
+                                  <Badge bg="danger">{t('scheduling.details.runHistory.status.failed')}</Badge>
                                 ) : run.log ? (
-                                  <>
-                                    {run.log.error && (
-                                      <Alert variant="danger">
-                                        <strong>{t('scheduling.details.runHistory.status.failed')}:</strong>{' '}
-                                        {run.log.error}
-                                      </Alert>
-                                    )}
-                                    {run.log.messages?.map((msg, idx) => (
-                                      <div key={idx} className="mb-3">
-                                        <div className="fw-bold text-uppercase small text-muted mb-1">{msg.role}</div>
-                                        <div
-                                          className="p-2 rounded"
-                                          style={{
-                                            backgroundColor: msg.role === 'user' ? '#e3f2fd' : '#ffffff',
-                                          }}
-                                        >
-                                          {msg.role === 'assistant' ? (
-                                            <MarkdownContent
-                                              content={msg.content || t('scheduling.details.runHistory.noContent')}
-                                            />
-                                          ) : (
-                                            <div style={{ whiteSpace: 'pre-wrap' }}>
-                                              {msg.content || t('scheduling.details.runHistory.noContent')}
-                                            </div>
-                                          )}
-                                        </div>
-                                      </div>
-                                    ))}
-                                    {(!run.log.messages || run.log.messages.length === 0) && (
-                                      <p className="text-muted mb-0">{t('scheduling.details.runHistory.noMessages')}</p>
-                                    )}
-                                  </>
+                                  <Badge bg="success">{t('scheduling.details.runHistory.status.completed')}</Badge>
                                 ) : (
-                                  <div className="text-center py-3 text-muted">
-                                    {t('scheduling.details.runHistory.clickToLoad')}
-                                  </div>
+                                  <Badge bg="secondary">{t('scheduling.details.runHistory.placeholder')}</Badge>
                                 )}
-                              </div>
-                            </td>
-                          </tr>
-                        )}
-                      </React.Fragment>
-                    ))}
-                  </tbody>
-                </Table>
-              )}
-            </Card.Body>
-          </Card>
-        </Col>
-      </Row>
+                              </td>
+                            </tr>
+                            {expandedRun === run.runId && (
+                              <tr>
+                                <td
+                                  colSpan={showDebugIds ? 5 : 4}
+                                  className="p-0 border-0"
+                                  style={
+                                    {
+                                      backgroundColor: '#f8f9fa',
+                                      '--bs-table-hover-bg': '#f8f9fa',
+                                    } as React.CSSProperties
+                                  }
+                                >
+                                  <div className="p-3">
+                                    {run.loading ? (
+                                      <div className="text-center py-3">
+                                        <Spinner animation="border" size="sm" />
+                                        <span className="ms-2">
+                                          {t('scheduling.details.runHistory.loadingDetails')}
+                                        </span>
+                                      </div>
+                                    ) : run.error ? (
+                                      <Alert variant="danger" className="mb-0">
+                                        {run.error}
+                                      </Alert>
+                                    ) : run.log ? (
+                                      <>
+                                        {run.log.error && (
+                                          <Alert variant="danger">
+                                            <strong>{t('scheduling.details.runHistory.status.failed')}:</strong>{' '}
+                                            {run.log.error}
+                                          </Alert>
+                                        )}
+                                        {run.log.messages?.map((msg, idx) => (
+                                          <div key={idx} className="mb-3">
+                                            <div className="fw-bold text-uppercase small text-muted mb-1">
+                                              {msg.role}
+                                            </div>
+                                            <div
+                                              className="p-2 rounded"
+                                              style={{
+                                                backgroundColor: msg.role === 'user' ? '#e3f2fd' : '#ffffff',
+                                              }}
+                                            >
+                                              {msg.role === 'assistant' ? (
+                                                <MarkdownContent
+                                                  content={msg.content || t('scheduling.details.runHistory.noContent')}
+                                                />
+                                              ) : (
+                                                <div style={{ whiteSpace: 'pre-wrap' }}>
+                                                  {msg.content || t('scheduling.details.runHistory.noContent')}
+                                                </div>
+                                              )}
+                                            </div>
+                                          </div>
+                                        ))}
+                                        {(!run.log.messages || run.log.messages.length === 0) && (
+                                          <p className="text-muted mb-0">
+                                            {t('scheduling.details.runHistory.noMessages')}
+                                          </p>
+                                        )}
+                                      </>
+                                    ) : (
+                                      <div className="text-center py-3 text-muted">
+                                        {t('scheduling.details.runHistory.clickToLoad')}
+                                      </div>
+                                    )}
+                                  </div>
+                                </td>
+                              </tr>
+                            )}
+                          </React.Fragment>
+                        ))}
+                      </tbody>
+                    </Table>
+                  )}
+                </Card.Body>
+              </Card>
+            </Col>
+          </Row>
 
-      {/* Edit Modal */}
-      {editingAgent && (
-        <AgentScheduleModal
-          show={showEditModal}
-          onHide={() => setShowEditModal(false)}
-          agent={editingAgent}
-          editingSchedule={schedule}
-          onCreate={handleUpdateSchedule}
-        />
-      )}
+          {/* Edit Modal */}
+          {editingAgent && (
+            <AgentScheduleModal
+              show={showEditModal}
+              onHide={() => setShowEditModal(false)}
+              agent={editingAgent}
+              editingSchedule={schedule}
+              onCreate={handleUpdateSchedule}
+            />
+          )}
 
-      {/* Delete Confirmation Modal */}
-      <Modal show={showDeleteConfirm} onHide={() => setShowDeleteConfirm(false)} centered>
-        <Modal.Header closeButton>
-          <Modal.Title className="text-danger">
-            <i className="bi bi-exclamation-triangle-fill me-2"></i>
-            {t('scheduling.delete.title')}
-          </Modal.Title>
-        </Modal.Header>
-        <Modal.Body>
-          <p>
-            {t('scheduling.delete.confirmPrefix')} <strong>{schedule.label || t('scheduling.labels.unnamed')}</strong>
-            {t('scheduling.delete.confirmSuffix')}
-          </p>
-          <Alert variant="warning" className="mb-0">
-            <i className="bi bi-exclamation-triangle me-2"></i>
-            <strong>{t('scheduling.delete.warningTitle')}</strong> {t('scheduling.delete.warningBody')}
-          </Alert>
-        </Modal.Body>
-        <Modal.Footer>
-          <Button variant="secondary" onClick={() => setShowDeleteConfirm(false)} disabled={actionLoading !== null}>
-            {t('scheduling.actions.cancel')}
-          </Button>
-          <Button variant="danger" onClick={handleConfirmDelete} disabled={actionLoading !== null}>
-            {actionLoading === 'delete' ? (
-              <>
-                <Spinner animation="border" size="sm" className="me-2" />
-                {t('scheduling.delete.deleting')}
-              </>
-            ) : (
-              <>
-                <i className="bi bi-trash me-2"></i>
-                {t('scheduling.delete.confirmButton')}
-              </>
-            )}
-          </Button>
-        </Modal.Footer>
-      </Modal>
-    </Container>
+          {/* Delete Confirmation Modal */}
+          <Modal show={showDeleteConfirm} onHide={() => setShowDeleteConfirm(false)} centered>
+            <Modal.Header closeButton>
+              <Modal.Title className="text-danger">
+                <i className="bi bi-exclamation-triangle-fill me-2"></i>
+                {t('scheduling.delete.title')}
+              </Modal.Title>
+            </Modal.Header>
+            <Modal.Body>
+              <p>
+                {t('scheduling.delete.confirmPrefix')}{' '}
+                <strong>{schedule.label || t('scheduling.labels.unnamed')}</strong>
+                {t('scheduling.delete.confirmSuffix')}
+              </p>
+              <Alert variant="warning" className="mb-0">
+                <i className="bi bi-exclamation-triangle me-2"></i>
+                <strong>{t('scheduling.delete.warningTitle')}</strong> {t('scheduling.delete.warningBody')}
+              </Alert>
+            </Modal.Body>
+            <Modal.Footer>
+              <Button variant="secondary" onClick={() => setShowDeleteConfirm(false)} disabled={actionLoading !== null}>
+                {t('scheduling.actions.cancel')}
+              </Button>
+              <Button variant="danger" onClick={handleConfirmDelete} disabled={actionLoading !== null}>
+                {actionLoading === 'delete' ? (
+                  <>
+                    <Spinner animation="border" size="sm" className="me-2" />
+                    {t('scheduling.delete.deleting')}
+                  </>
+                ) : (
+                  <>
+                    <i className="bi bi-trash me-2"></i>
+                    {t('scheduling.delete.confirmButton')}
+                  </>
+                )}
+              </Button>
+            </Modal.Footer>
+          </Modal>
+        </Container>
+      </LayoutDashboard>
+    </div>
   );
 };
 

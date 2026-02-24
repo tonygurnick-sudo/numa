@@ -4,6 +4,7 @@ import { useNumaRequest } from '../../Providers/NumaRequestContext';
 import { useOps } from './OpsContext';
 import * as OpsService from '../../Services/OpsService';
 import type { TeamSummary, TeamResponse } from '../../types/ops';
+import { getCached, setCache } from '../../utils/opsCache';
 
 /**
  * AllTeamsStrip — header strip for "All Teams" board view mode.
@@ -18,8 +19,19 @@ const AllTeamsStrip = () => {
   const { teams, selectedTeamId, selectTeam, teamData, activeZoneId, setActiveZone } = useOps();
 
   // Cache of team data for non-selected teams: teamId → TeamResponse
-  const [teamDataCache, setTeamDataCache] = useState<Map<string, TeamResponse>>(new Map());
-  const fetchedRef = useRef<Set<string>>(new Set());
+  // Initialized from localStorage so zone names render instantly on remount.
+  const [teamDataCache, setTeamDataCache] = useState<Map<string, TeamResponse>>(() => {
+    const cached = getCached<Record<string, TeamResponse>>('allTeamsZones');
+    return cached ? new Map(Object.entries(cached)) : new Map();
+  });
+  const fetchedRef = useRef<Set<string>>(
+    new Set(
+      (() => {
+        const cached = getCached<Record<string, TeamResponse>>('allTeamsZones');
+        return cached ? Object.keys(cached) : [];
+      })(),
+    ),
+  );
 
   // Fetch zone data for all teams that aren't currently selected
   useEffect(() => {
@@ -42,6 +54,12 @@ const AllTeamsStrip = () => {
             fetchedRef.current.add(tm.id);
           }
         });
+        // Persist to localStorage for instant rendering on remount
+        const obj: Record<string, TeamResponse> = {};
+        next.forEach((v, k) => {
+          obj[k] = v;
+        });
+        setCache('allTeamsZones', obj);
         return next;
       });
     };
@@ -94,7 +112,7 @@ const AllTeamsStrip = () => {
   }
 
   return (
-    <div className="d-flex align-items-stretch gap-2 flex-grow-1" style={{ overflowX: 'auto' }}>
+    <div className="d-flex align-items-stretch gap-3 flex-grow-1" style={{ overflowX: 'auto' }}>
       {teams.map((team) => {
         const isSelected = team.id === selectedTeamId;
         const zones = getZonesForTeam(team.id);
@@ -129,15 +147,10 @@ interface TeamBoxProps {
 const TeamBox = ({ team, isSelected, zones, activeZoneId, onSelectTeam, onSelectZone }: TeamBoxProps) => {
   return (
     <div
-      className="d-flex flex-column flex-shrink-0"
+      className={`ops-team-box ${isSelected ? 'selected' : ''}`}
       style={{
-        border: isSelected ? `2px solid ${team.color || '#0d6efd'}` : '1px solid #e9ecef',
-        borderRadius: 10,
-        backgroundColor: isSelected ? `${team.color || '#0d6efd'}10` : '#fff',
-        padding: '8px 12px',
-        minWidth: 130,
-        cursor: 'pointer',
-        transition: 'border-color 0.15s, background-color 0.15s',
+        borderColor: isSelected ? team.color || '#0d6efd' : undefined,
+        backgroundColor: isSelected ? `${team.color || '#0d6efd'}10` : undefined,
       }}
       onClick={onSelectTeam}
       role="button"
@@ -150,7 +163,7 @@ const TeamBox = ({ team, isSelected, zones, activeZoneId, onSelectTeam, onSelect
       }}
     >
       {/* Team name row */}
-      <div className="d-flex align-items-center gap-2 mb-1">
+      <div className="d-flex align-items-center gap-2">
         <span
           className="d-inline-block rounded-circle flex-shrink-0"
           style={{
@@ -167,7 +180,7 @@ const TeamBox = ({ team, isSelected, zones, activeZoneId, onSelectTeam, onSelect
         </span>
       </div>
 
-      {/* Zone pills (always shown if zone data is available) */}
+      {/* Zone pills */}
       {zones.length > 0 && (
         <div className="d-flex align-items-center gap-1 flex-wrap">
           {zones.map((zone) => {
@@ -176,13 +189,13 @@ const TeamBox = ({ team, isSelected, zones, activeZoneId, onSelectTeam, onSelect
               <button
                 key={zone.id}
                 type="button"
-                className={`btn btn-sm py-0 px-2 ${isActive ? 'btn-primary' : 'btn-outline-secondary'}`}
-                style={{ fontSize: '0.72rem', lineHeight: '1.7', borderRadius: 6 }}
+                className={`ops-team-zone-pill ${isActive ? 'active' : ''}`}
                 onClick={(e) => {
                   e.stopPropagation();
                   onSelectZone(zone.id);
                 }}
               >
+                <i className={`bi ${zone.zoneType === 'board' ? 'bi-kanban' : 'bi-list-task'}`} />
                 {zone.name}
               </button>
             );
