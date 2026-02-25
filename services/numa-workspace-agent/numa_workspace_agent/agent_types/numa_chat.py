@@ -21,8 +21,6 @@ NUMA_CHAT = AgentTypeConfig(
         "Grep",
         "Bash",
         "KillShell",
-        "Task",
-        "TaskOutput",
         "TodoWrite",
         "Skill",
     ],
@@ -34,9 +32,8 @@ NUMA_CHAT = AgentTypeConfig(
         "Glob",
         "Grep",
         "Edit",
-        # Task management
+        # Task tracking and skills
         "TodoWrite",
-        "Task",
         "Skill",
         # Shell
         "BashOutput",

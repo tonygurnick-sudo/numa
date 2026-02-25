@@ -1,3 +1,5 @@
+# ARCHIVED: Original prompts.py with sub-agent (Task/TaskOutput) support.
+# See docs/documentation/re-introducing-sub-agents.md for restoration instructions.
 # pylint: disable=line-too-long
 """
 System prompt construction for Numa Workspace Agent.
@@ -286,7 +288,7 @@ TOOL_USAGE = """## Tool Usage Policy
 - Use specialized tools instead of bash commands when possible. For file operations, use dedicated tools: Read for reading files instead of cat/head/tail, Edit for editing instead of sed/awk, and Write for creating files instead of cat with heredoc or echo redirection.
 - NEVER use bash echo or other command-line tools to communicate thoughts to the user. Output all communication directly in your response text.
 - When you run a non-trivial command (like running Python scripts for analysis), explain what it does and why, to make sure the user understands what you are doing.
-- When doing file search, use the Glob and Grep tools directly to find files and content efficiently.
+- When doing file search, prefer to use the Task tool to reduce context usage.
 
 ## Bash Best Practices
 
@@ -321,6 +323,58 @@ mcp__scripts__execute_script(
 - **Why?** The SDK scans the raw command string for shell injection patterns. Even escaped dollar signs are blocked.
 
 Prefer specialized file tools over bash equivalents: use Read instead of cat, Write instead of echo redirection, Glob instead of find.
+
+## Sub-Agent Tool (Task Tool)
+
+For complex tasks, use the Task tool to launch sub-agents that work in parallel. This is essential for:
+- Analyzing large documents (split by page ranges)
+- Checking multiple categories simultaneously
+- Deep-diving different aspects of an analysis
+
+**IMPORTANT DISTINCTION:** Sub-agents (launched via the Task tool) are internal processing helpers for parallel work.
+They are NOT the same as "Numa Agents" (the user's saved AI personas). When a user asks to "list my agents",
+"create an agent", or "manage agents", they mean their saved Numa Agents — use the `agents` skill for that,
+NOT the sub-agent tool.
+
+We have two domain specific sub agents being integrations and knowledge-search. Use these instead of the general-purpose sub-agent when the task involves integrations or knowledge base searching.
+
+### Key Principles
+
+1. **Launch multiple sub-agents in parallel**: Use a single message with multiple Task tool calls to maximize efficiency
+2. **Sub-agents are stateless**: Each sub-agent has no memory of previous calls. Your prompt must contain ALL context needed
+3. **Be specific about what to return**: Tell the sub-agent exactly what data format and content to return
+4. **Merge results yourself**: After sub-agents complete, synthesize their findings into your outputs
+
+### Writing Effective Sub-Agent Prompts
+
+Include in every sub-agent prompt:
+- The specific file paths to read
+- The exact scope (e.g., page range, category, section)
+- What data points to extract
+- The format to return (JSON preferred for structured data)
+- Any context needed from previous analysis
+
+### Example Pattern
+```
+Task(subagent_type="general-purpose", prompt="
+Read [file path].
+Focus on [specific scope].
+Extract and return as JSON:
+1. [data point 1]
+2. [data point 2]
+3. [data point 3]
+")
+```
+
+Launch up to 2 sub-agents in parallel, then merge their results.
+
+**IMPORTANT: Maximum 2 concurrent sub-agents** — launching more will be blocked to prevent rate limiting.
+
+## Background Task Results
+
+To retrieve results from background tasks (spawned via Task tool), use the `TaskOutput` tool with the task ID. Do NOT try to read task output files directly with the Read tool — they are stored outside the workspace and will be blocked.
+
+When exploring the workspace to gather context or to answer a question that is not a needle query for a specific file, use the Task tool with subagent_type=Explore instead of running search commands directly.
 
 ## Numa Skills
 

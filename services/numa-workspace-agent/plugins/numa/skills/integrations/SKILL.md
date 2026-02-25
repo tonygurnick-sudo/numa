@@ -219,18 +219,6 @@ Read /workdir/session/integrations-results/result-{timestamp}.json
 
 ---
 
-## Using the Sub-Agent
-
-For complex multi-step workflows (3+ actions, cross-integration work, iterative searches), delegate to the integrations sub-agent:
-
-```
-Task(subagent_type="numa-workspace:integrations", prompt="Search for Q4 reports, download the most recent one, and summarize its contents")
-```
-
-The sub-agent has access to all the same MCP tools and can chain actions, resolve props, and parse results autonomously. Use the fully-qualified name `numa-workspace:integrations`.
-
----
-
 ## Best Practices
 
 1. **Schema first, always** — read `_index.json` then the action schema before calling anything
