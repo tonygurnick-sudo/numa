@@ -260,26 +260,29 @@ DANGEROUS_NODE_PATTERNS = [
 # Dangerous Python patterns (catch common bypasses)
 DANGEROUS_PYTHON_PATTERNS = [
     # Direct dangerous imports
-    r"import\s+os\b",
-    r"import\s+subprocess\b",
-    r"import\s+socket\b",
-    r"import\s+urllib\b",
-    r"import\s+requests\b",
-    r"import\s+http\b",
-    r"import\s+sys\b",
-    r"import\s+pty\b",
-    r"import\s+shutil\b",
-    r"import\s+signal\b",
-    r"import\s+code\b",
-    r"import\s+marshal\b",
-    r"import\s+antigravity\b",
-    r"import\s+webbrowser\b",
-    r"from\s+os\s+import",
-    r"from\s+subprocess\s+import",
-    r"from\s+socket\s+import",
-    r"from\s+sys\s+import",
-    r"from\s+shutil\s+import",
-    r"from\s+marshal\s+import",
+    # NOTE: ^\s* anchors to start-of-line (with re.MULTILINE) so that "import os"
+    # inside string literals (e.g. HTML test descriptions) does not trigger a false
+    # positive. Real import statements always start at the beginning of a line.
+    r"^\s*import\s+os\b",
+    r"^\s*import\s+subprocess\b",
+    r"^\s*import\s+socket\b",
+    r"^\s*import\s+urllib\b",
+    r"^\s*import\s+requests\b",
+    r"^\s*import\s+http\b",
+    r"^\s*import\s+sys\b",
+    r"^\s*import\s+pty\b",
+    r"^\s*import\s+shutil\b",
+    r"^\s*import\s+signal\b",
+    r"^\s*import\s+code\b",
+    r"^\s*import\s+marshal\b",
+    r"^\s*import\s+antigravity\b",
+    r"^\s*import\s+webbrowser\b",
+    r"^\s*from\s+os\s+import",
+    r"^\s*from\s+subprocess\s+import",
+    r"^\s*from\s+socket\s+import",
+    r"^\s*from\s+sys\s+import",
+    r"^\s*from\s+shutil\s+import",
+    r"^\s*from\s+marshal\s+import",
     # Import bypasses
     r"__import__\s*\(",
     r"importlib\.import_module\s*\(",
@@ -289,28 +292,28 @@ DANGEROUS_PYTHON_PATTERNS = [
     r"eval\s*\(",
     r"compile\s*\(",
     # Unsafe deserialization (pickle-based RCE vectors)
-    r"import\s+pickle\b",
-    r"from\s+pickle\s+import",
+    r"^\s*import\s+pickle\b",
+    r"^\s*from\s+pickle\s+import",
     r"\bpickle\s*\.\s*load\s*\(",
     r"\bpickle\s*\.\s*loads\s*\(",
     r"\bpickle\s*\.\s*Unpickler\s*\(",
-    r"from\s+pandas\s+import\s+read_pickle\b",
+    r"^\s*from\s+pandas\s+import\s+read_pickle\b",
     r"\bpandas\s*\.\s*read_pickle\s*\(",
     r"\bpd\s*\.\s*read_pickle\s*\(",
     r"\bread_pickle\s*\(",
-    r"import\s+shelve\b",
-    r"from\s+shelve\s+import",
+    r"^\s*import\s+shelve\b",
+    r"^\s*from\s+shelve\s+import",
     r"\bshelve\s*\.\s*open\s*\(",
-    r"import\s+dill\b",
-    r"from\s+dill\s+import",
+    r"^\s*import\s+dill\b",
+    r"^\s*from\s+dill\s+import",
     r"\bdill\s*\.\s*load\s*\(",
     r"\bdill\s*\.\s*loads\s*\(",
-    r"import\s+cloudpickle\b",
-    r"from\s+cloudpickle\s+import",
+    r"^\s*import\s+cloudpickle\b",
+    r"^\s*from\s+cloudpickle\s+import",
     r"\bcloudpickle\s*\.\s*load\s*\(",
     r"\bcloudpickle\s*\.\s*loads\s*\(",
-    r"import\s+joblib\b",
-    r"from\s+joblib\s+import\s+load\b",
+    r"^\s*import\s+joblib\b",
+    r"^\s*from\s+joblib\s+import\s+load\b",
     r"\bjoblib\s*\.\s*load\s*\(",
     # Builtin access bypasses
     r"__builtins__",
@@ -441,9 +444,10 @@ def check_python_command(command: str) -> tuple[bool, str | None]:
     if " -c " in command:
         parts = command.split(" -c ", 1)
         if len(parts) > 1:
-            python_code = parts[1]
+            # Strip surrounding shell quotes so ^\s* patterns can match line starts
+            python_code = parts[1].strip().strip("\"'").strip()
             for pattern in DANGEROUS_PYTHON_PATTERNS:
-                if re.search(pattern, python_code, re.IGNORECASE):
+                if re.search(pattern, python_code, re.IGNORECASE | re.MULTILINE):
                     return True, f"Dangerous Python pattern detected: {pattern}"
 
     # Check Python file content when executing .py files
@@ -456,7 +460,7 @@ def check_python_command(command: str) -> tuple[bool, str | None]:
             with open(script_path, "r") as f:
                 file_content = f.read()
             for pattern in DANGEROUS_PYTHON_PATTERNS:
-                if re.search(pattern, file_content, re.IGNORECASE):
+                if re.search(pattern, file_content, re.IGNORECASE | re.MULTILINE):
                     return True, f"Dangerous pattern in {script_path}: {pattern}"
         except FileNotFoundError:
             # File doesn't exist yet, will fail at execution anyway
