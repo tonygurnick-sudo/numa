@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { Button, Form, Spinner, Badge } from 'react-bootstrap';
+import { Button, Form, Spinner, Badge, Alert } from 'react-bootstrap';
 import {
   DndContext,
   closestCenter,
@@ -10,8 +10,11 @@ import {
   useDroppable,
   type DragEndEvent,
   type DragStartEvent,
+  type DragOverEvent,
 } from '@dnd-kit/core';
+import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { useTranslation } from 'react-i18next';
+
 import { useNumaRequest } from '../../../Providers/NumaRequestContext';
 import { useOps } from '../OpsContext';
 import * as OpsService from '../../../Services/OpsService';
@@ -48,6 +51,27 @@ function formatCurrency(value: number): string {
   }).format(value);
 }
 
+// ─── Constants & Helpers ─────────────────────────────────────────────────────
+
+const ORDER_GAP = 1000;
+
+function calculateNewOrder(items: { order?: number }[], insertIndex: number): number {
+  const defaultItems = items.map((item) => ({ ...item, order: item.order ?? 0 }));
+
+  if (defaultItems.length === 0) {
+    return ORDER_GAP;
+  }
+  if (insertIndex <= 0) {
+    return defaultItems[0].order - ORDER_GAP;
+  }
+  if (insertIndex >= defaultItems.length) {
+    return defaultItems[defaultItems.length - 1].order + ORDER_GAP;
+  }
+  const before = defaultItems[insertIndex - 1].order;
+  const after = defaultItems[insertIndex].order;
+  return Math.round((before + after) / 2);
+}
+
 // ─── Droppable Column ────────────────────────────────────────────────────────
 
 interface DroppableColumnProps {
@@ -65,17 +89,23 @@ function DroppableColumn({ stage, customers, crmConfig, onCustomerClick }: Dropp
   const textColor = getContrastTextColor(stageColor);
 
   return (
-    <div className="d-flex flex-column" style={{ minWidth: 140, flex: '1 1 0', height: '100%' }}>
+    <div className="d-flex flex-column" style={{ minWidth: 280, flex: '1 0 280px', height: '100%' }}>
       {/* Colored column header */}
       <div
+        className="shadow-sm"
         style={{
           backgroundColor: stageColor,
           color: textColor,
           borderRadius: '10px 10px 0 0',
-          padding: '8px 12px',
+          padding: '10px 14px',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
+          border: `1px solid ${stageColor}`,
+          borderBottom: 'none',
+          boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -2px rgba(0, 0, 0, 0.025)',
+          zIndex: 10,
+          position: 'relative',
         }}
       >
         <span style={{ fontWeight: 700, fontSize: '0.82rem' }}>{stage.name}</span>
@@ -99,25 +129,27 @@ function DroppableColumn({ stage, customers, crmConfig, onCustomerClick }: Dropp
         style={{
           flex: 1,
           borderRadius: '0 0 10px 10px',
-          padding: '8px',
-          backgroundColor: isOver ? '#f5f3ff' : '#f9fafb',
-          borderLeft: '1px solid #e5e7eb',
-          borderRight: '1px solid #e5e7eb',
-          borderBottom: isOver ? `2px dashed ${stageColor}` : '1px solid #e5e7eb',
-          transition: 'background-color 0.15s',
+          padding: '12px 8px',
+          backgroundColor: isOver ? '#f5f3ff' : '#f8fafc',
+          borderLeft: '1px solid #e2e8f0',
+          borderRight: '1px solid #e2e8f0',
+          borderBottom: isOver ? `2px dashed ${stageColor}` : '1px solid #e2e8f0',
+          transition: 'background-color 0.2s ease, border-color 0.2s',
           overflowY: 'auto',
           minHeight: 100,
         }}
       >
-        {customers.length === 0 && (
-          <div className="text-center py-4">
-            <i className="bi bi-people" style={{ fontSize: '1.4rem', color: '#d1d5db' }} />
-            <div style={{ fontSize: '0.75rem', color: '#9ca3af', marginTop: 4 }}>{t('empty.noCustomers')}</div>
-          </div>
-        )}
-        {customers.map((customer) => (
-          <CustomerCard key={customer.id} customer={customer} crmConfig={crmConfig} onClick={onCustomerClick} />
-        ))}
+        <SortableContext items={customers.map((c) => c.id)} strategy={verticalListSortingStrategy}>
+          {customers.length === 0 && (
+            <div className="text-center py-4">
+              <i className="bi bi-people" style={{ fontSize: '1.4rem', color: '#d1d5db' }} />
+              <div style={{ fontSize: '0.75rem', color: '#9ca3af', marginTop: 4 }}>{t('empty.noCustomers')}</div>
+            </div>
+          )}
+          {customers.map((customer) => (
+            <CustomerCard key={customer.id} customer={customer} crmConfig={crmConfig} onClick={onCustomerClick} />
+          ))}
+        </SortableContext>
       </div>
     </div>
   );
@@ -283,8 +315,6 @@ function CustomerListView({ customers, crmConfig, onCustomerClick }: CustomerLis
   );
 }
 
-// ─── CrmMirrorView ────────────────────────────────────────────────────────────
-
 const CrmMirrorView = (): React.JSX.Element => {
   const { t } = useTranslation('ops');
   const { numaGet, numaPost, numaPut } = useNumaRequest();
@@ -315,12 +345,11 @@ const CrmMirrorView = (): React.JSX.Element => {
       /* quota exceeded */
     }
   }, []);
-  const [showNewForm, setShowNewForm] = useState(false);
-  const [newCompanyName, setNewCompanyName] = useState('');
-  const [creating, setCreating] = useState(false);
+  const [creatingCustomer, setCreatingCustomer] = useState(false);
   const [activeCustomer, setActiveCustomer] = useState<Customer | null>(null);
   const [detailCustomerId, setDetailCustomerId] = useState<string | null>(null);
   const [showDetail, setShowDetail] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const crmConfig: CrmConfig | null = config?.crmConfig ?? null;
   const stages = crmConfig?.lifecycleStages ?? [];
@@ -382,20 +411,31 @@ const CrmMirrorView = (): React.JSX.Element => {
 
   // ── Create customer ───────────────────────────────────────────────────────
   const handleCreateCustomer = useCallback(async () => {
-    const name = newCompanyName.trim();
-    if (!name) return;
-    setCreating(true);
     try {
-      await OpsService.createCustomer(numaPost, { companyName: name });
-      setNewCompanyName('');
-      setShowNewForm(false);
-      await loadCustomers();
+      setCreatingCustomer(true);
+      setError(null);
+
+      const defaultStageId = stages.length > 0 ? stages[0].id : undefined;
+
+      const newCustomer = await OpsService.createCustomer(numaPost, {
+        companyName: t('crm.newCustomerDefaultName', 'New Customer'),
+        lifecycleStage: defaultStageId,
+      });
+
+      if (defaultStageId && !newCustomer.lifecycleStage) {
+        newCustomer.lifecycleStage = defaultStageId;
+      }
+
+      setCustomers((prev) => [newCustomer, ...prev]);
+      setDetailCustomerId(newCustomer.id);
+      setShowDetail(true);
     } catch (err) {
-      console.error('[CrmMirrorView] Failed to create customer:', err);
+      console.error('[CrmMirrorView] Create customer failed', err);
+      setError(String(err));
     } finally {
-      setCreating(false);
+      setCreatingCustomer(false);
     }
-  }, [newCompanyName, numaPost, loadCustomers]);
+  }, [numaPost, t, stages]);
 
   // ── Click handler ─────────────────────────────────────────────────────────
   const handleCustomerClick = useCallback((customer: Customer) => {
@@ -411,19 +451,103 @@ const CrmMirrorView = (): React.JSX.Element => {
     [filteredCustomers],
   );
 
+  const handleDragOver = useCallback(
+    (event: DragOverEvent) => {
+      const { active, over } = event;
+      const overId = over?.id;
+
+      if (!overId || active.id === overId) return;
+
+      const activeCustomer = customers.find((c) => c.id === active.id);
+      const overCustomer = customers.find((c) => c.id === overId);
+
+      const isOverColumn = String(overId).startsWith('stage-');
+      if (!activeCustomer) return;
+
+      const activeStageId = activeCustomer.lifecycleStage;
+      const overStageId = isOverColumn ? String(overId).replace('stage-', '') : overCustomer?.lifecycleStage;
+
+      if (!overStageId || activeStageId === overStageId) return;
+
+      setCustomers((prev) => {
+        const overItems = prev
+          .filter((c) => c.lifecycleStage === overStageId)
+          .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+        let overIndex = overItems.length;
+
+        if (!isOverColumn && overCustomer) {
+          overIndex = overItems.findIndex((c) => c.id === overId);
+          const isBelow =
+            over.rect &&
+            active.rect.current.translated &&
+            active.rect.current.translated.top > over.rect.top + over.rect.height / 2;
+          overIndex += isBelow ? 1 : 0;
+        }
+
+        return prev.map((c) => {
+          if (c.id === active.id) {
+            return { ...c, lifecycleStage: overStageId, order: calculateNewOrder(overItems, overIndex) };
+          }
+          return c;
+        });
+      });
+    },
+    [customers],
+  );
+
   const handleDragEnd = useCallback(
     async (event: DragEndEvent) => {
       setActiveCustomer(null);
       const { active, over } = event;
       if (!over) return;
       const overId = over.id as string;
-      if (!overId.startsWith('stage-')) return;
-      const newStageId = overId.replace('stage-', '');
+      let newStageId: string | null = null;
+
+      if (overId.startsWith('stage-')) {
+        newStageId = overId.replace('stage-', '');
+      } else {
+        // Dropped over another customer card
+        const overCustomer = customers.find((c) => c.id === overId);
+        if (overCustomer) {
+          newStageId = overCustomer.lifecycleStage;
+        }
+      }
+
+      if (!newStageId) return;
+
       const customer = customers.find((c) => c.id === active.id);
-      if (!customer || customer.lifecycleStage === newStageId) return;
-      setCustomers((prev) => prev.map((c) => (c.id === customer.id ? { ...c, lifecycleStage: newStageId } : c)));
+      if (!customer) return;
+
+      const destCustomers = filteredCustomers
+        .filter((c) => {
+          if (c.id === customer.id) return false;
+          return c.lifecycleStage === newStageId;
+        })
+        .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+
+      let insertIndex = destCustomers.length;
+      if (!overId.startsWith('stage-') && overId !== active.id) {
+        const overIndex = destCustomers.findIndex((c) => c.id === overId);
+        if (overIndex >= 0) {
+          const isBelow =
+            over.rect &&
+            active.rect.current.translated &&
+            active.rect.current.translated.top > over.rect.top + over.rect.height / 2;
+          insertIndex = overIndex + (isBelow ? 1 : 0);
+        }
+      }
+
+      const newOrder = calculateNewOrder(destCustomers, insertIndex);
+
+      // If nothing changed in position or stage, skip
+      if (customer.lifecycleStage === newStageId && customer.order === newOrder) return;
+
+      setCustomers((prev) =>
+        prev.map((c) => (c.id === customer.id ? { ...c, lifecycleStage: newStageId!, order: newOrder } : c)),
+      );
+
       try {
-        await OpsService.updateCustomer(numaPut, customer.id, { lifecycleStage: newStageId });
+        await OpsService.updateCustomer(numaPut, customer.id, { lifecycleStage: newStageId, order: newOrder });
       } catch (err) {
         console.error('[CrmMirrorView] Failed to update customer stage:', err);
         await loadCustomers();
@@ -438,7 +562,7 @@ const CrmMirrorView = (): React.JSX.Element => {
     for (const stage of stages) {
       map.set(
         stage.id,
-        filteredCustomers.filter((c) => c.lifecycleStage === stage.id),
+        filteredCustomers.filter((c) => c.lifecycleStage === stage.id).sort((a, b) => (a.order ?? 0) - (b.order ?? 0)),
       );
     }
     return map;
@@ -522,101 +646,72 @@ const CrmMirrorView = (): React.JSX.Element => {
 
           <div className="flex-grow-1" />
 
-          {/* Board / List toggle */}
-          <div
-            style={{ display: 'flex', border: '1px solid #e5e7eb', borderRadius: 8, overflow: 'hidden', flexShrink: 0 }}
-          >
-            <button
-              type="button"
-              title={t('common.boardView')}
-              onClick={() => handleSetViewMode('board')}
-              style={{
-                padding: '5px 10px',
-                border: 'none',
-                background: viewMode === 'board' ? '#4f46e5' : '#fff',
-                color: viewMode === 'board' ? '#fff' : '#6b7280',
-                cursor: 'pointer',
-                fontSize: '0.85rem',
-                transition: 'all 0.12s',
-              }}
-            >
-              <i className="bi bi-kanban" />
-            </button>
-            <button
-              type="button"
-              title={t('common.listView')}
-              onClick={() => handleSetViewMode('list')}
-              style={{
-                padding: '5px 10px',
-                border: 'none',
-                borderLeft: '1px solid #e5e7eb',
-                background: viewMode === 'list' ? '#4f46e5' : '#fff',
-                color: viewMode === 'list' ? '#fff' : '#6b7280',
-                cursor: 'pointer',
-                fontSize: '0.85rem',
-                transition: 'all 0.12s',
-              }}
-            >
-              <i className="bi bi-list-ul" />
-            </button>
-          </div>
-
-          {!showNewForm && (
-            <Button
-              size="sm"
-              onClick={() => setShowNewForm(true)}
-              style={{ borderRadius: 8, backgroundColor: '#4f46e5', borderColor: '#4f46e5', flexShrink: 0 }}
-            >
-              <i className="bi bi-plus me-1" />
+          {/* Header controls (View toggles, Create button) */}
+          <div className="d-flex align-items-center gap-2">
+            <Button variant="primary" size="sm" onClick={handleCreateCustomer} disabled={creatingCustomer}>
+              {creatingCustomer ? (
+                <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true" />
+              ) : (
+                <i className="bi bi-plus me-1" />
+              )}
               {t('crm.newCustomer')}
             </Button>
-          )}
+
+            {/* Board / List toggle */}
+            <div
+              style={{
+                display: 'flex',
+                border: '1px solid #e5e7eb',
+                borderRadius: 8,
+                overflow: 'hidden',
+                flexShrink: 0,
+              }}
+            >
+              <button
+                type="button"
+                title={t('common.boardView')}
+                onClick={() => handleSetViewMode('board')}
+                style={{
+                  padding: '5px 10px',
+                  border: 'none',
+                  background: viewMode === 'board' ? '#4f46e5' : '#fff',
+                  color: viewMode === 'board' ? '#fff' : '#6b7280',
+                  cursor: 'pointer',
+                  fontSize: '0.85rem',
+                  transition: 'all 0.12s',
+                }}
+              >
+                <i className="bi bi-kanban" />
+              </button>
+              <button
+                type="button"
+                title={t('common.listView')}
+                onClick={() => handleSetViewMode('list')}
+                style={{
+                  padding: '5px 10px',
+                  border: 'none',
+                  borderLeft: '1px solid #e5e7eb',
+                  background: viewMode === 'list' ? '#4f46e5' : '#fff',
+                  color: viewMode === 'list' ? '#fff' : '#6b7280',
+                  cursor: 'pointer',
+                  fontSize: '0.85rem',
+                  transition: 'all 0.12s',
+                }}
+              >
+                <i className="bi bi-list-ul" />
+              </button>
+            </div>
+          </div>
         </div>
 
-        {/* ── New customer form ─────────────────────────────────────────── */}
-        {showNewForm && (
-          <div className="d-flex align-items-center gap-2 px-3 pb-2">
-            <Form.Control
-              type="text"
-              size="sm"
-              placeholder={t('common.name')}
-              value={newCompanyName}
-              onChange={(e) => setNewCompanyName(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') void handleCreateCustomer();
-                if (e.key === 'Escape') {
-                  setShowNewForm(false);
-                  setNewCompanyName('');
-                }
-              }}
-              style={{ maxWidth: 280, borderRadius: 8 }}
-              autoFocus
-              disabled={creating}
-            />
-            <Button
-              size="sm"
-              onClick={() => void handleCreateCustomer()}
-              disabled={creating || !newCompanyName.trim()}
-              style={{ backgroundColor: '#4f46e5', borderColor: '#4f46e5', borderRadius: 8 }}
-            >
-              {creating ? t('common.loading') : t('common.save')}
-            </Button>
-            <Button
-              variant="outline-secondary"
-              size="sm"
-              onClick={() => {
-                setShowNewForm(false);
-                setNewCompanyName('');
-              }}
-              style={{ borderRadius: 8 }}
-              disabled={creating}
-            >
-              {t('common.cancel')}
-            </Button>
+        {/* ── Board or List content ─────────────────────────────────────── */}
+        {error && (
+          <div className="px-3">
+            <Alert variant="danger" onClose={() => setError(null)} dismissible className="py-2 mb-0">
+              {error}
+            </Alert>
           </div>
         )}
-
-        {/* ── Board or List content ─────────────────────────────────────── */}
         <div className="flex-grow-1 overflow-auto px-3 pb-3 pt-1">
           {viewMode === 'list' ? (
             <CustomerListView
@@ -634,6 +729,7 @@ const CrmMirrorView = (): React.JSX.Element => {
               sensors={sensors}
               collisionDetection={closestCenter}
               onDragStart={handleDragStart}
+              onDragOver={handleDragOver}
               onDragEnd={(e) => void handleDragEnd(e)}
             >
               <div className="d-flex gap-3 h-100 overflow-auto" style={{ minHeight: 300 }}>
@@ -650,25 +746,12 @@ const CrmMirrorView = (): React.JSX.Element => {
 
               <DragOverlay>
                 {activeCustomer ? (
-                  <div
-                    style={{
-                      background: '#fff',
-                      borderRadius: 10,
-                      border: '1px solid #e5e7eb',
-                      padding: '12px 14px',
-                      boxShadow: '0 8px 24px rgba(0,0,0,0.15)',
-                      width: 255,
-                      opacity: 0.95,
-                    }}
-                  >
-                    <div className="fw-bold" style={{ fontSize: '0.9rem', color: '#111827' }}>
-                      {activeCustomer.companyName}
-                    </div>
-                    {activeCustomer.industry && (
-                      <div style={{ fontSize: '0.76rem', color: '#9ca3af', marginTop: 3 }}>
-                        {activeCustomer.industry}
-                      </div>
-                    )}
+                  <div style={{ transform: 'scale(1.02)', opacity: 0.9 }}>
+                    <CustomerCard
+                      customer={activeCustomer}
+                      crmConfig={crmConfig}
+                      onClick={() => { }} // No-op during drag
+                    />
                   </div>
                 ) : null}
               </DragOverlay>

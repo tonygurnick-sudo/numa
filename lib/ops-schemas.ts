@@ -16,7 +16,7 @@ export const prioritySchema = z.enum(['highest', 'high', 'medium', 'low', 'lowes
 
 export const zoneTypeSchema = z.enum(['board', 'backlog']);
 
-export const boardModeSchema = z.enum(['basic', 'normal']);
+export const boardModeSchema = z.enum(['basic', 'normal', 'development', 'support', 'monthly', 'solo']);
 
 export const workUnitStatusSchema = z.enum(['planning', 'active', 'completed']);
 

@@ -45,7 +45,8 @@ export function CreateTeamWizard({ show, onHide, onCreated }: CreateTeamWizardPr
   const [presetId, setPresetId] = useState('standard');
   const [enableWorkUnits, setEnableWorkUnits] = useState(false);
   const [wuLabel, setWuLabel] = useState('Sprint');
-  const [wuPatternStart, setWuPatternStart] = useState(1);
+  const [wuPatternStart, setWuPatternStart] = useState<number | string>(1);
+  const [wuPatternType, setWuPatternType] = useState<'sequential' | 'months'>('sequential');
 
   // ── Step 2: Ticket Types ─────────────────────────────────────────────────
   const allTypeIds = useMemo(() => config?.ticketTypes.map((tt) => tt.id) ?? [], [config?.ticketTypes]);
@@ -85,6 +86,7 @@ export function CreateTeamWizard({ show, onHide, onCreated }: CreateTeamWizardPr
       setEnableWorkUnits(false);
       setWuLabel('Sprint');
       setWuPatternStart(1);
+      setWuPatternType('sequential');
       setSelectedTicketTypes([...allTypeIds]);
       setCustomTicketTypes([]);
       setShowAddType(false);
@@ -111,7 +113,7 @@ export function CreateTeamWizard({ show, onHide, onCreated }: CreateTeamWizardPr
           enabled: true,
           label: wuLabel || 'Sprint',
           labelPlural: `${wuLabel || 'Sprint'}s`,
-          patternType: 'sequential',
+          patternType: wuPatternType,
           patternStart: wuPatternStart,
           allowOverlap: false,
         };
@@ -320,6 +322,21 @@ export function CreateTeamWizard({ show, onHide, onCreated }: CreateTeamWizardPr
                     onClick={() => {
                       setPresetId(p.id);
                       setCustomStages(null);
+
+                      // Auto-configure work units based on preset
+                      if (p.mode === 'development' || p.mode === 'normal') {
+                        setEnableWorkUnits(true);
+                        setWuLabel('Sprint');
+                        setWuPatternType('sequential');
+                        setWuPatternStart(1);
+                      } else if (p.mode === 'monthly') {
+                        setEnableWorkUnits(true);
+                        setWuLabel('Month');
+                        setWuPatternType('months');
+                        setWuPatternStart('january');
+                      } else {
+                        setEnableWorkUnits(false);
+                      }
                     }}
                   >
                     <strong>{p.name}</strong>
@@ -329,7 +346,7 @@ export function CreateTeamWizard({ show, onHide, onCreated }: CreateTeamWizardPr
               </div>
             </Form.Group>
 
-            {preset.mode === 'normal' && (
+            {['development', 'monthly', 'normal'].includes(preset.mode) && (
               <div className="border-top pt-3">
                 <Form.Check
                   type="switch"
@@ -347,14 +364,42 @@ export function CreateTeamWizard({ show, onHide, onCreated }: CreateTeamWizardPr
                     </Form.Group>
                     <Form.Group>
                       <Form.Label>{t('teams.patternStart')}</Form.Label>
-                      <Form.Control
-                        size="sm"
-                        type="number"
-                        min={1}
-                        value={wuPatternStart}
-                        onChange={(e) => setWuPatternStart(Math.max(1, parseInt(e.target.value, 10) || 1))}
-                        style={{ maxWidth: 100 }}
-                      />
+                      {wuPatternType === 'sequential' ? (
+                        <Form.Control
+                          size="sm"
+                          type="number"
+                          min={1}
+                          value={wuPatternStart as number}
+                          onChange={(e) => setWuPatternStart(Math.max(1, parseInt(e.target.value, 10) || 1))}
+                          style={{ maxWidth: 100 }}
+                        />
+                      ) : (
+                        <Form.Select
+                          size="sm"
+                          value={wuPatternStart as string}
+                          onChange={(e) => setWuPatternStart(e.target.value)}
+                          style={{ maxWidth: 150 }}
+                        >
+                          {[
+                            'january',
+                            'february',
+                            'march',
+                            'april',
+                            'may',
+                            'june',
+                            'july',
+                            'august',
+                            'september',
+                            'october',
+                            'november',
+                            'december',
+                          ].map((m) => (
+                            <option key={m} value={m}>
+                              {m.charAt(0).toUpperCase() + m.slice(1)}
+                            </option>
+                          ))}
+                        </Form.Select>
+                      )}
                     </Form.Group>
                   </div>
                 )}

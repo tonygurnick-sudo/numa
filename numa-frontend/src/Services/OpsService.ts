@@ -92,7 +92,6 @@ export const syncStaff = async (numaPost: NumaPost, force = false): Promise<Staf
   console.info(`${LOG_PREFIX} syncStaff: success`, { count: response.staff?.length, skipped: response.skipped });
   return response;
 };
-
 export const createTicketType = async (
   numaPost: NumaPost,
   payload: { name: string; prefix: string; icon: string; color: string; defaultFields: string[] },

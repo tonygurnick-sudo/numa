@@ -98,6 +98,7 @@ export type CrmConfig = {
   territories: string[];
   industries: string[];
   defaultStage?: string;
+  useAutoColors?: boolean;
 };
 
 export type SupplierFlag = {
@@ -112,6 +113,7 @@ export type SupplierConfig = {
   supplierFlags: SupplierFlag[];
   documentTypes: DocTypeEntry[];
   defaultStage?: string;
+  useAutoColors?: boolean;
 };
 
 export type LinkTypeDefinition = {
@@ -158,7 +160,7 @@ export type WorkUnitSeriesConfig = {
   label: string;
   labelPlural: string;
   patternType: string;
-  patternStart: number;
+  patternStart: number | string;
   allowOverlap: boolean;
   backlogZoneId?: string;
 } | null;
@@ -181,7 +183,7 @@ export type Team = {
 
 export type ZoneType = 'board' | 'backlog';
 
-export type TeamPreset = 'basic' | 'normal';
+export type TeamPreset = 'basic' | 'normal' | 'support' | 'solo' | 'monthly' | 'development';
 
 export type WorkZone = {
   id: string;
@@ -384,6 +386,7 @@ export type Customer = {
   createdBy: string;
   createdAt: string;
   updatedAt: string;
+  order?: number;
 };
 
 export type Supplier = {
@@ -407,6 +410,7 @@ export type Supplier = {
   createdBy: string;
   createdAt: string;
   updatedAt: string;
+  order?: number;
 };
 
 export type ActivityType = 'call' | 'email' | 'meeting' | 'note' | 'demo' | 'slack';
@@ -553,6 +557,7 @@ export type CreateCustomerPayload = {
   productNotes?: string | null;
   notes?: string;
   contacts?: Contact[];
+  order?: number;
 };
 
 export type UpdateCustomerPayload = Partial<CreateCustomerPayload>;
@@ -571,6 +576,7 @@ export type CreateSupplierPayload = {
   contacts?: Contact[];
   annualSpend?: number | null;
   paymentTerms?: string | null;
+  order?: number;
 };
 
 export type UpdateSupplierPayload = Partial<CreateSupplierPayload>;

@@ -28,7 +28,6 @@ import { DocumentSection } from '../Shared/DocumentSection';
 import { getColorForPosition, getContrastTextColor } from '../Shared/colorUtils';
 import { PriorityIndicator } from '../Shared/PriorityIndicator';
 import { CreateTicketModal } from './CreateTicketModal';
-import { TicketDetailModal } from './TicketDetailModal';
 
 // ─── Props ──────────────────────────────────────────────────────────────────
 
@@ -145,7 +144,7 @@ export function CustomerDetailModal({
   const [linkedTickets, setLinkedTickets] = useState<Ticket[]>([]);
   const [loadingTickets, setLoadingTickets] = useState(false);
   const [showCreateTicket, setShowCreateTicket] = useState(false);
-  const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null);
+  const [_selectedTicket, setSelectedTicket] = useState<Ticket | null>(null);
   const [linkedTicketCount, setLinkedTicketCount] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -270,6 +269,7 @@ export function CustomerDetailModal({
       setLinkedWorkStatusFilter('all');
       setLinkedWorkSortBy('updatedAt');
       setLinkedWorkSortBy('updatedAt');
+
       setError(null);
     }
   }, [show, customerId, loadCustomer, numaGet]);
@@ -1210,19 +1210,6 @@ export function CustomerDetailModal({
         prefilledCustomerId={customerId}
         prefilledCustomerName={customer?.companyName}
       />
-
-      {/* Open a linked ticket's detail modal */}
-      {selectedTicket && (
-        <TicketDetailModal
-          show={!!selectedTicket}
-          ticketId={selectedTicket.id}
-          onHide={() => setSelectedTicket(null)}
-          onDeleted={() => {
-            setLinkedTickets((prev) => prev.filter((t) => t.id !== selectedTicket.id));
-            setSelectedTicket(null);
-          }}
-        />
-      )}
     </>
   );
 }
