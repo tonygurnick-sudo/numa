@@ -64,7 +64,12 @@ interface UserProfilePageProps {
   settingsScope?: 'user' | 'admin';
 }
 
-export default function UserProfilePage({ embedded = false, activeTabKey, onActiveTabChange, settingsScope = 'user' }: UserProfilePageProps) {
+export default function UserProfilePage({
+  embedded = false,
+  activeTabKey,
+  onActiveTabChange,
+  settingsScope = 'user',
+}: UserProfilePageProps) {
   const { t } = useTranslation('settings');
   const { user, getCredentials } = useAuth();
   const { numaGet, numaPut } = useNumaRequest();
