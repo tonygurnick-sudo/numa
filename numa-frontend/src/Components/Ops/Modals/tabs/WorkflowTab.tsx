@@ -195,84 +195,145 @@ export function WorkflowTab({
   // ════════════════════════════════════════════════════════════════════
   if (editingZone && editingZoneId) {
     return (
-      <>
+      <div className="border rounded-3 p-4 bg-white mb-4 shadow-sm">
         <button
           type="button"
-          className="btn btn-link text-decoration-none p-0 mb-3 text-muted"
+          className="btn btn-link text-decoration-none p-0 mb-4 text-muted d-flex align-items-center"
           onClick={() => setEditingZoneId(null)}
         >
-          <i className="bi bi-arrow-left me-1" />
-          {t('settings.workZones')}
+          <i className="bi bi-arrow-left me-2" />
+          <span className="fw-medium">{t('settings.workZones')}</span>
         </button>
 
-        <h6 className="fw-bold mb-3">{t('settings.editWorkZone')}</h6>
+        <h5 className="fw-bold mb-4 text-dark">{t('settings.editWorkZone')}</h5>
 
-        {/* Zone name (editable) */}
-        <Form.Group className="mb-3">
-          <Form.Label className="fw-semibold">{t('settings.zoneName')} *</Form.Label>
-          <Form.Control
-            type="text"
-            value={editingZone.name ?? ''}
-            onChange={(e) => handleZoneNameChange(editingZoneIdx, e.target.value)}
-          />
-        </Form.Group>
+        <div className="bg-light p-3 rounded border mb-4">
+          <Row>
+            <Col md={6}>
+              {/* Zone name (editable) */}
+              <Form.Group>
+                <Form.Label className="small fw-bold text-muted text-uppercase mb-2" style={{ letterSpacing: '0.5px' }}>
+                  {t('settings.zoneName')} *
+                </Form.Label>
+                <Form.Control
+                  type="text"
+                  value={editingZone.name ?? ''}
+                  onChange={(e) => handleZoneNameChange(editingZoneIdx, e.target.value)}
+                />
+              </Form.Group>
+            </Col>
+            <Col md={6}>
+              {/* Zone type */}
+              <Form.Group>
+                <Form.Label className="small fw-bold text-muted text-uppercase mb-2" style={{ letterSpacing: '0.5px' }}>
+                  {t('settings.zoneType')}
+                </Form.Label>
+                <Form.Select
+                  size="sm"
+                  value={editingZone.zoneType ?? 'standard'}
+                  onChange={(e) => handleZoneTypeChange(editingZoneIdx, e.target.value as ZoneType)}
+                  style={{ height: '38px' }}
+                >
+                  {(Object.keys(ZONE_STATUS_TYPES) as ZoneType[]).map((zt) => (
+                    <option key={zt} value={zt}>
+                      {t(`zones.type_${zt}`)}
+                    </option>
+                  ))}
+                </Form.Select>
+                <small className="text-muted d-block mt-2">
+                  {t(`settings.zoneTypeDesc_${editingZone.zoneType ?? 'standard'}`)}
+                </small>
+              </Form.Group>
+            </Col>
+          </Row>
+        </div>
 
-        {/* Zone type */}
-        <Form.Group className="mb-3">
-          <Form.Label>{t('settings.zoneType')}</Form.Label>
-          <Form.Select
-            size="sm"
-            value={editingZone.zoneType ?? 'standard'}
-            onChange={(e) => handleZoneTypeChange(editingZoneIdx, e.target.value as ZoneType)}
-            style={{ maxWidth: 200 }}
-          >
-            {(Object.keys(ZONE_STATUS_TYPES) as ZoneType[]).map((zt) => (
-              <option key={zt} value={zt}>
-                {t(`zones.type_${zt}`)}
-              </option>
-            ))}
-          </Form.Select>
-          <small className="text-muted d-block mt-1">
-            {t(`settings.zoneTypeDesc_${editingZone.zoneType ?? 'standard'}`)}
-          </small>
-        </Form.Group>
+        <div className="border-top pt-4 mt-2">
+          <h6 className="fw-bold mb-1 text-dark">{t('settings.workStages')}</h6>
+          <p className="text-muted small mb-3">{t('settings.workStagesHelp')}</p>
 
-        {/* Stages within this zone */}
-        <h6 className="fw-bold mb-1">{t('settings.workStages')}</h6>
-        <p className="text-muted small mb-2">{t('settings.workStagesHelp')}</p>
+          {editingZoneStages.length > 0 && (
+            <div className="d-flex align-items-center gap-2 mb-2 px-1">
+              <div style={{ width: 20 }} />
+              <small className="text-muted fw-bold" style={{ flex: 1, maxWidth: 280 }}>
+                {t('settings.stageName')}
+              </small>
+              <small className="text-muted fw-bold" style={{ width: 160 }}>
+                {t('settings.statusCategory')}
+              </small>
+              <small className="text-muted fw-bold" style={{ width: 120 }}>
+                {t('common.actions')}
+              </small>
+            </div>
+          )}
 
-        {editingZoneStages.length > 0 && (
-          <div className="d-flex align-items-center gap-2 mb-2 px-1">
-            <div style={{ width: 20 }} />
-            <small className="text-muted fw-bold" style={{ flex: 1, maxWidth: 280 }}>
-              {t('settings.stageName')}
-            </small>
-            <small className="text-muted fw-bold" style={{ width: 160 }}>
-              {t('settings.statusCategory')}
-            </small>
-            <small className="text-muted fw-bold" style={{ width: 120 }}>
-              {t('common.actions')}
-            </small>
-          </div>
-        )}
+          {editingZoneStages.map((stage, idx) => (
+            <div key={stage.id ?? `stage-${idx}`} className="d-flex align-items-center gap-2 mb-2">
+              <i className="bi bi-grip-vertical text-muted" />
+              <Form.Control
+                type="text"
+                size="sm"
+                value={stage.name ?? ''}
+                onChange={(e) => handleStageNameChange(editingZoneId, idx, e.target.value)}
+                style={{ flex: 1, maxWidth: 280 }}
+              />
+              <Form.Select
+                size="sm"
+                value={stage.statusType ?? ''}
+                onChange={(e) => handleStageStatusTypeChange(editingZoneId, idx, e.target.value as StatusType)}
+                style={{ maxWidth: 160 }}
+              >
+                <option value="">{t('common.selectOption')}</option>
+                {editingZoneAllowedTypes.map((st) => (
+                  <option key={st} value={st}>
+                    {t(`globalSettings.statusTypes.${st}`)}
+                  </option>
+                ))}
+              </Form.Select>
+              <Button
+                variant="outline-secondary"
+                size="sm"
+                disabled={idx === 0}
+                onClick={() => handleStageMoveInZone(editingZoneId, idx, 'up')}
+              >
+                <i className="bi bi-arrow-up" />
+              </Button>
+              <Button
+                variant="outline-secondary"
+                size="sm"
+                disabled={idx === editingZoneStages.length - 1}
+                onClick={() => handleStageMoveInZone(editingZoneId, idx, 'down')}
+              >
+                <i className="bi bi-arrow-down" />
+              </Button>
+              <Button variant="outline-danger" size="sm" onClick={() => handleRemoveStageFromZone(editingZoneId, idx)}>
+                <i className="bi bi-trash" />
+              </Button>
+            </div>
+          ))}
 
-        {editingZoneStages.map((stage, idx) => (
-          <div key={stage.id ?? `stage-${idx}`} className="d-flex align-items-center gap-2 mb-2">
-            <i className="bi bi-grip-vertical text-muted" />
+          {editingZoneStages.length === 0 && (
+            <span className="text-muted small fst-italic">{t('settings.noStages')}</span>
+          )}
+
+          {/* Add stage row */}
+          <div className="d-flex align-items-center gap-2 mt-2 pt-2 border-top">
+            <i className="bi bi-plus text-muted" />
             <Form.Control
               type="text"
               size="sm"
-              value={stage.name ?? ''}
-              onChange={(e) => handleStageNameChange(editingZoneId, idx, e.target.value)}
+              placeholder={t('settings.addStage')}
+              value={editingNewStage.name}
+              onChange={(e) => handleNewStageChange(editingZoneId, 'name', e.target.value)}
               style={{ flex: 1, maxWidth: 280 }}
             />
             <Form.Select
               size="sm"
-              value={stage.statusType ?? ''}
-              onChange={(e) => handleStageStatusTypeChange(editingZoneId, idx, e.target.value as StatusType)}
+              value={editingNewStage.statusType}
+              onChange={(e) => handleNewStageChange(editingZoneId, 'statusType', e.target.value)}
               style={{ maxWidth: 160 }}
             >
-              <option value="">{t('common.selectOption')}</option>
+              <option value="">{t('settings.statusCategory')}</option>
               {editingZoneAllowedTypes.map((st) => (
                 <option key={st} value={st}>
                   {t(`globalSettings.statusTypes.${st}`)}
@@ -280,70 +341,20 @@ export function WorkflowTab({
               ))}
             </Form.Select>
             <Button
-              variant="outline-secondary"
+              variant="outline-primary"
               size="sm"
-              disabled={idx === 0}
-              onClick={() => handleStageMoveInZone(editingZoneId, idx, 'up')}
+              disabled={!editingNewStage.name.trim() || !editingNewStage.statusType}
+              onClick={() => handleAddStageToZone(editingZoneId)}
             >
-              <i className="bi bi-arrow-up" />
-            </Button>
-            <Button
-              variant="outline-secondary"
-              size="sm"
-              disabled={idx === editingZoneStages.length - 1}
-              onClick={() => handleStageMoveInZone(editingZoneId, idx, 'down')}
-            >
-              <i className="bi bi-arrow-down" />
-            </Button>
-            <Button variant="outline-danger" size="sm" onClick={() => handleRemoveStageFromZone(editingZoneId, idx)}>
-              <i className="bi bi-trash" />
+              {t('common.add')}
             </Button>
           </div>
-        ))}
-
-        {editingZoneStages.length === 0 && (
-          <span className="text-muted small fst-italic">{t('settings.noStages')}</span>
-        )}
-
-        {/* Add stage row */}
-        <div className="d-flex align-items-center gap-2 mt-2 pt-2 border-top">
-          <i className="bi bi-plus text-muted" />
-          <Form.Control
-            type="text"
-            size="sm"
-            placeholder={t('settings.addStage')}
-            value={editingNewStage.name}
-            onChange={(e) => handleNewStageChange(editingZoneId, 'name', e.target.value)}
-            style={{ flex: 1, maxWidth: 280 }}
-          />
-          <Form.Select
-            size="sm"
-            value={editingNewStage.statusType}
-            onChange={(e) => handleNewStageChange(editingZoneId, 'statusType', e.target.value)}
-            style={{ maxWidth: 160 }}
-          >
-            <option value="">{t('settings.statusCategory')}</option>
-            {editingZoneAllowedTypes.map((st) => (
-              <option key={st} value={st}>
-                {t(`globalSettings.statusTypes.${st}`)}
-              </option>
-            ))}
-          </Form.Select>
-          <Button
-            variant="outline-primary"
-            size="sm"
-            disabled={!editingNewStage.name.trim() || !editingNewStage.statusType}
-            onClick={() => handleAddStageToZone(editingZoneId)}
-          >
-            {t('common.add')}
-          </Button>
         </div>
-
-        <p className="text-muted small mt-3 fst-italic">
-          <i className="bi bi-lightbulb me-1" />
+        <p className="text-muted small mt-4 pt-3 border-top fst-italic">
+          <i className="bi bi-lightbulb text-warning me-2" />
           {t('settings.stageStatusTip')}
         </p>
-      </>
+      </div>
     );
   }
 
@@ -351,134 +362,157 @@ export function WorkflowTab({
   // Zone List View — configurable zones (add/remove/edit)
   // ════════════════════════════════════════════════════════════════════
   return (
-    <>
+    <div className="d-flex flex-column gap-4">
       {/* Info banner */}
-      <div className="alert alert-info small mb-3">
-        <i className="bi bi-info-circle me-1" />
-        {t('settings.fixedZonesInfo')}
-        <br />
-        <i className="bi bi-lightbulb me-1 mt-1" />
-        {t('settings.zoneTypeHelp')}
+      <div className="alert bg-primary bg-opacity-10 border-primary border-opacity-25 text-primary small mb-0 rounded-3 shadow-sm d-flex gap-3 align-items-start p-3">
+        <i className="bi bi-info-circle fs-5 mt-1" />
+        <div>
+          <div className="fw-medium mb-1">{t('settings.fixedZonesInfo')}</div>
+          <div className="opacity-75">{t('settings.zoneTypeHelp')}</div>
+        </div>
       </div>
 
-      <h6 className="fw-bold mb-1">{t('settings.workZones')}</h6>
-      <p className="text-muted small mb-3">{t('settings.workZonesHelp')}</p>
+      <div className="border rounded-3 p-4 bg-white shadow-sm">
+        <div className="d-flex align-items-center justify-content-between mb-4">
+          <div>
+            <h5 className="fw-bold mb-1 text-dark">{t('settings.workZones')}</h5>
+            <p className="text-muted small mb-0">{t('settings.workZonesHelp')}</p>
+          </div>
+        </div>
 
-      {sortedZones.map((zone) => {
-        const zoneStages = getStagesForZone(zone.id);
-        const ticketCount = zone.id ? (zoneTicketCounts.get(zone.id) ?? 0) : 0;
-        const isDefault = zone.id === defaultZoneId;
-        const canDelete = zones.length > 1 && ticketCount === 0;
+        <div className="d-flex flex-column gap-3 mb-4">
+          {sortedZones.map((zone) => {
+            const zoneStages = getStagesForZone(zone.id);
+            const ticketCount = zone.id ? (zoneTicketCounts.get(zone.id) ?? 0) : 0;
+            const isDefault = zone.id === defaultZoneId;
+            const canDelete = zones.length > 1 && ticketCount === 0;
 
-        return (
-          <div key={zone.id ?? `zone-${zone.zoneType}`} className="card mb-2">
-            <div className="card-body py-2 px-3">
-              <div className="d-flex align-items-center gap-2">
-                <span className="fw-semibold">{zone.name}</span>
-                <Badge bg={ZONE_TYPE_BADGE_COLORS[zone.zoneType!] ?? 'secondary'} style={{ fontSize: '0.65rem' }}>
-                  {t(`zones.type_${zone.zoneType}`)}
-                </Badge>
-                {isDefault && (
-                  <Badge bg="info" style={{ fontSize: '0.65rem' }}>
-                    {t('settings.defaultLocationSection')}
-                  </Badge>
-                )}
-                {ticketCount > 0 && (
-                  <Badge bg="light" text="dark" style={{ fontSize: '0.65rem' }}>
-                    {t('tickets.count', { count: ticketCount })}
-                  </Badge>
-                )}
-                <div className="ms-auto d-flex align-items-center gap-1">
-                  {zone.id && (
-                    <Button
-                      variant="link"
-                      size="sm"
-                      className="p-0 text-muted"
-                      onClick={() => setEditingZoneId(zone.id!)}
-                    >
-                      <i className="bi bi-pencil" />
-                    </Button>
-                  )}
-                  {zone.id && (
-                    <Button
-                      variant="link"
-                      size="sm"
-                      className="p-0 text-danger"
-                      disabled={!canDelete}
-                      title={
-                        !canDelete
-                          ? zones.length <= 1
-                            ? t('settings.cannotDeleteLastZone')
-                            : t('settings.cannotDeleteZoneWithTickets')
-                          : t('settings.deleteZone')
-                      }
-                      onClick={() => zone.id && handleDeleteZone(zone.id)}
-                    >
-                      <i className="bi bi-trash" />
-                    </Button>
+            return (
+              <div key={zone.id ?? `zone-${zone.zoneType}`} className="card mb-2">
+                <div className="card-body py-2 px-3">
+                  <div className="d-flex align-items-center gap-2">
+                    <span className="fw-semibold">{zone.name}</span>
+                    <Badge bg={ZONE_TYPE_BADGE_COLORS[zone.zoneType!] ?? 'secondary'} style={{ fontSize: '0.65rem' }}>
+                      {t(`zones.type_${zone.zoneType}`)}
+                    </Badge>
+                    {isDefault && (
+                      <Badge bg="info" style={{ fontSize: '0.65rem' }}>
+                        {t('settings.defaultLocationSection')}
+                      </Badge>
+                    )}
+                    {ticketCount > 0 && (
+                      <Badge bg="light" text="dark" style={{ fontSize: '0.65rem' }}>
+                        {t('tickets.count', { count: ticketCount })}
+                      </Badge>
+                    )}
+                    <div className="ms-auto d-flex align-items-center gap-1">
+                      {zone.id && (
+                        <Button
+                          variant="link"
+                          size="sm"
+                          className="p-0 text-muted"
+                          onClick={() => setEditingZoneId(zone.id!)}
+                        >
+                          <i className="bi bi-pencil" />
+                        </Button>
+                      )}
+                      {zone.id && (
+                        <Button
+                          variant="link"
+                          size="sm"
+                          className="p-0 text-danger"
+                          disabled={!canDelete}
+                          title={
+                            !canDelete
+                              ? zones.length <= 1
+                                ? t('settings.cannotDeleteLastZone')
+                                : t('settings.cannotDeleteZoneWithTickets')
+                              : t('settings.deleteZone')
+                          }
+                          onClick={() => zone.id && handleDeleteZone(zone.id)}
+                        >
+                          <i className="bi bi-trash" />
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                  {/* Stage flow preview */}
+                  {zoneStages.length > 0 && (
+                    <div className="d-flex align-items-center gap-1 mt-1 flex-wrap">
+                      <small className="text-muted">{t('settings.stages')}:</small>
+                      {zoneStages.map((s, i) => (
+                        <React.Fragment key={s.id ?? `s-${i}`}>
+                          {i > 0 && <small className="text-muted">&rarr;</small>}
+                          <small>{s.name}</small>
+                        </React.Fragment>
+                      ))}
+                    </div>
                   )}
                 </div>
               </div>
-              {/* Stage flow preview */}
-              {zoneStages.length > 0 && (
-                <div className="d-flex align-items-center gap-1 mt-1 flex-wrap">
-                  <small className="text-muted">{t('settings.stages')}:</small>
-                  {zoneStages.map((s, i) => (
-                    <React.Fragment key={s.id ?? `s-${i}`}>
-                      {i > 0 && <small className="text-muted">&rarr;</small>}
-                      <small>{s.name}</small>
-                    </React.Fragment>
-                  ))}
-                </div>
-              )}
+            );
+          })}
+        </div>
+
+        {/* Add Zone */}
+        <div className="bg-light rounded-3 p-3 border mt-2">
+          <div className="d-flex align-items-center gap-3">
+            <Form.Group className="flex-grow-1" style={{ maxWidth: 250 }}>
+              <Form.Label className="small fw-bold text-muted text-uppercase mb-1" style={{ letterSpacing: '0.5px' }}>
+                {t('settings.zoneName')}
+              </Form.Label>
+              <Form.Control
+                type="text"
+                size="sm"
+                placeholder={t('settings.newZoneNamePlaceholder')}
+                value={newZoneName}
+                onChange={(e) => setNewZoneName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    handleAddZone();
+                  }
+                }}
+              />
+            </Form.Group>
+            <Form.Group style={{ width: 140 }}>
+              <Form.Label className="small fw-bold text-muted text-uppercase mb-1" style={{ letterSpacing: '0.5px' }}>
+                {t('settings.zoneType')}
+              </Form.Label>
+              <Form.Select size="sm" value={newZoneType} onChange={(e) => setNewZoneType(e.target.value as ZoneType)}>
+                {(Object.keys(ZONE_STATUS_TYPES) as ZoneType[]).map((zt) => (
+                  <option key={zt} value={zt}>
+                    {t(`zones.type_${zt}`)}
+                  </option>
+                ))}
+              </Form.Select>
+            </Form.Group>
+            <div className="d-flex align-items-end mb-1" style={{ height: 50 }}>
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={handleAddZone}
+                disabled={!newZoneName.trim()}
+                className="d-flex align-items-center gap-2"
+              >
+                <i className="bi bi-plus" />
+                {t('settings.addZone')}
+              </Button>
             </div>
           </div>
-        );
-      })}
-
-      {/* Add Zone */}
-      <div className="mt-2">
-        <div className="d-flex align-items-center gap-2">
-          <Form.Control
-            type="text"
-            size="sm"
-            placeholder={t('settings.newZoneNamePlaceholder')}
-            value={newZoneName}
-            onChange={(e) => setNewZoneName(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') {
-                e.preventDefault();
-                handleAddZone();
-              }
-            }}
-            style={{ maxWidth: 180 }}
-          />
-          <Form.Select
-            size="sm"
-            value={newZoneType}
-            onChange={(e) => setNewZoneType(e.target.value as ZoneType)}
-            style={{ maxWidth: 130 }}
-          >
-            {(Object.keys(ZONE_STATUS_TYPES) as ZoneType[]).map((zt) => (
-              <option key={zt} value={zt}>
-                {t(`zones.type_${zt}`)}
-              </option>
-            ))}
-          </Form.Select>
-          <Button variant="outline-primary" size="sm" onClick={handleAddZone} disabled={!newZoneName.trim()}>
-            <i className="bi bi-plus me-1" />
-            {t('settings.addZone')}
-          </Button>
+          <div className="text-muted small mt-2 d-flex align-items-center gap-2 opacity-75">
+            <i className="bi bi-info-circle" />
+            <span>
+              {t(`settings.zoneTypeDesc_${newZoneType}`)}
+              {' — '}
+              {t('settings.addZoneStagesHint')}
+            </span>
+          </div>
         </div>
-        <small className="text-muted d-block mt-1">
-          {t(`settings.zoneTypeDesc_${newZoneType}`)}
-          {' — '}
-          {t('settings.addZoneStagesHint')}
-        </small>
       </div>
 
       {/* Default Location for New Tickets */}
-      <div className="mt-4 pt-3 border-top">
+      <div className="border rounded-3 p-4 bg-white shadow-sm mb-4">
         <h6 className="fw-bold mb-1">{t('settings.defaultLocation')}</h6>
         <p className="text-muted small mb-2">{t('settings.defaultLocationHelp')}</p>
         <Row>
@@ -524,6 +558,6 @@ export function WorkflowTab({
           </Col>
         </Row>
       </div>
-    </>
+    </div>
   );
 }

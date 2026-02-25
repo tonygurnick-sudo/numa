@@ -46,6 +46,7 @@ const OpsHeader = () => {
     selectTeam,
     refreshTeam,
     refreshTeams,
+    refreshConfig,
   } = useOps();
 
   // ── Modal state ──────────────────────────────────────────────────────────
@@ -239,9 +240,9 @@ const OpsHeader = () => {
       <GlobalSettingsModal
         show={showGlobalSettings}
         onHide={() => setShowGlobalSettings(false)}
-        onSaved={() => {
+        onSaved={async () => {
           setShowGlobalSettings(false);
-          refreshTeam();
+          await refreshConfig();
         }}
       />
       <CreateTeamWizard

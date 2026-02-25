@@ -1,3 +1,4 @@
+/* eslint-disable i18next/no-literal-string */
 import React, { useMemo } from 'react';
 import { Form, Row, Col } from 'react-bootstrap';
 import { useTranslation } from 'react-i18next';
@@ -97,90 +98,95 @@ export function GeneralTab({
       )}
 
       {/* Team name & color */}
-      <Form.Group className="mb-3">
-        <Form.Label>{t('teams.name')}</Form.Label>
-        <Form.Control type="text" value={name} onChange={(e) => setName(e.target.value)} />
-      </Form.Group>
+      <div className="border rounded-3 p-3 bg-white mb-4 shadow-sm">
+        <h6 className="fw-bold text-dark mb-3">Basic Information</h6>
+        <Form.Group className="mb-3">
+          <Form.Label className="small fw-medium text-muted">{t('teams.name')}</Form.Label>
+          <Form.Control type="text" value={name} onChange={(e) => setName(e.target.value)} />
+        </Form.Group>
 
-      <Form.Group className="mb-4">
-        <Form.Label>{t('teams.color')}</Form.Label>
-        <div className="d-flex flex-wrap gap-2">
-          {BOARD_COLORS.map((c) => (
-            <button
-              key={c}
-              type="button"
-              onClick={() => setColor(c)}
-              className="border-0 p-0 d-flex align-items-center justify-content-center"
-              style={{
-                width: 32,
-                height: 32,
-                borderRadius: '50%',
-                backgroundColor: c,
-                cursor: 'pointer',
-                outline: color === c ? '3px solid #333' : 'none',
-                outlineOffset: 2,
-              }}
-            >
-              {color === c && <i className="bi bi-check-lg" style={{ color: '#fff', fontSize: 16 }} />}
-            </button>
-          ))}
-        </div>
-      </Form.Group>
+        <Form.Group>
+          <Form.Label className="small fw-medium text-muted">{t('teams.color')}</Form.Label>
+          <div className="d-flex flex-wrap gap-2">
+            {BOARD_COLORS.map((c) => (
+              <button
+                key={c}
+                type="button"
+                onClick={() => setColor(c)}
+                className="border-0 p-0 d-flex align-items-center justify-content-center"
+                style={{
+                  width: 32,
+                  height: 32,
+                  borderRadius: '50%',
+                  backgroundColor: c,
+                  cursor: 'pointer',
+                  outline: color === c ? '3px solid #333' : 'none',
+                  outlineOffset: 2,
+                }}
+              >
+                {color === c && <i className="bi bi-check-lg" style={{ color: '#fff', fontSize: 16 }} />}
+              </button>
+            ))}
+          </div>
+        </Form.Group>
+      </div>
 
       {/* Work Units */}
-      <div className="border-top pt-3 mb-4">
-        <h6 className="fw-bold mb-1">{t('settings.workUnitsToggle')}</h6>
-        <p className="text-muted small mb-2">{t('settings.workUnitsHelp')}</p>
+      <div className="border rounded-3 p-3 bg-white mb-4 shadow-sm">
+        <h6 className="fw-bold text-dark mb-1">{t('settings.workUnitsToggle')}</h6>
+        <p className="text-muted small mb-3">{t('settings.workUnitsHelp')}</p>
 
         <Form.Check
           type="switch"
           id="enable-work-units"
           label={t('settings.enableWorkUnits')}
+          className="mb-3 fw-medium"
           checked={wuEnabled}
           onChange={(e) => handleWuToggle(e.target.checked)}
-          className="mb-2"
         />
 
         {wuEnabled && (
-          <Row className="ps-4 mt-2">
-            <Col md={6}>
-              <Form.Group className="mb-2">
-                <Form.Label className="small">{t('settings.workUnitLabel')}</Form.Label>
-                <Form.Control
-                  type="text"
-                  size="sm"
-                  value={wuLabel}
-                  onChange={(e) => handleWuLabelChange(e.target.value)}
-                  placeholder={t('settings.workUnitLabelPlaceholder')}
-                />
-              </Form.Group>
-            </Col>
-            <Col md={6}>
-              <Form.Group className="mb-2">
-                <Form.Label className="small">{t('settings.workUnitStartNumber')}</Form.Label>
-                <Form.Control
-                  type="number"
-                  size="sm"
-                  min={1}
-                  value={wuPatternStart}
-                  onChange={(e) => handleWuStartChange(Math.max(1, parseInt(e.target.value, 10) || 1))}
-                  style={{ maxWidth: 120 }}
-                />
-              </Form.Group>
-            </Col>
-          </Row>
+          <div className="bg-light p-3 rounded border">
+            <Row>
+              <Col md={6}>
+                <Form.Group className="mb-2">
+                  <Form.Label className="small fw-medium text-muted">{t('settings.workUnitLabel')}</Form.Label>
+                  <Form.Control
+                    type="text"
+                    size="sm"
+                    value={wuLabel}
+                    onChange={(e) => handleWuLabelChange(e.target.value)}
+                    placeholder={t('settings.workUnitLabelPlaceholder')}
+                  />
+                </Form.Group>
+              </Col>
+              <Col md={6}>
+                <Form.Group className="mb-2">
+                  <Form.Label className="small fw-medium text-muted">{t('settings.workUnitStartNumber')}</Form.Label>
+                  <Form.Control
+                    type="number"
+                    size="sm"
+                    min={1}
+                    value={wuPatternStart}
+                    onChange={(e) => handleWuStartChange(Math.max(1, parseInt(e.target.value, 10) || 1))}
+                    style={{ maxWidth: 120 }}
+                  />
+                </Form.Group>
+              </Col>
+            </Row>
+          </div>
         )}
       </div>
 
       {/* Default Location */}
       {sortedZones.length > 0 && (
-        <div className="border-top pt-3 mb-4">
-          <h6 className="fw-bold mb-1">{t('settings.defaultLocation')}</h6>
-          <p className="text-muted small mb-2">{t('settings.defaultLocationHelp')}</p>
+        <div className="border rounded-3 p-3 bg-white mb-4 shadow-sm">
+          <h6 className="fw-bold text-dark mb-1">{t('settings.defaultLocation')}</h6>
+          <p className="text-muted small mb-3">{t('settings.defaultLocationHelp')}</p>
           <Row>
             <Col md={6}>
               <Form.Group className="mb-2">
-                <Form.Label className="small">{t('settings.defaultZone')}</Form.Label>
+                <Form.Label className="small fw-medium text-muted">{t('settings.defaultZone')}</Form.Label>
                 <Form.Select
                   size="sm"
                   value={defaultZoneId}
@@ -200,7 +206,7 @@ export function GeneralTab({
             </Col>
             <Col md={6}>
               <Form.Group className="mb-2">
-                <Form.Label className="small">{t('settings.defaultStage')}</Form.Label>
+                <Form.Label className="small fw-medium text-muted">{t('settings.defaultStage')}</Form.Label>
                 <Form.Select
                   size="sm"
                   value={defaultStageId}

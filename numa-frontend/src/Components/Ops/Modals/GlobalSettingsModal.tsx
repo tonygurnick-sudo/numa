@@ -1,10 +1,17 @@
+/* eslint-disable i18next/no-literal-string */
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Modal, Button, Form, Nav, Tab, Table, Badge } from 'react-bootstrap';
 import { useTranslation } from 'react-i18next';
 import { useNumaRequest } from '../../../Providers/NumaRequestContext';
 import { useOps } from '../OpsContext';
 import * as OpsService from '../../../Services/OpsService';
-import { getColorForPosition, getContrastTextColor, getStatusTypeColor, BOARD_COLORS } from '../Shared/colorUtils';
+import {
+  getColorForPosition,
+  getContrastTextColor,
+  getStatusTypeColor,
+  BOARD_COLORS,
+  calculateAutoColorPositions,
+} from '../Shared/colorUtils';
 import { STATUS_TYPE_TO_ZONES } from '../../../constants/opsConstants';
 import { ConfirmModal } from './ConfirmModal';
 import { CustomerDetailModal } from './CustomerDetailModal';
@@ -25,6 +32,9 @@ import type {
   LinkConfig,
   Customer,
   Supplier,
+  CrmFlag,
+  SupplierFlag,
+  DocTypeEntry,
 } from '../../../types/ops';
 
 // ─── Props ───────────────────────────────────────────────────────────────────
@@ -151,48 +161,6 @@ function TagList({
   );
 }
 
-// ─── Doc Type Adder Sub-Component ───────────────────────────────────────────
-
-function DocTypeAdder({
-  onAdd,
-  placeholder,
-}: {
-  onAdd: (name: string) => void;
-  placeholder: string;
-}): React.JSX.Element {
-  const [newItem, setNewItem] = useState('');
-
-  const handleAdd = () => {
-    const trimmed = newItem.trim();
-    if (trimmed) {
-      onAdd(trimmed);
-      setNewItem('');
-    }
-  };
-
-  return (
-    <div className="d-flex gap-2">
-      <Form.Control
-        type="text"
-        size="sm"
-        placeholder={placeholder}
-        value={newItem}
-        onChange={(e) => setNewItem(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter') {
-            e.preventDefault();
-            handleAdd();
-          }
-        }}
-        style={{ maxWidth: 200 }}
-      />
-      <Button variant="outline-secondary" size="sm" onClick={handleAdd} disabled={!newItem.trim()}>
-        <i className="bi bi-plus" />
-      </Button>
-    </div>
-  );
-}
-
 // ─── Component ───────────────────────────────────────────────────────────────
 
 export function GlobalSettingsModal({
@@ -242,6 +210,32 @@ export function GlobalSettingsModal({
   const [newFieldType, setNewFieldType] = useState<FieldType>('text');
   const [newFieldCategory, setNewFieldCategory] = useState<FieldCategory>('common');
   const [newFieldOptions, setNewFieldOptions] = useState('');
+
+  // ── CRM Config state ───────────────────────────────────────────────────────
+  const [editingLifecycleStage, setEditingLifecycleStage] = useState<CrmLifecycleStage | null>(null);
+  const [lifecycleStageForm, setLifecycleStageForm] = useState({ name: '', colorPosition: 6 });
+  const [showLifecycleStageModal, setShowLifecycleStageModal] = useState(false);
+
+  const [editingFlag, setEditingFlag] = useState<CrmFlag | null>(null);
+  const [flagForm, setFlagForm] = useState({ name: '', icon: '⭐', color: '#F59E0B' });
+  const [showFlagModal, setShowFlagModal] = useState(false);
+
+  const [editingDocType, setEditingDocType] = useState<DocTypeEntry | null>(null);
+  const [docTypeForm, setDocTypeForm] = useState({ name: '' });
+  const [showDocTypeModal, setShowDocTypeModal] = useState(false);
+
+  // ── Supplier Config state ──────────────────────────────────────────────────
+  const [editingSupplierLifecycleStage, setEditingSupplierLifecycleStage] = useState<CrmLifecycleStage | null>(null);
+  const [supplierLifecycleStageForm, setSupplierLifecycleStageForm] = useState({ name: '', colorPosition: 6 });
+  const [showSupplierLifecycleStageModal, setShowSupplierLifecycleStageModal] = useState(false);
+
+  const [editingSupplierFlag, setEditingSupplierFlag] = useState<SupplierFlag | null>(null);
+  const [supplierFlagForm, setSupplierFlagForm] = useState({ name: '', icon: '⭐', color: '#14B8A6' });
+  const [showSupplierFlagModal, setShowSupplierFlagModal] = useState(false);
+
+  const [editingSupplierDocType, setEditingSupplierDocType] = useState<DocTypeEntry | null>(null);
+  const [supplierDocTypeForm, setSupplierDocTypeForm] = useState({ name: '' });
+  const [showSupplierDocTypeModal, setShowSupplierDocTypeModal] = useState(false);
 
   // ── Detail modal state ─────────────────────────────────────────────────────
   const [detailCustomerId, setDetailCustomerId] = useState<string | null>(null);
@@ -956,494 +950,616 @@ export function GlobalSettingsModal({
 
   // ── Tab 6: CRM Config ─────────────────────────────────────────────────────
   const renderCrmConfigTab = () => (
-    <div>
-      {/* Lifecycle Stages */}
-      <h6 className="mb-2">{t('globalSettings.lifecycleStages')}</h6>
-      <div className="mb-4">
-        {crmConfig.lifecycleStages.map((stage, idx) => {
-          const stageColor = getColorForPosition(stage.colorPosition);
-          return (
-            <div key={stage.id} className="d-flex align-items-center gap-2 mb-2">
-              <span
-                className="d-inline-block rounded flex-shrink-0"
-                style={{ width: 16, height: 16, backgroundColor: stageColor }}
-              />
-              <Form.Control
-                type="text"
-                size="sm"
-                value={stage.name}
-                onChange={(e) => {
-                  const updated = structuredClone(crmConfig);
-                  updated.lifecycleStages[idx].name = e.target.value;
-                  setCrmConfig(updated);
-                }}
-                style={{ maxWidth: 200 }}
-              />
-              <Button
-                variant="link"
-                size="sm"
-                className="text-muted p-0"
-                disabled={idx === 0}
-                onClick={() => {
-                  const updated = structuredClone(crmConfig);
-                  const stages = updated.lifecycleStages;
-                  [stages[idx - 1], stages[idx]] = [stages[idx], stages[idx - 1]];
-                  // Recompute color positions
-                  stages.forEach((s, i) => {
-                    s.colorPosition = stages.length <= 1 ? 1 : Math.round(1 + (i / (stages.length - 1)) * 9);
-                  });
-                  setCrmConfig(updated);
-                }}
-              >
-                <i className="bi bi-arrow-up" />
-              </Button>
-              <Button
-                variant="link"
-                size="sm"
-                className="text-muted p-0"
-                disabled={idx === crmConfig.lifecycleStages.length - 1}
-                onClick={() => {
-                  const updated = structuredClone(crmConfig);
-                  const stages = updated.lifecycleStages;
-                  [stages[idx], stages[idx + 1]] = [stages[idx + 1], stages[idx]];
-                  stages.forEach((s, i) => {
-                    s.colorPosition = stages.length <= 1 ? 1 : Math.round(1 + (i / (stages.length - 1)) * 9);
-                  });
-                  setCrmConfig(updated);
-                }}
-              >
-                <i className="bi bi-arrow-down" />
-              </Button>
-              <Button
-                variant="outline-danger"
-                size="sm"
-                onClick={() => {
-                  const updated = structuredClone(crmConfig);
-                  updated.lifecycleStages = updated.lifecycleStages.filter((_, i) => i !== idx);
-                  updated.lifecycleStages.forEach((s, i) => {
-                    s.colorPosition =
-                      updated.lifecycleStages.length <= 1
-                        ? 1
-                        : Math.round(1 + (i / (updated.lifecycleStages.length - 1)) * 9);
-                  });
-                  setCrmConfig(updated);
-                }}
-              >
-                <i className="bi bi-trash" />
-              </Button>
-            </div>
-          );
-        })}
-        <Button
-          variant="outline-primary"
-          size="sm"
-          onClick={() => {
-            const updated = structuredClone(crmConfig);
-            const len = updated.lifecycleStages.length;
-            updated.lifecycleStages.push({
-              id: generateId(),
-              name: '',
-              colorPosition: len === 0 ? 1 : Math.round(1 + (len / len) * 9),
-            });
-            // Recompute
-            updated.lifecycleStages.forEach((s, i) => {
-              s.colorPosition =
-                updated.lifecycleStages.length <= 1
-                  ? 1
-                  : Math.round(1 + (i / (updated.lifecycleStages.length - 1)) * 9);
-            });
-            setCrmConfig(updated);
-          }}
-        >
-          <i className="bi bi-plus me-1" />
-          {t('common.add')}
-        </Button>
+    <div className="d-flex flex-column h-100 mx-n3 mt-n3 mb-n3">
+      {/* Sticky Header */}
+      <div className="bg-white px-4 pt-4 pb-3 border-bottom flex-shrink-0">
+        <h5 className="fw-bold mb-1">{t('settings.crmConfig', 'CRM Configuration')}</h5>
+        <div className="text-muted small">Configure customer lifecycle stages, flags, and document types.</div>
       </div>
 
-      {/* Customer Flags */}
-      <h6 className="mb-2">{t('globalSettings.customerFlags')}</h6>
-      <div className="mb-4">
-        <Table size="sm" className="mb-2">
-          <thead>
-            <tr>
-              <th>{t('common.name')}</th>
-              <th>{t('globalSettings.icon')}</th>
-              <th>{t('common.color')}</th>
-              <th />
-            </tr>
-          </thead>
-          <tbody>
-            {crmConfig.customerFlags.map((flag, idx) => (
-              <tr key={flag.id}>
-                <td>
-                  <Form.Control
-                    type="text"
-                    size="sm"
-                    value={flag.name}
-                    onChange={(e) => {
-                      const updated = structuredClone(crmConfig);
-                      updated.customerFlags[idx].name = e.target.value;
-                      setCrmConfig(updated);
-                    }}
-                  />
-                </td>
-                <td>
-                  <Form.Control
-                    type="text"
-                    size="sm"
-                    style={{ width: 50 }}
-                    value={flag.icon ?? ''}
-                    onChange={(e) => {
-                      const updated = structuredClone(crmConfig);
-                      updated.customerFlags[idx].icon = e.target.value;
-                      setCrmConfig(updated);
-                    }}
-                  />
-                </td>
-                <td>
-                  <div className="d-flex gap-1">
-                    {BOARD_COLORS.slice(0, 6).map((c) => (
-                      <ColorSwatch
-                        key={c}
-                        color={c}
-                        selected={flag.color === c}
-                        onSelect={(color) => {
-                          const updated = structuredClone(crmConfig);
-                          updated.customerFlags[idx].color = color;
-                          setCrmConfig(updated);
-                        }}
-                      />
-                    ))}
+      {/* Scrollable Content */}
+      <div className="flex-grow-1 overflow-auto p-4 pe-4">
+        {/* Lifecycle Stages Section */}
+        <div className="border rounded-3 p-3 bg-white mb-4 shadow-sm">
+          <div className="d-flex align-items-center justify-content-between mb-3">
+            <div>
+              <h6 className="fw-bold text-dark mb-1">Customer Lifecycle Stages</h6>
+              <div className="text-muted small">
+                Stages represent where a customer is in their relationship with you.
+              </div>
+            </div>
+            <Button
+              variant="primary"
+              size="sm"
+              className="d-flex align-items-center gap-2"
+              onClick={() => {
+                setEditingLifecycleStage(null);
+                setLifecycleStageForm({ name: '', colorPosition: 6 });
+                setShowLifecycleStageModal(true);
+              }}
+            >
+              <i className="bi bi-plus" /> Add Stage
+            </Button>
+          </div>
+
+          <div className="mb-3 d-flex align-items-center gap-2">
+            <Form.Check
+              type="checkbox"
+              id="crmUseAutoColors"
+              checked={crmConfig.useAutoColors !== false}
+              onChange={(e) => {
+                const updated = structuredClone(crmConfig);
+                updated.useAutoColors = e.target.checked;
+                if (e.target.checked && updated.lifecycleStages) {
+                  const positions = calculateAutoColorPositions(updated.lifecycleStages.length).reverse();
+                  updated.lifecycleStages = updated.lifecycleStages.map((stage, idx) => ({
+                    ...stage,
+                    colorPosition: positions[idx],
+                  }));
+                }
+                setCrmConfig(updated);
+              }}
+              label={<span className="text-muted small">Auto-assign colors based on stage order</span>}
+            />
+          </div>
+
+          <div className="d-flex flex-column gap-2">
+            {(crmConfig.lifecycleStages || []).map((stage, index, arr) => {
+              const colorHex = getColorForPosition(stage.colorPosition);
+              const textColor = getContrastTextColor(colorHex);
+
+              return (
+                <div key={stage.id} className="d-flex align-items-center gap-3 p-2 bg-light rounded border">
+                  <div
+                    className="rounded-circle d-flex align-items-center justify-content-center fw-bold flex-shrink-0"
+                    style={{ width: 32, height: 32, backgroundColor: colorHex, color: textColor, fontSize: 12 }}
+                  >
+                    {stage.colorPosition}
                   </div>
-                </td>
-                <td>
+
+                  <div className="flex-grow-1 fw-medium">{stage.name}</div>
+
+                  <div className="d-flex align-items-center gap-1">
+                    <Button
+                      variant="link"
+                      className="text-muted p-1"
+                      disabled={index === 0}
+                      onClick={() => {
+                        const updated = structuredClone(crmConfig);
+                        const stages = updated.lifecycleStages;
+                        [stages[index - 1], stages[index]] = [stages[index], stages[index - 1]];
+                        if (updated.useAutoColors !== false) {
+                          const positions = calculateAutoColorPositions(stages.length).reverse();
+                          stages.forEach((s, idx) => (s.colorPosition = positions[idx]));
+                        }
+                        setCrmConfig(updated);
+                      }}
+                    >
+                      <i className="bi bi-arrow-up" />
+                    </Button>
+                    <Button
+                      variant="link"
+                      className="text-muted p-1"
+                      disabled={index === arr.length - 1}
+                      onClick={() => {
+                        const updated = structuredClone(crmConfig);
+                        const stages = updated.lifecycleStages;
+                        [stages[index], stages[index + 1]] = [stages[index + 1], stages[index]];
+                        if (updated.useAutoColors !== false) {
+                          const positions = calculateAutoColorPositions(stages.length).reverse();
+                          stages.forEach((s, idx) => (s.colorPosition = positions[idx]));
+                        }
+                        setCrmConfig(updated);
+                      }}
+                    >
+                      <i className="bi bi-arrow-down" />
+                    </Button>
+                  </div>
+
+                  <div className="d-flex align-items-center gap-1">
+                    <Button
+                      variant="light"
+                      size="sm"
+                      className="text-muted border-0 hover-primary"
+                      onClick={() => {
+                        setEditingLifecycleStage(stage);
+                        setLifecycleStageForm({ name: stage.name, colorPosition: stage.colorPosition });
+                        setShowLifecycleStageModal(true);
+                      }}
+                    >
+                      <i className="bi bi-pencil" />
+                    </Button>
+                    <Button
+                      variant="light"
+                      size="sm"
+                      className="text-danger border-0"
+                      onClick={() => {
+                        if ((crmConfig.lifecycleStages || []).length <= 1) {
+                          alert('Cannot delete the last lifecycle stage.');
+                          return;
+                        }
+                        const updated = structuredClone(crmConfig);
+                        updated.lifecycleStages = updated.lifecycleStages.filter((s) => s.id !== stage.id);
+                        if (updated.useAutoColors !== false) {
+                          const positions = calculateAutoColorPositions(updated.lifecycleStages.length).reverse();
+                          updated.lifecycleStages.forEach((s, idx) => (s.colorPosition = positions[idx]));
+                        }
+                        setCrmConfig(updated);
+                      }}
+                    >
+                      <i className="bi bi-trash" />
+                    </Button>
+                  </div>
+                </div>
+              );
+            })}
+
+            {(!crmConfig.lifecycleStages || crmConfig.lifecycleStages.length === 0) && (
+              <div className="text-center py-4 text-muted">No lifecycle stages defined.</div>
+            )}
+          </div>
+        </div>
+
+        {/* Customer Flags Section */}
+        <div className="border rounded-3 p-3 bg-white mb-4 shadow-sm">
+          <div className="d-flex align-items-center justify-content-between mb-3">
+            <div>
+              <h6 className="fw-bold text-dark mb-1">Customer Flags</h6>
+              <div className="text-muted small">
+                Flags highlight important customers (e.g., VIP, Strategic Account).
+              </div>
+            </div>
+            <Button
+              variant="primary"
+              size="sm"
+              className="d-flex align-items-center gap-2"
+              onClick={() => {
+                setEditingFlag(null);
+                setFlagForm({ name: '', icon: '⭐', color: '#F59E0B' });
+                setShowFlagModal(true);
+              }}
+            >
+              <i className="bi bi-plus" /> Add Flag
+            </Button>
+          </div>
+
+          <div className="d-flex flex-column gap-2">
+            {(crmConfig.customerFlags || []).map((flag) => (
+              <div key={flag.id} className="d-flex align-items-center gap-3 p-2 bg-light rounded border">
+                <div
+                  className="rounded-circle d-flex align-items-center justify-content-center fs-5 flex-shrink-0"
+                  style={{ width: 32, height: 32, backgroundColor: flag.color + '20' }}
+                >
+                  {flag.icon}
+                </div>
+
+                <div className="flex-grow-1 fw-medium">{flag.name}</div>
+
+                <div
+                  className="rounded border shadow-sm"
+                  style={{ width: 24, height: 24, backgroundColor: flag.color }}
+                  title={flag.color}
+                />
+
+                <div className="d-flex align-items-center gap-1 ms-2">
                   <Button
-                    variant="outline-danger"
+                    variant="light"
                     size="sm"
+                    className="text-muted border-0"
+                    onClick={() => {
+                      setEditingFlag(flag);
+                      setFlagForm({ name: flag.name, icon: flag.icon, color: flag.color });
+                      setShowFlagModal(true);
+                    }}
+                  >
+                    <i className="bi bi-pencil" />
+                  </Button>
+                  <Button
+                    variant="light"
+                    size="sm"
+                    className="text-danger border-0"
                     onClick={() => {
                       const updated = structuredClone(crmConfig);
-                      updated.customerFlags = updated.customerFlags.filter((_, i) => i !== idx);
+                      updated.customerFlags = updated.customerFlags.filter((f) => f.id !== flag.id);
                       setCrmConfig(updated);
                     }}
                   >
                     <i className="bi bi-trash" />
                   </Button>
-                </td>
-              </tr>
+                </div>
+              </div>
             ))}
-          </tbody>
-        </Table>
-        <Button
-          variant="outline-primary"
-          size="sm"
-          onClick={() => {
-            const updated = structuredClone(crmConfig);
-            updated.customerFlags.push({
-              id: generateId(),
-              name: '',
-              icon: '',
-              color: BOARD_COLORS[updated.customerFlags.length % BOARD_COLORS.length],
-            });
-            setCrmConfig(updated);
-          }}
-        >
-          <i className="bi bi-plus me-1" />
-          {t('common.add')}
-        </Button>
-      </div>
 
-      {/* Document Types */}
-      <h6 className="mb-2">{t('globalSettings.documentTypes')}</h6>
-      <div className="mb-4">
-        <div className="d-flex flex-wrap gap-1 mb-2">
-          {crmConfig.documentTypes.map((dt) => (
-            <Badge
-              key={dt.id}
-              bg="secondary"
-              className="d-flex align-items-center gap-1 py-1 px-2"
-              style={{ cursor: 'pointer' }}
+            {(!crmConfig.customerFlags || crmConfig.customerFlags.length === 0) && (
+              <div className="text-center py-4 text-muted">No customer flags defined.</div>
+            )}
+          </div>
+        </div>
+
+        {/* Document Types Section */}
+        <div className="border rounded-3 p-3 bg-white mb-4 shadow-sm">
+          <div className="d-flex align-items-center justify-content-between mb-3">
+            <div>
+              <h6 className="fw-bold text-dark mb-1">Document Types</h6>
+              <div className="text-muted small">
+                Categorize documents linked to customers (contracts, proposals, etc.).
+              </div>
+            </div>
+            <Button
+              variant="primary"
+              size="sm"
+              className="d-flex align-items-center gap-2"
               onClick={() => {
-                const updated = structuredClone(crmConfig);
-                updated.documentTypes = updated.documentTypes.filter((d) => d.id !== dt.id);
-                setCrmConfig(updated);
+                setEditingDocType(null);
+                setDocTypeForm({ name: '' });
+                setShowDocTypeModal(true);
               }}
             >
-              {dt.name}
-              <i className="bi bi-x" />
-            </Badge>
-          ))}
+              <i className="bi bi-plus" /> Add Type
+            </Button>
+          </div>
+
+          <div className="d-flex flex-wrap gap-2">
+            {(crmConfig.documentTypes || []).map((docType) => (
+              <div key={docType.id} className="d-flex align-items-center gap-2 px-3 py-2 bg-light border rounded">
+                <span className="small fw-medium">{docType.name}</span>
+                <Button
+                  variant="link"
+                  size="sm"
+                  className="p-0 text-muted ms-2"
+                  onClick={() => {
+                    setEditingDocType(docType);
+                    setDocTypeForm({ name: docType.name });
+                    setShowDocTypeModal(true);
+                  }}
+                >
+                  <i className="bi bi-pencil small" />
+                </Button>
+                <Button
+                  variant="link"
+                  size="sm"
+                  className="p-0 text-danger ms-1"
+                  onClick={() => {
+                    const updated = structuredClone(crmConfig);
+                    updated.documentTypes = updated.documentTypes.filter((d) => d.id !== docType.id);
+                    setCrmConfig(updated);
+                  }}
+                >
+                  <i className="bi bi-trash small" />
+                </Button>
+              </div>
+            ))}
+
+            {(!crmConfig.documentTypes || crmConfig.documentTypes.length === 0) && (
+              <div className="text-center py-3 text-muted w-100">No document types defined.</div>
+            )}
+          </div>
         </div>
-        <DocTypeAdder
-          onAdd={(name) => {
-            const updated = structuredClone(crmConfig);
-            updated.documentTypes = [...updated.documentTypes, { id: `doctype-${generateId()}`, name }];
-            setCrmConfig(updated);
-          }}
-          placeholder={t('globalSettings.addItem')}
-        />
-      </div>
 
-      {/* Territories */}
-      <h6 className="mb-2">{t('globalSettings.territories')}</h6>
-      <div className="mb-4">
-        <TagList
-          items={crmConfig.territories}
-          onChange={(items) => {
-            const updated = structuredClone(crmConfig);
-            updated.territories = items;
-            setCrmConfig(updated);
-          }}
-          placeholder={t('globalSettings.addItem')}
-        />
-      </div>
+        {/* Territories */}
+        <div className="border rounded-3 p-3 bg-white mb-4 shadow-sm">
+          <h6 className="fw-bold text-dark mb-3">{t('globalSettings.territories', 'Territories')}</h6>
+          <TagList
+            items={crmConfig.territories}
+            onChange={(items) => {
+              const updated = structuredClone(crmConfig);
+              updated.territories = items;
+              setCrmConfig(updated);
+            }}
+            placeholder={t('globalSettings.addItem', 'Add Item')}
+          />
+        </div>
 
-      {/* Industries */}
-      <h6 className="mb-2">{t('globalSettings.industries')}</h6>
-      <div className="mb-4">
-        <TagList
-          items={crmConfig.industries}
-          onChange={(items) => {
-            const updated = structuredClone(crmConfig);
-            updated.industries = items;
-            setCrmConfig(updated);
-          }}
-          placeholder={t('globalSettings.addItem')}
-        />
+        {/* Industries */}
+        <div className="border rounded-3 p-3 bg-white mb-4 shadow-sm">
+          <h6 className="fw-bold text-dark mb-3">{t('globalSettings.industries', 'Industries')}</h6>
+          <TagList
+            items={crmConfig.industries}
+            onChange={(items) => {
+              const updated = structuredClone(crmConfig);
+              updated.industries = items;
+              setCrmConfig(updated);
+            }}
+            placeholder={t('globalSettings.addItem', 'Add Item')}
+          />
+        </div>
       </div>
     </div>
   );
 
   // ── Tab 7: Supplier Config ─────────────────────────────────────────────────
   const renderSupplierConfigTab = () => (
-    <div>
-      {/* Supplier Lifecycle Stages */}
-      <h6 className="mb-2" style={{ color: '#14b8a6' }}>
-        {t('globalSettings.supplierLifecycleStages')}
-      </h6>
-      <div className="mb-4">
-        {supplierConfig.lifecycleStages.map((stage, idx) => {
-          const stageColor = getColorForPosition(stage.colorPosition);
-          return (
-            <div key={stage.id} className="d-flex align-items-center gap-2 mb-2">
-              <span
-                className="d-inline-block rounded flex-shrink-0"
-                style={{ width: 16, height: 16, backgroundColor: stageColor }}
-              />
-              <Form.Control
-                type="text"
-                size="sm"
-                value={stage.name}
-                onChange={(e) => {
-                  const updated = structuredClone(supplierConfig);
-                  updated.lifecycleStages[idx].name = e.target.value;
-                  setSupplierConfig(updated);
-                }}
-                style={{ maxWidth: 200 }}
-              />
-              <Button
-                variant="link"
-                size="sm"
-                className="text-muted p-0"
-                disabled={idx === 0}
-                onClick={() => {
-                  const updated = structuredClone(supplierConfig);
-                  const stages = updated.lifecycleStages;
-                  [stages[idx - 1], stages[idx]] = [stages[idx], stages[idx - 1]];
-                  stages.forEach((s, i) => {
-                    s.colorPosition = stages.length <= 1 ? 1 : Math.round(1 + (i / (stages.length - 1)) * 9);
-                  });
-                  setSupplierConfig(updated);
-                }}
-              >
-                <i className="bi bi-arrow-up" />
-              </Button>
-              <Button
-                variant="link"
-                size="sm"
-                className="text-muted p-0"
-                disabled={idx === supplierConfig.lifecycleStages.length - 1}
-                onClick={() => {
-                  const updated = structuredClone(supplierConfig);
-                  const stages = updated.lifecycleStages;
-                  [stages[idx], stages[idx + 1]] = [stages[idx + 1], stages[idx]];
-                  stages.forEach((s, i) => {
-                    s.colorPosition = stages.length <= 1 ? 1 : Math.round(1 + (i / (stages.length - 1)) * 9);
-                  });
-                  setSupplierConfig(updated);
-                }}
-              >
-                <i className="bi bi-arrow-down" />
-              </Button>
-              <Button
-                variant="outline-danger"
-                size="sm"
-                onClick={() => {
-                  const updated = structuredClone(supplierConfig);
-                  updated.lifecycleStages = updated.lifecycleStages.filter((_, i) => i !== idx);
-                  updated.lifecycleStages.forEach((s, i) => {
-                    s.colorPosition =
-                      updated.lifecycleStages.length <= 1
-                        ? 1
-                        : Math.round(1 + (i / (updated.lifecycleStages.length - 1)) * 9);
-                  });
-                  setSupplierConfig(updated);
-                }}
-              >
-                <i className="bi bi-trash" />
-              </Button>
-            </div>
-          );
-        })}
-        <Button
-          variant="outline-primary"
-          size="sm"
-          onClick={() => {
-            const updated = structuredClone(supplierConfig);
-            const len = updated.lifecycleStages.length;
-            updated.lifecycleStages.push({
-              id: generateId(),
-              name: '',
-              colorPosition: len === 0 ? 1 : Math.round(1 + (len / len) * 9),
-            });
-            updated.lifecycleStages.forEach((s, i) => {
-              s.colorPosition =
-                updated.lifecycleStages.length <= 1
-                  ? 1
-                  : Math.round(1 + (i / (updated.lifecycleStages.length - 1)) * 9);
-            });
-            setSupplierConfig(updated);
-          }}
-        >
-          <i className="bi bi-plus me-1" />
-          {t('common.add')}
-        </Button>
+    <div className="d-flex flex-column h-100 mx-n3 mt-n3 mb-n3">
+      {/* Sticky Header */}
+      <div className="bg-white px-4 pt-4 pb-3 border-bottom flex-shrink-0">
+        <h5 className="fw-bold mb-1">Supplier Configuration</h5>
+        <div className="text-muted small">Configure supplier lifecycle stages, flags, and document types.</div>
       </div>
 
-      {/* Supplier Flags */}
-      <h6 className="mb-2" style={{ color: '#14b8a6' }}>
-        {t('globalSettings.supplierFlags')}
-      </h6>
-      <div className="mb-4">
-        <Table size="sm" className="mb-2">
-          <thead>
-            <tr>
-              <th>{t('common.name')}</th>
-              <th>{t('globalSettings.icon')}</th>
-              <th>{t('common.color')}</th>
-              <th />
-            </tr>
-          </thead>
-          <tbody>
-            {supplierConfig.supplierFlags.map((flag, idx) => (
-              <tr key={flag.id}>
-                <td>
-                  <Form.Control
-                    type="text"
-                    size="sm"
-                    value={flag.name}
-                    onChange={(e) => {
-                      const updated = structuredClone(supplierConfig);
-                      updated.supplierFlags[idx].name = e.target.value;
-                      setSupplierConfig(updated);
-                    }}
-                  />
-                </td>
-                <td>
-                  <Form.Control
-                    type="text"
-                    size="sm"
-                    style={{ width: 50 }}
-                    value={flag.icon ?? ''}
-                    onChange={(e) => {
-                      const updated = structuredClone(supplierConfig);
-                      updated.supplierFlags[idx].icon = e.target.value;
-                      setSupplierConfig(updated);
-                    }}
-                  />
-                </td>
-                <td>
-                  <div className="d-flex gap-1">
-                    {BOARD_COLORS.slice(0, 6).map((c) => (
-                      <ColorSwatch
-                        key={c}
-                        color={c}
-                        selected={flag.color === c}
-                        onSelect={(color) => {
-                          const updated = structuredClone(supplierConfig);
-                          updated.supplierFlags[idx].color = color;
-                          setSupplierConfig(updated);
-                        }}
-                      />
-                    ))}
+      {/* Scrollable Content */}
+      <div className="flex-grow-1 overflow-auto p-4 pe-4">
+        {/* Supplier Lifecycle Stages Section */}
+        <div className="border rounded-3 p-3 bg-white mb-4 shadow-sm" style={{ borderColor: '#14b8a6' }}>
+          <div className="d-flex align-items-center justify-content-between mb-3">
+            <div>
+              <h6 className="fw-bold mb-1" style={{ color: '#14b8a6' }}>
+                Supplier Lifecycle Stages
+              </h6>
+              <div className="text-muted small">
+                Stages represent where a supplier is in their relationship with you.
+              </div>
+            </div>
+            <Button
+              size="sm"
+              className="d-flex align-items-center gap-2 border-0 text-white"
+              style={{ backgroundColor: '#14b8a6' }}
+              onClick={() => {
+                setEditingSupplierLifecycleStage(null);
+                setSupplierLifecycleStageForm({ name: '', colorPosition: 6 });
+                setShowSupplierLifecycleStageModal(true);
+              }}
+            >
+              <i className="bi bi-plus" /> Add Stage
+            </Button>
+          </div>
+
+          <div className="mb-3 d-flex align-items-center gap-2">
+            <Form.Check
+              type="checkbox"
+              id="supplierUseAutoColors"
+              checked={supplierConfig.useAutoColors !== false}
+              onChange={(e) => {
+                const updated = structuredClone(supplierConfig);
+                updated.useAutoColors = e.target.checked;
+                if (e.target.checked && updated.lifecycleStages) {
+                  const positions = calculateAutoColorPositions(updated.lifecycleStages.length);
+                  updated.lifecycleStages = updated.lifecycleStages.map((stage, idx) => ({
+                    ...stage,
+                    colorPosition: positions[idx],
+                  }));
+                }
+                setSupplierConfig(updated);
+              }}
+              label={<span className="text-muted small">Auto-assign colors based on stage order</span>}
+            />
+          </div>
+
+          <div className="d-flex flex-column gap-2">
+            {(supplierConfig.lifecycleStages || []).map((stage, index, arr) => {
+              const colorHex = getColorForPosition(stage.colorPosition);
+              const textColor = getContrastTextColor(colorHex);
+
+              return (
+                <div key={stage.id} className="d-flex align-items-center gap-3 p-2 bg-light rounded border">
+                  <div
+                    className="rounded-circle d-flex align-items-center justify-content-center fw-bold flex-shrink-0"
+                    style={{ width: 32, height: 32, backgroundColor: colorHex, color: textColor, fontSize: 12 }}
+                  >
+                    {stage.colorPosition}
                   </div>
-                </td>
-                <td>
+
+                  <div className="flex-grow-1 fw-medium">{stage.name}</div>
+
+                  <div className="d-flex align-items-center gap-1">
+                    <Button
+                      variant="link"
+                      className="text-muted p-1"
+                      disabled={index === 0}
+                      onClick={() => {
+                        const updated = structuredClone(supplierConfig);
+                        const stages = updated.lifecycleStages;
+                        [stages[index - 1], stages[index]] = [stages[index], stages[index - 1]];
+                        if (updated.useAutoColors !== false) {
+                          const positions = calculateAutoColorPositions(stages.length);
+                          stages.forEach((s, idx) => (s.colorPosition = positions[idx]));
+                        }
+                        setSupplierConfig(updated);
+                      }}
+                    >
+                      <i className="bi bi-arrow-up" />
+                    </Button>
+                    <Button
+                      variant="link"
+                      className="text-muted p-1"
+                      disabled={index === arr.length - 1}
+                      onClick={() => {
+                        const updated = structuredClone(supplierConfig);
+                        const stages = updated.lifecycleStages;
+                        [stages[index], stages[index + 1]] = [stages[index + 1], stages[index]];
+                        if (updated.useAutoColors !== false) {
+                          const positions = calculateAutoColorPositions(stages.length);
+                          stages.forEach((s, idx) => (s.colorPosition = positions[idx]));
+                        }
+                        setSupplierConfig(updated);
+                      }}
+                    >
+                      <i className="bi bi-arrow-down" />
+                    </Button>
+                  </div>
+
+                  <div className="d-flex align-items-center gap-1">
+                    <Button
+                      variant="light"
+                      size="sm"
+                      className="text-muted border-0"
+                      onClick={() => {
+                        setEditingSupplierLifecycleStage(stage);
+                        setSupplierLifecycleStageForm({ name: stage.name, colorPosition: stage.colorPosition });
+                        setShowSupplierLifecycleStageModal(true);
+                      }}
+                    >
+                      <i className="bi bi-pencil" />
+                    </Button>
+                    <Button
+                      variant="light"
+                      size="sm"
+                      className="text-danger border-0"
+                      onClick={() => {
+                        if ((supplierConfig.lifecycleStages || []).length <= 1) {
+                          alert('Cannot delete the last lifecycle stage.');
+                          return;
+                        }
+                        const updated = structuredClone(supplierConfig);
+                        updated.lifecycleStages = updated.lifecycleStages.filter((s) => s.id !== stage.id);
+                        if (updated.useAutoColors !== false) {
+                          const positions = calculateAutoColorPositions(updated.lifecycleStages.length);
+                          updated.lifecycleStages.forEach((s, idx) => (s.colorPosition = positions[idx]));
+                        }
+                        setSupplierConfig(updated);
+                      }}
+                    >
+                      <i className="bi bi-trash" />
+                    </Button>
+                  </div>
+                </div>
+              );
+            })}
+
+            {(!supplierConfig.lifecycleStages || supplierConfig.lifecycleStages.length === 0) && (
+              <div className="text-center py-4 text-muted">No lifecycle stages defined.</div>
+            )}
+          </div>
+        </div>
+
+        {/* Supplier Flags Section */}
+        <div className="border rounded-3 p-3 bg-white mb-4 shadow-sm" style={{ borderColor: '#14b8a6' }}>
+          <div className="d-flex align-items-center justify-content-between mb-3">
+            <div>
+              <h6 className="fw-bold mb-1" style={{ color: '#14b8a6' }}>
+                Supplier Flags
+              </h6>
+              <div className="text-muted small">
+                Flags highlight important suppliers (e.g., ISO Certified, Priority).
+              </div>
+            </div>
+            <Button
+              size="sm"
+              className="d-flex align-items-center gap-2 border-0 text-white"
+              style={{ backgroundColor: '#14b8a6' }}
+              onClick={() => {
+                setEditingSupplierFlag(null);
+                setSupplierFlagForm({ name: '', icon: '⭐', color: '#14B8A6' });
+                setShowSupplierFlagModal(true);
+              }}
+            >
+              <i className="bi bi-plus" /> Add Flag
+            </Button>
+          </div>
+
+          <div className="d-flex flex-column gap-2">
+            {(supplierConfig.supplierFlags || []).map((flag) => (
+              <div key={flag.id} className="d-flex align-items-center gap-3 p-2 bg-light rounded border">
+                <div
+                  className="rounded-circle d-flex align-items-center justify-content-center fs-5 flex-shrink-0"
+                  style={{ width: 32, height: 32, backgroundColor: flag.color + '20' }}
+                >
+                  {flag.icon}
+                </div>
+
+                <div className="flex-grow-1 fw-medium">{flag.name}</div>
+
+                <div
+                  className="rounded border shadow-sm"
+                  style={{ width: 24, height: 24, backgroundColor: flag.color }}
+                  title={flag.color}
+                />
+
+                <div className="d-flex align-items-center gap-1 ms-2">
                   <Button
-                    variant="outline-danger"
+                    variant="light"
                     size="sm"
+                    className="text-muted border-0"
+                    onClick={() => {
+                      setEditingSupplierFlag(flag);
+                      setSupplierFlagForm({ name: flag.name, icon: flag.icon, color: flag.color });
+                      setShowSupplierFlagModal(true);
+                    }}
+                  >
+                    <i className="bi bi-pencil" />
+                  </Button>
+                  <Button
+                    variant="light"
+                    size="sm"
+                    className="text-danger border-0"
                     onClick={() => {
                       const updated = structuredClone(supplierConfig);
-                      updated.supplierFlags = updated.supplierFlags.filter((_, i) => i !== idx);
+                      updated.supplierFlags = updated.supplierFlags.filter((f) => f.id !== flag.id);
                       setSupplierConfig(updated);
                     }}
                   >
                     <i className="bi bi-trash" />
                   </Button>
-                </td>
-              </tr>
+                </div>
+              </div>
             ))}
-          </tbody>
-        </Table>
-        <Button
-          variant="outline-primary"
-          size="sm"
-          onClick={() => {
-            const updated = structuredClone(supplierConfig);
-            updated.supplierFlags.push({
-              id: generateId(),
-              name: '',
-              icon: '',
-              color: BOARD_COLORS[updated.supplierFlags.length % BOARD_COLORS.length],
-            });
-            setSupplierConfig(updated);
-          }}
-        >
-          <i className="bi bi-plus me-1" />
-          {t('common.add')}
-        </Button>
-      </div>
 
-      {/* Supplier Document Types */}
-      <h6 className="mb-2" style={{ color: '#14b8a6' }}>
-        {t('globalSettings.supplierDocumentTypes')}
-      </h6>
-      <div className="mb-4">
-        <div className="d-flex flex-wrap gap-1 mb-2">
-          {supplierConfig.documentTypes.map((dt) => (
-            <Badge
-              key={dt.id}
-              bg="secondary"
-              className="d-flex align-items-center gap-1 py-1 px-2"
-              style={{ cursor: 'pointer' }}
+            {(!supplierConfig.supplierFlags || supplierConfig.supplierFlags.length === 0) && (
+              <div className="text-center py-4 text-muted">No supplier flags defined.</div>
+            )}
+          </div>
+        </div>
+
+        {/* Supplier Document Types Section */}
+        <div className="border rounded-3 p-3 bg-white mb-4 shadow-sm" style={{ borderColor: '#14b8a6' }}>
+          <div className="d-flex align-items-center justify-content-between mb-3">
+            <div>
+              <h6 className="fw-bold mb-1" style={{ color: '#14b8a6' }}>
+                Supplier Document Types
+              </h6>
+              <div className="text-muted small">
+                Categorize documents linked to suppliers (contracts, quotes, etc.).
+              </div>
+            </div>
+            <Button
+              size="sm"
+              className="d-flex align-items-center gap-2 border-0 text-white"
+              style={{ backgroundColor: '#14b8a6' }}
               onClick={() => {
-                const updated = structuredClone(supplierConfig);
-                updated.documentTypes = updated.documentTypes.filter((d) => d.id !== dt.id);
-                setSupplierConfig(updated);
+                setEditingSupplierDocType(null);
+                setSupplierDocTypeForm({ name: '' });
+                setShowSupplierDocTypeModal(true);
               }}
             >
-              {dt.name}
-              <i className="bi bi-x" />
-            </Badge>
-          ))}
+              <i className="bi bi-plus" /> Add Type
+            </Button>
+          </div>
+
+          <div className="d-flex flex-wrap gap-2">
+            {(supplierConfig.documentTypes || []).map((docType) => (
+              <div key={docType.id} className="d-flex align-items-center gap-2 px-3 py-2 bg-light border rounded">
+                <span className="small fw-medium">{docType.name}</span>
+                <Button
+                  variant="link"
+                  size="sm"
+                  className="p-0 text-muted ms-2"
+                  onClick={() => {
+                    setEditingSupplierDocType(docType);
+                    setSupplierDocTypeForm({ name: docType.name });
+                    setShowSupplierDocTypeModal(true);
+                  }}
+                >
+                  <i className="bi bi-pencil small" />
+                </Button>
+                <Button
+                  variant="link"
+                  size="sm"
+                  className="p-0 text-danger ms-1"
+                  onClick={() => {
+                    const updated = structuredClone(supplierConfig);
+                    updated.documentTypes = updated.documentTypes.filter((d) => d.id !== docType.id);
+                    setSupplierConfig(updated);
+                  }}
+                >
+                  <i className="bi bi-trash small" />
+                </Button>
+              </div>
+            ))}
+
+            {(!supplierConfig.documentTypes || supplierConfig.documentTypes.length === 0) && (
+              <div className="text-center py-3 text-muted w-100">No document types defined.</div>
+            )}
+          </div>
         </div>
-        <DocTypeAdder
-          onAdd={(name) => {
-            const updated = structuredClone(supplierConfig);
-            updated.documentTypes = [...updated.documentTypes, { id: `sup-doc-${generateId()}`, name }];
-            setSupplierConfig(updated);
-          }}
-          placeholder={t('globalSettings.addItem')}
-        />
       </div>
     </div>
   );
@@ -1808,6 +1924,459 @@ export function GlobalSettingsModal({
         confirmLabel={t('common.delete')}
         variant="danger"
       />
+
+      {/* ── CRM Config Modals ──────────────────────────────────────────── */}
+      <Modal show={showLifecycleStageModal} onHide={() => setShowLifecycleStageModal(false)} centered>
+        <Modal.Header closeButton>
+          <Modal.Title>{editingLifecycleStage ? 'Edit Lifecycle Stage' : 'Add Lifecycle Stage'}</Modal.Title>
+        </Modal.Header>
+        <Modal.Body className="d-flex flex-column gap-3">
+          <Form.Group>
+            <Form.Label className="fw-medium small">Stage Name *</Form.Label>
+            <Form.Control
+              type="text"
+              autoFocus
+              placeholder="e.g., Active, At Risk, Churned"
+              value={lifecycleStageForm.name}
+              onChange={(e) => setLifecycleStageForm({ ...lifecycleStageForm, name: e.target.value })}
+            />
+          </Form.Group>
+          <Form.Group>
+            <Form.Label className="fw-medium small">Color Position (1-10)</Form.Label>
+            <div className="d-flex flex-wrap gap-2">
+              {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((pos) => {
+                const colorHex = getColorForPosition(pos);
+                const textColor = getContrastTextColor(colorHex);
+                const isSelected = lifecycleStageForm.colorPosition === pos;
+                return (
+                  <button
+                    key={pos}
+                    type="button"
+                    onClick={() => setLifecycleStageForm({ ...lifecycleStageForm, colorPosition: pos })}
+                    className={`rounded-circle border-0 fw-bold d-flex align-items-center justify-content-center ${isSelected ? 'shadow ring-2 ring-primary' : ''}`}
+                    style={{
+                      width: 40,
+                      height: 40,
+                      backgroundColor: colorHex,
+                      color: textColor,
+                      outline: isSelected ? '2px solid #0d6efd' : 'none',
+                      outlineOffset: 2,
+                    }}
+                  >
+                    {pos}
+                  </button>
+                );
+              })}
+            </div>
+            <div className="text-muted small mt-2">1 = Critical (red) → 10 = Minimal (green)</div>
+          </Form.Group>
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="secondary" onClick={() => setShowLifecycleStageModal(false)}>
+            Cancel
+          </Button>
+          <Button
+            variant="primary"
+            onClick={() => {
+              if (!lifecycleStageForm.name.trim()) return alert('Please enter a stage name');
+              const updated = structuredClone(crmConfig);
+              if (editingLifecycleStage) {
+                const stage = updated.lifecycleStages.find((s) => s.id === editingLifecycleStage.id);
+                if (stage) {
+                  stage.name = lifecycleStageForm.name.trim();
+                  // only manually set colorPosition if we aren't using auto colors
+                  if (updated.useAutoColors === false) {
+                    stage.colorPosition = lifecycleStageForm.colorPosition;
+                  }
+                }
+              } else {
+                updated.lifecycleStages.push({
+                  id: generateId(),
+                  name: lifecycleStageForm.name.trim(),
+                  colorPosition: lifecycleStageForm.colorPosition,
+                });
+              }
+              if (updated.useAutoColors !== false) {
+                const positions = calculateAutoColorPositions(updated.lifecycleStages.length).reverse();
+                updated.lifecycleStages.forEach((s, idx) => (s.colorPosition = positions[idx]));
+              }
+              setCrmConfig(updated);
+              setShowLifecycleStageModal(false);
+            }}
+          >
+            {editingLifecycleStage ? 'Save' : 'Add Stage'}
+          </Button>
+        </Modal.Footer>
+      </Modal>
+
+      <Modal show={showFlagModal} onHide={() => setShowFlagModal(false)} centered>
+        <Modal.Header closeButton>
+          <Modal.Title>{editingFlag ? 'Edit Customer Flag' : 'Add Customer Flag'}</Modal.Title>
+        </Modal.Header>
+        <Modal.Body className="d-flex flex-column gap-3">
+          <Form.Group>
+            <Form.Label className="fw-medium small">Flag Name *</Form.Label>
+            <Form.Control
+              type="text"
+              autoFocus
+              placeholder="e.g., VIP, Strategic, At Risk"
+              value={flagForm.name}
+              onChange={(e) => setFlagForm({ ...flagForm, name: e.target.value })}
+            />
+          </Form.Group>
+          <Form.Group>
+            <Form.Label className="fw-medium small">Icon</Form.Label>
+            <div className="d-flex flex-wrap gap-2">
+              {['⭐', '🎯', '🔥', '💎', '🏆', '⚡', '❤️', '🚀', '⚠️', '🛡️', '👑', '💼'].map((icon) => (
+                <button
+                  key={icon}
+                  type="button"
+                  onClick={() => setFlagForm({ ...flagForm, icon })}
+                  className={`border rounded fs-5 d-flex align-items-center justify-content-center bg-white ${flagForm.icon === icon ? 'border-primary bg-primary bg-opacity-10' : ''}`}
+                  style={{ width: 44, height: 44 }}
+                >
+                  {icon}
+                </button>
+              ))}
+            </div>
+          </Form.Group>
+          <Form.Group>
+            <Form.Label className="fw-medium small">Color</Form.Label>
+            <div className="d-flex flex-wrap gap-2">
+              {[
+                { hex: '#F59E0B', name: 'Amber' },
+                { hex: '#8B5CF6', name: 'Purple' },
+                { hex: '#EF4444', name: 'Red' },
+                { hex: '#10B981', name: 'Green' },
+                { hex: '#3B82F6', name: 'Blue' },
+                { hex: '#EC4899', name: 'Pink' },
+                { hex: '#6366F1', name: 'Indigo' },
+                { hex: '#14B8A6', name: 'Teal' },
+              ].map((color) => (
+                <button
+                  key={color.hex}
+                  type="button"
+                  onClick={() => setFlagForm({ ...flagForm, color: color.hex })}
+                  className="rounded border"
+                  title={color.name}
+                  style={{
+                    width: 44,
+                    height: 44,
+                    backgroundColor: color.hex,
+                    outline: flagForm.color === color.hex ? '3px solid #333' : 'none',
+                    outlineOffset: 2,
+                  }}
+                />
+              ))}
+            </div>
+          </Form.Group>
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="secondary" onClick={() => setShowFlagModal(false)}>
+            Cancel
+          </Button>
+          <Button
+            variant="primary"
+            onClick={() => {
+              if (!flagForm.name.trim()) return alert('Please enter a flag name');
+              const updated = structuredClone(crmConfig);
+              if (editingFlag) {
+                const flag = updated.customerFlags.find((f) => f.id === editingFlag.id);
+                if (flag) {
+                  flag.name = flagForm.name.trim();
+                  flag.icon = flagForm.icon;
+                  flag.color = flagForm.color;
+                }
+              } else {
+                updated.customerFlags.push({
+                  id: generateId(),
+                  name: flagForm.name.trim(),
+                  icon: flagForm.icon,
+                  color: flagForm.color,
+                });
+              }
+              setCrmConfig(updated);
+              setShowFlagModal(false);
+            }}
+          >
+            {editingFlag ? 'Save' : 'Add Flag'}
+          </Button>
+        </Modal.Footer>
+      </Modal>
+
+      <Modal show={showDocTypeModal} onHide={() => setShowDocTypeModal(false)} centered size="sm">
+        <Modal.Header closeButton>
+          <Modal.Title className="fs-6">{editingDocType ? 'Edit Document Type' : 'Add Document Type'}</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          <Form.Group>
+            <Form.Label className="fw-medium small">Type Name *</Form.Label>
+            <Form.Control
+              type="text"
+              autoFocus
+              placeholder="e.g., Contract, Proposal"
+              value={docTypeForm.name}
+              onChange={(e) => setDocTypeForm({ ...docTypeForm, name: e.target.value })}
+            />
+          </Form.Group>
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="secondary" size="sm" onClick={() => setShowDocTypeModal(false)}>
+            Cancel
+          </Button>
+          <Button
+            variant="primary"
+            size="sm"
+            onClick={() => {
+              if (!docTypeForm.name.trim()) return alert('Please enter a document type name');
+              const updated = structuredClone(crmConfig);
+              if (editingDocType) {
+                const dt = updated.documentTypes.find((d) => d.id === editingDocType.id);
+                if (dt) dt.name = docTypeForm.name.trim();
+              } else {
+                updated.documentTypes.push({ id: generateId(), name: docTypeForm.name.trim() });
+              }
+              setCrmConfig(updated);
+              setShowDocTypeModal(false);
+            }}
+          >
+            {editingDocType ? 'Save' : 'Add'}
+          </Button>
+        </Modal.Footer>
+      </Modal>
+
+      {/* ── Supplier Config Modals ───────────────────────────────────────── */}
+      <Modal show={showSupplierLifecycleStageModal} onHide={() => setShowSupplierLifecycleStageModal(false)} centered>
+        <Modal.Header closeButton>
+          <Modal.Title style={{ color: '#14b8a6' }}>
+            {editingSupplierLifecycleStage ? 'Edit Supplier Stage' : 'Add Supplier Stage'}
+          </Modal.Title>
+        </Modal.Header>
+        <Modal.Body className="d-flex flex-column gap-3">
+          <Form.Group>
+            <Form.Label className="fw-medium small">Stage Name *</Form.Label>
+            <Form.Control
+              type="text"
+              autoFocus
+              placeholder="e.g., Approved, Preferred, Inactive"
+              value={supplierLifecycleStageForm.name}
+              onChange={(e) => setSupplierLifecycleStageForm({ ...supplierLifecycleStageForm, name: e.target.value })}
+            />
+          </Form.Group>
+          <Form.Group>
+            <Form.Label className="fw-medium small">Color Position (1-10)</Form.Label>
+            <div className="d-flex flex-wrap gap-2">
+              {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((pos) => {
+                const colorHex = getColorForPosition(pos);
+                const textColor = getContrastTextColor(colorHex);
+                const isSelected = supplierLifecycleStageForm.colorPosition === pos;
+                return (
+                  <button
+                    key={pos}
+                    type="button"
+                    onClick={() => setSupplierLifecycleStageForm({ ...supplierLifecycleStageForm, colorPosition: pos })}
+                    className="rounded-circle border-0 fw-bold d-flex align-items-center justify-content-center"
+                    style={{
+                      width: 40,
+                      height: 40,
+                      backgroundColor: colorHex,
+                      color: textColor,
+                      outline: isSelected ? '2px solid #14b8a6' : 'none',
+                      outlineOffset: 2,
+                    }}
+                  >
+                    {pos}
+                  </button>
+                );
+              })}
+            </div>
+            <div className="text-muted small mt-2">1 = Critical (red) → 10 = Minimal (green)</div>
+          </Form.Group>
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="secondary" onClick={() => setShowSupplierLifecycleStageModal(false)}>
+            Cancel
+          </Button>
+          <Button
+            className="border-0 text-white"
+            style={{ backgroundColor: '#14b8a6' }}
+            onClick={() => {
+              if (!supplierLifecycleStageForm.name.trim()) return alert('Please enter a stage name');
+              const updated = structuredClone(supplierConfig);
+              if (editingSupplierLifecycleStage) {
+                const stage = updated.lifecycleStages.find((s) => s.id === editingSupplierLifecycleStage.id);
+                if (stage) {
+                  stage.name = supplierLifecycleStageForm.name.trim();
+                  // only manually set colorPosition if we aren't using auto colors
+                  if (updated.useAutoColors === false) {
+                    stage.colorPosition = supplierLifecycleStageForm.colorPosition;
+                  }
+                }
+              } else {
+                updated.lifecycleStages.push({
+                  id: generateId(),
+                  name: supplierLifecycleStageForm.name.trim(),
+                  colorPosition: supplierLifecycleStageForm.colorPosition,
+                });
+              }
+              if (updated.useAutoColors !== false) {
+                const positions = calculateAutoColorPositions(updated.lifecycleStages.length);
+                updated.lifecycleStages.forEach((s, idx) => (s.colorPosition = positions[idx]));
+              }
+              setSupplierConfig(updated);
+              setShowSupplierLifecycleStageModal(false);
+            }}
+          >
+            {editingSupplierLifecycleStage ? 'Save' : 'Add Stage'}
+          </Button>
+        </Modal.Footer>
+      </Modal>
+
+      <Modal show={showSupplierFlagModal} onHide={() => setShowSupplierFlagModal(false)} centered>
+        <Modal.Header closeButton>
+          <Modal.Title style={{ color: '#14b8a6' }}>
+            {editingSupplierFlag ? 'Edit Supplier Flag' : 'Add Supplier Flag'}
+          </Modal.Title>
+        </Modal.Header>
+        <Modal.Body className="d-flex flex-column gap-3">
+          <Form.Group>
+            <Form.Label className="fw-medium small">Flag Name *</Form.Label>
+            <Form.Control
+              type="text"
+              autoFocus
+              placeholder="e.g., Preferred, ISO Certified"
+              value={supplierFlagForm.name}
+              onChange={(e) => setSupplierFlagForm({ ...supplierFlagForm, name: e.target.value })}
+            />
+          </Form.Group>
+          <Form.Group>
+            <Form.Label className="fw-medium small">Icon</Form.Label>
+            <div className="d-flex flex-wrap gap-2">
+              {['⭐', '✓', '🔒', '🏆', '📍', '⚡', '🛡️', '✈️', '🏭', '📦', '🔧', '💼'].map((icon) => (
+                <button
+                  key={icon}
+                  type="button"
+                  onClick={() => setSupplierFlagForm({ ...supplierFlagForm, icon })}
+                  className={`border rounded fs-5 d-flex align-items-center justify-content-center bg-white ${supplierFlagForm.icon === icon ? 'border-primary bg-primary bg-opacity-10' : ''}`}
+                  style={{
+                    width: 44,
+                    height: 44,
+                    borderColor: supplierFlagForm.icon === icon ? '#14b8a6 !important' : '',
+                  }}
+                >
+                  {icon}
+                </button>
+              ))}
+            </div>
+          </Form.Group>
+          <Form.Group>
+            <Form.Label className="fw-medium small">Color</Form.Label>
+            <div className="d-flex flex-wrap gap-2">
+              {[
+                { hex: '#14B8A6', name: 'Teal' },
+                { hex: '#F59E0B', name: 'Amber' },
+                { hex: '#10B981', name: 'Green' },
+                { hex: '#8B5CF6', name: 'Purple' },
+                { hex: '#3B82F6', name: 'Blue' },
+                { hex: '#EF4444', name: 'Red' },
+                { hex: '#EC4899', name: 'Pink' },
+                { hex: '#6366F1', name: 'Indigo' },
+              ].map((color) => (
+                <button
+                  key={color.hex}
+                  type="button"
+                  onClick={() => setSupplierFlagForm({ ...supplierFlagForm, color: color.hex })}
+                  className="rounded border"
+                  title={color.name}
+                  style={{
+                    width: 44,
+                    height: 44,
+                    backgroundColor: color.hex,
+                    outline: supplierFlagForm.color === color.hex ? '3px solid #333' : 'none',
+                    outlineOffset: 2,
+                  }}
+                />
+              ))}
+            </div>
+          </Form.Group>
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="secondary" onClick={() => setShowSupplierFlagModal(false)}>
+            Cancel
+          </Button>
+          <Button
+            className="border-0 text-white"
+            style={{ backgroundColor: '#14b8a6' }}
+            onClick={() => {
+              if (!supplierFlagForm.name.trim()) return alert('Please enter a flag name');
+              const updated = structuredClone(supplierConfig);
+              if (editingSupplierFlag) {
+                const flag = updated.supplierFlags.find((f) => f.id === editingSupplierFlag.id);
+                if (flag) {
+                  flag.name = supplierFlagForm.name.trim();
+                  flag.icon = supplierFlagForm.icon;
+                  flag.color = supplierFlagForm.color;
+                }
+              } else {
+                updated.supplierFlags.push({
+                  id: generateId(),
+                  name: supplierFlagForm.name.trim(),
+                  icon: supplierFlagForm.icon,
+                  color: supplierFlagForm.color,
+                });
+              }
+              setSupplierConfig(updated);
+              setShowSupplierFlagModal(false);
+            }}
+          >
+            {editingSupplierFlag ? 'Save' : 'Add Flag'}
+          </Button>
+        </Modal.Footer>
+      </Modal>
+
+      <Modal show={showSupplierDocTypeModal} onHide={() => setShowSupplierDocTypeModal(false)} centered size="sm">
+        <Modal.Header closeButton>
+          <Modal.Title className="fs-6" style={{ color: '#14b8a6' }}>
+            {editingSupplierDocType ? 'Edit Document Type' : 'Add Document Type'}
+          </Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          <Form.Group>
+            <Form.Label className="fw-medium small">Type Name *</Form.Label>
+            <Form.Control
+              type="text"
+              autoFocus
+              placeholder="e.g., Certificate, Invoice"
+              value={supplierDocTypeForm.name}
+              onChange={(e) => setSupplierDocTypeForm({ ...supplierDocTypeForm, name: e.target.value })}
+            />
+          </Form.Group>
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="secondary" size="sm" onClick={() => setShowSupplierDocTypeModal(false)}>
+            Cancel
+          </Button>
+          <Button
+            size="sm"
+            className="border-0 text-white"
+            style={{ backgroundColor: '#14b8a6' }}
+            onClick={() => {
+              if (!supplierDocTypeForm.name.trim()) return alert('Please enter a document type name');
+              const updated = structuredClone(supplierConfig);
+              if (editingSupplierDocType) {
+                const dt = updated.documentTypes.find((d) => d.id === editingSupplierDocType.id);
+                if (dt) dt.name = supplierDocTypeForm.name.trim();
+              } else {
+                updated.documentTypes.push({ id: generateId(), name: supplierDocTypeForm.name.trim() });
+              }
+              setSupplierConfig(updated);
+              setShowSupplierDocTypeModal(false);
+            }}
+          >
+            {editingSupplierDocType ? 'Save' : 'Add'}
+          </Button>
+        </Modal.Footer>
+      </Modal>
 
       {/* ── Detail Modals ──────────────────────────────────────────────── */}
       <CustomerDetailModal

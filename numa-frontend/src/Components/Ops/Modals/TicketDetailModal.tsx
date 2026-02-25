@@ -133,6 +133,7 @@ export function TicketDetailModal({
   const [links, setLinks] = useState<TicketLink[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
 
