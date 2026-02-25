@@ -6,6 +6,7 @@ import type { EventTypeFilter } from './CalendarToolbar';
 import { useNumaRequest } from '../../Providers/NumaRequestContext';
 import { useTranslation } from 'react-i18next';
 import { Bot } from 'lucide-react';
+import { getAllTimezones } from '../../utils/timezoneUtils';
 
 interface ScheduleModalProps {
   show: boolean;
@@ -307,14 +308,11 @@ export const ScheduleModal: React.FC<ScheduleModalProps> = ({
               <Form.Group className="mb-3">
                 <Form.Label>{t('scheduling.scheduleModal.fields.timezone')}</Form.Label>
                 <Form.Select value={formData.timezone} onChange={(e) => handleInputChange('timezone', e.target.value)}>
-                  <option value="UTC">{t('scheduling.timezones.utc')}</option>
-                  <option value="America/New_York">{t('scheduling.timezones.americaNewYorkShort')}</option>
-                  <option value="America/Chicago">{t('scheduling.timezones.americaChicagoShort')}</option>
-                  <option value="America/Denver">{t('scheduling.timezones.americaDenverShort')}</option>
-                  <option value="America/Los_Angeles">{t('scheduling.timezones.americaLosAngelesShort')}</option>
-                  <option value="Europe/London">{t('scheduling.timezones.europeLondonShort')}</option>
-                  <option value="Europe/Paris">{t('scheduling.timezones.europeParisShort')}</option>
-                  <option value="Asia/Tokyo">{t('scheduling.timezones.asiaTokyoShort')}</option>
+                  {getAllTimezones().map((tz) => (
+                    <option key={tz.value} value={tz.value}>
+                      {tz.label}
+                    </option>
+                  ))}
                 </Form.Select>
               </Form.Group>
             </Col>

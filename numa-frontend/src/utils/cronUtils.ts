@@ -229,7 +229,6 @@ const calculateNextOccurrence = (cronFields: string[], from: Date, timezone: str
   const dayOfWeekField = parseCronField(dayOfWeek, 0, 6, 'dayOfWeek');
 
   if (!minuteField || !hourField || !dayField || !monthField || !dayOfWeekField) {
-    console.warn('CRON DEBUG: Invalid cron field(s) for matching', { cronFields });
     return null;
   }
 
@@ -264,7 +263,6 @@ const calculateNextOccurrence = (cronFields: string[], from: Date, timezone: str
     nextDate = new Date(nextDate.getTime() + 60000);
   }
 
-  console.warn('CRON DEBUG: Could not find next occurrence within reasonable time frame');
   return null;
 };
 
@@ -273,7 +271,7 @@ const calculateNextOccurrence = (cronFields: string[], from: Date, timezone: str
  */
 const generateOneTimeEvent = (cronFields: string[], targetYear: number, timezone: string): Date[] => {
   if (!Array.isArray(cronFields) || cronFields.length !== 5) {
-    console.error('CRON DEBUG: Invalid cronFields for one-time event:', { cronFields });
+    console.error('Invalid cronFields for one-time event:', { cronFields });
     return [];
   }
 
@@ -286,29 +284,12 @@ const generateOneTimeEvent = (cronFields: string[], targetYear: number, timezone
   const monthVal = parseInt(month) - 1; // Convert to 0-based
 
   if (isNaN(minuteVal) || isNaN(hourVal) || isNaN(dayVal) || isNaN(monthVal)) {
-    console.error('CRON DEBUG: Invalid numeric values in cron fields:', {
-      minute,
-      hour,
-      dayOfMonth,
-      month,
-      minuteVal,
-      hourVal,
-      dayVal,
-      monthVal,
-    });
+    console.error('Invalid numeric values in cron fields:', { minute, hour, dayOfMonth, month });
     return [];
   }
 
   // Create the specific date in the requested timezone
   const eventDate = makeUtcDateFromZonedParts(targetYear, monthVal + 1, dayVal, hourVal, minuteVal, 0, timezone);
-
-  console.log('CRON DEBUG: Generated one-time event:', {
-    cronFields,
-    targetYear,
-    timezone,
-    eventDate,
-    eventDateString: eventDate.toLocaleString(),
-  });
 
   return [eventDate];
 };
@@ -318,7 +299,7 @@ const generateOneTimeEvent = (cronFields: string[], targetYear: number, timezone
  */
 const generateNextOccurrences = (cronFields: string[], startFrom: Date, timezone: string, count: number): Date[] => {
   if (!Array.isArray(cronFields)) {
-    console.error('CRON DEBUG: cronFields is not an array:', { cronFields, type: typeof cronFields });
+    console.error('cronFields is not an array:', { cronFields, type: typeof cronFields });
     return [];
   }
 
@@ -328,7 +309,6 @@ const generateNextOccurrences = (cronFields: string[], startFrom: Date, timezone
   for (let i = 0; i < count; i++) {
     const nextOccurrence = calculateNextOccurrence(cronFields, currentDate, timezone);
     if (!nextOccurrence) {
-      console.log(`CRON DEBUG: No more occurrences found after ${i} iterations`);
       break;
     }
 
@@ -338,7 +318,6 @@ const generateNextOccurrences = (cronFields: string[], startFrom: Date, timezone
     currentDate = new Date(nextOccurrence.getTime() + 60000);
   }
 
-  console.log(`CRON DEBUG: Generated ${occurrences.length} recurring occurrences`);
   return occurrences;
 };
 
@@ -347,11 +326,7 @@ const generateNextOccurrences = (cronFields: string[], startFrom: Date, timezone
  */
 const isValidCronFormat = (cronFields: string[]): boolean => {
   if (!Array.isArray(cronFields) || cronFields.length !== 5) {
-    console.error('CRON DEBUG: Invalid cronFields structure:', {
-      cronFields,
-      isArray: Array.isArray(cronFields),
-      length: cronFields?.length,
-    });
+    console.error('Invalid cronFields structure:', { cronFields });
     return false;
   }
 
@@ -366,13 +341,7 @@ const isValidCronFormat = (cronFields: string[]): boolean => {
   const isValid = Boolean(minuteField && hourField && dayField && monthField && dayOfWeekField);
 
   if (!isValid) {
-    console.error('CRON DEBUG: Field validation failed:', {
-      minute: { value: minute, valid: Boolean(minuteField) },
-      hour: { value: hour, valid: Boolean(hourField) },
-      dayOfMonth: { value: dayOfMonth, valid: Boolean(dayField) },
-      month: { value: month, valid: Boolean(monthField) },
-      dayOfWeek: { value: dayOfWeek, valid: Boolean(dayOfWeekField) },
-    });
+    console.error('Invalid cron field validation:', { minute, hour, dayOfMonth, month, dayOfWeek });
   }
 
   return isValid;
@@ -411,16 +380,6 @@ const parseEventBridgeCron = (
     const isOneTime = year !== '*' && year !== '?' && !isNaN(parseInt(year));
     const targetYear = isOneTime ? parseInt(year) : undefined;
 
-    console.log('CRON DEBUG: EventBridge parsing:', {
-      original: cronExpr,
-      extracted: expr,
-      parts: parts,
-      standardParts: standardParts,
-      year: year,
-      isOneTime: isOneTime,
-      targetYear: targetYear,
-    });
-
     return {
       cronFields: standardParts,
       isOneTime,
@@ -431,18 +390,13 @@ const parseEventBridgeCron = (
   // If it's already 5 parts, assume it's standard cron (recurring)
   if (parts.length === 5) {
     const convertedParts = parts.map((part) => (part === '?' ? '*' : part));
-    console.log('CRON DEBUG: Standard cron parsing:', {
-      original: cronExpr,
-      parts: parts,
-      convertedParts: convertedParts,
-    });
     return {
       cronFields: convertedParts,
       isOneTime: false,
     };
   }
 
-  console.error('CRON DEBUG: Invalid cron parts count:', { cronExpr, parts, partsLength: parts.length });
+  console.error('Invalid cron parts count:', { cronExpr, partsLength: parts.length });
   return null;
 };
 
@@ -529,64 +483,64 @@ export const calculateNextRun = (
   }
 
   try {
-    console.log('CRON DEBUG: Processing cron expression with custom parser:', {
-      cronExpression,
-      timezone,
-      status,
-    });
+    // For EventBridge cron, use parseEventBridgeCron to detect one-time events
+    if (cronExpression.startsWith('cron(')) {
+      const parsed = parseEventBridgeCron(cronExpression);
+      if (!parsed) return defaultResult;
+
+      if (parsed.isOneTime && parsed.targetYear) {
+        // One-time event: generate the specific date and check if it's in the future
+        const eventDates = generateOneTimeEvent(parsed.cronFields, parsed.targetYear, timezone);
+        if (eventDates.length > 0 && eventDates[0] > new Date()) {
+          return {
+            nextRun: eventDates[0],
+            humanReadable: formatNextRunTime(eventDates[0]),
+            isActive: true,
+          };
+        }
+        // One-time event in the past — no future occurrences
+        return {
+          ...defaultResult,
+          humanReadable: 'Completed',
+          isActive: false,
+        };
+      }
+    }
 
     let standardCron: string | null = null;
 
     // Handle different expression formats
     if (cronExpression.startsWith('cron(')) {
       standardCron = convertEventBridgeCronToStandard(cronExpression);
-      console.log('CRON DEBUG: Converted EventBridge cron:', standardCron);
     } else if (cronExpression.startsWith('rate(')) {
       standardCron = convertRateToCron(cronExpression);
-      console.log('CRON DEBUG: Converted rate expression:', standardCron);
     } else {
-      // Assume it's already standard cron
       standardCron = cronExpression;
-      console.log('CRON DEBUG: Using standard cron:', standardCron);
     }
 
     if (!standardCron) {
-      console.warn('CRON DEBUG: Failed to convert expression to standard cron');
       return defaultResult;
     }
 
     // Parse the standard cron expression into fields
     const cronFields = standardCron.split(/\s+/).filter((field) => field.length > 0);
 
-    console.log('CRON DEBUG: Parsed cron fields for calculateNextRun:', {
-      standardCron,
-      cronFieldsRaw: standardCron.split(/\s+/),
-      cronFieldsFiltered: cronFields,
-      cronFieldsLength: cronFields.length,
-    });
-
     if (!isValidCronFormat(cronFields)) {
-      console.error('CRON DEBUG: Invalid cron format:', cronFields);
       return {
         ...defaultResult,
         humanReadable: 'Invalid cron format',
       };
     }
 
-    console.log('CRON DEBUG: About to calculate next occurrence with custom parser');
-
     // Calculate the next occurrence
     const nextRun = calculateNextOccurrence(cronFields, new Date(), timezone);
 
     if (!nextRun) {
-      console.warn('CRON DEBUG: Could not calculate next run time');
       return {
         ...defaultResult,
         humanReadable: 'No future occurrences found',
       };
     }
-
-    console.log('CRON DEBUG: Successfully calculated next run:', nextRun);
 
     return {
       nextRun,
@@ -1187,22 +1141,12 @@ export const getNextRunTimes = (cronExpression: string, timezone: string = 'UTC'
       parsedCron = { cronFields, isOneTime: false };
     }
 
-    console.log(
-      'GET_NEXT_RUN_TIMES DEBUG: Processing',
-      cronExpression,
-      'isOneTime:',
-      parsedCron?.isOneTime,
-      'targetYear:',
-      parsedCron?.targetYear,
-    );
-
     if (!parsedCron || !parsedCron.cronFields) {
-      console.warn('GET_NEXT_RUN_TIMES DEBUG: Failed to parse cron expression');
       return [];
     }
 
     if (!isValidCronFormat(parsedCron.cronFields)) {
-      console.error('GET_NEXT_RUN_TIMES ERROR: Invalid cron format:', parsedCron.cronFields);
+      console.error('Invalid cron format:', parsedCron.cronFields);
       return [];
     }
 
@@ -1221,11 +1165,9 @@ export const getNextRunTimes = (cronExpression: string, timezone: string = 'UTC'
       runTimes = runTimes.filter((date) => date > now);
     }
 
-    console.log('GET_NEXT_RUN_TIMES DEBUG: Generated', runTimes.length, 'run times for', cronExpression);
-
     return runTimes;
   } catch (error) {
-    console.error('GET_NEXT_RUN_TIMES ERROR: Failed to get next run times:', {
+    console.error('Failed to get next run times:', {
       cronExpression,
       timezone,
       count,
@@ -1235,4 +1177,36 @@ export const getNextRunTimes = (cronExpression: string, timezone: string = 'UTC'
     });
     return [];
   }
+};
+
+/**
+ * Determines if a schedule is effectively completed (client-side).
+ * A schedule is completed if:
+ * 1. maxRuns is set and totalRuns >= maxRuns, OR
+ * 2. It's a one-off cron expression whose date has passed
+ */
+export const isScheduleCompleted = (schedule: {
+  cronExpression: string;
+  timezone: string;
+  status: string;
+  maxRuns?: number;
+  totalRuns?: number;
+}): boolean => {
+  if (schedule.status !== 'active') return false;
+
+  // Check if max runs have been reached
+  if (schedule.maxRuns && schedule.totalRuns && schedule.totalRuns >= schedule.maxRuns) {
+    return true;
+  }
+
+  // Check if it's a one-off schedule with a past date
+  const nextRuns = getNextRunTimes(schedule.cronExpression, schedule.timezone, 1);
+  if (nextRuns.length === 0) {
+    const parsed = parseEventBridgeCron(schedule.cronExpression);
+    if (parsed?.isOneTime) {
+      return true;
+    }
+  }
+
+  return false;
 };

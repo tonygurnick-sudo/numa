@@ -36,6 +36,7 @@ type AgentCardProps = {
   onSchedule?: (agent: AgentSummary) => void;
   onToggleFavorite?: (agent: AgentSummary, next: boolean) => void;
   hasSchedules?: boolean;
+  scheduleCount?: number;
   highlight?: boolean;
   disabled?: boolean;
   isInMyAgentsSection?: boolean;
@@ -107,6 +108,7 @@ export const AgentCard = ({
   onSchedule,
   onToggleFavorite,
   hasSchedules = false,
+  scheduleCount = 0,
   highlight = false,
   disabled = false,
   isInMyAgentsSection = false,
@@ -211,10 +213,26 @@ export const AgentCard = ({
                   <OverlayTrigger
                     placement="top"
                     overlay={
-                      <Tooltip id={`schedules-indicator-${agent.agentId}`}>{t('card.schedules.active')}</Tooltip>
+                      <Tooltip id={`schedules-indicator-${agent.agentId}`}>
+                        {t('card.schedules.active')}
+                        {scheduleCount > 0 ? ` (${scheduleCount})` : ''}
+                      </Tooltip>
                     }
                   >
-                    <Clock size={13} style={{ color: 'var(--brand-primary, var(--color-primary))' }} />
+                    <Badge
+                      bg=""
+                      className="d-flex align-items-center gap-1"
+                      style={{
+                        backgroundColor:
+                          'color-mix(in srgb, var(--brand-primary, var(--color-primary)) 12%, transparent)',
+                        color: 'var(--brand-primary, var(--color-primary))',
+                        fontSize: '0.65rem',
+                        fontWeight: 500,
+                      }}
+                    >
+                      <Clock size={10} />
+                      {t('card.schedules.badge')}
+                    </Badge>
                   </OverlayTrigger>
                 )}
               </div>
@@ -375,10 +393,24 @@ export const AgentCard = ({
                     overlay={
                       <Tooltip id={`schedules-indicator-expanded-${agent.agentId}`}>
                         {t('card.schedules.active')}
+                        {scheduleCount > 0 ? ` (${scheduleCount})` : ''}
                       </Tooltip>
                     }
                   >
-                    <Clock size={14} style={{ color: 'var(--brand-primary, var(--color-primary))' }} />
+                    <Badge
+                      bg=""
+                      className="d-flex align-items-center gap-1"
+                      style={{
+                        backgroundColor:
+                          'color-mix(in srgb, var(--brand-primary, var(--color-primary)) 12%, transparent)',
+                        color: 'var(--brand-primary, var(--color-primary))',
+                        fontSize: '0.7rem',
+                        fontWeight: 500,
+                      }}
+                    >
+                      <Clock size={11} />
+                      {t('card.schedules.badge')}
+                    </Badge>
                   </OverlayTrigger>
                 )}
               </div>

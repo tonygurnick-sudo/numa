@@ -60,9 +60,16 @@ interface UserProfilePageProps {
   embedded?: boolean;
   activeTabKey?: string;
   onActiveTabChange?: (tabKey: string) => void;
+  /** When embedded in Settings, the current scope ('user' | 'admin'). Re-fetches data when switching back to 'user'. */
+  settingsScope?: 'user' | 'admin';
 }
 
-export default function UserProfilePage({ embedded = false, activeTabKey, onActiveTabChange }: UserProfilePageProps) {
+export default function UserProfilePage({
+  embedded = false,
+  activeTabKey,
+  onActiveTabChange,
+  settingsScope = 'user',
+}: UserProfilePageProps) {
   const { t } = useTranslation('settings');
   const { user, getCredentials } = useAuth();
   const { numaGet, numaPut } = useNumaRequest();
@@ -89,6 +96,11 @@ export default function UserProfilePage({ embedded = false, activeTabKey, onActi
   const [saving, setSaving] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [dirty, setDirty] = useState<boolean>(false);
+
+  // Snapshots of last-saved state — auto-clear dirty when user undoes changes
+  const savedDefaultsRef = useRef('');
+  const savedDefaultsEnabledRef = useRef(false);
+  const savedProfileRef = useRef('');
 
   const hasWorkspaceChat = window.sessionStorage.getItem('NUMA_WORKSPACE_CHAT') === 'true';
   const hasPipedreamFeature = window.sessionStorage.getItem('PIPEDREAM_INTEGRATIONS') === 'true';
@@ -217,6 +229,8 @@ export default function UserProfilePage({ embedded = false, activeTabKey, onActi
   >({});
 
   useEffect(() => {
+    // Skip fetching while the admin view is active — re-fetch when switching back to 'user'.
+    if (settingsScope !== 'user') return;
     let cancelled = false;
     (async () => {
       try {
@@ -241,7 +255,7 @@ export default function UserProfilePage({ embedded = false, activeTabKey, onActi
     return () => {
       cancelled = true;
     };
-  }, [numaGet]);
+  }, [numaGet, settingsScope]);
 
   useEffect(() => {
     let cancelled = false;
@@ -269,6 +283,7 @@ export default function UserProfilePage({ embedded = false, activeTabKey, onActi
   }, [dataAnalysisAvailable]);
 
   useEffect(() => {
+    if (settingsScope !== 'user') return;
     let cancelled = false;
     (async () => {
       try {
@@ -277,6 +292,8 @@ export default function UserProfilePage({ embedded = false, activeTabKey, onActi
         if (cancelled) return;
         setUserDefaults(res.settings);
         setUserDefaultsEnabled(res.userDefaultsEnabled);
+        savedDefaultsRef.current = JSON.stringify(res.settings);
+        savedDefaultsEnabledRef.current = res.userDefaultsEnabled;
         setError(null);
         setDirty(false);
       } catch (e) {
@@ -289,7 +306,7 @@ export default function UserProfilePage({ embedded = false, activeTabKey, onActi
     return () => {
       cancelled = true;
     };
-  }, [numaGet]);
+  }, [numaGet, settingsScope]);
 
   // Load user profile
   useEffect(() => {
@@ -300,6 +317,7 @@ export default function UserProfilePage({ embedded = false, activeTabKey, onActi
         const profile = await ChatSettingsService.getUserProfile(numaGet);
         if (cancelled) return;
         setUserProfile(profile);
+        savedProfileRef.current = JSON.stringify(profile);
         setProfileError(null);
         setProfileDirty(false);
       } catch (e) {
@@ -313,6 +331,20 @@ export default function UserProfilePage({ embedded = false, activeTabKey, onActi
       cancelled = true;
     };
   }, [numaGet]);
+
+  // Auto-clear dirty flags when current state matches the last-saved snapshot
+  useEffect(() => {
+    if (!dirty) return;
+    const matches =
+      JSON.stringify(userDefaults) === savedDefaultsRef.current &&
+      userDefaultsEnabled === savedDefaultsEnabledRef.current;
+    if (matches) setDirty(false);
+  }, [userDefaults, userDefaultsEnabled, dirty]);
+
+  useEffect(() => {
+    if (!profileDirty) return;
+    if (JSON.stringify(userProfile) === savedProfileRef.current) setProfileDirty(false);
+  }, [userProfile, profileDirty]);
 
   const kbIdsSorted = useMemo(
     () => availableKBs.map((kb) => kb.kb_id).filter((id) => typeof id === 'string'),
@@ -497,6 +529,8 @@ export default function UserProfilePage({ embedded = false, activeTabKey, onActi
       const refreshed = await ChatSettingsService.getForProfile(numaGet);
       setUserDefaults(refreshed.settings);
       setUserDefaultsEnabled(refreshed.userDefaultsEnabled);
+      savedDefaultsRef.current = JSON.stringify(refreshed.settings);
+      savedDefaultsEnabledRef.current = refreshed.userDefaultsEnabled;
       await applyLanguagePreference(refreshed.settings.language);
       setDirty(false);
     } catch (e) {
@@ -528,6 +562,8 @@ export default function UserProfilePage({ embedded = false, activeTabKey, onActi
       const refreshed = await ChatSettingsService.getForProfile(numaGet);
       setUserDefaults(refreshed.settings);
       setUserDefaultsEnabled(refreshed.userDefaultsEnabled);
+      savedDefaultsRef.current = JSON.stringify(refreshed.settings);
+      savedDefaultsEnabledRef.current = refreshed.userDefaultsEnabled;
       await applyLanguagePreference(refreshed.settings.language);
       setDirty(false);
     } catch (e) {
@@ -544,6 +580,7 @@ export default function UserProfilePage({ embedded = false, activeTabKey, onActi
       await ChatSettingsService.updateUserProfile(userProfile, numaPut);
       const refreshed = await ChatSettingsService.getUserProfile(numaGet);
       setUserProfile(refreshed);
+      savedProfileRef.current = JSON.stringify(refreshed);
       setProfileDirty(false);
     } catch (e) {
       setProfileError((e as Error).message || t('userProfile.profile.errors.saveProfile'));
@@ -557,8 +594,16 @@ export default function UserProfilePage({ embedded = false, activeTabKey, onActi
     setProfileDirty(true);
   };
 
+  const hasUnsavedChanges = dirty || profileDirty;
+
   const profileContent = (
     <div className="user-profile-content">
+      {hasUnsavedChanges && (
+        <div className="settings-unsaved-banner">
+          <i className="bi bi-exclamation-circle" />
+          {t('unsavedBanner')}
+        </div>
+      )}
       {error && (
         <Alert variant="danger" className="mb-3">
           {error}
@@ -1361,7 +1406,7 @@ export default function UserProfilePage({ embedded = false, activeTabKey, onActi
                         type="switch"
                         id="profile-defaults-web-search"
                         label=""
-                        checked={displayedSettings.webSearchEnabled}
+                        checked={displayedSettings.autoToolsEnabled || displayedSettings.webSearchEnabled}
                         disabled={disableDefaultsForm || displayedSettings.autoToolsEnabled}
                         onChange={(e) => {
                           setUserDefaults((prev) => ({ ...prev, webSearchEnabled: e.target.checked }));
@@ -1380,7 +1425,7 @@ export default function UserProfilePage({ embedded = false, activeTabKey, onActi
                           type="switch"
                           id="profile-defaults-data-analysis"
                           label=""
-                          checked={displayedSettings.dataAnalysisEnabled}
+                          checked={displayedSettings.autoToolsEnabled || displayedSettings.dataAnalysisEnabled}
                           disabled={disableDefaultsForm || displayedSettings.autoToolsEnabled}
                           onChange={(e) => {
                             setUserDefaults((prev) => ({ ...prev, dataAnalysisEnabled: e.target.checked }));
@@ -1399,7 +1444,7 @@ export default function UserProfilePage({ embedded = false, activeTabKey, onActi
                         type="switch"
                         id="profile-defaults-create-agent"
                         label=""
-                        checked={displayedSettings.createAgentEnabled}
+                        checked={displayedSettings.autoToolsEnabled || displayedSettings.createAgentEnabled}
                         disabled={disableDefaultsForm || displayedSettings.autoToolsEnabled}
                         onChange={(e) => {
                           setUserDefaults((prev) => ({ ...prev, createAgentEnabled: e.target.checked }));
@@ -1417,7 +1462,7 @@ export default function UserProfilePage({ embedded = false, activeTabKey, onActi
                         type="switch"
                         id="profile-defaults-memories"
                         label=""
-                        checked={displayedSettings.memoriesEnabled}
+                        checked={displayedSettings.autoToolsEnabled || displayedSettings.memoriesEnabled}
                         disabled={disableDefaultsForm || displayedSettings.autoToolsEnabled}
                         onChange={(e) => {
                           setUserDefaults((prev) => ({ ...prev, memoriesEnabled: e.target.checked }));

@@ -1,8 +1,21 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Modal, Form, Button, Row, Col, Alert, Spinner, Accordion } from 'react-bootstrap';
+import {
+  Modal,
+  Form,
+  Button,
+  Row,
+  Col,
+  Alert,
+  Spinner,
+  Accordion,
+  Badge,
+  Table,
+  OverlayTrigger,
+  Tooltip,
+} from 'react-bootstrap';
 import { LambdaClient } from '@aws-sdk/client-lambda';
 import { fromWebToken } from '@aws-sdk/credential-providers';
-import { Database, Lightbulb, Search, Robot } from 'react-bootstrap-icons';
+import { Database, Lightbulb, Search, Robot, Clock } from 'react-bootstrap-icons';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../../Providers/AuthProvider';
 import { useNumaRequest } from '../../Providers/NumaRequestContext';
@@ -11,8 +24,15 @@ import { useKnowledgeBase } from '../../Providers/KnowledgeBaseProvider';
 import { AgentFileUpload } from './AgentFileUpload';
 import { AgentAvatarSelector } from './AgentAvatarSelector';
 import AgentAvatar from './AgentAvatar';
+import { CronExpressionBuilder } from './CronExpressionBuilder';
+import type { FrequencyType, WeekDay, WeekNumber, MonthlyMode } from './schedulingTypes';
+import { getAllTimezones, getDefaultTimezone } from '../../utils/timezoneUtils';
 import type { AgentPayload, AgentSummary, AgentUpdatePayload, AgentReferenceFile } from '../../types/agents';
+import type { AgentSchedule } from '../../types/agentSchedules';
 import { createAgent, updateAgent } from '../../Services/AgentsService';
+import { ScheduleService } from '../../Services/ScheduleService';
+import { parseCronExpression } from '../../utils/schedulingUtils';
+import { describeCronExpression, isScheduleCompleted } from '../../utils/cronUtils';
 import { AdminAgentsService, type AgentsMode } from '../../Services/AdminAgentsService';
 import { PipedreamProxyService } from '../../Services/PipedreamProxyService';
 import { getConnectionConfig } from '../../config/integrationsConfig';
@@ -24,6 +44,9 @@ type AgentCreateModalProps = {
   onHide: () => void;
   editingAgent?: AgentSummary | null;
   onAgentSaved?: (agent: AgentSummary) => void;
+  onScheduleCreated?: () => void;
+  initialAccordionKey?: string;
+  onScheduleChange?: () => void;
 };
 
 type ConnectionInfo = {
@@ -61,10 +84,20 @@ const DEFAULT_PAYLOAD: AgentPayload = {
 // KB access mode type for the UI
 type KBAccessMode = 'none' | 'all' | 'selected';
 
-export const AgentCreateModal = ({ show, onHide, editingAgent = null, onAgentSaved }: AgentCreateModalProps) => {
+export const AgentCreateModal = ({
+  show,
+  onHide,
+  editingAgent = null,
+  onAgentSaved,
+  onScheduleCreated,
+  initialAccordionKey,
+  onScheduleChange,
+}: AgentCreateModalProps) => {
   const { t } = useTranslation('agents');
   const { user } = useAuth();
-  const { numaGet, numaPost, numaPut } = useNumaRequest();
+  const { numaGet, numaPost, numaPut, numaDelete } = useNumaRequest();
+  const schedulingEnabled =
+    typeof window !== 'undefined' ? window.sessionStorage.getItem('SCHEDULING') === 'true' : false;
   const { branding } = useBranding();
   const { availableKBs } = useKnowledgeBase();
 
@@ -83,6 +116,47 @@ export const AgentCreateModal = ({ show, onHide, editingAgent = null, onAgentSav
   // Local string inputs for time saved (to allow clearing and free typing)
   const [timeInputs, setTimeInputs] = useState<{ hours: string; minutes: string }>({ hours: '', minutes: '' });
 
+  // Scheduling state
+  const [scheduleEnabled, setScheduleEnabled] = useState(false);
+  const [scheduleName, setScheduleName] = useState('');
+  const [schedulePrompt, setSchedulePrompt] = useState('');
+  const [scheduleFrequency, setScheduleFrequency] = useState<FrequencyType>('daily');
+  const [scheduleStartDate, setScheduleStartDate] = useState(() => {
+    const now = new Date();
+    now.setMinutes(now.getMinutes() + 5);
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  });
+  const [scheduleStartTime, setScheduleStartTime] = useState('09:00');
+  const [scheduleWeekDays, setScheduleWeekDays] = useState<WeekDay[]>(['monday']);
+  const [scheduleWeeklyWeekNumbers, setScheduleWeeklyWeekNumbers] = useState<WeekNumber[]>([]);
+  const [scheduleMonthlyDay, setScheduleMonthlyDay] = useState(1);
+  const [scheduleMonthlyMode, setScheduleMonthlyMode] = useState<MonthlyMode>('day_of_month');
+  const [scheduleMonthlyWeekNumber, setScheduleMonthlyWeekNumber] = useState<WeekNumber>(1);
+  const [scheduleMonthlyWeekDay, setScheduleMonthlyWeekDay] = useState<WeekDay>('monday');
+  const [scheduleMonthlyInterval, setScheduleMonthlyInterval] = useState(1);
+  const [scheduleDailyInterval, setScheduleDailyInterval] = useState(1);
+  const [scheduleHourInterval, setScheduleHourInterval] = useState(1);
+  const [scheduleMinuteInterval, setScheduleMinuteInterval] = useState(5);
+  const [scheduleDailyAnchorDay, setScheduleDailyAnchorDay] = useState(() => new Date().getDate());
+  const [scheduleMonthlyAnchorMonth, setScheduleMonthlyAnchorMonth] = useState(() => new Date().getMonth() + 1);
+  const [scheduleCustomCron, setScheduleCustomCron] = useState('cron(0 9 * * ? *)');
+  const [scheduleTimezone, setScheduleTimezone] = useState(() => {
+    try {
+      return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+    } catch {
+      return 'UTC';
+    }
+  });
+  const [scheduleMaxRuns, setScheduleMaxRuns] = useState<string>('');
+  const [scheduleEmailNotifications, setScheduleEmailNotifications] = useState(false);
+
+  // Inline schedule management state (for editing existing agents)
+  const [scheduleList, setScheduleList] = useState<AgentSchedule[]>([]);
+  const [scheduleViewMode, setScheduleViewMode] = useState<'list' | 'create' | 'edit'>('list');
+  const [editingScheduleData, setEditingScheduleData] = useState<AgentSchedule | null>(null);
+  const [scheduleListLoading, setScheduleListLoading] = useState(false);
+  const [scheduleDeletingId, setScheduleDeletingId] = useState<string | null>(null);
+
   const brandPrimaryColor = branding.colors.primary ?? 'var(--brand-primary, var(--color-primary))';
   const brandPrimaryContrast = branding.colors.primaryContrast ?? 'white';
   const primaryButtonColor = branding.colors.buttonPrimary ?? brandPrimaryColor;
@@ -98,6 +172,27 @@ export const AgentCreateModal = ({ show, onHide, editingAgent = null, onAgentSav
   );
   const relayLambdaArn = useMemo(() => window.sessionStorage.getItem('PIPEDREAM_RELAY_LAMBDA_ARN') || '', []);
   const REGION = useMemo(() => window.sessionStorage.getItem('REGION') || '', []);
+
+  const scheduleTimezoneDisplay = useMemo(() => {
+    try {
+      const offset = new Date()
+        .toLocaleString('en', { timeZone: scheduleTimezone, timeZoneName: 'short' })
+        .split(' ')
+        .pop();
+      return offset ? `${scheduleTimezone} (${offset})` : scheduleTimezone;
+    } catch {
+      return scheduleTimezone;
+    }
+  }, [scheduleTimezone]);
+
+  const handleScheduleStartDateChange = (value: string) => {
+    setScheduleStartDate(value);
+    const parsed = new Date(value);
+    if (!Number.isNaN(parsed.getTime())) {
+      setScheduleDailyAnchorDay(parsed.getDate());
+      setScheduleMonthlyAnchorMonth(parsed.getMonth() + 1);
+    }
+  };
 
   useEffect(() => {
     if (!show || !hasPipedreamIntegrations) return;
@@ -286,6 +381,31 @@ export const AgentCreateModal = ({ show, onHide, editingAgent = null, onAgentSav
       });
       setReferenceFiles(editingAgent.referenceFiles ?? []);
       setError(null);
+      // Reset form-level scheduling state — will be overridden by loaded schedules
+      setScheduleName('');
+      setSchedulePrompt('');
+      setScheduleFrequency('daily');
+      setScheduleStartTime('09:00');
+      setScheduleMaxRuns('');
+      setScheduleEmailNotifications(false);
+      // Reset inline schedule management state
+      setScheduleViewMode('list');
+      setEditingScheduleData(null);
+      setScheduleDeletingId(null);
+      // Load existing schedules for this agent
+      setScheduleListLoading(true);
+      ScheduleService.getByAgent(numaGet, editingAgent.agentId)
+        .then((schedules) => {
+          setScheduleList(schedules);
+          setScheduleEnabled(schedules.length > 0);
+        })
+        .catch(() => {
+          setScheduleList([]);
+          setScheduleEnabled(false);
+        })
+        .finally(() => setScheduleListLoading(false));
+      // Use initialAccordionKey if provided (e.g. from card schedule button)
+      setActiveAccordionKey(initialAccordionKey ?? '0');
     } else if (show) {
       setFormState({
         ...DEFAULT_PAYLOAD,
@@ -294,8 +414,21 @@ export const AgentCreateModal = ({ show, onHide, editingAgent = null, onAgentSav
       });
       setReferenceFiles([]);
       setError(null);
+      // Reset scheduling state for new agents
+      setScheduleEnabled(false);
+      setScheduleName('');
+      setSchedulePrompt('');
+      setScheduleFrequency('daily');
+      setScheduleStartTime('09:00');
+      setScheduleMaxRuns('');
+      setScheduleEmailNotifications(false);
+      setScheduleList([]);
+      setScheduleViewMode('list');
+      setEditingScheduleData(null);
+      setScheduleDeletingId(null);
+      setActiveAccordionKey(initialAccordionKey ?? '0');
     }
-  }, [editingAgent, show, authorName]);
+  }, [editingAgent, show, authorName, initialAccordionKey]);
 
   // Initialize local time input fields when opening or switching the editing agent
   useEffect(() => {
@@ -497,6 +630,210 @@ export const AgentCreateModal = ({ show, onHide, editingAgent = null, onAgentSav
     return { valid: missing.length === 0, missingFields: missing };
   };
 
+  const buildScheduleCronExpression = (): string => {
+    const parseTime = (timeStr: string) => {
+      const [h, m] = timeStr.split(':');
+      return { hour: parseInt(h, 10) || 0, minute: parseInt(m, 10) || 0 };
+    };
+    const { hour, minute } = parseTime(scheduleStartTime);
+
+    switch (scheduleFrequency) {
+      case 'once': {
+        const [y, mo, d] = scheduleStartDate.split('-').map(Number);
+        return `cron(${minute} ${hour} ${d || 1} ${mo || 1} ? ${y || new Date().getFullYear()})`;
+      }
+      case 'five_minute': {
+        const interval = Math.max(5, Math.round(scheduleMinuteInterval / 5) * 5);
+        return `cron(${minute}/${interval} * * * ? *)`;
+      }
+      case 'hourly':
+        return `cron(${minute} ${hour}/${Math.max(1, scheduleHourInterval)} * * ? *)`;
+      case 'daily':
+        if (scheduleDailyInterval > 1) {
+          return `cron(${minute} ${hour} ${scheduleDailyAnchorDay}/${scheduleDailyInterval} * ? *)`;
+        }
+        return `cron(${minute} ${hour} * * ? *)`;
+      case 'weekdays':
+        return `cron(${minute} ${hour} ? * 1-5 *)`;
+      case 'weekly': {
+        const days = scheduleWeekDays.length ? scheduleWeekDays : ['monday'];
+        if (scheduleWeeklyWeekNumbers.length > 0) {
+          const combos = scheduleWeeklyWeekNumbers.flatMap((n) =>
+            days.map((d) => {
+              const dow = d.slice(0, 3).toUpperCase();
+              return n === 'last' ? `${dow}L` : `${dow}#${n}`;
+            }),
+          );
+          return `cron(${minute} ${hour} ? * ${combos.join(',') || 'MON'} *)`;
+        }
+        return `cron(${minute} ${hour} ? * ${days.map((d) => d.slice(0, 3).toUpperCase()).join(',')} *)`;
+      }
+      case 'monthly': {
+        const monthSegment =
+          scheduleMonthlyInterval > 1 ? `${scheduleMonthlyAnchorMonth}/${scheduleMonthlyInterval}` : '*';
+        if (scheduleMonthlyMode === 'day_of_week') {
+          const dow = scheduleMonthlyWeekDay.slice(0, 3).toUpperCase();
+          const suffix = scheduleMonthlyWeekNumber === 'last' ? 'L' : `#${scheduleMonthlyWeekNumber}`;
+          return `cron(${minute} ${hour} ? ${monthSegment} ${dow}${suffix} *)`;
+        }
+        return `cron(${minute} ${hour} ${Math.min(31, Math.max(1, scheduleMonthlyDay))} ${monthSegment} ? *)`;
+      }
+      case 'custom':
+        return scheduleCustomCron || `cron(${minute} ${hour} * * ? *)`;
+      default:
+        return `cron(${minute} ${hour} * * ? *)`;
+    }
+  };
+
+  const buildScheduleEnabledTools = (): string[] => {
+    const tools: string[] = [];
+    const tc = formState.toolsConfig;
+    if (tc?.queryDataSources !== false && tc?.allowedKnowledgeBases?.length) {
+      tools.push('knowledge_search');
+    }
+    if (tc?.webSearchEnabled) tools.push('web_search');
+    if (tc?.createAgentEnabled) tools.push('create_agent_tool');
+    return tools;
+  };
+
+  // --- Inline schedule management helpers (for editing existing agents) ---
+
+  const reloadScheduleList = async () => {
+    if (!editingAgent) return;
+    try {
+      const schedules = await ScheduleService.getByAgent(numaGet, editingAgent.agentId);
+      setScheduleList(schedules);
+      onScheduleChange?.();
+    } catch {
+      // Silently fail — list will remain stale
+    }
+  };
+
+  const handleInlineDeleteSchedule = async (schedule: AgentSchedule) => {
+    if (
+      !window.confirm(t('createModal.scheduling.confirmDeleteInline', { label: schedule.label || schedule.scheduleId }))
+    ) {
+      return;
+    }
+    try {
+      setScheduleDeletingId(schedule.scheduleId);
+      await ScheduleService.delete(numaDelete, schedule.scheduleId);
+      await reloadScheduleList();
+    } catch (err) {
+      console.error('Failed to delete schedule:', err);
+    } finally {
+      setScheduleDeletingId(null);
+    }
+  };
+
+  const handleInlinePauseSchedule = async (schedule: AgentSchedule) => {
+    try {
+      await ScheduleService.update(numaPut, schedule.scheduleId, {
+        status: schedule.status === 'active' ? 'paused' : 'active',
+      });
+      await reloadScheduleList();
+    } catch (err) {
+      console.error('Failed to pause/resume schedule:', err);
+    }
+  };
+
+  const handleInlineEditSchedule = (schedule: AgentSchedule) => {
+    setEditingScheduleData(schedule);
+    // Parse existing cron into the form fields
+    const parsed = parseCronExpression(schedule.cronExpression || 'cron(0 9 * * ? *)');
+    setScheduleFrequency(parsed.frequency);
+    setScheduleWeekDays(parsed.weekDays.length ? parsed.weekDays : ['monday']);
+    setScheduleWeeklyWeekNumbers(parsed.weeklyWeekNumbers ?? []);
+    const [h, m] = (parsed.time || '09:00').split(':');
+    setScheduleStartTime(`${(h || '09').padStart(2, '0')}:${(m || '00').padStart(2, '0')}`);
+    if (parsed.onceDate) setScheduleStartDate(parsed.onceDate);
+    if (parsed.customCron) setScheduleCustomCron(parsed.customCron);
+    if (parsed.monthlyDay) setScheduleMonthlyDay(parsed.monthlyDay);
+    if (parsed.monthlyMode) setScheduleMonthlyMode(parsed.monthlyMode);
+    if (parsed.monthlyWeekNumber) setScheduleMonthlyWeekNumber(parsed.monthlyWeekNumber);
+    if (parsed.monthlyWeekDay) setScheduleMonthlyWeekDay(parsed.monthlyWeekDay);
+    if (parsed.monthlyInterval) setScheduleMonthlyInterval(parsed.monthlyInterval);
+    if (parsed.dailyInterval) setScheduleDailyInterval(parsed.dailyInterval);
+    if (parsed.dailyAnchorDay) setScheduleDailyAnchorDay(parsed.dailyAnchorDay);
+    if (parsed.hourInterval) setScheduleHourInterval(parsed.hourInterval);
+    if (parsed.minuteInterval) setScheduleMinuteInterval(parsed.minuteInterval);
+    if (parsed.monthlyAnchorMonth) setScheduleMonthlyAnchorMonth(parsed.monthlyAnchorMonth);
+    setScheduleName(schedule.label || '');
+    setSchedulePrompt(schedule.promptText || '');
+    setScheduleTimezone(schedule.timezone || getDefaultTimezone());
+    setScheduleMaxRuns(schedule.maxRuns ? String(schedule.maxRuns) : '');
+    setScheduleEmailNotifications(schedule.emailNotifications ?? false);
+    setScheduleViewMode('edit');
+  };
+
+  const handleInlineScheduleFormCancel = () => {
+    setScheduleViewMode('list');
+    setEditingScheduleData(null);
+    // Reset form fields
+    setScheduleName('');
+    setSchedulePrompt('');
+    setScheduleFrequency('daily');
+    setScheduleStartTime('09:00');
+    setScheduleMaxRuns('');
+    setScheduleEmailNotifications(false);
+    setScheduleTimezone(getDefaultTimezone());
+  };
+
+  const handleInlineScheduleFormSave = async () => {
+    if (!editingAgent) return;
+    setSaving(true);
+    try {
+      const cronExpression = buildScheduleCronExpression();
+      if (editingScheduleData) {
+        // Update existing schedule
+        await ScheduleService.update(numaPut, editingScheduleData.scheduleId, {
+          promptText: schedulePrompt.trim(),
+          cronExpression,
+          timezone: scheduleTimezone,
+          label: scheduleName.trim() || undefined,
+          maxRuns: scheduleMaxRuns ? parseInt(scheduleMaxRuns, 10) : undefined,
+          emailNotifications: scheduleEmailNotifications,
+        });
+      } else {
+        // Create new schedule
+        const conversationId = `schedule-${editingAgent.agentId}-${Date.now()}`;
+        await ScheduleService.create(numaPost, {
+          agentId: editingAgent.agentId,
+          agentTitle: editingAgent.title,
+          conversationId,
+          promptText: schedulePrompt.trim(),
+          cronExpression,
+          timezone: scheduleTimezone,
+          label: scheduleName.trim() || undefined,
+          maxRuns: scheduleMaxRuns ? parseInt(scheduleMaxRuns, 10) : undefined,
+          emailNotifications: scheduleEmailNotifications,
+          runConfig: {
+            enabledTools: buildScheduleEnabledTools(),
+            enabledConnections: formState.toolsConfig?.enabledConnections,
+            enabledKBIds: formState.toolsConfig?.allowedKnowledgeBases?.filter(Boolean) as string[] | undefined,
+            autoToolsEnabled: formState.toolsConfig?.autoToolsEnabled,
+            webSearchEnabled: formState.toolsConfig?.webSearchEnabled,
+            createAgentEnabled: formState.toolsConfig?.createAgentEnabled,
+          },
+          agentSnapshot: {
+            agentId: editingAgent.agentId,
+            title: editingAgent.title,
+            icon: formState.icon,
+            toolsConfig: formState.toolsConfig,
+            visibility: formState.visibility,
+          },
+        });
+      }
+      await reloadScheduleList();
+      handleInlineScheduleFormCancel();
+    } catch (err) {
+      console.error('Failed to save schedule:', err);
+      setError((err as Error)?.message ?? t('scheduling.errors.update'));
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const handleSave = async (event: React.FormEvent) => {
     event.preventDefault();
     const validation = validateForm();
@@ -547,6 +884,44 @@ export const AgentCreateModal = ({ show, onHide, editingAgent = null, onAgentSav
         saved = await updateAgent(numaPut, editingAgent.agentId, updatePayload);
       } else {
         saved = await createAgent(numaPost, payload);
+      }
+
+      // Create schedule if scheduling is enabled (only for new agents — editing uses the schedule modal)
+      if (scheduleEnabled && schedulingEnabled && !editingAgent) {
+        try {
+          const cronParts = buildScheduleCronExpression();
+          const conversationId = `schedule-${saved.agentId}-${Date.now()}`;
+          await ScheduleService.create(numaPost, {
+            agentId: saved.agentId,
+            agentTitle: saved.title,
+            conversationId,
+            promptText: schedulePrompt.trim(),
+            cronExpression: cronParts,
+            timezone: scheduleTimezone,
+            label: scheduleName.trim() || undefined,
+            maxRuns: scheduleMaxRuns ? parseInt(scheduleMaxRuns, 10) : undefined,
+            emailNotifications: scheduleEmailNotifications,
+            runConfig: {
+              enabledTools: buildScheduleEnabledTools(),
+              enabledConnections: formState.toolsConfig?.enabledConnections,
+              enabledKBIds: formState.toolsConfig?.allowedKnowledgeBases?.filter(Boolean) as string[] | undefined,
+              autoToolsEnabled: formState.toolsConfig?.autoToolsEnabled,
+              webSearchEnabled: formState.toolsConfig?.webSearchEnabled,
+              createAgentEnabled: formState.toolsConfig?.createAgentEnabled,
+            },
+            agentSnapshot: {
+              agentId: saved.agentId,
+              title: saved.title,
+              icon: formState.icon,
+              toolsConfig: formState.toolsConfig,
+              visibility: formState.visibility,
+            },
+          });
+          onScheduleCreated?.();
+        } catch (schedErr) {
+          console.error('AgentCreateModal: schedule creation failed', schedErr);
+          // Agent was saved successfully but schedule failed - still close modal
+        }
       }
 
       onAgentSaved?.(saved);
@@ -1393,6 +1768,475 @@ export const AgentCreateModal = ({ show, onHide, editingAgent = null, onAgentSav
                 </Form.Text>
               </Accordion.Body>
             </Accordion.Item>
+
+            {/* Section 5: Scheduling */}
+            {schedulingEnabled && (
+              <Accordion.Item eventKey="4" className="mb-3 border rounded-3">
+                <Accordion.Header className="bg-light">
+                  <div className="d-flex align-items-center justify-content-between w-100 pe-3">
+                    <div className="d-flex align-items-center gap-2">
+                      <span
+                        className="fw-bold text-uppercase"
+                        style={{ fontSize: '0.85rem', letterSpacing: '0.5px', color: brandPrimaryColor }}
+                      >
+                        <Clock className="me-2" />
+                        {t('createModal.sections.scheduling.title')}
+                      </span>
+                    </div>
+                    {activeAccordionKey !== '4' && scheduleEnabled && (
+                      <span className="badge bg-success">
+                        {editingAgent && scheduleList.length > 0
+                          ? `${scheduleList.filter((s) => s.status === 'active').length} ${t('createModal.scheduling.summary.active').toLowerCase()}`
+                          : t('createModal.scheduling.summary.active')}
+                      </span>
+                    )}
+                  </div>
+                </Accordion.Header>
+                <Accordion.Body className="p-4 bg-light">
+                  {/* Enable toggle */}
+                  <div className="d-flex align-items-center gap-3 mb-2">
+                    <Form.Check
+                      type="switch"
+                      id="schedule-toggle"
+                      checked={scheduleEnabled}
+                      onChange={(e) => {
+                        setScheduleEnabled(e.target.checked);
+                        if (e.target.checked && editingAgent && scheduleList.length === 0) {
+                          setScheduleViewMode('create');
+                        }
+                      }}
+                      disabled={saving}
+                      className="mb-0"
+                    />
+                    <Form.Label htmlFor="schedule-toggle" className="mb-0 fw-medium" style={{ cursor: 'pointer' }}>
+                      {t('createModal.scheduling.toggle.title')}
+                    </Form.Label>
+                  </div>
+                  <Form.Text muted className="d-block mb-3">
+                    {t('createModal.scheduling.toggle.description')}
+                  </Form.Text>
+
+                  {scheduleEnabled && (
+                    <>
+                      {/* --- Editing existing agent: inline schedule management --- */}
+                      {editingAgent && scheduleViewMode === 'list' && (
+                        <>
+                          {scheduleListLoading ? (
+                            <div className="d-flex justify-content-center py-3">
+                              <Spinner animation="border" size="sm" className="me-2" />
+                              <span className="text-muted">{t('scheduling.loading')}</span>
+                            </div>
+                          ) : scheduleList.length === 0 ? (
+                            <div className="text-center py-3 text-muted">{t('createModal.scheduling.list.empty')}</div>
+                          ) : (
+                            <div className="table-responsive mb-3">
+                              <Table hover size="sm">
+                                <thead>
+                                  <tr>
+                                    <th>{t('createModal.scheduling.list.columns.schedule')}</th>
+                                    <th>{t('createModal.scheduling.list.columns.prompt')}</th>
+                                    <th>{t('createModal.scheduling.list.columns.frequency')}</th>
+                                    <th>{t('createModal.scheduling.list.columns.status')}</th>
+                                    <th width="120">{t('createModal.scheduling.list.columns.actions')}</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {scheduleList.map((schedule) => (
+                                    <tr key={schedule.scheduleId}>
+                                      <td>
+                                        <div className="fw-medium small">
+                                          {schedule.label || schedule.scheduleId.slice(0, 8)}
+                                        </div>
+                                      </td>
+                                      <td>
+                                        <div
+                                          className="small"
+                                          style={{
+                                            maxWidth: '180px',
+                                            overflow: 'hidden',
+                                            textOverflow: 'ellipsis',
+                                            whiteSpace: 'nowrap',
+                                          }}
+                                          title={schedule.promptText}
+                                        >
+                                          {schedule.promptText}
+                                        </div>
+                                      </td>
+                                      <td>
+                                        <div className="small">{describeCronExpression(schedule.cronExpression)}</div>
+                                        <small className="text-muted">{schedule.timezone}</small>
+                                      </td>
+                                      <td>
+                                        {isScheduleCompleted(schedule) ? (
+                                          <Badge bg="info">{t('scheduling.status.completed')}</Badge>
+                                        ) : (
+                                          <Badge
+                                            bg={
+                                              schedule.status === 'active'
+                                                ? 'success'
+                                                : schedule.status === 'paused'
+                                                  ? 'warning'
+                                                  : 'secondary'
+                                            }
+                                          >
+                                            {t(`scheduling.status.${schedule.status}`, schedule.status)}
+                                          </Badge>
+                                        )}
+                                      </td>
+                                      <td>
+                                        <div className="d-flex gap-1">
+                                          <OverlayTrigger
+                                            placement="top"
+                                            overlay={
+                                              <Tooltip id={`edit-${schedule.scheduleId}`}>
+                                                {t('scheduling.actions.edit')}
+                                              </Tooltip>
+                                            }
+                                          >
+                                            <Button
+                                              variant="outline-primary"
+                                              size="sm"
+                                              onClick={() => handleInlineEditSchedule(schedule)}
+                                            >
+                                              <i className="bi bi-pencil"></i>
+                                            </Button>
+                                          </OverlayTrigger>
+                                          <OverlayTrigger
+                                            placement="top"
+                                            overlay={
+                                              <Tooltip id={`pause-${schedule.scheduleId}`}>
+                                                {schedule.status === 'active'
+                                                  ? t('scheduling.actions.pause')
+                                                  : t('scheduling.actions.resume')}
+                                              </Tooltip>
+                                            }
+                                          >
+                                            <Button
+                                              variant={
+                                                schedule.status === 'active' ? 'outline-warning' : 'outline-success'
+                                              }
+                                              size="sm"
+                                              onClick={() => handleInlinePauseSchedule(schedule)}
+                                            >
+                                              <i
+                                                className={`bi bi-${schedule.status === 'active' ? 'pause' : 'play'}`}
+                                              ></i>
+                                            </Button>
+                                          </OverlayTrigger>
+                                          <OverlayTrigger
+                                            placement="top"
+                                            overlay={
+                                              <Tooltip id={`del-${schedule.scheduleId}`}>
+                                                {t('scheduling.actions.delete')}
+                                              </Tooltip>
+                                            }
+                                          >
+                                            <Button
+                                              variant="outline-danger"
+                                              size="sm"
+                                              onClick={() => handleInlineDeleteSchedule(schedule)}
+                                              disabled={scheduleDeletingId === schedule.scheduleId}
+                                            >
+                                              {scheduleDeletingId === schedule.scheduleId ? (
+                                                <Spinner animation="border" size="sm" />
+                                              ) : (
+                                                <i className="bi bi-trash"></i>
+                                              )}
+                                            </Button>
+                                          </OverlayTrigger>
+                                        </div>
+                                      </td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </Table>
+                            </div>
+                          )}
+                          <Button
+                            variant="primary"
+                            size="sm"
+                            className="mt-2"
+                            style={{ backgroundColor: brandPrimaryColor, borderColor: brandPrimaryColor }}
+                            onClick={() => {
+                              handleInlineScheduleFormCancel();
+                              setScheduleViewMode('create');
+                            }}
+                          >
+                            <i className="bi bi-plus-circle me-2"></i>
+                            {t('createModal.scheduling.list.addNew')}
+                          </Button>
+                        </>
+                      )}
+
+                      {/* --- Editing existing agent: create/edit form --- */}
+                      {editingAgent && (scheduleViewMode === 'create' || scheduleViewMode === 'edit') && (
+                        <>
+                          <h6 className="fw-semibold mb-3">
+                            {scheduleViewMode === 'edit'
+                              ? t('createModal.scheduling.form.editTitle')
+                              : t('createModal.scheduling.form.createTitle')}
+                          </h6>
+
+                          {/* Schedule name */}
+                          <div className="mb-3">
+                            <Form.Label>{t('createModal.scheduling.taskName.label')}</Form.Label>
+                            <Form.Control
+                              type="text"
+                              value={scheduleName}
+                              onChange={(e) => setScheduleName(e.target.value)}
+                              placeholder={t('createModal.scheduling.taskName.placeholder')}
+                              disabled={saving}
+                            />
+                          </div>
+
+                          {/* Schedule prompt */}
+                          <div className="mb-3">
+                            <Form.Label>{t('createModal.scheduling.prompt.label')}</Form.Label>
+                            <Form.Control
+                              as="textarea"
+                              rows={3}
+                              value={schedulePrompt}
+                              onChange={(e) => setSchedulePrompt(e.target.value)}
+                              placeholder={t('createModal.scheduling.prompt.placeholder')}
+                              disabled={saving}
+                            />
+                            <Form.Text muted>{t('createModal.scheduling.prompt.help')}</Form.Text>
+                          </div>
+
+                          {/* Cron expression builder */}
+                          <div className="mb-3">
+                            <CronExpressionBuilder
+                              frequency={scheduleFrequency}
+                              onFrequencyChange={setScheduleFrequency}
+                              startDate={scheduleStartDate}
+                              onStartDateChange={handleScheduleStartDateChange}
+                              startTime={scheduleStartTime}
+                              onStartTimeChange={setScheduleStartTime}
+                              weekDays={scheduleWeekDays}
+                              onWeekDaysChange={setScheduleWeekDays}
+                              monthlyDay={scheduleMonthlyDay}
+                              onMonthlyDayChange={setScheduleMonthlyDay}
+                              hourInterval={scheduleHourInterval}
+                              onHourIntervalChange={setScheduleHourInterval}
+                              minuteInterval={scheduleMinuteInterval}
+                              onMinuteIntervalChange={setScheduleMinuteInterval}
+                              timezoneLabel={scheduleTimezoneDisplay}
+                              customCron={scheduleCustomCron}
+                              onCustomCronChange={setScheduleCustomCron}
+                              submitting={saving}
+                              weeklyWeekNumbers={scheduleWeeklyWeekNumbers}
+                              onWeeklyWeekNumbersChange={setScheduleWeeklyWeekNumbers}
+                              dailyInterval={scheduleDailyInterval}
+                              onDailyIntervalChange={setScheduleDailyInterval}
+                              monthlyMode={scheduleMonthlyMode}
+                              onMonthlyModeChange={setScheduleMonthlyMode}
+                              monthlyWeekNumber={scheduleMonthlyWeekNumber}
+                              onMonthlyWeekNumberChange={setScheduleMonthlyWeekNumber}
+                              monthlyWeekDay={scheduleMonthlyWeekDay}
+                              onMonthlyWeekDayChange={setScheduleMonthlyWeekDay}
+                              monthlyInterval={scheduleMonthlyInterval}
+                              onMonthlyIntervalChange={setScheduleMonthlyInterval}
+                            />
+                          </div>
+
+                          {/* Timezone selector */}
+                          <div className="mb-3">
+                            <Form.Label>{t('scheduling.fields.timezone.label')}</Form.Label>
+                            <Form.Select
+                              value={scheduleTimezone}
+                              onChange={(e) => setScheduleTimezone(e.target.value)}
+                              disabled={saving}
+                            >
+                              {getAllTimezones().map((tz) => (
+                                <option key={tz.value} value={tz.value}>
+                                  {tz.label}
+                                </option>
+                              ))}
+                            </Form.Select>
+                          </div>
+
+                          {/* Max runs */}
+                          <div className="mb-3">
+                            <Form.Label>{t('createModal.scheduling.maxRuns.label')}</Form.Label>
+                            <Form.Control
+                              type="number"
+                              min={1}
+                              value={scheduleMaxRuns}
+                              onChange={(e) => setScheduleMaxRuns(e.target.value)}
+                              placeholder={t('createModal.scheduling.maxRuns.placeholder')}
+                              disabled={saving}
+                            />
+                            <Form.Text muted>{t('createModal.scheduling.maxRuns.help')}</Form.Text>
+                          </div>
+
+                          {/* Email notifications (coming soon) */}
+                          <div className="mb-3">
+                            <Form.Check
+                              type="switch"
+                              id="schedule-email-toggle-inline"
+                              label={
+                                <>
+                                  {t('createModal.scheduling.emailNotifications.label')}{' '}
+                                  <span className="badge bg-secondary ms-1">
+                                    {t('createModal.scheduling.emailNotifications.comingSoon')}
+                                  </span>
+                                </>
+                              }
+                              checked={scheduleEmailNotifications}
+                              onChange={(e) => setScheduleEmailNotifications(e.target.checked)}
+                              disabled={true}
+                            />
+                            <Form.Text muted className="d-block">
+                              {t('createModal.scheduling.emailNotifications.description')}
+                            </Form.Text>
+                          </div>
+
+                          {/* Save / Cancel buttons */}
+                          <div className="d-flex gap-2 mt-3">
+                            <Button
+                              variant="primary"
+                              size="sm"
+                              onClick={handleInlineScheduleFormSave}
+                              disabled={saving}
+                            >
+                              {saving ? <Spinner animation="border" size="sm" className="me-1" /> : null}
+                              {t('createModal.scheduling.form.save')}
+                            </Button>
+                            <Button
+                              variant="secondary"
+                              size="sm"
+                              onClick={handleInlineScheduleFormCancel}
+                              disabled={saving}
+                            >
+                              {t('createModal.scheduling.form.cancel')}
+                            </Button>
+                          </div>
+                        </>
+                      )}
+
+                      {/* --- Creating new agent: original form (no list view) --- */}
+                      {!editingAgent && (
+                        <>
+                          {/* Schedule name */}
+                          <div className="mb-3">
+                            <Form.Label>{t('createModal.scheduling.taskName.label')}</Form.Label>
+                            <Form.Control
+                              type="text"
+                              value={scheduleName}
+                              onChange={(e) => setScheduleName(e.target.value)}
+                              placeholder={t('createModal.scheduling.taskName.placeholder')}
+                              disabled={saving}
+                            />
+                          </div>
+
+                          {/* Schedule prompt */}
+                          <div className="mb-3">
+                            <Form.Label>{t('createModal.scheduling.prompt.label')}</Form.Label>
+                            <Form.Control
+                              as="textarea"
+                              rows={3}
+                              value={schedulePrompt}
+                              onChange={(e) => setSchedulePrompt(e.target.value)}
+                              placeholder={t('createModal.scheduling.prompt.placeholder')}
+                              disabled={saving}
+                            />
+                            <Form.Text muted>{t('createModal.scheduling.prompt.help')}</Form.Text>
+                          </div>
+
+                          {/* Cron expression builder */}
+                          <div className="mb-3">
+                            <CronExpressionBuilder
+                              frequency={scheduleFrequency}
+                              onFrequencyChange={setScheduleFrequency}
+                              startDate={scheduleStartDate}
+                              onStartDateChange={handleScheduleStartDateChange}
+                              startTime={scheduleStartTime}
+                              onStartTimeChange={setScheduleStartTime}
+                              weekDays={scheduleWeekDays}
+                              onWeekDaysChange={setScheduleWeekDays}
+                              monthlyDay={scheduleMonthlyDay}
+                              onMonthlyDayChange={setScheduleMonthlyDay}
+                              hourInterval={scheduleHourInterval}
+                              onHourIntervalChange={setScheduleHourInterval}
+                              minuteInterval={scheduleMinuteInterval}
+                              onMinuteIntervalChange={setScheduleMinuteInterval}
+                              timezoneLabel={scheduleTimezoneDisplay}
+                              customCron={scheduleCustomCron}
+                              onCustomCronChange={setScheduleCustomCron}
+                              submitting={saving}
+                              weeklyWeekNumbers={scheduleWeeklyWeekNumbers}
+                              onWeeklyWeekNumbersChange={setScheduleWeeklyWeekNumbers}
+                              dailyInterval={scheduleDailyInterval}
+                              onDailyIntervalChange={setScheduleDailyInterval}
+                              monthlyMode={scheduleMonthlyMode}
+                              onMonthlyModeChange={setScheduleMonthlyMode}
+                              monthlyWeekNumber={scheduleMonthlyWeekNumber}
+                              onMonthlyWeekNumberChange={setScheduleMonthlyWeekNumber}
+                              monthlyWeekDay={scheduleMonthlyWeekDay}
+                              onMonthlyWeekDayChange={setScheduleMonthlyWeekDay}
+                              monthlyInterval={scheduleMonthlyInterval}
+                              onMonthlyIntervalChange={setScheduleMonthlyInterval}
+                            />
+                          </div>
+
+                          {/* Timezone selector */}
+                          <div className="mb-3">
+                            <Form.Label>{t('scheduling.fields.timezone.label')}</Form.Label>
+                            <Form.Select
+                              value={scheduleTimezone}
+                              onChange={(e) => setScheduleTimezone(e.target.value)}
+                              disabled={saving}
+                            >
+                              {getAllTimezones().map((tz) => (
+                                <option key={tz.value} value={tz.value}>
+                                  {tz.label}
+                                </option>
+                              ))}
+                            </Form.Select>
+                          </div>
+
+                          {/* Max runs */}
+                          <div className="mb-3">
+                            <Form.Label>{t('createModal.scheduling.maxRuns.label')}</Form.Label>
+                            <Form.Control
+                              type="number"
+                              min={1}
+                              value={scheduleMaxRuns}
+                              onChange={(e) => setScheduleMaxRuns(e.target.value)}
+                              placeholder={t('createModal.scheduling.maxRuns.placeholder')}
+                              disabled={saving}
+                            />
+                            <Form.Text muted>{t('createModal.scheduling.maxRuns.help')}</Form.Text>
+                          </div>
+
+                          {/* Email notifications (coming soon) */}
+                          <div className="mb-2">
+                            <Form.Check
+                              type="switch"
+                              id="schedule-email-toggle"
+                              label={
+                                <>
+                                  {t('createModal.scheduling.emailNotifications.label')}{' '}
+                                  <span className="badge bg-secondary ms-1">
+                                    {t('createModal.scheduling.emailNotifications.comingSoon')}
+                                  </span>
+                                </>
+                              }
+                              checked={scheduleEmailNotifications}
+                              onChange={(e) => setScheduleEmailNotifications(e.target.checked)}
+                              disabled={true}
+                            />
+                            <Form.Text muted className="d-block">
+                              {t('createModal.scheduling.emailNotifications.description')}
+                            </Form.Text>
+                          </div>
+                        </>
+                      )}
+                    </>
+                  )}
+                </Accordion.Body>
+              </Accordion.Item>
+            )}
           </Accordion>
 
           {/* Footer Info */}

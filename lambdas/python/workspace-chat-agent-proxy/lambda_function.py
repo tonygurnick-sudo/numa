@@ -1,3 +1,4 @@
+# pylint: disable=too-many-lines
 """
 Workspace Chat Agent Proxy Lambda
 
@@ -49,6 +50,7 @@ COGNITO_USER_POOL_ID = os.environ.get("COGNITO_USER_POOL_ID", "")
 COGNITO_CLIENT_ID = os.environ.get("COGNITO_CLIENT_ID", "")
 FILE_REDIRECT_SECRET = os.environ.get("FILE_REDIRECT_SECRET", "")
 OUTPUTS_BUCKET_NAME = os.environ.get("OUTPUTS_BUCKET_NAME", "")
+SCHEDULE_RUNNER_SECRET = os.environ.get("SCHEDULE_RUNNER_SECRET", "")
 
 # JWKS cache (persists across warm Lambda invocations)
 _jwks_cache: Dict[str, Any] = {"data": None}
@@ -231,19 +233,45 @@ def _verify_jwt_token(token: str) -> Dict[str, Any]:
     return payload
 
 
-def extract_user_sub(authorization: str | None) -> str:
-    """Extract and VERIFY user_sub from JWT token.
+def extract_user_sub(
+    authorization: str | None, schedule_runner_sub: str | None = None
+) -> str:
+    """Extract and VERIFY user_sub from JWT token or schedule runner secret.
 
     Security: This function validates JWT signatures against Cognito JWKS.
     Previously, JWTs were decoded without verification, allowing token forgery.
+
+    For scheduled agent runs, the schedule runner Lambda authenticates with the
+    SCHEDULE_RUNNER_SECRET as a bearer token and passes the user's sub via the
+    x-schedule-runner-sub header. This avoids needing a Cognito JWT for
+    server-to-server calls.
     """
     if not authorization:
         raise HTTPException(status_code=401, detail="Authorization header required")
 
+    # Check for schedule runner authentication (server-to-server calls)
+    token = (
+        authorization.replace("Bearer ", "")
+        if authorization.startswith("Bearer ")
+        else authorization
+    )
+    if SCHEDULE_RUNNER_SECRET and hmac_mod.compare_digest(
+        token, SCHEDULE_RUNNER_SECRET
+    ):
+        if not schedule_runner_sub:
+            raise HTTPException(
+                status_code=400,
+                detail="x-schedule-runner-sub header required for schedule runner auth",
+            )
+        logger.info(
+            "Schedule runner auth verified, sub=%s...",
+            schedule_runner_sub[:8] if schedule_runner_sub else None,
+        )
+        return schedule_runner_sub
+
     if not COGNITO_USER_POOL_ID:
         # Dev mode: fall back to unverified (log warning)
         logger.warning("COGNITO_USER_POOL_ID not set - JWT verification DISABLED")
-        token = authorization.replace("Bearer ", "")
         try:
             decoded = jwt.decode(token, options={"verify_signature": False})
             return decoded.get("sub", "anonymous")
@@ -456,15 +484,22 @@ async def invocations(
     x_arcanum_cloudfront_secret: str | None = Header(
         None, alias="x-arcanum-cloudfront-secret"
     ),
+    x_schedule_runner_sub: str | None = Header(None, alias="x-schedule-runner-sub"),
 ):
     """
     Forward invocation to AgentCore runtime.
 
     This is the main entry point for chat and other actions.
     Supports streaming responses for chat actions.
+
+    For scheduled agent runs, the schedule runner Lambda authenticates with the
+    SCHEDULE_RUNNER_SECRET as bearer token and passes the user sub via
+    x-schedule-runner-sub header.
     """
     validate_cloudfront_secret(x_arcanum_cloudfront_secret, authorization)
-    user_sub = extract_user_sub(authorization)
+    user_sub = extract_user_sub(
+        authorization, schedule_runner_sub=x_schedule_runner_sub
+    )
 
     # Parse request body
     try:

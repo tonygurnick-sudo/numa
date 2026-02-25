@@ -651,6 +651,7 @@ async def stream_claude_sdk(
                             # Determine if this tool call should be auto-approved
                             # based on the resolved approval_mode.
                             auto_approved = False
+                            schema_found = False
                             if approval_mode == "never":
                                 auto_approved = True
                             elif approval_mode == "non_destructive":
@@ -665,7 +666,8 @@ async def stream_claude_sdk(
                                         / integration_slug
                                         / f"{_approval_key}.json"
                                     )
-                                    if schema_path.exists():
+                                    schema_found = schema_path.exists()
+                                    if schema_found:
                                         schema_data = json.loads(
                                             schema_path.read_text(encoding="utf-8")
                                         )
@@ -697,6 +699,18 @@ async def stream_claude_sdk(
                                     )
                                 else:
                                     auto_approved = False
+
+                            logger.info(
+                                "Integration tool approval decision",
+                                _name="APPROVAL_DECISION",
+                                phase="integrations",
+                                tool_name=block.name,
+                                action_key=_approval_key,
+                                integration_slug=integration_slug,
+                                approval_mode=approval_mode,
+                                auto_approved=auto_approved,
+                                schema_found=schema_found,
+                            )
 
                             # Set NUMA_APPROVAL_MODE env var so the tools Lambda
                             # knows whether to skip DynamoDB polling.
@@ -946,6 +960,10 @@ async def run_claude_sdk(
         v1_migration_context,
     )
 
+    # 3b. Default approval mode env var — overridden per tool call in the
+    # message loop below (same as the streaming path in stream_claude_sdk).
+    os.environ["NUMA_APPROVAL_MODE"] = "manual"
+
     # 4. Create SDK options
     validated_model = validate_model_id(model_id)
     options = create_agent_options(
@@ -1031,6 +1049,105 @@ async def run_claude_sdk(
                                     block.content,
                                     block.is_error,
                                 )
+
+                # Per-tool-call approval mode for integration tools.
+                # Identical to stream_claude_sdk: checks approval_mode and
+                # schema annotations, sets NUMA_APPROVAL_MODE env var, and
+                # generates NUMA_REQUEST_ID_MAP entries.
+                APPROVAL_REQUIRED_TOOLS = ("run_action", "proxy_request")
+                if isinstance(message, AssistantMessage):
+                    for block in message.content:
+                        if isinstance(block, ToolUseBlock) and any(
+                            t in block.name for t in APPROVAL_REQUIRED_TOOLS
+                        ):
+                            tool_input = (
+                                block.input if isinstance(block.input, dict) else {}
+                            )
+                            action_key = tool_input.get("action_key", "")
+                            integration_slug = tool_input.get("integration_slug") or (
+                                action_key.split("-")[0] if action_key else ""
+                            )
+                            if (
+                                enabled_integrations
+                                and integration_slug
+                                and integration_slug not in enabled_integrations
+                            ):
+                                continue
+
+                            _approval_key = (
+                                action_key
+                                or f"{integration_slug}-{tool_input.get('method', 'request')}"
+                            )
+
+                            # Determine if this tool call should be auto-approved
+                            # based on the resolved approval_mode.
+                            auto_approved = False
+                            if approval_mode == "never":
+                                auto_approved = True
+                            elif approval_mode == "non_destructive":
+                                schema_annotations = {}
+                                try:
+                                    schema_path = (
+                                        Path("/workdir/tools/integrations")
+                                        / integration_slug
+                                        / f"{_approval_key}.json"
+                                    )
+                                    if schema_path.exists():
+                                        schema_data = json.loads(
+                                            schema_path.read_text(encoding="utf-8")
+                                        )
+                                        schema_annotations = schema_data.get(
+                                            "annotations", {}
+                                        )
+                                except Exception as exc:
+                                    logger.debug(
+                                        "Could not read action schema for approval check",
+                                        action_key=_approval_key,
+                                        error=str(exc),
+                                    )
+                                if isinstance(schema_annotations, dict):
+                                    read_only = schema_annotations.get(
+                                        "readOnlyHint", False
+                                    )
+                                    is_draft = "draft" in _approval_key.lower()
+                                    non_destructive = not schema_annotations.get(
+                                        "destructiveHint", True
+                                    )
+                                    auto_approved = bool(
+                                        read_only or (is_draft and non_destructive)
+                                    )
+                                else:
+                                    auto_approved = False
+
+                            # Set NUMA_APPROVAL_MODE env var so the tools Lambda
+                            # knows whether to skip DynamoDB polling.
+                            os.environ["NUMA_APPROVAL_MODE"] = (
+                                "auto" if auto_approved else "manual"
+                            )
+
+                            # Generate a per-tool-call approval ID and store in
+                            # NUMA_REQUEST_ID_MAP (JSON dict of action_key → list
+                            # of IDs). Each parallel tool pops its ID from the
+                            # list in FIFO order.
+                            approval_id = str(uuid_mod.uuid4())
+                            try:
+                                _id_map = json.loads(
+                                    os.environ.get("NUMA_REQUEST_ID_MAP", "{}")
+                                )
+                            except (json.JSONDecodeError, TypeError):
+                                _id_map = {}
+                            _id_map.setdefault(_approval_key, []).append(approval_id)
+                            os.environ["NUMA_REQUEST_ID_MAP"] = json.dumps(_id_map)
+
+                            logger.info(
+                                "Non-streaming approval check",
+                                _name="SYNC_APPROVAL_CHECK",
+                                tool_name=block.name,
+                                action_key=_approval_key,
+                                auto_approved=auto_approved,
+                                approval_mode=approval_mode,
+                                request_id=approval_id,
+                            )
 
                 # Serialize and write to trace
                 serialized = serialize_message(message)

@@ -48,7 +48,8 @@
     "schedules": {
       "active": "Has active schedules",
       "manage": "Manage schedules",
-      "create": "Schedule runs"
+      "create": "Turn on scheduling",
+      "badge": "Scheduled"
     }
   },
   "iconPicker": {
@@ -108,6 +109,9 @@
       },
       "referenceFiles": {
         "title": "Reference files"
+      },
+      "scheduling": {
+        "title": "Scheduling"
       }
     },
     "setup": {
@@ -185,6 +189,56 @@
       "always": "Always require approval",
       "nonDestructive": "Auto-approve safe actions",
       "never": "Auto-approve all actions"
+    },
+    "scheduling": {
+      "toggle": {
+        "title": "Enable scheduled runs",
+        "description": "Run this agent automatically on a schedule."
+      },
+      "prompt": {
+        "label": "Scheduled prompt",
+        "placeholder": "Enter the prompt that will be sent to the agent on each scheduled run.",
+        "help": "This prompt is sent to the agent every time the schedule fires."
+      },
+      "taskName": {
+        "label": "Schedule name",
+        "placeholder": "e.g., Daily report check"
+      },
+      "maxRuns": {
+        "label": "Max total runs",
+        "placeholder": "Unlimited",
+        "help": "Stop this schedule after this many runs. Leave blank for unlimited."
+      },
+      "emailNotifications": {
+        "label": "Email notifications",
+        "description": "Receive an email summary after each scheduled run.",
+        "comingSoon": "Coming soon"
+      },
+      "summary": {
+        "active": "Active",
+        "paused": "Paused",
+        "runsCompleted": "{{completed}} / {{max}} runs completed",
+        "runsUnlimited": "Unlimited runs"
+      },
+      "list": {
+        "title": "Active Schedules",
+        "empty": "No schedules yet. Toggle on to create one.",
+        "addNew": "Add Schedule",
+        "columns": {
+          "schedule": "Schedule",
+          "prompt": "Prompt",
+          "frequency": "Frequency",
+          "status": "Status",
+          "actions": "Actions"
+        }
+      },
+      "form": {
+        "cancel": "Cancel",
+        "save": "Save Schedule",
+        "editTitle": "Edit Schedule",
+        "createTitle": "New Schedule"
+      },
+      "confirmDeleteInline": "Delete schedule \"{{label}}\"?"
     },
     "referenceFiles": {
       "count": "{{count}} files",
@@ -290,6 +344,15 @@
       "personal": "Personal",
       "company": "Company"
     },
+    "upcomingSchedules": {
+      "title": "Upcoming Schedules",
+      "subtitle": "Active scheduled agent runs",
+      "noSchedules": "No active schedules",
+      "viewAll": "View All",
+      "nextRun": "Next run",
+      "runsCompleted": "{{completed}}/{{max}} runs",
+      "atTime": "{{agent}} at {{time}}"
+    },
     "disabled": {
       "title": "Agents are not enabled for your company",
       "description": "Create agents to automate tasks, standardize workflows, and reuse expert setups across your team. Contact your account administrator to request access.",
@@ -359,7 +422,8 @@
       "active": "Active",
       "inactive": "Inactive",
       "paused": "Paused",
-      "deleted": "Deleted"
+      "deleted": "Deleted",
+      "completed": "Completed"
     },
     "actions": {
       "cancel": "Cancel",
@@ -608,6 +672,12 @@
         "status": "Status",
         "timezone": "Timezone",
         "actions": "Actions"
+      },
+      "runHistory": {
+        "expand": "Expand run history",
+        "title": "Recent Runs",
+        "noRuns": "No run history yet",
+        "viewAll": "View full history"
       }
     },
     "delete": {
@@ -662,18 +732,36 @@
           "runId": "Run ID",
           "started": "Started",
           "completed": "Completed",
+          "duration": "Duration",
           "status": "Status"
         },
         "placeholder": "-",
         "status": {
           "error": "Error",
           "failed": "Failed",
-          "completed": "Completed"
+          "completed": "Completed",
+          "partial": "Partial",
+          "success": "Success"
         },
         "loadingDetails": "Loading run details...",
         "noContent": "No content",
         "noMessages": "No messages in this run",
-        "clickToLoad": "Click to load run details"
+        "showMessages": "Conversation ({{count}} messages)",
+        "clickToLoad": "Click to load run details",
+        "agentStatus": {
+          "title": "Agent Report",
+          "summary": "Summary",
+          "artifacts": "Files created",
+          "errors": "Errors",
+          "warnings": "Warnings"
+        },
+        "stats": {
+          "total": "{{count}} runs",
+          "success": "{{count}} succeeded",
+          "partial": "{{count}} partial",
+          "failed": "{{count}} failed",
+          "successRate": "success rate"
+        }
       }
     },
     "calendar": {

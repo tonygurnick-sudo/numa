@@ -28,6 +28,9 @@ export type AgentSchedule = {
   lastRunConversationId?: string;
   lastRunS3Key?: string;
   runConfig?: ScheduledRunConfig;
+  maxRuns?: number;
+  totalRuns?: number;
+  emailNotifications?: boolean;
 };
 
 import type { AgentToolsConfig } from './agents';
@@ -55,6 +58,8 @@ export type CreateAgentSchedulePayload = {
   label?: string;
   runConfig?: ScheduledRunConfig;
   agentSnapshot?: AgentScheduleSnapshot;
+  maxRuns?: number;
+  emailNotifications?: boolean;
 };
 
 export type UpdateAgentSchedulePayload = {
@@ -64,4 +69,6 @@ export type UpdateAgentSchedulePayload = {
   label?: string;
   status?: 'active' | 'paused' | 'deleted';
   runConfig?: ScheduledRunConfig;
+  maxRuns?: number;
+  emailNotifications?: boolean;
 };

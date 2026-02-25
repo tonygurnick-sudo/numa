@@ -15,15 +15,20 @@ import {
   Dropdown,
 } from 'react-bootstrap';
 import { useNavigate } from 'react-router-dom';
-import { Search, ChevronDown, Check, RefreshCw } from 'lucide-react';
+import { Search, ChevronDown, ChevronRight, Check, RefreshCw } from 'lucide-react';
 import { PageHeader } from '../Components/PageHeader';
 import { StickyToolbar } from '../Components/StickyToolbar';
 import { LayoutDashboard } from '../Layouts/LayoutDashboard';
 import { ScheduleService } from '../Services/ScheduleService';
 import type { AgentSchedule } from '../types/agentSchedules';
+import type { RunHistoryItem, ScheduledRunLog } from '../types/scheduledRuns';
 import { AgentScheduleModal } from '../Components/Agents/AgentScheduleModal';
+import { RunHistoryExpandedRow } from '../Components/Scheduling/RunHistoryExpandedRow';
 import { useNumaRequest } from '../Providers/NumaRequestContext';
+import { useAuth } from '../Providers/AuthProvider';
 import { getNextRunTimes, describeCronExpression } from '../utils/cronUtils';
+import { listObjectsInFolder, fetchFileFromS3, downloadFileFromS3 } from '../utils/s3Utils';
+import { jwtDecode } from 'jwt-decode';
 import { useTranslation } from 'react-i18next';
 
 const getStatusBadgeVariant = (status: string) => {
@@ -109,10 +114,34 @@ const getDerivedStatus = (schedule: ScheduleWithNextRun) => {
   return schedule.status;
 };
 
+const formatDuration = (startedAt?: string, completedAt?: string): string | null => {
+  if (!startedAt || !completedAt) return null;
+  const ms = Date.parse(completedAt) - Date.parse(startedAt);
+  if (Number.isNaN(ms) || ms < 0) return null;
+  const totalSec = Math.floor(ms / 1000);
+  if (totalSec < 60) return `${totalSec}s`;
+  const mins = Math.floor(totalSec / 60);
+  const secs = totalSec % 60;
+  if (mins < 60) return secs > 0 ? `${mins}m ${secs}s` : `${mins}m`;
+  const hrs = Math.floor(mins / 60);
+  const remMins = mins % 60;
+  return remMins > 0 ? `${hrs}h ${remMins}m` : `${hrs}h`;
+};
+
+const getRunSortTime = (run: RunHistoryItem): number => {
+  const fromLog = run.log?.completedAt || run.log?.startedAt;
+  if (fromLog) {
+    const parsed = Date.parse(fromLog);
+    if (!Number.isNaN(parsed)) return parsed;
+  }
+  return run.timestamp?.getTime?.() ?? 0;
+};
+
 export const SchedulingPage: React.FC = () => {
   const navigate = useNavigate();
   const { t } = useTranslation('agents');
   const { numaGet, numaPut, numaDelete } = useNumaRequest();
+  const { getCredentials, region: authRegion, getAccessToken } = useAuth();
   const [schedules, setSchedules] = useState<AgentSchedule[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -128,6 +157,18 @@ export const SchedulingPage: React.FC = () => {
   const [sortField, setSortField] = useState<SortField | null>(null);
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
   const [showDebugIds, setShowDebugIds] = useState(false);
+
+  // Run history expansion state
+  const [expandedScheduleId, setExpandedScheduleId] = useState<string | null>(null);
+  const [runHistoryBySchedule, setRunHistoryBySchedule] = useState<Record<string, RunHistoryItem[]>>({});
+  const [runHistoryLoading, setRunHistoryLoading] = useState<Record<string, boolean>>({});
+
+  const outputsBucket = useMemo(() => {
+    if (typeof window === 'undefined') return null;
+    return window.sessionStorage.getItem('OUTPUTS_BUCKET_NAME');
+  }, []);
+
+  const region = authRegion || (typeof window !== 'undefined' ? window.sessionStorage.getItem('REGION') : null);
 
   const loadSchedules = useCallback(async () => {
     try {
@@ -225,6 +266,126 @@ export const SchedulingPage: React.FC = () => {
     setShowDeleteConfirm(false);
     setScheduleToDelete(null);
   }, []);
+
+  // --- Run history helpers ---
+
+  const extractUserIdFromS3Key = useCallback((s3Key: string | undefined): string | null => {
+    if (!s3Key) return null;
+    const parts = s3Key.split('/');
+    if (parts.length >= 4 && parts[0] === 'numa-chat' && parts[1] === 'scheduled-runs') {
+      return parts[2];
+    }
+    return null;
+  }, []);
+
+  const getUserIdFromToken = useCallback(async (): Promise<string | null> => {
+    try {
+      const accessToken = await getAccessToken();
+      if (accessToken) {
+        const decoded = jwtDecode<{ sub?: string }>(accessToken);
+        if (decoded.sub) return decoded.sub;
+      }
+    } catch {
+      // Fall through
+    }
+    try {
+      const idToken = localStorage.getItem('idToken');
+      if (idToken) {
+        const decoded = jwtDecode<{ sub?: string }>(idToken);
+        return decoded.sub ?? null;
+      }
+    } catch {
+      // Give up
+    }
+    return null;
+  }, [getAccessToken]);
+
+  const handleDownloadArtifact = useCallback(
+    async (conversationId: string, userId: string, filename: string) => {
+      if (!outputsBucket || !region || !getCredentials) return;
+      const s3Key = `numa-chat/workspace/${userId}/conversations/${conversationId}/session/${filename}`;
+      try {
+        await downloadFileFromS3(s3Key, outputsBucket, region, getCredentials, filename);
+      } catch (err) {
+        console.error('Failed to download artifact:', err);
+      }
+    },
+    [outputsBucket, region, getCredentials],
+  );
+
+  const loadRunHistoryForSchedule = useCallback(
+    async (schedule: AgentSchedule) => {
+      if (!outputsBucket || !region || !getCredentials) return;
+
+      setRunHistoryLoading((prev) => ({ ...prev, [schedule.scheduleId]: true }));
+
+      try {
+        let userId = extractUserIdFromS3Key(schedule.lastRunS3Key);
+        if (!userId) {
+          userId = await getUserIdFromToken();
+        }
+        if (!userId) {
+          setRunHistoryLoading((prev) => ({ ...prev, [schedule.scheduleId]: false }));
+          return;
+        }
+
+        const prefix = `numa-chat/scheduled-runs/${userId}/${schedule.scheduleId}/`;
+        const keys = await listObjectsInFolder(prefix, outputsBucket, region, getCredentials);
+
+        const runs: RunHistoryItem[] = keys
+          .filter((key) => key && key.endsWith('.json'))
+          .map((key) => ({
+            runId: key.split('/').pop()?.replace('.json', '') ?? '',
+            s3Key: key,
+            timestamp: new Date(0),
+          }));
+
+        // Batch-load logs for all runs (up to 10 most recent)
+        const toLoad = runs.slice(0, 5);
+        const loaded = await Promise.all(
+          toLoad.map(async (run) => {
+            try {
+              const blob = await fetchFileFromS3(run.s3Key, outputsBucket, region, getCredentials);
+              const text = await blob.text();
+              const log = JSON.parse(text) as ScheduledRunLog;
+              return {
+                ...run,
+                log,
+                timestamp: log.startedAt ? new Date(log.startedAt) : run.timestamp,
+              };
+            } catch {
+              return { ...run, error: t('scheduling.errors.loadRunLog') };
+            }
+          }),
+        );
+
+        // Sort newest first
+        loaded.sort((a, b) => getRunSortTime(b) - getRunSortTime(a));
+        setRunHistoryBySchedule((prev) => ({ ...prev, [schedule.scheduleId]: loaded }));
+      } catch (err) {
+        console.error('Failed to load run history:', err);
+      } finally {
+        setRunHistoryLoading((prev) => ({ ...prev, [schedule.scheduleId]: false }));
+      }
+    },
+    [outputsBucket, region, getCredentials, extractUserIdFromS3Key, getUserIdFromToken, fetchFileFromS3, t],
+  );
+
+  const handleToggleScheduleExpand = useCallback(
+    (e: React.MouseEvent, schedule: AgentSchedule) => {
+      e.stopPropagation();
+      const id = schedule.scheduleId;
+      if (expandedScheduleId === id) {
+        setExpandedScheduleId(null);
+      } else {
+        setExpandedScheduleId(id);
+        if (!runHistoryBySchedule[id] && !runHistoryLoading[id]) {
+          loadRunHistoryForSchedule(schedule);
+        }
+      }
+    },
+    [expandedScheduleId, runHistoryBySchedule, runHistoryLoading, loadRunHistoryForSchedule],
+  );
 
   // Compute next run for each schedule
   const schedulesWithNextRun = useMemo<ScheduleWithNextRun[]>(() => {
@@ -536,6 +697,7 @@ export const SchedulingPage: React.FC = () => {
                       <Table hover className="mb-0 file-table auto-layout scheduling-table">
                         <thead className="sticky-table-header numa-table-header">
                           <tr>
+                            <th style={{ width: '2.5rem' }} aria-label={t('scheduling.page.runHistory.expand')}></th>
                             <th onClick={() => handleSort('name')} className="sortable-header">
                               {t('scheduling.page.columns.name')}{' '}
                               {sortField === 'name' && (
@@ -584,102 +746,226 @@ export const SchedulingPage: React.FC = () => {
                         <tbody>
                           {sortedSchedules.map((schedule) => {
                             const derivedStatus = getDerivedStatus(schedule);
+                            const isExpanded = expandedScheduleId === schedule.scheduleId;
+                            const runs = runHistoryBySchedule[schedule.scheduleId] ?? [];
+                            const isLoadingRuns = runHistoryLoading[schedule.scheduleId] ?? false;
                             return (
-                              <tr
-                                key={schedule.scheduleId}
-                                onClick={() => handleScheduleClick(schedule)}
-                                className="scheduling-table-row"
-                              >
-                                <td>
-                                  <strong>{schedule.label || t('scheduling.labels.unnamed')}</strong>
-                                  {showDebugIds && (
-                                    <>
-                                      <br />
-                                      <small className="text-muted">{schedule.scheduleId}</small>
-                                    </>
-                                  )}
-                                </td>
-                                <td>{schedule.agentTitle || schedule.agentId || '-'}</td>
-                                <td>
-                                  <span>{describeCronExpression(schedule.cronExpression)}</span>
-                                  {showDebugIds && (
-                                    <>
-                                      <br />
-                                      <small className="text-muted font-monospace">{schedule.cronExpression}</small>
-                                    </>
-                                  )}
-                                </td>
-                                <td>
-                                  {formatDate(
-                                    schedule.nextRun,
-                                    { notAvailable: t('scheduling.labels.notAvailable') },
-                                    schedule.timezone,
-                                  )}
-                                </td>
-                                <td>
-                                  {schedule.lastRunEpoch
-                                    ? formatDate(
-                                        new Date(schedule.lastRunEpoch),
-                                        { notAvailable: t('scheduling.labels.notAvailable') },
-                                        schedule.timezone,
-                                      )
-                                    : t('scheduling.labels.never')}
-                                  {schedule.lastStatus && (
-                                    <>
-                                      <br />
-                                      <small className="text-muted">{schedule.lastStatus}</small>
-                                    </>
-                                  )}
-                                </td>
-                                <td>
-                                  <Badge bg={getStatusBadgeVariant(derivedStatus)}>
-                                    {t(`scheduling.status.${derivedStatus}`, derivedStatus)}
-                                  </Badge>
-                                </td>
-                                <td>
-                                  <small>{schedule.timezone}</small>
-                                </td>
-                                <td>
-                                  <ButtonGroup size="sm" className="scheduling-action-group">
-                                    <Button
-                                      variant="outline-secondary"
-                                      onClick={(e) => handleEditSchedule(e, schedule)}
-                                      title={t('scheduling.actions.edit')}
-                                      disabled={actionLoading === schedule.scheduleId}
-                                    >
-                                      <i className="bi bi-pencil"></i>
-                                    </Button>
-                                    <Button
-                                      variant={schedule.status === 'active' ? 'outline-warning' : 'outline-success'}
-                                      onClick={(e) => handleTogglePause(e, schedule)}
-                                      title={
-                                        schedule.status === 'active'
-                                          ? t('scheduling.actions.pause')
-                                          : t('scheduling.actions.resume')
+                              <React.Fragment key={schedule.scheduleId}>
+                                <tr onClick={() => handleScheduleClick(schedule)} className="scheduling-table-row">
+                                  <td
+                                    onClick={(e) => handleToggleScheduleExpand(e, schedule)}
+                                    style={{ cursor: 'pointer', textAlign: 'center', verticalAlign: 'middle' }}
+                                    aria-label={t('scheduling.page.runHistory.expand')}
+                                  >
+                                    {isExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                                  </td>
+                                  <td>
+                                    <strong>{schedule.label || t('scheduling.labels.unnamed')}</strong>
+                                    {showDebugIds && (
+                                      <>
+                                        <br />
+                                        <small className="text-muted">{schedule.scheduleId}</small>
+                                      </>
+                                    )}
+                                  </td>
+                                  <td>{schedule.agentTitle || schedule.agentId || '-'}</td>
+                                  <td>
+                                    <span>{describeCronExpression(schedule.cronExpression)}</span>
+                                    {showDebugIds && (
+                                      <>
+                                        <br />
+                                        <small className="text-muted font-monospace">{schedule.cronExpression}</small>
+                                      </>
+                                    )}
+                                  </td>
+                                  <td>
+                                    {formatDate(
+                                      schedule.nextRun,
+                                      { notAvailable: t('scheduling.labels.notAvailable') },
+                                      schedule.timezone,
+                                    )}
+                                  </td>
+                                  <td>
+                                    {schedule.lastRunEpoch
+                                      ? formatDate(
+                                          new Date(schedule.lastRunEpoch),
+                                          { notAvailable: t('scheduling.labels.notAvailable') },
+                                          schedule.timezone,
+                                        )
+                                      : t('scheduling.labels.never')}
+                                    {schedule.lastStatus && (
+                                      <>
+                                        <br />
+                                        <small className="text-muted">{schedule.lastStatus}</small>
+                                      </>
+                                    )}
+                                  </td>
+                                  <td>
+                                    <Badge bg={getStatusBadgeVariant(derivedStatus)}>
+                                      {t(`scheduling.status.${derivedStatus}`, derivedStatus)}
+                                    </Badge>
+                                  </td>
+                                  <td>
+                                    <small>{schedule.timezone}</small>
+                                  </td>
+                                  <td>
+                                    <ButtonGroup size="sm" className="scheduling-action-group">
+                                      <Button
+                                        variant="outline-secondary"
+                                        onClick={(e) => handleEditSchedule(e, schedule)}
+                                        title={t('scheduling.actions.edit')}
+                                        disabled={actionLoading === schedule.scheduleId}
+                                      >
+                                        <i className="bi bi-pencil"></i>
+                                      </Button>
+                                      <Button
+                                        variant={schedule.status === 'active' ? 'outline-warning' : 'outline-success'}
+                                        onClick={(e) => handleTogglePause(e, schedule)}
+                                        title={
+                                          schedule.status === 'active'
+                                            ? t('scheduling.actions.pause')
+                                            : t('scheduling.actions.resume')
+                                        }
+                                        disabled={actionLoading === schedule.scheduleId}
+                                      >
+                                        {actionLoading === schedule.scheduleId ? (
+                                          <Spinner animation="border" size="sm" />
+                                        ) : (
+                                          <i
+                                            className={
+                                              schedule.status === 'active' ? 'bi bi-pause-fill' : 'bi bi-play-fill'
+                                            }
+                                          ></i>
+                                        )}
+                                      </Button>
+                                      <Button
+                                        variant="outline-danger"
+                                        onClick={(e) => handleDeleteClick(e, schedule)}
+                                        title={t('scheduling.actions.delete')}
+                                        disabled={actionLoading === schedule.scheduleId}
+                                      >
+                                        <i className="bi bi-trash"></i>
+                                      </Button>
+                                    </ButtonGroup>
+                                  </td>
+                                </tr>
+                                {isExpanded && (
+                                  <tr>
+                                    <td
+                                      colSpan={9}
+                                      className="p-0 border-0"
+                                      style={
+                                        {
+                                          backgroundColor: '#f8f9fa',
+                                          '--bs-table-hover-bg': '#f8f9fa',
+                                        } as React.CSSProperties
                                       }
-                                      disabled={actionLoading === schedule.scheduleId}
                                     >
-                                      {actionLoading === schedule.scheduleId ? (
-                                        <Spinner animation="border" size="sm" />
-                                      ) : (
-                                        <i
-                                          className={
-                                            schedule.status === 'active' ? 'bi bi-pause-fill' : 'bi bi-play-fill'
-                                          }
-                                        ></i>
-                                      )}
-                                    </Button>
-                                    <Button
-                                      variant="outline-danger"
-                                      onClick={(e) => handleDeleteClick(e, schedule)}
-                                      title={t('scheduling.actions.delete')}
-                                      disabled={actionLoading === schedule.scheduleId}
-                                    >
-                                      <i className="bi bi-trash"></i>
-                                    </Button>
-                                  </ButtonGroup>
-                                </td>
-                              </tr>
+                                      <div className="p-3">
+                                        <div className="d-flex align-items-center justify-content-between mb-3">
+                                          <h6 className="mb-0">
+                                            <i className="bi bi-clock-history me-2" aria-hidden="true"></i>
+                                            {t('scheduling.page.runHistory.title')}
+                                          </h6>
+                                          <Button
+                                            variant="outline-secondary"
+                                            size="sm"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              navigate(`/scheduling/${schedule.scheduleId}`, { state: { schedule } });
+                                            }}
+                                          >
+                                            {t('scheduling.page.runHistory.viewAll')}
+                                            <i className="bi bi-arrow-right ms-1" aria-hidden="true"></i>
+                                          </Button>
+                                        </div>
+                                        {isLoadingRuns ? (
+                                          <div className="text-center py-3">
+                                            <Spinner animation="border" size="sm" />
+                                            <span className="ms-2 text-muted">
+                                              {t('scheduling.details.runHistory.loading')}
+                                            </span>
+                                          </div>
+                                        ) : runs.length === 0 ? (
+                                          <div className="text-center py-3 text-muted fst-italic">
+                                            {t('scheduling.page.runHistory.noRuns')}
+                                          </div>
+                                        ) : (
+                                          <div className="d-flex flex-column gap-3">
+                                            {runs.map((run) => {
+                                              const statusBadge = run.error ? (
+                                                <Badge bg="danger">
+                                                  {t('scheduling.details.runHistory.status.error')}
+                                                </Badge>
+                                              ) : run.log?.error ? (
+                                                <Badge bg="danger">
+                                                  {t('scheduling.details.runHistory.status.failed')}
+                                                </Badge>
+                                              ) : run.log?.agentStatus ? (
+                                                <Badge
+                                                  bg={
+                                                    run.log.agentStatus.status === 'success'
+                                                      ? 'success'
+                                                      : run.log.agentStatus.status === 'partial'
+                                                        ? 'warning'
+                                                        : 'danger'
+                                                  }
+                                                >
+                                                  {t(
+                                                    `scheduling.details.runHistory.status.${run.log.agentStatus.status}`,
+                                                    run.log.agentStatus.status,
+                                                  )}
+                                                </Badge>
+                                              ) : run.log ? (
+                                                <Badge bg="success">
+                                                  {t('scheduling.details.runHistory.status.completed')}
+                                                </Badge>
+                                              ) : (
+                                                <Badge bg="secondary">
+                                                  {t('scheduling.details.runHistory.placeholder')}
+                                                </Badge>
+                                              );
+
+                                              const startedStr = run.log?.startedAt
+                                                ? new Date(run.log.startedAt).toLocaleString(
+                                                    undefined,
+                                                    schedule.timezone ? { timeZone: schedule.timezone } : undefined,
+                                                  )
+                                                : null;
+                                              const duration = formatDuration(run.log?.startedAt, run.log?.completedAt);
+
+                                              return (
+                                                <Card
+                                                  key={run.runId}
+                                                  className="border"
+                                                  onClick={(e) => e.stopPropagation()}
+                                                >
+                                                  <Card.Header className="d-flex align-items-center gap-2 py-2 px-3">
+                                                    {statusBadge}
+                                                    {startedStr && (
+                                                      <small className="text-muted">
+                                                        <i className="bi bi-clock me-1" aria-hidden="true"></i>
+                                                        {startedStr}
+                                                      </small>
+                                                    )}
+                                                    {duration && <small className="text-muted">{duration}</small>}
+                                                  </Card.Header>
+                                                  <Card.Body className="py-2 px-3">
+                                                    <RunHistoryExpandedRow
+                                                      run={run}
+                                                      onDownloadArtifact={handleDownloadArtifact}
+                                                    />
+                                                  </Card.Body>
+                                                </Card>
+                                              );
+                                            })}
+                                          </div>
+                                        )}
+                                      </div>
+                                    </td>
+                                  </tr>
+                                )}
+                              </React.Fragment>
                             );
                           })}
                         </tbody>

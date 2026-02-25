@@ -20,8 +20,9 @@ import { PipedreamProxyService } from '../Services/PipedreamProxyService';
 import { getConnectionConfig } from '../config/integrationsConfig';
 import { useBranding } from '../Providers/BrandingContext';
 import { withPRM } from '../utils/prmUtils';
+import { isScheduleCompleted, calculateNextRun } from '../utils/cronUtils';
 import { useTranslation } from 'react-i18next';
-import { ArrowLeft, Bot, ExternalLink, Link2, PlusCircle, RefreshCw, Store, User } from 'lucide-react';
+import { ArrowLeft, Bot, Clock, ExternalLink, Link2, PlusCircle, RefreshCw, Store, User } from 'lucide-react';
 
 type FilterOption = 'all' | 'personal' | 'public';
 
@@ -45,6 +46,7 @@ export const AgentsManagement = () => {
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingAgent, setEditingAgent] = useState<AgentSummary | null>(null);
+  const [editModalAccordionKey, setEditModalAccordionKey] = useState<string | undefined>(undefined);
   // SWR: initialize from localStorage cache so agents render instantly
   const [loading, setLoading] = useState(() => !getCachedAgents('owned'));
   const [error, setError] = useState<string | null>(null);
@@ -72,23 +74,29 @@ export const AgentsManagement = () => {
     agent: AgentSummary | null;
   }>({ show: false, agent: null });
 
-  const [agentScheduleMap, setAgentScheduleMap] = useState<Map<string, boolean>>(new Map());
+  const [agentScheduleMap, setAgentScheduleMap] = useState<Map<string, number>>(new Map());
+  const [activeSchedules, setActiveSchedules] = useState<AgentSchedule[]>([]);
 
   const userId = user?.decoded_tokens?.idToken?.sub ?? '';
 
   const loadSchedules = async () => {
     try {
       const schedules = await ScheduleService.list(numaGet);
-      const scheduleMap = new Map<string, boolean>();
+      const scheduleMap = new Map<string, number>();
 
       // Count schedules per agent - include paused schedules
+      const active: AgentSchedule[] = [];
       schedules.forEach((schedule) => {
         if (schedule.agentId && schedule.status !== 'deleted') {
-          scheduleMap.set(schedule.agentId, true);
+          scheduleMap.set(schedule.agentId, (scheduleMap.get(schedule.agentId) ?? 0) + 1);
+          if (schedule.status === 'active' && !isScheduleCompleted(schedule)) {
+            active.push(schedule);
+          }
         }
       });
 
       setAgentScheduleMap(scheduleMap);
+      setActiveSchedules(active);
     } catch (err) {
       console.error('Failed to load schedules:', err);
       // Don't set error for schedule loading - it's not critical
@@ -176,11 +184,13 @@ export const AgentsManagement = () => {
 
   const handleCreate = () => {
     setEditingAgent(null);
+    setEditModalAccordionKey(undefined);
     setIsModalOpen(true);
   };
 
   const handleEdit = (agent: AgentSummary) => {
     setEditingAgent(agent);
+    setEditModalAccordionKey(undefined);
     setIsModalOpen(true);
   };
 
@@ -286,15 +296,10 @@ export const AgentsManagement = () => {
   };
 
   const handleScheduleAgent = (agent: AgentSummary) => {
-    const hasSchedules = agentScheduleMap.get(agent.agentId) || false;
-
-    if (hasSchedules) {
-      // Show schedule list/management modal
-      setScheduleListModal({ show: true, agent });
-    } else {
-      // Show create schedule modal
-      setScheduleModal({ show: true, agent, editingSchedule: null });
-    }
+    // Open the edit modal directly at the scheduling section
+    setEditingAgent(agent);
+    setEditModalAccordionKey('4'); // "4" is the scheduling accordion key
+    setIsModalOpen(true);
   };
 
   const buildScheduleRunConfig = (agent: AgentSummary) => {
@@ -443,7 +448,8 @@ export const AgentsManagement = () => {
               onToggleFavorite={
                 agent.scope === 'user' || agent.createdBy.userId === userId ? handleToggleFavorite : undefined
               }
-              hasSchedules={schedulingEnabled && (agentScheduleMap.get(agent.agentId) || false)}
+              hasSchedules={schedulingEnabled && (agentScheduleMap.get(agent.agentId) ?? 0) > 0}
+              scheduleCount={agentScheduleMap.get(agent.agentId) ?? 0}
               isInMyAgentsSection={isMyAgentsSection}
             />
           </Col>
@@ -571,6 +577,80 @@ export const AgentsManagement = () => {
                 </div>
               </Col>
             </Row>
+          </Container>
+        )}
+
+        {/* Upcoming Schedules Banner */}
+        {schedulingEnabled && activeSchedules.length > 0 && (
+          <Container fluid className="px-0 mb-4">
+            <div
+              className="p-3 rounded-3 border"
+              style={{ backgroundColor: brandPrimarySoftBackground, borderColor: brandPrimaryBorderColor }}
+            >
+              <div className="d-flex align-items-center justify-content-between mb-2">
+                <div className="d-flex align-items-center gap-2">
+                  <Clock size={18} style={{ color: brandPrimaryColor }} />
+                  <h6 className="mb-0 fw-semibold" style={{ color: brandPrimaryColor }}>
+                    {t('management.upcomingSchedules.title')}
+                  </h6>
+                  <span
+                    className="badge rounded-pill"
+                    style={{ backgroundColor: brandPrimaryColor, color: brandPrimaryContrast }}
+                  >
+                    {activeSchedules.length}
+                  </span>
+                </div>
+                {schedulingEnabled && (
+                  <Button
+                    variant="link"
+                    size="sm"
+                    className="p-0 text-decoration-none"
+                    style={{ color: brandPrimaryColor }}
+                    onClick={() => navigate('/scheduling')}
+                  >
+                    {t('management.upcomingSchedules.viewAll')}
+                  </Button>
+                )}
+              </div>
+              <div className="d-flex flex-wrap gap-2">
+                {activeSchedules.slice(0, 5).map((schedule) => {
+                  const nextRunInfo = calculateNextRun(schedule.cronExpression, schedule.timezone, schedule.status);
+                  const agentName = schedule.agentTitle || schedule.label || schedule.agentId;
+                  const nextTimeStr = nextRunInfo.nextRun
+                    ? nextRunInfo.nextRun.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+                    : null;
+                  return (
+                    <div
+                      key={schedule.scheduleId}
+                      className="bg-white rounded-2 border px-3 py-2 d-flex align-items-center gap-2"
+                      style={{ fontSize: '0.85rem', cursor: 'pointer' }}
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => navigate(`/scheduling/${schedule.scheduleId}`, { state: { schedule } })}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          navigate(`/scheduling/${schedule.scheduleId}`, { state: { schedule } });
+                        }
+                      }}
+                    >
+                      <Clock size={13} style={{ color: brandPrimaryColor }} />
+                      <span className="fw-medium">
+                        {nextTimeStr
+                          ? t('management.upcomingSchedules.atTime', { agent: agentName, time: nextTimeStr })
+                          : agentName}
+                      </span>
+                      {nextRunInfo.humanReadable && (
+                        <span className="text-muted small">{nextRunInfo.humanReadable}</span>
+                      )}
+                    </div>
+                  );
+                })}
+                {activeSchedules.length > 5 && (
+                  <span className="text-muted small align-self-center">+{activeSchedules.length - 5}</span>
+                )}
+              </div>
+            </div>
           </Container>
         )}
 
@@ -709,9 +789,15 @@ export const AgentsManagement = () => {
 
           <AgentCreateModal
             show={isModalOpen}
-            onHide={() => setIsModalOpen(false)}
+            onHide={() => {
+              setIsModalOpen(false);
+              setEditModalAccordionKey(undefined);
+            }}
             editingAgent={editingAgent}
             onAgentSaved={handleModalSaved}
+            onScheduleCreated={loadSchedules}
+            initialAccordionKey={editModalAccordionKey}
+            onScheduleChange={loadSchedules}
           />
 
           <AgentScheduleModal

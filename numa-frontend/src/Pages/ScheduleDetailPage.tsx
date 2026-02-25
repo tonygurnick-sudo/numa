@@ -1,43 +1,22 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Container, Row, Col, Card, Alert, Badge, Button, Spinner, Table, Modal } from 'react-bootstrap';
-import { useParams, useNavigate, useLocation } from 'react-router-dom';
+import { useParams, useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import { PageHeader } from '../Components/PageHeader';
 import { LayoutDashboard } from '../Layouts/LayoutDashboard';
 import { ScheduleService } from '../Services/ScheduleService';
 import type { AgentSchedule } from '../types/agentSchedules';
+import type { RunHistoryItem, ScheduledRunLog } from '../types/scheduledRuns';
 import { AgentScheduleModal } from '../Components/Agents/AgentScheduleModal';
 import { useNumaRequest } from '../Providers/NumaRequestContext';
 import { useAuth } from '../Providers/AuthProvider';
 import { getNextRunTimes, describeCronExpression } from '../utils/cronUtils';
-import { listObjectsInFolder, fetchFileFromS3 } from '../utils/s3Utils';
+import { listObjectsInFolder, fetchFileFromS3, downloadFileFromS3 } from '../utils/s3Utils';
 import { jwtDecode } from 'jwt-decode';
-import { MarkdownContent } from '../Components/Renderers/MarkdownContent';
+import { RunHistoryExpandedRow } from '../Components/Scheduling/RunHistoryExpandedRow';
 import { useTranslation } from 'react-i18next';
 
 type LocationState = {
   schedule?: AgentSchedule;
-};
-
-type ScheduledRunLog = {
-  scheduleId?: string;
-  scheduleLabel?: string | null;
-  runId?: string;
-  conversationId?: string;
-  userId?: string;
-  prompt?: string;
-  error?: string;
-  startedAt?: string;
-  completedAt?: string;
-  messages?: { role: string; content: string }[];
-};
-
-type RunHistoryItem = {
-  runId: string;
-  s3Key: string;
-  timestamp: Date;
-  log?: ScheduledRunLog;
-  loading?: boolean;
-  error?: string;
 };
 
 const getStatusBadgeVariant = (status: string) => {
@@ -75,6 +54,21 @@ const formatTimestamp = (
   }
 };
 
+/** Format the difference between two ISO timestamps as a human-readable duration. */
+const formatDuration = (startedAt?: string, completedAt?: string): string | null => {
+  if (!startedAt || !completedAt) return null;
+  const ms = Date.parse(completedAt) - Date.parse(startedAt);
+  if (Number.isNaN(ms) || ms < 0) return null;
+  const totalSec = Math.floor(ms / 1000);
+  if (totalSec < 60) return `${totalSec}s`;
+  const mins = Math.floor(totalSec / 60);
+  const secs = totalSec % 60;
+  if (mins < 60) return secs > 0 ? `${mins}m ${secs}s` : `${mins}m`;
+  const hrs = Math.floor(mins / 60);
+  const remMins = mins % 60;
+  return remMins > 0 ? `${hrs}h ${remMins}m` : `${hrs}h`;
+};
+
 const getRunSortTime = (run: RunHistoryItem): number => {
   const completedAt = run.log?.completedAt;
   const startedAt = run.log?.startedAt;
@@ -90,9 +84,14 @@ export const ScheduleDetailPage: React.FC = () => {
   const { scheduleId } = useParams<{ scheduleId: string }>();
   const navigate = useNavigate();
   const location = useLocation();
+  const [searchParams] = useSearchParams();
   const { numaGet, numaPut, numaDelete, numaPost } = useNumaRequest();
   const { getCredentials, region: authRegion, getAccessToken } = useAuth();
   const { t } = useTranslation('agents');
+
+  // If a ?run=<runId> query param is present (e.g. from a notification deeplink),
+  // auto-expand that run once the history loads.
+  const deeplinkRunId = searchParams.get('run');
 
   // Get schedule from navigation state if available
   const locationState = location.state as LocationState | null;
@@ -106,7 +105,7 @@ export const ScheduleDetailPage: React.FC = () => {
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [runHistory, setRunHistory] = useState<RunHistoryItem[]>([]);
   const [runHistoryLoading, setRunHistoryLoading] = useState(false);
-  const [expandedRun, setExpandedRun] = useState<string | null>(null);
+  const [expandedRun, setExpandedRun] = useState<string | null>(deeplinkRunId);
   const [showDebugIds, setShowDebugIds] = useState(false);
 
   const outputsBucket = useMemo(() => {
@@ -115,6 +114,20 @@ export const ScheduleDetailPage: React.FC = () => {
   }, []);
 
   const region = authRegion || (typeof window !== 'undefined' ? window.sessionStorage.getItem('REGION') : null);
+
+  /** Download an artifact from the agent's workspace in S3. */
+  const handleDownloadArtifact = useCallback(
+    async (conversationId: string, userId: string, filename: string) => {
+      if (!outputsBucket || !region || !getCredentials) return;
+      const s3Key = `numa-chat/workspace/${userId}/conversations/${conversationId}/session/${filename}`;
+      try {
+        await downloadFileFromS3(s3Key, outputsBucket, region, getCredentials, filename);
+      } catch (err) {
+        console.error('Failed to download artifact:', err);
+      }
+    },
+    [outputsBucket, region, getCredentials],
+  );
 
   const loadSchedule = useCallback(async () => {
     if (!scheduleId) return;
@@ -168,14 +181,26 @@ export const ScheduleDetailPage: React.FC = () => {
   }, []);
 
   const getUserIdFromToken = useCallback(async (): Promise<string | null> => {
+    // Try access token first, then fall back to ID token from localStorage
     try {
       const accessToken = await getAccessToken();
-      if (!accessToken) return null;
-      const decoded = jwtDecode<{ sub?: string }>(accessToken);
-      return decoded.sub ?? null;
+      if (accessToken) {
+        const decoded = jwtDecode<{ sub?: string }>(accessToken);
+        if (decoded.sub) return decoded.sub;
+      }
     } catch {
-      return null;
+      // Fall through to ID token
     }
+    try {
+      const idToken = localStorage.getItem('idToken');
+      if (idToken) {
+        const decoded = jwtDecode<{ sub?: string }>(idToken);
+        return decoded.sub ?? null;
+      }
+    } catch {
+      // Give up
+    }
+    return null;
   }, [getAccessToken]);
 
   const sortRunHistory = useCallback((items: RunHistoryItem[]) => {
@@ -329,6 +354,16 @@ export const ScheduleDetailPage: React.FC = () => {
     }
   }, [schedule, loadRunHistory]);
 
+  // When a deeplink run is present and loaded, scroll it into view.
+  useEffect(() => {
+    if (!deeplinkRunId || !runHistory.length) return;
+    const match = runHistory.find((r) => r.runId === deeplinkRunId);
+    if (match?.log) {
+      const el = document.getElementById(`run-${deeplinkRunId}`);
+      el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  }, [deeplinkRunId, runHistory]);
+
   const loadRunLog = useCallback(
     async (run: RunHistoryItem) => {
       if (!outputsBucket || !region || !getCredentials || run.log || run.loading) return;
@@ -451,6 +486,22 @@ export const ScheduleDetailPage: React.FC = () => {
       title: schedule.agentTitle || schedule.agentId,
     };
   }, [schedule]);
+
+  /** Aggregate run stats from loaded run history for a quick trend overview. */
+  const runStats = useMemo(() => {
+    const loaded = runHistory.filter((r) => r.log && !r.loading);
+    if (loaded.length === 0) return null;
+    let success = 0;
+    let partial = 0;
+    let failed = 0;
+    for (const r of loaded) {
+      const s = r.log?.agentStatus?.status;
+      if (s === 'failed' || r.log?.error) failed++;
+      else if (s === 'partial') partial++;
+      else success++;
+    }
+    return { total: loaded.length, success, partial, failed };
+  }, [runHistory]);
 
   if (loading) {
     return (
@@ -671,6 +722,35 @@ export const ScheduleDetailPage: React.FC = () => {
                     <span className="ms-2">{t('scheduling.actions.refresh')}</span>
                   </Button>
                 </Card.Header>
+                {/* Run success rate summary */}
+                {runStats && (
+                  <div className="d-flex align-items-center gap-3 px-3 py-2 border-bottom bg-light small">
+                    <span className="fw-bold">
+                      {t('scheduling.details.runHistory.stats.total', { count: runStats.total })}
+                    </span>
+                    <span className="text-success">
+                      <i className="bi bi-check-circle me-1" aria-hidden="true"></i>
+                      {t('scheduling.details.runHistory.stats.success', { count: runStats.success })}
+                    </span>
+                    {runStats.partial > 0 && (
+                      <span className="text-warning">
+                        <i className="bi bi-exclamation-triangle me-1" aria-hidden="true"></i>
+                        {t('scheduling.details.runHistory.stats.partial', { count: runStats.partial })}
+                      </span>
+                    )}
+                    {runStats.failed > 0 && (
+                      <span className="text-danger">
+                        <i className="bi bi-x-circle me-1" aria-hidden="true"></i>
+                        {t('scheduling.details.runHistory.stats.failed', { count: runStats.failed })}
+                      </span>
+                    )}
+                    <span className="text-muted ms-auto">
+                      {Math.round((runStats.success / runStats.total) * 100)}
+                      {'% '}
+                      {t('scheduling.details.runHistory.stats.successRate')}
+                    </span>
+                  </div>
+                )}
                 <Card.Body className="p-0">
                   {runHistoryLoading && runHistory.length === 0 ? (
                     <div className="text-center py-5">
@@ -690,6 +770,7 @@ export const ScheduleDetailPage: React.FC = () => {
                           {showDebugIds && <th>{t('scheduling.details.runHistory.columns.runId')}</th>}
                           <th>{t('scheduling.details.runHistory.columns.started')}</th>
                           <th>{t('scheduling.details.runHistory.columns.completed')}</th>
+                          <th>{t('scheduling.details.runHistory.columns.duration')}</th>
                           <th>{t('scheduling.details.runHistory.columns.status')}</th>
                         </tr>
                       </thead>
@@ -697,6 +778,7 @@ export const ScheduleDetailPage: React.FC = () => {
                         {runHistory.map((run) => (
                           <React.Fragment key={run.runId}>
                             <tr
+                              id={`run-${run.runId}`}
                               onClick={() => handleToggleExpand(run)}
                               className={
                                 expandedRun === run.runId
@@ -730,6 +812,10 @@ export const ScheduleDetailPage: React.FC = () => {
                                     )
                                   : t('scheduling.details.runHistory.placeholder')}
                               </td>
+                              <td className="text-muted small">
+                                {formatDuration(run.log?.startedAt, run.log?.completedAt) ??
+                                  t('scheduling.details.runHistory.placeholder')}
+                              </td>
                               <td>
                                 {run.loading ? (
                                   <Spinner animation="border" size="sm" />
@@ -737,6 +823,21 @@ export const ScheduleDetailPage: React.FC = () => {
                                   <Badge bg="danger">{t('scheduling.details.runHistory.status.error')}</Badge>
                                 ) : run.log?.error ? (
                                   <Badge bg="danger">{t('scheduling.details.runHistory.status.failed')}</Badge>
+                                ) : run.log?.agentStatus ? (
+                                  <Badge
+                                    bg={
+                                      run.log.agentStatus.status === 'success'
+                                        ? 'success'
+                                        : run.log.agentStatus.status === 'partial'
+                                          ? 'warning'
+                                          : 'danger'
+                                    }
+                                  >
+                                    {t(
+                                      `scheduling.details.runHistory.status.${run.log.agentStatus.status}`,
+                                      run.log.agentStatus.status,
+                                    )}
+                                  </Badge>
                                 ) : run.log ? (
                                   <Badge bg="success">{t('scheduling.details.runHistory.status.completed')}</Badge>
                                 ) : (
@@ -747,7 +848,7 @@ export const ScheduleDetailPage: React.FC = () => {
                             {expandedRun === run.runId && (
                               <tr>
                                 <td
-                                  colSpan={showDebugIds ? 5 : 4}
+                                  colSpan={showDebugIds ? 6 : 5}
                                   className="p-0 border-0"
                                   style={
                                     {
@@ -757,59 +858,11 @@ export const ScheduleDetailPage: React.FC = () => {
                                   }
                                 >
                                   <div className="p-3">
-                                    {run.loading ? (
-                                      <div className="text-center py-3">
-                                        <Spinner animation="border" size="sm" />
-                                        <span className="ms-2">
-                                          {t('scheduling.details.runHistory.loadingDetails')}
-                                        </span>
-                                      </div>
-                                    ) : run.error ? (
-                                      <Alert variant="danger" className="mb-0">
-                                        {run.error}
-                                      </Alert>
-                                    ) : run.log ? (
-                                      <>
-                                        {run.log.error && (
-                                          <Alert variant="danger">
-                                            <strong>{t('scheduling.details.runHistory.status.failed')}:</strong>{' '}
-                                            {run.log.error}
-                                          </Alert>
-                                        )}
-                                        {run.log.messages?.map((msg, idx) => (
-                                          <div key={idx} className="mb-3">
-                                            <div className="fw-bold text-uppercase small text-muted mb-1">
-                                              {msg.role}
-                                            </div>
-                                            <div
-                                              className="p-2 rounded"
-                                              style={{
-                                                backgroundColor: msg.role === 'user' ? '#e3f2fd' : '#ffffff',
-                                              }}
-                                            >
-                                              {msg.role === 'assistant' ? (
-                                                <MarkdownContent
-                                                  content={msg.content || t('scheduling.details.runHistory.noContent')}
-                                                />
-                                              ) : (
-                                                <div style={{ whiteSpace: 'pre-wrap' }}>
-                                                  {msg.content || t('scheduling.details.runHistory.noContent')}
-                                                </div>
-                                              )}
-                                            </div>
-                                          </div>
-                                        ))}
-                                        {(!run.log.messages || run.log.messages.length === 0) && (
-                                          <p className="text-muted mb-0">
-                                            {t('scheduling.details.runHistory.noMessages')}
-                                          </p>
-                                        )}
-                                      </>
-                                    ) : (
-                                      <div className="text-center py-3 text-muted">
-                                        {t('scheduling.details.runHistory.clickToLoad')}
-                                      </div>
-                                    )}
+                                    <RunHistoryExpandedRow
+                                      run={run}
+                                      onDownloadArtifact={handleDownloadArtifact}
+                                      defaultMessagesOpen
+                                    />
                                   </div>
                                 </td>
                               </tr>

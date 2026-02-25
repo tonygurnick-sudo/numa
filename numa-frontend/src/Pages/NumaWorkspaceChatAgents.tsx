@@ -548,7 +548,7 @@ const NumaWorkspaceChatAgents = () => {
   }, [applyAgentConfiguration]);
 
   // Simple direct access - no need for useMemo for primitive values
-  const userId = user?.attributes?.sub;
+  const userId = sub;
   const userExists = !!user;
 
   // If feature disabled, ensure no agent is selected and agent-specific flags are off
@@ -964,10 +964,15 @@ const NumaWorkspaceChatAgents = () => {
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
   const isProcessingRef = useRef(false);
 
-  // Auto-scroll to bottom on messages or ephemeral changes
+  // Auto-scroll to bottom on new messages (streaming) or after conversation finishes loading.
+  // We skip scrolling while isConversationLoading is true because ChatMessages renders a
+  // loading spinner during that phase — messageEndRef is inside the spinner, not after messages.
+  // Adding isConversationLoading to deps ensures we scroll once it flips to false and messages render.
   useEffect(() => {
-    messageEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+    if (!isConversationLoading) {
+      messageEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [messages, isConversationLoading]);
 
   // Inactivity: when expired, start a new chat and show suggestions (hook will fetch suggestions)
   async function handleNewChatOnExpired() {
@@ -1012,6 +1017,7 @@ const NumaWorkspaceChatAgents = () => {
     showContinueSuggestions,
     recentConversations,
     resetInactivityTimer,
+    touchInactivityTimer,
     hideSuggestions,
     forceShowNewChatView,
     suggestionsLoading,
@@ -1024,6 +1030,14 @@ const NumaWorkspaceChatAgents = () => {
     // DO NOT pass inputMessage: keep suggestions visible while typing; hide on submit instead
     storageKeySuffix: '-v2', // Isolate inactivity timer from V1 chat
   });
+
+  // Typing is user activity — prevent the inactivity handler from wiping the input
+  // while the user is composing a message.
+  useEffect(() => {
+    if (inputMessage) {
+      touchInactivityTimer();
+    }
+  }, [inputMessage, touchInactivityTimer]);
 
   // Sort agents by favorites first, then most recently used, then updatedAt
   const sortedPersonalAgents = useMemo(() => {

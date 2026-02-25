@@ -1820,6 +1820,75 @@ async def _handle_sync(
 
     external_user_id = f"{CLIENT_NAME}_{user_sub}" if enabled_integrations else None
 
+    # Add each connected integration slug to enabled_tools so the
+    # workspace-chat-tools Lambda can validate per-integration access
+    # (mirrors the same logic in _handle_chat for streaming requests)
+    if enabled_integrations:
+        enabled_tools = list(enabled_tools)
+        for slug in enabled_integrations:
+            if slug not in enabled_tools:
+                enabled_tools.append(slug)
+
+    # --- Sync Integration Schemas (same as _handle_chat) ---
+    # Must happen before SDK runs so that non_destructive approval mode
+    # can check readOnlyHint annotations from the schema files on disk.
+    # Without this, scheduled runs default to fail-closed (require approval)
+    # because the schema files don't exist.
+    if enabled_integrations and external_user_id:
+        try:
+            sync_result = _sync_integration_schemas(
+                enabled_integrations, external_user_id
+            )
+            if sync_result["added"] or sync_result["removed"]:
+                logger.info(
+                    "Integration schemas synced in sync handler",
+                    _name="SYNC_INTEGRATION_SCHEMAS",
+                    phase="integrations",
+                    added=sync_result["added"],
+                    removed=sync_result["removed"],
+                    cached=sync_result.get("cached", []),
+                )
+        except Exception as e:
+            logger.warning(
+                "Failed to sync integration schemas in sync handler",
+                error=str(e),
+                integrations=enabled_integrations,
+            )
+    elif not enabled_integrations:
+        # No integrations enabled — clean up any stale schemas on disk
+        tools_dir = Path("/workdir/tools/integrations")
+        if tools_dir.exists() and any(tools_dir.iterdir()):
+            shutil.rmtree(tools_dir, ignore_errors=True)
+
+    # Agent config — fetch if agentId provided (same as _handle_chat)
+    agent_id = body.get("agentId")
+    agent_config: Optional[AgentConfig] = None
+    if agent_id:
+        try:
+            agent_config = fetch_agent_config(agent_id, user_sub)
+        except Exception as e:
+            logger.warning(
+                "Failed to fetch agent config in sync handler",
+                agent_id=agent_id,
+                error=str(e),
+            )
+
+    # Resolve integration approval mode (agent config > user setting > default)
+    effective_approval_mode = resolve_approval_mode(user_sub, agent_config)
+    logger.info(
+        "Resolved approval mode for sync request",
+        _name="SYNC_APPROVAL_MODE",
+        phase="integrations",
+        effective_mode=effective_approval_mode,
+        agent_id=agent_id,
+        has_agent_config=agent_config is not None,
+        agent_approval_mode=(
+            agent_config.tools_config.approval_mode
+            if agent_config and agent_config.tools_config
+            else None
+        ),
+    )
+
     # KB listings
     kb_listings = None
     if available_kbs:
@@ -1868,9 +1937,10 @@ async def _handle_sync(
             model_id=model_id,
             kb_listings=kb_listings,
             request_id=request_id,
-            agent_config=None,
+            agent_config=agent_config,
             external_user_id=external_user_id,
             enabled_integrations=enabled_integrations,
+            approval_mode=effective_approval_mode,
             agent_type_config=agent_type_config,
             company_profile=company_profile,
         )
@@ -2005,6 +2075,68 @@ async def _handle_fire_and_forget(
 
     external_user_id = f"{CLIENT_NAME}_{user_sub}" if enabled_integrations else None
 
+    # Add integration slugs to enabled_tools for workspace-chat-tools validation
+    if enabled_integrations:
+        enabled_tools = list(enabled_tools)
+        for slug in enabled_integrations:
+            if slug not in enabled_tools:
+                enabled_tools.append(slug)
+
+    # --- Sync Integration Schemas (same as _handle_chat) ---
+    # Must happen before SDK runs so that non_destructive approval mode
+    # can check readOnlyHint annotations from the schema files on disk.
+    if enabled_integrations and external_user_id:
+        try:
+            sync_result = _sync_integration_schemas(
+                enabled_integrations, external_user_id
+            )
+            if sync_result["added"] or sync_result["removed"]:
+                logger.info(
+                    "Integration schemas synced in fire-and-forget handler",
+                    _name="ASYNC_INTEGRATION_SCHEMAS",
+                    phase="integrations",
+                    added=sync_result["added"],
+                    removed=sync_result["removed"],
+                    cached=sync_result.get("cached", []),
+                )
+        except Exception as e:
+            logger.warning(
+                "Failed to sync integration schemas in fire-and-forget handler",
+                error=str(e),
+                integrations=enabled_integrations,
+            )
+    elif not enabled_integrations:
+        tools_dir = Path("/workdir/tools/integrations")
+        if tools_dir.exists() and any(tools_dir.iterdir()):
+            shutil.rmtree(tools_dir, ignore_errors=True)
+
+    # Agent config and approval mode
+    agent_id = body.get("agentId")
+    agent_config: Optional[AgentConfig] = None
+    if agent_id:
+        try:
+            agent_config = fetch_agent_config(agent_id, user_sub)
+        except Exception as e:
+            logger.warning(
+                "Failed to fetch agent config in fire-and-forget handler",
+                agent_id=agent_id,
+                error=str(e),
+            )
+    effective_approval_mode = resolve_approval_mode(user_sub, agent_config)
+    logger.info(
+        "Resolved approval mode for fire-and-forget request",
+        _name="ASYNC_APPROVAL_MODE",
+        phase="integrations",
+        effective_mode=effective_approval_mode,
+        agent_id=agent_id,
+        has_agent_config=agent_config is not None,
+        agent_approval_mode=(
+            agent_config.tools_config.approval_mode
+            if agent_config and agent_config.tools_config
+            else None
+        ),
+    )
+
     kb_listings = None
     if available_kbs:
         kb_listings = _get_cached_kb_listings(
@@ -2058,9 +2190,10 @@ async def _handle_fire_and_forget(
                     model_id=model_id,
                     kb_listings=kb_listings,
                     request_id=request_id,
-                    agent_config=None,
+                    agent_config=agent_config,
                     external_user_id=external_user_id,
                     enabled_integrations=enabled_integrations,
+                    approval_mode=effective_approval_mode,
                     agent_type_config=agent_type_config,
                     company_profile=company_profile,
                 )

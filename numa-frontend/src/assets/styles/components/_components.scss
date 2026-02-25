@@ -401,7 +401,7 @@ fieldset:disabled .btn {
   width: 100%;
 }
 
-label {
+.app-wizard label {
   color: var(--color-dk-gray);
   font-size: 9px;
   letter-spacing: 0.14em;
@@ -2478,6 +2478,44 @@ label {
     color: #991b1b;
     border-color: color-mix(in srgb, #b91c1c 45%, #d4d4d8);
   }
+}
+
+.notifications-result-preview,
+.notifications-error-preview {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: 0.5rem;
+  font-family: 'Metropolis Regular';
+  font-size: 0.8125rem;
+  line-height: 1.35rem;
+}
+
+.notifications-result-preview {
+  background: color-mix(in srgb, #16a34a 8%, #ffffff);
+  border: 1px solid color-mix(in srgb, #16a34a 20%, #e4e4e7);
+  color: #15803d;
+}
+
+.notifications-error-preview {
+  background: color-mix(in srgb, #dc2626 8%, #ffffff);
+  border: 1px solid color-mix(in srgb, #dc2626 20%, #e4e4e7);
+  color: #b91c1c;
+}
+
+.notifications-result-preview__icon,
+.notifications-error-preview__icon {
+  flex-shrink: 0;
+  margin-top: 0.15rem;
+}
+
+.notifications-result-preview__text,
+.notifications-error-preview__text {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: break-word;
+  word-break: break-word;
 }
 
 @include mobile {

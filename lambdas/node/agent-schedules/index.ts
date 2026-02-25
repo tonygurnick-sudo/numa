@@ -253,6 +253,9 @@ const createSchedule = async (
     agent_snapshot: validatedPayload.agentSnapshot,
     run_config: validatedPayload.runConfig,
     label: validatedPayload.label,
+    max_runs: validatedPayload.maxRuns,
+    total_runs: 0,
+    email_notifications: validatedPayload.emailNotifications ?? false,
     created_at: now,
     updated_at: now,
     schedule_name: scheduleName(scheduleId),
@@ -340,6 +343,7 @@ const updateSchedule = async (
     ':ts': Date.now(),
   };
   const setParts: string[] = ['updated_at = :ts'];
+  const removeParts: string[] = [];
 
   if (validatedPayload.status) {
     expressionNames['#status'] = 'status';
@@ -376,6 +380,21 @@ const updateSchedule = async (
     expressionValues[':agent_snapshot'] = validatedPayload.agentSnapshot;
     setParts.push('#agent_snapshot = :agent_snapshot');
   }
+  if (validatedPayload.maxRuns !== undefined) {
+    expressionNames['#max_runs'] = 'max_runs';
+    if (validatedPayload.maxRuns === null) {
+      // Clearing maxRuns removes the limit — REMOVE the attribute
+      removeParts.push('#max_runs');
+    } else {
+      expressionValues[':max_runs'] = validatedPayload.maxRuns;
+      setParts.push('#max_runs = :max_runs');
+    }
+  }
+  if (validatedPayload.emailNotifications !== undefined) {
+    expressionNames['#email_notifications'] = 'email_notifications';
+    expressionValues[':email_notifications'] = validatedPayload.emailNotifications;
+    setParts.push('#email_notifications = :email_notifications');
+  }
 
   const updatedRecord = await dynamo.send(
     new UpdateCommand({
@@ -384,9 +403,9 @@ const updateSchedule = async (
         user_id: auth.sub,
         schedule_id: scheduleId,
       },
-      UpdateExpression: `SET ${setParts.join(', ')}`,
+      UpdateExpression: `SET ${setParts.join(', ')}${removeParts.length > 0 ? ` REMOVE ${removeParts.join(', ')}` : ''}`,
       ExpressionAttributeNames: expressionNames,
-      ExpressionAttributeValues: expressionValues,
+      ...(Object.keys(expressionValues).length > 0 ? { ExpressionAttributeValues: expressionValues } : {}),
       ReturnValues: 'ALL_NEW',
     }),
   );

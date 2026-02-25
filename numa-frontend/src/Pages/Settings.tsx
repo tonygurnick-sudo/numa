@@ -350,10 +350,17 @@ export default function SettingsPage() {
   const [chatDefaultsError, setChatDefaultsError] = useState<string | null>(null);
   const [chatDefaultsDirty, setChatDefaultsDirty] = useState<boolean>(false);
   const chatDefaultsDirtyRef = useRef<boolean>(chatDefaultsDirty);
+  const savedChatDefaultsRef = useRef<string>('');
 
   useEffect(() => {
     chatDefaultsDirtyRef.current = chatDefaultsDirty;
   }, [chatDefaultsDirty]);
+
+  // Auto-clear dirty when admin undoes chat defaults changes
+  useEffect(() => {
+    if (!chatDefaultsDirty) return;
+    if (JSON.stringify(globalChatSettings) === savedChatDefaultsRef.current) setChatDefaultsDirty(false);
+  }, [globalChatSettings, chatDefaultsDirty]);
 
   useNavigationConfirm(
     isAdmin && activeKey === 'chat-defaults' && chatDefaultsDirty,
@@ -373,6 +380,7 @@ export default function SettingsPage() {
         if (!cancelled) {
           if (!chatDefaultsDirtyRef.current) {
             setGlobalChatSettings(settings);
+            savedChatDefaultsRef.current = JSON.stringify(settings);
             setChatDefaultsError(null);
             setChatDefaultsDirty(false);
           }
@@ -723,12 +731,22 @@ export default function SettingsPage() {
 
       <div className="app-content settings-app-content">
         <div hidden={currentScope !== 'user'} aria-hidden={currentScope !== 'user'}>
-          <UserProfilePage embedded activeTabKey={userSettingsTabKey} onActiveTabChange={setUserSettingsTabKey} />
+          <UserProfilePage
+            embedded
+            activeTabKey={userSettingsTabKey}
+            onActiveTabChange={setUserSettingsTabKey}
+            settingsScope={currentScope}
+          />
         </div>
 
         {isAdmin && (
           <div hidden={currentScope !== 'admin'} aria-hidden={currentScope !== 'admin'}>
-            {/* Note: company-wide banner and preview notice moved into Integrations tab */}
+            {(chatDefaultsDirty || isBrandingDirty) && (
+              <div className="settings-unsaved-banner">
+                <i className="bi bi-exclamation-circle" />
+                {t('unsavedBanner')}
+              </div>
+            )}
             {error && (
               <Alert variant="danger" className="mb-3">
                 {error}
@@ -883,7 +901,7 @@ export default function SettingsPage() {
                                 type="switch"
                                 id="chat-defaults-web-search"
                                 label=""
-                                checked={globalChatSettings.webSearchEnabled}
+                                checked={globalChatSettings.autoToolsEnabled || globalChatSettings.webSearchEnabled}
                                 disabled={globalChatSettings.autoToolsEnabled}
                                 onChange={(e) => {
                                   setGlobalChatSettings((prev) => ({
@@ -905,7 +923,9 @@ export default function SettingsPage() {
                                   type="switch"
                                   id="chat-defaults-data-analysis"
                                   label=""
-                                  checked={globalChatSettings.dataAnalysisEnabled}
+                                  checked={
+                                    globalChatSettings.autoToolsEnabled || globalChatSettings.dataAnalysisEnabled
+                                  }
                                   disabled={globalChatSettings.autoToolsEnabled}
                                   onChange={(e) => {
                                     setGlobalChatSettings((prev) => ({
@@ -927,7 +947,7 @@ export default function SettingsPage() {
                                 type="switch"
                                 id="chat-defaults-create-agent"
                                 label=""
-                                checked={globalChatSettings.createAgentEnabled}
+                                checked={globalChatSettings.autoToolsEnabled || globalChatSettings.createAgentEnabled}
                                 disabled={globalChatSettings.autoToolsEnabled}
                                 onChange={(e) => {
                                   setGlobalChatSettings((prev) => ({
@@ -948,7 +968,7 @@ export default function SettingsPage() {
                                 type="switch"
                                 id="chat-defaults-memories"
                                 label=""
-                                checked={globalChatSettings.memoriesEnabled}
+                                checked={globalChatSettings.autoToolsEnabled || globalChatSettings.memoriesEnabled}
                                 disabled={globalChatSettings.autoToolsEnabled}
                                 onChange={(e) => {
                                   setGlobalChatSettings((prev) => ({
@@ -1035,6 +1055,7 @@ export default function SettingsPage() {
                                   numaPut,
                                 );
                                 setGlobalChatSettings(saved);
+                                savedChatDefaultsRef.current = JSON.stringify(saved);
                                 setChatDefaultsError(null);
                                 setChatDefaultsDirty(false);
                               } catch (e) {

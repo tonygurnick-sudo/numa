@@ -122,6 +122,9 @@ export const ScheduleRecordSchema = z.object({
   agent_snapshot: AgentSnapshotSchema.optional(),
   run_config: ScheduledRunConfigSchema.optional(),
   label: z.string().max(200, 'Label too long').optional(),
+  max_runs: z.number().int().positive().optional(),
+  total_runs: z.number().int().min(0).optional().default(0),
+  email_notifications: z.boolean().optional().default(false),
   last_run_epoch: z.number().optional(),
   last_status: z.string().optional(),
   last_error: z.string().optional(),
@@ -147,6 +150,8 @@ export const CreateSchedulePayloadSchema = z.object({
   label: z.string().max(200, 'Label too long').optional(),
   runConfig: ScheduledRunConfigSchema.optional(),
   eventType: z.enum(['agent', 'application', 'data_sync']).optional().default('agent'),
+  maxRuns: z.number().int().positive().optional(),
+  emailNotifications: z.boolean().optional().default(false),
 });
 
 // Update payload schema
@@ -169,6 +174,8 @@ export const UpdateSchedulePayloadSchema = z.object({
   label: z.string().max(200, 'Label too long').optional(),
   runConfig: ScheduledRunConfigSchema.optional(),
   agentSnapshot: AgentSnapshotSchema.optional(),
+  maxRuns: z.number().int().positive().nullable().optional(),
+  emailNotifications: z.boolean().optional().default(false),
 });
 
 // Application schedule schema

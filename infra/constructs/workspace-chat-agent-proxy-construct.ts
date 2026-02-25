@@ -31,6 +31,8 @@ export interface WorkspaceChatAgentProxyProps {
   outputsBucketName?: string;
   /** Outputs bucket ARN (for S3 GetObject IAM permission) */
   outputsBucketArn?: string;
+  /** Schedule runner secret for authenticating server-to-server calls from the agent-schedule-runner Lambda */
+  scheduleRunnerSecret?: string;
 }
 
 /**
@@ -87,6 +89,11 @@ export class WorkspaceChatAgentProxy extends Construct {
         }),
         ...(props.outputsBucketName && {
           OUTPUTS_BUCKET_NAME: props.outputsBucketName,
+        }),
+        // Schedule runner secret for authenticating server-to-server calls
+        // from the agent-schedule-runner Lambda (scheduled agents use V2 sync mode)
+        ...(props.scheduleRunnerSecret && {
+          SCHEDULE_RUNNER_SECRET: props.scheduleRunnerSecret,
         }),
       },
       logGroup: logGroup,

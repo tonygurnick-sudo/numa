@@ -39,6 +39,13 @@ Set `bodyType="html"` when your content includes links, lists, bold/italics, or 
 ## Threading / Replies
 Use `inReplyTo` with the Gmail message ID (hex string like `19c216feb2f7b960`) to keep replies in the same thread. The response will show matching `threadId` confirming proper threading.
 
+## Listing Emails — Accuracy and Pagination
+Pipedream's Gmail actions default to returning only **20 messages**. Be precise about what you actually fetched:
+- If you fetch 20 emails without a time filter, say "your 20 most recent emails", **not** "20 emails in the last 7 days". You only know how many were *returned*, not how many *exist*.
+- **Time-bound requests need search filters.** If the user asks for "emails today" or "emails this week", use the `q` parameter with time operators (e.g., `newer_than:1d`, `newer_than:7d`) so the results genuinely reflect that time range.
+- You can increase `maxResults` (up to 500) when the user needs a broader view, but 20 is fine for casual "check my recent emails" requests — just describe it accurately.
+- If the response includes a `nextPageToken`, mention that more results are available.
+
 ## Search Query Syntax
 Uses Gmail's standard search operators in the `q` parameter:
 - `has:attachment` — emails with attachments
