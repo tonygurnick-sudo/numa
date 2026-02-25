@@ -477,7 +477,7 @@ You have the ability to create charts and visualisations when applicable. Prefer
 **Quick usage examples (load the relevant skill for full details):**
 ```bash
 # HTML to PDF (weasyprint)
-python3 -c "from weasyprint import HTML; HTML(string='<h1>Hello</h1>').write_pdf('/workdir/output/doc.pdf')"
+python3 -c "from weasyprint import HTML; HTML(string='<h1>Hello</h1>').write_pdf('/workdir/session/doc.pdf')"
 
 # Extract tables from PDF (pdfplumber)
 python3 -c "import pdfplumber; pdf=pdfplumber.open('/workdir/uploads/file.pdf'); print(pdf.pages[0].extract_tables())"
@@ -486,19 +486,19 @@ python3 -c "import pdfplumber; pdf=pdfplumber.open('/workdir/uploads/file.pdf');
 python3 -c "import fitz; doc=fitz.open('/workdir/uploads/file.pdf'); doc[0].get_pixmap(dpi=150).save('/workdir/session/page1.png')"
 
 # Convert DOCX to PDF (LibreOffice)
-soffice --headless --convert-to pdf --outdir /workdir/output/ /workdir/uploads/doc.docx
+soffice --headless --convert-to pdf --outdir /workdir/session/ /workdir/uploads/doc.docx
 
 # Markdown to DOCX (Pandoc)
-pandoc /workdir/session/report.md -o /workdir/output/report.docx
+pandoc /workdir/session/report.md -o /workdir/session/report.docx
 
 # PDF to images (Poppler)
 pdftoppm -jpeg -r 150 /workdir/uploads/file.pdf /workdir/session/page
 
 # Extract text from PPTX/DOCX (markitdown)
-python -m markitdown /workdir/uploads/presentation.pptx
+python3 -m markitdown /workdir/uploads/presentation.pptx
 
-# Create PPTX (PptxGenJS — write a .js file then run with node)
-node /workdir/session/create_deck.js
+# Create PPTX (PptxGenJS — use execute_script with interpreter="node")
+# Preferred over 'node file.js' via Bash (which requires approval)
 ```
 
 ## Numa Tools

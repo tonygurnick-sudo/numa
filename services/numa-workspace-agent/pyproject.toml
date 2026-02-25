@@ -55,7 +55,7 @@ pdf2image = ">=1.17.0"  # PDF pages to images (uses poppler)
 Pillow = ">=10.0.0"  # Image manipulation
 
 # Content extraction
-markitdown = {version = ">=0.1.0", extras = ["pptx"]}  # Text extraction from PPTX/DOCX/other formats
+markitdown = {version = ">=0.1.0", extras = ["pptx", "docx"]}  # Text extraction from PPTX/DOCX/other formats
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.0.0"

@@ -54,7 +54,7 @@ pres.layout = "LAYOUT_16x9";
 let slide = pres.addSlide();
 slide.addText("Hello World!", { x: 0.5, y: 0.5, fontSize: 36, color: "363636" });
 
-pres.writeFile({ fileName: "/workdir/output/presentation.pptx" });
+pres.writeFile({ fileName: "/workdir/session/presentation.pptx" });
 ```
 
 ```bash
@@ -81,7 +81,7 @@ for shape in slide.shapes:
                 if "PLACEHOLDER" in run.text:
                     run.text = run.text.replace("PLACEHOLDER", "Actual Content")
 
-prs.save("/workdir/output/filled_presentation.pptx")
+prs.save("/workdir/session/filled_presentation.pptx")
 ```
 
 ---
@@ -160,14 +160,14 @@ Your first render is almost never correct. Always verify output visually.
 ### Convert to Images
 
 ```bash
-soffice --headless --convert-to pdf --outdir /workdir/session/ /workdir/output/presentation.pptx
+soffice --headless --convert-to pdf --outdir /workdir/session/ /workdir/session/presentation.pptx
 pdftoppm -jpeg -r 150 /workdir/session/presentation.pdf /workdir/session/slide
 ```
 
 ### Content QA
 
 ```bash
-python -m markitdown /workdir/output/presentation.pptx
+python3 -m markitdown /workdir/session/presentation.pptx
 ```
 
 Check for missing content, typos, wrong order, leftover placeholder text.
@@ -210,8 +210,12 @@ const checkSvg = `<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
   <path d="M7 12l3 3 7-7" stroke="white" stroke-width="2.5" fill="none" stroke-linecap="round"/>
 </svg>`;
 
-const iconData = await svgToBase64(checkSvg);
-slide.addImage({ data: iconData, x: 1, y: 1, w: 0.5, h: 0.5 });
+// Must wrap in async function (top-level await not supported in CommonJS)
+async function main() {
+  const iconData = await svgToBase64(checkSvg);
+  slide.addImage({ data: iconData, x: 1, y: 1, w: 0.5, h: 0.5 });
+}
+main();
 ```
 
 Common icon patterns (simple inline SVGs):
@@ -237,5 +241,5 @@ All pre-installed in the workspace:
 ## File Paths
 
 - **Input presentations**: `/workdir/uploads/`
-- **Output presentations**: `/workdir/output/`
+- **Output presentations**: `/workdir/session/`
 - **Working files**: `/workdir/session/`

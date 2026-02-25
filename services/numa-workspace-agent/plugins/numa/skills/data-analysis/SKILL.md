@@ -38,7 +38,7 @@ Is your file > 50MB?
 ```python
 import pandas as pd
 import sqlite3
-import os
+from pathlib import Path
 
 # Read the source file
 input_path = '/workdir/uploads/large_data.csv'
@@ -55,7 +55,7 @@ conn = sqlite3.connect(db_path)
 df.to_sql('data', conn, index=False, if_exists='replace')
 
 print(f"Converted to SQLite: {db_path}")
-print(f"Database size: {os.path.getsize(db_path) / 1024 / 1024:.1f} MB")
+print(f"Database size: {Path(db_path).stat().st_size / 1024 / 1024:.1f} MB")
 ```
 
 ### Step 2: Create Indexes for Performance
@@ -346,9 +346,9 @@ html = '''<!DOCTYPE html>
 </body>
 </html>'''
 
-with open('/workdir/output/dashboard.html', 'w') as f:
+with open('/workdir/session/dashboard.html', 'w') as f:
     f.write(html)
-print("Dashboard saved: /workdir/output/dashboard.html")
+print("Dashboard saved: /workdir/session/dashboard.html")
 ```
 
 Use Numa's purple (`#8e50a7`) as the primary color. HTML dashboards are responsive, interactive, and more professional for non-chart visualizations.
@@ -405,10 +405,10 @@ for bar, val in zip(bars, result['total']):
             f'{val:,.0f}', ha='center', va='bottom', fontsize=9)
 
 plt.tight_layout()
-plt.savefig('/workdir/output/category_chart.png', dpi=150, bbox_inches='tight')
+plt.savefig('/workdir/session/category_chart.png', dpi=150, bbox_inches='tight')
 plt.close()
 
-print("Chart saved: /workdir/output/category_chart.png")
+print("Chart saved: /workdir/session/category_chart.png")
 ```
 
 ### Line Chart (Time Series)
@@ -441,10 +441,10 @@ ax.tick_params(axis='x', rotation=45)
 ax.grid(True, alpha=0.3)
 
 plt.tight_layout()
-plt.savefig('/workdir/output/trend_chart.png', dpi=150, bbox_inches='tight')
+plt.savefig('/workdir/session/trend_chart.png', dpi=150, bbox_inches='tight')
 plt.close()
 
-print("Chart saved: /workdir/output/trend_chart.png")
+print("Chart saved: /workdir/session/trend_chart.png")
 ```
 
 ### Pie Chart
@@ -480,10 +480,10 @@ wedges, texts, autotexts = ax.pie(
 ax.set_title('Distribution by Category', fontsize=14, fontweight='bold')
 
 plt.tight_layout()
-plt.savefig('/workdir/output/pie_chart.png', dpi=150, bbox_inches='tight')
+plt.savefig('/workdir/session/pie_chart.png', dpi=150, bbox_inches='tight')
 plt.close()
 
-print("Chart saved: /workdir/output/pie_chart.png")
+print("Chart saved: /workdir/session/pie_chart.png")
 ```
 
 ### Multiple Series Comparison
@@ -525,10 +525,10 @@ ax.tick_params(axis='x', rotation=45)
 ax.grid(True, alpha=0.3)
 
 plt.tight_layout()
-plt.savefig('/workdir/output/comparison_chart.png', dpi=150, bbox_inches='tight')
+plt.savefig('/workdir/session/comparison_chart.png', dpi=150, bbox_inches='tight')
 plt.close()
 
-print("Chart saved: /workdir/output/comparison_chart.png")
+print("Chart saved: /workdir/session/comparison_chart.png")
 ```
 
 ---
@@ -551,7 +551,7 @@ Stick with pandas when:
 import pandas as pd
 import sqlite3
 import matplotlib.pyplot as plt
-import os
+from pathlib import Path
 
 # 1. Load data to SQLite
 print("Loading data...")
@@ -605,18 +605,18 @@ ax2.set_title('Monthly Sales Trend')
 ax2.tick_params(axis='x', rotation=45)
 
 plt.tight_layout()
-plt.savefig('/workdir/output/analysis_summary.png', dpi=150, bbox_inches='tight')
+plt.savefig('/workdir/session/analysis_summary.png', dpi=150, bbox_inches='tight')
 plt.close()
 
 # 5. Export results
-by_category.to_csv('/workdir/output/sales_by_category.csv', index=False)
-monthly.to_csv('/workdir/output/monthly_trends.csv', index=False)
+by_category.to_csv('/workdir/session/sales_by_category.csv', index=False)
+monthly.to_csv('/workdir/session/monthly_trends.csv', index=False)
 
 print("\nAnalysis complete!")
 print("Files created:")
-print("  - /workdir/output/analysis_summary.png")
-print("  - /workdir/output/sales_by_category.csv")
-print("  - /workdir/output/monthly_trends.csv")
+print("  - /workdir/session/analysis_summary.png")
+print("  - /workdir/session/sales_by_category.csv")
+print("  - /workdir/session/monthly_trends.csv")
 
 conn.close()
 ```
@@ -628,7 +628,7 @@ conn.close()
 1. **Always sample first** - Understand your data with 1000 rows before loading millions
 2. **Create indexes on filter/group columns** - This is what makes SQLite fast
 3. **Use `/workdir/session/` for the database** - Ephemeral, cleaned up after session
-4. **Use `/workdir/output/` for results** - These sync to S3 for the user
+4. **Use `/workdir/session/` for results** - These sync to S3 for the user
 5. **Close connections** - Use `conn.close()` or context managers
 6. **Show progress for large operations** - Users appreciate knowing things are working
 
@@ -648,4 +648,4 @@ conn.close()
 
 - **Input files**: `/workdir/uploads/`
 - **Database**: `/workdir/session/analysis.db`
-- **Charts/exports**: `/workdir/output/`
+- **Charts/exports**: `/workdir/session/`

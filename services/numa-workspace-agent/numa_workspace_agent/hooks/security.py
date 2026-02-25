@@ -107,6 +107,20 @@ DANGEROUS_COMMANDS = [
     "gem install",
     "cargo install",
     "go install",
+    # npx downloads and executes packages without install
+    "npx ",
+    # Full path to env bypasses word-boundary regex
+    "/usr/bin/env",
+    # Node.js flags that preload modules before code scanning
+    "node -r ",
+    "node --require",
+    "node --import",
+    "node --loader",
+    # Python module execution of dangerous modules
+    "python3 -m http",
+    "python -m http",
+    "python3 -m smtpd",
+    "python -m smtpd",
 ]
 
 # Environment variable command patterns (regex for more flexible matching)
@@ -121,8 +135,14 @@ ENV_VAR_PATTERNS = [
     r"compgen\s+-[eAv]",
     # Echo/printf with sensitive env var patterns
     r"(?:echo|printf).*\$\{?(?:AWS_|COGNITO_|CLOUDFRONT_|SECRET|API_KEY|TOKEN|CREDENTIAL|PASSWORD|DYNAMODB_|OUTPUTS_BUCKET)",
-    # Cat/reading proc environ
-    r"(?:cat|less|more|head|tail|strings).*\/proc\/.*\/environ",
+    # Reading proc environ (all tools including binary readers)
+    r"(?:cat|less|more|head|tail|strings|xxd|od|hexdump|hd|tr).*\/proc\/.*\/environ",
+    # Input redirection from /proc
+    r"<\s*\/proc",
+    # awk/perl ENVIRON access
+    r"\bENVIRON\s*\[",
+    # Here-string env var injection
+    r"<<<\s*\$",
     # Python one-liners accessing env
     r"python.*os\.environ",
     r"python.*os\.getenv",
@@ -200,10 +220,14 @@ DANGEROUS_NODE_PATTERNS = [
     r"require\s*\(\s*['\"]http['\"]",
     r"require\s*\(\s*['\"]https['\"]",
     r"require\s*\(\s*['\"]dgram['\"]",
+    r"require\s*\(\s*['\"]dns['\"]",
+    r"require\s*\(\s*['\"]tls['\"]",
     r"from\s+['\"]net['\"]",
     r"from\s+['\"]http['\"]",
     r"from\s+['\"]https['\"]",
     r"from\s+['\"]dgram['\"]",
+    r"from\s+['\"]dns['\"]",
+    r"from\s+['\"]tls['\"]",
     # System info / sandbox escape
     r"require\s*\(\s*['\"]os['\"]",
     r"require\s*\(\s*['\"]vm['\"]",
@@ -217,8 +241,20 @@ DANGEROUS_NODE_PATTERNS = [
     # Dynamic code execution
     r"\beval\s*\(",
     r"\bFunction\s*\(",
-    # Global process access bypass
-    r"globalThis\s*\.\s*process",
+    # Global process access bypasses
+    r"\bglobalThis\b",
+    r"\bReflect\s*\.",
+    r"constructor\s*\.\s*constructor",
+    # File access outside workdir via fs
+    r"readFileSync\s*\(\s*['\"]\/(?!workdir)",
+    r"readFile\s*\(\s*['\"]\/(?!workdir)",
+    r"createReadStream\s*\(\s*['\"]\/(?!workdir)",
+    r"writeFileSync\s*\(\s*['\"]\/(?!workdir)",
+    r"writeFile\s*\(\s*['\"]\/(?!workdir)",
+    # Path string literals for sensitive dirs (catches concatenation like '/proc')
+    r"['\"]\/proc['\"/]",
+    r"['\"]\/etc['\"/]",
+    r"['\"]\/sys['\"/]",
 ]
 
 # Dangerous Python patterns (catch common bypasses)
@@ -230,9 +266,20 @@ DANGEROUS_PYTHON_PATTERNS = [
     r"import\s+urllib\b",
     r"import\s+requests\b",
     r"import\s+http\b",
+    r"import\s+sys\b",
+    r"import\s+pty\b",
+    r"import\s+shutil\b",
+    r"import\s+signal\b",
+    r"import\s+code\b",
+    r"import\s+marshal\b",
+    r"import\s+antigravity\b",
+    r"import\s+webbrowser\b",
     r"from\s+os\s+import",
     r"from\s+subprocess\s+import",
     r"from\s+socket\s+import",
+    r"from\s+sys\s+import",
+    r"from\s+shutil\s+import",
+    r"from\s+marshal\s+import",
     # Import bypasses
     r"__import__\s*\(",
     r"importlib\.import_module\s*\(",
@@ -267,6 +314,12 @@ DANGEROUS_PYTHON_PATTERNS = [
     r"\bjoblib\s*\.\s*load\s*\(",
     # Builtin access bypasses
     r"__builtins__",
+    r"__subclasses__",
+    r"__globals__",
+    r"__bases__",
+    r"__mro__",
+    r"sys\.modules",
+    r"sys\.path",
     r"getattr\s*\([^)]*['\"]open['\"]",
     r"getattr\s*\([^)]*['\"]exec['\"]",
     r"getattr\s*\([^)]*['\"]eval['\"]",
@@ -434,10 +487,10 @@ def check_node_command(command: str) -> tuple[bool, str | None]:
                 if re.search(pattern, node_code, re.IGNORECASE):
                     return True, f"Dangerous Node.js pattern detected: {pattern}"
 
-    # Check JS file content when executing .js files
-    # Match: node /workdir/script.js, node /workdir/session/gen.js, etc.
+    # Check JS file content when executing .js/.mjs/.cjs files
+    # Match: node /workdir/script.js, node /workdir/session/gen.cjs, etc.
     file_match = re.search(
-        r'node\s+["\']?(/workdir/[^\s"\']+\.(?:js|mjs))["\']?', command
+        r'node\s+["\']?(/workdir/[^\s"\']+\.(?:js|mjs|cjs))["\']?', command
     )
     if file_match:
         script_path = file_match.group(1)

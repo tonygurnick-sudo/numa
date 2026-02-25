@@ -15,7 +15,7 @@ pres.title = "Presentation Title";
 let slide = pres.addSlide();
 slide.addText("Hello World!", { x: 0.5, y: 0.5, fontSize: 36, color: "363636" });
 
-pres.writeFile({ fileName: "/workdir/output/presentation.pptx" });
+pres.writeFile({ fileName: "/workdir/session/presentation.pptx" });
 ```
 
 Save as `/workdir/session/create_deck.js` and run:

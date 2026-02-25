@@ -233,13 +233,13 @@ html_content = """
 </html>
 """
 
-HTML(string=html_content).write_pdf("/workdir/output/report.pdf")
-print("PDF created: /workdir/output/report.pdf")
+HTML(string=html_content).write_pdf("/workdir/session/report.pdf")
+print("PDF created: /workdir/session/report.pdf")
 ```
 
 ```python
 # From an HTML file
-HTML(filename="/workdir/session/report.html").write_pdf("/workdir/output/report.pdf")
+HTML(filename="/workdir/session/report.html").write_pdf("/workdir/session/report.pdf")
 ```
 
 **Why WeasyPrint over fpdf2:**
@@ -248,6 +248,52 @@ HTML(filename="/workdir/session/report.html").write_pdf("/workdir/output/report.
 - Professional typography
 - Easy to style with CSS
 - Great for multi-page documents
+
+### Multi-Page Layout Best Practices
+
+These patterns prevent common layout bugs (content spilling to extra pages, broken footers, dead space):
+
+**1. Use `@page` margin boxes for headers/footers** — never regular `<div>` elements in the document flow:
+
+```css
+@page {
+  size: A4;
+  margin: 25mm;
+  @bottom-left {
+    content: "Company Name";
+    font-size: 9pt;
+    color: #666;
+    white-space: nowrap;  /* Prevents text stacking vertically */
+  }
+  @bottom-right {
+    content: "Page " counter(page) " of " counter(pages);
+    font-size: 9pt;
+    color: #666;
+  }
+}
+/* Suppress header/footer on title page */
+@page :first {
+  @bottom-left { content: none; }
+  @bottom-right { content: none; }
+}
+```
+
+**2. Avoid forced page breaks** — prefer natural flow:
+- Use `page-break-inside: avoid` on atomic elements (cards, tables, callouts, stat boxes)
+- Only use `page-break-before: always` for deliberate section starts (e.g., title page → body)
+- Do NOT use `page-break-before: always` between content sections — it creates dead space
+
+**3. Professional document pattern** (most reliable for multi-page):
+- Generous margins: `25-30mm` all sides
+- Serif fonts (Georgia, Times) for body text
+- `text-align: justify` with `hyphens: auto`
+- Thin horizontal rules under section headings (`border-bottom: 1px solid #ccc`)
+- This style works more reliably than marketing layouts with gradients, cards, and flex rows
+
+**4. Common pitfalls:**
+- Footer text too long for margin box → add `white-space: nowrap`
+- Content slightly too tall for one page → cascading overflow pushes everything to extra pages
+- Tables splitting without repeated headers → keep small tables together with `page-break-inside: avoid`
 
 ### Professional Layouts: reportlab
 
@@ -260,7 +306,7 @@ from reportlab.lib.colors import HexColor
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 
-doc = SimpleDocTemplate("/workdir/output/professional.pdf", pagesize=A4)
+doc = SimpleDocTemplate("/workdir/session/professional.pdf", pagesize=A4)
 styles = getSampleStyleSheet()
 
 # Custom styles
@@ -311,7 +357,7 @@ story.append(Spacer(1, 20))
 story.append(Paragraph('H<sub>2</sub>O and E=mc<sup>2</sup>', body_style))
 
 doc.build(story)
-print("PDF created: /workdir/output/professional.pdf")
+print("PDF created: /workdir/session/professional.pdf")
 ```
 
 ### Quick & Simple: fpdf2
@@ -330,8 +376,8 @@ pdf.set_font("Helvetica", size=12)
 pdf.ln(10)
 pdf.multi_cell(0, 7, text="Your paragraph text goes here.")
 
-pdf.output("/workdir/output/document.pdf")
-print("PDF created: /workdir/output/document.pdf")
+pdf.output("/workdir/session/document.pdf")
+print("PDF created: /workdir/session/document.pdf")
 ```
 
 #### Tables with fpdf2
@@ -364,7 +410,7 @@ for row in data:
         pdf.cell(col_widths[i], 10, cell, border=1, align="C")
     pdf.ln()
 
-pdf.output("/workdir/output/table.pdf")
+pdf.output("/workdir/session/table.pdf")
 ```
 
 #### Multi-Page with Headers/Footers
@@ -390,7 +436,7 @@ for i in range(3):
     pdf.set_font("Helvetica", size=12)
     pdf.multi_cell(0, 10, f"Content for page {i + 1}...\n" * 10)
 
-pdf.output("/workdir/output/report.pdf")
+pdf.output("/workdir/session/report.pdf")
 ```
 
 ---
@@ -401,12 +447,15 @@ For reports where you want professional formatting from markdown:
 
 ### Local Pandoc (preferred — fast, no Lambda call)
 
-```bash
-# Markdown → PDF via Pandoc + LaTeX-style output
-pandoc /workdir/session/report.md -o /workdir/output/report.pdf
+> **Note:** `pandoc file.md -o file.pdf` requires a LaTeX engine which is **not installed**
+> (too large for the Docker image). Use the `--pdf-engine=weasyprint` flag instead.
 
-# With custom margins
-pandoc /workdir/session/report.md -o /workdir/output/report.pdf -V geometry:margin=1in
+```bash
+# Markdown → PDF via Pandoc + WeasyPrint engine
+pandoc /workdir/session/report.md --pdf-engine=weasyprint -o /workdir/session/report.pdf
+
+# Markdown → DOCX (works natively, no extra engine needed)
+pandoc /workdir/session/report.md -o /workdir/session/report.docx
 ```
 
 ### Lambda Fallback
@@ -420,6 +469,45 @@ python3 /workdir/tools/numa/convert_document.py \
 
 ---
 
+## Visual QA for Generated PDFs
+
+For multi-page PDFs, always inspect at least 1-2 pages visually before delivering.
+
+### Render to Images
+
+```python
+import fitz
+doc = fitz.open("/workdir/session/report.pdf")
+for i, page in enumerate(doc):
+    page.get_pixmap(dpi=150).save(f"/workdir/session/page_{i+1}.png")
+doc.close()
+```
+
+Or via CLI:
+```bash
+pdftoppm -jpeg -r 150 /workdir/session/report.pdf /workdir/session/page
+```
+
+### Visual Inspection Checklist
+
+After rendering, read the page images and check for:
+- Content spilling to unexpected extra pages
+- Footer/header text wrapping or stacking vertically
+- Massive dead space (half-empty pages)
+- Elements cut off at page boundaries
+- Tables splitting awkwardly (header on one page, rows on next)
+- Text overflow outside containers
+
+### Fix-and-Verify Loop
+
+1. Generate PDF → Render pages to images → Inspect
+2. List issues found
+3. Fix CSS/layout
+4. Re-render and confirm fixes
+5. Repeat until clean
+
+---
+
 ## Manipulating PDFs with PyPDF2
 
 ### Merge Multiple PDFs
@@ -430,7 +518,7 @@ from PyPDF2 import PdfMerger
 merger = PdfMerger()
 merger.append("/workdir/uploads/document1.pdf")
 merger.append("/workdir/uploads/document2.pdf")
-merger.write("/workdir/output/merged.pdf")
+merger.write("/workdir/session/merged.pdf")
 merger.close()
 ```
 
@@ -446,7 +534,7 @@ writer = PdfWriter()
 for i in range(1, min(5, len(reader.pages))):
     writer.add_page(reader.pages[i])
 
-with open("/workdir/output/extracted.pdf", "wb") as f:
+with open("/workdir/session/extracted.pdf", "wb") as f:
     writer.write(f)
 ```
 
@@ -461,7 +549,7 @@ for page in reader.pages:
     page.rotate(90)
     writer.add_page(page)
 
-with open("/workdir/output/rotated.pdf", "wb") as f:
+with open("/workdir/session/rotated.pdf", "wb") as f:
     writer.write(f)
 ```
 
@@ -479,7 +567,7 @@ for page in reader.pages:
     page.merge_page(watermark_page)
     writer.add_page(page)
 
-with open("/workdir/output/watermarked.pdf", "wb") as f:
+with open("/workdir/session/watermarked.pdf", "wb") as f:
     writer.write(f)
 ```
 
@@ -507,7 +595,7 @@ writer.update_page_form_field_values(
     writer.pages[0],
     {"client_name": "Acme Corp", "invoice_number": "INV-2026-001"}
 )
-with open("/workdir/output/filled_form.pdf", "wb") as f:
+with open("/workdir/session/filled_form.pdf", "wb") as f:
     writer.write(f)
 ```
 
@@ -537,7 +625,7 @@ page = template.pages[0]
 page.merge_page(overlay_reader.pages[0])
 writer.add_page(page)
 
-with open("/workdir/output/filled.pdf", "wb") as f:
+with open("/workdir/session/filled.pdf", "wb") as f:
     writer.write(f)
 ```
 
@@ -549,7 +637,7 @@ Convert DOCX, PPTX, XLSX to PDF locally:
 
 ```bash
 # DOCX → PDF
-soffice --headless --convert-to pdf --outdir /workdir/output/ /workdir/uploads/document.docx
+soffice --headless --convert-to pdf --outdir /workdir/session/ /workdir/uploads/document.docx
 
 # PPTX → PDF (useful for visual QA of presentations)
 soffice --headless --convert-to pdf --outdir /workdir/session/ /workdir/uploads/presentation.pptx
@@ -595,10 +683,10 @@ In these cases, switch to `extract_content.py` which uses vision AI to "read" th
 
 ```bash
 # DOCX → PDF (local, fast)
-soffice --headless --convert-to pdf --outdir /workdir/output/ /workdir/uploads/document.docx
+soffice --headless --convert-to pdf --outdir /workdir/session/ /workdir/uploads/document.docx
 
 # PDF → DOCX (local, variable quality)
-soffice --headless --convert-to docx --outdir /workdir/output/ /workdir/uploads/document.pdf
+soffice --headless --convert-to docx --outdir /workdir/session/ /workdir/uploads/document.pdf
 ```
 
 ### Lambda Fallback
@@ -619,8 +707,8 @@ python3 /workdir/tools/numa/convert_document.py \
 
 ## Best Practices
 
-1. **Always use `/workdir/output/` for generated PDFs** — ensures files are synced to S3
-2. **Check file exists before reading** — use `os.path.exists()` before opening PDFs
+1. **Always use `/workdir/session/` for generated PDFs** — ensures files are synced to S3
+2. **Check file exists before reading** — use `Path(path).exists()` (from `pathlib`) before opening PDFs
 3. **Handle encryption** — some PDFs are password-protected; check `reader.is_encrypted`
 4. **Use meaningful filenames** — include dates or identifiers in output names
 5. **Close resources** — use context managers (`with`) or call `.close()` on writers/mergers
@@ -641,5 +729,5 @@ python3 /workdir/tools/numa/convert_document.py \
 ## File Paths
 
 - **Input files**: `/workdir/uploads/`
-- **Output files**: `/workdir/output/`
+- **Output files**: `/workdir/session/`
 - **Working files**: `/workdir/session/`

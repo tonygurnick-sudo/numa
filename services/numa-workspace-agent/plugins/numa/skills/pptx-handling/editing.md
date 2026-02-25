@@ -102,7 +102,7 @@ for slide in prs.slides:
                         if old in run.text:
                             run.text = run.text.replace(old, new)
 
-prs.save("/workdir/output/filled_presentation.pptx")
+prs.save("/workdir/session/filled_presentation.pptx")
 ```
 
 ### Preserving Formatting
@@ -125,7 +125,7 @@ for slide in prs.slides:
             for para in shape.text_frame.paragraphs:
                 replace_in_runs(para, "PLACEHOLDER", "Actual Content")
 
-prs.save("/workdir/output/result.pptx")
+prs.save("/workdir/session/result.pptx")
 ```
 
 ### Setting Text with Formatting
@@ -150,7 +150,7 @@ for shape in slide.shapes:
         run.font.bold = True
         run.font.color.rgb = RGBColor(0x1E, 0x27, 0x61)
 
-prs.save("/workdir/output/styled.pptx")
+prs.save("/workdir/session/styled.pptx")
 ```
 
 ---
@@ -185,7 +185,7 @@ for shape in slide.shapes:
                 run.font.bold = True
                 run.font.size = Pt(12)
 
-prs.save("/workdir/output/table_filled.pptx")
+prs.save("/workdir/session/table_filled.pptx")
 ```
 
 ---
@@ -210,7 +210,7 @@ for ph in slide.placeholders:
     elif ph.placeholder_format.idx == 1:  # Body/Content
         ph.text = "Content goes here"
 
-prs.save("/workdir/output/with_new_slide.pptx")
+prs.save("/workdir/session/with_new_slide.pptx")
 ```
 
 ---
@@ -231,7 +231,7 @@ slide.shapes.add_picture(
     width=Inches(3)  # Height auto-calculated from aspect ratio
 )
 
-prs.save("/workdir/output/with_image.pptx")
+prs.save("/workdir/session/with_image.pptx")
 ```
 
 ---
@@ -253,7 +253,7 @@ def delete_slide(prs, index):
 # Delete the last slide
 delete_slide(prs, len(prs.slides) - 1)
 
-prs.save("/workdir/output/fewer_slides.pptx")
+prs.save("/workdir/session/fewer_slides.pptx")
 ```
 
 ---
@@ -282,7 +282,7 @@ def duplicate_slide(prs, slide_index):
 
 prs = Presentation("/workdir/uploads/template.pptx")
 duplicate_slide(prs, 0)  # Duplicate first slide
-prs.save("/workdir/output/duplicated.pptx")
+prs.save("/workdir/session/duplicated.pptx")
 ```
 
 ---
@@ -304,7 +304,7 @@ if slide.has_notes_slide:
 notes_slide = slide.notes_slide
 notes_slide.notes_text_frame.text = "Speaker notes for this slide"
 
-prs.save("/workdir/output/with_notes.pptx")
+prs.save("/workdir/session/with_notes.pptx")
 ```
 
 ---
@@ -354,5 +354,5 @@ def replace_across_runs(paragraph, old_text, new_text):
 ## File Paths
 
 - **Input templates**: `/workdir/uploads/`
-- **Output files**: `/workdir/output/`
+- **Output files**: `/workdir/session/`
 - **Working files**: `/workdir/session/`

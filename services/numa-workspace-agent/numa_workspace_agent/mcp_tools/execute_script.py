@@ -53,6 +53,15 @@ DANGEROUS_PYTHON_PATTERNS: list[tuple[str, str]] = [
     (r"\bimport\s+builtins\b", "import builtins is blocked"),
     (r"\bimport\s+importlib\b", "import importlib is blocked"),
     (r"\bimport\s+pkgutil\b", "import pkgutil is blocked"),
+    (r"\bimport\s+pty\b", "pty import is blocked"),
+    (r"\bimport\s+shutil\b", "shutil import is blocked"),
+    (r"\bimport\s+signal\b", "signal import is blocked"),
+    (r"\bimport\s+code\b", "code module import is blocked"),
+    (r"\bimport\s+marshal\b", "marshal import is blocked"),
+    (r"\bimport\s+antigravity\b", "antigravity import is blocked"),
+    (r"\bimport\s+webbrowser\b", "webbrowser import is blocked"),
+    (r"\bfrom\s+shutil\b", "from shutil import is blocked"),
+    (r"\bfrom\s+marshal\b", "from marshal import is blocked"),
     # Code execution
     (r"\bexec\s*\(", "exec() is blocked"),
     (r"\beval\s*\(", "eval() is blocked"),
@@ -83,6 +92,13 @@ DANGEROUS_PYTHON_PATTERNS: list[tuple[str, str]] = [
     (r"\bfrom\s+joblib\s+import\s+load\b", "from joblib import load is blocked"),
     (r"\bjoblib\s*\.\s*load\s*\(", "joblib.load() is blocked"),
     (r"\bgetattr\s*\([^,]+,\s*['\"]__", "getattr with dunder is blocked"),
+    # Python sandbox escape via dunder chains
+    (r"__subclasses__", "__subclasses__ access is blocked"),
+    (r"__globals__", "__globals__ access is blocked"),
+    (r"__bases__", "__bases__ access is blocked"),
+    (r"__mro__", "__mro__ access is blocked"),
+    (r"\bsys\.modules\b", "sys.modules access is blocked"),
+    (r"\bsys\.path\b", "sys.path access is blocked"),
     # Environment variable access
     (r"\bos\.environ\b", "os.environ is blocked"),
     (r"\bos\.getenv\b", "os.getenv is blocked"),
@@ -139,13 +155,29 @@ DANGEROUS_BASH_PATTERNS: list[tuple[str, str]] = [
     (r"\/var\/", "/var/ is blocked"),
     (r"\.system", ".system directory is blocked"),
     (r"\.env", ".env files are blocked"),
+    # Package installation (supply chain risk)
+    (r"\bpip\s+install\b", "pip install is blocked"),
+    (r"\bpip3\s+install\b", "pip3 install is blocked"),
+    (r"\bpython3?\s+-m\s+pip\b", "python -m pip is blocked"),
+    (r"\bnpm\s+install\b", "npm install is blocked"),
+    (r"\bnpm\s+i\s", "npm i is blocked"),
+    (r"\byarn\s+add\b", "yarn add is blocked"),
+    (r"\bapt-get\b", "apt-get is blocked"),
+    (r"\bapt\s+install\b", "apt install is blocked"),
+    (r"\bconda\s+install\b", "conda install is blocked"),
+    # Destructive commands
+    (r"\brm\s+-rf\b", "rm -rf is blocked"),
+    # Shell spawning
+    (r"\bbash\s+-c\b", "bash -c is blocked"),
+    (r"\bsh\s+-c\b", "sh -c is blocked"),
+    # npx downloads and executes packages without install
+    (r"\bnpx\b", "npx is blocked"),
 ]
 
 # Dangerous patterns for Node.js code
 DANGEROUS_NODE_PATTERNS: list[tuple[str, str]] = [
     # Dangerous modules
     (r"\brequire\s*\(\s*['\"]child_process", "child_process is blocked"),
-    (r"\brequire\s*\(\s*['\"]fs['\"]", "fs module is blocked - use allowed paths only"),
     (r"\brequire\s*\(\s*['\"]net['\"]", "net module is blocked"),
     (r"\brequire\s*\(\s*['\"]http", "http modules are blocked"),
     (r"\brequire\s*\(\s*['\"]https", "https module is blocked"),
@@ -154,15 +186,42 @@ DANGEROUS_NODE_PATTERNS: list[tuple[str, str]] = [
     (r"\brequire\s*\(\s*['\"]tls", "tls module is blocked"),
     # Dynamic imports
     (r"\bimport\s*\(\s*['\"]child_process", "child_process import is blocked"),
-    (r"\bimport\s*\(\s*['\"]fs['\"]", "fs import is blocked"),
     (r"\bimport\s*\(\s*['\"]net['\"]", "net import is blocked"),
     # Environment access
     (r"\bprocess\.env\b", "process.env is blocked"),
     # Code execution
     (r"\beval\s*\(", "eval() is blocked"),
     (r"\bFunction\s*\(", "Function() constructor is blocked"),
+    # Global process access bypasses
+    (r"\bglobalThis\b", "globalThis access is blocked"),
+    (r"\bReflect\s*\.", "Reflect API is blocked"),
+    (r"constructor\s*\.\s*constructor", "constructor chain is blocked"),
+    # File access outside workdir via fs
+    (
+        r"readFileSync\s*\(\s*['\"]\/(?!workdir)",
+        "reading files outside /workdir is blocked",
+    ),
+    (
+        r"readFile\s*\(\s*['\"]\/(?!workdir)",
+        "reading files outside /workdir is blocked",
+    ),
+    (
+        r"createReadStream\s*\(\s*['\"]\/(?!workdir)",
+        "reading files outside /workdir is blocked",
+    ),
+    (
+        r"writeFileSync\s*\(\s*['\"]\/(?!workdir)",
+        "writing files outside /workdir is blocked",
+    ),
+    (
+        r"writeFile\s*\(\s*['\"]\/(?!workdir)",
+        "writing files outside /workdir is blocked",
+    ),
+    # Path string literals for sensitive dirs
+    (r"['\"]\/proc['\"/]", "/proc is blocked"),
+    (r"['\"]\/etc['\"/]", "/etc is blocked"),
+    (r"['\"]\/sys['\"/]", "/sys is blocked"),
     # Protected paths
-    (r"['\"]\/etc\/", "/etc/ is blocked"),
     (r"['\"]\/home\/", "/home/ is blocked"),
     (r"['\"]\/root", "/root is blocked"),
     (r"['\"]\.system", ".system directory is blocked"),
