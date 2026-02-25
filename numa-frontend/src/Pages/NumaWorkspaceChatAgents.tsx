@@ -1631,9 +1631,21 @@ const NumaWorkspaceChatAgents = () => {
             resetAgentState();
           }
         } catch (wsError) {
-          console.error('Error loading V2 trace, falling back to V1 loader:', wsError);
-          // Trace fetch failed - fall through to V1 loading
-          await loadV1Conversation(selectedConversationId);
+          console.error('Error loading V2 workspace conversation trace:', wsError);
+          // This is a known V2 workspace conversation — do NOT fall back to V1.
+          // Network errors (e.g. interrupted requests, HTTP/2 errors after stop+refresh)
+          // should not reclassify a workspace conversation as V1.
+          setConversationId(selectedConversationId);
+          sessionStorage.setItem('currentConversationId-v2', selectedConversationId);
+          sessionStorage.setItem('isWorkspaceConversation-v2', 'true');
+          setNeedsV1Migration(false);
+          setMessages([
+            {
+              role: 'system',
+              content: t('systemMessages.loadTraceFailed'),
+            },
+          ]);
+          resetAgentState();
         }
       } else {
         // V1 conversation: load directly from DynamoDB (skip trace fetch entirely)
@@ -1646,7 +1658,7 @@ const NumaWorkspaceChatAgents = () => {
       setMessages([
         {
           role: 'system',
-          content: 'Error loading conversation. Please try again or select a different conversation.',
+          content: t('systemMessages.loadConversationFailed'),
         },
       ]);
       resetAgentState();

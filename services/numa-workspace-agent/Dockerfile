@@ -22,10 +22,34 @@ FROM --platform=linux/arm64 python:3.13-slim
 
 # Install runtime dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    curl \
-    ca-certificates \
-    jq \
+    curl ca-certificates jq \
+    # PDF-to-image, text extraction (pdftoppm, pdftotext, pdfimages)
+    poppler-utils \
+    # Document conversion (DOCX/PPTX/XLSX → PDF, formula recalc)
+    libreoffice-writer-nogui libreoffice-calc-nogui libreoffice-impress-nogui \
+    # WeasyPrint system dependencies (HTML→PDF)
+    libpango-1.0-0 libpangocairo-1.0-0 libcairo2 \
+    libgdk-pixbuf-2.0-0 libffi-dev libxml2 libxslt1.1 \
+    # PDF manipulation CLI
+    qpdf \
     && rm -rf /var/lib/apt/lists/*
+
+# Node.js 20 LTS for PptxGenJS presentation creation
+RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+    && apt-get install -y --no-install-recommends nodejs \
+    && rm -rf /var/lib/apt/lists/*
+
+# Pandoc for Markdown-to-DOCX/PDF conversion
+ARG PANDOC_VERSION=3.6.1
+RUN curl -fsSL -o /tmp/pandoc.deb \
+    "https://github.com/jgm/pandoc/releases/download/${PANDOC_VERSION}/pandoc-${PANDOC_VERSION}-1-arm64.deb" \
+    && dpkg -i /tmp/pandoc.deb && rm /tmp/pandoc.deb
+
+# PptxGenJS + sharp for presentation creation with icon rasterization
+RUN mkdir -p /app/node_packages && cd /app/node_packages \
+    && npm init -y && npm install --production pptxgenjs@3.12.0 sharp@0.33.0 \
+    && npm cache clean --force
+ENV NODE_PATH="/app/node_packages/node_modules"
 
 # Create non-root user with UID 1000
 # Note: AgentCore uses ephemeral storage, no EFS access point needed

@@ -376,6 +376,7 @@ CloudFront routing: The frontend distribution forwards `/api/*` to API Gateway a
 - Services (Docker/AgentCore)
   - Requires Docker Desktop running.
   - Package: `cd services && ./package-service.sh numa-workspace-agent`
+  - Force full rebuild (no cache): `DOCKER_BUILD_OPTS="--no-cache" ./package-service.sh numa-workspace-agent`
   - Output: `infra/assets/artifacts/<service-name>/image.tar`
   - Then deploy via CDKTF as usual (image is pushed to ECR).
   - Local dev: `cd services/numa-workspace-agent && poetry install && poetry run uvicorn numa_workspace_agent.main:app --reload --port 8080`

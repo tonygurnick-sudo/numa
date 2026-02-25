@@ -571,6 +571,9 @@ claude-cli-artifact-build:
     expire_in: 7 days
 
 # Build workspace-agent Docker image as tar for Fargate deployment
+# Uses BuildKit local cache to avoid rebuilding system packages, Node.js, Pandoc,
+# and Python deps on every run. First build is full (~27min), subsequent builds
+# that only change application code take ~5-8min.
 workspace-agent-package:
   stage: package
   timeout: 45 minutes  # ARM64 cross-compile via QEMU — P90 is ~27min
@@ -583,6 +586,14 @@ workspace-agent-package:
     - !reference [.rules, if-deployable]
   variables:
     DOCKER_TLS_CERTDIR: "/certs"
+    # BuildKit cache: reuse system packages, Node.js, Pandoc, Python deps between builds.
+    # mode=max exports all layers (not just final image), maximising cache hits.
+    # --cache-from silently ignores missing cache on first run.
+    DOCKER_BUILD_OPTS: "--cache-from type=local,src=$CI_PROJECT_DIR/.docker-cache --cache-to type=local,dest=$CI_PROJECT_DIR/.docker-cache,mode=max"
+  cache:
+    - key: workspace-agent-docker-${CI_DEFAULT_BRANCH}
+      paths:
+        - .docker-cache/
   before_script:
     - apk add --no-cache bash git
     # Register QEMU emulators for cross-platform builds (ARM64 on x86_64 runner)

@@ -108,7 +108,8 @@
   "systemMessages": {
     "backupModel": "Switching to backup model due to high demand. Please try your request again.",
     "agentError": "Agent error: {{message}}",
-    "loadConversationFailed": "Error loading conversation. Please try again or select a different conversation."
+    "loadConversationFailed": "Error loading conversation. Please try again or select a different conversation.",
+    "loadTraceFailed": "Unable to load conversation history. This may happen after stopping a response. Please send a new message to continue."
   },
   "errors": {
     "activateAgentFailed": "Unable to activate agent",

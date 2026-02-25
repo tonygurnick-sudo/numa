@@ -190,6 +190,37 @@ PROTECTED_DIR_PATTERNS = [
     r"\btree\b\s+[\"']?/workdir[\"']?\s*\|",  # tree /workdir | less
 ]
 
+# Dangerous Node.js patterns (block shell escape, env access, network)
+DANGEROUS_NODE_PATTERNS = [
+    # Shell escape via child_process
+    r"require\s*\(\s*['\"]child_process['\"]",
+    r"from\s+['\"]child_process['\"]",
+    # Network modules
+    r"require\s*\(\s*['\"]net['\"]",
+    r"require\s*\(\s*['\"]http['\"]",
+    r"require\s*\(\s*['\"]https['\"]",
+    r"require\s*\(\s*['\"]dgram['\"]",
+    r"from\s+['\"]net['\"]",
+    r"from\s+['\"]http['\"]",
+    r"from\s+['\"]https['\"]",
+    r"from\s+['\"]dgram['\"]",
+    # System info / sandbox escape
+    r"require\s*\(\s*['\"]os['\"]",
+    r"require\s*\(\s*['\"]vm['\"]",
+    r"require\s*\(\s*['\"]cluster['\"]",
+    r"from\s+['\"]os['\"]",
+    r"from\s+['\"]vm['\"]",
+    r"from\s+['\"]cluster['\"]",
+    # Environment variable access (leaks AWS secrets, Cognito tokens, etc.)
+    r"process\.env",
+    r"process\.exit",
+    # Dynamic code execution
+    r"\beval\s*\(",
+    r"\bFunction\s*\(",
+    # Global process access bypass
+    r"globalThis\s*\.\s*process",
+]
+
 # Dangerous Python patterns (catch common bypasses)
 DANGEROUS_PYTHON_PATTERNS = [
     # Direct dangerous imports
@@ -383,6 +414,48 @@ def check_python_command(command: str) -> tuple[bool, str | None]:
     return False, None
 
 
+def check_node_command(command: str) -> tuple[bool, str | None]:
+    """
+    Check Node.js command for dangerous patterns.
+
+    Scans BOTH:
+    - Inline code via -e flag: node -e "code"
+    - JS files: node /workdir/script.js
+
+    Blocks shell escape (child_process), env access, network modules, etc.
+    Allows: require('fs'), require('path'), require('pptxgenjs'), require('sharp').
+    """
+    # Check inline code passed via -e flag
+    if " -e " in command:
+        parts = command.split(" -e ", 1)
+        if len(parts) > 1:
+            node_code = parts[1]
+            for pattern in DANGEROUS_NODE_PATTERNS:
+                if re.search(pattern, node_code, re.IGNORECASE):
+                    return True, f"Dangerous Node.js pattern detected: {pattern}"
+
+    # Check JS file content when executing .js files
+    # Match: node /workdir/script.js, node /workdir/session/gen.js, etc.
+    file_match = re.search(
+        r'node\s+["\']?(/workdir/[^\s"\']+\.(?:js|mjs))["\']?', command
+    )
+    if file_match:
+        script_path = file_match.group(1)
+        try:
+            with open(script_path, "r") as f:
+                file_content = f.read()
+            for pattern in DANGEROUS_NODE_PATTERNS:
+                if re.search(pattern, file_content, re.IGNORECASE):
+                    return True, f"Dangerous pattern in {script_path}: {pattern}"
+        except FileNotFoundError:
+            # File doesn't exist yet, will fail at execution anyway
+            pass
+        except Exception as e:
+            logger.warning(f"Could not scan Node.js file {script_path}: {e}")
+
+    return False, None
+
+
 def check_bash_command(
     command: str, cwd: str = WORKSPACE_ROOT
 ) -> tuple[bool, str | None]:
@@ -445,6 +518,12 @@ def check_bash_command(
     # Check Python commands specifically for dangerous patterns
     if command.strip().startswith(("python", "python3")):
         blocked, reason = check_python_command(command)
+        if blocked:
+            return True, reason
+
+    # Check Node.js commands for dangerous patterns
+    if command.strip().startswith("node"):
+        blocked, reason = check_node_command(command)
         if blocked:
             return True, reason
 

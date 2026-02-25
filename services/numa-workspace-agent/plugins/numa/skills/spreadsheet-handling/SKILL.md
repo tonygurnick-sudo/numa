@@ -18,6 +18,31 @@ Read, write, and analyze spreadsheet files using pandas, openpyxl, and XlsxWrite
 
 ---
 
+## Quick Text Extraction with markitdown
+
+For a fast overview of spreadsheet content without writing code:
+
+```bash
+python -m markitdown /workdir/uploads/data.xlsx
+```
+
+This outputs the spreadsheet content as markdown tables — useful for quick review.
+
+---
+
+## Formula Recalculation via LibreOffice
+
+If an Excel file has formulas that need recalculating (e.g., after modifying data), use LibreOffice:
+
+```bash
+# Recalculate formulas and save as XLSX
+soffice --headless --calc --convert-to xlsx --outdir /workdir/output/ /workdir/uploads/data.xlsx
+```
+
+This opens the file in LibreOffice Calc (headless), recalculates all formulas, and saves the result.
+
+---
+
 ## Reading Spreadsheets with pandas
 
 ### Read Excel Files

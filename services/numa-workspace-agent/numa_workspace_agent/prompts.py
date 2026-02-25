@@ -387,6 +387,7 @@ Activate skills using the Skill tool. Available skills:
 | `integrations` | Working with connected external apps (Google Drive, Slack, Gmail, HubSpot, Jira, Notion, etc.) |
 | `knowledge-search` | Querying, uploading, downloading, or listing files in company knowledge bases |
 | `web-search` | Searching the internet for current information not available in the knowledge base |
+| `pptx-handling` | Creating, reading, or editing PowerPoint presentations, slide decks, or .pptx files |
 | `pdf-handling` | Creating, reading, merging, or manipulating PDF files |
 | `docx-handling` | Creating, reading, manipulating Word documents/templates, and adding images/logos |
 | `spreadsheet-handling` | Reading, writing, and analyzing Excel, CSV, and TSV files |
@@ -457,14 +458,48 @@ You have the ability to create charts and visualisations when applicable. Prefer
 
 ## Available Packages & Commands
 
-**Execution environments:** Python 3, Bash
-**System commands:** `jq`
+**Execution environments:** Python 3, Bash, Node.js 20
+**System commands:** `jq`, `soffice` (LibreOffice headless), `pandoc`, `pdftoppm`, `pdftotext`, `pdfimages`, `qpdf`, `node`
 **Python packages (pre-installed):**
 - Data: `pandas`, `numpy`
 - Excel: `openpyxl`, `xlrd`, `XlsxWriter`
-- Documents: `PyPDF2`, `python-docx`, `python-pptx`, `extract-msg`
+- Documents: `PyPDF2`, `python-docx`, `python-pptx`, `extract-msg`, `markitdown`
 - Web/HTML: `beautifulsoup4`, `html5lib`
-- PDF generation: `fpdf2`
+- PDF creation: `fpdf2`, `reportlab`, `weasyprint`
+- PDF reading: `pdfplumber`, `PyMuPDF` (import as fitz), `pdf2image`
+- Images: `Pillow`
+- Charts: `matplotlib`
+- OCR: Use `extract_content.py` Lambda (vision AI — better than local OCR)
+**Node.js packages (pre-installed, use via .js scripts):**
+- PPTX creation: `pptxgenjs`
+- Image processing: `sharp` (SVG-to-PNG rasterisation for icons)
+
+**Quick usage examples (load the relevant skill for full details):**
+```bash
+# HTML to PDF (weasyprint)
+python3 -c "from weasyprint import HTML; HTML(string='<h1>Hello</h1>').write_pdf('/workdir/output/doc.pdf')"
+
+# Extract tables from PDF (pdfplumber)
+python3 -c "import pdfplumber; pdf=pdfplumber.open('/workdir/uploads/file.pdf'); print(pdf.pages[0].extract_tables())"
+
+# Render PDF page as image (PyMuPDF)
+python3 -c "import fitz; doc=fitz.open('/workdir/uploads/file.pdf'); doc[0].get_pixmap(dpi=150).save('/workdir/session/page1.png')"
+
+# Convert DOCX to PDF (LibreOffice)
+soffice --headless --convert-to pdf --outdir /workdir/output/ /workdir/uploads/doc.docx
+
+# Markdown to DOCX (Pandoc)
+pandoc /workdir/session/report.md -o /workdir/output/report.docx
+
+# PDF to images (Poppler)
+pdftoppm -jpeg -r 150 /workdir/uploads/file.pdf /workdir/session/page
+
+# Extract text from PPTX/DOCX (markitdown)
+python -m markitdown /workdir/uploads/presentation.pptx
+
+# Create PPTX (PptxGenJS — write a .js file then run with node)
+node /workdir/session/create_deck.js
+```
 
 ## Numa Tools
 

@@ -175,7 +175,17 @@ doc.save('/workdir/output/with_images.docx')
 
 ## Reading DOCX Files
 
-### Extract All Text
+### Quick Text Extraction with markitdown
+
+The fastest way to extract text content from a DOCX file:
+
+```bash
+python -m markitdown /workdir/uploads/document.docx
+```
+
+This outputs the document content as markdown — great for quick review or processing.
+
+### Extract All Text with python-docx
 
 ```python
 from docx import Document
@@ -193,7 +203,7 @@ for table in doc.tables:
         print(' | '.join(row_text))
 ```
 
-### Analyze Document Structure
+### Analyse Document Structure
 
 ```python
 from docx import Document
@@ -526,11 +536,21 @@ print(f"Missing: {result['values_missing']}")
 
 ## Creating High-Quality DOCX from Markdown
 
-For reports, documents, or any content where you want **clean formatting without manual python-docx code**, consider writing markdown first and then converting to DOCX:
+For reports and documents where you want **clean formatting without manual python-docx code**, write markdown and convert with Pandoc.
+
+### Local Pandoc (preferred — fast, no Lambda call)
 
 ```bash
-# Write your content as markdown (manually or have the agent generate it)
-# Then convert to DOCX with proper formatting:
+# Markdown → DOCX (local, instant)
+pandoc /workdir/session/report.md -o /workdir/output/report.docx
+
+# With a reference doc for styling
+pandoc /workdir/session/report.md -o /workdir/output/report.docx --reference-doc=/workdir/uploads/template.docx
+```
+
+### Lambda Fallback
+
+```bash
 python3 /workdir/tools/numa/convert_document.py \
     --file-path "/workdir/session/report.md" \
     --format docx \
@@ -547,7 +567,7 @@ python3 /workdir/tools/numa/convert_document.py \
 
 | Need | Best Approach |
 |------|---------------|
-| Quick report with text/tables | Write markdown → `convert_document.py` |
+| Quick report with text/tables | Write markdown → `pandoc` (local) |
 | Fill existing DOCX template | python-docx (this skill) |
 | Complex formatting/styling | python-docx (this skill) |
 | Programmatic data insertion | python-docx (this skill) |
@@ -582,53 +602,47 @@ python3 /workdir/tools/numa/convert_document.py \
 
 ## Document Conversion (PDF ↔ DOCX)
 
-The `convert_document.py` tool supports **direct file conversion** between DOCX and PDF using LibreOffice.
-
-### Direct Conversion (Recommended)
-
-Use `--mode file` for direct DOCX ↔ PDF conversion:
+### Local Conversion (preferred — fast, no Lambda call)
 
 ```bash
-# DOCX → PDF (direct conversion) - Excellent quality
+# DOCX → PDF (local, excellent quality)
+soffice --headless --convert-to pdf --outdir /workdir/output/ /workdir/uploads/document.docx
+
+# PDF → DOCX (local, variable quality)
+soffice --headless --convert-to docx --outdir /workdir/output/ /workdir/uploads/document.pdf
+
+# Markdown → DOCX (local, instant)
+pandoc /workdir/session/report.md -o /workdir/output/report.docx
+```
+
+### Lambda Fallback
+
+Use `convert_document.py` when local tools aren't sufficient:
+
+```bash
+# DOCX → PDF
 python3 /workdir/tools/numa/convert_document.py \
     --file-path "/workdir/uploads/document.docx" \
-    --format pdf \
-    --mode file
-# → /workdir/session/converted_document.pdf
+    --format pdf --mode file
 
-# PDF → DOCX (direct conversion) - Variable quality
+# PDF → DOCX
 python3 /workdir/tools/numa/convert_document.py \
     --file-path "/workdir/uploads/document.pdf" \
-    --format docx \
-    --mode file
-# → /workdir/session/converted_document.docx
-```
+    --format docx --mode file
 
-### convert_document.py Usage
-
-```
+# Markdown → DOCX
 python3 /workdir/tools/numa/convert_document.py \
-    --file-path "/workdir/uploads/document.docx" \
-    --format pdf|docx \
-    --mode file|markdown \
-    [--title "Optional Document Title"]
+    --file-path "/workdir/session/report.md" \
+    --format docx --mode markdown
 ```
-
-**Parameters:**
-- `--file-path, -f` - Path to input file (required)
-- `--format, -o` - Output format: `pdf` or `docx` (required)
-- `--mode, -m` - Conversion mode (optional, default: `markdown`)
-  - `file` - Direct DOCX ↔ PDF conversion using LibreOffice
-  - `markdown` - Convert markdown/text to PDF/DOCX using Pandoc
-- `--title, -t` - Optional document title (used for filename)
 
 ### Conversion Quality
 
 | Conversion | Quality | Notes |
 |------------|---------|-------|
-| DOCX → PDF | ✅ Excellent | LibreOffice handles this very well |
-| PDF → DOCX | ⚠️ Variable | PDFs are presentation format; complex layouts may not convert cleanly |
-| Markdown → PDF/DOCX | ✅ Good | Works well for properly formatted markdown |
+| DOCX → PDF | Excellent | LibreOffice handles this very well |
+| PDF → DOCX | Variable | PDFs are presentation format; complex layouts may not convert cleanly |
+| Markdown → DOCX | Good | Works well for properly formatted markdown |
 
 ### When to Use python-docx vs. Conversion Tools
 
@@ -637,9 +651,9 @@ python3 /workdir/tools/numa/convert_document.py \
 | Creating new DOCX from scratch | python-docx (this skill) |
 | Filling DOCX templates | python-docx (this skill) |
 | Modifying existing DOCX | python-docx (this skill) |
-| Converting DOCX → PDF | `convert_document.py --mode file` |
-| Converting PDF → DOCX | `convert_document.py --mode file` |
-| Complex/scanned PDFs | `extract_content.py` + `convert_document.py --mode markdown` |
+| Converting DOCX → PDF | `soffice --headless` (local) |
+| Converting Markdown → DOCX | `pandoc` (local) |
+| Complex/scanned PDFs | `extract_content.py` + `pandoc` |
 
 ### Alternative: Extract + Convert (for complex PDFs)
 
@@ -649,14 +663,9 @@ For scanned or complex PDFs where direct conversion fails:
 # Step 1: Extract content using vision AI
 python3 /workdir/tools/numa/extract_content.py \
     --file-path "/workdir/uploads/scanned_document.pdf"
-# → /workdir/session/extracted_scanned_document.txt
 
-# Step 2: Convert extracted markdown to DOCX
-python3 /workdir/tools/numa/convert_document.py \
-    --file-path "/workdir/session/extracted_scanned_document.txt" \
-    --format docx \
-    --mode markdown
-# → /workdir/session/converted_scanned_document.docx
+# Step 2: Convert extracted text to DOCX (local pandoc)
+pandoc /workdir/session/extracted_scanned_document.txt -o /workdir/output/document.docx
 ```
 
 ---
