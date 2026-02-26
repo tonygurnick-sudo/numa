@@ -90,38 +90,18 @@ const ResizableSplitView = ({
       {/* Divider – only if showRight and showDivider are both true */}
       {showRight && showDivider && (
         <div
+          onMouseDown={handleMouseDown}
+          onMouseEnter={() => setHandleHovered(true)}
+          onMouseLeave={() => setHandleHovered(false)}
           style={{
-            width: '5px',
+            width: handleHovered || dragging ? '3px' : '1px',
             position: 'relative',
             zIndex: 10,
-            backgroundColor: 'transparent',
+            backgroundColor: handleHovered || dragging ? '#a1a1aa' : '#e4e4e7',
             cursor: 'col-resize',
+            transition: 'width 0.15s ease, background-color 0.15s ease',
           }}
-          onMouseDown={handleMouseDown}
-        >
-          {/* Three-Dot Handle */}
-          <div
-            style={{
-              height: '100%',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
-          >
-            <div
-              onMouseEnter={() => setHandleHovered(true)}
-              onMouseLeave={() => setHandleHovered(false)}
-              style={{
-                width: '6px',
-                height: '26px',
-                background: handleHovered
-                  ? 'repeating-linear-gradient(#888 0 2px, transparent 2px 4px)'
-                  : 'repeating-linear-gradient(#aaa 0 2px, transparent 2px 4px)',
-                borderRadius: '2px',
-              }}
-            />
-          </div>
-        </div>
+        />
       )}
 
       {/* Right Panel */}

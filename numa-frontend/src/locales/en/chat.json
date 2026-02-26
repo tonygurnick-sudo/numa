@@ -374,6 +374,11 @@
       "parseError": "Unable to preview this PDF. Please download to view.",
       "noPages": "No pages found in this PDF"
     },
+    "docx": {
+      "pageOf": "Page {{current}} of {{total}}",
+      "parseError": "Unable to preview this document. Please download to view.",
+      "noPages": "No pages found in this document"
+    },
     "pptx": {
       "slideOf": "Slide {{current}} of {{total}}",
       "parseError": "Unable to preview this presentation. Please download to view.",

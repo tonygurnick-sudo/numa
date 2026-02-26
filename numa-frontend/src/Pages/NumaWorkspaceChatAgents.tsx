@@ -2498,6 +2498,7 @@ const NumaWorkspaceChatAgents = () => {
                 onLeftFractionChange={showFilePreview && filePreview ? setFilePreviewLeftFraction : setLeftFraction}
                 minLeft={200}
                 minRight={200}
+                rightPadding="0"
               />
             </div>
           </div>

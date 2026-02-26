@@ -437,9 +437,9 @@ export const FilePreviewPanel: React.FC<FilePreviewPanelProps> = ({
             <span className="fw-semibold">{title}</span>
             <span className="text-muted ms-2 small">{preview.relativePath}</span>
           </div>
-          <Button variant="secondary" size="sm" onClick={onClose}>
-            {t('filePreview.actions.close')}
-          </Button>
+          <button type="button" className="file-preview-close-btn" onClick={onClose}>
+            <i className="bi bi-x-lg" />
+          </button>
         </div>
       )}
 
