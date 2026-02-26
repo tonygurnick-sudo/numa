@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Spinner, Button } from 'react-bootstrap';
+import { Spinner } from 'react-bootstrap';
 import { useTranslation } from 'react-i18next';
 
 interface XlsxPreviewProps {
@@ -7,9 +7,14 @@ interface XlsxPreviewProps {
   filename?: string;
 }
 
+const isNumeric = (value: string): boolean => {
+  if (!value || value.trim() === '') return false;
+  return !isNaN(Number(String(value).replace(/,/g, '')));
+};
+
 /**
  * XLSX Preview Component using SheetJS
- * Displays spreadsheets with multiple sheet tabs
+ * Displays spreadsheets with styled sheet tabs and table
  */
 export const XlsxPreview: React.FC<XlsxPreviewProps> = ({ data, filename: _filename }) => {
   const { t } = useTranslation('chat');
@@ -26,7 +31,6 @@ export const XlsxPreview: React.FC<XlsxPreviewProps> = ({ data, filename: _filen
 
         const parsedSheets = workbook.SheetNames.map((name) => {
           const sheet = workbook.Sheets[name];
-          // Convert to array of arrays, with formatting info where available
           const jsonData = XLSX.utils.sheet_to_json<string[]>(sheet, {
             header: 1,
             defval: '',
@@ -68,47 +72,168 @@ export const XlsxPreview: React.FC<XlsxPreviewProps> = ({ data, filename: _filen
   }
 
   const currentSheet = sheets[activeSheet];
-  const displayRows = currentSheet.data.slice(0, 100);
-  const totalRows = currentSheet.data.length;
+  const headerRow = currentSheet.data[0] || [];
+  const dataRows = currentSheet.data.slice(1, 101);
+  const totalRows = currentSheet.data.length - 1; // exclude header
+  const maxCols = Math.max(headerRow.length, ...dataRows.map((r) => r.length));
 
   return (
-    <div className="workspace-xlsx-preview" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       {/* Sheet tabs */}
       {sheets.length > 1 && (
-        <div className="xlsx-sheet-tabs d-flex gap-1 p-2 border-bottom bg-light" style={{ flexShrink: 0 }}>
+        <div
+          style={{
+            display: 'flex',
+            gap: '0.25rem',
+            padding: '0.5rem 0',
+            flexShrink: 0,
+            borderBottom: '2px solid #e2e8f0',
+          }}
+        >
           {sheets.map((sheet, idx) => (
-            <Button
+            <button
               key={sheet.name}
-              size="sm"
-              variant={idx === activeSheet ? 'primary' : 'outline-secondary'}
               onClick={() => setActiveSheet(idx)}
-              className="px-3"
+              style={{
+                padding: '0.35rem 1rem',
+                fontSize: '0.8rem',
+                fontWeight: idx === activeSheet ? 600 : 400,
+                border: 'none',
+                borderBottom: idx === activeSheet ? '2px solid var(--color-primary, #6f42c1)' : '2px solid transparent',
+                marginBottom: '-2px',
+                backgroundColor: 'transparent',
+                color: idx === activeSheet ? 'var(--color-primary, #6f42c1)' : '#6c757d',
+                cursor: 'pointer',
+                transition: 'all 0.15s',
+                borderRadius: '4px 4px 0 0',
+              }}
             >
               {sheet.name}
-            </Button>
+            </button>
           ))}
         </div>
       )}
 
+      {/* Summary bar */}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '0.75rem',
+          padding: '0.5rem 0',
+          flexShrink: 0,
+          fontSize: '0.8rem',
+          color: '#6c757d',
+        }}
+      >
+        <span>
+          <i className="bi bi-grid-3x3 me-1"></i>
+          {totalRows} {totalRows === 1 ? 'row' : 'rows'} &middot; {maxCols} {maxCols === 1 ? 'column' : 'columns'}
+        </span>
+      </div>
+
       {/* Data table */}
-      <div className="table-responsive" style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
-        <table className="table table-sm table-bordered table-hover xlsx-table">
+      <div
+        className="table-responsive"
+        style={{
+          flex: 1,
+          overflowY: 'auto',
+          minHeight: 0,
+          borderRadius: '8px',
+          border: '1px solid #e2e8f0',
+        }}
+      >
+        <table
+          style={{
+            width: '100%',
+            borderCollapse: 'collapse',
+            fontSize: '0.85rem',
+          }}
+        >
+          <thead>
+            <tr>
+              <th
+                style={{
+                  position: 'sticky',
+                  top: 0,
+                  zIndex: 2,
+                  backgroundColor: 'var(--color-primary, #6f42c1)',
+                  color: 'white',
+                  padding: '0.6rem 0.5rem',
+                  textAlign: 'center',
+                  fontWeight: 600,
+                  fontSize: '0.75rem',
+                  width: '3rem',
+                  borderRight: '1px solid rgba(255,255,255,0.2)',
+                }}
+              >
+                #
+              </th>
+              {headerRow.map((header, idx) => (
+                <th
+                  key={idx}
+                  style={{
+                    position: 'sticky',
+                    top: 0,
+                    zIndex: 1,
+                    backgroundColor: 'var(--color-primary, #6f42c1)',
+                    color: 'white',
+                    padding: '0.6rem 0.75rem',
+                    fontWeight: 600,
+                    whiteSpace: 'nowrap',
+                    borderRight: idx < headerRow.length - 1 ? '1px solid rgba(255,255,255,0.2)' : 'none',
+                  }}
+                >
+                  {String(header)}
+                </th>
+              ))}
+            </tr>
+          </thead>
           <tbody>
-            {displayRows.map((row, rowIdx) => (
-              <tr key={rowIdx} className={rowIdx === 0 ? 'table-light fw-semibold' : ''}>
-                {row.map((cell, cellIdx) => (
-                  <td
-                    key={cellIdx}
-                    style={{
-                      whiteSpace: 'pre-wrap',
-                      maxWidth: '300px',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                    }}
-                  >
-                    {String(cell)}
-                  </td>
-                ))}
+            {dataRows.map((row, rowIdx) => (
+              <tr
+                key={rowIdx}
+                style={{
+                  backgroundColor: rowIdx % 2 === 0 ? '#ffffff' : '#f8f9fc',
+                  transition: 'background-color 0.1s',
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#eef2ff')}
+                onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = rowIdx % 2 === 0 ? '#ffffff' : '#f8f9fc')}
+              >
+                <td
+                  style={{
+                    padding: '0.5rem',
+                    textAlign: 'center',
+                    color: '#94a3b8',
+                    fontSize: '0.75rem',
+                    fontVariantNumeric: 'tabular-nums',
+                    borderRight: '1px solid #e2e8f0',
+                    backgroundColor: rowIdx % 2 === 0 ? '#fafbfd' : '#f3f4f8',
+                    userSelect: 'none',
+                  }}
+                >
+                  {rowIdx + 1}
+                </td>
+                {headerRow.map((_, cellIdx) => {
+                  const cell = String(row[cellIdx] ?? '');
+                  return (
+                    <td
+                      key={cellIdx}
+                      style={{
+                        padding: '0.5rem 0.75rem',
+                        whiteSpace: 'pre-wrap',
+                        maxWidth: '300px',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        borderRight: cellIdx < headerRow.length - 1 ? '1px solid #f0f0f0' : 'none',
+                        textAlign: isNumeric(cell) ? 'right' : 'left',
+                        fontVariantNumeric: isNumeric(cell) ? 'tabular-nums' : 'normal',
+                      }}
+                    >
+                      {cell}
+                    </td>
+                  );
+                })}
               </tr>
             ))}
           </tbody>
@@ -116,7 +241,14 @@ export const XlsxPreview: React.FC<XlsxPreviewProps> = ({ data, filename: _filen
       </div>
 
       {totalRows > 100 && (
-        <div className="text-muted small p-2 border-top" style={{ flexShrink: 0 }}>
+        <div
+          style={{
+            flexShrink: 0,
+            padding: '0.5rem 0',
+            fontSize: '0.8rem',
+            color: '#6c757d',
+          }}
+        >
           <i className="bi bi-info-circle me-1"></i>
           {t('filePreview.xlsx.rowsShowing', { total: totalRows })}
         </div>
