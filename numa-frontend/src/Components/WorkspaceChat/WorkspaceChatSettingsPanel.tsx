@@ -722,37 +722,39 @@ const WorkspaceSettingsFileList: React.FC<WorkspaceSettingsFileListProps> = ({
 
         return (
           <div key={file.path} className="workspace-settings-file-row">
+            <i className={`${iconClass} workspace-settings-file-icon`} />
             <div className="workspace-settings-file-main" title={file.relativePath}>
-              <i className={`${iconClass} workspace-settings-file-icon`} />
-              <span className="workspace-settings-file-name">{file.displayName}</span>
+              <div className="workspace-settings-file-top-row">
+                <span className="workspace-settings-file-name">{file.displayName}</span>
+                <div className="workspace-settings-file-actions">
+                  {onOpen && (
+                    <Button
+                      variant="link"
+                      size="sm"
+                      className="workspace-settings-file-action-btn"
+                      onClick={() => onOpen(file)}
+                      title={t('workspaceSettings.preview')}
+                    >
+                      <Eye size={14} />
+                    </Button>
+                  )}
+                  {onDownload && (
+                    <Button
+                      variant="link"
+                      size="sm"
+                      className="workspace-settings-file-action-btn"
+                      onClick={() => onDownload(file)}
+                      title={t('workspaceSettings.download')}
+                    >
+                      <Download size={14} />
+                    </Button>
+                  )}
+                </div>
+              </div>
               <span className="workspace-settings-file-meta">
                 <span className="workspace-settings-file-size">{formatFileSize(file.size)}</span>
                 {modifiedLabel && <span className="workspace-settings-file-modified">{modifiedLabel}</span>}
               </span>
-            </div>
-            <div className="workspace-settings-file-actions">
-              {onOpen && (
-                <Button
-                  variant="link"
-                  size="sm"
-                  className="workspace-settings-file-action-btn"
-                  onClick={() => onOpen(file)}
-                  title={t('workspaceSettings.preview')}
-                >
-                  <Eye size={14} />
-                </Button>
-              )}
-              {onDownload && (
-                <Button
-                  variant="link"
-                  size="sm"
-                  className="workspace-settings-file-action-btn"
-                  onClick={() => onDownload(file)}
-                  title={t('workspaceSettings.download')}
-                >
-                  <Download size={14} />
-                </Button>
-              )}
             </div>
           </div>
         );

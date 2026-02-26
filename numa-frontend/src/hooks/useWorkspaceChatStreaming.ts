@@ -1,5 +1,9 @@
 import { useRef, useCallback, useState } from 'react';
-import { stopWorkspaceChatAgent, streamWorkspaceChatAgent } from '../Services/workspaceChatAgentService';
+import {
+  stopWorkspaceChatAgent,
+  streamWorkspaceChatAgent,
+  saveInlineDocumentToS3,
+} from '../Services/workspaceChatAgentService';
 import {
   createSDKEventContext,
   resetSDKEventContext,
@@ -12,6 +16,7 @@ import {
 } from '../utils/workspaceChatEventHandlers';
 import { parseChunkWithoutDocComments, extractSingleDocBlock } from '../utils/streamingProcessors';
 import type { SDKEventContext, SDKEvent, SDKStreamEvent, WorkspaceChatModelId } from '../types/workspaceChatTypes';
+import type { AwsCredentialIdentity } from '@aws-sdk/types';
 
 type Message = {
   role: string;
@@ -73,6 +78,10 @@ type UseWorkspaceChatStreamingOptions = {
   setIsInitializing?: (isInitializing: boolean) => void;
   /** Optional callback invoked after stream completes successfully (for auto-naming, etc.) */
   onStreamComplete?: (conversationId: string) => void;
+  /** AWS credentials getter for saving inline documents to S3 */
+  getCredentials?: () => Promise<AwsCredentialIdentity>;
+  /** Callback to refresh the session files panel after saving inline docs */
+  refreshSessionFiles?: () => void;
 };
 
 const resolveErrorMessage = (error: unknown, fallback: string): string => {
@@ -98,6 +107,8 @@ export function useWorkspaceChatStreaming({
   resetUserNewChatFlag,
   setIsInitializing,
   onStreamComplete,
+  getCredentials,
+  refreshSessionFiles,
 }: UseWorkspaceChatStreamingOptions) {
   // Workspace chat-specific refs
   const workspaceChatEventContextRef = useRef<SDKEventContext>(createSDKEventContext());
@@ -638,10 +649,18 @@ export function useWorkspaceChatStreaming({
                 }
                 return updated;
               });
+
+              // Auto-save inline document to S3 outputs (fire-and-forget)
+              if (getCredentials && conversationId) {
+                saveInlineDocumentToS3(docBlock.docTitle, docBlock.docContent, conversationId, getCredentials).then(
+                  () => refreshSessionFiles?.(),
+                );
+              }
             }
           }
 
           refreshSidebar();
+          refreshSessionFiles?.();
           setUploadedFiles([]);
           if (hasUserStartedNewChat) {
             resetUserNewChatFlag();
@@ -724,6 +743,8 @@ export function useWorkspaceChatStreaming({
       resetUserNewChatFlag,
       setIsInitializing,
       onStreamComplete,
+      getCredentials,
+      refreshSessionFiles,
     ],
   );
 

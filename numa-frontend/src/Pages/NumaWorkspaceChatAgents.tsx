@@ -1174,6 +1174,8 @@ const NumaWorkspaceChatAgents = () => {
     resetUserNewChatFlag,
     setIsInitializing,
     onStreamComplete: handleAutoNaming,
+    getCredentials,
+    refreshSessionFiles: settingsPanel.refreshFiles,
   });
 
   // Handle renaming a conversation from NewChat view
