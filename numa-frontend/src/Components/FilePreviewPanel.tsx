@@ -16,6 +16,9 @@ import {
   JsonPreview,
   VttPreview,
   PptxPreview,
+  CodePreview,
+  getLanguageFromExtension,
+  CODE_EXTENSIONS,
 } from './FilePreview';
 import type { FilePreview as FilePreviewType, FolderPreview } from '../hooks/useFilePreviewProcessor';
 
@@ -46,6 +49,8 @@ const FILE_SIZE_LIMITS: Record<string, number> = {
   gif: 10 * 1024 * 1024,
   pptx: 10 * 1024 * 1024,
   ppt: 10 * 1024 * 1024,
+  svg: 5 * 1024 * 1024,
+  webp: 10 * 1024 * 1024,
 };
 
 const DEFAULT_SIZE_LIMIT = 5 * 1024 * 1024;
@@ -129,9 +134,14 @@ export const FilePreviewPanel: React.FC<FilePreviewPanelProps> = ({
   // Fetch image as data URL
   const fetchImageAsDataUrl = useCallback(
     async (s3Key: string, extension: string): Promise<string> => {
+      const mimeTypes: Record<string, string> = {
+        png: 'image/png',
+        gif: 'image/gif',
+        svg: 'image/svg+xml',
+        webp: 'image/webp',
+      };
       const binary = await fetchBinaryContent(s3Key);
-      const mimeType = extension === 'png' ? 'image/png' : extension === 'gif' ? 'image/gif' : 'image/jpeg';
-      const blob = new Blob([binary], { type: mimeType });
+      const blob = new Blob([binary], { type: mimeTypes[extension] || 'image/jpeg' });
       return URL.createObjectURL(blob);
     },
     [fetchBinaryContent],
@@ -190,13 +200,13 @@ export const FilePreviewPanel: React.FC<FilePreviewPanelProps> = ({
           }
 
           // Load based on file type
-          if (['md', 'markdown', 'csv', 'html', 'json', 'txt', 'vtt'].includes(ext)) {
+          if (['md', 'markdown', 'csv', 'html', 'json', 'txt', 'vtt', ...CODE_EXTENSIONS].includes(ext)) {
             const content = await fetchTextContent(s3Key);
             setTextContent(content);
           } else if (['pdf', 'xlsx', 'xls', 'docx', 'pptx', 'ppt'].includes(ext)) {
             const binary = await fetchBinaryContent(s3Key);
             setBinaryContent(binary);
-          } else if (['png', 'jpg', 'jpeg', 'gif'].includes(ext)) {
+          } else if (['png', 'jpg', 'jpeg', 'gif', 'svg', 'webp'].includes(ext)) {
             const url = await fetchImageAsDataUrl(s3Key, ext);
             setImageUrl(url);
           }
@@ -380,7 +390,7 @@ export const FilePreviewPanel: React.FC<FilePreviewPanelProps> = ({
       );
     }
 
-    if (['png', 'jpg', 'jpeg', 'gif'].includes(ext) && imageUrl) {
+    if (['png', 'jpg', 'jpeg', 'gif', 'svg', 'webp'].includes(ext) && imageUrl) {
       return <ImagePreview src={imageUrl} filename={preview.filename} />;
     }
 
@@ -388,6 +398,19 @@ export const FilePreviewPanel: React.FC<FilePreviewPanelProps> = ({
       return (
         <div className="p-3 h-100">
           <VttPreview content={textContent} />
+        </div>
+      );
+    }
+
+    // Code files with syntax highlighting
+    if (CODE_EXTENSIONS.includes(ext) && textContent) {
+      return (
+        <div className="h-100">
+          <CodePreview
+            content={textContent}
+            language={getLanguageFromExtension(ext)}
+            filename={preview.filename}
+          />
         </div>
       );
     }

@@ -427,6 +427,17 @@
   }
 }
 
+// Code preview — fills the panel body
+.code-preview-container {
+  height: 100%;
+  overflow: auto;
+
+  pre {
+    margin: 0 !important;
+    min-height: 100%;
+  }
+}
+
 // File Preview Modal (mobile)
 .file-preview-modal {
   .modal-header {
