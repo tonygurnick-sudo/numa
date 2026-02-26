@@ -601,9 +601,7 @@ export const WorkspaceChatSettingsPanel: React.FC<WorkspaceChatSettingsPanelProp
               <div className="workspace-settings-card-title">
                 <FileText size={16} />
                 <span>{t('workspaceSettings.outputFiles')}</span>
-                {outputFiles.length > 0 && (
-                  <span className="workspace-settings-count-badge">{outputFiles.length}</span>
-                )}
+                {outputFiles.length > 0 && <span className="workspace-settings-count-badge">{outputFiles.length}</span>}
               </div>
               <div className="workspace-settings-card-header-right">
                 {collapsedSections.outputFiles && (

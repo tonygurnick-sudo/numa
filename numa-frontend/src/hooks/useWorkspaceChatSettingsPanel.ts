@@ -89,8 +89,12 @@ export function useWorkspaceChatSettingsPanel(conversationId: string | null): Us
         // File path format: "uploads/filename.pdf" or "outputs/output.txt"
         if (file.path.startsWith('uploads/') || file.path.startsWith('uploads\\')) {
           uploads.push(file);
-        } else if (file.path.startsWith('outputs/') || file.path.startsWith('outputs\\')
-                || file.path.startsWith('session/') || file.path.startsWith('session\\')) {
+        } else if (
+          file.path.startsWith('outputs/') ||
+          file.path.startsWith('outputs\\') ||
+          file.path.startsWith('session/') ||
+          file.path.startsWith('session\\')
+        ) {
           output.push(file);
         }
         // Ignore other paths
