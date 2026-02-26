@@ -387,6 +387,67 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
       route: { verb: 'PUT', path: 'settings/agents' },
     });
 
+    // Admin MFA Settings API (GET/PUT device remember duration)
+    const adminMfaEnv = {
+      CLIENT_NAME: props.clientName,
+      MFA_SETTINGS_TABLE_NAME: props.mfaSettingsTableName,
+    } as Record<string, string>;
+    const adminMfaPolicy = [
+      {
+        effect: 'Allow',
+        actions: ['dynamodb:GetItem', 'dynamodb:PutItem', 'dynamodb:DeleteItem'],
+        resources: [`arn:aws:dynamodb:*:*:table/${props.mfaSettingsTableName}`],
+      },
+    ];
+    this.addLambdaFunction(this, 'admin-mfa-settings-get', {
+      addAuthorizer: false, // Public: Login page fetches this mid-auth before tokens are available
+      lambdaDirectory: 'node/admin-mfa-settings',
+      runtime: 'nodejs22.x',
+      handler: 'index.handler',
+      environment: adminMfaEnv,
+      additionalPolicyStatements: adminMfaPolicy,
+      route: { verb: 'GET', path: 'settings/mfa' },
+    });
+    this.addLambdaFunction(this, 'admin-mfa-settings-put', {
+      addAuthorizer: true,
+      lambdaDirectory: 'node/admin-mfa-settings',
+      runtime: 'nodejs22.x',
+      handler: 'index.handler',
+      environment: adminMfaEnv,
+      additionalPolicyStatements: adminMfaPolicy,
+      route: { verb: 'PUT', path: 'settings/mfa' },
+    });
+    // Device trust: record (authenticated — called after MFA success to store server-side timestamp)
+    this.addLambdaFunction(this, 'admin-mfa-device-trust-record', {
+      addAuthorizer: true,
+      lambdaDirectory: 'node/admin-mfa-settings',
+      runtime: 'nodejs22.x',
+      handler: 'index.handler',
+      environment: adminMfaEnv,
+      additionalPolicyStatements: adminMfaPolicy,
+      route: { verb: 'POST', path: 'settings/mfa/device-trust' },
+    });
+    // Device trust: validate (public — called mid-login before tokens are available)
+    this.addLambdaFunction(this, 'admin-mfa-validate-device', {
+      addAuthorizer: false,
+      lambdaDirectory: 'node/admin-mfa-settings',
+      runtime: 'nodejs22.x',
+      handler: 'index.handler',
+      environment: adminMfaEnv,
+      additionalPolicyStatements: adminMfaPolicy,
+      route: { verb: 'POST', path: 'settings/mfa/validate-device' },
+    });
+    // Device trust: revoke (authenticated — called when user forgets a device)
+    this.addLambdaFunction(this, 'admin-mfa-device-trust-revoke', {
+      addAuthorizer: true,
+      lambdaDirectory: 'node/admin-mfa-settings',
+      runtime: 'nodejs22.x',
+      handler: 'index.handler',
+      environment: adminMfaEnv,
+      additionalPolicyStatements: adminMfaPolicy,
+      route: { verb: 'DELETE', path: 'settings/mfa/device-trust' },
+    });
+
     // User Chat Settings API (per-user defaults for tools, KBs, integrations)
     const chatSettingsEnv = {
       CLIENT_NAME: props.clientName,
@@ -1040,6 +1101,8 @@ export interface AppAgnosticApiGatewayLambdaCollectionProps
   userAgentsTableName: string;
   /** Exact agents settings table name, passed from Core to avoid name drift. */
   agentsSettingsTableName: string;
+  /** MFA settings table name for device remember duration. */
+  mfaSettingsTableName: string;
   /** User chat settings table name for per-user defaults (tools, KBs, integrations). */
   chatSettingsTableName: string;
   /** Data connectors table name for per-user connector configs. */

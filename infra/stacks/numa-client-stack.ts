@@ -444,6 +444,7 @@ export class NumaClientStack extends TerraformStack {
       workspaceAgentsTableName: core.workspaceAgentsTable.name,
       userAgentsTableName: core.userAgentsTable.name,
       agentsSettingsTableName: core.agentsSettingsTable.name,
+      mfaSettingsTableName: core.mfaSettingsTable.name,
       chatSettingsTableName: core.chatSettingsTable.name,
       dataConnectorsTableName: core.dataConnectorsTable.name,
       dataConnectorsSettingsTableName: core.dataConnectorsSettingsTable.name,

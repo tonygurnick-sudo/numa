@@ -8,7 +8,13 @@ import { BedrockAgentClient } from '@aws-sdk/client-bedrock-agent';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { QAppsClient } from '@aws-sdk/client-qapps';
 import { fromWebToken } from '@aws-sdk/credential-providers';
-import { createSrpSession, signSrpSession } from 'cognito-srp-helper';
+import {
+  createSrpSession,
+  signSrpSession,
+  createDeviceVerifier,
+  signSrpSessionWithDevice,
+  wrapAuthChallenge,
+} from 'cognito-srp-helper';
 import {
   CognitoIdentityProviderClient,
   RespondToAuthChallengeCommand,
@@ -18,6 +24,10 @@ import {
   GetUserCommand,
   AssociateSoftwareTokenCommand,
   VerifySoftwareTokenCommand,
+  ConfirmDeviceCommand,
+  UpdateDeviceStatusCommand,
+  ListDevicesCommand,
+  ForgetDeviceCommand,
 } from '@aws-sdk/client-cognito-identity-provider';
 import { NumaChatDynamoUtils } from '../utils/DynamoDBUtils';
 import { NumaBedrockUtils } from '../utils/NumaBedrockUtils';
@@ -25,6 +35,7 @@ import Notification from '../Components/Notification';
 import { withPRM } from '../utils/prmUtils';
 import { useTranslation } from 'react-i18next';
 import { hasConfigInSession, fetchConfigAddtoSession } from '../Components/ConfigSetup';
+import { AdminMfaSettingsService } from '../Services/AdminMfaSettingsService';
 
 const AuthContext = createContext(null);
 
@@ -48,6 +59,28 @@ export type LoginResult =
   | { requiresNewPassword: true; session: unknown }
   | MfaSetupRequired
   | MfaCodeRequired;
+
+// Device trust localStorage helpers — stores only Cognito SRP credentials.
+// The trust timestamp and expiry check are server-side (DynamoDB + Lambda)
+// so that users cannot tamper with them via DevTools.
+const DEVICE_KEY_STORAGE = 'numa_device_key';
+const DEVICE_GROUP_KEY_STORAGE = 'numa_device_group_key';
+const DEVICE_RANDOM_PASSWORD_STORAGE = 'numa_device_random_password';
+
+const getStoredDeviceKey = (): string | null => localStorage.getItem(DEVICE_KEY_STORAGE);
+const getStoredDeviceGroupKey = (): string | null => localStorage.getItem(DEVICE_GROUP_KEY_STORAGE);
+const getStoredDeviceRandomPassword = (): string | null => localStorage.getItem(DEVICE_RANDOM_PASSWORD_STORAGE);
+const storeDeviceTrust = (deviceKey: string, groupKey: string, randomPassword: string): void => {
+  localStorage.setItem(DEVICE_KEY_STORAGE, deviceKey);
+  localStorage.setItem(DEVICE_GROUP_KEY_STORAGE, groupKey);
+  localStorage.setItem(DEVICE_RANDOM_PASSWORD_STORAGE, randomPassword);
+};
+
+const clearDeviceTrust = (): void => {
+  localStorage.removeItem(DEVICE_KEY_STORAGE);
+  localStorage.removeItem(DEVICE_GROUP_KEY_STORAGE);
+  localStorage.removeItem(DEVICE_RANDOM_PASSWORD_STORAGE);
+};
 
 const MINUTE = 1000 * 60;
 
@@ -1316,15 +1349,39 @@ export const AuthProvider = ({ children, initialTokens }) => {
     // Step 1: Create SRP session
     const srpSession = createSrpSession(lowercaseUsername, password, USER_POOL_ID, false);
 
-    // Step 2: Initiate authentication
+    // Step 2: Validate device trust server-side before including DEVICE_KEY.
+    // The server holds the rememberedAt timestamp and checks it against the admin-configured
+    // duration — the client has no control over the expiry window (tamper-proof).
+    let storedDeviceKey = getStoredDeviceKey();
+    if (storedDeviceKey) {
+      try {
+        const valid = await AdminMfaSettingsService.validateDevice(storedDeviceKey);
+        if (!valid) {
+          clearDeviceTrust();
+          storedDeviceKey = null;
+        }
+      } catch {
+        // If we can't reach the server, fail closed (require MFA)
+        clearDeviceTrust();
+        storedDeviceKey = null;
+      }
+    }
+
+    // Initiate authentication (include DEVICE_KEY only if trust is still valid)
+    const authParameters: Record<string, string> = {
+      USERNAME: lowercaseUsername,
+      SRP_A: srpSession.largeA,
+      SECRET_HASH: SECRET_HASH,
+    };
+
+    if (storedDeviceKey) {
+      authParameters.DEVICE_KEY = storedDeviceKey;
+    }
+
     const initiateAuthParams = {
       AuthFlow: 'USER_SRP_AUTH',
       ClientId: CLIENT_ID,
-      AuthParameters: {
-        USERNAME: lowercaseUsername,
-        SRP_A: srpSession.largeA,
-        SECRET_HASH: SECRET_HASH,
-      },
+      AuthParameters: authParameters,
     };
 
     const initiateAuthCommand = new InitiateAuthCommand(initiateAuthParams);
@@ -1338,20 +1395,96 @@ export const AuthProvider = ({ children, initialTokens }) => {
     const signedSrpSession = signSrpSession(srpSession, initiateAuthResponse);
 
     // Step 4: Respond to the password verifier challenge
+    const challengeResponses: Record<string, string> = {
+      USERNAME: lowercaseUsername,
+      PASSWORD_CLAIM_SECRET_BLOCK: signedSrpSession.secret,
+      PASSWORD_CLAIM_SIGNATURE: signedSrpSession.passwordSignature,
+      SECRET_HASH: SECRET_HASH,
+      TIMESTAMP: signedSrpSession.timestamp,
+    };
+
+    if (storedDeviceKey) {
+      challengeResponses.DEVICE_KEY = storedDeviceKey;
+    }
+
     const respondToAuthChallengeParams = {
       ChallengeName: 'PASSWORD_VERIFIER',
       ClientId: CLIENT_ID,
-      ChallengeResponses: {
-        USERNAME: lowercaseUsername,
-        PASSWORD_CLAIM_SECRET_BLOCK: signedSrpSession.secret,
-        PASSWORD_CLAIM_SIGNATURE: signedSrpSession.passwordSignature,
-        SECRET_HASH: SECRET_HASH,
-        TIMESTAMP: signedSrpSession.timestamp,
-      },
+      ChallengeResponses: challengeResponses,
     };
 
     const respondToAuthChallengeCommand = new RespondToAuthChallengeCommand(respondToAuthChallengeParams);
-    const respondToAuthChallengeResponse = await cognitoClient.send(respondToAuthChallengeCommand);
+    let respondToAuthChallengeResponse = await cognitoClient.send(respondToAuthChallengeCommand);
+
+    // Handle DEVICE_SRP_AUTH → DEVICE_PASSWORD_VERIFIER challenge chain.
+    // When a remembered device sends DEVICE_KEY with login, Cognito returns
+    // DEVICE_SRP_AUTH after PASSWORD_VERIFIER instead of MFA. We complete
+    // the device SRP handshake here so the caller gets AuthenticationResult
+    // (with MFA skipped) or falls through to MFA if device auth fails.
+    if (respondToAuthChallengeResponse.ChallengeName === 'DEVICE_SRP_AUTH') {
+      const deviceGroupKey = getStoredDeviceGroupKey();
+      const deviceRandomPassword = getStoredDeviceRandomPassword();
+
+      if (!storedDeviceKey || !deviceGroupKey || !deviceRandomPassword) {
+        // Device credentials are incomplete — clear stale trust and let Cognito
+        // fall back to MFA on the next attempt
+        clearDeviceTrust();
+      } else {
+        try {
+          // Step 1: Respond to DEVICE_SRP_AUTH — sends SRP_A for device key exchange
+          const deviceSrpResponse = await cognitoClient.send(
+            new RespondToAuthChallengeCommand(
+              wrapAuthChallenge(signedSrpSession, {
+                ClientId: CLIENT_ID,
+                ChallengeName: 'DEVICE_SRP_AUTH',
+                ChallengeResponses: {
+                  SECRET_HASH: SECRET_HASH,
+                  USERNAME: lowercaseUsername,
+                  DEVICE_KEY: storedDeviceKey,
+                },
+                Session: respondToAuthChallengeResponse.Session,
+              }),
+            ),
+          );
+
+          // DEBUG: Log what Cognito returned — if ChallengeName is not DEVICE_PASSWORD_VERIFIER,
+          // the wrapAuthChallenge SRP_A may be mismatched (user SRP vs device SRP).
+          console.debug('DEVICE_SRP_AUTH response:', {
+            challengeName: deviceSrpResponse.ChallengeName,
+            hasSession: !!deviceSrpResponse.Session,
+            hasAuthResult: !!deviceSrpResponse.AuthenticationResult,
+          });
+
+          // Step 2: Sign the device SRP session using the stored random password
+          const signedDeviceSession = signSrpSessionWithDevice(
+            srpSession,
+            deviceSrpResponse,
+            deviceGroupKey,
+            deviceRandomPassword,
+          );
+
+          // Step 3: Respond to DEVICE_PASSWORD_VERIFIER — proves we know the device password
+          respondToAuthChallengeResponse = await cognitoClient.send(
+            new RespondToAuthChallengeCommand(
+              wrapAuthChallenge(signedDeviceSession, {
+                ClientId: CLIENT_ID,
+                ChallengeName: 'DEVICE_PASSWORD_VERIFIER',
+                ChallengeResponses: {
+                  SECRET_HASH: SECRET_HASH,
+                  USERNAME: lowercaseUsername,
+                  DEVICE_KEY: storedDeviceKey,
+                },
+                Session: deviceSrpResponse.Session,
+              }),
+            ),
+          );
+        } catch (deviceErr) {
+          // Device SRP failed — clear stale trust so next login falls back to MFA
+          console.warn('Device SRP authentication failed, clearing device trust:', deviceErr);
+          clearDeviceTrust();
+        }
+      }
+    }
 
     return {
       response: respondToAuthChallengeResponse,
@@ -1439,8 +1572,65 @@ export const AuthProvider = ({ children, initialTokens }) => {
     };
   };
 
+  // Confirm and optionally remember a new device after successful MFA authentication.
+  // Uses createDeviceVerifier() from cognito-srp-helper to compute the SRP salt and
+  // password verifier that Cognito needs to register the device. The DeviceRandomPassword
+  // is stored in localStorage so we can complete DEVICE_PASSWORD_VERIFIER challenges
+  // on subsequent logins (which skips MFA for the remembered device).
+  const confirmAndRememberDevice = async (
+    authResult: { NewDeviceMetadata?: { DeviceKey?: string; DeviceGroupKey?: string } },
+    cognitoClient: CognitoIdentityProviderClient,
+    accessToken: string,
+    rememberDevice: boolean,
+  ): Promise<void> => {
+    const newDeviceMetadata = authResult.NewDeviceMetadata;
+    if (!newDeviceMetadata?.DeviceKey || !newDeviceMetadata?.DeviceGroupKey) return;
+
+    try {
+      // Generate the SRP verifier for this device (salt + password verifier)
+      const { DeviceSecretVerifierConfig, DeviceRandomPassword } = createDeviceVerifier(
+        newDeviceMetadata.DeviceKey,
+        newDeviceMetadata.DeviceGroupKey,
+      );
+
+      // Confirm the device with Cognito, including the SRP verifier
+      await cognitoClient.send(
+        new ConfirmDeviceCommand({
+          AccessToken: accessToken,
+          DeviceKey: newDeviceMetadata.DeviceKey,
+          DeviceName: navigator.userAgent,
+          DeviceSecretVerifierConfig,
+        }),
+      );
+
+      if (rememberDevice) {
+        // Tell Cognito to remember this device (suppresses future MFA)
+        await cognitoClient.send(
+          new UpdateDeviceStatusCommand({
+            AccessToken: accessToken,
+            DeviceKey: newDeviceMetadata.DeviceKey,
+            DeviceRememberedStatus: 'remembered',
+          }),
+        );
+        // Store device key, group key, and random password in localStorage.
+        // The random password is needed for DEVICE_PASSWORD_VERIFIER on next login.
+        storeDeviceTrust(newDeviceMetadata.DeviceKey, newDeviceMetadata.DeviceGroupKey, DeviceRandomPassword);
+        // Record trust timestamp server-side (non-blocking). The server stores the
+        // rememberedAt time so the client cannot tamper with expiry via DevTools.
+        try {
+          await AdminMfaSettingsService.recordDeviceTrust(newDeviceMetadata.DeviceKey, accessToken);
+        } catch (trustErr) {
+          console.warn('Failed to record device trust server-side (non-blocking):', trustErr);
+        }
+      }
+    } catch (err) {
+      // Device confirmation failure should not block login
+      console.warn('Device confirmation failed (non-blocking):', err);
+    }
+  };
+
   // Complete MFA setup by verifying the TOTP code and enabling MFA
-  const completeMfaSetup = useCallback(async (code: string): Promise<LoginResult> => {
+  const completeMfaSetup = useCallback(async (code: string, rememberDevice?: boolean): Promise<LoginResult> => {
     const REGION = window.sessionStorage.getItem('REGION');
     const CLIENT_ID = window.sessionStorage.getItem('CLIENT_ID');
     const cognitoClient = withPRM(CognitoIdentityProviderClient, { region: REGION });
@@ -1488,6 +1678,13 @@ export const AuthProvider = ({ children, initialTokens }) => {
 
     if (authResponse.AuthenticationResult) {
       await handleLoginSuccess(authResponse.AuthenticationResult);
+      // Confirm and optionally remember device after successful auth
+      await confirmAndRememberDevice(
+        authResponse.AuthenticationResult,
+        cognitoClient,
+        authResponse.AuthenticationResult.AccessToken,
+        rememberDevice ?? false,
+      );
       return { success: true };
     }
 
@@ -1495,7 +1692,7 @@ export const AuthProvider = ({ children, initialTokens }) => {
   }, []);
 
   // Submit MFA code for SOFTWARE_TOKEN_MFA challenge (subsequent logins)
-  const submitMfaCode = useCallback(async (code: string): Promise<LoginResult> => {
+  const submitMfaCode = useCallback(async (code: string, rememberDevice?: boolean): Promise<LoginResult> => {
     const REGION = window.sessionStorage.getItem('REGION');
     const CLIENT_ID = window.sessionStorage.getItem('CLIENT_ID');
     const cognitoClient = withPRM(CognitoIdentityProviderClient, { region: REGION });
@@ -1531,6 +1728,13 @@ export const AuthProvider = ({ children, initialTokens }) => {
 
     if (authResponse.AuthenticationResult) {
       await handleLoginSuccess(authResponse.AuthenticationResult);
+      // Confirm and optionally remember device after successful auth
+      await confirmAndRememberDevice(
+        authResponse.AuthenticationResult,
+        cognitoClient,
+        authResponse.AuthenticationResult.AccessToken,
+        rememberDevice ?? false,
+      );
       return { success: true };
     }
 
@@ -1595,18 +1799,6 @@ export const AuthProvider = ({ children, initialTokens }) => {
       accessToken: decodedAccessToken,
       idToken: decodedIdToken,
     };
-
-    // Debug: Log token contents to understand what claims are available
-    console.log('🔍 Login Success - Token debugging:', {
-      decodedAccessTokenKeys: Object.keys(decodedAccessToken),
-      decodedIdTokenKeys: Object.keys(decodedIdToken),
-      accessTokenGroups: decodedAccessToken['cognito:groups'],
-      idTokenGroups: decodedIdToken['cognito:groups'],
-      accessTokenUsername: decodedAccessToken['username'],
-      idTokenUsername: decodedIdToken['cognito:username'] || decodedIdToken['username'],
-      accessTokenSub: decodedAccessToken['sub'],
-      idTokenSub: decodedIdToken['sub'],
-    });
 
     // Use the utility function to extract groups and features
     const { groups, features } = extractGroupsAndFeatures(decodedIdToken, setAuthError);
@@ -1765,6 +1957,50 @@ export const AuthProvider = ({ children, initialTokens }) => {
     }
   }, [user, refreshTokens]);
 
+  // List all remembered devices for the current user
+  const listDevices = useCallback(async () => {
+    const accessToken = await getAccessToken();
+    if (!accessToken) return [];
+    const REGION = window.sessionStorage.getItem('REGION');
+    const cognitoClient = withPRM(CognitoIdentityProviderClient, { region: REGION });
+    try {
+      const response = await cognitoClient.send(new ListDevicesCommand({ AccessToken: accessToken, Limit: 20 }));
+      const currentDeviceKey = getStoredDeviceKey();
+      return (response.Devices || []).map((d) => ({
+        deviceKey: d.DeviceKey || '',
+        deviceName: d.DeviceAttributes?.find((a) => a.Name === 'device_name')?.Value || '',
+        lastAuthDate: d.DeviceLastAuthenticatedDate ? new Date(d.DeviceLastAuthenticatedDate) : null,
+        remembered: d.DeviceAttributes?.find((a) => a.Name === 'device_status')?.Value === 'remembered',
+        isCurrent: d.DeviceKey === currentDeviceKey,
+      }));
+    } catch (err) {
+      console.warn('Failed to list devices:', err);
+      return [];
+    }
+  }, [getAccessToken]);
+
+  // Forget (revoke trust for) a specific device
+  const forgetDevice = useCallback(
+    async (deviceKey: string) => {
+      const accessToken = await getAccessToken();
+      if (!accessToken) return;
+      const REGION = window.sessionStorage.getItem('REGION');
+      const cognitoClient = withPRM(CognitoIdentityProviderClient, { region: REGION });
+      await cognitoClient.send(new ForgetDeviceCommand({ AccessToken: accessToken, DeviceKey: deviceKey }));
+      // Revoke server-side trust record (non-blocking)
+      try {
+        await AdminMfaSettingsService.revokeDeviceTrust(deviceKey, accessToken);
+      } catch (revokeErr) {
+        console.warn('Failed to revoke device trust server-side (non-blocking):', revokeErr);
+      }
+      // If forgetting the current device, clear local trust
+      if (deviceKey === getStoredDeviceKey()) {
+        clearDeviceTrust();
+      }
+    },
+    [getAccessToken],
+  );
+
   const value = useMemo(() => {
     return {
       isAuthenticated: !!user,
@@ -1795,6 +2031,8 @@ export const AuthProvider = ({ children, initialTokens }) => {
       requestPasswordReset,
       confirmPasswordReset,
       getCredentials,
+      listDevices,
+      forgetDevice,
     };
   }, [
     loading,
@@ -1823,7 +2061,8 @@ export const AuthProvider = ({ children, initialTokens }) => {
     requestPasswordReset,
     confirmPasswordReset,
     getCredentials,
-    numaChatDynamoUtils, // Include numaChatDynamoUtils so conversation manager gets notified when it becomes available
+    listDevices,
+    forgetDevice,
   ]);
 
   // Token revocation notification component

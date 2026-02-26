@@ -71,7 +71,7 @@ export default function UserProfilePage({
   settingsScope = 'user',
 }: UserProfilePageProps) {
   const { t } = useTranslation('settings');
-  const { user, getCredentials } = useAuth();
+  const { user, getCredentials, listDevices, forgetDevice } = useAuth();
   const { numaGet, numaPut } = useNumaRequest();
   const { availableKBs, isLoadingKBs, kbError } = useKnowledgeBase();
 
@@ -101,6 +101,52 @@ export default function UserProfilePage({
   const savedDefaultsRef = useRef('');
   const savedDefaultsEnabledRef = useRef(false);
   const savedProfileRef = useRef('');
+
+  const hasMfa = window.sessionStorage.getItem('MFA_ENABLED') === 'true';
+
+  type DeviceInfo = {
+    deviceKey: string;
+    deviceName: string;
+    lastAuthDate: Date | null;
+    remembered: boolean;
+    isCurrent: boolean;
+  };
+  const [devices, setDevices] = useState<DeviceInfo[]>([]);
+  const [devicesLoading, setDevicesLoading] = useState(false);
+  const [deviceRevoking, setDeviceRevoking] = useState<string | null>(null);
+
+  const loadDevices = useCallback(async () => {
+    if (!hasMfa || !listDevices) return;
+    setDevicesLoading(true);
+    try {
+      const result = await listDevices();
+      setDevices(result);
+    } catch {
+      // silently fail
+    } finally {
+      setDevicesLoading(false);
+    }
+  }, [hasMfa, listDevices]);
+
+  useEffect(() => {
+    loadDevices();
+  }, [loadDevices]);
+
+  const handleForgetDevice = useCallback(
+    async (deviceKey: string) => {
+      if (!forgetDevice) return;
+      setDeviceRevoking(deviceKey);
+      try {
+        await forgetDevice(deviceKey);
+        setDevices((prev) => prev.filter((d) => d.deviceKey !== deviceKey));
+      } catch {
+        // silently fail
+      } finally {
+        setDeviceRevoking(null);
+      }
+    },
+    [forgetDevice],
+  );
 
   const hasWorkspaceChat = window.sessionStorage.getItem('NUMA_WORKSPACE_CHAT') === 'true';
   const hasPipedreamFeature = window.sessionStorage.getItem('PIPEDREAM_INTEGRATIONS') === 'true';
@@ -1612,6 +1658,67 @@ export default function UserProfilePage({
                 canEditUserDefaults,
               )}
             </Form>
+          </Tab>
+        )}
+
+        {hasMfa && (
+          <Tab
+            eventKey="trusted-devices"
+            title={
+              <span>
+                <i className="bi bi-phone me-2"></i>
+                {t('userProfile.trustedDevices.title')}
+              </span>
+            }
+          >
+            <p className="text-muted mb-3">{t('userProfile.trustedDevices.description')}</p>
+            {devicesLoading ? (
+              <div className="text-center py-4">
+                <Spinner animation="border" />
+              </div>
+            ) : devices.length === 0 ? (
+              <Alert variant="secondary">
+                <i className="bi bi-info-circle me-2"></i>
+                {t('userProfile.trustedDevices.noDevices')}
+              </Alert>
+            ) : (
+              <div className="d-flex flex-column gap-2">
+                {devices.map((device) => (
+                  <div
+                    key={device.deviceKey}
+                    className="p-3 border rounded-3 bg-white d-flex align-items-center justify-content-between"
+                  >
+                    <div>
+                      <div className="fw-semibold">
+                        {device.deviceName || t('userProfile.trustedDevices.unknownDevice')}
+                        {device.isCurrent && (
+                          <span className="badge bg-primary ms-2">{t('userProfile.trustedDevices.currentDevice')}</span>
+                        )}
+                      </div>
+                      {device.lastAuthDate && (
+                        <div className="text-muted small">
+                          {t('userProfile.trustedDevices.lastUsed', {
+                            date: device.lastAuthDate.toLocaleDateString(),
+                          })}
+                        </div>
+                      )}
+                    </div>
+                    <Button
+                      variant="outline-danger"
+                      size="sm"
+                      disabled={deviceRevoking === device.deviceKey}
+                      onClick={() => handleForgetDevice(device.deviceKey)}
+                    >
+                      {deviceRevoking === device.deviceKey ? (
+                        <Spinner as="span" animation="border" size="sm" />
+                      ) : (
+                        t('userProfile.trustedDevices.forget')
+                      )}
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
           </Tab>
         )}
       </StyledTabs>

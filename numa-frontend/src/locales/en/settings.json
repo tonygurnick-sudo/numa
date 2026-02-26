@@ -17,7 +17,8 @@
     "integrations": "Integrations",
     "connectedApps": "Connected Apps",
     "dataConnectors": "Data Connectors",
-    "companyProfile": "Company Profile"
+    "companyProfile": "Company Profile",
+    "mfa": "MFA & Devices"
   },
   "navigation": {
     "unsavedBranding": "You have unsaved branding changes. Leaving this page will discard them. Continue?",
@@ -91,6 +92,16 @@
       "full": "Enable Agents and company sharing for everyone?"
     },
     "footerNote": "Users will still see gentle hints where agents are disabled (e.g., \"Agents are disabled. Contact your admin\")."
+  },
+  "mfaSettings": {
+    "title": "Device Trust Duration",
+    "description": "Configure how long users can skip two-factor authentication on trusted devices. Set to 0 to require MFA on every login. Reducing the duration takes effect on the next login — existing device trust that exceeds the new window will require MFA again.",
+    "durationLabel": "Remember device duration",
+    "unitHours": "hours",
+    "unitDays": "days",
+    "durationHelp": "Users who check 'Remember this device' will skip MFA for the selected duration.",
+    "zeroMeansAlways": "MFA will be required on every login. No 'Remember this device' option will be shown to users.",
+    "saveSuccess": "MFA device trust settings saved successfully."
   },
   "integrations": {
     "companySettingsTitle": "Company-wide settings",
@@ -520,6 +531,15 @@
           "help": "All integration actions will run automatically without approval prompts. Use this only if you fully trust the integrations and agents you use."
         }
       }
+    },
+    "trustedDevices": {
+      "title": "Trusted Devices",
+      "description": "Devices you have chosen to remember for two-factor authentication. Revoking trust means MFA will be required on the next login from that device.",
+      "noDevices": "No trusted devices found. When you log in with MFA and select 'Remember this device', it will appear here.",
+      "unknownDevice": "Unknown device",
+      "currentDevice": "This device",
+      "lastUsed": "Last used: {{date}}",
+      "forget": "Revoke Trust"
     },
     "actions": {
       "saving": "Saving...",

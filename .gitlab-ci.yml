@@ -60,6 +60,7 @@ deploy-dev-gate:
     - BUILD_DIR:
         - lambdas/node/admin-data-connector-settings
         - lambdas/node/admin-agents-settings
+        - lambdas/node/admin-mfa-settings
         - lambdas/node/admin-integration-settings
         - lambdas/node/agent-schedule-runner
         - lambdas/node/agent-schedules

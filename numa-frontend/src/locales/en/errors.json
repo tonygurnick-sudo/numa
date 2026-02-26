@@ -13,6 +13,9 @@
   "adminAgents": {
     "updateFailed": "Failed to update agents settings"
   },
+  "adminMfa": {
+    "updateFailed": "Failed to update MFA settings"
+  },
   "adminIntegrations": {
     "updateFailed": "Failed to update settings for {{integration}}"
   },

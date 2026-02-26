@@ -77,6 +77,7 @@ export class CoreNumaInfra extends Construct {
   readonly dataConnectorsSyncConfigsTable: DynamodbTable;
   readonly sharedTable: DynamodbTable;
   readonly sharedChatHistoryTable: DynamodbTable;
+  readonly mfaSettingsTable: DynamodbTable;
   readonly filesTable?: DynamodbTable;
   readonly webCrawler: WebCrawlerConstruct;
   readonly cognitoGroups!: CognitoGroupsConstruct;
@@ -122,6 +123,10 @@ export class CoreNumaInfra extends Construct {
             mfaConfiguration: 'ON',
             softwareTokenMfaConfiguration: {
               enabled: true,
+            },
+            deviceConfiguration: {
+              challengeRequiredOnNewDevice: true,
+              deviceOnlyRememberedOnUserPrompt: true,
             },
           }
         : {
@@ -543,6 +548,23 @@ export class CoreNumaInfra extends Construct {
         Name: `${numaClient}-agents-settings`,
         Environment: props.environmentName,
         Purpose: 'agents-settings',
+      },
+    });
+
+    // MFA settings table (device remember duration + per-device trust records)
+    this.mfaSettingsTable = new DynamodbTable(this, 'numa-mfa-settings-table', {
+      name: `${numaClient}-mfa-settings`,
+      billingMode: 'PAY_PER_REQUEST',
+      hashKey: 'setting',
+      attribute: [{ name: 'setting', type: 'S' }],
+      ttl: {
+        attributeName: 'ttl',
+        enabled: true,
+      },
+      tags: {
+        Name: `${numaClient}-mfa-settings`,
+        Environment: props.environmentName,
+        Purpose: 'mfa-settings',
       },
     });
 
