@@ -8,7 +8,7 @@ import { ChatSettingsPanel } from './ChatSettingsPanel';
 import { PendingFilesBar } from './PendingFilesBar';
 import { QuickActionsRow } from './QuickActionsRow';
 import type { ConversationMeta } from '../../hooks/useChatInactivity';
-import type { WorkspaceChatModelId, StagedItem } from '../../types/workspaceChatTypes';
+import type { WorkspaceChatModelId, StagedItem, UploadingFile } from '../../types/workspaceChatTypes';
 import type { QuickActionConfig } from '../../config/quickActionsConfig';
 import numaIcon from '/numa-logo.svg?url';
 import { useBranding } from '../../Providers/BrandingContext';
@@ -18,15 +18,6 @@ import { useAgentById } from '../../hooks/useAgentById';
 
 /** NewChat variant - 'v1' shows inline settings, 'v2' relies on external settings panel */
 export type NewChatVariant = 'v1' | 'v2';
-
-declare global {
-  interface Window {
-    /** Set by ChatFileUpload while open — ingest & auto-start (no staging). */
-    __ingestAndStart?: (files: File[]) => void;
-    /** Fallback cache when modal bridge isn’t ready yet. */
-    __pendingFiles?: File[];
-  }
-}
 
 type ConnectionOption = {
   id: string;
@@ -125,6 +116,10 @@ type NewChatProps = {
   onOpenHistory?: () => void;
   /** Callback to open the agents sidebar (V2 only) */
   onOpenAgents?: () => void;
+  /** Files currently being uploaded via drag-and-drop (V2 only) */
+  uploadingFiles?: UploadingFile[];
+  /** Cancel an in-progress upload (V2 only) */
+  onCancelUpload?: (id: string) => void;
 };
 
 // Avatar for recent conversations
@@ -233,6 +228,8 @@ const NewChat = ({
   connectedIntegrations = new Set<string>(),
   onOpenHistory,
   onOpenAgents,
+  uploadingFiles = [],
+  onCancelUpload,
 }: NewChatProps) => {
   const { t } = useTranslation('chat');
   // ------- Mobile detection and tab state -------
@@ -442,9 +439,14 @@ const NewChat = ({
   const inputComposer = (
     <div className="chat-input-wrapper new-chat-input-wrapper" style={{ animation: 'fadeIn 0.8s ease-in-out' }}>
       {dataAnalysisBanner}
-      {/* Show pending files indicator for pre-minted conversations (V2) */}
-      {variant === 'v2' && stagedItems.length > 0 && onRemoveStagedItem && (
-        <PendingFilesBar items={stagedItems} onRemove={onRemoveStagedItem} />
+      {/* Show pending/uploading files indicator for pre-minted conversations (V2) */}
+      {variant === 'v2' && (stagedItems.length > 0 || uploadingFiles.length > 0) && onRemoveStagedItem && (
+        <PendingFilesBar
+          items={stagedItems}
+          onRemove={onRemoveStagedItem}
+          uploadingFiles={uploadingFiles}
+          onCancelUpload={onCancelUpload}
+        />
       )}
       <ChatInput
         inputMessage={inputMessage}
@@ -491,14 +493,23 @@ const NewChat = ({
     </div>
   );
 
+  // For v2 (workspace chat), drag-and-drop is handled at the page level (chat-left-pane).
+  // Only v1 needs NewChat-level drag handlers.
+  const dragHandlers =
+    variant === 'v2'
+      ? {}
+      : {
+          onDragEnterCapture: handleDragEnter,
+          onDragOverCapture: handleDragOver,
+          onDragLeaveCapture: handleDragLeave,
+          onDropCapture: handleDrop,
+        };
+
   return (
     <div
       ref={wrapperRef}
       className={`d-flex flex-column h-100 new-chat-wrapper ${variant === 'v2' ? 'new-chat-wrapper-v2' : ''}`}
-      onDragEnterCapture={handleDragEnter}
-      onDragOverCapture={handleDragOver}
-      onDragLeaveCapture={handleDragLeave}
-      onDropCapture={handleDrop}
+      {...dragHandlers}
       data-dragging={isDragging ? 'true' : 'false'}
     >
       {/* Greeting */}

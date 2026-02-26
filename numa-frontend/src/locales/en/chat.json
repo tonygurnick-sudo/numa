@@ -295,7 +295,9 @@
       "folderCount_other": "({{count}} files)",
       "showAll": "Show all",
       "showLess": "Show less",
-      "moreFiles": "+{{count}} more"
+      "moreFiles": "+{{count}} more",
+      "uploading": "Uploading...",
+      "uploadError": "Upload failed"
     },
     "userAttachments": {
       "moreFiles": "+{{count}} more files",
@@ -337,7 +339,8 @@
       "uploadCount_other": "Upload {{count}} Files",
       "uploadMore": "Upload More",
       "done": "Done",
-      "cancel": "Cancel"
+      "cancel": "Cancel",
+      "dropOverlay": "Drop files to upload"
     },
     "segments": {
       "uploaded": "Uploaded: {{filename}}",

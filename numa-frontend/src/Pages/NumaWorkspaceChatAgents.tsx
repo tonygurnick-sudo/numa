@@ -54,7 +54,7 @@ import { WorkspaceChatSettingsPanel } from '../Components/WorkspaceChat/Workspac
 import { WorkspaceChatAgentsPanel } from '../Components/WorkspaceChat/WorkspaceChatAgentsPanel';
 import { useWorkspaceChatSettingsPanel } from '../hooks/useWorkspaceChatSettingsPanel';
 import { PendingFilesBar } from '../Components/Chat/PendingFilesBar';
-import { deleteWorkspaceChatUploads } from '../Services/workspaceChatAgentService';
+import { deleteWorkspaceChatUploads, uploadWorkspaceChatFileDirect } from '../Services/workspaceChatAgentService';
 import {
   loadStagedItems,
   saveStagedItems,
@@ -68,6 +68,7 @@ import {
 import type {
   StagedItem,
   StagedFile,
+  UploadingFile,
   WorkspaceChatUploadResponse,
   WorkspaceChatModelId,
 } from '../types/workspaceChatTypes';
@@ -154,6 +155,10 @@ const NumaWorkspaceChatAgents = () => {
   const [needsV1Migration, setNeedsV1Migration] = useState(false);
   /** Allows users to hide the legacy migration notice for the current conversation */
   const [dismissedLegacyMigrationNotice, setDismissedLegacyMigrationNotice] = useState(false);
+  /** Drag-and-drop state */
+  const [isDraggingFiles, setIsDraggingFiles] = useState(false);
+  const [uploadingFiles, setUploadingFiles] = useState<UploadingFile[]>([]);
+  const dragDepthRef = useRef(0);
 
   // Refs
   const messageEndRef = useRef(null);
@@ -1231,6 +1236,262 @@ const NumaWorkspaceChatAgents = () => {
     setShowUploadModal(true);
   };
 
+  // ---- Drag-and-drop file upload ----
+
+  // Prevent browser from opening files when dragged/dropped outside our target
+  useEffect(() => {
+    const prevent = (e: DragEvent) => {
+      if (e.dataTransfer?.types?.includes('Files')) e.preventDefault();
+    };
+    window.addEventListener('dragover', prevent);
+    window.addEventListener('drop', prevent);
+    return () => {
+      window.removeEventListener('dragover', prevent);
+      window.removeEventListener('drop', prevent);
+    };
+  }, []);
+
+  const hasUploadsInProgress = uploadingFiles.some((f) => f.status === 'uploading');
+
+  /**
+   * Recursively read all files from a dropped FileSystemDirectoryEntry.
+   * Preserves relative paths so folder structure is maintained in S3.
+   */
+  const readDirectoryRecursively = useCallback(
+    async (
+      dirEntry: FileSystemDirectoryEntry,
+      basePath: string,
+    ): Promise<Array<{ file: File; relativePath: string }>> => {
+      const results: Array<{ file: File; relativePath: string }> = [];
+      const readEntries = (reader: FileSystemDirectoryReader): Promise<FileSystemEntry[]> =>
+        new Promise((resolve, reject) => reader.readEntries(resolve, reject));
+
+      const reader = dirEntry.createReader();
+      let entries: FileSystemEntry[] = [];
+      let batch: FileSystemEntry[];
+      do {
+        batch = await readEntries(reader);
+        entries = entries.concat(batch);
+      } while (batch.length > 0);
+
+      for (const entry of entries) {
+        const entryPath = basePath ? `${basePath}/${entry.name}` : entry.name;
+        if (entry.isFile) {
+          const file = await new Promise<File>((resolve, reject) =>
+            (entry as FileSystemFileEntry).file(resolve, reject),
+          );
+          results.push({ file, relativePath: entryPath });
+        } else if (entry.isDirectory) {
+          const subResults = await readDirectoryRecursively(entry as FileSystemDirectoryEntry, entryPath);
+          results.push(...subResults);
+        }
+      }
+      return results;
+    },
+    [],
+  );
+
+  /**
+   * Extract files from a drop event's DataTransfer.
+   * Uses webkitGetAsEntry to properly handle folders (recursively reads contents).
+   */
+  const extractDroppedEntries = useCallback(
+    async (dt: DataTransfer | null): Promise<Array<{ file: File; relativePath?: string }>> => {
+      if (!dt) return [];
+
+      // Try webkitGetAsEntry first — needed for proper folder handling
+      if (dt.items && dt.items.length) {
+        const entries: FileSystemEntry[] = [];
+        for (let i = 0; i < dt.items.length; i++) {
+          const entry = dt.items[i].webkitGetAsEntry?.();
+          if (entry) entries.push(entry);
+        }
+
+        if (entries.length > 0) {
+          const allFiles: Array<{ file: File; relativePath?: string }> = [];
+          for (const entry of entries) {
+            if (entry.isFile) {
+              const file = await new Promise<File>((resolve, reject) =>
+                (entry as FileSystemFileEntry).file(resolve, reject),
+              );
+              if (file.size > 0) allFiles.push({ file });
+            } else if (entry.isDirectory) {
+              const dirFiles = await readDirectoryRecursively(entry as FileSystemDirectoryEntry, entry.name);
+              allFiles.push(...dirFiles.filter((f) => f.file.size > 0));
+            }
+          }
+          if (allFiles.length > 0) return allFiles;
+        }
+      }
+
+      // Fallback: simple file list (no folder support)
+      return Array.from(dt.files || [])
+        .filter((f) => f.size > 0)
+        .map((file) => ({ file }));
+    },
+    [readDirectoryRecursively],
+  );
+
+  const handleChatDragEnter = useCallback((e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    const hasFiles =
+      Array.from(e.dataTransfer?.types || []).includes('Files') ||
+      (e.dataTransfer?.items && Array.from(e.dataTransfer.items).some((i) => i.kind === 'file'));
+    if (!hasFiles) return;
+    dragDepthRef.current += 1;
+    setIsDraggingFiles(true);
+  }, []);
+
+  const handleChatDragOver = useCallback((e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
+  }, []);
+
+  const handleChatDragLeave = useCallback((e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    dragDepthRef.current = Math.max(0, dragDepthRef.current - 1);
+    if (dragDepthRef.current === 0) setIsDraggingFiles(false);
+  }, []);
+
+  /**
+   * Upload dropped files directly to S3 (no modal).
+   * Shows progress in PendingFilesBar and stages files on completion.
+   * Accepts entries with optional relativePath for folder uploads.
+   */
+  const handleDroppedFiles = useCallback(
+    async (entries: Array<{ file: File; relativePath?: string }>) => {
+      if (entries.length === 0) return;
+
+      // Mint a conversation if needed (same as clicking the paperclip).
+      // ensureConversationReady returns the conversationId.
+      let targetConversationId = conversationId;
+      if (!targetConversationId) {
+        const activeAgent = pendingAgent || currentAgent;
+        targetConversationId = await ensureConversationReady(
+          'File Upload',
+          activeAgent
+            ? {
+                agentId: activeAgent.agentId,
+                title: activeAgent.title,
+                version: activeAgent.version,
+                icon: activeAgent.icon,
+                agentType: activeAgent.agentType,
+                visibility: activeAgent.visibility,
+              }
+            : undefined,
+        );
+        setIsPreMintedConversation(true);
+      }
+
+      if (!targetConversationId) return;
+
+      // Create uploading entries for each file
+      const newUploading: (UploadingFile & { relativePath?: string })[] = entries.map((entry) => ({
+        id: crypto.randomUUID(),
+        file: entry.file,
+        filename: entry.relativePath || entry.file.name,
+        progress: 0,
+        status: 'uploading' as const,
+        relativePath: entry.relativePath,
+      }));
+      setUploadingFiles((prev) => [...prev, ...newUploading]);
+
+      // Upload each file concurrently
+      const convId = targetConversationId;
+      const uploadPromises = newUploading.map(async (entry) => {
+        try {
+          const response = await uploadWorkspaceChatFileDirect(
+            entry.file,
+            convId,
+            entry.relativePath,
+            (progress) => {
+              setUploadingFiles((prev) => prev.map((f) => (f.id === entry.id ? { ...f, progress } : f)));
+            },
+            getCredentials,
+          );
+
+          // Remove from uploading list on success
+          setUploadingFiles((prev) => prev.filter((f) => f.id !== entry.id));
+          return response;
+        } catch (error) {
+          console.error('[DragDrop] Upload failed:', error);
+          setUploadingFiles((prev) =>
+            prev.map((f) =>
+              f.id === entry.id
+                ? { ...f, status: 'error' as const, error: (error as Error).message || 'Upload failed' }
+                : f,
+            ),
+          );
+          return null;
+        }
+      });
+
+      const results = await Promise.all(uploadPromises);
+      const successfulResponses = results.filter((r): r is WorkspaceChatUploadResponse => r !== null);
+
+      if (successfulResponses.length > 0) {
+        // Stage the successfully uploaded files
+        const newFiles: StagedFile[] = successfulResponses.map((r) => ({
+          kind: 'file' as const,
+          filename: r.filename,
+          path: r.path,
+          size: r.size,
+          uploadedAt: Date.now(),
+        }));
+
+        setStagedItems((prev) => {
+          const existingFiles = flattenStagedItems(prev);
+          const allFiles = [...existingFiles, ...newFiles];
+          const grouped = groupFilesIntoFolders(allFiles);
+          if (convId) saveStagedItems(convId, grouped);
+          return grouped;
+        });
+
+        // Auto-name pre-minted conversations
+        if (isPreMintedConversation && numaChatDynamoUtils && convId) {
+          const firstName = successfulResponses[0].filename;
+          try {
+            await numaChatDynamoUtils.updateConversationName(convId, sub, firstName, 'auto');
+          } catch (err) {
+            console.error('Error renaming pre-minted conversation:', err);
+          }
+        }
+
+        refreshSidebar();
+        settingsPanel.refreshFiles();
+      }
+    },
+    [
+      conversationId,
+      pendingAgent,
+      currentAgent,
+      ensureConversationReady,
+      getCredentials,
+      isPreMintedConversation,
+      numaChatDynamoUtils,
+      sub,
+      refreshSidebar,
+      settingsPanel,
+    ],
+  );
+
+  const handleChatDrop = useCallback(
+    async (e: React.DragEvent<HTMLDivElement>) => {
+      e.preventDefault();
+      dragDepthRef.current = 0;
+      setIsDraggingFiles(false);
+      const entries = await extractDroppedEntries(e.dataTransfer);
+      handleDroppedFiles(entries);
+    },
+    [extractDroppedEntries, handleDroppedFiles],
+  );
+
+  const handleCancelUpload = useCallback((id: string) => {
+    setUploadingFiles((prev) => prev.filter((f) => f.id !== id));
+  }, []);
+
+  // ---- End drag-and-drop ----
+
   // Configure model, tools, and system prompt for agent call
   const configureAgentCall = (autoToolsEnabled, webSearchEnabled, createAgentEnabled, idToken, user, sub) => {
     // Determine which model to use based on fallback status
@@ -1938,7 +2199,24 @@ const NumaWorkspaceChatAgents = () => {
             <div className="chat-container position-relative flex-grow-1">
               <ResizableSplitView
                 left={
-                  <div className="chat-left-pane d-flex flex-column h-100">
+                  <div
+                    className="chat-left-pane d-flex flex-column h-100"
+                    style={{ position: 'relative' }}
+                    onDragEnter={handleChatDragEnter}
+                    onDragOver={handleChatDragOver}
+                    onDragLeave={handleChatDragLeave}
+                    onDrop={handleChatDrop}
+                  >
+                    {/* Drag-and-drop overlay */}
+                    {isDraggingFiles && (
+                      <div className="chat-drag-overlay">
+                        <div className="chat-drag-overlay-content">
+                          <i className="bi bi-cloud-arrow-up chat-drag-overlay-icon" />
+                          <span className="chat-drag-overlay-text">{t('workspace.fileUpload.dropOverlay')}</span>
+                        </div>
+                      </div>
+                    )}
+
                     {isInitializing && (
                       <div className="workspace-chat-initializing">
                         <div className="spinner-border spinner-border-sm" role="status">
@@ -1993,7 +2271,7 @@ const NumaWorkspaceChatAgents = () => {
                           setEnabledConnections={handleUserSetEnabledConnections}
                           connectionsLoading={connectionsLoading}
                           hasPipedreamFeature={hasPipedreamFeature}
-                          uploadsInProgress={isFileProcessing}
+                          uploadsInProgress={isFileProcessing || hasUploadsInProgress}
                           noToolsActive={noToolsActive}
                           inputRef={inputRef}
                           recentConversations={recentConversations}
@@ -2051,6 +2329,9 @@ const NumaWorkspaceChatAgents = () => {
                             setIsHistoryPanelOpen(false);
                             setIsAgentsPanelOpen(true);
                           }}
+                          onFilesDropped={(files) => handleDroppedFiles(files.map((f) => ({ file: f })))}
+                          uploadingFiles={uploadingFiles}
+                          onCancelUpload={handleCancelUpload}
                         />
                       ) : (
                         <>
@@ -2108,7 +2389,7 @@ const NumaWorkspaceChatAgents = () => {
 
                     {!shouldShowNewChatView && (
                       <div className="chat-input-wrapper">
-                        {stagedItems.length > 0 && (
+                        {(stagedItems.length > 0 || uploadingFiles.length > 0) && (
                           <PendingFilesBar
                             items={stagedItems}
                             onRemove={async (item: StagedItem) => {
@@ -2136,6 +2417,8 @@ const NumaWorkspaceChatAgents = () => {
                                 return filtered;
                               });
                             }}
+                            uploadingFiles={uploadingFiles}
+                            onCancelUpload={handleCancelUpload}
                           />
                         )}
                         <ChatInput
@@ -2155,7 +2438,7 @@ const NumaWorkspaceChatAgents = () => {
                           setEnabledConnections={handleUserSetEnabledConnections}
                           connectionsLoading={connectionsLoading}
                           hasPipedreamFeature={hasPipedreamFeature}
-                          uploadsInProgress={isFileProcessing}
+                          uploadsInProgress={isFileProcessing || hasUploadsInProgress}
                           noToolsActive={noToolsActive}
                           externalInputRef={inputRef}
                           autoFocus={true}
@@ -2277,7 +2560,7 @@ const NumaWorkspaceChatAgents = () => {
             availableConnections={availableConnections}
             connectionsLoading={connectionsLoading}
             hasPipedreamFeature={hasPipedreamFeature}
-            isDisabled={buttonStatus === 'streaming' || isFileProcessing}
+            isDisabled={buttonStatus === 'streaming' || isFileProcessing || hasUploadsInProgress}
             showModelSelector={workspaceModelSelectionEnabled}
             selectedModelId={selectedModelId}
             setSelectedModelId={setSelectedModelId}

@@ -409,6 +409,16 @@ export interface StagedFolder {
 /** Union type for staged items (can be file or folder) */
 export type StagedItem = StagedFile | StagedFolder;
 
+/** A file currently being uploaded via drag-and-drop (shown in PendingFilesBar with progress) */
+export interface UploadingFile {
+  id: string;
+  file: File;
+  filename: string;
+  progress: number;
+  status: 'uploading' | 'success' | 'error';
+  error?: string;
+}
+
 /** Segment for folder attachments in user messages */
 export interface WorkspaceChatFolderAttachmentSegment {
   kind: 'folder_attachment';
