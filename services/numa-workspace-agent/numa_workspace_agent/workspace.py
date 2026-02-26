@@ -229,6 +229,7 @@ def clear_conversation_files() -> int:
         "outputs",
         "agent-files",
         "tools",
+        "numa-codebase",
     }
     root = paths["root"]
 

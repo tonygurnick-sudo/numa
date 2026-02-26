@@ -130,7 +130,14 @@ def get_local_checksums(conversation_id: str) -> dict[str, FileChecksum]:
 
     # Protected directories that should not be synced as root files
     # tools/ is baked into container image - never sync to S3
-    protected_dirs = {".system", "chat-workflows", "uploads", "outputs", "tools"}
+    protected_dirs = {
+        ".system",
+        "chat-workflows",
+        "uploads",
+        "outputs",
+        "tools",
+        "numa-codebase",
+    }
 
     # DISABLED: chat-workflows feature temporarily disabled
     # Scan chat-workflows (globally persistent)
