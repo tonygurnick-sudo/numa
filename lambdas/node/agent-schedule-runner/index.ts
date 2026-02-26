@@ -1021,10 +1021,7 @@ const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout
  * Returns null if the file doesn't exist or is malformed — callers should
  * fall back to the raw assistant text in that case.
  */
-const readWorkspaceStatus = async (
-  userId: string,
-  conversationId: string,
-): Promise<AgentStatus | null> => {
+const readWorkspaceStatus = async (userId: string, conversationId: string): Promise<AgentStatus | null> => {
   if (!OUTPUTS_BUCKET) return null;
 
   // S3 path mirrors the workspace agent's sync convention:
@@ -1069,7 +1066,9 @@ const readWorkspaceStatus = async (
       if (isNotFound && attempt < MAX_ATTEMPTS) {
         // File may not have synced to S3 yet — wait and retry
         const delayMs = RETRY_DELAYS_MS[attempt - 1];
-        console.log(`status.json not found yet, retrying in ${delayMs}ms (attempt ${attempt}/${MAX_ATTEMPTS})`, { key });
+        console.log(`status.json not found yet, retrying in ${delayMs}ms (attempt ${attempt}/${MAX_ATTEMPTS})`, {
+          key,
+        });
         await sleep(delayMs);
         continue;
       }
@@ -1120,9 +1119,7 @@ const invokeWorkspaceAgent = async ({
   // For scheduled runs, prepend instructions so the agent knows to complete
   // autonomously and write a structured status report when finished.
   // V2 handles the agent's system prompt natively via agentId — we only add the scheduled-run context.
-  const prompt = scheduledRun
-    ? `${SCHEDULED_RUN_PREAMBLE}${runPrompt}`
-    : runPrompt;
+  const prompt = scheduledRun ? `${SCHEDULED_RUN_PREAMBLE}${runPrompt}` : runPrompt;
 
   const requestBody = {
     action: 'chat',

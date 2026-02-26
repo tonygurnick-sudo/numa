@@ -28,6 +28,7 @@ import { DocumentSection } from '../Shared/DocumentSection';
 import { getColorForPosition, getContrastTextColor } from '../Shared/colorUtils';
 import { PriorityIndicator } from '../Shared/PriorityIndicator';
 import { CreateTicketModal } from './CreateTicketModal';
+import { TicketDetailModal } from './TicketDetailModal';
 
 // ─── Props ──────────────────────────────────────────────────────────────────
 
@@ -153,6 +154,9 @@ export function CustomerDetailModal({
   // Linked work view state
   const [linkedWorkStatusFilter, setLinkedWorkStatusFilter] = useState<LinkedWorkStatusFilter>('all');
   const [linkedWorkSortBy, setLinkedWorkSortBy] = useState<LinkedWorkSortBy>('updatedAt');
+  const [showLinkedTicketDetail, setShowLinkedTicketDetail] = useState(false);
+  const [linkedTicketDetailId, setLinkedTicketDetailId] = useState<string | null>(null);
+  const [linkedTicketDetailTeamId, setLinkedTicketDetailTeamId] = useState<string | null>(null);
 
   // ── Inline editing state ──────────────────────────────────────────────
 
@@ -1166,6 +1170,7 @@ export function CustomerDetailModal({
         show={show}
         onHide={onHide}
         size="xl"
+        fullscreen="lg-down"
         scrollable
         dialogClassName="customer-detail-modal"
         contentClassName="d-flex flex-column"
@@ -1209,6 +1214,17 @@ export function CustomerDetailModal({
         }}
         prefilledCustomerId={customerId}
         prefilledCustomerName={customer?.companyName}
+      />
+      {/* Open a linked ticket's detail modal */}
+      <TicketDetailModal
+        show={showLinkedTicketDetail}
+        ticketId={linkedTicketDetailId}
+        teamIdOverride={linkedTicketDetailTeamId}
+        onHide={() => {
+          setShowLinkedTicketDetail(false);
+          setLinkedTicketDetailId(null);
+          setLinkedTicketDetailTeamId(null);
+        }}
       />
     </>
   );

@@ -66,6 +66,8 @@ const DEFAULT_VISIBLE_KEYS = [
   'customerName',
 ];
 
+const MOBILE_KEEP_KEYS = ['displayId', 'title', 'stageId', 'dueDate'];
+
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
 function getDatePresetRange(preset: string): { start: Date; end: Date } {
@@ -882,7 +884,7 @@ export function AllTicketsView(): React.JSX.Element {
         style={{ border: '1px solid #e0e0e0', borderRadius: 12, minHeight: 0 }}
       >
         {/* ── Toolbar ────────────────────────────────────────────────────── */}
-        <div className="d-flex align-items-center gap-3 px-3 py-2 border-bottom bg-white">
+        <div className="d-flex align-items-center flex-wrap gap-2 gap-md-3 px-3 py-2 border-bottom bg-white">
           {/* Search input */}
           <div className="position-relative" style={{ width: 280 }}>
             <i
@@ -1129,6 +1131,7 @@ export function AllTicketsView(): React.JSX.Element {
                   {visibleColumns.map((col) => (
                     <th
                       key={col.key}
+                      className={MOBILE_KEEP_KEYS.includes(col.key) ? '' : 'd-none d-lg-table-cell'}
                       style={{
                         whiteSpace: 'nowrap',
                         padding: '0.6rem 0.75rem',
@@ -1180,7 +1183,11 @@ export function AllTicketsView(): React.JSX.Element {
                         />
                       </td>
                       {visibleColumns.map((col) => (
-                        <td key={col.key} style={{ padding: '0.75rem 0.75rem' }}>
+                        <td
+                          key={col.key}
+                          className={MOBILE_KEEP_KEYS.includes(col.key) ? '' : 'd-none d-lg-table-cell'}
+                          style={{ padding: '0.75rem 0.75rem' }}
+                        >
                           {col.render ? col.render(ticket) : String(col.accessor(ticket) ?? '-')}
                         </td>
                       ))}

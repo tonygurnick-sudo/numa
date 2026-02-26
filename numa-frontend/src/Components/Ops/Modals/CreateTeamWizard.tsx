@@ -256,7 +256,7 @@ export function CreateTeamWizard({ show, onHide, onCreated }: CreateTeamWizardPr
   if (!config) return <></>;
 
   return (
-    <Modal show={show} onHide={onHide} size="lg" centered>
+    <Modal show={show} onHide={onHide} size="lg" fullscreen="lg-down" centered>
       <Modal.Header closeButton>
         <Modal.Title>{t('teams.create')}</Modal.Title>
       </Modal.Header>

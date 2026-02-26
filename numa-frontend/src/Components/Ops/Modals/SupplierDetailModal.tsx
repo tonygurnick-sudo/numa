@@ -295,7 +295,7 @@ export function SupplierDetailModal({
 
   return (
     <>
-      <Modal show={show} onHide={onHide} size="xl" centered scrollable>
+      <Modal show={show} onHide={onHide} size="xl" fullscreen="lg-down" centered scrollable>
         {/* ── Header ─────────────────────────────────────────────────────────── */}
         <Modal.Header closeButton style={{ borderBottom: `3px solid ${TEAL_ACCENT}` }}>
           <Modal.Title className="d-flex align-items-center gap-2 flex-wrap w-100">

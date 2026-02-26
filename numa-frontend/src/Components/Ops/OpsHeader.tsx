@@ -65,11 +65,11 @@ const OpsHeader = () => {
     <>
       {/* ── Row 1: Title + Team Selector | Nav Tabs + Actions ── */}
       <div
-        className="d-flex align-items-center justify-content-between px-3 border-bottom bg-white"
-        style={{ height: 92, minHeight: 92 }}
+        className="d-flex align-items-center justify-content-between px-2 px-md-3 py-2 py-md-0 border-bottom bg-white flex-wrap"
+        style={{ minHeight: 92 }}
       >
         {/* Left: Page Title + Team Selector */}
-        <div className="d-flex align-items-center flex-shrink-0" style={{ gap: '2.25rem' }}>
+        <div className="d-flex align-items-center gap-2 gap-md-4">
           <div
             className="d-flex align-items-center gap-2"
             style={{ cursor: canManage ? 'pointer' : 'default' }}
@@ -94,7 +94,7 @@ const OpsHeader = () => {
               <span className="fw-bold text-dark" style={{ fontSize: '1.15rem' }}>
                 {t('title')}
               </span>
-              <span className="text-muted d-none d-md-inline" style={{ fontSize: '0.78rem' }}>
+              <span className="text-muted d-none d-lg-inline" style={{ fontSize: '0.78rem' }}>
                 {t('subtitle')}
               </span>
             </div>
@@ -120,8 +120,8 @@ const OpsHeader = () => {
         </div>
 
         {/* Right: Nav tabs + actions grouped together */}
-        <div className="d-flex align-items-center gap-3 flex-shrink-0">
-          <div className="ops-nav-tabs">
+        <div className="d-flex align-items-center gap-2 gap-md-3 flex-wrap mt-2 mt-md-0 w-100 w-md-auto justify-content-start justify-content-md-end">
+          <div className="ops-nav-tabs d-flex flex-wrap" style={{ paddingBottom: 4 }}>
             {OPS_TOP_VIEWS.map(({ key, labelKey, icon }) => (
               <button
                 key={key}
@@ -137,12 +137,12 @@ const OpsHeader = () => {
 
           <button
             type="button"
-            className="btn btn-primary rounded-pill"
-            style={{ fontSize: '0.85rem', padding: '7px 20px' }}
+            className="btn btn-primary rounded-pill d-flex align-items-center justify-content-center"
+            style={{ fontSize: '0.85rem', padding: '7px 16px' }}
             onClick={() => setShowCreateTicket(true)}
           >
-            <i className="bi bi-plus-lg me-1" />
-            {t('tickets.newTicket')}
+            <i className="bi bi-plus-lg me-0 me-md-1" />
+            <span className="d-none d-md-inline">{t('tickets.newTicket')}</span>
           </button>
 
           {canManage && (

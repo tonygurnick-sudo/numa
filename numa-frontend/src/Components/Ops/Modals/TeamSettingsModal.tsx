@@ -191,7 +191,7 @@ export function TeamSettingsModal({ show, onHide, onSaved, onDeleted }: TeamSett
 
   return (
     <>
-      <Modal show={show} onHide={onHide} size="xl" centered>
+      <Modal show={show} onHide={onHide} size="xl" fullscreen="lg-down" centered>
         <Modal.Header closeButton>
           <Modal.Title>{t('teams.settings')}</Modal.Title>
         </Modal.Header>

@@ -23,15 +23,30 @@
   gap: 16px;
   height: 100%;
   align-items: flex-start;
-  overflow-x: auto;
+}
+
+@media (max-width: 991px) {
+  .kanban-columns {
+    flex-direction: column;
+    overflow-x: hidden;
+    overflow-y: auto;
+  }
 }
 
 .kanban-column {
-  flex: 1 1 0;
-  min-width: 140px;
+  flex: 1 0 280px;
+  min-width: 280px;
   display: flex;
   flex-direction: column;
   border-radius: var(--ops-radius);
+}
+
+@media (max-width: 991px) {
+  .kanban-column {
+    min-width: 100%;
+    width: 100%;
+    margin-bottom: 16px;
+  }
 }
 
 /* ── Column Header ────────────────────────────────────────────────────────── */
@@ -114,6 +129,7 @@
 .kanban-column-body::-webkit-scrollbar {
   width: 4px;
 }
+
 .kanban-column-body::-webkit-scrollbar-thumb {
   background: #d1d5db;
   border-radius: 4px;
@@ -131,24 +147,30 @@
    ═══════════════════════════════════════════════════════════════════════════ */
 
 .ticket-card {
-  background: #fff;
-  border-radius: 8px;
-  margin-bottom: 8px;
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border-radius: 10px;
+  margin-bottom: 10px;
   cursor: grab;
-  border: 1px solid var(--ops-border);
-  padding: 12px 14px;
-  transition: box-shadow 0.15s, border-color 0.15s, transform 0.1s;
+  border: 1px solid rgba(229, 231, 235, 0.8);
+  padding: 14px 16px;
+  transition: all 0.25s cubic-bezier(0.2, 0.8, 0.2, 1);
   position: relative;
   user-select: none;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.02), 0 1px 2px rgba(0, 0, 0, 0.03);
 }
 
 .ticket-card:hover {
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.09);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08), 0 4px 8px rgba(0, 0, 0, 0.04);
   border-color: #d1d5db;
+  transform: translateY(-2px);
 }
 
 .ticket-card:active {
   cursor: grabbing;
+  transform: translateY(1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
 }
 
 /* Top row: type badge + meta counts */
@@ -208,6 +230,7 @@
   margin: 0 0 10px 0;
   display: -webkit-box;
   -webkit-line-clamp: 2;
+  line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
@@ -380,8 +403,16 @@
   font-size: 0.85rem;
   font-weight: 500;
   cursor: pointer;
-  transition: var(--ops-transition);
+  transition: all 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
   white-space: nowrap;
+}
+
+@media (max-width: 767px) {
+  .ops-nav-tab {
+    padding: 6px 10px;
+    font-size: 0.75rem;
+    gap: 4px;
+  }
 }
 
 .ops-nav-tab:hover {
@@ -389,9 +420,10 @@
 }
 
 .ops-nav-tab.active {
-  background-color: #fff;
+  background-color: #ffffff;
   color: var(--brand-primary, var(--color-primary, #8e50a7));
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08), 0 2px 4px rgba(0, 0, 0, 0.04);
+  font-weight: 600;
 }
 
 .ops-nav-tab.active:hover {
@@ -1256,4 +1288,103 @@
   background: #e5e7eb;
   color: var(--ops-text-secondary);
   font-size: 0.72rem;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   List View (CRM & Suppliers) — Responsive Table-to-Card
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.ops-list-row,
+.ops-list-header {
+  display: flex;
+  align-items: center;
+  flex-wrap: nowrap;
+}
+
+@media (max-width: 991px) {
+  .ops-list-header {
+    display: none !important;
+    /* hide header on mobile */
+  }
+
+  .ops-list-row {
+    flex-wrap: wrap;
+    align-items: flex-start;
+    padding: 16px !important;
+    gap: 12px;
+    border-radius: var(--ops-radius);
+    margin-bottom: 8px;
+    background: #fff;
+    border: 1px solid var(--ops-border) !important;
+  }
+
+  .ops-list-row:last-child {
+    margin-bottom: 0;
+  }
+
+  .ops-list-col {
+    flex: 1 1 100% !important;
+    /* Stack vertically */
+    padding-right: 0 !important;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .ops-list-col.is-title {
+    margin-bottom: 4px;
+    justify-content: flex-start;
+  }
+
+  .ops-list-col.is-title .fw-semibold {
+    font-size: 1rem !important;
+    /* Larger title on mobile */
+  }
+
+  /* Reveal the pseudo-element label added in TSX using data-label on mobile */
+  .ops-list-col[data-label]::before {
+    content: attr(data-label);
+    font-size: 0.75rem;
+    color: var(--ops-text-secondary);
+    font-weight: 500;
+    margin-right: auto;
+    padding-right: 16px;
+  }
+
+  /* Reset left/right alignment specifically on mobile */
+  .ops-list-col {
+    text-align: right !important;
+  }
+
+  /* ═══════════════════════════════════════════════════════════════════════════
+     Global Settings — Config Tables Mobile Cards
+     ═══════════════════════════════════════════════════════════════════════════ */
+  .ops-settings-table thead {
+    display: none;
+  }
+
+  .ops-settings-table tbody {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .ops-settings-table tr {
+    display: block;
+    border: 1px solid var(--ops-border);
+    border-radius: var(--ops-radius);
+    padding: 12px;
+    background: #fff;
+  }
+
+  .ops-settings-table td {
+    display: block;
+    border: none !important;
+    padding: 6px 0 !important;
+    width: 100%;
+  }
+
+  .ops-settings-table td:empty {
+    display: none;
+  }
 }
