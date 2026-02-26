@@ -15,6 +15,7 @@ import {
   FolderTreePreview,
   JsonPreview,
   VttPreview,
+  PptxPreview,
 } from './FilePreview';
 import type { FilePreview as FilePreviewType, FolderPreview } from '../hooks/useFilePreviewProcessor';
 
@@ -43,6 +44,8 @@ const FILE_SIZE_LIMITS: Record<string, number> = {
   jpg: 10 * 1024 * 1024,
   jpeg: 10 * 1024 * 1024,
   gif: 10 * 1024 * 1024,
+  pptx: 10 * 1024 * 1024,
+  ppt: 10 * 1024 * 1024,
 };
 
 const DEFAULT_SIZE_LIMIT = 5 * 1024 * 1024;
@@ -190,7 +193,7 @@ export const FilePreviewPanel: React.FC<FilePreviewPanelProps> = ({
           if (['md', 'markdown', 'csv', 'html', 'json', 'txt', 'vtt'].includes(ext)) {
             const content = await fetchTextContent(s3Key);
             setTextContent(content);
-          } else if (['pdf', 'xlsx', 'xls', 'docx'].includes(ext)) {
+          } else if (['pdf', 'xlsx', 'xls', 'docx', 'pptx', 'ppt'].includes(ext)) {
             const binary = await fetchBinaryContent(s3Key);
             setBinaryContent(binary);
           } else if (['png', 'jpg', 'jpeg', 'gif'].includes(ext)) {
@@ -369,6 +372,14 @@ export const FilePreviewPanel: React.FC<FilePreviewPanelProps> = ({
       );
     }
 
+    if (['pptx', 'ppt'].includes(ext) && binaryContent) {
+      return (
+        <div className="p-3 h-100">
+          <PptxPreview data={binaryContent} filename={preview.filename} />
+        </div>
+      );
+    }
+
     if (['png', 'jpg', 'jpeg', 'gif'].includes(ext) && imageUrl) {
       return <ImagePreview src={imageUrl} filename={preview.filename} />;
     }
@@ -449,6 +460,19 @@ export const FilePreviewPanel: React.FC<FilePreviewPanelProps> = ({
                   const url = URL.createObjectURL(blob);
                   window.open(url, '_blank');
                   setTimeout(() => URL.revokeObjectURL(url), 1000);
+                }
+              : undefined
+          }
+          onOpenFullScreen={
+            preview.type === 'file'
+              ? () => {
+                  const params = new URLSearchParams({
+                    key: preview.fullPath,
+                    name: preview.filename,
+                    ext: preview.extension,
+                    bucket,
+                  });
+                  window.open(`/file-preview?${params.toString()}`, '_blank');
                 }
               : undefined
           }

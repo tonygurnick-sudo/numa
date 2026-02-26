@@ -15,6 +15,9 @@ const SharedDocumentChat = lazy(() =>
   import('./Pages/SharedDocumentChat').then((m) => ({ default: m.SharedDocumentChat })),
 );
 const SharedAnalytics = lazy(() => import('./Pages/SharedAnalytics').then((m) => ({ default: m.SharedAnalytics })));
+const FilePreviewFullScreen = lazy(() =>
+  import('./Pages/FilePreviewFullScreen').then((m) => ({ default: m.FilePreviewFullScreen })),
+);
 
 // Component to wrap authenticated routes with AppLayout
 const AuthenticatedLayout = ({ children, requiredFeature }: { children: ReactNode; requiredFeature?: string }) => {
@@ -87,6 +90,8 @@ const AppRoutes = () => {
             </AuthenticatedLayout>
           }
         />
+        {/* Full-screen file preview — authenticated but no AppLayout (opens in new tab) */}
+        <Route path="/file-preview" element={user ? <FilePreviewFullScreen /> : <Navigate to="/login" replace />} />
         {/* Dynamically render all protected routes from ROUTE_CONFIG */}
         {ROUTE_CONFIG.map((r) => {
           const featureEnabled = isFeatureEnabled(r.featureFlag);

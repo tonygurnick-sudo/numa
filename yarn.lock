@@ -122,6 +122,7 @@ __metadata:
     "@dnd-kit/utilities": "npm:^3.2.2"
     "@eslint/js": "npm:^9.0.0"
     "@honeycombio/opentelemetry-web": "npm:^0.21.0"
+    "@jvmr/pptx-to-html": "npm:^1.0.0"
     "@mdxeditor/editor": "npm:^3.19.3"
     "@opentelemetry/auto-instrumentations-web": "npm:^0.47.0"
     "@pipedream/sdk": "npm:2.0.4"
@@ -9850,6 +9851,15 @@ __metadata:
   dependencies:
     ajv: "npm:^8.17.1"
   checksum: 10c0/eb561c3d954202c55539cc25116d1a31fe186c875aacd96c26aaca770959dadde8b6787fa51526f3a11f300342439dccf368552c2953c03210961cd7805c6e3a
+  languageName: node
+  linkType: hard
+
+"@jvmr/pptx-to-html@npm:^1.0.0":
+  version: 1.0.0
+  resolution: "@jvmr/pptx-to-html@npm:1.0.0"
+  dependencies:
+    jszip: "npm:^3.10.1"
+  checksum: 10c0/c7f3bfafad4eaba5fd3eb51388a5c5d87089594a8c25a6d994ebf5f35a57dded1fb9aaa35dd78bba53ef5d74bb2678b4d8a52efbd420f9d8a0895e0fa7595db3
   languageName: node
   linkType: hard
 

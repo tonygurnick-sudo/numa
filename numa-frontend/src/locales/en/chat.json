@@ -369,7 +369,15 @@
     },
     "pdf": {
       "pages_one": "{{count}} page",
-      "pages_other": "{{count}} pages"
+      "pages_other": "{{count}} pages",
+      "pageOf": "Page {{current}} of {{total}}",
+      "parseError": "Unable to preview this PDF. Please download to view.",
+      "noPages": "No pages found in this PDF"
+    },
+    "pptx": {
+      "slideOf": "Slide {{current}} of {{total}}",
+      "parseError": "Unable to preview this presentation. Please download to view.",
+      "noSlides": "No slides found in this presentation"
     },
     "folder": {
       "noFiles": "No files found in this folder"
@@ -388,7 +396,8 @@
       "docx": "DOCX",
       "rawMarkdown": "Raw Markdown",
       "downloadToView": "Download to view",
-      "downloadFile": "Download file"
+      "downloadFile": "Download file",
+      "openFullScreen": "Open in Full Screen"
     },
     "noFileSelected": "No File Selected",
     "selectFile": "Select a file to preview",

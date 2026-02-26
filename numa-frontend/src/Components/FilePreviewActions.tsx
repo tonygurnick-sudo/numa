@@ -14,6 +14,7 @@ interface FilePreviewActionsProps {
   onDownloadFile: () => void;
   onDownloadFolder?: () => void;
   onOpenInNewTab?: () => void; // For HTML files
+  onOpenFullScreen?: () => void; // Open in full-screen new tab
 }
 
 /**
@@ -28,6 +29,7 @@ export const FilePreviewActions: React.FC<FilePreviewActionsProps> = ({
   onDownloadFile,
   onDownloadFolder,
   onOpenInNewTab,
+  onOpenFullScreen,
 }) => {
   const { t } = useTranslation('chat');
   const { numaPost } = useNumaRequest();
@@ -151,6 +153,20 @@ export const FilePreviewActions: React.FC<FilePreviewActionsProps> = ({
   if (isMarkdown && content) {
     return (
       <div className="file-preview-actions p-3 border-top d-flex gap-2">
+        {onOpenFullScreen && (
+          <Button
+            onClick={onOpenFullScreen}
+            style={{
+              backgroundColor: 'var(--color-primary)',
+              borderColor: 'var(--color-primary)',
+              color: 'white',
+              flex: '2',
+            }}
+          >
+            <i className="bi bi-arrows-fullscreen me-2"></i>
+            {t('filePreview.actions.openFullScreen')}
+          </Button>
+        )}
         <Dropdown>
           <Dropdown.Toggle
             disabled={isConverting}
@@ -195,6 +211,20 @@ export const FilePreviewActions: React.FC<FilePreviewActionsProps> = ({
   // Other files - Direct download
   return (
     <div className="file-preview-actions p-3 border-top d-flex gap-2">
+      {onOpenFullScreen && (
+        <Button
+          onClick={onOpenFullScreen}
+          style={{
+            backgroundColor: 'var(--color-primary)',
+            borderColor: 'var(--color-primary)',
+            color: 'white',
+            flex: '2',
+          }}
+        >
+          <i className="bi bi-arrows-fullscreen me-2"></i>
+          {t('filePreview.actions.openFullScreen')}
+        </Button>
+      )}
       {onOpenInNewTab && (
         <Button variant="outline-secondary" onClick={onOpenInNewTab}>
           <i className="bi bi-box-arrow-up-right me-2"></i>
@@ -204,9 +234,10 @@ export const FilePreviewActions: React.FC<FilePreviewActionsProps> = ({
       <Button
         onClick={onDownloadFile}
         style={{
-          backgroundColor: 'var(--color-primary)',
           borderColor: 'var(--color-primary)',
-          color: 'white',
+          color: 'var(--color-primary)',
+          backgroundColor: 'transparent',
+          flex: '1',
         }}
       >
         <i className="bi bi-download me-2"></i>

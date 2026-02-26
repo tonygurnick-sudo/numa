@@ -408,6 +408,255 @@
   }
 }
 
+// PPTX Preview - slide viewer with thumbnail strip
+.pptx-preview-container {
+  display: flex;
+  height: 100%;
+  min-height: 0;
+  gap: 0;
+}
+
+.pptx-thumbnail-strip {
+  width: 120px;
+  flex-shrink: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px;
+  border-right: 1px solid #e4e4e7;
+  background: #f8f8fa;
+}
+
+.pptx-thumbnail {
+  position: relative;
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  border: 2px solid #e4e4e7;
+  border-radius: 4px;
+  overflow: hidden;
+  cursor: pointer;
+  padding: 0;
+  background: #fff;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+
+  &:hover {
+    border-color: #a1a1aa;
+  }
+
+  &.active {
+    border-color: var(--color-primary, #7c3aed);
+    box-shadow: 0 0 0 1px var(--color-primary, #7c3aed);
+  }
+}
+
+.pptx-thumbnail-content {
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  position: relative;
+  overflow: hidden;
+
+  // The library renders slides at 960x540 with absolute positioning.
+  // Scale the output down to fit the ~104px wide thumbnail.
+  > .slide-container,
+  > .slide {
+    position: absolute !important;
+    top: 0;
+    left: 0;
+    transform-origin: top left !important;
+    // Thumbnail is ~104px wide, library renders at 960px
+    // 104 / 960 ≈ 0.108
+    transform: scale(0.108) !important;
+  }
+}
+
+.pptx-thumbnail-number {
+  position: absolute;
+  bottom: 2px;
+  right: 4px;
+  font-size: 0.6rem;
+  color: #71717a;
+  font-weight: 600;
+  background: rgba(255, 255, 255, 0.85);
+  border-radius: 2px;
+  padding: 0 3px;
+  line-height: 1.4;
+}
+
+.pptx-slide-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.pptx-slide-viewport {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  overflow: auto;
+}
+
+// Outer wrapper with actual scaled dimensions so flex centering works correctly.
+// (CSS transform doesn't change the element's layout box.)
+.pptx-slide-sizer {
+  flex-shrink: 0;
+  border-radius: 6px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.12);
+}
+
+// Inner wrapper at native 960x540 with CSS transform: scale() applied
+.pptx-slide-scaler {
+  // Override the library's overflow:hidden so shapes at slide edges aren't clipped
+  .slide-container,
+  .slide {
+    overflow: visible !important;
+  }
+}
+
+.pptx-slide-nav {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 8px 16px;
+  border-top: 1px solid #e4e4e7;
+  background: #fafafa;
+  flex-shrink: 0;
+}
+
+.pptx-slide-nav-label {
+  font-size: 0.8rem;
+  color: #52525b;
+  font-weight: 500;
+  min-width: 100px;
+  text-align: center;
+}
+
+// ============================================================
+// PDF Preview (thumbnail strip + page navigation)
+// ============================================================
+
+.pdf-preview-container {
+  display: flex;
+  height: 100%;
+  min-height: 0;
+  gap: 0;
+}
+
+.pdf-thumbnail-strip {
+  width: 120px;
+  flex-shrink: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px;
+  border-right: 1px solid #e4e4e7;
+  background: #f8f8fa;
+}
+
+.pdf-thumbnail {
+  position: relative;
+  display: block;
+  width: 100%;
+  border: 2px solid #e4e4e7;
+  border-radius: 4px;
+  overflow: hidden;
+  cursor: pointer;
+  padding: 0;
+  background: #fff;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+
+  &:hover {
+    border-color: #a1a1aa;
+  }
+
+  &.active {
+    border-color: var(--color-primary, #7c3aed);
+    box-shadow: 0 0 0 1px var(--color-primary, #7c3aed);
+  }
+}
+
+.pdf-thumbnail-content {
+  width: 100%;
+  pointer-events: none;
+  overflow: hidden;
+
+  canvas {
+    display: block;
+    width: 100% !important;
+    height: auto !important;
+  }
+}
+
+.pdf-thumbnail-number {
+  position: absolute;
+  bottom: 2px;
+  right: 4px;
+  font-size: 0.6rem;
+  color: #71717a;
+  font-weight: 600;
+  background: rgba(255, 255, 255, 0.85);
+  border-radius: 2px;
+  padding: 0 3px;
+  line-height: 1.4;
+}
+
+.pdf-page-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.pdf-page-viewport {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 16px;
+  overflow: auto;
+
+  // react-pdf wraps the canvas in a .react-pdf__Page div
+  .react-pdf__Page {
+    border-radius: 4px;
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.12);
+    overflow: hidden;
+
+    canvas {
+      display: block;
+    }
+  }
+}
+
+.pdf-page-nav {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 8px 16px;
+  border-top: 1px solid #e4e4e7;
+  background: #fafafa;
+  flex-shrink: 0;
+}
+
+.pdf-page-nav-label {
+  font-size: 0.8rem;
+  color: #52525b;
+  font-weight: 500;
+  min-width: 100px;
+  text-align: center;
+}
+
 // Dark mode support (if needed)
 @media (prefers-color-scheme: dark) {
   .workspace-chat-markdown {
