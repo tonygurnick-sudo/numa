@@ -155,10 +155,7 @@ export const PptxPreview: React.FC<PptxPreviewProps> = ({ data }) => {
             onClick={() => goToSlide(idx)}
             title={`Slide ${idx + 1}`}
           >
-            <div
-              className="pptx-thumbnail-content"
-              dangerouslySetInnerHTML={{ __html: html }}
-            />
+            <div className="pptx-thumbnail-content" dangerouslySetInnerHTML={{ __html: html }} />
             <span className="pptx-thumbnail-number">{idx + 1}</span>
           </button>
         ))}
@@ -197,7 +194,12 @@ export const PptxPreview: React.FC<PptxPreviewProps> = ({ data }) => {
           <span className="pptx-slide-nav-label">
             {t('filePreview.pptx.slideOf', { current: currentSlide + 1, total: slideHtmls.length })}
           </span>
-          <Button variant="outline-secondary" size="sm" onClick={goNext} disabled={currentSlide === slideHtmls.length - 1}>
+          <Button
+            variant="outline-secondary"
+            size="sm"
+            onClick={goNext}
+            disabled={currentSlide === slideHtmls.length - 1}
+          >
             <i className="bi bi-chevron-right" />
           </Button>
         </div>

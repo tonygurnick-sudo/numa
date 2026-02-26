@@ -750,7 +750,7 @@ const CrmMirrorView = (): React.JSX.Element => {
                     <CustomerCard
                       customer={activeCustomer}
                       crmConfig={crmConfig}
-                      onClick={() => { }} // No-op during drag
+                      onClick={() => {}} // No-op during drag
                     />
                   </div>
                 ) : null}

@@ -406,11 +406,7 @@ export const FilePreviewPanel: React.FC<FilePreviewPanelProps> = ({
     if (CODE_EXTENSIONS.includes(ext) && textContent) {
       return (
         <div className="h-100">
-          <CodePreview
-            content={textContent}
-            language={getLanguageFromExtension(ext)}
-            filename={preview.filename}
-          />
+          <CodePreview content={textContent} language={getLanguageFromExtension(ext)} filename={preview.filename} />
         </div>
       );
     }

@@ -10,7 +10,6 @@ interface PdfPreviewProps {
 // Thumbnail render width (strip is 120px with 8px padding = ~104px usable)
 const THUMB_WIDTH = 104;
 
-// eslint-disable-next-line i18next/no-literal-string
 type ReactPdfModule = typeof import('react-pdf');
 
 /**
@@ -160,12 +159,7 @@ export const PdfPreview: React.FC<PdfPreviewProps> = ({ data }) => {
                 title={`Page ${i + 1}`}
               >
                 <div className="pdf-thumbnail-content">
-                  <Page
-                    pageNumber={i + 1}
-                    width={THUMB_WIDTH}
-                    renderTextLayer={false}
-                    renderAnnotationLayer={false}
-                  />
+                  <Page pageNumber={i + 1} width={THUMB_WIDTH} renderTextLayer={false} renderAnnotationLayer={false} />
                 </div>
                 <span className="pdf-thumbnail-number">{i + 1}</span>
               </button>
@@ -192,12 +186,7 @@ export const PdfPreview: React.FC<PdfPreviewProps> = ({ data }) => {
               <span className="pdf-page-nav-label">
                 {t('filePreview.pdf.pageOf', { current: currentPage, total: numPages })}
               </span>
-              <Button
-                variant="outline-secondary"
-                size="sm"
-                onClick={goNext}
-                disabled={currentPage === numPages}
-              >
+              <Button variant="outline-secondary" size="sm" onClick={goNext} disabled={currentPage === numPages}>
                 <i className="bi bi-chevron-right" />
               </Button>
             </div>

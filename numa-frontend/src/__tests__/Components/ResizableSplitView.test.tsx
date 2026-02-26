@@ -45,7 +45,7 @@ describe('ResizableSplitView Component', () => {
     // Right panel should not be rendered
     expect(screen.queryByText('Right Panel')).toBeNull();
     // Divider should not be rendered when showRight is false
-    expect(container.querySelector('div[style*="width: 5px"]')).toBeNull();
+    expect(container.querySelector('div[style*="cursor: col-resize"]')).toBeNull();
   });
 
   it('dragging adjusts leftFraction', () => {
@@ -72,8 +72,8 @@ describe('ResizableSplitView Component', () => {
       right: 1000,
     });
 
-    // Find the divider element by its inline style width "5px"
-    const divider = container.querySelector('div[style*="width: 5px"]');
+    // Find the divider element by its col-resize cursor
+    const divider = container.querySelector('div[style*="cursor: col-resize"]');
     expect(divider).toBeInTheDocument();
 
     // Simulate mouse down on the divider to start dragging.
@@ -97,19 +97,19 @@ describe('ResizableSplitView Component', () => {
         onLeftFractionChange={onLeftFractionChange}
       />,
     );
-    // Find the handle element (the inner div inside the divider with width "6px")
-    const handle = container.querySelector('div[style*="width: 6px"]');
-    expect(handle).toBeInTheDocument();
+    // Find the divider by its col-resize cursor
+    const divider = container.querySelector('div[style*="cursor: col-resize"]');
+    expect(divider).toBeInTheDocument();
 
-    // Initially, the background should use the non-hovered gradient.
-    expect(handle.style.background).toContain('repeating-linear-gradient(#aaa');
+    // Initially, the background should be the resting color (#e4e4e7)
+    expect(divider.style.backgroundColor).toBe('rgb(228, 228, 231)');
 
-    // Simulate mouse enter on the handle.
-    fireEvent.mouseEnter(handle);
-    expect(handle.style.background).toContain('repeating-linear-gradient(#888');
+    // Simulate mouse enter — should darken (#a1a1aa)
+    fireEvent.mouseEnter(divider);
+    expect(divider.style.backgroundColor).toBe('rgb(161, 161, 170)');
 
-    // Simulate mouse leave on the handle.
-    fireEvent.mouseLeave(handle);
-    expect(handle.style.background).toContain('repeating-linear-gradient(#aaa');
+    // Simulate mouse leave — should return to resting state
+    fireEvent.mouseLeave(divider);
+    expect(divider.style.backgroundColor).toBe('rgb(228, 228, 231)');
   });
 });
