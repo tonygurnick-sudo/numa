@@ -52,8 +52,8 @@ export interface WorkspaceChatSettingsPanelProps {
   // Files
   /** Files in the uploads folder */
   uploadsFiles: WorkspaceChatFileInfo[];
-  /** Files in the session folder */
-  sessionFiles: WorkspaceChatFileInfo[];
+  /** Files in the outputs folder */
+  outputFiles: WorkspaceChatFileInfo[];
   /** Whether files are loading */
   filesLoading: boolean;
   /** Error loading files */
@@ -103,14 +103,14 @@ export interface WorkspaceChatSettingsPanelProps {
  *
  * Consolidates:
  * - Chat Uploads (user uploaded files)
- * - Session Files (Claude-generated files)
+ * - Output Files (Claude-generated files)
  * - Settings (KB, tools, integrations toggles)
  */
 export const WorkspaceChatSettingsPanel: React.FC<WorkspaceChatSettingsPanelProps> = ({
   isOpen,
   isNewChat = false,
   uploadsFiles,
-  sessionFiles,
+  outputFiles,
   filesLoading,
   filesError,
   onRefreshFiles,
@@ -149,7 +149,7 @@ export const WorkspaceChatSettingsPanel: React.FC<WorkspaceChatSettingsPanelProp
     integrations: true,
     model: true,
     chatUploads: true,
-    sessionFiles: true,
+    outputFiles: true,
   };
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>(() => {
     try {
@@ -595,20 +595,20 @@ export const WorkspaceChatSettingsPanel: React.FC<WorkspaceChatSettingsPanelProp
             <button
               type="button"
               className="workspace-settings-card-header workspace-settings-card-header--collapsible"
-              onClick={() => toggleSection('sessionFiles')}
-              aria-expanded={!collapsedSections.sessionFiles}
+              onClick={() => toggleSection('outputFiles')}
+              aria-expanded={!collapsedSections.outputFiles}
             >
               <div className="workspace-settings-card-title">
                 <FileText size={16} />
-                <span>{t('workspaceSettings.sessionFiles')}</span>
-                {sessionFiles.length > 0 && (
-                  <span className="workspace-settings-count-badge">{sessionFiles.length}</span>
+                <span>{t('workspaceSettings.outputFiles')}</span>
+                {outputFiles.length > 0 && (
+                  <span className="workspace-settings-count-badge">{outputFiles.length}</span>
                 )}
               </div>
               <div className="workspace-settings-card-header-right">
-                {collapsedSections.sessionFiles && (
+                {collapsedSections.outputFiles && (
                   <span className="workspace-settings-collapsed-summary">
-                    {sessionFiles.length > 0 ? `${sessionFiles.length}` : t('workspaceSettings.noneSelected')}
+                    {outputFiles.length > 0 ? `${outputFiles.length}` : t('workspaceSettings.noneSelected')}
                   </span>
                 )}
                 <span
@@ -629,10 +629,10 @@ export const WorkspaceChatSettingsPanel: React.FC<WorkspaceChatSettingsPanelProp
                 >
                   <RefreshCw size={14} className={filesLoading ? 'spinning' : ''} />
                 </span>
-                {collapsedSections.sessionFiles ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
+                {collapsedSections.outputFiles ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
               </div>
             </button>
-            {!collapsedSections.sessionFiles && (
+            {!collapsedSections.outputFiles && (
               <div className="workspace-settings-card-body">
                 {filesLoading ? (
                   <div className="text-muted small d-flex align-items-center gap-2 py-2">
@@ -644,12 +644,12 @@ export const WorkspaceChatSettingsPanel: React.FC<WorkspaceChatSettingsPanelProp
                     <AlertTriangle size={14} className="me-1" />
                     {filesError}
                   </div>
-                ) : sessionFiles.length === 0 ? (
-                  <div className="text-muted small fst-italic py-2">{t('workspaceSettings.noSessionFiles')}</div>
+                ) : outputFiles.length === 0 ? (
+                  <div className="text-muted small fst-italic py-2">{t('workspaceSettings.noOutputFiles')}</div>
                 ) : (
                   <WorkspaceSettingsFileList
-                    files={sessionFiles}
-                    rootPrefix="session/"
+                    files={outputFiles}
+                    rootPrefix="outputs/"
                     onOpen={onOpenFile}
                     onDownload={onDownloadFile}
                   />

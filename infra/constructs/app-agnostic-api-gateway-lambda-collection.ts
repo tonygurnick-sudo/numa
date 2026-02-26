@@ -714,7 +714,7 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
         {
           effect: 'Allow',
           actions: ['s3:GetObject'],
-          resources: [`arn:aws:s3:::${props.outputsBucketName}/numa-chat/workspace/*/session/status.json`],
+          resources: [`arn:aws:s3:::${props.outputsBucketName}/numa-chat/workspace/*/outputs/status.json`],
         },
         {
           effect: 'Allow',

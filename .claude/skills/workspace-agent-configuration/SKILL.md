@@ -252,7 +252,7 @@ You are an invoice parser. Read uploaded invoice files and extract structured da
 ## Instructions
 1. Read files in /workdir/uploads/
 2. Extract invoice details
-3. Write to /workdir/session/result.json:
+3. Write to /workdir/outputs/result.json:
 ```json
 {
     "vendor": "Company Name",
@@ -291,7 +291,7 @@ INVOICE_PARSER = AgentTypeConfig(
     restrict_kbs=True,
     restrict_integrations=True,
 
-    # Writes /workdir/session/result.json
+    # Writes /workdir/outputs/result.json
     pipeline_result_mode="result_file",
 
     max_turns=10,
@@ -309,8 +309,8 @@ Like `profile-creator` — orchestrates multiple agent types sequentially. Steps
 """
 Report Generator — two-step pipeline: research then format.
 
-Step 1 (report-researcher): Gathers data, writes /workdir/session/research.json
-Step 2 (report-formatter): Reads research, writes /workdir/session/result.json
+Step 1 (report-researcher): Gathers data, writes /workdir/outputs/research.json
+Step 2 (report-formatter): Reads research, writes /workdir/outputs/result.json
 """
 from .base import AgentTypeConfig
 from .registry import register_agent_type
@@ -320,7 +320,7 @@ from ..prompts import build_workspace_system_prompt
 
 RESEARCHER_ADDENDUM = """
 ## Your Role
-Research the topic thoroughly and write findings to /workdir/session/research.json.
+Research the topic thoroughly and write findings to /workdir/outputs/research.json.
 Use web search and any uploaded reference files.
 """
 
@@ -354,8 +354,8 @@ register_agent_type(REPORT_RESEARCHER)
 
 FORMATTER_ADDENDUM = """
 ## Your Role
-Read /workdir/session/research.json from the previous step.
-Format it into a polished report and write to /workdir/session/result.json.
+Read /workdir/outputs/research.json from the previous step.
+Format it into a polished report and write to /workdir/outputs/result.json.
 """
 
 def build_formatter_prompt(**kwargs):

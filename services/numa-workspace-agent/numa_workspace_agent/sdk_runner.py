@@ -1228,16 +1228,16 @@ async def run_claude_sdk(
 
         stream_log.log_summary()
 
-    # Gather artifacts from session directory
+    # Gather artifacts from outputs directory
     artifacts: list[dict[str, str]] = []
-    session_dir = paths["session"]
-    if session_dir.exists():
-        for f in session_dir.rglob("*"):
+    outputs_dir = paths["outputs"]
+    if outputs_dir.exists():
+        for f in outputs_dir.rglob("*"):
             if f.is_file():
                 artifacts.append(
                     {
                         "type": "file",
-                        "path": f"session/{f.relative_to(session_dir)}",
+                        "path": f"outputs/{f.relative_to(outputs_dir)}",
                     }
                 )
 

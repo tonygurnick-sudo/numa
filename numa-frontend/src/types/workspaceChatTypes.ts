@@ -250,7 +250,7 @@ export interface WorkspaceChatConversation {
   hasTrace: boolean;
   sessionId?: string;
   uploadsCount?: number;
-  sessionCount?: number;
+  outputsCount?: number;
 }
 
 /** Workspace chat message for UI display */
@@ -517,7 +517,7 @@ export interface WorkspaceChatConversationDetailResponse {
       hasTrace: boolean;
       sessionId?: string;
       uploadsCount: number;
-      sessionCount: number;
+      outputsCount: number;
       traceSizeBytes?: number;
     };
   };

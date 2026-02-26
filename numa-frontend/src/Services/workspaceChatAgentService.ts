@@ -527,7 +527,7 @@ export async function listWorkspaceChatFiles(): Promise<WorkspaceChatFilesRespon
 /**
  * List files for a specific conversation (uploads + session folders)
  *
- * This endpoint lists files from the conversation's uploads/ and session/
+ * This endpoint lists files from the conversation's uploads/ and outputs/
  * directories in S3, used for the settings panel file listing.
  */
 export async function listConversationFiles(conversationId: string): Promise<WorkspaceChatFilesResponse> {

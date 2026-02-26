@@ -33,8 +33,8 @@ python -m markitdown presentation.pptx
 
 For visual overview, convert to images:
 ```bash
-soffice --headless --convert-to pdf --outdir /workdir/session/ /workdir/uploads/presentation.pptx
-pdftoppm -jpeg -r 150 /workdir/session/presentation.pdf /workdir/session/slide
+soffice --headless --convert-to pdf --outdir /workdir/outputs/ /workdir/uploads/presentation.pptx
+pdftoppm -jpeg -r 150 /workdir/outputs/presentation.pdf /workdir/outputs/slide
 ```
 This creates `slide-01.jpg`, `slide-02.jpg`, etc.
 
@@ -54,11 +54,11 @@ pres.layout = "LAYOUT_16x9";
 let slide = pres.addSlide();
 slide.addText("Hello World!", { x: 0.5, y: 0.5, fontSize: 36, color: "363636" });
 
-pres.writeFile({ fileName: "/workdir/session/presentation.pptx" });
+pres.writeFile({ fileName: "/workdir/outputs/presentation.pptx" });
 ```
 
 ```bash
-node /workdir/session/create_deck.js
+node /workdir/outputs/create_deck.js
 ```
 
 ---
@@ -81,7 +81,7 @@ for shape in slide.shapes:
                 if "PLACEHOLDER" in run.text:
                     run.text = run.text.replace("PLACEHOLDER", "Actual Content")
 
-prs.save("/workdir/session/filled_presentation.pptx")
+prs.save("/workdir/outputs/filled_presentation.pptx")
 ```
 
 ---
@@ -160,14 +160,14 @@ Your first render is almost never correct. Always verify output visually.
 ### Convert to Images
 
 ```bash
-soffice --headless --convert-to pdf --outdir /workdir/session/ /workdir/session/presentation.pptx
-pdftoppm -jpeg -r 150 /workdir/session/presentation.pdf /workdir/session/slide
+soffice --headless --convert-to pdf --outdir /workdir/outputs/ /workdir/outputs/presentation.pptx
+pdftoppm -jpeg -r 150 /workdir/outputs/presentation.pdf /workdir/outputs/slide
 ```
 
 ### Content QA
 
 ```bash
-python3 -m markitdown /workdir/session/presentation.pptx
+python3 -m markitdown /workdir/outputs/presentation.pptx
 ```
 
 Check for missing content, typos, wrong order, leftover placeholder text.
@@ -186,9 +186,9 @@ After converting to images, read each slide image and check for:
 
 1. Generate slides -> Convert to images -> Inspect
 2. List issues found
-3. Fix issues
-4. Re-verify affected slides
-5. Repeat until a full pass reveals no new issues
+3. Fix **critical issues only** (overlapping text, corrupted layout, missing content, text cut off)
+4. Re-verify the affected slides ONE time to confirm the fix worked
+5. **Stop here.** Do NOT loop more than once. Present the result to the user and say something like "Here's your presentation — let me know if you'd like me to adjust anything." Minor cosmetic issues (spacing tweaks, colour preferences, font size adjustments) should be mentioned to the user rather than auto-fixed in another loop.
 
 ---
 
@@ -241,5 +241,5 @@ All pre-installed in the workspace:
 ## File Paths
 
 - **Input presentations**: `/workdir/uploads/`
-- **Output presentations**: `/workdir/session/`
-- **Working files**: `/workdir/session/`
+- **Output presentations**: `/workdir/outputs/`
+- **Working files**: `/workdir/outputs/`

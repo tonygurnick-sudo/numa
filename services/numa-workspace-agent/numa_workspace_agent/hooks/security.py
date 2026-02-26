@@ -183,7 +183,7 @@ PROTECTED_DIR_PATTERNS = [
     # Piped commands that filter for protected directories
     r"\|\s*grep.*(?:\.?system|secrets|\.claude)",
     # ls with -a flag on /workdir root (reveals hidden .system directory)
-    # Safe: ls -la /workdir/session/, ls -la /workdir/uploads/ (explicit subdirectory)
+    # Safe: ls -la /workdir/outputs/, ls -la /workdir/uploads/ (explicit subdirectory)
     # Blocked: ls -la /workdir (root enumeration - would reveal .system)
     r"\bls\b\s+-[^\s]*a[^\s]*\s+[\"']?/workdir[\"']?\s*$",  # ls -la /workdir
     r"\bls\b\s+-[^\s]*a[^\s]*\s+[\"']?/workdir[\"']?\s*\|",  # ls -la /workdir | ...
@@ -198,7 +198,7 @@ PROTECTED_DIR_PATTERNS = [
     r"\bcat\b.*\.claude",
     # Block find/tree on /workdir root (would discover protected subdirs like _system/)
     # These patterns match commands that would enumerate the entire workspace
-    # Safe: find /workdir/uploads, find /workdir/session (explicit subdirectory)
+    # Safe: find /workdir/uploads, find /workdir/outputs (explicit subdirectory)
     # Blocked: find /workdir, find /workdir -type f (root enumeration)
     r"\bfind\b\s+[\"']?/workdir[\"']?\s*$",  # find /workdir (end of command)
     r"\bfind\b\s+[\"']?/workdir[\"']?\s+-",  # find /workdir -type f (followed by flags)
@@ -492,7 +492,7 @@ def check_node_command(command: str) -> tuple[bool, str | None]:
                     return True, f"Dangerous Node.js pattern detected: {pattern}"
 
     # Check JS file content when executing .js/.mjs/.cjs files
-    # Match: node /workdir/script.js, node /workdir/session/gen.cjs, etc.
+    # Match: node /workdir/script.js, node /workdir/outputs/gen.cjs, etc.
     file_match = re.search(
         r'node\s+["\']?(/workdir/[^\s"\']+\.(?:js|mjs|cjs))["\']?', command
     )
@@ -553,7 +553,7 @@ def check_bash_command(
     # Check if this is a trusted Numa tool (whitelist before scanning)
     # Security: These are platform-provided tools with their own security measures:
     # - knowledge_base.py: KB ID validated against NUMA_ALLOWED_KBS, DynamoDB perms server-side
-    # - All Numa tools: Output written to /workdir/session/ (within workspace)
+    # - All Numa tools: Output written to /workdir/outputs/ (within workspace)
     # - Tools are deployed with the container, not user-uploadable
     if "/workdir/tools/numa/" in command and command.strip().startswith(
         ("python", "python3")

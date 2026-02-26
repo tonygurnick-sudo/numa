@@ -62,7 +62,7 @@ RUN useradd --uid 1000 --create-home --shell /bin/bash agent
 RUN mkdir -p /workdir/.system/.claude && \
     mkdir -p /workdir/chat-workflows && \
     mkdir -p /workdir/uploads && \
-    mkdir -p /workdir/session && \
+    mkdir -p /workdir/outputs && \
     mkdir -p /workdir/tools/numa && \
     chown -R agent:agent /workdir && \
     # Create plugin directory outside /workdir (AI cannot modify plugins)

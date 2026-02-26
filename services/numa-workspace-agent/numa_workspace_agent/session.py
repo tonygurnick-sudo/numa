@@ -54,12 +54,12 @@ def get_conversation_metadata() -> dict[str, Any]:
     if paths["uploads"].exists():
         uploads_count = sum(1 for f in paths["uploads"].iterdir() if f.is_file())
 
-    session_count = 0
-    if paths["session"].exists():
-        session_count = sum(1 for f in paths["session"].iterdir() if f.is_file())
+    outputs_count = 0
+    if paths["outputs"].exists():
+        outputs_count = sum(1 for f in paths["outputs"].iterdir() if f.is_file())
 
     metadata["uploads_count"] = uploads_count
-    metadata["session_count"] = session_count
+    metadata["outputs_count"] = outputs_count
 
     return metadata
 

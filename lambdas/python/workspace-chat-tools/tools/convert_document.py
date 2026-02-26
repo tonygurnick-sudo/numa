@@ -68,7 +68,7 @@ def _validate_workspace_path(file_path: str) -> tuple[bool, str | None]:
     Validate that the file path is within allowed workspace directories.
 
     Args:
-        file_path: Path to validate (e.g., /workdir/session/file.txt)
+        file_path: Path to validate (e.g., /workdir/outputs/file.txt)
 
     Returns:
         (is_valid, error_message)
@@ -97,10 +97,10 @@ def _get_relative_path(file_path: str) -> str:
     Extract the relative path from a workspace absolute path.
 
     Args:
-        file_path: Absolute path (e.g., /workdir/session/file.txt)
+        file_path: Absolute path (e.g., /workdir/outputs/file.txt)
 
     Returns:
-        Relative path (e.g., session/file.txt)
+        Relative path (e.g., outputs/file.txt)
     """
     if file_path.startswith(WORKSPACE_ROOT + "/"):
         return file_path[len(WORKSPACE_ROOT) + 1 :]
@@ -114,7 +114,7 @@ def _get_s3_key_for_file(rel_path: str, user_sub: str, conversation_id: str) -> 
     Determine the S3 key for a workspace file.
 
     Args:
-        rel_path: Path relative to workspace root (e.g., session/file.txt)
+        rel_path: Path relative to workspace root (e.g., outputs/file.txt)
         user_sub: User's Cognito sub
         conversation_id: Current conversation ID
 
@@ -135,7 +135,7 @@ def _get_output_s3_key(
     """
     Determine the S3 key for the converted document output.
 
-    Output is always written to session/ directory (conversation-scoped).
+    Output is always written to outputs/ directory (conversation-scoped).
 
     Args:
         input_rel_path: Relative path of input file
@@ -154,8 +154,8 @@ def _get_output_s3_key(
     # Sanitize filename for S3 key
     safe_filename = re.sub(r"[^a-zA-Z0-9_-]", "_", filename)
 
-    # Output goes to session/ with converted_ prefix
-    output_rel_path = f"session/converted_{safe_filename}.{output_format}"
+    # Output goes to outputs/ with converted_ prefix
+    output_rel_path = f"outputs/converted_{safe_filename}.{output_format}"
 
     return f"{S3_PREFIX}/{user_sub}/conversations/{conversation_id}/{output_rel_path}"
 
@@ -168,7 +168,7 @@ def handle_convert_document(params: Dict[str, Any]) -> Dict[str, Any]:
 
     Parameters:
         file_path (str, required): Workspace path to the input file
-            (e.g., /workdir/uploads/document.docx or /workdir/session/extracted.txt)
+            (e.g., /workdir/uploads/document.docx or /workdir/outputs/extracted.txt)
         format (str, required): Output format - 'pdf' or 'docx'
         mode (str, optional): Conversion mode - 'markdown' (default) or 'file'
             - 'file': Direct DOCX↔PDF conversion using LibreOffice

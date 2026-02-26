@@ -65,7 +65,7 @@ if result.get('binary') and result.get('base64_body'):
     print(f'Saved {sys.argv[2]}')
 else:
     print('Response is not binary')
-" /path/to/proxy-result.json /workdir/session/integrations-results/filename.png
+" /path/to/proxy-result.json /workdir/outputs/integrations-results/filename.png
 ```
 
 When multiple files share the same name (common with `image.png`), deduplicate by appending the file ID: `image_F0ACCBWBC83.png`.

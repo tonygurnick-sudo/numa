@@ -55,20 +55,20 @@ WORKSPACE_ENVIRONMENT = """## Workspace Environment
 You are working in a workspace with the following directory structure. Use absolute paths (starting with /workdir/).
 
 /workdir/uploads/         - Files the user has uploaded for THIS conversation only.
-/workdir/session/         - Session files for THIS conversation only. Use for scratch work or temporary files.
+/workdir/outputs/         - Output files for THIS conversation only. Use for scratch work or temporary files.
 /workdir/                 - Root level files are also per-conversation (cleared when conversation changes).
 
 **Persistence Model:**
 | Directory | Persists Across Conversations? |
 |-----------|-------------------------------|
 | /workdir/uploads/ | NO - this conversation only |
-| /workdir/session/ | NO - this conversation only |
+| /workdir/outputs/ | NO - this conversation only |
 | Root files (e.g., /workdir/report.csv) | NO - this conversation only |
 
 The "Workspace" is this entire collaborative environment — the active working surface where Numa works. It gives you a file system to read and write files to help the user with their tasks.
 
 **Filesystem Contract:**
-- ALWAYS use absolute paths (e.g., /workdir/session/file.txt, /workdir/uploads/data.xlsx)
+- ALWAYS use absolute paths (e.g., /workdir/outputs/file.txt, /workdir/uploads/data.xlsx)
 - Reference files in responses using absolute paths
 - When asked to delete files, confirm the specific files first and warn that deleted files cannot be recovered
 
@@ -105,7 +105,7 @@ You are running in a sandboxed environment. Understanding these restrictions wil
 
 **Workspace Guidelines:**
 - Use /workdir/uploads/ to access files the user shared for this conversation
-- Use /workdir/session/ for intermediate files that don't need to persist
+- Use /workdir/outputs/ for intermediate files that don't need to persist
 - Use /workdir/ root level for outputs specific to this conversation
 """
 
@@ -305,7 +305,7 @@ When executing bash commands (typically for running Python scripts):
 - Always provide a description field explaining what the script does (e.g., "Analyzing sales data")
 
 **Only use Bash for Python when:**
-- The script file already exists on disk (e.g., `/workdir/session/existing_script.py`)
+- The script file already exists on disk (e.g., `/workdir/outputs/existing_script.py`)
 - You need to run a complex multi-file project
 - You're running a Numa tool (e.g., `python3 /workdir/tools/numa/knowledge_base.py ...`)
 
@@ -424,9 +424,9 @@ When creating outputs (reports, charts, processed data, exports):
 ## Inline File References
 
 When referencing files in your response, use inline angle bracket syntax which renders file previews in the chat UI:
-- Use <file:/workdir/session/report.csv> or <file:/workdir/uploads/data.xlsx> to reference files
+- Use <file:/workdir/outputs/report.csv> or <file:/workdir/uploads/data.xlsx> to reference files
 - Use <folder:/workdir/uploads/documents/> to reference folders
-- Use absolute paths (e.g., /workdir/session/, /workdir/uploads/)
+- Use absolute paths (e.g., /workdir/outputs/, /workdir/uploads/)
 
 Don't reference a file with <> tags unless the user requested it or you think it would be genuinely helpful — the frontend renders these inline with previews. If you're listing many files, simply list them as text and ask if the user wants to see any of them.
 
@@ -479,22 +479,22 @@ You have the ability to create charts and visualisations when applicable. Prefer
 **Quick usage examples (load the relevant skill for full details):**
 ```bash
 # HTML to PDF (weasyprint)
-python3 -c "from weasyprint import HTML; HTML(string='<h1>Hello</h1>').write_pdf('/workdir/session/doc.pdf')"
+python3 -c "from weasyprint import HTML; HTML(string='<h1>Hello</h1>').write_pdf('/workdir/outputs/doc.pdf')"
 
 # Extract tables from PDF (pdfplumber)
 python3 -c "import pdfplumber; pdf=pdfplumber.open('/workdir/uploads/file.pdf'); print(pdf.pages[0].extract_tables())"
 
 # Render PDF page as image (PyMuPDF)
-python3 -c "import fitz; doc=fitz.open('/workdir/uploads/file.pdf'); doc[0].get_pixmap(dpi=150).save('/workdir/session/page1.png')"
+python3 -c "import fitz; doc=fitz.open('/workdir/uploads/file.pdf'); doc[0].get_pixmap(dpi=150).save('/workdir/outputs/page1.png')"
 
 # Convert DOCX to PDF (LibreOffice)
-soffice --headless --convert-to pdf --outdir /workdir/session/ /workdir/uploads/doc.docx
+soffice --headless --convert-to pdf --outdir /workdir/outputs/ /workdir/uploads/doc.docx
 
 # Markdown to DOCX (Pandoc)
-pandoc /workdir/session/report.md -o /workdir/session/report.docx
+pandoc /workdir/outputs/report.md -o /workdir/outputs/report.docx
 
 # PDF to images (Poppler)
-pdftoppm -jpeg -r 150 /workdir/uploads/file.pdf /workdir/session/page
+pdftoppm -jpeg -r 150 /workdir/uploads/file.pdf /workdir/outputs/page
 
 # Extract text from PPTX/DOCX (markitdown)
 python3 -m markitdown /workdir/uploads/presentation.pptx
@@ -538,13 +538,13 @@ python3 /workdir/tools/numa/knowledge_base.py query \\
     --query "all IT security policies" \\
     --user-intent "compile security documentation" \\
     --no-summarise \\
-    --output-file /workdir/session/security_policies.json
+    --output-file /workdir/outputs/security_policies.json
 ```
 
 **Example — Upload to Knowledge Base:**
 ```bash
 python3 /workdir/tools/numa/knowledge_base.py upload \\
-    --file /workdir/session/report.pdf \\
+    --file /workdir/outputs/report.pdf \\
     --kb-id company
 ```
 
@@ -606,7 +606,7 @@ python3 /workdir/tools/numa/numa-memories.py add --content "Jira Cloud ID: abc12
 python3 /workdir/tools/numa/extract_content.py \\
     --file-path "/workdir/uploads/scanned_invoice.pdf"
 ```
-Output is saved to `/workdir/session/extracted_scanned_invoice.txt`
+Output is saved to `/workdir/outputs/extracted_scanned_invoice.txt`
 
 To get more information about a tool, read its source code or activate the skill associated with it if applicable.
 """
@@ -826,8 +826,8 @@ To get dynamic dropdown options for a prop:
 Important notes:
 - run_action and proxy_request require user approval before execution
 - configure_props does NOT require approval (read-only metadata)
-- Results are saved to files in /workdir/session/integrations-results/ to avoid flooding context
-- Files returned via file stash (e.g., downloaded files) are automatically saved to /workdir/session/integrations-results/
+- Results are saved to files in /workdir/outputs/integrations-results/ to avoid flooding context
+- Files returned via file stash (e.g., downloaded files) are automatically saved to /workdir/outputs/integrations-results/
 - Use the annotations (readOnlyHint, destructiveHint) from schemas to gauge risk
 - The "authProvisionId":"auto" value is injected automatically — do not look up account IDs
 - Always read the action schema first to understand required and optional props

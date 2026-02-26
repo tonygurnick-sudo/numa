@@ -81,10 +81,10 @@ class AgentTypeConfig:
             sequential agent steps within the same workspace. Each step runs
             to completion before the next starts. The system prompts for each
             step type handle inter-step coordination (e.g. "write your output
-            to /workdir/session/research.json").
+            to /workdir/outputs/research.json").
         pipeline_result_mode: How to extract the final result from a pipeline.
             - "last_step_text": Return the last step's text response (default).
-            - "result_file": Read /workdir/session/result.json and return it.
+            - "result_file": Read /workdir/outputs/result.json and return it.
               The pipeline's prompts instruct the agent to write this file.
         max_turns: Maximum number of agentic turns (tool-use loops) per
             request. Safety limit to prevent runaway agents.

@@ -41,9 +41,9 @@ Always resolve in sequence using `configure_props`.
   - The `filename` prop (even though not marked optional in schema)
   - `stash_id="NEW"` in the `run_action` call to enable file stashing
 
-  Downloaded files are saved to `/workdir/session/integrations-results/__stash/{filename}` and are immediately available for reading or further processing.
+  Downloaded files are saved to `/workdir/outputs/integrations-results/__stash/{filename}` and are immediately available for reading or further processing.
 
-- **File uploads accept workspace paths:** The `filePath` prop for `upload-file` accepts workspace paths (e.g., `/workdir/session/file.txt`) which are automatically converted to presigned URLs.
+- **File uploads accept workspace paths:** The `filePath` prop for `upload-file` accepts workspace paths (e.g., `/workdir/outputs/file.txt`) which are automatically converted to presigned URLs.
 
 - **Global vs site-scoped search:**
   - `search-files` searches across ALL sites (no siteId required)
@@ -125,7 +125,7 @@ fields/Modified gt '2024-01-01'
   "siteId": "contoso.sharepoint.com,abc...,def...",
   "driveId": "b!...",
   "uploadFolderId": "folder-id-here",
-  "filePath": "/workdir/session/report.pdf",
+  "filePath": "/workdir/outputs/report.pdf",
   "filename": "Q4-Report.pdf"
 }
 ```

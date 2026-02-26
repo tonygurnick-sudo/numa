@@ -18,9 +18,9 @@ BLOCKED_SNIPPETS = [
 
 SAFE_SNIPPETS = [
     "import pandas as pd; pd.read_csv('/workdir/uploads/data.csv')",
-    "import pandas as pd; frame = pd.DataFrame({'x': [1, 2]}); frame.to_csv('/workdir/session/out.csv', index=False)",
+    "import pandas as pd; frame = pd.DataFrame({'x': [1, 2]}); frame.to_csv('/workdir/outputs/out.csv', index=False)",
     "import numpy as np; arr = np.array([1, 2, 3]); print(arr.mean())",
-    "with open('/workdir/session/notes.txt', 'w') as f: f.write('ok')",
+    "with open('/workdir/outputs/notes.txt', 'w') as f: f.write('ok')",
 ]
 
 

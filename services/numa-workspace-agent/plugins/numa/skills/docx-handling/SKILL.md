@@ -21,7 +21,7 @@ doc = Document('/workdir/uploads/template.docx')
 doc = Document()
 
 # Save document
-doc.save('/workdir/session/result.docx')
+doc.save('/workdir/outputs/result.docx')
 ```
 
 ---
@@ -66,8 +66,8 @@ run.bold = True
 p.add_run(' followed by normal text.')
 
 # Save
-doc.save('/workdir/session/new_document.docx')
-print("Created: /workdir/session/new_document.docx")
+doc.save('/workdir/outputs/new_document.docx')
+print("Created: /workdir/outputs/new_document.docx")
 ```
 
 ### Adding Tables
@@ -95,7 +95,7 @@ for row_idx, row_data in enumerate(data, start=1):
     for col_idx, value in enumerate(row_data):
         table.rows[row_idx].cells[col_idx].text = value
 
-doc.save('/workdir/session/with_table.docx')
+doc.save('/workdir/outputs/with_table.docx')
 ```
 
 ### Text Styling
@@ -123,7 +123,7 @@ run.font.size = Pt(18)
 run = p.add_run('Colored')
 run.font.color.rgb = RGBColor(255, 0, 0)  # Red
 
-doc.save('/workdir/session/styled.docx')
+doc.save('/workdir/outputs/styled.docx')
 ```
 
 ### Adding Images
@@ -159,7 +159,7 @@ paragraph = cell.paragraphs[0]
 run = paragraph.add_run()
 run.add_picture('/workdir/uploads/logo.png', width=Inches(1.5))
 
-doc.save('/workdir/session/with_images.docx')
+doc.save('/workdir/outputs/with_images.docx')
 ```
 
 **Common image use cases:**
@@ -346,7 +346,7 @@ for table in doc.tables:
                 if old_text in cell.text:
                     cell.text = cell.text.replace(old_text, new_text)
 
-doc.save('/workdir/session/filled.docx')
+doc.save('/workdir/outputs/filled.docx')
 ```
 
 #### Preserving Formatting During Replacement
@@ -376,7 +376,7 @@ def replace_preserving_format(doc, old_text, new_text):
 
 doc = Document('/workdir/uploads/template.docx')
 replace_preserving_format(doc, '<Name>', 'Jane Doe')
-doc.save('/workdir/session/formatted.docx')
+doc.save('/workdir/outputs/formatted.docx')
 ```
 
 #### Filling Table Rows with Data
@@ -416,7 +416,7 @@ for i, item in enumerate(line_items):
     row.cells[2].text = f"${item['rate']:.2f}"
     row.cells[3].text = f"${item['total']:.2f}"
 
-doc.save('/workdir/session/invoice_filled.docx')
+doc.save('/workdir/outputs/invoice_filled.docx')
 ```
 
 #### Adding Paragraphs at Specific Locations
@@ -441,7 +441,7 @@ run = p.add_run('Important note: ')
 run.bold = True
 p.add_run('This is additional context.')
 
-doc.save('/workdir/session/with_paragraphs.docx')
+doc.save('/workdir/outputs/with_paragraphs.docx')
 ```
 
 ### Step 5: Handle Pagination
@@ -525,7 +525,7 @@ def validate_filled_document(doc_path, expected_values):
 
 # Example usage
 result = validate_filled_document(
-    '/workdir/session/invoice.docx',
+    '/workdir/outputs/invoice.docx',
     ['Arcanum Solutions', '$1,500.00', 'John Smith']
 )
 print(f"Found: {result['values_found']}")
@@ -542,17 +542,17 @@ For reports and documents where you want **clean formatting without manual pytho
 
 ```bash
 # Markdown → DOCX (local, instant)
-pandoc /workdir/session/report.md -o /workdir/session/report.docx
+pandoc /workdir/outputs/report.md -o /workdir/outputs/report.docx
 
 # With a reference doc for styling
-pandoc /workdir/session/report.md -o /workdir/session/report.docx --reference-doc=/workdir/uploads/template.docx
+pandoc /workdir/outputs/report.md -o /workdir/outputs/report.docx --reference-doc=/workdir/uploads/template.docx
 ```
 
 ### Lambda Fallback
 
 ```bash
 python3 /workdir/tools/numa/convert_document.py \
-    --file-path "/workdir/session/report.md" \
+    --file-path "/workdir/outputs/report.md" \
     --format docx \
     --mode markdown
 ```
@@ -606,13 +606,13 @@ python3 /workdir/tools/numa/convert_document.py \
 
 ```bash
 # DOCX → PDF (local, excellent quality)
-soffice --headless --convert-to pdf --outdir /workdir/session/ /workdir/uploads/document.docx
+soffice --headless --convert-to pdf --outdir /workdir/outputs/ /workdir/uploads/document.docx
 
 # PDF → DOCX (local, variable quality)
-soffice --headless --convert-to docx --outdir /workdir/session/ /workdir/uploads/document.pdf
+soffice --headless --convert-to docx --outdir /workdir/outputs/ /workdir/uploads/document.pdf
 
 # Markdown → DOCX (local, instant)
-pandoc /workdir/session/report.md -o /workdir/session/report.docx
+pandoc /workdir/outputs/report.md -o /workdir/outputs/report.docx
 ```
 
 ### Lambda Fallback
@@ -632,7 +632,7 @@ python3 /workdir/tools/numa/convert_document.py \
 
 # Markdown → DOCX
 python3 /workdir/tools/numa/convert_document.py \
-    --file-path "/workdir/session/report.md" \
+    --file-path "/workdir/outputs/report.md" \
     --format docx --mode markdown
 ```
 
@@ -665,7 +665,7 @@ python3 /workdir/tools/numa/extract_content.py \
     --file-path "/workdir/uploads/scanned_document.pdf"
 
 # Step 2: Convert extracted text to DOCX (local pandoc)
-pandoc /workdir/session/extracted_scanned_document.txt -o /workdir/session/document.docx
+pandoc /workdir/outputs/extracted_scanned_document.txt -o /workdir/outputs/document.docx
 ```
 
 ---
@@ -673,7 +673,7 @@ pandoc /workdir/session/extracted_scanned_document.txt -o /workdir/session/docum
 ## File Paths
 
 - **Input templates**: `/workdir/uploads/`
-- **Output documents**: `/workdir/session/`
-- **Working files**: `/workdir/session/`
+- **Output documents**: `/workdir/outputs/`
+- **Working files**: `/workdir/outputs/`
 
 Always use full paths and verify files exist before processing.

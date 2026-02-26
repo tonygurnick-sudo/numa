@@ -41,12 +41,12 @@ class TestPreprocessFilePaths(unittest.TestCase):
     def test_string_prop_converted(self, mock_prm):
         """Single string /workdir/ prop gets converted."""
         s3 = self._make_s3_client(
-            {"numa-chat/workspace/user1/conversations/conv1/session/file.txt"}
+            {"numa-chat/workspace/user1/conversations/conv1/outputs/file.txt"}
         )
         mock_prm.return_value = s3
 
         result = _preprocess_file_paths(
-            {"filePath": "/workdir/session/file.txt"},
+            {"filePath": "/workdir/outputs/file.txt"},
             user_sub="user1",
             conversation_id="conv1",
         )
@@ -58,8 +58,8 @@ class TestPreprocessFilePaths(unittest.TestCase):
         """String array with /workdir/ paths gets each element converted."""
         s3 = self._make_s3_client(
             {
-                "numa-chat/workspace/user1/conversations/conv1/session/a.pdf",
-                "numa-chat/workspace/user1/conversations/conv1/session/b.pdf",
+                "numa-chat/workspace/user1/conversations/conv1/outputs/a.pdf",
+                "numa-chat/workspace/user1/conversations/conv1/outputs/b.pdf",
             }
         )
         mock_prm.return_value = s3
@@ -67,8 +67,8 @@ class TestPreprocessFilePaths(unittest.TestCase):
         result = _preprocess_file_paths(
             {
                 "attachmentUrlsOrPaths": [
-                    "/workdir/session/a.pdf",
-                    "/workdir/session/b.pdf",
+                    "/workdir/outputs/a.pdf",
+                    "/workdir/outputs/b.pdf",
                 ]
             },
             user_sub="user1",
@@ -83,7 +83,7 @@ class TestPreprocessFilePaths(unittest.TestCase):
     def test_mixed_list_only_workdir_converted(self, mock_prm):
         """In a mixed list, only /workdir/ strings are converted; URLs stay."""
         s3 = self._make_s3_client(
-            {"numa-chat/workspace/user1/conversations/conv1/session/local.pdf"}
+            {"numa-chat/workspace/user1/conversations/conv1/outputs/local.pdf"}
         )
         mock_prm.return_value = s3
 
@@ -91,7 +91,7 @@ class TestPreprocessFilePaths(unittest.TestCase):
             {
                 "attachmentUrlsOrPaths": [
                     "https://example.com/remote.pdf",
-                    "/workdir/session/local.pdf",
+                    "/workdir/outputs/local.pdf",
                 ]
             },
             user_sub="user1",
@@ -122,7 +122,7 @@ class TestPreprocessFilePaths(unittest.TestCase):
         self.assertEqual(result, {})
 
     def test_missing_user_sub_returns_unchanged(self):
-        props = {"filePath": "/workdir/session/file.txt"}
+        props = {"filePath": "/workdir/outputs/file.txt"}
         result = _preprocess_file_paths(props, user_sub="", conversation_id="conv1")
         self.assertEqual(result, props)
 
@@ -142,7 +142,7 @@ class TestPreprocessFilePaths(unittest.TestCase):
     def test_path_traversal_blocked_in_list(self, mock_prm):
         """Path traversal in array elements is rejected."""
         s3 = self._make_s3_client(
-            {"numa-chat/workspace/user1/conversations/conv1/session/good.txt"}
+            {"numa-chat/workspace/user1/conversations/conv1/outputs/good.txt"}
         )
         mock_prm.return_value = s3
 
@@ -150,7 +150,7 @@ class TestPreprocessFilePaths(unittest.TestCase):
             {
                 "files": [
                     "/workdir/../etc/passwd",
-                    "/workdir/session/good.txt",
+                    "/workdir/outputs/good.txt",
                 ]
             },
             user_sub="user1",

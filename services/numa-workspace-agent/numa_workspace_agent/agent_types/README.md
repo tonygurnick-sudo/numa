@@ -69,7 +69,7 @@ Agent types can chain multiple steps using `pipeline_steps`. Each step is anothe
 AgentTypeConfig(
     type_id="profile-creator",
     pipeline_steps=["profile-researcher", "profile-validator"],
-    pipeline_result_mode="result_file",  # reads /workdir/session/result.json
+    pipeline_result_mode="result_file",  # reads /workdir/outputs/result.json
 )
 ```
 

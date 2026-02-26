@@ -59,12 +59,12 @@ Add files from the workspace to a knowledge base:
 ```bash
 # Upload to company KB (admin only)
 python3 /workdir/tools/numa/knowledge_base.py upload \
-    --file /workdir/session/report.pdf \
+    --file /workdir/outputs/report.pdf \
     --kb-id company
 
 # Upload to user KB with folder path
 python3 /workdir/tools/numa/knowledge_base.py upload \
-    --file /workdir/session/analysis.docx \
+    --file /workdir/outputs/analysis.docx \
     --kb-id "abc-123-uuid" \
     --path "reports/2024/"
 ```
@@ -87,12 +87,12 @@ python3 /workdir/tools/numa/knowledge_base.py download-folder \
     --kb-id company
 
 # Create analysis script
-cat > /workdir/session/analyze_kb.py << 'EOF'
+cat > /workdir/outputs/analyze_kb.py << 'EOF'
 import zipfile
 import json
 from collections import Counter
 
-zip_path = '/workdir/session/company.zip'
+zip_path = '/workdir/outputs/company.zip'
 results = {'file_count': 0, 'extensions': Counter()}
 
 with zipfile.ZipFile(zip_path, 'r') as z:
@@ -105,7 +105,7 @@ print(json.dumps(results, indent=2))
 EOF
 
 # Run analysis
-python3 /workdir/session/analyze_kb.py
+python3 /workdir/outputs/analyze_kb.py
 ```
 
 This approach enables comprehensive content analysis (word counts, topic extraction, cross-file comparisons) while avoiding filesystem limitations.
@@ -150,7 +150,7 @@ python3 /workdir/tools/numa/knowledge_base.py query \
     --user-intent "compile security documentation" \
     --no-summarise \
     --max-results 15 \
-    --output-file /workdir/session/security_docs.json
+    --output-file /workdir/outputs/security_docs.json
 ```
 
 Then read and analyze the saved file for complete information.
@@ -182,7 +182,7 @@ When returning results:
 - Include relevant quotes or excerpts
 - **Always cite sources using the `<kb-source:s3://...>` format** so users can access the original documents
 - Highlight any gaps or areas where more information might be needed
-- If you downloaded files, mention their location in `/workdir/session/`
+- If you downloaded files, mention their location in `/workdir/outputs/`
 - If you uploaded files to KB, confirm the upload and note the ~30 min indexing delay
 
 **Source Citation Example:**

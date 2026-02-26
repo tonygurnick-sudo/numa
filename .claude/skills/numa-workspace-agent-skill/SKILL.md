@@ -62,7 +62,7 @@ SSE Stream back to Frontend
 - `chat` - Main chat streaming
 - `upload` - Upload file to workspace
 - `delete_uploads` - Remove staged files
-- `cleanup_session` - Clear session files
+- `cleanup_session` - Clear output files
 
 ### assistant.py - Pre-Request Assistant
 
@@ -144,7 +144,7 @@ S3 sync operations for workspace files:
 ```
 s3://{outputs_bucket}/workspaces/{user_sub}/{conversation_id}/
 ├── .system/          # Claude SDK session state
-├── session/          # Per-conversation scratch files
+├── outputs/          # Per-conversation output files
 ├── uploads/          # User uploaded files
 ├── chat-workflows/   # Persistent scripts (user-level, not conversation)
 └── trace.jsonl       # Conversation history
@@ -384,7 +384,7 @@ Two security layers validate bash commands:
 ```bash
 # Instead of: python3 -c "print(f'${total:.2f}')"  # BLOCKED
 # Do this:
-python3 /workdir/session/analysis.py  # Write script first, then run
+python3 /workdir/outputs/analysis.py  # Write script first, then run
 ```
 
 ---

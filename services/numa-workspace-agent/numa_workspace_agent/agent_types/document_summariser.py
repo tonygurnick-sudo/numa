@@ -5,7 +5,7 @@ This is the first real (non-chat) agent type. It demonstrates:
     - Custom system prompt builder (extends the default with summariser instructions)
     - Sync response mode (caller waits for the JSON result)
     - Restricted tools (read/write only — no Bash, no MCP, no integrations)
-    - result_file convention (agent writes /workdir/session/result.json)
+    - result_file convention (agent writes /workdir/outputs/result.json)
 
 Typical callers: Step Functions, APIs, or other backend systems that need a
 structured document summary as JSON.
@@ -30,7 +30,7 @@ produce clear, structured summaries.
 
 1. Read the uploaded file(s) in /workdir/uploads/
 2. Analyse the content thoroughly
-3. Write your summary to /workdir/session/result.json with this schema:
+3. Write your summary to /workdir/outputs/result.json with this schema:
 
 ```json
 {
@@ -109,7 +109,7 @@ DOCUMENT_SUMMARISER = AgentTypeConfig(
     # No KB or integrations
     restrict_kbs=True,
     restrict_integrations=True,
-    # Agent writes /workdir/session/result.json — the handler reads it
+    # Agent writes /workdir/outputs/result.json — the handler reads it
     pipeline_result_mode="result_file",
     max_turns=10,  # Simple task, few turns needed
     max_thinking_tokens=5000,

@@ -114,7 +114,7 @@ def _get_output_s3_key(input_rel_path: str, user_sub: str, conversation_id: str)
     """
     Determine the S3 key for the extracted content output.
 
-    Output is always written to session/ directory (conversation-scoped).
+    Output is always written to outputs/ directory (conversation-scoped).
 
     Args:
         input_rel_path: Relative path of input file
@@ -129,8 +129,8 @@ def _get_output_s3_key(input_rel_path: str, user_sub: str, conversation_id: str)
     # Sanitize filename for S3 key
     safe_filename = re.sub(r"[^a-zA-Z0-9_-]", "_", filename)
 
-    # Output goes to session/ with extracted_ prefix
-    output_rel_path = f"session/extracted_{safe_filename}.txt"
+    # Output goes to outputs/ with extracted_ prefix
+    output_rel_path = f"outputs/extracted_{safe_filename}.txt"
 
     return f"{S3_PREFIX}/{user_sub}/conversations/{conversation_id}/{output_rel_path}"
 

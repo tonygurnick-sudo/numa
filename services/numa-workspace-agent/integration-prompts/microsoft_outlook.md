@@ -33,7 +33,7 @@ The `emailAddresses` prop accepts a simple string array `["email@example.com"]`,
 Use `proxy_request` with `DELETE` method to delete contacts (`/me/contacts/{id}`) or emails (`/me/messages/{id}`). Moving to the "Deleted Items" folder is an alternative for emails.
 
 ## Download Attachment Requires `stash_id`
-Always include `stash_id: "NEW"` when calling `download-attachment`. Files are saved to `/workdir/session/integrations-results/`.
+Always include `stash_id: "NEW"` when calling `download-attachment`. Files are saved to `/workdir/outputs/integrations-results/`.
 
 ## Business/Organization Accounts
 

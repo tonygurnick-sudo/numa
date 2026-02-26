@@ -169,6 +169,7 @@ const NumaWorkspaceChatAgents = () => {
   const preselectTimerRef = useRef<number | null>(null);
   const autoNamingAttemptedRef = useRef<Set<string>>(new Set());
   const lastLoadedConversationRef = useRef<string | null>(null); // Prevents infinite reload loop
+  const loadGenerationRef = useRef(0); // Incremented on new chat to cancel in-flight loads
   const conversationChatConfigSaveTimeoutRef = useRef<number | null>(null);
   const isApplyingConversationChatConfigRef = useRef(false);
   // Note: Workspace streaming refs moved to useWorkspaceStreaming hook
@@ -1008,6 +1009,9 @@ const NumaWorkspaceChatAgents = () => {
     // Clear auto-naming tracking for new conversation
     autoNamingAttemptedRef.current.clear();
 
+    // Cancel any in-flight conversation loads so they don't overwrite new chat state
+    loadGenerationRef.current += 1;
+
     // Use the hook's new chat handler
     await handleNewChat();
   }
@@ -1790,6 +1794,10 @@ const NumaWorkspaceChatAgents = () => {
   const handleLoadConversation = async (selectedConversationId: string, isWorkspaceConversation = true) => {
     if (!numaChatDynamoUtils) return;
 
+    // Capture generation so we can detect if new chat was clicked during this load
+    const generation = loadGenerationRef.current;
+    const isCancelled = () => loadGenerationRef.current !== generation;
+
     console.log('[NumaChat] handleLoadConversation called:', {
       selectedConversationId,
       isWorkspaceConversation,
@@ -1823,6 +1831,10 @@ const NumaWorkspaceChatAgents = () => {
         console.log('[NumaChat] Loading V2 workspace conversation from trace');
         try {
           const rawTrace = await getWorkspaceChatRawTrace(selectedConversationId);
+          if (isCancelled()) {
+            console.log('[NumaChat] Load cancelled after trace fetch:', selectedConversationId);
+            return;
+          }
           console.log('[NumaChat] Raw trace length:', rawTrace?.length, 'lines:', rawTrace?.split('\n').length);
 
           // Parse raw trace using same logic as live streaming
@@ -1844,6 +1856,10 @@ const NumaWorkspaceChatAgents = () => {
               1000, // Must be large enough to include the meta record (oldest item, query is newest-first)
               sub,
             );
+            if (isCancelled()) {
+              console.log('[NumaChat] Load cancelled after metadata fetch:', selectedConversationId);
+              return;
+            }
             console.log('[DEBUG-AGENT] queryConversations returned', conversationHistory.length, 'items');
             console.log(
               '[DEBUG-AGENT] message_types:',
@@ -1865,12 +1881,13 @@ const NumaWorkspaceChatAgents = () => {
               console.log('[NumaChat] V2 conversation has agent, restoring:', metaItem.agentId);
               try {
                 const agent = await getAgent(numaGet, metaItem.agentId);
+                if (isCancelled()) return;
                 setCurrentAgent(agent);
                 setPendingAgent(null);
                 applyAgentConfiguration(agent);
               } catch (agentErr) {
                 console.error('Failed to hydrate agent for V2 conversation', agentErr);
-                resetAgentState();
+                if (!isCancelled()) resetAgentState();
               }
             } else {
               // Clear agent state without applying defaults — let chatConfig handle it
@@ -1889,9 +1906,10 @@ const NumaWorkspaceChatAgents = () => {
             }
           } catch (metaErr) {
             console.error('Failed to fetch V2 conversation metadata:', metaErr);
-            resetAgentState();
+            if (!isCancelled()) resetAgentState();
           }
         } catch (wsError) {
+          if (isCancelled()) return;
           console.error('Error loading V2 workspace conversation trace:', wsError);
           // This is a known V2 workspace conversation — do NOT fall back to V1.
           // Network errors (e.g. interrupted requests, HTTP/2 errors after stop+refresh)
@@ -1911,9 +1929,12 @@ const NumaWorkspaceChatAgents = () => {
       } else {
         // V1 conversation: load directly from DynamoDB (skip trace fetch entirely)
         console.log('[NumaChat] Loading V1 conversation from DynamoDB');
-        await loadV1Conversation(selectedConversationId);
+        if (!isCancelled()) {
+          await loadV1Conversation(selectedConversationId);
+        }
       }
     } catch (error) {
+      if (isCancelled()) return;
       console.error('Error loading conversation:', error);
       // Show error message to user
       setMessages([
@@ -1924,10 +1945,12 @@ const NumaWorkspaceChatAgents = () => {
       ]);
       resetAgentState();
     } finally {
-      setIsConversationLoading(false);
-      setIsManuallyLoading(false);
-      // Mark this conversation as loaded to prevent infinite reload loop
-      lastLoadedConversationRef.current = selectedConversationId;
+      if (!isCancelled()) {
+        setIsConversationLoading(false);
+        setIsManuallyLoading(false);
+        // Mark this conversation as loaded to prevent infinite reload loop
+        lastLoadedConversationRef.current = selectedConversationId;
+      }
     }
   };
 
@@ -2510,7 +2533,7 @@ const NumaWorkspaceChatAgents = () => {
             isOpen={settingsPanel.isPanelOpen}
             isNewChat={shouldShowNewChatView}
             uploadsFiles={settingsPanel.uploadsFiles}
-            sessionFiles={settingsPanel.sessionFiles}
+            outputFiles={settingsPanel.outputFiles}
             filesLoading={settingsPanel.filesLoading}
             filesError={settingsPanel.filesError}
             onRefreshFiles={settingsPanel.refreshFiles}

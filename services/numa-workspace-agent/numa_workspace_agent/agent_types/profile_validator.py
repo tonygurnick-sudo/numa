@@ -1,9 +1,9 @@
 """
 Profile Validator — Step 2 of the profile-creator pipeline.
 
-Reads the draft profile from /workdir/session/profile_draft.json (written by
+Reads the draft profile from /workdir/outputs/profile_draft.json (written by
 the profile-researcher step), validates it, fixes any issues, and writes the
-final validated profile to /workdir/session/result.json.
+final validated profile to /workdir/outputs/result.json.
 """
 
 from ..prompts import build_workspace_system_prompt
@@ -15,12 +15,12 @@ VALIDATOR_ADDENDUM = """
 ## Your Role
 
 You are a profile validator and quality checker. A previous researcher has
-written a draft profile to /workdir/session/profile_draft.json. Your job is
+written a draft profile to /workdir/outputs/profile_draft.json. Your job is
 to review it, fix any issues, and produce the final version.
 
 ## Instructions
 
-1. Read /workdir/session/profile_draft.json
+1. Read /workdir/outputs/profile_draft.json
 2. Validate the profile against these quality checks:
    - All required fields are present and non-empty
    - "background" is well-written and factual-sounding (no speculation)
@@ -29,7 +29,7 @@ to review it, fix any issues, and produce the final version.
    - No obvious contradictions or red flags
 3. Fix any issues you find (improve wording, remove speculation, etc.)
 4. Add a "validation" field to the output with your assessment
-5. Write the final validated profile to /workdir/session/result.json:
+5. Write the final validated profile to /workdir/outputs/result.json:
 
 ```json
 {

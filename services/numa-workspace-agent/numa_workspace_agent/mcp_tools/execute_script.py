@@ -8,7 +8,7 @@ in a controlled manner.
 
 Security:
 - Only allowed interpreters can be used (python3, node, bash, sh)
-- Scripts are written to /workdir/session (within workspace jail)
+- Scripts are written to /workdir/outputs (within workspace jail)
 - Code is scanned for dangerous patterns before execution (imports, file access, etc.)
 - Temp files are cleaned up after execution
 """
@@ -297,8 +297,8 @@ ALLOWED_INTERPRETERS = {
     "sh": ".sh",
 }
 
-# Workspace session directory for temp files
-SCRIPT_DIR = "/workdir/session"
+# Workspace outputs directory for temp files
+SCRIPT_DIR = "/workdir/outputs"
 
 
 @tool(
@@ -307,7 +307,7 @@ SCRIPT_DIR = "/workdir/session"
         "Execute code in a sandboxed interpreter. "
         "Use this instead of heredocs (python3 << 'EOF') or inline scripts. "
         "Supported interpreters: python3, node, bash. "
-        "Code is written to a temp file in /workdir/session and executed."
+        "Code is written to a temp file in /workdir/outputs and executed."
     ),
     input_schema={
         "type": "object",

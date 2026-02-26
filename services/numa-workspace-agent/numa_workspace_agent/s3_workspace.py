@@ -3,14 +3,14 @@ S3-based workspace persistence for AgentCore.
 
 Syncs workspace files to/from S3 for persistence across per-conversation sessions.
 - chat-workflows/ is globally persistent (syncs to user's root S3 path) [currently disabled]
-- uploads/, session/, root files, and trace sync to conversation-specific S3 path
+- uploads/, outputs/, root files, and trace sync to conversation-specific S3 path
 
 S3 Structure:
     {bucket}/numa-chat/workspace/{user_sub}/
     ├── chat-workflows/                # GLOBAL - persists across all conversations
     └── conversations/{conv_id}/       # Per-conversation
         ├── uploads/
-        ├── session/
+        ├── outputs/
         ├── (root files)
         └── _system/
             └── trace.jsonl
@@ -87,7 +87,7 @@ def _get_s3_path_for_file(rel_path: str, conversation_id: str, user_sub: str) ->
     if rel_path == "_system/trace.jsonl":
         return f"{S3_PREFIX}/{user_sub}/conversations/{conversation_id}/_system/trace.jsonl"
 
-    # Everything else (uploads, session, root files) goes to conversation path
+    # Everything else (uploads, outputs, root files) goes to conversation path
     return f"{S3_PREFIX}/{user_sub}/conversations/{conversation_id}/{rel_path}"
 
 
@@ -114,7 +114,7 @@ def get_local_checksums(conversation_id: str) -> dict[str, FileChecksum]:
     Scans:
     - /chat-workflows/* (globally persistent)
     - /uploads/* (conversation)
-    - /session/* (conversation)
+    - /outputs/* (conversation)
     - /* root-level files (conversation)
     - /.system/trace.jsonl (conversation)
 
@@ -130,7 +130,7 @@ def get_local_checksums(conversation_id: str) -> dict[str, FileChecksum]:
 
     # Protected directories that should not be synced as root files
     # tools/ is baked into container image - never sync to S3
-    protected_dirs = {".system", "chat-workflows", "uploads", "session", "tools"}
+    protected_dirs = {".system", "chat-workflows", "uploads", "outputs", "tools"}
 
     # DISABLED: chat-workflows feature temporarily disabled
     # Scan chat-workflows (globally persistent)
@@ -152,8 +152,8 @@ def get_local_checksums(conversation_id: str) -> dict[str, FileChecksum]:
     #                 "Failed to checksum file", path=str(file_path), error=str(e)
     #             )
 
-    # Scan uploads and session (per-conversation)
-    for dir_key in ["uploads", "session"]:
+    # Scan uploads and outputs (per-conversation)
+    for dir_key in ["uploads", "outputs"]:
         scan_dir = paths[dir_key]
         if not scan_dir.exists():
             continue
@@ -278,9 +278,12 @@ def sync_from_s3(user_sub: str, conversation_id: str) -> SyncResult:
     prefixes = [
         # Globally persistent chat-workflows (DISABLED)
         # (f"{S3_PREFIX}/{user_sub}/chat-workflows/", paths["workflows"]),
-        # Conversation-specific files (uploads, session, root files, _system)
+        # Conversation-specific files (uploads, outputs, root files, _system)
         (f"{S3_PREFIX}/{user_sub}/conversations/{conversation_id}/", root),
     ]
+
+    # Track downloaded output files to avoid old session/ files overwriting them
+    downloaded_output_files: set[str] = set()
 
     for s3_prefix, local_base in prefixes:
         try:
@@ -296,8 +299,18 @@ def sync_from_s3(user_sub: str, conversation_id: str) -> SyncResult:
                     # Handle _system/trace.jsonl specially
                     if rel_path == "_system/trace.jsonl":
                         local_file = paths["trace_file"]
+                    # Backward compat: old S3 data under session/ → local outputs/
+                    elif rel_path.startswith("session/"):
+                        output_rel = rel_path[len("session/") :]
+                        # Skip if we already downloaded this file from outputs/
+                        if output_rel in downloaded_output_files:
+                            continue
+                        local_file = local_base / "outputs" / output_rel
                     else:
                         local_file = local_base / rel_path
+                        # Track files downloaded from outputs/ prefix
+                        if rel_path.startswith("outputs/"):
+                            downloaded_output_files.add(rel_path[len("outputs/") :])
 
                     local_file.parent.mkdir(parents=True, exist_ok=True)
 
@@ -643,7 +656,7 @@ def list_workspace_files_from_s3(user_sub: str) -> list[dict]:
 
 def list_conversation_files_from_s3(user_sub: str, conversation_id: str) -> list[dict]:
     """
-    List files in a conversation's uploads/ and session/ directories from S3.
+    List files in a conversation's uploads/ and outputs/ directories from S3.
 
     This is used for the /files/{conversation_id} endpoint to show
     conversation-specific files in the settings panel.
@@ -663,6 +676,7 @@ def list_conversation_files_from_s3(user_sub: str, conversation_id: str) -> list
     prefix = f"{S3_PREFIX}/{user_sub}/conversations/{conversation_id}/"
 
     files = []
+    seen_output_names: set[str] = set()
     try:
         paginator = s3.get_paginator("list_objects_v2")
         for page in paginator.paginate(Bucket=OUTPUTS_BUCKET, Prefix=prefix):
@@ -670,15 +684,28 @@ def list_conversation_files_from_s3(user_sub: str, conversation_id: str) -> list
                 # Extract relative path within conversation
                 rel_path = obj["Key"][len(prefix) :]
 
-                # Only include files from uploads/ and session/ folders
+                # Only include files from uploads/, outputs/, or session/ (backward compat)
                 if not (
-                    rel_path.startswith("uploads/") or rel_path.startswith("session/")
+                    rel_path.startswith("uploads/")
+                    or rel_path.startswith("outputs/")
+                    or rel_path.startswith("session/")  # backward compat
                 ):
                     continue
 
                 # Skip _system/ directory
                 if rel_path.startswith("_system/"):
                     continue
+
+                # Normalize old session/ paths to outputs/ for consistency
+                if rel_path.startswith("session/"):
+                    normalized_path = "outputs/" + rel_path[len("session/") :]
+                    # Skip if we already have this file under outputs/
+                    if normalized_path in seen_output_names:
+                        continue
+                    rel_path = normalized_path
+
+                if rel_path.startswith("outputs/"):
+                    seen_output_names.add(rel_path)
 
                 files.append(
                     {

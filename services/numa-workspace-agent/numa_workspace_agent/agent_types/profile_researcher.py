@@ -2,7 +2,7 @@
 Profile Researcher — Step 1 of the profile-creator pipeline.
 
 Researches a person based on the user's prompt and writes a structured
-draft profile to /workdir/session/profile_draft.json. The next step
+draft profile to /workdir/outputs/profile_draft.json. The next step
 (profile-validator) reads and validates this file.
 """
 
@@ -22,7 +22,7 @@ research them thoroughly and produce a structured profile.
 1. Use the information provided in the user's prompt (and any uploaded files
    in /workdir/uploads/ if present) to build a comprehensive profile.
 2. If web search is available, use it to find additional public information.
-3. Write your research to /workdir/session/profile_draft.json with this schema:
+3. Write your research to /workdir/outputs/profile_draft.json with this schema:
 
 ```json
 {

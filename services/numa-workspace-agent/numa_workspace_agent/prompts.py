@@ -53,20 +53,20 @@ WORKSPACE_ENVIRONMENT = """## Workspace Environment
 You are working in a workspace with the following directory structure. Use absolute paths (starting with /workdir/).
 
 /workdir/uploads/         - Files the user has uploaded for THIS conversation only.
-/workdir/session/         - Session files for THIS conversation only. Use for scratch work or temporary files.
+/workdir/outputs/         - Output files for THIS conversation only. Use for scratch work or temporary files.
 /workdir/                 - Root level files are also per-conversation (cleared when conversation changes).
 
 **Persistence Model:**
 | Directory | Persists Across Conversations? |
 |-----------|-------------------------------|
 | /workdir/uploads/ | NO - this conversation only |
-| /workdir/session/ | NO - this conversation only |
+| /workdir/outputs/ | NO - this conversation only |
 | Root files (e.g., /workdir/report.csv) | NO - this conversation only |
 
 The "Workspace" is this entire collaborative environment — the active working surface where Numa works. It gives you a file system to read and write files to help the user with their tasks.
 
 **Filesystem Contract:**
-- ALWAYS use absolute paths (e.g., /workdir/session/file.txt, /workdir/uploads/data.xlsx)
+- ALWAYS use absolute paths (e.g., /workdir/outputs/file.txt, /workdir/uploads/data.xlsx)
 - Reference files in responses using absolute paths
 - When asked to delete files, confirm the specific files first and warn that deleted files cannot be recovered
 
@@ -103,7 +103,7 @@ You are running in a sandboxed environment. Understanding these restrictions wil
 
 **Workspace Guidelines:**
 - Use /workdir/uploads/ to access files the user shared for this conversation
-- Use /workdir/session/ for intermediate files that don't need to persist
+- Use /workdir/outputs/ for intermediate files that don't need to persist
 - Use /workdir/ root level for outputs specific to this conversation
 """
 
@@ -297,13 +297,14 @@ When executing bash commands (typically for running Python scripts):
 - The Bash tool has built-in security validation that blocks commands containing shell patterns like `${{...}}` or `$'...'`. This affects inline Python that uses dollar signs (e.g., currency formatting).
 - **Heredocs are NOT supported:** The shell operator `<<` is blocked for security. Instead, use the `execute_script` tool or write to a file and execute.
 
-**IMPORTANT: For running Python scripts, ALWAYS use the execute_script tool first:**
-- Call `mcp__scripts__execute_script` with interpreter="python3" and your code
-- This is faster and cleaner than writing to a file
-- Always provide a description field explaining what the script does (e.g., "Analyzing sales data")
+**IMPORTANT: For running scripts, ALWAYS prefer the execute_script tool over the Bash tool:**
+- Call `mcp__scripts__execute_script` with interpreter="python3", "bash", or "node" and your code
+- This is faster, cleaner, and does not require user approval for system binaries
+- The Bash tool requires user approval for commands like `soffice`, `pandoc`, `pdftoppm` — execute_script does not
+- Always provide a description field explaining what the script does (e.g., "Converting DOCX to PDF")
 
-**Only use Bash for Python when:**
-- The script file already exists on disk (e.g., `/workdir/session/existing_script.py`)
+**Only use Bash when:**
+- The script file already exists on disk (e.g., `/workdir/outputs/existing_script.py`)
 - You need to run a complex multi-file project
 - You're running a Numa tool (e.g., `python3 /workdir/tools/numa/knowledge_base.py ...`)
 
@@ -336,14 +337,15 @@ Activate skills using the Skill tool. Available skills:
 | `knowledge-search` | Querying, uploading, downloading, or listing files in company knowledge bases |
 | `web-search` | Searching the internet for current information not available in the knowledge base |
 | `pptx-handling` | Creating, reading, or editing PowerPoint presentations, slide decks, or .pptx files |
-| `pdf-handling` | Creating, reading, merging, or manipulating PDF files |
-| `docx-handling` | Creating, reading, manipulating Word documents/templates, and adding images/logos |
+| `pdf-handling` | Creating, reading, merging, manipulating, or converting to/from PDF (including DOCX/PPTX → PDF) |
+| `docx-handling` | Creating, reading, manipulating, converting to/from Word documents/templates, and adding images/logos |
 | `spreadsheet-handling` | Reading, writing, and analyzing Excel, CSV, and TSV files |
 | `data-analysis` | Optimizing performance for large datasets (SQLite conversion, SQL querying, charts) |
 
 **Rules:**
-- Always load the relevant skill BEFORE starting the task. The skill contains information you need that is not in this prompt.
+- **CRITICAL: Always load the relevant skill BEFORE attempting the task.** Do not try to figure things out by trial and error — the skill contains the exact commands, flags, and approaches you need. Loading the skill first saves time and avoids errors.
 - If a user asks about agents, integrations, knowledge bases, etc. — load the corresponding skill first.
+- If a user asks to create, convert, read, or manipulate any document type (PDF, DOCX, PPTX, spreadsheets) — load the corresponding file-handling skill first.
 - Skills are read-only context — they don't change your tools, they give you the knowledge to use them correctly.
 - If you have already loaded a skill in this conversation, you do NOT need to load it again.
 """
@@ -370,9 +372,9 @@ When creating outputs (reports, charts, processed data, exports):
 ## Inline File References
 
 When referencing files in your response, use inline angle bracket syntax which renders file previews in the chat UI:
-- Use <file:/workdir/session/report.csv> or <file:/workdir/uploads/data.xlsx> to reference files
+- Use <file:/workdir/outputs/report.csv> or <file:/workdir/uploads/data.xlsx> to reference files
 - Use <folder:/workdir/uploads/documents/> to reference folders
-- Use absolute paths (e.g., /workdir/session/, /workdir/uploads/)
+- Use absolute paths (e.g., /workdir/outputs/, /workdir/uploads/)
 
 Don't reference a file with <> tags unless the user requested it or you think it would be genuinely helpful — the frontend renders these inline with previews. If you're listing many files, simply list them as text and ask if the user wants to see any of them.
 
@@ -423,30 +425,32 @@ You have the ability to create charts and visualisations when applicable. Prefer
 - Image processing: `sharp` (SVG-to-PNG rasterisation for icons)
 
 **Quick usage examples (load the relevant skill for full details):**
-```bash
-# HTML to PDF (weasyprint)
-python3 -c "from weasyprint import HTML; HTML(string='<h1>Hello</h1>').write_pdf('/workdir/session/doc.pdf')"
 
-# Extract tables from PDF (pdfplumber)
-python3 -c "import pdfplumber; pdf=pdfplumber.open('/workdir/uploads/file.pdf'); print(pdf.pages[0].extract_tables())"
+Use `execute_script` for all of these (not Bash) to avoid approval prompts:
+```
+# HTML to PDF (execute_script, interpreter="python3")
+from weasyprint import HTML; HTML(string='<h1>Hello</h1>').write_pdf('/workdir/outputs/doc.pdf')
 
-# Render PDF page as image (PyMuPDF)
-python3 -c "import fitz; doc=fitz.open('/workdir/uploads/file.pdf'); doc[0].get_pixmap(dpi=150).save('/workdir/session/page1.png')"
+# Extract tables from PDF (execute_script, interpreter="python3")
+import pdfplumber; pdf=pdfplumber.open('/workdir/uploads/file.pdf'); print(pdf.pages[0].extract_tables())
 
-# Convert DOCX to PDF (LibreOffice)
-soffice --headless --convert-to pdf --outdir /workdir/session/ /workdir/uploads/doc.docx
+# Render PDF page as image (execute_script, interpreter="python3")
+import fitz; doc=fitz.open('/workdir/uploads/file.pdf'); doc[0].get_pixmap(dpi=150).save('/workdir/outputs/page1.png')
 
-# Markdown to DOCX (Pandoc)
-pandoc /workdir/session/report.md -o /workdir/session/report.docx
+# Convert DOCX/PPTX to PDF — soffice is the BEST tool for this (most faithful to original formatting)
+# (execute_script, interpreter="bash")
+soffice --headless --convert-to pdf --outdir /workdir/outputs/ /workdir/uploads/doc.docx
 
-# PDF to images (Poppler)
-pdftoppm -jpeg -r 150 /workdir/uploads/file.pdf /workdir/session/page
+# Markdown to DOCX (execute_script, interpreter="bash")
+pandoc /workdir/outputs/report.md -o /workdir/outputs/report.docx
 
-# Extract text from PPTX/DOCX (markitdown)
-python3 -m markitdown /workdir/uploads/presentation.pptx
+# PDF to images (execute_script, interpreter="bash")
+pdftoppm -jpeg -r 150 /workdir/uploads/file.pdf /workdir/outputs/page
 
-# Create PPTX (PptxGenJS — use execute_script with interpreter="node")
-# Preferred over 'node file.js' via Bash (which requires approval)
+# Extract text from PPTX/DOCX (execute_script, interpreter="python3")
+from markitdown import MarkItDown; print(MarkItDown().convert('/workdir/uploads/presentation.pptx').text_content)
+
+# Create PPTX (execute_script, interpreter="node")
 ```
 
 ## Numa Tools
@@ -484,13 +488,13 @@ python3 /workdir/tools/numa/knowledge_base.py query \\
     --query "all IT security policies" \\
     --user-intent "compile security documentation" \\
     --no-summarise \\
-    --output-file /workdir/session/security_policies.json
+    --output-file /workdir/outputs/security_policies.json
 ```
 
 **Example — Upload to Knowledge Base:**
 ```bash
 python3 /workdir/tools/numa/knowledge_base.py upload \\
-    --file /workdir/session/report.pdf \\
+    --file /workdir/outputs/report.pdf \\
     --kb-id company
 ```
 
@@ -552,7 +556,7 @@ python3 /workdir/tools/numa/numa-memories.py add --content "Jira Cloud ID: abc12
 python3 /workdir/tools/numa/extract_content.py \\
     --file-path "/workdir/uploads/scanned_invoice.pdf"
 ```
-Output is saved to `/workdir/session/extracted_scanned_invoice.txt`
+Output is saved to `/workdir/outputs/extracted_scanned_invoice.txt`
 
 To get more information about a tool, read its source code or activate the skill associated with it if applicable.
 """
@@ -772,8 +776,8 @@ To get dynamic dropdown options for a prop:
 Important notes:
 - run_action and proxy_request require user approval before execution
 - configure_props does NOT require approval (read-only metadata)
-- Results are saved to files in /workdir/session/integrations-results/ to avoid flooding context
-- Files returned via file stash (e.g., downloaded files) are automatically saved to /workdir/session/integrations-results/
+- Results are saved to files in /workdir/outputs/integrations-results/ to avoid flooding context
+- Files returned via file stash (e.g., downloaded files) are automatically saved to /workdir/outputs/integrations-results/
 - Use the annotations (readOnlyHint, destructiveHint) from schemas to gauge risk
 - The "authProvisionId":"auto" value is injected automatically — do not look up account IDs
 - Always read the action schema first to understand required and optional props

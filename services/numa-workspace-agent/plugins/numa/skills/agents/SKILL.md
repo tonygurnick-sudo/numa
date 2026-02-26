@@ -252,7 +252,7 @@ Agents can have reference files attached that provide context for answering ques
 
 Files can be attached from these workspace locations:
 - `/workdir/uploads/` - User-uploaded files
-- `/workdir/session/` - Files created during the conversation
+- `/workdir/outputs/` - Files created during the conversation
 - `/workdir/chat-workflows/` - Workflow output files
 
 ### How It Works

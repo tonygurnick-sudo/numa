@@ -9,12 +9,12 @@ step N are immediately available to step N+1.
 The system prompts handle all coordination between steps. The runner does not
 pass data between steps — it just runs them sequentially with the same original
 user prompt. For example, step 1's prompt says "write your research to
-/workdir/session/research.json" and step 2's prompt says "read
-/workdir/session/research.json and create a quote".
+/workdir/outputs/research.json" and step 2's prompt says "read
+/workdir/outputs/research.json and create a quote".
 
 Two result modes (configured via ``pipeline_result_mode`` on the parent type):
     - ``"last_step_text"``: Return the last step's text response (default).
-    - ``"result_file"``: Read ``/workdir/session/result.json`` and return it.
+    - ``"result_file"``: Read ``/workdir/outputs/result.json`` and return it.
 """
 
 import inspect
@@ -33,7 +33,7 @@ from .workspace import setup_agent_tools
 logger = structlog.get_logger()
 
 # Where the agent writes structured output when pipeline_result_mode = "result_file"
-RESULT_FILE_PATH = Path("/workdir/session/result.json")
+RESULT_FILE_PATH = Path("/workdir/outputs/result.json")
 
 
 def validate_pipeline(

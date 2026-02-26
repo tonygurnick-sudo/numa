@@ -28,7 +28,7 @@ The `attachmentFilenames` and `attachmentUrlsOrPaths` must be parallel arrays. W
   "subject": "Report attached",
   "body": "Please see attached.",
   "attachmentFilenames": ["report.pdf"],
-  "attachmentUrlsOrPaths": ["/workdir/session/report.pdf"]
+  "attachmentUrlsOrPaths": ["/workdir/outputs/report.pdf"]
 }
 ```
 Public URLs also work: `"attachmentUrlsOrPaths": ["https://example.com/files/report.pdf"]`
