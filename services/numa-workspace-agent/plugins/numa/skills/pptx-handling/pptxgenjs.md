@@ -1,6 +1,6 @@
 # PptxGenJS Tutorial
 
-Create presentations from scratch using PptxGenJS (Node.js). Write a `.js` file and run with `node`.
+Create presentations from scratch using PptxGenJS (Node.js). Use `execute_script` with `interpreter="node"` for inline code, or write a `.js` file and run with `node`.
 
 ## Setup & Basic Structure
 
@@ -18,7 +18,9 @@ slide.addText("Hello World!", { x: 0.5, y: 0.5, fontSize: 36, color: "363636" })
 pres.writeFile({ fileName: "/workdir/outputs/presentation.pptx" });
 ```
 
-Save as `/workdir/outputs/create_deck.js` and run:
+**Preferred:** Use `execute_script(interpreter="node", code="...")` to run this inline.
+
+**Alternative:** Save as `/workdir/outputs/create_deck.js` and run with Bash:
 ```bash
 node /workdir/outputs/create_deck.js
 ```

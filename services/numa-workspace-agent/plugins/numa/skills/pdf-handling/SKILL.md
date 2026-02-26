@@ -639,7 +639,7 @@ with open("/workdir/outputs/filled.pdf", "wb") as f:
 
 ## Local Conversion via LibreOffice
 
-Convert DOCX, PPTX, XLSX to PDF locally. **Use the `execute_script` tool** (not the Bash tool) to run `soffice` and `pandoc` — the Bash tool requires user approval for system binaries, while execute_script runs them in a controlled sandbox without approval prompts.
+Convert DOCX, PPTX, XLSX to PDF locally. Both `execute_script` and the Bash tool work for `soffice` and `pandoc`. Prefer `execute_script` for inline code per system prompt convention.
 
 ```python
 # DOCX → PDF (via execute_script with interpreter="bash")

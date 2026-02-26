@@ -22,6 +22,8 @@ description: "Use this skill any time a .pptx file is involved — as input, out
 | Fill template with data | python-pptx | Works with existing placeholders and structure |
 | Quick text extraction | markitdown | Fast CLI, no code needed |
 
+> **Tool preference:** Use `execute_script` for inline code (Node.js, Python, Bash). Use the Bash tool when running an already-written script file on disk (e.g., `node /workdir/outputs/create_deck.js`).
+
 ---
 
 ## Reading Content
@@ -31,10 +33,12 @@ description: "Use this skill any time a .pptx file is involved — as input, out
 python -m markitdown presentation.pptx
 ```
 
-For visual overview, convert to images:
-```bash
+For visual overview, convert to images using `execute_script`:
+```
+execute_script(interpreter="bash", description="Converting PPTX to images for visual QA", code="""
 soffice --headless --convert-to pdf --outdir /workdir/outputs/ /workdir/uploads/presentation.pptx
 pdftoppm -jpeg -r 150 /workdir/outputs/presentation.pdf /workdir/outputs/slide
+""")
 ```
 This creates `slide-01.jpg`, `slide-02.jpg`, etc.
 
@@ -44,9 +48,10 @@ This creates `slide-01.jpg`, `slide-02.jpg`, etc.
 
 **Read [pptxgenjs.md](pptxgenjs.md) for the full tutorial.**
 
-Write a `.js` file, then run with `node`:
+Use `execute_script` with `interpreter="node"` for inline PptxGenJS code:
 
-```javascript
+```
+execute_script(interpreter="node", description="Creating presentation", code="""
 const pptxgen = require("pptxgenjs");
 let pres = new pptxgen();
 pres.layout = "LAYOUT_16x9";
@@ -55,8 +60,10 @@ let slide = pres.addSlide();
 slide.addText("Hello World!", { x: 0.5, y: 0.5, fontSize: 36, color: "363636" });
 
 pres.writeFile({ fileName: "/workdir/outputs/presentation.pptx" });
+""")
 ```
 
+Or write a `.js` file and run with Bash:
 ```bash
 node /workdir/outputs/create_deck.js
 ```
@@ -159,9 +166,11 @@ Your first render is almost never correct. Always verify output visually.
 
 ### Convert to Images
 
-```bash
+```
+execute_script(interpreter="bash", description="Converting slides to images for QA", code="""
 soffice --headless --convert-to pdf --outdir /workdir/outputs/ /workdir/outputs/presentation.pptx
 pdftoppm -jpeg -r 150 /workdir/outputs/presentation.pdf /workdir/outputs/slide
+""")
 ```
 
 ### Content QA
