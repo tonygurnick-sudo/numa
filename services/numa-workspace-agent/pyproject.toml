@@ -41,8 +41,21 @@ beautifulsoup4 = ">=4.12.3"
 html5lib = ">=1.1"
 XlsxWriter = ">=3.2.0"
 
-# PDF generation (lightweight, pure Python)
+# PDF generation and creation
 fpdf2 = ">=2.8.0"  # Lightweight PDF generation
+reportlab = ">=4.0"  # Professional PDF creation with precise layout control
+weasyprint = ">=62.0"  # HTML-to-PDF conversion (styled reports, letters)
+
+# PDF reading and extraction
+pdfplumber = ">=0.11.0"  # Advanced PDF text/table extraction with layout
+PyMuPDF = ">=1.24.0"  # Visual extraction from PDFs (import as fitz)
+pdf2image = ">=1.17.0"  # PDF pages to images (uses poppler)
+
+# Image processing
+Pillow = ">=10.0.0"  # Image manipulation
+
+# Content extraction
+markitdown = {version = ">=0.1.0", extras = ["pptx", "docx"]}  # Text extraction from PPTX/DOCX/other formats
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.0.0"

@@ -70,7 +70,7 @@ python3 /workdir/tools/numa/knowledge_base.py query \
     --user-intent "compile complete security documentation" \
     --no-summarise \
     --max-results 15 \
-    --output-file /workdir/session/security_policies.json
+    --output-file /workdir/outputs/security_policies.json
 ```
 
 ### Output Format
@@ -121,12 +121,12 @@ Add files from the workspace to a knowledge base for future retrieval.
 ```bash
 # Upload to company KB (admin only)
 python3 /workdir/tools/numa/knowledge_base.py upload \
-    --file /workdir/session/report.pdf \
+    --file /workdir/outputs/report.pdf \
     --kb-id company
 
 # Upload to user KB with folder path
 python3 /workdir/tools/numa/knowledge_base.py upload \
-    --file /workdir/session/analysis.docx \
+    --file /workdir/outputs/analysis.docx \
     --kb-id "abc-123-uuid" \
     --path "reports/2024/"
 ```
@@ -152,7 +152,7 @@ Download files from knowledge base storage.
 | `--file, -f` | * | - | Filename to download (use with --kb-id) |
 | `--kb-id, -k` | No | "company" | KB ID when using --file |
 | `--uri, -u` | * | - | Full S3 URI (alternative to --file) |
-| `--output-dir, -o` | No | /workdir/session/ | Download location |
+| `--output-dir, -o` | No | /workdir/outputs/ | Download location |
 
 *Either `--file` or `--uri` must be provided.
 
@@ -174,7 +174,7 @@ python3 /workdir/tools/numa/knowledge_base.py download \
 # Download to specific directory
 python3 /workdir/tools/numa/knowledge_base.py download \
     --uri "s3://bucket/documents/company/report.xlsx" \
-    --output-dir /workdir/session/downloads/
+    --output-dir /workdir/outputs/downloads/
 ```
 
 ### When to use which mode
@@ -241,7 +241,7 @@ Download all files in a KB folder as a zip archive.
 |-----------|----------|---------|-------------|
 | `--kb-id, -k` | No | "company" | KB ID to download from |
 | `--folder-path, -f` | No | root | Folder path within KB |
-| `--output-dir, -o` | No | /workdir/session/ | Where to save the zip |
+| `--output-dir, -o` | No | /workdir/outputs/ | Where to save the zip |
 
 ### Examples
 
@@ -277,12 +277,12 @@ Downloaded KB folders are saved as **zip files**. For best results:
 import zipfile
 
 # List contents
-with zipfile.ZipFile('/workdir/session/kb_download.zip', 'r') as z:
+with zipfile.ZipFile('/workdir/outputs/kb_download.zip', 'r') as z:
     for name in z.namelist():
         print(name)
 
 # Read file content without extracting
-with zipfile.ZipFile('/workdir/session/kb_download.zip', 'r') as z:
+with zipfile.ZipFile('/workdir/outputs/kb_download.zip', 'r') as z:
     with z.open('path/to/file.txt') as f:
         content = f.read().decode('utf-8')
 ```
@@ -291,14 +291,14 @@ with zipfile.ZipFile('/workdir/session/kb_download.zip', 'r') as z:
 
 ```python
 # Write script
-with open('/workdir/session/analyze.py', 'w') as f:
+with open('/workdir/outputs/analyze.py', 'w') as f:
     f.write('''
 import zipfile
 # ... analysis code ...
 ''')
 
 # Then execute
-# python3 /workdir/session/analyze.py
+# python3 /workdir/outputs/analyze.py
 ```
 
 **4. URL-decode web-crawled filenames** for meaningful analysis:
@@ -343,19 +343,3 @@ Based on the company policy, employees are entitled to 25 days annual leave.
 - Use the S3 URIs from the `references` array in the KB query results
 - List the most relevant sources (typically 1-3) rather than every result
 - If multiple documents contributed to your answer, cite all relevant ones
-
----
-
-## When to Use the Sub-Agent
-
-For complex multi-step KB research, delegate to the `knowledge-search` sub-agent via Task tool:
-
-```
-Task(subagent_type="knowledge-search", prompt="Research X across multiple documents...")
-```
-
-Use the sub-agent when:
-- Multiple related queries are needed
-- Results need cross-referencing
-- Synthesis across documents is required
-- Deep research spanning multiple KBs

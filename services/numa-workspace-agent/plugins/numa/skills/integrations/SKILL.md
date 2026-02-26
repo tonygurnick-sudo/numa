@@ -140,14 +140,14 @@ When downloading files from integrations:
 
 1. In props, specify `"filePath": "/tmp/filename.ext"` (Pipedream convention — use `/tmp/` prefix)
 2. Include `stash_id="NEW"` in the `run_action` call
-3. The file is automatically saved to `/workdir/session/integrations-results/`
-4. Read it from there: `Read /workdir/session/integrations-results/filename.ext`
+3. The file is automatically saved to `/workdir/outputs/integrations-results/`
+4. Read it from there: `Read /workdir/outputs/integrations-results/filename.ext`
 
 ---
 
 ## Result Handling
 
-- Results are saved to `/workdir/session/integrations-results/` to avoid flooding context
+- Results are saved to `/workdir/outputs/integrations-results/` to avoid flooding context
 - Downloaded files also appear in that directory
 - For large results: read the file, extract what's needed, summarize for the user
 
@@ -214,20 +214,8 @@ mcp__integrations__run_action(
 )
 
 # 5. Read and summarize the result
-Read /workdir/session/integrations-results/result-{timestamp}.json
+Read /workdir/outputs/integrations-results/result-{timestamp}.json
 ```
-
----
-
-## Using the Sub-Agent
-
-For complex multi-step workflows (3+ actions, cross-integration work, iterative searches), delegate to the integrations sub-agent:
-
-```
-Task(subagent_type="numa-workspace:integrations", prompt="Search for Q4 reports, download the most recent one, and summarize its contents")
-```
-
-The sub-agent has access to all the same MCP tools and can chain actions, resolve props, and parse results autonomously. Use the fully-qualified name `numa-workspace:integrations`.
 
 ---
 

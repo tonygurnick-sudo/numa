@@ -31,7 +31,7 @@ Usage:
 
     # Markdown to PDF (default mode)
     python3 /workdir/tools/numa/convert_document.py \\
-        --file-path "/workdir/session/report.md" \\
+        --file-path "/workdir/outputs/report.md" \\
         --format pdf
 
 Parameters:
@@ -41,7 +41,7 @@ Parameters:
     --title, -t        Optional document title (used for filename)
 
 Output:
-    Converted document is saved to /workdir/session/converted_{filename}.{ext}
+    Converted document is saved to /workdir/outputs/converted_{filename}.{ext}
     Returns JSON with path to the converted file.
 
 Conversion Quality:
@@ -56,7 +56,7 @@ For complex/scanned PDFs, use the two-step approach:
 
     # Step 2: Convert extracted markdown to DOCX
     python3 /workdir/tools/numa/convert_document.py \\
-        --file-path "/workdir/session/extracted_scanned_document.txt" \\
+        --file-path "/workdir/outputs/extracted_scanned_document.txt" \\
         --format docx
 """
 
@@ -159,12 +159,12 @@ Examples:
 
   # Markdown to PDF (default mode)
   python3 /workdir/tools/numa/convert_document.py \\
-      --file-path "/workdir/session/report.md" \\
+      --file-path "/workdir/outputs/report.md" \\
       --format pdf
 
   # Markdown to DOCX with custom title
   python3 /workdir/tools/numa/convert_document.py \\
-      --file-path "/workdir/session/report.md" \\
+      --file-path "/workdir/outputs/report.md" \\
       --format docx \\
       --title "Quarterly Report"
 """,

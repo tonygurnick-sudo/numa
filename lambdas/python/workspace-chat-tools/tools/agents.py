@@ -143,7 +143,7 @@ def _resolve_and_copy_reference_files(
     2. Derive source S3 key from workspace path
     3. Get file metadata (size, type) from S3
     4. Copy to: numa-chat/agents/{user_sub}/{agent_id}/{timestamp}_{filename}
-    5. Look for extracted content (.txt in session/) and copy if exists
+    5. Look for extracted content (.txt in outputs/) and copy if exists
     6. Build reference file metadata with new S3 keys
 
     Args:
@@ -229,11 +229,11 @@ def _resolve_and_copy_reference_files(
             warnings.append(f"Failed to copy {file_path} to agent storage: {str(e)}")
             continue
 
-        # Look for extracted content file (e.g., session/extracted_document.txt)
+        # Look for extracted content file (e.g., outputs/extracted_document.txt)
         extracted_content_key: Optional[str] = None
         stem = Path(filename).stem
         safe_stem = re.sub(r"[^a-zA-Z0-9_-]", "_", stem)
-        extracted_rel_path = f"session/extracted_{safe_stem}.txt"
+        extracted_rel_path = f"outputs/extracted_{safe_stem}.txt"
         extracted_source_key = _get_s3_key_for_workspace_file(
             extracted_rel_path, user_sub, conversation_id
         )

@@ -119,7 +119,7 @@ export const ScheduleDetailPage: React.FC = () => {
   const handleDownloadArtifact = useCallback(
     async (conversationId: string, userId: string, filename: string) => {
       if (!outputsBucket || !region || !getCredentials) return;
-      const s3Key = `numa-chat/workspace/${userId}/conversations/${conversationId}/session/${filename}`;
+      const s3Key = `numa-chat/workspace/${userId}/conversations/${conversationId}/outputs/${filename}`;
       try {
         await downloadFileFromS3(s3Key, outputsBucket, region, getCredentials, filename);
       } catch (err) {

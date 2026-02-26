@@ -8,7 +8,7 @@ in a controlled manner.
 
 Security:
 - Only allowed interpreters can be used (python3, node, bash, sh)
-- Scripts are written to /workdir/session (within workspace jail)
+- Scripts are written to /workdir/outputs (within workspace jail)
 - Code is scanned for dangerous patterns before execution (imports, file access, etc.)
 - Temp files are cleaned up after execution
 """
@@ -28,61 +28,80 @@ from claude_agent_sdk import tool
 # Dangerous patterns for Python code - block these before execution
 DANGEROUS_PYTHON_PATTERNS: list[tuple[str, str]] = [
     # Dangerous module imports
-    (r"\bimport\s+os\b", "import os is blocked"),
-    (r"\bfrom\s+os\b", "from os import is blocked"),
-    (r"\bimport\s+subprocess\b", "import subprocess is blocked"),
-    (r"\bfrom\s+subprocess\b", "from subprocess import is blocked"),
-    (r"\bimport\s+socket\b", "import socket is blocked"),
-    (r"\bfrom\s+socket\b", "from socket import is blocked"),
-    (r"\bimport\s+urllib\b", "import urllib is blocked"),
-    (r"\bfrom\s+urllib\b", "from urllib import is blocked"),
-    (r"\bimport\s+requests\b", "import requests is blocked"),
-    (r"\bfrom\s+requests\b", "from requests import is blocked"),
-    (r"\bimport\s+http\b", "import http is blocked"),
-    (r"\bfrom\s+http\b", "from http import is blocked"),
-    (r"\bimport\s+ftplib\b", "import ftplib is blocked"),
-    (r"\bimport\s+smtplib\b", "import smtplib is blocked"),
-    (r"\bimport\s+telnetlib\b", "import telnetlib is blocked"),
-    (r"\bimport\s+ssl\b", "import ssl is blocked"),
-    (r"\bimport\s+ctypes\b", "import ctypes is blocked"),
-    (r"\bimport\s+multiprocessing\b", "import multiprocessing is blocked"),
-    (r"\bimport\s+threading\b", "import threading is blocked"),
-    (r"\bimport\s+asyncio\b", "import asyncio is blocked"),
-    (r"\bimport\s+sys\b", "import sys is blocked"),
-    (r"\bfrom\s+sys\b", "from sys import is blocked"),
-    (r"\bimport\s+builtins\b", "import builtins is blocked"),
-    (r"\bimport\s+importlib\b", "import importlib is blocked"),
-    (r"\bimport\s+pkgutil\b", "import pkgutil is blocked"),
+    # NOTE: ^\s* anchors to start-of-line (with re.MULTILINE) so that "import os"
+    # inside string literals (e.g. HTML test descriptions) does not trigger a false
+    # positive. Real import statements always start at the beginning of a line.
+    (r"^\s*import\s+os\b", "import os is blocked"),
+    (r"^\s*from\s+os\b", "from os import is blocked"),
+    (r"^\s*import\s+subprocess\b", "import subprocess is blocked"),
+    (r"^\s*from\s+subprocess\b", "from subprocess import is blocked"),
+    (r"^\s*import\s+socket\b", "import socket is blocked"),
+    (r"^\s*from\s+socket\b", "from socket import is blocked"),
+    (r"^\s*import\s+urllib\b", "import urllib is blocked"),
+    (r"^\s*from\s+urllib\b", "from urllib import is blocked"),
+    (r"^\s*import\s+requests\b", "import requests is blocked"),
+    (r"^\s*from\s+requests\b", "from requests import is blocked"),
+    (r"^\s*import\s+http\b", "import http is blocked"),
+    (r"^\s*from\s+http\b", "from http import is blocked"),
+    (r"^\s*import\s+ftplib\b", "import ftplib is blocked"),
+    (r"^\s*import\s+smtplib\b", "import smtplib is blocked"),
+    (r"^\s*import\s+telnetlib\b", "import telnetlib is blocked"),
+    (r"^\s*import\s+ssl\b", "import ssl is blocked"),
+    (r"^\s*import\s+ctypes\b", "import ctypes is blocked"),
+    (r"^\s*import\s+multiprocessing\b", "import multiprocessing is blocked"),
+    (r"^\s*import\s+threading\b", "import threading is blocked"),
+    (r"^\s*import\s+asyncio\b", "import asyncio is blocked"),
+    (r"^\s*import\s+sys\b", "import sys is blocked"),
+    (r"^\s*from\s+sys\b", "from sys import is blocked"),
+    (r"^\s*import\s+builtins\b", "import builtins is blocked"),
+    (r"^\s*import\s+importlib\b", "import importlib is blocked"),
+    (r"^\s*import\s+pkgutil\b", "import pkgutil is blocked"),
+    (r"^\s*import\s+pty\b", "pty import is blocked"),
+    (r"^\s*import\s+shutil\b", "shutil import is blocked"),
+    (r"^\s*import\s+signal\b", "signal import is blocked"),
+    (r"^\s*import\s+code\b", "code module import is blocked"),
+    (r"^\s*import\s+marshal\b", "marshal import is blocked"),
+    (r"^\s*import\s+antigravity\b", "antigravity import is blocked"),
+    (r"^\s*import\s+webbrowser\b", "webbrowser import is blocked"),
+    (r"^\s*from\s+shutil\b", "from shutil import is blocked"),
+    (r"^\s*from\s+marshal\b", "from marshal import is blocked"),
     # Code execution
     (r"\bexec\s*\(", "exec() is blocked"),
     (r"\beval\s*\(", "eval() is blocked"),
     (r"\bcompile\s*\(", "compile() is blocked"),
     (r"\b__import__\s*\(", "__import__() is blocked"),
     # Unsafe deserialization (pickle-based RCE vectors)
-    (r"\bimport\s+pickle\b", "pickle import is blocked"),
-    (r"\bfrom\s+pickle\b", "from pickle import is blocked"),
+    (r"^\s*import\s+pickle\b", "pickle import is blocked"),
+    (r"^\s*from\s+pickle\b", "from pickle import is blocked"),
     (r"\bpickle\s*\.\s*load\s*\(", "pickle.load() is blocked"),
     (r"\bpickle\s*\.\s*loads\s*\(", "pickle.loads() is blocked"),
     (r"\bpickle\s*\.\s*Unpickler\s*\(", "pickle.Unpickler is blocked"),
-    (r"\bfrom\s+pandas\s+import\s+read_pickle\b", "pandas.read_pickle is blocked"),
+    (r"^\s*from\s+pandas\s+import\s+read_pickle\b", "pandas.read_pickle is blocked"),
     (r"\bpandas\s*\.\s*read_pickle\s*\(", "pandas.read_pickle() is blocked"),
     (r"\bpd\s*\.\s*read_pickle\s*\(", "pandas.read_pickle() is blocked"),
     (r"\bread_pickle\s*\(", "read_pickle() is blocked"),
-    (r"\bimport\s+shelve\b", "shelve import is blocked"),
-    (r"\bfrom\s+shelve\b", "from shelve import is blocked"),
+    (r"^\s*import\s+shelve\b", "shelve import is blocked"),
+    (r"^\s*from\s+shelve\b", "from shelve import is blocked"),
     (r"\bshelve\s*\.\s*open\s*\(", "shelve.open() is blocked"),
-    (r"\bimport\s+dill\b", "dill import is blocked"),
-    (r"\bfrom\s+dill\b", "from dill import is blocked"),
+    (r"^\s*import\s+dill\b", "dill import is blocked"),
+    (r"^\s*from\s+dill\b", "from dill import is blocked"),
     (r"\bdill\s*\.\s*load\s*\(", "dill.load() is blocked"),
     (r"\bdill\s*\.\s*loads\s*\(", "dill.loads() is blocked"),
-    (r"\bimport\s+cloudpickle\b", "cloudpickle import is blocked"),
-    (r"\bfrom\s+cloudpickle\b", "from cloudpickle import is blocked"),
+    (r"^\s*import\s+cloudpickle\b", "cloudpickle import is blocked"),
+    (r"^\s*from\s+cloudpickle\b", "from cloudpickle import is blocked"),
     (r"\bcloudpickle\s*\.\s*load\s*\(", "cloudpickle.load() is blocked"),
     (r"\bcloudpickle\s*\.\s*loads\s*\(", "cloudpickle.loads() is blocked"),
-    (r"\bimport\s+joblib\b", "joblib import is blocked"),
-    (r"\bfrom\s+joblib\s+import\s+load\b", "from joblib import load is blocked"),
+    (r"^\s*import\s+joblib\b", "joblib import is blocked"),
+    (r"^\s*from\s+joblib\s+import\s+load\b", "from joblib import load is blocked"),
     (r"\bjoblib\s*\.\s*load\s*\(", "joblib.load() is blocked"),
     (r"\bgetattr\s*\([^,]+,\s*['\"]__", "getattr with dunder is blocked"),
+    # Python sandbox escape via dunder chains
+    (r"__subclasses__", "__subclasses__ access is blocked"),
+    (r"__globals__", "__globals__ access is blocked"),
+    (r"__bases__", "__bases__ access is blocked"),
+    (r"__mro__", "__mro__ access is blocked"),
+    (r"\bsys\.modules\b", "sys.modules access is blocked"),
+    (r"\bsys\.path\b", "sys.path access is blocked"),
     # Environment variable access
     (r"\bos\.environ\b", "os.environ is blocked"),
     (r"\bos\.getenv\b", "os.getenv is blocked"),
@@ -139,13 +158,29 @@ DANGEROUS_BASH_PATTERNS: list[tuple[str, str]] = [
     (r"\/var\/", "/var/ is blocked"),
     (r"\.system", ".system directory is blocked"),
     (r"\.env", ".env files are blocked"),
+    # Package installation (supply chain risk)
+    (r"\bpip\s+install\b", "pip install is blocked"),
+    (r"\bpip3\s+install\b", "pip3 install is blocked"),
+    (r"\bpython3?\s+-m\s+pip\b", "python -m pip is blocked"),
+    (r"\bnpm\s+install\b", "npm install is blocked"),
+    (r"\bnpm\s+i\s", "npm i is blocked"),
+    (r"\byarn\s+add\b", "yarn add is blocked"),
+    (r"\bapt-get\b", "apt-get is blocked"),
+    (r"\bapt\s+install\b", "apt install is blocked"),
+    (r"\bconda\s+install\b", "conda install is blocked"),
+    # Destructive commands
+    (r"\brm\s+-rf\b", "rm -rf is blocked"),
+    # Shell spawning
+    (r"\bbash\s+-c\b", "bash -c is blocked"),
+    (r"\bsh\s+-c\b", "sh -c is blocked"),
+    # npx downloads and executes packages without install
+    (r"\bnpx\b", "npx is blocked"),
 ]
 
 # Dangerous patterns for Node.js code
 DANGEROUS_NODE_PATTERNS: list[tuple[str, str]] = [
     # Dangerous modules
     (r"\brequire\s*\(\s*['\"]child_process", "child_process is blocked"),
-    (r"\brequire\s*\(\s*['\"]fs['\"]", "fs module is blocked - use allowed paths only"),
     (r"\brequire\s*\(\s*['\"]net['\"]", "net module is blocked"),
     (r"\brequire\s*\(\s*['\"]http", "http modules are blocked"),
     (r"\brequire\s*\(\s*['\"]https", "https module is blocked"),
@@ -154,15 +189,42 @@ DANGEROUS_NODE_PATTERNS: list[tuple[str, str]] = [
     (r"\brequire\s*\(\s*['\"]tls", "tls module is blocked"),
     # Dynamic imports
     (r"\bimport\s*\(\s*['\"]child_process", "child_process import is blocked"),
-    (r"\bimport\s*\(\s*['\"]fs['\"]", "fs import is blocked"),
     (r"\bimport\s*\(\s*['\"]net['\"]", "net import is blocked"),
     # Environment access
     (r"\bprocess\.env\b", "process.env is blocked"),
     # Code execution
     (r"\beval\s*\(", "eval() is blocked"),
     (r"\bFunction\s*\(", "Function() constructor is blocked"),
+    # Global process access bypasses
+    (r"\bglobalThis\b", "globalThis access is blocked"),
+    (r"\bReflect\s*\.", "Reflect API is blocked"),
+    (r"constructor\s*\.\s*constructor", "constructor chain is blocked"),
+    # File access outside workdir via fs
+    (
+        r"readFileSync\s*\(\s*['\"]\/(?!workdir)",
+        "reading files outside /workdir is blocked",
+    ),
+    (
+        r"readFile\s*\(\s*['\"]\/(?!workdir)",
+        "reading files outside /workdir is blocked",
+    ),
+    (
+        r"createReadStream\s*\(\s*['\"]\/(?!workdir)",
+        "reading files outside /workdir is blocked",
+    ),
+    (
+        r"writeFileSync\s*\(\s*['\"]\/(?!workdir)",
+        "writing files outside /workdir is blocked",
+    ),
+    (
+        r"writeFile\s*\(\s*['\"]\/(?!workdir)",
+        "writing files outside /workdir is blocked",
+    ),
+    # Path string literals for sensitive dirs
+    (r"['\"]\/proc['\"/]", "/proc is blocked"),
+    (r"['\"]\/etc['\"/]", "/etc is blocked"),
+    (r"['\"]\/sys['\"/]", "/sys is blocked"),
     # Protected paths
-    (r"['\"]\/etc\/", "/etc/ is blocked"),
     (r"['\"]\/home\/", "/home/ is blocked"),
     (r"['\"]\/root", "/root is blocked"),
     (r"['\"]\.system", ".system directory is blocked"),
@@ -235,8 +297,8 @@ ALLOWED_INTERPRETERS = {
     "sh": ".sh",
 }
 
-# Workspace session directory for temp files
-SCRIPT_DIR = "/workdir/session"
+# Workspace outputs directory for temp files
+SCRIPT_DIR = "/workdir/outputs"
 
 
 @tool(
@@ -245,7 +307,7 @@ SCRIPT_DIR = "/workdir/session"
         "Execute code in a sandboxed interpreter. "
         "Use this instead of heredocs (python3 << 'EOF') or inline scripts. "
         "Supported interpreters: python3, node, bash. "
-        "Code is written to a temp file in /workdir/session and executed."
+        "Code is written to a temp file in /workdir/outputs and executed."
     ),
     input_schema={
         "type": "object",

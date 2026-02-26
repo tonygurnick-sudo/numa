@@ -14,7 +14,7 @@ Subcommands:
 
 Usage:
     python3 /workdir/tools/numa/knowledge_base.py query --query "search" --user-intent "intent"
-    python3 /workdir/tools/numa/knowledge_base.py upload --file /workdir/session/report.pdf
+    python3 /workdir/tools/numa/knowledge_base.py upload --file /workdir/outputs/report.pdf
     python3 /workdir/tools/numa/knowledge_base.py download --file "policy.pdf" --kb-id company
     python3 /workdir/tools/numa/knowledge_base.py download --uri "s3://bucket/documents/company/file.pdf"
     python3 /workdir/tools/numa/knowledge_base.py list --kb-id company --pattern "*.pdf"
@@ -34,7 +34,7 @@ Examples:
 
     # Upload a file to the company KB
     python3 /workdir/tools/numa/knowledge_base.py upload \\
-        --file /workdir/session/report.pdf \\
+        --file /workdir/outputs/report.pdf \\
         --kb-id company
 
     # Download a file by filename (simplest - when you know the filename)
@@ -595,11 +595,11 @@ Examples:
 Examples:
   # Upload to company KB root
   python3 knowledge_base.py upload \\
-      --file /workdir/session/report.pdf --kb-id company
+      --file /workdir/outputs/report.pdf --kb-id company
 
   # Upload to user KB with path
   python3 knowledge_base.py upload \\
-      --file /workdir/session/policy.docx --kb-id kb-123 --path policies/
+      --file /workdir/outputs/policy.docx --kb-id kb-123 --path policies/
 
 Permissions:
   - Company KB: Only admins can upload
@@ -643,7 +643,7 @@ Examples:
   # Download to specific directory
   python3 knowledge_base.py download \\
       --uri "s3://bucket/documents/company/report.xlsx" \\
-      --output-dir /workdir/session/downloads/
+      --output-dir /workdir/outputs/downloads/
 
 When to use which:
   --file + --kb-id: When you know the filename (e.g., from system prompt KB listings)
@@ -665,8 +665,8 @@ When to use which:
     download_parser.add_argument(
         "--output-dir",
         "-o",
-        default="/workdir/session/",
-        help="Download location (default: /workdir/session/)",
+        default="/workdir/outputs/",
+        help="Download location (default: /workdir/outputs/)",
     )
     download_parser.set_defaults(func=cmd_download)
 
@@ -735,8 +735,8 @@ Limits:
     download_folder_parser.add_argument(
         "--output-dir",
         "-o",
-        default="/workdir/session/",
-        help="Where to save the zip (default: /workdir/session/)",
+        default="/workdir/outputs/",
+        help="Where to save the zip (default: /workdir/outputs/)",
     )
     download_folder_parser.set_defaults(func=cmd_download_folder)
 

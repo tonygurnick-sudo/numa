@@ -72,10 +72,14 @@ docker buildx inspect --bootstrap
 echo ""
 echo "=== Building Docker image (ARM64) ==="
 # --load imports the image to local docker daemon for subsequent docker save
-# --no-cache ensures code changes are always included
+# Layer caching is enabled by default — Docker only rebuilds layers after a
+# changed COPY/RUN step, so code changes are always picked up while system
+# packages, Node.js, Pandoc, and Python deps are cached across builds.
+# Pass --no-cache to this script's environment (DOCKER_BUILD_OPTS="--no-cache")
+# to force a full rebuild when needed.
 docker buildx build \
     --platform linux/arm64 \
-    --no-cache \
+    ${DOCKER_BUILD_OPTS:-} \
     --load \
     --build-arg GIT_HASH="$GIT_HASH" \
     -t "$SERVICE_NAME:$GIT_HASH" \

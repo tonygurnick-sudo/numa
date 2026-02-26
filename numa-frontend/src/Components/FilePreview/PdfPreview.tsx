@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { Spinner } from 'react-bootstrap';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { Button, Spinner } from 'react-bootstrap';
 import { useTranslation } from 'react-i18next';
 
 interface PdfPreviewProps {
@@ -7,72 +7,119 @@ interface PdfPreviewProps {
   filename?: string;
 }
 
+// Thumbnail render width (strip is 120px with 8px padding = ~104px usable)
+const THUMB_WIDTH = 104;
+
+type ReactPdfModule = typeof import('react-pdf');
+
 /**
- * PDF Preview Component using react-pdf
- * Dynamically imports react-pdf to avoid SSR issues
+ * PDF Preview with thumbnail strip + page navigation (like PPTX preview).
+ * Uses react-pdf (pdfjs-dist) with canvas rendering for each page.
  */
-export const PdfPreview: React.FC<PdfPreviewProps> = ({ data, filename: _filename }) => {
+export const PdfPreview: React.FC<PdfPreviewProps> = ({ data }) => {
   const { t } = useTranslation('chat');
-  const [numPages, setNumPages] = useState<number>(0);
+  const [numPages, setNumPages] = useState(0);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [pdfModule, setPdfModule] = useState<ReactPdfModule | null>(null);
+  const thumbnailStripRef = useRef<HTMLDivElement>(null);
+  const viewportRef = useRef<HTMLDivElement>(null);
+  const [mainPageWidth, setMainPageWidth] = useState(800);
 
-  // Create a stable copy of the ArrayBuffer as a Blob URL
-  // react-pdf transfers ArrayBuffers to a web worker which "detaches" them,
-  // making them unusable on re-renders. Using a Blob URL avoids this issue.
-  const fileUrl = useMemo(() => {
-    const blob = new Blob([data], { type: 'application/pdf' });
-    return URL.createObjectURL(blob);
-  }, [data]);
-
-  // Clean up the Blob URL when component unmounts or data changes
-  useEffect(() => {
-    return () => {
-      URL.revokeObjectURL(fileUrl);
-    };
-  }, [fileUrl]);
+  // Pass a fresh copy of the data to react-pdf each render cycle.
+  // react-pdf transfers ArrayBuffers to its web worker (detaching them),
+  // so we slice() a copy to keep the original intact.
+  const pdfFile = useMemo(() => ({ data: data.slice(0) }), [data]);
 
   // Dynamically import react-pdf to avoid SSR issues
-  const [pdfComponents, setPdfComponents] = useState<{
-    Document: React.ComponentType<{
-      file: string | { data: ArrayBuffer };
-      onLoadSuccess: (pdf: { numPages: number }) => void;
-      onLoadError: (err: Error) => void;
-      loading: React.ReactNode;
-      children: React.ReactNode;
-    }>;
-    Page: React.ComponentType<{
-      pageNumber: number;
-      width: number;
-      renderTextLayer: boolean;
-      renderAnnotationLayer: boolean;
-    }>;
-  } | null>(null);
-
   useEffect(() => {
-    import('react-pdf').then((module) => {
-      // Set up the worker
-      module.pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${module.pdfjs.version}/build/pdf.worker.min.mjs`;
-      setPdfComponents({
-        Document: module.Document as unknown as typeof pdfComponents.Document,
-        Page: module.Page as unknown as typeof pdfComponents.Page,
-      });
+    let cancelled = false;
+    import('react-pdf').then((mod) => {
+      if (cancelled) return;
+      mod.pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${mod.pdfjs.version}/build/pdf.worker.min.mjs`;
+      setPdfModule(mod);
     });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
-  const onDocumentLoadSuccess = ({ numPages }: { numPages: number }) => {
-    setNumPages(numPages);
-  };
+  // Measure viewport and set main page width to fit
+  useEffect(() => {
+    const el = viewportRef.current;
+    if (!el) return;
 
-  const onDocumentLoadError = (err: Error) => {
-    console.error('Error loading PDF:', err);
-    setError('Failed to load PDF. The file may be corrupted or password-protected.');
-  };
+    const measure = () => {
+      const padding = 32;
+      const availW = el.clientWidth - padding;
+      if (availW > 0) {
+        setMainPageWidth(Math.min(960, availW));
+      }
+    };
 
-  if (!pdfComponents) {
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [numPages]);
+
+  const onLoadSuccess = useCallback(({ numPages: n }: { numPages: number }) => {
+    setNumPages(n);
+    setCurrentPage(1);
+    setLoading(false);
+  }, []);
+
+  const onLoadError = useCallback(
+    (err: Error) => {
+      console.error('Error loading PDF:', err);
+      setError(t('filePreview.pdf.parseError'));
+      setLoading(false);
+    },
+    [t],
+  );
+
+  // Navigate pages
+  const goToPage = useCallback(
+    (page: number) => {
+      if (page >= 1 && page <= numPages) {
+        setCurrentPage(page);
+      }
+    },
+    [numPages],
+  );
+
+  const goPrev = useCallback(() => goToPage(currentPage - 1), [currentPage, goToPage]);
+  const goNext = useCallback(() => goToPage(currentPage + 1), [currentPage, goToPage]);
+
+  // Keyboard navigation
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        goPrev();
+      } else if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+        e.preventDefault();
+        goNext();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [goPrev, goNext]);
+
+  // Scroll active thumbnail into view
+  useEffect(() => {
+    const strip = thumbnailStripRef.current;
+    if (!strip) return;
+    const activeThumb = strip.children[currentPage - 1] as HTMLElement | undefined;
+    activeThumb?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }, [currentPage]);
+
+  if (!pdfModule) {
     return (
-      <div className="text-center py-4">
+      <div className="text-center py-5">
         <Spinner animation="border" size="sm" />
-        <span className="ms-2">{t('page.loading')}</span>
+        <span className="ms-2">{t('filePreview.loadingPreview')}</span>
       </div>
     );
   }
@@ -80,44 +127,72 @@ export const PdfPreview: React.FC<PdfPreviewProps> = ({ data, filename: _filenam
   if (error) {
     return (
       <div className="p-3">
-        <div className="alert alert-warning mb-0">{error}</div>
+        <div className="alert alert-info mb-0">{error}</div>
       </div>
     );
   }
 
-  const { Document, Page } = pdfComponents;
+  const { Document, Page } = pdfModule;
 
   return (
-    <div className="workspace-pdf-preview" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-      <Document
-        file={fileUrl}
-        onLoadSuccess={onDocumentLoadSuccess}
-        onLoadError={onDocumentLoadError}
-        loading={
-          <div className="text-center py-4">
-            <Spinner animation="border" size="sm" />
-            <span className="ms-2">{t('page.loading')}</span>
+    <Document
+      file={pdfFile}
+      onLoadSuccess={onLoadSuccess}
+      onLoadError={onLoadError}
+      loading={
+        <div className="text-center py-5">
+          <Spinner animation="border" size="sm" />
+          <span className="ms-2">{t('filePreview.loadingPreview')}</span>
+        </div>
+      }
+    >
+      {loading ? null : (
+        <div className="pdf-preview-container">
+          {/* Thumbnail strip */}
+          <div className="pdf-thumbnail-strip" ref={thumbnailStripRef}>
+            {Array.from({ length: numPages }, (_, i) => (
+              <button
+                key={i}
+                type="button"
+                className={`pdf-thumbnail${i + 1 === currentPage ? ' active' : ''}`}
+                onClick={() => goToPage(i + 1)}
+                title={`Page ${i + 1}`}
+              >
+                <div className="pdf-thumbnail-content">
+                  <Page pageNumber={i + 1} width={THUMB_WIDTH} renderTextLayer={false} renderAnnotationLayer={false} />
+                </div>
+                <span className="pdf-thumbnail-number">{i + 1}</span>
+              </button>
+            ))}
           </div>
-        }
-      >
-        <div className="pdf-pages-container" style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
-          {Array.from(new Array(numPages), (_, index) => (
-            <div key={`page_${index + 1}`} className="pdf-page-wrapper mb-3">
+
+          {/* Main page area */}
+          <div className="pdf-page-main">
+            <div className="pdf-page-viewport" ref={viewportRef}>
               <Page
-                pageNumber={index + 1}
-                width={Math.min(800, window.innerWidth - 100)}
+                key={currentPage}
+                pageNumber={currentPage}
+                width={mainPageWidth}
                 renderTextLayer={false}
                 renderAnnotationLayer={false}
               />
             </div>
-          ))}
-        </div>
-      </Document>
-      {numPages > 0 && (
-        <div className="text-muted small text-center py-2 border-top" style={{ flexShrink: 0 }}>
-          {t('filePreview.pdf.pages', { count: numPages })}
+
+            {/* Navigation bar */}
+            <div className="pdf-page-nav">
+              <Button variant="outline-secondary" size="sm" onClick={goPrev} disabled={currentPage === 1}>
+                <i className="bi bi-chevron-left" />
+              </Button>
+              <span className="pdf-page-nav-label">
+                {t('filePreview.pdf.pageOf', { current: currentPage, total: numPages })}
+              </span>
+              <Button variant="outline-secondary" size="sm" onClick={goNext} disabled={currentPage === numPages}>
+                <i className="bi bi-chevron-right" />
+              </Button>
+            </div>
+          </div>
         </div>
       )}
-    </div>
+    </Document>
   );
 };

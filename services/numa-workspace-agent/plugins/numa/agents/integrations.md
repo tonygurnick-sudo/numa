@@ -84,7 +84,7 @@ Use for: APIs not covered by actions, advanced queries, bulk operations.
 
 **Uploads:** Use workspace paths directly in props (e.g., `/workdir/uploads/report.pdf`). System auto-converts to presigned URLs. Check schema for correct param name (`filePath`, `file`, `content`, etc.).
 
-**Downloads:** Use `"filePath": "/tmp/filename.ext"` in props with `stash_id="NEW"`. File appears in `/workdir/session/integrations-results/`.
+**Downloads:** Use `"filePath": "/tmp/filename.ext"` in props with `stash_id="NEW"`. File appears in `/workdir/outputs/integrations-results/`.
 
 ## Verbose Descriptions for Write Operations
 
@@ -110,7 +110,7 @@ Do NOT retry denied actions.
 1. **Read the schema** — `_index.json` then the specific action schema
 2. **Resolve dynamic props** if the action requires them
 3. **Execute actions** with correct parameters from schema
-4. **Save large results** to `/workdir/session/integrations-results/`
+4. **Save large results** to `/workdir/outputs/integrations-results/`
 5. **Parse and summarize** results for the user
 6. **Chain actions** when the workflow spans multiple steps or apps
 7. **Report results concisely** with file paths for any generated output

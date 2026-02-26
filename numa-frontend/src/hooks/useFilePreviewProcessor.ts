@@ -53,7 +53,7 @@ export const useFilePreviewProcessor = () => {
       relativePath: ref.relativePath,
       extension: ref.extension,
     });
-    setLeftFraction(0.55);
+    setLeftFraction(0.5);
     setShowFilePreview(true);
   }, []);
 
@@ -67,7 +67,7 @@ export const useFilePreviewProcessor = () => {
       fullPath: ref.fullPath,
       relativePath: ref.relativePath,
     });
-    setLeftFraction(0.55);
+    setLeftFraction(0.5);
     setShowFilePreview(true);
   }, []);
 

@@ -23,9 +23,10 @@ export const BOARD_COLORS: string[] = [
  * Position 1 = green (#22c55e), position 10 = red (#ef4444),
  * with smooth interpolation through yellow/orange in between.
  */
-export function getColorForPosition(position: number): string {
+export function getColorForPosition(position: number, reverse = false): string {
   const clamped = Math.max(1, Math.min(10, position));
-  const t = (clamped - 1) / 9; // 0..1
+  let t = (clamped - 1) / 9; // 0..1
+  if (reverse) t = 1 - t; // Flips 0..1 to 1..0, making 1 red and 10 green
 
   // Gradient stops: green -> yellow -> orange -> red
   const stops = [
@@ -54,6 +55,49 @@ export function getColorForPosition(position: number): string {
   const b = Math.round(lower.b + (upper.b - lower.b) * ratio);
 
   return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
+}
+
+/**
+ * Calculate auto-assigned positions for N items
+ * Distributes items evenly across the 10-point scale
+ *
+ * Mapping table:
+ * | Count | Positions |
+ * |-------|-----------|
+ * | 1     | [6]       |
+ * | 2     | [1, 10]   |
+ * | 3     | [1, 6, 10] |
+ * | 4     | [1, 4, 7, 10] |
+ * | 5     | [1, 3, 6, 8, 10] |
+ * | 6     | [1, 2, 4, 6, 8, 10] |
+ * | 7     | [1, 2, 4, 6, 7, 9, 10] |
+ * | 8+    | Distribute evenly |
+ */
+export function calculateAutoColorPositions(itemCount: number): number[] {
+  if (itemCount <= 0) return [];
+  if (itemCount === 1) return [6]; // Single item gets "Normal"
+  if (itemCount >= 10) {
+    return [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+  }
+
+  const predefinedMappings: Record<number, number[]> = {
+    2: [1, 10],
+    3: [1, 6, 10],
+    4: [1, 4, 7, 10],
+    5: [1, 3, 6, 8, 10],
+    6: [1, 2, 4, 6, 8, 10],
+    7: [1, 2, 4, 6, 7, 9, 10],
+  };
+
+  if (predefinedMappings[itemCount]) {
+    return predefinedMappings[itemCount];
+  }
+
+  const positions: number[] = [];
+  for (let i = 0; i < itemCount; i++) {
+    positions.push(Math.round(1 + (i * 9) / (itemCount - 1)));
+  }
+  return positions;
 }
 
 /**
@@ -143,3 +187,4 @@ export function getBoardColor(color: string): { border: string; bg: string; text
     text: getContrastTextColor(bg),
   };
 }
+// trailing ws fix

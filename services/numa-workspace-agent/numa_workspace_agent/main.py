@@ -438,7 +438,7 @@ async def get_history(conversation_id: str, request: Request):
                     "metadata": {
                         "hasTrace": False,
                         "uploadsCount": 0,
-                        "sessionCount": 0,
+                        "outputsCount": 0,
                     },
                 },
             }
@@ -455,7 +455,7 @@ async def get_history(conversation_id: str, request: Request):
                 "metadata": {
                     "hasTrace": True,
                     "uploadsCount": 0,
-                    "sessionCount": 0,
+                    "outputsCount": 0,
                 },
             },
         }
@@ -477,7 +477,7 @@ async def get_history(conversation_id: str, request: Request):
                 "metadata": {
                     "hasTrace": False,
                     "uploadsCount": 0,
-                    "sessionCount": 0,
+                    "outputsCount": 0,
                     "error": str(e),
                 },
             },
@@ -552,7 +552,7 @@ async def list_files_endpoint(request: Request):
 @app.get("/files/{conversation_id}")
 async def list_conversation_files_endpoint(conversation_id: str, request: Request):
     """
-    List files in a conversation's uploads/ and session/ directories from S3.
+    List files in a conversation's uploads/ and outputs/ directories from S3.
 
     This is a read-only endpoint that doesn't trigger workspace sync.
     Used for displaying conversation files in the settings panel.
@@ -581,9 +581,9 @@ async def list_conversation_files_endpoint(conversation_id: str, request: Reques
 
 @app.get("/workspace/files")
 async def list_workspace_local_files():
-    """List files in /workdir/session/ and /workdir/uploads/ from the local filesystem."""
+    """List files in /workdir/outputs/ and /workdir/uploads/ from the local filesystem."""
     files = []
-    for subdir in ("session", "uploads"):
+    for subdir in ("outputs", "uploads"):
         dir_path = LOCAL_ROOT / subdir
         if not dir_path.exists():
             continue
@@ -605,7 +605,7 @@ async def list_workspace_local_files():
 async def read_workspace_local_file(path: str):
     """Read a file from the local /workdir filesystem.
 
-    Query param ``path`` is relative to /workdir (e.g. ``session/result.json``).
+    Query param ``path`` is relative to /workdir (e.g. ``outputs/result.json``).
     Rejects paths containing ``..`` to prevent traversal.
     """
     if ".." in path:
@@ -689,7 +689,7 @@ async def _handle_proxy_history(user_sub: str, conversation_id: str) -> dict:
                     "metadata": {
                         "hasTrace": False,
                         "uploadsCount": 0,
-                        "sessionCount": 0,
+                        "outputsCount": 0,
                     },
                 },
             }
@@ -706,7 +706,7 @@ async def _handle_proxy_history(user_sub: str, conversation_id: str) -> dict:
                 "metadata": {
                     "hasTrace": True,
                     "uploadsCount": 0,
-                    "sessionCount": 0,
+                    "outputsCount": 0,
                 },
             },
         }
@@ -728,7 +728,7 @@ async def _handle_proxy_history(user_sub: str, conversation_id: str) -> dict:
                 "metadata": {
                     "hasTrace": False,
                     "uploadsCount": 0,
-                    "sessionCount": 0,
+                    "outputsCount": 0,
                     "error": str(e),
                 },
             },
@@ -1945,7 +1945,7 @@ async def _handle_sync(
             company_profile=company_profile,
         )
 
-    # If the agent type uses result_file mode, read /workdir/session/result.json
+    # If the agent type uses result_file mode, read /workdir/outputs/result.json
     # and use it as the response text instead of the raw SDK output. This is the
     # same convention used by pipelines, but here for single-step agent types
     # (e.g. document-summariser) that write structured output to a known file.
@@ -1954,7 +1954,7 @@ async def _handle_sync(
         and agent_type_config.pipeline_result_mode == "result_file"
         and not agent_type_config.pipeline_steps  # Pipelines handle this themselves
     ):
-        result_path = Path("/workdir/session/result.json")
+        result_path = Path("/workdir/outputs/result.json")
         if result_path.exists():
             try:
                 structured = json.loads(result_path.read_text())
@@ -2204,7 +2204,7 @@ async def _handle_fire_and_forget(
                 and agent_type_config.pipeline_result_mode == "result_file"
                 and not agent_type_config.pipeline_steps
             ):
-                result_path = Path("/workdir/session/result.json")
+                result_path = Path("/workdir/outputs/result.json")
                 if result_path.exists():
                     try:
                         structured = json.loads(result_path.read_text())

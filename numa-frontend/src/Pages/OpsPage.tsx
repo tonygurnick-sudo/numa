@@ -98,21 +98,20 @@ const OpsPageContent: React.FC = () => {
             selectTeam(team.id);
           }}
         />
-        <GlobalSettingsModal
-          show={showGlobalSettings}
-          onHide={() => setShowGlobalSettings(false)}
-          onSaved={() => {
-            setShowGlobalSettings(false);
-            refreshTeam();
-          }}
-          defaultTab={globalSettingsTab}
-        />
         <TeamSettingsModal
           show={showTeamSettings}
           onHide={() => setShowTeamSettings(false)}
           onSaved={() => {
             setShowTeamSettings(false);
             refreshTeam();
+          }}
+        />
+        <GlobalSettingsModal
+          show={showGlobalSettings}
+          onHide={() => setShowGlobalSettings(false)}
+          defaultTab={globalSettingsTab}
+          onSaved={() => {
+            setShowGlobalSettings(false);
           }}
         />
       </>

@@ -38,11 +38,11 @@ Usage:
 
 Parameters:
     --file-path, -f    Path to file in workspace (required)
-                       Supports: /workdir/uploads/, /workdir/session/,
+                       Supports: /workdir/uploads/, /workdir/outputs/,
                                 /workdir/chat-workflows/, or root files
 
 Output:
-    Extracted content is saved to /workdir/session/extracted_{filename}.txt
+    Extracted content is saved to /workdir/outputs/extracted_{filename}.txt
     Returns JSON with path to the extracted file.
 
 Example:
@@ -50,7 +50,7 @@ Example:
     python3 /workdir/tools/numa/extract_content.py \\
         --file-path "/workdir/uploads/scanned_invoice.pdf"
 
-    # Output: {"status": "success", "output_path": "/workdir/session/extracted_scanned_invoice.txt"}
+    # Output: {"status": "success", "output_path": "/workdir/outputs/extracted_scanned_invoice.txt"}
 """
 
 import argparse

@@ -15,8 +15,8 @@ export interface UseWorkspaceChatSettingsPanelReturn {
   togglePanel: () => void;
   /** Files in the /uploads folder */
   uploadsFiles: WorkspaceChatFileInfo[];
-  /** Files in the /session folder */
-  sessionFiles: WorkspaceChatFileInfo[];
+  /** Files in the /outputs folder */
+  outputFiles: WorkspaceChatFileInfo[];
   /** Whether files are currently loading */
   filesLoading: boolean;
   /** Error message if file loading failed */
@@ -45,7 +45,7 @@ export function useWorkspaceChatSettingsPanel(conversationId: string | null): Us
 
   // File state
   const [uploadsFiles, setUploadsFiles] = useState<WorkspaceChatFileInfo[]>([]);
-  const [sessionFiles, setSessionFiles] = useState<WorkspaceChatFileInfo[]>([]);
+  const [outputFiles, setOutputFiles] = useState<WorkspaceChatFileInfo[]>([]);
   const [filesLoading, setFilesLoading] = useState(false);
   const [filesError, setFilesError] = useState<string | null>(null);
 
@@ -67,7 +67,7 @@ export function useWorkspaceChatSettingsPanel(conversationId: string | null): Us
     if (!conversationId) {
       // No conversation yet - clear files
       setUploadsFiles([]);
-      setSessionFiles([]);
+      setOutputFiles([]);
       setFilesError(null);
       return;
     }
@@ -76,21 +76,26 @@ export function useWorkspaceChatSettingsPanel(conversationId: string | null): Us
     setFilesError(null);
 
     try {
-      // Fetch files for this specific conversation's uploads/ and session/ directories
+      // Fetch files for this specific conversation's uploads/ and outputs/ directories
       const response = await listConversationFiles(conversationId);
       const files = response.files || [];
       lastLoadedConversationRef.current = conversationId;
 
       // Split files by prefix
       const uploads: WorkspaceChatFileInfo[] = [];
-      const session: WorkspaceChatFileInfo[] = [];
+      const output: WorkspaceChatFileInfo[] = [];
 
       for (const file of files) {
-        // File path format: "uploads/filename.pdf" or "session/output.txt"
+        // File path format: "uploads/filename.pdf" or "outputs/output.txt"
         if (file.path.startsWith('uploads/') || file.path.startsWith('uploads\\')) {
           uploads.push(file);
-        } else if (file.path.startsWith('session/') || file.path.startsWith('session\\')) {
-          session.push(file);
+        } else if (
+          file.path.startsWith('outputs/') ||
+          file.path.startsWith('outputs\\') ||
+          file.path.startsWith('session/') ||
+          file.path.startsWith('session\\')
+        ) {
+          output.push(file);
         }
         // Ignore other paths
       }
@@ -103,12 +108,12 @@ export function useWorkspaceChatSettingsPanel(conversationId: string | null): Us
       };
 
       setUploadsFiles(uploads.sort(sortByDate));
-      setSessionFiles(session.sort(sortByDate));
+      setOutputFiles(output.sort(sortByDate));
     } catch (err) {
       console.error('[useWorkspaceChatSettingsPanel] Error loading files:', err);
       setFilesError('Failed to load files');
       setUploadsFiles([]);
-      setSessionFiles([]);
+      setOutputFiles([]);
     } finally {
       setFilesLoading(false);
     }
@@ -128,7 +133,7 @@ export function useWorkspaceChatSettingsPanel(conversationId: string | null): Us
   useEffect(() => {
     if (conversationId !== lastLoadedConversationRef.current) {
       setUploadsFiles([]);
-      setSessionFiles([]);
+      setOutputFiles([]);
       setFilesError(null);
     }
   }, [conversationId]);
@@ -139,7 +144,7 @@ export function useWorkspaceChatSettingsPanel(conversationId: string | null): Us
     closePanel,
     togglePanel,
     uploadsFiles,
-    sessionFiles,
+    outputFiles,
     filesLoading,
     filesError,
     refreshFiles: loadFiles,

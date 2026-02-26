@@ -32,6 +32,7 @@
     "@dnd-kit/sortable": "^10.0.0",
     "@dnd-kit/utilities": "^3.2.2",
     "@honeycombio/opentelemetry-web": "^0.21.0",
+    "@jvmr/pptx-to-html": "^1.0.0",
     "@mdxeditor/editor": "^3.19.3",
     "@opentelemetry/auto-instrumentations-web": "^0.47.0",
     "@pipedream/sdk": "2.0.4",

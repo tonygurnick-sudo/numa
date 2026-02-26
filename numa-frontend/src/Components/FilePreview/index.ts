@@ -8,3 +8,6 @@ export { MarkdownPreview } from './MarkdownPreview';
 export { FolderTreePreview } from './FolderTreePreview';
 export { JsonPreview } from './JsonPreview';
 export { VttPreview } from './VttPreview';
+export { PptxPreview } from './PptxPreview';
+export { CodePreview } from './CodePreview';
+export { getLanguageFromExtension, CODE_EXTENSIONS } from './codeLanguages';

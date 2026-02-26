@@ -472,6 +472,68 @@
   border-color: #a1a1aa;
 }
 
+// Uploading file chip (drag-and-drop in-progress indicator)
+.workspace-chat-v2 .pending-file-chip.uploading-chip {
+  border-style: dashed;
+  opacity: 0.85;
+}
+
+.workspace-chat-v2 .pending-file-chip .upload-progress-bar {
+  width: 40px;
+  height: 4px;
+  background: #e4e4e7;
+  border-radius: 2px;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.workspace-chat-v2 .pending-file-chip .upload-progress-fill {
+  height: 100%;
+  background: var(--brand-primary, #4b007d);
+  transition: width 0.2s ease;
+  border-radius: 2px;
+}
+
+// Drag-and-drop file overlay
+.workspace-chat-v2 .chat-drag-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 50;
+  background: rgba(255, 255, 255, 0.85);
+  border: 2px dashed var(--brand-primary, #4b007d);
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  animation: chatDragOverlayFadeIn 0.15s ease-in-out;
+}
+
+.workspace-chat-v2 .chat-drag-overlay-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.workspace-chat-v2 .chat-drag-overlay-icon {
+  font-size: 3rem;
+  color: var(--brand-primary, #4b007d);
+  opacity: 0.8;
+}
+
+.workspace-chat-v2 .chat-drag-overlay-text {
+  font-size: 1.1rem;
+  font-weight: 500;
+  color: var(--brand-primary, #4b007d);
+  opacity: 0.9;
+}
+
+@keyframes chatDragOverlayFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
 .workspace-chat-v2 .chat-input-container {
   position: relative;
   display: flex;
@@ -1894,8 +1956,8 @@
 
 .workspace-chat-v2 .workspace-chat-settings-drawer .workspace-settings-file-row {
   display: flex;
-  align-items: center;
-  gap: 0.35rem;
+  align-items: flex-start;
+  gap: 0.45rem;
   width: 100%;
   min-width: 0;
   padding: 0.52rem 0.58rem;
@@ -1910,19 +1972,27 @@
   border-color: #d4d4d8;
 }
 
-.workspace-chat-v2 .workspace-chat-settings-drawer .workspace-settings-file-main {
-  min-width: 0;
-  flex: 1;
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-
 .workspace-chat-v2 .workspace-chat-settings-drawer .workspace-settings-file-icon {
   flex-shrink: 0;
   color: #71717a;
   font-size: 0.88rem;
   line-height: 1;
+  margin-top: 0.15rem;
+}
+
+.workspace-chat-v2 .workspace-chat-settings-drawer .workspace-settings-file-main {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.workspace-chat-v2 .workspace-chat-settings-drawer .workspace-settings-file-top-row {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-width: 0;
 }
 
 .workspace-chat-v2 .workspace-chat-settings-drawer .workspace-settings-file-name {
@@ -1938,7 +2008,6 @@
 }
 
 .workspace-chat-v2 .workspace-chat-settings-drawer .workspace-settings-file-meta {
-  flex-shrink: 0;
   display: inline-flex;
   align-items: center;
   gap: 0.28rem;

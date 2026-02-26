@@ -1,6 +1,20 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import {
+  DndContext,
+  PointerSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+  DragOverlay,
+  useDroppable,
+  type DragEndEvent,
+  type DragStartEvent,
+  type DragOverEvent,
+} from '@dnd-kit/core';
+import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { Button, Form, Badge, Spinner } from 'react-bootstrap';
 import { useTranslation } from 'react-i18next';
+
 import { useNumaRequest } from '../../../Providers/NumaRequestContext';
 import { useOps } from '../OpsContext';
 import * as OpsService from '../../../Services/OpsService';
@@ -11,6 +25,25 @@ import { SupplierCard } from './SupplierCard';
 import { SupplierDetailModal } from '../Modals/SupplierDetailModal';
 
 // ─── Constants ──────────────────────────────────────────────────────────────
+
+const ORDER_GAP = 1000;
+
+function calculateNewOrder(items: { order?: number }[], insertIndex: number): number {
+  const defaultItems = items.map((item) => ({ ...item, order: item.order ?? 0 }));
+
+  if (defaultItems.length === 0) {
+    return ORDER_GAP;
+  }
+  if (insertIndex <= 0) {
+    return defaultItems[0].order - ORDER_GAP;
+  }
+  if (insertIndex >= defaultItems.length) {
+    return defaultItems[defaultItems.length - 1].order + ORDER_GAP;
+  }
+  const before = defaultItems[insertIndex - 1].order;
+  const after = defaultItems[insertIndex].order;
+  return Math.round((before + after) / 2);
+}
 
 const TEAL_ACCENT = '#0d9488';
 
@@ -206,6 +239,87 @@ function SupplierListView({ suppliers, supplierConfig, onSupplierClick }: Suppli
   );
 }
 
+// ─── Droppable Supplier Column ──────────────────────────────────────────────
+
+interface DroppableSupplierColumnProps {
+  stage: { id: string; name: string; colorPosition?: number };
+  suppliers: Supplier[];
+  supplierConfig: SupplierConfig;
+  onSupplierClick: (s: Supplier) => void;
+}
+
+function DroppableSupplierColumn({
+  stage,
+  suppliers,
+  supplierConfig,
+  onSupplierClick,
+}: DroppableSupplierColumnProps): React.JSX.Element {
+  const { t } = useTranslation('ops');
+  const { setNodeRef, isOver } = useDroppable({ id: `stage-${stage.id}` });
+  const supplierIds = suppliers.map((s) => s.id);
+
+  return (
+    <div
+      ref={setNodeRef}
+      className={`d-flex flex-column rounded-3 p-2 h-100 ${isOver ? 'bg-light bg-opacity-75' : 'bg-transparent'}`}
+      style={{
+        flex: '1 0 280px',
+        minWidth: 280,
+        backgroundColor: '#f9fafb',
+        border: '1px solid #e5e7eb',
+        transition: 'background-color 0.2s ease',
+      }}
+    >
+      <div className="d-flex align-items-center justify-content-between mb-2 px-1">
+        <span
+          style={{
+            fontWeight: 700,
+            fontSize: '0.75rem',
+            textTransform: 'uppercase',
+            letterSpacing: '0.06em',
+            color: '#374151',
+          }}
+        >
+          {stage.name}
+        </span>
+        <span
+          style={{
+            backgroundColor: '#f3f4f6',
+            color: '#6b7280',
+            fontSize: '0.7rem',
+            fontWeight: 600,
+            borderRadius: 10,
+            padding: '1px 8px',
+            minWidth: 22,
+            textAlign: 'center',
+          }}
+        >
+          {suppliers.length}
+        </span>
+      </div>
+
+      <div className="flex-grow-1 overflow-auto" style={{ borderRadius: 10, minHeight: 100 }}>
+        {suppliers.length === 0 && (
+          <div className="text-center py-4">
+            <i className="bi bi-truck" style={{ fontSize: '1.5rem', color: '#d1d5db' }} />
+            <div style={{ fontSize: '0.78rem', color: '#9ca3af', marginTop: 4 }}>{t('empty.noSuppliers')}</div>
+          </div>
+        )}
+        <SortableContext items={supplierIds} strategy={verticalListSortingStrategy}>
+          {suppliers.map((supplier) => (
+            <SupplierCard
+              key={supplier.id}
+              supplier={supplier}
+              supplierConfig={supplierConfig}
+              onClick={onSupplierClick}
+            />
+          ))}
+        </SortableContext>
+      </div>
+    </div>
+  );
+}
+
 // ─── Component ──────────────────────────────────────────────────────────────
 
 /**
@@ -245,6 +359,10 @@ export function SupplierMirrorView(): React.JSX.Element {
       /* quota exceeded */
     }
   }, []);
+
+  // ── DnD Settings ─────────────────────────────────────────────────────────
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
+  const [activeSupplier, setActiveSupplier] = useState<Supplier | null>(null);
 
   // New supplier creation
   const [showNewInput, setShowNewInput] = useState(false);
@@ -297,6 +415,10 @@ export function SupplierMirrorView(): React.JSX.Element {
   const totalCount = suppliers.length;
   const withTicketsCount = useMemo(() => suppliers.filter((s) => s.openTicketCount > 0).length, [suppliers]);
 
+  // ── Lifecycle Stages ───────────────────────────────────────────────────
+
+  const stages = supplierConfig?.lifecycleStages ?? [];
+
   // ── Create Supplier ────────────────────────────────────────────────────
 
   const handleCreate = useCallback(async () => {
@@ -305,7 +427,12 @@ export function SupplierMirrorView(): React.JSX.Element {
 
     setCreating(true);
     try {
-      await OpsService.createSupplier(numaPost, { companyName: trimmed });
+      const defaultStageId = stages.length > 0 ? stages[0].id : undefined;
+
+      await OpsService.createSupplier(numaPost, {
+        companyName: trimmed,
+        lifecycleStage: defaultStageId,
+      });
       setNewName('');
       setShowNewInput(false);
       await loadSuppliers();
@@ -314,7 +441,123 @@ export function SupplierMirrorView(): React.JSX.Element {
     } finally {
       setCreating(false);
     }
-  }, [newName, numaPost, loadSuppliers]);
+  }, [newName, numaPost, loadSuppliers, stages]);
+
+  // ── Handlers ───────────────────────────────────────────────────────────
+
+  const handleDragStart = useCallback(
+    (event: DragStartEvent) => {
+      const { active } = event;
+      const supplier = filteredSuppliers.find((s) => s.id === active.id);
+      if (supplier) setActiveSupplier(supplier);
+    },
+    [filteredSuppliers],
+  );
+
+  const handleDragOver = useCallback(
+    (event: DragOverEvent) => {
+      const { active, over } = event;
+      const overId = over?.id;
+
+      if (!overId || active.id === overId) return;
+
+      const activeSupplier = suppliers.find((s) => s.id === active.id);
+      const overSupplier = suppliers.find((s) => s.id === overId);
+
+      const isOverColumn = String(overId).startsWith('stage-');
+      if (!activeSupplier) return;
+
+      const activeStageId = activeSupplier.lifecycleStage;
+      const overStageId = isOverColumn ? String(overId).replace('stage-', '') : overSupplier?.lifecycleStage;
+
+      if (!overStageId || activeStageId === overStageId) return;
+
+      setSuppliers((prev) => {
+        const overItems = prev
+          .filter((s) => s.lifecycleStage === overStageId)
+          .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+        let overIndex = overItems.length;
+
+        if (!isOverColumn && overSupplier) {
+          overIndex = overItems.findIndex((s) => s.id === overId);
+          const isBelow =
+            over.rect &&
+            active.rect.current.translated &&
+            active.rect.current.translated.top > over.rect.top + over.rect.height / 2;
+          overIndex += isBelow ? 1 : 0;
+        }
+
+        return prev.map((s) => {
+          if (s.id === active.id) {
+            return { ...s, lifecycleStage: overStageId, order: calculateNewOrder(overItems, overIndex) };
+          }
+          return s;
+        });
+      });
+    },
+    [suppliers],
+  );
+
+  const handleDragEnd = useCallback(
+    async (event: DragEndEvent) => {
+      setActiveSupplier(null);
+      const { active, over } = event;
+      if (!over) return;
+
+      const overId = over.id as string;
+      let newStageId: string | null = null;
+
+      if (overId.startsWith('stage-')) {
+        newStageId = overId.replace('stage-', '');
+      } else {
+        const overSupplier = suppliers.find((s) => s.id === overId);
+        if (overSupplier) {
+          newStageId = overSupplier.lifecycleStage;
+        }
+      }
+
+      if (!newStageId) return;
+
+      const supplier = suppliers.find((s) => s.id === active.id);
+      if (!supplier) return;
+
+      const destSuppliers = filteredSuppliers
+        .filter((s) => {
+          if (s.id === supplier.id) return false;
+          return s.lifecycleStage === newStageId;
+        })
+        .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+
+      let insertIndex = destSuppliers.length;
+      if (!overId.startsWith('stage-') && overId !== active.id) {
+        const overIndex = destSuppliers.findIndex((s) => s.id === overId);
+        if (overIndex >= 0) {
+          const isBelow =
+            over.rect &&
+            active.rect.current.translated &&
+            active.rect.current.translated.top > over.rect.top + over.rect.height / 2;
+          insertIndex = overIndex + (isBelow ? 1 : 0);
+        }
+      }
+
+      const newOrder = calculateNewOrder(destSuppliers, insertIndex);
+
+      if (supplier.lifecycleStage === newStageId && supplier.order === newOrder) return;
+
+      // Optimistic update
+      setSuppliers((prev) =>
+        prev.map((s) => (s.id === supplier.id ? { ...s, lifecycleStage: newStageId!, order: newOrder } : s)),
+      );
+
+      try {
+        await OpsService.updateSupplier(numaPost, supplier.id, { lifecycleStage: newStageId, order: newOrder });
+      } catch (err) {
+        console.error('[SupplierMirrorView] Failed to update supplier stage:', err);
+        await loadSuppliers();
+      }
+    },
+    [suppliers, filteredSuppliers, numaPost, loadSuppliers],
+  );
 
   // ── Detail Modal ───────────────────────────────────────────────────────
 
@@ -331,10 +574,6 @@ export function SupplierMirrorView(): React.JSX.Element {
   const handleDetailUpdated = useCallback(() => {
     loadSuppliers();
   }, [loadSuppliers]);
-
-  // ── Lifecycle Stages ───────────────────────────────────────────────────
-
-  const stages = supplierConfig?.lifecycleStages ?? [];
 
   // ── Render ─────────────────────────────────────────────────────────────
 
@@ -438,7 +677,7 @@ export function SupplierMirrorView(): React.JSX.Element {
             <i className="bi bi-list-ul" />
           </button>
         </div>
-
+        <div className="flex-grow-1" />
         {/* New supplier */}
         {showNewInput ? (
           <div className="d-flex gap-1 align-items-center">
@@ -511,76 +750,37 @@ export function SupplierMirrorView(): React.JSX.Element {
             onSupplierClick={openDetail}
           />
         ) : (
-          <div className="d-flex overflow-auto h-100" style={{ gap: 16 }}>
-            {stages.map((stage) => {
-              const stageSuppliers = filteredSuppliers.filter((s) => s.lifecycleStage === stage.id);
-
-              return (
-                <div
-                  key={stage.id}
-                  className="d-flex flex-column"
-                  style={{ flex: '1 1 0', minWidth: 140, minHeight: 0 }}
-                >
-                  {/* Column header */}
-                  <div className="d-flex align-items-center justify-content-between mb-2 px-1">
-                    <span
-                      style={{
-                        fontWeight: 700,
-                        fontSize: '0.75rem',
-                        textTransform: 'uppercase',
-                        letterSpacing: '0.06em',
-                        color: '#374151',
-                      }}
-                    >
-                      {stage.name}
-                    </span>
-                    <span
-                      style={{
-                        backgroundColor: '#f3f4f6',
-                        color: '#6b7280',
-                        fontSize: '0.7rem',
-                        fontWeight: 600,
-                        borderRadius: 10,
-                        padding: '1px 8px',
-                        minWidth: 22,
-                        textAlign: 'center',
-                      }}
-                    >
-                      {stageSuppliers.length}
-                    </span>
-                  </div>
-
-                  {/* Column body */}
-                  <div
-                    className="flex-grow-1 overflow-auto"
-                    style={{
-                      borderRadius: 10,
-                      padding: 8,
-                      backgroundColor: 'transparent',
-                      minHeight: 100,
-                    }}
-                  >
-                    {stageSuppliers.length === 0 && (
-                      <div className="text-center py-4">
-                        <i className="bi bi-truck" style={{ fontSize: '1.5rem', color: '#d1d5db' }} />
-                        <div style={{ fontSize: '0.78rem', color: '#9ca3af', marginTop: 4 }}>
-                          {t('empty.noSuppliers')}
-                        </div>
-                      </div>
-                    )}
-                    {stageSuppliers.map((supplier) => (
-                      <SupplierCard
-                        key={supplier.id}
-                        supplier={supplier}
-                        supplierConfig={supplierConfig!}
-                        onClick={openDetail}
-                      />
-                    ))}
-                  </div>
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            onDragStart={handleDragStart}
+            onDragOver={handleDragOver}
+            onDragEnd={(e) => void handleDragEnd(e)}
+          >
+            <div className="d-flex overflow-auto h-100" style={{ gap: 16 }}>
+              {stages.map((stage) => {
+                const stageSuppliers = filteredSuppliers
+                  .filter((s) => s.lifecycleStage === stage.id)
+                  .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+                return (
+                  <DroppableSupplierColumn
+                    key={stage.id}
+                    stage={stage}
+                    suppliers={stageSuppliers}
+                    supplierConfig={supplierConfig!}
+                    onSupplierClick={openDetail}
+                  />
+                );
+              })}
+            </div>
+            <DragOverlay>
+              {activeSupplier ? (
+                <div style={{ transform: 'scale(1.02)', opacity: 0.9 }}>
+                  <SupplierCard supplier={activeSupplier} supplierConfig={supplierConfig!} onClick={() => {}} />
                 </div>
-              );
-            })}
-          </div>
+              ) : null}
+            </DragOverlay>
+          </DndContext>
         )}
       </div>
 

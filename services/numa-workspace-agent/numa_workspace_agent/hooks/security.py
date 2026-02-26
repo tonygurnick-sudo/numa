@@ -107,6 +107,20 @@ DANGEROUS_COMMANDS = [
     "gem install",
     "cargo install",
     "go install",
+    # npx downloads and executes packages without install
+    "npx ",
+    # Full path to env bypasses word-boundary regex
+    "/usr/bin/env",
+    # Node.js flags that preload modules before code scanning
+    "node -r ",
+    "node --require",
+    "node --import",
+    "node --loader",
+    # Python module execution of dangerous modules
+    "python3 -m http",
+    "python -m http",
+    "python3 -m smtpd",
+    "python -m smtpd",
 ]
 
 # Environment variable command patterns (regex for more flexible matching)
@@ -121,8 +135,14 @@ ENV_VAR_PATTERNS = [
     r"compgen\s+-[eAv]",
     # Echo/printf with sensitive env var patterns
     r"(?:echo|printf).*\$\{?(?:AWS_|COGNITO_|CLOUDFRONT_|SECRET|API_KEY|TOKEN|CREDENTIAL|PASSWORD|DYNAMODB_|OUTPUTS_BUCKET)",
-    # Cat/reading proc environ
-    r"(?:cat|less|more|head|tail|strings).*\/proc\/.*\/environ",
+    # Reading proc environ (all tools including binary readers)
+    r"(?:cat|less|more|head|tail|strings|xxd|od|hexdump|hd|tr).*\/proc\/.*\/environ",
+    # Input redirection from /proc
+    r"<\s*\/proc",
+    # awk/perl ENVIRON access
+    r"\bENVIRON\s*\[",
+    # Here-string env var injection
+    r"<<<\s*\$",
     # Python one-liners accessing env
     r"python.*os\.environ",
     r"python.*os\.getenv",
@@ -163,7 +183,7 @@ PROTECTED_DIR_PATTERNS = [
     # Piped commands that filter for protected directories
     r"\|\s*grep.*(?:\.?system|secrets|\.claude)",
     # ls with -a flag on /workdir root (reveals hidden .system directory)
-    # Safe: ls -la /workdir/session/, ls -la /workdir/uploads/ (explicit subdirectory)
+    # Safe: ls -la /workdir/outputs/, ls -la /workdir/uploads/ (explicit subdirectory)
     # Blocked: ls -la /workdir (root enumeration - would reveal .system)
     r"\bls\b\s+-[^\s]*a[^\s]*\s+[\"']?/workdir[\"']?\s*$",  # ls -la /workdir
     r"\bls\b\s+-[^\s]*a[^\s]*\s+[\"']?/workdir[\"']?\s*\|",  # ls -la /workdir | ...
@@ -178,7 +198,7 @@ PROTECTED_DIR_PATTERNS = [
     r"\bcat\b.*\.claude",
     # Block find/tree on /workdir root (would discover protected subdirs like _system/)
     # These patterns match commands that would enumerate the entire workspace
-    # Safe: find /workdir/uploads, find /workdir/session (explicit subdirectory)
+    # Safe: find /workdir/uploads, find /workdir/outputs (explicit subdirectory)
     # Blocked: find /workdir, find /workdir -type f (root enumeration)
     r"\bfind\b\s+[\"']?/workdir[\"']?\s*$",  # find /workdir (end of command)
     r"\bfind\b\s+[\"']?/workdir[\"']?\s+-",  # find /workdir -type f (followed by flags)
@@ -190,18 +210,79 @@ PROTECTED_DIR_PATTERNS = [
     r"\btree\b\s+[\"']?/workdir[\"']?\s*\|",  # tree /workdir | less
 ]
 
+# Dangerous Node.js patterns (block shell escape, env access, network)
+DANGEROUS_NODE_PATTERNS = [
+    # Shell escape via child_process
+    r"require\s*\(\s*['\"]child_process['\"]",
+    r"from\s+['\"]child_process['\"]",
+    # Network modules
+    r"require\s*\(\s*['\"]net['\"]",
+    r"require\s*\(\s*['\"]http['\"]",
+    r"require\s*\(\s*['\"]https['\"]",
+    r"require\s*\(\s*['\"]dgram['\"]",
+    r"require\s*\(\s*['\"]dns['\"]",
+    r"require\s*\(\s*['\"]tls['\"]",
+    r"from\s+['\"]net['\"]",
+    r"from\s+['\"]http['\"]",
+    r"from\s+['\"]https['\"]",
+    r"from\s+['\"]dgram['\"]",
+    r"from\s+['\"]dns['\"]",
+    r"from\s+['\"]tls['\"]",
+    # System info / sandbox escape
+    r"require\s*\(\s*['\"]os['\"]",
+    r"require\s*\(\s*['\"]vm['\"]",
+    r"require\s*\(\s*['\"]cluster['\"]",
+    r"from\s+['\"]os['\"]",
+    r"from\s+['\"]vm['\"]",
+    r"from\s+['\"]cluster['\"]",
+    # Environment variable access (leaks AWS secrets, Cognito tokens, etc.)
+    r"process\.env",
+    r"process\.exit",
+    # Dynamic code execution
+    r"\beval\s*\(",
+    r"\bFunction\s*\(",
+    # Global process access bypasses
+    r"\bglobalThis\b",
+    r"\bReflect\s*\.",
+    r"constructor\s*\.\s*constructor",
+    # File access outside workdir via fs
+    r"readFileSync\s*\(\s*['\"]\/(?!workdir)",
+    r"readFile\s*\(\s*['\"]\/(?!workdir)",
+    r"createReadStream\s*\(\s*['\"]\/(?!workdir)",
+    r"writeFileSync\s*\(\s*['\"]\/(?!workdir)",
+    r"writeFile\s*\(\s*['\"]\/(?!workdir)",
+    # Path string literals for sensitive dirs (catches concatenation like '/proc')
+    r"['\"]\/proc['\"/]",
+    r"['\"]\/etc['\"/]",
+    r"['\"]\/sys['\"/]",
+]
+
 # Dangerous Python patterns (catch common bypasses)
 DANGEROUS_PYTHON_PATTERNS = [
     # Direct dangerous imports
-    r"import\s+os\b",
-    r"import\s+subprocess\b",
-    r"import\s+socket\b",
-    r"import\s+urllib\b",
-    r"import\s+requests\b",
-    r"import\s+http\b",
-    r"from\s+os\s+import",
-    r"from\s+subprocess\s+import",
-    r"from\s+socket\s+import",
+    # NOTE: ^\s* anchors to start-of-line (with re.MULTILINE) so that "import os"
+    # inside string literals (e.g. HTML test descriptions) does not trigger a false
+    # positive. Real import statements always start at the beginning of a line.
+    r"^\s*import\s+os\b",
+    r"^\s*import\s+subprocess\b",
+    r"^\s*import\s+socket\b",
+    r"^\s*import\s+urllib\b",
+    r"^\s*import\s+requests\b",
+    r"^\s*import\s+http\b",
+    r"^\s*import\s+sys\b",
+    r"^\s*import\s+pty\b",
+    r"^\s*import\s+shutil\b",
+    r"^\s*import\s+signal\b",
+    r"^\s*import\s+code\b",
+    r"^\s*import\s+marshal\b",
+    r"^\s*import\s+antigravity\b",
+    r"^\s*import\s+webbrowser\b",
+    r"^\s*from\s+os\s+import",
+    r"^\s*from\s+subprocess\s+import",
+    r"^\s*from\s+socket\s+import",
+    r"^\s*from\s+sys\s+import",
+    r"^\s*from\s+shutil\s+import",
+    r"^\s*from\s+marshal\s+import",
     # Import bypasses
     r"__import__\s*\(",
     r"importlib\.import_module\s*\(",
@@ -211,31 +292,37 @@ DANGEROUS_PYTHON_PATTERNS = [
     r"eval\s*\(",
     r"compile\s*\(",
     # Unsafe deserialization (pickle-based RCE vectors)
-    r"import\s+pickle\b",
-    r"from\s+pickle\s+import",
+    r"^\s*import\s+pickle\b",
+    r"^\s*from\s+pickle\s+import",
     r"\bpickle\s*\.\s*load\s*\(",
     r"\bpickle\s*\.\s*loads\s*\(",
     r"\bpickle\s*\.\s*Unpickler\s*\(",
-    r"from\s+pandas\s+import\s+read_pickle\b",
+    r"^\s*from\s+pandas\s+import\s+read_pickle\b",
     r"\bpandas\s*\.\s*read_pickle\s*\(",
     r"\bpd\s*\.\s*read_pickle\s*\(",
     r"\bread_pickle\s*\(",
-    r"import\s+shelve\b",
-    r"from\s+shelve\s+import",
+    r"^\s*import\s+shelve\b",
+    r"^\s*from\s+shelve\s+import",
     r"\bshelve\s*\.\s*open\s*\(",
-    r"import\s+dill\b",
-    r"from\s+dill\s+import",
+    r"^\s*import\s+dill\b",
+    r"^\s*from\s+dill\s+import",
     r"\bdill\s*\.\s*load\s*\(",
     r"\bdill\s*\.\s*loads\s*\(",
-    r"import\s+cloudpickle\b",
-    r"from\s+cloudpickle\s+import",
+    r"^\s*import\s+cloudpickle\b",
+    r"^\s*from\s+cloudpickle\s+import",
     r"\bcloudpickle\s*\.\s*load\s*\(",
     r"\bcloudpickle\s*\.\s*loads\s*\(",
-    r"import\s+joblib\b",
-    r"from\s+joblib\s+import\s+load\b",
+    r"^\s*import\s+joblib\b",
+    r"^\s*from\s+joblib\s+import\s+load\b",
     r"\bjoblib\s*\.\s*load\s*\(",
     # Builtin access bypasses
     r"__builtins__",
+    r"__subclasses__",
+    r"__globals__",
+    r"__bases__",
+    r"__mro__",
+    r"sys\.modules",
+    r"sys\.path",
     r"getattr\s*\([^)]*['\"]open['\"]",
     r"getattr\s*\([^)]*['\"]exec['\"]",
     r"getattr\s*\([^)]*['\"]eval['\"]",
@@ -357,9 +444,10 @@ def check_python_command(command: str) -> tuple[bool, str | None]:
     if " -c " in command:
         parts = command.split(" -c ", 1)
         if len(parts) > 1:
-            python_code = parts[1]
+            # Strip surrounding shell quotes so ^\s* patterns can match line starts
+            python_code = parts[1].strip().strip("\"'").strip()
             for pattern in DANGEROUS_PYTHON_PATTERNS:
-                if re.search(pattern, python_code, re.IGNORECASE):
+                if re.search(pattern, python_code, re.IGNORECASE | re.MULTILINE):
                     return True, f"Dangerous Python pattern detected: {pattern}"
 
     # Check Python file content when executing .py files
@@ -372,13 +460,55 @@ def check_python_command(command: str) -> tuple[bool, str | None]:
             with open(script_path, "r") as f:
                 file_content = f.read()
             for pattern in DANGEROUS_PYTHON_PATTERNS:
-                if re.search(pattern, file_content, re.IGNORECASE):
+                if re.search(pattern, file_content, re.IGNORECASE | re.MULTILINE):
                     return True, f"Dangerous pattern in {script_path}: {pattern}"
         except FileNotFoundError:
             # File doesn't exist yet, will fail at execution anyway
             pass
         except Exception as e:
             logger.warning(f"Could not scan Python file {script_path}: {e}")
+
+    return False, None
+
+
+def check_node_command(command: str) -> tuple[bool, str | None]:
+    """
+    Check Node.js command for dangerous patterns.
+
+    Scans BOTH:
+    - Inline code via -e flag: node -e "code"
+    - JS files: node /workdir/script.js
+
+    Blocks shell escape (child_process), env access, network modules, etc.
+    Allows: require('fs'), require('path'), require('pptxgenjs'), require('sharp').
+    """
+    # Check inline code passed via -e flag
+    if " -e " in command:
+        parts = command.split(" -e ", 1)
+        if len(parts) > 1:
+            node_code = parts[1]
+            for pattern in DANGEROUS_NODE_PATTERNS:
+                if re.search(pattern, node_code, re.IGNORECASE):
+                    return True, f"Dangerous Node.js pattern detected: {pattern}"
+
+    # Check JS file content when executing .js/.mjs/.cjs files
+    # Match: node /workdir/script.js, node /workdir/outputs/gen.cjs, etc.
+    file_match = re.search(
+        r'node\s+["\']?(/workdir/[^\s"\']+\.(?:js|mjs|cjs))["\']?', command
+    )
+    if file_match:
+        script_path = file_match.group(1)
+        try:
+            with open(script_path, "r") as f:
+                file_content = f.read()
+            for pattern in DANGEROUS_NODE_PATTERNS:
+                if re.search(pattern, file_content, re.IGNORECASE):
+                    return True, f"Dangerous pattern in {script_path}: {pattern}"
+        except FileNotFoundError:
+            # File doesn't exist yet, will fail at execution anyway
+            pass
+        except Exception as e:
+            logger.warning(f"Could not scan Node.js file {script_path}: {e}")
 
     return False, None
 
@@ -423,7 +553,7 @@ def check_bash_command(
     # Check if this is a trusted Numa tool (whitelist before scanning)
     # Security: These are platform-provided tools with their own security measures:
     # - knowledge_base.py: KB ID validated against NUMA_ALLOWED_KBS, DynamoDB perms server-side
-    # - All Numa tools: Output written to /workdir/session/ (within workspace)
+    # - All Numa tools: Output written to /workdir/outputs/ (within workspace)
     # - Tools are deployed with the container, not user-uploadable
     if "/workdir/tools/numa/" in command and command.strip().startswith(
         ("python", "python3")
@@ -445,6 +575,12 @@ def check_bash_command(
     # Check Python commands specifically for dangerous patterns
     if command.strip().startswith(("python", "python3")):
         blocked, reason = check_python_command(command)
+        if blocked:
+            return True, reason
+
+    # Check Node.js commands for dangerous patterns
+    if command.strip().startswith("node"):
+        blocked, reason = check_node_command(command)
         if blocked:
             return True, reason
 

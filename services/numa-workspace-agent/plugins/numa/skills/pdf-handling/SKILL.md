@@ -1,69 +1,402 @@
 ---
 name: pdf-handling
-description: Create, read, and manipulate PDF files. Use when asked to generate PDFs, create reports, extract text from PDFs, merge PDF documents, read PDF content, or convert data to PDF format.
+description: Create, read, and manipulate PDF files. Use when asked to generate PDFs, create reports, extract text from PDFs, merge PDF documents, read PDF content, convert to/from PDF, extract images from PDFs, or convert data to PDF format.
 ---
 
 # PDF Handling Skill
 
-Create, read, and manipulate PDF files using the fpdf2 and PyPDF2 libraries.
+Create, read, manipulate, and convert PDF files.
 
 ## Available Libraries
 
 | Library | Purpose | Import |
 |---------|---------|--------|
-| **fpdf2** | Create PDFs from scratch | `from fpdf import FPDF` |
-| **PyPDF2** | Read and manipulate existing PDFs | `from PyPDF2 import PdfReader, PdfWriter, PdfMerger` |
+| **pdfplumber** | Advanced text/table extraction with layout | `import pdfplumber` |
+| **PyMuPDF (fitz)** | Visual extraction, render pages as images, extract embedded images | `import fitz` |
+| **pdf2image** | PDF pages to PIL images (uses poppler) | `from pdf2image import convert_from_path` |
+| **weasyprint** | HTML-to-PDF conversion (styled reports, letters) | `from weasyprint import HTML` |
+| **reportlab** | Professional PDF creation with precise layout | `from reportlab.lib.pagesizes import A4` |
+| **fpdf2** | Quick & simple PDF creation | `from fpdf import FPDF` |
+| **PyPDF2** | Merge, split, rotate, watermark (PDF manipulation) | `from PyPDF2 import PdfReader, PdfWriter, PdfMerger` |
+
+## Decision Matrix
+
+| Need | Best Tool | Why |
+|------|-----------|-----|
+| Styled reports, letters, documents | **WeasyPrint** (HTML→PDF) | Write HTML+CSS, professional output |
+| Precise layout control, subscripts | **reportlab** | Pixel-perfect positioning |
+| Quick data tables, simple PDFs | **fpdf2** | Lightweight, fast |
+| Read text/tables from PDFs | **pdfplumber** | Best layout-aware text extraction |
+| Merge, split, rotate PDFs | **PyPDF2** | Best for manipulation operations |
+| Extract images from PDFs | **PyMuPDF (fitz)** | Access embedded images directly |
+| Render pages as images | **pdf2image** or **PyMuPDF** | Page-to-image conversion |
+| Scanned/complex documents | `extract_content.py` Lambda | Vision AI — better than local OCR |
+| Convert DOCX/PPTX → PDF | `soffice --headless` | Local LibreOffice conversion |
 
 ---
 
-## Creating PDFs with fpdf2
+## Reading PDFs
 
-### Basic PDF Creation
+### Primary: pdfplumber (text and tables with layout)
+
+pdfplumber is the best tool for extracting text and tables from PDFs. It preserves layout information and provides word-level bounding boxes.
 
 ```python
-from fpdf import FPDF
+import pdfplumber
 
-# Create PDF instance
-pdf = FPDF()
-pdf.add_page()
+with pdfplumber.open("/workdir/uploads/document.pdf") as pdf:
+    # Basic text extraction
+    for page in pdf.pages:
+        text = page.extract_text()
+        print(f"--- Page {page.page_number} ---")
+        print(text)
 
-# Set font (built-in fonts: Helvetica, Times, Courier)
-pdf.set_font("Helvetica", size=16)
+    # Table extraction (returns list of lists)
+    page = pdf.pages[0]
+    tables = page.extract_tables()
+    for table in tables:
+        for row in table:
+            print(row)
 
-# Add title
-pdf.cell(0, 10, text="Document Title", align="C", new_x="LMARGIN", new_y="NEXT")
-
-# Add body text
-pdf.set_font("Helvetica", size=12)
-pdf.ln(10)  # Line break
-pdf.multi_cell(0, 7, text="Your paragraph text goes here. This will automatically wrap to multiple lines when it reaches the page margin.")
-
-# Save the PDF
-pdf.output("/workdir/output/document.pdf")
-print("PDF created: /workdir/output/document.pdf")
+    # Word-level extraction with bounding boxes
+    words = page.extract_words()
+    for word in words[:10]:
+        print(f"'{word['text']}' at ({word['x0']:.1f}, {word['top']:.1f})")
 ```
 
-### Adding Tables
+### Simple extraction: PyPDF2
+
+PyPDF2 is simpler but less accurate for complex layouts. Use it when you just need basic text or metadata.
+
+```python
+from PyPDF2 import PdfReader
+
+reader = PdfReader("/workdir/uploads/document.pdf")
+num_pages = len(reader.pages)
+print(f"PDF has {num_pages} pages")
+
+# Extract text from all pages
+for i, page in enumerate(reader.pages):
+    text = page.extract_text()
+    print(f"\n--- Page {i + 1} ---\n{text}")
+
+# Get metadata
+metadata = reader.metadata
+if metadata:
+    print(f"Title: {metadata.get('/Title', 'N/A')}")
+    print(f"Author: {metadata.get('/Author', 'N/A')}")
+```
+
+---
+
+## Visual Extraction with PyMuPDF (fitz)
+
+PyMuPDF can render PDF pages as images and extract embedded images — essential for visual analysis.
+
+### Render Pages as Images
+
+```python
+import fitz  # PyMuPDF
+
+doc = fitz.open("/workdir/uploads/document.pdf")
+
+for page_num in range(len(doc)):
+    page = doc[page_num]
+    # Render at 150 DPI
+    pix = page.get_pixmap(dpi=150)
+    pix.save(f"/workdir/outputs/page_{page_num + 1}.png")
+    print(f"Saved page {page_num + 1}: {pix.width}x{pix.height}")
+
+doc.close()
+```
+
+### Extract Embedded Images
+
+```python
+import fitz
+
+doc = fitz.open("/workdir/uploads/document.pdf")
+
+for page_num in range(len(doc)):
+    page = doc[page_num]
+    images = page.get_images(full=True)
+
+    for img_idx, img in enumerate(images):
+        xref = img[0]
+        base_image = doc.extract_image(xref)
+        image_bytes = base_image["image"]
+        image_ext = base_image["ext"]
+
+        output_path = f"/workdir/outputs/page{page_num + 1}_img{img_idx + 1}.{image_ext}"
+        with open(output_path, "wb") as f:
+            f.write(image_bytes)
+        print(f"Extracted: {output_path} ({len(image_bytes)} bytes)")
+
+doc.close()
+```
+
+### Extract Text with Layout (PyMuPDF)
+
+```python
+import fitz
+
+doc = fitz.open("/workdir/uploads/document.pdf")
+page = doc[0]
+
+# Get text with position information
+blocks = page.get_text("dict")["blocks"]
+for block in blocks:
+    if block["type"] == 0:  # Text block
+        for line in block["lines"]:
+            text = "".join(span["text"] for span in line["spans"])
+            print(f"  ({line['bbox'][0]:.0f},{line['bbox'][1]:.0f}): {text}")
+
+doc.close()
+```
+
+---
+
+## PDF-to-Image with pdf2image
+
+Batch convert PDF pages to images using poppler (pdftoppm).
+
+```python
+from pdf2image import convert_from_path
+
+# Convert all pages
+images = convert_from_path("/workdir/uploads/document.pdf", dpi=150)
+
+for i, img in enumerate(images):
+    output_path = f"/workdir/outputs/page_{i + 1}.png"
+    img.save(output_path, "PNG")
+    print(f"Saved: {output_path} ({img.width}x{img.height})")
+
+# Convert specific pages only
+images = convert_from_path(
+    "/workdir/uploads/document.pdf",
+    dpi=200,
+    first_page=1,
+    last_page=3
+)
+```
+
+Or use the CLI directly:
+```bash
+pdftoppm -jpeg -r 150 /workdir/uploads/document.pdf /workdir/outputs/page
+# Creates page-01.jpg, page-02.jpg, etc.
+```
+
+---
+
+## Creating PDFs
+
+### Primary: WeasyPrint (HTML-to-PDF)
+
+WeasyPrint converts HTML+CSS to PDF with excellent results. Best for styled reports, letters, and documents.
+
+```python
+from weasyprint import HTML
+
+# Simple HTML string
+html_content = """
+<html>
+<head>
+<style>
+    body { font-family: Arial, sans-serif; margin: 40px; color: #333; }
+    h1 { color: #1E2761; border-bottom: 2px solid #1E2761; padding-bottom: 10px; }
+    h2 { color: #4472C4; margin-top: 30px; }
+    table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+    th { background-color: #4472C4; color: white; padding: 12px; text-align: left; }
+    td { padding: 10px; border-bottom: 1px solid #ddd; }
+    tr:nth-child(even) { background-color: #f8f9fa; }
+    .highlight { background-color: #fff3cd; padding: 15px; border-left: 4px solid #ffc107; margin: 20px 0; }
+    @page { size: A4; margin: 2cm; }
+</style>
+</head>
+<body>
+    <h1>Quarterly Report</h1>
+    <p>Prepared for Acme Corp — February 2026</p>
+
+    <div class="highlight">
+        <strong>Key Finding:</strong> Revenue increased 23% year-over-year.
+    </div>
+
+    <h2>Sales Summary</h2>
+    <table>
+        <tr><th>Quarter</th><th>Revenue</th><th>Growth</th></tr>
+        <tr><td>Q1</td><td>$1.2M</td><td>+15%</td></tr>
+        <tr><td>Q2</td><td>$1.4M</td><td>+17%</td></tr>
+        <tr><td>Q3</td><td>$1.5M</td><td>+7%</td></tr>
+        <tr><td>Q4</td><td>$1.8M</td><td>+20%</td></tr>
+    </table>
+</body>
+</html>
+"""
+
+HTML(string=html_content).write_pdf("/workdir/outputs/report.pdf")
+print("PDF created: /workdir/outputs/report.pdf")
+```
+
+```python
+# From an HTML file
+HTML(filename="/workdir/outputs/report.html").write_pdf("/workdir/outputs/report.pdf")
+```
+
+**Why WeasyPrint over fpdf2:**
+- Full CSS support (flexbox excluded, but floats, tables, margins, colours all work)
+- Automatic page breaks
+- Professional typography
+- Easy to style with CSS
+- Great for multi-page documents
+
+### Multi-Page Layout Best Practices
+
+These patterns prevent common layout bugs (content spilling to extra pages, broken footers, dead space):
+
+**1. Use `@page` margin boxes for headers/footers** — never regular `<div>` elements in the document flow:
+
+```css
+@page {
+  size: A4;
+  margin: 25mm;
+  @bottom-left {
+    content: "Company Name";
+    font-size: 9pt;
+    color: #666;
+    white-space: nowrap;  /* Prevents text stacking vertically */
+  }
+  @bottom-right {
+    content: "Page " counter(page) " of " counter(pages);
+    font-size: 9pt;
+    color: #666;
+  }
+}
+/* Suppress header/footer on title page */
+@page :first {
+  @bottom-left { content: none; }
+  @bottom-right { content: none; }
+}
+```
+
+**2. Avoid forced page breaks** — prefer natural flow:
+- Use `page-break-inside: avoid` on atomic elements (cards, tables, callouts, stat boxes)
+- Only use `page-break-before: always` for deliberate section starts (e.g., title page → body)
+- Do NOT use `page-break-before: always` between content sections — it creates dead space
+
+**3. Professional document pattern** (most reliable for multi-page):
+- Generous margins: `25-30mm` all sides
+- Serif fonts (Georgia, Times) for body text
+- `text-align: justify` with `hyphens: auto`
+- Thin horizontal rules under section headings (`border-bottom: 1px solid #ccc`)
+- This style works more reliably than marketing layouts with gradients, cards, and flex rows
+
+**4. Common pitfalls:**
+- Footer text too long for margin box → add `white-space: nowrap`
+- Content slightly too tall for one page → cascading overflow pushes everything to extra pages
+- Tables splitting without repeated headers → keep small tables together with `page-break-inside: avoid`
+
+### Professional Layouts: reportlab
+
+For pixel-perfect PDF creation with precise positioning, subscripts, superscripts, and complex layouts.
+
+```python
+from reportlab.lib.pagesizes import A4, letter
+from reportlab.lib.units import inch, cm
+from reportlab.lib.colors import HexColor
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+
+doc = SimpleDocTemplate("/workdir/outputs/professional.pdf", pagesize=A4)
+styles = getSampleStyleSheet()
+
+# Custom styles
+title_style = ParagraphStyle(
+    "CustomTitle",
+    parent=styles["Title"],
+    fontSize=24,
+    textColor=HexColor("#1E2761"),
+    spaceAfter=20,
+)
+
+body_style = ParagraphStyle(
+    "CustomBody",
+    parent=styles["Normal"],
+    fontSize=11,
+    leading=16,
+    spaceAfter=12,
+)
+
+# Build content
+story = []
+story.append(Paragraph("Annual Report 2026", title_style))
+story.append(Spacer(1, 12))
+story.append(Paragraph("This report covers the fiscal year ending December 2025.", body_style))
+
+# Table
+data = [
+    ["Department", "Budget", "Spent", "Variance"],
+    ["Engineering", "$500K", "$480K", "+$20K"],
+    ["Marketing", "$300K", "$310K", "-$10K"],
+    ["Sales", "$200K", "$190K", "+$10K"],
+]
+
+table = Table(data, colWidths=[2*inch, 1.5*inch, 1.5*inch, 1.5*inch])
+table.setStyle(TableStyle([
+    ("BACKGROUND", (0, 0), (-1, 0), HexColor("#4472C4")),
+    ("TEXTCOLOR", (0, 0), (-1, 0), HexColor("#FFFFFF")),
+    ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+    ("ALIGN", (1, 0), (-1, -1), "CENTER"),
+    ("GRID", (0, 0), (-1, -1), 0.5, HexColor("#CCCCCC")),
+    ("ROWBACKGROUNDS", (0, 1), (-1, -1), [HexColor("#FFFFFF"), HexColor("#F8F9FA")]),
+]))
+
+story.append(table)
+
+# Subscripts/superscripts (reportlab strength)
+story.append(Spacer(1, 20))
+story.append(Paragraph('H<sub>2</sub>O and E=mc<sup>2</sup>', body_style))
+
+doc.build(story)
+print("PDF created: /workdir/outputs/professional.pdf")
+```
+
+### Quick & Simple: fpdf2
+
+fpdf2 is still useful for quick, simple PDFs — basic tables, text, and images without complex styling.
 
 ```python
 from fpdf import FPDF
 
 pdf = FPDF()
 pdf.add_page()
-pdf.set_font("Helvetica", size=10)
+pdf.set_font("Helvetica", size=16)
+pdf.cell(0, 10, text="Document Title", align="C", new_x="LMARGIN", new_y="NEXT")
 
-# Table data
+pdf.set_font("Helvetica", size=12)
+pdf.ln(10)
+pdf.multi_cell(0, 7, text="Your paragraph text goes here.")
+
+pdf.output("/workdir/outputs/document.pdf")
+print("PDF created: /workdir/outputs/document.pdf")
+```
+
+#### Tables with fpdf2
+
+```python
+from fpdf import FPDF
+
+pdf = FPDF()
+pdf.add_page()
+
 headers = ["Name", "Department", "Salary"]
 data = [
     ["Alice Smith", "Engineering", "$95,000"],
     ["Bob Jones", "Marketing", "$78,000"],
-    ["Carol White", "Sales", "$82,000"],
 ]
 
-# Column widths
 col_widths = [60, 50, 40]
 
-# Header row (bold)
+# Header row
 pdf.set_font("Helvetica", "B", 10)
 pdf.set_fill_color(200, 200, 200)
 for i, header in enumerate(headers):
@@ -77,32 +410,10 @@ for row in data:
         pdf.cell(col_widths[i], 10, cell, border=1, align="C")
     pdf.ln()
 
-pdf.output("/workdir/output/table.pdf")
-print("Table PDF created: /workdir/output/table.pdf")
+pdf.output("/workdir/outputs/table.pdf")
 ```
 
-### Adding Images
-
-```python
-from fpdf import FPDF
-
-pdf = FPDF()
-pdf.add_page()
-
-# Add image (supports PNG, JPEG, GIF)
-# Parameters: file, x, y, width (height auto-calculated to maintain aspect ratio)
-pdf.image("/workdir/input/logo.png", x=10, y=10, w=50)
-
-# Add text below image
-pdf.set_y(70)  # Move cursor below image
-pdf.set_font("Helvetica", size=12)
-pdf.cell(0, 10, text="Caption for the image above", align="C")
-
-pdf.output("/workdir/output/with_image.pdf")
-print("PDF with image created: /workdir/output/with_image.pdf")
-```
-
-### Multi-Page Document with Headers/Footers
+#### Multi-Page with Headers/Footers
 
 ```python
 from fpdf import FPDF
@@ -119,112 +430,87 @@ class ReportPDF(FPDF):
         self.cell(0, 10, f"Page {self.page_no()}/{{nb}}", align="C")
 
 pdf = ReportPDF()
-pdf.alias_nb_pages()  # Enable {nb} placeholder for total pages
-
-# Add multiple pages
+pdf.alias_nb_pages()
 for i in range(3):
     pdf.add_page()
     pdf.set_font("Helvetica", size=12)
     pdf.multi_cell(0, 10, f"Content for page {i + 1}...\n" * 10)
 
-pdf.output("/workdir/output/report.pdf")
-print("Multi-page report created: /workdir/output/report.pdf")
-```
-
-### Styled Text (Bold, Italic, Colors)
-
-```python
-from fpdf import FPDF
-
-pdf = FPDF()
-pdf.add_page()
-
-# Bold text
-pdf.set_font("Helvetica", "B", 14)
-pdf.cell(0, 10, "Bold Title", new_x="LMARGIN", new_y="NEXT")
-
-# Italic text
-pdf.set_font("Helvetica", "I", 12)
-pdf.cell(0, 10, "Italic subtitle", new_x="LMARGIN", new_y="NEXT")
-
-# Colored text
-pdf.set_text_color(255, 0, 0)  # Red
-pdf.set_font("Helvetica", size=12)
-pdf.cell(0, 10, "Red warning text", new_x="LMARGIN", new_y="NEXT")
-
-# Reset to black
-pdf.set_text_color(0, 0, 0)
-pdf.cell(0, 10, "Back to normal black text", new_x="LMARGIN", new_y="NEXT")
-
-# Background fill
-pdf.set_fill_color(255, 255, 0)  # Yellow background
-pdf.cell(0, 10, "Highlighted text", fill=True, new_x="LMARGIN", new_y="NEXT")
-
-pdf.output("/workdir/output/styled.pdf")
-print("Styled PDF created: /workdir/output/styled.pdf")
+pdf.output("/workdir/outputs/report.pdf")
 ```
 
 ---
 
-## Reading PDFs with PyPDF2
+## Creating PDFs from Markdown
 
-### Extract All Text
+For reports where you want professional formatting from markdown:
 
-```python
-from PyPDF2 import PdfReader
+### Local Pandoc (preferred — fast, no Lambda call)
 
-reader = PdfReader("/workdir/input/document.pdf")
+> **Note:** `pandoc file.md -o file.pdf` requires a LaTeX engine which is **not installed**
+> (too large for the Docker image). Use the `--pdf-engine=weasyprint` flag instead.
+>
+> If the source document contains embedded images, add `--extract-media=/workdir/outputs/`
+> to extract them so pandoc can reference them during conversion.
 
-# Get number of pages
-num_pages = len(reader.pages)
-print(f"PDF has {num_pages} pages")
+```bash
+# Markdown → PDF via Pandoc + WeasyPrint engine
+pandoc /workdir/outputs/report.md --pdf-engine=weasyprint -o /workdir/outputs/report.pdf
 
-# Extract text from all pages
-full_text = ""
-for i, page in enumerate(reader.pages):
-    text = page.extract_text()
-    full_text += f"\n--- Page {i + 1} ---\n{text}"
+# With embedded images (e.g. DOCX with images → PDF)
+pandoc /workdir/uploads/document.docx --pdf-engine=weasyprint --extract-media=/workdir/outputs/ -o /workdir/outputs/document.pdf
 
-print(full_text)
+# Markdown → DOCX (works natively, no extra engine needed)
+pandoc /workdir/outputs/report.md -o /workdir/outputs/report.docx
 ```
 
-### Extract Text from Specific Pages
+### Lambda Fallback
 
-```python
-from PyPDF2 import PdfReader
-
-reader = PdfReader("/workdir/input/document.pdf")
-
-# Extract from page 1 only (0-indexed)
-page_text = reader.pages[0].extract_text()
-print(page_text)
-
-# Extract from pages 2-5
-for i in range(1, 5):
-    if i < len(reader.pages):
-        print(f"\n--- Page {i + 1} ---")
-        print(reader.pages[i].extract_text())
+```bash
+python3 /workdir/tools/numa/convert_document.py \
+    --file-path "/workdir/outputs/report.md" \
+    --format pdf \
+    --mode markdown
 ```
 
-### Get PDF Metadata
+---
+
+## Visual QA for Generated PDFs
+
+For multi-page PDFs, always inspect at least 1-2 pages visually before delivering.
+
+### Render to Images
 
 ```python
-from PyPDF2 import PdfReader
-
-reader = PdfReader("/workdir/input/document.pdf")
-
-metadata = reader.metadata
-if metadata:
-    print(f"Title: {metadata.get('/Title', 'N/A')}")
-    print(f"Author: {metadata.get('/Author', 'N/A')}")
-    print(f"Subject: {metadata.get('/Subject', 'N/A')}")
-    print(f"Creator: {metadata.get('/Creator', 'N/A')}")
-    print(f"Producer: {metadata.get('/Producer', 'N/A')}")
-    print(f"Creation Date: {metadata.get('/CreationDate', 'N/A')}")
-
-print(f"Number of pages: {len(reader.pages)}")
-print(f"Is encrypted: {reader.is_encrypted}")
+import fitz
+doc = fitz.open("/workdir/outputs/report.pdf")
+for i, page in enumerate(doc):
+    page.get_pixmap(dpi=150).save(f"/workdir/outputs/page_{i+1}.png")
+doc.close()
 ```
+
+Or via CLI:
+```bash
+pdftoppm -jpeg -r 150 /workdir/outputs/report.pdf /workdir/outputs/page
+```
+
+### Visual Inspection Checklist
+
+After rendering, read the page images and check for:
+- Content spilling to unexpected extra pages
+- Footer/header text wrapping or stacking vertically
+- Massive dead space (half-empty pages)
+- Elements cut off at page boundaries
+- Tables splitting awkwardly (header on one page, rows on next)
+- Text overflow outside containers
+
+### Fix-and-Verify Loop
+
+1. Generate PDF → Render pages to images → Inspect
+2. List issues found
+3. Fix CSS/layout
+4. Re-render and confirm fixes
+5. Repeat until clean
 
 ---
 
@@ -236,80 +522,26 @@ print(f"Is encrypted: {reader.is_encrypted}")
 from PyPDF2 import PdfMerger
 
 merger = PdfMerger()
-
-# Add PDFs in order
-merger.append("/workdir/input/document1.pdf")
-merger.append("/workdir/input/document2.pdf")
-merger.append("/workdir/input/document3.pdf")
-
-# Write merged PDF
-merger.write("/workdir/output/merged.pdf")
+merger.append("/workdir/uploads/document1.pdf")
+merger.append("/workdir/uploads/document2.pdf")
+merger.write("/workdir/outputs/merged.pdf")
 merger.close()
-
-print("PDFs merged: /workdir/output/merged.pdf")
 ```
 
-### Merge Specific Pages
-
-```python
-from PyPDF2 import PdfMerger
-
-merger = PdfMerger()
-
-# Add all pages from first PDF
-merger.append("/workdir/input/document1.pdf")
-
-# Add only pages 1-3 from second PDF (0-indexed)
-merger.append("/workdir/input/document2.pdf", pages=(0, 3))
-
-# Add only page 5 from third PDF
-merger.append("/workdir/input/document3.pdf", pages=(4, 5))
-
-merger.write("/workdir/output/selective_merge.pdf")
-merger.close()
-
-print("Selective merge complete: /workdir/output/selective_merge.pdf")
-```
-
-### Split PDF into Individual Pages
+### Split PDF / Extract Pages
 
 ```python
 from PyPDF2 import PdfReader, PdfWriter
 
-reader = PdfReader("/workdir/input/document.pdf")
-
-for i, page in enumerate(reader.pages):
-    writer = PdfWriter()
-    writer.add_page(page)
-
-    output_path = f"/workdir/output/page_{i + 1}.pdf"
-    with open(output_path, "wb") as output_file:
-        writer.write(output_file)
-
-    print(f"Created: {output_path}")
-
-print(f"Split into {len(reader.pages)} files")
-```
-
-### Extract Page Range
-
-```python
-from PyPDF2 import PdfReader, PdfWriter
-
-reader = PdfReader("/workdir/input/document.pdf")
+reader = PdfReader("/workdir/uploads/document.pdf")
 writer = PdfWriter()
 
-# Extract pages 2-5 (0-indexed: 1-4)
-start_page = 1
-end_page = 5
-
-for i in range(start_page, min(end_page, len(reader.pages))):
+# Extract pages 2-5 (0-indexed)
+for i in range(1, min(5, len(reader.pages))):
     writer.add_page(reader.pages[i])
 
-with open("/workdir/output/extracted_pages.pdf", "wb") as output_file:
-    writer.write(output_file)
-
-print("Extracted pages 2-5: /workdir/output/extracted_pages.pdf")
+with open("/workdir/outputs/extracted.pdf", "wb") as f:
+    writer.write(f)
 ```
 
 ### Rotate Pages
@@ -317,18 +549,14 @@ print("Extracted pages 2-5: /workdir/output/extracted_pages.pdf")
 ```python
 from PyPDF2 import PdfReader, PdfWriter
 
-reader = PdfReader("/workdir/input/document.pdf")
+reader = PdfReader("/workdir/uploads/document.pdf")
 writer = PdfWriter()
-
 for page in reader.pages:
-    # Rotate 90 degrees clockwise
     page.rotate(90)
     writer.add_page(page)
 
-with open("/workdir/output/rotated.pdf", "wb") as output_file:
-    writer.write(output_file)
-
-print("Rotated PDF created: /workdir/output/rotated.pdf")
+with open("/workdir/outputs/rotated.pdf", "wb") as f:
+    writer.write(f)
 ```
 
 ### Add Watermark
@@ -336,231 +564,127 @@ print("Rotated PDF created: /workdir/output/rotated.pdf")
 ```python
 from PyPDF2 import PdfReader, PdfWriter
 
-# Read the main document
-reader = PdfReader("/workdir/input/document.pdf")
-
-# Read the watermark (single page PDF with transparent background)
-watermark = PdfReader("/workdir/input/watermark.pdf")
+reader = PdfReader("/workdir/uploads/document.pdf")
+watermark = PdfReader("/workdir/uploads/watermark.pdf")
 watermark_page = watermark.pages[0]
 
 writer = PdfWriter()
-
 for page in reader.pages:
     page.merge_page(watermark_page)
     writer.add_page(page)
 
-with open("/workdir/output/watermarked.pdf", "wb") as output_file:
-    writer.write(output_file)
-
-print("Watermarked PDF created: /workdir/output/watermarked.pdf")
-```
-
----
-
-## Creating Data Reports
-
-### DataFrame to PDF Table
-
-```python
-import pandas as pd
-from fpdf import FPDF
-
-# Sample DataFrame
-df = pd.DataFrame({
-    "Product": ["Widget A", "Widget B", "Widget C"],
-    "Q1 Sales": [1200, 1500, 800],
-    "Q2 Sales": [1400, 1300, 950],
-    "Q3 Sales": [1100, 1600, 1100],
-})
-
-pdf = FPDF()
-pdf.add_page()
-pdf.set_font("Helvetica", "B", 16)
-pdf.cell(0, 10, "Sales Report", align="C", new_x="LMARGIN", new_y="NEXT")
-pdf.ln(10)
-
-# Table header
-pdf.set_font("Helvetica", "B", 10)
-pdf.set_fill_color(66, 133, 244)
-pdf.set_text_color(255, 255, 255)
-
-col_width = 45
-for col in df.columns:
-    pdf.cell(col_width, 10, col, border=1, fill=True, align="C")
-pdf.ln()
-
-# Table data
-pdf.set_font("Helvetica", size=10)
-pdf.set_text_color(0, 0, 0)
-
-for _, row in df.iterrows():
-    for value in row:
-        pdf.cell(col_width, 10, str(value), border=1, align="C")
-    pdf.ln()
-
-pdf.output("/workdir/output/sales_report.pdf")
-print("Sales report created: /workdir/output/sales_report.pdf")
+with open("/workdir/outputs/watermarked.pdf", "wb") as f:
+    writer.write(f)
 ```
 
 ---
 
 ## Populating PDF Templates
 
-### Method 1: Fillable Forms (AcroForms)
-
-Check if the PDF has fillable fields:
-
-```python
-from PyPDF2 import PdfReader
-
-reader = PdfReader("/workdir/uploads/template.pdf")
-fields = reader.get_fields()
-
-if fields:
-    print("Fillable fields found:")
-    for name, field in fields.items():
-        field_type = field.get('/FT', 'unknown')
-        print(f"  {name}: {field_type}")
-else:
-    print("No fillable fields - use visual overlay method")
-```
-
-Fill the form:
+### Fillable Forms (AcroForms)
 
 ```python
 from PyPDF2 import PdfReader, PdfWriter
 
 reader = PdfReader("/workdir/uploads/form.pdf")
+
+# Check for fillable fields
+fields = reader.get_fields()
+if fields:
+    for name, field in fields.items():
+        print(f"  {name}: {field.get('/FT', 'unknown')}")
+
+# Fill form
 writer = PdfWriter()
 writer.append(reader)
-
 writer.update_page_form_field_values(
     writer.pages[0],
-    {"client_name": "Acme Corp", "invoice_number": "INV-2026-001", "total_amount": "$5,250.00"}
+    {"client_name": "Acme Corp", "invoice_number": "INV-2026-001"}
 )
-
-with open("/workdir/output/filled_form.pdf", "wb") as f:
+with open("/workdir/outputs/filled_form.pdf", "wb") as f:
     writer.write(f)
 ```
 
-### Method 2: Visual Overlay (Non-Fillable Templates)
-
-For templates without form fields, create an overlay with fpdf2 and merge it onto the template:
+### Visual Overlay (Non-Fillable Templates)
 
 ```python
 from fpdf import FPDF
 from PyPDF2 import PdfReader, PdfWriter
 import io
 
-# Step 1: Create overlay with fpdf2
+# Create overlay
 overlay = FPDF()
 overlay.add_page()
 overlay.set_font("Helvetica", size=12)
-
-# Add text at specific positions (x, y in mm from top-left)
-overlay.set_xy(100, 150)  # Adjust coordinates to match template
+overlay.set_xy(100, 150)
 overlay.cell(0, 0, "Acme Corporation")
 
-overlay.set_xy(100, 170)
-overlay.cell(0, 0, "INV-2026-001")
-
-# Convert to bytes
 overlay_bytes = io.BytesIO()
 overlay.output(overlay_bytes)
 overlay_bytes.seek(0)
 
-# Step 2: Merge onto template
-template = PdfReader("/workdir/uploads/invoice_template.pdf")
+# Merge onto template
+template = PdfReader("/workdir/uploads/template.pdf")
 overlay_reader = PdfReader(overlay_bytes)
-
 writer = PdfWriter()
 page = template.pages[0]
 page.merge_page(overlay_reader.pages[0])
 writer.add_page(page)
 
-with open("/workdir/output/filled_invoice.pdf", "wb") as f:
+with open("/workdir/outputs/filled.pdf", "wb") as f:
     writer.write(f)
 ```
 
-**Tip:** Use `extract_content.py` with vision AI to analyze the template and determine exact coordinates for text placement.
-
 ---
 
-## Creating High-Quality PDFs from Markdown
+## Local Conversion via LibreOffice
 
-For reports, documents, or any content where you want **professional formatting**, consider writing markdown first and then converting to PDF:
+Convert DOCX, PPTX, XLSX to PDF locally. Both `execute_script` and the Bash tool work for `soffice` and `pandoc`. Prefer `execute_script` for inline code per system prompt convention.
 
-```bash
-# Write your content as markdown (manually or have the agent generate it)
-# Then convert to PDF with excellent formatting:
-python3 /workdir/tools/numa/convert_document.py \
-    --file-path "/workdir/session/report.md" \
-    --format pdf \
-    --mode markdown
+```python
+# DOCX → PDF (via execute_script with interpreter="bash")
+import subprocess
+subprocess.run(["soffice", "--headless", "--convert-to", "pdf", "--outdir", "/workdir/outputs/", "/workdir/uploads/document.docx"], check=True)
 ```
 
-**Why this approach works well:**
-- Pandoc + LibreOffice produce professional typography
-- Markdown is easier to write and review than fpdf2 code
-- Supports headings, lists, tables, code blocks automatically
-- Great for reports, memos, documentation
+Or as bash commands (via execute_script with interpreter="bash"):
+```bash
+# DOCX → PDF
+soffice --headless --convert-to pdf --outdir /workdir/outputs/ /workdir/uploads/document.docx
 
-**When to use each approach:**
-
-| Need | Best Approach |
-|------|---------------|
-| Quick report with text/tables | Write markdown → `convert_document.py` |
-| Pixel-perfect positioning | fpdf2 (manual coordinates) |
-| Fill existing PDF template | PyPDF2 form fields or overlay |
-| Programmatic data tables | fpdf2 or pandas → markdown |
+# PPTX → PDF (useful for visual QA of presentations)
+soffice --headless --convert-to pdf --outdir /workdir/outputs/ /workdir/uploads/presentation.pptx
+```
 
 ---
 
-## Best Practices
-
-1. **Always use `/workdir/output/` for generated PDFs** - This ensures files are synced to S3
-2. **Check file exists before reading** - Use `os.path.exists()` before opening PDFs
-3. **Handle encryption** - Some PDFs are password-protected; check `reader.is_encrypted`
-4. **Use meaningful filenames** - Include dates or identifiers in output names
-5. **Close resources** - Use context managers (`with`) or call `.close()` on writers/mergers
-
-## Common Issues
-
-| Issue | Solution |
-|-------|----------|
-| "No /workdir/input/file.pdf" | Check the file path; list files with `ls /workdir/input/` |
-| Empty text extraction | PDF may contain scanned images, not text - use `extract_content.py` instead |
-| Font not found | Use built-in fonts: Helvetica, Times, Courier |
-| Large file size | Compress images before embedding; use JPEG over PNG |
-
----
-
-## When to Use extract_content.py vs PyPDF2
-
-The `extract_content.py` Numa tool uses advanced OCR and vision AI to extract text from complex documents. Use it when PyPDF2 can't extract text properly.
+## When to Use extract_content.py vs Local Tools
 
 | Scenario | Recommended Tool |
 |----------|-----------------|
-| Text-based PDFs, simple extraction | PyPDF2 (faster, local) |
-| Scanned PDFs, images of documents | extract_content.py (uses vision AI) |
-| Handwritten text, forms | extract_content.py |
-| Complex layouts, tables in images | extract_content.py |
-| Large documents (>50 pages) | extract_content.py (handles chunking) |
-| Merging, splitting, rotating PDFs | PyPDF2 (manipulation operations) |
-| Creating new PDFs from scratch | fpdf2 |
+| Text-based PDFs, simple text | **pdfplumber** (local, fast, layout-aware) |
+| Tables in PDFs | **pdfplumber** (local, `extract_tables()`) |
+| Scanned PDFs, images of text | `extract_content.py` (uses vision AI) |
+| Handwritten text, forms | `extract_content.py` |
+| Complex layouts, multi-column | Try pdfplumber first, fall back to `extract_content.py` |
+| Large documents (>50 pages) | `extract_content.py` (handles chunking) |
+| Extract embedded images | **PyMuPDF (fitz)** |
+| Render pages as images | **pdf2image** or **PyMuPDF** |
+| Merge/split/rotate | **PyPDF2** |
+| Create from HTML+CSS | **WeasyPrint** |
+| Create with precise layout | **reportlab** |
+| Quick simple PDFs | **fpdf2** |
 
-**Example - Extract from scanned PDF:**
+**Example — Extract from scanned PDF:**
 ```bash
 python3 /workdir/tools/numa/extract_content.py \
     --file-path "/workdir/uploads/scanned_invoice.pdf"
 ```
 
-The extracted content is saved to `/workdir/session/extracted_scanned_invoice.txt`.
-
-**When PyPDF2 returns empty or garbled text**, it's usually because:
+**When pdfplumber or PyPDF2 return empty or garbled text**, it's usually because:
 - The PDF is scanned (images of text, not actual text)
 - The PDF uses custom fonts without proper encoding
-- The text is embedded in graphics or forms
+- The text is embedded in graphics
 
 In these cases, switch to `extract_content.py` which uses vision AI to "read" the document visually.
 
@@ -568,89 +692,55 @@ In these cases, switch to `extract_content.py` which uses vision AI to "read" th
 
 ## Document Conversion (PDF ↔ DOCX)
 
-The `convert_document.py` tool supports **direct file conversion** between PDF and DOCX using LibreOffice.
-
-### Direct Conversion (Recommended)
-
-Use `--mode file` for direct PDF ↔ DOCX conversion:
+### Local Conversion (preferred)
 
 ```bash
-# PDF → DOCX (direct conversion)
+# DOCX → PDF (local, fast)
+soffice --headless --convert-to pdf --outdir /workdir/outputs/ /workdir/uploads/document.docx
+
+# PDF → DOCX (local, variable quality)
+soffice --headless --convert-to docx --outdir /workdir/outputs/ /workdir/uploads/document.pdf
+```
+
+### Lambda Fallback
+
+```bash
+# PDF → DOCX
 python3 /workdir/tools/numa/convert_document.py \
     --file-path "/workdir/uploads/document.pdf" \
-    --format docx \
-    --mode file
-# → /workdir/session/converted_document.docx
+    --format docx --mode file
 
-# DOCX → PDF (direct conversion)
+# DOCX → PDF
 python3 /workdir/tools/numa/convert_document.py \
     --file-path "/workdir/uploads/document.docx" \
-    --format pdf \
-    --mode file
-# → /workdir/session/converted_document.pdf
+    --format pdf --mode file
 ```
 
-### convert_document.py Usage
+---
 
-```
-python3 /workdir/tools/numa/convert_document.py \
-    --file-path "/workdir/uploads/document.pdf" \
-    --format pdf|docx \
-    --mode file|markdown \
-    [--title "Optional Document Title"]
-```
+## Best Practices
 
-**Parameters:**
-- `--file-path, -f` - Path to input file (required)
-- `--format, -o` - Output format: `pdf` or `docx` (required)
-- `--mode, -m` - Conversion mode (optional, default: `markdown`)
-  - `file` - Direct DOCX ↔ PDF conversion using LibreOffice
-  - `markdown` - Convert markdown/text to PDF/DOCX using Pandoc
-- `--title, -t` - Optional document title (used for filename)
+1. **Always use `/workdir/outputs/` for generated PDFs** — ensures files are synced to S3
+2. **Check file exists before reading** — use `Path(path).exists()` (from `pathlib`) before opening PDFs
+3. **Handle encryption** — some PDFs are password-protected; check `reader.is_encrypted`
+4. **Use meaningful filenames** — include dates or identifiers in output names
+5. **Close resources** — use context managers (`with`) or call `.close()` on writers/mergers
+6. **Choose the right tool** — WeasyPrint for styled docs, pdfplumber for reading, PyPDF2 for manipulation
 
-### Conversion Quality
+## Common Issues
 
-| Conversion | Quality | Notes |
-|------------|---------|-------|
-| DOCX → PDF | ✅ Excellent | LibreOffice handles this very well |
-| PDF → DOCX | ⚠️ Variable | PDFs are presentation format; complex layouts may not convert cleanly |
-| Markdown → PDF/DOCX | ✅ Good | Works well for properly formatted markdown |
+| Issue | Solution |
+|-------|----------|
+| Empty text extraction | PDF may be scanned — use `extract_content.py` instead |
+| Font not found (fpdf2) | Use built-in fonts: Helvetica, Times, Courier |
+| Large file size | Compress images before embedding; use JPEG over PNG |
+| WeasyPrint missing fonts | System fonts are available; use common font families |
+| pdfplumber table extraction fails | Try `page.extract_tables(table_settings={...})` with custom settings |
 
-### PDF → DOCX Limitations
+---
 
-PDF is a **presentation format** (designed for viewing, not editing). When converting PDF → DOCX:
+## File Paths
 
-**Works well:**
-- Simple text-based PDFs
-- Basic formatting (bold, italic, headings)
-- Single-column layouts
-
-**May not work well:**
-- Complex multi-column layouts
-- Embedded images and graphics
-- Scanned PDFs (need OCR first - use `extract_content.py`)
-- Forms with fillable fields
-- Documents with precise positioning
-
-### Alternative: Extract + Convert (for complex PDFs)
-
-For complex or scanned PDFs, use the two-step approach:
-
-```bash
-# Step 1: Extract content using vision AI
-python3 /workdir/tools/numa/extract_content.py \
-    --file-path "/workdir/uploads/scanned_document.pdf"
-# → /workdir/session/extracted_scanned_document.txt
-
-# Step 2: Convert extracted markdown to DOCX
-python3 /workdir/tools/numa/convert_document.py \
-    --file-path "/workdir/session/extracted_scanned_document.txt" \
-    --format docx \
-    --mode markdown
-# → /workdir/session/converted_scanned_document.docx
-```
-
-This approach uses vision AI to "read" the document, which works better for:
-- Scanned documents
-- PDFs with images of text
-- Complex layouts where direct conversion fails
+- **Input files**: `/workdir/uploads/`
+- **Output files**: `/workdir/outputs/`
+- **Working files**: `/workdir/outputs/`

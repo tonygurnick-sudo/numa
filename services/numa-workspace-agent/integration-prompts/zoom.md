@@ -38,7 +38,7 @@ Before performing Zoom operations, establish context:
      ```
      **IMPORTANT:** Always include `?include_fields=download_access_token` — without it, the transcript cannot be downloaded.
 
-  3. **Transcript files are auto-downloaded:** When the recordings response contains transcript entries and a `download_access_token`, the VTT file is automatically downloaded to `/workdir/session/integrations-results/transcript-{meetingId}.vtt`. Read the file directly — no additional download step needed.
+  3. **Transcript files are auto-downloaded:** When the recordings response contains transcript entries and a `download_access_token`, the VTT file is automatically downloaded to `/workdir/outputs/integrations-results/transcript-{meetingId}.vtt`. Read the file directly — no additional download step needed.
 
   4. **Limitations:**
      - The recordings API may only return meetings the connected user **hosted** (not meetings they attended as a participant)

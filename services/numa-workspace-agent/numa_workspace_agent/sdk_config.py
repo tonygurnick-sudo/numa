@@ -278,6 +278,10 @@ ALLOWED_TOOLS = [
     "Bash(mkdir:*)",
     "Bash(mv:*)",
     "Bash(cp:*)",
+    # Node.js runtime (PowerPoint generation, data processing scripts, etc.)
+    "Bash(node:*)",
+    "Bash(npm:*)",
+    "Bash(npx:*)",
     # Common data analysis tools
     "Bash(sqlite3:*)",  # Database queries
     "Bash(jq:*)",  # JSON processing
@@ -289,6 +293,13 @@ ALLOWED_TOOLS = [
     "Bash(diff:*)",  # File comparison
     "Bash(grep:*)",  # Pattern matching (useful with pipes)
     "Bash(xargs:*)",  # Build command lines from input
+    # Document handling binaries (pre-installed in container)
+    "Bash(soffice:*)",  # LibreOffice headless (DOCX/PPTX → PDF)
+    "Bash(pdftoppm:*)",  # PDF → images (visual QA)
+    "Bash(pdftotext:*)",  # PDF text extraction
+    "Bash(pdfimages:*)",  # PDF image extraction
+    "Bash(pandoc:*)",  # Document format conversion
+    "Bash(qpdf:*)",  # PDF manipulation (merge, split)
 ]
 
 # Tools that Claude cannot use

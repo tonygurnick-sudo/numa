@@ -35,7 +35,7 @@ interface WorkspaceChatMarkdownProps {
 
 /**
  * Build S3 key from a workspace-relative path
- * Handles paths like /workdir/session/file.md or workdir/uploads/file.csv
+ * Handles paths like /workdir/outputs/file.md or workdir/uploads/file.csv
  */
 const buildS3KeyForPath = (relativePath: string, userSub: string, conversationId: string): string => {
   let normalized = relativePath.trim();

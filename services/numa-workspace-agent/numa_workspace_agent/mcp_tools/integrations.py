@@ -6,7 +6,7 @@ Connect API via the workspace-chat-tools Lambda. Actions requiring
 side effects (run_action, proxy_request) go through human-in-the-loop
 approval before execution.
 
-Results are saved to files in /workdir/session/integrations-results/ to
+Results are saved to files in /workdir/outputs/integrations-results/ to
 avoid flooding the agent's context window with large API responses.
 Files returned via Pipedream's file stash are automatically downloaded
 into the same directory.
@@ -25,7 +25,7 @@ from claude_agent_sdk import tool
 logger = logging.getLogger(__name__)
 
 # Results directory for integration outputs
-RESULTS_DIR = "/workdir/session/integrations-results"
+RESULTS_DIR = "/workdir/outputs/integrations-results"
 
 # Preview length for truncated results shown inline
 PREVIEW_LENGTH = 500

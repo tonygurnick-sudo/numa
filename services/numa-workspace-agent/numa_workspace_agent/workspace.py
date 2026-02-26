@@ -31,7 +31,7 @@ class WorkspacePaths(TypedDict):
     conv_meta: Path  # /workdir/.system/current_conv.json - active conversation tracking
     workflows: Path  # /workdir/chat-workflows - persistent workflows (GLOBAL)
     uploads: Path  # /workdir/uploads - conversation uploads
-    session: Path  # /workdir/session - conversation session files
+    outputs: Path  # /workdir/outputs - conversation output files
     agent_files: Path  # /workdir/agent-files - agent reference files (per-conversation)
 
 
@@ -47,7 +47,7 @@ def get_workspace_paths() -> WorkspacePaths:
     │   └── trace.jsonl         # Current conversation trace
     ├── chat-workflows/         # Persistent workflows (GLOBAL)
     ├── uploads/                # Current conversation uploads
-    ├── session/                # Current conversation session files
+    ├── outputs/                # Current conversation output files
     ├── agent-files/            # Agent reference files (per-conversation)
     └── (root files)            # Per-conversation (cleared on switch)
 
@@ -65,7 +65,7 @@ def get_workspace_paths() -> WorkspacePaths:
         conv_meta=system_dir / "current_conv.json",
         workflows=root / "chat-workflows",
         uploads=root / "uploads",
-        session=root / "session",
+        outputs=root / "outputs",
         agent_files=root / "agent-files",
     )
 
@@ -85,7 +85,7 @@ def ensure_directories() -> WorkspacePaths:
     # DISABLED: chat-workflows feature temporarily disabled
     # paths["workflows"].mkdir(parents=True, exist_ok=True)
     paths["uploads"].mkdir(parents=True, exist_ok=True)
-    paths["session"].mkdir(parents=True, exist_ok=True)
+    paths["outputs"].mkdir(parents=True, exist_ok=True)
 
     logger.debug("Ensured workspace directories")
     return paths
@@ -181,7 +181,7 @@ def clear_conversation_files() -> int:
 
     Clears:
     - /uploads/ contents
-    - /session/ contents
+    - /outputs/ contents
     - /agent-files/ contents
     - Root-level files (not in protected dirs)
     - /.system/trace.jsonl
@@ -197,8 +197,8 @@ def clear_conversation_files() -> int:
     paths = get_workspace_paths()
     deleted = 0
 
-    # Clear uploads, session, and agent-files directories
-    for dir_path in [paths["uploads"], paths["session"], paths["agent_files"]]:
+    # Clear uploads, outputs, and agent-files directories
+    for dir_path in [paths["uploads"], paths["outputs"], paths["agent_files"]]:
         if not dir_path.exists():
             continue
 
@@ -221,12 +221,12 @@ def clear_conversation_files() -> int:
             logger.warning("Failed to delete trace", error=str(e))
 
     # Clear root-level files and non-protected directories
-    # Protected: .system, chat-workflows, uploads, session, agent-files, tools
+    # Protected: .system, chat-workflows, uploads, outputs, agent-files, tools
     protected_dirs = {
         ".system",
         "chat-workflows",
         "uploads",
-        "session",
+        "outputs",
         "agent-files",
         "tools",
     }
@@ -272,7 +272,7 @@ def get_workspace_files(max_files: int = 100) -> list[dict]:
     List files in the persistent chat-workflows directory.
 
     Only chat-workflows/ is globally persistent. Other directories
-    (uploads, session, root files) are per-conversation.
+    (uploads, outputs, root files) are per-conversation.
 
     Args:
         max_files: Maximum number of files to return
@@ -314,29 +314,29 @@ def get_workspace_files(max_files: int = 100) -> list[dict]:
 
 def cleanup_session_files() -> int:
     """
-    Clean up session files.
+    Clean up output files.
 
     Returns:
         Number of files deleted
     """
     paths = get_workspace_paths()
-    session_dir = paths["session"]
+    outputs_dir = paths["outputs"]
 
-    if not session_dir.exists():
+    if not outputs_dir.exists():
         return 0
 
     deleted = 0
-    for file_path in session_dir.rglob("*"):
+    for file_path in outputs_dir.rglob("*"):
         if file_path.is_file():
             try:
                 file_path.unlink()
                 deleted += 1
             except Exception as e:
                 logger.warning(
-                    "Failed to delete session file", path=str(file_path), error=str(e)
+                    "Failed to delete output file", path=str(file_path), error=str(e)
                 )
 
-    logger.info("Cleaned up session files", deleted=deleted)
+    logger.info("Cleaned up output files", deleted=deleted)
     return deleted
 
 

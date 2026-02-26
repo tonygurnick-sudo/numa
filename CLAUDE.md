@@ -200,7 +200,7 @@ The `numa-workspace-agent` is the **default and primary chat backend**, running 
 ### Core concepts
 
 - **Per‑conversation MicroVM**: Each conversation gets its own isolated MicroVM (`conv-{conversationId}`). The proxy Lambda routes requests to the correct session. No cross‑conversation contamination.
-- **Persistent workspace (`/workdir`)**: Files in `/workdir/uploads/` and `/workdir/session/` are per‑conversation and synced to S3 after each request. Users can upload files, and the agent can create/edit files that persist.
+- **Persistent workspace (`/workdir`)**: Files in `/workdir/uploads/` and `/workdir/outputs/` are per‑conversation and synced to S3 after each request. Users can upload files, and the agent can create/edit files that persist.
 - **Skills & plugins**: Located in `/app/plugins/numa/skills/` (read‑only, outside workspace so the AI cannot modify them). Skills include: knowledge‑search, web‑search, pdf‑handling, docx‑handling, spreadsheet‑handling, data‑analysis, integrations, and agents.
 - **MCP tools**: `execute_script` (sandboxed Python/Bash/Node), integration tools (`run_action`, `configure_props`, `proxy_request`), and workspace tools (KB query, web search, document conversion, content extraction).
 - **Security hooks**: PreToolUse/PostToolUse hooks block dangerous imports (os, subprocess, socket, etc.), directory traversal, access to `.system/` paths, and obfuscation attempts. Container runs as non‑root (UID 1000).
@@ -376,6 +376,7 @@ CloudFront routing: The frontend distribution forwards `/api/*` to API Gateway a
 - Services (Docker/AgentCore)
   - Requires Docker Desktop running.
   - Package: `cd services && ./package-service.sh numa-workspace-agent`
+  - Force full rebuild (no cache): `DOCKER_BUILD_OPTS="--no-cache" ./package-service.sh numa-workspace-agent`
   - Output: `infra/assets/artifacts/<service-name>/image.tar`
   - Then deploy via CDKTF as usual (image is pushed to ECR).
   - Local dev: `cd services/numa-workspace-agent && poetry install && poetry run uvicorn numa_workspace_agent.main:app --reload --port 8080`

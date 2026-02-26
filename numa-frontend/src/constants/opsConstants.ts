@@ -56,22 +56,21 @@ export type TeamPresetConfig = {
 
 export const TEAM_PRESETS: TeamPresetConfig[] = [
   {
-    id: 'standard',
-    name: 'Normal',
-    description: 'Backlog zone + board zone — full workflow with sprint support.',
-    mode: 'normal',
+    id: 'development',
+    name: 'Product Development',
+    description: 'Backlog + Sprints. Perfect for software engineering and product teams.',
+    mode: 'development',
     zones: [
       {
         name: 'Backlog',
         zoneType: 'backlog',
         stages: [
           { name: 'New', statusType: 'backlog' },
-          { name: 'Backlog', statusType: 'backlog' },
           { name: 'Ready', statusType: 'scoped' },
         ],
       },
       {
-        name: 'Board',
+        name: 'Sprint',
         zoneType: 'board',
         stages: [
           { name: 'To Do', statusType: 'queued' },
@@ -83,9 +82,70 @@ export const TEAM_PRESETS: TeamPresetConfig[] = [
     ],
   },
   {
+    id: 'support',
+    name: 'Support Desk',
+    description: 'Kanban board for managing incoming tickets and requests.',
+    mode: 'support',
+    zones: [
+      {
+        name: 'Tickets',
+        zoneType: 'board',
+        stages: [
+          { name: 'New', statusType: 'queued' },
+          { name: 'Investigating', statusType: 'active' },
+          { name: 'Pending', statusType: 'queued' },
+          { name: 'Resolved', statusType: 'completed' },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'monthly',
+    name: 'Monthly Cycles',
+    description: 'Backlog + Board planned in monthly periods (e.g., Marketing, Finance).',
+    mode: 'monthly',
+    zones: [
+      {
+        name: 'Pipeline',
+        zoneType: 'backlog',
+        stages: [
+          { name: 'New', statusType: 'backlog' },
+          { name: 'Quoted / Approved', statusType: 'scoped' },
+        ],
+      },
+      {
+        name: 'Board',
+        zoneType: 'board',
+        stages: [
+          { name: 'Queued', statusType: 'queued' },
+          { name: 'In Progress', statusType: 'active' },
+          { name: 'Done', statusType: 'completed' },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'solo',
+    name: 'Solo Consultant',
+    description: 'Simple kanban for managing personal client work.',
+    mode: 'solo',
+    zones: [
+      {
+        name: 'Work',
+        zoneType: 'board',
+        stages: [
+          { name: 'Inbox', statusType: 'queued' },
+          { name: 'Active', statusType: 'active' },
+          { name: 'Waiting', statusType: 'queued' },
+          { name: 'Done', statusType: 'completed' },
+        ],
+      },
+    ],
+  },
+  {
     id: 'simple',
-    name: 'Basic',
-    description: 'Single board zone — simple kanban (e.g., To Do / In Progress / Done).',
+    name: 'Basic Kanban',
+    description: 'Single board zone with simple columns (To Do / In Progress / Done).',
     mode: 'basic',
     zones: [
       {
@@ -120,18 +180,39 @@ export type TeamPresetInfo = {
 
 export const TEAM_PRESETS_INFO: TeamPresetInfo[] = [
   {
+    mode: 'development',
+    name: 'Product Development',
+    nameKey: 'teams.modeDevelopment',
+    descriptionKey: 'teams.modeDevelopmentDesc',
+    defaultPreset: 'development',
+  },
+  {
+    mode: 'support',
+    name: 'Support Desk',
+    nameKey: 'teams.modeSupport',
+    descriptionKey: 'teams.modeSupportDesc',
+    defaultPreset: 'support',
+  },
+  {
+    mode: 'monthly',
+    name: 'Monthly Cycles',
+    nameKey: 'teams.modeMonthly',
+    descriptionKey: 'teams.modeMonthlyDesc',
+    defaultPreset: 'monthly',
+  },
+  {
+    mode: 'solo',
+    name: 'Solo Consultant',
+    nameKey: 'teams.modeSolo',
+    descriptionKey: 'teams.modeSoloDesc',
+    defaultPreset: 'solo',
+  },
+  {
     mode: 'basic',
-    name: 'Basic',
+    name: 'Basic Kanban',
     nameKey: 'teams.modeBasic',
     descriptionKey: 'teams.modeBasicDesc',
     defaultPreset: 'simple',
-  },
-  {
-    mode: 'normal',
-    name: 'Normal',
-    nameKey: 'teams.modeNormal',
-    descriptionKey: 'teams.modeNormalDesc',
-    defaultPreset: 'standard',
   },
 ];
 

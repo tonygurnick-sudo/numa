@@ -201,7 +201,7 @@ curl -s -X POST http://localhost:8080/invocations \
 **What to verify:**
 - `system` init shows only `Glob, Grep, Read, Write, TodoWrite` (no Bash, no MCP tools)
 - MCP servers: empty `[]`
-- Agent writes `/workdir/session/result.json` with structured output
+- Agent writes `/workdir/outputs/result.json` with structured output
 - `result` event contains the summary text
 
 ### Test: Tool Comparison (quick validation)

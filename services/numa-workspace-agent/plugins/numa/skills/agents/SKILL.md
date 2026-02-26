@@ -165,14 +165,12 @@ python3 /workdir/tools/numa/numa-agents.py create \
 {
   "autoToolsEnabled": true,
   "webSearchEnabled": true,
-  "createAgentEnabled": false,
   "allowedKnowledgeBases": ["company", "kb-uuid"]
 }
 ```
 
 - `autoToolsEnabled` - Enable automatic tool selection (default: true)
 - `webSearchEnabled` - Allow web search (default: false)
-- `createAgentEnabled` - Allow creating sub-agents (default: false)
 - `allowedKnowledgeBases` - Which KBs can be queried (null = all, [] = none, array = specific)
 
 ### Visibility Rules
@@ -254,7 +252,7 @@ Agents can have reference files attached that provide context for answering ques
 
 Files can be attached from these workspace locations:
 - `/workdir/uploads/` - User-uploaded files
-- `/workdir/session/` - Files created during the conversation
+- `/workdir/outputs/` - Files created during the conversation
 - `/workdir/chat-workflows/` - Workflow output files
 
 ### How It Works
@@ -376,7 +374,6 @@ Based on the use case, ask about the tools and capabilities the agent needs:
 - **Web Search:** "Will this agent need to search the web for current information?"
 - **Knowledge Bases:** "Should it have access to your company's knowledge bases?"
   - If yes: "All knowledge bases, or specific ones?"
-- **Sub-agent creation:** Only ask if the use case suggests complex orchestration needs
 
 Build the `toolsConfig` based on their answers:
 ```json

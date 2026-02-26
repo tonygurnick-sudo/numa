@@ -21,7 +21,7 @@ doc = Document('/workdir/uploads/template.docx')
 doc = Document()
 
 # Save document
-doc.save('/workdir/output/result.docx')
+doc.save('/workdir/outputs/result.docx')
 ```
 
 ---
@@ -66,8 +66,8 @@ run.bold = True
 p.add_run(' followed by normal text.')
 
 # Save
-doc.save('/workdir/output/new_document.docx')
-print("Created: /workdir/output/new_document.docx")
+doc.save('/workdir/outputs/new_document.docx')
+print("Created: /workdir/outputs/new_document.docx")
 ```
 
 ### Adding Tables
@@ -95,7 +95,7 @@ for row_idx, row_data in enumerate(data, start=1):
     for col_idx, value in enumerate(row_data):
         table.rows[row_idx].cells[col_idx].text = value
 
-doc.save('/workdir/output/with_table.docx')
+doc.save('/workdir/outputs/with_table.docx')
 ```
 
 ### Text Styling
@@ -123,7 +123,7 @@ run.font.size = Pt(18)
 run = p.add_run('Colored')
 run.font.color.rgb = RGBColor(255, 0, 0)  # Red
 
-doc.save('/workdir/output/styled.docx')
+doc.save('/workdir/outputs/styled.docx')
 ```
 
 ### Adding Images
@@ -159,7 +159,7 @@ paragraph = cell.paragraphs[0]
 run = paragraph.add_run()
 run.add_picture('/workdir/uploads/logo.png', width=Inches(1.5))
 
-doc.save('/workdir/output/with_images.docx')
+doc.save('/workdir/outputs/with_images.docx')
 ```
 
 **Common image use cases:**
@@ -175,7 +175,17 @@ doc.save('/workdir/output/with_images.docx')
 
 ## Reading DOCX Files
 
-### Extract All Text
+### Quick Text Extraction with markitdown
+
+The fastest way to extract text content from a DOCX file:
+
+```bash
+python -m markitdown /workdir/uploads/document.docx
+```
+
+This outputs the document content as markdown — great for quick review or processing.
+
+### Extract All Text with python-docx
 
 ```python
 from docx import Document
@@ -193,7 +203,7 @@ for table in doc.tables:
         print(' | '.join(row_text))
 ```
 
-### Analyze Document Structure
+### Analyse Document Structure
 
 ```python
 from docx import Document
@@ -336,7 +346,7 @@ for table in doc.tables:
                 if old_text in cell.text:
                     cell.text = cell.text.replace(old_text, new_text)
 
-doc.save('/workdir/output/filled.docx')
+doc.save('/workdir/outputs/filled.docx')
 ```
 
 #### Preserving Formatting During Replacement
@@ -366,7 +376,7 @@ def replace_preserving_format(doc, old_text, new_text):
 
 doc = Document('/workdir/uploads/template.docx')
 replace_preserving_format(doc, '<Name>', 'Jane Doe')
-doc.save('/workdir/output/formatted.docx')
+doc.save('/workdir/outputs/formatted.docx')
 ```
 
 #### Filling Table Rows with Data
@@ -406,7 +416,7 @@ for i, item in enumerate(line_items):
     row.cells[2].text = f"${item['rate']:.2f}"
     row.cells[3].text = f"${item['total']:.2f}"
 
-doc.save('/workdir/output/invoice_filled.docx')
+doc.save('/workdir/outputs/invoice_filled.docx')
 ```
 
 #### Adding Paragraphs at Specific Locations
@@ -431,7 +441,7 @@ run = p.add_run('Important note: ')
 run.bold = True
 p.add_run('This is additional context.')
 
-doc.save('/workdir/output/with_paragraphs.docx')
+doc.save('/workdir/outputs/with_paragraphs.docx')
 ```
 
 ### Step 5: Handle Pagination
@@ -515,7 +525,7 @@ def validate_filled_document(doc_path, expected_values):
 
 # Example usage
 result = validate_filled_document(
-    '/workdir/output/invoice.docx',
+    '/workdir/outputs/invoice.docx',
     ['Arcanum Solutions', '$1,500.00', 'John Smith']
 )
 print(f"Found: {result['values_found']}")
@@ -526,13 +536,23 @@ print(f"Missing: {result['values_missing']}")
 
 ## Creating High-Quality DOCX from Markdown
 
-For reports, documents, or any content where you want **clean formatting without manual python-docx code**, consider writing markdown first and then converting to DOCX:
+For reports and documents where you want **clean formatting without manual python-docx code**, write markdown and convert with Pandoc.
+
+### Local Pandoc (preferred — fast, no Lambda call)
 
 ```bash
-# Write your content as markdown (manually or have the agent generate it)
-# Then convert to DOCX with proper formatting:
+# Markdown → DOCX (local, instant)
+pandoc /workdir/outputs/report.md -o /workdir/outputs/report.docx
+
+# With a reference doc for styling
+pandoc /workdir/outputs/report.md -o /workdir/outputs/report.docx --reference-doc=/workdir/uploads/template.docx
+```
+
+### Lambda Fallback
+
+```bash
 python3 /workdir/tools/numa/convert_document.py \
-    --file-path "/workdir/session/report.md" \
+    --file-path "/workdir/outputs/report.md" \
     --format docx \
     --mode markdown
 ```
@@ -547,7 +567,7 @@ python3 /workdir/tools/numa/convert_document.py \
 
 | Need | Best Approach |
 |------|---------------|
-| Quick report with text/tables | Write markdown → `convert_document.py` |
+| Quick report with text/tables | Write markdown → `pandoc` (local) |
 | Fill existing DOCX template | python-docx (this skill) |
 | Complex formatting/styling | python-docx (this skill) |
 | Programmatic data insertion | python-docx (this skill) |
@@ -582,53 +602,47 @@ python3 /workdir/tools/numa/convert_document.py \
 
 ## Document Conversion (PDF ↔ DOCX)
 
-The `convert_document.py` tool supports **direct file conversion** between DOCX and PDF using LibreOffice.
-
-### Direct Conversion (Recommended)
-
-Use `--mode file` for direct DOCX ↔ PDF conversion:
+### Local Conversion (preferred — fast, no Lambda call)
 
 ```bash
-# DOCX → PDF (direct conversion) - Excellent quality
+# DOCX → PDF (local, excellent quality)
+soffice --headless --convert-to pdf --outdir /workdir/outputs/ /workdir/uploads/document.docx
+
+# PDF → DOCX (local, variable quality)
+soffice --headless --convert-to docx --outdir /workdir/outputs/ /workdir/uploads/document.pdf
+
+# Markdown → DOCX (local, instant)
+pandoc /workdir/outputs/report.md -o /workdir/outputs/report.docx
+```
+
+### Lambda Fallback
+
+Use `convert_document.py` when local tools aren't sufficient:
+
+```bash
+# DOCX → PDF
 python3 /workdir/tools/numa/convert_document.py \
     --file-path "/workdir/uploads/document.docx" \
-    --format pdf \
-    --mode file
-# → /workdir/session/converted_document.pdf
+    --format pdf --mode file
 
-# PDF → DOCX (direct conversion) - Variable quality
+# PDF → DOCX
 python3 /workdir/tools/numa/convert_document.py \
     --file-path "/workdir/uploads/document.pdf" \
-    --format docx \
-    --mode file
-# → /workdir/session/converted_document.docx
-```
+    --format docx --mode file
 
-### convert_document.py Usage
-
-```
+# Markdown → DOCX
 python3 /workdir/tools/numa/convert_document.py \
-    --file-path "/workdir/uploads/document.docx" \
-    --format pdf|docx \
-    --mode file|markdown \
-    [--title "Optional Document Title"]
+    --file-path "/workdir/outputs/report.md" \
+    --format docx --mode markdown
 ```
-
-**Parameters:**
-- `--file-path, -f` - Path to input file (required)
-- `--format, -o` - Output format: `pdf` or `docx` (required)
-- `--mode, -m` - Conversion mode (optional, default: `markdown`)
-  - `file` - Direct DOCX ↔ PDF conversion using LibreOffice
-  - `markdown` - Convert markdown/text to PDF/DOCX using Pandoc
-- `--title, -t` - Optional document title (used for filename)
 
 ### Conversion Quality
 
 | Conversion | Quality | Notes |
 |------------|---------|-------|
-| DOCX → PDF | ✅ Excellent | LibreOffice handles this very well |
-| PDF → DOCX | ⚠️ Variable | PDFs are presentation format; complex layouts may not convert cleanly |
-| Markdown → PDF/DOCX | ✅ Good | Works well for properly formatted markdown |
+| DOCX → PDF | Excellent | LibreOffice handles this very well |
+| PDF → DOCX | Variable | PDFs are presentation format; complex layouts may not convert cleanly |
+| Markdown → DOCX | Good | Works well for properly formatted markdown |
 
 ### When to Use python-docx vs. Conversion Tools
 
@@ -637,9 +651,9 @@ python3 /workdir/tools/numa/convert_document.py \
 | Creating new DOCX from scratch | python-docx (this skill) |
 | Filling DOCX templates | python-docx (this skill) |
 | Modifying existing DOCX | python-docx (this skill) |
-| Converting DOCX → PDF | `convert_document.py --mode file` |
-| Converting PDF → DOCX | `convert_document.py --mode file` |
-| Complex/scanned PDFs | `extract_content.py` + `convert_document.py --mode markdown` |
+| Converting DOCX → PDF | `soffice --headless` (local) |
+| Converting Markdown → DOCX | `pandoc` (local) |
+| Complex/scanned PDFs | `extract_content.py` + `pandoc` |
 
 ### Alternative: Extract + Convert (for complex PDFs)
 
@@ -649,14 +663,9 @@ For scanned or complex PDFs where direct conversion fails:
 # Step 1: Extract content using vision AI
 python3 /workdir/tools/numa/extract_content.py \
     --file-path "/workdir/uploads/scanned_document.pdf"
-# → /workdir/session/extracted_scanned_document.txt
 
-# Step 2: Convert extracted markdown to DOCX
-python3 /workdir/tools/numa/convert_document.py \
-    --file-path "/workdir/session/extracted_scanned_document.txt" \
-    --format docx \
-    --mode markdown
-# → /workdir/session/converted_scanned_document.docx
+# Step 2: Convert extracted text to DOCX (local pandoc)
+pandoc /workdir/outputs/extracted_scanned_document.txt -o /workdir/outputs/document.docx
 ```
 
 ---
@@ -664,7 +673,7 @@ python3 /workdir/tools/numa/convert_document.py \
 ## File Paths
 
 - **Input templates**: `/workdir/uploads/`
-- **Output documents**: `/workdir/output/`
-- **Working files**: `/workdir/session/`
+- **Output documents**: `/workdir/outputs/`
+- **Working files**: `/workdir/outputs/`
 
 Always use full paths and verify files exist before processing.

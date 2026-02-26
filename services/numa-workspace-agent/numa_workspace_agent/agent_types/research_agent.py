@@ -77,6 +77,14 @@ RESEARCH_AGENT = AgentTypeConfig(
         "Bash(diff:*)",  # File comparison
         "Bash(grep:*)",  # Pattern matching (useful with pipes)
         "Bash(xargs:*)",  # Build command lines from input
+        # Document handling binaries (pre-installed in container)
+        "Bash(node:*)",  # Node.js (PptxGenJS, sharp)
+        "Bash(soffice:*)",  # LibreOffice headless (DOCX/PPTX → PDF)
+        "Bash(pdftoppm:*)",  # PDF → images (visual QA)
+        "Bash(pdftotext:*)",  # PDF text extraction
+        "Bash(pdfimages:*)",  # PDF image extraction
+        "Bash(pandoc:*)",  # Document format conversion
+        "Bash(qpdf:*)",  # PDF manipulation (merge, split)
     ],
     # Layer 2: Scripts MCP only, no integrations
     enable_scripts_mcp=True,

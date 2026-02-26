@@ -68,7 +68,7 @@ mcp__integrations__run_action(
   stash_id="NEW"
 )
 ```
-The PDF is saved to `/workdir/session/integrations-results/{invoiceId}.pdf`.
+The PDF is saved to `/workdir/outputs/integrations-results/{invoiceId}.pdf`.
 
 ### Contact Finder Actions Use String Not Boolean
 Both `find-or-create-contact` and `find-contact` use string values `"Yes"` or `"No"` for `createContactIfNotFound`, not boolean:

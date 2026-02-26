@@ -225,6 +225,19 @@ export const useConversationManager = (options: UseConversationManagerOptions = 
           return;
         }
 
+        // Check if inactivity has expired before restoring a previous conversation.
+        // This prevents a race where useConversationManager sets conversationId from
+        // sessionStorage (triggering auto-load) before useChatInactivity can expire it.
+        const inactivityKey = `numa_chat_lastInteraction${storageKeySuffix}`;
+        const INACTIVITY_MS = 20 * 60 * 1000; // 20 minutes — must match useChatInactivity
+        const lastInteraction = Number(localStorage.getItem(inactivityKey) || 0);
+        const isStale = !lastInteraction || Date.now() - lastInteraction >= INACTIVITY_MS;
+
+        if (isStale) {
+          handleNewChat();
+          return;
+        }
+
         const savedConvoId = sessionStorage.getItem(storageKey);
         const savedConvo = metaItems.find((item) => item.conversation_id === savedConvoId);
         if (savedConvoId && savedConvo) {

@@ -166,7 +166,7 @@ export function getToolCategoryAndIcon(
     const skillName = skillInput?.skill || '';
     // Extract just the skill name from "numa-workspace:knowledge-search" format
     const shortName = skillName.includes(':') ? skillName.split(':').pop() || skillName : skillName;
-    return { category: 'important', iconName: getSkillIcon(shortName) };
+    return { category: 'transient', iconName: getSkillIcon(shortName) };
   }
 
   // Handle Bash tool - check if KB query, agent command, or transient command

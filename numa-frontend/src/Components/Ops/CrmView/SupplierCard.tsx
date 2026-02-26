@@ -1,6 +1,9 @@
 import React, { useMemo } from 'react';
+import { Card } from 'react-bootstrap';
+import { useSortable } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import { useTranslation } from 'react-i18next';
-import type { Supplier, SupplierConfig, Contact } from '../../../types/ops';
+import type { Supplier, SupplierConfig, CrmLifecycleStage } from '../../../types/ops';
 import { getColorForPosition } from '../Shared/colorUtils';
 
 // ─── Props ──────────────────────────────────────────────────────────────────
@@ -13,18 +16,11 @@ interface SupplierCardProps {
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
-function formatLastContact(dateStr: string | null | undefined): string {
-  if (!dateStr) return 'No contact';
-  const diff = Date.now() - new Date(dateStr).getTime();
-  const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-  if (days === 0) return 'Today';
-  if (days === 1) return '1 day ago';
-  if (days < 30) return `${String(days)} days ago`;
-  const months = Math.floor(days / 30);
-  return months === 1 ? '1 month ago' : `${String(months)} months ago`;
-}
-
-function formatCurrency(value: number): string {
+/**
+ * Formats a number as currency (USD). Returns an empty string for null/undefined.
+ */
+function formatCurrency(value: number | null | undefined): string {
+  if (value == null) return '';
   return new Intl.NumberFormat('en-US', {
     style: 'currency',
     currency: 'USD',
@@ -33,127 +29,222 @@ function formatCurrency(value: number): string {
   }).format(value);
 }
 
+/**
+ * Formats an ISO date string into a human-friendly relative label.
+ */
+function formatLastContactLabel(
+  dateStr: string | null | undefined,
+  t: (key: string, options?: Record<string, unknown>) => string,
+): string {
+  if (!dateStr) return t('crm.noLastContact');
+
+  const timestamp = new Date(dateStr).getTime();
+  if (Number.isNaN(timestamp)) return t('crm.noLastContact');
+
+  const diffMs = Date.now() - timestamp;
+  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+
+  if (diffDays <= 0) return t('crm.lastContactToday');
+  if (diffDays === 1) return t('crm.lastContactYesterday');
+  if (diffDays < 7) return t('crm.lastContactDaysAgo', { count: diffDays });
+  if (diffDays < 30) return t('crm.lastContactWeeksAgo', { count: Math.floor(diffDays / 7) });
+  if (diffDays < 365) return t('crm.lastContactMonthsAgo', { count: Math.floor(diffDays / 30) });
+  return t('crm.lastContactYearsAgo', { count: Math.floor(diffDays / 365) });
+}
+
 // ─── Component ──────────────────────────────────────────────────────────────
 
 export function SupplierCard({ supplier, supplierConfig, onClick }: SupplierCardProps): React.JSX.Element {
   const { t } = useTranslation('ops');
-  const stageColor = useMemo(() => {
-    const stage = supplierConfig.lifecycleStages.find((s) => s.id === supplier.lifecycleStage);
-    return stage ? getColorForPosition(stage.colorPosition) : '#0d9488';
-  }, [supplier.lifecycleStage, supplierConfig.lifecycleStages]);
 
-  const primaryContact: Contact | undefined = supplier.contacts.find((c) => c.isPrimary);
-  const lastContact = formatLastContact(supplier.lastContactDate);
+  // ── DnD-kit sortable ────────────────────────────────────────────────
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: supplier.id,
+    data: { supplier },
+  });
+
+  const dragStyle: React.CSSProperties = {
+    transform: CSS.Translate.toString(transform),
+    transition,
+    opacity: isDragging ? 0.4 : 1,
+    zIndex: isDragging ? 999 : 'auto',
+  };
+
+  // Resolve the lifecycle stage for the bottom border color.
+  const stage: CrmLifecycleStage | undefined = supplierConfig.lifecycleStages.find(
+    (s) => s.id === supplier.lifecycleStage,
+  );
+
+  const lastContactLabel = useMemo(
+    () => formatLastContactLabel(supplier.lastContactDate, t),
+    [supplier.lastContactDate, t],
+  );
+
+  // Evaluate flags to display the orange dot
+  const hasUpdatesOrRisk = supplier.flags && supplier.flags.length > 0;
+
+  // Let's create a progress percentage for the bottom bar based on stage.
+  const stagePosition = stage?.colorPosition ?? 1;
+  const totalStages = Math.max(5, supplierConfig.lifecycleStages.length);
+  const progressPercent = Math.min(100, Math.max(10, (stagePosition / totalStages) * 100));
 
   return (
-    <div
-      style={{
-        background: '#fff',
-        borderRadius: 10,
-        border: '1px solid #e5e7eb',
-        padding: '12px 14px',
-        cursor: 'pointer',
-        boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
-        transition: 'box-shadow 0.15s',
-        marginBottom: 8,
-        userSelect: 'none',
-      }}
-      onClick={() => onClick(supplier)}
-      onMouseEnter={(e) => {
-        (e.currentTarget as HTMLElement).style.boxShadow = '0 4px 12px rgba(13,148,136,0.12)';
-      }}
-      onMouseLeave={(e) => {
-        (e.currentTarget as HTMLElement).style.boxShadow = '0 1px 2px rgba(0,0,0,0.05)';
-      }}
-      role="button"
-      tabIndex={0}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter' || e.key === ' ') {
-          e.preventDefault();
-          onClick(supplier);
-        }
-      }}
-    >
-      {/* Row 1: Company name + open ticket count */}
-      <div className="d-flex align-items-start justify-content-between gap-2 mb-1">
-        <span
-          className="fw-bold"
-          style={{
-            fontSize: '0.9rem',
-            color: '#111827',
-            lineHeight: '1.3',
-            overflow: 'hidden',
-            display: '-webkit-box',
-            WebkitLineClamp: 2,
-            WebkitBoxOrient: 'vertical',
-          }}
-          title={supplier.companyName}
-        >
-          {supplier.companyName}
-        </span>
-        {supplier.openTicketCount > 0 && (
-          <span
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              flexShrink: 0,
-              backgroundColor: '#f0fdfa',
-              border: '1px solid #99f6e4',
-              borderRadius: 6,
-              padding: '2px 7px',
-              fontSize: '0.72rem',
-              color: '#0f766e',
-              fontWeight: 600,
-              whiteSpace: 'nowrap',
-            }}
-          >
-            {t('tickets.open', { count: supplier.openTicketCount })}
-          </span>
-        )}
-      </div>
-
-      {/* Row 2: Primary contact with star */}
-      {primaryContact ? (
-        <div
-          className="d-flex align-items-center gap-1"
-          style={{ fontSize: '0.8rem', color: '#374151', marginBottom: 4 }}
-        >
-          <i className="bi bi-star-fill" style={{ color: '#f59e0b', fontSize: '0.65rem', flexShrink: 0 }} />
-          <span className="text-truncate">
-            {primaryContact.name}
-            {primaryContact.role && <span style={{ color: '#9ca3af', marginLeft: 3 }}>({primaryContact.role})</span>}
-          </span>
-        </div>
-      ) : (
-        <div style={{ fontSize: '0.8rem', color: '#9ca3af', marginBottom: 4, fontStyle: 'italic' }}>
-          {t('crm.noContactAdded')}
-        </div>
-      )}
-
-      {/* Row 3: Industry · Size + annual spend */}
-      {(supplier.industry || supplier.companySize) && (
-        <div style={{ fontSize: '0.76rem', color: '#9ca3af', marginBottom: 4 }}>
-          {[supplier.industry, supplier.companySize].filter(Boolean).join(' · ')}
-          {supplier.annualSpend != null && supplier.annualSpend > 0 && (
-            <span style={{ color: '#0d9488', fontWeight: 600, marginLeft: 6 }}>
-              {formatCurrency(supplier.annualSpend)}
-            </span>
-          )}
-        </div>
-      )}
-
-      {/* Row 4: Last contact */}
-      <div
+    <div ref={setNodeRef} style={dragStyle} className="mb-3" {...attributes} {...listeners}>
+      <Card
         style={{
-          fontSize: '0.74rem',
-          color: lastContact === 'No contact' ? '#d1d5db' : '#9ca3af',
+          width: '100%',
+          border: isDragging ? '2px solid rgba(13, 148, 136, 0.8)' : '1px solid rgba(226, 232, 240, 0.8)',
+          borderRadius: 16,
+          backgroundColor: '#ffffff',
+          cursor: isDragging ? 'grabbing' : 'pointer',
+          transition: isDragging
+            ? 'none'
+            : 'box-shadow 0.2s cubic-bezier(0.4, 0, 0.2, 1), transform 0.2s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.2s',
+          opacity: isDragging ? 0.9 : 1,
+          boxShadow: isDragging
+            ? '0 20px 25px -5px rgba(13, 148, 136, 0.15), 0 8px 10px -6px rgba(13, 148, 136, 0.1)'
+            : '0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -2px rgba(0, 0, 0, 0.025)',
+          position: 'relative',
+          overflow: 'hidden',
+        }}
+        onClick={() => onClick(supplier)}
+        onMouseEnter={(e) => {
+          if (!isDragging) {
+            (e.currentTarget as HTMLElement).style.borderColor = 'rgba(13, 148, 136, 0.5)';
+            (e.currentTarget as HTMLElement).style.boxShadow =
+              '0 10px 15px -3px rgba(0, 0, 0, 0.08), 0 4px 6px -4px rgba(0, 0, 0, 0.04), 0 0 0 3px rgba(13, 148, 136, 0.1)';
+            (e.currentTarget as HTMLElement).style.transform = 'translateY(-2px)';
+          }
+        }}
+        onMouseLeave={(e) => {
+          if (!isDragging) {
+            (e.currentTarget as HTMLElement).style.borderColor = 'rgba(226, 232, 240, 0.8)';
+            (e.currentTarget as HTMLElement).style.boxShadow =
+              '0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -2px rgba(0, 0, 0, 0.025)';
+            (e.currentTarget as HTMLElement).style.transform = 'translateY(0)';
+          }
+        }}
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            onClick(supplier);
+          }
         }}
       >
-        {lastContact}
-      </div>
+        <Card.Body className="p-3 d-flex flex-column h-100">
+          <div className="d-flex align-items-start gap-3 mb-3 flex-grow-1">
+            {/* Icon Box */}
+            <div
+              className="position-relative d-flex align-items-center justify-content-center flex-shrink-0 shadow-sm"
+              style={{
+                width: 46,
+                height: 46,
+                backgroundColor: 'rgba(249, 250, 251, 0.8)',
+                color: '#64748b',
+                borderRadius: 14,
+                fontSize: '1.25rem',
+                border: '1px solid rgba(226, 232, 240, 0.8)',
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <i className="bi bi-truck"></i>
+              {hasUpdatesOrRisk && (
+                <span
+                  className="position-absolute translate-middle rounded-circle shadow-sm"
+                  style={{
+                    top: 2,
+                    left: 2,
+                    width: 12,
+                    height: 12,
+                    backgroundColor: '#fbbf24',
+                    border: '2px solid #fff',
+                  }}
+                ></span>
+              )}
+            </div>
 
-      {/* Bottom stage color bar */}
-      <div style={{ height: 3, borderRadius: 2, backgroundColor: stageColor, marginTop: 10 }} />
+            {/* Title & Subtitle */}
+            <div className="flex-grow-1 min-w-0">
+              <div className="d-flex align-items-start justify-content-between gap-2">
+                <div
+                  className="fw-bolder text-truncate"
+                  title={supplier.companyName}
+                  style={{ color: '#0f172a', fontSize: '1rem', lineHeight: 1.2, letterSpacing: '-0.01em' }}
+                >
+                  {supplier.companyName}
+                </div>
+                {/* Tickets badge */}
+                {supplier.openTicketCount > 0 && (
+                  <div
+                    className="flex-shrink-0 d-inline-flex align-items-center justify-content-center fw-bold shadow-sm"
+                    style={{
+                      backgroundColor: '#f0fdf4',
+                      color: '#059669',
+                      borderRadius: 8,
+                      padding: '3px 8px',
+                      fontSize: '0.75rem',
+                      border: '1px solid #bbf7d0',
+                    }}
+                  >
+                    <i className="bi bi-file-earmark-text me-1"></i>
+                    {supplier.openTicketCount}
+                  </div>
+                )}
+              </div>
+              <div
+                className="text-muted small text-truncate mt-1 fw-medium"
+                style={{ fontSize: '0.82rem', color: '#64748b' }}
+              >
+                {supplier.industry || supplier.companySize || 'Supplier'}
+              </div>
+            </div>
+          </div>
+
+          {/* Footer stats: Annual Spend & Last Contact */}
+          <div
+            className="d-flex align-items-center justify-content-between mb-3 text-muted mt-auto"
+            style={{ minHeight: '1.2rem' }}
+          >
+            <div className="fw-bolder" style={{ color: '#0d9488', fontSize: '0.95rem' }}>
+              {supplier.annualSpend != null && supplier.annualSpend > 0 ? formatCurrency(supplier.annualSpend) : ''}
+            </div>
+            {supplier.lastContactDate ? (
+              <div className="fw-medium" style={{ fontSize: '0.78rem', color: '#64748b' }}>
+                <i className="bi bi-clock me-1 opacity-75"></i>
+                {lastContactLabel}
+              </div>
+            ) : (
+              <div className="fw-medium" style={{ fontSize: '0.78rem', color: '#94a3b8' }}>
+                {lastContactLabel}
+              </div>
+            )}
+          </div>
+
+          {/* Progress Line */}
+          <div
+            className="shadow-inner"
+            style={{
+              height: 5,
+              backgroundColor: '#f1f5f9',
+              borderRadius: 3,
+              width: '100%',
+              overflow: 'hidden',
+            }}
+          >
+            <div
+              style={{
+                height: '100%',
+                backgroundColor: stage?.colorPosition ? getColorForPosition(stage.colorPosition) : '#0d9488',
+                width: `${String(progressPercent)}%`,
+                borderRadius: 3,
+                transition: 'width 0.4s cubic-bezier(0.34, 1.56, 0.64, 1)',
+              }}
+            />
+          </div>
+        </Card.Body>
+      </Card>
     </div>
   );
 }

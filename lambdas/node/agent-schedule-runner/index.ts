@@ -125,7 +125,7 @@ type ScheduledJobRecord = {
 
 /**
  * Structured self-evaluation written by the workspace agent at the end of each
- * scheduled run to /workdir/session/status.json. Read from S3 after the run.
+ * scheduled run to /workdir/outputs/status.json. Read from S3 after the run.
  */
 type AgentStatus = {
   status: 'success' | 'partial' | 'failed';
@@ -154,7 +154,7 @@ Key behaviour differences:
 MANDATORY — STATUS REPORT:
 After completing your work — whether successful, partially successful, or failed — you MUST write a JSON status report as the VERY LAST action before your final response. This is required on EVERY scheduled run, no exceptions.
 
-Write the file to: /workdir/session/status.json
+Write the file to: /workdir/outputs/status.json
 
 The file must contain valid JSON with exactly these fields:
 - "status" (string): one of "success", "partial", or "failed"
@@ -549,7 +549,7 @@ const executeRun = async ({
 
     if (!adHoc) {
       // Read the agent's structured self-evaluation from the workspace.
-      // The workspace agent syncs /workdir/session/ to S3 before returning,
+      // The workspace agent syncs /workdir/outputs/ to S3 before returning,
       // so status.json should be available by this point.
       const agentStatus = await readWorkspaceStatus(schedule.user_id, runConversationId);
       if (agentStatus) {
@@ -1009,7 +1009,7 @@ const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout
 /**
  * Read the agent's self-evaluation status.json from the workspace in S3.
  *
- * After a scheduled run, the workspace agent writes /workdir/session/status.json
+ * After a scheduled run, the workspace agent writes /workdir/outputs/status.json
  * and syncs it to S3. This function reads that file to get structured outcome data
  * (status, summary, artifacts, errors, warnings) for richer notifications.
  *
@@ -1028,8 +1028,8 @@ const readWorkspaceStatus = async (
   if (!OUTPUTS_BUCKET) return null;
 
   // S3 path mirrors the workspace agent's sync convention:
-  // numa-chat/workspace/{user_sub}/conversations/{conversation_id}/session/status.json
-  const key = `numa-chat/workspace/${userId}/conversations/${conversationId}/session/status.json`;
+  // numa-chat/workspace/{user_sub}/conversations/{conversation_id}/outputs/status.json
+  const key = `numa-chat/workspace/${userId}/conversations/${conversationId}/outputs/status.json`;
 
   const MAX_ATTEMPTS = 3;
   const RETRY_DELAYS_MS = [2_000, 4_000]; // delays between attempt 1→2 and 2→3

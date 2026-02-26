@@ -57,6 +57,7 @@ export type OpsDataState = {
   refreshTickets: () => Promise<void>;
   refreshTeams: () => Promise<void>;
   refreshStaff: () => Promise<void>;
+  refreshConfig: () => Promise<void>;
   refreshCrmData: () => void;
 };
 
@@ -411,6 +412,10 @@ export const useOpsData = (): OpsDataState => {
     await loadTeams();
   }, [loadTeams]);
 
+  const refreshConfig = useCallback(async () => {
+    await loadConfig();
+  }, [loadConfig]);
+
   const refreshCrmData = useCallback(() => {
     setCrmRefreshVersion((prev) => prev + 1);
   }, []);
@@ -447,6 +452,7 @@ export const useOpsData = (): OpsDataState => {
     refreshTeam,
     refreshTickets,
     refreshTeams,
+    refreshConfig,
     refreshStaff,
     refreshCrmData,
   };

@@ -18,6 +18,31 @@ Read, write, and analyze spreadsheet files using pandas, openpyxl, and XlsxWrite
 
 ---
 
+## Quick Text Extraction with markitdown
+
+For a fast overview of spreadsheet content without writing code:
+
+```bash
+python -m markitdown /workdir/uploads/data.xlsx
+```
+
+This outputs the spreadsheet content as markdown tables — useful for quick review.
+
+---
+
+## Formula Recalculation via LibreOffice
+
+If an Excel file has formulas that need recalculating (e.g., after modifying data), use LibreOffice:
+
+```bash
+# Recalculate formulas and save as XLSX
+soffice --headless --calc --convert-to xlsx --outdir /workdir/outputs/ /workdir/uploads/data.xlsx
+```
+
+This opens the file in LibreOffice Calc (headless), recalculates all formulas, and saves the result.
+
+---
+
 ## Reading Spreadsheets with pandas
 
 ### Read Excel Files
@@ -124,17 +149,17 @@ df = pd.DataFrame({
 })
 
 # Basic write
-df.to_excel('/workdir/output/report.xlsx', index=False)
+df.to_excel('/workdir/outputs/report.xlsx', index=False)
 
 # With sheet name
-df.to_excel('/workdir/output/report.xlsx', sheet_name='Employees', index=False)
+df.to_excel('/workdir/outputs/report.xlsx', sheet_name='Employees', index=False)
 
 # Multiple sheets
-with pd.ExcelWriter('/workdir/output/report.xlsx') as writer:
+with pd.ExcelWriter('/workdir/outputs/report.xlsx') as writer:
     df.to_excel(writer, sheet_name='Employees', index=False)
     summary_df.to_excel(writer, sheet_name='Summary', index=False)
 
-print("Excel file created: /workdir/output/report.xlsx")
+print("Excel file created: /workdir/outputs/report.xlsx")
 ```
 
 ### Write CSV Files
@@ -148,15 +173,15 @@ df = pd.DataFrame({
 })
 
 # Basic CSV
-df.to_csv('/workdir/output/data.csv', index=False)
+df.to_csv('/workdir/outputs/data.csv', index=False)
 
 # With specific encoding
-df.to_csv('/workdir/output/data.csv', index=False, encoding='utf-8-sig')
+df.to_csv('/workdir/outputs/data.csv', index=False, encoding='utf-8-sig')
 
 # TSV output
-df.to_csv('/workdir/output/data.tsv', index=False, sep='\t')
+df.to_csv('/workdir/outputs/data.tsv', index=False, sep='\t')
 
-print("CSV file created: /workdir/output/data.csv")
+print("CSV file created: /workdir/outputs/data.csv")
 ```
 
 ---
@@ -235,7 +260,7 @@ pivot = pd.pivot_table(
 )
 
 # Save pivot table
-pivot.to_excel('/workdir/output/pivot_report.xlsx')
+pivot.to_excel('/workdir/outputs/pivot_report.xlsx')
 ```
 
 ### Sorting and Ranking
@@ -328,8 +353,8 @@ ws.column_dimensions['C'].width = 12
 for row in range(2, len(data) + 2):
     ws.cell(row=row, column=3).number_format = '$#,##0'
 
-wb.save('/workdir/output/formatted_report.xlsx')
-print("Formatted Excel created: /workdir/output/formatted_report.xlsx")
+wb.save('/workdir/outputs/formatted_report.xlsx')
+print("Formatted Excel created: /workdir/outputs/formatted_report.xlsx")
 ```
 
 ### Modify Existing Excel
@@ -353,8 +378,8 @@ ws.insert_rows(5)
 # Delete row
 ws.delete_rows(10)
 
-wb.save('/workdir/output/modified.xlsx')
-print("Modified Excel saved: /workdir/output/modified.xlsx")
+wb.save('/workdir/outputs/modified.xlsx')
+print("Modified Excel saved: /workdir/outputs/modified.xlsx")
 ```
 
 ---
@@ -368,7 +393,7 @@ import xlsxwriter
 import pandas as pd
 
 # Create workbook
-workbook = xlsxwriter.Workbook('/workdir/output/sales_report.xlsx')
+workbook = xlsxwriter.Workbook('/workdir/outputs/sales_report.xlsx')
 worksheet = workbook.add_worksheet('Sales Data')
 
 # Define formats
@@ -424,7 +449,7 @@ worksheet.set_column('A:A', 12)
 worksheet.set_column('B:E', 10)
 
 workbook.close()
-print("Sales report with chart created: /workdir/output/sales_report.xlsx")
+print("Sales report with chart created: /workdir/outputs/sales_report.xlsx")
 ```
 
 ### Conditional Formatting
@@ -432,7 +457,7 @@ print("Sales report with chart created: /workdir/output/sales_report.xlsx")
 ```python
 import xlsxwriter
 
-workbook = xlsxwriter.Workbook('/workdir/output/conditional.xlsx')
+workbook = xlsxwriter.Workbook('/workdir/outputs/conditional.xlsx')
 worksheet = workbook.add_worksheet()
 
 # Sample data
@@ -465,7 +490,7 @@ worksheet.conditional_format('A1:A10', {
 })
 
 workbook.close()
-print("Conditional formatting example: /workdir/output/conditional.xlsx")
+print("Conditional formatting example: /workdir/outputs/conditional.xlsx")
 ```
 
 ### Data Validation (Dropdowns)
@@ -473,7 +498,7 @@ print("Conditional formatting example: /workdir/output/conditional.xlsx")
 ```python
 import xlsxwriter
 
-workbook = xlsxwriter.Workbook('/workdir/output/with_validation.xlsx')
+workbook = xlsxwriter.Workbook('/workdir/outputs/with_validation.xlsx')
 worksheet = workbook.add_worksheet()
 
 # Add dropdown list validation
@@ -487,7 +512,7 @@ worksheet.write('A1', 'Item')
 worksheet.write('B1', 'Approved')
 
 workbook.close()
-print("Created with dropdown: /workdir/output/with_validation.xlsx")
+print("Created with dropdown: /workdir/outputs/with_validation.xlsx")
 ```
 
 ---
@@ -503,9 +528,9 @@ import pandas as pd
 df = pd.read_excel('/workdir/uploads/data.xlsx')
 
 # Write CSV
-df.to_csv('/workdir/output/data.csv', index=False)
+df.to_csv('/workdir/outputs/data.csv', index=False)
 
-print("Converted to CSV: /workdir/output/data.csv")
+print("Converted to CSV: /workdir/outputs/data.csv")
 ```
 
 ### CSV to Excel
@@ -517,9 +542,9 @@ import pandas as pd
 df = pd.read_csv('/workdir/uploads/data.csv')
 
 # Write Excel
-df.to_excel('/workdir/output/data.xlsx', index=False)
+df.to_excel('/workdir/outputs/data.xlsx', index=False)
 
-print("Converted to Excel: /workdir/output/data.xlsx")
+print("Converted to Excel: /workdir/outputs/data.xlsx")
 ```
 
 ### Multiple CSVs to Single Excel
@@ -531,14 +556,14 @@ import glob
 # Find all CSV files
 csv_files = glob.glob('/workdir/uploads/*.csv')
 
-with pd.ExcelWriter('/workdir/output/combined.xlsx') as writer:
+with pd.ExcelWriter('/workdir/outputs/combined.xlsx') as writer:
     for csv_file in csv_files:
         df = pd.read_csv(csv_file)
         # Use filename (without extension) as sheet name
         sheet_name = csv_file.split('/')[-1].replace('.csv', '')[:31]  # Excel limit: 31 chars
         df.to_excel(writer, sheet_name=sheet_name, index=False)
 
-print(f"Combined {len(csv_files)} CSV files into: /workdir/output/combined.xlsx")
+print(f"Combined {len(csv_files)} CSV files into: /workdir/outputs/combined.xlsx")
 ```
 
 ### Excel Sheets to Separate CSVs
@@ -550,7 +575,7 @@ import pandas as pd
 sheets = pd.read_excel('/workdir/uploads/workbook.xlsx', sheet_name=None)
 
 for sheet_name, df in sheets.items():
-    output_path = f'/workdir/output/{sheet_name}.csv'
+    output_path = f'/workdir/outputs/{sheet_name}.csv'
     df.to_csv(output_path, index=False)
     print(f"Created: {output_path}")
 ```
@@ -574,7 +599,7 @@ Is your file > 50MB?
 ```python
 import pandas as pd
 import sqlite3
-import os
+from pathlib import Path
 
 # 1. Sample first to understand the data
 df_sample = pd.read_csv('/workdir/uploads/large_data.csv', nrows=1000)
@@ -586,10 +611,10 @@ print(f"Sample:\n{df_sample.head()}")
 df = pd.read_csv('/workdir/uploads/large_data.csv')
 print(f"Loaded {len(df):,} rows, {len(df.columns)} columns")
 
-db_path = '/workdir/session/analysis.db'
+db_path = '/workdir/outputs/analysis.db'
 conn = sqlite3.connect(db_path)
 df.to_sql('data', conn, index=False, if_exists='replace')
-print(f"Converted to SQLite: {os.path.getsize(db_path) / 1024 / 1024:.1f} MB")
+print(f"Converted to SQLite: {Path(db_path).stat().st_size / 1024 / 1024:.1f} MB")
 
 # 3. Create indexes on columns you'll filter/group by (makes queries fast)
 conn.execute('CREATE INDEX IF NOT EXISTS idx_category ON data(category)')
@@ -655,7 +680,7 @@ import pandas as pd
 
 # For very large Excel files, use XlsxWriter engine
 df.to_excel(
-    '/workdir/output/large_report.xlsx',
+    '/workdir/outputs/large_report.xlsx',
     index=False,
     engine='xlsxwriter'
 )
@@ -732,8 +757,8 @@ df_2024 = df[mask]
 
 ## Best Practices
 
-1. **Always use `/workdir/output/` for generated files** - Ensures files are synced to S3
-2. **Check file exists before reading** - Use `os.path.exists()` before opening files
+1. **Always use `/workdir/outputs/` for generated files** - Ensures files are synced to S3
+2. **Check file exists before reading** - Use `Path(path).exists()` (from `pathlib`) before opening files
 3. **Specify dtypes for large files** - Reduces memory usage significantly
 4. **Use `index=False` when writing** - Avoid adding unnecessary index columns
 5. **Handle encoding for CSV** - Use `encoding='utf-8-sig'` for Excel compatibility
@@ -759,10 +784,10 @@ The Bash tool blocks `${...}` patterns for security, which affects inline Python
 **Solution:** Write your analysis script to a file, then execute it:
 ```python
 # 1. Write the script (using Write tool)
-# /workdir/session/analysis.py
+# /workdir/outputs/analysis.py
 
 # 2. Run it
-python3 /workdir/session/analysis.py
+python3 /workdir/outputs/analysis.py
 ```
 
 This is actually better practice for any non-trivial analysis anyway.
@@ -787,7 +812,7 @@ This is actually better practice for any non-trivial analysis anyway.
 ## File Paths
 
 - **Input files**: `/workdir/uploads/`
-- **Output files**: `/workdir/output/`
-- **Working files**: `/workdir/session/`
+- **Output files**: `/workdir/outputs/`
+- **Working files**: `/workdir/outputs/`
 
 Always use full paths and verify files exist before processing.

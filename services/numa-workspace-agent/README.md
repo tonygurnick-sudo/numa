@@ -37,7 +37,7 @@ Numa Workspace transforms Numa from a stateless AI assistant into a **persistent
 - **Claude Agent SDK**: Native Python SDK integration for AI-powered agentic operations
 - **Python Security Hooks**: Async security and audit hooks for workspace protection
 - **Persistent Workspace**: Files in `/chat-workflows/` persist across all conversations (currently disabled)
-- **Per-Conversation Storage**: `/uploads/`, `/session/`, and root files are isolated per conversation
+- **Per-Conversation Storage**: `/uploads/`, `/outputs/`, and root files are isolated per conversation
 - **S3 Sync**: Automatic sync to S3 for workspace persistence across container restarts
 - **Streaming Responses**: Real-time NDJSON streaming for chat responses
 - **Skills & Agents**: Plugin system for extending Claude's capabilities
@@ -63,7 +63,7 @@ Numa Workspace transforms Numa from a stateless AI assistant into a **persistent
 │  │  │  .system/        - Internal (hidden from AI)   │  │  │
 │  │  │  chat-workflows/ - Global persistent (disabled)│  │  │
 │  │  │  uploads/        - Per-conversation            │  │  │
-│  │  │  session/        - Per-conversation            │  │  │
+│  │  │  outputs/        - Per-conversation            │  │  │
 │  │  │  tools/          - Workspace tools             │  │  │
 │  │  └─────────────────────────────────────────────────┘  │  │
 │  └───────────────────────────────────────────────────────┘  │
@@ -103,7 +103,7 @@ AWS AgentCore sets `LOCAL_WORKSPACE_ROOT=/workdir`, so the workspace is under `/
 │   └── trace.jsonl         # Current conversation trace
 ├── chat-workflows/         # GLOBAL persistent (currently DISABLED — not synced to S3)
 ├── uploads/                # Per-conversation uploads
-├── session/                # Per-conversation session files
+├── outputs/                # Per-conversation output files
 ├── agent-files/            # Downloaded agent reference files
 ├── tools/                  # Workspace tools (read-only)
 │   ├── numa/               # Numa-specific tools (KB, web search, etc.)
@@ -135,7 +135,7 @@ AWS AgentCore sets `LOCAL_WORKSPACE_ROOT=/workdir`, so the workspace is under `/
 |-----------|-------------------------------|--------------|
 | `/workdir/chat-workflows/` | DISABLED — intended to be globally persistent | `{user}/chat-workflows/` (sync disabled) |
 | `/workdir/uploads/` | NO - this conversation only | `{user}/conversations/{id}/uploads/` |
-| `/workdir/session/` | NO - this conversation only | `{user}/conversations/{id}/session/` |
+| `/workdir/outputs/` | NO - this conversation only | `{user}/conversations/{id}/outputs/` |
 | Root files | NO - this conversation only | `{user}/conversations/{id}/` |
 | `/workdir/.system/` | NO - internal only | `{user}/conversations/{id}/_system/` |
 
@@ -180,7 +180,7 @@ python3 /workdir/tools/numa/knowledge_base.py query \
     --user-intent "compile complete security documentation" \
     --no-summarise \
     --max-results 15 \
-    --output-file /workdir/session/security_docs.json
+    --output-file /workdir/outputs/security_docs.json
 ```
 
 ### Web Search Skill
@@ -204,7 +204,7 @@ pdf = FPDF()
 pdf.add_page()
 pdf.set_font("Helvetica", size=16)
 pdf.cell(0, 10, text="Report Title", align="C")
-pdf.output("/workdir/session/report.pdf")
+pdf.output("/workdir/outputs/report.pdf")
 ```
 
 ### DOCX Handling Skill
@@ -216,7 +216,7 @@ from docx import Document
 
 doc = Document('/workdir/uploads/template.docx')
 # Fill template...
-doc.save('/workdir/session/filled.docx')
+doc.save('/workdir/outputs/filled.docx')
 ```
 
 ### Spreadsheet Handling Skill
@@ -235,7 +235,7 @@ print(summary)
 
 # Create pivot table
 pivot = pd.pivot_table(df, values='Amount', index='Department', columns='Quarter', aggfunc='sum')
-pivot.to_excel('/workdir/session/pivot_report.xlsx')
+pivot.to_excel('/workdir/outputs/pivot_report.xlsx')
 ```
 
 ---
@@ -269,7 +269,7 @@ python3 /workdir/tools/numa/knowledge_base.py list \
 
 # Upload to KB (admin: company, user: their KBs)
 python3 /workdir/tools/numa/knowledge_base.py upload \
-    --file /workdir/session/report.pdf \
+    --file /workdir/outputs/report.pdf \
     --kb-id company
 
 # Download folder as zip
@@ -299,12 +299,12 @@ python3 /workdir/tools/numa/convert_document.py \
 
 # Convert Markdown to PDF
 python3 /workdir/tools/numa/convert_document.py \
-    --file-path "/workdir/session/report.md" \
+    --file-path "/workdir/outputs/report.md" \
     --format pdf
 
 # Convert Markdown to DOCX with title
 python3 /workdir/tools/numa/convert_document.py \
-    --file-path "/workdir/session/report.md" \
+    --file-path "/workdir/outputs/report.md" \
     --format docx \
     --title "Quarterly Report"
 ```
@@ -382,7 +382,7 @@ The following integrations have custom system prompt overrides in `/integration-
 
 Integration results are saved to files to avoid flooding the agent's context window:
 
-- Results directory: `/workdir/session/integrations-results/`
+- Results directory: `/workdir/outputs/integrations-results/`
 - Each result saved as `{action_key}-{timestamp}.json`
 - Large results are truncated in the agent response with a pointer to the full file
 - Pipedream file stash uploads (e.g., downloaded files) are automatically saved to the results directory
@@ -602,7 +602,7 @@ The React frontend connects via `numa-frontend/src/Services/workspaceChatAgentSe
 | `listWorkspaceChatFiles()` | List persistent workspace files |
 | `getWorkspaceChatConversation()` | Get conversation history |
 | `getWorkspaceChatRawTrace()` | Get raw trace.jsonl |
-| `cleanupConversationSession()` | Clean up session files |
+| `cleanupConversationSession()` | Clean up output files |
 | `stopWorkspaceChatAgent()` | Stop an in-flight request |
 | `isWorkspaceChatAgentAvailable()` | Ping health check |
 
@@ -629,7 +629,7 @@ s3://{bucket}/numa-chat/workspace/{user_sub}/
 └── conversations/{conversation_id}/   # Per-conversation
     ├── uploads/
     │   └── data.xlsx
-    ├── session/
+    ├── outputs/
     │   └── temp.csv
     ├── report.csv                     # Root-level file
     └── _system/

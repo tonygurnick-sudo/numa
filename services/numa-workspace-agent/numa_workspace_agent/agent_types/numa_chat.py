@@ -21,8 +21,6 @@ NUMA_CHAT = AgentTypeConfig(
         "Grep",
         "Bash",
         "KillShell",
-        "Task",
-        "TaskOutput",
         "TodoWrite",
         "Skill",
     ],
@@ -34,9 +32,8 @@ NUMA_CHAT = AgentTypeConfig(
         "Glob",
         "Grep",
         "Edit",
-        # Task management
+        # Task tracking and skills
         "TodoWrite",
-        "Task",
         "Skill",
         # Shell
         "BashOutput",
@@ -79,6 +76,14 @@ NUMA_CHAT = AgentTypeConfig(
         "Bash(diff:*)",  # File comparison
         "Bash(grep:*)",  # Pattern matching (useful with pipes)
         "Bash(xargs:*)",  # Build command lines from input
+        # Document handling binaries (pre-installed in container)
+        "Bash(node:*)",  # Node.js (PptxGenJS, sharp)
+        "Bash(soffice:*)",  # LibreOffice headless (DOCX/PPTX → PDF)
+        "Bash(pdftoppm:*)",  # PDF → images (visual QA)
+        "Bash(pdftotext:*)",  # PDF text extraction
+        "Bash(pdfimages:*)",  # PDF image extraction
+        "Bash(pandoc:*)",  # Document format conversion
+        "Bash(qpdf:*)",  # PDF manipulation (merge, split)
     ],
     # Layer 2: All MCP tools enabled
     enable_scripts_mcp=True,
