@@ -27,7 +27,7 @@ type UserManagementProps = {
 const UserManagement = ({ embedded = false }: UserManagementProps) => {
   const { t } = useTranslation('userManagement');
   // Auth and API state
-  const { getCredentials, user, qBusinessClient, forceTokenValidation } = useAuth();
+  const { getCredentials, user, qBusinessClient, forceTokenValidation, requestPasswordReset } = useAuth();
   const currentUserSub = user?.decoded_tokens?.idToken?.sub;
 
   // Users data state
@@ -210,8 +210,8 @@ const UserManagement = ({ embedded = false }: UserManagementProps) => {
     return items;
   };
 
-  // Create user handler
-  const handleCreateUser = async (email: string) => {
+  // Create user handler — returns whether the activation email was sent successfully
+  const handleCreateUser = async (email: string): Promise<{ emailSent: boolean }> => {
     const isValid = await forceTokenValidation();
     if (!isValid) {
       throw new Error(t('errors.sessionExpired'));
@@ -228,10 +228,21 @@ const UserManagement = ({ embedded = false }: UserManagementProps) => {
     const userManagementUtils = new UserManagementUtils(REGION, credentials);
     await userManagementUtils.createUser(email, USER_POOL_ID);
 
+    // Send activation email (best-effort — user creation is the critical operation)
+    let emailSent = false;
+    try {
+      await requestPasswordReset(email, 'create');
+      emailSent = true;
+    } catch (err) {
+      console.error('Failed to send activation email:', err);
+    }
+
     // Refresh user list after creation
     setTimeout(() => {
       fetchUsers(1);
     }, 1000);
+
+    return { emailSent };
   };
 
   // Promote user to admin

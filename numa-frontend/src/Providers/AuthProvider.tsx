@@ -1852,6 +1852,7 @@ export const AuthProvider = ({ children, initialTokens }) => {
         // Custom client metadata can be used to pass additional information
         ClientMetadata: {
           mode: mode, // 'reset' or 'create'
+          domain: window.location.hostname,
         },
       });
 

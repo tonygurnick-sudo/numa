@@ -98,8 +98,8 @@
     "title": "Create New User",
     "description": "Create a new user account by entering their email address:",
     "bullets": {
-      "passwordSetup": "The user will need to visit {{origin}}/create-password to set their password",
-      "instructions": "You'll receive instructions to share with the user after creation",
+      "emailSent": "An activation email will be sent automatically to the user",
+      "passwordSetup": "The email contains a link to set up their password",
       "permissions": "Access to Numa will be based on their assigned permissions"
     },
     "emailLabel": "Email address",
@@ -108,25 +108,32 @@
     "creating": "Creating...",
     "copyInstructionsText": "Welcome to Numa!\n\nYour account has been created with the following email address: {{email}}\n\nTo set up your password and access the system, please:\n1. Go to {{origin}}/create-password\n2. Enter your email address: {{email}}\n3. Follow the instructions to create your password\n\nIf you have any questions, please contact your administrator.",
     "success": {
-      "title": "User created successfully!",
-      "instructionsTitle": "User Instructions",
-      "welcome": "Welcome to Numa!",
-      "createdForLabel": "Your account has been created with the following email address:",
-      "stepsIntro": "To set up your password and access the system, please:",
-      "steps": {
-        "goTo": "Go to {{origin}}/create-password",
-        "enterEmail": "Enter your email address: {{email}}",
-        "follow": "Follow the instructions to create your password"
+      "emailSent": {
+        "title": "User created and activation email sent!",
+        "description": "An activation email has been sent to:",
+        "note": "The email contains a link to set up their password. If they don't receive it, you can share the backup instructions below.",
+        "backupTitle": "Backup Instructions",
+        "copied": "Copied!",
+        "copyAddress": "Copy Email Address"
       },
-      "support": "If you have any questions, please contact your administrator.",
-      "copied": "Copied!",
-      "copyAddress": "Copy Address",
-      "copyInstructions": "Copy User Instructions",
-      "nextSteps": "Next Steps",
-      "nextStepItems": {
-        "share": "Share these instructions with the user securely",
-        "visit": "They will need to visit {{origin}}/create-password",
-        "setPassword": "They will be able to set their password there for the first time"
+      "emailFailed": {
+        "title": "User created successfully",
+        "warning": "The account was created but the activation email could not be sent. Please share the instructions below with the user manually."
+      },
+      "instructions": {
+        "title": "User Instructions",
+        "welcome": "Welcome to Numa!",
+        "createdForLabel": "Your account has been created with the following email address:",
+        "stepsIntro": "To set up your password and access the system, please:",
+        "steps": {
+          "goTo": "Go to {{origin}}/create-password",
+          "enterEmail": "Enter your email address: {{email}}",
+          "follow": "Follow the instructions to create your password"
+        },
+        "support": "If you have any questions, please contact your administrator.",
+        "copied": "Copied!",
+        "copyAddress": "Copy Address",
+        "copyInstructions": "Copy User Instructions"
       }
     }
   },
