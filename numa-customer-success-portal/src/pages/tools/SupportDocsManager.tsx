@@ -167,7 +167,7 @@ export default function SupportDocsManager() {
           updateDeployStatus(client.name, {
             state: 'success',
             progress: 100,
-            message: `Uploaded ${result.uploadedCount} objects, cleaned ${result.cleanedCount}, KB ${
+            message: `Uploaded ${result.uploadedCount} files, cleaned ${result.cleanedCount}, KB ${
               result.kbCreated ? 'created' : 'verified'
             }.`,
           })

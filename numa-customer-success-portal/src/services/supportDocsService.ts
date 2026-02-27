@@ -208,7 +208,7 @@ export class SupportDocsService {
     const clientS3 = withPRM(S3Client, clientConfig)
     const targetBucket = `numa-${clientName}-data`
     const desiredKeys = new Set<string>()
-    const uploadTotal = masterDocs.length * 2
+    const uploadTotal = masterDocs.length
     let uploaded = 0
 
     for (const doc of masterDocs) {
@@ -230,8 +230,6 @@ export class SupportDocsService {
         },
       }))
       desiredKeys.add(targetKey)
-      uploaded += 1
-      onProgress?.({ current: uploaded, total: uploadTotal, message: `Uploaded ${doc.key}` })
 
       const sidecar = {
         metadataAttributes: {
@@ -249,8 +247,9 @@ export class SupportDocsService {
         ContentType: 'application/json',
       }))
       desiredKeys.add(metadataKey)
+
       uploaded += 1
-      onProgress?.({ current: uploaded, total: uploadTotal, message: `Uploaded metadata for ${doc.key}` })
+      onProgress?.({ current: uploaded, total: uploadTotal, message: `Uploaded ${doc.key}` })
     }
 
     const existingKeys = await listAllS3Keys(clientS3, targetBucket, NUMA_SUPPORT_PREFIX)
