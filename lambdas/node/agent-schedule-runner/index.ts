@@ -1151,6 +1151,7 @@ const invokeWorkspaceAgent = async ({
       'x-schedule-runner-sub': auth.sub,
     },
     body: JSON.stringify(requestBody),
+    signal: AbortSignal.timeout(840_000), // 14 min — just under the 15 min Lambda timeout
   });
 
   if (!response.ok) {
