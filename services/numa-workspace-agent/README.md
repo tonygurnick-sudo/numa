@@ -160,37 +160,34 @@ Skills are Claude-readable instructions that teach the AI how to accomplish spec
 
 ### Knowledge Search Skill
 
-Search and retrieve from enterprise knowledge bases:
+Search and retrieve from enterprise knowledge bases via the `mcp__numa__numa_tool` MCP tool:
 
-```bash
+```python
 # Basic KB search
-python3 /workdir/tools/numa/knowledge_base.py query \
-    --query "annual leave policy" \
-    --user-intent "find how many days of leave employees get"
+mcp__numa__numa_tool(
+  name="query_knowledge_base",
+  description="Searching for annual leave policy",
+  params={"query": "annual leave policy", "user_intent": "find how many days of leave employees get"}
+)
 
 # Query all KBs at once
-python3 /workdir/tools/numa/knowledge_base.py query \
-    --query "compliance requirements" \
-    --user-intent "find all compliance info" \
-    --all-kbs
-
-# Detailed research (raw content, not summarized)
-python3 /workdir/tools/numa/knowledge_base.py query \
-    --query "IT security policies" \
-    --user-intent "compile complete security documentation" \
-    --no-summarise \
-    --max-results 15 \
-    --output-file /workdir/outputs/security_docs.json
+mcp__numa__numa_tool(
+  name="query_knowledge_base",
+  description="Searching all KBs for compliance requirements",
+  params={"query": "compliance requirements", "user_intent": "find all compliance info", "all_kbs": true}
+)
 ```
 
 ### Web Search Skill
 
-Search the internet for current information:
+Search the internet for current information via MCP:
 
-```bash
-python3 /workdir/tools/numa/web_search.py \
-    --query "AWS Lambda pricing 2025" \
-    --user-intent "Find current Lambda pricing information"
+```python
+mcp__numa__numa_tool(
+  name="web_search",
+  description="Searching for AWS Lambda pricing",
+  params={"query": "AWS Lambda pricing 2025", "user_intent": "Find current Lambda pricing information"}
+)
 ```
 
 ### PDF Handling Skill
@@ -242,72 +239,94 @@ pivot.to_excel('/workdir/outputs/pivot_report.xlsx')
 
 ## Workspace Tools
 
-Python tools available at `/workdir/tools/numa/` for the AI to use:
+All Numa tool operations go through the unified `mcp__numa__numa_tool` MCP tool. The files at `/workdir/tools/numa/` are **documentation-only reference cards** — direct bash execution is blocked by security hooks.
 
-| Tool | Purpose | Subcommands/Key Parameters |
-|------|---------|----------------------------|
-| `knowledge_base.py` | Unified KB operations | `query`, `upload`, `download`, `list`, `download-folder` |
-| `web_search.py` | Web search with AI synthesis | `--query`, `--user-intent`, `--max-results` |
-| `extract_content.py` | Extract text from documents (OCR) | `--file-path` |
-| `convert_document.py` | Document format conversion | `--file-path`, `--format`, `--mode`, `--title` |
+| MCP Tool Name | Purpose | Key Parameters |
+|---------------|---------|----------------|
+| `query_knowledge_base` | Search knowledge bases | `query`, `user_intent`, `kb_id`, `all_kbs` |
+| `kb_upload` | Upload file to a KB | `file`, `kb_id`, `path` |
+| `kb_download` | Download file from KB | `file` + `kb_id`, or `uri` |
+| `kb_list` | List files in a KB | `kb_id`, `pattern` |
+| `kb_download_folder` | Download KB folder as zip | `kb_id`, `folder_path` |
+| `web_search` | Web search with AI synthesis | `query`, `user_intent`, `max_results` |
+| `extract_content` | Extract text from docs (OCR) | `file_path` |
+| `convert_document` | Document format conversion | `file_path`, `format`, `mode`, `title` |
+| `agents` | Manage saved Numa agents | `operation`, `agent_id`, `title`, etc. |
+| `memories` | Manage user memories | `operation`, `content`, `scope`, etc. |
 
 ### Tool Examples
 
-```bash
+```python
 # Query knowledge base
-python3 /workdir/tools/numa/knowledge_base.py query \
-    --query "expense policy" \
-    --user-intent "find expense limits"
+mcp__numa__numa_tool(
+  name="query_knowledge_base",
+  description="Searching KB for expense policy",
+  params={"query": "expense policy", "user_intent": "find expense limits"}
+)
 
 # Download a file from KB
-python3 /workdir/tools/numa/knowledge_base.py download \
-    --uri "s3://bucket/documents/company/policy.pdf"
-
-# List files in KB
-python3 /workdir/tools/numa/knowledge_base.py list \
-    --kb-id company --pattern "*.pdf"
-
-# Upload to KB (admin: company, user: their KBs)
-python3 /workdir/tools/numa/knowledge_base.py upload \
-    --file /workdir/outputs/report.pdf \
-    --kb-id company
-
-# Download folder as zip
-python3 /workdir/tools/numa/knowledge_base.py download-folder \
-    --kb-id company --folder-path "reports/2024/"
+mcp__numa__numa_tool(
+  name="kb_download",
+  description="Downloading policy document",
+  params={"uri": "s3://bucket/documents/company/policy.pdf"}
+)
 
 # Web search
-python3 /workdir/tools/numa/web_search.py \
-    --query "GDPR compliance requirements" \
-    --user-intent "understand data protection obligations"
+mcp__numa__numa_tool(
+  name="web_search",
+  description="Researching GDPR compliance",
+  params={"query": "GDPR compliance requirements", "user_intent": "understand data protection obligations"}
+)
 
 # Extract text from scanned PDF
-python3 /workdir/tools/numa/extract_content.py \
-    --file-path "/workdir/uploads/scanned_invoice.pdf"
+mcp__numa__numa_tool(
+  name="extract_content",
+  description="Extracting text from scanned invoice",
+  params={"file_path": "/workdir/uploads/scanned_invoice.pdf"}
+)
 
-# Convert DOCX to PDF (direct file conversion)
-python3 /workdir/tools/numa/convert_document.py \
-    --file-path "/workdir/uploads/document.docx" \
-    --format pdf \
-    --mode file
-
-# Convert PDF to DOCX (direct file conversion)
-python3 /workdir/tools/numa/convert_document.py \
-    --file-path "/workdir/uploads/document.pdf" \
-    --format docx \
-    --mode file
-
-# Convert Markdown to PDF
-python3 /workdir/tools/numa/convert_document.py \
-    --file-path "/workdir/outputs/report.md" \
-    --format pdf
-
-# Convert Markdown to DOCX with title
-python3 /workdir/tools/numa/convert_document.py \
-    --file-path "/workdir/outputs/report.md" \
-    --format docx \
-    --title "Quarterly Report"
+# Convert DOCX to PDF
+mcp__numa__numa_tool(
+  name="convert_document",
+  description="Converting DOCX to PDF",
+  params={"file_path": "/workdir/uploads/document.docx", "format": "pdf", "mode": "file"}
+)
 ```
+
+### Tool Access Control (Two-Layer Model)
+
+Tool operations are controlled by two independent layers. Both must allow an operation for it to proceed:
+
+| Layer | Source | Scope | Controls |
+|-------|--------|-------|----------|
+| **Agent type config** | `allowed_numa_operations` on `AgentTypeConfig` | Per agent type (developer-set) | Hard limit on which operations are available |
+| **Frontend toggles** | `enabledTools` in request body | Per request (user-set) | User-controlled toggles in chat settings |
+
+**Agent type config** (Layer 1): Set `allowed_numa_operations` on an `AgentTypeConfig` to restrict which operations are available. `None` (default) means all operations are allowed. A list means only those operations are permitted:
+
+```python
+# Full access (default for numa-chat)
+allowed_numa_operations=None
+
+# Only KB search and content extraction
+allowed_numa_operations=["query_knowledge_base", "extract_content"]
+
+# No operations (even though MCP server is registered)
+allowed_numa_operations=[]
+```
+
+**Frontend toggles** (Layer 2): The frontend sends `enabledTools` in the request body based on user settings. Operations are gated by these toggles:
+
+| Frontend toggle key | Operations gated |
+|-------------------|-----------------|
+| `query_knowledge_base` | `query_knowledge_base`, `kb_upload`, `kb_download`, `kb_list`, `kb_download_folder` |
+| `web_search` | `web_search` |
+| `create_agent_tool` | `agents` |
+| `memories_tool` | `memories` |
+
+KB operations all share the same toggle — if the user hasn't enabled a knowledge base, they can't query, upload, download, or list.
+
+The remaining operations (`extract_content`, `convert_document`) have no frontend toggle — they're pure utility operations always available if the MCP server is enabled.
 
 ---
 
@@ -522,8 +541,16 @@ numa_workspace_agent/
 ├── hooks/                # Python async security hooks
 │   ├── __init__.py
 │   └── security.py       # PreToolUse/PostToolUse security enforcement
+├── agent_types/           # Agent type configuration system
+│   ├── __init__.py
+│   ├── base.py            # AgentTypeConfig dataclass, TOOL_FILE_MAP
+│   ├── registry.py        # Agent type registration and lookup
+│   ├── numa_chat.py       # Default chat agent type (full access)
+│   ├── research_agent.py  # Research-focused agent type
+│   └── document_summariser.py  # Restricted summariser agent type
 └── mcp_tools/            # SDK-registered MCP tools
     ├── __init__.py
+    ├── numa_tool.py       # Unified Numa tool dispatcher (KB, web search, agents, memories, etc.)
     ├── execute_script.py  # Sandboxed code execution (Python, Bash)
     └── integrations.py    # Pipedream integration tools (run_action, configure_props, proxy_request)
 ```
@@ -540,6 +567,7 @@ numa_workspace_agent/
 | **agent_config.py** | Fetches agent configs from DynamoDB, resolves approval modes for integrations |
 | **assistant.py** | Pre-request routing via Nova 2 Lite; detects skills needed from message content/file extensions |
 | **stream_logger.py** | Captures full conversation flow (text + tool calls) and logs summary at stream end |
+| **mcp_tools/numa_tool.py** | Unified Numa tool dispatcher with two-layer access control |
 | **mcp_tools/execute_script.py** | Sandboxed code execution for Python/Bash scripts with security scanning |
 | **mcp_tools/integrations.py** | Pipedream integration tools with human-in-the-loop approval |
 

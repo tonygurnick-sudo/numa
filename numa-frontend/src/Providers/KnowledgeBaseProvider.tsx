@@ -138,6 +138,8 @@ export function KnowledgeBaseProvider({ children }: { children: React.ReactNode 
   const [kbError, setKbError] = useState<string | null>(null);
 
   useEffect(() => {
+    // Re-set on mount to handle React StrictMode double-mount (cleanup sets false, remount needs true)
+    isMountedRef.current = true;
     return () => {
       isMountedRef.current = false;
     };

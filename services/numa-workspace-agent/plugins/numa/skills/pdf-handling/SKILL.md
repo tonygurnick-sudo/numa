@@ -30,7 +30,7 @@ Create, read, manipulate, and convert PDF files.
 | Merge, split, rotate PDFs | **PyPDF2** | Best for manipulation operations |
 | Extract images from PDFs | **PyMuPDF (fitz)** | Access embedded images directly |
 | Render pages as images | **pdf2image** or **PyMuPDF** | Page-to-image conversion |
-| Scanned/complex documents | `extract_content.py` Lambda | Vision AI — better than local OCR |
+| Scanned/complex documents | `extract_content` tool (via `numa_tool` MCP) | Vision AI — better than local OCR |
 | Convert DOCX/PPTX → PDF | `soffice --headless` | Local LibreOffice conversion |
 
 ---
@@ -464,13 +464,10 @@ pandoc /workdir/uploads/document.docx --pdf-engine=weasyprint --extract-media=/w
 pandoc /workdir/outputs/report.md -o /workdir/outputs/report.docx
 ```
 
-### Lambda Fallback
+### MCP Tool Fallback
 
-```bash
-python3 /workdir/tools/numa/convert_document.py \
-    --file-path "/workdir/outputs/report.md" \
-    --format pdf \
-    --mode markdown
+```
+mcp__numa__numa_tool(name="convert_document", description="Converting markdown report to PDF", params={"file_path": "/workdir/outputs/report.md", "format": "pdf", "mode": "markdown"})
 ```
 
 ---
@@ -658,16 +655,16 @@ soffice --headless --convert-to pdf --outdir /workdir/outputs/ /workdir/uploads/
 
 ---
 
-## When to Use extract_content.py vs Local Tools
+## When to Use the extract_content Tool vs Local Tools
 
 | Scenario | Recommended Tool |
 |----------|-----------------|
 | Text-based PDFs, simple text | **pdfplumber** (local, fast, layout-aware) |
 | Tables in PDFs | **pdfplumber** (local, `extract_tables()`) |
-| Scanned PDFs, images of text | `extract_content.py` (uses vision AI) |
-| Handwritten text, forms | `extract_content.py` |
-| Complex layouts, multi-column | Try pdfplumber first, fall back to `extract_content.py` |
-| Large documents (>50 pages) | `extract_content.py` (handles chunking) |
+| Scanned PDFs, images of text | `extract_content` tool via `numa_tool` MCP (uses vision AI) |
+| Handwritten text, forms | `extract_content` tool via `numa_tool` MCP |
+| Complex layouts, multi-column | Try pdfplumber first, fall back to `extract_content` tool |
+| Large documents (>50 pages) | `extract_content` tool via `numa_tool` MCP (handles chunking) |
 | Extract embedded images | **PyMuPDF (fitz)** |
 | Render pages as images | **pdf2image** or **PyMuPDF** |
 | Merge/split/rotate | **PyPDF2** |
@@ -676,9 +673,8 @@ soffice --headless --convert-to pdf --outdir /workdir/outputs/ /workdir/uploads/
 | Quick simple PDFs | **fpdf2** |
 
 **Example — Extract from scanned PDF:**
-```bash
-python3 /workdir/tools/numa/extract_content.py \
-    --file-path "/workdir/uploads/scanned_invoice.pdf"
+```
+mcp__numa__numa_tool(name="extract_content", description="Extracting content from scanned invoice", params={"file_path": "/workdir/uploads/scanned_invoice.pdf"})
 ```
 
 **When pdfplumber or PyPDF2 return empty or garbled text**, it's usually because:
@@ -686,7 +682,7 @@ python3 /workdir/tools/numa/extract_content.py \
 - The PDF uses custom fonts without proper encoding
 - The text is embedded in graphics
 
-In these cases, switch to `extract_content.py` which uses vision AI to "read" the document visually.
+In these cases, switch to the `extract_content` tool (via `numa_tool` MCP) which uses vision AI to "read" the document visually.
 
 ---
 
@@ -702,18 +698,14 @@ soffice --headless --convert-to pdf --outdir /workdir/outputs/ /workdir/uploads/
 soffice --headless --convert-to docx --outdir /workdir/outputs/ /workdir/uploads/document.pdf
 ```
 
-### Lambda Fallback
+### MCP Tool Fallback
 
-```bash
+```
 # PDF → DOCX
-python3 /workdir/tools/numa/convert_document.py \
-    --file-path "/workdir/uploads/document.pdf" \
-    --format docx --mode file
+mcp__numa__numa_tool(name="convert_document", description="Converting PDF to DOCX", params={"file_path": "/workdir/uploads/document.pdf", "format": "docx", "mode": "file"})
 
 # DOCX → PDF
-python3 /workdir/tools/numa/convert_document.py \
-    --file-path "/workdir/uploads/document.docx" \
-    --format pdf --mode file
+mcp__numa__numa_tool(name="convert_document", description="Converting DOCX to PDF", params={"file_path": "/workdir/uploads/document.docx", "format": "pdf", "mode": "file"})
 ```
 
 ---
@@ -731,7 +723,7 @@ python3 /workdir/tools/numa/convert_document.py \
 
 | Issue | Solution |
 |-------|----------|
-| Empty text extraction | PDF may be scanned — use `extract_content.py` instead |
+| Empty text extraction | PDF may be scanned — use the `extract_content` tool (via `numa_tool` MCP) instead |
 | Font not found (fpdf2) | Use built-in fonts: Helvetica, Times, Courier |
 | Large file size | Compress images before embedding; use JPEG over PNG |
 | WeasyPrint missing fonts | System fonts are available; use common font families |

@@ -131,6 +131,7 @@ export function WorkspaceChatSegmentRenderer({
                 label={segment.label}
                 steps={segment.steps}
                 result={segment.result}
+                toolInput={segment.input}
                 isLoading={segment.isLoading}
                 conversationId={conversationId}
                 sub={userSub}

@@ -26,6 +26,13 @@ const TOOL_RENDERERS: Record<string, ToolRenderer> = {
   create_agent_tool: AgentCreationRenderer,
   data_analysis: DataAnalysisRenderer,
   integrations: IntegrationsRenderer,
+  mcp__numa__numa_tool: FallbackRenderer,
+  // Numa sub-tool renderers (used when effectiveToolName resolves from mcp__numa__numa_tool input)
+  knowledge_base: KnowledgeBaseRenderer,
+  extract_content: FallbackRenderer,
+  convert_document: FallbackRenderer,
+  agents: FallbackRenderer,
+  memories: FallbackRenderer,
   _default: FallbackRenderer,
 };
 
@@ -35,6 +42,13 @@ const TOOL_LABEL_KEYS: Record<string, string> = {
   create_agent_tool: 'common:toolLabels.agentCreation',
   data_analysis: 'common:toolLabels.dataAnalysis',
   integrations: 'common:toolLabels.integration',
+  mcp__numa__numa_tool: 'common:toolLabels.numaTool',
+  // Numa sub-tool labels (resolved from mcp__numa__numa_tool input name)
+  knowledge_base: 'common:toolLabels.knowledgeBase',
+  extract_content: 'common:toolLabels.extractContent',
+  convert_document: 'common:toolLabels.convertDocument',
+  agents: 'common:toolLabels.agents',
+  memories: 'common:toolLabels.memories',
   _default: 'common:toolLabels.unknown',
 };
 
@@ -109,6 +123,14 @@ export function resolveToolVisual(toolName: string | null | undefined): ToolVisu
   if (name === 'create_agent_tool') return { kind: 'icon', className: 'bi bi-robot' };
   if (name === 'data_analysis') return { kind: 'icon', className: 'bi bi-bar-chart' };
 
+  // Numa MCP tool and sub-tools
+  if (name === 'mcp__numa__numa_tool') return { kind: 'icon', className: 'bi bi-tools' };
+  if (name === 'knowledge_base') return { kind: 'icon', className: 'bi bi-folder2-open' };
+  if (name === 'extract_content') return { kind: 'icon', className: 'bi bi-file-earmark-text' };
+  if (name === 'convert_document') return { kind: 'icon', className: 'bi bi-file-earmark-arrow-down' };
+  if (name === 'agents') return { kind: 'icon', className: 'bi bi-robot' };
+  if (name === 'memories') return { kind: 'icon', className: 'bi bi-lightbulb' };
+
   // Integrations: prefer branded image; fallback to bootstrap icon class from config
   if (name.endsWith('_integration')) {
     const integrationId = name.replace(/_integration$/, '');
@@ -172,6 +194,26 @@ export function getToolActionSteps(toolName: string | null | undefined, inputPay
       steps.push(i18n.t('common:toolSteps.dataAnalysis.running'));
     }
     return steps;
+  }
+
+  // Numa MCP tool: extract description or sub-tool name from input
+  if (name === 'mcp__numa__numa_tool') {
+    try {
+      if (inputPayload && typeof inputPayload === 'object') {
+        const obj = inputPayload as Record<string, unknown>;
+        const desc = obj.description;
+        if (typeof desc === 'string' && desc.trim()) {
+          return [desc.trim()];
+        }
+        const subTool = obj.name;
+        if (typeof subTool === 'string' && subTool.trim()) {
+          return [subTool.replace(/_/g, ' ')];
+        }
+      }
+    } catch {
+      /* ignore */
+    }
+    return [i18n.t('common:toolSteps.numaTool.running')];
   }
 
   // Integrations: the `input` typically contains `tool: <action-name>`

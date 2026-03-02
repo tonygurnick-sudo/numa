@@ -91,11 +91,15 @@ PROFILE_RESEARCHER = AgentTypeConfig(
         "TodoWrite",
         "KillShell",
         "Skill",
+        # MCP tools
+        "mcp__scripts__execute_script",
+        "mcp__numa__numa_tool",
     ],
     enable_scripts_mcp=True,
     enable_integrations_mcp=False,
-    # Web search available for research
-    enabled_numa_tools=["web_search"],
+    enable_numa_mcp=True,
+    # Web search migrated to MCP numa_tool
+    enabled_numa_tools=[],
     tools_source_dirs=["numa"],
     plugins_path="/app/plugins/numa",
     restrict_kbs=True,

@@ -548,13 +548,10 @@ pandoc /workdir/outputs/report.md -o /workdir/outputs/report.docx
 pandoc /workdir/outputs/report.md -o /workdir/outputs/report.docx --reference-doc=/workdir/uploads/template.docx
 ```
 
-### Lambda Fallback
+### MCP Tool Fallback
 
-```bash
-python3 /workdir/tools/numa/convert_document.py \
-    --file-path "/workdir/outputs/report.md" \
-    --format docx \
-    --mode markdown
+```
+mcp__numa__numa_tool(name="convert_document", description="Converting markdown report to DOCX", params={"file_path": "/workdir/outputs/report.md", "format": "docx", "mode": "markdown"})
 ```
 
 **Why this approach works well:**
@@ -615,25 +612,19 @@ soffice --headless --convert-to docx --outdir /workdir/outputs/ /workdir/uploads
 pandoc /workdir/outputs/report.md -o /workdir/outputs/report.docx
 ```
 
-### Lambda Fallback
+### MCP Tool Fallback
 
-Use `convert_document.py` when local tools aren't sufficient:
+Use the `convert_document` tool (via `numa_tool` MCP) when local tools aren't sufficient:
 
-```bash
+```
 # DOCX → PDF
-python3 /workdir/tools/numa/convert_document.py \
-    --file-path "/workdir/uploads/document.docx" \
-    --format pdf --mode file
+mcp__numa__numa_tool(name="convert_document", description="Converting DOCX to PDF", params={"file_path": "/workdir/uploads/document.docx", "format": "pdf", "mode": "file"})
 
 # PDF → DOCX
-python3 /workdir/tools/numa/convert_document.py \
-    --file-path "/workdir/uploads/document.pdf" \
-    --format docx --mode file
+mcp__numa__numa_tool(name="convert_document", description="Converting PDF to DOCX", params={"file_path": "/workdir/uploads/document.pdf", "format": "docx", "mode": "file"})
 
 # Markdown → DOCX
-python3 /workdir/tools/numa/convert_document.py \
-    --file-path "/workdir/outputs/report.md" \
-    --format docx --mode markdown
+mcp__numa__numa_tool(name="convert_document", description="Converting markdown to DOCX", params={"file_path": "/workdir/outputs/report.md", "format": "docx", "mode": "markdown"})
 ```
 
 ### Conversion Quality
@@ -653,17 +644,18 @@ python3 /workdir/tools/numa/convert_document.py \
 | Modifying existing DOCX | python-docx (this skill) |
 | Converting DOCX → PDF | `soffice --headless` (local) |
 | Converting Markdown → DOCX | `pandoc` (local) |
-| Complex/scanned PDFs | `extract_content.py` + `pandoc` |
+| Complex/scanned PDFs | `extract_content` tool (via `numa_tool` MCP) + `pandoc` |
 
 ### Alternative: Extract + Convert (for complex PDFs)
 
 For scanned or complex PDFs where direct conversion fails:
 
-```bash
-# Step 1: Extract content using vision AI
-python3 /workdir/tools/numa/extract_content.py \
-    --file-path "/workdir/uploads/scanned_document.pdf"
+```
+# Step 1: Extract content using vision AI (via MCP tool)
+mcp__numa__numa_tool(name="extract_content", description="Extracting content from scanned document", params={"file_path": "/workdir/uploads/scanned_document.pdf"})
+```
 
+```bash
 # Step 2: Convert extracted text to DOCX (local pandoc)
 pandoc /workdir/outputs/extracted_scanned_document.txt -o /workdir/outputs/document.docx
 ```

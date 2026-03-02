@@ -42,7 +42,7 @@ import type {
 
 // Document processing utilities
 import { parseChunkWithoutDocComments, extractSingleDocBlock, createDocStripState } from './streamingProcessors';
-import { resolveToolVisual } from './ToolConfig';
+import { resolveToolVisual, getToolActionSteps, resolveToolDescriptor } from './ToolConfig';
 
 // Type guards (runtime functions, not types)
 import {
@@ -75,6 +75,7 @@ const INLINE_TOOLS = new Set([
   'Grep',
   'Skill',
   'mcp__scripts__execute_script',
+  'mcp__numa__numa_tool',
   'TaskOutput',
 ]);
 
@@ -186,6 +187,21 @@ export function getToolCategoryAndIcon(
       return { category: 'transient' };
     }
     return { category: 'default' };
+  }
+
+  // Numa MCP tool: pick icon based on sub-tool name
+  if (toolName === 'mcp__numa__numa_tool') {
+    const inputObj = input && typeof input === 'object' ? (input as Record<string, unknown>) : {};
+    const subTool = (inputObj.name as string) || '';
+    const NUMA_SUB_TOOL_ICONS: Record<string, string> = {
+      knowledge_base: 'bi-folder2-open',
+      web_search: 'bi-search',
+      extract_content: 'bi-file-earmark-text',
+      convert_document: 'bi-file-earmark-arrow-down',
+      agents: 'bi-robot',
+      memories: 'bi-lightbulb',
+    };
+    return { category: 'important', iconName: NUMA_SUB_TOOL_ICONS[subTool] || 'bi-tools' };
   }
 
   // Check important tools map
@@ -402,6 +418,17 @@ export function getInlineToolDisplay(toolName: string, input: unknown): { text: 
       const shortName = skillName.includes(':') ? skillName.split(':').pop() : skillName;
       return { text: `Loading ${shortName} skill` };
     }
+    case 'mcp__numa__numa_tool': {
+      // Use description field (human-friendly), fall back to sub-tool name
+      const numaInput = inputObj as { name?: string; description?: string };
+      if (numaInput.description && typeof numaInput.description === 'string') {
+        return { text: numaInput.description };
+      }
+      if (numaInput.name && typeof numaInput.name === 'string') {
+        return { text: numaInput.name.replace(/_/g, ' ') };
+      }
+      return { text: 'Running Numa tool...' };
+    }
     default:
       return { text: `Using ${toolName}` };
   }
@@ -465,12 +492,13 @@ export function createInitialToolSegment(toolName: string, toolUseId: string): W
     case 'tool_card': {
       // Integration MCP tools get a placeholder; real label set in updateSegmentWithInput
       const isIntegration = INTEGRATION_MCP_TOOLS.has(toolName);
+      const isNumaTool = toolName === 'mcp__numa__numa_tool';
       return {
         kind: 'tool_card',
         toolUseId,
-        toolName: isIntegration ? toolName : toolName,
-        label: isIntegration ? 'Integration' : toolName,
-        steps: isIntegration ? ['Connecting...'] : [`Using ${toolName}`],
+        toolName,
+        label: isIntegration ? 'Integration' : isNumaTool ? 'Numa Tool' : toolName,
+        steps: isIntegration ? ['Connecting...'] : isNumaTool ? ['Loading...'] : [`Using ${toolName}`],
         isLoading: true,
       };
     }
@@ -554,6 +582,17 @@ export function updateSegmentWithInput(
           toolName: integrationInfo.integrationToolName || segment.toolName,
           label: integrationInfo.label,
           steps: [integrationInfo.label],
+        };
+      }
+      // For mcp__numa__numa_tool, derive label and steps from the sub-tool name
+      if (toolName === 'mcp__numa__numa_tool') {
+        const subTool = inputObj2.name as string | undefined;
+        const label = subTool ? resolveToolDescriptor(subTool).label : segment.toolName;
+        return {
+          ...segment,
+          input,
+          label,
+          steps: getToolActionSteps(toolName, input),
         };
       }
       return {
@@ -1006,9 +1045,16 @@ function addToolCard(helpers: WorkspaceChatMessageHelpers, toolUseId: string, to
   const inputObj = input && typeof input === 'object' ? (input as Record<string, unknown>) : {};
   const integrationInfo = formatIntegrationToolLabel(toolName, inputObj);
 
-  const effectiveToolName = integrationInfo?.integrationToolName || toolName;
-  const effectiveLabel = integrationInfo?.label || toolName;
-  const effectiveSteps = integrationInfo ? [integrationInfo.label] : [`Using ${toolName}`];
+  let effectiveToolName = integrationInfo?.integrationToolName || toolName;
+  let effectiveLabel = integrationInfo?.label || toolName;
+  let effectiveSteps = integrationInfo ? [integrationInfo.label] : [`Using ${toolName}`];
+
+  // For mcp__numa__numa_tool, derive label and steps from the sub-tool name
+  if (toolName === 'mcp__numa__numa_tool' && !integrationInfo) {
+    const subTool = inputObj.name as string | undefined;
+    if (subTool) effectiveLabel = resolveToolDescriptor(subTool).label;
+    effectiveSteps = getToolActionSteps(toolName, input);
+  }
 
   helpers.setMessages((prev) => {
     const updated = ensureAssistantMessage(prev);
@@ -2196,9 +2242,16 @@ function processAssistantContent(
 
       // Fallback: tool card for other tools
       const integrationInfo = formatIntegrationToolLabel(toolName, input);
-      const effectiveToolName = integrationInfo?.integrationToolName || toolName;
-      const effectiveLabel = integrationInfo?.label || toolName;
-      const effectiveSteps = integrationInfo ? [integrationInfo.label] : [`Using ${toolName}`];
+      let effectiveToolName = integrationInfo?.integrationToolName || toolName;
+      let effectiveLabel = integrationInfo?.label || toolName;
+      let effectiveSteps = integrationInfo ? [integrationInfo.label] : [`Using ${toolName}`];
+
+      // For mcp__numa__numa_tool, derive label and steps from the sub-tool name
+      if (toolName === 'mcp__numa__numa_tool' && !integrationInfo) {
+        const subTool = input?.name as string | undefined;
+        if (subTool) effectiveLabel = resolveToolDescriptor(subTool).label;
+        effectiveSteps = getToolActionSteps(toolName, input);
+      }
 
       segments.push({
         kind: 'tool_card',

@@ -9,31 +9,38 @@ Create, list, update, and duplicate Numa agents from the workspace. Supports att
 
 ## Quick Reference
 
-```bash
+```python
 # List your agents
-python3 /workdir/tools/numa/numa-agents.py list --scope owned
+mcp__numa__numa_tool(name="agents", description="List my agents", params={
+    "operation": "list", "scope": "owned"
+})
 
 # Get agent details
-python3 /workdir/tools/numa/numa-agents.py get --agent-id agt_abc123
+mcp__numa__numa_tool(name="agents", description="Get agent details", params={
+    "operation": "get", "agent_id": "agt_abc123"
+})
 
 # Create a new agent
-python3 /workdir/tools/numa/numa-agents.py create \
-    --title "Customer Support Agent" \
-    --system-prompt "You are a helpful customer support assistant..." \
-    --visibility personal
+mcp__numa__numa_tool(name="agents", description="Create customer support agent", params={
+    "operation": "create",
+    "title": "Customer Support Agent",
+    "systemPrompt": "You are a helpful customer support assistant...",
+    "visibility": "personal"
+})
 
 # Create an agent with file attachments
-python3 /workdir/tools/numa/numa-agents.py create \
-    --title "Policy Expert" \
-    --system-prompt "You help answer questions about company policies." \
-    --attach-file /workdir/uploads/handbook.pdf \
-    --attach-file /workdir/uploads/policies.docx
+mcp__numa__numa_tool(name="agents", description="Create policy expert agent", params={
+    "operation": "create",
+    "title": "Policy Expert",
+    "systemPrompt": "You help answer questions about company policies.",
+    "attach_files": ["/workdir/uploads/handbook.pdf", "/workdir/uploads/policies.docx"]
+})
 ```
 
-## Subcommands
+## Operations
 
-| Subcommand | Purpose |
-|------------|---------|
+| Operation | Purpose |
+|-----------|---------|
 | `list` | List agents (owned, public, or all) |
 | `get` | Get details of a specific agent |
 | `create` | Create a new agent |
@@ -42,7 +49,7 @@ python3 /workdir/tools/numa/numa-agents.py create \
 
 ---
 
-## List Subcommand
+## List Operation
 
 List agents with scope filtering.
 
@@ -50,23 +57,32 @@ List agents with scope filtering.
 
 | Parameter | Required | Default | Description |
 |-----------|----------|---------|-------------|
-| `--scope, -s` | No | owned | Scope: owned, public, or all |
-| `--agent-type, -t` | No | - | Filter by agent type |
+| `operation` | Yes | - | `"list"` |
+| `scope` | No | `"owned"` | `owned`, `public`, or `all` |
+| `agent_type` | No | - | Filter by agent type |
 
 ### Examples
 
-```bash
+```python
 # List your personal agents and agents you created
-python3 /workdir/tools/numa/numa-agents.py list --scope owned
+mcp__numa__numa_tool(name="agents", description="List my agents", params={
+    "operation": "list", "scope": "owned"
+})
 
 # List all public/company agents
-python3 /workdir/tools/numa/numa-agents.py list --scope public
+mcp__numa__numa_tool(name="agents", description="List public agents", params={
+    "operation": "list", "scope": "public"
+})
 
 # List all agents you can access
-python3 /workdir/tools/numa/numa-agents.py list --scope all
+mcp__numa__numa_tool(name="agents", description="List all agents", params={
+    "operation": "list", "scope": "all"
+})
 
 # Filter by agent type
-python3 /workdir/tools/numa/numa-agents.py list --scope owned --agent-type task
+mcp__numa__numa_tool(name="agents", description="List task agents", params={
+    "operation": "list", "scope": "owned", "agent_type": "task"
+})
 ```
 
 ### Output Format
@@ -84,7 +100,7 @@ JSON response with:
 
 ---
 
-## Get Subcommand
+## Get Operation
 
 Get detailed information about a specific agent.
 
@@ -92,12 +108,15 @@ Get detailed information about a specific agent.
 
 | Parameter | Required | Description |
 |-----------|----------|-------------|
-| `--agent-id, -a` | Yes | Agent ID to retrieve |
+| `operation` | Yes | `"get"` |
+| `agent_id` | Yes | Agent ID to retrieve |
 
 ### Examples
 
-```bash
-python3 /workdir/tools/numa/numa-agents.py get --agent-id agt_abc123
+```python
+mcp__numa__numa_tool(name="agents", description="Get agent details", params={
+    "operation": "get", "agent_id": "agt_abc123"
+})
 ```
 
 ### Output Format
@@ -111,7 +130,7 @@ JSON response with full agent details including:
 
 ---
 
-## Create Subcommand
+## Create Operation
 
 Create a new agent with custom instructions.
 
@@ -119,44 +138,52 @@ Create a new agent with custom instructions.
 
 | Parameter | Required | Default | Description |
 |-----------|----------|---------|-------------|
-| `--title, -t` | Yes | - | Agent display name |
-| `--system-prompt, -p` | Yes | - | Core instructions for the agent |
-| `--visibility, -v` | No | personal | personal or public |
-| `--description, -d` | No | - | One-line description |
-| `--agent-type` | No | task | Agent type label |
-| `--welcome-message, -w` | No | - | Greeting shown when agent starts |
-| `--time-saved` | No | - | Estimated time saved in minutes |
-| `--tools-config` | No | - | JSON tools configuration |
-| `--attach-file, -f` | No | - | Workspace file to attach (repeatable, max 5) |
+| `operation` | Yes | - | `"create"` |
+| `title` | Yes | - | Agent display name |
+| `systemPrompt` | Yes | - | Core instructions for the agent |
+| `visibility` | No | `"personal"` | `personal` or `public` |
+| `description` | No | - | One-line description |
+| `agentType` | No | `"task"` | Agent type label |
+| `userWelcomeMessage` | No | - | Greeting shown when agent starts |
+| `estimatedTimeSavedMinutes` | No | - | Estimated time saved in minutes |
+| `toolsConfig` | No | - | Tools configuration object |
+| `attach_files` | No | - | Array of workspace file paths to attach (max 5) |
 
 ### Examples
 
-```bash
+```python
 # Create a personal agent
-python3 /workdir/tools/numa/numa-agents.py create \
-    --title "Sales Report Generator" \
-    --system-prompt "You help create weekly sales reports from CRM data. Always include YoY comparisons and highlight significant changes." \
-    --description "Generates weekly sales reports with insights"
+mcp__numa__numa_tool(name="agents", description="Create sales report agent", params={
+    "operation": "create",
+    "title": "Sales Report Generator",
+    "systemPrompt": "You help create weekly sales reports from CRM data. Always include YoY comparisons and highlight significant changes.",
+    "description": "Generates weekly sales reports with insights"
+})
 
 # Create a public/company agent
-python3 /workdir/tools/numa/numa-agents.py create \
-    --title "Onboarding Assistant" \
-    --system-prompt "You help new employees navigate company resources and policies." \
-    --visibility public \
-    --description "Helps new hires get started"
+mcp__numa__numa_tool(name="agents", description="Create onboarding assistant", params={
+    "operation": "create",
+    "title": "Onboarding Assistant",
+    "systemPrompt": "You help new employees navigate company resources and policies.",
+    "visibility": "public",
+    "description": "Helps new hires get started"
+})
 
 # Create with file attachments
-python3 /workdir/tools/numa/numa-agents.py create \
-    --title "Policy Expert" \
-    --system-prompt "You help answer questions about company policies using the attached documents." \
-    --attach-file /workdir/uploads/employee_handbook.pdf \
-    --attach-file /workdir/uploads/benefits_guide.docx
+mcp__numa__numa_tool(name="agents", description="Create policy expert agent", params={
+    "operation": "create",
+    "title": "Policy Expert",
+    "systemPrompt": "You help answer questions about company policies using the attached documents.",
+    "attach_files": ["/workdir/uploads/employee_handbook.pdf", "/workdir/uploads/benefits_guide.docx"]
+})
 
 # Create with tools configuration
-python3 /workdir/tools/numa/numa-agents.py create \
-    --title "Research Agent" \
-    --system-prompt "You help with research tasks using web search and company KB." \
-    --tools-config '{"webSearchEnabled": true, "allowedKnowledgeBases": ["company"]}'
+mcp__numa__numa_tool(name="agents", description="Create research agent", params={
+    "operation": "create",
+    "title": "Research Agent",
+    "systemPrompt": "You help with research tasks using web search and company KB.",
+    "toolsConfig": {"webSearchEnabled": true, "allowedKnowledgeBases": ["company"]}
+})
 ```
 
 ### Tools Configuration Options
@@ -187,7 +214,7 @@ Admin policies may restrict agent creation:
 
 ---
 
-## Update Subcommand
+## Update Operation
 
 Update an existing agent you own or have permission to edit.
 
@@ -195,45 +222,49 @@ Update an existing agent you own or have permission to edit.
 
 | Parameter | Required | Description |
 |-----------|----------|-------------|
-| `--agent-id, -a` | Yes | Agent ID to update |
-| `--title, -t` | No | New title |
-| `--system-prompt, -p` | No | New instructions |
-| `--visibility, -v` | No | Change visibility |
-| `--description, -d` | No | New description |
-| `--agent-type` | No | New agent type |
-| `--welcome-message, -w` | No | New welcome message |
-| `--time-saved` | No | New time saved estimate |
-| `--tools-config` | No | New tools configuration (JSON) |
-| `--attach-file, -f` | No | Workspace file to attach (repeatable, max 5 total) |
+| `operation` | Yes | `"update"` |
+| `agent_id` | Yes | Agent ID to update |
+| `title` | No | New title |
+| `systemPrompt` | No | New instructions |
+| `visibility` | No | Change visibility (`personal` or `public`) |
+| `description` | No | New description |
+| `agentType` | No | New agent type |
+| `userWelcomeMessage` | No | New welcome message |
+| `estimatedTimeSavedMinutes` | No | New time saved estimate |
+| `toolsConfig` | No | New tools configuration object |
+| `attach_files` | No | Workspace files to attach (max 5 total) |
 
 ### Examples
 
-```bash
+```python
 # Update agent title and description
-python3 /workdir/tools/numa/numa-agents.py update \
-    --agent-id agt_abc123 \
-    --title "Sales Report Generator v2" \
-    --description "Updated with quarterly projections"
+mcp__numa__numa_tool(name="agents", description="Update agent title", params={
+    "operation": "update",
+    "agent_id": "agt_abc123",
+    "title": "Sales Report Generator v2",
+    "description": "Updated with quarterly projections"
+})
 
 # Update system prompt
-python3 /workdir/tools/numa/numa-agents.py update \
-    --agent-id agt_abc123 \
-    --system-prompt "You help create comprehensive sales reports..."
+mcp__numa__numa_tool(name="agents", description="Update agent prompt", params={
+    "operation": "update",
+    "agent_id": "agt_abc123",
+    "systemPrompt": "Improved instructions..."
+})
 
 # Add file attachments to an existing agent
-python3 /workdir/tools/numa/numa-agents.py update \
-    --agent-id agt_abc123 \
-    --attach-file /workdir/uploads/new_policy.pdf
-
-# Change agent to public
-python3 /workdir/tools/numa/numa-agents.py update \
-    --agent-id agt_abc123 \
-    --visibility public
+mcp__numa__numa_tool(name="agents", description="Attach file to agent", params={
+    "operation": "update",
+    "agent_id": "agt_abc123",
+    "attach_files": ["/workdir/uploads/new_policy.pdf"]
+})
 
 # Enable web search for an agent
-python3 /workdir/tools/numa/numa-agents.py update \
-    --agent-id agt_abc123 \
-    --tools-config '{"webSearchEnabled": true}'
+mcp__numa__numa_tool(name="agents", description="Enable web search for agent", params={
+    "operation": "update",
+    "agent_id": "agt_abc123",
+    "toolsConfig": {"webSearchEnabled": true}
+})
 ```
 
 ### Permissions
@@ -258,9 +289,9 @@ Files can be attached from these workspace locations:
 ### How It Works
 
 1. **Upload/Create files first** - Files must exist in the workspace before attaching
-2. **Use `--attach-file`** - Specify the full workspace path (can repeat for multiple files)
+2. **Use `attach_files`** - Provide an array of full workspace paths
 3. **Files are copied** - Files are copied to permanent agent storage (original files remain)
-4. **Extracted content included** - If the file has been processed with `extract_content.py`, the extracted text is also attached
+4. **Extracted content included** - If the file has been processed with the `extract_content` tool (via `numa_tool` MCP), the extracted text is also attached
 
 ### Limits
 
@@ -269,24 +300,27 @@ Files can be attached from these workspace locations:
 
 ### Example Workflow
 
-```bash
+```python
 # 1. User uploads files to workspace (via UI or prior steps)
 # Files are now at /workdir/uploads/handbook.pdf, /workdir/uploads/policies.docx
 
 # 2. Optionally extract content for better search
-python3 /workdir/tools/numa/extract_content.py -f /workdir/uploads/handbook.pdf
+mcp__numa__numa_tool(name="extract_content", description="Extract content from handbook", params={
+    "file_path": "/workdir/uploads/handbook.pdf"
+})
 
 # 3. Create agent with file attachments
-python3 /workdir/tools/numa/numa-agents.py create \
-    --title "HR Assistant" \
-    --system-prompt "You help employees with HR questions using the attached handbook and policies." \
-    --attach-file /workdir/uploads/handbook.pdf \
-    --attach-file /workdir/uploads/policies.docx
+mcp__numa__numa_tool(name="agents", description="Create HR assistant agent", params={
+    "operation": "create",
+    "title": "HR Assistant",
+    "systemPrompt": "You help employees with HR questions using the attached handbook and policies.",
+    "attach_files": ["/workdir/uploads/handbook.pdf", "/workdir/uploads/policies.docx"]
+})
 ```
 
 ---
 
-## Duplicate Subcommand
+## Duplicate Operation
 
 Create a personal copy of any agent you can access.
 
@@ -294,16 +328,21 @@ Create a personal copy of any agent you can access.
 
 | Parameter | Required | Description |
 |-----------|----------|-------------|
-| `--agent-id, -a` | Yes | Agent ID to duplicate |
+| `operation` | Yes | `"duplicate"` |
+| `agent_id` | Yes | Agent ID to duplicate |
 
 ### Examples
 
-```bash
+```python
 # Duplicate a company agent to your personal library
-python3 /workdir/tools/numa/numa-agents.py duplicate --agent-id agt_company123
+mcp__numa__numa_tool(name="agents", description="Duplicate company agent", params={
+    "operation": "duplicate", "agent_id": "agt_company123"
+})
 
 # Duplicate your own agent to make a variant
-python3 /workdir/tools/numa/numa-agents.py duplicate --agent-id agt_personal456
+mcp__numa__numa_tool(name="agents", description="Duplicate my agent", params={
+    "operation": "duplicate", "agent_id": "agt_personal456"
+})
 ```
 
 The duplicate is always created as a **personal** agent with "(Copy)" appended to the title. If a copy already exists, it becomes "(Copy 2)", "(Copy 3)", etc.
@@ -437,15 +476,17 @@ Before creating anything, present a complete draft for review:
   3. Ask for confirmation again
 - Only proceed to creation after receiving clear approval
 
-Once confirmed, execute the create command:
-```bash
-python3 /workdir/tools/numa/numa-agents.py create \
-    --title "Agent Title" \
-    --system-prompt "The complete system prompt..." \
-    --description "One-line description" \
-    --visibility personal \
-    --time-saved 15 \
-    --tools-config '{"webSearchEnabled": true, "allowedKnowledgeBases": null}'
+Once confirmed, execute the create call:
+```python
+mcp__numa__numa_tool(name="agents", description="Create agent", params={
+    "operation": "create",
+    "title": "Agent Title",
+    "systemPrompt": "The complete system prompt...",
+    "description": "One-line description",
+    "visibility": "personal",
+    "estimatedTimeSavedMinutes": 15,
+    "toolsConfig": {"webSearchEnabled": true, "allowedKnowledgeBases": null}
+})
 ```
 
 ---
@@ -528,7 +569,7 @@ Numa: Updated draft:
 
 User: Yes, create it
 
-Numa: [Executes create command and confirms success]
+Numa: [Executes create call and confirms success]
 ```
 
 ---
@@ -541,11 +582,13 @@ If the user has been working on a task and wants to save it as a reusable agent 
 2. **Still follow Steps 2-7** of the interactive process above
 3. Pre-fill the draft based on conversation context, but still get confirmation
 
-```bash
-python3 /workdir/tools/numa/numa-agents.py create \
-    --title "Weekly Report Helper" \
-    --system-prompt "Based on our conversation, here are the instructions..." \
-    --description "Helps create weekly status reports"
+```python
+mcp__numa__numa_tool(name="agents", description="Create weekly report helper agent", params={
+    "operation": "create",
+    "title": "Weekly Report Helper",
+    "systemPrompt": "Based on our conversation, here are the instructions...",
+    "description": "Helps create weekly status reports"
+})
 ```
 
 ### Find and use an agent
@@ -556,12 +599,16 @@ When user asks about available agents:
 2. Get details of specific agent if needed
 3. The user can select the agent via the UI
 
-```bash
+```python
 # Show available agents
-python3 /workdir/tools/numa/numa-agents.py list --scope all
+mcp__numa__numa_tool(name="agents", description="List all agents", params={
+    "operation": "list", "scope": "all"
+})
 
 # Get details about a specific one
-python3 /workdir/tools/numa/numa-agents.py get --agent-id agt_abc123
+mcp__numa__numa_tool(name="agents", description="Get agent details", params={
+    "operation": "get", "agent_id": "agt_abc123"
+})
 ```
 
 ### Improve an existing agent
@@ -572,12 +619,16 @@ When user wants to enhance an agent:
 2. Discuss improvements with user
 3. Update with new instructions
 
-```bash
+```python
 # Get current state
-python3 /workdir/tools/numa/numa-agents.py get --agent-id agt_abc123
+mcp__numa__numa_tool(name="agents", description="Get agent details", params={
+    "operation": "get", "agent_id": "agt_abc123"
+})
 
 # Update with improvements
-python3 /workdir/tools/numa/numa-agents.py update \
-    --agent-id agt_abc123 \
-    --system-prompt "Improved instructions..."
+mcp__numa__numa_tool(name="agents", description="Update agent instructions", params={
+    "operation": "update",
+    "agent_id": "agt_abc123",
+    "systemPrompt": "Improved instructions..."
+})
 ```

@@ -9,39 +9,48 @@ List, add, and update the user's persistent memories. Memories are facts, prefer
 
 ## Quick Reference
 
-```bash
+```python
 # List all memories
-python3 /workdir/tools/numa/numa-memories.py list
+mcp__numa__numa_tool(name="memories", description="List all memories", params={
+    "operation": "list"
+})
 
 # List memories filtered by scope
-python3 /workdir/tools/numa/numa-memories.py list --scope general
-python3 /workdir/tools/numa/numa-memories.py list --scope "integration:jira"
+mcp__numa__numa_tool(name="memories", description="List general memories", params={
+    "operation": "list", "scope": "general"
+})
 
 # Add a general memory
-python3 /workdir/tools/numa/numa-memories.py add --content "Prefers concise responses"
+mcp__numa__numa_tool(name="memories", description="Save user preference", params={
+    "operation": "add", "content": "Prefers concise responses"
+})
 
 # Add an integration-scoped memory
-python3 /workdir/tools/numa/numa-memories.py add \
-    --content "Jira Cloud ID: abc123-def456" \
-    --scope "integration:jira"
+mcp__numa__numa_tool(name="memories", description="Save Jira config", params={
+    "operation": "add",
+    "content": "Jira Cloud ID: abc123-def456",
+    "scope": "integration:jira"
+})
 
 # Update a memory
-python3 /workdir/tools/numa/numa-memories.py update \
-    --memory-id mem_abc123 \
-    --content "Prefers concise bullet-point responses"
+mcp__numa__numa_tool(name="memories", description="Update preference", params={
+    "operation": "update",
+    "memory_id": "mem_abc123",
+    "content": "Prefers concise bullet-point responses"
+})
 ```
 
-## Subcommands
+## Operations
 
-| Subcommand | Purpose |
-|------------|---------|
+| Operation | Purpose |
+|-----------|---------|
 | `list` | List memories (optionally filtered by scope) |
 | `add` | Add a new memory |
 | `update` | Update an existing memory's content |
 
 ---
 
-## List Subcommand
+## List Operation
 
 List the user's memories, optionally filtered by scope.
 
@@ -49,22 +58,31 @@ List the user's memories, optionally filtered by scope.
 
 | Parameter | Required | Default | Description |
 |-----------|----------|---------|-------------|
-| `--scope, -s` | No | all | Filter: `general`, `integration:{slug}`, or `agent:{agentId}` |
+| `operation` | Yes | - | `"list"` |
+| `scope` | No | all | Filter: `general`, `integration:{slug}`, or `agent:{agentId}` |
 
 ### Examples
 
-```bash
+```python
 # List all memories
-python3 /workdir/tools/numa/numa-memories.py list
+mcp__numa__numa_tool(name="memories", description="List all memories", params={
+    "operation": "list"
+})
 
 # List only general memories
-python3 /workdir/tools/numa/numa-memories.py list --scope general
+mcp__numa__numa_tool(name="memories", description="List general memories", params={
+    "operation": "list", "scope": "general"
+})
 
 # List Jira integration memories
-python3 /workdir/tools/numa/numa-memories.py list --scope "integration:jira"
+mcp__numa__numa_tool(name="memories", description="List Jira memories", params={
+    "operation": "list", "scope": "integration:jira"
+})
 
 # List memories for a specific agent
-python3 /workdir/tools/numa/numa-memories.py list --scope "agent:agt_abc123"
+mcp__numa__numa_tool(name="memories", description="List agent memories", params={
+    "operation": "list", "scope": "agent:agt_abc123"
+})
 ```
 
 ### Output Format
@@ -79,7 +97,7 @@ JSON response with:
 
 ---
 
-## Add Subcommand
+## Add Operation
 
 Add a new memory for the user.
 
@@ -87,30 +105,38 @@ Add a new memory for the user.
 
 | Parameter | Required | Default | Description |
 |-----------|----------|---------|-------------|
-| `--content, -c` | Yes | - | Memory content (max 300 characters) |
-| `--scope, -s` | No | `general` | Scope: `general`, `integration:{slug}`, or `agent:{agentId}` |
+| `operation` | Yes | - | `"add"` |
+| `content` | Yes | - | Memory content (max 300 characters) |
+| `scope` | No | `"general"` | `general`, `integration:{slug}`, or `agent:{agentId}` |
 
 ### Examples
 
-```bash
+```python
 # Add a general preference
-python3 /workdir/tools/numa/numa-memories.py add \
-    --content "Prefers dark mode"
+mcp__numa__numa_tool(name="memories", description="Save dark mode preference", params={
+    "operation": "add", "content": "Prefers dark mode"
+})
 
 # Add an integration memory
-python3 /workdir/tools/numa/numa-memories.py add \
-    --content "Slack workspace: acme-corp, main channel: #general" \
-    --scope "integration:slack"
+mcp__numa__numa_tool(name="memories", description="Save Slack config", params={
+    "operation": "add",
+    "content": "Slack workspace: acme-corp, main channel: #general",
+    "scope": "integration:slack"
+})
 
 # Add a Jira memory
-python3 /workdir/tools/numa/numa-memories.py add \
-    --content "Jira Cloud ID: abc123-def456, default project: ENG" \
-    --scope "integration:jira"
+mcp__numa__numa_tool(name="memories", description="Save Jira config", params={
+    "operation": "add",
+    "content": "Jira Cloud ID: abc123-def456, default project: ENG",
+    "scope": "integration:jira"
+})
 
 # Add an agent-specific memory
-python3 /workdir/tools/numa/numa-memories.py add \
-    --content "User wants weekly summaries from this agent" \
-    --scope "agent:agt_abc123"
+mcp__numa__numa_tool(name="memories", description="Save agent preference", params={
+    "operation": "add",
+    "content": "User wants weekly summaries from this agent",
+    "scope": "agent:agt_abc123"
+})
 ```
 
 ### Limits
@@ -121,7 +147,7 @@ python3 /workdir/tools/numa/numa-memories.py add \
 
 ---
 
-## Update Subcommand
+## Update Operation
 
 Update the content of an existing memory. The scope and creation date are preserved.
 
@@ -129,16 +155,19 @@ Update the content of an existing memory. The scope and creation date are preser
 
 | Parameter | Required | Description |
 |-----------|----------|-------------|
-| `--memory-id, -m` | Yes | Memory ID to update |
-| `--content, -c` | Yes | New memory content (max 300 characters) |
+| `operation` | Yes | `"update"` |
+| `memory_id` | Yes | Memory ID to update |
+| `content` | Yes | New memory content (max 300 characters) |
 
 ### Examples
 
-```bash
+```python
 # Update a memory's content
-python3 /workdir/tools/numa/numa-memories.py update \
-    --memory-id mem_abc123def456 \
-    --content "Prefers concise bullet-point responses with code examples"
+mcp__numa__numa_tool(name="memories", description="Update preference", params={
+    "operation": "update",
+    "memory_id": "mem_abc123def456",
+    "content": "Prefers concise bullet-point responses with code examples"
+})
 ```
 
 ### Notes
@@ -204,33 +233,40 @@ You cannot delete memories. If the user wants to delete a memory, direct them to
 
 When the user says "remember this" or similar:
 
-```bash
+```python
 # Just add it directly - no need to load the skill for quick adds
-python3 /workdir/tools/numa/numa-memories.py add \
-    --content "Prefers responses in British English"
+mcp__numa__numa_tool(name="memories", description="Save preference", params={
+    "operation": "add", "content": "Prefers responses in British English"
+})
 ```
 
 ### Review and Manage Memories
 
 When the user wants to see or manage their memories:
 
-```bash
+```python
 # 1. List all memories
-python3 /workdir/tools/numa/numa-memories.py list
+mcp__numa__numa_tool(name="memories", description="List all memories", params={
+    "operation": "list"
+})
 
 # 2. If updating, find the memory ID from the list, then:
-python3 /workdir/tools/numa/numa-memories.py update \
-    --memory-id mem_abc123 \
-    --content "Updated preference text"
+mcp__numa__numa_tool(name="memories", description="Update preference", params={
+    "operation": "update",
+    "memory_id": "mem_abc123",
+    "content": "Updated preference text"
+})
 ```
 
 ### Save Integration Details
 
 When working with an integration and discovering useful details:
 
-```bash
+```python
 # After discovering the user's Jira Cloud ID during an integration task
-python3 /workdir/tools/numa/numa-memories.py add \
-    --content "Jira Cloud ID: abc123-def456, preferred project: ENG-board" \
-    --scope "integration:jira"
+mcp__numa__numa_tool(name="memories", description="Save Jira config", params={
+    "operation": "add",
+    "content": "Jira Cloud ID: abc123-def456, preferred project: ENG-board",
+    "scope": "integration:jira"
+})
 ```

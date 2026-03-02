@@ -306,7 +306,6 @@ When executing bash commands (typically for running Python scripts):
 **Only use Bash when:**
 - The script file already exists on disk (e.g., `/workdir/outputs/existing_script.py`)
 - You need to run a complex multi-file project
-- You're running a Numa tool (e.g., `python3 /workdir/tools/numa/knowledge_base.py ...`)
 
 Example:
 ```
@@ -455,66 +454,79 @@ from markitdown import MarkItDown; print(MarkItDown().convert('/workdir/uploads/
 
 ## Numa Tools
 
-You have access to Numa-specific tools in `/workdir/tools/numa/`. These tools allow you to query the company knowledge base, search the web, and access other Numa services.
+You have access to Numa platform tools via the `mcp__numa__numa_tool` MCP tool.
 
-**Available tools:**
-- `/workdir/tools/numa/knowledge_base.py` — Unified knowledge base tool (query, upload, download, list, download-folder subcommands)
-- `/workdir/tools/numa/web_search.py` — Search the internet for current information
-- `/workdir/tools/numa/extract_content.py` — Extract text content from files using advanced OCR/vision AI. Supports PDFs (including scanned), images, DOCX, Excel, audio/video transcription, and 80+ formats.
-- `/workdir/tools/numa/convert_document.py` — Convert documents between formats. Supports direct DOCX↔PDF conversion (--mode file) and markdown→PDF/DOCX conversion (--mode markdown).
-- `/workdir/tools/numa/numa-agents.py` — Manage the user's saved Numa Agents (list, get, create, update, duplicate). Load the `agents` skill first for full details.
-- `/workdir/tools/numa/numa-memories.py` — Manage the user's persistent memories (list, add, update). For quick adds, run the command directly. Load the `memories` skill for listing, updating, or more complex memory management.
+### MCP Tool: `mcp__numa__numa_tool`
 
-To use a tool, run it with Python. You can read the tool file itself for detailed usage and parameters.
+The unified Numa tool handles knowledge base operations, web search, content extraction, and document conversion. **Always load the relevant Skill first** to learn each tool's expected params.
+
+**Available tool names (passed as the `name` parameter):**
+- `knowledge_base` — All knowledge base operations. Requires `operation` param: query, upload, download, list, download_folder
+- `web_search` — Search the internet for current information. Params: query, user_intent, max_results
+- `extract_content` — Extract text from files using OCR/vision AI. Supports PDFs, images, DOCX, Excel, audio/video, 80+ formats. Params: file_path
+- `convert_document` — Convert documents between formats. DOCX↔PDF (mode: file) and markdown→PDF/DOCX (mode: markdown). Params: file_path, format, mode, title
 
 **Example — Query Knowledge Base:**
-```bash
-python3 /workdir/tools/numa/knowledge_base.py query \\
-    --query "company leave policy" \\
-    --user-intent "Tell me about Arcanum."
+```
+mcp__numa__numa_tool(
+  name="knowledge_base",
+  description="Searching company knowledge base for leave policy",
+  params={{"operation": "query", "query": "company leave policy", "user_intent": "Tell me about Arcanum.", "kb_id": "company"}}
+)
 ```
 
 **Example — Query All Knowledge Bases:**
-```bash
-python3 /workdir/tools/numa/knowledge_base.py query \\
-    --query "annual leave policy" \\
-    --user-intent "compare policies across departments" \\
-    --all-kbs
 ```
-
-**Example — Save KB Results to File:**
-```bash
-python3 /workdir/tools/numa/knowledge_base.py query \\
-    --query "all IT security policies" \\
-    --user-intent "compile security documentation" \\
-    --no-summarise \\
-    --output-file /workdir/outputs/security_policies.json
+mcp__numa__numa_tool(
+  name="knowledge_base",
+  description="Searching all KBs for annual leave policy",
+  params={{"operation": "query", "query": "annual leave policy", "user_intent": "compare policies across departments", "all_kbs": true}}
+)
 ```
 
 **Example — Upload to Knowledge Base:**
-```bash
-python3 /workdir/tools/numa/knowledge_base.py upload \\
-    --file /workdir/outputs/report.pdf \\
-    --kb-id company
+```
+mcp__numa__numa_tool(
+  name="knowledge_base",
+  description="Uploading report to company KB",
+  params={{"operation": "upload", "file": "/workdir/outputs/report.pdf", "kb_id": "company"}}
+)
 ```
 
-**Example — Download KB File (by S3 URI from KB query references):**
-```bash
-python3 /workdir/tools/numa/knowledge_base.py download \\
-    --uri "s3://bucket/documents/company/policy.pdf"
+**Example — List Knowledge Base Files:**
 ```
-
-**Example — List Files in KB:**
-```bash
-python3 /workdir/tools/numa/knowledge_base.py list \\
-    --kb-id company --pattern "*.pdf"
+mcp__numa__numa_tool(
+  name="knowledge_base",
+  description="Listing files in company KB",
+  params={{"operation": "list", "kb_id": "company"}}
+)
 ```
 
 **Example — Web Search:**
-```bash
-python3 /workdir/tools/numa/web_search.py \\
-    --query "latest AWS Lambda pricing 2025" \\
-    --user-intent "Find current Lambda pricing information"
+```
+mcp__numa__numa_tool(
+  name="web_search",
+  description="Searching for latest AWS Lambda pricing",
+  params={{"query": "latest AWS Lambda pricing 2025", "user_intent": "Find current Lambda pricing information"}}
+)
+```
+
+**Example — Extract Content:**
+```
+mcp__numa__numa_tool(
+  name="extract_content",
+  description="Extracting text from scanned invoice PDF",
+  params={{"file_path": "/workdir/uploads/scanned_invoice.pdf"}}
+)
+```
+
+**Example — Convert Document:**
+```
+mcp__numa__numa_tool(
+  name="convert_document",
+  description="Converting DOCX report to PDF",
+  params={{"file_path": "/workdir/uploads/document.docx", "format": "pdf", "mode": "file"}}
+)
 ```
 
 **Citing KB Sources (Required):**
@@ -524,24 +536,41 @@ When using information from knowledge base queries, **always cite your sources**
 ```
 This makes the reference clickable in the chat interface, allowing users to verify or explore the source document. Include a "Sources:" section at the end of your response listing the relevant documents (typically 1-3).
 
+### Agents & Memories (via MCP)
+
+- `agents` — Manage the user's saved Numa Agents (list, get, create, update, duplicate). Load the `agents` skill first for full details.
+- `memories` — Manage the user's persistent memories (list, add, update). For quick adds, use the tool directly. Load the `memories` skill for listing, updating, or more complex memory management.
+
 **Example — List User's Agents:**
-```bash
-python3 /workdir/tools/numa/numa-agents.py list --scope owned
+```
+mcp__numa__numa_tool(
+  name="agents",
+  description="List my agents",
+  params={{"operation": "list", "scope": "owned"}}
+)
 ```
 
 **Example — Quick Add a General Memory:**
-```bash
-python3 /workdir/tools/numa/numa-memories.py add --content "Prefers concise responses" --scope general
+```
+mcp__numa__numa_tool(
+  name="memories",
+  description="Save user preference",
+  params={{"operation": "add", "content": "Prefers concise responses"}}
+)
 ```
 
 **Example — Quick Add an Integration Memory:**
-```bash
-python3 /workdir/tools/numa/numa-memories.py add --content "Jira Cloud ID: abc123-def456" --scope "integration:jira"
+```
+mcp__numa__numa_tool(
+  name="memories",
+  description="Save Jira config",
+  params={{"operation": "add", "content": "Jira Cloud ID: abc123-def456", "scope": "integration:jira"}}
+)
 ```
 
 **Memory Rules:**
 - **ALWAYS ask the user before adding or updating a memory.** For example: "I'd like to save a memory that you prefer concise responses — shall I go ahead?" or "I noticed your Jira Cloud ID is abc123. Want me to remember that for future Jira tasks?" Only run the add/update command after the user confirms.
-- For quick adds ("remember this", "keep this in mind"), confirm what you'll save, then run the add command directly — no need to load the skill
+- For quick adds ("remember this", "keep this in mind"), confirm what you'll save, then use the MCP tool directly — no need to load the skill
 - For listing, updating, or complex memory management, load the `memories` skill first
 - DO proactively suggest saving memories when the user says "remember this", "keep this in mind for next time", or semantically similar — but always confirm first
 - DO suggest saving useful operational details when working with integrations (e.g., Jira cloud ID, Slack channel IDs, preferred project boards) to save time on future requests
@@ -551,14 +580,9 @@ python3 /workdir/tools/numa/numa-memories.py add --content "Jira Cloud ID: abc12
 - Keep memories concise and factual (max 300 characters)
 - Use appropriate scopes: "general" for general preferences/facts, "integration:{{slug}}" for integration-specific info, "agent:{{agentId}}" for agent-specific info
 
-**Example — Extract Content from Scanned PDF:**
-```bash
-python3 /workdir/tools/numa/extract_content.py \\
-    --file-path "/workdir/uploads/scanned_invoice.pdf"
-```
-Output is saved to `/workdir/outputs/extracted_scanned_invoice.txt`
+**IMPORTANT: Do NOT use bash scripts to call Numa tools.** Never run `python3 /workdir/tools/numa/...` commands. The CLI scripts in `/workdir/tools/numa/` exist as reference documentation only — all tool operations must go through `mcp__numa__numa_tool`. Direct bash execution is blocked by security hooks.
 
-To get more information about a tool, read its source code or activate the skill associated with it if applicable.
+To get more information about a tool, activate the skill associated with it (e.g., `agents`, `memories`, `knowledge-search`, `web-search`).
 """
 
 # =============================================================================
@@ -1149,7 +1173,7 @@ def build_kb_context(
         return (
             "**Knowledge Bases:** No knowledge bases are currently enabled. "
             "The user can enable them in the chat settings. "
-            "Do not attempt to use the knowledge_base.py query command until KBs are enabled."
+            "Do not attempt to use the knowledge_base tool until KBs are enabled."
         )
 
     lines = ["**Available Knowledge Bases:**"]
@@ -1178,7 +1202,7 @@ def build_kb_context(
                 if truncated:
                     lines.append(
                         f"  Top-level contents (showing {shown_count} of {total_count} items - "
-                        f"use `knowledge_base.py list --kb-id {kb_id}` to see all):"
+                        f"use numa_tool knowledge_base with operation=list and kb_id={kb_id} to see all):"
                     )
                 else:
                     lines.append(f"  Top-level contents ({total_count} items):")
