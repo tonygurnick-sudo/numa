@@ -1,22 +1,24 @@
 import { useState, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { WorkZone, WorkStage, Ticket } from '../../../types/ops';
+import type { WorkZone, WorkStage, Ticket, TicketType } from '../../../types/ops';
 import KanbanColumn from './KanbanColumn';
 
 type KanbanZoneProps = {
   zone: WorkZone;
   stages: WorkStage[];
   tickets: Ticket[];
+  ticketTypes: TicketType[];
   onTicketClick: (ticket: Ticket) => void;
   onTicketContextMenu: (e: React.MouseEvent, ticket: Ticket) => void;
   onTicketAssign?: (ticketId: string, assigneeId: string | null, version: number) => void;
-  onQuickAdd: (stageId: string, title: string) => void;
+  onQuickAdd: (stageId: string, title: string, ticketTypeId?: string) => void;
 };
 
 const KanbanZone: React.FC<KanbanZoneProps> = ({
   zone,
   stages,
   tickets,
+  ticketTypes,
   onTicketClick,
   onTicketContextMenu,
   onTicketAssign,
@@ -39,10 +41,11 @@ const KanbanZone: React.FC<KanbanZoneProps> = ({
             key={stage.id}
             stage={stage}
             tickets={stageTickets}
+            ticketTypes={ticketTypes}
             onTicketClick={onTicketClick}
             onTicketContextMenu={onTicketContextMenu}
             onTicketAssign={onTicketAssign}
-            onQuickAdd={(title) => onQuickAdd(stage.id, title)}
+            onQuickAdd={(title, ticketTypeId) => onQuickAdd(stage.id, title, ticketTypeId)}
           />
         );
       })}

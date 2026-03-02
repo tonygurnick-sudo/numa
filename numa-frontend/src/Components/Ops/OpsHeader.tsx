@@ -65,63 +65,43 @@ const OpsHeader = () => {
     <>
       {/* ── Row 1: Title + Team Selector | Nav Tabs + Actions ── */}
       <div
-        className="d-flex align-items-center justify-content-between px-2 px-md-3 py-2 py-md-0 border-bottom bg-white flex-wrap"
-        style={{ minHeight: 92 }}
+        className="d-flex align-items-center justify-content-between px-2 px-md-3 py-2 border-bottom bg-white flex-wrap"
+        style={{ minHeight: 64 }}
       >
-        {/* Left: Page Title + Team Selector */}
-        <div className="d-flex align-items-center gap-2 gap-md-4">
-          <div
-            className="d-flex align-items-center gap-2"
-            style={{ cursor: canManage ? 'pointer' : 'default' }}
-            onClick={() => {
-              if (canManage) setTopView('home');
-            }}
-            role={canManage ? 'button' : undefined}
-            tabIndex={canManage ? 0 : undefined}
-            onKeyDown={
-              canManage
-                ? (e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                      e.preventDefault();
-                      setTopView('home');
-                    }
+        {/* Left: Page Title */}
+        <div
+          className="d-flex align-items-center gap-2"
+          style={{ cursor: canManage ? 'pointer' : 'default' }}
+          onClick={() => {
+            if (canManage) setTopView('home');
+          }}
+          role={canManage ? 'button' : undefined}
+          tabIndex={canManage ? 0 : undefined}
+          onKeyDown={
+            canManage
+              ? (e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    setTopView('home');
                   }
-                : undefined
-            }
-          >
-            <img src={navLogo} alt={t('title')} style={{ height: 40, width: 40, objectFit: 'contain' }} />
-            <div className="d-flex flex-column lh-sm">
-              <span className="fw-bold text-dark" style={{ fontSize: '1.15rem' }}>
-                {t('title')}
-              </span>
-              <span className="text-muted d-none d-lg-inline" style={{ fontSize: '0.78rem' }}>
-                {t('subtitle')}
-              </span>
-            </div>
+                }
+              : undefined
+          }
+        >
+          <img src={navLogo} alt={t('title')} style={{ height: 40, width: 40, objectFit: 'contain' }} />
+          <div className="d-flex flex-column lh-sm">
+            <span className="fw-bold text-dark" style={{ fontSize: '1.15rem' }}>
+              {t('title')}
+            </span>
+            <span className="text-muted d-none d-lg-inline" style={{ fontSize: '0.78rem' }}>
+              {t('subtitle')}
+            </span>
           </div>
-
-          {/* Team / All Teams selector dropdown */}
-          {teams.length > 0 && (
-            <>
-              <div className="vr" style={{ height: 32 }} />
-              <TeamSelector
-                currentTeam={teams.find((tm) => tm.id === selectedTeamId) ?? null}
-                teams={teams}
-                isAllTeams={boardViewMode === 'allTeams'}
-                onSelectTeam={(teamId) => {
-                  selectTeam(teamId);
-                  setBoardViewMode('singleTeam');
-                }}
-                onSelectAllTeams={() => setBoardViewMode('allTeams')}
-                onCreateTeam={() => setShowCreateTeam(true)}
-              />
-            </>
-          )}
         </div>
 
         {/* Right: Nav tabs + actions grouped together */}
-        <div className="d-flex align-items-center gap-2 gap-md-3 flex-wrap mt-2 mt-md-0 w-100 w-md-auto justify-content-start justify-content-md-end">
-          <div className="ops-nav-tabs d-flex flex-wrap" style={{ paddingBottom: 4 }}>
+        <div className="d-flex align-items-center gap-2 gap-md-3">
+          <div className="ops-nav-tabs d-flex flex-wrap">
             {OPS_TOP_VIEWS.map(({ key, labelKey, icon }) => (
               <button
                 key={key}
@@ -134,16 +114,6 @@ const OpsHeader = () => {
               </button>
             ))}
           </div>
-
-          <button
-            type="button"
-            className="btn btn-primary rounded-pill d-flex align-items-center justify-content-center"
-            style={{ fontSize: '0.85rem', padding: '7px 16px' }}
-            onClick={() => setShowCreateTicket(true)}
-          >
-            <i className="bi bi-plus-lg me-0 me-md-1" />
-            <span className="d-none d-md-inline">{t('tickets.newTicket')}</span>
-          </button>
 
           {canManage && (
             <button
@@ -160,37 +130,64 @@ const OpsHeader = () => {
       </div>
 
       {/* ── Row 2: Zone/Sprint strip or All Teams strip (Board view only) ── */}
+      {/* ── Row 2: Team selector + Zone/Sprint strip (Board view only) ── */}
       {topView === 'board' && (
         <div
           className="d-flex align-items-center px-3 gap-3 border-bottom bg-white"
-          style={{ minHeight: 68, padding: '14px 0' }}
+          style={{ minHeight: 54, padding: '10px 0' }}
         >
-          {boardViewMode === 'singleTeam' ? (
-            <>
-              {/* Zone / Sprint strip */}
-              <ZoneSprintStrip />
-
-              {/* Right-side controls */}
-              <div className="d-flex align-items-center gap-2 flex-shrink-0 ms-auto">
-                {/* Team settings gear */}
-                {selectedTeamId && canManage && (
-                  <button
-                    type="button"
-                    className="btn btn-outline-secondary btn-sm"
-                    onClick={() => setShowBoardSettings(true)}
-                    title={t('teams.settings')}
-                  >
-                    <i className="bi bi-sliders" />
-                  </button>
-                )}
-              </div>
-            </>
-          ) : (
-            <>
-              {/* All Teams strip */}
-              <AllTeamsStrip />
-            </>
+          {/* Team / All Teams selector */}
+          {teams.length > 0 && (
+            <div className="d-flex align-items-center gap-3 flex-shrink-0">
+              <TeamSelector
+                currentTeam={teams.find((tm) => tm.id === selectedTeamId) ?? null}
+                teams={teams}
+                isAllTeams={boardViewMode === 'allTeams'}
+                onSelectTeam={(teamId) => {
+                  selectTeam(teamId);
+                  setBoardViewMode('singleTeam');
+                }}
+                onSelectAllTeams={() => setBoardViewMode('allTeams')}
+                onCreateTeam={() => setShowCreateTeam(true)}
+              />
+              {/* Team settings — next to team name in single-team mode */}
+              {boardViewMode === 'singleTeam' && selectedTeamId && canManage && (
+                <button
+                  type="button"
+                  className="btn btn-link text-muted p-0"
+                  onClick={() => setShowBoardSettings(true)}
+                  title={t('teams.settings')}
+                  style={{ fontSize: '0.95rem' }}
+                >
+                  <i className="bi bi-sliders" />
+                </button>
+              )}
+              <div className="vr align-self-stretch my-2" />
+            </div>
           )}
+
+          {boardViewMode === 'singleTeam' ? (
+            <ZoneSprintStrip />
+          ) : (
+            <AllTeamsStrip
+              canManage={canManage}
+              onOpenTeamSettings={(teamId) => {
+                selectTeam(teamId);
+                setShowBoardSettings(true);
+              }}
+            />
+          )}
+
+          {/* New Ticket button — right side of board bar */}
+          <button
+            type="button"
+            className="btn btn-primary rounded-pill d-flex align-items-center justify-content-center flex-shrink-0 ms-auto"
+            style={{ fontSize: '0.85rem', padding: '7px 16px' }}
+            onClick={() => setShowCreateTicket(true)}
+          >
+            <i className="bi bi-plus-lg me-0 me-md-1" />
+            <span className="d-none d-md-inline">{t('tickets.newTicket')}</span>
+          </button>
         </div>
       )}
 

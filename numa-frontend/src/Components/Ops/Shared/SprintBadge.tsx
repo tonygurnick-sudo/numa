@@ -25,6 +25,7 @@ export function SprintBadge({ workUnit }: SprintBadgeProps): React.JSX.Element |
   return (
     <Badge
       pill
+      bg=""
       className="d-inline-flex align-items-center gap-1 fw-normal"
       style={{
         backgroundColor: `${dotColor}18`,

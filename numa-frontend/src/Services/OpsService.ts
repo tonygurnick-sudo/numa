@@ -206,6 +206,12 @@ export const updateWorkUnit = async (
   return response.workUnit;
 };
 
+export const deleteWorkUnit = async (numaDelete: NumaDelete, teamId: string, workUnitId: string): Promise<void> => {
+  console.info(`${LOG_PREFIX} deleteWorkUnit`, { teamId, workUnitId });
+  await numaDelete(`${BASE_URL}/teams/${encodeURIComponent(teamId)}/work-units/${encodeURIComponent(workUnitId)}`);
+  console.info(`${LOG_PREFIX} deleteWorkUnit: success`);
+};
+
 // ─── Tickets ───────────────────────────────────────────────────────────────
 
 export const listTickets = async (

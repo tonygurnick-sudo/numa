@@ -626,7 +626,7 @@ const handleTeams = async (
 
     const id = randomUUID();
     const ts = now();
-    const unitStatus = status ? String(status) : 'active';
+    const unitStatus = status ? String(status) : 'planning';
     const existingUnits = await queryGSI1(`TEAM#${teamId}`, 'WORKUNIT#');
     const order = (existingUnits.items.length + 1) * ORDER_GAP;
 
@@ -822,6 +822,41 @@ const handleTeams = async (
     await putItem(updated);
 
     return jsonResponse(200, { workUnit: updated, movedCount, rolloverCount });
+  }
+
+  // DELETE /ops/teams/{teamId}/work-units/{id} — delete a planning work unit
+  if (method === 'DELETE' && segments.length === 3 && segments[1] === 'work-units') {
+    if (!isAdmin(auth)) return errorResponse(403, 'Admin access required');
+    const teamId = segments[0];
+    const id = segments[2];
+    const existing = await getItem(`TEAM#${teamId}`, `WORKUNIT#${id}`);
+    if (!existing) return errorResponse(404, 'Work unit not found');
+    if (String(existing.status) !== 'planning') {
+      return errorResponse(409, 'Only planning sprints can be deleted');
+    }
+
+    // Un-assign any tickets linked to this work unit
+    const sprintTickets = await queryGSI2(`WORKUNIT#${id}`, 'TICKET#');
+    const ts = now();
+    for (const item of sprintTickets.items) {
+      if (String(item.entityType ?? '') === 'TICKET') {
+        const ticket = item;
+        await putItem({
+          ...ticket,
+          workUnitId: null,
+          updatedAt: ts,
+        });
+        // Remove the work unit index entry
+        try {
+          await deleteItem(`TEAM#${teamId}`, `TICKET#${String(ticket.id)}#IDX_WORKUNIT`);
+        } catch {
+          /* index may not exist */
+        }
+      }
+    }
+
+    await deleteItem(`TEAM#${teamId}`, `WORKUNIT#${id}`);
+    return jsonResponse(200, { deleted: true });
   }
 
   return errorResponse(404, 'Route not found');

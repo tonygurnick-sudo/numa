@@ -13,7 +13,12 @@ import { getCached, setCache } from '../../utils/opsCache';
  * pills (matching Ian's design). The selected team uses the context's
  * `teamData` directly; other teams are fetched on mount and cached.
  */
-const AllTeamsStrip = () => {
+interface AllTeamsStripProps {
+  canManage?: boolean;
+  onOpenTeamSettings?: (teamId: string) => void;
+}
+
+const AllTeamsStrip = ({ canManage, onOpenTeamSettings }: AllTeamsStripProps) => {
   const { t } = useTranslation('ops');
   const { numaGet } = useNumaRequest();
   const { teams, selectedTeamId, selectTeam, teamData, activeZoneId, setActiveZone } = useOps();
@@ -82,6 +87,16 @@ const AllTeamsStrip = () => {
     [selectedTeamId, teamData, teamDataCache],
   );
 
+  // Helper: get active work unit name for a team
+  const getActiveSprintName = useCallback(
+    (teamId: string): string | null => {
+      const data = teamId === selectedTeamId && teamData ? teamData : teamDataCache.get(teamId);
+      if (!data?.team?.workUnitSeries?.enabled || !data.activeWorkUnit) return null;
+      return data.activeWorkUnit.name ?? null;
+    },
+    [selectedTeamId, teamData, teamDataCache],
+  );
+
   // Handle clicking a zone pill inside a team box
   const handleSelectZone = useCallback(
     (teamId: string, zoneId: string) => {
@@ -116,6 +131,7 @@ const AllTeamsStrip = () => {
       {teams.map((team) => {
         const isSelected = team.id === selectedTeamId;
         const zones = getZonesForTeam(team.id);
+        const activeSprintName = getActiveSprintName(team.id);
 
         return (
           <TeamBox
@@ -124,8 +140,10 @@ const AllTeamsStrip = () => {
             isSelected={isSelected}
             zones={zones}
             activeZoneId={isSelected ? activeZoneId : null}
+            activeSprintName={activeSprintName}
             onSelectTeam={() => handleSelectTeam(team.id)}
             onSelectZone={(zoneId) => handleSelectZone(team.id, zoneId)}
+            onOpenSettings={canManage && onOpenTeamSettings ? () => onOpenTeamSettings(team.id) : undefined}
           />
         );
       })}
@@ -140,11 +158,23 @@ interface TeamBoxProps {
   isSelected: boolean;
   zones: { id: string; name: string; zoneType: string }[];
   activeZoneId: string | null;
+  activeSprintName: string | null;
   onSelectTeam: () => void;
   onSelectZone: (zoneId: string) => void;
+  onOpenSettings?: () => void;
 }
 
-const TeamBox = ({ team, isSelected, zones, activeZoneId, onSelectTeam, onSelectZone }: TeamBoxProps) => {
+const TeamBox = ({
+  team,
+  isSelected,
+  zones,
+  activeZoneId,
+  activeSprintName,
+  onSelectTeam,
+  onSelectZone,
+  onOpenSettings,
+}: TeamBoxProps) => {
+  const { t } = useTranslation('ops');
   return (
     <div
       className={`ops-team-box ${isSelected ? 'selected' : ''}`}
@@ -178,6 +208,20 @@ const TeamBox = ({ team, isSelected, zones, activeZoneId, onSelectTeam, onSelect
         >
           {team.name}
         </span>
+        {onOpenSettings && (
+          <button
+            type="button"
+            className="btn btn-link text-muted p-0 ms-auto flex-shrink-0"
+            onClick={(e) => {
+              e.stopPropagation();
+              onOpenSettings();
+            }}
+            title={t('teams.settings')}
+            style={{ fontSize: '0.8rem', lineHeight: 1 }}
+          >
+            <i className="bi bi-sliders" />
+          </button>
+        )}
       </div>
 
       {/* Zone links */}
@@ -200,6 +244,14 @@ const TeamBox = ({ team, isSelected, zones, activeZoneId, onSelectTeam, onSelect
               </button>
             );
           })}
+        </div>
+      )}
+
+      {/* Active sprint indicator */}
+      {activeSprintName && (
+        <div className="d-flex align-items-center gap-1 mt-1" style={{ fontSize: '0.75rem' }}>
+          <span className="d-inline-block rounded-circle" style={{ width: 6, height: 6, backgroundColor: '#198754' }} />
+          <span className="text-muted">{activeSprintName}</span>
         </div>
       )}
     </div>

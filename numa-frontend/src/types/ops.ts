@@ -603,6 +603,7 @@ export type CreateDocumentPayload = {
 
 export type CreateWorkUnitPayload = {
   name: string;
+  status?: WorkUnitStatus;
   goal?: string | null;
   startDate?: string | null;
   endDate?: string | null;
