@@ -757,22 +757,22 @@ export const AuthProvider = ({ children, initialTokens }) => {
     }
 
     try {
-      const idToken = tokensRef.current.idToken;
-      if (!idToken) {
+      if (!tokensRef.current.idToken) {
         console.error('No ID token available for QBusinessClient initialization');
         return;
       }
 
-      const credentials = fromWebToken({
-        roleSessionName: 'numa-qbusiness-client',
-        roleArn: roleArn,
-        webIdentityToken: idToken,
-        durationSeconds: 900,
-      });
+      const credentialProvider = () =>
+        fromWebToken({
+          roleSessionName: 'numa-qbusiness-client',
+          roleArn: roleArn,
+          webIdentityToken: tokensRef.current.idToken,
+          durationSeconds: 900,
+        })();
 
       const newClient = withPRM(QBusinessClient, {
         region: REGION,
-        credentials: await credentials(),
+        credentials: credentialProvider,
       });
 
       setQBusinessClient(newClient);
@@ -816,24 +816,24 @@ export const AuthProvider = ({ children, initialTokens }) => {
     }
 
     try {
-      const idToken = tokensRef.current.idToken;
-      if (!idToken) {
+      if (!tokensRef.current.idToken) {
         console.error('No ID token available for BedrockRuntimeClient initialization');
         return;
       }
 
       // Frontend uses direct Bedrock access within client account
       // Cross-account quota sharing is backend-only
-      const credentials = await fromWebToken({
-        roleSessionName: 'numa-bedrock-client',
-        roleArn: roleArn,
-        webIdentityToken: idToken,
-        durationSeconds: 1800, // Reduced from 1 hour to 30 minutes for better security
-      })();
+      const credentialProvider = () =>
+        fromWebToken({
+          roleSessionName: 'numa-bedrock-client',
+          roleArn: roleArn,
+          webIdentityToken: tokensRef.current.idToken,
+          durationSeconds: 1800, // Reduced from 1 hour to 30 minutes for better security
+        })();
 
       const newClient = withPRM(BedrockRuntimeClient, {
         region: REGION,
-        credentials,
+        credentials: credentialProvider,
       });
 
       setBedrockRuntimeClient(newClient);
@@ -879,22 +879,22 @@ export const AuthProvider = ({ children, initialTokens }) => {
     }
 
     try {
-      const idToken = tokensRef.current.idToken;
-      if (!idToken) {
+      if (!tokensRef.current.idToken) {
         console.error('No ID token available for BedrockAgentRuntimeClient initialization');
         return;
       }
 
-      const credentials = fromWebToken({
-        roleSessionName: 'numa-bedrock-agent-runtime-client',
-        roleArn: roleArn,
-        webIdentityToken: idToken,
-        durationSeconds: 1800, // Reduced from 1 hour to 30 minutes for better security
-      });
+      const credentialProvider = () =>
+        fromWebToken({
+          roleSessionName: 'numa-bedrock-agent-runtime-client',
+          roleArn: roleArn,
+          webIdentityToken: tokensRef.current.idToken,
+          durationSeconds: 1800, // Reduced from 1 hour to 30 minutes for better security
+        })();
 
       const newClient = withPRM(BedrockAgentRuntimeClient, {
         region: REGION,
-        credentials: await credentials(),
+        credentials: credentialProvider,
       });
 
       setBedrockAgentRuntimeClient(newClient);
@@ -937,22 +937,22 @@ export const AuthProvider = ({ children, initialTokens }) => {
     }
 
     try {
-      const idToken = tokensRef.current.idToken;
-      if (!idToken) {
+      if (!tokensRef.current.idToken) {
         console.error('No ID token available for BedrockAgentClient initialization');
         return;
       }
 
-      const credentials = fromWebToken({
-        roleSessionName: 'numa-bedrock-agent-client',
-        roleArn: roleArn,
-        webIdentityToken: idToken,
-        durationSeconds: 1800, // Reduced from 1 hour to 30 minutes for better security
-      });
+      const credentialProvider = () =>
+        fromWebToken({
+          roleSessionName: 'numa-bedrock-agent-client',
+          roleArn: roleArn,
+          webIdentityToken: tokensRef.current.idToken,
+          durationSeconds: 1800, // Reduced from 1 hour to 30 minutes for better security
+        })();
 
       const newClient = withPRM(BedrockAgentClient, {
         region: REGION,
-        credentials: await credentials(),
+        credentials: credentialProvider,
       });
 
       setBedrockAgentClient(newClient);
@@ -1000,22 +1000,22 @@ export const AuthProvider = ({ children, initialTokens }) => {
     }
 
     try {
-      const idToken = tokensRef.current.idToken;
-      if (!idToken) {
+      if (!tokensRef.current.idToken) {
         console.error('No ID token available for DynamoDBClient initialization');
         return;
       }
 
-      const credentials = await fromWebToken({
-        roleSessionName: 'numa-dynamo-client',
-        roleArn: roleArn,
-        webIdentityToken: idToken,
-        durationSeconds: 900,
-      })();
+      const credentialProvider = () =>
+        fromWebToken({
+          roleSessionName: 'numa-dynamo-client',
+          roleArn: roleArn,
+          webIdentityToken: tokensRef.current.idToken,
+          durationSeconds: 900,
+        })();
 
       const newClient = withPRM(DynamoDBClient, {
         region: REGION,
-        credentials: credentials,
+        credentials: credentialProvider,
       });
 
       setDynamoDBClient(newClient);
@@ -1061,22 +1061,22 @@ export const AuthProvider = ({ children, initialTokens }) => {
     }
 
     try {
-      const idToken = tokensRef.current.idToken;
-      if (!idToken) {
+      if (!tokensRef.current.idToken) {
         console.error('No ID token available for QAppsClient initialization');
         return;
       }
 
-      const credentials = await fromWebToken({
-        roleSessionName: 'numa-qapps-client',
-        roleArn: roleArn,
-        webIdentityToken: idToken,
-        durationSeconds: 900,
-      })();
+      const credentialProvider = () =>
+        fromWebToken({
+          roleSessionName: 'numa-qapps-client',
+          roleArn: roleArn,
+          webIdentityToken: tokensRef.current.idToken,
+          durationSeconds: 900,
+        })();
 
       const newQAppsClient = withPRM(QAppsClient, {
         region: REGION,
-        credentials: credentials,
+        credentials: credentialProvider,
       });
 
       setQAppsClient(newQAppsClient);

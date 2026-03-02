@@ -56,14 +56,14 @@ For any modified service code (e.g., `services/numa-workspace-agent`):
 
 For any modified frontend code:
 
-1. **Linting**:
+1. **Linting** (ESLint v9 flat config — no `--max-workers`, it runs single-threaded):
    ```bash
    yarn lint
    ```
 
-2. **Tests**:
+2. **Tests** (cap Vitest workers to avoid OOM on many-core machines):
    ```bash
-   yarn test
+   yarn test --pool=threads --poolOptions.threads.maxThreads=2
    ```
 
 ## Infrastructure (infra/)

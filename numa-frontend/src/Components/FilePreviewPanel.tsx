@@ -310,9 +310,7 @@ export const FilePreviewPanel: React.FC<FilePreviewPanelProps> = ({
         <div className="text-center py-5">
           <Spinner animation="border" />
           <p className="mt-3 text-muted">{t('filePreview.loadingPreview')}</p>
-          {convertingDocx && (
-            <p className="text-muted small">{t('filePreview.docx.converting')}</p>
-          )}
+          {convertingDocx && <p className="text-muted small">{t('filePreview.docx.converting')}</p>}
         </div>
       );
     }
