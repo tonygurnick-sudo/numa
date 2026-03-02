@@ -94,7 +94,7 @@ export const AgentCreateModal = ({
   onScheduleChange,
 }: AgentCreateModalProps) => {
   const { t } = useTranslation('agents');
-  const { user } = useAuth();
+  const { user, getIdToken } = useAuth();
   const { numaGet, numaPost, numaPut, numaDelete } = useNumaRequest();
   const schedulingEnabled =
     typeof window !== 'undefined' ? window.sessionStorage.getItem('SCHEDULING') === 'true' : false;
@@ -249,7 +249,7 @@ export const AgentCreateModal = ({
             const userGroup = user.decoded_tokens?.idToken?.['cognito:groups']?.[0] || 'standard';
             const roleArn = groupConfig?.[userGroup]?.roleArn;
             const cognitoUserId = user.decoded_tokens?.idToken?.sub;
-            const idTokenValue = user.tokens?.idToken;
+            const idTokenValue = await getIdToken();
 
             if (roleArn && cognitoUserId && idTokenValue) {
               const credentials = fromWebToken({

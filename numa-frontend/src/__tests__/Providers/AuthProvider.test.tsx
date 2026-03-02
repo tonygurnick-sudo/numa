@@ -356,17 +356,13 @@ describe('AuthProvider', () => {
         }),
       );
 
-      // Verify localStorage was updated with new tokens
+      // Verify localStorage was updated with new tokens — this is the authoritative
+      // store. User state is intentionally NOT updated when only tokens change
+      // (groups/features unchanged) to prevent cascading re-renders.
+      // Consumers use getAccessToken()/getIdToken() which read from tokensRef,
+      // kept in sync with localStorage by refreshTokens().
       expect(window.localStorage.setItem).toHaveBeenCalledWith('accessToken', TEST_TOKENS.valid.accessToken);
       expect(window.localStorage.setItem).toHaveBeenCalledWith('idToken', TEST_TOKENS.valid.idToken);
-
-      // Wait for the user state to be updated with new tokens after refresh
-      await waitFor(() => {
-        const updatedAuth = onAuth.mock.calls[onAuth.mock.calls.length - 1][0];
-        const userInfo = updatedAuth.getUserInfo();
-        // Verify that user info now contains the new valid tokens
-        expect(userInfo.tokens.accessToken).toBe(TEST_TOKENS.valid.accessToken);
-      });
     });
 
     it('should handle logout correctly', async () => {

@@ -181,7 +181,7 @@ const NumaChatAgents = () => {
   } = documentProcessor;
   const { setCurrentAbort, resetStreamingState } = streamingHandler;
 
-  const { user, bedrockRuntimeClient, numaChatDynamoUtils, getAccessToken } = useAuth();
+  const { user, bedrockRuntimeClient, numaChatDynamoUtils, getAccessToken, getIdToken } = useAuth();
   // Extract user info from token early (used by hooks/deps below)
   const idToken = user?.decoded_tokens?.idToken ?? {};
   const sub = idToken.sub;
@@ -839,8 +839,10 @@ const NumaChatAgents = () => {
           setAvailableConnections([]);
           return;
         }
+        const idTokenValue = await getIdToken();
+        if (!idTokenValue) return;
         const credentials = fromWebToken({
-          webIdentityToken: user.tokens.idToken,
+          webIdentityToken: idTokenValue,
           roleArn,
           roleSessionName: cognitoUserId,
         });
@@ -1207,7 +1209,7 @@ const NumaChatAgents = () => {
 
     // Prepare user authentication context for the Lambda
     const userAuth = {
-      idToken: user?.tokens?.idToken || localStorage.getItem('idToken'),
+      idToken: localStorage.getItem('idToken'),
       email: idToken.email,
       sub: sub,
       groups: user?.decoded_tokens?.idToken?.['cognito:groups'] || [],

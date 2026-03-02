@@ -64,7 +64,7 @@ const useNavigationConfirm = (when: boolean, message: string) => {
 
 export default function SettingsPage() {
   const { t, i18n } = useTranslation('settings');
-  const { user, getCredentials } = useAuth();
+  const { user, getCredentials, getIdToken } = useAuth();
   const { numaGet, numaPut } = useNumaRequest();
   const [activeKey, setActiveKey] = useState<string>('users');
   const [settingsScope, setSettingsScope] = useState<'user' | 'admin'>('user');
@@ -144,8 +144,10 @@ export default function SettingsPage() {
         const roleArn = GROUPS[userGroup]?.roleArn;
         const cognitoUserId = user.decoded_tokens?.idToken?.sub;
         if (!roleArn) return;
+        const idTokenValue = await getIdToken();
+        if (!idTokenValue) return;
         const credentials = fromWebToken({
-          webIdentityToken: user.tokens.idToken,
+          webIdentityToken: idTokenValue,
           roleArn,
           roleSessionName: cognitoUserId,
         });

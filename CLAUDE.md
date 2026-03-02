@@ -157,6 +157,19 @@ To add a new language option for users and ensure it reaches the LLM prompts, up
 5. **LLM prompt wording + language names:** `lib/bedrock/bedrock/language.py`
    Add the language code to `LANGUAGE_NAMES`. This file is the single source of truth for the system prompt wording used by both chat and apps.
 
+### Token Access Pattern (AuthProvider)
+
+**IMPORTANT:** Never read tokens directly from `user.tokens` or `user.decoded_tokens` for API calls or AWS credential creation. User state is intentionally NOT updated on token refresh (to prevent cascading re-renders across all `useAuth()` consumers). Tokens in `user.tokens` may be stale/expired.
+
+**Correct patterns:**
+- `await getAccessToken()` — for access tokens (API Authorization headers)
+- `await getIdToken()` — for ID tokens (STS `webIdentityToken`, chat agent requests)
+- `user.decoded_tokens.idToken.sub`, `.email`, `.cognito:groups` — identity claims are safe to read from state (they don't change during a session)
+
+**Why:** `refreshTokens()` updates `tokensRef`, `decodedTokensRef`, and `localStorage` every 10 minutes, but only calls `setUser()` when groups/features actually change. This prevents a cascade where every `useAuth()` consumer re-renders and all AWS clients are re-initialized. `getAccessToken()`/`getIdToken()` read from refs (always fresh) and handle expiry checks automatically.
+
+**Key files:** `numa-frontend/src/Providers/AuthProvider.tsx`, `numa-frontend/src/Providers/RequestProvider.tsx`
+
 ---
 
 ## Legacy Chat Agent — V1 (DEPRECATED) (lambdas/python/numa-chat-agent)

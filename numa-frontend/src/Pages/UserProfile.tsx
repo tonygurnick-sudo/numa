@@ -71,7 +71,7 @@ export default function UserProfilePage({
   settingsScope = 'user',
 }: UserProfilePageProps) {
   const { t } = useTranslation('settings');
-  const { user, getCredentials, listDevices, forgetDevice } = useAuth();
+  const { user, getCredentials, getIdToken, listDevices, forgetDevice } = useAuth();
   const { numaGet, numaPut } = useNumaRequest();
   const { availableKBs, isLoadingKBs, kbError } = useKnowledgeBase();
 
@@ -419,8 +419,10 @@ export default function UserProfilePage({
           setAvailableConnections([]);
           return;
         }
+        const idTokenValue = await getIdToken();
+        if (!idTokenValue) return;
         const credentials = fromWebToken({
-          webIdentityToken: user.tokens.idToken,
+          webIdentityToken: idTokenValue,
           roleArn,
           roleSessionName: cognitoUserId,
         });

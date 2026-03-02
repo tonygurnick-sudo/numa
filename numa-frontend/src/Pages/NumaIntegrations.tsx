@@ -32,7 +32,7 @@ type PipedreamConnection = ConnectionStatus & {
 
 export const NumaIntegrations = () => {
   const { t, i18n } = useTranslation('integrations');
-  const { user } = useAuth();
+  const { user, getIdToken } = useAuth();
   const { numaGet } = useNumaRequest();
   const [lambdaClient, setLambdaClient] = useState<LambdaClient | null>(null);
   const [connections, setConnections] = useState<PipedreamConnection[]>([]);
@@ -93,8 +93,10 @@ export const NumaIntegrations = () => {
           setError(t('errors.permissions'));
           return;
         }
+        const idTokenValue = await getIdToken();
+        if (!idTokenValue) return;
         const credentials = fromWebToken({
-          webIdentityToken: user.tokens.idToken,
+          webIdentityToken: idTokenValue,
           roleArn,
           roleSessionName: cognitoUserId,
           durationSeconds: 3600,

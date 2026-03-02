@@ -29,7 +29,7 @@ type FilterOption = 'all' | 'personal' | 'public';
 export const AgentsManagement = () => {
   const { t } = useTranslation('agents');
   const { numaGet, numaDelete, numaPost, numaPut } = useNumaRequest();
-  const { user } = useAuth();
+  const { user, getIdToken } = useAuth();
   const navigate = useNavigate();
   const agentsFeatureEnabled =
     typeof window !== 'undefined' ? window.sessionStorage.getItem('AGENTS') === 'true' : false;
@@ -262,7 +262,7 @@ export const AgentsManagement = () => {
       const userGroup = user.decoded_tokens?.idToken?.['cognito:groups']?.[0] || 'standard';
       const roleArn = GROUPS?.[userGroup]?.roleArn;
       const cognitoUserId = user.decoded_tokens?.idToken?.sub;
-      const idTokenValue = user.tokens?.idToken;
+      const idTokenValue = await getIdToken();
       if (!REGION || !roleArn || !cognitoUserId || !idTokenValue) {
         setMissingModal({ show: true, loading: false, agent, missing: needs, error: null });
         return;
@@ -410,7 +410,7 @@ export const AgentsManagement = () => {
         const userGroup = user.decoded_tokens?.idToken?.['cognito:groups']?.[0] || 'standard';
         const roleArn = GROUPS?.[userGroup]?.roleArn;
         const cognitoUserId = user.decoded_tokens?.idToken?.sub;
-        const idTokenValue = user.tokens?.idToken;
+        const idTokenValue = await getIdToken();
         if (!REGION || !roleArn || !cognitoUserId || !idTokenValue) return;
         const credentials = fromWebToken({
           webIdentityToken: idTokenValue,

@@ -549,10 +549,20 @@ export const AuthProvider = ({ children, initialTokens }) => {
               idToken: newDecodedIdToken,
             };
 
-            setUser((prevUser) => ({
-              ...prevUser,
-              ...userUpdate,
-            }));
+            setUser((prevUser) => {
+              if (!prevUser) return { ...prevUser, ...userUpdate };
+
+              const groupsMatch = JSON.stringify(prevUser.groups?.slice().sort()) === JSON.stringify(groups.sort());
+              const featuresMatch =
+                JSON.stringify(prevUser.features?.slice().sort()) === JSON.stringify(features.sort());
+
+              // Only trigger re-render when identity attributes change.
+              // Tokens are already fresh in tokensRef, decodedTokensRef,
+              // and localStorage — consumers use getAccessToken()/getIdToken().
+              if (groupsMatch && featuresMatch) return prevUser;
+
+              return { ...prevUser, ...userUpdate };
+            });
 
             lastRefreshTimeRef.current = Date.now();
             scheduleRefreshBeforeExpiry();
@@ -700,6 +710,17 @@ export const AuthProvider = ({ children, initialTokens }) => {
 
     // Return the current access token from tokensRef instead of user.tokens
     return tokensRef.current.accessToken;
+  }, [refreshTokens]);
+
+  const getIdToken = useCallback(async () => {
+    if (!user) return null;
+
+    if (isTokenExpired(decodedTokensRef.current.idToken)) {
+      const refreshed = await refreshTokens();
+      if (!refreshed) return null;
+    }
+
+    return tokensRef.current.idToken;
   }, [refreshTokens]);
 
   const initializeQBusinessClient = useCallback(async () => {
@@ -2014,6 +2035,7 @@ export const AuthProvider = ({ children, initialTokens }) => {
       setNewPassword,
       refreshTokens,
       getAccessToken,
+      getIdToken,
       getUserInfo,
       checkAndRefreshTokens,
       forceTokenValidation,
@@ -2044,6 +2066,7 @@ export const AuthProvider = ({ children, initialTokens }) => {
     setNewPassword,
     refreshTokens,
     getAccessToken,
+    getIdToken,
     getUserInfo,
     checkAndRefreshTokens,
     forceTokenValidation,
