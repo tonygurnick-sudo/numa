@@ -247,7 +247,9 @@
     },
     "loading": "לואדינג...",
     "loadingConversation": "לואדינג כונבהרסאטיונ...",
-    "documentTitle": "דוכומהנט"
+    "documentTitle": "דוכומהנט",
+    "firstMessageInitializing": "סביבת העבודה המאובטחת שלך מוגדרת. התגובה הראשונה עשויה לקחת מספר שניות נוספות.",
+    "initializingWorkspace": "מאתחל סביבת עבודה מאובטחת..."
   },
   "workspace": {
     "thinkingBlock": {

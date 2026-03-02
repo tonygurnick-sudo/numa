@@ -257,7 +257,8 @@
     "loading": "Loading...",
     "loadingConversation": "Loading conversation...",
     "documentTitle": "Document",
-    "firstMessageInitializing": "Your workspace is being set up. The first response may take a few extra seconds."
+    "firstMessageInitializing": "Your secure workspace is being set up. The first response may take a few extra seconds.",
+    "initializingWorkspace": "Initializing secure workspace..."
   },
   "workspace": {
     "export": {

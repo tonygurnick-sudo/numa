@@ -2210,7 +2210,7 @@ const NumaWorkspaceChatAgents = () => {
                             {t('page.initializing', { defaultValue: 'Initializing' })}
                           </span>
                         </div>
-                        <span>{t('page.initializingWorkspace', { defaultValue: 'Initializing workspace...' })}</span>
+                        <span>{t('page.initializingWorkspace')}</span>
                       </div>
                     )}
 
