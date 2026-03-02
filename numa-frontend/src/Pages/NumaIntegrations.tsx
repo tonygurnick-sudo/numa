@@ -1,13 +1,10 @@
-import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import type { TFunction } from 'i18next';
 import { useTranslation } from 'react-i18next';
 import { Container, Row, Col, Button, Alert, Spinner, Collapse, Modal } from 'react-bootstrap';
 import { AlertTriangle, Grid3X3, Link2, RefreshCw, Settings, X, Zap } from 'lucide-react';
 
 import { createFrontendClient } from '@pipedream/sdk/browser';
-import { LambdaClient } from '@aws-sdk/client-lambda';
-import { withPRM } from '../utils/prmUtils';
-import { fromWebToken } from '@aws-sdk/credential-providers';
 import { useAuth } from '../Providers/AuthProvider';
 import { GenericTestConnection } from '../Components/GenericTestConnection';
 import { getIntegrationsListFormat, type IntegrationListItem } from '../config/integrationsConfig';
@@ -32,9 +29,8 @@ type PipedreamConnection = ConnectionStatus & {
 
 export const NumaIntegrations = () => {
   const { t, i18n } = useTranslation('integrations');
-  const { user, getIdToken } = useAuth();
+  const { user, lambdaClient } = useAuth();
   const { numaGet } = useNumaRequest();
-  const [lambdaClient, setLambdaClient] = useState<LambdaClient | null>(null);
   const [connections, setConnections] = useState<PipedreamConnection[]>([]);
   const availableApps = useMemo<IntegrationListItem[]>(() => getIntegrationsListFormat(), [i18n.language]);
   const [loading, setLoading] = useState(true);
@@ -66,58 +62,21 @@ export const NumaIntegrations = () => {
   // Global admin integration settings
   const [globalSettings, setGlobalSettings] = useState<GlobalIntegrationSettingsMap>({});
   const [dataConnectorSettings, setDataConnectorSettings] = useState<GlobalDataConnectorSettingsMap>({});
-  const lambdaInitializedRef = useRef(false);
 
-  // Initialize Lambda client only if integrations proxy is configured
+  // Detect preview mode when integrations proxy is not configured
   useEffect(() => {
-    const initializeLambdaClient = async () => {
-      if (!user) return;
-      if (lambdaClient || lambdaInitializedRef.current) return;
-      const relayLambdaArn = sessionStorage.getItem('PIPEDREAM_RELAY_LAMBDA_ARN');
-      const enabledFlag = sessionStorage.getItem('PIPEDREAM_INTEGRATIONS') === 'true';
-      if (!relayLambdaArn || !enabledFlag) {
-        console.log('Integrations proxy not configured or disabled - entering preview mode');
-        setPreviewMode(true);
-        setLambdaClient(null);
-        setLoading(false);
-        return;
-      }
-      try {
-        const REGION = window.sessionStorage.getItem('REGION') || 'us-east-1';
-        const GROUPS = JSON.parse(window.sessionStorage.getItem('GROUPS') || '{}');
-        const userGroup = user.decoded_tokens?.idToken?.['cognito:groups']?.[0] || 'standard';
-        const roleArn = GROUPS[userGroup]?.roleArn;
-        const cognitoUserId = user.decoded_tokens?.idToken?.sub;
-        if (!roleArn) {
-          console.error('No role ARN found for user group:', userGroup);
-          setError(t('errors.permissions'));
-          return;
-        }
-        const idTokenValue = await getIdToken();
-        if (!idTokenValue) return;
-        const credentials = fromWebToken({
-          webIdentityToken: idTokenValue,
-          roleArn,
-          roleSessionName: cognitoUserId,
-          durationSeconds: 3600,
-        });
-        const newClient = withPRM(LambdaClient, { region: REGION, credentials });
-        setLambdaClient(newClient);
-        if (!lambdaInitializedRef.current) {
-          console.log('Lambda client initialized successfully for integrations proxy');
-          lambdaInitializedRef.current = true;
-        }
-      } catch (err) {
-        console.error('Error initializing Lambda client:', err);
-        setError(t('errors.initLambda'));
-      }
-    };
-    initializeLambdaClient();
-  }, [user, lambdaClient]);
+    if (!user) return;
+    const relayLambdaArn = sessionStorage.getItem('PIPEDREAM_RELAY_LAMBDA_ARN');
+    const enabledFlag = sessionStorage.getItem('PIPEDREAM_INTEGRATIONS') === 'true';
+    if (!relayLambdaArn || !enabledFlag) {
+      setPreviewMode(true);
+      setLoading(false);
+    }
+  }, [user]);
 
-  // Load connection status when lambda client is ready
+  // Load connection status when lambda client is ready and not in preview mode
   useEffect(() => {
-    if (lambdaClient) {
+    if (lambdaClient && !previewMode) {
       loadConnectionStatus();
     }
   }, [lambdaClient]);

@@ -1,8 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, Button, Dropdown, Form, Spinner, Tab } from 'react-bootstrap';
-import { LambdaClient } from '@aws-sdk/client-lambda';
 import { PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
-import { fromWebToken } from '@aws-sdk/credential-providers';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import axios from 'axios';
 import { useAuth } from '../Providers/AuthProvider';
@@ -71,7 +69,7 @@ export default function UserProfilePage({
   settingsScope = 'user',
 }: UserProfilePageProps) {
   const { t } = useTranslation('settings');
-  const { user, getCredentials, getIdToken, listDevices, forgetDevice } = useAuth();
+  const { user, getCredentials, listDevices, forgetDevice, lambdaClient } = useAuth();
   const { numaGet, numaPut } = useNumaRequest();
   const { availableKBs, isLoadingKBs, kbError } = useKnowledgeBase();
 
@@ -152,8 +150,6 @@ export default function UserProfilePage({
   const hasPipedreamFeature = window.sessionStorage.getItem('PIPEDREAM_INTEGRATIONS') === 'true';
   const relayLambdaArn = window.sessionStorage.getItem('PIPEDREAM_RELAY_LAMBDA_ARN');
   const previewMode = !hasPipedreamFeature || !relayLambdaArn;
-  const REGION = window.sessionStorage.getItem('REGION') || 'us-east-1';
-
   // Profile image upload state
   const [imageUploading, setImageUploading] = useState(false);
   const [imageError, setImageError] = useState<string | null>(null);
@@ -266,7 +262,6 @@ export default function UserProfilePage({
     setProfileDirty(true);
   }, [userProfile.profileImage]);
 
-  const [lambdaClient, setLambdaClient] = useState<LambdaClient | null>(null);
   const [connectionsLoading, setConnectionsLoading] = useState<boolean>(false);
   const [availableConnections, setAvailableConnections] = useState<Connection[]>([]);
   const [dataAnalysisAvailable, setDataAnalysisAvailable] = useState(true);
@@ -400,41 +395,13 @@ export default function UserProfilePage({
   const canEditUserDefaults = globalLoaded && globalAllowUserDefaults;
   const canEditProfile = globalLoaded;
 
+  // Clear connections state when in preview mode
   useEffect(() => {
-    const init = async () => {
-      if (!user) return;
-      if (previewMode) {
-        setConnectionsLoading(false);
-        setAvailableConnections([]);
-        return;
-      }
-
-      try {
-        const GROUPS = JSON.parse(window.sessionStorage.getItem('GROUPS') || '{}');
-        const userGroup = user.decoded_tokens?.idToken?.['cognito:groups']?.[0] || 'standard';
-        const roleArn = GROUPS[userGroup]?.roleArn;
-        const cognitoUserId = user.decoded_tokens?.idToken?.sub;
-        if (!roleArn) {
-          setConnectionsLoading(false);
-          setAvailableConnections([]);
-          return;
-        }
-        const idTokenValue = await getIdToken();
-        if (!idTokenValue) return;
-        const credentials = fromWebToken({
-          webIdentityToken: idTokenValue,
-          roleArn,
-          roleSessionName: cognitoUserId,
-        });
-        const client = withPRM(LambdaClient, { region: REGION, credentials });
-        setLambdaClient(client);
-      } catch {
-        setConnectionsLoading(false);
-        setAvailableConnections([]);
-      }
-    };
-    init();
-  }, [REGION, previewMode, user]);
+    if (previewMode) {
+      setConnectionsLoading(false);
+      setAvailableConnections([]);
+    }
+  }, [previewMode]);
 
   useEffect(() => {
     (async () => {
@@ -484,7 +451,7 @@ export default function UserProfilePage({
       }
     };
 
-    if (lambdaClient) {
+    if (lambdaClient && !previewMode) {
       loadConnectionStatus();
     }
   }, [globalIntegrationSettings, lambdaClient, user]);

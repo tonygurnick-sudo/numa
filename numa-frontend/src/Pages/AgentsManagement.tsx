@@ -14,12 +14,9 @@ import { PageHeader } from '../Components/PageHeader';
 import { ScheduleService } from '../Services/ScheduleService';
 import type { AgentSchedule } from '../types/agentSchedules';
 import { LayoutDashboard } from '../Layouts/LayoutDashboard';
-import { LambdaClient } from '@aws-sdk/client-lambda';
-import { fromWebToken } from '@aws-sdk/credential-providers';
 import { PipedreamProxyService } from '../Services/PipedreamProxyService';
 import { getConnectionConfig } from '../config/integrationsConfig';
 import { useBranding } from '../Providers/BrandingContext';
-import { withPRM } from '../utils/prmUtils';
 import { isScheduleCompleted, calculateNextRun } from '../utils/cronUtils';
 import { useTranslation } from 'react-i18next';
 import { ArrowLeft, Bot, Clock, ExternalLink, Link2, PlusCircle, RefreshCw, Store, User } from 'lucide-react';
@@ -29,7 +26,7 @@ type FilterOption = 'all' | 'personal' | 'public';
 export const AgentsManagement = () => {
   const { t } = useTranslation('agents');
   const { numaGet, numaDelete, numaPost, numaPut } = useNumaRequest();
-  const { user, getIdToken } = useAuth();
+  const { user, lambdaClient } = useAuth();
   const navigate = useNavigate();
   const agentsFeatureEnabled =
     typeof window !== 'undefined' ? window.sessionStorage.getItem('AGENTS') === 'true' : false;
@@ -253,27 +250,11 @@ export const AgentsManagement = () => {
     setMissingModal({ show: true, loading: true, agent, missing: [], error: null });
 
     try {
-      if (!user) {
-        setMissingModal({ show: true, loading: false, agent, missing: needs, error: null });
-        return;
-      }
-      const REGION = window.sessionStorage.getItem('REGION') || '';
-      const GROUPS = JSON.parse(window.sessionStorage.getItem('GROUPS') || '{}');
-      const userGroup = user.decoded_tokens?.idToken?.['cognito:groups']?.[0] || 'standard';
-      const roleArn = GROUPS?.[userGroup]?.roleArn;
-      const cognitoUserId = user.decoded_tokens?.idToken?.sub;
-      const idTokenValue = await getIdToken();
-      if (!REGION || !roleArn || !cognitoUserId || !idTokenValue) {
+      if (!user || !lambdaClient) {
         setMissingModal({ show: true, loading: false, agent, missing: needs, error: null });
         return;
       }
 
-      const credentials = fromWebToken({
-        webIdentityToken: idTokenValue,
-        roleArn,
-        roleSessionName: cognitoUserId,
-      });
-      const lambdaClient = withPRM(LambdaClient, { region: REGION, credentials });
       const externalUserId = PipedreamProxyService.deriveExternalUserId(user);
       const status = await PipedreamProxyService.getIntegrationStatus(lambdaClient, externalUserId, {
         ttlMs: 30 * 60 * 1000,
@@ -404,20 +385,7 @@ export const AgentsManagement = () => {
     const warmCache = async () => {
       try {
         const hasPipedreamFeature = window.sessionStorage.getItem('PIPEDREAM_INTEGRATIONS') === 'true';
-        if (!hasPipedreamFeature || !user) return;
-        const REGION = window.sessionStorage.getItem('REGION') || '';
-        const GROUPS = JSON.parse(window.sessionStorage.getItem('GROUPS') || '{}');
-        const userGroup = user.decoded_tokens?.idToken?.['cognito:groups']?.[0] || 'standard';
-        const roleArn = GROUPS?.[userGroup]?.roleArn;
-        const cognitoUserId = user.decoded_tokens?.idToken?.sub;
-        const idTokenValue = await getIdToken();
-        if (!REGION || !roleArn || !cognitoUserId || !idTokenValue) return;
-        const credentials = fromWebToken({
-          webIdentityToken: idTokenValue,
-          roleArn,
-          roleSessionName: cognitoUserId,
-        });
-        const lambdaClient = withPRM(LambdaClient, { region: REGION, credentials });
+        if (!hasPipedreamFeature || !user || !lambdaClient) return;
         const externalUserId = PipedreamProxyService.deriveExternalUserId(user);
         await PipedreamProxyService.getIntegrationStatus(lambdaClient, externalUserId, {
           ttlMs: 30 * 60 * 1000,
@@ -427,7 +395,7 @@ export const AgentsManagement = () => {
       }
     };
     warmCache();
-  }, [user]);
+  }, [user, lambdaClient]);
 
   const renderAgentsGrid = (agents: AgentSummary[], emptyMessage: string, isMyAgentsSection = false) => {
     if (!agents.length) {

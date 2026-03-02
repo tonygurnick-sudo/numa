@@ -17,9 +17,6 @@ import { AdminAgentsService, type AgentsMode } from '../Services/AdminAgentsServ
 import { AdminMfaSettingsService } from '../Services/AdminMfaSettingsService';
 import { getIntegrationsListFormat, type IntegrationListItem } from '../config/integrationsConfig';
 import { PipedreamProxyService } from '../Services/PipedreamProxyService';
-import { LambdaClient } from '@aws-sdk/client-lambda';
-import { fromWebToken } from '@aws-sdk/credential-providers';
-import { withPRM } from '../utils/prmUtils';
 import { useNumaRequest } from '../Providers/NumaRequestContext';
 import BrandingAdminPanel from '../Components/Branding/BrandingAdminPanel';
 import { UNSAFE_NavigationContext } from 'react-router-dom';
@@ -64,7 +61,7 @@ const useNavigationConfirm = (when: boolean, message: string) => {
 
 export default function SettingsPage() {
   const { t, i18n } = useTranslation('settings');
-  const { user, getCredentials, getIdToken } = useAuth();
+  const { user, getCredentials, lambdaClient } = useAuth();
   const { numaGet, numaPut } = useNumaRequest();
   const [activeKey, setActiveKey] = useState<string>('users');
   const [settingsScope, setSettingsScope] = useState<'user' | 'admin'>('user');
@@ -130,34 +127,6 @@ export default function SettingsPage() {
   const relayLambdaArn = window.sessionStorage.getItem('PIPEDREAM_RELAY_LAMBDA_ARN');
   const previewMode = !hasPipedreamFeature || !relayLambdaArn;
   const workspaceChatEnabled = window.sessionStorage.getItem('NUMA_WORKSPACE_CHAT') === 'true';
-
-  // AWS Lambda client for listing tools (admin view)
-  const [lambdaClient, setLambdaClient] = useState<LambdaClient | null>(null);
-
-  useEffect(() => {
-    const initLambda = async () => {
-      if (!isAdmin || !user || previewMode) return;
-      try {
-        const REGION = window.sessionStorage.getItem('REGION') || 'us-east-1';
-        const GROUPS = JSON.parse(window.sessionStorage.getItem('GROUPS') || '{}');
-        const userGroup = user.decoded_tokens?.idToken?.['cognito:groups']?.[0] || 'standard';
-        const roleArn = GROUPS[userGroup]?.roleArn;
-        const cognitoUserId = user.decoded_tokens?.idToken?.sub;
-        if (!roleArn) return;
-        const idTokenValue = await getIdToken();
-        if (!idTokenValue) return;
-        const credentials = fromWebToken({
-          webIdentityToken: idTokenValue,
-          roleArn,
-          roleSessionName: cognitoUserId,
-        });
-        setLambdaClient(withPRM(LambdaClient, { region: REGION, credentials }));
-      } catch (e) {
-        console.error('Settings: init lambda failed', e);
-      }
-    };
-    initLambda();
-  }, [isAdmin, user, previewMode]);
 
   useEffect(() => {
     let isMounted = true;

@@ -6,6 +6,7 @@ import { BedrockRuntimeClient } from '@aws-sdk/client-bedrock-runtime';
 import { BedrockAgentRuntimeClient } from '@aws-sdk/client-bedrock-agent-runtime';
 import { BedrockAgentClient } from '@aws-sdk/client-bedrock-agent';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
+import { LambdaClient } from '@aws-sdk/client-lambda';
 import { QAppsClient } from '@aws-sdk/client-qapps';
 import { fromWebToken } from '@aws-sdk/credential-providers';
 import {
@@ -235,6 +236,7 @@ export const AuthProvider = ({ children, initialTokens }) => {
   const [bedrockAgentClient, setBedrockAgentClient] = useState(null);
   const [numaChatBedrockUtils, setNumaChatBedrockUtils] = useState(null);
   const [dynamoDBClient, setDynamoDBClient] = useState(null);
+  const [lambdaClient, setLambdaClient] = useState(null);
   const [numaChatDynamoUtils, setNumaChatDynamoUtils] = useState(null);
   const [tokenValidationComplete, setTokenValidationComplete] = useState(false);
 
@@ -399,6 +401,7 @@ export const AuthProvider = ({ children, initialTokens }) => {
     setBedrockAgentClient(null);
     setNumaChatBedrockUtils(null);
     setDynamoDBClient(null);
+    setLambdaClient(null);
     setNumaChatDynamoUtils(null);
 
     setUser(null);
@@ -1086,6 +1089,61 @@ export const AuthProvider = ({ children, initialTokens }) => {
     }
   }, [user]);
 
+  const initializeLambdaClient = useCallback(async () => {
+    if (!user) return;
+
+    const REGION = window.sessionStorage.getItem('REGION');
+    const GROUPS = JSON.parse(window.sessionStorage.getItem('GROUPS'));
+
+    if (!REGION || !GROUPS) {
+      console.error('Missing required session storage values for LambdaClient initialization');
+      return;
+    }
+
+    if (!user.decoded_tokens?.idToken) {
+      console.error('User does not have valid decoded tokens');
+      return;
+    }
+
+    const userGroups = getGroupsFromToken(user.decoded_tokens.idToken);
+    if (!userGroups || userGroups.length === 0) {
+      console.error('No groups found for user - cannot initialize LambdaClient');
+      return;
+    }
+
+    const userGroup = userGroups[0];
+    const roleArn = GROUPS[userGroup]?.roleArn;
+
+    if (!roleArn) {
+      console.error('No role ARN found for user group:', userGroup, 'available groups:', Object.keys(GROUPS));
+      return;
+    }
+
+    try {
+      if (!tokensRef.current.idToken) {
+        console.error('No ID token available for LambdaClient initialization');
+        return;
+      }
+
+      const credentialProvider = () =>
+        fromWebToken({
+          roleSessionName: 'numa-lambda-client',
+          roleArn: roleArn,
+          webIdentityToken: tokensRef.current.idToken,
+          durationSeconds: 900,
+        })();
+
+      const newClient = withPRM(LambdaClient, {
+        region: REGION,
+        credentials: credentialProvider,
+      });
+
+      setLambdaClient(newClient);
+    } catch (error) {
+      console.error('Error in LambdaClient initialization:', error);
+    }
+  }, [user]);
+
   useEffect(() => {
     // Only initialize clients after token validation is complete and user is properly loaded
     if (user && tokenValidationComplete && user.decoded_tokens?.idToken && user.features?.length > 0) {
@@ -1101,6 +1159,7 @@ export const AuthProvider = ({ children, initialTokens }) => {
           initializeBedrockAgentRuntimeClient();
           initializeBedrockAgentClient();
           initializeDynamoDBClient();
+          initializeLambdaClient();
         }
       }, 100);
 
@@ -1113,6 +1172,7 @@ export const AuthProvider = ({ children, initialTokens }) => {
       setBedrockAgentClient(null);
       setNumaChatBedrockUtils(null);
       setDynamoDBClient(null);
+      setLambdaClient(null);
       setNumaChatDynamoUtils(null);
     }
   }, [
@@ -1124,6 +1184,7 @@ export const AuthProvider = ({ children, initialTokens }) => {
     initializeBedrockAgentRuntimeClient,
     initializeBedrockAgentClient,
     initializeDynamoDBClient,
+    initializeLambdaClient,
   ]);
   const checkAndRefreshTokens = useCallback(async () => {
     const { accessToken, idToken, refreshToken } = tokensRef.current;
@@ -2050,6 +2111,7 @@ export const AuthProvider = ({ children, initialTokens }) => {
       bedrockAgentClient,
       numaChatBedrockUtils,
       dynamoDBClient,
+      lambdaClient,
       numaChatDynamoUtils,
       requestPasswordReset,
       confirmPasswordReset,
@@ -2081,6 +2143,7 @@ export const AuthProvider = ({ children, initialTokens }) => {
     bedrockAgentClient,
     numaChatBedrockUtils,
     dynamoDBClient,
+    lambdaClient,
     numaChatDynamoUtils,
     requestPasswordReset,
     confirmPasswordReset,

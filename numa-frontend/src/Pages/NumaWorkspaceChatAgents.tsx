@@ -2,8 +2,6 @@ import { useState, useRef, useEffect, useMemo, useCallback, type ReactNode, type
 import { Button, Alert, Modal } from 'react-bootstrap';
 import { Bot, Clock, Plus, Settings } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { LambdaClient } from '@aws-sdk/client-lambda';
-import { fromWebToken } from '@aws-sdk/credential-providers';
 import { useAuth } from '../Providers/AuthProvider';
 import { LayoutDashboard } from '../Layouts/LayoutDashboard';
 import { PageHeader } from '../Components/PageHeader';
@@ -40,7 +38,6 @@ import type { QuickActionConfig } from '../config/quickActionsConfig';
 import { sortAgentsByPriority } from '../utils/agentSortingUtils';
 import { AdminAgentsService, type AgentsMode } from '../Services/AdminAgentsService';
 import { ChatSettingsService, type ChatSettings, DEFAULT_CHAT_SETTINGS } from '../Services/ChatSettingsService';
-import { withPRM } from '../utils/prmUtils';
 // Workspace chat mode imports
 import { getWorkspaceChatRawTrace } from '../Services/workspaceChatAgentService';
 import { parseRawTraceToMessages } from '../utils/workspaceChatEventHandlers';
@@ -112,7 +109,6 @@ const NumaWorkspaceChatAgents = () => {
   const [autoToolsEnabled, setAutoToolsEnabled] = useState(true); // Default to auto mode
   const [buttonStatus, setButtonStatus] = useState('idle');
   const [isFileProcessing, _setIsFileProcessing] = useState(false);
-  const [lambdaClient, setLambdaClient] = useState<LambdaClient | null>(null);
   const [isManuallyLoading, setIsManuallyLoading] = useState(false);
   const [currentAgent, setCurrentAgent] = useState<AgentSummary | null>(null);
   const [pendingAgent, setPendingAgent] = useState<AgentSummary | null>(null);
@@ -240,7 +236,7 @@ const NumaWorkspaceChatAgents = () => {
   } = filePreviewProcessor;
   const { setCurrentAbort, resetStreamingState } = streamingHandler;
 
-  const { user, bedrockRuntimeClient, numaChatDynamoUtils, getAccessToken, getIdToken, getCredentials } = useAuth();
+  const { user, bedrockRuntimeClient, numaChatDynamoUtils, getAccessToken, getCredentials, lambdaClient } = useAuth();
   // Extract user info from token early (used by hooks/deps below)
   const idToken = user?.decoded_tokens?.idToken ?? {};
   const sub = idToken.sub;
@@ -820,50 +816,13 @@ const NumaWorkspaceChatAgents = () => {
     }
   }, [user, hasPipedreamFeature, relayLambdaArn]);
 
-  // Initialize AWS Lambda client (cross-account) if feature enabled
+  // Clear connections state when Pipedream feature is not enabled
   useEffect(() => {
-    const init = async () => {
-      if (!user) return;
-      if (!hasPipedreamFeature) {
-        setConnectionsLoading(false);
-        setAvailableConnections([]);
-        return;
-      }
-      if (!relayLambdaArn) {
-        console.error('Pipedream feature enabled but Lambda ARN not configured');
-        setConnectionsLoading(false);
-        setAvailableConnections([]);
-        return;
-      }
-      try {
-        const GROUPS = JSON.parse(window.sessionStorage.getItem('GROUPS') || '{}');
-        const userGroup = user.decoded_tokens?.idToken?.['cognito:groups']?.[0] || 'standard';
-        const roleArn = GROUPS[userGroup]?.roleArn;
-        const cognitoUserId = user.decoded_tokens?.idToken?.sub;
-        if (!roleArn) {
-          console.error('No role ARN found for user group:', userGroup);
-          setConnectionsLoading(false);
-          setAvailableConnections([]);
-          return;
-        }
-        const idTokenValue = await getIdToken();
-        if (!idTokenValue) return;
-        const credentials = fromWebToken({
-          webIdentityToken: idTokenValue,
-          roleArn,
-          roleSessionName: cognitoUserId,
-        });
-        const client = withPRM(LambdaClient, { region: REGION, credentials });
-        setLambdaClient(client);
-        console.log('Lambda client initialized successfully for Pipedream relay');
-      } catch (e) {
-        console.error('Error initializing Lambda client:', e);
-        setConnectionsLoading(false);
-        setAvailableConnections([]);
-      }
-    };
-    init();
-  }, [user, REGION, hasPipedreamFeature, relayLambdaArn]);
+    if (!user || !hasPipedreamFeature || !relayLambdaArn) {
+      setConnectionsLoading(false);
+      setAvailableConnections([]);
+    }
+  }, [user, hasPipedreamFeature, relayLambdaArn]);
 
   // When a preselected agent is queued, start the session once connections have loaded
   useEffect(() => {
@@ -965,7 +924,7 @@ const NumaWorkspaceChatAgents = () => {
   };
 
   useEffect(() => {
-    if (lambdaClient) loadConnectionStatus();
+    if (lambdaClient && hasPipedreamFeature && relayLambdaArn) loadConnectionStatus();
   }, [lambdaClient]);
 
   // Ref for input textarea

@@ -170,6 +170,30 @@ To add a new language option for users and ensure it reaches the LLM prompts, up
 
 **Key files:** `numa-frontend/src/Providers/AuthProvider.tsx`, `numa-frontend/src/Providers/RequestProvider.tsx`
 
+### AWS SDK Client Pattern (AuthProvider)
+
+**IMPORTANT:** Never create AWS SDK clients (LambdaClient, S3Client, DynamoDBClient, etc.) locally in page components. All AWS SDK clients are centralized in AuthProvider and accessed via `useAuth()`.
+
+**Correct pattern:**
+```tsx
+const { lambdaClient, dynamoDBClient, bedrockRuntimeClient } = useAuth();
+// Use directly — credentials auto-refresh via function-based provider
+```
+
+**Wrong pattern (causes stale credentials after token refresh):**
+```tsx
+// DO NOT DO THIS — credentials are captured once and become stale
+const idToken = await getIdToken();
+const credentials = fromWebToken({ webIdentityToken: idToken, ... });
+const client = new LambdaClient({ credentials }); // Stale after ~15min
+```
+
+**Why:** AuthProvider creates clients with a function-based credential provider (`() => fromWebToken({ webIdentityToken: tokensRef.current.idToken })()`) that reads fresh tokens from `tokensRef` on every SDK call. Page-local clients capture the token once at init time, so after background token refresh the credentials go stale — causing 401/403 errors.
+
+**Adding a new AWS SDK client:** Follow the existing pattern in AuthProvider: state + `useCallback` initializer + add to the central `useEffect` + `value` useMemo + logout cleanup. See `initializeLambdaClient` or `initializeQBusinessClient` as templates.
+
+**Key file:** `numa-frontend/src/Providers/AuthProvider.tsx`
+
 ---
 
 ## Legacy Chat Agent — V1 (DEPRECATED) (lambdas/python/numa-chat-agent)
