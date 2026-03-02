@@ -453,13 +453,23 @@ export const AuthProvider = ({ children, initialTokens }) => {
 
             const cognitoClient = withPRM(CognitoIdentityProviderClient, { region: REGION });
 
+            const authParameters: Record<string, string> = {
+              REFRESH_TOKEN: refreshToken,
+              SECRET_HASH: SECRET_HASH,
+            };
+
+            // When device tracking is enabled, Cognito requires DEVICE_KEY
+            // in REFRESH_TOKEN_AUTH requests — without it the refresh token
+            // is rejected with "Invalid Refresh Token".
+            const deviceKey = getStoredDeviceKey();
+            if (deviceKey) {
+              authParameters.DEVICE_KEY = deviceKey;
+            }
+
             const params = {
               AuthFlow: 'REFRESH_TOKEN_AUTH',
               ClientId: CLIENT_ID,
-              AuthParameters: {
-                REFRESH_TOKEN: refreshToken,
-                SECRET_HASH: SECRET_HASH,
-              },
+              AuthParameters: authParameters,
             };
 
             const command = new InitiateAuthCommand(params);
