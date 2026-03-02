@@ -864,3 +864,31 @@ export async function listWorkspaceAgentTypes(): Promise<
   const data = await res.json();
   return data.types || [];
 }
+
+/**
+ * Convert a document for preview (e.g. DOCX -> PDF) via server-side LibreOffice.
+ *
+ * Calls the proxy Lambda which invokes workspace-chat-tools -> document-converter.
+ * Returns a presigned URL to the converted file (15min expiry).
+ */
+export async function convertDocxPreview(
+  bucket: string,
+  key: string,
+  format: string = 'pdf',
+): Promise<{ url: string; filename: string; size: number }> {
+  const res = await fetch(`${getApiUrl()}/convert-preview`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...getAuthHeaders(),
+    },
+    body: JSON.stringify({ bucket, key, format }),
+  });
+
+  if (!res.ok) {
+    const errorText = await res.text().catch(() => res.statusText);
+    throw new Error(`Document conversion failed: ${errorText}`);
+  }
+
+  return res.json();
+}

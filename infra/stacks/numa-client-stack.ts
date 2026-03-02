@@ -382,6 +382,9 @@ export class NumaClientStack extends TerraformStack {
         // Schedule runner secret so the proxy can authenticate server-to-server calls
         // from the agent-schedule-runner Lambda (scheduled agents use V2 sync mode)
         scheduleRunnerSecret: agentScheduleSecretParam.value,
+        // Workspace chat tools Lambda for document conversion preview (DOCX → PDF)
+        workspaceToolsLambdaArn: workspaceChatTools.lambdaArn,
+        workspaceToolsLambdaName: workspaceChatTools.lambdaName,
       });
 
       new TerraformOutput(this, 'workspace-chat-agent-proxy-url', {

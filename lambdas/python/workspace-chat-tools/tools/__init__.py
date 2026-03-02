@@ -12,6 +12,7 @@ from .agents import (
     handle_update_agent,
 )
 from .convert_document import handle_convert_document
+from .convert_preview import handle_convert_preview
 from .extract_content import handle_extract_content
 from .knowledge_base import (
     handle_add_to_kb,
@@ -36,6 +37,7 @@ from .web_search import handle_web_search
 __all__ = [
     "handle_add_to_kb",
     "handle_convert_document",
+    "handle_convert_preview",
     "handle_create_agent",
     "handle_duplicate_agent",
     "handle_extract_content",

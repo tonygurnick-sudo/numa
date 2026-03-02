@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Button, Spinner } from 'react-bootstrap';
 import { useTranslation } from 'react-i18next';
 
@@ -27,10 +27,19 @@ export const PdfPreview: React.FC<PdfPreviewProps> = ({ data }) => {
   const viewportRef = useRef<HTMLDivElement>(null);
   const [mainPageWidth, setMainPageWidth] = useState(800);
 
-  // Pass a fresh copy of the data to react-pdf each render cycle.
-  // react-pdf transfers ArrayBuffers to its web worker (detaching them),
-  // so we slice() a copy to keep the original intact.
-  const pdfFile = useMemo(() => ({ data: data.slice(0) }), [data]);
+  // Convert to a Blob URL so react-pdf receives a string instead of an ArrayBuffer.
+  // react-pdf uses dequal to deep-compare the file prop between renders. When its
+  // web worker processes a PDF it transfers (detaches) the underlying ArrayBuffer,
+  // so dequal's `new Uint8Array(detachedBuffer)` comparison throws on re-render.
+  // A Blob URL is a plain string — trivially comparable and immune to this issue.
+  const [pdfUrl, setPdfUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    const blob = new Blob([data], { type: 'application/pdf' });
+    const url = URL.createObjectURL(blob);
+    setPdfUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [data]);
 
   // Dynamically import react-pdf to avoid SSR issues
   useEffect(() => {
@@ -115,7 +124,7 @@ export const PdfPreview: React.FC<PdfPreviewProps> = ({ data }) => {
     activeThumb?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   }, [currentPage]);
 
-  if (!pdfModule) {
+  if (!pdfModule || !pdfUrl) {
     return (
       <div className="text-center py-5">
         <Spinner animation="border" size="sm" />
@@ -136,7 +145,7 @@ export const PdfPreview: React.FC<PdfPreviewProps> = ({ data }) => {
 
   return (
     <Document
-      file={pdfFile}
+      file={pdfUrl}
       onLoadSuccess={onLoadSuccess}
       onLoadError={onLoadError}
       loading={

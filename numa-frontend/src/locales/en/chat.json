@@ -377,7 +377,8 @@
     "docx": {
       "pageOf": "Page {{current}} of {{total}}",
       "parseError": "Unable to preview this document. Please download to view.",
-      "noPages": "No pages found in this document"
+      "noPages": "No pages found in this document",
+      "converting": "Converting document — this may take a few seconds"
     },
     "pptx": {
       "slideOf": "Slide {{current}} of {{total}}",
