@@ -110,7 +110,6 @@ class NumaChatDynamoUtils {
       });
 
       await this.dynamoDBClient.send(command);
-      console.log(`Message added to conversation ${conversationId}`);
     } catch (error) {
       console.error(`Error adding message to conversation ${conversationId}:`, error);
     }
@@ -377,9 +376,6 @@ class NumaChatDynamoUtils {
       // Apply limit of 100 after sorting
       const limitedConversations = conversations.slice(0, limit);
 
-      console.log(
-        `Retrieved ${limitedConversations.length} conversations for user ${userId} (limited to 25 from ${conversations.length} total)`,
-      );
       return limitedConversations;
     } catch (err) {
       console.error('Error fetching user conversation meta:', err);

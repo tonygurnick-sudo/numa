@@ -137,11 +137,6 @@ export const NumaIntegrations = () => {
         // Transform connection objects from response
         // Use connected_apps array as source of truth for connection status
         const connectedAppNames = response.connected_apps || [];
-        // DEBUG: Log raw response to identify name_slug mismatches
-        console.log('DEBUG: Raw Pipedream response:', {
-          connected_apps: connectedAppNames,
-          all_connections: response.connections?.map((c) => ({ app_name: c.app_name, status: c.status })),
-        });
         const connectionObjects = (response.connections || []).map((conn) => ({
           app_name: conn.app_name,
           status: connectedAppNames.includes(conn.app_name) ? 'connected' : 'not_connected',

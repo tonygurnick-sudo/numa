@@ -1007,14 +1007,7 @@ const NumaChatAgents = () => {
       messages.length === 0 &&
       !isManuallyLoading
     ) {
-      console.log('[NumaChat] Auto-loading conversation:', conversationId);
       handleLoadConversation(conversationId);
-    } else if (conversationId && hasUserStartedNewChat) {
-      console.log('[NumaChat] Skipping auto-load for just-created conversation:', conversationId);
-    } else if (conversationId && messages.length > 0) {
-      console.log('[NumaChat] Skipping auto-load because messages already exist:', messages.length);
-    } else if (conversationId && isManuallyLoading) {
-      console.log('[NumaChat] Skipping auto-load because manual loading is in progress:', conversationId);
     }
   }, [conversationId, numaChatDynamoUtils, sub, hasUserStartedNewChat, messages.length, isManuallyLoading]);
 
@@ -1118,8 +1111,6 @@ const NumaChatAgents = () => {
     const clientName = window.sessionStorage.getItem('CLIENT_NAME');
     const modelType = isInFallbackMode(clientName) ? MODEL_TYPES.FALLBACK : MODEL_TYPES.DEFAULT;
     const modelId = getModelId(REGION, modelType);
-    console.log('[NumaChat] Using model:', modelId, 'fallback mode:', isInFallbackMode(clientName));
-
     // Determine which tools to enable based on auto mode or manual selection
     const enabledTools = getEnabledTools(
       autoToolsEnabled,
@@ -1346,14 +1337,7 @@ const NumaChatAgents = () => {
     inputRef,
   ) => {
     return async (cid, userMsg, sub, chunkHandler) => {
-      console.log('[NumaChat] Chat agent completion callback triggered');
-      const { hasStreamingStarted, hasReceivedTextChunk, accumulatedResponse } = chunkHandler.getStreamingState();
-      console.log(
-        '[NumaChat] Final streaming state - hasStreamingStarted:',
-        hasStreamingStarted,
-        'hasReceivedTextChunk:',
-        hasReceivedTextChunk,
-      );
+      const { accumulatedResponse } = chunkHandler.getStreamingState();
 
       // Clean up abort function reference
       setCurrentAbort(null);
@@ -1362,7 +1346,6 @@ const NumaChatAgents = () => {
       isProcessingRef.current = false; // Reset processing flag
 
       // Flush any remaining text to save the final segment with content preservation
-      console.log('[NumaChat] Stream completion - flushing final text buffer');
       flushPendingText(cid, true); // preserveContent=true to prevent race condition
 
       // Extract doc from raw text
@@ -1382,11 +1365,6 @@ const NumaChatAgents = () => {
         });
 
         // Save document metadata to DynamoDB for history reconstruction
-        console.log('[NumaChat] Saving document metadata to DynamoDB');
-        console.log('[NumaChat] Document metadata:', {
-          docTitle: docBlock.docTitle,
-          docContent: docBlock.docContent,
-        });
         if (numaChatDynamoUtils && cid && sub) {
           numaChatDynamoUtils
             .addMessage({
@@ -1417,9 +1395,7 @@ const NumaChatAgents = () => {
       try {
         if (bedrockRuntimeClient && numaChatDynamoUtils && sub && cid) {
           // Prevent duplicate auto-naming for same conversation
-          if (autoNamingAttemptedRef.current.has(cid)) {
-            console.log('[NumaChat] Auto-naming already attempted for this conversation, skipping');
-          } else {
+          if (!autoNamingAttemptedRef.current.has(cid)) {
             autoNamingAttemptedRef.current.add(cid);
             const renamed = await autoNameConversation({
               conversationId: cid,
@@ -1465,7 +1441,6 @@ const NumaChatAgents = () => {
 
     // Prevent duplicate submissions (React StrictMode protection) - check FIRST
     if (isProcessingRef.current) {
-      console.log('[NumaChat] Ignoring duplicate handleSubmit call');
       return;
     }
     isProcessingRef.current = true;
@@ -1565,8 +1540,6 @@ const NumaChatAgents = () => {
         }
       }
 
-      console.log('[NumaChat] Sending minimal payload - backend will load conversation history');
-
       const { modelId, enabledTools, systemPrompt, userAuth, clientName } = configureAgentCall(
         autoToolsEnabled,
         webSearchEnabled,
@@ -1631,7 +1604,6 @@ const NumaChatAgents = () => {
 
             // Check for quota/throttling errors and set fallback mode
             if (isQuotaLimitError(error)) {
-              console.log('[NumaChat] Quota limit exceeded, setting fallback mode for client:', clientName);
               setFallbackMode(clientName);
 
               setMessages((prev) => {
@@ -1902,15 +1874,10 @@ const NumaChatAgents = () => {
   // Helper: push buffered text as its own segment then clear buffer, and save to DynamoDB
   const flushPendingText = (currentConversationId = null, preserveContent = false) => {
     if (!streamingHandler.textBufferRef.current.trim()) {
-      console.log('[NumaChat] No text to flush (buffer empty)');
       return; // Only flush if there's actual content
     }
 
     const textToSave = streamingHandler.textBufferRef.current;
-    console.log(
-      '[NumaChat] Flushing pending text (preserveContent=' + preserveContent + ', length=' + textToSave.length + '):',
-      textToSave.slice(0, 50) + '...',
-    );
 
     // ALWAYS save to DynamoDB first, regardless of preserve/duplicate logic
     const cidToUse = currentConversationId || conversationId;
@@ -1924,12 +1891,10 @@ const NumaChatAgents = () => {
           content: textToSave,
         })
         .catch((err) => console.error('Error saving text segment:', err));
-      console.log('[NumaChat] Saved text segment to DynamoDB');
     }
 
     // Prevent double-flushing UI updates in final completion phase
     if (preserveContent && streamingHandler.finalFlushPerformedRef.current) {
-      console.log('[NumaChat] Skipping duplicate final flush UI update (already saved to DB)');
       return;
     }
 
@@ -1957,7 +1922,6 @@ const NumaChatAgents = () => {
         lastMsg.segments = segs;
         lastMsg.content = finalText; // Update legacy content field too
         updated[lastIdx] = lastMsg;
-        console.log('[NumaChat] Finalized text segment with content length:', finalText.length);
       }
 
       return updated;
@@ -1966,7 +1930,6 @@ const NumaChatAgents = () => {
     // Clear the text buffer only if not preserving content
     if (!preserveContent) {
       streamingHandler.textBufferRef.current = '';
-      console.log('[NumaChat] Cleared text buffer');
     }
   };
 

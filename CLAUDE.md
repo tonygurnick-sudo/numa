@@ -170,6 +170,40 @@ To add a new language option for users and ensure it reaches the LLM prompts, up
 
 **Key files:** `numa-frontend/src/Providers/AuthProvider.tsx`, `numa-frontend/src/Providers/RequestProvider.tsx`
 
+### API Request Pattern (RequestProvider)
+
+**IMPORTANT:** Always use `useNumaRequest()` hooks for API calls to protected `/api/` endpoints. Never use raw `fetch()` or `axios` directly — they won't include the Authorization header and will 401.
+
+**Correct pattern:**
+```tsx
+const { numaGet, numaPost, numaPut, numaDelete } = useNumaRequest();
+
+// These automatically include auth headers
+const data = await numaGet('/api/settings/agents');
+await numaPut('/api/settings/agents', { mode: 'full' });
+```
+
+**Wrong pattern (causes 401 errors):**
+```tsx
+// DO NOT DO THIS — no Authorization header is sent
+const resp = await fetch('/api/settings/agents', {
+  method: 'GET',
+  headers: { 'Content-Type': 'application/json' },
+});
+```
+
+**When calling service methods:** Many admin services (e.g., `AdminAgentsService`, `AdminMfaSettingsService`, `AdminChatSettingsService`) accept optional `numaGet`/`numaPut` parameters. When these are not passed, the service silently falls back to raw `fetch()` without auth. **Always pass the auth helper** when calling these methods from authenticated components:
+
+```tsx
+// ✅ Correct — passes numaGet so the service uses authenticated requests
+const res = await AdminAgentsService.get(numaGet);
+
+// ❌ Wrong — silently falls back to unauthenticated fetch(), returns 401
+const res = await AdminAgentsService.get();
+```
+
+**Key file:** `numa-frontend/src/Providers/RequestProvider.tsx`
+
 ### AWS SDK Client Pattern (AuthProvider)
 
 **IMPORTANT:** Never create AWS SDK clients (LambdaClient, S3Client, DynamoDBClient, etc.) locally in page components. All AWS SDK clients are centralized in AuthProvider and accessed via `useAuth()`.

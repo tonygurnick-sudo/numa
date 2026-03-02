@@ -164,7 +164,7 @@
     "types": {
       "webCrawler": "Web Crawler",
       "unknown": "Unknown",
-      "s3": "Amazon S3",
+      "s3": "User Uploads",
       "sharepoint": "SharePoint",
       "confluence": "Confluence",
       "salesforce": "Salesforce"

@@ -317,7 +317,7 @@ export const AgentCreateModal = ({
     if (show) {
       (async () => {
         try {
-          const res = await AdminAgentsService.get();
+          const res = await AdminAgentsService.get(numaGet);
           if (!cancelled) setAgentsMode(res.mode);
         } catch {
           if (!cancelled) setAgentsMode('full');

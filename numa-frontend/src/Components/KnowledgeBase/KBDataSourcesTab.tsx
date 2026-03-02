@@ -83,7 +83,7 @@ function getDataSourceTypeDisplay(
   labels: Record<string, string>,
 ): string {
   if (isWebCrawler) return labels.webCrawler;
-  if (!type) return labels.unknown;
+  if (!type) return labels.s3;
 
   switch (type.toUpperCase()) {
     case 'S3':
@@ -114,11 +114,6 @@ export function KBDataSourcesTab({
    */
   const { fileDataSources, webCrawlerDataSources, otherDataSources } = useMemo(() => {
     const dataSources = kbState?.dataSources || [];
-
-    // Only log if we have an issue with data source detection
-    if (!dataSources || dataSources.length === 0) {
-      console.warn('[KBDataSourcesTab] No data sources available from kbState');
-    }
 
     const fileDataSources: DataSource[] = [];
     const webCrawlerDataSources: DataSource[] = [];
