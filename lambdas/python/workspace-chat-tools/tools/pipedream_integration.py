@@ -16,7 +16,7 @@ import json
 import os
 import time
 import uuid
-from typing import Any, Dict, Optional
+from typing import Any, Callable, Dict, Optional
 
 import structlog
 
@@ -369,6 +369,92 @@ def _poll_approval(approval_id: str) -> str:
     return "timeout"
 
 
+def _execute_with_idempotency(
+    approval_id: str,
+    execute_fn: Callable[[], Dict[str, Any]],
+) -> Dict[str, Any]:
+    """Execute a function with idempotency guard using DynamoDB conditional updates.
+
+    Prevents duplicate execution of the same approved action by tracking
+    execution_status in the approval record. Uses a conditional update to
+    atomically transition from pending/unknown to "executing".
+
+    Args:
+        approval_id: The approval request ID (used as the idempotency key)
+        execute_fn: Zero-arg callable that performs the actual relay invocation
+
+    Returns:
+        The result from execute_fn, or an already_executed/execution_timeout response
+    """
+    if not INTEGRATIONS_APPROVAL_TABLE:
+        # No table configured — skip idempotency and just execute
+        return execute_fn()
+
+    dynamodb = prm_client("dynamodb")
+
+    # Atomically claim execution: only proceed if no other invocation is running
+    try:
+        dynamodb.update_item(
+            TableName=INTEGRATIONS_APPROVAL_TABLE,
+            Key={"approval_id": {"S": approval_id}},
+            UpdateExpression="SET execution_status = :executing",
+            ConditionExpression=(
+                "attribute_not_exists(execution_status) "
+                "OR execution_status IN (:pending, :unknown)"
+            ),
+            ExpressionAttributeValues={
+                ":executing": {"S": "executing"},
+                ":pending": {"S": "pending"},
+                ":unknown": {"S": "unknown"},
+            },
+        )
+    except dynamodb.exceptions.ConditionalCheckFailedException:
+        logger.warning(
+            "Idempotency guard: action already executed",
+            approval_id=approval_id,
+        )
+        return {
+            "status": "already_executed",
+            "message": "This action has already been executed.",
+        }
+
+    # Execute the relay call
+    try:
+        result = execute_fn()
+        # Mark as completed
+        dynamodb.update_item(
+            TableName=INTEGRATIONS_APPROVAL_TABLE,
+            Key={"approval_id": {"S": approval_id}},
+            UpdateExpression="SET execution_status = :completed",
+            ExpressionAttributeValues={
+                ":completed": {"S": "completed"},
+            },
+        )
+        return result
+    except Exception as exc:
+        # Relay failed or timed out — mark as unknown so a retry can attempt again
+        logger.warning(
+            "Relay execution failed after approval",
+            approval_id=approval_id,
+            error=str(exc),
+        )
+        dynamodb.update_item(
+            TableName=INTEGRATIONS_APPROVAL_TABLE,
+            Key={"approval_id": {"S": approval_id}},
+            UpdateExpression="SET execution_status = :unknown",
+            ExpressionAttributeValues={
+                ":unknown": {"S": "unknown"},
+            },
+        )
+        return {
+            "status": "execution_timeout",
+            "message": (
+                "Action was approved and may have completed. "
+                "Check the target system before retrying."
+            ),
+        }
+
+
 def handle_list_actions(params: Dict[str, Any]) -> Dict[str, Any]:
     """List available actions for an integration app.
 
@@ -467,7 +553,7 @@ def handle_run_action(params: Dict[str, Any]) -> Dict[str, Any]:
         conversation_id=params.get("__conversation_id", ""),
     )
 
-    # Execute the action
+    # Execute the action with idempotency guard to prevent duplicate execution
     relay_params: Dict[str, Any] = {
         "action_key": action_key,
         "configured_props": configured_props,
@@ -475,17 +561,19 @@ def handle_run_action(params: Dict[str, Any]) -> Dict[str, Any]:
     if stash_id:
         relay_params["stash_id"] = stash_id
 
-    result = _invoke_relay(
-        operation="run_action",
-        external_user_id=external_user_id,
-        parameters=relay_params,
-    )
+    def _do_run_action() -> Dict[str, Any]:
+        result = _invoke_relay(
+            operation="run_action",
+            external_user_id=external_user_id,
+            parameters=relay_params,
+        )
+        return {
+            "status": "success",
+            "approval_id": approval_id,
+            "result": result,
+        }
 
-    return {
-        "status": "success",
-        "approval_id": approval_id,
-        "result": result,
-    }
+    return _execute_with_idempotency(approval_id, _do_run_action)
 
 
 def handle_configure_props(params: Dict[str, Any]) -> Dict[str, Any]:
@@ -612,7 +700,7 @@ def handle_proxy_request(params: Dict[str, Any]) -> Dict[str, Any]:
             approval_id=approval_id,
         )
 
-    # Approved — execute
+    # Approved — execute with idempotency guard
     relay_params = {
         "method": method,
         "upstream_url": upstream_url,
@@ -622,17 +710,19 @@ def handle_proxy_request(params: Dict[str, Any]) -> Dict[str, Any]:
     if headers:
         relay_params["headers"] = headers
 
-    result = _invoke_relay(
-        operation="proxy_request",
-        external_user_id=external_user_id,
-        parameters=relay_params,
-    )
+    def _do_proxy_request() -> Dict[str, Any]:
+        result = _invoke_relay(
+            operation="proxy_request",
+            external_user_id=external_user_id,
+            parameters=relay_params,
+        )
+        return {
+            "status": "success",
+            "approval_id": approval_id,
+            "result": result,
+        }
 
-    return {
-        "status": "success",
-        "approval_id": approval_id,
-        "result": result,
-    }
+    return _execute_with_idempotency(approval_id, _do_proxy_request)
 
 
 def handle_approve_action(params: Dict[str, Any]) -> Dict[str, Any]:
