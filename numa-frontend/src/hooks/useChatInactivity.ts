@@ -92,21 +92,33 @@ export function useChatInactivity({
     }
   };
 
-  const fetchRecentConversations = async (): Promise<ConversationMeta[]> => {
+  const fetchRecentConversations = async (signal?: AbortSignal): Promise<ConversationMeta[]> => {
     if (!numaChatDynamoUtils || !sub) return [] as ConversationMeta[];
     try {
       const items = await numaChatDynamoUtils.getUserConversationsMeta(sub);
       return items as ConversationMeta[];
-    } catch (e) {
-      console.error('Failed to fetch recent conversations:', e);
-      return [] as ConversationMeta[];
+    } catch (firstError) {
+      console.warn('First attempt to fetch recent conversations failed, retrying in 1.5s...', firstError);
+      // Wait 1.5s to give the AWS SDK time to resolve fresh STS credentials
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+      // If the effect was torn down during the delay, bail out
+      if (signal?.aborted) return [] as ConversationMeta[];
+      try {
+        const items = await numaChatDynamoUtils.getUserConversationsMeta(sub);
+        return items as ConversationMeta[];
+      } catch (retryError) {
+        console.error('Retry also failed to fetch recent conversations:', retryError);
+        return [] as ConversationMeta[];
+      }
     }
   };
 
-  const showSuggestionsIfAvailable = async (forceShow = false) => {
+  const showSuggestionsIfAvailable = async (forceShow = false, signal?: AbortSignal) => {
     setSuggestionsLoading(true);
     try {
-      let items = await fetchRecentConversations();
+      let items = await fetchRecentConversations(signal);
+      // If the effect was torn down while we were fetching, discard the stale result
+      if (signal?.aborted) return;
       // Filter out workspace conversations if excludeWorkspaceConversations is true (for V1 chat)
       if (excludeWorkspaceConversations) {
         items = items.filter((item) => !item.isWorkspaceConversation);
@@ -122,7 +134,9 @@ export function useChatInactivity({
         }
       }
     } finally {
-      setSuggestionsLoading(false);
+      if (!signal?.aborted) {
+        setSuggestionsLoading(false);
+      }
     }
   };
 
@@ -134,6 +148,12 @@ export function useChatInactivity({
     if (!sub || !numaChatDynamoUtils) {
       return;
     }
+
+    // AbortController cancels stale in-flight fetches when this effect tears down
+    // (e.g. when numaChatDynamoUtils changes on token refresh), preventing a stale
+    // response from overwriting fresh state.
+    const abortController = new AbortController();
+    const { signal } = abortController;
 
     const checkAndMaybeReset = async () => {
       // Skip if we've already activated new chat view AND inactivity hasn't expired again.
@@ -157,8 +177,9 @@ export function useChatInactivity({
         } catch (error) {
           console.warn('Error running inactivity expiration handler:', error);
         }
+        if (signal.aborted) return;
         try {
-          await showSuggestionsIfAvailable(true);
+          await showSuggestionsIfAvailable(true, signal);
         } catch (error) {
           console.warn('Failed to refresh recent conversations after inactivity expiration:', error);
         }
@@ -186,6 +207,7 @@ export function useChatInactivity({
     const interval = setInterval(checkAndMaybeReset, 30000);
 
     return () => {
+      abortController.abort();
       window.removeEventListener('focus', onFocus);
       document.removeEventListener('visibilitychange', onVisibilityChange);
       clearInterval(interval);
