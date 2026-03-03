@@ -10,12 +10,12 @@ import { getCached, setCache } from '../../../utils/opsCache';
 // ─── Props ──────────────────────────────────────────────────────────────────
 
 interface OpsHomeViewProps {
-  onCreateTeam: () => void;
+  onCreateBoard: () => void;
   onCreateCustomer: () => void;
   onCreateSupplier: () => void;
   onOpenGlobalSettings: (defaultTab?: string) => void;
-  onOpenTeamSettings: (teamId: string) => void;
-  onNavigateToTeam: (teamId: string) => void;
+  onOpenBoardSettings: (boardId: string) => void;
+  onNavigateToBoard: (boardId: string) => void;
 }
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -42,12 +42,12 @@ const CONFIG_CARDS: { key: string; icon: string; labelKey: string }[] = [
 // ─── Component ──────────────────────────────────────────────────────────────
 
 export const OpsHomeView = ({
-  onCreateTeam,
+  onCreateBoard,
   onCreateCustomer,
   onCreateSupplier,
   onOpenGlobalSettings,
-  onOpenTeamSettings,
-  onNavigateToTeam,
+  onOpenBoardSettings,
+  onNavigateToBoard,
 }: OpsHomeViewProps) => {
   const { t } = useTranslation('ops');
   const { numaGet } = useNumaRequest();
@@ -145,9 +145,9 @@ export const OpsHomeView = ({
           <QuickActionCard
             icon="bi-people"
             iconColor="#6366f1"
-            title={t('home.createTeam')}
-            description={t('home.createTeamDesc')}
-            onClick={onCreateTeam}
+            title={t('home.createBoard')}
+            description={t('home.createBoardDesc')}
+            onClick={onCreateBoard}
           />
         </div>
         <div className="col-md-4">
@@ -178,7 +178,7 @@ export const OpsHomeView = ({
         {t('home.overview')}
       </h6>
       <div className="d-flex gap-3 flex-wrap mb-4">
-        <StatCard label={t('home.teamsCount')} value={teams.length} color="#6366f1" />
+        <StatCard label={t('home.boardsCount')} value={teams.length} color="#6366f1" />
         <StatCard label={t('home.openTickets')} value={metrics?.totals?.open ?? 0} color="#f59e0b" />
         <StatCard label={t('home.closedTickets')} value={metrics?.totals?.closed ?? 0} color="#10b981" />
         <StatCard label={t('home.customersCount')} value={customerCount} color="#0d9488" />
@@ -190,12 +190,12 @@ export const OpsHomeView = ({
         className="text-muted text-uppercase fw-semibold mb-3"
         style={{ fontSize: '0.75rem', letterSpacing: '0.5px' }}
       >
-        {t('home.yourTeams')}
+        {t('home.yourBoards')}
       </h6>
       {teams.length === 0 ? (
         <div className="border rounded p-4 text-center text-muted mb-4">
           <i className="bi bi-kanban fs-3 d-block mb-2" />
-          <span>{t('home.noTeamsYet')}</span>
+          <span>{t('home.noBoardsYet')}</span>
         </div>
       ) : (
         <div className="row g-3 mb-4">
@@ -228,18 +228,18 @@ export const OpsHomeView = ({
                     <button
                       type="button"
                       className="btn btn-sm btn-outline-secondary flex-grow-1"
-                      onClick={() => onOpenTeamSettings(team.id)}
+                      onClick={() => onOpenBoardSettings(team.id)}
                     >
                       <i className="bi bi-sliders me-1" />
-                      {t('teams.settings')}
+                      {t('boards.settings')}
                     </button>
                     <button
                       type="button"
                       className="btn btn-sm btn-outline-primary flex-grow-1"
-                      onClick={() => onNavigateToTeam(team.id)}
+                      onClick={() => onNavigateToBoard(team.id)}
                     >
                       <i className="bi bi-arrow-right me-1" />
-                      {t('home.viewTeam')}
+                      {t('home.viewBoard')}
                     </button>
                   </div>
                 </div>

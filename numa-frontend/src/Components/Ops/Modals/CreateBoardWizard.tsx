@@ -18,7 +18,7 @@ import type { Team, WorkUnitSeriesConfig, StatusType, AccessControlMode } from '
 
 // ─── Props ───────────────────────────────────────────────────────────────────
 
-interface CreateTeamWizardProps {
+interface CreateBoardWizardProps {
   show: boolean;
   onHide: () => void;
   onCreated: (team: Team) => void;
@@ -31,7 +31,7 @@ const TOTAL_STEPS = 4;
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
-export function CreateTeamWizard({ show, onHide, onCreated }: CreateTeamWizardProps): React.JSX.Element {
+export function CreateBoardWizard({ show, onHide, onCreated }: CreateBoardWizardProps): React.JSX.Element {
   const { t } = useTranslation('ops');
   const { numaPost } = useNumaRequest();
   const { config } = useOps();
@@ -323,8 +323,18 @@ export function CreateTeamWizard({ show, onHide, onCreated }: CreateTeamWizardPr
                       setPresetId(p.id);
                       setCustomStages(null);
 
+                      // Auto-select ticket types based on prefixes
+                      if (p.allowedTicketTypePrefixes && config.ticketTypes) {
+                        const autoSelectedIds = config.ticketTypes
+                          .filter((tt) => p.allowedTicketTypePrefixes?.includes(tt.prefix))
+                          .map((tt) => tt.id);
+                        setSelectedTicketTypes(autoSelectedIds);
+                      } else {
+                        setSelectedTicketTypes([...allTypeIds]);
+                      }
+
                       // Auto-configure work units based on preset
-                      if (p.mode === 'development' || p.mode === 'normal') {
+                      if (p.mode === 'development') {
                         setEnableWorkUnits(true);
                         setWuLabel('Sprint');
                         setWuPatternType('sequential');

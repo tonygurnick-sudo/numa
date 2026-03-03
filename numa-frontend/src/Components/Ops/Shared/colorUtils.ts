@@ -10,12 +10,19 @@ export const BOARD_COLORS: string[] = [
   '#f59e0b', // amber
   '#8b5cf6', // violet
   '#ec4899', // pink
-  '#06b6d4', // cyan
+  '#06b6d4', // cyan / light blue
   '#f97316', // orange
   '#14b8a6', // teal
   '#6366f1', // indigo
   '#a855f7', // purple
   '#84cc16', // lime
+  '#0ea5e9', // sky
+  '#f43f5e', // rose
+  '#10b981', // emerald
+  '#64748b', // slate
+  '#6c757d', // neutral grey
+  '#343a40', // dark grey
+  '#adb5bd', // light grey
 ];
 
 /**

@@ -44,7 +44,7 @@ export type FieldType =
   | 'workunit'
   | 'project';
 
-export type FieldCategory = 'common' | 'development' | 'support' | 'crm' | 'operations';
+export type FieldCategory = string;
 
 export type FieldDefinition = {
   id: string;
@@ -80,6 +80,7 @@ export type CrmLifecycleStage = {
   id: string;
   name: string;
   colorPosition: number;
+  color?: string;
 };
 
 export type CrmFlag = {
