@@ -496,17 +496,17 @@ const BrandingAdminPanel: React.FC<BrandingAdminPanelProps> = ({ onDirtyChange }
 
   const handleSplashUpdate =
     (field: 'title' | 'description' | 'textColor' | 'showPanel') =>
-    (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-      const value = field === 'showPanel' ? (event.target as HTMLInputElement).checked : event.target.value;
-      markDirty();
-      setBranding((prev) => ({
-        ...prev,
-        splashScreen: {
-          ...prev.splashScreen,
-          [field]: value,
-        },
-      }));
-    };
+      (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+        const value = field === 'showPanel' ? (event.target as HTMLInputElement).checked : event.target.value;
+        markDirty();
+        setBranding((prev) => ({
+          ...prev,
+          splashScreen: {
+            ...prev.splashScreen,
+            [field]: value,
+          },
+        }));
+      };
 
   // Convert S3 URI or HTTPS URL to unsigned HTTPS URL for display
   // (used for thumbnails where signing isn't critical)
@@ -722,6 +722,11 @@ const BrandingAdminPanel: React.FC<BrandingAdminPanelProps> = ({ onDirtyChange }
       await BrandingAdminService.saveConfig(numaPut, payload);
       showToast({ variant: 'success', message: t('brandingAdmin.toasts.saveSuccess') });
       sessionStorage.setItem('BRANDING_THEME_ENABLED', enabled ? 'true' : 'false');
+
+      dirtyRef.current = false;
+      setIsDirty(false);
+      onDirtyChange?.(false);
+
       await loadConfig({ force: true });
       setHistoryLoaded(false);
     } catch (error) {
@@ -923,9 +928,9 @@ const BrandingAdminPanel: React.FC<BrandingAdminPanelProps> = ({ onDirtyChange }
                     console.log('Version history item:', item);
                     const formattedTimestamp = item.updatedAt
                       ? new Date(item.updatedAt).toLocaleString(i18n.language, {
-                          dateStyle: 'medium',
-                          timeStyle: 'short',
-                        })
+                        dateStyle: 'medium',
+                        timeStyle: 'short',
+                      })
                       : undefined;
                     const displayLabel = item.label || formattedTimestamp || item.versionId;
                     const metaParts: string[] = [];
