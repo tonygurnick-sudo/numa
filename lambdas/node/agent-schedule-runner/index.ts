@@ -1327,8 +1327,11 @@ const mergeRunConfig = (
   ]);
 
   // Merge KB IDs from both the run config and the agent snapshot's allowedKnowledgeBases.
-  // Without this, scheduled runs for agents with KB access configured via the agent builder
-  // would have empty enabledKBIds, preventing knowledge_search from being added to enabledTools.
+  // allowedKnowledgeBases semantics: null = all KBs, [] = none, [...ids] = specific.
+  // When null ("All knowledge bases"), there are no specific IDs to merge — we pass
+  // allKBsAllowed=true to buildEnabledTools so it still enables knowledge_search.
+  const allKBsAllowed =
+    toolsConfig.allowedKnowledgeBases === null || toolsConfig.allowedKnowledgeBases === undefined;
   const enabledKBIds = uniqStrings([
     ...(Array.isArray(base.enabledKBIds) ? base.enabledKBIds : []),
     ...(Array.isArray(toolsConfig.allowedKnowledgeBases) ? toolsConfig.allowedKnowledgeBases : []),
@@ -1345,6 +1348,7 @@ const mergeRunConfig = (
           webSearchEnabled,
           createAgentEnabled,
           enabledKBIds,
+          allKBsAllowed,
           queryDataSources: toolsConfig.queryDataSources,
         });
 
@@ -1365,22 +1369,32 @@ const mergeRunConfig = (
  * V2 names: knowledge_search (not query_knowledge_base), memories_tool, web_search, create_agent_tool.
  * The MCP tool layer accepts both V1 and V2 names for backward compatibility with
  * existing schedule records that may have V1 names stored in DynamoDB.
+ *
+ * KB access: allowedKnowledgeBases=null means "all KBs" (user selected "All knowledge bases"
+ * in the agent builder). In this case enabledKBIds will be empty but allKBsAllowed=true.
+ * The legacy queryDataSources flag is ignored when allKBsAllowed is set, since the new
+ * allowedKnowledgeBases field takes precedence.
  */
 const buildEnabledTools = ({
   autoToolsEnabled,
   webSearchEnabled,
   createAgentEnabled,
   enabledKBIds,
+  allKBsAllowed,
   queryDataSources,
 }: {
   autoToolsEnabled?: boolean;
   webSearchEnabled?: boolean;
   createAgentEnabled?: boolean;
   enabledKBIds: string[];
+  allKBsAllowed?: boolean;
   queryDataSources?: boolean;
 }): string[] => {
   const enabledTools: string[] = [];
-  const hasKBs = enabledKBIds.length > 0 && queryDataSources !== false;
+  // KB access is enabled when:
+  // - allKBsAllowed (allowedKnowledgeBases was null = "All knowledge bases"), OR
+  // - specific KB IDs exist and the legacy queryDataSources flag isn't explicitly false
+  const hasKBs = allKBsAllowed || (enabledKBIds.length > 0 && queryDataSources !== false);
   const auto = autoToolsEnabled ?? true;
 
   if (auto) {
