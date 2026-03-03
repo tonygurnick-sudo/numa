@@ -22,6 +22,7 @@ from typing import List
 class Region(str, Enum):
     US_EAST_1 = "us-east-1"
     AP_SOUTHEAST_2 = "ap-southeast-2"
+    AP_SOUTHEAST_3 = "ap-southeast-3"
 
 
 class ModelTypes(str, Enum):
@@ -113,6 +114,40 @@ FALLBACK_SEQUENCES = {
             max_tokens=10000,
         ),
     ],
+    Region.AP_SOUTHEAST_3: [
+        ModelInfo(
+            model_id="global.anthropic.claude-sonnet-4-6",
+            provider="anthropic",
+            name="Claude Sonnet 4.6",
+            input_cost=0.003,
+            output_cost=0.015,
+            max_tokens=64000,
+        ),
+        ModelInfo(
+            model_id="global.anthropic.claude-haiku-4-5-20251001-v1:0",
+            provider="anthropic",
+            name="Claude Haiku 4.5",
+            input_cost=0.001,
+            output_cost=0.005,
+            max_tokens=64000,
+        ),
+        ModelInfo(
+            model_id="apac.anthropic.claude-sonnet-4-20250514-v1:0",
+            provider="anthropic",
+            name="Claude Sonnet 4",
+            input_cost=0.003,
+            output_cost=0.015,
+            max_tokens=64000,
+        ),
+        ModelInfo(
+            model_id="global.amazon.nova-pro-v1:0",
+            provider="amazon",
+            name="Nova Pro",
+            input_cost=0.0008,
+            output_cost=0.0032,
+            max_tokens=10000,
+        ),
+    ],
 }
 
 
@@ -128,6 +163,12 @@ MODEL_MAP = {
             0
         ].model_id,  # Primary model (first in sequence)
         ModelTypes.CLAUDE_HAIKU: "au.anthropic.claude-haiku-4-5-20251001-v1:0",
+    },
+    Region.AP_SOUTHEAST_3: {
+        ModelTypes.DEFAULT: FALLBACK_SEQUENCES[Region.AP_SOUTHEAST_3][
+            0
+        ].model_id,  # Primary model (first in sequence)
+        ModelTypes.CLAUDE_HAIKU: "global.anthropic.claude-haiku-4-5-20251001-v1:0",
     },
 }
 

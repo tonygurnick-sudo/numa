@@ -16,6 +16,17 @@ import { validateClientName, sanitizeClientName } from '@/utils/clientValidation
 const REGION_OPTIONS = [
   { label: 'US East (N. Virginia) us-east-1', value: 'us-east-1' },
   { label: 'Asia Pacific (Sydney) ap-southeast-2', value: 'ap-southeast-2' },
+  { label: 'Asia Pacific (Jakarta) ap-southeast-3', value: 'ap-southeast-3' },
+]
+
+// Regions where Bedrock AgentCore is available (for cross-region AgentCore deployments)
+const AGENTCORE_REGION_OPTIONS = [
+  { label: 'US East (N. Virginia) us-east-1', value: 'us-east-1' },
+  { label: 'Asia Pacific (Sydney) ap-southeast-2', value: 'ap-southeast-2' },
+  { label: 'Asia Pacific (Singapore) ap-southeast-1', value: 'ap-southeast-1' },
+  { label: 'Asia Pacific (Tokyo) ap-northeast-1', value: 'ap-northeast-1' },
+  { label: 'Asia Pacific (Seoul) ap-northeast-2', value: 'ap-northeast-2' },
+  { label: 'Asia Pacific (Mumbai) ap-south-1', value: 'ap-south-1' },
 ]
 
 // All apps from infrastructure appLibrary + devAppLibrary (sorted alphabetically)
@@ -71,12 +82,13 @@ export default function CreateClientConfig() {
   const [allowQuotaSharing, setAllowQuotaSharing] = useState(defaults.allowBedrockQuotaSharing)
   const [bedrockAccount, setBedrockAccount] = useState('')
   const [provisionQResources, setProvisionQResources] = useState(defaults.provisionQResources)
-  const [preferredKnowledgeBase, setPreferredKnowledgeBase] = useState<"q" | "bedrock">(defaults.preferredKnowledgeBase)
+  const [preferredKnowledgeBase, setPreferredKnowledgeBase] = useState<"q" | "bedrock" | "none">(defaults.preferredKnowledgeBase)
   const [agents, setAgents] = useState(defaults.agents)
   const [brandingProviderEnabled, setBrandingProviderEnabled] = useState(defaults.brandingProviderEnabled)
   const [numaWorkspaceChat, setNumaWorkspaceChat] = useState(defaults.numaWorkspaceChat)
   const [workspaceChatModelSelection, setWorkspaceChatModelSelection] = useState(defaults.workspaceChatModelSelection)
   const [numaOps, setNumaOps] = useState(defaults.numaOps)
+  const [agentCoreRegion, setAgentCoreRegion] = useState('')
   const [groupAdmin, setGroupAdmin] = useState(featuresListToString(DEFAULT_ADMIN_FEATURES))
   const [groupStandard, setGroupStandard] = useState(featuresListToString(DEFAULT_STANDARD_FEATURES))
   const [showAdvanced, setShowAdvanced] = useState(false)
@@ -159,6 +171,7 @@ export default function CreateClientConfig() {
     if (!numaWorkspaceChat) minimal['numaWorkspaceChat'] = false
     if (workspaceChatModelSelection) minimal['workspaceChatModelSelection'] = true
     if (numaOps) minimal['numaOps'] = true
+    if (agentCoreRegion && agentCoreRegion !== region) minimal['agentCoreRegion'] = agentCoreRegion
 
     // Always include these two fields so defaults are written explicitly
     minimal['provisionQResources'] = provisionQResources
@@ -374,11 +387,12 @@ export default function CreateClientConfig() {
                         label="Preferred Knowledge Base"
                         value={preferredKnowledgeBase}
                         defaultValue={defaults.preferredKnowledgeBase}
-                        onChange={(v: any) => setPreferredKnowledgeBase(v as 'q' | 'bedrock')}
+                        onChange={(v: any) => setPreferredKnowledgeBase(v as 'q' | 'bedrock' | 'none')}
                         type="select"
                         options={[
                           { label: 'Bedrock', value: 'bedrock' },
                           { label: 'Q Business', value: 'q' },
+                          { label: 'None (no KB)', value: 'none' },
                         ]}
                         helpText="Select knowledge base service to use by default"
                       />
@@ -418,6 +432,24 @@ export default function CreateClientConfig() {
                     />
                     {showAdvanced && (
                       <div className="bg-light rounded p-3">
+                        <Row className="mb-3">
+                          <Col md={6}>
+                            <ConfigField
+                              label="AgentCore Region"
+                              value={agentCoreRegion}
+                              defaultValue=""
+                              onChange={setAgentCoreRegion}
+                              type="select"
+                              options={[{ label: 'Same as deployment region (default)', value: '' }, ...AGENTCORE_REGION_OPTIONS]}
+                              helpText="Only set this if the deployment region does not support Bedrock AgentCore. Consult a developer before changing."
+                            />
+                            {agentCoreRegion && (
+                              <Alert variant="warning" className="mt-2 py-2 small">
+                                <strong>Warning:</strong> Cross-region AgentCore adds latency and complexity. Do not change this without consulting a developer.
+                              </Alert>
+                            )}
+                          </Col>
+                        </Row>
                         <Row>
                           <Col md={6}>
                             <Form.Group className="mb-3">

@@ -3,6 +3,7 @@ import { Fn } from 'cdktf';
 import path from 'node:path';
 
 // AWS Provider imports
+import { AwsProvider } from '@cdktf/provider-aws/lib/provider';
 import { EcrRepository } from '@cdktf/provider-aws/lib/ecr-repository';
 import { IamRole } from '@cdktf/provider-aws/lib/iam-role';
 import { IamRolePolicy } from '@cdktf/provider-aws/lib/iam-role-policy';
@@ -56,6 +57,10 @@ export interface WorkspaceChatAgentConstructProps {
   companyBucketName?: string;
   /** Company bucket ARN (for IAM permissions) */
   companyBucketArn?: string;
+  /** Optional AWS provider for AgentCore-region resources (when cross-region) */
+  agentCoreProvider?: AwsProvider;
+  /** Region where AgentCore resources are deployed (defaults to props.region) */
+  agentCoreRegion?: string;
 }
 
 export class WorkspaceChatAgentConstruct extends Construct {
@@ -100,7 +105,16 @@ export class WorkspaceChatAgentConstruct extends Construct {
         fallback: { model_id: 'au.anthropic.claude-haiku-4-5-20251001-v1:0', max_tokens: 64000 },
         haiku: { model_id: 'au.anthropic.claude-haiku-4-5-20251001-v1:0', max_tokens: 64000 },
       },
+      'ap-southeast-3': {
+        default: { model_id: 'global.anthropic.claude-sonnet-4-6', max_tokens: 64000 },
+        fallback: { model_id: 'global.anthropic.claude-haiku-4-5-20251001-v1:0', max_tokens: 64000 },
+        haiku: { model_id: 'global.anthropic.claude-haiku-4-5-20251001-v1:0', max_tokens: 64000 },
+      },
     };
+    // AgentCore region — where compute runs (may differ from data region)
+    const acRegion = props.agentCoreRegion ?? props.region;
+    // Model IDs must match the Bedrock endpoint region the container calls (AWS_REGION = data region).
+    // Task 01 (Jakarta region support) will add a separate BEDROCK_REGION config to decouple this.
     const regionModel = REGIONAL_MODEL_MAP[props.region] ?? REGIONAL_MODEL_MAP['us-east-1'];
 
     // Get current account ID
@@ -128,6 +142,7 @@ export class WorkspaceChatAgentConstruct extends Construct {
     // =========================================================================
 
     this.ecrRepository = new EcrRepository(this, 'ecr', {
+      ...(props.agentCoreProvider && { provider: props.agentCoreProvider }),
       name: `numa-${props.clientName}-workspace-chat-agent`,
       imageScanningConfiguration: { scanOnPush: true },
       forceDelete: true, // Allow deletion even if images exist (for dev)
@@ -177,15 +192,15 @@ export AWS_SESSION_TOKEN=$(echo $CLIENT_CREDS | jq -r .SessionToken)
 
 # Login to client ECR with client credentials
 # Use --authfile to avoid /run/containers permission issues when running as non-root
-aws ecr get-login-password --region ${props.region} | \\
-  skopeo login --authfile /tmp/skopeo-auth.json --username AWS --password-stdin ${callerIdentity.accountId}.dkr.ecr.${props.region}.amazonaws.com
+aws ecr get-login-password --region ${acRegion} | \\
+  skopeo login --authfile /tmp/skopeo-auth.json --username AWS --password-stdin ${callerIdentity.accountId}.dkr.ecr.${acRegion}.amazonaws.com
 
 # Delete all existing images to keep ECR lean (versions tracked in git, not ECR)
 echo "Cleaning up old images from ECR..."
 REPO_NAME="numa-${props.clientName}-workspace-chat-agent"
-IMAGES=$(aws ecr list-images --repository-name "$REPO_NAME" --region ${props.region} --query 'imageIds[*]' --output json 2>/dev/null || echo "[]")
+IMAGES=$(aws ecr list-images --repository-name "$REPO_NAME" --region ${acRegion} --query 'imageIds[*]' --output json 2>/dev/null || echo "[]")
 if [ "$IMAGES" != "[]" ] && [ -n "$IMAGES" ]; then
-  aws ecr batch-delete-image --repository-name "$REPO_NAME" --region ${props.region} --image-ids "$IMAGES" || true
+  aws ecr batch-delete-image --repository-name "$REPO_NAME" --region ${acRegion} --image-ids "$IMAGES" || true
   echo "Deleted old images"
 else
   echo "No existing images to delete"
@@ -370,7 +385,9 @@ echo "Successfully pushed image to ${this.ecrRepository.repositoryUrl}:${imageTa
     // =========================================================================
 
     // Use /aws/vendedlogs/ prefix required for AWS service log delivery
+    // Vendedlogs must be in the same region as AgentCore
     this.logGroup = new CloudwatchLogGroup(this, 'log-group', {
+      ...(props.agentCoreProvider && { provider: props.agentCoreProvider }),
       name: `/aws/vendedlogs/bedrock-agentcore/numa-${props.clientName}-workspace-chat`,
       retentionInDays: 30,
     });
@@ -388,8 +405,12 @@ echo "Successfully pushed image to ${this.ecrRepository.repositoryUrl}:${imageTa
     // Shared vendedlogs resource policy — uses a fixed name so all client stacks
     // in the same account share one policy (AWS limit: 10 resource policies per account).
     // PutResourcePolicy is idempotent, so concurrent deploys are safe.
-    const region = new DataAwsRegion(this, 'current-region', {}).region;
+    // DataAwsRegion and resource policy must be in the AgentCore region for vendedlogs
+    const region = new DataAwsRegion(this, 'current-region', {
+      ...(props.agentCoreProvider && { provider: props.agentCoreProvider }),
+    }).region;
     const vendedlogsDeliveryPolicy = new CloudwatchLogResourcePolicy(this, 'vendedlogs-delivery-policy', {
+      ...(props.agentCoreProvider && { provider: props.agentCoreProvider }),
       policyName: 'numa-vendedlogs-resource-policy',
       policyDocument: JSON.stringify({
         Version: '2012-10-17',
@@ -427,6 +448,7 @@ echo "Successfully pushed image to ${this.ecrRepository.repositoryUrl}:${imageTa
     const sanitizedClientName = props.clientName.replace(/-/g, '_');
 
     this.agentRuntime = new BedrockagentcoreAgentRuntime(this, 'agentcore-runtime', {
+      ...(props.agentCoreProvider && { provider: props.agentCoreProvider }),
       // Ensure image is pushed to ECR before creating AgentCore runtime
       dependsOn: [pushImage],
 
@@ -546,14 +568,16 @@ echo "Successfully pushed image to ${this.ecrRepository.repositoryUrl}:${imageTa
 
     // Construct the endpoint URL for CloudFront routing
     // Format: https://<id>.runtime.bedrock-agentcore.<region>.amazonaws.com
-    this.agentCoreEndpoint = `https://${this.agentRuntime.agentRuntimeId}.runtime.bedrock-agentcore.${props.region}.amazonaws.com`;
+    this.agentCoreEndpoint = `https://${this.agentRuntime.agentRuntimeId}.runtime.bedrock-agentcore.${acRegion}.amazonaws.com`;
 
     // =========================================================================
     // CLOUDWATCH LOG DELIVERY (for container logs)
     // =========================================================================
 
     // Create a log delivery destination pointing to the existing log group
+    // Log delivery resources must be in the same region as AgentCore
     const logDeliveryDestination = new CloudwatchLogDeliveryDestination(this, 'log-delivery-destination', {
+      ...(props.agentCoreProvider && { provider: props.agentCoreProvider }),
       name: `numa-${props.clientName}-workspace-chat-logs-dest`,
       outputFormat: 'json',
       deliveryDestinationConfiguration: [
@@ -565,6 +589,7 @@ echo "Successfully pushed image to ${this.ecrRepository.repositoryUrl}:${imageTa
 
     // Create a log delivery source linked to the AgentCore runtime
     const logDeliverySource = new CloudwatchLogDeliverySource(this, 'log-delivery-source', {
+      ...(props.agentCoreProvider && { provider: props.agentCoreProvider }),
       name: `numa-${props.clientName}-workspace-chat-logs-source`,
       logType: 'APPLICATION_LOGS',
       resourceArn: this.agentRuntime.agentRuntimeArn,
@@ -572,6 +597,7 @@ echo "Successfully pushed image to ${this.ecrRepository.repositoryUrl}:${imageTa
 
     // Wire source to destination (ensure resource policies are created first)
     new CloudwatchLogDelivery(this, 'log-delivery', {
+      ...(props.agentCoreProvider && { provider: props.agentCoreProvider }),
       dependsOn: [logDeliverySource, vendedlogsDeliveryPolicy],
       deliverySourceName: logDeliverySource.name,
       deliveryDestinationArn: logDeliveryDestination.arn,

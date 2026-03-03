@@ -16,7 +16,7 @@ import type {
 } from '@/types/tools'
 
 const SERVICE_CODE = 'bedrock'
-const ALL_REGIONS = ['us-east-1', 'ap-southeast-2']
+const ALL_REGIONS = ['us-east-1', 'ap-southeast-2', 'ap-southeast-3']
 
 // Arcanum internal AWS accounts for direct quota querying
 const ARCANUM_INTERNAL_ACCOUNTS = [

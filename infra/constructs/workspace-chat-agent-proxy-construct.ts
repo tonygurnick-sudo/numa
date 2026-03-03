@@ -37,6 +37,8 @@ export interface WorkspaceChatAgentProxyProps {
   workspaceToolsLambdaArn?: string;
   /** Workspace chat tools Lambda name (for invoking from proxy) */
   workspaceToolsLambdaName?: string;
+  /** Region where AgentCore resources are deployed (defaults to props.region) */
+  agentCoreRegion?: string;
 }
 
 /**
@@ -103,6 +105,11 @@ export class WorkspaceChatAgentProxy extends Construct {
         ...(props.workspaceToolsLambdaName && {
           WORKSPACE_TOOLS_LAMBDA_NAME: props.workspaceToolsLambdaName,
         }),
+        // AgentCore region (may differ from Lambda's own region for cross-region deployments)
+        ...(props.agentCoreRegion &&
+          props.agentCoreRegion !== props.region && {
+            AGENTCORE_REGION: props.agentCoreRegion,
+          }),
       },
       logGroup: logGroup,
       resourceNameSuffix: '_workspace_chat_agent_proxy',
@@ -118,7 +125,9 @@ export class WorkspaceChatAgentProxy extends Construct {
             'bedrock-agentcore:InvokeAgentRuntimeStreaming',
             'bedrock-agentcore:InvokeAgentRuntimeForUser',
           ],
-          resources: [`arn:aws:bedrock-agentcore:${props.region}:${callerIdentity.accountId}:*`],
+          resources: [
+            `arn:aws:bedrock-agentcore:${props.agentCoreRegion ?? props.region}:${callerIdentity.accountId}:*`,
+          ],
         },
         // CloudWatch logs (inherited from NumaLambda but explicit for clarity)
         {

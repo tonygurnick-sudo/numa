@@ -14,7 +14,7 @@ export interface WorkspaceChatToolsConstructProps {
   /** CloudWatch log group for Lambda logs */
   logGroup: CloudwatchLogGroup;
   /** Preferred knowledge base provider: "q" or "bedrock" */
-  preferredKnowledgeBase: 'q' | 'bedrock';
+  preferredKnowledgeBase: 'q' | 'bedrock' | 'none';
   /** Bedrock Knowledge Base ID (required for bedrock provider) */
   bedrockKnowledgeBaseId?: string;
   /** Q Business Application ID (required for q provider) */

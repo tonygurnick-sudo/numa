@@ -142,16 +142,10 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
     // Uses Pandoc layer for MD->DOCX, LibreOffice layer for DOCX->PDF
     // Defined before extract-content because extract-content invokes it for DOCX→PDF conversion.
 
-    // Deploy Pandoc layer from SAR (Serverless Application Repository)
-    const pandocSarStack = new ServerlessapplicationrepositoryCloudformationStack(this, 'pandoc-layer', {
-      name: `${props.clientName}-pandoc-layer`,
-      applicationId: 'arn:aws:serverlessrepo:us-east-1:145266761615:applications/pandoc-lambda-layer',
-      capabilities: ['CAPABILITY_IAM'],
-      lifecycle: {
-        ignoreChanges: ['parameters', 'tags'],
-      },
-    });
-    const pandocLayerArn = pandocSarStack.outputs.lookup('LayerVersion');
+    // Pandoc layer: SAR (Serverless Application Repository) is not available in all regions.
+    // For unsupported regions, use a pre-published layer ARN instead.
+    // Publish with: tools/publish-pandoc-layer.sh <target-region> <source-layer-arn>
+    const pandocLayerArn = this.getPandocLayerArn(props.clientName, props.region);
 
     const libreOfficeLayerArn = this.getLibreOfficeLayerArn(props.region);
     const documentConverterLambda = this.addLambdaFunction(this, 'document-converter', {
@@ -1071,8 +1065,37 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
     const layerArns: Record<string, string> = {
       'us-east-1': 'arn:aws:lambda:us-east-1:764866452798:layer:libreoffice-brotli:1',
       'ap-southeast-2': 'arn:aws:lambda:ap-southeast-2:764866452798:layer:libreoffice-brotli:1',
+      'ap-southeast-3': 'arn:aws:lambda:ap-southeast-3:207567759910:layer:libreoffice-brotli:1',
     };
     return layerArns[region] || layerArns['us-east-1'];
+  }
+
+  /**
+   * Get the Pandoc Lambda layer ARN for the given region.
+   * Most regions use SAR (Serverless Application Repository) to deploy the layer per-account.
+   * Regions without SAR (e.g. ap-southeast-3) use a pre-published public layer instead.
+   * Publish with: tools/publish-pandoc-layer.sh <target-region> <source-layer-arn>
+   */
+  private getPandocLayerArn(clientName: string, region: string): string {
+    // Pre-published layer ARNs for regions where SAR is unavailable
+    const staticLayerArns: Record<string, string> = {
+      'ap-southeast-3': 'arn:aws:lambda:ap-southeast-3:207567759910:layer:pandoc:1',
+    };
+
+    if (staticLayerArns[region]) {
+      return staticLayerArns[region];
+    }
+
+    // For regions with SAR support, deploy dynamically via SAR
+    const pandocSarStack = new ServerlessapplicationrepositoryCloudformationStack(this, 'pandoc-layer', {
+      name: `${clientName}-pandoc-layer`,
+      applicationId: 'arn:aws:serverlessrepo:us-east-1:145266761615:applications/pandoc-lambda-layer',
+      capabilities: ['CAPABILITY_IAM'],
+      lifecycle: {
+        ignoreChanges: ['parameters', 'tags'],
+      },
+    });
+    return pandocSarStack.outputs.lookup('LayerVersion');
   }
 }
 

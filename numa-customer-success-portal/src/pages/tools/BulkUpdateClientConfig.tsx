@@ -34,6 +34,7 @@ interface FieldConfig {
 const REGION_OPTIONS = [
   { label: 'US East (N. Virginia) us-east-1', value: 'us-east-1' },
   { label: 'Asia Pacific (Sydney) ap-southeast-2', value: 'ap-southeast-2' },
+  { label: 'Asia Pacific (Jakarta) ap-southeast-3', value: 'ap-southeast-3' },
 ]
 
 const BULK_UPDATABLE_FIELDS: FieldConfig[] = [

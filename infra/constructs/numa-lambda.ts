@@ -17,6 +17,28 @@ const OTEL_COLLECTOR_LAYER_VERSION = '0_16_0';
 const OTEL_LANGUAGE_LAYER_VERSION = '0_15_0';
 const OTEL_LAYER_ACCOUNT = '184161586896'; // From: https://github.com/open-telemetry/opentelemetry-lambda/releases
 
+// Regions where AWS publishes OpenTelemetry Lambda layers.
+// ap-southeast-3 (Jakarta) and other newer regions are NOT supported.
+// Source: https://aws-otel.github.io/docs/getting-started/lambda/lambda-python/
+const OTEL_SUPPORTED_REGIONS = new Set([
+  'ap-northeast-1',
+  'ap-northeast-2',
+  'ap-south-1',
+  'ap-southeast-1',
+  'ap-southeast-2',
+  'ca-central-1',
+  'eu-central-1',
+  'eu-north-1',
+  'eu-west-1',
+  'eu-west-2',
+  'eu-west-3',
+  'sa-east-1',
+  'us-east-1',
+  'us-east-2',
+  'us-west-1',
+  'us-west-2',
+]);
+
 export class NumaLambda extends Construct {
   readonly additionalPolicies: IamPolicy[];
   readonly lambda: LambdaFunction;
@@ -154,7 +176,7 @@ function otelLayersAndEnvironment(
   const environmentVariables: Record<string, string> = {};
   const layers: string[] = [];
 
-  if (props) {
+  if (props && OTEL_SUPPORTED_REGIONS.has(props.region)) {
     const architecture = props?.architecture ?? 'amd64';
     const collectorLayer = `arn:aws:lambda:${props.region}:${OTEL_LAYER_ACCOUNT}:layer:opentelemetry-collector-${architecture}-${OTEL_COLLECTOR_LAYER_VERSION}:1`;
     layers.push(collectorLayer);
