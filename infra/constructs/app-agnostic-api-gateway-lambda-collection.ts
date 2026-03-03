@@ -788,6 +788,9 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
         CLOUDFRONT_SHARED_SECRET: props.cloudfrontSharedSecret,
         SCHEDULE_RUNNER_SECRET: props.agentScheduleRunnerSecret,
         OUTPUTS_BUCKET_NAME: props.outputsBucketName,
+        // Agent tables for refreshing stale snapshots before each scheduled run
+        WORKSPACE_AGENTS_TABLE_NAME: props.workspaceAgentsTableName,
+        USER_AGENTS_TABLE_NAME: props.userAgentsTableName,
       },
       additionalPolicyStatements: [
         {
@@ -825,6 +828,15 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
           effect: 'Allow',
           actions: ['lambda:InvokeFunction'],
           resources: ['*'],
+        },
+        // Read-only access to agent tables for refreshing stale snapshots
+        {
+          effect: 'Allow',
+          actions: ['dynamodb:GetItem'],
+          resources: [
+            `arn:aws:dynamodb:*:*:table/${props.workspaceAgentsTableName}`,
+            `arn:aws:dynamodb:*:*:table/${props.userAgentsTableName}`,
+          ],
         },
       ],
     });

@@ -2,7 +2,7 @@ import type { APIGatewayProxyEventV2, APIGatewayProxyResultV2 } from 'aws-lambda
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { InvokeCommand, LambdaClient } from '@aws-sdk/client-lambda';
 import { GetObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
-import { DynamoDBDocumentClient, PutCommand, QueryCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
+import { DynamoDBDocumentClient, GetCommand, PutCommand, QueryCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
 import { withPRM } from '../../../lib/prm-node/prm';
 import { NotificationService } from '../../../lib/notification-service';
 import { v4 as uuidv4 } from 'uuid';
@@ -14,6 +14,9 @@ const WORKSPACE_AGENT_PROXY_URL = (process.env.WORKSPACE_AGENT_PROXY_URL ?? '').
 const CLOUDFRONT_SHARED_SECRET = process.env.CLOUDFRONT_SHARED_SECRET ?? '';
 const SCHEDULE_RUNNER_SECRET = process.env.SCHEDULE_RUNNER_SECRET ?? '';
 const OUTPUTS_BUCKET = process.env.OUTPUTS_BUCKET_NAME ?? '';
+const WORKSPACE_AGENTS_TABLE = process.env.WORKSPACE_AGENTS_TABLE_NAME ?? '';
+const USER_AGENTS_TABLE = process.env.USER_AGENTS_TABLE_NAME ?? '';
+const CLIENT_NAME = process.env.CLIENT_NAME ?? '';
 const SCHEDULED_RUNS_PREFIX = 'numa-chat/scheduled-runs';
 
 const dynamo = DynamoDBDocumentClient.from(withPRM(DynamoDBClient, { region: REGION }), {
@@ -480,12 +483,17 @@ const executeRun = async ({
 
   let assistantText: string;
   try {
-    const mergedRunConfig = mergeRunConfig(runConfig, agentSnapshot);
+    // Refresh agent snapshot from DynamoDB so scheduled runs use the latest
+    // agent config (integrations, KBs, tools) rather than the frozen snapshot
+    // stored at schedule creation time.
+    const freshSnapshot = await refreshAgentSnapshot(agentMeta?.agentId, auth.sub);
+    const effectiveSnapshot = freshSnapshot ?? agentMeta;
+    const mergedRunConfig = mergeRunConfig(runConfig, effectiveSnapshot);
     assistantText = await invokeWorkspaceAgent({
       prompt: apiPrompt,
       conversationId: runConversationId,
       runConfig: mergedRunConfig,
-      agentSnapshot: agentMeta,
+      agentSnapshot: effectiveSnapshot,
       auth,
       scheduledRun: !adHoc,
     });
@@ -1172,7 +1180,7 @@ const invokeWorkspaceAgent = async ({
   return payload.result?.text ?? '';
 };
 
-/** Map V1 tool names to V2 equivalents. V2 uses "knowledge_search" instead of "query_knowledge_base". */
+/** Map any remaining V1 tool names to V2 equivalents for schedule records created before the migration. */
 const mapToolsToV2 = (tools?: string[]): string[] | undefined => {
   if (!tools || tools.length === 0) return undefined;
   return tools.map((tool) => {
@@ -1221,6 +1229,82 @@ const buildRunLogKey = (userId: string, scheduleId: string, runId: string): stri
   `${SCHEDULED_RUNS_PREFIX}/${userId}/${scheduleId}/${runId}.json`;
 
 /**
+ * Refresh the agent snapshot by fetching the current agent config from DynamoDB.
+ *
+ * Agent snapshots are frozen at schedule creation time. If the agent config is
+ * later updated (e.g. integrations added/removed, KB access changed), the
+ * schedule would use stale data. This function fetches the latest config so
+ * scheduled runs always reflect the current agent state.
+ *
+ * Tries the user agent table first (personal agents), falls back to workspace
+ * table (shared agents). Returns null if the agent no longer exists or the
+ * tables are not configured.
+ */
+const refreshAgentSnapshot = async (
+  agentId: string | undefined,
+  userId: string,
+): Promise<AgentSnapshot | null> => {
+  if (!agentId) return null;
+  if (!USER_AGENTS_TABLE && !WORKSPACE_AGENTS_TABLE) {
+    console.warn('Agent tables not configured; using frozen snapshot');
+    return null;
+  }
+
+  // Try user (personal) agent table first
+  if (USER_AGENTS_TABLE) {
+    try {
+      const result = await dynamo.send(
+        new GetCommand({
+          TableName: USER_AGENTS_TABLE,
+          Key: { user_id: userId, agent_id: agentId },
+        }),
+      );
+      if (result.Item) {
+        console.info('Refreshed agent snapshot from user table', { agentId, userId });
+        return mapDynamoItemToSnapshot(result.Item);
+      }
+    } catch (err) {
+      console.warn('Failed to fetch user agent', { agentId, error: (err as Error).message });
+    }
+  }
+
+  // Fall back to workspace (shared) agent table
+  if (WORKSPACE_AGENTS_TABLE && CLIENT_NAME) {
+    try {
+      const result = await dynamo.send(
+        new GetCommand({
+          TableName: WORKSPACE_AGENTS_TABLE,
+          Key: { tenant_id: CLIENT_NAME, agent_id: agentId },
+        }),
+      );
+      if (result.Item) {
+        console.info('Refreshed agent snapshot from workspace table', { agentId });
+        return mapDynamoItemToSnapshot(result.Item);
+      }
+    } catch (err) {
+      console.warn('Failed to fetch workspace agent', { agentId, error: (err as Error).message });
+    }
+  }
+
+  console.warn('Agent not found in either table; using frozen snapshot', { agentId });
+  return null;
+};
+
+/** Map a raw DynamoDB agent item to the AgentSnapshot type used by the schedule runner. */
+const mapDynamoItemToSnapshot = (item: Record<string, unknown>): AgentSnapshot => ({
+  agentId: item.agent_id as string,
+  title: item.title as string | undefined,
+  icon: item.icon as string | undefined,
+  iconImage: item.icon_image as { s3Bucket: string; s3Key: string } | null | undefined,
+  version: item.version as number | undefined,
+  visibility: item.visibility as string | undefined,
+  systemPrompt: item.system_prompt as string | undefined,
+  userWelcomeMessage: item.user_instructions as string | undefined,
+  requiredIntegrations: (item.required_integrations as string[] | undefined) ?? [],
+  toolsConfig: item.tools_config as AgentToolsConfig | undefined,
+});
+
+/**
  * Merge the run config from the schedule record with the agent snapshot's tools config.
  *
  * The V2 workspace agent resolves agent system prompts natively via agentId,
@@ -1242,7 +1326,13 @@ const mergeRunConfig = (
     ...(agentSnapshot?.requiredIntegrations ?? []),
   ]);
 
-  const enabledKBIds = Array.isArray(base.enabledKBIds) ? base.enabledKBIds : [];
+  // Merge KB IDs from both the run config and the agent snapshot's allowedKnowledgeBases.
+  // Without this, scheduled runs for agents with KB access configured via the agent builder
+  // would have empty enabledKBIds, preventing knowledge_search from being added to enabledTools.
+  const enabledKBIds = uniqStrings([
+    ...(Array.isArray(base.enabledKBIds) ? base.enabledKBIds : []),
+    ...(Array.isArray(toolsConfig.allowedKnowledgeBases) ? toolsConfig.allowedKnowledgeBases : []),
+  ]);
   const autoToolsEnabled = base.autoToolsEnabled ?? toolsConfig.autoToolsEnabled;
   const webSearchEnabled = base.webSearchEnabled ?? toolsConfig.webSearchEnabled;
   const createAgentEnabled = base.createAgentEnabled ?? toolsConfig.createAgentEnabled;
@@ -1269,7 +1359,13 @@ const mergeRunConfig = (
   };
 };
 
-/** Build the list of enabled tools using V2 tool names. */
+/**
+ * Build the list of enabled tools using V2 tool names.
+ *
+ * V2 names: knowledge_search (not query_knowledge_base), memories_tool, web_search, create_agent_tool.
+ * The MCP tool layer accepts both V1 and V2 names for backward compatibility with
+ * existing schedule records that may have V1 names stored in DynamoDB.
+ */
 const buildEnabledTools = ({
   autoToolsEnabled,
   webSearchEnabled,
@@ -1291,10 +1387,12 @@ const buildEnabledTools = ({
     if (hasKBs) enabledTools.push('knowledge_search');
     enabledTools.push('web_search');
     if (createAgentEnabled) enabledTools.push('create_agent_tool');
+    enabledTools.push('memories_tool');
   } else {
     if (hasKBs) enabledTools.push('knowledge_search');
     if (webSearchEnabled) enabledTools.push('web_search');
     if (createAgentEnabled) enabledTools.push('create_agent_tool');
+    enabledTools.push('memories_tool');
   }
 
   return enabledTools;
