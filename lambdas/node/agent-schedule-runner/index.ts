@@ -1327,11 +1327,13 @@ const mergeRunConfig = (
   ]);
 
   // Merge KB IDs from both the run config and the agent snapshot's allowedKnowledgeBases.
-  // allowedKnowledgeBases semantics: null = all KBs, [] = none, [...ids] = specific.
-  // When null ("All knowledge bases"), there are no specific IDs to merge — we pass
-  // allKBsAllowed=true to buildEnabledTools so it still enables knowledge_search.
-  const allKBsAllowed =
-    toolsConfig.allowedKnowledgeBases === null || toolsConfig.allowedKnowledgeBases === undefined;
+  // allowedKnowledgeBases semantics:
+  //   null      = "All knowledge bases" (user explicitly selected this)
+  //   undefined = field not set (legacy agent — fall back to queryDataSources)
+  //   []        = "No knowledge bases"
+  //   [...ids]  = "Selected knowledge bases"
+  const allKBsAllowed = toolsConfig.allowedKnowledgeBases === null;
+  const kbFieldSet = 'allowedKnowledgeBases' in toolsConfig;
   const enabledKBIds = uniqStrings([
     ...(Array.isArray(base.enabledKBIds) ? base.enabledKBIds : []),
     ...(Array.isArray(toolsConfig.allowedKnowledgeBases) ? toolsConfig.allowedKnowledgeBases : []),
@@ -1349,6 +1351,7 @@ const mergeRunConfig = (
           createAgentEnabled,
           enabledKBIds,
           allKBsAllowed,
+          kbFieldSet,
           queryDataSources: toolsConfig.queryDataSources,
         });
 
@@ -1370,10 +1373,9 @@ const mergeRunConfig = (
  * The MCP tool layer accepts both V1 and V2 names for backward compatibility with
  * existing schedule records that may have V1 names stored in DynamoDB.
  *
- * KB access: allowedKnowledgeBases=null means "all KBs" (user selected "All knowledge bases"
- * in the agent builder). In this case enabledKBIds will be empty but allKBsAllowed=true.
- * The legacy queryDataSources flag is ignored when allKBsAllowed is set, since the new
- * allowedKnowledgeBases field takes precedence.
+ * KB access: The new allowedKnowledgeBases field (null / [] / [...ids]) is authoritative
+ * when present. The legacy queryDataSources boolean is only used as a fallback for
+ * agents created before allowedKnowledgeBases existed.
  */
 const buildEnabledTools = ({
   autoToolsEnabled,
@@ -1381,6 +1383,7 @@ const buildEnabledTools = ({
   createAgentEnabled,
   enabledKBIds,
   allKBsAllowed,
+  kbFieldSet,
   queryDataSources,
 }: {
   autoToolsEnabled?: boolean;
@@ -1388,13 +1391,15 @@ const buildEnabledTools = ({
   createAgentEnabled?: boolean;
   enabledKBIds: string[];
   allKBsAllowed?: boolean;
+  kbFieldSet?: boolean;
   queryDataSources?: boolean;
 }): string[] => {
   const enabledTools: string[] = [];
   // KB access is enabled when:
   // - allKBsAllowed (allowedKnowledgeBases was null = "All knowledge bases"), OR
-  // - specific KB IDs exist and the legacy queryDataSources flag isn't explicitly false
-  const hasKBs = allKBsAllowed || (enabledKBIds.length > 0 && queryDataSources !== false);
+  // - specific KB IDs were selected (enabledKBIds has entries), OR
+  // - legacy fallback: allowedKnowledgeBases field doesn't exist and queryDataSources is true
+  const hasKBs = allKBsAllowed || enabledKBIds.length > 0 || (!kbFieldSet && queryDataSources === true);
   const auto = autoToolsEnabled ?? true;
 
   if (auto) {
