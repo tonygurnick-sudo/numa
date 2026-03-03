@@ -6,7 +6,7 @@ import { Preloader } from '../Preloader';
 interface CreateUserModalProps {
   show: boolean;
   onHide: () => void;
-  onCreateUser: (email: string) => Promise<void>;
+  onCreateUser: (email: string) => Promise<{ emailSent: boolean }>;
 }
 
 export function CreateUserModal({ show, onHide, onCreateUser }: CreateUserModalProps): React.JSX.Element {
@@ -15,6 +15,7 @@ export function CreateUserModal({ show, onHide, onCreateUser }: CreateUserModalP
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+  const [emailSent, setEmailSent] = useState(false);
   const [createdEmail, setCreatedEmail] = useState('');
   const [copiedEmail, setCopiedEmail] = useState(false);
   const [copiedInstructions, setCopiedInstructions] = useState(false);
@@ -24,6 +25,7 @@ export function CreateUserModal({ show, onHide, onCreateUser }: CreateUserModalP
     setEmail('');
     setError(null);
     setSuccess(false);
+    setEmailSent(false);
     setCreatedEmail('');
     onHide();
   };
@@ -60,8 +62,9 @@ export function CreateUserModal({ show, onHide, onCreateUser }: CreateUserModalP
     setError(null);
 
     try {
-      await onCreateUser(email);
+      const result = await onCreateUser(email);
       setCreatedEmail(email);
+      setEmailSent(result.emailSent);
       setSuccess(true);
       setEmail('');
     } catch (err) {
@@ -91,8 +94,8 @@ export function CreateUserModal({ show, onHide, onCreateUser }: CreateUserModalP
             <>
               <p className="text-muted mb-3">{t('createModal.description')}</p>
               <ul className="text-muted mb-4">
-                <li>{t('createModal.bullets.passwordSetup', { origin: window.location.origin })}</li>
-                <li>{t('createModal.bullets.instructions')}</li>
+                <li>{t('createModal.bullets.emailSent')}</li>
+                <li>{t('createModal.bullets.passwordSetup')}</li>
                 <li>{t('createModal.bullets.permissions')}</li>
               </ul>
 
@@ -113,47 +116,68 @@ export function CreateUserModal({ show, onHide, onCreateUser }: CreateUserModalP
               </Form.Group>
             </>
           ) : (
-            <Alert variant="success" className="mb-0">
-              <h5 className="alert-heading">{t('createModal.success.title')}</h5>
-              <hr />
-              <div className="mb-3">
-                <strong className="d-block mb-2">{t('createModal.success.instructionsTitle')}</strong>
+            <>
+              {emailSent ? (
+                <Alert variant="success" className="mb-3">
+                  <h5 className="alert-heading">{t('createModal.success.emailSent.title')}</h5>
+                  <hr />
+                  <p>{t('createModal.success.emailSent.description')}</p>
+                  <div className="bg-light p-3 rounded d-flex justify-content-between align-items-center">
+                    <strong>{createdEmail}</strong>
+                    <Button variant="outline-primary" size="sm" onClick={handleCopyEmail}>
+                      {copiedEmail
+                        ? t('createModal.success.emailSent.copied')
+                        : t('createModal.success.emailSent.copyAddress')}
+                    </Button>
+                  </div>
+                  <p className="text-muted mt-3 mb-0">{t('createModal.success.emailSent.note')}</p>
+                </Alert>
+              ) : (
+                <>
+                  <Alert variant="success" className="mb-3">
+                    <h5 className="alert-heading">{t('createModal.success.emailFailed.title')}</h5>
+                  </Alert>
+                  <Alert variant="warning" className="mb-3">
+                    {t('createModal.success.emailFailed.warning')}
+                  </Alert>
+                </>
+              )}
+
+              <div className="mb-0">
+                <strong className="d-block mb-2">
+                  {emailSent
+                    ? t('createModal.success.emailSent.backupTitle')
+                    : t('createModal.success.instructions.title')}
+                </strong>
                 <div className="bg-light p-3 rounded">
                   <div className="user-select-all">
-                    <p className="mb-2">{t('createModal.success.welcome')}</p>
+                    <p className="mb-2">{t('createModal.success.instructions.welcome')}</p>
                     <p className="mb-2">
-                      {t('createModal.success.createdForLabel')} <strong>{createdEmail}</strong>
+                      {t('createModal.success.instructions.createdForLabel')} <strong>{createdEmail}</strong>
                     </p>
-                    <p className="mb-2">{t('createModal.success.stepsIntro')}</p>
+                    <p className="mb-2">{t('createModal.success.instructions.stepsIntro')}</p>
                     <ol className="ps-4 mb-2">
-                      <li>{t('createModal.success.steps.goTo', { origin: window.location.origin })}</li>
-                      <li>{t('createModal.success.steps.enterEmail', { email: createdEmail })}</li>
-                      <li>{t('createModal.success.steps.follow')}</li>
+                      <li>{t('createModal.success.instructions.steps.goTo', { origin: window.location.origin })}</li>
+                      <li>{t('createModal.success.instructions.steps.enterEmail', { email: createdEmail })}</li>
+                      <li>{t('createModal.success.instructions.steps.follow')}</li>
                     </ol>
-                    <p className="mb-0">{t('createModal.success.support')}</p>
+                    <p className="mb-0">{t('createModal.success.instructions.support')}</p>
                   </div>
                   <div className="d-flex justify-content-end mt-3">
                     <Button variant="secondary" size="sm" className="me-2" onClick={handleCopyEmail}>
-                      {copiedEmail ? t('createModal.success.copied') : t('createModal.success.copyAddress')}
+                      {copiedEmail
+                        ? t('createModal.success.instructions.copied')
+                        : t('createModal.success.instructions.copyAddress')}
                     </Button>
                     <Button variant="outline-primary" size="sm" onClick={handleCopyInstructions}>
-                      {copiedInstructions ? t('createModal.success.copied') : t('createModal.success.copyInstructions')}
+                      {copiedInstructions
+                        ? t('createModal.success.instructions.copied')
+                        : t('createModal.success.instructions.copyInstructions')}
                     </Button>
                   </div>
                 </div>
               </div>
-
-              <div>
-                <strong className="d-block mb-2">{t('createModal.success.nextSteps')}</strong>
-                <ol className="mb-0 ps-3">
-                  <li className="mb-1">{t('createModal.success.nextStepItems.share')}</li>
-                  <li className="mb-1">
-                    {t('createModal.success.nextStepItems.visit', { origin: window.location.origin })}
-                  </li>
-                  <li>{t('createModal.success.nextStepItems.setPassword')}</li>
-                </ol>
-              </div>
-            </Alert>
+            </>
           )}
         </Modal.Body>
 

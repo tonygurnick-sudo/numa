@@ -89,7 +89,7 @@ function DroppableColumn({ stage, customers, crmConfig, onCustomerClick }: Dropp
   const textColor = getContrastTextColor(stageColor);
 
   return (
-    <div className="d-flex flex-column" style={{ minWidth: 280, flex: '1 0 280px', height: '100%' }}>
+    <div className="kanban-column d-flex flex-column" style={{ height: '100%' }}>
       {/* Colored column header */}
       <div
         className="shadow-sm"
@@ -179,7 +179,7 @@ function CustomerListView({ customers, crmConfig, onCustomerClick }: CustomerLis
     <div style={{ borderRadius: 10, border: '1px solid #e5e7eb', overflow: 'hidden', backgroundColor: '#fff' }}>
       {/* Header row */}
       <div
-        className="d-flex align-items-center px-3 py-2"
+        className="ops-list-header px-3 py-2"
         style={{
           backgroundColor: '#f9fafb',
           borderBottom: '1px solid #e5e7eb',
@@ -209,7 +209,7 @@ function CustomerListView({ customers, crmConfig, onCustomerClick }: CustomerLis
         return (
           <div
             key={customer.id}
-            className="d-flex align-items-center px-3 py-2"
+            className="ops-list-row px-3 py-2"
             style={{
               borderBottom: '1px solid #f3f4f6',
               cursor: 'pointer',
@@ -229,7 +229,7 @@ function CustomerListView({ customers, crmConfig, onCustomerClick }: CustomerLis
             }}
           >
             {/* Company name */}
-            <div style={{ flex: '0 0 28%', minWidth: 0, paddingRight: 12 }}>
+            <div className="ops-list-col is-title" style={{ flex: '0 0 28%', minWidth: 0, paddingRight: 12 }}>
               <span
                 className="fw-semibold d-block text-truncate"
                 style={{ fontSize: '0.85rem', color: '#111827' }}
@@ -245,14 +245,22 @@ function CustomerListView({ customers, crmConfig, onCustomerClick }: CustomerLis
             </div>
 
             {/* Stage badge */}
-            <div style={{ flex: '0 0 16%', paddingRight: 12 }}>
+            <div
+              className="ops-list-col"
+              data-label={t('crm.lifecycleStage')}
+              style={{ flex: '0 0 16%', paddingRight: 12 }}
+            >
               <Badge pill bg="" style={{ backgroundColor: stageColor, color: stageTextColor, fontSize: '0.72rem' }}>
                 {stage?.name ?? '—'}
               </Badge>
             </div>
 
             {/* Primary contact */}
-            <div style={{ flex: '0 0 22%', minWidth: 0, paddingRight: 12 }}>
+            <div
+              className="ops-list-col"
+              data-label={t('crm.primaryContact')}
+              style={{ flex: '0 0 22%', minWidth: 0, paddingRight: 12 }}
+            >
               {primaryContact ? (
                 <div className="d-flex align-items-center gap-1">
                   <i className="bi bi-star-fill" style={{ color: '#f59e0b', fontSize: '0.6rem', flexShrink: 0 }} />
@@ -269,7 +277,11 @@ function CustomerListView({ customers, crmConfig, onCustomerClick }: CustomerLis
             </div>
 
             {/* Industry · Size */}
-            <div style={{ flex: '0 0 16%', minWidth: 0, paddingRight: 12 }}>
+            <div
+              className="ops-list-col"
+              data-label={t('crm.industry')}
+              style={{ flex: '0 0 16%', minWidth: 0, paddingRight: 12 }}
+            >
               <span
                 className="text-truncate d-block"
                 style={{ fontSize: '0.8rem', color: '#6b7280' }}
@@ -280,14 +292,18 @@ function CustomerListView({ customers, crmConfig, onCustomerClick }: CustomerLis
             </div>
 
             {/* Last contact */}
-            <div style={{ flex: '0 0 12%' }}>
+            <div className="ops-list-col" data-label={t('crm.lastContact')} style={{ flex: '0 0 12%' }}>
               <span style={{ fontSize: '0.78rem', color: lastContact === 'No contact' ? '#d1d5db' : '#6b7280' }}>
                 {lastContact}
               </span>
             </div>
 
             {/* Open tickets */}
-            <div style={{ flex: '0 0 6%', textAlign: 'right' }}>
+            <div
+              className="ops-list-col"
+              data-label={t('tickets.links')}
+              style={{ flex: '0 0 6%', textAlign: 'right' }}
+            >
               {customer.openTicketCount > 0 ? (
                 <span
                   style={{
@@ -732,7 +748,7 @@ const CrmMirrorView = (): React.JSX.Element => {
               onDragOver={handleDragOver}
               onDragEnd={(e) => void handleDragEnd(e)}
             >
-              <div className="d-flex gap-3 h-100 overflow-auto" style={{ minHeight: 300 }}>
+              <div className="kanban-columns flex-grow-1" style={{ minHeight: 300 }}>
                 {stages.map((stage) => (
                   <DroppableColumn
                     key={stage.id}

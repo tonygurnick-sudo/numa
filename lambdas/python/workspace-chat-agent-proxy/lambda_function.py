@@ -51,6 +51,7 @@ COGNITO_CLIENT_ID = os.environ.get("COGNITO_CLIENT_ID", "")
 FILE_REDIRECT_SECRET = os.environ.get("FILE_REDIRECT_SECRET", "")
 OUTPUTS_BUCKET_NAME = os.environ.get("OUTPUTS_BUCKET_NAME", "")
 SCHEDULE_RUNNER_SECRET = os.environ.get("SCHEDULE_RUNNER_SECRET", "")
+WORKSPACE_TOOLS_LAMBDA_NAME = os.environ.get("WORKSPACE_TOOLS_LAMBDA_NAME", "")
 
 # JWKS cache (persists across warm Lambda invocations)
 _jwks_cache: Dict[str, Any] = {"data": None}
@@ -84,6 +85,13 @@ agentcore_client = boto3.client(
 
 # S3 client for file redirect endpoint
 s3_client = boto3.client("s3", region_name=AWS_REGION) if OUTPUTS_BUCKET_NAME else None
+
+# Lambda client for invoking workspace-chat-tools (document conversion for preview)
+lambda_client = (
+    boto3.client("lambda", region_name=AWS_REGION)
+    if WORKSPACE_TOOLS_LAMBDA_NAME
+    else None
+)
 
 # Blocked path patterns for file redirect security
 _BLOCKED_PATH_PATTERNS = [".system/", ".system", "secrets/", "secrets", ".env"]
@@ -365,6 +373,82 @@ async def integration_file_redirect(
         ExpiresIn=30,
     )
     return RedirectResponse(url=presigned_url, status_code=302)
+
+
+@app.post(f"{PREFIX}/convert-preview")
+async def convert_preview(
+    request: Request,
+    authorization: str | None = Header(None),
+    x_arcanum_cloudfront_secret: str | None = Header(
+        None, alias="x-arcanum-cloudfront-secret"
+    ),
+):
+    """Convert a document for frontend preview (e.g. DOCX -> PDF).
+
+    Invokes the workspace-chat-tools Lambda with the convert_preview tool,
+    which calls the document-converter Lambda (LibreOffice) and returns a
+    presigned download URL for the converted file.
+    """
+    validate_cloudfront_secret(x_arcanum_cloudfront_secret, authorization)
+    extract_user_sub(authorization)  # Validate auth
+
+    if not lambda_client or not WORKSPACE_TOOLS_LAMBDA_NAME:
+        raise HTTPException(
+            status_code=500, detail="Document conversion not configured"
+        )
+
+    try:
+        body = await request.json()
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=400, detail="Invalid JSON body")
+
+    source_bucket = body.get("bucket")
+    source_key = body.get("key")
+    target_format = body.get("format", "pdf")
+
+    if not source_bucket or not source_key:
+        raise HTTPException(status_code=400, detail="bucket and key are required")
+
+    # Invoke workspace-chat-tools with convert_preview tool
+    tools_payload = {
+        "tool": "convert_preview",
+        "params": {
+            "source_bucket": source_bucket,
+            "source_key": source_key,
+            "format": target_format,
+        },
+    }
+
+    try:
+        response = lambda_client.invoke(
+            FunctionName=WORKSPACE_TOOLS_LAMBDA_NAME,
+            InvocationType="RequestResponse",
+            Payload=json.dumps(tools_payload).encode("utf-8"),
+        )
+
+        if "FunctionError" in response:
+            error_payload = response["Payload"].read().decode("utf-8")
+            logger.error("Workspace tools Lambda error: %s", error_payload)
+            raise HTTPException(status_code=500, detail="Document conversion failed")
+
+        result = json.loads(response["Payload"].read().decode("utf-8"))
+
+        if result.get("status") != "success":
+            error_msg = result.get("error", "Unknown error")
+            logger.error("Convert preview failed: %s", error_msg)
+            raise HTTPException(
+                status_code=500, detail=f"Document conversion failed: {error_msg}"
+            )
+
+        return JSONResponse(content=result.get("result", {}))
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("Error in convert-preview: %s", e)
+        raise HTTPException(
+            status_code=500, detail=f"Document conversion failed: {str(e)}"
+        )
 
 
 @app.get(f"{PREFIX}/runs/{{run_id}}/status")

@@ -550,27 +550,20 @@ def check_bash_command(
                 "Access to protected directories (.system/, secrets/) is blocked",
             )
 
-    # Check if this is a trusted Numa tool (whitelist before scanning)
-    # Security: These are platform-provided tools with their own security measures:
-    # - knowledge_base.py: KB ID validated against NUMA_ALLOWED_KBS, DynamoDB perms server-side
-    # - All Numa tools: Output written to /workdir/outputs/ (within workspace)
-    # - Tools are deployed with the container, not user-uploadable
+    # Block direct execution of Numa CLI tools via bash.
+    # All Numa tool operations MUST go through the mcp__numa__numa_tool MCP tool,
+    # which enforces HITL approval, enabled-tools checks, and proper guardrails.
+    # The bash scripts exist as documentation/reference only.
     if "/workdir/tools/numa/" in command and command.strip().startswith(
         ("python", "python3")
     ):
-        # Extract the script path and verify it's a .py file in the trusted directory
-        file_match = re.search(
-            r'python3?\s+["\']?(/workdir/tools/numa/[^\s"\']+\.py)["\']?', command
+        return (
+            True,
+            "Direct execution of Numa CLI tools via bash is not allowed. "
+            "Use the mcp__numa__numa_tool MCP tool instead. "
+            "Load the relevant Skill (agents, memories, knowledge-search, etc.) "
+            "to learn the correct MCP tool parameters.",
         )
-        if file_match:
-            script_path = file_match.group(1)
-            # SECURITY: Normalize path to prevent traversal attacks like:
-            # /workdir/tools/numa/../uploads/malicious.py
-            normalized_path = os.path.normpath(script_path)
-            if normalized_path.startswith("/workdir/tools/numa/"):
-                # Trusted Numa tool - skip dangerous pattern scanning
-                return False, None
-            # Path traversal detected - fall through to normal scanning
 
     # Check Python commands specifically for dangerous patterns
     if command.strip().startswith(("python", "python3")):

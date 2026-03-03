@@ -1,3 +1,6 @@
+# syntax=docker/dockerfile:1
+# check=skip=FromPlatformFlagConstDisallowed
+
 # Numa Workspace Agent - AgentCore Service
 # Based on Python 3.13 slim for minimal image size
 # ARM64 required for AWS Bedrock AgentCore

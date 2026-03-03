@@ -38,14 +38,6 @@ vi.mock('../../Services/PipedreamProxyService', () => ({
   },
 }));
 
-vi.mock('@aws-sdk/client-lambda', () => ({
-  LambdaClient: vi.fn(),
-}));
-
-vi.mock('@aws-sdk/credential-providers', () => ({
-  fromWebToken: vi.fn(),
-}));
-
 vi.mock('../../Components/Nav', () => ({
   Nav: () => <nav data-testid="nav" />,
 }));
@@ -88,6 +80,7 @@ describe('SettingsPage', () => {
         tokens: { idToken: 'token' },
         decoded_tokens: { idToken: { 'cognito:groups': ['admin'], sub: 'user' } },
       },
+      lambdaClient: null,
     });
   });
 

@@ -157,6 +157,77 @@ To add a new language option for users and ensure it reaches the LLM prompts, up
 5. **LLM prompt wording + language names:** `lib/bedrock/bedrock/language.py`
    Add the language code to `LANGUAGE_NAMES`. This file is the single source of truth for the system prompt wording used by both chat and apps.
 
+### Token Access Pattern (AuthProvider)
+
+**IMPORTANT:** Never read tokens directly from `user.tokens` or `user.decoded_tokens` for API calls or AWS credential creation. User state is intentionally NOT updated on token refresh (to prevent cascading re-renders across all `useAuth()` consumers). Tokens in `user.tokens` may be stale/expired.
+
+**Correct patterns:**
+- `await getAccessToken()` — for access tokens (API Authorization headers)
+- `await getIdToken()` — for ID tokens (STS `webIdentityToken`, chat agent requests)
+- `user.decoded_tokens.idToken.sub`, `.email`, `.cognito:groups` — identity claims are safe to read from state (they don't change during a session)
+
+**Why:** `refreshTokens()` updates `tokensRef`, `decodedTokensRef`, and `localStorage` every 10 minutes, but only calls `setUser()` when groups/features actually change. This prevents a cascade where every `useAuth()` consumer re-renders and all AWS clients are re-initialized. `getAccessToken()`/`getIdToken()` read from refs (always fresh) and handle expiry checks automatically.
+
+**Key files:** `numa-frontend/src/Providers/AuthProvider.tsx`, `numa-frontend/src/Providers/RequestProvider.tsx`
+
+### API Request Pattern (RequestProvider)
+
+**IMPORTANT:** Always use `useNumaRequest()` hooks for API calls to protected `/api/` endpoints. Never use raw `fetch()` or `axios` directly — they won't include the Authorization header and will 401.
+
+**Correct pattern:**
+```tsx
+const { numaGet, numaPost, numaPut, numaDelete } = useNumaRequest();
+
+// These automatically include auth headers
+const data = await numaGet('/api/settings/agents');
+await numaPut('/api/settings/agents', { mode: 'full' });
+```
+
+**Wrong pattern (causes 401 errors):**
+```tsx
+// DO NOT DO THIS — no Authorization header is sent
+const resp = await fetch('/api/settings/agents', {
+  method: 'GET',
+  headers: { 'Content-Type': 'application/json' },
+});
+```
+
+**When calling service methods:** Many admin services (e.g., `AdminAgentsService`, `AdminMfaSettingsService`, `AdminChatSettingsService`) accept optional `numaGet`/`numaPut` parameters. When these are not passed, the service silently falls back to raw `fetch()` without auth. **Always pass the auth helper** when calling these methods from authenticated components:
+
+```tsx
+// ✅ Correct — passes numaGet so the service uses authenticated requests
+const res = await AdminAgentsService.get(numaGet);
+
+// ❌ Wrong — silently falls back to unauthenticated fetch(), returns 401
+const res = await AdminAgentsService.get();
+```
+
+**Key file:** `numa-frontend/src/Providers/RequestProvider.tsx`
+
+### AWS SDK Client Pattern (AuthProvider)
+
+**IMPORTANT:** Never create AWS SDK clients (LambdaClient, S3Client, DynamoDBClient, etc.) locally in page components. All AWS SDK clients are centralized in AuthProvider and accessed via `useAuth()`.
+
+**Correct pattern:**
+```tsx
+const { lambdaClient, dynamoDBClient, bedrockRuntimeClient } = useAuth();
+// Use directly — credentials auto-refresh via function-based provider
+```
+
+**Wrong pattern (causes stale credentials after token refresh):**
+```tsx
+// DO NOT DO THIS — credentials are captured once and become stale
+const idToken = await getIdToken();
+const credentials = fromWebToken({ webIdentityToken: idToken, ... });
+const client = new LambdaClient({ credentials }); // Stale after ~15min
+```
+
+**Why:** AuthProvider creates clients with a function-based credential provider (`() => fromWebToken({ webIdentityToken: tokensRef.current.idToken })()`) that reads fresh tokens from `tokensRef` on every SDK call. Page-local clients capture the token once at init time, so after background token refresh the credentials go stale — causing 401/403 errors.
+
+**Adding a new AWS SDK client:** Follow the existing pattern in AuthProvider: state + `useCallback` initializer + add to the central `useEffect` + `value` useMemo + logout cleanup. See `initializeLambdaClient` or `initializeQBusinessClient` as templates.
+
+**Key file:** `numa-frontend/src/Providers/AuthProvider.tsx`
+
 ---
 
 ## Legacy Chat Agent — V1 (DEPRECATED) (lambdas/python/numa-chat-agent)

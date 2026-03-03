@@ -45,10 +45,8 @@ function getStreamingUrl(): string {
   const directUrl = getDirectLambdaUrl();
   if (directUrl) {
     const baseUrl = directUrl.replace(/\/$/, '');
-    console.log('[WorkspaceChat] Using direct Lambda URL for streaming:', baseUrl);
     return baseUrl + '/api/workspace-chat-agent';
   }
-  console.log('[WorkspaceChat] Using CloudFront path for streaming:', API_BASE);
   return API_BASE;
 }
 
@@ -234,9 +232,6 @@ export async function streamWorkspaceChatAgent(
                 try {
                   const event = JSON.parse(jsonStr);
 
-                  // Log HTTP event for debugging
-                  console.log('[HTTP] Received event:', event.type || 'unknown');
-
                   // Check for AgentCore session events first (including assistant advice)
                   if (
                     event.type === 'session_init' ||
@@ -269,7 +264,6 @@ export async function streamWorkspaceChatAgent(
               const jsonStr = trimmedLine.slice(6);
               try {
                 const event = JSON.parse(jsonStr);
-                console.log('[HTTP] Received event:', event.type || 'unknown');
                 if (
                   event.type === 'session_init' ||
                   event.type === 'conversation_switch' ||
@@ -742,8 +736,6 @@ export async function saveInlineDocumentToS3(
     await axios.put(presignedUrl, blob, {
       headers: { 'Content-Type': 'text/markdown' },
     });
-
-    console.log('[WorkspaceChat] Inline document saved to S3:', s3Key);
   } catch (err) {
     console.error('[WorkspaceChat] Failed to save inline document to S3:', err);
   }
@@ -863,4 +855,32 @@ export async function listWorkspaceAgentTypes(): Promise<
 
   const data = await res.json();
   return data.types || [];
+}
+
+/**
+ * Convert a document for preview (e.g. DOCX -> PDF) via server-side LibreOffice.
+ *
+ * Calls the proxy Lambda which invokes workspace-chat-tools -> document-converter.
+ * Returns a presigned URL to the converted file (15min expiry).
+ */
+export async function convertDocxPreview(
+  bucket: string,
+  key: string,
+  format: string = 'pdf',
+): Promise<{ url: string; filename: string; size: number }> {
+  const res = await fetch(`${getApiUrl()}/convert-preview`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...getAuthHeaders(),
+    },
+    body: JSON.stringify({ bucket, key, format }),
+  });
+
+  if (!res.ok) {
+    const errorText = await res.text().catch(() => res.statusText);
+    throw new Error(`Document conversion failed: ${errorText}`);
+  }
+
+  return res.json();
 }

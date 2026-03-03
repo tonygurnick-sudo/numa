@@ -10,6 +10,7 @@ import pathlib
 import re
 import tempfile
 import time
+import urllib.request
 import uuid
 from html import unescape
 from typing import Any, Dict, Iterator, List, Sequence, TypeVar
@@ -332,6 +333,112 @@ def handler(event: dict, context) -> dict:
         raise
 
 
+@tracer.start_as_current_span("_extract_docx_via_pdf")
+def _extract_docx_via_pdf(
+    input_bucket: str, input_key: str, file_name: str | None
+) -> Document:
+    """Convert DOCX to PDF via the document-converter Lambda, then extract
+    content using the high-quality vision pipeline (PyMuPDF + Bedrock Vision).
+
+    This produces much richer output than plain python-docx text extraction
+    because the vision model can see embedded images, complex tables, and
+    formatting that python-docx would miss entirely.
+
+    Falls back to the legacy text-only extraction if the conversion fails.
+    """
+    converter_name = os.environ["DOCUMENT_CONVERTER_LAMBDA_NAME"]
+    lambda_client = prm_client("lambda")
+    temp_pdf_key = f"temp-docx-conversion/{input_key}.pdf"
+
+    try:
+        # 1. Invoke document-converter Lambda (DOCX → PDF via LibreOffice)
+        logger.info(
+            "Converting DOCX to PDF via document-converter",
+            input_key=input_key,
+            converter=converter_name,
+        )
+        converter_payload = json.dumps(
+            {
+                "body": json.dumps(
+                    {
+                        "action": "file",
+                        "format": "pdf",
+                        "sourceBucket": input_bucket,
+                        "sourceKey": input_key,
+                    }
+                )
+            }
+        ).encode("utf-8")
+
+        response = lambda_client.invoke(
+            FunctionName=converter_name,
+            InvocationType="RequestResponse",
+            Payload=converter_payload,
+        )
+
+        response_payload = json.loads(response["Payload"].read())
+
+        # The converter wraps its JSON in an API Gateway-style response
+        if "body" in response_payload:
+            body = json.loads(response_payload["body"])
+        else:
+            body = response_payload
+
+        if not body.get("success"):
+            raise RuntimeError(
+                f"Document converter failed: {body.get('error', 'unknown error')}"
+            )
+
+        download_url = body["downloadUrl"]
+
+        # 2. Download the converted PDF from the presigned URL
+        logger.info("Downloading converted PDF", url_length=len(download_url))
+        with urllib.request.urlopen(download_url) as resp:  # noqa: S310
+            pdf_bytes = resp.read()
+
+        # 3. Upload to a temp S3 key so fm_vision_extraction can read it
+        s3_client.put_object(
+            Body=pdf_bytes,
+            Bucket=input_bucket,
+            Key=temp_pdf_key,
+            ContentType="application/pdf",
+        )
+
+        # 4. Run the high-quality vision extraction pipeline on the PDF
+        logger.info(
+            "Extracting content from converted PDF via vision pipeline",
+            temp_pdf_key=temp_pdf_key,
+        )
+        document = fm_vision_extraction.extract_content(
+            input_bucket, temp_pdf_key, file_name
+        )
+        logger.info(
+            "DOCX vision extraction complete",
+            pages=document.num_pages,
+            words=document.total_num_words,
+        )
+        return document
+
+    except Exception:
+        logger.warning(
+            "DOCX-to-PDF conversion failed, falling back to text extraction",
+            input_key=input_key,
+            exc_info=True,
+        )
+        # Graceful degradation: fall back to the legacy text-only path
+        s3_file_object = s3_client.get_object(Bucket=input_bucket, Key=input_key)
+        file_content = s3_file_object["Body"].read()
+        pages = extract_docx_pages(file_content)
+        return _textract_pages_to_document(pages, input_key, file_name)
+
+    finally:
+        # 5. Clean up the temp PDF from S3 (best-effort)
+        try:
+            s3_client.delete_object(Bucket=input_bucket, Key=temp_pdf_key)
+        except Exception:
+            logger.warning("Failed to clean up temp PDF", key=temp_pdf_key)
+
+
 @tracer.start_as_current_span("_extract_content")
 def _extract_content(
     input_bucket: str, input_key: str, file_name: str | None, payload: dict
@@ -349,6 +456,12 @@ def _extract_content(
     elif suffix in [
         ".docx",
     ]:
+        # When the document-converter Lambda is wired up, convert DOCX→PDF
+        # first so we get the high-quality vision extraction (images, tables,
+        # formatting). Otherwise fall back to plain text extraction.
+        if os.environ.get("DOCUMENT_CONVERTER_LAMBDA_NAME"):
+            return _extract_docx_via_pdf(input_bucket, input_key, file_name)
+
         s3_file_object = s3_client.get_object(Bucket=input_bucket, Key=input_key)
         with tracer.start_as_current_span("read_file_content"):
             file_content = s3_file_object["Body"].read()

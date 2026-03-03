@@ -360,13 +360,13 @@ def setup_agent_tools(
     always_copy: list[str],
 ) -> dict:
     """
-    Selectively copy tool scripts to /workdir/tools/ based on agent type config.
+    Selectively copy tool reference docs to /workdir/tools/ based on agent type config.
 
-    Only tools listed in enabled_numa_tools get copied. This is the "selective
-    copy at startup" approach — Claude can't call what doesn't exist in the
-    workspace.
+    Only docs for tools listed in enabled_numa_tools get copied. Claude reads
+    these for parameter reference when using the numa_tool MCP tool. The files
+    are documentation only — direct bash execution is blocked by security hooks.
 
-    The Dockerfile bakes ALL tools into the image (at /workdir/tools/ with
+    The Dockerfile bakes ALL tool docs into the image (at /workdir/tools/ with
     chmod 555). This function clears /workdir/tools/ and re-copies only what
     the agent type needs.
 

@@ -97,9 +97,10 @@ TONY_COMEDIAN = AgentTypeConfig(
         "Write",
         "TodoWrite",
     ],
-    # No code execution or integrations
+    # No code execution, integrations, or Numa tools
     enable_scripts_mcp=False,
     enable_integrations_mcp=False,
+    enable_numa_mcp=False,
     # No Numa CLI tools
     enabled_numa_tools=[],
     tools_source_dirs=[],

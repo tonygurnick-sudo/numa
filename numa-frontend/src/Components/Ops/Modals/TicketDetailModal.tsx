@@ -956,6 +956,7 @@ export function TicketDetailModal({
         show={show}
         onHide={onHide}
         size="xl"
+        fullscreen="lg-down"
         dialogClassName="ticket-detail-modal"
         contentClassName="d-flex flex-column"
       >

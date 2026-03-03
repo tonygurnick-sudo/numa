@@ -130,7 +130,7 @@ export function CreateZoneWizard({ show, onHide, onCreated }: CreateZoneWizardPr
   if (!team) return <></>;
 
   return (
-    <Modal show={show} onHide={onHide} size="lg" centered>
+    <Modal show={show} onHide={onHide} size="lg" fullscreen="lg-down" centered>
       <Modal.Header closeButton>
         <Modal.Title>{t('zones.createZone')}</Modal.Title>
       </Modal.Header>

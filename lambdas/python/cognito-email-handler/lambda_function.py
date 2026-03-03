@@ -122,13 +122,13 @@ BASE_TEMPLATE = """<!DOCTYPE html>
 <body>
   <div class="container">
     <img class="logo"
-      src="https://arcanum-prod-numa-demo.numa.arcanum.ai/numa-logo.svg"
+      src="https://{{domain}}/numa-logo-email.png"
       alt="Numa Logo" width="40" height="40">
     <h1>{{title}}</h1>
     {{content}}
   </div>
   <div class="footer">
-    <p>&copy; 2025 Numa by Arcanum. All rights reserved.</p>
+    <p>&copy; 2026 Numa by Arcanum. All rights reserved.</p>
   </div>
 </body>
 </html>"""
@@ -212,13 +212,15 @@ EMAIL_TEMPLATES: EmailTemplates = {
 def render_template(
     template_config: TemplateDict,
     context: Dict[str, str],
+    domain: str,
 ) -> Optional[Dict[str, str]]:
     """
     Render an email template with the given context using Jinja2.
 
     Args:
-        template_name: The name of the template
+        template_config: The template configuration dict
         context: Dictionary of values to use in the template
+        domain: The client domain used for the logo URL in the base template
 
     Returns:
         Dictionary with 'subject', 'html', and 'text'
@@ -231,8 +233,8 @@ def render_template(
         # Render title
         title = template_config["title"]
 
-        # Render full HTML with base template
-        html = base_template.render(title=title, content=content_html)
+        # Render full HTML with base template (domain used for logo URL)
+        html = base_template.render(title=title, content=content_html, domain=domain)
 
         # Render text version
         text = template_config["text"].render(**context)
@@ -293,12 +295,14 @@ def handler(
         template_data = render_template(
             EMAIL_TEMPLATES["create-password"],
             {"code": code_parameter, "domain": domain, "email": email},
+            domain=domain,
         )
     else:
         # For regular password reset flow
         template_data = render_template(
             EMAIL_TEMPLATES["reset-password"],
             {"code": code_parameter},
+            domain=domain,
         )
 
     if template_data:

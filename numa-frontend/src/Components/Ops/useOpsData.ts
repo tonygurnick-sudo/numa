@@ -10,6 +10,7 @@ const LS_ACTIVE_TEAM = 'numa_ops_active_team';
 const LS_ACTIVE_ZONE = 'numa_ops_active_zone';
 const LS_BOARD_VIEW_MODE = 'numa_ops_board_view_mode';
 const LS_TOP_VIEW = 'numa_ops_top_view';
+const LS_SELECTED_WORK_UNIT = 'numa_ops_selected_work_unit';
 
 // ─── View Types ─────────────────────────────────────────────────────────────
 
@@ -45,16 +46,19 @@ export type OpsDataState = {
   boardViewMode: BoardViewMode;
   activeZoneId: string | null;
   crmRefreshVersion: number;
+  pendingSprintFilter: string[] | null;
 
   // Actions
   selectTeam: (teamId: string) => void;
   setTopView: (view: OpsTopView) => void;
+  setPendingSprintFilter: (filter: string[] | null) => void;
   setBoardViewMode: (mode: BoardViewMode) => void;
   setActiveZone: (zoneId: string | null) => void;
   selectWorkUnit: (wuId: string | null) => void;
   setTickets: React.Dispatch<React.SetStateAction<Ticket[]>>;
   refreshTeam: () => Promise<TeamResponse | null>;
   refreshTickets: () => Promise<void>;
+  refreshWorkUnits: () => Promise<void>;
   refreshTeams: () => Promise<void>;
   refreshStaff: () => Promise<void>;
   refreshConfig: () => Promise<void>;
@@ -117,7 +121,18 @@ export const useOpsData = (): OpsDataState => {
   const [workUnits, setWorkUnits] = useState<WorkUnit[]>(
     () => (initialTeamId ? getCached<WorkUnit[]>(`workUnits_${initialTeamId}`) : null) ?? [],
   );
-  const [selectedWorkUnitId, setSelectedWorkUnitId] = useState<string | null>(null);
+  const [selectedWorkUnitId, setSelectedWorkUnitId] = useState<string | null>(() => {
+    try {
+      const saved = localStorage.getItem(LS_SELECTED_WORK_UNIT);
+      if (saved) {
+        const parsed = JSON.parse(saved) as { teamId: string; wuId: string };
+        if (parsed.teamId === initialTeamId && parsed.wuId) return parsed.wuId;
+      }
+    } catch {
+      /* ignore */
+    }
+    return null;
+  });
 
   // ── View State ──────────────────────────────────────────────────────────
   const [topView, setTopViewState] = useState<OpsTopView>(() => {
@@ -147,6 +162,7 @@ export const useOpsData = (): OpsDataState => {
     }
   });
   const [crmRefreshVersion, setCrmRefreshVersion] = useState(0);
+  const [pendingSprintFilter, setPendingSprintFilter] = useState<string[] | null>(null);
 
   // ── Refs ─────────────────────────────────────────────────────────────────
   const initialLoadDone = useRef(false);
@@ -360,6 +376,18 @@ export const useOpsData = (): OpsDataState => {
     (teamId: string) => {
       setSelectedTeamId(teamId);
       persistTeam(teamId);
+      // Restore saved sprint filter for the new team, or clear it
+      try {
+        const saved = localStorage.getItem(LS_SELECTED_WORK_UNIT);
+        if (saved) {
+          const parsed = JSON.parse(saved) as { teamId: string; wuId: string };
+          setSelectedWorkUnitId(parsed.teamId === teamId ? parsed.wuId : null);
+        } else {
+          setSelectedWorkUnitId(null);
+        }
+      } catch {
+        setSelectedWorkUnitId(null);
+      }
     },
     [persistTeam],
   );
@@ -391,9 +419,27 @@ export const useOpsData = (): OpsDataState => {
     }
   }, []);
 
-  const selectWorkUnit = useCallback((wuId: string | null) => {
-    setSelectedWorkUnitId(wuId);
-  }, []);
+  const selectWorkUnit = useCallback(
+    (wuId: string | null) => {
+      setSelectedWorkUnitId(wuId);
+      try {
+        if (wuId && selectedTeamId) {
+          localStorage.setItem(LS_SELECTED_WORK_UNIT, JSON.stringify({ teamId: selectedTeamId, wuId }));
+        } else {
+          localStorage.removeItem(LS_SELECTED_WORK_UNIT);
+        }
+      } catch {
+        /* quota or private mode */
+      }
+    },
+    [selectedTeamId],
+  );
+
+  const refreshWorkUnits = useCallback(async () => {
+    if (selectedTeamId) {
+      await loadWorkUnits(selectedTeamId);
+    }
+  }, [selectedTeamId, loadWorkUnits]);
 
   const refreshTeam = useCallback(async (): Promise<TeamResponse | null> => {
     if (selectedTeamId) {
@@ -443,14 +489,17 @@ export const useOpsData = (): OpsDataState => {
     boardViewMode,
     activeZoneId,
     crmRefreshVersion,
+    pendingSprintFilter,
 
     selectTeam,
     setTopView,
+    setPendingSprintFilter,
     setBoardViewMode,
     setActiveZone,
     selectWorkUnit,
     refreshTeam,
     refreshTickets,
+    refreshWorkUnits,
     refreshTeams,
     refreshConfig,
     refreshStaff,

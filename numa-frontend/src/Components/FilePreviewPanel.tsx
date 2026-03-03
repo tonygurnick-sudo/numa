@@ -3,6 +3,7 @@ import { Button, Spinner } from 'react-bootstrap';
 import { useTranslation } from 'react-i18next';
 import { getFileIconClass } from '../utils/fileUtils';
 import { downloadFileFromS3, downloadFolderAsZip, listObjectsInFolder } from '../utils/s3Utils';
+import { convertDocxPreview } from '../Services/workspaceChatAgentService';
 import { FilePreviewActions } from './FilePreviewActions';
 import {
   PdfPreview,
@@ -83,6 +84,10 @@ export const FilePreviewPanel: React.FC<FilePreviewPanelProps> = ({
   const [_fileSize, setFileSize] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Tracks when a DOCX was converted to PDF for preview (renders as PdfPreview)
+  const [convertedFormat, setConvertedFormat] = useState<string | null>(null);
+  // True while the server-side DOCX→PDF conversion is in progress
+  const [convertingDocx, setConvertingDocx] = useState(false);
 
   // Folder state
   const [folderContents, setFolderContents] = useState<string[]>([]);
@@ -157,6 +162,8 @@ export const FilePreviewPanel: React.FC<FilePreviewPanelProps> = ({
     setImageUrl(null);
     setFileSize(null);
     setError(null);
+    setConvertedFormat(null);
+    setConvertingDocx(false);
     setFolderContents([]);
     setFolderError(null);
 
@@ -203,7 +210,25 @@ export const FilePreviewPanel: React.FC<FilePreviewPanelProps> = ({
           if (['md', 'markdown', 'csv', 'html', 'json', 'txt', 'vtt', ...CODE_EXTENSIONS].includes(ext)) {
             const content = await fetchTextContent(s3Key);
             setTextContent(content);
-          } else if (['pdf', 'xlsx', 'xls', 'docx', 'pptx', 'ppt'].includes(ext)) {
+          } else if (ext === 'docx') {
+            // DOCX: try server-side conversion to PDF for faithful rendering,
+            // fall back to client-side docx-preview library if conversion fails
+            try {
+              setConvertingDocx(true);
+              const result = await convertDocxPreview(bucket, s3Key);
+              const pdfResponse = await fetch(result.url);
+              if (!pdfResponse.ok) throw new Error('Failed to fetch converted PDF');
+              const pdfBuffer = await pdfResponse.arrayBuffer();
+              setBinaryContent(pdfBuffer);
+              setConvertedFormat('pdf');
+            } catch (conversionErr) {
+              console.warn('DOCX server-side conversion failed, falling back to client-side:', conversionErr);
+              const binary = await fetchBinaryContent(s3Key);
+              setBinaryContent(binary);
+            } finally {
+              setConvertingDocx(false);
+            }
+          } else if (['pdf', 'xlsx', 'xls', 'pptx', 'ppt'].includes(ext)) {
             const binary = await fetchBinaryContent(s3Key);
             setBinaryContent(binary);
           } else if (['png', 'jpg', 'jpeg', 'gif', 'svg', 'webp'].includes(ext)) {
@@ -285,6 +310,7 @@ export const FilePreviewPanel: React.FC<FilePreviewPanelProps> = ({
         <div className="text-center py-5">
           <Spinner animation="border" />
           <p className="mt-3 text-muted">{t('filePreview.loadingPreview')}</p>
+          {convertingDocx && <p className="text-muted small">{t('filePreview.docx.converting')}</p>}
         </div>
       );
     }
@@ -375,6 +401,15 @@ export const FilePreviewPanel: React.FC<FilePreviewPanelProps> = ({
     }
 
     if (ext === 'docx' && binaryContent) {
+      // If server-side conversion succeeded, render as PDF for faithful font rendering
+      if (convertedFormat === 'pdf') {
+        return (
+          <div className="p-3 h-100">
+            <PdfPreview data={binaryContent} filename={preview.filename} />
+          </div>
+        );
+      }
+      // Fallback: client-side rendering with docx-preview library
       return (
         <div className="p-3 h-100">
           <DocxPreview data={binaryContent} filename={preview.filename} />

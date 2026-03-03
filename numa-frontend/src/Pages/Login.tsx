@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { LayoutForm } from '../Layouts/LayoutForm';
 import { Button, Form, Alert, Spinner, InputGroup } from 'react-bootstrap';
@@ -6,6 +6,7 @@ import { useTranslation } from 'react-i18next';
 import { useAuth, MfaSetupRequired, MfaCodeRequired } from '../Providers/AuthProvider';
 import { useBranding, DEFAULT_BRANDING_THEME } from '../Providers/BrandingContext';
 import { QRCodeSVG } from 'qrcode.react';
+import { AdminMfaSettingsService } from '../Services/AdminMfaSettingsService';
 
 const NumaLogin = () => {
   const usernameRef = useRef();
@@ -30,6 +31,10 @@ const NumaLogin = () => {
   const [mfaCodeRequired, setMfaCodeRequired] = useState<MfaCodeRequired | null>(null);
   const [secretCopied, setSecretCopied] = useState(false);
 
+  // Device remember state
+  const [rememberDevice, setRememberDevice] = useState(false);
+  const [mfaRememberHours, setMfaRememberHours] = useState(0);
+
   const clearInputs = () => {
     if (usernameRef.current) usernameRef.current.value = '';
     if (passwordRef.current) passwordRef.current.value = '';
@@ -38,6 +43,23 @@ const NumaLogin = () => {
   };
 
   const { login, setNewPassword, completeMfaSetup, submitMfaCode } = useAuth();
+
+  // Fetch MFA remember duration when MFA form appears, and reset the checkbox
+  useEffect(() => {
+    if (!mfaSetupRequired && !mfaCodeRequired) return;
+    setRememberDevice(false);
+    let cancelled = false;
+    AdminMfaSettingsService.get()
+      .then((settings) => {
+        if (!cancelled) setMfaRememberHours(settings.rememberDurationHours);
+      })
+      .catch(() => {
+        // If fetch fails, default to 0 (no remember option)
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [mfaSetupRequired, mfaCodeRequired]);
 
   const handleSubmit = async (e, providedUsername, providedPassword) => {
     if (e) e.preventDefault();
@@ -162,7 +184,7 @@ const NumaLogin = () => {
     }
 
     try {
-      const result = await completeMfaSetup(code);
+      const result = await completeMfaSetup(code, rememberDevice);
       if ('success' in result && result.success) {
         setSuccess(t('login.messages.loginSuccess'));
         setMfaSetupRequired(null);
@@ -191,7 +213,7 @@ const NumaLogin = () => {
     }
 
     try {
-      const result = await submitMfaCode(code);
+      const result = await submitMfaCode(code, rememberDevice);
       if ('success' in result && result.success) {
         setSuccess(t('login.messages.loginSuccess'));
         setMfaCodeRequired(null);
@@ -383,6 +405,26 @@ const NumaLogin = () => {
             />
           </Form.Group>
 
+          {mfaRememberHours > 0 && (
+            <Form.Group className="mb-3">
+              <Form.Check
+                type="checkbox"
+                id="rememberDeviceSetup"
+                label={
+                  mfaRememberHours >= 24
+                    ? t('mfa.rememberDeviceDays', {
+                        days: Math.floor(mfaRememberHours / 24),
+                        count: Math.floor(mfaRememberHours / 24),
+                      })
+                    : t('mfa.rememberDeviceHours', { hours: mfaRememberHours, count: mfaRememberHours })
+                }
+                checked={rememberDevice}
+                onChange={(e) => setRememberDevice(e.target.checked)}
+                data-testid="remember-device-checkbox"
+              />
+            </Form.Group>
+          )}
+
           <Button
             variant="primary"
             type="submit"
@@ -426,6 +468,26 @@ const NumaLogin = () => {
               data-testid="mfa-code-input"
             />
           </Form.Group>
+
+          {mfaRememberHours > 0 && (
+            <Form.Group className="mb-3">
+              <Form.Check
+                type="checkbox"
+                id="rememberDeviceCode"
+                label={
+                  mfaRememberHours >= 24
+                    ? t('mfa.rememberDeviceDays', {
+                        days: Math.floor(mfaRememberHours / 24),
+                        count: Math.floor(mfaRememberHours / 24),
+                      })
+                    : t('mfa.rememberDeviceHours', { hours: mfaRememberHours, count: mfaRememberHours })
+                }
+                checked={rememberDevice}
+                onChange={(e) => setRememberDevice(e.target.checked)}
+                data-testid="remember-device-checkbox"
+              />
+            </Form.Group>
+          )}
 
           <Button
             variant="primary"

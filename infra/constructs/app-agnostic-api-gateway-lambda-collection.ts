@@ -138,6 +138,50 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
       ],
     });
 
+    // Document Converter API - converts markdown to DOCX/PDF
+    // Uses Pandoc layer for MD->DOCX, LibreOffice layer for DOCX->PDF
+    // Defined before extract-content because extract-content invokes it for DOCX→PDF conversion.
+
+    // Deploy Pandoc layer from SAR (Serverless Application Repository)
+    const pandocSarStack = new ServerlessapplicationrepositoryCloudformationStack(this, 'pandoc-layer', {
+      name: `${props.clientName}-pandoc-layer`,
+      applicationId: 'arn:aws:serverlessrepo:us-east-1:145266761615:applications/pandoc-lambda-layer',
+      capabilities: ['CAPABILITY_IAM'],
+      lifecycle: {
+        ignoreChanges: ['parameters', 'tags'],
+      },
+    });
+    const pandocLayerArn = pandocSarStack.outputs.lookup('LayerVersion');
+
+    const libreOfficeLayerArn = this.getLibreOfficeLayerArn(props.region);
+    const documentConverterLambda = this.addLambdaFunction(this, 'document-converter', {
+      addAuthorizer: true,
+      lambdaDirectory: 'node/document-converter',
+      runtime: 'nodejs22.x',
+      handler: 'index.handler',
+      route: {
+        verb: 'POST',
+        path: 'document-converter',
+      },
+      environment: {
+        OUTPUTS_BUCKET: props.outputsBucketName,
+        LOG_LEVEL: 'INFO',
+        PATH: '/opt/bin:/usr/local/bin:/usr/bin:/bin',
+        HOME: '/tmp', // Required for LibreOffice to work
+      },
+      timeout: 120,
+      memorySize: 2048,
+      ephemeralStorageMb: 512,
+      additionalLayers: [pandocLayerArn, libreOfficeLayerArn],
+      additionalPolicyStatements: [
+        {
+          effect: 'Allow',
+          actions: ['s3:PutObject', 's3:GetObject'],
+          resources: [`${props.outputsBucketArn}/*`],
+        },
+      ],
+    });
+
     // Extract Content from File API Endpoint
     this.extractContentLambda = this.addLambdaFunction(this, 'extract-content', {
       addAuthorizer: true,
@@ -150,6 +194,7 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
       environment: {
         LOG_LEVEL: 'INFO',
         VISION_MODEL_TYPE: props.visionModelType,
+        DOCUMENT_CONVERTER_LAMBDA_NAME: documentConverterLambda.functionName,
       },
       timeout: 900,
       memorySize: 1024,
@@ -182,6 +227,11 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
           effect: 'Allow',
           actions: ['dynamodb:UpdateItem'],
           resources: [`arn:aws:dynamodb:${props.region}:*:table/${props.clientName}-*-recent-jobs`],
+        },
+        {
+          effect: 'Allow',
+          actions: ['lambda:InvokeFunction'],
+          resources: [documentConverterLambda.arn],
         },
       ],
     });
@@ -385,6 +435,67 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
       environment: adminAgentsEnv,
       additionalPolicyStatements: adminAgentsPolicy,
       route: { verb: 'PUT', path: 'settings/agents' },
+    });
+
+    // Admin MFA Settings API (GET/PUT device remember duration)
+    const adminMfaEnv = {
+      CLIENT_NAME: props.clientName,
+      MFA_SETTINGS_TABLE_NAME: props.mfaSettingsTableName,
+    } as Record<string, string>;
+    const adminMfaPolicy = [
+      {
+        effect: 'Allow',
+        actions: ['dynamodb:GetItem', 'dynamodb:PutItem', 'dynamodb:DeleteItem'],
+        resources: [`arn:aws:dynamodb:*:*:table/${props.mfaSettingsTableName}`],
+      },
+    ];
+    this.addLambdaFunction(this, 'admin-mfa-settings-get', {
+      addAuthorizer: false, // Public: Login page fetches this mid-auth before tokens are available
+      lambdaDirectory: 'node/admin-mfa-settings',
+      runtime: 'nodejs22.x',
+      handler: 'index.handler',
+      environment: adminMfaEnv,
+      additionalPolicyStatements: adminMfaPolicy,
+      route: { verb: 'GET', path: 'settings/mfa' },
+    });
+    this.addLambdaFunction(this, 'admin-mfa-settings-put', {
+      addAuthorizer: true,
+      lambdaDirectory: 'node/admin-mfa-settings',
+      runtime: 'nodejs22.x',
+      handler: 'index.handler',
+      environment: adminMfaEnv,
+      additionalPolicyStatements: adminMfaPolicy,
+      route: { verb: 'PUT', path: 'settings/mfa' },
+    });
+    // Device trust: record (authenticated — called after MFA success to store server-side timestamp)
+    this.addLambdaFunction(this, 'admin-mfa-device-trust-record', {
+      addAuthorizer: true,
+      lambdaDirectory: 'node/admin-mfa-settings',
+      runtime: 'nodejs22.x',
+      handler: 'index.handler',
+      environment: adminMfaEnv,
+      additionalPolicyStatements: adminMfaPolicy,
+      route: { verb: 'POST', path: 'settings/mfa/device-trust' },
+    });
+    // Device trust: validate (public — called mid-login before tokens are available)
+    this.addLambdaFunction(this, 'admin-mfa-validate-device', {
+      addAuthorizer: false,
+      lambdaDirectory: 'node/admin-mfa-settings',
+      runtime: 'nodejs22.x',
+      handler: 'index.handler',
+      environment: adminMfaEnv,
+      additionalPolicyStatements: adminMfaPolicy,
+      route: { verb: 'POST', path: 'settings/mfa/validate-device' },
+    });
+    // Device trust: revoke (authenticated — called when user forgets a device)
+    this.addLambdaFunction(this, 'admin-mfa-device-trust-revoke', {
+      addAuthorizer: true,
+      lambdaDirectory: 'node/admin-mfa-settings',
+      runtime: 'nodejs22.x',
+      handler: 'index.handler',
+      environment: adminMfaEnv,
+      additionalPolicyStatements: adminMfaPolicy,
+      route: { verb: 'DELETE', path: 'settings/mfa/device-trust' },
     });
 
     // User Chat Settings API (per-user defaults for tools, KBs, integrations)
@@ -950,50 +1061,6 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
     // Update the agent-schedules Lambda to use the extended environment
     // Note: This would require modifying the existing Lambda's environment
     // For now, the ARNs are available for EventBridge schedule targets
-
-    // Document Converter API - converts markdown to DOCX/PDF
-    // Uses Pandoc layer for MD->DOCX, LibreOffice layer for DOCX->PDF
-
-    // Deploy Pandoc layer from SAR (Serverless Application Repository)
-    // SAR app ID is always in us-east-1, but deploys to the current region
-    const pandocSarStack = new ServerlessapplicationrepositoryCloudformationStack(this, 'pandoc-layer', {
-      name: `${props.clientName}-pandoc-layer`,
-      applicationId: 'arn:aws:serverlessrepo:us-east-1:145266761615:applications/pandoc-lambda-layer',
-      capabilities: ['CAPABILITY_IAM'],
-      lifecycle: {
-        ignoreChanges: ['parameters', 'tags'],
-      },
-    });
-    const pandocLayerArn = pandocSarStack.outputs.lookup('LayerVersion');
-
-    const libreOfficeLayerArn = this.getLibreOfficeLayerArn(props.region);
-    this.addLambdaFunction(this, 'document-converter', {
-      addAuthorizer: true,
-      lambdaDirectory: 'node/document-converter',
-      runtime: 'nodejs22.x',
-      handler: 'index.handler',
-      route: {
-        verb: 'POST',
-        path: 'document-converter',
-      },
-      environment: {
-        OUTPUTS_BUCKET: props.outputsBucketName,
-        LOG_LEVEL: 'INFO',
-        PATH: '/opt/bin:/usr/local/bin:/usr/bin:/bin',
-        HOME: '/tmp', // Required for LibreOffice to work
-      },
-      timeout: 120,
-      memorySize: 2048,
-      ephemeralStorageMb: 512,
-      additionalLayers: [pandocLayerArn, libreOfficeLayerArn],
-      additionalPolicyStatements: [
-        {
-          effect: 'Allow',
-          actions: ['s3:PutObject', 's3:GetObject'],
-          resources: [`${props.outputsBucketArn}/*`],
-        },
-      ],
-    });
   }
 
   /**
@@ -1040,6 +1107,8 @@ export interface AppAgnosticApiGatewayLambdaCollectionProps
   userAgentsTableName: string;
   /** Exact agents settings table name, passed from Core to avoid name drift. */
   agentsSettingsTableName: string;
+  /** MFA settings table name for device remember duration. */
+  mfaSettingsTableName: string;
   /** User chat settings table name for per-user defaults (tools, KBs, integrations). */
   chatSettingsTableName: string;
   /** Data connectors table name for per-user connector configs. */

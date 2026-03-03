@@ -25,6 +25,7 @@ from numa_workspace_agent.hooks import (
 from numa_workspace_agent.mcp_tools import (
     configure_props,
     execute_script,
+    numa_tool,
     proxy_request,
     run_action,
 )
@@ -409,6 +410,12 @@ def create_agent_options(
     else:
         env["NUMA_ENABLED_TOOLS"] = "[]"
 
+    # Pass allowed operations from agent type config (developer-level restriction).
+    # None = all operations allowed; list = only these operations.
+    if type_config.allowed_numa_operations is not None:
+        env["NUMA_ALLOWED_OPERATIONS"] = json.dumps(type_config.allowed_numa_operations)
+    # else: don't set env var — None means "no restriction"
+
     # Pass user context to custom tools
     if user_sub:
         env["NUMA_USER_SUB"] = user_sub
@@ -439,17 +446,33 @@ def create_agent_options(
     if cross_account_creds:
         env.update(cross_account_creds)
 
-    # Propagate integration env vars to os.environ for in-process MCP tools.
+    # Propagate env vars to os.environ for in-process MCP tools.
     # The env dict in ClaudeAgentOptions only reaches subprocess-based tools,
     # but MCP servers created via create_sdk_mcp_server run in-process and
-    # read os.environ directly. Sync the keys that integration tools need.
+    # read os.environ directly. Sync the keys that MCP tools need.
     for _key in (
         "NUMA_ENABLED_TOOLS",
+        "NUMA_ALLOWED_OPERATIONS",
         "NUMA_ENABLED_INTEGRATIONS",
         "NUMA_EXTERNAL_USER_ID",
+        # Numa tool needs these for Lambda invocation, KB operations, S3 file sync
+        "WORKSPACE_TOOLS_LAMBDA_NAME",
+        "NUMA_ALLOWED_KBS",
+        "NUMA_USER_SUB",
+        "NUMA_CONVERSATION_ID",
+        "OUTPUTS_BUCKET_NAME",
+        # Local account credentials for Lambda/S3 calls from in-process MCP tools
+        "NUMA_LOCAL_AWS_ACCESS_KEY_ID",
+        "NUMA_LOCAL_AWS_SECRET_ACCESS_KEY",
+        "NUMA_LOCAL_AWS_SESSION_TOKEN",
     ):
         if _key in env:
             os.environ[_key] = env[_key]
+    # Also propagate OUTPUTS_BUCKET_NAME from parent environment if not in env dict
+    if "OUTPUTS_BUCKET_NAME" not in env:
+        _outputs_bucket = os.environ.get("OUTPUTS_BUCKET_NAME", "")
+        if _outputs_bucket:
+            os.environ["OUTPUTS_BUCKET_NAME"] = _outputs_bucket
 
     # Stderr callback to capture CLI subprocess errors
     def log_stderr(msg: str) -> None:
@@ -473,6 +496,13 @@ def create_agent_options(
             name="integrations",
             version="1.0.0",
             tools=[run_action, configure_props, proxy_request],
+        )
+
+    if type_config.enable_numa_mcp:
+        mcp_servers["numa"] = create_sdk_mcp_server(
+            name="numa",
+            version="1.0.0",
+            tools=[numa_tool],
         )
 
     import structlog as _structlog

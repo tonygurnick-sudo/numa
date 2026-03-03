@@ -9,38 +9,45 @@ Search the internet for current information not available in the knowledge base.
 
 ## Quick Reference
 
-```bash
-python3 /workdir/tools/numa/web_search.py \
-    --query "search terms" \
-    --user-intent "what user wants to find"
+```
+mcp__numa__numa_tool(
+  name="web_search",
+  description="Searching the web for search terms",
+  params={"query": "search terms", "user_intent": "what user wants to find"}
+)
 ```
 
 ## Parameters
 
 | Parameter | Required | Default | Description |
 |-----------|----------|---------|-------------|
-| `--query, -q` | Yes | - | Search query |
-| `--user-intent, -u` | Yes | - | What the user is trying to accomplish |
-| `--max-results, -m` | No | 3 | Number of pages to scrape (max: 10) |
+| `query` | Yes | - | Search query |
+| `user_intent` | Yes | - | What the user is trying to accomplish |
+| `max_results` | No | 3 | Number of pages to scrape (max: 10) |
 
 ## Examples
 
-```bash
+```
 # Find current pricing
-python3 /workdir/tools/numa/web_search.py \
-    --query "AWS Lambda pricing 2025" \
-    --user-intent "Find current Lambda pricing information"
+mcp__numa__numa_tool(
+  name="web_search",
+  description="Finding current AWS Lambda pricing",
+  params={"query": "AWS Lambda pricing 2025", "user_intent": "Find current Lambda pricing information"}
+)
 
 # Research regulations
-python3 /workdir/tools/numa/web_search.py \
-    --query "GDPR compliance requirements" \
-    --user-intent "Understand data protection obligations"
+mcp__numa__numa_tool(
+  name="web_search",
+  description="Researching GDPR compliance requirements",
+  params={"query": "GDPR compliance requirements", "user_intent": "Understand data protection obligations"}
+)
 
 # Get more results for broad topics
-python3 /workdir/tools/numa/web_search.py \
-    --query "best practices microservices architecture" \
-    --user-intent "Research architectural patterns" \
-    --max-results 5
+mcp__numa__numa_tool(
+  name="web_search",
+  description="Researching microservices architecture patterns",
+  params={"query": "best practices microservices architecture", "user_intent": "Research architectural patterns", "max_results": 5}
+)
 ```
 
 ## Output

@@ -9,25 +9,29 @@ Search, retrieve, and upload to enterprise knowledge bases for documents, polici
 
 ## Quick Reference
 
-```bash
-python3 /workdir/tools/numa/knowledge_base.py query \
-    --query "search terms" \
-    --user-intent "what user wants to accomplish"
+```
+mcp__numa__numa_tool(
+  name="knowledge_base",
+  description="Searching knowledge base",
+  params={"operation": "query", "query": "search terms", "user_intent": "what user wants to accomplish"}
+)
 ```
 
-## Subcommands
+## Operations
 
-| Subcommand | Purpose |
-|------------|---------|
+All KB operations use `name="knowledge_base"` with an `operation` parameter:
+
+| Operation | Purpose |
+|-----------|---------|
 | `query` | Search KBs with AI summarization |
 | `upload` | Add files to a knowledge base |
-| `download` | Download a file by S3 URI |
+| `download` | Download a file by S3 URI or filename |
 | `list` | List files in a KB |
-| `download-folder` | Download folder as zip |
+| `download_folder` | Download folder as zip |
 
 ---
 
-## Query Subcommand
+## operation: query
 
 Search knowledge bases with optional AI summarization.
 
@@ -35,42 +39,45 @@ Search knowledge bases with optional AI summarization.
 
 | Parameter | Required | Default | Description |
 |-----------|----------|---------|-------------|
-| `--query, -q` | Yes | - | Natural language search query |
-| `--user-intent, -u` | Yes | - | What the user is trying to accomplish |
-| `--max-results, -m` | No | 6 | Max results (max: 15) |
-| `--kb-id, -k` | No | "company" | KB ID: "company" or user KB UUID |
-| `--summarise` | No | Yes | Summarize results (default) |
-| `--no-summarise` | No | - | Return raw results |
-| `--all-kbs` | No | - | Query all enabled KBs and synthesize results |
-| `--output-file, -o` | No | - | Write results to file instead of stdout |
+| `operation` | Yes | - | `"query"` |
+| `query` | Yes | - | Natural language search query |
+| `user_intent` | Yes | - | What the user is trying to accomplish |
+| `max_results` | No | 6 | Max results (max: 15) |
+| `kb_id` | No | "company" | KB ID: "company" or user KB UUID |
+| `summarise_results` | No | true | Summarize results (default) |
+| `all_kbs` | No | false | Query all enabled KBs and synthesize results |
+| `output_file` | No | - | Write results to file instead of returning inline |
 
 ### Examples
 
-```bash
+```
 # Simple KB search
-python3 /workdir/tools/numa/knowledge_base.py query \
-    --query "annual leave policy" \
-    --user-intent "find how many days of leave employees get"
+mcp__numa__numa_tool(
+  name="knowledge_base",
+  description="Searching KB for annual leave policy",
+  params={"operation": "query", "query": "annual leave policy", "user_intent": "find how many days of leave employees get"}
+)
 
 # Query specific user KB
-python3 /workdir/tools/numa/knowledge_base.py query \
-    --query "project requirements" \
-    --user-intent "find project specs" \
-    --kb-id "abc-123-uuid"
+mcp__numa__numa_tool(
+  name="knowledge_base",
+  description="Searching project KB for requirements",
+  params={"operation": "query", "query": "project requirements", "user_intent": "find project specs", "kb_id": "abc-123-uuid"}
+)
 
 # Query all enabled KBs at once
-python3 /workdir/tools/numa/knowledge_base.py query \
-    --query "annual leave policy" \
-    --user-intent "compare policies across departments" \
-    --all-kbs
+mcp__numa__numa_tool(
+  name="knowledge_base",
+  description="Searching all KBs for annual leave policy",
+  params={"operation": "query", "query": "annual leave policy", "user_intent": "compare policies across departments", "all_kbs": true}
+)
 
 # Get raw content for detailed analysis
-python3 /workdir/tools/numa/knowledge_base.py query \
-    --query "all IT security policies" \
-    --user-intent "compile complete security documentation" \
-    --no-summarise \
-    --max-results 15 \
-    --output-file /workdir/outputs/security_policies.json
+mcp__numa__numa_tool(
+  name="knowledge_base",
+  description="Compiling security documentation from KB",
+  params={"operation": "query", "query": "all IT security policies", "user_intent": "compile complete security documentation", "summarise_results": false, "max_results": 15, "output_file": "/workdir/outputs/security_policies.json"}
+)
 ```
 
 ### Output Format
@@ -80,7 +87,7 @@ JSON response with:
 - `references` - Source documents with S3 URIs
 - `provider` - KB provider type (bedrock or q)
 - `results_count` - Number of results
-- `kbs_queried` - List of KB IDs queried (when using --all-kbs)
+- `kbs_queried` - List of KB IDs queried (when using all_kbs)
 
 ### When to Use Summarized vs Raw Results
 
@@ -90,7 +97,7 @@ JSON response with:
 - First pass to understand what's available in the KB
 - User is non-technical or wants digestible information
 
-**Use Raw Results (`--no-summarise`)** when:
+**Use Raw Results (`summarise_results: false`)** when:
 - User needs exact values: specific numbers, limits, thresholds, dates
 - Extracting code examples, API parameters, or technical specifications
 - User will quote or cite specific passages
@@ -104,7 +111,7 @@ JSON response with:
 
 ---
 
-## Upload Subcommand
+## operation: upload
 
 Add files from the workspace to a knowledge base for future retrieval.
 
@@ -112,23 +119,27 @@ Add files from the workspace to a knowledge base for future retrieval.
 
 | Parameter | Required | Default | Description |
 |-----------|----------|---------|-------------|
-| `--file, -f` | Yes | - | Path to file in workspace |
-| `--kb-id, -k` | No | "company" | Target KB ID |
-| `--path, -p` | No | root | Folder path within KB |
+| `operation` | Yes | - | `"upload"` |
+| `file` | Yes | - | Path to file in workspace |
+| `kb_id` | No | "company" | Target KB ID |
+| `path` | No | root | Folder prefix within KB (e.g. "reports/2024/"). This is a directory, NOT a filename — omit to upload to the KB root |
 
 ### Examples
 
-```bash
+```
 # Upload to company KB (admin only)
-python3 /workdir/tools/numa/knowledge_base.py upload \
-    --file /workdir/outputs/report.pdf \
-    --kb-id company
+mcp__numa__numa_tool(
+  name="knowledge_base",
+  description="Uploading report to company KB",
+  params={"operation": "upload", "file": "/workdir/outputs/report.pdf", "kb_id": "company"}
+)
 
 # Upload to user KB with folder path
-python3 /workdir/tools/numa/knowledge_base.py upload \
-    --file /workdir/outputs/analysis.docx \
-    --kb-id "abc-123-uuid" \
-    --path "reports/2024/"
+mcp__numa__numa_tool(
+  name="knowledge_base",
+  description="Uploading analysis to user KB",
+  params={"operation": "upload", "file": "/workdir/outputs/analysis.docx", "kb_id": "abc-123-uuid", "path": "reports/2024/"}
+)
 ```
 
 ### Permissions
@@ -141,7 +152,7 @@ python3 /workdir/tools/numa/knowledge_base.py upload \
 
 ---
 
-## Download Subcommand
+## operation: download
 
 Download files from knowledge base storage.
 
@@ -149,51 +160,59 @@ Download files from knowledge base storage.
 
 | Parameter | Required | Default | Description |
 |-----------|----------|---------|-------------|
-| `--file, -f` | * | - | Filename to download (use with --kb-id) |
-| `--kb-id, -k` | No | "company" | KB ID when using --file |
-| `--uri, -u` | * | - | Full S3 URI (alternative to --file) |
-| `--output-dir, -o` | No | /workdir/outputs/ | Download location |
+| `operation` | Yes | - | `"download"` |
+| `file` | * | - | Filename to download (use with kb_id) |
+| `kb_id` | No | "company" | KB ID when using file |
+| `uri` | * | - | Full S3 URI (alternative to file) |
+| `output_dir` | No | /workdir/outputs/ | Download location |
 
-*Either `--file` or `--uri` must be provided.
+*Either `file` or `uri` must be provided.
 
 ### Examples
 
-```bash
+```
 # Download by filename (simplest - use when you know the filename)
-python3 /workdir/tools/numa/knowledge_base.py download \
-    --file "employee-handbook.pdf" --kb-id company
-
-# Download from user KB by filename
-python3 /workdir/tools/numa/knowledge_base.py download \
-    --file "project-specs.docx" --kb-id "abc-123-uuid"
+mcp__numa__numa_tool(
+  name="knowledge_base",
+  description="Downloading employee handbook from KB",
+  params={"operation": "download", "file": "employee-handbook.pdf", "kb_id": "company"}
+)
 
 # Download by S3 URI (from KB query result references)
-python3 /workdir/tools/numa/knowledge_base.py download \
-    --uri "s3://bucket/documents/company/policy.pdf"
+mcp__numa__numa_tool(
+  name="knowledge_base",
+  description="Downloading policy document from KB",
+  params={"operation": "download", "uri": "s3://bucket/documents/company/policy.pdf"}
+)
 
 # Download to specific directory
-python3 /workdir/tools/numa/knowledge_base.py download \
-    --uri "s3://bucket/documents/company/report.xlsx" \
-    --output-dir /workdir/outputs/downloads/
+mcp__numa__numa_tool(
+  name="knowledge_base",
+  description="Downloading report to downloads folder",
+  params={"operation": "download", "uri": "s3://bucket/documents/company/report.xlsx", "output_dir": "/workdir/outputs/downloads/"}
+)
 ```
 
 ### When to use which mode
 
-**Use `--file + --kb-id`** when:
+**Use `file + kb_id`** when:
 - You know the filename (e.g., from system prompt KB listings)
 - Downloading files shown in the conversation context
-- Simpler and more direct - no need to run `list` first
+- Simpler and more direct - no need to run list first
 
-**Use `--uri`** when:
+**Use `uri`** when:
 - Downloading from KB query result references (the `references` array includes S3 URIs)
 - You have the full S3 URI from a previous operation
 
 ### Working with subfolders
 
-For files in subfolders, include the relative path in `--file`:
-```bash
-python3 /workdir/tools/numa/knowledge_base.py download \
-    --file "reports/2024/q4-summary.pdf" --kb-id company
+For files in subfolders, include the relative path in `file`:
+```
+mcp__numa__numa_tool(
+  name="knowledge_base",
+  description="Downloading Q4 summary from KB",
+  params={"operation": "download", "file": "reports/2024/q4-summary.pdf", "kb_id": "company"}
+)
 ```
 
 Use file download when:
@@ -203,7 +222,7 @@ Use file download when:
 
 ---
 
-## List Subcommand
+## operation: list
 
 List files in a knowledge base, optionally filtered by pattern.
 
@@ -211,27 +230,38 @@ List files in a knowledge base, optionally filtered by pattern.
 
 | Parameter | Required | Default | Description |
 |-----------|----------|---------|-------------|
-| `--kb-id, -k` | No | "company" | KB ID to list files from |
-| `--pattern, -p` | No | - | Filename pattern (e.g., *.pdf) |
+| `operation` | Yes | - | `"list"` |
+| `kb_id` | No | "company" | KB ID to list files from |
+| `pattern` | No | - | Filename pattern (e.g., *.pdf) |
 
 ### Examples
 
-```bash
+```
 # List all files in company KB
-python3 /workdir/tools/numa/knowledge_base.py list --kb-id company
+mcp__numa__numa_tool(
+  name="knowledge_base",
+  description="Listing files in company KB",
+  params={"operation": "list", "kb_id": "company"}
+)
 
 # List only PDF files
-python3 /workdir/tools/numa/knowledge_base.py list \
-    --kb-id company --pattern "*.pdf"
+mcp__numa__numa_tool(
+  name="knowledge_base",
+  description="Listing PDF files in KB",
+  params={"operation": "list", "kb_id": "company", "pattern": "*.pdf"}
+)
 
 # List files in a user KB
-python3 /workdir/tools/numa/knowledge_base.py list \
-    --kb-id "abc-123-uuid"
+mcp__numa__numa_tool(
+  name="knowledge_base",
+  description="Listing files in user KB",
+  params={"operation": "list", "kb_id": "abc-123-uuid"}
+)
 ```
 
 ---
 
-## Download-Folder Subcommand
+## operation: download_folder
 
 Download all files in a KB folder as a zip archive.
 
@@ -239,24 +269,34 @@ Download all files in a KB folder as a zip archive.
 
 | Parameter | Required | Default | Description |
 |-----------|----------|---------|-------------|
-| `--kb-id, -k` | No | "company" | KB ID to download from |
-| `--folder-path, -f` | No | root | Folder path within KB |
-| `--output-dir, -o` | No | /workdir/outputs/ | Where to save the zip |
+| `operation` | Yes | - | `"download_folder"` |
+| `kb_id` | No | "company" | KB ID to download from |
+| `folder_path` | No | root | Folder path within KB |
+| `output_dir` | No | /workdir/outputs/ | Where to save the zip |
 
 ### Examples
 
-```bash
+```
 # Download entire company KB
-python3 /workdir/tools/numa/knowledge_base.py download-folder \
-    --kb-id company
+mcp__numa__numa_tool(
+  name="knowledge_base",
+  description="Downloading entire company KB",
+  params={"operation": "download_folder", "kb_id": "company"}
+)
 
 # Download a specific folder
-python3 /workdir/tools/numa/knowledge_base.py download-folder \
-    --kb-id company --folder-path "reports/2024/"
+mcp__numa__numa_tool(
+  name="knowledge_base",
+  description="Downloading 2024 reports folder from KB",
+  params={"operation": "download_folder", "kb_id": "company", "folder_path": "reports/2024/"}
+)
 
 # Download from a user KB
-python3 /workdir/tools/numa/knowledge_base.py download-folder \
-    --kb-id "abc-123-uuid" --folder-path "contracts/"
+mcp__numa__numa_tool(
+  name="knowledge_base",
+  description="Downloading contracts from user KB",
+  params={"operation": "download_folder", "kb_id": "abc-123-uuid", "folder_path": "contracts/"}
+)
 ```
 
 **Limits:**

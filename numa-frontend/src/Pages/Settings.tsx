@@ -14,11 +14,9 @@ import {
   type GlobalDataConnectorSettingsMap,
 } from '../Services/AdminDataConnectorsService';
 import { AdminAgentsService, type AgentsMode } from '../Services/AdminAgentsService';
+import { AdminMfaSettingsService } from '../Services/AdminMfaSettingsService';
 import { getIntegrationsListFormat, type IntegrationListItem } from '../config/integrationsConfig';
 import { PipedreamProxyService } from '../Services/PipedreamProxyService';
-import { LambdaClient } from '@aws-sdk/client-lambda';
-import { fromWebToken } from '@aws-sdk/credential-providers';
-import { withPRM } from '../utils/prmUtils';
 import { useNumaRequest } from '../Providers/NumaRequestContext';
 import BrandingAdminPanel from '../Components/Branding/BrandingAdminPanel';
 import { UNSAFE_NavigationContext } from 'react-router-dom';
@@ -63,7 +61,7 @@ const useNavigationConfirm = (when: boolean, message: string) => {
 
 export default function SettingsPage() {
   const { t, i18n } = useTranslation('settings');
-  const { user, getCredentials } = useAuth();
+  const { user, getCredentials, lambdaClient } = useAuth();
   const { numaGet, numaPut } = useNumaRequest();
   const [activeKey, setActiveKey] = useState<string>('users');
   const [settingsScope, setSettingsScope] = useState<'user' | 'admin'>('user');
@@ -75,6 +73,7 @@ export default function SettingsPage() {
   const allowBrandingTab = brandingApiEnabled && isAdmin;
   const agentsFeatureEnabled =
     typeof window !== 'undefined' ? window.sessionStorage.getItem('AGENTS') === 'true' : false;
+  const mfaEnabled = typeof window !== 'undefined' ? window.sessionStorage.getItem('MFA_ENABLED') === 'true' : false;
   const dataConnectorsEnabled =
     typeof window !== 'undefined' ? window.sessionStorage.getItem('DATA_CONNECTORS_ENABLED') === 'true' : false;
   const availableIntegrations = useMemo<IntegrationListItem[]>(() => getIntegrationsListFormat(), [i18n.language]);
@@ -97,6 +96,15 @@ export default function SettingsPage() {
   const [agentsMode, setAgentsMode] = useState<AgentsMode>('full');
   const [agentsLoading, setAgentsLoading] = useState<boolean>(true);
   const [agentsSaving, setAgentsSaving] = useState<boolean>(false);
+
+  // MFA (admin) settings — stored as hours, displayed in a user-chosen unit.
+  // mfaInputValue is a string so the input can be empty while typing.
+  const [mfaRememberHours, setMfaRememberHours] = useState<number>(0);
+  const [mfaInputValue, setMfaInputValue] = useState<string>('0');
+  const [mfaUnit, setMfaUnit] = useState<'hours' | 'days'>('days');
+  const [mfaLoading, setMfaLoading] = useState<boolean>(true);
+  const [mfaSaving, setMfaSaving] = useState<boolean>(false);
+  const [mfaSaveStatus, setMfaSaveStatus] = useState<{ variant: string; message: string } | null>(null);
   const [dataAnalysisAvailable, setDataAnalysisAvailable] = useState(true);
 
   // Company profile (admin) settings
@@ -119,32 +127,6 @@ export default function SettingsPage() {
   const relayLambdaArn = window.sessionStorage.getItem('PIPEDREAM_RELAY_LAMBDA_ARN');
   const previewMode = !hasPipedreamFeature || !relayLambdaArn;
   const workspaceChatEnabled = window.sessionStorage.getItem('NUMA_WORKSPACE_CHAT') === 'true';
-
-  // AWS Lambda client for listing tools (admin view)
-  const [lambdaClient, setLambdaClient] = useState<LambdaClient | null>(null);
-
-  useEffect(() => {
-    const initLambda = async () => {
-      if (!isAdmin || !user || previewMode) return;
-      try {
-        const REGION = window.sessionStorage.getItem('REGION') || 'us-east-1';
-        const GROUPS = JSON.parse(window.sessionStorage.getItem('GROUPS') || '{}');
-        const userGroup = user.decoded_tokens?.idToken?.['cognito:groups']?.[0] || 'standard';
-        const roleArn = GROUPS[userGroup]?.roleArn;
-        const cognitoUserId = user.decoded_tokens?.idToken?.sub;
-        if (!roleArn) return;
-        const credentials = fromWebToken({
-          webIdentityToken: user.tokens.idToken,
-          roleArn,
-          roleSessionName: cognitoUserId,
-        });
-        setLambdaClient(withPRM(LambdaClient, { region: REGION, credentials }));
-      } catch (e) {
-        console.error('Settings: init lambda failed', e);
-      }
-    };
-    initLambda();
-  }, [isAdmin, user, previewMode]);
 
   useEffect(() => {
     let isMounted = true;
@@ -257,6 +239,37 @@ export default function SettingsPage() {
       cancelled = true;
     };
   }, [isAdmin, agentsFeatureEnabled, user, numaGet]);
+
+  // Load MFA settings
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      if (!isAdmin || !mfaEnabled) {
+        if (!cancelled) setMfaLoading(false);
+        return;
+      }
+      try {
+        setMfaLoading(true);
+        const res = await AdminMfaSettingsService.get(numaGet);
+        if (!cancelled) {
+          const hours = res.rememberDurationHours;
+          setMfaRememberHours(hours);
+          // Default to days if evenly divisible, otherwise hours
+          const unit = hours > 0 && hours % 24 === 0 ? 'days' : 'hours';
+          setMfaUnit(unit);
+          setMfaInputValue(String(unit === 'days' ? Math.floor(hours / 24) : hours));
+        }
+      } catch (e) {
+        console.warn('Settings: failed to load MFA settings', e);
+        if (!cancelled) setMfaRememberHours(0);
+      } finally {
+        if (!cancelled) setMfaLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [isAdmin, mfaEnabled, user, numaGet]);
 
   // Load Company Profile
   useEffect(() => {
@@ -659,9 +672,10 @@ export default function SettingsPage() {
       { key: 'chat-defaults', label: t('tabs.chatDefaults'), iconClassName: 'bi bi-chat-dots' },
       { key: 'company-profile', label: t('tabs.companyProfile'), iconClassName: 'bi bi-building' },
       ...(agentsFeatureEnabled ? [{ key: 'agents', label: t('tabs.agents'), iconClassName: 'bi bi-robot' }] : []),
+      ...(mfaEnabled ? [{ key: 'mfa', label: t('tabs.mfa'), iconClassName: 'bi bi-shield-lock' }] : []),
       { key: 'integrations', label: t('tabs.integrations'), iconClassName: 'bi bi-plug' },
     ],
-    [allowBrandingTab, agentsFeatureEnabled, t],
+    [allowBrandingTab, agentsFeatureEnabled, mfaEnabled, t],
   );
   const userTabs = useMemo(
     () => [
@@ -1268,6 +1282,127 @@ export default function SettingsPage() {
                         })}
                         <div className="text-muted small mt-2">{t('agents.footerNote')}</div>
                       </div>
+                    )}
+                  </div>
+                </Tab>
+              )}
+              {mfaEnabled && (
+                <Tab
+                  eventKey="mfa"
+                  title={
+                    <span>
+                      <i className="bi bi-shield-lock me-2"></i>
+                      {t('tabs.mfa')}
+                    </span>
+                  }
+                >
+                  <div className="mb-3">
+                    <Alert variant="secondary" className="mb-3">
+                      <div className="d-flex align-items-start">
+                        <i className="bi bi-phone me-2 mt-1"></i>
+                        <div>
+                          <div className="settings-section-title">{t('mfaSettings.title')}</div>
+                          <div className="small text-muted">{t('mfaSettings.description')}</div>
+                        </div>
+                      </div>
+                    </Alert>
+                    {mfaLoading ? (
+                      <div className="text-center py-4">
+                        <Spinner animation="border" />
+                      </div>
+                    ) : (
+                      <Form>
+                        <Form.Group className="mb-3">
+                          <Form.Label className="fw-semibold">{t('mfaSettings.durationLabel')}</Form.Label>
+                          <div className="d-flex align-items-center gap-2" style={{ maxWidth: 340 }}>
+                            <Form.Control
+                              type="number"
+                              min={0}
+                              max={mfaUnit === 'days' ? 365 : 8760}
+                              value={mfaInputValue}
+                              onChange={(e) => {
+                                const str = e.target.value;
+                                setMfaInputValue(str);
+                                const parsed = parseInt(str, 10);
+                                if (!isNaN(parsed) && parsed >= 0) {
+                                  const maxVal = mfaUnit === 'days' ? 365 : 8760;
+                                  const clamped = Math.min(maxVal, parsed);
+                                  setMfaRememberHours(mfaUnit === 'days' ? clamped * 24 : clamped);
+                                } else {
+                                  setMfaRememberHours(0);
+                                }
+                              }}
+                              onBlur={() => {
+                                if (mfaInputValue === '') setMfaInputValue('0');
+                              }}
+                              style={{ maxWidth: 120 }}
+                            />
+                            <Form.Select
+                              value={mfaUnit}
+                              onChange={(e) => {
+                                const newUnit = e.target.value as 'hours' | 'days';
+                                setMfaUnit(newUnit);
+                                // Convert the display value when switching units
+                                const display =
+                                  newUnit === 'days' ? Math.floor(mfaRememberHours / 24) : mfaRememberHours;
+                                setMfaInputValue(String(display));
+                              }}
+                              style={{ maxWidth: 120 }}
+                            >
+                              <option value="hours">{t('mfaSettings.unitHours')}</option>
+                              <option value="days">{t('mfaSettings.unitDays')}</option>
+                            </Form.Select>
+                          </div>
+                          <Form.Text className="text-muted">{t('mfaSettings.durationHelp')}</Form.Text>
+                        </Form.Group>
+
+                        {mfaRememberHours === 0 && (
+                          <Alert variant="info" className="mb-3">
+                            <i className="bi bi-info-circle me-2"></i>
+                            {t('mfaSettings.zeroMeansAlways')}
+                          </Alert>
+                        )}
+
+                        {mfaSaveStatus && (
+                          <Alert
+                            variant={mfaSaveStatus.variant}
+                            className="mb-3"
+                            dismissible
+                            onClose={() => setMfaSaveStatus(null)}
+                          >
+                            {mfaSaveStatus.message}
+                          </Alert>
+                        )}
+
+                        <Button
+                          variant="primary"
+                          disabled={mfaSaving}
+                          onClick={async () => {
+                            try {
+                              setMfaSaving(true);
+                              setMfaSaveStatus(null);
+                              await AdminMfaSettingsService.update(mfaRememberHours, numaPut);
+                              setMfaSaveStatus({ variant: 'success', message: t('mfaSettings.saveSuccess') });
+                            } catch (e) {
+                              setMfaSaveStatus({
+                                variant: 'danger',
+                                message: (e as Error).message || t('errors:adminMfa.updateFailed'),
+                              });
+                            } finally {
+                              setMfaSaving(false);
+                            }
+                          }}
+                        >
+                          {mfaSaving ? (
+                            <>
+                              <Spinner as="span" animation="border" size="sm" className="me-2" />
+                              {t('common:saving')}
+                            </>
+                          ) : (
+                            t('common:save')
+                          )}
+                        </Button>
+                      </Form>
                     )}
                   </div>
                 </Tab>

@@ -17,38 +17,36 @@ You excel at searching company knowledge bases to find relevant documents, polic
 ### 1. Knowledge Base Query
 Search and retrieve information from knowledge bases:
 
-```bash
-python3 /workdir/tools/numa/knowledge_base.py query \
-    --query "search terms" \
-    --user-intent "what user needs" \
-    [--kb-id company|uuid] \
-    [--all-kbs] \
-    [--no-summarise] \
-    [--max-results 15] \
-    [--output-file /path/to/file.json]
+```
+mcp__numa__numa_tool(name="query_knowledge_base", description="Searching knowledge base for ...", params={
+    "query": "search terms",
+    "user_intent": "what user needs",
+    "kb_id": "company|uuid",        # optional
+    "all_kbs": true,                 # optional
+    "no_summarise": true,            # optional
+    "max_results": 15,               # optional
+    "output_file": "/path/to/file.json"  # optional
+})
 ```
 
 Key options:
-- `--all-kbs`: Query all enabled KBs and synthesize results with attribution
-- `--no-summarise`: Get raw content for detailed analysis
-- `--output-file`: Save results for later processing
-- `--max-results 15`: Get more results for comprehensive research
+- `all_kbs`: Query all enabled KBs and synthesize results with attribution
+- `no_summarise`: Get raw content for detailed analysis
+- `output_file`: Save results for later processing
+- `max_results`: Get more results for comprehensive research (e.g. 15)
 
 ### 2. File Retrieval
 Download source files from KB storage:
 
-```bash
+```
 # Download by S3 URI (from KB references)
-python3 /workdir/tools/numa/knowledge_base.py download \
-    --uri "s3://bucket/documents/company/policy.pdf"
+mcp__numa__numa_tool(name="kb_download", description="Downloading policy document from KB", params={"uri": "s3://bucket/documents/company/policy.pdf"})
 
 # List available files
-python3 /workdir/tools/numa/knowledge_base.py list \
-    --kb-id company --pattern "*.pdf"
+mcp__numa__numa_tool(name="kb_list", description="Listing PDF files in company KB", params={"kb_id": "company", "pattern": "*.pdf"})
 
 # Download entire folder as zip
-python3 /workdir/tools/numa/knowledge_base.py download-folder \
-    --kb-id company --folder-path "reports/2024/"
+mcp__numa__numa_tool(name="kb_download_folder", description="Downloading reports folder from KB", params={"kb_id": "company", "folder_path": "reports/2024/"})
 ```
 
 Use this to access the full source document when KB excerpts aren't sufficient.
@@ -56,17 +54,12 @@ Use this to access the full source document when KB excerpts aren't sufficient.
 ### 3. Upload to Knowledge Base
 Add files from the workspace to a knowledge base:
 
-```bash
+```
 # Upload to company KB (admin only)
-python3 /workdir/tools/numa/knowledge_base.py upload \
-    --file /workdir/outputs/report.pdf \
-    --kb-id company
+mcp__numa__numa_tool(name="kb_upload", description="Uploading report to company KB", params={"file": "/workdir/outputs/report.pdf", "kb_id": "company"})
 
 # Upload to user KB with folder path
-python3 /workdir/tools/numa/knowledge_base.py upload \
-    --file /workdir/outputs/analysis.docx \
-    --kb-id "abc-123-uuid" \
-    --path "reports/2024/"
+mcp__numa__numa_tool(name="kb_upload", description="Uploading analysis to user KB", params={"file": "/workdir/outputs/analysis.docx", "kb_id": "abc-123-uuid", "path": "reports/2024/"})
 ```
 
 **Permissions**: Company KB requires admin; user KBs require editor/owner access.
@@ -74,7 +67,7 @@ python3 /workdir/tools/numa/knowledge_base.py upload \
 
 ### 4. Analyzing Downloaded Folders
 
-When using `download-folder`, the result is a **zip file**. Follow these best practices:
+When using `kb_download_folder`, the result is a **zip file**. Follow these best practices:
 
 1. **Never extract** - Analyze directly from zip using Python's `zipfile` module
 2. **Write Python scripts to files** - Don't use complex inline bash (security blocks may occur)
@@ -82,9 +75,8 @@ When using `download-folder`, the result is a **zip file**. Follow these best pr
 
 Example analysis workflow:
 ```bash
-# Download folder
-python3 /workdir/tools/numa/knowledge_base.py download-folder \
-    --kb-id company
+# Download folder (use the MCP tool first):
+# mcp__numa__numa_tool(name="kb_download_folder", description="Downloading company KB folder", params={"kb_id": "company"})
 
 # Create analysis script
 cat > /workdir/outputs/analyze_kb.py << 'EOF'
@@ -114,10 +106,8 @@ This approach enables comprehensive content analysis (word counts, topic extract
 
 ### Quick Answer (AI Summary - Default)
 For conceptual questions or quick understanding:
-```bash
-python3 /workdir/tools/numa/knowledge_base.py query \
-    --query "annual leave policy" \
-    --user-intent "find leave entitlements"
+```
+mcp__numa__numa_tool(name="query_knowledge_base", description="Finding leave entitlements", params={"query": "annual leave policy", "user_intent": "find leave entitlements"})
 ```
 
 **Use summarized results when:**
@@ -127,12 +117,8 @@ python3 /workdir/tools/numa/knowledge_base.py query \
 
 ### Precision Research (Raw Results)
 For exact values, code examples, or technical specifications:
-```bash
-python3 /workdir/tools/numa/knowledge_base.py query \
-    --query "API rate limits and error codes" \
-    --user-intent "find exact technical limits" \
-    --no-summarise \
-    --max-results 15
+```
+mcp__numa__numa_tool(name="query_knowledge_base", description="Finding exact technical limits", params={"query": "API rate limits and error codes", "user_intent": "find exact technical limits", "no_summarise": true, "max_results": 15})
 ```
 
 **Use raw results when:**
@@ -144,24 +130,16 @@ python3 /workdir/tools/numa/knowledge_base.py query \
 
 ### Comprehensive Research
 For deep analysis, save raw results to file:
-```bash
-python3 /workdir/tools/numa/knowledge_base.py query \
-    --query "all security policies" \
-    --user-intent "compile security documentation" \
-    --no-summarise \
-    --max-results 15 \
-    --output-file /workdir/outputs/security_docs.json
+```
+mcp__numa__numa_tool(name="query_knowledge_base", description="Compiling security documentation", params={"query": "all security policies", "user_intent": "compile security documentation", "no_summarise": true, "max_results": 15, "output_file": "/workdir/outputs/security_docs.json"})
 ```
 
 Then read and analyze the saved file for complete information.
 
 ### Cross-KB Research
 When information might span multiple knowledge bases:
-```bash
-python3 /workdir/tools/numa/knowledge_base.py query \
-    --query "compliance requirements" \
-    --user-intent "find all compliance info" \
-    --all-kbs
+```
+mcp__numa__numa_tool(name="query_knowledge_base", description="Finding all compliance info across KBs", params={"query": "compliance requirements", "user_intent": "find all compliance info", "all_kbs": true})
 ```
 
 ## Approach

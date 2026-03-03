@@ -669,9 +669,7 @@ export function useWorkspaceChatStreaming({
           currentRequestIdRef.current = null;
           // Call optional onStreamComplete callback (for auto-naming, etc.)
           // Pass conversationId from the stream config so callback has the correct value
-          console.log('[WorkspaceChat] Stream complete, onStreamComplete callback:', typeof onStreamComplete);
           if (onStreamComplete) {
-            console.log('[WorkspaceChat] Calling onStreamComplete callback with conversationId:', conversationId);
             onStreamComplete(conversationId);
           }
           setTimeout(() => inputRef.current?.focus(), 0);
@@ -708,7 +706,6 @@ export function useWorkspaceChatStreaming({
           // Handle session_init events for initialization state
           if (event.type === 'session_init') {
             const initEvent = event as { type: 'session_init'; status: 'syncing_workspace' | 'ready' };
-            console.log('[WorkspaceChat] Session init:', initEvent.status);
             if (setIsInitializing) {
               setIsInitializing(initEvent.status === 'syncing_workspace');
             }
@@ -717,13 +714,10 @@ export function useWorkspaceChatStreaming({
           // Handle conversation_switch events
           if (event.type === 'conversation_switch') {
             const switchEvent = event as { type: 'conversation_switch'; status: 'switching' | 'ready' };
-            console.log('[WorkspaceChat] Conversation switch:', switchEvent.status);
             if (setIsInitializing) {
               setIsInitializing(switchEvent.status === 'switching');
             }
           }
-
-          console.log('[WorkspaceChat] Session event:', event.type);
         },
       );
 

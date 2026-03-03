@@ -150,31 +150,23 @@ s3://{outputs_bucket}/workspaces/{user_sub}/{conversation_id}/
 └── trace.jsonl       # Conversation history
 ```
 
-## Tools (in /workdir/tools/numa/)
+## Tools (via `mcp__numa__numa_tool` MCP)
 
-### knowledge_base.py
-Unified KB tool with subcommands:
-- `query` - Search knowledge base
-- `upload` - Upload file to KB
-- `download` - Download source file from KB
-- `list` - List files in KB
-- `download-folder` - Download folder from KB
+All Numa tool operations go through the unified `mcp__numa__numa_tool` MCP tool.
+The files at `/workdir/tools/numa/` are **documentation-only reference cards** — direct bash execution is blocked by security hooks.
 
-### web_search.py
-Internet search via Lambda proxy:
-```bash
-python3 /workdir/tools/numa/web_search.py --query "search terms" --user-intent "context"
-```
+| MCP Tool Name | Purpose |
+|---------------|---------|
+| `query_knowledge_base` | Search knowledge bases |
+| `kb_upload` / `kb_download` / `kb_list` / `kb_download_folder` | KB file operations |
+| `web_search` | Internet search via Lambda proxy |
+| `extract_content` | AI-powered content extraction (OCR, transcription) |
+| `convert_document` | Document format conversion (DOCX↔PDF, Markdown→PDF/DOCX) |
+| `agents` | Manage saved Numa agents |
+| `memories` | Manage user memories |
 
-### extract_content.py
-AI-powered content extraction (OCR, transcription):
-- Scanned PDFs, images, audio/video
-- Uses Lambda for heavy processing
-
-### convert_document.py
-Document format conversion:
-- DOCX ↔ PDF (--mode file)
-- Markdown → PDF/DOCX (--mode markdown)
+**Implementation:** `numa_workspace_agent/mcp_tools/numa_tool.py` (unified dispatcher)
+and `numa_workspace_agent/mcp_tools/lambda_client.py` (shared Lambda invocation client).
 
 ## Credential Isolation (Cross-Account Bedrock)
 
@@ -184,10 +176,7 @@ When using cross-account Bedrock credentials, local services (Lambda, S3) need l
 - `AWS_*` - Cross-account Bedrock credentials
 - `NUMA_LOCAL_AWS_*` - Local account credentials for Lambda/S3 calls
 
-**Implementation:** `tools/numa/helpers/credentials.py`
-```python
-from helpers.credentials import get_local_lambda_client, get_local_s3_client
-```
+**Implementation:** `numa_workspace_agent/mcp_tools/lambda_client.py` uses `NUMA_LOCAL_AWS_*` env vars to create boto3 clients that target the local account.
 
 ---
 

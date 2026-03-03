@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   DndContext,
@@ -16,7 +16,9 @@ import { useOps } from '../OpsContext';
 import * as OpsService from '../../../Services/OpsService';
 import type { Ticket, WorkStage } from '../../../types/ops';
 import KanbanZone from './KanbanZone';
+import SprintBoardBar from './SprintBoardBar';
 import { TicketDetailModal } from '../Modals/TicketDetailModal';
+import { CreateTicketModal } from '../Modals/CreateTicketModal';
 import ContextMenu from '../ContextMenu';
 import './kanban.css';
 
@@ -83,6 +85,9 @@ const BoardView = () => {
     ticket: Ticket | null;
   }>({ show: false, position: { x: 0, y: 0 }, ticket: null });
 
+  // ── CreateTicketModal state ────────────────────────────────────
+  const [createModal, setCreateModal] = useState<{ show: boolean; zoneId?: string }>({ show: false });
+
   const team = teamData?.team ?? null;
   const zones = teamData?.zones ?? [];
   const stages = teamData?.stages ?? [];
@@ -95,27 +100,77 @@ const BoardView = () => {
     [zones, activeZoneId],
   );
 
-  /** The active work unit (for auto-scoping in Board view when sprints are enabled) */
-  const activeWorkUnit = useMemo(
-    () => (hasWorkUnitSeries ? (workUnits.find((wu) => wu.status === 'active') ?? null) : null),
-    [hasWorkUnitSeries, workUnits],
-  );
-
-  /** Filter tickets: only active zone, exclude archived, apply work unit scope */
+  /** Filter tickets: only active zone, exclude archived, apply opt-in sprint filter */
   const filteredTickets = useMemo(() => {
     let result = tickets.filter((tk) => !tk.archived);
     // Scope to active zone
     if (activeZone) {
       result = result.filter((tk) => tk.zoneId === activeZone.id);
     }
-    // When work units are enabled, auto-scope to the active sprint
-    if (hasWorkUnitSeries && activeWorkUnit) {
-      result = result.filter((tk) => tk.workUnitId === activeWorkUnit.id);
-    } else if (selectedWorkUnitId !== null) {
+    // Sprint filter: only when user explicitly selects a sprint pill
+    if (selectedWorkUnitId !== null) {
       result = result.filter((tk) => tk.workUnitId === selectedWorkUnitId);
     }
     return result;
-  }, [tickets, activeZone, hasWorkUnitSeries, activeWorkUnit, selectedWorkUnitId]);
+  }, [tickets, activeZone, selectedWorkUnitId]);
+
+  // ── Unsorted tickets: board zone tickets with no sprint assignment ──
+  const unsortedCount = useMemo(() => {
+    if (!hasWorkUnitSeries || !activeZone || selectedWorkUnitId !== null) return 0;
+    return filteredTickets.filter((tk) => !tk.workUnitId).length;
+  }, [hasWorkUnitSeries, activeZone, selectedWorkUnitId, filteredTickets]);
+
+  const planningUnits = useMemo(
+    () => workUnits.filter((wu) => wu.status === 'planning' || wu.status === 'active'),
+    [workUnits],
+  );
+
+  const [showAssignDropdown, setShowAssignDropdown] = useState(false);
+  const [assigningToSprint, setAssigningToSprint] = useState(false);
+  const assignRef = useRef<HTMLDivElement>(null);
+  const dismissKey = activeZone ? `ops-unsorted-dismissed-${team?.id}-${activeZone.id}` : '';
+  const [unsortedDismissed, setUnsortedDismissed] = useState(() => {
+    if (!dismissKey) return false;
+    return localStorage.getItem(dismissKey) === '1';
+  });
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    if (!showAssignDropdown) return;
+    const handler = (e: MouseEvent) => {
+      if (assignRef.current && !assignRef.current.contains(e.target as Node)) {
+        setShowAssignDropdown(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [showAssignDropdown]);
+
+  const handleAssignToSprint = useCallback(
+    async (workUnitId: string) => {
+      if (!activeZone || assigningToSprint) return;
+      setAssigningToSprint(true);
+      try {
+        const unsortedTickets = filteredTickets.filter((tk) => !tk.workUnitId);
+        await Promise.all(
+          unsortedTickets.map((tk) =>
+            OpsService.updateTicket(numaPut, tk.id, {
+              teamId: tk.teamId,
+              workUnitId,
+              version: tk.version,
+            }),
+          ),
+        );
+        await refreshTickets();
+        setShowAssignDropdown(false);
+      } catch (err) {
+        console.error('[BoardView] Assign to sprint failed:', err);
+      } finally {
+        setAssigningToSprint(false);
+      }
+    },
+    [activeZone, assigningToSprint, filteredTickets, numaPut, refreshTickets],
+  );
 
   /** Map: stageId -> zoneId (for resolving zone when dropping into a stage) */
   const stageZoneMap = useMemo(() => {
@@ -188,10 +243,17 @@ const BoardView = () => {
       // Insert at the end of the destination column
       const newOrder = calculateNewOrder(destStageTickets, destStageTickets.length);
 
-      // Optimistic update: move ticket in local state immediately
+      // Resolve the destination stage's statusType for optimistic sprint stats
+      const destStage = stages.find((s) => s.id === newStageId);
+      const newStatusType = destStage?.statusType ?? ticket.statusType;
+
+      // Optimistic update: move ticket in local state immediately (including statusType
+      // so sprint progress bars update without waiting for the server round-trip)
       setTickets((prev) =>
         prev.map((tk) =>
-          tk.id === ticketId ? { ...tk, stageId: newStageId, zoneId: newZoneId, order: newOrder } : tk,
+          tk.id === ticketId
+            ? { ...tk, stageId: newStageId, zoneId: newZoneId, order: newOrder, statusType: newStatusType }
+            : tk,
         ),
       );
 
@@ -335,7 +397,7 @@ const BoardView = () => {
   );
 
   const handleQuickAdd = useCallback(
-    async (stageId: string, title: string) => {
+    async (stageId: string, title: string, ticketTypeId?: string) => {
       if (!team || !config?.ticketTypes?.[0]) return;
       const stage = stages.find((s) => s.id === stageId);
       if (!stage) return;
@@ -343,10 +405,12 @@ const BoardView = () => {
       const destTickets = filteredTickets.filter((tk) => tk.stageId === stageId).sort((a, b) => a.order - b.order);
       const _order = calculateNewOrder(destTickets, destTickets.length);
 
+      const resolvedTypeId = ticketTypeId ?? config.ticketTypes[0].id;
+
       try {
         await OpsService.createTicket(numaPost, {
           teamId: team.id,
-          ticketTypeId: config.ticketTypes[0].id,
+          ticketTypeId: resolvedTypeId,
           title,
           stageId,
           zoneId: stage.zoneId,
@@ -377,6 +441,15 @@ const BoardView = () => {
           setDetailTicketId(null);
           refreshTickets();
         }}
+      />
+      <CreateTicketModal
+        show={createModal.show}
+        onHide={() => setCreateModal({ show: false })}
+        onSuccess={(_ticket) => {
+          setCreateModal({ show: false });
+          refreshTickets();
+        }}
+        prefilledZoneId={createModal.zoneId}
       />
       <ContextMenu
         show={ctxMenu.show}
@@ -414,6 +487,20 @@ const BoardView = () => {
     );
   }
 
+  // ── Empty state: sprint-enabled team, no sprints, no tickets ──────
+  if (hasWorkUnitSeries && workUnits.length === 0 && filteredTickets.length === 0) {
+    return (
+      <>
+        <div className="text-center text-muted py-5">
+          <i className="bi bi-lightning-charge d-block mb-3" style={{ fontSize: '2.5rem' }} />
+          <h5 className="fw-semibold">{t('sprints.noSprintsYet')}</h5>
+          <p className="mb-3">{t('sprints.noSprintsYetHelp')}</p>
+        </div>
+        {overlays}
+      </>
+    );
+  }
+
   // ── Render: active board zone as kanban columns ────────────────────
 
   const dragOverlay = (
@@ -439,10 +526,68 @@ const BoardView = () => {
         onDragEnd={handleDragEnd}
       >
         <div className="p-3">
+          {/* Unsorted tickets bar */}
+          {unsortedCount > 0 && !unsortedDismissed && (
+            <div
+              className="d-flex align-items-center gap-2 px-3 py-2 mb-3 rounded border"
+              style={{ backgroundColor: '#f8f9fa', fontSize: '0.85rem' }}
+            >
+              <i className="bi bi-info-circle text-primary" />
+              <span className="text-muted">{t('sprints.unsortedTickets', { count: unsortedCount })}</span>
+              <div ref={assignRef} className="position-relative">
+                <button
+                  type="button"
+                  className="btn btn-sm btn-outline-primary"
+                  disabled={planningUnits.length === 0 || assigningToSprint}
+                  onClick={() => setShowAssignDropdown((prev) => !prev)}
+                >
+                  {t('sprints.assignToSprint')}
+                </button>
+                {showAssignDropdown && planningUnits.length > 0 && (
+                  <div
+                    className="position-absolute bg-white border rounded shadow-sm py-1"
+                    style={{ top: '100%', left: 0, minWidth: 180, zIndex: 1050, marginTop: 4 }}
+                  >
+                    {planningUnits.map((wu) => (
+                      <button
+                        key={wu.id}
+                        type="button"
+                        className="dropdown-item d-flex align-items-center gap-2 px-3 py-2"
+                        disabled={assigningToSprint}
+                        onClick={() => handleAssignToSprint(wu.id)}
+                      >
+                        <span
+                          className="d-inline-block rounded-circle"
+                          style={{
+                            width: 8,
+                            height: 8,
+                            backgroundColor: wu.status === 'active' ? '#198754' : '#0d6efd',
+                          }}
+                        />
+                        {wu.name}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <button
+                type="button"
+                className="btn btn-sm btn-link text-muted ms-auto p-0"
+                onClick={() => {
+                  setUnsortedDismissed(true);
+                  if (dismissKey) localStorage.setItem(dismissKey, '1');
+                }}
+              >
+                {t('sprints.dismiss')}
+              </button>
+            </div>
+          )}
+          {hasWorkUnitSeries && <SprintBoardBar />}
           <KanbanZone
             zone={activeZone}
             stages={zoneStagesMap.get(activeZone.id) ?? []}
             tickets={filteredTickets}
+            ticketTypes={config?.ticketTypes ?? []}
             onTicketClick={handleTicketClick}
             onTicketContextMenu={handleTicketContextMenu}
             onTicketAssign={handleTicketAssign}

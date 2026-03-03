@@ -35,6 +35,11 @@ class TestAgentTypeConfigDefaults:
         config = AgentTypeConfig(type_id="test", display_name="Test")
         assert config.enable_scripts_mcp is True
         assert config.enable_integrations_mcp is True
+        assert config.enable_numa_mcp is True
+
+    def test_default_allowed_numa_operations_is_none(self):
+        config = AgentTypeConfig(type_id="test", display_name="Test")
+        assert config.allowed_numa_operations is None  # None = all allowed
 
     def test_default_numa_tools(self):
         config = AgentTypeConfig(type_id="test", display_name="Test")
@@ -128,11 +133,10 @@ class TestToolFileMap:
 class TestAlwaysCopy:
     """Test the always-copy list."""
 
-    def test_always_copy_not_empty(self):
-        assert len(ALWAYS_COPY) > 0
-
-    def test_helpers_in_always_copy(self):
-        assert "helpers/" in ALWAYS_COPY
+    def test_always_copy_is_empty(self):
+        # helpers/ was removed when tool files became documentation-only.
+        # ALWAYS_COPY should be empty since there are no shared modules.
+        assert len(ALWAYS_COPY) == 0
 
 
 # ---------------------------------------------------------------------------
@@ -161,10 +165,15 @@ class TestNumaChatType:
         for tool in ["Read", "Write", "Edit", "Glob", "Grep", "Bash"]:
             assert tool in config.tools
 
-    def test_has_numa_tools(self):
+    def test_has_numa_tool_docs(self):
         config = get_agent_type_config("numa-chat")
-        assert "knowledge_search" in config.enabled_numa_tools
-        assert "web_search" in config.enabled_numa_tools
+        assert "agents" in config.enabled_numa_tools
+        assert "memories" in config.enabled_numa_tools
+
+    def test_numa_mcp_enabled_with_all_operations(self):
+        config = get_agent_type_config("numa-chat")
+        assert config.enable_numa_mcp is True
+        assert config.allowed_numa_operations is None  # None = all operations
 
     def test_no_restrictions(self):
         config = get_agent_type_config("numa-chat")
@@ -188,14 +197,14 @@ class TestResearchAgentType:
         assert config.enable_integrations_mcp is False
         assert config.restrict_integrations is True
 
-    def test_has_kb_tools(self):
+    def test_numa_mcp_enabled(self):
         config = get_agent_type_config("research-agent")
-        assert "knowledge_search" in config.enabled_numa_tools
-        assert "web_search" in config.enabled_numa_tools
+        assert config.enable_numa_mcp is True
 
-    def test_no_agents_tool(self):
+    def test_no_tool_docs(self):
         config = get_agent_type_config("research-agent")
-        assert "agents" not in config.enabled_numa_tools
+        # Research agent has MCP access but no reference docs copied
+        assert config.enabled_numa_tools == []
 
 
 class TestDocumentSummariserType:

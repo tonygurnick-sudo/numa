@@ -23,6 +23,7 @@ type Props = {
   label?: string;
   steps: string[];
   result?: unknown;
+  toolInput?: unknown;
   isLoading?: boolean;
   conversationId?: string;
   sub?: string;
@@ -48,6 +49,7 @@ export const UnifiedToolCard = ({
   label,
   steps,
   result,
+  toolInput,
   isLoading = false,
   conversationId,
   sub,
@@ -57,14 +59,24 @@ export const UnifiedToolCard = ({
   const { t } = useTranslation('common');
   const [expanded, setExpanded] = useState(false);
   const [stepsExpanded, setStepsExpanded] = useState(() => toolName !== 'data_analysis');
-  const descriptor = resolveToolDescriptor(toolName);
-  const visual = resolveToolVisual(toolName);
+
+  // For mcp__numa__numa_tool, extract the sub-tool name from the tool input
+  // so we can route to the correct renderer (e.g. KnowledgeBaseRenderer for query_knowledge_base)
+  const effectiveToolName = useMemo(() => {
+    if (toolName !== 'mcp__numa__numa_tool') return toolName;
+    const input = toolInput as { name?: string } | undefined;
+    if (input?.name && typeof input.name === 'string') return input.name;
+    return toolName;
+  }, [toolName, toolInput]);
+
+  const descriptor = resolveToolDescriptor(effectiveToolName);
+  const visual = resolveToolVisual(effectiveToolName);
   // Derive dynamic title for KB when result contains kb_id
   const baseLabel = label || descriptor.label || toolName;
   // Integration tools with a custom label use it directly (already formatted)
   const isCustomIntegrationLabel = toolName.endsWith('_integration') && label && label !== toolName;
   let title = isCustomIntegrationLabel ? label : t('toolCard.callingTool', { label: baseLabel });
-  if (toolName === 'query_knowledge_base' && result) {
+  if (effectiveToolName === 'query_knowledge_base' && result) {
     try {
       const resultWithContent = result as { content?: unknown };
       const blocks = Array.isArray(resultWithContent?.content)
@@ -84,49 +96,53 @@ export const UnifiedToolCard = ({
   }
 
   const hasResult = !!result;
-  const isDataAnalysis = toolName === 'data_analysis';
+  const isDataAnalysis = effectiveToolName === 'data_analysis';
 
   // Enhanced status for integration tools with retry detection
   const enhancedStatus = useMemo(() => {
-    if (toolName.endsWith('_integration') && result) {
+    if (effectiveToolName.endsWith('_integration') && result) {
       return getEnhancedIntegrationStatus(result as ToolResultLike);
     }
     return null;
-  }, [toolName, result]);
+  }, [effectiveToolName, result]);
 
   const isRetrying = enhancedStatus?.isRetrying || false;
 
   // Determine summary line for result
   const resultSummary = useMemo(() => {
     if (!hasResult) return null;
-    if (toolName === 'web_search') {
+    if (effectiveToolName === 'web_search') {
       return t('toolCard.webSearchResults', { summary: getWebSearchSummary(result as ToolResultLike) });
     }
-    if (toolName === 'query_knowledge_base') return getKnowledgeBaseSummary(result as ToolResultLike);
-    if (toolName === 'create_agent_tool') return getAgentCreationSummary(result as ToolResultLike);
-    if (toolName === 'data_analysis') return getDataAnalysisSummary(result as ToolResultLike);
+    if (effectiveToolName === 'query_knowledge_base') return getKnowledgeBaseSummary(result as ToolResultLike);
+    if (effectiveToolName === 'create_agent_tool') return getAgentCreationSummary(result as ToolResultLike);
+    if (effectiveToolName === 'data_analysis') return getDataAnalysisSummary(result as ToolResultLike);
     // Check if it's an integration tool (ends with _integration)
-    if (toolName.endsWith('_integration')) {
+    if (effectiveToolName.endsWith('_integration')) {
       // Use enhanced status message for integrations
       return enhancedStatus?.message || getIntegrationsSummary(result as ToolResultLike);
     }
     return getFallbackSummary(result as ToolResultLike);
-  }, [toolName, result, hasResult, enhancedStatus]);
+  }, [effectiveToolName, result, hasResult, enhancedStatus]);
 
   // Only Web Search and Knowledge Base have collapsible details
-  const hasDetails = useMemo(() => toolName === 'web_search' || toolName === 'query_knowledge_base', [toolName]);
+  const hasDetails = useMemo(
+    () => effectiveToolName === 'web_search' || effectiveToolName === 'query_knowledge_base',
+    [effectiveToolName],
+  );
 
   // Choose body renderer (bare/inner only) for tools that support collapsible details
   const body = useMemo(() => {
     if (!hasDetails || !hasResult) return null;
-    if (toolName === 'web_search') return <WebSearchRenderer result={result as ToolResultLike} bare />;
-    if (toolName === 'query_knowledge_base') return <KnowledgeBaseRenderer result={result as ToolResultLike} bare />;
+    if (effectiveToolName === 'web_search') return <WebSearchRenderer result={result as ToolResultLike} bare />;
+    if (effectiveToolName === 'query_knowledge_base')
+      return <KnowledgeBaseRenderer result={result as ToolResultLike} bare />;
     return null;
-  }, [toolName, result, hasResult, hasDetails]);
+  }, [effectiveToolName, result, hasResult, hasDetails]);
 
   // Integration tools render inline (not collapsible)
   const inlineIntegrationContent = useMemo(() => {
-    if (!hasResult || !toolName.endsWith('_integration')) return null;
+    if (!hasResult || !effectiveToolName.endsWith('_integration')) return null;
     return (
       <IntegrationsRenderer
         result={result as ToolResultLike}
@@ -137,18 +153,18 @@ export const UnifiedToolCard = ({
         setMessages={setMessages}
       />
     );
-  }, [toolName, result, hasResult, conversationId, sub, numaChatDynamoUtils, setMessages]);
+  }, [effectiveToolName, result, hasResult, conversationId, sub, numaChatDynamoUtils, setMessages]);
 
   // Agent Creation tool renders inline (simple message with link)
   const inlineAgentCreationContent = useMemo(() => {
-    if (!hasResult || toolName !== 'create_agent_tool') return null;
+    if (!hasResult || effectiveToolName !== 'create_agent_tool') return null;
     return <AgentCreationRenderer result={result as ToolResultLike} bare />;
-  }, [toolName, result, hasResult]);
+  }, [effectiveToolName, result, hasResult]);
 
   const inlineDataAnalysisContent = useMemo(() => {
-    if (!hasResult || toolName !== 'data_analysis') return null;
+    if (!hasResult || effectiveToolName !== 'data_analysis') return null;
     return <DataAnalysisRenderer result={result as ToolResultLike} bare />;
-  }, [toolName, result, hasResult]);
+  }, [effectiveToolName, result, hasResult]);
 
   const toggle = () => setExpanded((e) => !e);
 

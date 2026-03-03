@@ -33,6 +33,10 @@ export interface WorkspaceChatAgentProxyProps {
   outputsBucketArn?: string;
   /** Schedule runner secret for authenticating server-to-server calls from the agent-schedule-runner Lambda */
   scheduleRunnerSecret?: string;
+  /** Workspace chat tools Lambda ARN (for document conversion preview) */
+  workspaceToolsLambdaArn?: string;
+  /** Workspace chat tools Lambda name (for invoking from proxy) */
+  workspaceToolsLambdaName?: string;
 }
 
 /**
@@ -95,6 +99,10 @@ export class WorkspaceChatAgentProxy extends Construct {
         ...(props.scheduleRunnerSecret && {
           SCHEDULE_RUNNER_SECRET: props.scheduleRunnerSecret,
         }),
+        // Workspace chat tools Lambda for document conversion preview
+        ...(props.workspaceToolsLambdaName && {
+          WORKSPACE_TOOLS_LAMBDA_NAME: props.workspaceToolsLambdaName,
+        }),
       },
       logGroup: logGroup,
       resourceNameSuffix: '_workspace_chat_agent_proxy',
@@ -135,6 +143,16 @@ export class WorkspaceChatAgentProxy extends Construct {
                 effect: 'Allow' as const,
                 actions: ['s3:GetObject'],
                 resources: [`${props.outputsBucketArn}/numa-chat/workspace/*`],
+              },
+            ]
+          : []),
+        // Lambda invoke for workspace-chat-tools (document conversion for preview)
+        ...(props.workspaceToolsLambdaArn
+          ? [
+              {
+                effect: 'Allow' as const,
+                actions: ['lambda:InvokeFunction'],
+                resources: [props.workspaceToolsLambdaArn],
               },
             ]
           : []),

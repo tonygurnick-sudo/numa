@@ -96,7 +96,7 @@ function SupplierListView({ suppliers, supplierConfig, onSupplierClick }: Suppli
     <div style={{ borderRadius: 10, border: '1px solid #e5e7eb', overflow: 'hidden', backgroundColor: '#fff' }}>
       {/* Header row */}
       <div
-        className="d-flex align-items-center px-3 py-2"
+        className="ops-list-header px-3 py-2"
         style={{
           backgroundColor: '#f9fafb',
           borderBottom: '1px solid #e5e7eb',
@@ -127,7 +127,7 @@ function SupplierListView({ suppliers, supplierConfig, onSupplierClick }: Suppli
         return (
           <div
             key={supplier.id}
-            className="d-flex align-items-center px-3 py-2"
+            className="ops-list-row px-3 py-2"
             style={{
               borderBottom: '1px solid #f3f4f6',
               cursor: 'pointer',
@@ -147,7 +147,7 @@ function SupplierListView({ suppliers, supplierConfig, onSupplierClick }: Suppli
             }}
           >
             {/* Company name */}
-            <div style={{ flex: '0 0 26%', minWidth: 0, paddingRight: 12 }}>
+            <div className="ops-list-col is-title" style={{ flex: '0 0 26%', minWidth: 0, paddingRight: 12 }}>
               <span
                 className="fw-semibold d-block text-truncate"
                 style={{ fontSize: '0.85rem', color: '#111827' }}
@@ -158,14 +158,22 @@ function SupplierListView({ suppliers, supplierConfig, onSupplierClick }: Suppli
             </div>
 
             {/* Stage badge */}
-            <div style={{ flex: '0 0 16%', paddingRight: 12 }}>
+            <div
+              className="ops-list-col"
+              data-label={t('crm.lifecycleStage')}
+              style={{ flex: '0 0 16%', paddingRight: 12 }}
+            >
               <Badge pill bg="" style={{ backgroundColor: stageColor, color: stageTextColor, fontSize: '0.72rem' }}>
                 {stage?.name ?? '\u2014'}
               </Badge>
             </div>
 
             {/* Primary contact */}
-            <div style={{ flex: '0 0 20%', minWidth: 0, paddingRight: 12 }}>
+            <div
+              className="ops-list-col"
+              data-label={t('crm.primaryContact')}
+              style={{ flex: '0 0 20%', minWidth: 0, paddingRight: 12 }}
+            >
               {primaryContact ? (
                 <div className="d-flex align-items-center gap-1">
                   <i className="bi bi-star-fill" style={{ color: '#f59e0b', fontSize: '0.6rem', flexShrink: 0 }} />
@@ -182,7 +190,11 @@ function SupplierListView({ suppliers, supplierConfig, onSupplierClick }: Suppli
             </div>
 
             {/* Industry */}
-            <div style={{ flex: '0 0 14%', minWidth: 0, paddingRight: 12 }}>
+            <div
+              className="ops-list-col"
+              data-label={t('crm.industry')}
+              style={{ flex: '0 0 14%', minWidth: 0, paddingRight: 12 }}
+            >
               <span
                 className="text-truncate d-block"
                 style={{ fontSize: '0.8rem', color: '#6b7280' }}
@@ -193,14 +205,18 @@ function SupplierListView({ suppliers, supplierConfig, onSupplierClick }: Suppli
             </div>
 
             {/* Last contact */}
-            <div style={{ flex: '0 0 12%' }}>
+            <div className="ops-list-col" data-label={t('crm.lastContact')} style={{ flex: '0 0 12%' }}>
               <span style={{ fontSize: '0.78rem', color: lastContact === 'No contact' ? '#d1d5db' : '#6b7280' }}>
                 {lastContact}
               </span>
             </div>
 
             {/* Annual spend */}
-            <div style={{ flex: '0 0 6%', textAlign: 'right' }}>
+            <div
+              className="ops-list-col"
+              data-label={t('suppliers.annualSpend')}
+              style={{ flex: '0 0 6%', textAlign: 'right' }}
+            >
               {supplier.annualSpend != null && supplier.annualSpend > 0 ? (
                 <span style={{ fontSize: '0.75rem', color: '#0d9488', fontWeight: 600 }}>
                   {formatCurrency(supplier.annualSpend)}
@@ -211,7 +227,11 @@ function SupplierListView({ suppliers, supplierConfig, onSupplierClick }: Suppli
             </div>
 
             {/* Open tickets */}
-            <div style={{ flex: '0 0 6%', textAlign: 'right' }}>
+            <div
+              className="ops-list-col"
+              data-label={t('tickets.links')}
+              style={{ flex: '0 0 6%', textAlign: 'right' }}
+            >
               {supplier.openTicketCount > 0 ? (
                 <span
                   style={{
@@ -261,10 +281,8 @@ function DroppableSupplierColumn({
   return (
     <div
       ref={setNodeRef}
-      className={`d-flex flex-column rounded-3 p-2 h-100 ${isOver ? 'bg-light bg-opacity-75' : 'bg-transparent'}`}
+      className={`kanban-column rounded-3 p-2 h-100 ${isOver ? 'bg-light bg-opacity-75' : 'bg-transparent'}`}
       style={{
-        flex: '1 0 280px',
-        minWidth: 280,
         backgroundColor: '#f9fafb',
         border: '1px solid #e5e7eb',
         transition: 'background-color 0.2s ease',

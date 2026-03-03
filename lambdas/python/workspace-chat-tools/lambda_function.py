@@ -42,6 +42,7 @@ from tools import (
     handle_approve_action,
     handle_configure_props,
     handle_convert_document,
+    handle_convert_preview,
     handle_create_agent,
     handle_duplicate_agent,
     handle_extract_content,
@@ -105,6 +106,7 @@ logger = structlog.get_logger()
 TOOL_HANDLERS: Dict[str, Callable[[Dict[str, Any]], Dict[str, Any]]] = {
     "add_to_kb": handle_add_to_kb,
     "convert_document": handle_convert_document,
+    "convert_preview": handle_convert_preview,
     "create_agent": handle_create_agent,
     "duplicate_agent": handle_duplicate_agent,
     "extract_content": handle_extract_content,

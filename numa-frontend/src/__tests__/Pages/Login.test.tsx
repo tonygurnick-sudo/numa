@@ -244,7 +244,7 @@ describe('NumaLogin Component', () => {
     fireEvent.click(getByTestId('mfa-setup-button'));
 
     await waitFor(() => {
-      expect(mockCompleteMfaSetup).toHaveBeenCalledWith('123456');
+      expect(mockCompleteMfaSetup).toHaveBeenCalledWith('123456', false);
       expect(mockNavigate).toHaveBeenCalledWith('/dash');
     });
   });
@@ -355,7 +355,7 @@ describe('NumaLogin Component', () => {
     fireEvent.click(getByTestId('mfa-verify-button'));
 
     await waitFor(() => {
-      expect(mockSubmitMfaCode).toHaveBeenCalledWith('654321');
+      expect(mockSubmitMfaCode).toHaveBeenCalledWith('654321', false);
       expect(mockNavigate).toHaveBeenCalledWith('/dash');
     });
   });

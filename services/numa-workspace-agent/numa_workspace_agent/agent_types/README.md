@@ -26,7 +26,44 @@ Agent types are different configurations of the same workspace agent engine. Eac
 
 1. **Claude SDK Tools** — Built-in capabilities (Read, Write, Bash, etc.) controlled by `tools`, `allowed_tools`, `disallowed_tools`
 2. **MCP Tools** — Server-side endpoints (execute_script, integration actions) controlled by `enable_scripts_mcp`, `enable_integrations_mcp`
-3. **Numa CLI Tools** — Python scripts copied to `/workdir/tools/` (knowledge_search, web_search, etc.) controlled by `enabled_numa_tools`
+3. **Numa Tool Reference Docs** — Documentation files copied to `/workdir/tools/` (knowledge_search, web_search, etc.) controlled by `enabled_numa_tools`. These are read-only references — all operations go through the `numa_tool` MCP tool.
+
+### MCP Server Architecture
+
+The workspace agent registers MCP servers conditionally based on agent type config. Each server groups related tools under a namespace:
+
+| MCP Server | Flag | Tools | Purpose |
+|------------|------|-------|---------|
+| `numa` | `enable_numa_mcp` | `numa_tool` | General platform tools — KB, web search, content extraction, document conversion, agents, memories |
+| `scripts` | `enable_scripts_mcp` | `execute_script` | Sandboxed Python/Bash/Node code execution |
+| `integrations` | `enable_integrations_mcp` | `run_action`, `configure_props`, `proxy_request` | Pipedream SaaS integration tools |
+
+#### When to add a new MCP server vs a new operation in `numa_tool`
+
+**Add a new operation to `numa_tool`** when the capability is:
+- A general platform utility (content extraction, document conversion, etc.)
+- Always available to all customers (no feature flag gating)
+- Handled by the same `workspace-chat-tools` Lambda
+
+**Create a separate MCP server** when the capability:
+- Belongs to a distinct product domain (e.g., Numa Ops, a future analytics module)
+- Is feature-flagged — not all customers should have it, and you want the LLM to not even see the tool when it's disabled
+- Has its own backend service or Lambda
+- Has enough operations to warrant its own tool description and skill docs
+
+#### Adding a new MCP server
+
+1. Create the tool module in `mcp_tools/` (e.g., `numa_ops_tool.py`) following the dispatcher pattern in `numa_tool.py`
+2. Add an `enable_<name>_mcp: bool` flag to `AgentTypeConfig` in `base.py` (default `False` for feature-flagged tools)
+3. Register it conditionally in `sdk_config.py` → `create_agent_options()`:
+   ```python
+   if type_config.enable_my_new_mcp:
+       mcp_servers["my_new"] = create_sdk_mcp_server(
+           name="my_new", version="1.0.0", tools=[my_new_tool],
+       )
+   ```
+4. Create a corresponding skill in `plugins/numa/skills/` so the LLM knows the tool's parameters
+5. Add a toggle mapping in the frontend if users should be able to enable/disable it
 
 ### System Prompt Customization
 

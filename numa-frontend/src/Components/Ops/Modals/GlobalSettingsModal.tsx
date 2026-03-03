@@ -474,7 +474,7 @@ export function GlobalSettingsModal({
   // ── Tab 1: Projects ────────────────────────────────────────────────────────
   const renderProjectsTab = () => (
     <div>
-      <Table size="sm" hover className="mb-0">
+      <Table size="sm" hover className="mb-0 ops-settings-table">
         <thead>
           <tr>
             <th>{t('common.name')}</th>
@@ -581,7 +581,7 @@ export function GlobalSettingsModal({
         <i className="bi bi-info-circle me-2" />
         {t('globalSettings.staffManagedNote')}
       </div>
-      <Table size="sm" hover>
+      <Table size="sm" hover className="ops-settings-table">
         <thead>
           <tr>
             <th style={{ width: 48 }} />
@@ -615,7 +615,7 @@ export function GlobalSettingsModal({
   // ── Tab 3: Ticket Types ────────────────────────────────────────────────────
   const renderTicketTypesTab = () => (
     <div>
-      <Table size="sm" hover className="mb-0">
+      <Table size="sm" hover className="mb-0 ops-settings-table">
         <thead>
           <tr>
             <th>{t('globalSettings.icon')}</th>
@@ -786,7 +786,7 @@ export function GlobalSettingsModal({
         {t('globalSettings.statusCategoriesInfo')}
       </div>
       <h6 className="fw-bold mb-2">{t('globalSettings.statusCategoriesRefTitle')}</h6>
-      <Table size="sm" className="mb-0">
+      <Table size="sm" className="mb-0 ops-settings-table">
         <thead>
           <tr>
             <th style={{ width: 40 }} />
@@ -961,7 +961,7 @@ export function GlobalSettingsModal({
       <div className="flex-grow-1 overflow-auto p-4 pe-4">
         {/* Lifecycle Stages Section */}
         <div className="border rounded-3 p-3 bg-white mb-4 shadow-sm">
-          <div className="d-flex align-items-center justify-content-between mb-3">
+          <div className="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
             <div>
               <h6 className="fw-bold text-dark mb-1">Customer Lifecycle Stages</h6>
               <div className="text-muted small">
@@ -1009,7 +1009,7 @@ export function GlobalSettingsModal({
               const textColor = getContrastTextColor(colorHex);
 
               return (
-                <div key={stage.id} className="d-flex align-items-center gap-3 p-2 bg-light rounded border">
+                <div key={stage.id} className="d-flex align-items-center flex-wrap gap-3 p-2 bg-light rounded border">
                   <div
                     className="rounded-circle d-flex align-items-center justify-content-center fw-bold flex-shrink-0"
                     style={{ width: 32, height: 32, backgroundColor: colorHex, color: textColor, fontSize: 12 }}
@@ -1102,7 +1102,7 @@ export function GlobalSettingsModal({
 
         {/* Customer Flags Section */}
         <div className="border rounded-3 p-3 bg-white mb-4 shadow-sm">
-          <div className="d-flex align-items-center justify-content-between mb-3">
+          <div className="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
             <div>
               <h6 className="fw-bold text-dark mb-1">Customer Flags</h6>
               <div className="text-muted small">
@@ -1125,7 +1125,7 @@ export function GlobalSettingsModal({
 
           <div className="d-flex flex-column gap-2">
             {(crmConfig.customerFlags || []).map((flag) => (
-              <div key={flag.id} className="d-flex align-items-center gap-3 p-2 bg-light rounded border">
+              <div key={flag.id} className="d-flex align-items-center flex-wrap gap-3 p-2 bg-light rounded border">
                 <div
                   className="rounded-circle d-flex align-items-center justify-content-center fs-5 flex-shrink-0"
                   style={{ width: 32, height: 32, backgroundColor: flag.color + '20' }}
@@ -1178,7 +1178,7 @@ export function GlobalSettingsModal({
 
         {/* Document Types Section */}
         <div className="border rounded-3 p-3 bg-white mb-4 shadow-sm">
-          <div className="d-flex align-items-center justify-content-between mb-3">
+          <div className="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
             <div>
               <h6 className="fw-bold text-dark mb-1">Document Types</h6>
               <div className="text-muted small">
@@ -1280,7 +1280,7 @@ export function GlobalSettingsModal({
       <div className="flex-grow-1 overflow-auto p-4 pe-4">
         {/* Supplier Lifecycle Stages Section */}
         <div className="border rounded-3 p-3 bg-white mb-4 shadow-sm" style={{ borderColor: '#14b8a6' }}>
-          <div className="d-flex align-items-center justify-content-between mb-3">
+          <div className="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
             <div>
               <h6 className="fw-bold mb-1" style={{ color: '#14b8a6' }}>
                 Supplier Lifecycle Stages
@@ -1330,7 +1330,7 @@ export function GlobalSettingsModal({
               const textColor = getContrastTextColor(colorHex);
 
               return (
-                <div key={stage.id} className="d-flex align-items-center gap-3 p-2 bg-light rounded border">
+                <div key={stage.id} className="d-flex align-items-center flex-wrap gap-3 p-2 bg-light rounded border">
                   <div
                     className="rounded-circle d-flex align-items-center justify-content-center fw-bold flex-shrink-0"
                     style={{ width: 32, height: 32, backgroundColor: colorHex, color: textColor, fontSize: 12 }}
@@ -1423,7 +1423,7 @@ export function GlobalSettingsModal({
 
         {/* Supplier Flags Section */}
         <div className="border rounded-3 p-3 bg-white mb-4 shadow-sm" style={{ borderColor: '#14b8a6' }}>
-          <div className="d-flex align-items-center justify-content-between mb-3">
+          <div className="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
             <div>
               <h6 className="fw-bold mb-1" style={{ color: '#14b8a6' }}>
                 Supplier Flags
@@ -1448,7 +1448,7 @@ export function GlobalSettingsModal({
 
           <div className="d-flex flex-column gap-2">
             {(supplierConfig.supplierFlags || []).map((flag) => (
-              <div key={flag.id} className="d-flex align-items-center gap-3 p-2 bg-light rounded border">
+              <div key={flag.id} className="d-flex align-items-center flex-wrap gap-3 p-2 bg-light rounded border">
                 <div
                   className="rounded-circle d-flex align-items-center justify-content-center fs-5 flex-shrink-0"
                   style={{ width: 32, height: 32, backgroundColor: flag.color + '20' }}
@@ -1501,7 +1501,7 @@ export function GlobalSettingsModal({
 
         {/* Supplier Document Types Section */}
         <div className="border rounded-3 p-3 bg-white mb-4 shadow-sm" style={{ borderColor: '#14b8a6' }}>
-          <div className="d-flex align-items-center justify-content-between mb-3">
+          <div className="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
             <div>
               <h6 className="fw-bold mb-1" style={{ color: '#14b8a6' }}>
                 Supplier Document Types
@@ -1578,7 +1578,7 @@ export function GlobalSettingsModal({
       ) : customers.length === 0 ? (
         <div className="text-center py-4 text-muted">{t('empty.noCustomers')}</div>
       ) : (
-        <Table size="sm" hover>
+        <Table size="sm" hover className="ops-settings-table">
           <thead>
             <tr>
               <th>{t('globalSettings.companyName')}</th>
@@ -1665,7 +1665,7 @@ export function GlobalSettingsModal({
       ) : suppliers.length === 0 ? (
         <div className="text-center py-4 text-muted">{t('empty.noSuppliers')}</div>
       ) : (
-        <Table size="sm" hover>
+        <Table size="sm" hover className="ops-settings-table">
           <thead>
             <tr>
               <th>{t('globalSettings.companyName')}</th>
@@ -1743,7 +1743,7 @@ export function GlobalSettingsModal({
       {teams.length === 0 ? (
         <div className="text-center py-4 text-muted">{t('teams.noTeams')}</div>
       ) : (
-        <Table size="sm" hover>
+        <Table size="sm" hover className="ops-settings-table">
           <thead>
             <tr>
               <th>{t('common.name')}</th>
@@ -1804,7 +1804,7 @@ export function GlobalSettingsModal({
         <i className="bi bi-info-circle me-2" />
         {t('globalSettings.linkConfigInfo')}
       </div>
-      <Table size="sm" hover>
+      <Table size="sm" hover className="ops-settings-table">
         <thead>
           <tr>
             <th>{t('globalSettings.linkType')}</th>
@@ -1839,18 +1839,22 @@ export function GlobalSettingsModal({
 
   return (
     <>
-      <Modal show={show} onHide={onHide} size="xl" centered>
+      <Modal show={show} onHide={onHide} size="xl" fullscreen="lg-down" centered>
         <Modal.Header closeButton>
           <Modal.Title>{t('settings.title')}</Modal.Title>
         </Modal.Header>
 
-        <Modal.Body style={{ minHeight: 500 }}>
+        <Modal.Body style={{ minHeight: 500, overflowX: 'hidden' }}>
           {error && <div className="alert alert-danger mb-3">{error}</div>}
 
           <Tab.Container defaultActiveKey={defaultTab ?? 'projects'}>
-            <div className="d-flex" style={{ minHeight: 460 }}>
-              {/* Vertical Nav */}
-              <Nav variant="pills" className="flex-column flex-shrink-0 me-3 border-end pe-3" style={{ minWidth: 160 }}>
+            <div className="d-flex flex-column flex-md-row" style={{ minHeight: 460 }}>
+              {/* Navigation */}
+              <Nav
+                variant="pills"
+                className="flex-column overflow-auto flex-shrink-0 mb-3 mb-md-0 pb-2 pb-md-0 me-0 me-md-3 pe-0 pe-md-3 ops-settings-nav"
+                style={{ minWidth: 160, maxWidth: '100%', gap: '0.25rem' }}
+              >
                 <Nav.Item>
                   <Nav.Link eventKey="projects">{t('settings.projects')}</Nav.Link>
                 </Nav.Item>

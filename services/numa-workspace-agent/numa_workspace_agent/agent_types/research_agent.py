@@ -42,8 +42,9 @@ RESEARCH_AGENT = AgentTypeConfig(
         # Shell
         "BashOutput",
         "KillShell",
-        # MCP tools — scripts only, no integrations
+        # MCP tools — scripts + numa, no integrations
         "mcp__scripts__execute_script",
+        "mcp__numa__numa_tool",  # Unified Numa tool dispatcher
         # NOTE: No mcp__integrations__* tools
         # Bash commands — same as chat
         "Bash(python:*)",
@@ -86,11 +87,12 @@ RESEARCH_AGENT = AgentTypeConfig(
         "Bash(pandoc:*)",  # Document format conversion
         "Bash(qpdf:*)",  # PDF manipulation (merge, split)
     ],
-    # Layer 2: Scripts MCP only, no integrations
+    # Layer 2: Scripts + Numa MCP, no integrations
     enable_scripts_mcp=True,
     enable_integrations_mcp=False,  # No integrations
-    # Layer 3: KB + web search only, no agents tool
-    enabled_numa_tools=["knowledge_search", "web_search"],
+    enable_numa_mcp=True,
+    # Layer 3: CLI tools (KB + web search migrated to MCP)
+    enabled_numa_tools=[],
     tools_source_dirs=["numa"],
     # Full plugins
     plugins_path="/app/plugins/numa",

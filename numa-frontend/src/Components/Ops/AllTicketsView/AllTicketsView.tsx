@@ -66,6 +66,8 @@ const DEFAULT_VISIBLE_KEYS = [
   'customerName',
 ];
 
+const MOBILE_KEEP_KEYS = ['displayId', 'title', 'stageId', 'dueDate'];
+
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
 function getDatePresetRange(preset: string): { start: Date; end: Date } {
@@ -198,7 +200,19 @@ export function AllTicketsView(): React.JSX.Element {
   const { t } = useTranslation('ops');
   const { user } = useAuth();
   const { numaGet, numaPut } = useNumaRequest();
-  const { config, tickets, ticketsLoading, refreshTickets, teamData, workUnits, selectedTeamId } = useOps();
+  const {
+    config,
+    tickets,
+    ticketsLoading,
+    refreshTickets,
+    teamData,
+    workUnits,
+    selectedTeamId,
+    teams,
+    selectTeam,
+    pendingSprintFilter,
+    setPendingSprintFilter,
+  } = useOps();
 
   // ── State ───────────────────────────────────────────────────────────────
   const [searchText, setSearchText] = useState('');
@@ -217,6 +231,14 @@ export function AllTicketsView(): React.JSX.Element {
   const [quickStatusFilter, setQuickStatusFilter] = useState<string[]>([]);
   const [quickSprintFilter, setQuickSprintFilter] = useState<string[]>([]);
   const [customerFilters, setCustomerFilters] = useState<CustomerFilterState>(EMPTY_CUSTOMER_FILTERS);
+
+  // Consume pending sprint filter from context (set by Finished Sprints dropdown)
+  useEffect(() => {
+    if (pendingSprintFilter) {
+      setQuickSprintFilter(pendingSprintFilter);
+      setPendingSprintFilter(null);
+    }
+  }, [pendingSprintFilter, setPendingSprintFilter]);
 
   // ── Customers (for CRM filter panel) ───────────────────────────────────
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -329,6 +351,10 @@ export function AllTicketsView(): React.JSX.Element {
   const ticketTypes = config?.ticketTypes ?? [];
   const staff = config?.staff ?? [];
   const projects = config?.projects ?? [];
+  const selectedTeamName = useMemo(
+    () => teams.find((tm) => tm.id === selectedTeamId)?.name ?? '',
+    [teams, selectedTeamId],
+  );
 
   // ── Column definitions ──────────────────────────────────────────────────
   const columns: ColumnDef[] = useMemo(
@@ -381,7 +407,11 @@ export function AllTicketsView(): React.JSX.Element {
         label: t('tickets.sprint'),
         sortable: true,
         filterType: 'enum',
-        filterOptions: () => workUnits.map((wu) => ({ value: wu.id, label: wu.name })),
+        filterOptions: () =>
+          workUnits.map((wu) => ({
+            value: wu.id,
+            label: selectedTeamName ? `${selectedTeamName} — ${wu.name}` : wu.name,
+          })),
         accessor: (tk) => {
           const wu = workUnits.find((w) => w.id === tk.workUnitId);
           return wu?.name ?? '';
@@ -505,7 +535,7 @@ export function AllTicketsView(): React.JSX.Element {
         render: (tk) => tk.reporterName || <span className="text-muted">{t('fields.unknown')}</span>,
       },
     ],
-    [t, ticketTypes, teamData?.stages, staff, workUnits, projects],
+    [t, ticketTypes, teamData?.stages, staff, workUnits, projects, selectedTeamName],
   );
 
   // ── Visible columns (ordered) ─────────────────────────────────────────
@@ -882,7 +912,7 @@ export function AllTicketsView(): React.JSX.Element {
         style={{ border: '1px solid #e0e0e0', borderRadius: 12, minHeight: 0 }}
       >
         {/* ── Toolbar ────────────────────────────────────────────────────── */}
-        <div className="d-flex align-items-center gap-3 px-3 py-2 border-bottom bg-white">
+        <div className="d-flex align-items-center flex-wrap gap-2 gap-md-3 px-3 py-2 border-bottom bg-white">
           {/* Search input */}
           <div className="position-relative" style={{ width: 280 }}>
             <i
@@ -904,6 +934,32 @@ export function AllTicketsView(): React.JSX.Element {
             />
           </div>
 
+          {/* Team selector */}
+          {teams.length > 1 && (
+            <div className="position-relative d-inline-block">
+              <select
+                className="form-select form-select-sm"
+                style={{
+                  backgroundColor: '#f8f9fa',
+                  border: '1px solid #dee2e6',
+                  borderRadius: 8,
+                  color: '#495057',
+                  fontSize: '0.82rem',
+                  paddingRight: 28,
+                  minWidth: 140,
+                }}
+                value={selectedTeamId ?? ''}
+                onChange={(e) => selectTeam(e.target.value)}
+              >
+                {teams.map((tm) => (
+                  <option key={tm.id} value={tm.id}>
+                    {tm.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
           {/* Quick-filter: All Status */}
           <QuickFilterDropdown
             label={t('allTicketsView.allStatus')}
@@ -915,7 +971,10 @@ export function AllTicketsView(): React.JSX.Element {
           {/* Quick-filter: All Sprints */}
           <QuickFilterDropdown
             label={t('allTicketsView.allSprints')}
-            options={workUnits.map((wu) => ({ value: wu.id, label: wu.name }))}
+            options={workUnits.map((wu) => ({
+              value: wu.id,
+              label: selectedTeamName ? `${selectedTeamName} — ${wu.name}` : wu.name,
+            }))}
             selected={quickSprintFilter}
             onChange={setQuickSprintFilter}
           />
@@ -1129,6 +1188,7 @@ export function AllTicketsView(): React.JSX.Element {
                   {visibleColumns.map((col) => (
                     <th
                       key={col.key}
+                      className={MOBILE_KEEP_KEYS.includes(col.key) ? '' : 'd-none d-lg-table-cell'}
                       style={{
                         whiteSpace: 'nowrap',
                         padding: '0.6rem 0.75rem',
@@ -1180,7 +1240,11 @@ export function AllTicketsView(): React.JSX.Element {
                         />
                       </td>
                       {visibleColumns.map((col) => (
-                        <td key={col.key} style={{ padding: '0.75rem 0.75rem' }}>
+                        <td
+                          key={col.key}
+                          className={MOBILE_KEEP_KEYS.includes(col.key) ? '' : 'd-none d-lg-table-cell'}
+                          style={{ padding: '0.75rem 0.75rem' }}
+                        >
                           {col.render ? col.render(ticket) : String(col.accessor(ticket) ?? '-')}
                         </td>
                       ))}

@@ -68,9 +68,20 @@ export const WorkspaceChatHistoryPanel = forwardRef<WorkspaceChatHistoryPanelRef
         const sorted = [...metaItems].sort((a, b) => b.latestTimestamp - a.latestTimestamp);
         setConversations(sorted);
         setLocalError(null);
-      } catch (error) {
-        console.error('Error fetching conversations for workspace history panel:', error);
-        setLocalError(t('history.loadFailed'));
+      } catch (firstError) {
+        console.warn('First attempt to fetch history failed, retrying in 1.5s...', firstError);
+        // Wait 1.5s to give the AWS SDK time to resolve fresh STS credentials
+        await new Promise((resolve) => setTimeout(resolve, 1500));
+        try {
+          const userId = sub || 'anonymous';
+          const metaItems = (await numaChatDynamoUtils.getUserConversationsMeta(userId)) as ConversationMeta[];
+          const sorted = [...metaItems].sort((a, b) => b.latestTimestamp - a.latestTimestamp);
+          setConversations(sorted);
+          setLocalError(null);
+        } catch (retryError) {
+          console.error('Retry also failed for workspace history panel:', retryError);
+          setLocalError(t('history.loadFailed'));
+        }
       } finally {
         setIsLoading(false);
       }

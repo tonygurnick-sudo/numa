@@ -13,8 +13,6 @@ import {
   OverlayTrigger,
   Tooltip,
 } from 'react-bootstrap';
-import { LambdaClient } from '@aws-sdk/client-lambda';
-import { fromWebToken } from '@aws-sdk/credential-providers';
 import { Database, Lightbulb, Search, Robot, Clock } from 'react-bootstrap-icons';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../../Providers/AuthProvider';
@@ -37,7 +35,6 @@ import { AdminAgentsService, type AgentsMode } from '../../Services/AdminAgentsS
 import { PipedreamProxyService } from '../../Services/PipedreamProxyService';
 import { getConnectionConfig } from '../../config/integrationsConfig';
 import { downloadAgentExport, parseAgentImport, serializeAgentPayloadToExport } from '../../utils/agentExport';
-import { withPRM } from '../../utils/prmUtils';
 
 type AgentCreateModalProps = {
   show: boolean;
@@ -94,7 +91,7 @@ export const AgentCreateModal = ({
   onScheduleChange,
 }: AgentCreateModalProps) => {
   const { t } = useTranslation('agents');
-  const { user } = useAuth();
+  const { user, lambdaClient } = useAuth();
   const { numaGet, numaPost, numaPut, numaDelete } = useNumaRequest();
   const schedulingEnabled =
     typeof window !== 'undefined' ? window.sessionStorage.getItem('SCHEDULING') === 'true' : false;
@@ -242,58 +239,43 @@ export const AgentCreateModal = ({
         const connectedSet = new Set<string>();
 
         // Try to get connected integrations from Pipedream
-        if (relayLambdaArn && user && REGION) {
+        if (relayLambdaArn && user && lambdaClient) {
           try {
-            const userGroups = window.sessionStorage.getItem('GROUPS');
-            const groupConfig = userGroups ? JSON.parse(userGroups) : {};
-            const userGroup = user.decoded_tokens?.idToken?.['cognito:groups']?.[0] || 'standard';
-            const roleArn = groupConfig?.[userGroup]?.roleArn;
-            const cognitoUserId = user.decoded_tokens?.idToken?.sub;
-            const idTokenValue = user.tokens?.idToken;
+            const externalUserId = PipedreamProxyService.deriveExternalUserId(user);
 
-            if (roleArn && cognitoUserId && idTokenValue) {
-              const credentials = fromWebToken({
-                webIdentityToken: idTokenValue,
-                roleArn,
-                roleSessionName: cognitoUserId,
-              });
-              const lambdaClient = withPRM(LambdaClient, { region: REGION, credentials });
-              const externalUserId = PipedreamProxyService.deriveExternalUserId(user);
+            const status = await PipedreamProxyService.getIntegrationStatus(lambdaClient, externalUserId, {
+              ttlMs: 30 * 60 * 1000, // cache for 30 minutes (refresh button or connect/disconnect invalidates)
+            });
 
-              const status = await PipedreamProxyService.getIntegrationStatus(lambdaClient, externalUserId, {
-                ttlMs: 30 * 60 * 1000, // cache for 30 minutes (refresh button or connect/disconnect invalidates)
-              });
+            const connectedAppNames = new Set(status.connected_apps || []);
+            const rawConnections = Array.isArray(status.connections) ? status.connections : [];
 
-              const connectedAppNames = new Set(status.connected_apps || []);
-              const rawConnections = Array.isArray(status.connections) ? status.connections : [];
+            // Parse connected apps
+            rawConnections.forEach((conn: Record<string, unknown>) => {
+              const appId =
+                (conn.app_name as string) ||
+                (conn.integration as string) ||
+                (conn.app as string) ||
+                (conn.id as string) ||
+                '';
+              if (!appId) return;
+              const statusValue =
+                (
+                  (conn.status as string) ||
+                  (conn.connection_status as string) ||
+                  (conn.state as string) ||
+                  (conn.connectionStatus as string) ||
+                  ''
+                )?.toLowerCase?.() ?? '';
+              const isConnected =
+                Boolean(conn.isConnected) || statusValue === 'connected' || connectedAppNames.has(appId);
+              if (isConnected) {
+                connectedSet.add(appId);
+              }
+            });
 
-              // Parse connected apps
-              rawConnections.forEach((conn: Record<string, unknown>) => {
-                const appId =
-                  (conn.app_name as string) ||
-                  (conn.integration as string) ||
-                  (conn.app as string) ||
-                  (conn.id as string) ||
-                  '';
-                if (!appId) return;
-                const statusValue =
-                  (
-                    (conn.status as string) ||
-                    (conn.connection_status as string) ||
-                    (conn.state as string) ||
-                    (conn.connectionStatus as string) ||
-                    ''
-                  )?.toLowerCase?.() ?? '';
-                const isConnected =
-                  Boolean(conn.isConnected) || statusValue === 'connected' || connectedAppNames.has(appId);
-                if (isConnected) {
-                  connectedSet.add(appId);
-                }
-              });
-
-              // Add any apps from connected_apps that weren't in connections array
-              connectedAppNames.forEach((name) => connectedSet.add(name));
-            }
+            // Add any apps from connected_apps that weren't in connections array
+            connectedAppNames.forEach((name) => connectedSet.add(name));
           } catch (err) {
             console.warn('AgentCreateModal: failed to fetch connected integrations, showing all as unconnected', err);
           }
@@ -327,7 +309,7 @@ export const AgentCreateModal = ({
     return () => {
       cancelled = true;
     };
-  }, [REGION, hasPipedreamIntegrations, integrationSettings, relayLambdaArn, show, user]);
+  }, [REGION, hasPipedreamIntegrations, integrationSettings, lambdaClient, relayLambdaArn, show, user]);
 
   useEffect(() => {
     // Load agents policy when modal opens
@@ -335,7 +317,7 @@ export const AgentCreateModal = ({
     if (show) {
       (async () => {
         try {
-          const res = await AdminAgentsService.get();
+          const res = await AdminAgentsService.get(numaGet);
           if (!cancelled) setAgentsMode(res.mode);
         } catch {
           if (!cancelled) setAgentsMode('full');

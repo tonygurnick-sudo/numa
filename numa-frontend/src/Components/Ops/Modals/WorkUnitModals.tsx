@@ -1,9 +1,110 @@
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { Modal, Button, Form } from 'react-bootstrap';
 import { useTranslation } from 'react-i18next';
 import { useNumaRequest } from '../../../Providers/NumaRequestContext';
 import * as OpsService from '../../../Services/OpsService';
 import type { WorkUnit, Ticket, WorkZone } from '../../../types/ops';
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// CreateWorkUnitModal
+// ═══════════════════════════════════════════════════════════════════════════════
+
+interface CreateWorkUnitModalProps {
+  show: boolean;
+  teamId: string;
+  defaultName: string;
+  onHide: () => void;
+  onCreated: () => void;
+}
+
+export function CreateWorkUnitModal({
+  show,
+  teamId,
+  defaultName,
+  onHide,
+  onCreated,
+}: CreateWorkUnitModalProps): React.JSX.Element {
+  const { t } = useTranslation('ops');
+  const { numaPost } = useNumaRequest();
+
+  const [name, setName] = useState('');
+  const [goal, setGoal] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Reset form when modal opens
+  const handleShow = useCallback(() => {
+    setName(defaultName);
+    setGoal('');
+    setError(null);
+  }, [defaultName]);
+
+  const handleCreate = useCallback(async () => {
+    if (!name.trim()) return;
+    try {
+      setSaving(true);
+      setError(null);
+      await OpsService.createWorkUnit(numaPost, teamId, {
+        name: name.trim(),
+        status: 'planning',
+        goal: goal.trim() || null,
+      });
+      onCreated();
+    } catch (err) {
+      setError(t('errors.saveFailed', { message: String(err) }));
+    } finally {
+      setSaving(false);
+    }
+  }, [name, goal, teamId, numaPost, onCreated, t]);
+
+  return (
+    <Modal show={show} onHide={onHide} onShow={handleShow} centered>
+      <Modal.Header closeButton>
+        <Modal.Title>{t('sprints.createTitle')}</Modal.Title>
+      </Modal.Header>
+
+      <Modal.Body>
+        {error && <div className="alert alert-danger mb-3">{error}</div>}
+
+        <Form.Group className="mb-3">
+          <Form.Label>{t('sprints.createName')}</Form.Label>
+          <Form.Control
+            type="text"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder={t('sprints.createNamePlaceholder')}
+            autoFocus
+          />
+        </Form.Group>
+
+        <Form.Group className="mb-3">
+          <Form.Label>{t('sprints.createGoal')}</Form.Label>
+          <Form.Control
+            as="textarea"
+            rows={2}
+            value={goal}
+            onChange={(e) => setGoal(e.target.value)}
+            placeholder={t('sprints.createGoalPlaceholder')}
+          />
+        </Form.Group>
+
+        <div className="alert alert-info mb-0 small">
+          <i className="bi bi-info-circle me-1" />
+          {t('sprints.createBacklogNote')}
+        </div>
+      </Modal.Body>
+
+      <Modal.Footer>
+        <Button variant="secondary" onClick={onHide}>
+          {t('common.cancel')}
+        </Button>
+        <Button variant="primary" disabled={!name.trim() || saving} onClick={handleCreate}>
+          {saving ? t('common.loading') : t('sprints.create')}
+        </Button>
+      </Modal.Footer>
+    </Modal>
+  );
+}
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // StartWorkUnitModal
@@ -15,6 +116,7 @@ interface StartWorkUnitModalProps {
   teamId: string;
   tickets: Ticket[];
   zones: WorkZone[];
+  preselectedId?: string | null;
   onHide: () => void;
   onStarted: () => void;
 }
@@ -25,6 +127,7 @@ export function StartWorkUnitModal({
   teamId,
   tickets,
   zones,
+  preselectedId,
   onHide,
   onStarted,
 }: StartWorkUnitModalProps): React.JSX.Element {
@@ -32,12 +135,69 @@ export function StartWorkUnitModal({
   const { numaPut } = useNumaRequest();
 
   const [selectedId, setSelectedId] = useState('');
+  const [sprintName, setSprintName] = useState('');
+  const [durationWeeks, setDurationWeeks] = useState(2);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const planningUnits = useMemo(() => workUnits.filter((wu) => wu.status === 'planning'), [workUnits]);
 
   const hasActiveUnit = useMemo(() => workUnits.some((wu) => wu.status === 'active'), [workUnits]);
+
+  // Auto-select when modal opens with a preselected sprint
+  useEffect(() => {
+    if (show && preselectedId) {
+      const wu = planningUnits.find((u) => u.id === preselectedId);
+      if (wu) {
+        setSelectedId(wu.id);
+        setSprintName(wu.name);
+      }
+    }
+    if (!show) {
+      setSelectedId('');
+      setSprintName('');
+      setDurationWeeks(2);
+      setError(null);
+    }
+  }, [show, preselectedId, planningUnits]);
+
+  // When a sprint is selected, populate its name
+  const selectedUnit = useMemo(
+    () => planningUnits.find((wu) => wu.id === selectedId) ?? null,
+    [planningUnits, selectedId],
+  );
+  const handleSelectSprint = useCallback(
+    (id: string) => {
+      setSelectedId(id);
+      const wu = planningUnits.find((u) => u.id === id);
+      if (wu) setSprintName(wu.name);
+    },
+    [planningUnits],
+  );
+
+  // Computed dates
+  const startDate = useMemo(() => {
+    const d = new Date();
+    return d.toISOString().split('T')[0];
+  }, []);
+
+  const endDate = useMemo(() => {
+    const d = new Date();
+    d.setDate(d.getDate() + durationWeeks * 7);
+    return d.toISOString().split('T')[0];
+  }, [durationWeeks]);
+
+  const formatDateDisplay = (iso: string): string => {
+    try {
+      return new Date(iso + 'T00:00:00').toLocaleDateString(undefined, {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+      });
+    } catch {
+      return iso;
+    }
+  };
 
   /** Count of backlog tickets that will be moved when this sprint starts */
   const backlogTicketCount = useMemo(() => {
@@ -51,17 +211,23 @@ export function StartWorkUnitModal({
     try {
       setSaving(true);
       setError(null);
+      // Update name (if changed) and set dates + status
       await OpsService.updateWorkUnit(numaPut, teamId, selectedId, {
         status: 'active',
+        name: sprintName.trim() || selectedUnit?.name,
+        startDate,
+        endDate,
       });
       setSelectedId('');
+      setSprintName('');
+      setDurationWeeks(2);
       onStarted();
     } catch (err) {
       setError(t('errors.saveFailed', { message: String(err) }));
     } finally {
       setSaving(false);
     }
-  }, [selectedId, teamId, numaPut, onStarted, t]);
+  }, [selectedId, sprintName, selectedUnit, startDate, endDate, teamId, numaPut, onStarted, t]);
 
   return (
     <Modal show={show} onHide={onHide} centered>
@@ -76,7 +242,7 @@ export function StartWorkUnitModal({
 
         <Form.Group className="mb-3">
           <Form.Label>{t('sprints.selectWorkUnit')}</Form.Label>
-          <Form.Select value={selectedId} onChange={(e) => setSelectedId(e.target.value)} disabled={hasActiveUnit}>
+          <Form.Select value={selectedId} onChange={(e) => handleSelectSprint(e.target.value)} disabled={hasActiveUnit}>
             <option value="">{t('common.selectOption')}</option>
             {planningUnits.map((wu) => (
               <option key={wu.id} value={wu.id}>
@@ -86,12 +252,44 @@ export function StartWorkUnitModal({
           </Form.Select>
         </Form.Group>
 
-        {selectedId && backlogTicketCount > 0 && (
-          <div className="alert alert-info mb-0">{t('sprints.startConfirmMessage', { count: backlogTicketCount })}</div>
-        )}
+        {selectedId && (
+          <>
+            <Form.Group className="mb-3">
+              <Form.Label>{t('sprints.sprintName')}</Form.Label>
+              <Form.Control type="text" value={sprintName} onChange={(e) => setSprintName(e.target.value)} />
+            </Form.Group>
 
-        {selectedId && backlogTicketCount === 0 && (
-          <p className="text-muted small mb-0">{t('sprints.noTicketsToMove')}</p>
+            <Form.Group className="mb-3">
+              <Form.Label>{t('sprints.duration')}</Form.Label>
+              <div className="d-flex align-items-center gap-2">
+                <Form.Control
+                  type="number"
+                  min={1}
+                  max={52}
+                  value={durationWeeks}
+                  onChange={(e) => setDurationWeeks(Math.max(1, parseInt(e.target.value) || 1))}
+                  style={{ width: 80 }}
+                />
+                <span className="text-muted">{t('sprints.weeks')}</span>
+              </div>
+            </Form.Group>
+
+            <div className="small text-muted mb-3">
+              <i className="bi bi-calendar3 me-1" />
+              {t('sprints.dateRange', {
+                start: formatDateDisplay(startDate),
+                end: formatDateDisplay(endDate),
+              })}
+            </div>
+
+            {backlogTicketCount > 0 && (
+              <div className="alert alert-info mb-0">
+                {t('sprints.startConfirmMessage', { count: backlogTicketCount })}
+              </div>
+            )}
+
+            {backlogTicketCount === 0 && <p className="text-muted small mb-0">{t('sprints.noTicketsToMove')}</p>}
+          </>
         )}
       </Modal.Body>
 
@@ -114,8 +312,10 @@ export function StartWorkUnitModal({
 interface CompleteWorkUnitModalProps {
   show: boolean;
   workUnit: WorkUnit | null;
+  workUnits: WorkUnit[];
   teamId: string;
   incompleteCount: number;
+  completedCount: number;
   onHide: () => void;
   onCompleted: () => void;
 }
@@ -123,17 +323,22 @@ interface CompleteWorkUnitModalProps {
 export function CompleteWorkUnitModal({
   show,
   workUnit,
+  workUnits,
   teamId,
   incompleteCount,
+  completedCount,
   onHide,
   onCompleted,
 }: CompleteWorkUnitModalProps): React.JSX.Element {
   const { t } = useTranslation('ops');
   const { numaPut } = useNumaRequest();
 
-  const [rolloverChoice, setRolloverChoice] = useState<'next' | 'backlog'>('backlog');
+  const [rolloverChoice, setRolloverChoice] = useState<'backlog' | 'sprint'>('backlog');
+  const [selectedTargetId, setSelectedTargetId] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const planningUnits = useMemo(() => workUnits.filter((wu) => wu.status === 'planning'), [workUnits]);
 
   const handleComplete = useCallback(async () => {
     if (!workUnit) return;
@@ -145,14 +350,8 @@ export function CompleteWorkUnitModal({
         status: 'completed',
       };
 
-      // If user chooses to move to next sprint, we send undefined for
-      // rolloverToWorkUnitId — the backend will resolve the next WU.
-      // If they choose backlog, we also omit it so tickets go to backlog.
-      if (rolloverChoice === 'next') {
-        // The backend interprets a truthy rolloverToWorkUnitId as "move
-        // incomplete tickets to that work unit". Sending 'next' as a
-        // sentinel tells the backend to find the next planning unit.
-        payload.rolloverToWorkUnitId = 'next';
+      if (rolloverChoice === 'sprint' && selectedTargetId) {
+        payload.rolloverToWorkUnitId = selectedTargetId;
       }
 
       await OpsService.updateWorkUnit(numaPut, teamId, workUnit.id, payload);
@@ -162,7 +361,7 @@ export function CompleteWorkUnitModal({
     } finally {
       setSaving(false);
     }
-  }, [workUnit, teamId, rolloverChoice, numaPut, onCompleted, t]);
+  }, [workUnit, teamId, rolloverChoice, selectedTargetId, numaPut, onCompleted, t]);
 
   if (!workUnit) return <></>;
 
@@ -175,20 +374,16 @@ export function CompleteWorkUnitModal({
       <Modal.Body>
         {error && <div className="alert alert-danger mb-3">{error}</div>}
 
-        <p className="fw-medium mb-3">{workUnit.name}</p>
+        <p className="fw-medium mb-2">{workUnit.name}</p>
+
+        {/* Ticket summary */}
+        <p className="text-muted small mb-3">
+          {t('sprints.completionSummary', { done: completedCount, incomplete: incompleteCount })}
+        </p>
 
         {incompleteCount > 0 && (
           <>
             <p className="text-muted mb-2">{t('sprints.incompleteTickets')}</p>
-            <Form.Check
-              type="radio"
-              id="rollover-next"
-              name="rolloverChoice"
-              label={t('sprints.moveToNext')}
-              checked={rolloverChoice === 'next'}
-              onChange={() => setRolloverChoice('next')}
-              className="mb-2"
-            />
             <Form.Check
               type="radio"
               id="rollover-backlog"
@@ -198,6 +393,35 @@ export function CompleteWorkUnitModal({
               onChange={() => setRolloverChoice('backlog')}
               className="mb-2"
             />
+            <Form.Check
+              type="radio"
+              id="rollover-sprint"
+              name="rolloverChoice"
+              label={t('sprints.moveToSprint')}
+              checked={rolloverChoice === 'sprint'}
+              onChange={() => setRolloverChoice('sprint')}
+              disabled={planningUnits.length === 0}
+              className="mb-2"
+            />
+            {rolloverChoice === 'sprint' && planningUnits.length > 0 && (
+              <Form.Select
+                size="sm"
+                className="ms-4 mb-2"
+                style={{ width: 'auto' }}
+                value={selectedTargetId}
+                onChange={(e) => setSelectedTargetId(e.target.value)}
+              >
+                <option value="">{t('sprints.selectTargetSprint')}</option>
+                {planningUnits.map((wu) => (
+                  <option key={wu.id} value={wu.id}>
+                    {wu.name}
+                  </option>
+                ))}
+              </Form.Select>
+            )}
+            {planningUnits.length === 0 && (
+              <p className="text-muted small ms-4 mb-2">{t('sprints.noPlanningSprints')}</p>
+            )}
           </>
         )}
       </Modal.Body>
@@ -206,7 +430,11 @@ export function CompleteWorkUnitModal({
         <Button variant="secondary" onClick={onHide}>
           {t('common.cancel')}
         </Button>
-        <Button variant="warning" disabled={saving} onClick={handleComplete}>
+        <Button
+          variant="warning"
+          disabled={saving || (incompleteCount > 0 && rolloverChoice === 'sprint' && !selectedTargetId)}
+          onClick={handleComplete}
+        >
           {saving ? t('common.loading') : t('sprints.complete')}
         </Button>
       </Modal.Footer>

@@ -1,7 +1,12 @@
 /**
  * @vitest-environment jsdom
  */
-import { setupAwsMocks, mockCognitoIdentityProviderClient } from '../Mocks/AwsMock';
+import {
+  setupAwsMocks,
+  mockCognitoIdentityProviderClient,
+  mockQBusinessClient,
+  mockQAppsClient,
+} from '../Mocks/AwsMock';
 
 import React from 'react';
 import { render, act } from '@testing-library/react';
@@ -10,7 +15,6 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import '@testing-library/jest-dom';
 import { AuthProvider, useAuth, TestAuthProvider } from '../../Providers/AuthProvider';
 import { authTestTokens } from '../Fixtures/AuthTestTokens';
-import { fromWebToken } from '@aws-sdk/credential-providers';
 
 // Mock cognito-srp-helper for MFA tests (SRP flow must complete before MFA challenges)
 vi.mock('cognito-srp-helper', () => ({
@@ -356,17 +360,13 @@ describe('AuthProvider', () => {
         }),
       );
 
-      // Verify localStorage was updated with new tokens
+      // Verify localStorage was updated with new tokens — this is the authoritative
+      // store. User state is intentionally NOT updated when only tokens change
+      // (groups/features unchanged) to prevent cascading re-renders.
+      // Consumers use getAccessToken()/getIdToken() which read from tokensRef,
+      // kept in sync with localStorage by refreshTokens().
       expect(window.localStorage.setItem).toHaveBeenCalledWith('accessToken', TEST_TOKENS.valid.accessToken);
       expect(window.localStorage.setItem).toHaveBeenCalledWith('idToken', TEST_TOKENS.valid.idToken);
-
-      // Wait for the user state to be updated with new tokens after refresh
-      await waitFor(() => {
-        const updatedAuth = onAuth.mock.calls[onAuth.mock.calls.length - 1][0];
-        const userInfo = updatedAuth.getUserInfo();
-        // Verify that user info now contains the new valid tokens
-        expect(userInfo.tokens.accessToken).toBe(TEST_TOKENS.valid.accessToken);
-      });
     });
 
     it('should handle logout correctly', async () => {
@@ -651,8 +651,9 @@ describe('AuthProvider', () => {
         }
       });
 
-      // Mock the credential provider to throw an error
-      vi.mocked(fromWebToken).mockImplementationOnce(() => {
+      // Mock the QBusinessClient constructor to throw - credentials are now lazy
+      // so fromWebToken is only called at request time, not during initialization
+      mockQBusinessClient.QBusinessClient.mockImplementationOnce(() => {
         throw new Error('Failed to initialize QBusinessClient');
       });
 
@@ -699,16 +700,11 @@ describe('AuthProvider', () => {
         }
       });
 
-      // First call succeeds (QBusinessClient), second call fails (QAppsClient)
-      vi.mocked(fromWebToken)
-        .mockImplementationOnce(() => async () => ({
-          accessKeyId: 'mock-access-key',
-          secretAccessKey: 'mock-secret-key',
-          sessionToken: 'mock-session-token',
-        }))
-        .mockImplementationOnce(() => {
-          throw new Error('Failed to initialize QAppsClient');
-        });
+      // Mock the QAppsClient constructor to throw - credentials are now lazy
+      // so fromWebToken is only called at request time, not during initialization
+      mockQAppsClient.QAppsClient.mockImplementationOnce(() => {
+        throw new Error('Failed to initialize QAppsClient');
+      });
 
       const onAuth = vi.fn();
       render(

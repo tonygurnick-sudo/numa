@@ -476,6 +476,11 @@
     "agentCreation": "Agent Creation",
     "dataAnalysis": "Data Analysis",
     "integration": "Integration",
+    "numaTool": "Numa Tool",
+    "extractContent": "Extract Content",
+    "convertDocument": "Convert Document",
+    "agents": "Agents",
+    "memories": "Memories",
     "unknown": "Unknown Tool"
   },
   "toolSteps": {
@@ -491,6 +496,9 @@
       "calling": "Making a tool call to Data Analysis...",
       "analyzingFiles": "Analyzing data file(s): {{files}}...",
       "running": "Running data analysis..."
+    },
+    "numaTool": {
+      "running": "Running Numa tool..."
     },
     "integration": {
       "actionFallback": "Executing action",

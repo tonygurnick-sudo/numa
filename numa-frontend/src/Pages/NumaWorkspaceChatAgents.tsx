@@ -2,8 +2,6 @@ import { useState, useRef, useEffect, useMemo, useCallback, type ReactNode, type
 import { Button, Alert, Modal } from 'react-bootstrap';
 import { Bot, Clock, Plus, Settings } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { LambdaClient } from '@aws-sdk/client-lambda';
-import { fromWebToken } from '@aws-sdk/credential-providers';
 import { useAuth } from '../Providers/AuthProvider';
 import { LayoutDashboard } from '../Layouts/LayoutDashboard';
 import { PageHeader } from '../Components/PageHeader';
@@ -40,7 +38,6 @@ import type { QuickActionConfig } from '../config/quickActionsConfig';
 import { sortAgentsByPriority } from '../utils/agentSortingUtils';
 import { AdminAgentsService, type AgentsMode } from '../Services/AdminAgentsService';
 import { ChatSettingsService, type ChatSettings, DEFAULT_CHAT_SETTINGS } from '../Services/ChatSettingsService';
-import { withPRM } from '../utils/prmUtils';
 // Workspace chat mode imports
 import { getWorkspaceChatRawTrace } from '../Services/workspaceChatAgentService';
 import { parseRawTraceToMessages } from '../utils/workspaceChatEventHandlers';
@@ -112,7 +109,6 @@ const NumaWorkspaceChatAgents = () => {
   const [autoToolsEnabled, setAutoToolsEnabled] = useState(true); // Default to auto mode
   const [buttonStatus, setButtonStatus] = useState('idle');
   const [isFileProcessing, _setIsFileProcessing] = useState(false);
-  const [lambdaClient, setLambdaClient] = useState<LambdaClient | null>(null);
   const [isManuallyLoading, setIsManuallyLoading] = useState(false);
   const [currentAgent, setCurrentAgent] = useState<AgentSummary | null>(null);
   const [pendingAgent, setPendingAgent] = useState<AgentSummary | null>(null);
@@ -240,7 +236,7 @@ const NumaWorkspaceChatAgents = () => {
   } = filePreviewProcessor;
   const { setCurrentAbort, resetStreamingState } = streamingHandler;
 
-  const { user, bedrockRuntimeClient, numaChatDynamoUtils, getAccessToken, getCredentials } = useAuth();
+  const { user, bedrockRuntimeClient, numaChatDynamoUtils, getAccessToken, getCredentials, lambdaClient } = useAuth();
   // Extract user info from token early (used by hooks/deps below)
   const idToken = user?.decoded_tokens?.idToken ?? {};
   const sub = idToken.sub;
@@ -820,48 +816,13 @@ const NumaWorkspaceChatAgents = () => {
     }
   }, [user, hasPipedreamFeature, relayLambdaArn]);
 
-  // Initialize AWS Lambda client (cross-account) if feature enabled
+  // Clear connections state when Pipedream feature is not enabled
   useEffect(() => {
-    const init = async () => {
-      if (!user) return;
-      if (!hasPipedreamFeature) {
-        setConnectionsLoading(false);
-        setAvailableConnections([]);
-        return;
-      }
-      if (!relayLambdaArn) {
-        console.error('Pipedream feature enabled but Lambda ARN not configured');
-        setConnectionsLoading(false);
-        setAvailableConnections([]);
-        return;
-      }
-      try {
-        const GROUPS = JSON.parse(window.sessionStorage.getItem('GROUPS') || '{}');
-        const userGroup = user.decoded_tokens?.idToken?.['cognito:groups']?.[0] || 'standard';
-        const roleArn = GROUPS[userGroup]?.roleArn;
-        const cognitoUserId = user.decoded_tokens?.idToken?.sub;
-        if (!roleArn) {
-          console.error('No role ARN found for user group:', userGroup);
-          setConnectionsLoading(false);
-          setAvailableConnections([]);
-          return;
-        }
-        const credentials = fromWebToken({
-          webIdentityToken: user.tokens.idToken,
-          roleArn,
-          roleSessionName: cognitoUserId,
-        });
-        const client = withPRM(LambdaClient, { region: REGION, credentials });
-        setLambdaClient(client);
-        console.log('Lambda client initialized successfully for Pipedream relay');
-      } catch (e) {
-        console.error('Error initializing Lambda client:', e);
-        setConnectionsLoading(false);
-        setAvailableConnections([]);
-      }
-    };
-    init();
-  }, [user, REGION, hasPipedreamFeature, relayLambdaArn]);
+    if (!user || !hasPipedreamFeature || !relayLambdaArn) {
+      setConnectionsLoading(false);
+      setAvailableConnections([]);
+    }
+  }, [user, hasPipedreamFeature, relayLambdaArn]);
 
   // When a preselected agent is queued, start the session once connections have loaded
   useEffect(() => {
@@ -963,7 +924,7 @@ const NumaWorkspaceChatAgents = () => {
   };
 
   useEffect(() => {
-    if (lambdaClient) loadConnectionStatus();
+    if (lambdaClient && hasPipedreamFeature && relayLambdaArn) loadConnectionStatus();
   }, [lambdaClient]);
 
   // Ref for input textarea
@@ -1083,14 +1044,7 @@ const NumaWorkspaceChatAgents = () => {
     ) {
       // Read isWorkspaceConversation from sessionStorage for auto-load (per-tab)
       const storedIsWorkspace = sessionStorage.getItem('isWorkspaceConversation-v2') !== 'false';
-      console.log('[NumaChat] Auto-loading conversation:', conversationId, 'isWorkspace:', storedIsWorkspace);
       handleLoadConversation(conversationId, storedIsWorkspace);
-    } else if (conversationId && hasUserStartedNewChat) {
-      console.log('[NumaChat] Skipping auto-load for just-created conversation:', conversationId);
-    } else if (conversationId && messages.length > 0) {
-      console.log('[NumaChat] Skipping auto-load because messages already exist:', messages.length);
-    } else if (conversationId && isManuallyLoading) {
-      console.log('[NumaChat] Skipping auto-load because manual loading is in progress:', conversationId);
     }
   }, [conversationId, numaChatDynamoUtils, sub, hasUserStartedNewChat, messages.length, isManuallyLoading]);
 
@@ -1121,22 +1075,13 @@ const NumaWorkspaceChatAgents = () => {
   // Receives conversationId as parameter from hook to avoid stale closure issues
   const handleAutoNaming = useCallback(
     async (streamConversationId: string) => {
-      console.log('[WorkspaceChat] handleAutoNaming called with:', streamConversationId);
       const cid = streamConversationId;
-      console.log('[WorkspaceChat] Auto-naming check:', {
-        cid,
-        hasBedrock: !!bedrockRuntimeClient,
-        hasDynamo: !!numaChatDynamoUtils,
-        sub,
-      });
       if (!bedrockRuntimeClient || !numaChatDynamoUtils || !sub || !cid) {
-        console.log('[WorkspaceChat] Auto-naming skipped - missing dependencies');
         return;
       }
 
       // Prevent duplicate auto-naming for same conversation
       if (autoNamingAttemptedRef.current.has(cid)) {
-        console.log('[WorkspaceChat] Auto-naming already attempted for this conversation, skipping');
         return;
       }
 
@@ -1504,8 +1449,6 @@ const NumaWorkspaceChatAgents = () => {
     const clientName = window.sessionStorage.getItem('CLIENT_NAME');
     const modelType = isInFallbackMode(clientName) ? MODEL_TYPES.FALLBACK : MODEL_TYPES.DEFAULT;
     const modelId = getModelId(REGION, modelType);
-    console.log('[NumaChat] Using model:', modelId, 'fallback mode:', isInFallbackMode(clientName));
-
     // Determine which tools to enable based on auto mode or manual selection
     const enabledTools = getEnabledTools(
       autoToolsEnabled,
@@ -1555,7 +1498,7 @@ const NumaWorkspaceChatAgents = () => {
 
     // Prepare user authentication context for the Lambda
     const userAuth = {
-      idToken: user?.tokens?.idToken || localStorage.getItem('idToken'),
+      idToken: localStorage.getItem('idToken'),
       email: idToken.email,
       sub: sub,
       groups: user?.decoded_tokens?.idToken?.['cognito:groups'] || [],
@@ -1578,7 +1521,6 @@ const NumaWorkspaceChatAgents = () => {
 
     // Prevent duplicate submissions (React StrictMode protection) - check FIRST
     if (isProcessingRef.current) {
-      console.log('[NumaChat] Ignoring duplicate handleSubmit call');
       return;
     }
     isProcessingRef.current = true;
@@ -1715,8 +1657,6 @@ const NumaWorkspaceChatAgents = () => {
         }
       }
 
-      console.log('[NumaChat] Sending minimal payload - backend will load conversation history');
-
       const { enabledTools } = configureAgentCall(
         autoToolsEnabled,
         webSearchEnabled,
@@ -1749,7 +1689,6 @@ const NumaWorkspaceChatAgents = () => {
       });
       // Clear the V1 migration flag after first message (migration happens on first request)
       if (needsV1Migration) {
-        console.log('[NumaChat] V1 migration completed, clearing flag and updating sessionStorage');
         setNeedsV1Migration(false);
         sessionStorage.setItem('isWorkspaceConversation-v2', 'true'); // Now it's V2
       }
@@ -1800,13 +1739,6 @@ const NumaWorkspaceChatAgents = () => {
     const generation = loadGenerationRef.current;
     const isCancelled = () => loadGenerationRef.current !== generation;
 
-    console.log('[NumaChat] handleLoadConversation called:', {
-      selectedConversationId,
-      isWorkspaceConversation,
-      typeofIsWorkspace: typeof isWorkspaceConversation,
-      willUseV2Path: isWorkspaceConversation !== false,
-    });
-
     setIsManuallyLoading(true);
     setIsHistoryPanelOpen(false);
     setIsAgentsPanelOpen(false);
@@ -1823,25 +1755,12 @@ const NumaWorkspaceChatAgents = () => {
 
     try {
       // V2 workspace conversations: load from trace file
-      console.log(
-        '[DEBUG-AGENT] isWorkspaceConversation:',
-        isWorkspaceConversation,
-        'type:',
-        typeof isWorkspaceConversation,
-      );
       if (isWorkspaceConversation) {
-        console.log('[NumaChat] Loading V2 workspace conversation from trace');
         try {
           const rawTrace = await getWorkspaceChatRawTrace(selectedConversationId);
-          if (isCancelled()) {
-            console.log('[NumaChat] Load cancelled after trace fetch:', selectedConversationId);
-            return;
-          }
-          console.log('[NumaChat] Raw trace length:', rawTrace?.length, 'lines:', rawTrace?.split('\n').length);
-
+          if (isCancelled()) return;
           // Parse raw trace using same logic as live streaming
           const chatMessages = parseRawTraceToMessages(rawTrace);
-          console.log('[NumaChat] Parsed messages:', chatMessages.length, chatMessages);
 
           setMessages(chatMessages);
           setConversationId(selectedConversationId);
@@ -1858,29 +1777,11 @@ const NumaWorkspaceChatAgents = () => {
               1000, // Must be large enough to include the meta record (oldest item, query is newest-first)
               sub,
             );
-            if (isCancelled()) {
-              console.log('[NumaChat] Load cancelled after metadata fetch:', selectedConversationId);
-              return;
-            }
-            console.log('[DEBUG-AGENT] queryConversations returned', conversationHistory.length, 'items');
-            console.log(
-              '[DEBUG-AGENT] message_types:',
-              conversationHistory.map((i: { message_type?: string }) => i.message_type),
-            );
+            if (isCancelled()) return;
             const metaItem = conversationHistory.find(
               (item: { message_type?: string }) => item.message_type === 'meta',
             );
-            console.log(
-              '[DEBUG-AGENT] metaItem found:',
-              !!metaItem,
-              'isAgentConversation:',
-              metaItem?.isAgentConversation,
-              'agentId:',
-              metaItem?.agentId,
-            );
-
             if (metaItem?.isAgentConversation && metaItem?.agentId) {
-              console.log('[NumaChat] V2 conversation has agent, restoring:', metaItem.agentId);
               try {
                 const agent = await getAgent(numaGet, metaItem.agentId);
                 if (isCancelled()) return;
@@ -1930,7 +1831,6 @@ const NumaWorkspaceChatAgents = () => {
         }
       } else {
         // V1 conversation: load directly from DynamoDB (skip trace fetch entirely)
-        console.log('[NumaChat] Loading V1 conversation from DynamoDB');
         if (!isCancelled()) {
           await loadV1Conversation(selectedConversationId);
         }
@@ -1958,7 +1858,6 @@ const NumaWorkspaceChatAgents = () => {
 
   // Helper function to load V1 conversations from DynamoDB
   const loadV1Conversation = async (selectedConversationId: string) => {
-    console.log('[NumaChat] V1 conversation detected, will migrate on first message');
     const {
       messages: chatMessages,
       agentMeta,
@@ -2009,15 +1908,10 @@ const NumaWorkspaceChatAgents = () => {
   // Kept for V1 compatibility but unused in workspace mode (handled by useWorkspaceStreaming hook)
   const _flushPendingText = (currentConversationId = null, preserveContent = false) => {
     if (!streamingHandler.textBufferRef.current.trim()) {
-      console.log('[NumaChat] No text to flush (buffer empty)');
       return; // Only flush if there's actual content
     }
 
     const textToSave = streamingHandler.textBufferRef.current;
-    console.log(
-      '[NumaChat] Flushing pending text (preserveContent=' + preserveContent + ', length=' + textToSave.length + '):',
-      textToSave.slice(0, 50) + '...',
-    );
 
     // ALWAYS save to DynamoDB first, regardless of preserve/duplicate logic
     const cidToUse = currentConversationId || conversationId;
@@ -2031,12 +1925,10 @@ const NumaWorkspaceChatAgents = () => {
           content: textToSave,
         })
         .catch((err) => console.error('Error saving text segment:', err));
-      console.log('[NumaChat] Saved text segment to DynamoDB');
     }
 
     // Prevent double-flushing UI updates in final completion phase
     if (preserveContent && streamingHandler.finalFlushPerformedRef.current) {
-      console.log('[NumaChat] Skipping duplicate final flush UI update (already saved to DB)');
       return;
     }
 
@@ -2064,7 +1956,6 @@ const NumaWorkspaceChatAgents = () => {
         lastMsg.segments = segs;
         lastMsg.content = finalText; // Update legacy content field too
         updated[lastIdx] = lastMsg;
-        console.log('[NumaChat] Finalized text segment with content length:', finalText.length);
       }
 
       return updated;
@@ -2073,7 +1964,6 @@ const NumaWorkspaceChatAgents = () => {
     // Clear the text buffer only if not preserving content
     if (!preserveContent) {
       streamingHandler.textBufferRef.current = '';
-      console.log('[NumaChat] Cleared text buffer');
     }
   };
 
@@ -2249,7 +2139,7 @@ const NumaWorkspaceChatAgents = () => {
                             {t('page.initializing', { defaultValue: 'Initializing' })}
                           </span>
                         </div>
-                        <span>{t('page.initializingWorkspace', { defaultValue: 'Initializing workspace...' })}</span>
+                        <span>{t('page.initializingWorkspace')}</span>
                       </div>
                     )}
 

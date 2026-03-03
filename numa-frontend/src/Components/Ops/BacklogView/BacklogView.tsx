@@ -17,9 +17,19 @@ import { useOps } from '../OpsContext';
 import * as OpsService from '../../../Services/OpsService';
 import { TicketDetailModal } from '../Modals/TicketDetailModal';
 import { CreateTicketModal } from '../Modals/CreateTicketModal';
+import { StartWorkUnitModal, WorkUnitSuccessModal } from '../Modals/WorkUnitModals';
 import { PriorityIndicator } from '../Shared/PriorityIndicator';
 import { StaffAvatar } from '../Shared/StaffAvatar';
-import type { WorkUnit, Ticket, WorkStage, TicketPriority, StatusType, StaffProfile } from '../../../types/ops';
+import type {
+  WorkUnit,
+  Ticket,
+  WorkStage,
+  TicketType,
+  TicketPriority,
+  StatusType,
+  StaffProfile,
+} from '../../../types/ops';
+import { getTicketTypeIconClass } from '../../../constants/opsConstants';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -163,6 +173,134 @@ function DroppableGroupBody({ groupId, children }: DroppableGroupBodyProps) {
       style={{ backgroundColor: isOver ? '#f0f4ff' : undefined, minHeight: 32 }}
     >
       {children}
+    </div>
+  );
+}
+
+// ─── Backlog Group Footer (quick-add + create ticket) ────────────────────────
+
+interface BacklogGroupFooterProps {
+  zoneId: string;
+  stageId?: string;
+  ticketTypes: TicketType[];
+  onQuickAdd: (title: string, zoneId: string, stageId?: string, ticketTypeId?: string) => void;
+  onCreateTicket: (zoneId: string) => void;
+}
+
+function BacklogGroupFooter({ zoneId, stageId, ticketTypes, onQuickAdd, onCreateTicket }: BacklogGroupFooterProps) {
+  const { t } = useTranslation('ops');
+  const [active, setActive] = useState(false);
+  const [value, setValue] = useState('');
+  const [selectedTypeId, setSelectedTypeId] = useState<string | null>(null);
+  const [showTypeDropdown, setShowTypeDropdown] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const rowRef = useRef<HTMLDivElement>(null);
+  const typeDropdownRef = useRef<HTMLDivElement>(null);
+
+  const selectedType = useMemo(
+    () => ticketTypes.find((tt) => tt.id === selectedTypeId) ?? ticketTypes[0] ?? null,
+    [ticketTypes, selectedTypeId],
+  );
+
+  useEffect(() => {
+    if (active && inputRef.current) inputRef.current.focus();
+  }, [active]);
+
+  useEffect(() => {
+    if (!showTypeDropdown) return;
+    const handler = (e: MouseEvent) => {
+      if (typeDropdownRef.current && !typeDropdownRef.current.contains(e.target as Node)) {
+        setShowTypeDropdown(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [showTypeDropdown]);
+
+  const handleSubmit = () => {
+    const trimmed = value.trim();
+    if (trimmed) onQuickAdd(trimmed, zoneId, stageId, selectedType?.id);
+    setValue('');
+    setActive(false);
+    setShowTypeDropdown(false);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      handleSubmit();
+    } else if (e.key === 'Escape') {
+      setValue('');
+      setActive(false);
+      setShowTypeDropdown(false);
+    }
+  };
+
+  const handleBlur = (e: React.FocusEvent<HTMLInputElement>) => {
+    if (rowRef.current?.contains(e.relatedTarget as Node)) return;
+    handleSubmit();
+  };
+
+  return (
+    <div className="backlog-group-footer">
+      {!active ? (
+        <div className="backlog-footer-actions">
+          <button type="button" className="backlog-footer-btn" onClick={() => setActive(true)}>
+            <i className="bi bi-plus" />
+            {t('board.quickTicket')}
+          </button>
+          <span className="backlog-footer-divider" />
+          <button type="button" className="backlog-footer-btn" onClick={() => onCreateTicket(zoneId)}>
+            <i className="bi bi-plus-square" />
+            {t('board.createTicket')}
+          </button>
+        </div>
+      ) : (
+        <div className="backlog-quick-add-row" ref={rowRef}>
+          {ticketTypes.length > 0 && selectedType && (
+            <div className="backlog-quick-add-type" ref={typeDropdownRef}>
+              <button
+                type="button"
+                className="backlog-quick-add-type-btn"
+                onClick={() => setShowTypeDropdown((prev) => !prev)}
+                title={selectedType.name}
+              >
+                <i className={getTicketTypeIconClass(selectedType.icon)} style={{ color: selectedType.color }} />
+                <i className="bi bi-chevron-down backlog-quick-add-type-caret" />
+              </button>
+              {showTypeDropdown && (
+                <div className="backlog-quick-add-type-dropdown">
+                  {ticketTypes.map((tt) => (
+                    <button
+                      key={tt.id}
+                      type="button"
+                      className={`backlog-quick-add-type-option${tt.id === selectedType.id ? ' active' : ''}`}
+                      onClick={() => {
+                        setSelectedTypeId(tt.id);
+                        setShowTypeDropdown(false);
+                        inputRef.current?.focus();
+                      }}
+                    >
+                      <i className={getTicketTypeIconClass(tt.icon)} style={{ color: tt.color }} />
+                      <span>{tt.name}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+          <input
+            ref={inputRef}
+            type="text"
+            className="backlog-quick-add-input"
+            placeholder={t('board.quickAddPlaceholder')}
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            onKeyDown={handleKeyDown}
+            onBlur={handleBlur}
+          />
+        </div>
+      )}
     </div>
   );
 }
@@ -366,8 +504,18 @@ function FilterDropdown({ label, value, options, onChange, allLabel }: FilterDro
 
 const BacklogView = () => {
   const { t } = useTranslation('ops');
-  const { numaPut } = useNumaRequest();
-  const { teamData, workUnits, tickets, config, refreshTickets, setTickets } = useOps();
+  const { numaPost, numaPut, numaDelete } = useNumaRequest();
+  const {
+    teamData,
+    workUnits,
+    tickets,
+    config,
+    refreshTickets,
+    refreshWorkUnits,
+    refreshTeam,
+    setActiveZone,
+    setTickets,
+  } = useOps();
 
   // ── Staff lookup map for avatars ────────────────────────────────
   const staffMap = useMemo(() => {
@@ -377,6 +525,34 @@ const BacklogView = () => {
     }
     return map;
   }, [config?.staff]);
+
+  // ── Start Sprint modal state ────────────────────────────────────
+  const [showStartSprint, setShowStartSprint] = useState(false);
+  const [startSprintId, setStartSprintId] = useState<string | null>(null);
+  const [showSprintSuccess, setShowSprintSuccess] = useState(false);
+  const [successWorkUnit, setSuccessWorkUnit] = useState<WorkUnit | null>(null);
+
+  const hasActiveWu = useMemo(() => workUnits.some((wu) => wu.status === 'active'), [workUnits]);
+  const teamId = teamData?.team?.id ?? '';
+
+  // ── Delete Sprint handler ────────────────────────────────────
+  const [deletingSprint, setDeletingSprint] = useState(false);
+  const handleDeleteSprint = useCallback(
+    async (wu: WorkUnit) => {
+      if (!teamId || deletingSprint) return;
+      if (!window.confirm(t('sprints.deleteSprintConfirm', { name: wu.name }))) return;
+      setDeletingSprint(true);
+      try {
+        await OpsService.deleteWorkUnit(numaDelete, teamId, wu.id);
+        await Promise.all([refreshWorkUnits(), refreshTickets()]);
+      } catch (err) {
+        console.error('[BacklogView] Failed to delete work unit:', err);
+      } finally {
+        setDeletingSprint(false);
+      }
+    },
+    [teamId, deletingSprint, numaDelete, refreshWorkUnits, refreshTickets, t],
+  );
 
   // ── Filters ────────────────────────────────────────────────────
   const [searchQuery, setSearchQuery] = useState('');
@@ -593,6 +769,29 @@ const BacklogView = () => {
     setCreateZoneId(zoneId);
     setShowCreate(true);
   }, []);
+
+  const handleBacklogQuickAdd = useCallback(
+    async (title: string, zoneId: string, stageId?: string, ticketTypeId?: string) => {
+      if (!teamId || !config?.ticketTypes?.[0]) return;
+      const resolvedStageId = stageId ?? teamData?.stages?.find((s) => s.zoneId === zoneId)?.id;
+      if (!resolvedStageId) return;
+      const resolvedTypeId = ticketTypeId ?? config.ticketTypes[0].id;
+      try {
+        await OpsService.createTicket(numaPost, {
+          teamId,
+          ticketTypeId: resolvedTypeId,
+          title,
+          stageId: resolvedStageId,
+          zoneId,
+          priority: 'medium',
+        });
+        await refreshTickets();
+      } catch (err) {
+        console.error('[BacklogView] Quick add failed:', err);
+      }
+    },
+    [teamId, config?.ticketTypes, teamData?.stages, numaPost, refreshTickets],
+  );
 
   const toggleAssignee = useCallback((assigneeId: string) => {
     setAssigneeFilter((prev) => {
@@ -891,6 +1090,39 @@ const BacklogView = () => {
                       >
                         <i className="bi bi-plus-lg" />
                       </button>
+
+                      {wu && wu.status === 'planning' && (
+                        <>
+                          <button
+                            type="button"
+                            className="btn btn-sm btn-outline-success ms-1"
+                            style={{ fontSize: '0.72rem', padding: '2px 8px' }}
+                            disabled={hasActiveWu}
+                            title={hasActiveWu ? t('sprints.completeCurrentFirst') : t('sprints.start')}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setStartSprintId(wu.id);
+                              setShowStartSprint(true);
+                            }}
+                          >
+                            <i className="bi bi-play-fill me-1" />
+                            {t('sprints.start')}
+                          </button>
+                          <button
+                            type="button"
+                            className="btn btn-sm btn-outline-danger ms-1"
+                            style={{ fontSize: '0.72rem', padding: '2px 6px' }}
+                            disabled={deletingSprint}
+                            title={t('sprints.deleteSprint')}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDeleteSprint(wu);
+                            }}
+                          >
+                            <i className="bi bi-trash" />
+                          </button>
+                        </>
+                      )}
                     </div>
 
                     {wu?.goal && !isCollapsed && (
@@ -920,24 +1152,33 @@ const BacklogView = () => {
                     )}
 
                     {!isCollapsed && (
-                      <DroppableGroupBody groupId={group.id}>
-                        {group.tickets.length === 0 ? (
-                          <div className="text-muted small py-3 px-4">{t('backlogView.noTickets')}</div>
-                        ) : (
-                          group.tickets
-                            .sort((a, b) => a.order - b.order)
-                            .map((ticket) => (
-                              <DraggableRow
-                                key={ticket.id}
-                                ticket={ticket}
-                                typeInfo={typeMap.get(ticket.ticketTypeId)}
-                                stageInfo={stageMap.get(ticket.stageId)}
-                                assigneeStaff={ticket.assigneeId ? staffMap.get(ticket.assigneeId) : undefined}
-                                onClick={() => handleTicketClick(ticket.id)}
-                              />
-                            ))
-                        )}
-                      </DroppableGroupBody>
+                      <>
+                        <DroppableGroupBody groupId={group.id}>
+                          {group.tickets.length === 0 ? (
+                            <div className="text-muted small py-3 px-4">{t('backlogView.noTickets')}</div>
+                          ) : (
+                            group.tickets
+                              .sort((a, b) => a.order - b.order)
+                              .map((ticket) => (
+                                <DraggableRow
+                                  key={ticket.id}
+                                  ticket={ticket}
+                                  typeInfo={typeMap.get(ticket.ticketTypeId)}
+                                  stageInfo={stageMap.get(ticket.stageId)}
+                                  assigneeStaff={ticket.assigneeId ? staffMap.get(ticket.assigneeId) : undefined}
+                                  onClick={() => handleTicketClick(ticket.id)}
+                                />
+                              ))
+                          )}
+                        </DroppableGroupBody>
+                        <BacklogGroupFooter
+                          zoneId={group.zoneId}
+                          stageId={group.stageId}
+                          ticketTypes={config?.ticketTypes ?? []}
+                          onQuickAdd={handleBacklogQuickAdd}
+                          onCreateTicket={handleAddTicket}
+                        />
+                      </>
                     )}
                   </div>
                 );
@@ -1003,6 +1244,39 @@ const BacklogView = () => {
           refreshTickets();
         }}
         prefilledZoneId={createZoneId}
+      />
+      <StartWorkUnitModal
+        show={showStartSprint}
+        workUnits={workUnits}
+        teamId={teamId}
+        tickets={tickets}
+        zones={zones}
+        preselectedId={startSprintId}
+        onHide={() => setShowStartSprint(false)}
+        onStarted={async () => {
+          setShowStartSprint(false);
+          const started = workUnits.find((wu) => wu.status === 'planning');
+          if (started) {
+            setSuccessWorkUnit(started);
+            setShowSprintSuccess(true);
+          }
+          const beforeZoneIds = new Set(zones.map((z) => z.id));
+          const updated = await refreshTeam();
+          if (updated) {
+            const newZone = updated.zones.find((z) => !beforeZoneIds.has(z.id));
+            if (newZone) setActiveZone(newZone.id);
+          }
+          await Promise.all([refreshTickets(), refreshWorkUnits()]);
+        }}
+      />
+      <WorkUnitSuccessModal
+        show={showSprintSuccess}
+        workUnit={successWorkUnit}
+        action="started"
+        onHide={() => {
+          setShowSprintSuccess(false);
+          setSuccessWorkUnit(null);
+        }}
       />
     </>
   );

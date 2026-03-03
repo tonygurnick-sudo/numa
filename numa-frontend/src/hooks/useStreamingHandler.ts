@@ -36,7 +36,6 @@ export const useStreamingHandler = () => {
   const createStreamingCallbacks = useCallback(
     ({ setMessages, setButtonStatus, flushPendingText, conversationId, onStreamComplete, onStreamError }) => {
       let hasStreamingStarted = false;
-      let hasReceivedTextChunk = false;
       let accumulatedResponse = '';
       const docStripState = createDocStripState();
 
@@ -52,8 +51,6 @@ export const useStreamingHandler = () => {
           setButtonStatus('streaming');
           hasStreamingStarted = true;
         }
-        hasReceivedTextChunk = true;
-
         // Accumulate the response
         accumulatedResponse += chunk;
 
@@ -89,19 +86,8 @@ export const useStreamingHandler = () => {
       };
 
       const onComplete = () => {
-        console.log('[StreamingHandler] Chat agent completion callback triggered');
-        console.log(
-          '[StreamingHandler] Final streaming state - hasStreamingStarted:',
-          hasStreamingStarted,
-          'hasReceivedTextChunk:',
-          hasReceivedTextChunk,
-        );
-
-        // Clean up abort function reference
-
         setButtonStatus('idle');
         // Flush any remaining text to save the final segment with content preservation
-        console.log('[StreamingHandler] Stream completion - flushing final text buffer');
         flushPendingText(conversationId, true); // preserveContent=true to prevent race condition
 
         // Call completion callback with accumulated response
@@ -134,9 +120,8 @@ export const useStreamingHandler = () => {
   /**
    * Set the current abort function
    */
-  const setCurrentAbort = useCallback((abortFn) => {
+  const setCurrentAbort = useCallback((_abortFn) => {
     // This is used for cleanup purposes, not user-initiated stopping
-    console.log('[StreamingHandler] Setting abort function:', !!abortFn);
   }, []);
 
   return {

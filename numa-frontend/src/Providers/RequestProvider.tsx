@@ -1,6 +1,5 @@
 import axios from 'axios';
-import { useCallback, useMemo, useRef } from 'react';
-import { useAuth } from './AuthProvider';
+import { useCallback, useMemo } from 'react';
 import { NumaRequestContext } from './NumaRequestContext';
 
 // Move parseNestedJson completely outside component - pure function
@@ -30,25 +29,17 @@ const parseNestedJson = (data) => {
 };
 
 export const NumaRequestProvider = ({ children }) => {
-  const { user } = useAuth();
-
-  // Store the current access token in a ref so request functions can always
-  // read the latest token without needing to be recreated on every refresh.
-  // This prevents the cascade: token refresh → new numaGet identity →
-  // all consumers re-run effects / refetch data.
-  const accessTokenRef = useRef(user?.tokens?.accessToken);
-  accessTokenRef.current = user?.tokens?.accessToken;
-
-  const getHeaders = useCallback(
-    (extra = {}) => ({
+  // Read access token directly from localStorage at request time.
+  // localStorage is always kept fresh by AuthProvider.refreshTokens(),
+  // so this avoids depending on user state (which would cascade re-renders).
+  const getHeaders = useCallback((extra = {}) => {
+    const accessToken = localStorage.getItem('accessToken');
+    return {
       'Content-Type': 'application/json',
-      ...(accessTokenRef.current && {
-        authorization: accessTokenRef.current,
-      }),
+      ...(accessToken && { authorization: accessToken }),
       ...extra,
-    }),
-    [],
-  );
+    };
+  }, []);
 
   const axiosConfig = useMemo(
     () => ({

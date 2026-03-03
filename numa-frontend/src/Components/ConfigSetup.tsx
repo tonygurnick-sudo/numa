@@ -37,6 +37,7 @@ const CONFIG_OPTIONAL_PROPERTIES = [
   'NUMA_FILES', // Feature flag for Numa Files (file management)
   'WORKSPACE_CHAT_MODEL_SELECTION', // Feature flag for model selection in Chat V2
   'NUMA_OPS', // Feature flag for Numa Ops work management
+  'MFA_ENABLED', // Feature flag for MFA device trust settings
 ];
 const CONFIG_PROPERTIES = [...CONFIG_REQUIRED_PROPERTIES, ...CONFIG_OPTIONAL_PROPERTIES];
 

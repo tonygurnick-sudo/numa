@@ -1,8 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, Button, Dropdown, Form, Spinner, Tab } from 'react-bootstrap';
-import { LambdaClient } from '@aws-sdk/client-lambda';
 import { PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
-import { fromWebToken } from '@aws-sdk/credential-providers';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import axios from 'axios';
 import { useAuth } from '../Providers/AuthProvider';
@@ -71,7 +69,7 @@ export default function UserProfilePage({
   settingsScope = 'user',
 }: UserProfilePageProps) {
   const { t } = useTranslation('settings');
-  const { user, getCredentials } = useAuth();
+  const { user, getCredentials, listDevices, forgetDevice, lambdaClient } = useAuth();
   const { numaGet, numaPut } = useNumaRequest();
   const { availableKBs, isLoadingKBs, kbError } = useKnowledgeBase();
 
@@ -102,12 +100,56 @@ export default function UserProfilePage({
   const savedDefaultsEnabledRef = useRef(false);
   const savedProfileRef = useRef('');
 
+  const hasMfa = window.sessionStorage.getItem('MFA_ENABLED') === 'true';
+
+  type DeviceInfo = {
+    deviceKey: string;
+    deviceName: string;
+    lastAuthDate: Date | null;
+    remembered: boolean;
+    isCurrent: boolean;
+  };
+  const [devices, setDevices] = useState<DeviceInfo[]>([]);
+  const [devicesLoading, setDevicesLoading] = useState(false);
+  const [deviceRevoking, setDeviceRevoking] = useState<string | null>(null);
+
+  const loadDevices = useCallback(async () => {
+    if (!hasMfa || !listDevices) return;
+    setDevicesLoading(true);
+    try {
+      const result = await listDevices();
+      setDevices(result);
+    } catch {
+      // silently fail
+    } finally {
+      setDevicesLoading(false);
+    }
+  }, [hasMfa, listDevices]);
+
+  useEffect(() => {
+    loadDevices();
+  }, [loadDevices]);
+
+  const handleForgetDevice = useCallback(
+    async (deviceKey: string) => {
+      if (!forgetDevice) return;
+      setDeviceRevoking(deviceKey);
+      try {
+        await forgetDevice(deviceKey);
+        setDevices((prev) => prev.filter((d) => d.deviceKey !== deviceKey));
+      } catch {
+        // silently fail
+      } finally {
+        setDeviceRevoking(null);
+      }
+    },
+    [forgetDevice],
+  );
+
   const hasWorkspaceChat = window.sessionStorage.getItem('NUMA_WORKSPACE_CHAT') === 'true';
   const hasPipedreamFeature = window.sessionStorage.getItem('PIPEDREAM_INTEGRATIONS') === 'true';
   const relayLambdaArn = window.sessionStorage.getItem('PIPEDREAM_RELAY_LAMBDA_ARN');
   const previewMode = !hasPipedreamFeature || !relayLambdaArn;
-  const REGION = window.sessionStorage.getItem('REGION') || 'us-east-1';
-
   // Profile image upload state
   const [imageUploading, setImageUploading] = useState(false);
   const [imageError, setImageError] = useState<string | null>(null);
@@ -220,7 +262,6 @@ export default function UserProfilePage({
     setProfileDirty(true);
   }, [userProfile.profileImage]);
 
-  const [lambdaClient, setLambdaClient] = useState<LambdaClient | null>(null);
   const [connectionsLoading, setConnectionsLoading] = useState<boolean>(false);
   const [availableConnections, setAvailableConnections] = useState<Connection[]>([]);
   const [dataAnalysisAvailable, setDataAnalysisAvailable] = useState(true);
@@ -354,39 +395,13 @@ export default function UserProfilePage({
   const canEditUserDefaults = globalLoaded && globalAllowUserDefaults;
   const canEditProfile = globalLoaded;
 
+  // Clear connections state when in preview mode
   useEffect(() => {
-    const init = async () => {
-      if (!user) return;
-      if (previewMode) {
-        setConnectionsLoading(false);
-        setAvailableConnections([]);
-        return;
-      }
-
-      try {
-        const GROUPS = JSON.parse(window.sessionStorage.getItem('GROUPS') || '{}');
-        const userGroup = user.decoded_tokens?.idToken?.['cognito:groups']?.[0] || 'standard';
-        const roleArn = GROUPS[userGroup]?.roleArn;
-        const cognitoUserId = user.decoded_tokens?.idToken?.sub;
-        if (!roleArn) {
-          setConnectionsLoading(false);
-          setAvailableConnections([]);
-          return;
-        }
-        const credentials = fromWebToken({
-          webIdentityToken: user.tokens.idToken,
-          roleArn,
-          roleSessionName: cognitoUserId,
-        });
-        const client = withPRM(LambdaClient, { region: REGION, credentials });
-        setLambdaClient(client);
-      } catch {
-        setConnectionsLoading(false);
-        setAvailableConnections([]);
-      }
-    };
-    init();
-  }, [REGION, previewMode, user]);
+    if (previewMode) {
+      setConnectionsLoading(false);
+      setAvailableConnections([]);
+    }
+  }, [previewMode]);
 
   useEffect(() => {
     (async () => {
@@ -436,7 +451,7 @@ export default function UserProfilePage({
       }
     };
 
-    if (lambdaClient) {
+    if (lambdaClient && !previewMode) {
       loadConnectionStatus();
     }
   }, [globalIntegrationSettings, lambdaClient, user]);
@@ -1612,6 +1627,67 @@ export default function UserProfilePage({
                 canEditUserDefaults,
               )}
             </Form>
+          </Tab>
+        )}
+
+        {hasMfa && (
+          <Tab
+            eventKey="trusted-devices"
+            title={
+              <span>
+                <i className="bi bi-phone me-2"></i>
+                {t('userProfile.trustedDevices.title')}
+              </span>
+            }
+          >
+            <p className="text-muted mb-3">{t('userProfile.trustedDevices.description')}</p>
+            {devicesLoading ? (
+              <div className="text-center py-4">
+                <Spinner animation="border" />
+              </div>
+            ) : devices.length === 0 ? (
+              <Alert variant="secondary">
+                <i className="bi bi-info-circle me-2"></i>
+                {t('userProfile.trustedDevices.noDevices')}
+              </Alert>
+            ) : (
+              <div className="d-flex flex-column gap-2">
+                {devices.map((device) => (
+                  <div
+                    key={device.deviceKey}
+                    className="p-3 border rounded-3 bg-white d-flex align-items-center justify-content-between"
+                  >
+                    <div>
+                      <div className="fw-semibold">
+                        {device.deviceName || t('userProfile.trustedDevices.unknownDevice')}
+                        {device.isCurrent && (
+                          <span className="badge bg-primary ms-2">{t('userProfile.trustedDevices.currentDevice')}</span>
+                        )}
+                      </div>
+                      {device.lastAuthDate && (
+                        <div className="text-muted small">
+                          {t('userProfile.trustedDevices.lastUsed', {
+                            date: device.lastAuthDate.toLocaleDateString(),
+                          })}
+                        </div>
+                      )}
+                    </div>
+                    <Button
+                      variant="outline-danger"
+                      size="sm"
+                      disabled={deviceRevoking === device.deviceKey}
+                      onClick={() => handleForgetDevice(device.deviceKey)}
+                    >
+                      {deviceRevoking === device.deviceKey ? (
+                        <Spinner as="span" animation="border" size="sm" />
+                      ) : (
+                        t('userProfile.trustedDevices.forget')
+                      )}
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
           </Tab>
         )}
       </StyledTabs>

@@ -87,6 +87,7 @@ PROFILE_VALIDATOR = AgentTypeConfig(
     ],
     enable_scripts_mcp=False,
     enable_integrations_mcp=False,
+    enable_numa_mcp=False,
     enabled_numa_tools=[],
     tools_source_dirs=[],
     plugins_path="/app/plugins/numa",

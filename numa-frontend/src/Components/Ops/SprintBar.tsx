@@ -3,12 +3,17 @@ import { useTranslation } from 'react-i18next';
 import { useNumaRequest } from '../../Providers/NumaRequestContext';
 import { useOps } from './OpsContext';
 import * as OpsService from '../../Services/OpsService';
-import { StartWorkUnitModal, CompleteWorkUnitModal, WorkUnitSuccessModal } from './Modals/WorkUnitModals';
+import {
+  CreateWorkUnitModal,
+  StartWorkUnitModal,
+  CompleteWorkUnitModal,
+  WorkUnitSuccessModal,
+} from './Modals/WorkUnitModals';
 import type { WorkUnit } from '../../types/ops';
 
 const SprintBar = () => {
   const { t } = useTranslation('ops');
-  const { numaPost } = useNumaRequest();
+  const { numaDelete } = useNumaRequest();
   const {
     teamData,
     workUnits,
@@ -17,10 +22,12 @@ const SprintBar = () => {
     selectWorkUnit,
     refreshTeam,
     refreshTickets,
+    refreshWorkUnits,
     setActiveZone,
   } = useOps();
 
   // ── Modal state ──────────────────────────────────────────────────
+  const [showCreate, setShowCreate] = useState(false);
   const [showStart, setShowStart] = useState(false);
   const [showComplete, setShowComplete] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
@@ -91,27 +98,47 @@ const SprintBar = () => {
   // ── Determine action button state ───────────────────────────────────────
   const hasActiveWu = workUnits.some((wu) => wu.status === 'active');
   const activeWorkUnit = workUnits.find((wu) => wu.status === 'active') ?? null;
-  const incompleteCount = useMemo(() => {
-    if (!activeWorkUnit) return 0;
-    return tickets.filter(
-      (tk) => tk.workUnitId === activeWorkUnit.id && tk.statusType !== 'completed' && tk.statusType !== 'ended',
-    ).length;
+  const { incompleteCount, completedCount } = useMemo(() => {
+    if (!activeWorkUnit) return { incompleteCount: 0, completedCount: 0 };
+    let incomplete = 0;
+    let completed = 0;
+    for (const tk of tickets) {
+      if (tk.workUnitId === activeWorkUnit.id) {
+        if (tk.statusType === 'completed' || tk.statusType === 'ended') {
+          completed += 1;
+        } else {
+          incomplete += 1;
+        }
+      }
+    }
+    return { incompleteCount: incomplete, completedCount: completed };
   }, [activeWorkUnit, tickets]);
 
-  // ── New Sprint handler ──────────────────────────────────────────────────
-  const handleNewSprint = useCallback(async () => {
-    if (!teamId) return;
+  // ── Default name for the next sprint ──────────────────────────────────
+  const defaultSprintName = useMemo(() => {
     const label = teamData?.team?.workUnitSeries?.label ?? 'Sprint';
-    const existingCount = workUnits.length;
-    try {
-      await OpsService.createWorkUnit(numaPost, teamId, {
-        name: `${label} ${existingCount + 1}`,
-      });
-      await refreshTeam();
-    } catch (err) {
-      console.error('[SprintBar] Failed to create work unit:', err);
-    }
-  }, [teamId, teamData?.team?.workUnitSeries?.label, workUnits.length, numaPost, refreshTeam]);
+    return `${label} ${workUnits.length + 1}`;
+  }, [teamData?.team?.workUnitSeries?.label, workUnits.length]);
+
+  // ── Delete Sprint handler ───────────────────────────────────────────────
+  const [deleting, setDeleting] = useState(false);
+  const handleDeleteSprint = useCallback(
+    async (wu: WorkUnit) => {
+      if (!teamId || deleting) return;
+      if (!window.confirm(t('sprints.deleteSprintConfirm', { name: wu.name }))) return;
+      setDeleting(true);
+      try {
+        await OpsService.deleteWorkUnit(numaDelete, teamId, wu.id);
+        selectWorkUnit(null);
+        await Promise.all([refreshWorkUnits(), refreshTickets()]);
+      } catch (err) {
+        console.error('[SprintBar] Failed to delete work unit:', err);
+      } finally {
+        setDeleting(false);
+      }
+    },
+    [teamId, deleting, numaDelete, selectWorkUnit, refreshWorkUnits, refreshTickets, t],
+  );
 
   return (
     <>
@@ -138,55 +165,77 @@ const SprintBar = () => {
             {t('sprints.backlog')} [{backlogCount}]
           </button>
 
-          {/* Work-unit pills */}
-          {workUnits.map((wu) => {
-            const stats = workUnitStats.get(wu.id) ?? { done: 0, total: 0 };
-            const isSelected = selectedWorkUnitId === wu.id;
-            const pct = stats.total > 0 ? Math.round((stats.done / stats.total) * 100) : 0;
+          {/* Work-unit pills — only active sprints shown here */}
+          {workUnits
+            .filter((wu) => wu.status === 'active')
+            .map((wu) => {
+              const stats = workUnitStats.get(wu.id) ?? { done: 0, total: 0 };
+              const isSelected = selectedWorkUnitId === wu.id;
+              const ticketPct = stats.total > 0 ? Math.round((stats.done / stats.total) * 100) : 0;
 
-            return (
-              <button
-                key={wu.id}
-                type="button"
-                className={`btn btn-sm flex-shrink-0 position-relative ${
-                  isSelected ? 'btn-primary' : 'btn-outline-secondary'
-                }`}
-                style={{ paddingBottom: wu.status === 'active' ? 10 : undefined }}
-                onClick={() => selectWorkUnit(wu.id)}
-              >
-                <span
-                  className="d-inline-block rounded-circle me-1"
-                  style={{
-                    width: 8,
-                    height: 8,
-                    backgroundColor: statusDotColor(wu.status),
-                  }}
-                />
-                {wu.name}{' '}
-                <span className="opacity-75">{t('sprints.progress', { done: stats.done, total: stats.total })}</span>
-                {/* Thin progress bar for active sprints */}
-                {wu.status === 'active' && (
+              // Time progress
+              let timePct = 0;
+              if (wu.startDate && wu.endDate) {
+                const start = new Date(wu.startDate).getTime();
+                const end = new Date(wu.endDate).getTime();
+                const now = Date.now();
+                if (end > start) {
+                  timePct = Math.min(100, Math.max(0, Math.round(((now - start) / (end - start)) * 100)));
+                }
+              }
+
+              return (
+                <button
+                  key={wu.id}
+                  type="button"
+                  className={`ops-pill ops-pill--sprint ${isSelected ? 'active' : ''}`}
+                  onClick={() => selectWorkUnit(wu.id)}
+                >
+                  <span className="ops-sprint-dot" style={{ backgroundColor: statusDotColor(wu.status) }} />
+                  {wu.name}{' '}
+                  <span className="ops-sprint-fraction">
+                    {t('sprints.progress', { done: stats.done, total: stats.total })}
+                  </span>
+                  {wu.startDate && wu.endDate && (
+                    <span
+                      className="ops-sprint-progress"
+                      style={{
+                        width: `${timePct}%`,
+                        backgroundColor: isSelected ? 'rgba(255,255,255,0.4)' : '#adb5bd',
+                        bottom: 5,
+                      }}
+                    />
+                  )}
                   <span
-                    className="position-absolute bottom-0 start-0"
+                    className="ops-sprint-progress"
                     style={{
-                      height: 3,
-                      width: `${pct}%`,
+                      width: `${ticketPct}%`,
                       backgroundColor: isSelected ? '#fff' : '#0d6efd',
-                      borderRadius: '0 0 4px 4px',
-                      transition: 'width 0.3s ease',
+                      bottom: 0,
                     }}
                   />
-                )}
-              </button>
-            );
-          })}
+                </button>
+              );
+            })}
 
           {/* ── Right-side actions ── */}
           <div className="ms-auto d-flex align-items-center gap-2 flex-shrink-0">
-            <button type="button" className="btn btn-sm btn-outline-primary" onClick={handleNewSprint}>
+            <button type="button" className="btn btn-sm btn-outline-primary" onClick={() => setShowCreate(true)}>
               <i className="bi bi-plus me-1" />
               {t('sprints.new')}
             </button>
+
+            {selectedWorkUnit && selectedWorkUnit.status === 'planning' && (
+              <button
+                type="button"
+                className="btn btn-sm btn-outline-danger"
+                disabled={deleting}
+                title={t('sprints.deleteSprint')}
+                onClick={() => handleDeleteSprint(selectedWorkUnit)}
+              >
+                <i className="bi bi-trash" />
+              </button>
+            )}
 
             {selectedWorkUnit && selectedWorkUnit.status === 'planning' && (
               <button
@@ -229,6 +278,16 @@ const SprintBar = () => {
       </div>
 
       {/* ── Work Unit Modals ──────────────────────────────────────────── */}
+      <CreateWorkUnitModal
+        show={showCreate}
+        teamId={teamId}
+        defaultName={defaultSprintName}
+        onHide={() => setShowCreate(false)}
+        onCreated={async () => {
+          setShowCreate(false);
+          await refreshWorkUnits();
+        }}
+      />
       <StartWorkUnitModal
         show={showStart}
         workUnits={workUnits}
@@ -251,15 +310,17 @@ const SprintBar = () => {
             const newZone = updated.zones.find((z) => !beforeZoneIds.has(z.id));
             if (newZone) setActiveZone(newZone.id);
           }
-          await refreshTickets();
+          await Promise.all([refreshTickets(), refreshWorkUnits()]);
         }}
       />
       {activeWorkUnit && (
         <CompleteWorkUnitModal
           show={showComplete}
           workUnit={activeWorkUnit}
+          workUnits={workUnits}
           teamId={teamId}
           incompleteCount={incompleteCount}
+          completedCount={completedCount}
           onHide={() => setShowComplete(false)}
           onCompleted={async () => {
             setShowComplete(false);
@@ -267,7 +328,7 @@ const SprintBar = () => {
             setSuccessAction('completed');
             setShowSuccess(true);
             await refreshTeam();
-            await refreshTickets();
+            await Promise.all([refreshTickets(), refreshWorkUnits()]);
           }}
         />
       )}

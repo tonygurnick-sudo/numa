@@ -13,7 +13,7 @@ import type { WorkUnit } from '../../types/ops';
  */
 const ActiveSprintStrip = () => {
   const { t } = useTranslation('ops');
-  const { teamData, workUnits, tickets, refreshTeam, refreshTickets } = useOps();
+  const { teamData, workUnits, tickets, refreshTeam, refreshTickets, refreshWorkUnits } = useOps();
 
   const [showComplete, setShowComplete] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
@@ -110,15 +110,17 @@ const ActiveSprintStrip = () => {
       <CompleteWorkUnitModal
         show={showComplete}
         workUnit={activeWorkUnit}
+        workUnits={workUnits}
         teamId={teamId}
         incompleteCount={incompleteCount}
+        completedCount={stats.done}
         onHide={() => setShowComplete(false)}
         onCompleted={async () => {
           setShowComplete(false);
           setSuccessWorkUnit(activeWorkUnit);
           setShowSuccess(true);
           await refreshTeam();
-          await refreshTickets();
+          await Promise.all([refreshTickets(), refreshWorkUnits()]);
         }}
       />
       <WorkUnitSuccessModal
