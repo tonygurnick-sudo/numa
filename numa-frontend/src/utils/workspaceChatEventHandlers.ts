@@ -889,35 +889,47 @@ function addTodoSegment(helpers: WorkspaceChatMessageHelpers, toolUseId: string,
   helpers.setMessages((prev) => {
     const updated = ensureAssistantMessage(prev);
     const lastIdx = updated.length - 1;
+
+    // Mark all todo segments in ALL messages (including current) as complete so they auto-collapse.
+    // Both todos can end up in the same message during streaming (placeholder + full input),
+    // so we must mark the current message's todos too, not just previous messages.
+    for (let i = 0; i <= lastIdx; i++) {
+      const msg = updated[i];
+      if (!msg.segments) continue;
+      const hasTodo = msg.segments.some((s) => s.kind === 'todo' && !(s as WorkspaceChatTodoSegment).isComplete);
+      if (hasTodo) {
+        updated[i] = {
+          ...msg,
+          segments: msg.segments.map((s) =>
+            s.kind === 'todo' && !(s as WorkspaceChatTodoSegment).isComplete ? { ...s, isComplete: true } : s,
+          ),
+        };
+      }
+    }
+
+    // Re-read the last message after marking (it may have been updated above)
     const lastMsg = { ...updated[lastIdx] };
     const segments = [...(lastMsg.segments || [])] as WorkspaceChatSegment[];
 
-    // Check if there's an existing todo segment to update
-    const existingIdx = segments.findIndex((s) => s.kind === 'todo');
+    // Find existing todo with the same toolUseId to update, or add a new one
+    const existingIdx = segments.findIndex(
+      (s) => s.kind === 'todo' && (s as WorkspaceChatTodoSegment).toolUseId === toolUseId,
+    );
+    const newTodo: WorkspaceChatTodoSegment = {
+      kind: 'todo',
+      toolUseId,
+      items: items.map((item) => ({
+        content: item.content,
+        status: item.status,
+        activeForm: item.activeForm,
+      })),
+      isComplete: false,
+    };
+
     if (existingIdx >= 0) {
-      // Update existing todo segment
-      segments[existingIdx] = {
-        kind: 'todo',
-        toolUseId,
-        items: items.map((item) => ({
-          content: item.content,
-          status: item.status,
-          activeForm: item.activeForm,
-        })),
-        isComplete: false,
-      };
+      segments[existingIdx] = newTodo;
     } else {
-      // Add new todo segment
-      segments.push({
-        kind: 'todo',
-        toolUseId,
-        items: items.map((item) => ({
-          content: item.content,
-          status: item.status,
-          activeForm: item.activeForm,
-        })),
-        isComplete: false,
-      });
+      segments.push(newTodo);
     }
 
     lastMsg.segments = segments;

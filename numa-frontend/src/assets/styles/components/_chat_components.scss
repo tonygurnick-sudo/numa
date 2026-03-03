@@ -4448,11 +4448,20 @@ $border-radius-pill: 1rem;
   .todo-header {
     display: flex;
     align-items: center;
-    justify-content: space-between;
     padding: 0.625rem 1rem;
     background: #f9fafb;
-    border-bottom: 1px solid #e5e7eb;
     font-size: 0.8125rem;
+    user-select: none;
+    cursor: pointer;
+    gap: 0.5rem;
+
+    &:hover {
+      background: #f3f4f6;
+    }
+  }
+
+  &:not(.todo-card-collapsed) .todo-header {
+    border-bottom: 1px solid #e5e7eb;
   }
 
   .todo-title {
@@ -4460,6 +4469,7 @@ $border-radius-pill: 1rem;
     font-weight: 500;
     display: flex;
     align-items: center;
+    flex: 1;
 
     i {
       color: #9ca3af;
@@ -4472,6 +4482,17 @@ $border-radius-pill: 1rem;
     background: #e5e7eb;
     padding: 0.125rem 0.5rem;
     border-radius: 12px;
+  }
+
+  .todo-summary-text {
+    color: #6b7280;
+    font-weight: 400;
+  }
+
+  .todo-collapse-icon {
+    color: #9ca3af;
+    font-size: 0.75rem;
+    flex-shrink: 0;
   }
 
   .todo-list {
