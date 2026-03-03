@@ -51,7 +51,7 @@ interface GlobalSettingsModalProps {
 const generateId = () => `custom-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
 const STATUS_TYPES: StatusType[] = ['backlog', 'scoped', 'queued', 'active', 'completed', 'ended'];
-const FIELD_CATEGORIES: FieldCategory[] = ['common', 'development', 'support', 'crm', 'operations'];
+const FIELD_CATEGORIES: string[] = ['common', 'mining', 'vehicle', 'crm', 'support', 'development', 'operations'];
 const FIELD_TYPES: FieldType[] = [
   'text',
   'textarea',
@@ -178,7 +178,71 @@ export function GlobalSettingsModal({
   const [staff, setStaff] = useState<StaffProfile[]>([]);
   const [ticketTypes, setTicketTypes] = useState<TicketType[]>([]);
   // statuses are read-only (fixed StatusType categories) — no longer editable
-  const [fields, setFields] = useState<FieldDefinition[]>([]);
+  const getInitialFields = (): FieldDefinition[] => [
+    { id: 'asset_id', name: 'Asset ID', fieldType: 'text', category: 'mining', isSystem: true, order: 100 },
+    { id: 'service_hours', name: 'Service Hours', fieldType: 'number', category: 'mining', isSystem: true, order: 110 },
+    { id: 'tractor_model', name: 'Tractor Model', fieldType: 'text', category: 'mining', isSystem: true, order: 120 },
+    { id: 'tractor_id', name: 'Tractor ID', fieldType: 'text', category: 'mining', isSystem: true, order: 125 },
+    {
+      id: 'registration',
+      name: 'Registration Number',
+      fieldType: 'text',
+      category: 'vehicle',
+      isSystem: true,
+      order: 200,
+    },
+    { id: 'vin', name: 'VIN', fieldType: 'text', category: 'vehicle', isSystem: true, order: 210 },
+    {
+      id: 'fuel_type',
+      name: 'Fuel Type',
+      fieldType: 'select',
+      category: 'vehicle',
+      isSystem: true,
+      options: ['Diesel', 'Petrol', 'Electric', 'Hybrid'],
+      order: 220,
+    },
+    {
+      id: 'consignment',
+      name: 'Consignment Note',
+      fieldType: 'text',
+      category: 'logistics',
+      isSystem: true,
+      order: 300,
+    },
+    {
+      id: 'shipping_method',
+      name: 'Shipping Method',
+      fieldType: 'select',
+      category: 'logistics',
+      isSystem: true,
+      options: ['Sea', 'Air', 'Road', 'Rail'],
+      order: 310,
+    },
+    { id: 'budget_code', name: 'Budget Code', fieldType: 'text', category: 'general', isSystem: true, order: 400 },
+    {
+      id: 'estimated_effort',
+      name: 'Estimated Effort (hrs)',
+      fieldType: 'number',
+      category: 'general',
+      isSystem: true,
+      order: 410,
+    },
+    {
+      id: 'complexity',
+      name: 'Complexity',
+      fieldType: 'select',
+      category: 'general',
+      isSystem: true,
+      options: ['Low', 'Medium', 'High', 'Critical'],
+      order: 420,
+    },
+  ];
+
+  const [fields, setFields] = useState<FieldDefinition[]>(() => {
+    const initial = config?.fields ?? [];
+    if (initial.length === 0) return getInitialFields();
+    return initial;
+  });
   const [crmConfig, setCrmConfig] = useState<CrmConfig>({
     lifecycleStages: [],
     customerFlags: [],
@@ -202,18 +266,36 @@ export function GlobalSettingsModal({
   // ── UI state ───────────────────────────────────────────────────────────────
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [expandedTypeId, setExpandedTypeId] = useState<string | null>(null);
   const [fieldCategoryFilter, setFieldCategoryFilter] = useState<FieldCategory>('common');
   const [fieldSearch, setFieldSearch] = useState('');
   const [showingNewField, setShowingNewField] = useState(false);
+  const [editingFieldId, setEditingFieldId] = useState<string | null>(null);
   const [newFieldName, setNewFieldName] = useState('');
   const [newFieldType, setNewFieldType] = useState<FieldType>('text');
-  const [newFieldCategory, setNewFieldCategory] = useState<FieldCategory>('common');
+  const [newFieldCategory, setNewFieldCategory] = useState<string>('common');
   const [newFieldOptions, setNewFieldOptions] = useState('');
+
+  // ── Ticket Types Config state ──────────────────────────────────────────────
+  const [editingTicketType, setEditingTicketType] = useState<TicketType | null>(null);
+  const [ticketTypeForm, setTicketTypeForm] = useState<TicketType>({
+    id: '',
+    name: '',
+    prefix: '',
+    icon: '',
+    color: '',
+    defaultFields: [],
+    order: 0,
+  });
+  const [showTicketTypeModal, setShowTicketTypeModal] = useState(false);
+  const [showTicketTypeFieldModal, setShowTicketTypeFieldModal] = useState(false);
+  const [fieldSelectionSearch, setFieldSelectionSearch] = useState('');
+  const [showCustomerDetail, setShowCustomerDetail] = useState(false);
 
   // ── CRM Config state ───────────────────────────────────────────────────────
   const [editingLifecycleStage, setEditingLifecycleStage] = useState<CrmLifecycleStage | null>(null);
-  const [lifecycleStageForm, setLifecycleStageForm] = useState({ name: '', colorPosition: 6 });
+  const [lifecycleStageForm, setLifecycleStageForm] = useState<{ name: string; colorPosition: number; color?: string }>(
+    { name: '', colorPosition: 6 },
+  );
   const [showLifecycleStageModal, setShowLifecycleStageModal] = useState(false);
 
   const [editingFlag, setEditingFlag] = useState<CrmFlag | null>(null);
@@ -226,7 +308,11 @@ export function GlobalSettingsModal({
 
   // ── Supplier Config state ──────────────────────────────────────────────────
   const [editingSupplierLifecycleStage, setEditingSupplierLifecycleStage] = useState<CrmLifecycleStage | null>(null);
-  const [supplierLifecycleStageForm, setSupplierLifecycleStageForm] = useState({ name: '', colorPosition: 6 });
+  const [supplierLifecycleStageForm, setSupplierLifecycleStageForm] = useState<{
+    name: string;
+    colorPosition: number;
+    color?: string;
+  }>({ name: '', colorPosition: 6 });
   const [showSupplierLifecycleStageModal, setShowSupplierLifecycleStageModal] = useState(false);
 
   const [editingSupplierFlag, setEditingSupplierFlag] = useState<SupplierFlag | null>(null);
@@ -239,8 +325,13 @@ export function GlobalSettingsModal({
 
   // ── Detail modal state ─────────────────────────────────────────────────────
   const [detailCustomerId, setDetailCustomerId] = useState<string | null>(null);
-  const [showCustomerDetail, setShowCustomerDetail] = useState(false);
   const [detailSupplierId, setDetailSupplierId] = useState<string | null>(null);
+
+  const allFieldCategories = useMemo(() => {
+    return Array.from(new Set([...FIELD_CATEGORIES, ...fields.map((f) => f.category)]))
+      .filter(Boolean)
+      .sort();
+  }, [fields]);
   const [showSupplierDetail, setShowSupplierDetail] = useState(false);
 
   // ── Confirm modal state ────────────────────────────────────────────────────
@@ -274,14 +365,18 @@ export function GlobalSettingsModal({
         config.supplierConfig
           ? structuredClone(config.supplierConfig)
           : {
-              lifecycleStages: [],
+              lifecycleStages: [
+                { id: 'sup-stage-potential', name: 'Potential', colorPosition: 6, color: '#6c757d' }, // Grey
+                { id: 'sup-stage-approved', name: 'Approved', colorPosition: 4, color: '#0dcaf0' }, // Light Blue
+                { id: 'sup-stage-preferred', name: 'Preferred', colorPosition: 2, color: '#22c55e' }, // Green
+                { id: 'sup-stage-inactive', name: 'Inactive', colorPosition: 9, color: '#ef4444' }, // Red
+              ],
               supplierFlags: [],
               documentTypes: [],
             },
       );
       setLinkConfig(config.linkConfig ? structuredClone(config.linkConfig) : { linkTypes: [] });
       setError(null);
-      setExpandedTypeId(null);
       setFieldSearch('');
       setShowingNewField(false);
     }
@@ -385,8 +480,8 @@ export function GlobalSettingsModal({
     [numaDelete, t],
   );
 
-  // ── Team delete handler ──────────────────────────────────────────────────
-  const handleDeleteTeam = useCallback(
+  // ── Board delete handler ──────────────────────────────────────────────────
+  const handleDeleteBoard = useCallback(
     async (teamId: string) => {
       try {
         await OpsService.deleteTeam(numaDelete, teamId);
@@ -394,7 +489,7 @@ export function GlobalSettingsModal({
       } catch (err) {
         const msg = String(err);
         if (msg.includes('409')) {
-          setError(t('globalSettings.teamDeleteHasTickets'));
+          setError(t('globalSettings.boardDeleteHasTickets'));
         } else {
           setError(t('errors.saveFailed', { message: msg }));
         }
@@ -431,27 +526,52 @@ export function GlobalSettingsModal({
     }
   }, [numaPost, t]);
 
-  // ── Add custom field handler ───────────────────────────────────────────────
-  const handleAddCustomField = () => {
+  // ── Save custom field handler (Create or Update) ───────────────────────────
+  const handleSaveCustomField = () => {
     if (!newFieldName.trim()) return;
-    const newField: FieldDefinition = {
-      id: generateId(),
-      name: newFieldName.trim(),
-      category: newFieldCategory,
-      fieldType: newFieldType,
-      options: ['select', 'multi_select'].includes(newFieldType)
-        ? newFieldOptions
-            .split(',')
-            .map((o) => o.trim())
-            .filter(Boolean)
-        : undefined,
-      isSystem: false,
-      order: fields.length,
-    };
-    setFields((prev) => [...prev, newField]);
+
+    const parsedOptions = ['select', 'multi_select'].includes(newFieldType)
+      ? newFieldOptions
+          .split(',')
+          .map((o) => o.trim())
+          .filter(Boolean)
+      : undefined;
+
+    setFields((prev) => {
+      if (editingFieldId) {
+        // Update existing field
+        return prev.map((f) =>
+          f.id === editingFieldId
+            ? {
+                ...f,
+                name: newFieldName.trim(),
+                category: newFieldCategory as FieldCategory,
+                fieldType: newFieldType,
+                options: parsedOptions,
+              }
+            : f,
+        );
+      } else {
+        // Create new field
+        const newField: FieldDefinition = {
+          id: generateId(),
+          name: newFieldName.trim(),
+          category: newFieldCategory as FieldCategory,
+          fieldType: newFieldType,
+          options: parsedOptions,
+          isSystem: false,
+          order: prev.length,
+        };
+        return [...prev, newField];
+      }
+    });
+
+    // Reset form state
     setNewFieldName('');
     setNewFieldType('text');
+    setNewFieldCategory('common');
     setNewFieldOptions('');
+    setEditingFieldId(null);
     setShowingNewField(false);
   };
 
@@ -512,7 +632,7 @@ export function GlobalSettingsModal({
                 />
               </td>
               <td>
-                <div className="d-flex gap-1">
+                <div className="d-flex flex-wrap gap-1">
                   {BOARD_COLORS.slice(0, 6).map((c) => (
                     <ColorSwatch
                       key={c}
@@ -615,6 +735,13 @@ export function GlobalSettingsModal({
   // ── Tab 3: Ticket Types ────────────────────────────────────────────────────
   const renderTicketTypesTab = () => (
     <div>
+      <div className="alert alert-info small mb-3">
+        <i className="bi bi-info-circle me-1" />
+        {t(
+          'globalSettings.ticketTypesInfo',
+          'A ticket type is a piece of work. Create ticket types for bugs, features, tasks, or anything else your boards need to track.',
+        )}
+      </div>
       <Table size="sm" hover className="mb-0 ops-settings-table">
         <thead>
           <tr>
@@ -626,155 +753,84 @@ export function GlobalSettingsModal({
           </tr>
         </thead>
         <tbody>
-          {ticketTypes.map((tt, idx) => (
-            <React.Fragment key={tt.id}>
-              <tr
-                style={{ cursor: 'pointer' }}
-                onClick={() => setExpandedTypeId(expandedTypeId === tt.id ? null : tt.id)}
-              >
+          {ticketTypes.map((tt, idx) => {
+            const textColor = getContrastTextColor(tt.color || '#6c757d');
+            return (
+              <tr key={tt.id}>
                 <td>
-                  <Form.Control
-                    type="text"
-                    size="sm"
-                    style={{ width: 50 }}
-                    value={tt.icon}
-                    onClick={(e) => e.stopPropagation()}
-                    onChange={(e) => {
-                      const updated = [...ticketTypes];
-                      updated[idx] = { ...updated[idx], icon: e.target.value };
-                      setTicketTypes(updated);
-                    }}
-                  />
-                </td>
-                <td>
-                  <div className="d-flex gap-1">
-                    {BOARD_COLORS.slice(0, 6).map((c) => (
-                      <ColorSwatch
-                        key={c}
-                        color={c}
-                        selected={tt.color === c}
-                        onSelect={(color) => {
-                          const updated = [...ticketTypes];
-                          updated[idx] = { ...updated[idx], color };
-                          setTicketTypes(updated);
-                        }}
-                      />
-                    ))}
+                  <div
+                    className="d-flex align-items-center justify-content-center bg-light rounded"
+                    style={{ width: 32, height: 32 }}
+                  >
+                    {tt.icon}
                   </div>
                 </td>
                 <td>
-                  <Form.Control
-                    type="text"
-                    size="sm"
-                    maxLength={8}
-                    style={{ width: 80 }}
-                    value={tt.prefix}
-                    onClick={(e) => e.stopPropagation()}
-                    onChange={(e) => {
-                      const updated = [...ticketTypes];
-                      updated[idx] = { ...updated[idx], prefix: e.target.value };
-                      setTicketTypes(updated);
-                    }}
+                  <div
+                    className="rounded-circle d-flex align-items-center justify-content-center fw-bold"
+                    style={{ width: 32, height: 32, backgroundColor: tt.color, color: textColor, fontSize: 12 }}
                   />
                 </td>
-                <td>
-                  <Form.Control
-                    type="text"
-                    size="sm"
-                    value={tt.name}
-                    onClick={(e) => e.stopPropagation()}
-                    onChange={(e) => {
-                      const updated = [...ticketTypes];
-                      updated[idx] = { ...updated[idx], name: e.target.value };
-                      setTicketTypes(updated);
-                    }}
-                  />
-                </td>
-                <td>
-                  <div className="d-flex gap-1">
+                <td className="align-middle fw-medium">{tt.prefix}</td>
+                <td className="align-middle">{tt.name}</td>
+                <td className="text-end">
+                  <div className="d-flex gap-1 justify-content-end">
                     <Button
-                      variant="link"
+                      variant="light"
                       size="sm"
-                      className="text-muted p-0"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setExpandedTypeId(expandedTypeId === tt.id ? null : tt.id);
+                      className="text-muted border-0 hover-primary"
+                      onClick={() => {
+                        setEditingTicketType(tt);
+                        setTicketTypeForm(structuredClone(tt));
+                        setShowTicketTypeModal(true);
                       }}
                     >
-                      <i className={`bi bi-chevron-${expandedTypeId === tt.id ? 'up' : 'down'}`} />
+                      <i className="bi bi-pencil" />
                     </Button>
                     <Button
-                      variant="outline-danger"
+                      variant="light"
                       size="sm"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setTicketTypes((prev) => prev.filter((_, i) => i !== idx));
-                      }}
+                      className="text-danger border-0"
+                      onClick={() => setTicketTypes((prev) => prev.filter((_, i) => i !== idx))}
                     >
                       <i className="bi bi-trash" />
                     </Button>
                   </div>
                 </td>
               </tr>
-              {expandedTypeId === tt.id && (
-                <tr>
-                  <td colSpan={5} className="bg-light">
-                    <div className="p-2">
-                      <strong className="d-block mb-2">{t('globalSettings.defaultFields')}</strong>
-                      <div className="d-flex flex-wrap gap-2">
-                        {fields.map((field) => (
-                          <Form.Check
-                            key={field.id}
-                            type="checkbox"
-                            id={`type-field-${tt.id}-${field.id}`}
-                            label={field.name}
-                            checked={tt.defaultFields.includes(field.id)}
-                            onChange={(e) => {
-                              const updated = [...ticketTypes];
-                              const current = updated[idx];
-                              if (e.target.checked) {
-                                updated[idx] = { ...current, defaultFields: [...current.defaultFields, field.id] };
-                              } else {
-                                updated[idx] = {
-                                  ...current,
-                                  defaultFields: current.defaultFields.filter((id) => id !== field.id),
-                                };
-                              }
-                              setTicketTypes(updated);
-                            }}
-                          />
-                        ))}
-                      </div>
-                    </div>
-                  </td>
-                </tr>
-              )}
-            </React.Fragment>
-          ))}
+            );
+          })}
+          {ticketTypes.length === 0 && (
+            <tr>
+              <td colSpan={5} className="text-center py-4 text-muted">
+                No ticket types defined.
+              </td>
+            </tr>
+          )}
         </tbody>
       </Table>
-      <Button
-        variant="outline-primary"
-        size="sm"
-        className="mt-2"
-        onClick={() =>
-          setTicketTypes((prev) => [
-            ...prev,
-            {
+      <div className="mt-3">
+        <Button
+          variant="outline-primary"
+          size="sm"
+          onClick={() => {
+            setEditingTicketType(null);
+            setTicketTypeForm({
               id: generateId(),
               name: '',
               prefix: '',
               icon: '',
-              color: BOARD_COLORS[prev.length % BOARD_COLORS.length],
+              color: BOARD_COLORS[ticketTypes.length % BOARD_COLORS.length],
               defaultFields: [],
-              order: prev.length,
-            },
-          ])
-        }
-      >
-        <i className="bi bi-plus me-1" />
-        {t('globalSettings.addType')}
-      </Button>
+              order: ticketTypes.length,
+            });
+            setShowTicketTypeModal(true);
+          }}
+        >
+          <i className="bi bi-plus me-1" />
+          {t('globalSettings.addType')}
+        </Button>
+      </div>
     </div>
   );
 
@@ -823,130 +879,219 @@ export function GlobalSettingsModal({
   );
 
   // ── Tab 5: Field Library ───────────────────────────────────────────────────
-  const renderFieldsTab = () => (
-    <div>
-      {/* Category sub-tabs */}
-      <Nav variant="pills" className="mb-3">
-        {FIELD_CATEGORIES.map((cat) => (
-          <Nav.Item key={cat}>
-            <Nav.Link active={fieldCategoryFilter === cat} onClick={() => setFieldCategoryFilter(cat)}>
-              {t(`globalSettings.fieldCategories.${cat}`)}
-            </Nav.Link>
-          </Nav.Item>
-        ))}
-      </Nav>
+  const renderFieldsTab = () => {
+    // Dynamically get all unique categories currently in use across all fields,
+    // combined with the default FIELD_CATEGORIES.
+    const allFieldCategories = Array.from(new Set([...FIELD_CATEGORIES, ...fields.map((f) => f.category)])).sort();
 
-      {/* Search */}
-      <Form.Control
-        type="text"
-        size="sm"
-        className="mb-3"
-        placeholder={t('globalSettings.searchFields')}
-        value={fieldSearch}
-        onChange={(e) => setFieldSearch(e.target.value)}
-      />
-
-      {/* Field list */}
-      <div className="d-flex flex-column gap-2 mb-3">
-        {filteredFields.map((field) => (
-          <div key={field.id} className="d-flex align-items-center gap-2 p-2 border rounded">
-            <span className="flex-grow-1 fw-medium">{field.name}</span>
-            <Badge bg="outline-secondary" className="border text-dark">
-              {field.fieldType}
-            </Badge>
-            {field.isSystem && (
-              <Badge bg="warning" text="dark">
-                {t('globalSettings.system')}
-              </Badge>
-            )}
-            {!field.isSystem && (
+    return (
+      <div className="d-flex flex-column h-100">
+        <div className="bg-light border rounded p-3 mb-3">
+          <div className="d-flex flex-column flex-md-row gap-3 align-items-md-center justify-content-between">
+            <div className="d-flex flex-column">
+              <span className="fw-bold d-flex align-items-center gap-2">
+                <i className="bi bi-collection text-primary"></i> Field Library
+              </span>
+              <span className="text-muted small">Manage available data fields for your boards.</span>
+            </div>
+            <div className="d-flex gap-2">
+              <div className="input-group input-group-sm" style={{ width: '240px' }}>
+                <span className="input-group-text bg-white border-end-0">
+                  <i className="bi bi-search text-muted"></i>
+                </span>
+                <input
+                  type="text"
+                  className="form-control border-start-0 ps-0 shadow-none"
+                  placeholder="Search fields..."
+                  value={fieldSearch}
+                  onChange={(e) => setFieldSearch(e.target.value)}
+                />
+              </div>
               <Button
-                variant="outline-danger"
+                variant={showingNewField ? 'secondary' : 'primary'}
                 size="sm"
-                onClick={() => setFields((prev) => prev.filter((f) => f.id !== field.id))}
+                onClick={() => {
+                  if (showingNewField) {
+                    setEditingFieldId(null);
+                    setNewFieldName('');
+                    setNewFieldType('text');
+                    setNewFieldCategory('common');
+                    setNewFieldOptions('');
+                  }
+                  setShowingNewField(!showingNewField);
+                }}
               >
-                <i className="bi bi-trash" />
+                <i className={`bi bi-${showingNewField ? 'x-lg' : 'plus-lg'}`}></i>
               </Button>
-            )}
+            </div>
           </div>
-        ))}
-        {filteredFields.length === 0 && <div className="text-muted text-center py-3">{t('common.noResults')}</div>}
-      </div>
 
-      {/* Add Custom Field */}
-      {!showingNewField ? (
-        <Button variant="outline-primary" size="sm" onClick={() => setShowingNewField(true)}>
-          <i className="bi bi-plus me-1" />
-          {t('globalSettings.addCustomField')}
-        </Button>
-      ) : (
-        <div className="border rounded p-3 bg-light">
-          <div className="d-flex gap-2 flex-wrap mb-2">
-            <Form.Group>
-              <Form.Label className="small mb-1">{t('common.name')}</Form.Label>
-              <Form.Control
-                type="text"
-                size="sm"
-                value={newFieldName}
-                onChange={(e) => setNewFieldName(e.target.value)}
-                style={{ width: 160 }}
-              />
-            </Form.Group>
-            <Form.Group>
-              <Form.Label className="small mb-1">{t('globalSettings.fieldType')}</Form.Label>
-              <Form.Select
-                size="sm"
-                value={newFieldType}
-                onChange={(e) => setNewFieldType(e.target.value as FieldType)}
-                style={{ width: 140 }}
-              >
-                {FIELD_TYPES.map((ft) => (
-                  <option key={ft} value={ft}>
-                    {ft}
-                  </option>
-                ))}
-              </Form.Select>
-            </Form.Group>
-            <Form.Group>
-              <Form.Label className="small mb-1">{t('globalSettings.category')}</Form.Label>
-              <Form.Select
-                size="sm"
-                value={newFieldCategory}
-                onChange={(e) => setNewFieldCategory(e.target.value as FieldCategory)}
-                style={{ width: 140 }}
-              >
-                {FIELD_CATEGORIES.map((cat) => (
-                  <option key={cat} value={cat}>
-                    {t(`globalSettings.fieldCategories.${cat}`)}
-                  </option>
-                ))}
-              </Form.Select>
-            </Form.Group>
-          </div>
-          {['select', 'multi_select'].includes(newFieldType) && (
-            <Form.Group className="mb-2">
-              <Form.Label className="small mb-1">{t('globalSettings.options')}</Form.Label>
-              <Form.Control
-                type="text"
-                size="sm"
-                placeholder={t('globalSettings.optionsHelp')}
-                value={newFieldOptions}
-                onChange={(e) => setNewFieldOptions(e.target.value)}
-              />
-            </Form.Group>
+          {showingNewField && (
+            <div className="mt-3 pt-3 border-top position-relative">
+              {editingFieldId && (
+                <Badge bg="warning" text="dark" className="position-absolute top-0 end-0 mt-2 me-2">
+                  Editing Custom Field
+                </Badge>
+              )}
+              <div className="row g-3">
+                <div className="col-md-4">
+                  <Form.Label className="small fw-medium mb-1">{t('common.name')} *</Form.Label>
+                  <Form.Control
+                    size="sm"
+                    type="text"
+                    placeholder="e.g., Asset Number"
+                    value={newFieldName}
+                    onChange={(e) => setNewFieldName(e.target.value)}
+                  />
+                </div>
+                <div className="col-md-3">
+                  <Form.Label className="small fw-medium mb-1">{t('globalSettings.fieldType')}</Form.Label>
+                  <Form.Select
+                    size="sm"
+                    value={newFieldType}
+                    onChange={(e) => setNewFieldType(e.target.value as FieldType)}
+                  >
+                    {FIELD_TYPES.map((ft) => (
+                      <option key={ft} value={ft}>
+                        {ft}
+                      </option>
+                    ))}
+                  </Form.Select>
+                </div>
+                <div className="col-md-3">
+                  <Form.Label className="small fw-medium mb-1">{t('globalSettings.category')}</Form.Label>
+                  <Form.Control
+                    size="sm"
+                    as="input"
+                    list="field-category-list"
+                    placeholder="Select or type..."
+                    value={newFieldCategory}
+                    onChange={(e) => setNewFieldCategory(e.target.value as FieldCategory)}
+                  />
+                  <datalist id="field-category-list">
+                    {allFieldCategories.map((c) => (
+                      <option key={c} value={c}>
+                        {c}
+                      </option>
+                    ))}
+                  </datalist>
+                </div>
+                <div className="col-md-2 d-flex align-items-end">
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    className="w-100"
+                    onClick={handleSaveCustomField}
+                    disabled={!newFieldName.trim()}
+                  >
+                    {editingFieldId ? t('common.save') : t('common.add')}
+                  </Button>
+                </div>
+                {['select', 'multi_select'].includes(newFieldType) && (
+                  <div className="col-12 mt-2">
+                    <Form.Label className="small fw-medium mb-1">
+                      {t('globalSettings.options')} (comma separated)
+                    </Form.Label>
+                    <Form.Control
+                      size="sm"
+                      type="text"
+                      placeholder="e.g. Red, Blue, Green"
+                      value={newFieldOptions}
+                      onChange={(e) => setNewFieldOptions(e.target.value)}
+                    />
+                  </div>
+                )}
+              </div>
+            </div>
           )}
-          <div className="d-flex gap-2">
-            <Button variant="primary" size="sm" onClick={handleAddCustomField} disabled={!newFieldName.trim()}>
-              {t('common.add')}
-            </Button>
-            <Button variant="secondary" size="sm" onClick={() => setShowingNewField(false)}>
-              {t('common.cancel')}
-            </Button>
-          </div>
         </div>
-      )}
-    </div>
-  );
+
+        <div className="d-flex gap-1 mb-3 overflow-auto pb-1 flex-wrap">
+          {allFieldCategories.map((cat) => (
+            <Badge
+              key={cat}
+              role="button"
+              bg={fieldCategoryFilter === cat ? 'primary' : 'light'}
+              className={`py-2 px-3 fw-medium ${fieldCategoryFilter === cat ? 'text-white' : 'text-dark border'}`}
+              style={{ cursor: 'pointer', fontSize: '0.8rem' }}
+              onClick={() => setFieldCategoryFilter(cat as FieldCategory)}
+            >
+              {cat.charAt(0).toUpperCase() + cat.slice(1)}
+              <span className="ms-2 opacity-50 px-1 rounded bg-black bg-opacity-10">
+                {fields.filter((f) => f.category === cat).length}
+              </span>
+            </Badge>
+          ))}
+        </div>
+
+        <div className="mb-4 flex-grow-1 overflow-auto pe-2">
+          {filteredFields.length === 0 ? (
+            <div className="text-center py-5 bg-light rounded border border-dashed text-muted">
+              <i className="bi bi-search d-block fs-3 mb-2 opacity-25"></i>
+              No fields found in this category.
+            </div>
+          ) : (
+            <div className="row g-2">
+              {filteredFields.map((field) => (
+                <div key={field.id} className="col-12 col-lg-6">
+                  <div
+                    className={`p-2 border rounded bg-white shadow-sm d-flex align-items-center gap-2 h-100 ${!field.isSystem ? 'border-info-subtle bg-info bg-opacity-10' : ''}`}
+                  >
+                    <div className="flex-grow-1 overflow-hidden">
+                      <div className="d-flex align-items-center gap-2">
+                        <span className="fw-bold small text-dark text-truncate" title={field.name}>
+                          {field.name}
+                        </span>
+                        {field.isSystem ? (
+                          <Badge bg="secondary" text="white" style={{ fontSize: '0.6rem' }} className="py-1">
+                            CORE
+                          </Badge>
+                        ) : (
+                          <Badge bg="info" text="dark" style={{ fontSize: '0.6rem' }} className="py-1">
+                            CUSTOM
+                          </Badge>
+                        )}
+                      </div>
+                      <div className="text-muted d-flex align-items-center gap-1" style={{ fontSize: '0.7rem' }}>
+                        <i className="bi bi-tag small"></i> {field.fieldType}
+                      </div>
+                    </div>
+                    {!field.isSystem && (
+                      <div className="d-flex ms-2">
+                        <Button
+                          variant="link"
+                          size="sm"
+                          className="text-primary p-0 border-0 me-2"
+                          onClick={() => {
+                            setEditingFieldId(field.id);
+                            setNewFieldName(field.name);
+                            setNewFieldType(field.fieldType);
+                            setNewFieldCategory(field.category);
+                            setNewFieldOptions(field.options?.join(', ') || '');
+                            setShowingNewField(true);
+                          }}
+                        >
+                          <i className="bi bi-pencil"></i>
+                        </Button>
+                        <Button
+                          variant="link"
+                          size="sm"
+                          className="text-danger p-0 border-0"
+                          onClick={() => setFields((prev) => prev.filter((f) => f.id !== field.id))}
+                        >
+                          <i className="bi bi-trash"></i>
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  };
 
   // ── Tab 6: CRM Config ─────────────────────────────────────────────────────
   const renderCrmConfigTab = () => (
@@ -1005,7 +1150,7 @@ export function GlobalSettingsModal({
 
           <div className="d-flex flex-column gap-2">
             {(crmConfig.lifecycleStages || []).map((stage, index, arr) => {
-              const colorHex = getColorForPosition(stage.colorPosition);
+              const colorHex = stage.color || getColorForPosition(stage.colorPosition);
               const textColor = getContrastTextColor(colorHex);
 
               return (
@@ -1028,10 +1173,6 @@ export function GlobalSettingsModal({
                         const updated = structuredClone(crmConfig);
                         const stages = updated.lifecycleStages;
                         [stages[index - 1], stages[index]] = [stages[index], stages[index - 1]];
-                        if (updated.useAutoColors !== false) {
-                          const positions = calculateAutoColorPositions(stages.length).reverse();
-                          stages.forEach((s, idx) => (s.colorPosition = positions[idx]));
-                        }
                         setCrmConfig(updated);
                       }}
                     >
@@ -1045,10 +1186,6 @@ export function GlobalSettingsModal({
                         const updated = structuredClone(crmConfig);
                         const stages = updated.lifecycleStages;
                         [stages[index], stages[index + 1]] = [stages[index + 1], stages[index]];
-                        if (updated.useAutoColors !== false) {
-                          const positions = calculateAutoColorPositions(stages.length).reverse();
-                          stages.forEach((s, idx) => (s.colorPosition = positions[idx]));
-                        }
                         setCrmConfig(updated);
                       }}
                     >
@@ -1063,7 +1200,11 @@ export function GlobalSettingsModal({
                       className="text-muted border-0 hover-primary"
                       onClick={() => {
                         setEditingLifecycleStage(stage);
-                        setLifecycleStageForm({ name: stage.name, colorPosition: stage.colorPosition });
+                        setLifecycleStageForm({
+                          name: stage.name,
+                          colorPosition: stage.colorPosition,
+                          color: stage.color,
+                        });
                         setShowLifecycleStageModal(true);
                       }}
                     >
@@ -1080,10 +1221,6 @@ export function GlobalSettingsModal({
                         }
                         const updated = structuredClone(crmConfig);
                         updated.lifecycleStages = updated.lifecycleStages.filter((s) => s.id !== stage.id);
-                        if (updated.useAutoColors !== false) {
-                          const positions = calculateAutoColorPositions(updated.lifecycleStages.length).reverse();
-                          updated.lifecycleStages.forEach((s, idx) => (s.colorPosition = positions[idx]));
-                        }
                         setCrmConfig(updated);
                       }}
                     >
@@ -1320,13 +1457,13 @@ export function GlobalSettingsModal({
                 }
                 setSupplierConfig(updated);
               }}
-              label={<span className="text-muted small">Auto-assign colors based on stage order</span>}
+              label={<span className="text-muted small">Auto-assign colors based on stage order (Legacy)</span>}
             />
           </div>
 
           <div className="d-flex flex-column gap-2">
             {(supplierConfig.lifecycleStages || []).map((stage, index, arr) => {
-              const colorHex = getColorForPosition(stage.colorPosition);
+              const colorHex = stage.color || getColorForPosition(stage.colorPosition);
               const textColor = getContrastTextColor(colorHex);
 
               return (
@@ -1349,10 +1486,6 @@ export function GlobalSettingsModal({
                         const updated = structuredClone(supplierConfig);
                         const stages = updated.lifecycleStages;
                         [stages[index - 1], stages[index]] = [stages[index], stages[index - 1]];
-                        if (updated.useAutoColors !== false) {
-                          const positions = calculateAutoColorPositions(stages.length);
-                          stages.forEach((s, idx) => (s.colorPosition = positions[idx]));
-                        }
                         setSupplierConfig(updated);
                       }}
                     >
@@ -1366,10 +1499,6 @@ export function GlobalSettingsModal({
                         const updated = structuredClone(supplierConfig);
                         const stages = updated.lifecycleStages;
                         [stages[index], stages[index + 1]] = [stages[index + 1], stages[index]];
-                        if (updated.useAutoColors !== false) {
-                          const positions = calculateAutoColorPositions(stages.length);
-                          stages.forEach((s, idx) => (s.colorPosition = positions[idx]));
-                        }
                         setSupplierConfig(updated);
                       }}
                     >
@@ -1384,7 +1513,11 @@ export function GlobalSettingsModal({
                       className="text-muted border-0"
                       onClick={() => {
                         setEditingSupplierLifecycleStage(stage);
-                        setSupplierLifecycleStageForm({ name: stage.name, colorPosition: stage.colorPosition });
+                        setSupplierLifecycleStageForm({
+                          name: stage.name,
+                          colorPosition: stage.colorPosition,
+                          color: stage.color,
+                        });
                         setShowSupplierLifecycleStageModal(true);
                       }}
                     >
@@ -1401,10 +1534,6 @@ export function GlobalSettingsModal({
                         }
                         const updated = structuredClone(supplierConfig);
                         updated.lifecycleStages = updated.lifecycleStages.filter((s) => s.id !== stage.id);
-                        if (updated.useAutoColors !== false) {
-                          const positions = calculateAutoColorPositions(updated.lifecycleStages.length);
-                          updated.lifecycleStages.forEach((s, idx) => (s.colorPosition = positions[idx]));
-                        }
                         setSupplierConfig(updated);
                       }}
                     >
@@ -1733,15 +1862,15 @@ export function GlobalSettingsModal({
     </div>
   );
 
-  // ── Tab 10: Teams ────────────────────────────────────────────────────────
-  const renderTeamsTab = () => (
+  // ── Tab 10: Boards ───────────────────────────────────────────────────────
+  const renderBoardsTab = () => (
     <div>
       <div className="alert alert-info mb-3">
         <i className="bi bi-info-circle me-2" />
-        {t('globalSettings.teamsInfo')}
+        {t('globalSettings.boardsInfo')}
       </div>
       {teams.length === 0 ? (
-        <div className="text-center py-4 text-muted">{t('teams.noTeams')}</div>
+        <div className="text-center py-4 text-muted">{t('boards.noBoards')}</div>
       ) : (
         <Table size="sm" hover className="ops-settings-table">
           <thead>
@@ -1776,10 +1905,10 @@ export function GlobalSettingsModal({
                     onClick={() => {
                       setConfirmDelete({
                         show: true,
-                        title: t('globalSettings.deleteTeamTitle'),
-                        message: t('globalSettings.deleteTeamMessage', { name: team.name }),
+                        title: t('globalSettings.deleteBoardTitle'),
+                        message: t('globalSettings.deleteBoardMessage', { name: team.name }),
                         onConfirm: () => {
-                          handleDeleteTeam(team.id);
+                          handleDeleteBoard(team.id);
                           setConfirmDelete((prev) => ({ ...prev, show: false }));
                         },
                       });
@@ -1852,7 +1981,7 @@ export function GlobalSettingsModal({
               {/* Navigation */}
               <Nav
                 variant="pills"
-                className="flex-column overflow-auto flex-shrink-0 mb-3 mb-md-0 pb-2 pb-md-0 me-0 me-md-3 pe-0 pe-md-3 ops-settings-nav"
+                className="flex-nowrap flex-md-column overflow-auto flex-shrink-0 mb-3 mb-md-0 pb-2 pb-md-0 me-0 me-md-3 pe-0 pe-md-3 ops-settings-nav"
                 style={{ minWidth: 160, maxWidth: '100%', gap: '0.25rem' }}
               >
                 <Nav.Item>
@@ -1883,7 +2012,7 @@ export function GlobalSettingsModal({
                   <Nav.Link eventKey="suppliersList">{t('settings.suppliersList')}</Nav.Link>
                 </Nav.Item>
                 <Nav.Item>
-                  <Nav.Link eventKey="teams">{t('settings.teams')}</Nav.Link>
+                  <Nav.Link eventKey="boards">{t('settings.boards')}</Nav.Link>
                 </Nav.Item>
                 <Nav.Item>
                   <Nav.Link eventKey="linkConfig">{t('settings.linkConfig')}</Nav.Link>
@@ -1901,7 +2030,7 @@ export function GlobalSettingsModal({
                 <Tab.Pane eventKey="supplierConfig">{renderSupplierConfigTab()}</Tab.Pane>
                 <Tab.Pane eventKey="customers">{renderCustomersTab()}</Tab.Pane>
                 <Tab.Pane eventKey="suppliersList">{renderSuppliersTab()}</Tab.Pane>
-                <Tab.Pane eventKey="teams">{renderTeamsTab()}</Tab.Pane>
+                <Tab.Pane eventKey="boards">{renderBoardsTab()}</Tab.Pane>
                 <Tab.Pane eventKey="linkConfig">{renderLinkConfigTab()}</Tab.Pane>
               </Tab.Content>
             </div>
@@ -1951,12 +2080,14 @@ export function GlobalSettingsModal({
               {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((pos) => {
                 const colorHex = getColorForPosition(pos);
                 const textColor = getContrastTextColor(colorHex);
-                const isSelected = lifecycleStageForm.colorPosition === pos;
+                const isSelected = lifecycleStageForm.colorPosition === pos && !lifecycleStageForm.color;
                 return (
                   <button
                     key={pos}
                     type="button"
-                    onClick={() => setLifecycleStageForm({ ...lifecycleStageForm, colorPosition: pos })}
+                    onClick={() =>
+                      setLifecycleStageForm({ ...lifecycleStageForm, colorPosition: pos, color: undefined })
+                    }
                     className={`rounded-circle border-0 fw-bold d-flex align-items-center justify-content-center ${isSelected ? 'shadow ring-2 ring-primary' : ''}`}
                     style={{
                       width: 40,
@@ -1972,7 +2103,27 @@ export function GlobalSettingsModal({
                 );
               })}
             </div>
-            <div className="text-muted small mt-2">1 = Critical (red) → 10 = Minimal (green)</div>
+            <div className="text-muted small mt-2">Legacy Auto-Color mapped by severity (1=Critical, 10=Minimal)</div>
+          </Form.Group>
+          <Form.Group>
+            <Form.Label className="fw-medium small">Override Explicit Color</Form.Label>
+            <div className="d-flex flex-wrap gap-1">
+              {BOARD_COLORS.map((c) => (
+                <ColorSwatch
+                  key={c}
+                  color={c}
+                  selected={lifecycleStageForm.color === c}
+                  onSelect={(color) => setLifecycleStageForm({ ...lifecycleStageForm, color })}
+                />
+              ))}
+              <div
+                className="d-flex flex-column justify-content-center ms-2"
+                style={{ cursor: 'pointer' }}
+                onClick={() => setLifecycleStageForm({ ...lifecycleStageForm, color: undefined })}
+              >
+                {lifecycleStageForm.color && <span className="small text-danger hover-underline">Clear Override</span>}
+              </div>
+            </div>
           </Form.Group>
         </Modal.Body>
         <Modal.Footer>
@@ -1988,10 +2139,9 @@ export function GlobalSettingsModal({
                 const stage = updated.lifecycleStages.find((s) => s.id === editingLifecycleStage.id);
                 if (stage) {
                   stage.name = lifecycleStageForm.name.trim();
-                  // only manually set colorPosition if we aren't using auto colors
-                  if (updated.useAutoColors === false) {
-                    stage.colorPosition = lifecycleStageForm.colorPosition;
-                  }
+                  // Always use the selected colorPosition or explicit color
+                  stage.colorPosition = lifecycleStageForm.colorPosition;
+                  stage.color = lifecycleStageForm.color;
                 }
               } else {
                 updated.lifecycleStages.push({
@@ -1999,10 +2149,6 @@ export function GlobalSettingsModal({
                   name: lifecycleStageForm.name.trim(),
                   colorPosition: lifecycleStageForm.colorPosition,
                 });
-              }
-              if (updated.useAutoColors !== false) {
-                const positions = calculateAutoColorPositions(updated.lifecycleStages.length).reverse();
-                updated.lifecycleStages.forEach((s, idx) => (s.colorPosition = positions[idx]));
               }
               setCrmConfig(updated);
               setShowLifecycleStageModal(false);
@@ -2173,12 +2319,19 @@ export function GlobalSettingsModal({
               {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((pos) => {
                 const colorHex = getColorForPosition(pos);
                 const textColor = getContrastTextColor(colorHex);
-                const isSelected = supplierLifecycleStageForm.colorPosition === pos;
+                const isSelected =
+                  supplierLifecycleStageForm.colorPosition === pos && !supplierLifecycleStageForm.color;
                 return (
                   <button
                     key={pos}
                     type="button"
-                    onClick={() => setSupplierLifecycleStageForm({ ...supplierLifecycleStageForm, colorPosition: pos })}
+                    onClick={() =>
+                      setSupplierLifecycleStageForm({
+                        ...supplierLifecycleStageForm,
+                        colorPosition: pos,
+                        color: undefined,
+                      })
+                    }
                     className="rounded-circle border-0 fw-bold d-flex align-items-center justify-content-center"
                     style={{
                       width: 40,
@@ -2194,7 +2347,29 @@ export function GlobalSettingsModal({
                 );
               })}
             </div>
-            <div className="text-muted small mt-2">1 = Critical (red) → 10 = Minimal (green)</div>
+            <div className="text-muted small mt-2">Legacy Auto-Color mapped by severity (1=Critical, 10=Minimal)</div>
+          </Form.Group>
+          <Form.Group>
+            <Form.Label className="fw-medium small">Override Explicit Color</Form.Label>
+            <div className="d-flex flex-wrap gap-1">
+              {BOARD_COLORS.map((c) => (
+                <ColorSwatch
+                  key={c}
+                  color={c}
+                  selected={supplierLifecycleStageForm.color === c}
+                  onSelect={(color) => setSupplierLifecycleStageForm({ ...supplierLifecycleStageForm, color })}
+                />
+              ))}
+              <div
+                className="d-flex flex-column justify-content-center ms-2"
+                style={{ cursor: 'pointer' }}
+                onClick={() => setSupplierLifecycleStageForm({ ...supplierLifecycleStageForm, color: undefined })}
+              >
+                {supplierLifecycleStageForm.color && (
+                  <span className="small text-danger hover-underline">Clear Override</span>
+                )}
+              </div>
+            </div>
           </Form.Group>
         </Modal.Body>
         <Modal.Footer>
@@ -2223,9 +2398,333 @@ export function GlobalSettingsModal({
                   colorPosition: supplierLifecycleStageForm.colorPosition,
                 });
               }
-              if (updated.useAutoColors !== false) {
-                const positions = calculateAutoColorPositions(updated.lifecycleStages.length);
-                updated.lifecycleStages.forEach((s, idx) => (s.colorPosition = positions[idx]));
+              setSupplierConfig(updated);
+              setShowSupplierLifecycleStageModal(false);
+            }}
+          >
+            {editingSupplierLifecycleStage ? 'Save' : 'Add Stage'}
+          </Button>
+        </Modal.Footer>
+      </Modal>
+
+      {/* ── Ticket Type Config Modal ─────────────────────────────────────── */}
+      <Modal show={showTicketTypeModal} onHide={() => setShowTicketTypeModal(false)} size="lg" centered>
+        <Modal.Header closeButton>
+          <Modal.Title>{editingTicketType ? 'Edit Ticket Type' : 'Add Ticket Type'}</Modal.Title>
+        </Modal.Header>
+        <Modal.Body className="d-flex flex-column gap-3">
+          <div className="row g-3">
+            <div className="col-12 col-md-6">
+              <Form.Group>
+                <Form.Label className="fw-medium small">{t('common.name')} *</Form.Label>
+                <Form.Control
+                  type="text"
+                  autoFocus
+                  placeholder="e.g., Bug, Feature, Task"
+                  value={ticketTypeForm.name}
+                  onChange={(e) => setTicketTypeForm({ ...ticketTypeForm, name: e.target.value })}
+                />
+              </Form.Group>
+            </div>
+            <div className="col-6 col-md-3">
+              <Form.Group>
+                <Form.Label className="fw-medium small">{t('globalSettings.prefix')} *</Form.Label>
+                <Form.Control
+                  type="text"
+                  maxLength={8}
+                  placeholder="e.g., BUG, FEAT"
+                  value={ticketTypeForm.prefix}
+                  onChange={(e) => setTicketTypeForm({ ...ticketTypeForm, prefix: e.target.value.toUpperCase() })}
+                />
+              </Form.Group>
+            </div>
+            <div className="col-6 col-md-3">
+              <Form.Group>
+                <Form.Label className="fw-medium small">{t('globalSettings.icon')}</Form.Label>
+                <Form.Control
+                  type="text"
+                  placeholder="Emoji"
+                  value={ticketTypeForm.icon}
+                  onChange={(e) => setTicketTypeForm({ ...ticketTypeForm, icon: e.target.value })}
+                />
+              </Form.Group>
+            </div>
+          </div>
+
+          <Form.Group>
+            <Form.Label className="fw-medium small">{t('common.color')}</Form.Label>
+            <div className="d-flex flex-wrap gap-1">
+              {BOARD_COLORS.map((c) => (
+                <ColorSwatch
+                  key={c}
+                  color={c}
+                  selected={ticketTypeForm.color === c}
+                  onSelect={(color) => setTicketTypeForm({ ...ticketTypeForm, color })}
+                />
+              ))}
+            </div>
+          </Form.Group>
+
+          <hr className="my-2" />
+
+          <Form.Group>
+            <Form.Label className="fw-medium d-flex align-items-center justify-content-between">
+              {t('globalSettings.defaultFields')}
+              <Button
+                variant="outline-primary"
+                size="sm"
+                className="py-0 px-2"
+                onClick={() => setShowTicketTypeFieldModal(true)}
+              >
+                Select Fields
+              </Button>
+            </Form.Label>
+            <div className="text-muted small mb-2">Select the fields that apply to this work item type.</div>
+            <div className="d-flex flex-wrap gap-1 p-2 border rounded bg-light" style={{ minHeight: '44px' }}>
+              {ticketTypeForm.defaultFields.length > 0 ? (
+                ticketTypeForm.defaultFields.map((fieldId) => {
+                  const field = fields.find((f) => f.id === fieldId);
+                  return field ? (
+                    <Badge
+                      key={fieldId}
+                      bg="info"
+                      className="text-white d-flex align-items-center gap-1 fw-normal"
+                      style={{ fontSize: '0.75rem' }}
+                    >
+                      {field.name}
+                      <i
+                        className="bi bi-x-circle-fill ms-1"
+                        style={{ cursor: 'pointer', opacity: 0.8 }}
+                        onClick={() => {
+                          setTicketTypeForm({
+                            ...ticketTypeForm,
+                            defaultFields: ticketTypeForm.defaultFields.filter((id) => id !== fieldId),
+                          });
+                        }}
+                      />
+                    </Badge>
+                  ) : null;
+                })
+              ) : (
+                <span className="text-muted small italic">No fields selected</span>
+              )}
+            </div>
+          </Form.Group>
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="secondary" onClick={() => setShowTicketTypeModal(false)}>
+            Cancel
+          </Button>
+          <Button
+            variant="primary"
+            onClick={() => {
+              if (!ticketTypeForm.name.trim() || !ticketTypeForm.prefix.trim()) {
+                alert('Name and Prefix are required.');
+                return;
+              }
+              if (editingTicketType) {
+                setTicketTypes((prev) => prev.map((tt) => (tt.id === ticketTypeForm.id ? ticketTypeForm : tt)));
+              } else {
+                setTicketTypes((prev) => [...prev, ticketTypeForm]);
+              }
+              setShowTicketTypeModal(false);
+            }}
+          >
+            {editingTicketType ? 'Save Changes' : 'Add Ticket Type'}
+          </Button>
+        </Modal.Footer>
+      </Modal>
+
+      {/* Ticket Type Field Selection Modal */}
+      <Modal
+        show={showTicketTypeFieldModal}
+        onHide={() => setShowTicketTypeFieldModal(false)}
+        size="lg"
+        centered
+        scrollable
+      >
+        <Modal.Header closeButton className="bg-light border-bottom">
+          <Modal.Title className="fs-6 fw-bold">Select Fields for {ticketTypeForm.name || 'Ticket Type'}</Modal.Title>
+        </Modal.Header>
+        <Modal.Body className="p-0">
+          <div className="p-3 bg-white border-bottom sticky-top" style={{ zIndex: 10 }}>
+            <div className="d-flex align-items-center gap-2">
+              <div className="input-group input-group-sm shadow-sm border rounded">
+                <span className="input-group-text bg-white border-0">
+                  <i className="bi bi-search text-muted"></i>
+                </span>
+                <input
+                  type="text"
+                  className="form-control border-0 ps-0 shadow-none bg-white"
+                  placeholder="Search all fields..."
+                  value={fieldSelectionSearch}
+                  onChange={(e) => setFieldSelectionSearch(e.target.value)}
+                />
+              </div>
+            </div>
+          </div>
+          <div className="p-3" style={{ maxHeight: '60vh' }}>
+            {allFieldCategories.map((cat) => {
+              const catFields = fields.filter(
+                (f) =>
+                  f.category === cat &&
+                  (!fieldSelectionSearch || f.name.toLowerCase().includes(fieldSelectionSearch.toLowerCase())),
+              );
+              if (catFields.length === 0) return null;
+
+              return (
+                <div key={cat} className="mb-4">
+                  <h6 className="fw-bold text-muted small text-uppercase mb-2 px-1">{cat}</h6>
+                  <div className="row g-2">
+                    {catFields.map((field) => (
+                      <div key={field.id} className="col-12 col-md-6 col-lg-4">
+                        <label
+                          htmlFor={`select-field-${field.id}`}
+                          className={`p-2 border rounded d-flex align-items-center gap-2 h-100 cursor-pointer transition-all ${ticketTypeForm.defaultFields.includes(field.id) ? 'border-primary bg-primary bg-opacity-10' : 'bg-white hover-bg-light border-light shadow-sm'}`}
+                          style={{ cursor: 'pointer' }}
+                        >
+                          <Form.Check
+                            type="checkbox"
+                            id={`select-field-${field.id}`}
+                            checked={ticketTypeForm.defaultFields.includes(field.id)}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setTicketTypeForm({
+                                  ...ticketTypeForm,
+                                  defaultFields: [...ticketTypeForm.defaultFields, field.id],
+                                });
+                              } else {
+                                setTicketTypeForm({
+                                  ...ticketTypeForm,
+                                  defaultFields: ticketTypeForm.defaultFields.filter((id) => id !== field.id),
+                                });
+                              }
+                            }}
+                          />
+                          <div className="flex-grow-1 overflow-hidden">
+                            <div className="text-truncate fw-medium small" title={field.name}>
+                              {field.name}
+                            </div>
+                            <div className="text-muted" style={{ fontSize: '0.65rem' }}>
+                              {field.fieldType}
+                            </div>
+                          </div>
+                        </label>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </Modal.Body>
+        <Modal.Footer className="bg-light border-top">
+          <div className="me-auto small text-muted">{ticketTypeForm.defaultFields.length} field(s) selected</div>
+          <Button variant="primary" size="sm" onClick={() => setShowTicketTypeFieldModal(false)}>
+            Done
+          </Button>
+        </Modal.Footer>
+      </Modal>
+
+      <Modal show={showSupplierLifecycleStageModal} onHide={() => setShowSupplierLifecycleStageModal(false)} centered>
+        <Modal.Header closeButton>
+          <Modal.Title style={{ color: '#14b8a6' }}>
+            {editingSupplierLifecycleStage ? 'Edit Supplier Stage' : 'Add Supplier Stage'}
+          </Modal.Title>
+        </Modal.Header>
+        <Modal.Body className="d-flex flex-column gap-3">
+          <Form.Group>
+            <Form.Label className="fw-medium small">Stage Name *</Form.Label>
+            <Form.Control
+              type="text"
+              autoFocus
+              placeholder="e.g., Potential, Approved, Preferred"
+              value={supplierLifecycleStageForm.name}
+              onChange={(e) => setSupplierLifecycleStageForm({ ...supplierLifecycleStageForm, name: e.target.value })}
+            />
+          </Form.Group>
+          <Form.Group>
+            <Form.Label className="fw-medium small">Color Position (1-10)</Form.Label>
+            <div className="d-flex flex-wrap gap-2">
+              {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((pos) => {
+                const colorHex = getColorForPosition(pos);
+                const textColor = getContrastTextColor(colorHex);
+                const isSelected =
+                  supplierLifecycleStageForm.colorPosition === pos && !supplierLifecycleStageForm.color;
+                return (
+                  <button
+                    key={pos}
+                    type="button"
+                    onClick={() =>
+                      setSupplierLifecycleStageForm({
+                        ...supplierLifecycleStageForm,
+                        colorPosition: pos,
+                        color: undefined,
+                      })
+                    }
+                    className={`rounded-circle border-0 fw-bold d-flex align-items-center justify-content-center ${isSelected ? 'shadow ring-2 ring-primary' : ''}`}
+                    style={{
+                      width: 40,
+                      height: 40,
+                      backgroundColor: colorHex,
+                      color: textColor,
+                      outline: isSelected ? '2px solid #0d6efd' : 'none',
+                      outlineOffset: 2,
+                    }}
+                  >
+                    {pos}
+                  </button>
+                );
+              })}
+            </div>
+          </Form.Group>
+          <Form.Group>
+            <Form.Label className="fw-medium small">Explicit Color Override</Form.Label>
+            <div className="d-flex flex-wrap gap-1">
+              {BOARD_COLORS.map((c) => (
+                <ColorSwatch
+                  key={c}
+                  color={c}
+                  selected={supplierLifecycleStageForm.color === c}
+                  onSelect={(color) => setSupplierLifecycleStageForm({ ...supplierLifecycleStageForm, color })}
+                />
+              ))}
+              <div
+                className="d-flex flex-column justify-content-center ms-2"
+                style={{ cursor: 'pointer' }}
+                onClick={() => setSupplierLifecycleStageForm({ ...supplierLifecycleStageForm, color: undefined })}
+              >
+                {supplierLifecycleStageForm.color && (
+                  <span className="small text-danger hover-underline">Clear Override</span>
+                )}
+              </div>
+            </div>
+          </Form.Group>
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="secondary" onClick={() => setShowSupplierLifecycleStageModal(false)}>
+            Cancel
+          </Button>
+          <Button
+            style={{ backgroundColor: '#14b8a6', borderColor: '#14b8a6' }}
+            className="text-white"
+            onClick={() => {
+              if (!supplierLifecycleStageForm.name.trim()) return alert('Please enter a stage name');
+              const updated = structuredClone(supplierConfig);
+              if (editingSupplierLifecycleStage) {
+                const stage = updated.lifecycleStages.find((s) => s.id === editingSupplierLifecycleStage.id);
+                if (stage) {
+                  stage.name = supplierLifecycleStageForm.name.trim();
+                  stage.colorPosition = supplierLifecycleStageForm.colorPosition;
+                  stage.color = supplierLifecycleStageForm.color;
+                }
+              } else {
+                updated.lifecycleStages.push({
+                  id: generateId(),
+                  name: supplierLifecycleStageForm.name.trim(),
+                  colorPosition: supplierLifecycleStageForm.colorPosition,
+                  color: supplierLifecycleStageForm.color,
+                });
               }
               setSupplierConfig(updated);
               setShowSupplierLifecycleStageModal(false);

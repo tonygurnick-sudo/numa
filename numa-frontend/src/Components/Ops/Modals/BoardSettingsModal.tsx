@@ -15,7 +15,7 @@ import type { WorkZone, WorkStage, FieldOverride, WorkUnitSeriesConfig, AccessCo
 
 // ─── Props ───────────────────────────────────────────────────────────────────
 
-interface TeamSettingsModalProps {
+interface BoardSettingsModalProps {
   show: boolean;
   onHide: () => void;
   onSaved: () => void;
@@ -24,7 +24,7 @@ interface TeamSettingsModalProps {
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
-export function TeamSettingsModal({ show, onHide, onSaved, onDeleted }: TeamSettingsModalProps): React.JSX.Element {
+export function BoardSettingsModal({ show, onHide, onSaved, onDeleted }: BoardSettingsModalProps): React.JSX.Element {
   const { t } = useTranslation('ops');
   const { user } = useAuth();
   const { numaPut, numaDelete } = useNumaRequest();
