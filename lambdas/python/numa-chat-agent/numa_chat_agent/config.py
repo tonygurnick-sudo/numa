@@ -50,6 +50,20 @@ REGIONAL_MODEL_MAP = {
             "max_tokens": 100000,
         },
     },
+    "ap-southeast-3": {
+        "primary": {
+            "model_id": "global.anthropic.claude-sonnet-4-6",
+            "max_tokens": 64000,
+        },
+        "fallback": {
+            "model_id": "global.anthropic.claude-haiku-4-5-20251001-v1:0",
+            "max_tokens": 64000,
+        },
+        "fast": {
+            "model_id": "global.amazon.nova-2-lite-v1:0",
+            "max_tokens": 100000,
+        },
+    },
 }
 
 

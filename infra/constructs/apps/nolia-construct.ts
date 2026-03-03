@@ -167,6 +167,7 @@ export class Nolia extends BaseNumaApp {
     const pandasLayerByRegion: Record<string, string> = {
       'us-east-1': 'arn:aws:lambda:us-east-1:336392948345:layer:AWSSDKPandas-Python313:5',
       'ap-southeast-2': 'arn:aws:lambda:ap-southeast-2:336392948345:layer:AWSSDKPandas-Python313:5',
+      'ap-southeast-3': 'arn:aws:lambda:ap-southeast-3:258944054355:layer:AWSSDKPandas-Python313:7',
     };
     const pandasLayerArn = pandasLayerByRegion[props.region];
 
@@ -218,6 +219,11 @@ export class Nolia extends BaseNumaApp {
         default: { model_id: 'au.anthropic.claude-sonnet-4-6', max_tokens: 64000 },
         fallback: { model_id: 'au.anthropic.claude-haiku-4-5-20251001-v1:0', max_tokens: 64000 },
         haiku: { model_id: 'au.anthropic.claude-haiku-4-5-20251001-v1:0', max_tokens: 64000 },
+      },
+      'ap-southeast-3': {
+        default: { model_id: 'global.anthropic.claude-sonnet-4-6', max_tokens: 64000 },
+        fallback: { model_id: 'global.anthropic.claude-haiku-4-5-20251001-v1:0', max_tokens: 64000 },
+        haiku: { model_id: 'global.anthropic.claude-haiku-4-5-20251001-v1:0', max_tokens: 64000 },
       },
     };
     const regionModel = REGIONAL_MODEL_MAP[props.region] ?? REGIONAL_MODEL_MAP['us-east-1'];

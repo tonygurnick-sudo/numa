@@ -65,7 +65,7 @@ export const clientConfigSchema = z.object({
   apps: z.record(baseAppConfigSchema).optional(), // default: {}
 
   // Knowledge base settings
-  preferredKnowledgeBase: z.enum(['q', 'bedrock']).optional(),
+  preferredKnowledgeBase: z.enum(['q', 'bedrock', 'none']).optional(),
   embeddingModel: z.string().optional(), // default: 'amazon.titan-embed-text-v2:0'
   bedrockParserModel: z.string().optional(), // default: 'amazon.nova-lite-v1:0'
   visionModelType: z.enum(['haiku', 'nova-pro']).optional(), // default: 'haiku'
@@ -83,6 +83,7 @@ export const clientConfigSchema = z.object({
   agents: z.boolean().optional(), // default: false
   brandingProviderEnabled: z.boolean().optional(), // default: false
   numaWorkspaceChat: z.boolean().optional(), // default: true
+  agentCoreRegion: z.string().optional(), // default: client region
   scheduling: z.boolean().optional(), // default: false
   workspaceChatModelSelection: z.boolean().optional(), // default: false
   numaOps: z.boolean().optional(), // default: false

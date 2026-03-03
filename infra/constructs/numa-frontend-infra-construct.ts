@@ -648,7 +648,7 @@ export interface NumaFrontendInfraProps {
   zoneId: string;
   outputsBucket: NumaCorsEnabledBucket;
   accountId: string;
-  knowledgeBase: KnowledgeBase;
+  knowledgeBase?: KnowledgeBase;
   chatAgentFunctionUrl: string;
   cloudfrontSecretParam?: SsmParameter;
   devInstance?: boolean;

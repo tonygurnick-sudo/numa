@@ -8,7 +8,7 @@ import type { Construct as CDKConstruct } from 'constructs';
 import { SUPPORTED_INTEGRATIONS } from '../config/integrations';
 
 interface ChatAgentConfiguration {
-  preferredKnowledgeBase: 'bedrock' | 'q';
+  preferredKnowledgeBase: 'bedrock' | 'q' | 'none';
   qApplicationId?: string;
   qRetrieverId?: string;
   qIndexId?: string;
@@ -51,15 +51,17 @@ export class NumaChatAgent extends Construct {
     super(scope, id);
 
     const config = props.chatAgentConfiguration;
-    if (config.preferredKnowledgeBase === 'q') {
-      if (!config.qApplicationId || !config.qRetrieverId) {
-        throw new Error(
-          `Chat agent prefers Q Business but missing required fields: ${!config.qApplicationId ? 'qApplicationId ' : ''}${!config.qRetrieverId ? 'qRetrieverId' : ''}`,
-        );
-      }
-    } else if (config.preferredKnowledgeBase === 'bedrock') {
-      if (!config.bedrockKnowledgeBaseId) {
-        throw new Error('Chat agent prefers Bedrock but bedrockKnowledgeBaseId is missing');
+    if (config.preferredKnowledgeBase !== 'none') {
+      if (config.preferredKnowledgeBase === 'q') {
+        if (!config.qApplicationId || !config.qRetrieverId) {
+          throw new Error(
+            `Chat agent prefers Q Business but missing required fields: ${!config.qApplicationId ? 'qApplicationId ' : ''}${!config.qRetrieverId ? 'qRetrieverId' : ''}`,
+          );
+        }
+      } else if (config.preferredKnowledgeBase === 'bedrock') {
+        if (!config.bedrockKnowledgeBaseId) {
+          throw new Error('Chat agent prefers Bedrock but bedrockKnowledgeBaseId is missing');
+        }
       }
     }
 

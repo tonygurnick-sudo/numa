@@ -13,7 +13,7 @@
  * - FALLBACK: Model used when DEFAULT model hits quota limits. Uses cross-region inference to avoid regional quota limitations.
  */
 
-const REGIONS = { US_EAST_1: 'us-east-1', AP_SOUTHEAST_2: 'ap-southeast-2' };
+const REGIONS = { US_EAST_1: 'us-east-1', AP_SOUTHEAST_2: 'ap-southeast-2', AP_SOUTHEAST_3: 'ap-southeast-3' };
 const MODEL_TYPES = {
   DEFAULT: 'default',
   CLAUDE_HAIKU: 'claude_haiku',
@@ -29,6 +29,11 @@ const MODEL_MAP = {
     [MODEL_TYPES.DEFAULT]: 'au.anthropic.claude-sonnet-4-6',
     [MODEL_TYPES.CLAUDE_HAIKU]: 'au.anthropic.claude-haiku-4-5-20251001-v1:0',
     [MODEL_TYPES.FALLBACK]: 'au.anthropic.claude-haiku-4-5-20251001-v1:0',
+  },
+  [REGIONS.AP_SOUTHEAST_3]: {
+    [MODEL_TYPES.DEFAULT]: 'global.anthropic.claude-sonnet-4-6',
+    [MODEL_TYPES.CLAUDE_HAIKU]: 'global.anthropic.claude-haiku-4-5-20251001-v1:0',
+    [MODEL_TYPES.FALLBACK]: 'global.anthropic.claude-haiku-4-5-20251001-v1:0',
   },
 };
 

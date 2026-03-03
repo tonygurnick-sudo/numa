@@ -83,7 +83,11 @@ export class NumaClientStack extends TerraformStack {
       ...props.clientConfig,
     };
 
-    if (!clientConfig.provisionQResources && clientConfig.preferredKnowledgeBase === 'q') {
+    if (
+      clientConfig.preferredKnowledgeBase !== 'none' &&
+      !clientConfig.provisionQResources &&
+      clientConfig.preferredKnowledgeBase === 'q'
+    ) {
       throw new Error('Nonsense detected: Q cannot be preferred knowledgebase when resources are not provisioned.');
     }
 
@@ -153,6 +157,19 @@ export class NumaClientStack extends TerraformStack {
       name: '/honeycomb/backend-key',
     }).value;
 
+    // AgentCore provider - needed when client region doesn't support Bedrock AgentCore
+    // (e.g., Jakarta ap-southeast-3 uses Sydney ap-southeast-2 for AgentCore)
+    const agentCoreRegion = clientConfig.agentCoreRegion ?? clientConfig.region;
+    const needsCrossRegionAgentCore = agentCoreRegion !== clientConfig.region;
+    const agentCoreProvider = needsCrossRegionAgentCore
+      ? new AwsProvider(this, 'agentcore-provider', {
+          region: agentCoreRegion,
+          assumeRole: [{ roleArn: deployerRole }, { roleArn: clientRole }],
+          alias: 'agentcore-provider',
+          defaultTags: defaultProvider.defaultTags,
+        })
+      : undefined;
+
     // QBusiness provider - currently needs to be us-east-1 in most regions
     // When QBusiness becomes available in other regions, this can use the client's region
     const qBusinessRegion = clientConfig.qBusinessRegion ?? clientConfig.region;
@@ -164,21 +181,26 @@ export class NumaClientStack extends TerraformStack {
     });
 
     // Conditionally create either RDS-based or S3 Vectors-based knowledge base
-    const vectorStorageType = clientConfig.vectorStorageType ?? 's3vectors';
+    // When preferredKnowledgeBase is 'none', skip KB creation entirely (e.g. for regions without Bedrock KB support)
     const knowledgeBase =
-      vectorStorageType === 's3vectors'
-        ? new S3VectorsKnowledgeBase(this, 'knowledge-base', {
-            clientName: clientConfig.clientName,
-            region: clientConfig.region,
-            embeddingModel: clientConfig.embeddingModel,
-            bedrockParserModel: clientConfig.bedrockParserModel,
-          })
-        : new KnowledgeBase(this, 'knowledge-base', {
-            clientName: clientConfig.clientName,
-            region: clientConfig.region,
-            embeddingModel: clientConfig.embeddingModel,
-            bedrockParserModel: clientConfig.bedrockParserModel,
-          });
+      clientConfig.preferredKnowledgeBase !== 'none'
+        ? ((): S3VectorsKnowledgeBase | KnowledgeBase => {
+            const vectorStorageType = clientConfig.vectorStorageType ?? 's3vectors';
+            return vectorStorageType === 's3vectors'
+              ? new S3VectorsKnowledgeBase(this, 'knowledge-base', {
+                  clientName: clientConfig.clientName,
+                  region: clientConfig.region,
+                  embeddingModel: clientConfig.embeddingModel,
+                  bedrockParserModel: clientConfig.bedrockParserModel,
+                })
+              : new KnowledgeBase(this, 'knowledge-base', {
+                  clientName: clientConfig.clientName,
+                  region: clientConfig.region,
+                  embeddingModel: clientConfig.embeddingModel,
+                  bedrockParserModel: clientConfig.bedrockParserModel,
+                });
+          })()
+        : undefined;
 
     // Include CS Portal origin in data bucket CORS so the Support Docs Manager
     // tool can write support docs into client buckets from the browser.
@@ -218,11 +240,11 @@ export class NumaClientStack extends TerraformStack {
       clientName: props.clientName,
       region: clientConfig.region,
       chatAgentConfiguration: {
-        preferredKnowledgeBase: clientConfig.preferredKnowledgeBase as 'q' | 'bedrock',
+        preferredKnowledgeBase: clientConfig.preferredKnowledgeBase as 'q' | 'bedrock' | 'none',
         qApplicationId: core.qBusinessApplicationId,
         qRetrieverId: core.qBusinessRetrieverId,
         qIndexId: core.qBusinessIndexId,
-        bedrockKnowledgeBaseId: knowledgeBase.knowledgeBaseId,
+        bedrockKnowledgeBaseId: knowledgeBase?.knowledgeBaseId,
       },
       userPoolId: core.userPoolId,
       userPoolClientId: core.userPoolClient.id,
@@ -306,8 +328,8 @@ export class NumaClientStack extends TerraformStack {
         clientName: props.clientName,
         region: clientConfig.region,
         logGroup: workspaceChatLogGroup,
-        preferredKnowledgeBase: (clientConfig.preferredKnowledgeBase as 'q' | 'bedrock') ?? 'bedrock',
-        bedrockKnowledgeBaseId: knowledgeBase.knowledgeBaseId,
+        preferredKnowledgeBase: (clientConfig.preferredKnowledgeBase as 'q' | 'bedrock' | 'none') ?? 'bedrock',
+        bedrockKnowledgeBaseId: knowledgeBase?.knowledgeBaseId,
         qApplicationId: core.qBusinessApplicationId,
         qRetrieverId: core.qBusinessRetrieverId,
         // Data bucket for KB file downloads/uploads
@@ -360,6 +382,9 @@ export class NumaClientStack extends TerraformStack {
         // Company bucket (for loading company profile into system prompt)
         companyBucketName: core.companyBucket.bucket.bucket,
         companyBucketArn: core.companyBucket.bucket.arn,
+        // Cross-region AgentCore support (when client region doesn't support AgentCore)
+        agentCoreProvider,
+        agentCoreRegion,
       });
 
       // Create the proxy Lambda that bridges CloudFront to AgentCore SDK
@@ -385,6 +410,8 @@ export class NumaClientStack extends TerraformStack {
         // Workspace chat tools Lambda for document conversion preview (DOCX → PDF)
         workspaceToolsLambdaArn: workspaceChatTools.lambdaArn,
         workspaceToolsLambdaName: workspaceChatTools.lambdaName,
+        // Cross-region AgentCore support (when client region doesn't support AgentCore)
+        agentCoreRegion,
       });
 
       new TerraformOutput(this, 'workspace-chat-agent-proxy-url', {
@@ -409,7 +436,7 @@ export class NumaClientStack extends TerraformStack {
       userPoolClientId: core.userPoolClient.id,
       outputsBucket: core.outputsBucket,
       accountId: clientConfig.clientAccountId,
-      knowledgeBase: knowledgeBase,
+      knowledgeBase,
       chatAgentFunctionUrl: chatAgent.functionUrl,
       cloudfrontSecretParam: cfSecretParam,
       // Workspace chat agent proxy Lambda Function URL is routed through main CloudFront
@@ -458,8 +485,8 @@ export class NumaClientStack extends TerraformStack {
       workspaceAgentProxyUrl: workspaceChatAgentProxy?.functionUrl ?? '',
       cloudfrontSharedSecret: cfSecretParam.value,
       agentScheduleRunnerSecret: agentScheduleSecretParam.value,
-      bedrockKbId: knowledgeBase.knowledgeBaseId,
-      bedrockDataSourceId: knowledgeBase.dataSourceId,
+      bedrockKbId: knowledgeBase?.knowledgeBaseId,
+      bedrockDataSourceId: knowledgeBase?.dataSourceId,
       filesTableName: core.filesTable?.name,
       filesTableArn: core.filesTable?.arn,
     });
@@ -575,7 +602,7 @@ export class NumaClientStack extends TerraformStack {
         DATA_BUCKET: core.dataBucket.bucket.bucket,
         PROVISION_Q_RESOURCES: clientConfig.provisionQResources ?? false,
         PREFERRED_KNOWLEDGE_BASE: clientConfig.preferredKnowledgeBase ?? 'bedrock',
-        BEDROCK_KNOWLEDGE_BASE_ID: knowledgeBase.knowledgeBaseId,
+        BEDROCK_KNOWLEDGE_BASE_ID: knowledgeBase?.knowledgeBaseId ?? '',
         BEDROCK_ACCOUNT: clientConfig.bedrockAccount,
         PIPEDREAM_RELAY_LAMBDA_ARN: core.pipedreamRelayLambdaArn ?? undefined,
         PIPEDREAM_INTEGRATIONS: clientConfig.pipedreamIntegrations ?? false,
@@ -801,7 +828,7 @@ export const clientConfigSchema = coreNumaInfraPropsSchema
          *
          * @default 'q' if provisionQResources is true, else 'bedrock'
          */
-        preferredKnowledgeBase: z.enum(['q', 'bedrock']).optional(),
+        preferredKnowledgeBase: z.enum(['q', 'bedrock', 'none']).optional(),
 
         /**
          * Vector storage type for Bedrock knowledge base
@@ -889,6 +916,13 @@ export const clientConfigSchema = coreNumaInfraPropsSchema
          * @default true
          */
         numaWorkspaceChat: z.boolean().optional().default(true),
+
+        /**
+         * Region to deploy AgentCore workspace chat resources to (ECR, AgentCore runtime, vendedlogs).
+         * Required when the client region doesn't support Bedrock AgentCore.
+         * Defaults to the client's own region.
+         */
+        agentCoreRegion: z.string().optional(),
 
         /**
          * Whether to enable Data Connectors functionality in the frontend.

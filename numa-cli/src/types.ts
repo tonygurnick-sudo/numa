@@ -79,7 +79,7 @@ export const clientConfigSchema = z.object({
   createServiceLinkedRole: z.boolean().optional(),
   devInstance: z.boolean().optional(),
   provisionQResources: z.boolean().optional(),
-  preferredKnowledgeBase: z.enum(['q', 'bedrock']).optional(),
+  preferredKnowledgeBase: z.enum(['q', 'bedrock', 'none']).optional(),
   allowBedrockQuotaSharing: z.boolean().optional(),
   allApps: z.boolean().optional(),
   allProdApps: z.boolean().optional(),
@@ -90,6 +90,7 @@ export const clientConfigSchema = z.object({
   brandingProviderEnabled: z.boolean().optional(),
   bedrockAccount: z.string().optional(),
   numaWorkspaceChat: z.boolean().optional(),
+  agentCoreRegion: z.string().optional(),
   dataConnectorsEnabled: z.boolean().optional(),
   scheduling: z.boolean().optional(),
   budget: z.object({
