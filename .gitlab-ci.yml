@@ -12,6 +12,7 @@ include:
 workflow:
   auto_cancel:
     on_new_commit: interruptible
+    on_job_failure: cancel
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
     - if: $CI_COMMIT_BRANCH && $CI_OPEN_MERGE_REQUESTS
@@ -171,6 +172,8 @@ deploy-dev-gate:
         - yarn-cache-$CI_DEFAULT_BRANCH
       paths:
         - .yarn/cache/
+        - node_modules/
+        - .pnp.*
   before_script:
     - !reference [.yarn, setup-private-auth]
     - corepack enable
