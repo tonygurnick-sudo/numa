@@ -142,24 +142,12 @@ describe('chatSystemPromptUtils', () => {
   describe('getEnabledTools', () => {
     it('enables core tools in auto mode', () => {
       const tools = getEnabledTools(true, false, false, false, ['kb-test-123'], true);
-      expect(tools).toEqual([
-        'knowledge_base',
-        'web_search',
-        'data_analysis',
-        'create_agent_tool',
-        'memories_tool',
-      ]);
+      expect(tools).toEqual(['knowledge_base', 'web_search', 'data_analysis', 'create_agent_tool', 'memories_tool']);
     });
 
     it('includes create_agent_tool in auto mode when explicitly enabled', () => {
       const tools = getEnabledTools(true, false, false, true, ['kb-test-123'], true);
-      expect(tools).toEqual([
-        'knowledge_base',
-        'web_search',
-        'data_analysis',
-        'create_agent_tool',
-        'memories_tool',
-      ]);
+      expect(tools).toEqual(['knowledge_base', 'web_search', 'data_analysis', 'create_agent_tool', 'memories_tool']);
     });
 
     it('enables only knowledge_base when KBs are selected in manual mode', () => {

@@ -81,11 +81,11 @@ const OpsHeader = () => {
             onKeyDown={
               canManage
                 ? (e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    setTopView('home');
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      setTopView('home');
+                    }
                   }
-                }
                 : undefined
             }
           >
@@ -133,7 +133,6 @@ const OpsHeader = () => {
               </button>
             ))}
           </div>
-
 
           {canManage && (
             <button

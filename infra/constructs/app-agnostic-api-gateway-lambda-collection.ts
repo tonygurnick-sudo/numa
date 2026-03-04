@@ -842,9 +842,7 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
         {
           effect: 'Allow',
           actions: ['dynamodb:Query'],
-          resources: [
-            `arn:aws:dynamodb:*:*:table/numa-${props.clientName}-knowledge-bases`,
-          ],
+          resources: [`arn:aws:dynamodb:*:*:table/numa-${props.clientName}-knowledge-bases`],
         },
       ],
     });

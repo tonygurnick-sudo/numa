@@ -30,7 +30,6 @@ import { PriorityIndicator } from '../Shared/PriorityIndicator';
 import { CreateTicketModal } from './CreateTicketModal';
 import { TicketDetailModal } from './TicketDetailModal';
 
-
 // ─── Props ──────────────────────────────────────────────────────────────────
 
 interface CustomerDetailModalProps {
