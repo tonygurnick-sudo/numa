@@ -52,6 +52,7 @@ export type TeamPresetConfig = {
   description: string;
   mode: TeamPreset;
   zones: PresetZone[];
+  allowedTicketTypePrefixes?: string[];
 };
 
 export const TEAM_PRESETS: TeamPresetConfig[] = [
@@ -80,6 +81,7 @@ export const TEAM_PRESETS: TeamPresetConfig[] = [
         ],
       },
     ],
+    allowedTicketTypePrefixes: ['FEAT', 'BUG', 'TASK'],
   },
   {
     id: 'support',
@@ -98,6 +100,7 @@ export const TEAM_PRESETS: TeamPresetConfig[] = [
         ],
       },
     ],
+    allowedTicketTypePrefixes: ['SUPP', 'BUG'],
   },
   {
     id: 'monthly',
@@ -158,6 +161,102 @@ export const TEAM_PRESETS: TeamPresetConfig[] = [
         ],
       },
     ],
+    allowedTicketTypePrefixes: ['TASK'],
+  },
+  {
+    id: 'mining',
+    name: 'Mining / Logistics',
+    description: 'Specialized for heavy equipment and logistics (Workshops / Repairs / Transport).',
+    mode: 'basic',
+    zones: [
+      {
+        name: 'Logistics',
+        zoneType: 'board',
+        stages: [
+          { name: 'Planned', statusType: 'queued' },
+          { name: 'In Transit', statusType: 'active' },
+          { name: 'Arrived', statusType: 'active' },
+          { name: 'Unloaded', statusType: 'completed' },
+        ],
+      },
+      {
+        name: 'Maintenance',
+        zoneType: 'board',
+        stages: [
+          { name: 'Workshop', statusType: 'queued' },
+          { name: 'Repairs', statusType: 'active' },
+          { name: 'Testing', statusType: 'active' },
+          { name: 'Released', statusType: 'completed' },
+        ],
+      },
+    ],
+    allowedTicketTypePrefixes: ['REP', 'LOGI', 'EQUIP'],
+  },
+  {
+    id: 'enterprise',
+    name: 'Enterprise Portfolio',
+    description: 'High-level oversight for multi-project organizations. Focuses on roadmap and cross-team delivery.',
+    mode: 'monthly',
+    zones: [
+      {
+        name: 'Portfolio Backlog',
+        zoneType: 'backlog',
+        stages: [
+          { name: 'Idea', statusType: 'backlog' },
+          { name: 'Business Case', statusType: 'scoped' },
+          { name: 'Approved', statusType: 'queued' },
+        ],
+      },
+      {
+        name: 'Execution',
+        zoneType: 'board',
+        stages: [
+          { name: 'Initiated', statusType: 'active' },
+          { name: 'Delivering', statusType: 'active' },
+          { name: 'Review', statusType: 'active' },
+          { name: 'Closed', statusType: 'completed' },
+        ],
+      },
+    ],
+    allowedTicketTypePrefixes: ['PROJ', 'EPIC', 'STRAT'],
+  },
+  {
+    id: 'work_mgmt',
+    name: 'Work Management',
+    description: 'Essential workflows for teams managing various tasks, requests, and simple projects.',
+    mode: 'basic',
+    zones: [
+      {
+        name: 'Board',
+        zoneType: 'board',
+        stages: [
+          { name: 'To Do', statusType: 'queued' },
+          { name: 'Doing', statusType: 'active' },
+          { name: 'Blocked', statusType: 'queued' },
+          { name: 'Done', statusType: 'completed' },
+        ],
+      },
+    ],
+    allowedTicketTypePrefixes: ['TASK', 'REQ', 'INFO'],
+  },
+  {
+    id: 'supplier',
+    name: 'Supplier Management',
+    description: 'Manage onboarding, reviews, and ongoing tracking of external suppliers.',
+    mode: 'basic',
+    zones: [
+      {
+        name: 'Suppliers',
+        zoneType: 'board',
+        stages: [
+          { name: 'Potential', statusType: 'queued' },
+          { name: 'Onboarding', statusType: 'active' },
+          { name: 'Active', statusType: 'completed' },
+          { name: 'Inactive', statusType: 'ended' },
+        ],
+      },
+    ],
+    allowedTicketTypePrefixes: ['SUPP', 'VEND'],
   },
 ];
 

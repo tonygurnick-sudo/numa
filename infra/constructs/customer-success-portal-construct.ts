@@ -454,7 +454,7 @@ export class CustomerSuccessPortalConstruct extends Construct {
           {
             test: 'StringEquals',
             variable: 'aws:RequestedRegion',
-            values: ['us-east-1', 'ap-southeast-2'], // Limit to supported regions
+            values: ['us-east-1', 'ap-southeast-2', 'ap-southeast-3'], // Limit to supported regions
           },
         ],
       },

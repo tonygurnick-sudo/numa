@@ -1551,5 +1551,5 @@ export type CoreNumaInfraProps = z.infer<typeof coreNumaInfraPropsSchema> & {
    * Provider for QBusiness resources.
    */
   qBusinessProvider?: AwsProvider;
-  knowledgeBase: KnowledgeBase;
+  knowledgeBase?: KnowledgeBase;
 };

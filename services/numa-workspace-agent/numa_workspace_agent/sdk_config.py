@@ -68,6 +68,12 @@ REGIONAL_MODEL_MAP: dict[str, dict[str, str]] = {
         "anthropic.claude-haiku-4-5-20251001-v1:0": "au.anthropic.claude-haiku-4-5-20251001-v1:0",
         "anthropic.claude-sonnet-4-20250514-v1:0": "apac.anthropic.claude-sonnet-4-20250514-v1:0",
     },
+    "ap-southeast-3": {
+        "anthropic.claude-sonnet-4-6": "global.anthropic.claude-sonnet-4-6",
+        "anthropic.claude-opus-4-6-v1": "global.anthropic.claude-opus-4-6-v1",
+        "anthropic.claude-haiku-4-5-20251001-v1:0": "global.anthropic.claude-haiku-4-5-20251001-v1:0",
+        "anthropic.claude-sonnet-4-20250514-v1:0": "apac.anthropic.claude-sonnet-4-20250514-v1:0",
+    },
 }
 
 

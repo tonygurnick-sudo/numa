@@ -2,7 +2,7 @@ import type { APIGatewayProxyEventV2, APIGatewayProxyResultV2 } from 'aws-lambda
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { InvokeCommand, LambdaClient } from '@aws-sdk/client-lambda';
 import { GetObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
-import { DynamoDBDocumentClient, PutCommand, QueryCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
+import { DynamoDBDocumentClient, GetCommand, PutCommand, QueryCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
 import { withPRM } from '../../../lib/prm-node/prm';
 import { NotificationService } from '../../../lib/notification-service';
 import { v4 as uuidv4 } from 'uuid';
@@ -14,6 +14,9 @@ const WORKSPACE_AGENT_PROXY_URL = (process.env.WORKSPACE_AGENT_PROXY_URL ?? '').
 const CLOUDFRONT_SHARED_SECRET = process.env.CLOUDFRONT_SHARED_SECRET ?? '';
 const SCHEDULE_RUNNER_SECRET = process.env.SCHEDULE_RUNNER_SECRET ?? '';
 const OUTPUTS_BUCKET = process.env.OUTPUTS_BUCKET_NAME ?? '';
+const WORKSPACE_AGENTS_TABLE = process.env.WORKSPACE_AGENTS_TABLE_NAME ?? '';
+const USER_AGENTS_TABLE = process.env.USER_AGENTS_TABLE_NAME ?? '';
+const CLIENT_NAME = process.env.CLIENT_NAME ?? '';
 const SCHEDULED_RUNS_PREFIX = 'numa-chat/scheduled-runs';
 
 const dynamo = DynamoDBDocumentClient.from(withPRM(DynamoDBClient, { region: REGION }), {
@@ -46,6 +49,7 @@ type ScheduledRunConfig = {
   autoToolsEnabled?: boolean;
   webSearchEnabled?: boolean;
   createAgentEnabled?: boolean;
+  allKBsAllowed?: boolean;
 };
 
 type AgentToolsConfig = {
@@ -480,12 +484,49 @@ const executeRun = async ({
 
   let assistantText: string;
   try {
-    const mergedRunConfig = mergeRunConfig(runConfig, agentSnapshot);
+    // Refresh agent snapshot from DynamoDB so scheduled runs use the latest
+    // agent config (integrations, KBs, tools) rather than the frozen snapshot
+    // stored at schedule creation time.
+    const freshSnapshot = await refreshAgentSnapshot(agentMeta?.agentId, auth.sub);
+    const effectiveSnapshot = freshSnapshot ?? agentMeta;
+
+    console.info('[SCHEDULE_RUNNER] Snapshot resolution', {
+      agentId: agentMeta?.agentId,
+      usedFreshSnapshot: !!freshSnapshot,
+      frozenToolsConfig: JSON.stringify(agentMeta?.toolsConfig),
+      freshToolsConfig: freshSnapshot ? JSON.stringify(freshSnapshot.toolsConfig) : 'N/A',
+      frozenRequiredIntegrations: agentMeta?.requiredIntegrations,
+      freshRequiredIntegrations: freshSnapshot?.requiredIntegrations,
+    });
+
+    const mergedRunConfig = mergeRunConfig(runConfig, effectiveSnapshot);
+
+    // When allKBsAllowed is true (agent configured with "All knowledge bases") but
+    // no specific KB IDs are available, resolve actual KB IDs from DynamoDB.
+    // This mirrors what the frontend does via KnowledgeBaseProvider.
+    if (
+      mergedRunConfig?.allKBsAllowed &&
+      (!mergedRunConfig.enabledKBIds || mergedRunConfig.enabledKBIds.length === 0)
+    ) {
+      const resolvedKBIds = await fetchAccessibleKBIds(auth.sub);
+      if (resolvedKBIds.length > 0 && mergedRunConfig) {
+        mergedRunConfig.enabledKBIds = resolvedKBIds;
+      }
+    }
+
+    console.info('[SCHEDULE_RUNNER] Merged run config', {
+      inputRunConfig: JSON.stringify(runConfig),
+      mergedEnabledTools: mergedRunConfig?.enabledTools,
+      mergedEnabledKBIds: mergedRunConfig?.enabledKBIds,
+      mergedEnabledConnections: mergedRunConfig?.enabledConnections,
+      mergedAutoToolsEnabled: mergedRunConfig?.autoToolsEnabled,
+    });
+
     assistantText = await invokeWorkspaceAgent({
       prompt: apiPrompt,
       conversationId: runConversationId,
       runConfig: mergedRunConfig,
-      agentSnapshot: agentMeta,
+      agentSnapshot: effectiveSnapshot,
       auth,
       scheduledRun: !adHoc,
     });
@@ -1132,7 +1173,7 @@ const invokeWorkspaceAgent = async ({
     type: 'numa-chat',
     modelId: runConfig?.modelId,
     // Map V1 tool names to V2 equivalents
-    enabledTools: mapToolsToV2(runConfig?.enabledTools),
+    enabledTools: mapToolsToCanonical(runConfig?.enabledTools),
     // Map V1 KB IDs to V2 availableKBs format
     availableKBs: mapKBsToV2(runConfig?.enabledKBIds),
     enabledConnections: runConfig?.enabledConnections,
@@ -1172,11 +1213,11 @@ const invokeWorkspaceAgent = async ({
   return payload.result?.text ?? '';
 };
 
-/** Map V1 tool names to V2 equivalents. V2 uses "knowledge_search" instead of "query_knowledge_base". */
-const mapToolsToV2 = (tools?: string[]): string[] | undefined => {
+/** Normalise legacy tool names to the canonical form used by the workspace agent MCP tool layer. */
+const mapToolsToCanonical = (tools?: string[]): string[] | undefined => {
   if (!tools || tools.length === 0) return undefined;
   return tools.map((tool) => {
-    if (tool === 'query_knowledge_base') return 'knowledge_search';
+    if (tool === 'query_knowledge_base' || tool === 'knowledge_search') return 'knowledge_base';
     return tool;
   });
 };
@@ -1221,6 +1262,160 @@ const buildRunLogKey = (userId: string, scheduleId: string, runId: string): stri
   `${SCHEDULED_RUNS_PREFIX}/${userId}/${scheduleId}/${runId}.json`;
 
 /**
+ * Refresh the agent snapshot by fetching the current agent config from DynamoDB.
+ *
+ * Agent snapshots are frozen at schedule creation time. If the agent config is
+ * later updated (e.g. integrations added/removed, KB access changed), the
+ * schedule would use stale data. This function fetches the latest config so
+ * scheduled runs always reflect the current agent state.
+ *
+ * Tries the user agent table first (personal agents), falls back to workspace
+ * table (shared agents). Returns null if the agent no longer exists or the
+ * tables are not configured.
+ */
+const refreshAgentSnapshot = async (agentId: string | undefined, userId: string): Promise<AgentSnapshot | null> => {
+  if (!agentId) return null;
+  if (!USER_AGENTS_TABLE && !WORKSPACE_AGENTS_TABLE) {
+    console.warn('Agent tables not configured; using frozen snapshot');
+    return null;
+  }
+
+  // Try user (personal) agent table first
+  if (USER_AGENTS_TABLE) {
+    try {
+      const result = await dynamo.send(
+        new GetCommand({
+          TableName: USER_AGENTS_TABLE,
+          Key: { user_id: userId, agent_id: agentId },
+        }),
+      );
+      if (result.Item) {
+        console.info('Refreshed agent snapshot from user table', { agentId, userId });
+        return mapDynamoItemToSnapshot(result.Item);
+      }
+    } catch (err) {
+      console.warn('Failed to fetch user agent', { agentId, error: (err as Error).message });
+    }
+  }
+
+  // Fall back to workspace (shared) agent table
+  if (WORKSPACE_AGENTS_TABLE && CLIENT_NAME) {
+    try {
+      const result = await dynamo.send(
+        new GetCommand({
+          TableName: WORKSPACE_AGENTS_TABLE,
+          Key: { tenant_id: CLIENT_NAME, agent_id: agentId },
+        }),
+      );
+      if (result.Item) {
+        console.info('Refreshed agent snapshot from workspace table', { agentId });
+        return mapDynamoItemToSnapshot(result.Item);
+      }
+    } catch (err) {
+      console.warn('Failed to fetch workspace agent', { agentId, error: (err as Error).message });
+    }
+  }
+
+  console.warn('Agent not found in either table; using frozen snapshot', { agentId });
+  return null;
+};
+
+/** Map a raw DynamoDB agent item to the AgentSnapshot type used by the schedule runner. */
+const mapDynamoItemToSnapshot = (item: Record<string, unknown>): AgentSnapshot => ({
+  agentId: item.agent_id as string,
+  title: item.title as string | undefined,
+  icon: item.icon as string | undefined,
+  iconImage: item.icon_image as { s3Bucket: string; s3Key: string } | null | undefined,
+  version: item.version as number | undefined,
+  visibility: item.visibility as string | undefined,
+  systemPrompt: item.system_prompt as string | undefined,
+  userWelcomeMessage: item.user_instructions as string | undefined,
+  requiredIntegrations: (item.required_integrations as string[] | undefined) ?? [],
+  toolsConfig: item.tools_config as AgentToolsConfig | undefined,
+});
+
+/** System KBs that are accessible to all authenticated users (mirrors kb_permissions.py). */
+const SYSTEM_KB_IDS = new Set(['company', 'numa-support']);
+
+/**
+ * Fetch all KB IDs that the user can access from the knowledge-bases DynamoDB table.
+ * Used when an agent has allowedKnowledgeBases=null ("All knowledge bases") so the
+ * schedule runner can resolve actual KB IDs — the same resolution the frontend does
+ * via KnowledgeBaseProvider.
+ */
+const fetchAccessibleKBIds = async (userSub: string): Promise<string[]> => {
+  const tableName = `numa-${CLIENT_NAME}-knowledge-bases`;
+  if (!CLIENT_NAME) {
+    console.warn('[SCHEDULE_RUNNER] CLIENT_NAME not set; cannot fetch KBs');
+    return [];
+  }
+
+  try {
+    const result = await dynamo.send(
+      new QueryCommand({
+        TableName: tableName,
+        KeyConditionExpression: 'PK = :pk AND begins_with(SK, :skPrefix)',
+        ExpressionAttributeValues: {
+          ':pk': `TENANT#${CLIENT_NAME}`,
+          ':skPrefix': 'KB#',
+        },
+        ProjectionExpression: 'SK, viewers, editors, created_by',
+      }),
+    );
+
+    const items = result.Items ?? [];
+    const accessibleKBIds: string[] = [];
+
+    for (const item of items) {
+      const sk = item.SK as string | undefined;
+      if (!sk) continue;
+      const kbId = sk.replace('KB#', '');
+      if (!kbId) continue;
+
+      // System KBs are accessible to all authenticated users
+      if (SYSTEM_KB_IDS.has(kbId)) {
+        accessibleKBIds.push(kbId);
+        continue;
+      }
+
+      // Check user access: viewers, editors, or creator
+      const viewers = extractStringList(item.viewers);
+      const editors = extractStringList(item.editors);
+      const createdBy = typeof item.created_by === 'string' ? item.created_by : '';
+
+      if (viewers.includes('*') || viewers.includes(userSub) || editors.includes(userSub) || createdBy === userSub) {
+        accessibleKBIds.push(kbId);
+      }
+    }
+
+    console.info('[SCHEDULE_RUNNER] Resolved all-KBs-allowed', {
+      tableName,
+      totalKBs: items.length,
+      accessibleKBIds,
+      userSub: userSub.slice(0, 8) + '...',
+    });
+
+    return accessibleKBIds;
+  } catch (err) {
+    console.error('[SCHEDULE_RUNNER] Failed to fetch KB IDs', {
+      tableName,
+      error: (err as Error).message,
+    });
+    return [];
+  }
+};
+
+/**
+ * Extract a list of strings from a DynamoDB attribute that may be stored as
+ * a string array (DynamoDB document client unmarshalled) or other formats.
+ * Mirrors the _extract_string_list helper in kb_permissions.py.
+ */
+const extractStringList = (attr: unknown): string[] => {
+  if (Array.isArray(attr)) return attr.filter((v): v is string => typeof v === 'string');
+  return [];
+};
+
+/**
  * Merge the run config from the schedule record with the agent snapshot's tools config.
  *
  * The V2 workspace agent resolves agent system prompts natively via agentId,
@@ -1242,10 +1437,32 @@ const mergeRunConfig = (
     ...(agentSnapshot?.requiredIntegrations ?? []),
   ]);
 
-  const enabledKBIds = Array.isArray(base.enabledKBIds) ? base.enabledKBIds : [];
+  // Merge KB IDs from both the run config and the agent snapshot's allowedKnowledgeBases.
+  // allowedKnowledgeBases semantics:
+  //   null      = "All knowledge bases" (user explicitly selected this)
+  //   undefined = field not set (legacy agent — fall back to queryDataSources)
+  //   []        = "No knowledge bases"
+  //   [...ids]  = "Selected knowledge bases"
+  const allKBsAllowed = toolsConfig.allowedKnowledgeBases === null;
+  const kbFieldSet = 'allowedKnowledgeBases' in toolsConfig;
+  const enabledKBIds = uniqStrings([
+    ...(Array.isArray(base.enabledKBIds) ? base.enabledKBIds : []),
+    ...(Array.isArray(toolsConfig.allowedKnowledgeBases) ? toolsConfig.allowedKnowledgeBases : []),
+  ]);
   const autoToolsEnabled = base.autoToolsEnabled ?? toolsConfig.autoToolsEnabled;
   const webSearchEnabled = base.webSearchEnabled ?? toolsConfig.webSearchEnabled;
   const createAgentEnabled = base.createAgentEnabled ?? toolsConfig.createAgentEnabled;
+
+  console.info('[SCHEDULE_RUNNER] mergeRunConfig KB resolution', {
+    'base.enabledKBIds': base.enabledKBIds,
+    'toolsConfig.allowedKnowledgeBases': toolsConfig.allowedKnowledgeBases,
+    'toolsConfig.queryDataSources': toolsConfig.queryDataSources,
+    allKBsAllowed,
+    kbFieldSet,
+    enabledKBIds,
+    'base.enabledTools': base.enabledTools,
+    willRebuildTools: !(base.enabledTools && base.enabledTools.length > 0),
+  });
 
   const enabledTools =
     base.enabledTools && base.enabledTools.length > 0
@@ -1255,6 +1472,8 @@ const mergeRunConfig = (
           webSearchEnabled,
           createAgentEnabled,
           enabledKBIds,
+          allKBsAllowed,
+          kbFieldSet,
           queryDataSources: toolsConfig.queryDataSources,
         });
 
@@ -1263,39 +1482,78 @@ const mergeRunConfig = (
     enabledTools,
     enabledConnections,
     enabledKBIds,
+    allKBsAllowed,
     autoToolsEnabled,
     webSearchEnabled,
     createAgentEnabled,
   };
 };
 
-/** Build the list of enabled tools using V2 tool names. */
+/**
+ * Build the list of enabled tools using canonical tool names.
+ *
+ * Canonical names: knowledge_base, memories_tool, web_search, create_agent_tool.
+ * The MCP tool layer also accepts legacy names (query_knowledge_base, knowledge_search)
+ * for backward compatibility with existing schedule records stored in DynamoDB.
+ *
+ * KB access: The new allowedKnowledgeBases field (null / [] / [...ids]) is authoritative
+ * when present. The legacy queryDataSources boolean is only used as a fallback for
+ * agents created before allowedKnowledgeBases existed.
+ */
 const buildEnabledTools = ({
   autoToolsEnabled,
   webSearchEnabled,
   createAgentEnabled,
   enabledKBIds,
+  allKBsAllowed,
+  kbFieldSet,
   queryDataSources,
 }: {
   autoToolsEnabled?: boolean;
   webSearchEnabled?: boolean;
   createAgentEnabled?: boolean;
   enabledKBIds: string[];
+  allKBsAllowed?: boolean;
+  kbFieldSet?: boolean;
   queryDataSources?: boolean;
 }): string[] => {
   const enabledTools: string[] = [];
-  const hasKBs = enabledKBIds.length > 0 && queryDataSources !== false;
+  // KB access is enabled when:
+  // - allKBsAllowed (allowedKnowledgeBases was null = "All knowledge bases"), OR
+  // - specific KB IDs were selected (enabledKBIds has entries), OR
+  // - legacy fallback: allowedKnowledgeBases field doesn't exist and queryDataSources is true
+  const hasKBs = allKBsAllowed || enabledKBIds.length > 0 || (!kbFieldSet && queryDataSources === true);
   const auto = autoToolsEnabled ?? true;
 
+  console.info('[SCHEDULE_RUNNER] buildEnabledTools', {
+    hasKBs,
+    hasKBs_reason: allKBsAllowed
+      ? 'allKBsAllowed'
+      : enabledKBIds.length > 0
+        ? 'specificKBIds'
+        : !kbFieldSet && queryDataSources === true
+          ? 'legacyQueryDataSources'
+          : 'none',
+    auto,
+    allKBsAllowed,
+    enabledKBIdsCount: enabledKBIds.length,
+    kbFieldSet,
+    queryDataSources,
+  });
+
   if (auto) {
-    if (hasKBs) enabledTools.push('knowledge_search');
+    if (hasKBs) enabledTools.push('knowledge_base');
     enabledTools.push('web_search');
     if (createAgentEnabled) enabledTools.push('create_agent_tool');
+    enabledTools.push('memories_tool');
   } else {
-    if (hasKBs) enabledTools.push('knowledge_search');
+    if (hasKBs) enabledTools.push('knowledge_base');
     if (webSearchEnabled) enabledTools.push('web_search');
     if (createAgentEnabled) enabledTools.push('create_agent_tool');
+    enabledTools.push('memories_tool');
   }
+
+  console.info('[SCHEDULE_RUNNER] buildEnabledTools result', { enabledTools });
 
   return enabledTools;
 };

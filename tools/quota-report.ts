@@ -11,7 +11,7 @@ const CACHE = create({
 
 const cartesian = (...a): string[][] => a.reduce((a, b) => a.flatMap((d) => b.map((e) => [d, e].flat())));
 
-const regions = ['us-east-1', 'ap-southeast-2'];
+const regions = ['us-east-1', 'ap-southeast-2', 'ap-southeast-3'];
 
 const ServiceCode = 'bedrock';
 interface Quota {

@@ -48,7 +48,7 @@ const createFeatureSets = (props: {
   dataBucket: BucketType;
   qBusinessApplicationId?: string;
   brandingTable?: TableType;
-  knowledgeBase: KnowledgeBase;
+  knowledgeBase?: KnowledgeBase;
   pipedreamRelayLambdaArn?: string;
   brandingAssetsBucketArn?: string;
   brandingAssetsPrefix?: string;
@@ -126,11 +126,15 @@ const createFeatureSets = (props: {
         resources: ['*'], // TODO: Update to specific models and agents when implemented
       },
       // Bedrock knowledge base retrieval for chat
-      {
-        effect: 'Allow',
-        actions: ['bedrock:Retrieve'],
-        resources: [props.knowledgeBase.knowledgeBaseArn],
-      },
+      ...(props.knowledgeBase
+        ? [
+            {
+              effect: 'Allow' as const,
+              actions: ['bedrock:Retrieve'],
+              resources: [props.knowledgeBase.knowledgeBaseArn],
+            },
+          ]
+        : []),
       // KMS permissions (only when invoked by Q)
       {
         effect: 'Allow',
@@ -405,7 +409,7 @@ const dummyProps: {
   chatHistoryTable: TableType;
   companyBucket: BucketType;
   dataBucket: BucketType;
-  knowledgeBase: KnowledgeBase;
+  knowledgeBase?: KnowledgeBase;
   brandingTable?: TableType;
 } = {
   callerAccountId: '123',
@@ -415,7 +419,6 @@ const dummyProps: {
   chatHistoryTable: { name: '123', arn: '123' },
   companyBucket: { bucket: { arn: '123' } },
   dataBucket: { bucket: { arn: '123' } },
-  knowledgeBase: { knowledgeBaseArn: '' } as KnowledgeBase,
 };
 export const FEATURE_SET_NAMES = Object.keys(createFeatureSets(dummyProps)) as FeatureSetName[];
 
@@ -438,7 +441,7 @@ export const cognitoGroupsConstructPropsSchema = z.object({
   groups: z.record(z.string(), z.array(z.enum(FEATURE_SET_NAMES as [FeatureSetName, ...FeatureSetName[]]))).optional(),
   pipedreamIntegrations: z.boolean().optional().default(false),
   pipedreamRelayLambdaArn: z.string().optional(),
-  knowledgeBase: z.instanceof(KnowledgeBase),
+  knowledgeBase: z.instanceof(KnowledgeBase).optional(),
 });
 
 export class CognitoGroupsConstruct extends Construct {

@@ -13,9 +13,9 @@ import CrmMirrorView from '../Components/Ops/CrmView/CrmMirrorView';
 import { SupplierMirrorView } from '../Components/Ops/CrmView/SupplierMirrorView';
 import { RoadmapPlaceholder } from '../Components/Ops/RoadmapView/RoadmapPlaceholder';
 import { OpsHomeView } from '../Components/Ops/HomeView/OpsHomeView';
-import { CreateTeamWizard } from '../Components/Ops/Modals/CreateTeamWizard';
+import { CreateBoardWizard } from '../Components/Ops/Modals/CreateBoardWizard';
 import { GlobalSettingsModal } from '../Components/Ops/Modals/GlobalSettingsModal';
-import { TeamSettingsModal } from '../Components/Ops/Modals/TeamSettingsModal';
+import { BoardSettingsModal } from '../Components/Ops/Modals/BoardSettingsModal';
 import { TicketDetailModal } from '../Components/Ops/Modals/TicketDetailModal';
 
 // ─── Inner Content ──────────────────────────────────────────────────────────
@@ -46,10 +46,10 @@ const OpsPageContent: React.FC = () => {
   const canManage = Boolean(user?.features?.includes('manageUsers'));
 
   // ── Modal state ─────────────────────────────────────────────────────────
-  const [showCreateTeam, setShowCreateTeam] = useState(false);
+  const [showCreateBoard, setShowCreateBoard] = useState(false);
   const [showGlobalSettings, setShowGlobalSettings] = useState(false);
   const [globalSettingsTab, setGlobalSettingsTab] = useState<string | undefined>();
-  const [showTeamSettings, setShowTeamSettings] = useState(false);
+  const [showBoardSettings, setShowBoardSettings] = useState(false);
 
   // ── Loading State (only show spinner if we have no data at all) ──────
   // When cached data is available, config/teams are already populated so
@@ -70,18 +70,18 @@ const OpsPageContent: React.FC = () => {
         <OpsHeader />
         <div className="flex-grow-1 overflow-auto">
           <OpsHomeView
-            onCreateTeam={() => setShowCreateTeam(true)}
+            onCreateBoard={() => setShowCreateBoard(true)}
             onCreateCustomer={() => setTopView('customers')}
             onCreateSupplier={() => setTopView('suppliers')}
             onOpenGlobalSettings={(tab) => {
               setGlobalSettingsTab(tab);
               setShowGlobalSettings(true);
             }}
-            onOpenTeamSettings={(teamId) => {
+            onOpenBoardSettings={(teamId) => {
               selectTeam(teamId);
-              setShowTeamSettings(true);
+              setShowBoardSettings(true);
             }}
-            onNavigateToTeam={(teamId) => {
+            onNavigateToBoard={(teamId) => {
               selectTeam(teamId);
               setBoardViewMode('singleTeam');
               setTopView('board');
@@ -89,20 +89,20 @@ const OpsPageContent: React.FC = () => {
           />
         </div>
         {/* Modals accessible from home view */}
-        <CreateTeamWizard
-          show={showCreateTeam}
-          onHide={() => setShowCreateTeam(false)}
+        <CreateBoardWizard
+          show={showCreateBoard}
+          onHide={() => setShowCreateBoard(false)}
           onCreated={(team) => {
-            setShowCreateTeam(false);
+            setShowCreateBoard(false);
             refreshTeams();
             selectTeam(team.id);
           }}
         />
-        <TeamSettingsModal
-          show={showTeamSettings}
-          onHide={() => setShowTeamSettings(false)}
+        <BoardSettingsModal
+          show={showBoardSettings}
+          onHide={() => setShowBoardSettings(false)}
           onSaved={() => {
-            setShowTeamSettings(false);
+            setShowBoardSettings(false);
             refreshTeam();
           }}
         />
@@ -179,15 +179,15 @@ const OpsPageContent: React.FC = () => {
               >
                 <i className="bi bi-kanban fs-2" style={{ color: '#6366f1' }} />
               </div>
-              <h4 className="fw-bold mb-1">{t('teams.welcome.headline')}</h4>
-              <p className="text-muted mb-0">{t('teams.welcome.subtitle')}</p>
+              <h4 className="fw-bold mb-1">{t('boards.welcome.headline')}</h4>
+              <p className="text-muted mb-0">{t('boards.welcome.subtitle')}</p>
             </div>
 
             <div className="d-flex justify-content-center gap-4 mb-4">
               {[
-                { icon: 'bi-check2-square', text: t('teams.welcome.featureTracking') },
-                { icon: 'bi-sliders', text: t('teams.welcome.featureWorkflows') },
-                { icon: 'bi-lightning-charge', text: t('teams.welcome.featureSprints') },
+                { icon: 'bi-check2-square', text: t('boards.welcome.featureTracking') },
+                { icon: 'bi-sliders', text: t('boards.welcome.featureWorkflows') },
+                { icon: 'bi-lightning-charge', text: t('boards.welcome.featureSprints') },
               ].map(({ icon, text }) => (
                 <div key={icon} className="text-center" style={{ maxWidth: 120 }}>
                   <i className={`bi ${icon} fs-5 text-primary d-block mb-1`} />
@@ -196,25 +196,25 @@ const OpsPageContent: React.FC = () => {
               ))}
             </div>
 
-            <p className="text-center text-muted mb-2">{t('teams.welcome.body')}</p>
+            <p className="text-center text-muted mb-2">{t('boards.welcome.body')}</p>
             <p className="text-center mb-4" style={{ fontSize: '0.85rem' }}>
               <i className="bi bi-lightbulb text-warning me-1" />
-              <span className="text-muted fst-italic">{t('teams.welcome.soloTip')}</span>
+              <span className="text-muted fst-italic">{t('boards.welcome.soloTip')}</span>
             </p>
 
             <div className="text-center">
-              <button type="button" className="btn btn-primary btn-lg px-4" onClick={() => setShowCreateTeam(true)}>
+              <button type="button" className="btn btn-primary btn-lg px-4" onClick={() => setShowCreateBoard(true)}>
                 <i className="bi bi-plus-lg me-2" />
-                {t('teams.welcome.cta')}
+                {t('boards.welcome.cta')}
               </button>
             </div>
           </div>
         </div>
-        <CreateTeamWizard
-          show={showCreateTeam}
-          onHide={() => setShowCreateTeam(false)}
+        <CreateBoardWizard
+          show={showCreateBoard}
+          onHide={() => setShowCreateBoard(false)}
           onCreated={(team) => {
-            setShowCreateTeam(false);
+            setShowCreateBoard(false);
             refreshTeams();
             selectTeam(team.id);
           }}

@@ -46,6 +46,9 @@ AGENT_RUNTIME_ARN = os.environ.get("AGENT_RUNTIME_ARN", "")
 CLOUDFRONT_SECRET = os.environ.get("CLOUDFRONT_SHARED_SECRET", "")
 CLIENT_NAME = os.environ.get("CLIENT_NAME", "unknown")
 AWS_REGION = os.environ.get("AWS_REGION", "us-east-1")
+# AgentCore region may differ from Lambda's own region for cross-region deployments
+# (e.g., Lambda in Jakarta, AgentCore in Sydney)
+AGENTCORE_REGION = os.environ.get("AGENTCORE_REGION", AWS_REGION)
 COGNITO_USER_POOL_ID = os.environ.get("COGNITO_USER_POOL_ID", "")
 COGNITO_CLIENT_ID = os.environ.get("COGNITO_CLIENT_ID", "")
 FILE_REDIRECT_SECRET = os.environ.get("FILE_REDIRECT_SECRET", "")
@@ -59,8 +62,9 @@ _jwks_cache: Dict[str, Any] = {"data": None}
 # Initialize boto3 client for AgentCore runtime
 # See: https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/bedrock-agentcore.html
 logger.info(
-    "Initializing workspace-chat-agent-proxy: region=%s, client=%s, runtime_arn=%s",
+    "Initializing workspace-chat-agent-proxy: region=%s, agentcore_region=%s, client=%s, runtime_arn=%s",
     AWS_REGION,
+    AGENTCORE_REGION,
     CLIENT_NAME,
     (
         AGENT_RUNTIME_ARN[:50] + "..."
@@ -79,7 +83,7 @@ agentcore_config = Config(
 
 agentcore_client = boto3.client(
     "bedrock-agentcore",
-    region_name=AWS_REGION,
+    region_name=AGENTCORE_REGION,
     config=agentcore_config,
 )
 

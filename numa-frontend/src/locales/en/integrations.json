@@ -10,6 +10,7 @@
     "autoApproved": "Auto-approved",
     "denied": "Denied",
     "timeout": "Timed Out",
+    "executionTimeout": "May have completed - check before retrying",
     "viewDetails": "View details"
   },
   "header": {

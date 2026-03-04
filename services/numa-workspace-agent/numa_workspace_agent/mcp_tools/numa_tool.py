@@ -531,16 +531,21 @@ def _get_allowed_operations() -> list[str] | None:
         return []  # Malformed → fail-closed (no operations allowed)
 
 
-# Maps MCP operation names to the frontend-toggle key that controls them.
-# KB operations all share the same toggle (query_knowledge_base) — if the
-# user hasn't enabled a KB, they shouldn't be able to upload/download/list
-# either.  Operations not in this map are always allowed by frontend toggles
+# Maps MCP operation names to the toggle keys that enable them.
+# KB operations all share the same toggle — if the user hasn't enabled a KB,
+# they shouldn't be able to upload/download/list either.
+# Operations not in this map are always allowed by frontend toggles
 # (but can still be restricted by NUMA_ALLOWED_OPERATIONS at agent type level).
-_OPERATION_TO_ENABLED_TOOL_KEY: dict[str, str] = {
-    "knowledge_base": "query_knowledge_base",
-    "web_search": "web_search",
-    "agents": "create_agent_tool",
-    "memories": "memories_tool",
+#
+# Each operation maps to a *list* of accepted toggle keys. The canonical name
+# is "knowledge_base" (matching the MCP operation). Legacy names
+# (query_knowledge_base, knowledge_search) are kept for backward compatibility
+# with existing schedule records in DynamoDB.
+_OPERATION_TO_ENABLED_TOOL_KEYS: dict[str, list[str]] = {
+    "knowledge_base": ["knowledge_base", "query_knowledge_base", "knowledge_search"],
+    "web_search": ["web_search"],
+    "agents": ["create_agent_tool"],
+    "memories": ["memories_tool"],
 }
 
 
@@ -558,10 +563,10 @@ def _check_operation_allowed(operation: str) -> str | None:
         )
 
     # Layer 2: Frontend request toggles (user-level controls)
-    toggle_key = _OPERATION_TO_ENABLED_TOOL_KEY.get(operation)
-    if toggle_key is not None:
+    toggle_keys = _OPERATION_TO_ENABLED_TOOL_KEYS.get(operation)
+    if toggle_keys is not None:
         enabled_tools = _get_enabled_tools()
-        if toggle_key not in enabled_tools:
+        if not any(key in enabled_tools for key in toggle_keys):
             # User-friendly messages per tool
             messages = {
                 "knowledge_base": "Knowledge base is not enabled. Enable a knowledge base in chat settings.",

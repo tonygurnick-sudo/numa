@@ -9,11 +9,11 @@ import { CreateTicketModal } from './Modals/CreateTicketModal';
 import { TicketSuccessModal } from './Modals/TicketSuccessModal';
 import { TicketDetailModal } from './Modals/TicketDetailModal';
 import { GlobalSettingsModal } from './Modals/GlobalSettingsModal';
-import { TeamSettingsModal } from './Modals/TeamSettingsModal';
-import { CreateTeamWizard } from './Modals/CreateTeamWizard';
-import TeamSelector from './TeamSelector';
+import { BoardSettingsModal } from './Modals/BoardSettingsModal';
+import { CreateBoardWizard } from './Modals/CreateBoardWizard';
+import BoardSelector from './BoardSelector';
 import ZoneSprintStrip from './ZoneSprintStrip';
-import AllTeamsStrip from './AllTeamsStrip';
+import AllBoardsStrip from './AllBoardsStrip';
 import type { Ticket } from '../../types/ops';
 import type { OpsTopView } from './useOpsData';
 import './BoardView/kanban.css';
@@ -68,40 +68,59 @@ const OpsHeader = () => {
         className="d-flex align-items-center justify-content-between px-2 px-md-3 py-2 border-bottom bg-white flex-wrap"
         style={{ minHeight: 64 }}
       >
-        {/* Left: Page Title */}
-        <div
-          className="d-flex align-items-center gap-2"
-          style={{ cursor: canManage ? 'pointer' : 'default' }}
-          onClick={() => {
-            if (canManage) setTopView('home');
-          }}
-          role={canManage ? 'button' : undefined}
-          tabIndex={canManage ? 0 : undefined}
-          onKeyDown={
-            canManage
-              ? (e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    setTopView('home');
+        {/* Left: Page Title + Team Selector */}
+        <div className="d-flex align-items-center gap-2 gap-md-4">
+          <div
+            className="d-flex align-items-center gap-2"
+            style={{ cursor: canManage ? 'pointer' : 'default' }}
+            onClick={() => {
+              if (canManage) setTopView('home');
+            }}
+            role={canManage ? 'button' : undefined}
+            tabIndex={canManage ? 0 : undefined}
+            onKeyDown={
+              canManage
+                ? (e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      setTopView('home');
+                    }
                   }
-                }
-              : undefined
-          }
-        >
-          <img src={navLogo} alt={t('title')} style={{ height: 40, width: 40, objectFit: 'contain' }} />
-          <div className="d-flex flex-column lh-sm">
-            <span className="fw-bold text-dark" style={{ fontSize: '1.15rem' }}>
-              {t('title')}
-            </span>
-            <span className="text-muted d-none d-lg-inline" style={{ fontSize: '0.78rem' }}>
-              {t('subtitle')}
-            </span>
+                : undefined
+            }
+          >
+            <img src={navLogo} alt={t('title')} style={{ height: 40, width: 40, objectFit: 'contain' }} />
+            <div className="d-flex flex-column lh-sm">
+              <span className="fw-bold text-dark" style={{ fontSize: '1.15rem' }}>
+                {t('title')}
+              </span>
+              <span className="text-muted d-none d-lg-inline" style={{ fontSize: '0.78rem' }}>
+                {t('subtitle')}
+              </span>
+            </div>
           </div>
+          {/* Board / All Boards selector dropdown */}
+          {teams.length > 0 && (
+            <>
+              <div className="vr" style={{ height: 32 }} />
+              <BoardSelector
+                currentBoard={teams.find((tm) => tm.id === selectedTeamId) ?? null}
+                boards={teams}
+                isAllBoards={boardViewMode === 'allTeams'}
+                onSelectBoard={(teamId) => {
+                  selectTeam(teamId);
+                  setBoardViewMode('singleTeam');
+                }}
+                onSelectAllBoards={() => setBoardViewMode('allTeams')}
+                onCreateBoard={() => setShowCreateTeam(true)}
+              />
+            </>
+          )}
         </div>
 
         {/* Right: Nav tabs + actions grouped together */}
-        <div className="d-flex align-items-center gap-2 gap-md-3">
-          <div className="ops-nav-tabs d-flex flex-wrap">
+        <div className="d-flex align-items-center gap-2 gap-md-3 flex-wrap mt-2 mt-md-0 w-100 w-md-auto justify-content-start justify-content-md-end">
+          <div className="ops-nav-tabs d-flex flex-wrap" style={{ paddingBottom: 4 }}>
             {OPS_TOP_VIEWS.map(({ key, labelKey, icon }) => (
               <button
                 key={key}
@@ -136,46 +155,28 @@ const OpsHeader = () => {
           className="d-flex align-items-center px-3 gap-3 border-bottom bg-white"
           style={{ minHeight: 54, padding: '10px 0' }}
         >
-          {/* Team / All Teams selector */}
-          {teams.length > 0 && (
-            <div className="d-flex align-items-center gap-3 flex-shrink-0">
-              <TeamSelector
-                currentTeam={teams.find((tm) => tm.id === selectedTeamId) ?? null}
-                teams={teams}
-                isAllTeams={boardViewMode === 'allTeams'}
-                onSelectTeam={(teamId) => {
-                  selectTeam(teamId);
-                  setBoardViewMode('singleTeam');
-                }}
-                onSelectAllTeams={() => setBoardViewMode('allTeams')}
-                onCreateTeam={() => setShowCreateTeam(true)}
-              />
-              {/* Team settings — next to team name in single-team mode */}
-              {boardViewMode === 'singleTeam' && selectedTeamId && canManage && (
-                <button
-                  type="button"
-                  className="btn btn-link text-muted p-0"
-                  onClick={() => setShowBoardSettings(true)}
-                  title={t('teams.settings')}
-                  style={{ fontSize: '0.95rem' }}
-                >
-                  <i className="bi bi-sliders" />
-                </button>
-              )}
-              <div className="vr align-self-stretch my-2" />
-            </div>
-          )}
-
           {boardViewMode === 'singleTeam' ? (
-            <ZoneSprintStrip />
+            <>
+              {/* Zone / Sprint strip */}
+              <ZoneSprintStrip />
+
+              {/* Right-side controls */}
+              <div className="d-flex align-items-center gap-2 flex-shrink-0 ms-auto">
+                {/* Board settings gear */}
+                {selectedTeamId && canManage && (
+                  <button
+                    type="button"
+                    className="btn btn-outline-secondary btn-sm"
+                    onClick={() => setShowBoardSettings(true)}
+                    title={t('boards.settings')}
+                  >
+                    <i className="bi bi-sliders" />
+                  </button>
+                )}
+              </div>
+            </>
           ) : (
-            <AllTeamsStrip
-              canManage={canManage}
-              onOpenTeamSettings={(teamId) => {
-                selectTeam(teamId);
-                setShowBoardSettings(true);
-              }}
-            />
+            <AllBoardsStrip />
           )}
 
           {/* New Ticket button — right side of board bar */}
@@ -226,7 +227,7 @@ const OpsHeader = () => {
           setDetailTicketId(null);
         }}
       />
-      <TeamSettingsModal
+      <BoardSettingsModal
         show={showBoardSettings}
         onHide={() => setShowBoardSettings(false)}
         onSaved={() => {
@@ -242,7 +243,7 @@ const OpsHeader = () => {
           await refreshConfig();
         }}
       />
-      <CreateTeamWizard
+      <CreateBoardWizard
         show={showCreateTeam}
         onHide={() => setShowCreateTeam(false)}
         onCreated={(team) => {

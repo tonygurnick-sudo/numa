@@ -82,14 +82,14 @@ export const getEnabledTools = (
 
   if (autoToolsEnabled) {
     // In all tools mode, enable tools; include agent creation only when feature enabled
-    if (Array.isArray(enabledKBIds) && enabledKBIds.length > 0) enabledTools.push('query_knowledge_base');
+    if (Array.isArray(enabledKBIds) && enabledKBIds.length > 0) enabledTools.push('knowledge_base');
     enabledTools.push('web_search');
     if (dataAnalysisAvailable) enabledTools.push('data_analysis');
     if (agentsFeatureEnabled) enabledTools.push('create_agent_tool');
     enabledTools.push('memories_tool');
   } else {
     // In manual mode, only enable selected tools based on what's selected
-    if (Array.isArray(enabledKBIds) && enabledKBIds.length > 0) enabledTools.push('query_knowledge_base');
+    if (Array.isArray(enabledKBIds) && enabledKBIds.length > 0) enabledTools.push('knowledge_base');
     if (webSearchEnabled) enabledTools.push('web_search');
     if (dataAnalysisEnabled && dataAnalysisAvailable) enabledTools.push('data_analysis');
     if (agentsFeatureEnabled && createAgentEnabled) enabledTools.push('create_agent_tool');
@@ -245,7 +245,7 @@ Today's Date: ${TODAY}`;
     // Build tools section with both tools and connections
     const toolLines: string[] = [];
 
-    if (enabledTools.includes('query_knowledge_base')) {
+    if (enabledTools.includes('knowledge_base')) {
       const kbList = Array.isArray(enabledKBMeta)
         ? enabledKBMeta
             .filter((k) => k && typeof k.id === 'string' && k.id.trim())

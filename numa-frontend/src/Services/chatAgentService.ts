@@ -352,7 +352,7 @@ const chatAgentWS = new ChatAgentHttpStream();
 export const callChatAgentStreaming = (
   prompt: string,
   conversationId: string,
-  enabledTools: string[] = ['query_knowledge_base', 'web_search'],
+  enabledTools: string[] = ['knowledge_base', 'web_search'],
   systemPrompt: string = '',
   modelId: string | null = null,
   onChunk: OnChunk,
