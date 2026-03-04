@@ -8,6 +8,7 @@ Streams SDK message types directly for frontend consumption.
 import asyncio
 import json
 import os
+import time
 import uuid as uuid_mod
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -734,6 +735,7 @@ async def stream_claude_sdk(
                             approval_event = {
                                 "type": "tool_approval",
                                 "timestamp": datetime.now(timezone.utc).isoformat(),
+                                "created_at": int(time.time()),
                                 "tool_use_id": block.id,
                                 "tool_name": block.name,
                                 "action_key": action_key

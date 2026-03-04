@@ -4116,6 +4116,12 @@ $border-radius-pill: 1rem;
     background: color-mix(in srgb, #d97706 12%, transparent);
     color: #d97706;
   }
+
+  &.execution_timeout {
+    background: color-mix(in srgb, #d97706 15%, transparent);
+    color: #b45309;
+    font-weight: 600;
+  }
 }
 
 // Inline Thinking Spinner (appears where content will stream)

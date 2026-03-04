@@ -762,6 +762,38 @@ function addInlineToolSegment(
 }
 
 /**
+ * Set the approval decision on an inline tool segment (e.g., 'execution_timeout').
+ * Walks backwards through messages to find the matching segment.
+ */
+function setApprovalDecision(
+  helpers: WorkspaceChatMessageHelpers,
+  toolUseId: string,
+  decision: 'approved' | 'denied' | 'timeout' | 'execution_timeout',
+): void {
+  helpers.setMessages((prev) => {
+    const updated = [...prev];
+    for (let i = updated.length - 1; i >= 0; i--) {
+      const msg = updated[i];
+      if (msg.role !== 'assistant' || !msg.segments) continue;
+      const segIdx = msg.segments.findIndex(
+        (s) => s.kind === 'inline_tool' && (s as WorkspaceChatInlineToolSegment).toolUseId === toolUseId,
+      );
+      if (segIdx >= 0) {
+        const newMsg = { ...msg, segments: [...msg.segments] };
+        const seg = { ...newMsg.segments[segIdx] } as WorkspaceChatInlineToolSegment;
+        if (seg.approval) {
+          seg.approval = { ...seg.approval, decision };
+        }
+        newMsg.segments[segIdx] = seg;
+        updated[i] = newMsg;
+        return updated;
+      }
+    }
+    return prev;
+  });
+}
+
+/**
  * Mark an inline tool as complete.
  */
 function completeInlineTool(helpers: WorkspaceChatMessageHelpers, toolUseId: string, isError = false): void {
@@ -1256,6 +1288,20 @@ function handleToolResultBlock(
   }
 
   if (INLINE_TOOLS.has(name) || INTEGRATION_MCP_TOOLS.has(name)) {
+    // For integration tools, check if the result indicates an execution_timeout.
+    // This happens when the action was approved but the relay call failed/timed out —
+    // the action may have already executed on the external system.
+    if (INTEGRATION_MCP_TOOLS.has(name) && block.content) {
+      try {
+        const resultStr = typeof block.content === 'string' ? block.content : JSON.stringify(block.content);
+        const parsed = JSON.parse(resultStr);
+        if (parsed?.status === 'execution_timeout') {
+          setApprovalDecision(helpers, tool_use_id, 'execution_timeout');
+        }
+      } catch {
+        // Not JSON — ignore
+      }
+    }
     completeInlineTool(helpers, tool_use_id, is_error);
     return;
   }
@@ -1466,6 +1512,7 @@ function handleToolApprovalEvent(event: SDKToolApprovalEvent, helpers: Workspace
           propsPreview: event.props_preview,
           requestId: event.request_id,
           autoApproved: event.auto_approved,
+          createdAt: event.created_at,
         };
         newMsg.segments[segIdx] = seg;
         updated[i] = newMsg;
@@ -1526,6 +1573,7 @@ function handleSubagentToolApprovalEvent(event: SDKToolApprovalEvent, helpers: W
         propsPreview: event.props_preview,
         requestId: event.request_id,
         autoApproved: event.auto_approved,
+        createdAt: event.created_at,
       },
     };
 

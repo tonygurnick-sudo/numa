@@ -93,7 +93,16 @@ function WorkspaceChatInlineTool({ segment, conversationId }: Props) {
   const { displayText, isComplete, isError, iconName, iconImage, approval, approvalOnly } = segment;
   const [submitting, setSubmitting] = useState(false);
   const [localDecision, setLocalDecision] = useState<string | undefined>(undefined);
-  const [secondsLeft, setSecondsLeft] = useState(APPROVAL_TIMEOUT_SECONDS);
+  const [secondsLeft, setSecondsLeft] = useState(() => {
+    // Sync with backend timer: if the approval event includes a created_at
+    // timestamp, calculate how much time has already elapsed so the frontend
+    // countdown matches the backend's remaining approval window.
+    if (approval?.createdAt) {
+      const elapsed = Math.floor(Date.now() / 1000) - approval.createdAt;
+      return Math.max(0, APPROVAL_TIMEOUT_SECONDS - elapsed);
+    }
+    return APPROVAL_TIMEOUT_SECONDS;
+  });
 
   const statusClass = isError ? 'error' : isComplete ? 'complete' : 'running';
   const isRunning = !isComplete && !isError;
@@ -164,13 +173,16 @@ function WorkspaceChatInlineTool({ segment, conversationId }: Props) {
             )}
             {decision && (
               <span className={`inline-tool-decision-badge ${decision}`}>
+                {decision === 'execution_timeout' && <i className="bi bi-exclamation-triangle me-1" />}
                 {approval?.autoApproved
                   ? t('approval.autoApproved')
                   : decision === 'approved'
                     ? t('approval.approved')
                     : decision === 'denied'
                       ? t('approval.denied')
-                      : t('approval.timeout')}
+                      : decision === 'execution_timeout'
+                        ? t('approval.executionTimeout')
+                        : t('approval.timeout')}
               </span>
             )}
           </div>

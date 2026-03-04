@@ -355,7 +355,7 @@ export interface WorkspaceChatToolApprovalSegment {
   description: string;
   propsPreview: string;
   requestId: string;
-  decision?: 'approved' | 'denied' | 'timeout';
+  decision?: 'approved' | 'denied' | 'timeout' | 'execution_timeout';
   isLoading: boolean;
   autoApproved?: boolean;
 }
@@ -856,6 +856,9 @@ export type SDKEvent =
 export interface SDKToolApprovalEvent {
   type: 'tool_approval';
   timestamp?: string;
+  /** Unix epoch seconds when the backend created the approval request.
+   *  Used by the frontend to synchronize the countdown timer. */
+  created_at?: number;
   tool_use_id: string;
   tool_name: string;
   action_key: string;
@@ -1004,9 +1007,11 @@ export interface WorkspaceChatInlineToolSegment {
     description: string;
     propsPreview: string;
     requestId: string;
-    decision?: 'approved' | 'denied' | 'timeout';
+    decision?: 'approved' | 'denied' | 'timeout' | 'execution_timeout';
     isSubmitting?: boolean;
     autoApproved?: boolean;
+    /** Unix epoch seconds when the backend created the approval — used to sync countdown */
+    createdAt?: number;
   };
 }
 
