@@ -402,6 +402,12 @@
       "copy": "Copy to Clipboard",
       "print": "Print"
     },
+    "emailTruncated": {
+      "bodyNotice": "\n\n---\n[Content truncated — full content has been copied to your clipboard. Paste into email for complete content.]",
+      "warningTitle": "Content Truncated",
+      "warningMessage": "The content is too long to include in an email link. If you continue, a truncated version will be placed in the email and the full content will be copied to your clipboard so you can paste it in.",
+      "copyAndContinue": "Copy to Clipboard & Continue"
+    },
     "formats": {
       "pdf": "PDF",
       "csv": "CSV",

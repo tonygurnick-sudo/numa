@@ -88,6 +88,9 @@ const ResultActions: React.FC<ResultActionsProps> = ({ content, title, appType =
   // Download loading state
   const [isDownloading, setIsDownloading] = useState(false);
 
+  // Email truncation warning state
+  const [showTruncationWarning, setShowTruncationWarning] = useState(false);
+
   // Check if user has feature flag for company KB
   const hasCompanyDataFeature = Boolean(user?.features?.includes('addToCompanyData'));
 
@@ -646,11 +649,37 @@ const ResultActions: React.FC<ResultActionsProps> = ({ content, title, appType =
   // ─────────────────────────────────────────────────────────────
   // 5) SHARE Handlers (Email, Copy, Print)
   const handleEmailShare = () => {
+    const MAX_BODY_LENGTH = 8000;
     const plainText = convertMarkdownToPlainText(content);
+
+    if (plainText.length > MAX_BODY_LENGTH) {
+      setShowTruncationWarning(true);
+      return;
+    }
+
     const emailSubject = encodeURIComponent(resolvedTitle);
     const emailBody = encodeURIComponent(plainText);
     const mailtoUrl = `mailto:?subject=${emailSubject}&body=${emailBody}`;
     window.open(mailtoUrl, '_blank', 'noopener,noreferrer');
+  };
+
+  const handleTruncatedEmailContinue = async () => {
+    const MAX_BODY_LENGTH = 8000;
+    const plainText = convertMarkdownToPlainText(content);
+
+    try {
+      await navigator.clipboard.writeText(plainText);
+    } catch (err) {
+      console.error('Failed to copy full content to clipboard:', err);
+    }
+
+    const truncatedText = plainText.substring(0, MAX_BODY_LENGTH) + t('resultActions.emailTruncated.bodyNotice');
+    const emailSubject = encodeURIComponent(resolvedTitle);
+    const emailBody = encodeURIComponent(truncatedText);
+    const mailtoUrl = `mailto:?subject=${emailSubject}&body=${emailBody}`;
+    window.open(mailtoUrl, '_blank', 'noopener,noreferrer');
+
+    setShowTruncationWarning(false);
   };
 
   const handleCopyToClipboard = async () => {
@@ -926,6 +955,24 @@ const ResultActions: React.FC<ResultActionsProps> = ({ content, title, appType =
             </Modal.Footer>
           </>
         )}
+      </Modal>
+
+      <Modal show={showTruncationWarning} onHide={() => setShowTruncationWarning(false)} centered>
+        <Modal.Header closeButton>
+          <Modal.Title>{t('resultActions.emailTruncated.warningTitle')}</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          <p>{t('resultActions.emailTruncated.warningMessage')}</p>
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="secondary" onClick={() => setShowTruncationWarning(false)}>
+            {t('common.cancel')}
+          </Button>
+          <Button variant="primary" onClick={handleTruncatedEmailContinue}>
+            <i className="bi bi-clipboard me-2"></i>
+            {t('resultActions.emailTruncated.copyAndContinue')}
+          </Button>
+        </Modal.Footer>
       </Modal>
     </div>
   );
