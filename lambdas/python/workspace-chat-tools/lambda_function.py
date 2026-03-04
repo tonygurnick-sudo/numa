@@ -569,7 +569,8 @@ def handler(event: Dict[str, Any], context: LambdaContext) -> Dict[str, Any]:
             # No slug (proxy_request) — check any non-standard tool is present
             standard_tools = {
                 "web_search",
-                "query_knowledge_base",
+                "knowledge_base",
+                "query_knowledge_base",  # Legacy V1 name
                 "data_analysis",
                 "create_agent_tool",
             }

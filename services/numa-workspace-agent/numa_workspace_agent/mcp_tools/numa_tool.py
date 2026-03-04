@@ -537,12 +537,12 @@ def _get_allowed_operations() -> list[str] | None:
 # Operations not in this map are always allowed by frontend toggles
 # (but can still be restricted by NUMA_ALLOWED_OPERATIONS at agent type level).
 #
-# Each operation maps to a *list* of accepted toggle keys so that both V1
-# (query_knowledge_base) and V2 (knowledge_search) names are recognised.
-# The frontend sends V1 names; the schedule runner historically sent V2 names
-# and existing schedule records in DynamoDB may still contain them.
+# Each operation maps to a *list* of accepted toggle keys. The canonical name
+# is "knowledge_base" (matching the MCP operation). Legacy names
+# (query_knowledge_base, knowledge_search) are kept for backward compatibility
+# with existing schedule records in DynamoDB.
 _OPERATION_TO_ENABLED_TOOL_KEYS: dict[str, list[str]] = {
-    "knowledge_base": ["query_knowledge_base", "knowledge_search"],
+    "knowledge_base": ["knowledge_base", "query_knowledge_base", "knowledge_search"],
     "web_search": ["web_search"],
     "agents": ["create_agent_tool"],
     "memories": ["memories_tool"],

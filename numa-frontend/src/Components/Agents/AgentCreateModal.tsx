@@ -670,11 +670,13 @@ export const AgentCreateModal = ({
   const buildScheduleEnabledTools = (): string[] => {
     const tools: string[] = [];
     const tc = formState.toolsConfig;
-    if (tc?.queryDataSources !== false && tc?.allowedKnowledgeBases?.length) {
-      tools.push('knowledge_search');
-    }
-    if (tc?.webSearchEnabled) tools.push('web_search');
+    // allowedKnowledgeBases: null = all KBs, [] = none, [...ids] = specific
+    const allowed = tc?.allowedKnowledgeBases;
+    const hasKBs = allowed === null || (Array.isArray(allowed) && allowed.length > 0);
+    if (hasKBs) tools.push('knowledge_base');
+    if (tc?.webSearchEnabled || tc?.autoToolsEnabled) tools.push('web_search');
     if (tc?.createAgentEnabled) tools.push('create_agent_tool');
+    tools.push('memories_tool');
     return tools;
   };
 

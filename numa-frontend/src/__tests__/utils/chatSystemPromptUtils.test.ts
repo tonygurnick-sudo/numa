@@ -143,7 +143,7 @@ describe('chatSystemPromptUtils', () => {
     it('enables core tools in auto mode', () => {
       const tools = getEnabledTools(true, false, false, false, ['kb-test-123'], true);
       expect(tools).toEqual([
-        'query_knowledge_base',
+        'knowledge_base',
         'web_search',
         'data_analysis',
         'create_agent_tool',
@@ -154,7 +154,7 @@ describe('chatSystemPromptUtils', () => {
     it('includes create_agent_tool in auto mode when explicitly enabled', () => {
       const tools = getEnabledTools(true, false, false, true, ['kb-test-123'], true);
       expect(tools).toEqual([
-        'query_knowledge_base',
+        'knowledge_base',
         'web_search',
         'data_analysis',
         'create_agent_tool',
@@ -162,9 +162,9 @@ describe('chatSystemPromptUtils', () => {
       ]);
     });
 
-    it('enables only query_knowledge_base when KBs are selected in manual mode', () => {
+    it('enables only knowledge_base when KBs are selected in manual mode', () => {
       const tools = getEnabledTools(false, false, false, false, ['kb-test-123'], true);
-      expect(tools).toEqual(['query_knowledge_base', 'memories_tool']);
+      expect(tools).toEqual(['knowledge_base', 'memories_tool']);
     });
 
     it('enables only web_search when selected in manual mode', () => {
@@ -174,7 +174,7 @@ describe('chatSystemPromptUtils', () => {
 
     it('enables both when both selected in manual mode', () => {
       const tools = getEnabledTools(false, true, false, false, ['kb-test-123'], true);
-      expect(tools).toEqual(['query_knowledge_base', 'web_search', 'memories_tool']);
+      expect(tools).toEqual(['knowledge_base', 'web_search', 'memories_tool']);
     });
 
     it('enables none when none selected in manual mode', () => {
@@ -200,7 +200,7 @@ describe('chatSystemPromptUtils', () => {
 
     it('omits rubric guidance when web_search is not enabled', () => {
       const email = 'test@example.com';
-      const prompt = generateSystemPrompt(['query_knowledge_base'], email, '');
+      const prompt = generateSystemPrompt(['knowledge_base'], email, '');
       expect(prompt).not.toContain('Use web_search to find current information from the internet');
       expect(prompt).not.toContain(
         '**IMPORTANT Tool Priority**: ALWAYS prioritize query_knowledge_base results when available',
@@ -209,7 +209,7 @@ describe('chatSystemPromptUtils', () => {
 
     it('includes user email and date metadata', () => {
       const email = 'user@org.co.nz';
-      const prompt = generateSystemPrompt(['query_knowledge_base', 'web_search'], email, '');
+      const prompt = generateSystemPrompt(['knowledge_base', 'web_search'], email, '');
       expect(prompt).toContain(`User Email: ${email}`);
       expect(prompt).toContain("Today's Date:");
     });

@@ -838,6 +838,14 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
             `arn:aws:dynamodb:*:*:table/${props.userAgentsTableName}`,
           ],
         },
+        // Query access to knowledge-bases table for resolving "All knowledge bases" in scheduled runs
+        {
+          effect: 'Allow',
+          actions: ['dynamodb:Query'],
+          resources: [
+            `arn:aws:dynamodb:*:*:table/numa-${props.clientName}-knowledge-bases`,
+          ],
+        },
       ],
     });
 
