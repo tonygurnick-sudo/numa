@@ -23,6 +23,8 @@ export interface UseWorkspaceChatSettingsPanelReturn {
   filesError: string | null;
   /** Refresh the file list */
   refreshFiles: () => Promise<void>;
+  /** Immediately clear all files (useful when switching conversations before async load completes) */
+  clearFiles: () => void;
 }
 
 /**
@@ -138,6 +140,12 @@ export function useWorkspaceChatSettingsPanel(conversationId: string | null): Us
     }
   }, [conversationId]);
 
+  const clearFiles = useCallback(() => {
+    setUploadsFiles([]);
+    setOutputFiles([]);
+    setFilesError(null);
+  }, []);
+
   return {
     isPanelOpen,
     openPanel,
@@ -148,6 +156,7 @@ export function useWorkspaceChatSettingsPanel(conversationId: string | null): Us
     filesLoading,
     filesError,
     refreshFiles: loadFiles,
+    clearFiles,
   };
 }
 

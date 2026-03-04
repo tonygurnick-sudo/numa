@@ -765,6 +765,12 @@ const NumaWorkspaceChatAgents = () => {
     // Do not show a banner for missing integrations; the pre-chat modal handles warnings
     setAgentError(null);
 
+    // Close any open split-screen previews from previous conversation
+    closeDocument();
+    setShowSplitView(false);
+    closeFilePreview();
+    settingsPanel.clearFiles();
+
     setIsManuallyLoading(true);
     await handleNewChat();
     applyAgentConfiguration(agent);
@@ -954,6 +960,8 @@ const NumaWorkspaceChatAgents = () => {
     setUploadedFiles([]);
     setInputMessage('');
     closeDocument();
+    closeFilePreview();
+    settingsPanel.clearFiles();
 
     // Reset split view state - hide document panel
     setShowSplitView(false);
@@ -1047,6 +1055,18 @@ const NumaWorkspaceChatAgents = () => {
       handleLoadConversation(conversationId, storedIsWorkspace);
     }
   }, [conversationId, numaChatDynamoUtils, sub, hasUserStartedNewChat, messages.length, isManuallyLoading]);
+
+  // Defensive: close all split-screen previews and clear stale files whenever conversation changes.
+  // Individual handlers already do this, but this effect acts as a safety net for any future code paths.
+  const prevConversationIdRef = useRef<string | null>(conversationId);
+  useEffect(() => {
+    if (conversationId !== prevConversationIdRef.current) {
+      prevConversationIdRef.current = conversationId;
+      closeDocument();
+      closeFilePreview();
+      settingsPanel.clearFiles();
+    }
+  }, [conversationId, closeDocument, closeFilePreview, settingsPanel]);
 
   // Load staged items from localStorage when conversation changes
   useEffect(() => {
@@ -1752,6 +1772,12 @@ const NumaWorkspaceChatAgents = () => {
     resetInactivityTimer();
     // Hide suggestions when loading a conversation
     hideSuggestions();
+    // Close any open split-screen previews (document or file) from the previous conversation
+    closeDocument();
+    setShowSplitView(false);
+    closeFilePreview();
+    // Clear output panel files immediately so stale files from previous conversation aren't visible during trace load
+    settingsPanel.clearFiles();
 
     try {
       // V2 workspace conversations: load from trace file
