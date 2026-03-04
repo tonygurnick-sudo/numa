@@ -12,7 +12,7 @@ include:
 workflow:
   auto_cancel:
     on_new_commit: interruptible
-    on_job_failure: cancel
+    on_job_failure: all
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
     - if: $CI_COMMIT_BRANCH && $CI_OPEN_MERGE_REQUESTS
