@@ -79,6 +79,7 @@ echo "=== Building Docker image (ARM64) ==="
 # to force a full rebuild when needed.
 docker buildx build \
     --platform linux/arm64 \
+    --no-cache \
     ${DOCKER_BUILD_OPTS:-} \
     --load \
     --build-arg GIT_HASH="$GIT_HASH" \

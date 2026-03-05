@@ -36,6 +36,7 @@ const NotificationsPage = lazy(() =>
 const SupportPage = lazy(() => import('../Pages/SupportPage').then((m) => ({ default: m.SupportPage })));
 const VaultSecretsPage = lazy(() => import('../Pages/VaultSecretsPage').then((m) => ({ default: m.VaultSecretsPage })));
 const OAuthCallback = lazy(() => import('../Pages/OAuthCallback'));
+const V2AppDetail = lazy(() => import('../Pages/V2AppDetail').then((m) => ({ default: m.V2AppDetail })));
 
 export const ROUTE_CONFIG = [
   // Chat
@@ -287,6 +288,11 @@ export const ROUTE_CONFIG = [
   {
     path: '/app/:appId',
     element: () => <AppDetail />,
+  },
+  {
+    path: '/apps/v2/:appId',
+    element: () => <V2AppDetail />,
+    featureFlag: 'V2_APPS',
   },
   {
     path: '/scheduling/:scheduleId',

@@ -23,7 +23,7 @@ import boto3
 import jwt
 import requests
 from botocore.config import Config
-from fastapi import FastAPI, Header, HTTPException, Request
+from fastapi import FastAPI, Header, HTTPException, Query, Request
 from fastapi.responses import (
     JSONResponse,
     RedirectResponse,
@@ -458,6 +458,9 @@ async def convert_preview(
 @app.get(f"{PREFIX}/runs/{{run_id}}/status")
 async def run_status(
     run_id: str,
+    s3_prefix: str | None = Query(
+        None, alias="s3Prefix", description="Custom S3 prefix for V2 app runs"
+    ),
     authorization: str | None = Header(None),
     x_arcanum_cloudfront_secret: str | None = Header(
         None, alias="x-arcanum-cloudfront-secret"
@@ -468,6 +471,10 @@ async def run_status(
     Routes the request to the AgentCore container which checks S3 for
     a ``_result.json`` file. Returns ``{"status": "running"}`` while the
     agent is still working, or the full result when done.
+
+    The optional ``s3Prefix`` query parameter allows V2 apps to specify
+    a custom S3 prefix template for result lookup (e.g.
+    ``v2-apps/data-analysis/{user_sub}/{conversation_id}``).
     """
     validate_cloudfront_secret(x_arcanum_cloudfront_secret, authorization)
     user_sub = extract_user_sub(authorization)
@@ -476,6 +483,7 @@ async def run_status(
         user_sub=user_sub,
         http_method="GET",
         http_path=f"/runs/{run_id}/status",
+        http_body={"s3Prefix": s3_prefix} if s3_prefix else None,
         authorization=authorization,
         stream=False,
         conversation_id=run_id,

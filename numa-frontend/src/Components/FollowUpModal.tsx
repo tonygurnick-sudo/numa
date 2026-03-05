@@ -1,30 +1,41 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useCallback } from 'react';
 import { Modal, Button, Form } from 'react-bootstrap';
 import { useTranslation } from 'react-i18next';
 
 interface FollowUpModalProps {
   show: boolean;
   onHide: () => void;
-  onSubmit: (prompt: string) => void;
+  onSubmit: (prompt: string, files: File[]) => void;
   isLoading?: boolean;
 }
 
 /**
- * Modal for submitting follow-up prompts to continue an analysis session
+ * Modal for submitting follow-up prompts to continue an analysis session.
+ * Supports optional file attachments.
  */
 export function FollowUpModal({ show, onHide, onSubmit, isLoading = false }: FollowUpModalProps): React.JSX.Element {
   const { t } = useTranslation('common');
   const [prompt, setPrompt] = useState('');
+  const [files, setFiles] = useState<File[]>([]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const addFiles = useCallback((fileList: FileList) => {
+    setFiles((prev) => [...prev, ...Array.from(fileList)]);
+  }, []);
+
+  const removeFile = useCallback((index: number) => {
+    setFiles((prev) => prev.filter((_, i) => i !== index));
+  }, []);
 
   const handleSubmit = () => {
     if (prompt.trim()) {
-      onSubmit(prompt.trim());
-      setPrompt(''); // Clear for next time
+      onSubmit(prompt.trim(), files);
+      setPrompt('');
+      setFiles([]);
     }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    // Submit on Ctrl+Enter or Cmd+Enter
     if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
       e.preventDefault();
       handleSubmit();
@@ -33,6 +44,7 @@ export function FollowUpModal({ show, onHide, onSubmit, isLoading = false }: Fol
 
   const handleClose = () => {
     setPrompt('');
+    setFiles([]);
     onHide();
   };
 
@@ -65,6 +77,46 @@ export function FollowUpModal({ show, onHide, onSubmit, isLoading = false }: Fol
           />
           <Form.Text className="text-muted">{t('followUp.helper')}</Form.Text>
         </Form.Group>
+
+        {/* File attachment */}
+        <div className="mt-3">
+          <input
+            ref={fileInputRef}
+            type="file"
+            multiple
+            className="d-none"
+            onChange={(e) => e.target.files && addFiles(e.target.files)}
+          />
+          <Button
+            variant="outline-secondary"
+            size="sm"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={isLoading}
+            className="d-flex align-items-center gap-1"
+          >
+            <i className="bi bi-paperclip"></i>
+            {t('followUp.attachFiles')}
+          </Button>
+
+          {files.length > 0 && (
+            <ul className="list-unstyled mt-2 mb-0">
+              {files.map((file, i) => (
+                <li
+                  key={`${file.name}-${i}`}
+                  className="d-flex align-items-center gap-2 py-1 px-2 mb-1 rounded"
+                  style={{ background: '#f8f9fa', fontSize: '0.85rem' }}
+                >
+                  <i className="bi bi-file-earmark"></i>
+                  <span className="flex-grow-1 text-truncate">{file.name}</span>
+                  <span className="text-muted">{`(${(file.size / 1024).toFixed(0)} KB)`}</span>
+                  <Button variant="link" size="sm" className="text-danger p-0 ms-auto" onClick={() => removeFile(i)}>
+                    <i className="bi bi-x-lg"></i>
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
       </Modal.Body>
 
       <Modal.Footer className="d-flex justify-content-between">

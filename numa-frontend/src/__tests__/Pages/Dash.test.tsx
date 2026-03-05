@@ -92,8 +92,7 @@ describe('Dash Component', () => {
 
     dashboardFixtures.validApps.apps.forEach((app) => {
       const card = screen.getByTestId(`app-card-${app.id}`);
-      const link = card.querySelector('a');
-      expect(link).toHaveAttribute('href', `/app/${app.id}`);
+      expect(card).toHaveAttribute('role', 'button');
     });
   });
 

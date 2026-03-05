@@ -110,6 +110,7 @@ export default function UpdateClientConfig() {
   const [scheduling, setScheduling] = useState<boolean>(false);
   const [workspaceChatModelSelection, setWorkspaceChatModelSelection] = useState<boolean>(false);
   const [numaOps, setNumaOps] = useState<boolean>(false);
+  const [v2Apps, setV2Apps] = useState<boolean>(false);
   const [agentCoreRegion, setAgentCoreRegion] = useState<string>('');
   const [mfa, setMfa] = useState<boolean>(false);
   const [groupAdmin, setGroupAdmin] = useState(featuresListToString(DEFAULT_ADMIN_FEATURES));
@@ -180,6 +181,7 @@ export default function UpdateClientConfig() {
     setScheduling(Boolean((cfg as any).scheduling));
     setWorkspaceChatModelSelection(Boolean((cfg as any).workspaceChatModelSelection));
     setNumaOps(Boolean((cfg as any).numaOps));
+    setV2Apps(Boolean((cfg as any)?.v2Apps));
     setAgentCoreRegion((cfg as any).agentCoreRegion || '');
     setMfa(Boolean((cfg as any).mfa));
     const groups = (cfg as unknown as Record<string, unknown>)['groups'] as
@@ -224,6 +226,7 @@ export default function UpdateClientConfig() {
       workspaceChatModelSelection:
         (current as any)?.workspaceChatModelSelection ?? defaults.workspaceChatModelSelection,
       numaOps: (current as any)?.numaOps ?? defaults.numaOps,
+      v2Apps: (current as any)?.v2Apps ?? defaults.v2Apps,
       agentCoreRegion: (current as any)?.agentCoreRegion ?? '',
       provisionQResources: (current as any)?.provisionQResources ?? defaults.provisionQResources,
       preferredKnowledgeBase:
@@ -281,6 +284,7 @@ export default function UpdateClientConfig() {
     if (eff.workspaceChatModelSelection !== workspaceChatModelSelection)
       updates.workspaceChatModelSelection = workspaceChatModelSelection;
     if (eff.numaOps !== numaOps) updates.numaOps = numaOps;
+    if (eff.v2Apps !== v2Apps) updates.v2Apps = v2Apps;
     if ((eff as any).agentCoreRegion !== agentCoreRegion) {
       if (agentCoreRegion) {
         (updates as any).agentCoreRegion = agentCoreRegion;
@@ -567,6 +571,14 @@ export default function UpdateClientConfig() {
                           onChange={setNumaOps}
                           type="switch"
                           helpText="Enable Numa Ops (work management, kanban boards, CRM)"
+                        />
+                        <ConfigField
+                          label="V2 Apps (not ready for customers)"
+                          value={v2Apps}
+                          defaultValue={defaults.v2Apps}
+                          onChange={setV2Apps}
+                          type="switch"
+                          helpText="Enable V2 Apps. Internal/dev only — not ready for customer use."
                         />
                         <ConfigField
                           label="Multi-Factor Authentication (MFA)"

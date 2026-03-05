@@ -1460,22 +1460,23 @@ const mergeRunConfig = (
     allKBsAllowed,
     kbFieldSet,
     enabledKBIds,
-    'base.enabledTools': base.enabledTools,
-    willRebuildTools: !(base.enabledTools && base.enabledTools.length > 0),
+    'base.enabledTools (ignored, always rebuilt)': base.enabledTools,
   });
 
-  const enabledTools =
-    base.enabledTools && base.enabledTools.length > 0
-      ? base.enabledTools
-      : buildEnabledTools({
-          autoToolsEnabled,
-          webSearchEnabled,
-          createAgentEnabled,
-          enabledKBIds,
-          allKBsAllowed,
-          kbFieldSet,
-          queryDataSources: toolsConfig.queryDataSources,
-        });
+  // Always rebuild enabledTools from the fresh agent snapshot rather than trusting
+  // the frozen run_config.enabledTools. The snapshot is refreshed from DynamoDB each
+  // run (see refreshAgentSnapshot), so KB/tool changes made after the schedule was
+  // created are reflected. The frozen enabledTools may be stale (e.g. missing
+  // knowledge_base when KBs were added after the schedule was created).
+  const enabledTools = buildEnabledTools({
+    autoToolsEnabled,
+    webSearchEnabled,
+    createAgentEnabled,
+    enabledKBIds,
+    allKBsAllowed,
+    kbFieldSet,
+    queryDataSources: toolsConfig.queryDataSources,
+  });
 
   return {
     ...base,

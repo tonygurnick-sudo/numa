@@ -1262,11 +1262,20 @@ async def run_claude_sdk(
                     captured_session_id = message.session_id
                     serialized["session_id"] = captured_session_id
                     stream_log.finalize(message)
+                    usage = getattr(message, "usage", {}) or {}
                     result_meta = {
                         "num_turns": message.num_turns,
                         "total_cost_usd": message.total_cost_usd,
                         "duration_ms": message.duration_ms,
                         "is_error": message.is_error,
+                        "input_tokens": usage.get("input_tokens", 0) or 0,
+                        "output_tokens": usage.get("output_tokens", 0) or 0,
+                        "cache_read_tokens": usage.get("cache_read_input_tokens", 0)
+                        or 0,
+                        "cache_creation_tokens": usage.get(
+                            "cache_creation_input_tokens", 0
+                        )
+                        or 0,
                     }
                     logger.info(
                         "SDK run result",
@@ -1359,7 +1368,7 @@ async def run_claude_sdk(
 
     return {
         "status": "completed",
-        "text": "".join(collected_text),
+        "text": "\n\n".join(collected_text),
         "artifacts": artifacts,
         "usage": result_meta,
         "session_id": captured_session_id or session_id or "",

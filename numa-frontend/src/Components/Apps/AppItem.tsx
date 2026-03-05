@@ -1,27 +1,77 @@
-import { Preloader } from '../Preloader';
 import { StarFill, Star } from 'react-bootstrap-icons';
 import { useFavorites } from '../../hooks/useFavorites';
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { FlyingStarAnimation } from '../FlyingStarAnimation';
 import { useTranslation } from 'react-i18next';
 import { formatCategory } from '../../utils/textUtils';
 
+const CATEGORY_COLORS: Record<string, string> = {
+  general: '#7c3aed',
+  productivity: '#9d64b5',
+  finance: '#026aa2',
+  compliance: '#56bcf2',
+  hr: '#28a07c',
+  legal: '#f59e0b',
+};
+
+const APP_ICON_MAP: Record<string, string> = {
+  // Production apps
+  'candidate-screening': 'bi bi-person-check',
+  'contract-analysis': 'bi bi-file-earmark-text',
+  'data-analysis': 'bi bi-graph-up',
+  'document-summariser': 'bi bi-file-text',
+  'financial-analysis': 'bi bi-currency-dollar',
+  'meeting-analyser': 'bi bi-people',
+  'policy-drafter': 'bi bi-pencil-square',
+  'policy-reviewer': 'bi bi-shield-check',
+  // Non-production apps
+  'beyond-expectations': 'bi bi-star',
+  'company-profile': 'bi bi-building',
+  'council-resource-consents': 'bi bi-bank',
+  'council-recourse-consents': 'bi bi-bank',
+  'costing-calculator': 'bi bi-calculator',
+  'gdsr-assessment': 'bi bi-clipboard-check',
+  'infringement-review': 'bi bi-exclamation-triangle',
+  nolia: 'bi bi-lightbulb',
+  'nzsba-policy-builder': 'bi bi-journal-check',
+  'rfp-response-comparison': 'bi bi-files',
+  'procurement-rfp-assessment': 'bi bi-cart-check',
+  'structured-data-query': 'bi bi-database',
+  'tor-assessment': 'bi bi-file-earmark-check',
+  'e2e-test': 'bi bi-bug',
+  // Example manifest / local dev apps
+  'policy-builder-app': 'bi bi-file-earmark-plus',
+  'meeting-tools-app': 'bi bi-camera-video',
+  'loan-financing-calculator': 'bi bi-calculator',
+  'data-processing-app-id': 'bi bi-cpu',
+  'ml-model-deployment-app-id': 'bi bi-robot',
+  'numa-workflow-app-id': 'bi bi-diagram-3',
+  'meeting-tools-app-native-test': 'bi bi-camera-video',
+};
+
 const AppItem = ({ app, onCategoryClick }) => {
   const { t } = useTranslation('apps');
-  // Get first 3 tags for display
-  const displayTags = app?.tags?.slice(0, 3) || [];
-
+  const navigate = useNavigate();
   const { isFavorite, toggleFavorite } = useFavorites();
   const favorite = isFavorite(app.id);
   const [showAnimation, setShowAnimation] = useState(false);
   const [sourceRect, setSourceRect] = useState(null);
 
-  const handleFavoriteClick = (e) => {
-    e.preventDefault(); // Prevent card click from triggering
+  const isActive = app.status === 'Active';
+  const categoryColor = CATEGORY_COLORS[app.category?.toLowerCase()] || '#6b7280';
 
-    // Only animate when adding to favorites, not removing
+  const handleClick = () => {
+    if (isActive) {
+      navigate(`/app/${app.id}`);
+    }
+  };
+
+  const handleFavoriteClick = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+
     if (!favorite) {
-      // Get the source position for the animation
       const starElement = e.currentTarget;
       setSourceRect(starElement.getBoundingClientRect());
       setShowAnimation(true);
@@ -29,15 +79,8 @@ const AppItem = ({ app, onCategoryClick }) => {
 
     toggleFavorite(app.id);
     if (favorite) {
-      // navigate('/favourite-apps');
       window.location.reload();
     }
-  };
-
-  // Format the app name to be more visually appealing
-  const formatAppName = (name) => {
-    if (!name) return '';
-    return name;
   };
 
   const getCategoryLabel = (category) => {
@@ -61,95 +104,56 @@ const AppItem = ({ app, onCategoryClick }) => {
         />
       )}
       <div
-        className={`card card-apps w-100 ${app.status !== 'Active' ? 'card-disabled' : ''}`}
+        className={`v2-app-card ${isActive ? 'v2-app-card--active' : 'v2-app-card--coming-soon'}`}
         data-testid={`app-card-${app.id}`}
-        title={app.status !== 'Active' ? t('appItem.unavailableTitle') : ''}
-        data-tooltip-delay="500"
+        onClick={handleClick}
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e) => e.key === 'Enter' && handleClick()}
+        title={!isActive ? t('appItem.unavailableTitle') : ''}
       >
-        <div className="card-header">
-          <div className="app-name">
-            <a href={`/app/${app.id}`} rel="noopener">
-              {formatAppName(app?.appName)}
-            </a>
+        <div className="v2-app-card__top">
+          <div className="v2-app-card__icon" style={{ backgroundColor: `${categoryColor}15` }}>
+            <i
+              className={APP_ICON_MAP[app.id] || 'bi bi-app-indicator'}
+              style={{ color: categoryColor, fontSize: '1.25rem' }}
+            />
           </div>
-
-          <div className="app-meta">
-            {app?.category && (
-              <div
-                className={`category-pill ${app.category.toLowerCase()}`}
+          <div className="v2-app-card__info">
+            <h3 className="v2-app-card__name">
+              {app.appName}
+              {!isActive && (
+                <span className="v2-status-badge v2-status-badge--coming-soon">{t('appItem.unavailable')}</span>
+              )}
+            </h3>
+            <p className="v2-app-card__description">{app.appDescription}</p>
+          </div>
+        </div>
+        <div className="v2-app-card__footer">
+          <span className="v2-app-card__status">
+            <span className="v2-app-card__status-dot" />
+            {statusLabel}
+          </span>
+          <div className="v2-app-card__footer-right">
+            {app.category && (
+              <span
+                className="v2-app-card__category"
+                style={{ backgroundColor: `${categoryColor}15`, color: categoryColor }}
                 onClick={(e) => {
-                  e.preventDefault(); // Prevent card click
-                  if (onCategoryClick) {
-                    onCategoryClick(app.category);
-                  }
+                  e.stopPropagation();
+                  if (onCategoryClick) onCategoryClick(app.category);
                 }}
-                style={{ cursor: 'pointer' }}
-                title={t('appItem.filterByCategory', { category: getCategoryLabel(app.category) })}
               >
                 {getCategoryLabel(app.category)}
-              </div>
+              </span>
             )}
-          </div>
-        </div>
-
-        <div className="card-body">
-          <div className="app-info">
-            <div className="app-description">
-              {app.appDescription === t('appItem.loading') ? (
-                <Preloader smallscreen={true} />
-              ) : (
-                <div className="description-text">{app.appDescription}</div>
-              )}
-            </div>
-            <div className="app-tags">
-              {displayTags.map((tag, index) => (
-                <span
-                  key={index}
-                  className={`tag-pill tag-${['green', 'purple', 'blue', 'orange', 'teal'][index % 5]}`}
-                >
-                  {tag}
-                </span>
-              ))}
-            </div>
-          </div>
-        </div>
-        <div className="card-footer">
-          <div className="footer-content">
-            <div className="footer-left">
-              <div className="d-flex align-items-center gap-3">
-                <div
-                  className={`favorite-button ${favorite ? 'fav-active' : ''}`}
-                  onClick={handleFavoriteClick}
-                  title={favorite ? t('appItem.favorites.remove') : t('appItem.favorites.add')}
-                  style={{ cursor: 'pointer' }}
-                >
-                  {favorite ? (
-                    <StarFill className="text-warning" size={20} />
-                  ) : (
-                    <Star className="text-muted" size={20} />
-                  )}
-                </div>
-                <div className="app-status">
-                  <span className={`status ${app.status.toLowerCase()}`}>{statusLabel}</span>
-                </div>
-                {app.appVersion && (
-                  <div className="version-badge">
-                    <span>{t('appItem.version', { version: app.appVersion })}</span>
-                  </div>
-                )}
-              </div>
-            </div>
-            <div className="footer-right">
-              {app.status === 'Active' ? (
-                <a href={`/app/${app.id}`} rel="noopener" className="btn btn-secondary">
-                  {t('appItem.launch')} <i className="bi bi-arrow-right ms-2"></i>
-                </a>
-              ) : (
-                <button className="btn btn-primary disabled" title={t('appItem.unavailableButtonTitle')}>
-                  {t('appItem.unavailable')} <i className="bi bi-lock ms-2"></i>
-                </button>
-              )}
-            </div>
+            <span
+              className="v2-app-card__favorite"
+              onClick={handleFavoriteClick}
+              title={favorite ? t('appItem.favorites.remove') : t('appItem.favorites.add')}
+            >
+              {favorite ? <StarFill className="text-warning" size={14} /> : <Star size={14} />}
+            </span>
           </div>
         </div>
       </div>

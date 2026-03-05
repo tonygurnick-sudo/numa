@@ -101,6 +101,7 @@ export default function CreateClientConfig() {
   const [numaWorkspaceChat, setNumaWorkspaceChat] = useState(defaults.numaWorkspaceChat);
   const [workspaceChatModelSelection, setWorkspaceChatModelSelection] = useState(defaults.workspaceChatModelSelection);
   const [numaOps, setNumaOps] = useState(defaults.numaOps);
+  const [v2Apps, setV2Apps] = useState(defaults.v2Apps);
   const [agentCoreRegion, setAgentCoreRegion] = useState('');
   const [groupAdmin, setGroupAdmin] = useState(featuresListToString(DEFAULT_ADMIN_FEATURES));
   const [groupStandard, setGroupStandard] = useState(featuresListToString(DEFAULT_STANDARD_FEATURES));
@@ -186,6 +187,7 @@ export default function CreateClientConfig() {
     if (!numaWorkspaceChat) minimal['numaWorkspaceChat'] = false;
     if (workspaceChatModelSelection) minimal['workspaceChatModelSelection'] = true;
     if (numaOps) minimal['numaOps'] = true;
+    if (v2Apps) minimal['v2Apps'] = true;
     if (agentCoreRegion && agentCoreRegion !== region) minimal['agentCoreRegion'] = agentCoreRegion;
 
     // Always include these two fields so defaults are written explicitly
@@ -452,6 +454,14 @@ export default function CreateClientConfig() {
                         onChange={setNumaOps}
                         type="switch"
                         helpText="Enable Numa Ops (work management, kanban boards, CRM)"
+                      />
+                      <ConfigField
+                        label="V2 Apps (not ready for customers)"
+                        value={v2Apps}
+                        defaultValue={defaults.v2Apps}
+                        onChange={setV2Apps}
+                        type="switch"
+                        helpText="Enable V2 Apps. Internal/dev only — not ready for customer use."
                       />
                       <ConfigField
                         label="Provision Q Resources"

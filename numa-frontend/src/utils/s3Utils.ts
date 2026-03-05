@@ -373,13 +373,18 @@ export const downloadFileWithSignedUrl = async (s3Key, s3Bucket, region, getCred
     const signedUrl = await getSignedUrlForS3Object(s3Key, s3Bucket, region, getCredentials);
     const filename = customFilename || extractFilenameFromPath(s3Key);
 
-    // Create and trigger download link
+    // Fetch as blob to bypass cross-origin download attribute restrictions
+    const response = await fetch(signedUrl);
+    const blob = await response.blob();
+    const blobUrl = URL.createObjectURL(blob);
+
     const a = document.createElement('a');
-    a.href = signedUrl;
+    a.href = blobUrl;
     a.download = filename;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
+    URL.revokeObjectURL(blobUrl);
   } catch (error) {
     console.error('Error downloading file with signed URL:', error);
     throw error;

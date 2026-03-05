@@ -69,6 +69,7 @@
     "numaWorkspaceChat": true,
     "numaOps": true,
     "workspaceChatModelSelection": true,
-    "scheduling": true
+    "scheduling": true,
+    "v2Apps": true
   }
 }

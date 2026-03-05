@@ -57,6 +57,68 @@ export interface NumaApp {
   [key: string]: unknown;
 }
 
+// ─── V2 Apps Types ──────────────────────────────────────────────────────────
+
+export interface V2AppTab {
+  id: string;
+  labelKey: string;
+  icon?: string;
+}
+
+export type V2AppStatus = 'active' | 'beta' | 'coming-soon';
+
+export interface V2AppAgent {
+  id: string;
+  nameKey: string;
+  descriptionKey: string;
+  icon: string;
+  color: string;
+  status: 'active' | 'coming-soon';
+  capabilities?: string[];
+  /** How to display results for this agent's runs. Defaults to agent-response. */
+  resultConfig?: V2AppResultConfig;
+}
+
+export interface V2AppWorkspaceSettings {
+  enabledKBIds: string[];
+  enabledTools: string[];
+  enabledConnections: string[];
+  workspaceAccess: boolean;
+  contextInstructions: string;
+}
+
+export interface RunConfiguration {
+  agentId: string;
+  enabledKBIds: string[];
+  enabledKBs?: Array<{ id: string; name: string }>;
+  enabledTools: string[];
+  enabledConnections: string[];
+  workspaceAccess: boolean;
+  contextInstructions: string;
+}
+
+/**
+ * Defines how to extract and display results for a V2 app run.
+ *
+ * - 'agent-response': Show the agent's text response as markdown.
+ * - 'file': Download/display a specific file from the run's S3 path (e.g. report.pdf).
+ */
+export type V2AppResultConfig = { type: 'agent-response' } | { type: 'file'; fileName: string; contentType: string };
+
+export interface V2AppConfig {
+  id: string;
+  nameKey: string;
+  descriptionKey: string;
+  icon: React.ComponentType<{ size?: number; style?: React.CSSProperties }>;
+  color: string;
+  status: V2AppStatus;
+  category: string;
+  tabs: V2AppTab[];
+  agents: V2AppAgent[];
+  /** @deprecated — Use resultConfig on each V2AppAgent instead. */
+  resultConfig?: V2AppResultConfig;
+}
+
 // ../types/apps.ts
 export interface NumaAppContextValue {
   // Status states

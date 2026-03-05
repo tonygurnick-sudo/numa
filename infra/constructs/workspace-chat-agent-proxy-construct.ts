@@ -54,6 +54,10 @@ export interface WorkspaceChatAgentProxyProps {
 export class WorkspaceChatAgentProxy extends Construct {
   /** The Function URL for CloudFront to route to */
   readonly functionUrl: string;
+  /** The ARN of the proxy Lambda (for granting invoke permissions) */
+  readonly functionArn: string;
+  /** The name of the proxy Lambda (for Lambda.invoke calls) */
+  readonly functionName: string;
 
   constructor(scope: Construct, id: string, props: WorkspaceChatAgentProxyProps) {
     super(scope, id);
@@ -195,5 +199,7 @@ export class WorkspaceChatAgentProxy extends Construct {
     });
 
     this.functionUrl = fnUrl.functionUrl;
+    this.functionArn = proxyFn.lambda.arn;
+    this.functionName = proxyFn.lambda.functionName;
   }
 }

@@ -5,6 +5,8 @@ import { LayoutDashboard } from '../Layouts/LayoutDashboard';
 
 import { AppSearch } from '../Components/Apps/AppSearch';
 import { AppItem } from '../Components/Apps/AppItem';
+import { V2AppCard } from '../Components/V2Apps/V2AppCard';
+import { getAllV2Apps } from '../Components/V2Apps/V2AppRegistry';
 import { Pagination } from '../Components/Pagination';
 import { Preloader } from '../Components/Preloader';
 import { PageHeader } from '../Components/PageHeader';
@@ -33,6 +35,7 @@ export const Dash = ({ showFavorites = false, ...rest }: DashProps) => {
   });
   const [currentPage, setCurrentPage] = useState(1);
   const { favorites } = useFavorites();
+  const v2AppsEnabled = sessionStorage.getItem('V2_APPS') === 'true';
 
   const localizedApps = useMemo(
     () =>
@@ -157,6 +160,8 @@ export const Dash = ({ showFavorites = false, ...rest }: DashProps) => {
   const totalPages = Math.ceil(filteredApps.length / itemsPerPage);
   const currentItems = filteredApps.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
+  const v2Apps = getAllV2Apps();
+
   return (
     <div className="dashboard apps-grid-page" data-testid="dashboard" {...rest}>
       <PageHeader
@@ -171,6 +176,35 @@ export const Dash = ({ showFavorites = false, ...rest }: DashProps) => {
       <LayoutDashboard>
         <Container fluid className="px-0">
           {niceties.isEnabled('job-status-dashboard') && <StatusDashboard />}
+
+          {/* V2 Apps Section */}
+          {v2AppsEnabled && !showFavorites && v2Apps.length > 0 && (
+            <div className="v2-apps-section">
+              <div className="v2-apps-section__header">
+                <div>
+                  <h2 className="v2-apps-section__title">{t('v2Apps.sectionTitle')}</h2>
+                </div>
+              </div>
+              <Row className="g-3">
+                {v2Apps.map((app) => (
+                  <Col key={app.id} lg={3} md={4} sm={6}>
+                    <V2AppCard app={app} />
+                  </Col>
+                ))}
+              </Row>
+            </div>
+          )}
+
+          {/* Legacy Apps Section */}
+          {v2AppsEnabled && !showFavorites && numaApps.length > 0 && (
+            <div className="v2-legacy-section">
+              <div className="v2-legacy-section__header">
+                <h3 className="v2-legacy-section__title">{t('v2Apps.legacySectionTitle')}</h3>
+                <span className="v2-legacy-section__subtitle">{t('v2Apps.legacySectionSubtitle')}</span>
+              </div>
+            </div>
+          )}
+
           <AppSearch
             onSearch={handleSearch}
             onCategoryFilter={handleCategoryFilter}
@@ -194,17 +228,11 @@ export const Dash = ({ showFavorites = false, ...rest }: DashProps) => {
           {loading ? (
             <Preloader />
           ) : (
-            <Row className={`g-4 w-100 mx-0${isAnimating ? ' fade-swipe-animating' : ''}`}>
+            <Row className={`g-3${isAnimating ? ' fade-swipe-animating' : ''}`}>
               {!error &&
                 Array.isArray(currentItems) &&
                 currentItems?.map((app) => (
-                  <Col
-                    key={`${app.id}-${app.appName.replace(/\s+/g, '-').toLowerCase()}`}
-                    lg={4}
-                    md={6}
-                    sm={12}
-                    className="d-flex"
-                  >
+                  <Col key={`${app.id}-${app.appName.replace(/\s+/g, '-').toLowerCase()}`} lg={3} md={4} sm={6}>
                     <AppItem
                       app={app}
                       onCategoryClick={(category) => {

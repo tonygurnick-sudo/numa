@@ -67,7 +67,12 @@ def _compute_file_checksum(file_path: Path) -> str:
     return hash_md5.hexdigest()
 
 
-def _get_s3_path_for_file(rel_path: str, conversation_id: str, user_sub: str) -> str:
+def _get_s3_path_for_file(
+    rel_path: str,
+    conversation_id: str,
+    user_sub: str,
+    s3_prefix: str | None = None,
+) -> str:
     """
     Determine the S3 path for a local file.
 
@@ -75,10 +80,19 @@ def _get_s3_path_for_file(rel_path: str, conversation_id: str, user_sub: str) ->
         rel_path: Path relative to workspace root (e.g., "chat-workflows/file.py")
         conversation_id: Current conversation ID
         user_sub: User's Cognito sub
+        s3_prefix: Optional custom S3 prefix (already formatted with user_sub
+            and conversation_id placeholders resolved). When provided, all files
+            are routed under this prefix instead of the default chat workspace
+            path. Used by V2 apps to store workspace files under
+            ``v2-apps/{appId}/{user_sub}/{runId}/``.
 
     Returns:
         Full S3 key for the file
     """
+    if s3_prefix:
+        # Custom prefix: all files go under it directly (no chat-workflows special case)
+        return f"{s3_prefix}/{rel_path}"
+
     # chat-workflows/ is globally persistent
     if rel_path.startswith("chat-workflows/"):
         return f"{S3_PREFIX}/{user_sub}/{rel_path}"
@@ -254,17 +268,24 @@ def is_cold_start() -> bool:
     return get_active_conversation() is None
 
 
-def sync_from_s3(user_sub: str, conversation_id: str) -> SyncResult:
+def sync_from_s3(
+    user_sub: str,
+    conversation_id: str,
+    s3_prefix: str | None = None,
+) -> SyncResult:
     """
     Download workspace from S3 to local storage.
 
     Downloads:
-    - chat-workflows/ from user's global path
-    - Conversation files from conversations/{conv_id}/
+    - chat-workflows/ from user's global path (default prefix only)
+    - Conversation files from conversations/{conv_id}/ (or custom prefix)
 
     Args:
         user_sub: Cognito user sub (UUID)
         conversation_id: Conversation to load
+        s3_prefix: Optional custom S3 prefix (already formatted). When provided,
+            files are downloaded from this prefix instead of the default chat
+            workspace path. Used by V2 apps (e.g. ``v2-apps/data-analysis/{user_sub}/{runId}``).
 
     Returns:
         SyncResult with sync details
@@ -280,14 +301,20 @@ def sync_from_s3(user_sub: str, conversation_id: str) -> SyncResult:
     s3 = _get_s3_client()
     root = paths["root"]
 
-    # Prefixes to download
-    # DISABLED: chat-workflows feature temporarily disabled
-    prefixes = [
-        # Globally persistent chat-workflows (DISABLED)
-        # (f"{S3_PREFIX}/{user_sub}/chat-workflows/", paths["workflows"]),
-        # Conversation-specific files (uploads, outputs, root files, _system)
-        (f"{S3_PREFIX}/{user_sub}/conversations/{conversation_id}/", root),
-    ]
+    if s3_prefix:
+        # Custom prefix: download everything from the custom path
+        prefixes = [
+            (f"{s3_prefix}/", root),
+        ]
+    else:
+        # Default: standard chat workspace prefix
+        # DISABLED: chat-workflows feature temporarily disabled
+        prefixes = [
+            # Globally persistent chat-workflows (DISABLED)
+            # (f"{S3_PREFIX}/{user_sub}/chat-workflows/", paths["workflows"]),
+            # Conversation-specific files (uploads, outputs, root files, _system)
+            (f"{S3_PREFIX}/{user_sub}/conversations/{conversation_id}/", root),
+        ]
 
     # Track downloaded output files to avoid old session/ files overwriting them
     downloaded_output_files: set[str] = set()
@@ -360,22 +387,103 @@ def sync_from_s3(user_sub: str, conversation_id: str) -> SyncResult:
     return result
 
 
+def sync_workspace_prefixes(
+    prefixes: list[str],
+    target_dir: str = "app-workspace",
+) -> int:
+    """Download files from multiple S3 prefixes into /workdir/{target_dir}/.
+
+    Used by V2 apps to sync app workspace files (company-scoped and user-scoped
+    data files) into the agent's workspace before the SDK runs.
+
+    Args:
+        prefixes: List of S3 key prefixes to download from (e.g.,
+            ``["v2-apps/data-analysis/data/", "v2-apps/data-analysis/user/{sub}/data/"]``).
+        target_dir: Subdirectory under /workdir/ to download into.
+            Defaults to "app-workspace".
+
+    Returns:
+        Total number of files downloaded across all prefixes.
+    """
+    if not OUTPUTS_BUCKET or not prefixes:
+        return 0
+
+    from .sdk_config import LOCAL_ROOT as root
+
+    target_path = Path(root) / target_dir
+    target_path.mkdir(parents=True, exist_ok=True)
+
+    s3 = _get_s3_client()
+    total_downloaded = 0
+
+    for prefix in prefixes:
+        if not prefix:
+            continue
+        # Ensure prefix ends with / for clean relative path extraction
+        norm_prefix = prefix if prefix.endswith("/") else prefix + "/"
+        try:
+            paginator = s3.get_paginator("list_objects_v2")
+            for page in paginator.paginate(Bucket=OUTPUTS_BUCKET, Prefix=norm_prefix):
+                for obj in page.get("Contents", []):
+                    s3_key = obj["Key"]
+                    rel_path = s3_key[len(norm_prefix) :]
+                    if not rel_path:
+                        continue
+
+                    local_file = target_path / rel_path
+                    local_file.parent.mkdir(parents=True, exist_ok=True)
+
+                    try:
+                        s3.download_file(OUTPUTS_BUCKET, s3_key, str(local_file))
+                        total_downloaded += 1
+                    except ClientError as e:
+                        logger.warning(
+                            "Failed to download workspace file",
+                            _name="WORKSPACE_PREFIX_DOWNLOAD_ERROR",
+                            phase="sync",
+                            s3_key=s3_key,
+                            error=str(e),
+                        )
+        except ClientError as e:
+            logger.warning(
+                "Failed to list workspace prefix",
+                _name="WORKSPACE_PREFIX_LIST_ERROR",
+                phase="sync",
+                prefix=norm_prefix,
+                error=str(e),
+            )
+
+    logger.info(
+        "Workspace prefix sync complete",
+        _name="WORKSPACE_PREFIX_SYNC",
+        phase="sync",
+        prefix_count=len(prefixes),
+        files_downloaded=total_downloaded,
+        target_dir=target_dir,
+    )
+
+    return total_downloaded
+
+
 def sync_to_s3(
     user_sub: str,
     conversation_id: str,
     previous_checksums: dict[str, FileChecksum] | None = None,
+    s3_prefix: str | None = None,
 ) -> SyncResult:
     """
     Upload changed files to S3.
 
     Routes files to correct S3 paths:
-    - chat-workflows/* -> {user_sub}/chat-workflows/*
-    - Everything else -> {user_sub}/conversations/{conv_id}/*
+    - chat-workflows/* -> {user_sub}/chat-workflows/* (default prefix only)
+    - Everything else -> {user_sub}/conversations/{conv_id}/* (or custom prefix)
 
     Args:
         user_sub: Cognito user sub (UUID)
         conversation_id: Current conversation ID
         previous_checksums: Previous checksums for change detection
+        s3_prefix: Optional custom S3 prefix (already formatted). When provided,
+            all files are uploaded under this prefix. Used by V2 apps.
 
     Returns:
         SyncResult with sync details
@@ -414,7 +522,9 @@ def sync_to_s3(
         local_file = _get_local_path_for_rel(rel_path, paths)
 
         # Determine S3 key based on file type
-        s3_key = _get_s3_path_for_file(rel_path, conversation_id, user_sub)
+        s3_key = _get_s3_path_for_file(
+            rel_path, conversation_id, user_sub, s3_prefix=s3_prefix
+        )
 
         try:
             content_type, _ = mimetypes.guess_type(str(local_file))

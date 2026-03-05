@@ -118,6 +118,35 @@ logger.info("FastAPI app created successfully")
 # Store checksums for change detection between requests
 _checksums_cache: dict[str, FileChecksum] = {}
 
+# Default S3 prefix template from AgentTypeConfig (used to detect custom prefixes)
+_DEFAULT_S3_PREFIX_TEMPLATE = (
+    "numa-chat/workspace/{user_sub}/conversations/{conversation_id}"
+)
+
+
+def _resolve_s3_prefix(
+    agent_type_config: Optional[AgentTypeConfig],
+    user_sub: str,
+    conversation_id: str,
+) -> str | None:
+    """Resolve a custom S3 prefix from the agent type config.
+
+    Returns the formatted S3 prefix string if the agent type uses a custom
+    ``s3_prefix_template`` (i.e. different from the default chat workspace path).
+    Returns ``None`` if the default prefix should be used.
+
+    This allows V2 apps to store workspace files under their own S3 paths
+    (e.g. ``v2-apps/data-analysis/{user_sub}/{runId}``) while chat conversations
+    continue using the default ``numa-chat/workspace/...`` path.
+    """
+    if not agent_type_config:
+        return None
+    template = agent_type_config.s3_prefix_template
+    if template == _DEFAULT_S3_PREFIX_TEMPLATE:
+        return None
+    return template.format(user_sub=user_sub, conversation_id=conversation_id)
+
+
 # Cache KB file listings for the current conversation
 _kb_listings_cache: dict[str, dict] = {}
 _kb_listings_conversation_id: str | None = None
@@ -786,28 +815,34 @@ async def _handle_list_types() -> JSONResponse:
     )
 
 
-async def _handle_run_status(user_sub: str, run_id: str) -> JSONResponse:
+async def _handle_run_status(
+    user_sub: str,
+    run_id: str,
+    s3_prefix: str | None = None,
+) -> JSONResponse:
     """Handle /runs/{run_id}/status — poll for fire-and-forget result.
 
     Checks S3 for a ``_result.json`` written by :func:`_handle_fire_and_forget`.
     Returns ``{"status": "running"}`` if the file does not exist yet, or the
     full result payload if the run has completed (or errored).
 
-    Note: ``s3_prefix`` is not passed here — the default template produces
-    the same path as the fallback. Agent types with custom ``s3_prefix_template``
-    values will need a future enhancement where the caller passes the agent
-    type (or stores the prefix alongside the run).
+    Args:
+        user_sub: Cognito user sub.
+        run_id: The run/conversation ID to poll.
+        s3_prefix: Optional custom S3 prefix template (with ``{user_sub}``
+            and ``{conversation_id}`` placeholders). When provided, looks for
+            ``_result.json`` under this prefix instead of the default chat
+            workspace path. Used by V2 apps.
     """
     logger.debug(
         "Polling run status",
         phase="request",
         user_sub=user_sub,
         run_id=run_id,
+        s3_prefix=s3_prefix or "default",
     )
 
-    # Uses the default S3 prefix. Custom agent types with non-default
-    # s3_prefix_template will need the type info passed through.
-    result = read_result_from_s3(user_sub, run_id)
+    result = read_result_from_s3(user_sub, run_id, s3_prefix=s3_prefix)
 
     if result is None:
         return JSONResponse(
@@ -937,7 +972,9 @@ async def invocations(request: Request):
         ):
             # /runs/{run_id}/status — poll for fire-and-forget result
             run_id = http_path.replace("/runs/", "").replace("/status", "")
-            return await _handle_run_status(user_sub, run_id)
+            # Extract s3Prefix from body if the proxy forwarded it
+            s3_prefix_param = body.get("s3Prefix") if isinstance(body, dict) else None
+            return await _handle_run_status(user_sub, run_id, s3_prefix=s3_prefix_param)
         elif http_path == "/types":
             return await _handle_list_types()
     else:
@@ -971,8 +1008,14 @@ async def invocations(request: Request):
     # Check for cold start
     cold_start = is_cold_start()
     if cold_start:
-        logger.info("Cold start detected, syncing from S3")
-        sync_result = sync_from_s3(user_sub, conversation_id)
+        resolved_prefix = _resolve_s3_prefix(
+            agent_type_config, user_sub, conversation_id
+        )
+        logger.info(
+            "Cold start detected, syncing from S3",
+            s3_prefix=resolved_prefix or "default",
+        )
+        sync_result = sync_from_s3(user_sub, conversation_id, s3_prefix=resolved_prefix)
         logger.info(
             "Cold start sync complete",
             files_downloaded=sync_result["files_downloaded"],
@@ -1106,7 +1149,12 @@ async def invocations(request: Request):
     finally:
         # Sync changed files to S3 after request (except chat which handles its own)
         if action not in ["chat", "stop"]:
-            sync_to_s3(user_sub, conversation_id, _checksums_cache)
+            resolved_prefix = _resolve_s3_prefix(
+                agent_type_config, user_sub, conversation_id
+            )
+            sync_to_s3(
+                user_sub, conversation_id, _checksums_cache, s3_prefix=resolved_prefix
+            )
 
 
 def _download_single_integration(
@@ -1737,7 +1785,12 @@ async def _handle_chat(
             )
 
             # Sync changed files to S3 (sync_to_s3 logs its own summary)
-            sync_to_s3(user_sub, conversation_id, _checksums_cache)
+            resolved_prefix = _resolve_s3_prefix(
+                agent_type_config, user_sub, conversation_id
+            )
+            sync_to_s3(
+                user_sub, conversation_id, _checksums_cache, s3_prefix=resolved_prefix
+            )
 
     return StreamingResponse(
         stream_with_sync(),
@@ -1987,7 +2040,8 @@ async def _handle_sync(
     )
 
     # Sync workspace to S3
-    sync_to_s3(user_sub, conversation_id, _checksums_cache)
+    resolved_prefix = _resolve_s3_prefix(agent_type_config, user_sub, conversation_id)
+    sync_to_s3(user_sub, conversation_id, _checksums_cache, s3_prefix=resolved_prefix)
 
     # Also persist result to S3 for retrieval via /runs endpoint
     s3_prefix = agent_type_config.s3_prefix_template if agent_type_config else None
@@ -2065,6 +2119,21 @@ async def _handle_fire_and_forget(
     attachments_data = body.get("attachments")
     attached_files = attachments_data.get("files", []) if attachments_data else []
     attached_folders = attachments_data.get("folders", []) if attachments_data else []
+
+    # Sync app workspace files (company-scoped and user-scoped) into /workdir/app-workspace/
+    workspace_prefixes = body.get("workspacePrefixes", [])
+    if workspace_prefixes:
+        from .s3_workspace import sync_workspace_prefixes
+
+        sync_workspace_prefixes(workspace_prefixes)
+
+    # Sync uploaded files into /workdir/uploads/ (essential for follow-up runs
+    # where the cold start sync doesn't re-run)
+    upload_prefixes = body.get("uploadPrefixes", [])
+    if upload_prefixes:
+        from .s3_workspace import sync_workspace_prefixes
+
+        sync_workspace_prefixes(upload_prefixes, target_dir="uploads")
 
     # Apply agent type restrictions
     if agent_type_config.restrict_kbs:
@@ -2154,6 +2223,7 @@ async def _handle_fire_and_forget(
     # Capture current checksums before background task starts
     pre_checksums = dict(_checksums_cache)
     s3_prefix = agent_type_config.s3_prefix_template if agent_type_config else None
+    resolved_prefix = _resolve_s3_prefix(agent_type_config, user_sub, conversation_id)
 
     async def _background_run() -> None:
         """Run the SDK (or pipeline) and write the result to S3 when done."""
@@ -2243,7 +2313,9 @@ async def _handle_fire_and_forget(
             )
 
             # Sync workspace and write result to S3
-            sync_to_s3(user_sub, conversation_id, pre_checksums)
+            sync_to_s3(
+                user_sub, conversation_id, pre_checksums, s3_prefix=resolved_prefix
+            )
             write_result_to_s3(
                 user_sub,
                 conversation_id,

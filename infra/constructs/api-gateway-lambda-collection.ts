@@ -55,6 +55,7 @@ export abstract class ApiGatewayLambdaCollection extends Construct {
       ephemeralStorageMb: props.ephemeralStorageMb,
       otelConfig: props.disableOtel ? undefined : this.props.otelConfig,
       resourceNameSuffix: (this.props.resourceNameInfix ?? '') + '_' + name,
+      systemLogLevel: props.systemLogLevel,
       timeout: props.timeout || 29, // API Gateway will only wait 30 seconds. Let's try to come in under that
     }).lambda;
 
@@ -118,6 +119,8 @@ export interface AddLambdaFunctionProps {
   route?: RouteDefinition | RouteDefinition[];
   runtime?: string;
   timeout?: number;
+  /** Override the system (platform) log level. Defaults to INFO. Set to WARN to suppress platform.start/report noise. */
+  systemLogLevel?: 'INFO' | 'WARN' | 'ERROR';
 }
 
 export interface ApiGatewayLambdaCollectionProps {

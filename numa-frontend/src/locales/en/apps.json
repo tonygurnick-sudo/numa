@@ -655,5 +655,175 @@
     "appNotInitialized": "App not initialized",
     "followUpNoJobId": "No job ID received from follow-up request",
     "startFollowUpFailed": "Unable to start follow-up. Please try again."
+  },
+  "v2Apps": {
+    "sectionTitle": "Apps",
+    "legacySectionTitle": "Legacy Apps",
+    "legacySectionSubtitle": "Classic Numa applications",
+    "noApps": "No apps available",
+    "tabs": {
+      "agents": "Agents",
+      "runs": "Runs",
+      "workspace": "Workspace",
+      "approvals": "Approvals",
+      "activity": "Activity"
+    },
+    "detail": {
+      "backToApps": "Back to Apps",
+      "notFound": "App not found"
+    },
+    "agents": {
+      "title": "{{appName}} Agents",
+      "subtitle": "AI assistants configured for this module",
+      "addAgent": "Add Agent",
+      "selectAgent": "Select an agent to configure and run",
+      "status": {
+        "active": "Active",
+        "coming-soon": "Coming Soon"
+      },
+      "capabilities": {
+        "charts": "Charts",
+        "reports": "Reports",
+        "insights": "Insights"
+      },
+      "settings": "Agent settings"
+    },
+    "agentRunPanel": {
+      "title": "Run {{agentName}}",
+      "close": "Close",
+      "settings": "Run Settings",
+      "settingsNote": "Override workspace defaults for this run",
+      "run": "Run Agent",
+      "workspaceAccess": "Workspace File Access",
+      "workspaceAccessHelp": "Allow agent to read files from the workspace",
+      "dropzone": "Drag & drop files here, or click to browse",
+      "namePlaceholder": "Run name (optional)",
+      "promptPlaceholder": "Describe the analysis you want to perform...",
+      "workspaceFilesHint": "Workspace files are available to the agent. You can reference them by name in your prompt."
+    },
+    "runs": {
+      "title": "Run History",
+      "empty": "No runs yet. Select an agent and start an analysis.",
+      "deleteConfirm": "Delete this run?",
+      "refresh": "Refresh",
+      "prompt": "Prompt",
+      "response": "Response",
+      "agent": "Agent",
+      "turns": "turns",
+      "tokens": "tokens",
+      "collapseList": "Collapse",
+      "expandList": "Expand",
+      "fileResult": "Download {{fileName}}",
+      "artifacts": "Generated Files ({{count}})",
+      "downloadArtifact": "Download file",
+      "previewArtifact": "Preview file",
+      "followUp": "Ask Follow Up",
+      "followUpLabel": "Follow-up",
+      "continue": "Continue",
+      "filePreview": {
+        "loading": "Loading preview...",
+        "download": "Download",
+        "openFullScreen": "Open full screen",
+        "openInPanel": "Open in panel",
+        "showMore": "Show more",
+        "showLess": "Show less",
+        "csvRowLimit": "Showing first 100 of {{total}} rows",
+        "noCsvData": "No data to preview"
+      },
+      "columns": {
+        "name": "Name",
+        "status": "Status",
+        "created": "Created"
+      }
+    },
+    "workspace": {
+      "description": "Configure the shared workspace for this app's agents",
+      "settingsTitle": "Settings",
+      "files": {
+        "title": "Files",
+        "company": "App Company Files",
+        "companyDescription": "Shared files available to all users in this app",
+        "user": "App User Files",
+        "userDescription": "Personal files only visible to you in this app",
+        "empty": "No files uploaded yet",
+        "upload": "Click to upload files",
+        "deleteConfirm": "Delete this file?"
+      },
+      "knowledgeBases": {
+        "title": "Knowledge Bases",
+        "description": "Select which knowledge bases agents can access",
+        "selected": "{{count}} selected",
+        "noneSelected": "None selected",
+        "loading": "Loading knowledge bases..."
+      },
+      "tools": {
+        "title": "Tools",
+        "description": "Select which tools agents can use",
+        "webSearch": "Web Search",
+        "knowledgeBase": "Knowledge Base",
+        "dataAnalysis": "Data Analysis"
+      },
+      "integrations": {
+        "title": "Integrations",
+        "description": "Toggle connected integrations for agent runs",
+        "noneEnabled": "None enabled",
+        "enabled": "{{count}} enabled",
+        "loading": "Loading integrations...",
+        "notAvailable": "Integrations not enabled for this environment"
+      },
+      "context": {
+        "title": "Context & Instructions",
+        "description": "Additional context included in all agent runs",
+        "placeholder": "Enter additional instructions or context for agents..."
+      }
+    },
+    "card": {
+      "launch": "Open",
+      "status": {
+        "active": "Active",
+        "beta": "Beta",
+        "coming-soon": "Coming Soon"
+      }
+    }
+  },
+  "v2DataAnalysis": {
+    "title": "Data Analysis",
+    "description": "Upload files and describe your analysis. The AI agent will process your data and generate insights, charts, and reports.",
+    "agents": {
+      "dataAnalyser": {
+        "name": "Data Analyser",
+        "description": "Analyses uploaded data files and generates insights, charts, and reports"
+      }
+    },
+    "upload": {
+      "dropzone": "Drag & drop files here, or click to browse"
+    },
+    "prompt": {
+      "placeholder": "Describe the analysis you want to perform on these files..."
+    },
+    "actions": {
+      "run": "Run Analysis",
+      "newAnalysis": "New Analysis",
+      "tryAgain": "Try Again"
+    },
+    "status": {
+      "pending": "Pending",
+      "processing": "Processing",
+      "completed": "Completed",
+      "failed": "Failed",
+      "uploading": "Uploading files...",
+      "analyzing": "Running analysis... This may take a few minutes."
+    },
+    "results": {
+      "title": "Results"
+    },
+    "history": {
+      "title": "Run History",
+      "empty": "No previous runs"
+    },
+    "errors": {
+      "runFailed": "Analysis Failed",
+      "uploadFailed": "Upload failed: {{message}}"
+    }
   }
 }

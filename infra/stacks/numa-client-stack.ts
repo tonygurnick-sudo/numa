@@ -52,6 +52,7 @@ import { DataAwsSsmParameter } from '@cdktf/provider-aws/lib/data-aws-ssm-parame
 import { NumaLambda } from '../constructs/numa-lambda';
 import { OAuthIntegrationConstruct } from '../constructs/oauth-integration-construct';
 import { OpsConstruct } from '../constructs/ops-construct';
+import { V2AppsConstruct } from '../constructs/v2-apps-construct';
 import { WorkspaceChatAgentConstruct } from '../constructs/workspace-chat-agent-construct';
 import { WorkspaceChatAgentProxy } from '../constructs/workspace-chat-agent-proxy-construct';
 import { WorkspaceChatToolsConstruct } from '../constructs/workspace-chat-tools-construct';
@@ -561,6 +562,22 @@ export class NumaClientStack extends TerraformStack {
       dataBucketArn: core.dataBucket.bucket.arn,
     });
 
+    // V2 Apps (workspace-agent-based apps: data analysis, quoting, etc.)
+    // Requires workspace chat to be enabled since apps run on the workspace agent
+    if (workspaceChatAgentProxy) {
+      new V2AppsConstruct(this, safeConstructId + '-v2-apps', {
+        apiGatewayAuthorizerId: fe.authorizer.id,
+        apiGatewayId: fe.apiGateway.id,
+        clientName: props.clientName,
+        environmentName: props.environmentName,
+        region: clientConfig.region,
+        outputsBucketArn: core.outputsBucket.bucket.arn,
+        outputsBucketName: core.outputsBucket.bucket.bucket,
+        workspaceProxyFunctionArn: workspaceChatAgentProxy.functionArn,
+        workspaceProxyFunctionName: workspaceChatAgentProxy.functionName,
+      });
+    }
+
     const appConfigsToDeploy = getAppConfigsToDeploy(
       appLibrary,
       clientConfig.apps ?? {},
@@ -674,6 +691,7 @@ export class NumaClientStack extends TerraformStack {
         OAUTH_INTEGRATIONS_ENABLED: clientConfig.oauthIntegrationsEnabled ?? false, // Controls UI access to OAuth setup
         // Per-provider flags removed — providers are now configured dynamically via COMPANY vault secrets.
         // OAUTH_GOOGLE_DRIVE, OAUTH_ONEDRIVE, OAUTH_DROPBOX are no longer needed in config.json.
+        V2_APPS: clientConfig.v2Apps ?? false,
         // Direct Lambda Function URL for workspace chat agent (bypasses CloudFront buffering for streaming)
         WORKSPACE_CHAT_AGENT_FUNCTION_URL: workspaceChatAgentProxy?.functionUrl,
         NUMA_VERSION: siteVersion,
@@ -1094,6 +1112,13 @@ export const clientConfigSchema = coreNumaInfraPropsSchema
             })
           )
           .optional(),
+
+        /**
+         * Whether to enable V2 Apps (next-generation app framework with agents, workspace, runs).
+         *
+         * @default false
+         */
+        v2Apps: z.boolean().optional().default(false),
       })
       .strict()
   );

@@ -266,7 +266,12 @@ echo "Successfully pushed image to ${this.ecrRepository.repositoryUrl}:${imageTa
             effect: 'Allow',
             actions: ['s3:GetObject', 's3:PutObject', 's3:DeleteObject', 's3:ListBucket'],
             // Path must match S3_PREFIX in s3_workspace.py: "numa-chat/workspace"
-            resources: [props.outputsBucketArn, `${props.outputsBucketArn}/numa-chat/workspace/*`],
+            // Also includes v2-apps/* for V2 app runs (agent type s3_prefix_template)
+            resources: [
+              props.outputsBucketArn,
+              `${props.outputsBucketArn}/numa-chat/workspace/*`,
+              `${props.outputsBucketArn}/v2-apps/*`,
+            ],
           },
           // Agent reference files - read-only access for downloading agent files
           {

@@ -62,7 +62,8 @@
       "dataConnectors": "Data Connectors",
       "files": "Files",
       "marketplace": "Marketplace",
-      "vault": "Secrets Vault"
+      "vault": "Secrets Vault",
+      "dataAnalysis": "Data Analysis"
     },
     "sections": {
       "build": "Build",
@@ -347,6 +348,7 @@
     "shortcutHint": "(Ctrl+Enter to submit)",
     "placeholder": "E.g., 'Create a visualization of the top 10 products' or 'Can you break down the data by region?'",
     "helper": "This will continue your analysis with access to all previous work and outputs.",
+    "attachFiles": "Attach Files",
     "starting": "Starting...",
     "continue": "Continue Analysis"
   },

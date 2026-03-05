@@ -144,7 +144,7 @@ export class NumaLambda extends Construct {
       loggingConfig: {
         logFormat: 'JSON',
         logGroup: props.logGroup.name,
-        systemLogLevel: 'INFO',
+        systemLogLevel: props.systemLogLevel ?? 'INFO',
       },
       memorySize: props.memorySize,
       role: role.arn,
@@ -215,4 +215,6 @@ export interface NumaLambdaProps {
   timeout?: number;
   /** Ephemeral storage (MB), e.g., 4096 or 10240 */
   ephemeralStorageMb?: number;
+  /** Override the system (platform) log level. Defaults to INFO. Set to WARN to suppress platform.start/report noise. */
+  systemLogLevel?: 'INFO' | 'WARN' | 'ERROR';
 }

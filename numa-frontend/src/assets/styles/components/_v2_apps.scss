@@ -1,0 +1,1823 @@
+@use '../abstracts/mixins' as *;
+
+// ─── V2 Apps Design Tokens ─────────────────────────────────────────────────
+
+$v2-card-radius: 12px;
+$v2-card-border: #e5e7eb;
+$v2-card-shadow-hover: 0 4px 12px rgba(0, 0, 0, 0.08);
+$v2-icon-size: 40px;
+$v2-icon-radius: 10px;
+$v2-status-active: #22c55e;
+$v2-status-active-bg: #f0fdf4;
+$v2-status-beta: #6b7280;
+$v2-status-beta-bg: #f3f4f6;
+$v2-status-coming-soon: #9ca3af;
+$v2-status-coming-soon-bg: #f3f4f6;
+$v2-text-primary: #111827;
+$v2-text-secondary: #6b7280;
+$v2-text-muted: #9ca3af;
+$v2-bg-page: #faf8fb;
+
+// ─── V2 Apps Section (on Dash page) ────────────────────────────────────────
+
+.v2-apps-section {
+  margin-bottom: 2rem;
+
+  &__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 1rem;
+  }
+
+  &__title {
+    font-size: 1.125rem;
+    font-weight: 600;
+    color: $v2-text-primary;
+    margin: 0;
+  }
+
+  &__subtitle {
+    font-size: 0.8125rem;
+    color: $v2-text-secondary;
+    margin: 0.25rem 0 0;
+  }
+}
+
+// ─── V2 App Card ────────────────────────────────────────────────────────────
+
+.v2-app-card {
+  background: #ffffff;
+  border: 1px solid $v2-card-border;
+  border-radius: $v2-card-radius;
+  padding: 1.25rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+
+  &:hover {
+    box-shadow: $v2-card-shadow-hover;
+    border-color: #d1d5db;
+  }
+
+  &__top {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+    margin-bottom: 0.75rem;
+  }
+
+  &__icon {
+    width: $v2-icon-size;
+    height: $v2-icon-size;
+    min-width: $v2-icon-size;
+    border-radius: $v2-icon-radius;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: transform 0.2s ease;
+
+    .v2-app-card:hover & {
+      transform: scale(1.05);
+    }
+  }
+
+  &__info {
+    flex: 1;
+    min-width: 0;
+  }
+
+  &__name {
+    font-size: 0.9375rem;
+    font-weight: 600;
+    color: $v2-text-primary;
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  &__description {
+    font-size: 0.8125rem;
+    color: $v2-text-secondary;
+    margin: 0.25rem 0 0;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    line-height: 1.4;
+  }
+
+  &__footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: auto;
+    padding-top: 0.75rem;
+  }
+
+  &__status {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    font-size: 0.75rem;
+    font-weight: 500;
+  }
+
+  &__status-dot {
+    width: 0.5rem;
+    height: 0.5rem;
+    border-radius: 999px;
+    display: inline-block;
+  }
+
+  &__category {
+    font-size: 0.6875rem;
+    font-weight: 500;
+    padding: 0.125rem 0.5rem;
+    border-radius: 4px;
+    text-transform: capitalize;
+  }
+
+  &__footer-right {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  &__favorite {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    padding: 0.125rem;
+    border-radius: 4px;
+    transition: transform 0.15s ease;
+    color: $v2-text-muted;
+
+    &:hover {
+      transform: scale(1.15);
+    }
+
+    .text-warning {
+      filter: drop-shadow(0 0 2px rgba(255, 193, 7, 0.3));
+    }
+  }
+
+  // Status variants
+  &--active {
+    .v2-app-card__status {
+      color: darken($v2-status-active, 15%);
+    }
+    .v2-app-card__status-dot {
+      background: $v2-status-active;
+    }
+  }
+
+  &--beta {
+    .v2-app-card__status {
+      color: $v2-status-beta;
+    }
+    .v2-app-card__status-dot {
+      background: $v2-status-beta;
+    }
+  }
+
+  &--coming-soon {
+    opacity: 0.7;
+    cursor: not-allowed;
+
+    .v2-app-card__status {
+      color: $v2-status-coming-soon;
+    }
+    .v2-app-card__status-dot {
+      background: $v2-status-coming-soon;
+    }
+  }
+}
+
+// ─── V2 Legacy Section Divider ──────────────────────────────────────────────
+
+.v2-legacy-section {
+  &__header {
+    display: flex;
+    align-items: baseline;
+    gap: 0.75rem;
+    margin-bottom: 0.5rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid #e4e4e7;
+  }
+
+  &__title {
+    font-size: 1rem;
+    font-weight: 600;
+    color: $v2-text-secondary;
+    margin: 0;
+  }
+
+  &__subtitle {
+    font-size: 0.8125rem;
+    color: $v2-text-muted;
+    margin: 0;
+  }
+}
+
+// ─── V2 App Detail Page ─────────────────────────────────────────────────────
+
+.v2-app-detail {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+
+  &__header {
+    background: #ffffff;
+    border-bottom: 1px solid #e4e4e7;
+    padding: 1.25rem 1.5rem;
+
+    @include mobile {
+      padding: 0.875rem;
+    }
+  }
+
+  &__header-inner {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+  }
+
+  &__back {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    font-size: 0.875rem;
+    color: $v2-text-secondary;
+    text-decoration: none;
+    padding: 0.375rem 0.5rem;
+    border-radius: 6px;
+    transition: all 0.15s ease;
+    border: none;
+    background: none;
+    cursor: pointer;
+
+    &:hover {
+      color: $v2-text-primary;
+      background: #f4f4f5;
+    }
+  }
+
+  &__header-icon {
+    width: $v2-icon-size;
+    height: $v2-icon-size;
+    min-width: $v2-icon-size;
+    border-radius: $v2-icon-radius;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  &__header-text {
+    flex: 1;
+    min-width: 0;
+  }
+
+  &__title {
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: $v2-text-primary;
+    margin: 0;
+  }
+
+  &__subtitle {
+    font-size: 0.8125rem;
+    color: $v2-text-secondary;
+    margin: 0.125rem 0 0;
+  }
+
+  // Tab navigation
+  &__tabs {
+    background: #ffffff;
+    border-bottom: 1px solid #e4e4e7;
+    padding: 0 1.5rem;
+
+    @include mobile {
+      padding: 0 0.875rem;
+    }
+
+    .nav-tabs {
+      border-bottom: none;
+      gap: 0;
+
+      .nav-link {
+        border: none;
+        border-bottom: 2px solid transparent;
+        border-radius: 0;
+        padding: 0.75rem 1rem;
+        font-size: 0.875rem;
+        font-weight: 500;
+        color: $v2-text-secondary;
+        transition: all 0.15s ease;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+
+        &:hover {
+          color: $v2-text-primary;
+          border-bottom-color: #d1d5db;
+        }
+
+        &.active {
+          color: var(--brand-primary, #7c3aed);
+          border-bottom-color: var(--brand-primary, #7c3aed);
+          background: none;
+        }
+
+        i {
+          font-size: 1rem;
+        }
+      }
+    }
+  }
+
+  // Tab content
+  &__content {
+    flex: 1;
+    overflow-y: auto;
+    padding: 1.5rem;
+    background: $v2-bg-page;
+    position: relative;
+
+    @include mobile {
+      padding: 0.875rem;
+    }
+  }
+}
+
+// ─── Actions Tab ────────────────────────────────────────────────────────────
+
+.v2-actions-tab {
+  max-width: 800px;
+
+  &__dropzone {
+    border: 2px dashed #d1d5db;
+    border-radius: $v2-card-radius;
+    padding: 2rem;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    background: #ffffff;
+
+    &:hover,
+    &--active {
+      border-color: var(--brand-primary, #7c3aed);
+      background: #faf8ff;
+    }
+
+    &__icon {
+      font-size: 2rem;
+      color: $v2-text-muted;
+      margin-bottom: 0.5rem;
+    }
+
+    &__text {
+      color: $v2-text-secondary;
+      font-size: 0.875rem;
+      margin: 0;
+    }
+  }
+
+  &__file-list {
+    list-style: none;
+    padding: 0;
+    margin: 0.75rem 0;
+  }
+
+  &__file-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.375rem 0;
+    font-size: 0.875rem;
+
+    .file-name {
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .file-size {
+      color: $v2-text-muted;
+      font-size: 0.75rem;
+    }
+  }
+
+  &__prompt {
+    .form-control {
+      border-radius: 8px;
+      border-color: $v2-card-border;
+      font-size: 0.9375rem;
+
+      &:focus {
+        border-color: var(--brand-primary, #7c3aed);
+        box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.1);
+      }
+    }
+  }
+
+  &__results {
+    background: #ffffff;
+    border: 1px solid $v2-card-border;
+    border-radius: $v2-card-radius;
+    padding: 1.25rem;
+  }
+
+  &__processing {
+    text-align: center;
+    padding: 3rem 1rem;
+    color: $v2-text-secondary;
+  }
+}
+
+// ─── Runs Tab ───────────────────────────────────────────────────────────────
+
+.v2-runs-tab {
+  height: 100%;
+
+  &__layout {
+    display: flex;
+    gap: 1rem;
+    height: calc(100vh - 220px);
+    align-items: stretch;
+  }
+
+  // ─── Left sidebar (collapsible) ─────────────────────────────────────
+  &__sidebar {
+    display: flex;
+    flex-direction: column;
+    flex: 0 0 300px;
+    max-width: 300px;
+    background: #ffffff;
+    border: 1px solid $v2-card-border;
+    border-radius: 12px;
+    overflow: hidden;
+    transition:
+      flex-basis 0.2s ease,
+      max-width 0.2s ease;
+
+    &--collapsed {
+      flex: 0 0 44px;
+      max-width: 44px;
+      align-self: flex-start;
+
+      .v2-runs-tab__sidebar-header {
+        border-bottom: none;
+      }
+    }
+  }
+
+  &__sidebar-header {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid $v2-card-border;
+    flex-shrink: 0;
+    min-height: 3.25rem; // align with detail header
+  }
+
+  &__sidebar-title {
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: $v2-text-primary;
+    flex: 1;
+  }
+
+  &__list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.375rem;
+    padding: 0.5rem;
+    overflow-y: auto;
+    flex: 1;
+  }
+
+  &__item {
+    background: #ffffff;
+    border: 1px solid $v2-card-border;
+    border-radius: 8px;
+    padding: 0.625rem 0.75rem;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+
+    &:hover {
+      border-color: #d1d5db;
+      background: #fafafa;
+    }
+
+    &--active {
+      border-color: var(--brand-primary, #7c3aed);
+      background: #f5f3ff;
+    }
+  }
+
+  &__item-info {
+    flex: 1;
+    min-width: 0;
+  }
+
+  &__item-name {
+    font-size: 0.8125rem;
+    font-weight: 500;
+    color: $v2-text-primary;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  &__item-meta {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-top: 0.125rem;
+  }
+
+  &__item-date {
+    font-size: 0.7rem;
+    color: $v2-text-muted;
+  }
+
+  &__item-duration {
+    font-size: 0.7rem;
+    color: $v2-text-secondary;
+
+    i {
+      font-size: 0.6rem;
+      margin-right: 0.15rem;
+    }
+  }
+
+  &__item-agent {
+    font-size: 0.7rem;
+    color: $v2-text-secondary;
+    margin-top: 0.125rem;
+
+    i {
+      font-size: 0.65rem;
+      margin-right: 0.2rem;
+    }
+  }
+
+  &__item-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.375rem;
+    flex-shrink: 0;
+  }
+
+  &__item-status {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.125rem;
+  }
+
+  &__item-continue {
+    background: none;
+    border: none;
+    padding: 0;
+    font-size: 0.65rem;
+    font-weight: 500;
+    color: var(--brand-primary, #7c3aed);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 0.2rem;
+
+    &:hover {
+      text-decoration: underline;
+    }
+
+    i {
+      font-size: 0.55rem;
+    }
+  }
+
+  // ─── Right detail panel ─────────────────────────────────────────────
+  &__detail {
+    flex: 1;
+    min-width: 0;
+    background: #ffffff;
+    border: 1px solid $v2-card-border;
+    border-radius: 12px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+  }
+
+  &__detail-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    color: $v2-text-muted;
+
+    i {
+      font-size: 2rem;
+      margin-bottom: 0.75rem;
+    }
+  }
+
+  &__detail-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.75rem 1.25rem;
+    border-bottom: 1px solid $v2-card-border;
+    flex-shrink: 0;
+    min-height: 3.25rem; // align with sidebar header
+  }
+
+  &__detail-agent {
+    font-size: 0.8rem;
+    color: $v2-text-secondary;
+    margin-top: 0.25rem;
+    display: block;
+
+    i {
+      font-size: 0.7rem;
+      margin-right: 0.2rem;
+    }
+  }
+
+  &__detail-meta {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    padding: 0.625rem 1.25rem;
+    border-bottom: 1px solid $v2-card-border;
+    background: #fafafa;
+    font-size: 0.8rem;
+    flex-shrink: 0;
+  }
+
+  &__detail-meta-item {
+    color: $v2-text-secondary;
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+
+    i {
+      font-size: 0.75rem;
+    }
+  }
+
+  &__detail-prompt {
+    padding: 0.75rem 1.25rem;
+    border-bottom: 1px solid $v2-card-border;
+    font-size: 0.85rem;
+    color: $v2-text-secondary;
+    flex-shrink: 0;
+  }
+
+  &__detail-section-label {
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: $v2-text-muted;
+    margin-bottom: 0.375rem;
+  }
+
+  &__detail-result {
+    padding: 1.25rem;
+  }
+
+  &__detail-section-toggle {
+    display: flex;
+    align-items: center;
+    gap: 0.375rem;
+    cursor: pointer;
+    user-select: none;
+
+    &:hover {
+      opacity: 0.7;
+    }
+
+    i {
+      font-size: 0.7rem;
+      color: $v2-text-muted;
+      transition: transform 0.15s ease;
+    }
+  }
+
+  &__detail-markdown {
+    font-size: 0.9rem;
+    line-height: 1.6;
+  }
+
+  // ─── Artifacts section ───────────────────────────────────────────────
+  &__detail-artifacts {
+    padding: 0.75rem 1.25rem;
+    border-top: 1px solid $v2-card-border;
+  }
+
+  &__artifact-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.375rem;
+  }
+
+  &__artifact-item {
+    display: flex;
+    align-items: center;
+    gap: 0.625rem;
+    padding: 0.5rem 0.75rem;
+    background: #fafafa;
+    border: 1px solid $v2-card-border;
+    border-radius: 8px;
+    font-size: 0.85rem;
+
+    i:first-child {
+      font-size: 1.125rem;
+      color: $v2-text-secondary;
+    }
+  }
+
+  &__artifact-name {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-weight: 500;
+    color: $v2-text-primary;
+  }
+
+  &__empty {
+    text-align: center;
+    padding: 3rem 1rem;
+    color: $v2-text-secondary;
+
+    i {
+      font-size: 2.5rem;
+      color: $v2-text-muted;
+      margin-bottom: 0.75rem;
+      display: block;
+    }
+  }
+
+  // ─── Follow-up section ──────────────────────────────────────────────
+  &__follow-up {
+    padding: 0.75rem 1.25rem;
+    border-top: 1px solid $v2-card-border;
+
+    .btn {
+      width: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+      padding: 0.5rem 1rem;
+      font-size: 0.85rem;
+      font-weight: 500;
+      border-radius: 8px;
+    }
+  }
+
+  // ─── Thread entries ─────────────────────────────────────────────────
+  &__thread-divider {
+    margin: 0;
+    border-color: $v2-card-border;
+  }
+}
+
+// ─── Data Tab ───────────────────────────────────────────────────────────────
+
+.v2-data-tab {
+  max-width: 800px;
+
+  &__list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  &__item {
+    background: #ffffff;
+    border: 1px solid $v2-card-border;
+    border-radius: 8px;
+    padding: 0.75rem 1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+
+    i {
+      font-size: 1.25rem;
+      color: $v2-text-muted;
+    }
+  }
+
+  &__item-info {
+    flex: 1;
+    min-width: 0;
+  }
+
+  &__item-name {
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: $v2-text-primary;
+  }
+
+  &__item-meta {
+    font-size: 0.75rem;
+    color: $v2-text-muted;
+  }
+
+  &__empty {
+    text-align: center;
+    padding: 3rem 1rem;
+    color: $v2-text-secondary;
+
+    i {
+      font-size: 2.5rem;
+      color: $v2-text-muted;
+      margin-bottom: 0.75rem;
+      display: block;
+    }
+  }
+
+  &__upload-zone {
+    border: 2px dashed #d1d5db;
+    border-radius: $v2-card-radius;
+    padding: 1.5rem;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    background: #ffffff;
+    margin-bottom: 1rem;
+
+    &:hover {
+      border-color: var(--brand-primary, #7c3aed);
+      background: #faf8ff;
+    }
+  }
+}
+
+// ─── Status Badges ──────────────────────────────────────────────────────────
+
+.v2-status-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.125rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+
+  &--beta {
+    background: $v2-status-beta-bg;
+    color: $v2-status-beta;
+  }
+
+  &--coming-soon {
+    background: $v2-status-coming-soon-bg;
+    color: $v2-status-coming-soon;
+  }
+}
+
+// ─── Agents Tab ──────────────────────────────────────────────────────────────
+
+.v2-agents-tab {
+  height: 100%;
+
+  &__layout {
+    display: flex;
+    gap: 1rem;
+    height: calc(100vh - 220px);
+    align-items: stretch;
+  }
+
+  // ─── Left sidebar ─────────────────────────────────────────────
+  &__sidebar {
+    display: flex;
+    flex-direction: column;
+    flex: 0 0 300px;
+    max-width: 300px;
+    background: #ffffff;
+    border: 1px solid $v2-card-border;
+    border-radius: 12px;
+    overflow: hidden;
+
+    @include mobile {
+      display: none;
+    }
+  }
+
+  &__sidebar-header {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid $v2-card-border;
+    flex-shrink: 0;
+    min-height: 3.25rem;
+  }
+
+  &__sidebar-title {
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: $v2-text-primary;
+    flex: 1;
+  }
+
+  &__agent-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.375rem;
+    padding: 0.5rem;
+    overflow-y: auto;
+    flex: 1;
+
+    // Compact card styling when inside the sidebar
+    .v2-agent-card {
+      padding: 0.875rem;
+
+      &__icon {
+        width: 36px;
+        height: 36px;
+        min-width: 36px;
+
+        i {
+          font-size: 1.125rem;
+        }
+      }
+
+      &__header {
+        flex-wrap: wrap;
+      }
+
+      &__description {
+        -webkit-line-clamp: 3;
+      }
+
+      &__capabilities {
+        padding-left: calc(36px + 0.75rem);
+      }
+    }
+  }
+
+  // ─── Right form panel ─────────────────────────────────────────
+  &__form-panel {
+    flex: 1;
+    min-width: 0;
+    background: #ffffff;
+    border: 1px solid $v2-card-border;
+    border-radius: 12px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+  }
+
+  &__form-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.75rem 1.25rem;
+    border-bottom: 1px solid $v2-card-border;
+    flex-shrink: 0;
+    min-height: 3.25rem;
+  }
+
+  &__form-title {
+    font-size: 1rem;
+    font-weight: 600;
+    color: $v2-text-primary;
+    margin: 0;
+  }
+
+  &__form-content {
+    flex: 1;
+    overflow-y: auto;
+    padding: 1.5rem;
+    max-width: 640px;
+    width: 100%;
+    margin: 0 auto;
+  }
+
+  &__form-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    color: $v2-text-muted;
+
+    i {
+      font-size: 2rem;
+      margin-bottom: 0.75rem;
+    }
+  }
+
+  // ─── Inline form elements (reused from agent-run-panel) ───────
+  &__dropzone {
+    border: 2px dashed #d1d5db;
+    border-radius: $v2-card-radius;
+    padding: 1.5rem;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    background: #ffffff;
+    color: $v2-text-muted;
+
+    &:hover,
+    &--active {
+      border-color: var(--brand-primary, #7c3aed);
+      background: #faf8ff;
+    }
+
+    i {
+      font-size: 1.5rem;
+    }
+  }
+
+  &__file-list {
+    list-style: none;
+    padding: 0;
+    margin: 0.75rem 0 0;
+  }
+
+  &__file-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.375rem 0;
+    font-size: 0.875rem;
+  }
+
+  &__file-name {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  &__file-size {
+    color: $v2-text-muted;
+    font-size: 0.75rem;
+  }
+
+  &__settings {
+    border: 1px solid $v2-card-border;
+    border-radius: 8px;
+    overflow: hidden;
+  }
+
+  &__settings-toggle {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    width: 100%;
+    padding: 0.75rem 1rem;
+    border: none;
+    background: #fafafa;
+    cursor: pointer;
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: $v2-text-primary;
+    text-align: left;
+
+    &:hover {
+      background: #f4f4f5;
+    }
+  }
+
+  &__settings-note {
+    font-size: 0.75rem;
+    font-weight: 400;
+    color: $v2-text-muted;
+    margin-left: auto;
+  }
+
+  &__settings-body {
+    padding: 0.75rem 1rem;
+    border-top: 1px solid $v2-card-border;
+  }
+
+  &__settings-section {
+    padding: 0.75rem 0;
+
+    &:not(:last-child) {
+      border-bottom: 1px solid #f3f4f6;
+    }
+  }
+
+  &__settings-section-title {
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: $v2-text-primary;
+    margin-bottom: 0.5rem;
+  }
+
+  &__processing {
+    text-align: center;
+    padding: 3rem 1rem;
+    color: $v2-text-secondary;
+  }
+
+  // Legacy grid (keep for potential future use)
+  &__header {
+    margin-bottom: 1.25rem;
+  }
+
+  &__title {
+    font-size: 1.125rem;
+    font-weight: 600;
+    color: $v2-text-primary;
+    margin: 0;
+  }
+
+  &__subtitle {
+    font-size: 0.8125rem;
+    color: $v2-text-secondary;
+    margin: 0.25rem 0 0;
+  }
+
+  &__grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 1rem;
+
+    @include mobile {
+      grid-template-columns: 1fr;
+    }
+  }
+}
+
+// ─── Agent Card ──────────────────────────────────────────────────────────────
+
+.v2-agent-card {
+  background: #ffffff;
+  border: 1px solid $v2-card-border;
+  border-radius: $v2-card-radius;
+  padding: 1.25rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+
+  &:hover {
+    box-shadow: $v2-card-shadow-hover;
+    border-color: #d1d5db;
+  }
+
+  &--selected {
+    border-color: var(--brand-primary, #7c3aed);
+    background: #faf8ff;
+  }
+
+  &--disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+
+  &__header {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+  }
+
+  &__icon {
+    width: 48px;
+    height: 48px;
+    min-width: 48px;
+    border-radius: $v2-card-radius;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: transform 0.2s ease;
+
+    i {
+      font-size: 1.5rem;
+    }
+
+    .v2-agent-card:hover & {
+      transform: scale(1.05);
+    }
+  }
+
+  &__info {
+    flex: 1;
+    min-width: 0;
+  }
+
+  &__name {
+    font-size: 0.9375rem;
+    font-weight: 600;
+    color: $v2-text-primary;
+    margin: 0;
+  }
+
+  &__description {
+    font-size: 0.8125rem;
+    color: $v2-text-secondary;
+    margin: 0.25rem 0 0;
+    line-height: 1.4;
+  }
+
+  &__status-area {
+    flex-shrink: 0;
+  }
+
+  &__status {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    font-size: 0.75rem;
+    font-weight: 500;
+
+    &--active {
+      color: darken($v2-status-active, 15%);
+
+      .v2-agent-card__status-dot {
+        background: $v2-status-active;
+      }
+    }
+
+    &--coming-soon {
+      color: $v2-status-coming-soon;
+
+      .v2-agent-card__status-dot {
+        background: $v2-status-coming-soon;
+      }
+    }
+  }
+
+  &__status-dot {
+    width: 0.5rem;
+    height: 0.5rem;
+    border-radius: 999px;
+    display: inline-block;
+  }
+
+  &__capabilities {
+    display: flex;
+    gap: 0.375rem;
+    flex-wrap: wrap;
+    margin-top: 0.75rem;
+    padding-left: calc(48px + 0.75rem); // align with text after icon
+  }
+
+  &__capability-tag {
+    font-size: 0.6875rem;
+    font-weight: 500;
+    padding: 0.125rem 0.5rem;
+    border-radius: 4px;
+    background: #f3f4f6;
+    color: $v2-text-secondary;
+  }
+}
+
+// ─── Agent Run Panel (slide-in from right) ───────────────────────────────────
+
+.v2-agent-run-panel {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 480px;
+  background: #ffffff;
+  border-left: 1px solid $v2-card-border;
+  box-shadow: -4px 0 16px rgba(0, 0, 0, 0.08);
+  z-index: 10;
+  transform: translateX(100%);
+  transition: transform 0.25s ease;
+  display: flex;
+  flex-direction: column;
+
+  &--open {
+    transform: translateX(0);
+  }
+
+  @include mobile {
+    width: 100%;
+  }
+
+  &__backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.1);
+    z-index: 9;
+  }
+
+  &__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 1rem 1.25rem;
+    border-bottom: 1px solid $v2-card-border;
+    flex-shrink: 0;
+  }
+
+  &__title {
+    font-size: 1rem;
+    font-weight: 600;
+    color: $v2-text-primary;
+    margin: 0;
+  }
+
+  &__close {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    border: none;
+    background: none;
+    border-radius: 6px;
+    color: $v2-text-secondary;
+    cursor: pointer;
+    transition: all 0.15s ease;
+
+    &:hover {
+      background: #f4f4f5;
+      color: $v2-text-primary;
+    }
+  }
+
+  &__body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 1.25rem;
+  }
+
+  // Dropzone
+  &__dropzone {
+    border: 2px dashed #d1d5db;
+    border-radius: $v2-card-radius;
+    padding: 1.5rem;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    background: #ffffff;
+    color: $v2-text-muted;
+
+    &:hover,
+    &--active {
+      border-color: var(--brand-primary, #7c3aed);
+      background: #faf8ff;
+    }
+
+    i {
+      font-size: 1.5rem;
+    }
+  }
+
+  // File list
+  &__file-list {
+    list-style: none;
+    padding: 0;
+    margin: 0.75rem 0 0;
+  }
+
+  &__file-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.375rem 0;
+    font-size: 0.875rem;
+  }
+
+  &__file-name {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  &__file-size {
+    color: $v2-text-muted;
+    font-size: 0.75rem;
+  }
+
+  // Settings overrides
+  &__settings {
+    border: 1px solid $v2-card-border;
+    border-radius: 8px;
+    overflow: hidden;
+  }
+
+  &__settings-toggle {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    width: 100%;
+    padding: 0.75rem 1rem;
+    border: none;
+    background: #fafafa;
+    cursor: pointer;
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: $v2-text-primary;
+    text-align: left;
+
+    &:hover {
+      background: #f4f4f5;
+    }
+  }
+
+  &__settings-note {
+    font-size: 0.75rem;
+    font-weight: 400;
+    color: $v2-text-muted;
+    margin-left: auto;
+  }
+
+  &__settings-body {
+    padding: 0.75rem 1rem;
+    border-top: 1px solid $v2-card-border;
+  }
+
+  &__settings-section {
+    padding: 0.75rem 0;
+
+    &:not(:last-child) {
+      border-bottom: 1px solid #f3f4f6;
+    }
+  }
+
+  &__settings-section-title {
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: $v2-text-primary;
+    margin-bottom: 0.5rem;
+  }
+
+  // Processing / Results
+  &__processing {
+    text-align: center;
+    padding: 3rem 1rem;
+    color: $v2-text-secondary;
+  }
+
+  &__results-content {
+    background: #ffffff;
+    border: 1px solid $v2-card-border;
+    border-radius: $v2-card-radius;
+    padding: 1.25rem;
+  }
+}
+
+// ─── Workspace Tab ───────────────────────────────────────────────────────────
+
+.v2-workspace-tab {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+
+  &__description {
+    font-size: 0.8125rem;
+    color: $v2-text-secondary;
+    margin: 0;
+    line-height: 1.5;
+  }
+
+  // Sidebar + panel layout (matching agents/runs tabs)
+  &__layout {
+    display: flex;
+    gap: 1rem;
+    height: calc(100vh - 220px);
+  }
+
+  // ─── Left sidebar ─────────────────────────────────────────────
+  &__sidebar {
+    display: flex;
+    flex-direction: column;
+    flex: 0 0 300px;
+    max-width: 300px;
+    background: #ffffff;
+    border: 1px solid $v2-card-border;
+    border-radius: 12px;
+    overflow: hidden;
+
+    @include mobile {
+      display: none;
+    }
+  }
+
+  &__sidebar-header {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid $v2-card-border;
+    flex-shrink: 0;
+    min-height: 3.25rem;
+  }
+
+  &__sidebar-title {
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: $v2-text-primary;
+    flex: 1;
+  }
+
+  &__sidebar-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.375rem;
+    padding: 0.5rem;
+    overflow-y: auto;
+    flex: 1;
+  }
+
+  &__sidebar-item {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    background: #ffffff;
+    border: 1px solid $v2-card-border;
+    border-radius: 8px;
+    padding: 0.75rem;
+    cursor: pointer;
+    transition: all 0.15s ease;
+
+    &:hover {
+      border-color: darken($v2-card-border, 10%);
+      background: #fafafa;
+    }
+
+    &--active {
+      border-color: var(--brand-primary, #7c3aed);
+      background: #f5f3ff;
+    }
+  }
+
+  &__sidebar-item-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    background: #f3f4f6;
+    flex-shrink: 0;
+
+    i {
+      font-size: 0.875rem;
+      color: $v2-text-secondary;
+    }
+
+    .v2-workspace-tab__sidebar-item--active & {
+      background: #ede9fe;
+
+      i {
+        color: var(--brand-primary, #7c3aed);
+      }
+    }
+  }
+
+  &__sidebar-item-content {
+    flex: 1;
+    min-width: 0;
+  }
+
+  &__sidebar-item-title {
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: $v2-text-primary;
+  }
+
+  &__sidebar-item-summary {
+    font-size: 0.75rem;
+    color: $v2-text-muted;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-top: 0.125rem;
+  }
+
+  // ─── Right panel ──────────────────────────────────────────────
+  &__panel {
+    flex: 1;
+    min-width: 0;
+    background: #ffffff;
+    border: 1px solid $v2-card-border;
+    border-radius: 12px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+
+  &__panel-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.75rem 1.25rem;
+    border-bottom: 1px solid $v2-card-border;
+    flex-shrink: 0;
+    min-height: 3.25rem;
+  }
+
+  &__panel-title {
+    font-size: 1rem;
+    font-weight: 600;
+    color: $v2-text-primary;
+    margin: 0;
+  }
+
+  &__panel-content {
+    flex: 1;
+    overflow-y: auto;
+    padding: 1.5rem;
+  }
+
+  // ─── Files panel content ──────────────────────────────────────
+  &__upload-zone {
+    border: 2px dashed #e5e7eb;
+    border-radius: 10px;
+    padding: 1.25rem;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    background: #fafafa;
+    margin-bottom: 0.5rem;
+
+    &:hover {
+      border-color: var(--brand-primary, #7c3aed);
+      background: #faf8ff;
+    }
+  }
+
+  // ─── Settings panel content ───────────────────────────────────
+  &__settings-sections {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+
+    .v2-workspace-section {
+      border: none;
+      border-radius: 0;
+      border-bottom: 1px solid #f3f4f6;
+
+      &:last-child {
+        border-bottom: none;
+      }
+
+      &:hover {
+        box-shadow: none;
+      }
+
+      &__body {
+        padding: 0 1.125rem 1rem;
+      }
+    }
+  }
+
+  // ─── Context panel content ────────────────────────────────────
+  &__context-textarea {
+    min-height: 200px;
+    resize: vertical;
+  }
+}
+
+// ─── Workspace Collapsible Section ───────────────────────────────────────────
+
+.v2-workspace-section {
+  background: #ffffff;
+  border: 1px solid $v2-card-border;
+  border-radius: 10px;
+  overflow: hidden;
+  transition: box-shadow 0.15s ease;
+
+  &:hover {
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
+  }
+
+  &__header {
+    display: flex;
+    align-items: center;
+    gap: 0.625rem;
+    width: 100%;
+    padding: 0.875rem 1.125rem;
+    border: none;
+    background: none;
+    cursor: pointer;
+    font-size: 0.875rem;
+    text-align: left;
+    transition: background 0.15s ease;
+
+    &:hover {
+      background: #fafafa;
+    }
+
+    i {
+      font-size: 0.6875rem;
+      color: $v2-text-muted;
+      transition: transform 0.15s ease;
+    }
+  }
+
+  &__icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border-radius: 7px;
+    background: #f3f4f6;
+    flex-shrink: 0;
+
+    i {
+      font-size: 0.8125rem;
+      color: $v2-text-secondary;
+    }
+  }
+
+  &__title {
+    font-weight: 600;
+    color: $v2-text-primary;
+  }
+
+  &__summary {
+    font-weight: 400;
+    color: $v2-text-muted;
+    font-size: 0.8125rem;
+    margin-left: auto;
+    white-space: nowrap;
+  }
+
+  &__body {
+    padding: 0 1.125rem 1.125rem;
+    border-top: 1px solid #f3f4f6;
+    padding-top: 0.875rem;
+  }
+}
+
+// ─── V2 Run Result Content (inline file previews) ─────────────────────────
+
+.v2-run-result-content {
+  font-size: 0.9rem;
+  line-height: 1.6;
+}
+
+.v2-run-result {
+  &__markdown-section {
+    margin-bottom: 0.5rem;
+
+    // Tighten top margin on first element
+    > *:first-child {
+      margin-top: 0;
+    }
+
+    > *:last-child {
+      margin-bottom: 0;
+    }
+  }
+
+  &__file-card {
+    margin: 1rem 0;
+    border: 1px solid $v2-card-border;
+    border-radius: 8px;
+    overflow: hidden;
+    border-left: 4px solid var(--color-primary, #7c3aed);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+  }
+
+  &__file-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.75rem 1rem;
+    background: #fafafa;
+    border-bottom: 1px solid $v2-card-border;
+  }
+
+  &__file-content {
+    background: #ffffff;
+  }
+
+  &__html-preview iframe {
+    display: block;
+  }
+
+  &__csv-preview {
+    max-height: 550px;
+    overflow: auto;
+  }
+
+  &__image-preview img {
+    border-radius: 4px;
+  }
+
+  &__folder-ref {
+    margin: 0.5rem 0;
+  }
+}
