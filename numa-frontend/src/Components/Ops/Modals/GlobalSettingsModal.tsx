@@ -526,10 +526,9 @@ export function GlobalSettingsModal({
     }
   }, [numaPost, t]);
 
-  // ── Save custom field handler (Create or Update) ───────────────────────────
-  const handleSaveCustomField = () => {
+  // ── Add custom field handler ───────────────────────────────────────────────
+  const handleAddCustomField = () => {
     if (!newFieldName.trim()) return;
-
     const parsedOptions = ['select', 'multi_select'].includes(newFieldType)
       ? newFieldOptions
           .split(',')
@@ -565,8 +564,6 @@ export function GlobalSettingsModal({
         return [...prev, newField];
       }
     });
-
-    // Reset form state
     setNewFieldName('');
     setNewFieldType('text');
     setNewFieldCategory('common');
@@ -574,7 +571,6 @@ export function GlobalSettingsModal({
     setEditingFieldId(null);
     setShowingNewField(false);
   };
-
   // ── Helper to get primary contact name for customer/supplier ───────────────
   const getPrimaryContactName = (contacts: { name: string; isPrimary: boolean }[]): string => {
     const primary = contacts.find((c) => c.isPrimary);
@@ -981,7 +977,7 @@ export function GlobalSettingsModal({
                     variant="primary"
                     size="sm"
                     className="w-100"
-                    onClick={handleSaveCustomField}
+                    onClick={handleAddCustomField}
                     disabled={!newFieldName.trim()}
                   >
                     {editingFieldId ? t('common.save') : t('common.add')}

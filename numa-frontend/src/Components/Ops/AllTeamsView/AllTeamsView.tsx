@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react';
 import { Nav } from 'react-bootstrap';
 import { useTranslation } from 'react-i18next';
 import { useOps } from '../OpsContext';
-import { CreateTeamWizard } from '../Modals/CreateTeamWizard';
+import { CreateBoardWizard } from '../Modals/CreateBoardWizard';
 import ActiveSprintStrip from '../ActiveSprintStrip';
 import BoardView from '../BoardView/BoardView';
 import BacklogView from '../BacklogView/BacklogView';
@@ -100,7 +100,7 @@ const AllTeamsView = () => {
             </div>
           </div>
         </div>
-        <CreateTeamWizard
+        <CreateBoardWizard
           show={showCreateTeam}
           onHide={() => setShowCreateTeam(false)}
           onCreated={(team) => {

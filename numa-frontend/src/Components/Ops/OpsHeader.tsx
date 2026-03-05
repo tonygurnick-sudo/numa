@@ -68,7 +68,7 @@ const OpsHeader = () => {
         className="d-flex align-items-center justify-content-between px-2 px-md-3 py-2 border-bottom bg-white flex-wrap"
         style={{ minHeight: 64 }}
       >
-        {/* Left: Page Title + Team Selector */}
+        {/* Left: Page Title */}
         <div className="d-flex align-items-center gap-2 gap-md-4">
           <div
             className="d-flex align-items-center gap-2"
@@ -99,27 +99,10 @@ const OpsHeader = () => {
               </span>
             </div>
           </div>
-          {/* Board / All Boards selector dropdown */}
-          {teams.length > 0 && (
-            <>
-              <div className="vr" style={{ height: 32 }} />
-              <BoardSelector
-                currentBoard={teams.find((tm) => tm.id === selectedTeamId) ?? null}
-                boards={teams}
-                isAllBoards={boardViewMode === 'allTeams'}
-                onSelectBoard={(teamId) => {
-                  selectTeam(teamId);
-                  setBoardViewMode('singleTeam');
-                }}
-                onSelectAllBoards={() => setBoardViewMode('allTeams')}
-                onCreateBoard={() => setShowCreateTeam(true)}
-              />
-            </>
-          )}
         </div>
 
         {/* Right: Nav tabs + actions grouped together */}
-        <div className="d-flex align-items-center gap-2 gap-md-3 flex-wrap mt-2 mt-md-0 w-100 w-md-auto justify-content-start justify-content-md-end">
+        <div className="d-flex align-items-center gap-2 gap-md-3">
           <div className="ops-nav-tabs d-flex flex-wrap" style={{ paddingBottom: 4 }}>
             {OPS_TOP_VIEWS.map(({ key, labelKey, icon }) => (
               <button
@@ -148,35 +131,52 @@ const OpsHeader = () => {
         </div>
       </div>
 
-      {/* ── Row 2: Zone/Sprint strip or All Teams strip (Board view only) ── */}
       {/* ── Row 2: Team selector + Zone/Sprint strip (Board view only) ── */}
       {topView === 'board' && (
         <div
           className="d-flex align-items-center px-3 gap-3 border-bottom bg-white"
           style={{ minHeight: 54, padding: '10px 0' }}
         >
-          {boardViewMode === 'singleTeam' ? (
-            <>
-              {/* Zone / Sprint strip */}
-              <ZoneSprintStrip />
+          {/* Board / All Boards selector */}
+          {teams.length > 0 && (
+            <div className="d-flex align-items-center gap-3 flex-shrink-0">
+              <BoardSelector
+                currentBoard={teams.find((tm) => tm.id === selectedTeamId) ?? null}
+                boards={teams}
+                isAllBoards={boardViewMode === 'allTeams'}
+                onSelectBoard={(teamId) => {
+                  selectTeam(teamId);
+                  setBoardViewMode('singleTeam');
+                }}
+                onSelectAllBoards={() => setBoardViewMode('allTeams')}
+                onCreateBoard={() => setShowCreateTeam(true)}
+              />
+              {/* Board settings — next to board name in single-board mode */}
+              {boardViewMode === 'singleTeam' && selectedTeamId && canManage && (
+                <button
+                  type="button"
+                  className="btn btn-link text-muted p-0"
+                  onClick={() => setShowBoardSettings(true)}
+                  title={t('boards.settings')}
+                  style={{ fontSize: '0.95rem' }}
+                >
+                  <i className="bi bi-sliders" />
+                </button>
+              )}
+              <div className="vr align-self-stretch my-2" />
+            </div>
+          )}
 
-              {/* Right-side controls */}
-              <div className="d-flex align-items-center gap-2 flex-shrink-0 ms-auto">
-                {/* Board settings gear */}
-                {selectedTeamId && canManage && (
-                  <button
-                    type="button"
-                    className="btn btn-outline-secondary btn-sm"
-                    onClick={() => setShowBoardSettings(true)}
-                    title={t('boards.settings')}
-                  >
-                    <i className="bi bi-sliders" />
-                  </button>
-                )}
-              </div>
-            </>
+          {boardViewMode === 'singleTeam' ? (
+            <ZoneSprintStrip />
           ) : (
-            <AllBoardsStrip />
+            <AllBoardsStrip
+              canManage={canManage}
+              onOpenTeamSettings={(teamId) => {
+                selectTeam(teamId);
+                setShowBoardSettings(true);
+              }}
+            />
           )}
 
           {/* New Ticket button — right side of board bar */}
