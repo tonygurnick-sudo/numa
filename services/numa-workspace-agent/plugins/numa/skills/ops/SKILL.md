@@ -11,7 +11,7 @@ Manage work items on the Numa Ops kanban boards. Create tickets, search and filt
 
 | Tool | Purpose | Approval |
 |------|---------|----------|
-| `mcp__numa_ops__numa_ops_tool` | Perform any Numa Ops operation (tickets, teams, customers, suppliers, config) | Required for writes |
+| `mcp__numa__numa_ops_tool` | Perform any Numa Ops operation (tickets, teams, customers, suppliers, config) | Required for writes |
 
 ---
 
@@ -20,7 +20,7 @@ Manage work items on the Numa Ops kanban boards. Create tickets, search and filt
 The `numa_ops_tool` accepts an `operation` string and a `params` JSON string. The operation determines what action is taken and which parameters are required.
 
 ```
-mcp__numa_ops__numa_ops_tool(
+mcp__numa__numa_ops_tool(
     operation="list_tickets",
     params='{"team_id": "team-abc123"}',
     description="List all tickets for the Engineering team"
@@ -45,7 +45,7 @@ mcp__numa_ops__numa_ops_tool(
 Returns ticket types, statuses, custom fields, staff members, projects, CRM config, and supplier config in a single call. **Always call this first** to understand the board structure before creating or updating tickets.
 
 ```
-mcp__numa_ops__numa_ops_tool(
+mcp__numa__numa_ops_tool(
     operation="get_config",
     params='{}',
     description="Load Numa Ops configuration"
@@ -269,13 +269,13 @@ The user can configure their approval preference in chat settings:
 
 ```
 # 1. Load config to get ticket types, statuses, staff
-mcp__numa_ops__numa_ops_tool(operation="get_config", params='{}', description="Load ops config")
+mcp__numa__numa_ops_tool(operation="get_config", params='{}', description="Load ops config")
 
 # 2. List teams to find the right one
-mcp__numa_ops__numa_ops_tool(operation="list_teams", params='{}', description="List all teams")
+mcp__numa__numa_ops_tool(operation="list_teams", params='{}', description="List all teams")
 
 # 3. Create the ticket
-mcp__numa_ops__numa_ops_tool(
+mcp__numa__numa_ops_tool(
     operation="create_ticket",
     params='{"team_id":"team-abc","title":"Fix login bug","ticket_type_id":"tt-bug123","priority":"high","description":"Users report 500 errors on login page"}',
     description="Create ticket: Fix login bug (high priority) in Engineering team"
@@ -286,14 +286,14 @@ mcp__numa_ops__numa_ops_tool(
 
 ```
 # Search for tickets
-mcp__numa_ops__numa_ops_tool(
+mcp__numa__numa_ops_tool(
     operation="search_tickets",
     params='{"query":"login bug","team_id":"team-abc"}',
     description="Search for login bug tickets"
 )
 
 # Update status
-mcp__numa_ops__numa_ops_tool(
+mcp__numa__numa_ops_tool(
     operation="update_ticket",
     params='{"ticket_id":"ticket-xyz","team_id":"team-abc","status_id":"status-inprogress"}',
     description="Move ticket to In Progress"

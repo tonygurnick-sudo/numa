@@ -319,9 +319,9 @@ def _resolve_lambda_and_request(
         body = {
             "fileName": params.get("file_name", ""),
             "contentType": params.get("content_type", "application/octet-stream"),
-            "ticketId": params.get("ticket_id"),
+            "contextId": params.get("ticket_id"),
         }
-        return (OPS_API_LAMBDA, "POST", "ops/uploads", body, None)
+        return (OPS_API_LAMBDA, "POST", "ops/uploads/presigned-url", body, None)
 
     if operation == "get_metrics":
         qp = {}
