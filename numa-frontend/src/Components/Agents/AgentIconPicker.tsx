@@ -21,7 +21,7 @@ export const AgentIconPicker = ({ value, onChange }: AgentIconPickerProps) => {
       { value: 'bi bi-shield-check', label: t('iconPicker.icons.compliance') },
       { value: 'bi bi-gear', label: t('iconPicker.icons.operations') },
     ],
-    [t],
+    [t]
   );
   const selected = useMemo(() => value ?? iconOptions[0].value, [value, iconOptions]);
 

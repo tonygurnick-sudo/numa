@@ -114,7 +114,7 @@ const parseInlineMarkdown = (text) => {
           text: currentText,
           highlight: 'lightGray',
           font: 'Courier New',
-        }),
+        })
       );
       currentText = '';
       isCode = false;
@@ -137,7 +137,7 @@ const parseInlineMarkdown = (text) => {
         new ExternalHyperlink({
           children: [new TextRun({ text: linkText, style: 'Hyperlink' })],
           link: linkUrl,
-        }),
+        })
       );
       linkText = null;
       linkUrl = null;
@@ -171,7 +171,7 @@ const parseMarkdownTable = (tableLines) => {
     row
       .trim()
       .split('|')
-      .filter((cell) => cell.trim() !== ''),
+      .filter((cell) => cell.trim() !== '')
   );
 
   // Create table
@@ -204,7 +204,7 @@ const parseMarkdownTable = (tableLines) => {
               shading: {
                 fill: 'EEEEEE',
               },
-            }),
+            })
         ),
       }),
       // Data rows
@@ -215,9 +215,9 @@ const parseMarkdownTable = (tableLines) => {
               (cell) =>
                 new TableCell({
                   children: [new Paragraph({ children: parseInlineMarkdown(cell.trim()) })],
-                }),
+                })
             ),
-          }),
+          })
       ),
     ],
   });
@@ -269,7 +269,7 @@ const handleReferencesSection = (lines, startIndex) => {
     new Paragraph({
       children: [new TextRun({ text: 'References:', bold: true })],
       spacing: { before: 400, after: 200 },
-    }),
+    })
   );
 
   i++; // Move past the "References:" line
@@ -305,7 +305,7 @@ const handleReferencesSection = (lines, startIndex) => {
           ],
           indent: { left: 240, hanging: 240 },
           spacing: { after: 80 },
-        }),
+        })
       );
 
       referenceCounter++;
@@ -315,7 +315,7 @@ const handleReferencesSection = (lines, startIndex) => {
         new Paragraph({
           children: parseInlineMarkdown(line),
           indent: { left: 240 },
-        }),
+        })
       );
     }
 
@@ -396,7 +396,7 @@ const convertMarkdownToDocxElements = (markdown) => {
           new Paragraph({
             children: parseInlineMarkdown(headingText),
             heading,
-          }),
+          })
         );
       }
       i++;
@@ -409,7 +409,7 @@ const convertMarkdownToDocxElements = (markdown) => {
         new Paragraph({
           children: [new TextRun('')],
           border: { bottom: { style: BorderStyle.SINGLE, size: 2, color: '000000' } },
-        }),
+        })
       );
       i++;
       continue;
@@ -422,7 +422,7 @@ const convertMarkdownToDocxElements = (markdown) => {
           children: parseInlineMarkdown(trimmed.substring(2).trim()),
           bullet: { level: indentLevel },
           indent: { left: (indentLevel + 1) * 240 }, // Enhanced indentation for nested bullet points
-        }),
+        })
       );
       i++;
       continue;
@@ -438,7 +438,7 @@ const convertMarkdownToDocxElements = (markdown) => {
         new Paragraph({
           children: [new TextRun({ text: `${letter}) `, bold: false }), ...parseInlineMarkdown(content)],
           indent: { left: (indentLevel + 1) * 240, hanging: 240 },
-        }),
+        })
       );
       i++;
       continue;
@@ -458,7 +458,7 @@ const convertMarkdownToDocxElements = (markdown) => {
               level: indentLevel,
             },
             indent: { left: (indentLevel + 1) * 240, hanging: 240 },
-          }),
+          })
         );
       }
       i++;
@@ -476,7 +476,7 @@ const convertMarkdownToDocxElements = (markdown) => {
           },
           indent: { left: 240 },
           spacing: { before: 120, after: 120 },
-        }),
+        })
       );
       i++;
       continue;
@@ -530,7 +530,7 @@ const convertMarkdownToDocxElements = (markdown) => {
       new Paragraph({
         children: parseInlineMarkdown(trimmed),
         lineSpacing: 240,
-      }),
+      })
     );
     i++;
   }

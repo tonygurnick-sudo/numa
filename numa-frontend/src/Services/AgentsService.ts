@@ -28,7 +28,7 @@ export const getCachedAgents = (scope: 'owned' | 'public' | 'all' = 'owned'): Ag
 
 export const listAgents = async (
   numaGet: NumaGet,
-  options?: { scope?: 'owned' | 'public' | 'all'; agentType?: string },
+  options?: { scope?: 'owned' | 'public' | 'all'; agentType?: string }
 ): Promise<AgentSummary[]> => {
   const params = cleanParams({
     scope: options?.scope,
@@ -65,7 +65,7 @@ export const createAgent = async (numaPost: NumaPost, payload: AgentPayload): Pr
 export const updateAgent = async (
   numaPut: NumaPut,
   agentId: string,
-  payload: AgentUpdatePayload,
+  payload: AgentUpdatePayload
 ): Promise<AgentSummary> => {
   console.info(`${LOG_PREFIX} update`, { agentId, visibility: payload.visibility ?? 'unchanged' });
   const response = (await numaPut(`${BASE_URL}/${encodeURIComponent(agentId)}`, payload)) as AgentResponse;

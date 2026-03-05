@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { getFlag } from '../../utils/featureFlags';
 import {
   Modal,
   Form,
@@ -93,8 +94,7 @@ export const AgentCreateModal = ({
   const { t } = useTranslation('agents');
   const { user, lambdaClient } = useAuth();
   const { numaGet, numaPost, numaPut, numaDelete } = useNumaRequest();
-  const schedulingEnabled =
-    typeof window !== 'undefined' ? window.sessionStorage.getItem('SCHEDULING') === 'true' : false;
+  const schedulingEnabled = getFlag('SCHEDULING');
   const { branding } = useBranding();
   const { availableKBs } = useKnowledgeBase();
 
@@ -163,10 +163,7 @@ export const AgentCreateModal = ({
 
   const idToken = user?.decoded_tokens?.idToken ?? {};
   const authorName = useMemo(() => idToken.name || idToken.email || t('createModal.footer.unknownUser'), [idToken, t]);
-  const hasPipedreamIntegrations = useMemo(
-    () => window.sessionStorage.getItem('PIPEDREAM_INTEGRATIONS') === 'true',
-    [],
-  );
+  const hasPipedreamIntegrations = useMemo(() => getFlag('PIPEDREAM_INTEGRATIONS'), []);
   const relayLambdaArn = useMemo(() => window.sessionStorage.getItem('PIPEDREAM_RELAY_LAMBDA_ARN') || '', []);
   const REGION = useMemo(() => window.sessionStorage.getItem('REGION') || '', []);
 
@@ -585,7 +582,7 @@ export const AgentCreateModal = ({
     };
     const setupComplete = setup.hasTitle && setup.hasInstructions;
     const setupProgress = [setup.hasTitle, setup.hasInstructions, setup.hasDescription, setup.hasWelcomeMessage].filter(
-      Boolean,
+      Boolean
     ).length;
 
     const appearanceComplete = true; // Optional section
@@ -644,7 +641,7 @@ export const AgentCreateModal = ({
             days.map((d) => {
               const dow = d.slice(0, 3).toUpperCase();
               return n === 'last' ? `${dow}L` : `${dow}#${n}`;
-            }),
+            })
           );
           return `cron(${minute} ${hour} ? * ${combos.join(',') || 'MON'} *)`;
         }
@@ -1627,7 +1624,7 @@ export const AgentCreateModal = ({
                 </Row>
 
                 {/* Integration Approval Mode (only when workspace chat is enabled and integrations exist) */}
-                {window.sessionStorage.getItem('NUMA_WORKSPACE_CHAT') === 'true' &&
+                {getFlag('NUMA_WORKSPACE_CHAT') &&
                   hasPipedreamIntegrations &&
                   (formState.toolsConfig?.enabledConnections?.length ?? 0) > 0 && (
                     <Row className="mt-3">

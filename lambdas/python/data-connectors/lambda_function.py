@@ -189,13 +189,20 @@ def _persist_connector(
 def _handle_connect(
     event: Dict[str, Any], user_id: str, table_name: str, client_name: str
 ) -> Dict[str, Any]:
-    """Handle a connector test + persist request."""
+    """Handle a connector test + persist request.
+
+    When ``skip_test`` is truthy in the request body the connection test and
+    secret storage are skipped — only the connector record is persisted with
+    status ``configured``.  This is used by the Synergy wizard which stores
+    only a server URL (per-user credentials are set later in Files).
+    """
     body = _parse_body(event)
     connector_id = body.get("connector_id")
     if not connector_id:
         return _response(400, {"error": "connector_id is required"})
 
     config = body.get("config") or {}
+    skip_test = body.get("skip_test", False)
     settings = _read_connector_settings(connector_id)
     if settings and settings.get("status") == "disabled":
         return _response(403, {"error": "Connector disabled by administrator"})
@@ -203,6 +210,27 @@ def _handle_connect(
     connector = get_connector(connector_id)
     if not connector:
         return _response(404, {"error": f"Unknown connector: {connector_id}"})
+
+    if skip_test:
+        # Persist config-only record without testing or storing secrets
+        sanitized = connector.sanitize_config(config)
+        now = _now_iso()
+        item = upsert_connector_record(
+            table_name,
+            user_id,
+            connector_id,
+            sanitized,
+            "",  # no secret ARN
+            {"success": True, "tested_at": now, "skipped": True},
+        )
+        return _response(
+            200,
+            {
+                "success": True,
+                "connector_id": connector_id,
+                "status": item.get("status"),
+            },
+        )
 
     try:
         test_result = connector.test_connection(config)
@@ -236,7 +264,7 @@ def _handle_synergy_jobs(
     """Return top-level Synergy jobs for the user."""
     creds = _get_synergy_credentials(table_name, user_id)
     if not creds:
-        return _response(400, {"error": "Synergy connector not configured."})
+        return _response(400, {"error": "Synergy 12d connector not configured."})
     server, token = creds
     params = event.get("queryStringParameters") or {}
     name = params.get("name") or params.get("q") or ""
@@ -256,7 +284,7 @@ def _handle_synergy_job_folders(
     """Return top-level folders for a Synergy job."""
     creds = _get_synergy_credentials(table_name, user_id)
     if not creds:
-        return _response(400, {"error": "Synergy connector not configured."})
+        return _response(400, {"error": "Synergy 12d connector not configured."})
     server, token = creds
     try:
         items = list_job_folders(server, token, job_id)
@@ -272,7 +300,7 @@ def _handle_synergy_folder_items(
     """Return subfolders for a Synergy folder."""
     creds = _get_synergy_credentials(table_name, user_id)
     if not creds:
-        return _response(400, {"error": "Synergy connector not configured."})
+        return _response(400, {"error": "Synergy 12d connector not configured."})
     server, token = creds
     try:
         payload = get_folder_items(server, token, folder_id)

@@ -122,7 +122,7 @@ export class RfpResponseComparison extends BaseNumaApp {
                   return_content: false,
                 },
                 null,
-                { Catch: [] },
+                { Catch: [] }
               ),
             },
           },
@@ -160,7 +160,7 @@ export class RfpResponseComparison extends BaseNumaApp {
             'language.$': '$.language',
           },
           'WriteSuccessStatus',
-          { OutputPath: '$.Payload' },
+          { OutputPath: '$.Payload' }
         ),
         WriteFailureStatus: this.writeFailureStatus(),
         WriteSuccessStatus: this.writeSuccessStatus(),

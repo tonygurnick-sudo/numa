@@ -2,8 +2,16 @@
   height: 100vh;
   width: 100vw;
   display: flex;
-  flex-direction: row;
+  flex-direction: column;
   background-color: #ffffff;
+}
+
+// Row container below the header: nav-collapsed + panels sit side-by-side
+.shared-body {
+  flex: 1;
+  display: flex;
+  flex-direction: row;
+  min-height: 0; // prevent overflow in flex child
 
   // Container for react-resizable-panels
   #shared-document-chat {
@@ -12,12 +20,22 @@
   }
 }
 
+.shared-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem 1.5rem;
+  background: #fff;
+  border-bottom: 1px solid var(--bs-border-color, #dee2e6);
+  flex-shrink: 0;
+}
+
 // Collapsed nav panel - fixed width, not resizable
 .nav-collapsed {
   width: 48px;
   min-width: 48px;
   max-width: 48px;
-  height: 100%;
+  flex-shrink: 0;
   background: #fff;
   border-right: 1px solid var(--bs-border-color, #dee2e6);
   display: flex;
@@ -50,7 +68,8 @@
 }
 
 .shared-loading,
-.shared-error {
+.shared-error,
+.shared-processing {
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -76,6 +95,27 @@
 
   p {
     color: var(--bs-secondary);
+  }
+}
+
+.shared-processing {
+  .processing-icon {
+    margin-bottom: 1rem;
+
+    .spinner-border {
+      width: 4rem;
+      height: 4rem;
+      border-width: 0.3rem;
+    }
+  }
+
+  h2 {
+    margin-bottom: 0.5rem;
+    color: var(--bs-info-emphasis, #087990);
+  }
+
+  p {
+    color: var(--bs-info, #0dcaf0);
   }
 }
 

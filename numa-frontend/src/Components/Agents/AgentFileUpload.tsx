@@ -100,7 +100,7 @@ export const AgentFileUpload = ({
             { s3Key, s3Bucket: bucketName, fileName: file.name },
             { user },
             getCredentials,
-            numaPost,
+            numaPost
           );
 
           uploadedFiles.push({
@@ -118,7 +118,7 @@ export const AgentFileUpload = ({
             t('fileUpload.errors.fileFailed', {
               fileName: file.name,
               message: (error as Error)?.message ?? t('fileUpload.errors.unknown'),
-            }),
+            })
           );
           break;
         }

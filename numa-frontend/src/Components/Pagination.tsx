@@ -19,7 +19,7 @@ export const Pagination = ({ currentPage, totalPages, onPageChange, maxVisiblePa
     items.push(
       <BSPagination.Item key={1} onClick={() => onPageChange(1)}>
         1
-      </BSPagination.Item>,
+      </BSPagination.Item>
     );
     if (startPage > 2) {
       items.push(<BSPagination.Ellipsis key="ellipsis1" />);
@@ -31,7 +31,7 @@ export const Pagination = ({ currentPage, totalPages, onPageChange, maxVisiblePa
     items.push(
       <BSPagination.Item key={number} active={number === currentPage} onClick={() => onPageChange(number)}>
         {number}
-      </BSPagination.Item>,
+      </BSPagination.Item>
     );
   }
 
@@ -43,7 +43,7 @@ export const Pagination = ({ currentPage, totalPages, onPageChange, maxVisiblePa
     items.push(
       <BSPagination.Item key={totalPages} onClick={() => onPageChange(totalPages)}>
         {totalPages}
-      </BSPagination.Item>,
+      </BSPagination.Item>
     );
   }
 

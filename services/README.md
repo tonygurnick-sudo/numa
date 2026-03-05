@@ -33,6 +33,7 @@ Builds an ARM64 Docker image and saves it to `infra/assets/artifacts/numa-worksp
 Starts the workspace agent container on `:8080` and a test UI on `:3000`, then opens your browser. Test all agent types (numa-chat, research-agent, document-summariser) interactively with streaming responses, tool call rendering, and real-time event logging.
 
 **Prerequisites:**
+
 - Docker Desktop running
 - AWS CLI configured with `q-demo` profile
 - Image built first (`./package-service.sh numa-workspace-agent`)

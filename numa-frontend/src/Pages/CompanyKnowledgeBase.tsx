@@ -65,7 +65,7 @@ export function CompanyKnowledgeBase(): React.JSX.Element {
         setShowFilePreviewModal(true);
       }
     },
-    [openFilePreview, isMobile],
+    [openFilePreview, isMobile]
   );
 
   const handleDownloadFile = useCallback(
@@ -76,7 +76,7 @@ export function CompanyKnowledgeBase(): React.JSX.Element {
         console.error('Error downloading file:', err);
       }
     },
-    [dataBucket, region, getCredentials],
+    [dataBucket, region, getCredentials]
   );
 
   const canView = Boolean(user?.features?.includes('useCompanyData'));

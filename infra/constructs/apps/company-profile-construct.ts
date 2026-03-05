@@ -137,7 +137,7 @@ export class CompanyProfile extends BaseNumaApp {
                     'output_key.$': '$.Payload.output_key',
                   },
                   ResultPath: '$.extracted',
-                },
+                }
               ),
             },
           },
@@ -166,7 +166,7 @@ export class CompanyProfile extends BaseNumaApp {
           'WriteSuccessStatus',
           {
             OutputPath: '$.Payload',
-          },
+          }
         ),
         WriteFailureStatus: this.writeFailureStatus(),
         WriteSuccessStatus: this.writeSuccessStatus(),

@@ -1,129 +1,128 @@
-import { useState, useEffect, useCallback } from 'react'
-import { Container, Form, Button, Alert, Table, Modal, Card } from 'react-bootstrap'
-import { PersonPlus, Trash } from 'react-bootstrap-icons'
-import { UserManagementService, User } from '@/services/userManagementService'
-import { useAuth } from '@/contexts/AuthContext'
+import { useState, useEffect, useCallback } from 'react';
+import { Container, Form, Button, Alert, Table, Modal, Card } from 'react-bootstrap';
+import { PersonPlus, Trash } from 'react-bootstrap-icons';
+import { UserManagementService, User } from '@/services/userManagementService';
+import { useAuth } from '@/contexts/AuthContext';
 
 export default function UserManagement() {
-  const { session } = useAuth()
-  const [email, setEmail] = useState('')
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [success, setSuccess] = useState(false)
-  const [createdEmail, setCreatedEmail] = useState('')
-  const [users, setUsers] = useState<User[]>([])
-  const [loadingUsers, setLoadingUsers] = useState(true)
-  const [usersError, setUsersError] = useState<string | null>(null)
-  const [deletingUser, setDeletingUser] = useState<string | null>(null)
-  const [showDeleteModal, setShowDeleteModal] = useState(false)
-  const [userToDelete, setUserToDelete] = useState<User | null>(null)
-  const [userManagementService, setUserManagementService] = useState<UserManagementService | null>(null)
+  const { session } = useAuth();
+  const [email, setEmail] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState(false);
+  const [createdEmail, setCreatedEmail] = useState('');
+  const [users, setUsers] = useState<User[]>([]);
+  const [loadingUsers, setLoadingUsers] = useState(true);
+  const [usersError, setUsersError] = useState<string | null>(null);
+  const [deletingUser, setDeletingUser] = useState<string | null>(null);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [userToDelete, setUserToDelete] = useState<User | null>(null);
+  const [userManagementService, setUserManagementService] = useState<UserManagementService | null>(null);
 
   // Define fetchUsers before using it in useEffect dependency array
-  const fetchUsers = useCallback(async (service?: UserManagementService) => {
-    if (!service && !userManagementService) return
+  const fetchUsers = useCallback(
+    async (service?: UserManagementService) => {
+      if (!service && !userManagementService) return;
 
-    const serviceToUse = service || userManagementService!
-    setLoadingUsers(true)
-    setUsersError(null)
+      const serviceToUse = service || userManagementService!;
+      setLoadingUsers(true);
+      setUsersError(null);
 
-    try {
-      const result = await serviceToUse.listUsers(50)
-      setUsers(result.users)
-    } catch (err: unknown) {
-      console.error('Error fetching users:', err)
-      setUsersError(err instanceof Error ? err.message : 'Failed to fetch users')
-    } finally {
-      setLoadingUsers(false)
-    }
-  }, [userManagementService])
+      try {
+        const result = await serviceToUse.listUsers(50);
+        setUsers(result.users);
+      } catch (err: unknown) {
+        console.error('Error fetching users:', err);
+        setUsersError(err instanceof Error ? err.message : 'Failed to fetch users');
+      } finally {
+        setLoadingUsers(false);
+      }
+    },
+    [userManagementService]
+  );
 
   useEffect(() => {
     const initializeService = async () => {
       if (!session?.idToken) {
-        setUsersError('Not authenticated')
-        setLoadingUsers(false)
-        return
+        setUsersError('Not authenticated');
+        setLoadingUsers(false);
+        return;
       }
 
       try {
-        const config = await fetch('/config.json').then(res => res.json())
+        const config = await fetch('/config.json').then((res) => res.json());
         // Avoid recreating the service if already initialized
         const service =
           userManagementService ||
-          new UserManagementService(
-            config.AWS_REGION,
-            config.IDENTITY_POOL_ID,
-            config.USER_POOL_ID,
-          )
-        if (!userManagementService) setUserManagementService(service)
-        await fetchUsers(service)
+          new UserManagementService(config.AWS_REGION, config.IDENTITY_POOL_ID, config.USER_POOL_ID);
+        if (!userManagementService) setUserManagementService(service);
+        await fetchUsers(service);
       } catch (err) {
-        console.error('Error initializing user management service:', err)
-        setUsersError('Failed to initialize user management service')
-        setLoadingUsers(false)
+        console.error('Error initializing user management service:', err);
+        setUsersError('Failed to initialize user management service');
+        setLoadingUsers(false);
       }
-    }
+    };
 
-    initializeService()
-  }, [session?.idToken])
+    initializeService();
+  }, [session?.idToken]);
 
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!userManagementService) return
+    e.preventDefault();
+    if (!userManagementService) return;
 
-    setLoading(true)
-    setError(null)
-    setSuccess(false)
-    setCreatedEmail('')
+    setLoading(true);
+    setError(null);
+    setSuccess(false);
+    setCreatedEmail('');
 
     try {
-      await userManagementService.createUser(email)
-      setCreatedEmail(email)
-      setSuccess(true)
-      setEmail('')
+      await userManagementService.createUser(email);
+      setCreatedEmail(email);
+      setSuccess(true);
+      setEmail('');
 
       setTimeout(() => {
-        fetchUsers()
-      }, 1000)
+        fetchUsers();
+      }, 1000);
     } catch (err: unknown) {
-      setError(err.message || 'Failed to create user')
+      setError(err.message || 'Failed to create user');
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
+  };
 
   const handleDeleteUser = (user: User) => {
-    setUserToDelete(user)
-    setShowDeleteModal(true)
-  }
+    setUserToDelete(user);
+    setShowDeleteModal(true);
+  };
 
   const confirmDeleteUser = async () => {
-    if (!userToDelete || !userManagementService) return
+    if (!userToDelete || !userManagementService) return;
 
-    setShowDeleteModal(false)
-    setDeletingUser(userToDelete.username)
-    setUsersError(null)
+    setShowDeleteModal(false);
+    setDeletingUser(userToDelete.username);
+    setUsersError(null);
 
     try {
-      await userManagementService.deleteUser(userToDelete.username)
-      await fetchUsers()
+      await userManagementService.deleteUser(userToDelete.username);
+      await fetchUsers();
     } catch (err: unknown) {
-      console.error('Error deleting user:', err)
-      setUsersError(err instanceof Error ? err.message : 'Failed to delete user')
+      console.error('Error deleting user:', err);
+      setUsersError(err instanceof Error ? err.message : 'Failed to delete user');
     } finally {
-      setDeletingUser(null)
-      setUserToDelete(null)
+      setDeletingUser(null);
+      setUserToDelete(null);
     }
-  }
+  };
 
   const cancelDeleteUser = () => {
-    setShowDeleteModal(false)
-    setUserToDelete(null)
-  }
+    setShowDeleteModal(false);
+    setUserToDelete(null);
+  };
 
   const getUserInstructions = (email: string) => {
-    const baseUrl = window.location.origin
+    const baseUrl = window.location.origin;
     return `Welcome to Numa Customer Success Portal!
 
 Your account has been created with the email address: ${email}
@@ -135,19 +134,19 @@ To set up your access:
 4. Enter the activation code and create your password
 5. Return to ${baseUrl} to sign in with your new password
 
-If you have any questions, please contact your administrator.`
-  }
+If you have any questions, please contact your administrator.`;
+  };
 
   const handleCopyInstructions = async () => {
-    if (!createdEmail) return
+    if (!createdEmail) return;
 
     try {
-      const instructions = getUserInstructions(createdEmail)
-      await navigator.clipboard.writeText(instructions)
+      const instructions = getUserInstructions(createdEmail);
+      await navigator.clipboard.writeText(instructions);
     } catch (err) {
-      console.error('Failed to copy instructions:', err)
+      console.error('Failed to copy instructions:', err);
     }
-  }
+  };
 
   return (
     <Container className="py-4">
@@ -168,7 +167,8 @@ If you have any questions, please contact your administrator.`
         <Card.Body>
           <h5 className="card-title">Create New User</h5>
           <p className="text-muted mb-4">
-            Create a new user account by entering their email address. The user will receive login credentials to access the system.
+            Create a new user account by entering their email address. The user will receive login credentials to access
+            the system.
           </p>
 
           <Form onSubmit={handleSubmit}>
@@ -182,9 +182,7 @@ If you have any questions, please contact your administrator.`
                 required
                 disabled={loading}
               />
-              <Form.Text className="text-muted">
-                This email will be their username for logging in.
-              </Form.Text>
+              <Form.Text className="text-muted">This email will be their username for logging in.</Form.Text>
             </Form.Group>
 
             <Button variant="primary" type="submit" disabled={loading}>
@@ -211,7 +209,12 @@ If you have any questions, please contact your administrator.`
                 <Button
                   variant="secondary"
                   size="sm"
-                  onClick={() => window.open(`${window.location.origin}/create-password?email=${encodeURIComponent(createdEmail)}`, '_blank')}
+                  onClick={() =>
+                    window.open(
+                      `${window.location.origin}/create-password?email=${encodeURIComponent(createdEmail)}`,
+                      '_blank'
+                    )
+                  }
                 >
                   Open Setup Link
                 </Button>
@@ -263,12 +266,9 @@ If you have any questions, please contact your administrator.`
                       <td>{user.email}</td>
                       <td>
                         <span
-                          className={`badge bg-${user.enabled
-                              ? user.status === 'CONFIRMED'
-                                ? 'success'
-                                : 'warning'
-                              : 'danger'
-                            }`}
+                          className={`badge bg-${
+                            user.enabled ? (user.status === 'CONFIRMED' ? 'success' : 'warning') : 'danger'
+                          }`}
                         >
                           {user.status}
                         </span>
@@ -324,8 +324,7 @@ If you have any questions, please contact your administrator.`
             <strong>Warning:</strong> This action cannot be undone.
           </Alert>
           <p>
-            Are you sure you want to permanently delete the account for{' '}
-            <strong>{userToDelete?.email}</strong>?
+            Are you sure you want to permanently delete the account for <strong>{userToDelete?.email}</strong>?
           </p>
           <p className="mb-0 text-muted small">
             The user will immediately lose access to the system and cannot be recovered.
@@ -341,5 +340,5 @@ If you have any questions, please contact your administrator.`
         </Modal.Footer>
       </Modal>
     </Container>
-  )
+  );
 }

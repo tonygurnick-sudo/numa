@@ -46,7 +46,7 @@ export async function fixUserEmailVerification(
   awsClientConfig: AWSClientConfig,
   userPoolId: string,
   username: string,
-  currentEmail: string,
+  currentEmail: string
 ): Promise<void> {
   const cognito = new CognitoIdentityProvider(awsClientConfig);
 
@@ -61,7 +61,7 @@ export async function fixUserEmailVerification(
             Value: 'true',
           },
         ],
-      }),
+      })
     );
     console.log(`Fixed email verification for ${username}: ${currentEmail}`);
   } catch (error) {
@@ -72,7 +72,7 @@ export async function fixUserEmailVerification(
 
 export async function findUnverifiedUsers(
   awsClientConfig: AWSClientConfig,
-  userPoolId: string,
+  userPoolId: string
 ): Promise<UnverifiedUser[]> {
   const cognito = new CognitoIdentityProvider(awsClientConfig);
   const unverifiedUsers: UnverifiedUser[] = [];
@@ -86,7 +86,7 @@ export async function findUnverifiedUsers(
           UserPoolId: userPoolId,
           Limit: 60,
           PaginationToken: paginationToken,
-        }),
+        })
       );
 
       if (response.Users) {
@@ -132,7 +132,7 @@ export async function findUserPoolId(awsClientConfig: AWSClientConfig, clientNam
     const response = await cognito.send(
       new ListUserPoolsCommand({
         MaxResults: 60,
-      }),
+      })
     );
 
     const userPool = response.UserPools?.find((pool) => pool.Name === `numa-${clientName}`);

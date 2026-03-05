@@ -46,7 +46,7 @@ export async function fixUserEmail(
   awsClientConfig: AWSClientConfig,
   userPoolId: string,
   username: string,
-  currentEmail: string,
+  currentEmail: string
 ): Promise<void> {
   const cognito = new CognitoIdentityProvider(awsClientConfig);
   const lowercaseEmail = currentEmail.toLowerCase();
@@ -62,7 +62,7 @@ export async function fixUserEmail(
             Value: lowercaseEmail,
           },
         ],
-      }),
+      })
     );
     console.log(`Fixed email case for ${username}: ${currentEmail} -> ${lowercaseEmail}`);
   } catch (error) {
@@ -73,7 +73,7 @@ export async function fixUserEmail(
 
 export async function findUsersWithCapital(
   awsClientConfig: AWSClientConfig,
-  userPoolId: string,
+  userPoolId: string
 ): Promise<UserWithCapital[]> {
   const cognito = new CognitoIdentityProvider(awsClientConfig);
   const usersWithCapital: UserWithCapital[] = [];
@@ -87,7 +87,7 @@ export async function findUsersWithCapital(
           UserPoolId: userPoolId,
           Limit: 60,
           PaginationToken: paginationToken,
-        }),
+        })
       );
 
       if (response.Users) {
@@ -131,7 +131,7 @@ export async function findUserPoolId(awsClientConfig: AWSClientConfig, clientNam
     const response = await cognito.send(
       new ListUserPoolsCommand({
         MaxResults: 60,
-      }),
+      })
     );
 
     const userPool = response.UserPools?.find((pool) => pool.Name === `numa-${clientName}`);

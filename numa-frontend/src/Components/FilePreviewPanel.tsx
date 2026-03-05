@@ -105,7 +105,7 @@ export const FilePreviewPanel: React.FC<FilePreviewPanelProps> = ({
       const response = await s3Client.send(new GetObjectCommand({ Bucket: bucket, Key: s3Key }));
       return (await response.Body?.transformToString()) || '';
     },
-    [bucket, region, getCredentials],
+    [bucket, region, getCredentials]
   );
 
   // Fetch binary content from S3
@@ -119,7 +119,7 @@ export const FilePreviewPanel: React.FC<FilePreviewPanelProps> = ({
       const response = await s3Client.send(new GetObjectCommand({ Bucket: bucket, Key: s3Key }));
       return (await response.Body?.transformToByteArray())?.buffer || new ArrayBuffer(0);
     },
-    [bucket, region, getCredentials],
+    [bucket, region, getCredentials]
   );
 
   // Check file size
@@ -133,7 +133,7 @@ export const FilePreviewPanel: React.FC<FilePreviewPanelProps> = ({
       const response = await s3Client.send(new HeadObjectCommand({ Bucket: bucket, Key: s3Key }));
       return response.ContentLength || 0;
     },
-    [bucket, region, getCredentials],
+    [bucket, region, getCredentials]
   );
 
   // Fetch image as data URL
@@ -149,7 +149,7 @@ export const FilePreviewPanel: React.FC<FilePreviewPanelProps> = ({
       const blob = new Blob([binary], { type: mimeTypes[extension] || 'image/jpeg' });
       return URL.createObjectURL(blob);
     },
-    [fetchBinaryContent],
+    [fetchBinaryContent]
   );
 
   // Load file content when preview changes

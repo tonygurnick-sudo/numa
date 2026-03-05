@@ -163,7 +163,7 @@ export function SupplierDetailModal({
         setFieldDraft('');
       }
     },
-    [supplierId, supplier, numaPut, onUpdated],
+    [supplierId, supplier, numaPut, onUpdated]
   );
 
   const startEdit = (field: string, currentValue: string) => {
@@ -186,7 +186,7 @@ export function SupplierDetailModal({
         : [...supplier.flags, flagId];
       await saveField('flags', newFlags);
     },
-    [supplier, saveField],
+    [supplier, saveField]
   );
 
   // ── Contacts Change ─────────────────────────────────────────────────────
@@ -205,7 +205,7 @@ export function SupplierDetailModal({
         setSaving(false);
       }
     },
-    [supplierId, numaPut, onUpdated],
+    [supplierId, numaPut, onUpdated]
   );
 
   // ── Notes Save ──────────────────────────────────────────────────────────
@@ -237,7 +237,7 @@ export function SupplierDetailModal({
     field: string,
     label: string,
     value: string | null | undefined,
-    type: 'text' | 'url' = 'text',
+    type: 'text' | 'url' = 'text'
   ) => {
     const displayValue = value ?? '';
     const isEditing = editingField === field;
@@ -483,7 +483,7 @@ export function SupplierDetailModal({
                               if (e.key === 'Enter')
                                 startEdit(
                                   'annualSpend',
-                                  supplier.annualSpend != null ? String(supplier.annualSpend) : '',
+                                  supplier.annualSpend != null ? String(supplier.annualSpend) : ''
                                 );
                             }}
                             style={{ cursor: 'pointer', minHeight: '1.4em' }}

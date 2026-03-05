@@ -57,7 +57,7 @@ function sanitizeFilename(name: string): string {
 function generateFilename(
   title: string | undefined,
   customFilename: string | undefined,
-  format: 'docx' | 'pdf',
+  format: 'docx' | 'pdf'
 ): string {
   if (customFilename) {
     const sanitized = sanitizeFilename(customFilename);

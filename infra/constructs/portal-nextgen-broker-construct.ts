@@ -63,7 +63,7 @@ export class PortalNextgenBrokerConstruct extends Construct {
       'lambdas',
       'node',
       'portal-nextgen-broker',
-      'lambda_function.zip',
+      'lambda_function.zip'
     );
     const fn = new LambdaFunction(this, 'portal-nextgen-broker-fn', {
       functionName: props.functionName || 'portal-nextgen-broker',

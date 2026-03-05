@@ -106,7 +106,7 @@ export function DynamicField({
         suppliers,
         workUnits,
         projects,
-        t,
+        t
       )}
     </Form.Group>
   );
@@ -119,7 +119,7 @@ function renderReadOnlyValue(
   field: FieldDefinition,
   value: unknown,
   staff: StaffProfile[] | undefined,
-  t: (key: string) => string,
+  t: (key: string) => string
 ): React.ReactNode {
   if (value === null || value === undefined || value === '') {
     return <span className="text-muted">{t('common.none')}</span>;
@@ -182,7 +182,7 @@ function renderEditControl(
   suppliers: Supplier[] | undefined,
   workUnits: WorkUnit[] | undefined,
   projects: Project[] | undefined,
-  t: (key: string) => string,
+  t: (key: string) => string
 ): React.ReactNode {
   switch (field.fieldType) {
     case 'text':

@@ -151,7 +151,7 @@ export const DataConnectorsPage = () => {
   }, [selectedKbId, syncConfigs]);
   const connectedJobIds = useMemo(
     () => new Set(connectedConfigsForKb.map((config) => config.synergy_job_id)),
-    [connectedConfigsForKb],
+    [connectedConfigsForKb]
   );
   const availableJobs = jobs.filter((job) => !connectedJobIds.has(job.job_id));
   const normalizedSearch = jobSearch.trim().toLowerCase();
@@ -205,8 +205,8 @@ export const DataConnectorsPage = () => {
               include_all_folders: includeAllFolders,
               skip_unsupported_files: skipUnsupportedFiles,
             }
-          : config,
-      ),
+          : config
+      )
     );
   };
 
@@ -252,7 +252,7 @@ export const DataConnectorsPage = () => {
     let nextConfigs = [...syncConfigs];
 
     const removed = initialSyncConfigs.filter(
-      (config) => !syncConfigs.some((c) => c.sync_config_id === config.sync_config_id),
+      (config) => !syncConfigs.some((c) => c.sync_config_id === config.sync_config_id)
     );
     const drafts = syncConfigs.filter((config) => config.sync_config_id.startsWith('draft-'));
     const existing = syncConfigs.filter((config) => !config.sync_config_id.startsWith('draft-'));
@@ -288,7 +288,7 @@ export const DataConnectorsPage = () => {
         };
         const updated = await SynergyDataConnectorService.updateSyncConfig(numaPut, current.sync_config_id, payload);
         nextConfigs = nextConfigs.map((config) =>
-          config.sync_config_id === updated.sync_config_id ? updated : config,
+          config.sync_config_id === updated.sync_config_id ? updated : config
         );
       }
 
@@ -414,7 +414,7 @@ export const DataConnectorsPage = () => {
                             prev.map((config) => ({
                               ...config,
                               skip_unsupported_files: nextValue,
-                            })),
+                            }))
                           );
                         }}
                         label={t('dataConnectorsPage.skipUnsupportedFiles')}
@@ -446,7 +446,7 @@ export const DataConnectorsPage = () => {
                                 onClick={() => {
                                   if (!selectedKbId) return;
                                   setSyncConfigs((prev) =>
-                                    prev.filter((config) => config.target_kb_id !== selectedKbId),
+                                    prev.filter((config) => config.target_kb_id !== selectedKbId)
                                   );
                                 }}
                                 disabled={!isSynergyConnected || connectedConfigsForKb.length === 0}
@@ -501,7 +501,7 @@ export const DataConnectorsPage = () => {
                                     const connectedIds = new Set(
                                       next
                                         .filter((config) => config.target_kb_id === selectedKbId)
-                                        .map((config) => config.synergy_job_id),
+                                        .map((config) => config.synergy_job_id)
                                     );
                                     availableJobs.forEach((job) => {
                                       if (connectedIds.has(job.job_id)) return;

@@ -10,32 +10,33 @@
 
 #### CRUD Operations
 
-| Operation | Endpoint | Method | Description |
-|-----------|----------|--------|-------------|
-| **List** | `/api/agents` | GET | List owned + public agents |
-| **Get** | `/api/agents/{agentId}` | GET | Get single agent |
-| **Create** | `/api/agents` | POST | Create new agent |
-| **Update** | `/api/agents/{agentId}` | PUT | Update agent |
-| **Delete** | `/api/agents/{agentId}` | DELETE | Delete agent |
-| **Duplicate** | `/api/agents/{agentId}/duplicate` | POST | Clone agent |
+| Operation     | Endpoint                          | Method | Description                |
+| ------------- | --------------------------------- | ------ | -------------------------- |
+| **List**      | `/api/agents`                     | GET    | List owned + public agents |
+| **Get**       | `/api/agents/{agentId}`           | GET    | Get single agent           |
+| **Create**    | `/api/agents`                     | POST   | Create new agent           |
+| **Update**    | `/api/agents/{agentId}`           | PUT    | Update agent               |
+| **Delete**    | `/api/agents/{agentId}`           | DELETE | Delete agent               |
+| **Duplicate** | `/api/agents/{agentId}/duplicate` | POST   | Clone agent                |
 
 #### List Agents Query Parameters
 
-| Param | Values | Default |
-|-------|--------|---------|
-| `scope` | `owned`, `public`, `all` | `owned` |
-| `agentType` | `task`, `knowledge`, etc. | (all) |
+| Param       | Values                    | Default |
+| ----------- | ------------------------- | ------- |
+| `scope`     | `owned`, `public`, `all`  | `owned` |
+| `agentType` | `task`, `knowledge`, etc. | (all)   |
 
 ### Admin Settings Lambda
 
 **Location:** `/lambdas/node/admin-agents-settings/index.ts`
 
-| Endpoint | Method | Auth | Description |
-|----------|--------|------|-------------|
-| `/api/settings/agents` | GET | Public + Auth | Read agents policy |
-| `/api/settings/agents` | PUT | Admin only | Update agents policy |
+| Endpoint               | Method | Auth          | Description          |
+| ---------------------- | ------ | ------------- | -------------------- |
+| `/api/settings/agents` | GET    | Public + Auth | Read agents policy   |
+| `/api/settings/agents` | PUT    | Admin only    | Update agents policy |
 
 **Policy Modes:**
+
 - `'off'` - Agents disabled
 - `'personal_only'` - Only personal agents
 - `'full'` - Full agent sharing enabled
@@ -221,6 +222,7 @@ this.addAgentApi(agentsLambda, {
 ### Lambda Permissions
 
 The agents Lambda needs:
+
 - DynamoDB access to all three agent tables
 - S3 access for icon management: `numa-chat/agent-icons/*`
 - Read access to agents settings table
@@ -237,11 +239,11 @@ The agents Lambda needs:
 
 ### Authorization Rules
 
-| Resource | Who Can Read | Who Can Edit/Delete |
-|----------|--------------|---------------------|
-| Personal agents | Owner only | Owner only |
-| Workspace agents | All users | Creator or Admin |
-| Settings | All users | Admin only |
+| Resource         | Who Can Read | Who Can Edit/Delete |
+| ---------------- | ------------ | ------------------- |
+| Personal agents  | Owner only   | Owner only          |
+| Workspace agents | All users    | Creator or Admin    |
+| Settings         | All users    | Admin only          |
 
 ### Admin Group Check
 
@@ -258,25 +260,25 @@ The agents Lambda needs:
 
 ## Key Files Summary
 
-| File | Purpose |
-|------|---------|
-| `/lambdas/node/agents/index.ts` | Main agents CRUD API |
-| `/lambdas/node/admin-agents-settings/index.ts` | Policy management |
-| `/lambdas/python/numa-chat-agent/.../agent_creation.py` | Chat tool + guardrails |
-| `/lambdas/python/numa-chat-agent/.../intent_verification.py` | Intent classification |
-| `/infra/constructs/numa-chat-agent-construct.ts` | Chat agent config |
-| `/infra/constructs/app-agnostic-api-gateway-lambda-collection.ts` | API routing |
+| File                                                              | Purpose                |
+| ----------------------------------------------------------------- | ---------------------- |
+| `/lambdas/node/agents/index.ts`                                   | Main agents CRUD API   |
+| `/lambdas/node/admin-agents-settings/index.ts`                    | Policy management      |
+| `/lambdas/python/numa-chat-agent/.../agent_creation.py`           | Chat tool + guardrails |
+| `/lambdas/python/numa-chat-agent/.../intent_verification.py`      | Intent classification  |
+| `/infra/constructs/numa-chat-agent-construct.ts`                  | Chat agent config      |
+| `/infra/constructs/app-agnostic-api-gateway-lambda-collection.ts` | API routing            |
 
 ---
 
 ## Error Handling
 
-| Status | Cause |
-|--------|-------|
-| 400 | Invalid payload (missing title/systemPrompt, too many files) |
-| 403 | Not authorized (not owner, not admin, policy denies) |
-| 404 | Agent not found |
-| 500 | Internal error |
+| Status | Cause                                                        |
+| ------ | ------------------------------------------------------------ |
+| 400    | Invalid payload (missing title/systemPrompt, too many files) |
+| 403    | Not authorized (not owner, not admin, policy denies)         |
+| 404    | Agent not found                                              |
+| 500    | Internal error                                               |
 
 ### Common Errors
 

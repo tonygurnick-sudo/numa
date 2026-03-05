@@ -75,7 +75,7 @@ export class E2ETestNumaApp extends BaseNumaApp {
           'WriteSuccessStatus',
           {
             OutputPath: '$.Payload',
-          },
+          }
         ),
         WriteFailureStatus: this.writeFailureStatus(),
         WriteSuccessStatus: this.writeSuccessStatus(),

@@ -1,4 +1,5 @@
 import {
+  CopyObjectCommand,
   DeleteObjectsCommand,
   GetObjectCommand,
   GetObjectTaggingCommand,
@@ -78,7 +79,7 @@ export const doesObjectExist = async (s3Key, s3Bucket, region, getCredentials) =
       new HeadObjectCommand({
         Bucket: s3Bucket,
         Key: s3Key,
-      }),
+      })
     );
     return true;
   } catch (error) {
@@ -92,7 +93,7 @@ export const doesObjectExist = async (s3Key, s3Bucket, region, getCredentials) =
 export const getInitialBrandingAssetUrl = (
   value: unknown,
   fallback: string,
-  options: { useCache?: boolean } = {},
+  options: { useCache?: boolean } = {}
 ): string => {
   if (options.useCache) {
     const cached = getCachedBrandingAssetUrl(value);
@@ -245,7 +246,7 @@ type ResolveBrandingAssetOptions = {
 export const resolveBrandingAssetUrl = async (
   value: unknown,
   getCredentials?: () => Promise<unknown>,
-  options: ResolveBrandingAssetOptions = {},
+  options: ResolveBrandingAssetOptions = {}
 ): Promise<string | undefined> => {
   if (!value) {
     return undefined;
@@ -285,7 +286,7 @@ export const resolveBrandingAssetUrl = async (
       location.bucket,
       inferredRegion,
       getCredentials,
-      options.expiresIn ?? 900,
+      options.expiresIn ?? 900
     );
     SIGNED_URL_CACHE.set(cacheKey, {
       url: signedUrl,
@@ -543,7 +544,7 @@ export const deleteMultipleObjectsFromS3 = async (objectKeys, s3Bucket, region, 
               key: err.Key,
               code: err.Code,
               message: err.Message,
-            })),
+            }))
           );
         }
 
@@ -563,7 +564,7 @@ export const deleteMultipleObjectsFromS3 = async (objectKeys, s3Bucket, region, 
             key,
             code: 'BATCH_ERROR',
             message: error.message,
-          })),
+          }))
         );
       }
     }
@@ -602,7 +603,7 @@ export const downloadFolderAsZip = async (
   region: string,
   getCredentials: () => Promise<unknown>,
   zipFilename?: string,
-  onProgress?: (progress: FolderDownloadProgress) => void,
+  onProgress?: (progress: FolderDownloadProgress) => void
 ): Promise<void> => {
   try {
     // Ensure folderPrefix ends with /
@@ -727,7 +728,7 @@ export const downloadMultipleFilesAsZip = async (
   region: string,
   getCredentials: () => Promise<unknown>,
   zipFilename: string = 'files.zip',
-  onProgress?: (progress: FolderDownloadProgress) => void,
+  onProgress?: (progress: FolderDownloadProgress) => void
 ): Promise<void> => {
   try {
     if (s3Keys.length === 0) {
@@ -817,7 +818,7 @@ export const listFoldersInKB = async (
   kbId: string,
   s3Bucket: string,
   region: string,
-  getCredentials: () => Promise<unknown>,
+  getCredentials: () => Promise<unknown>
 ): Promise<string[]> => {
   try {
     const credentials = await getCredentials();
@@ -892,4 +893,78 @@ export const listFoldersInKB = async (
     console.error('Error listing folders in KB:', error);
     throw error;
   }
+};
+
+// ─── Copy to Knowledge Base ─────────────────────────────────────────────────
+
+export interface CopyToKBOptions {
+  sourceKey: string;
+  destKey: string;
+  bucket: string;
+  region: string;
+  kbId: string;
+  tenantId: string;
+  uploaderSub: string;
+  uploaderEmail: string;
+  getCredentials: () => Promise<unknown>;
+}
+
+/** Server-side copy of a single file into a KB prefix, plus metadata sidecar. */
+export const copyFileToKB = async (opts: CopyToKBOptions): Promise<void> => {
+  const credentials = await opts.getCredentials();
+  const s3Client = withPRM(S3Client, { region: opts.region, credentials });
+
+  await s3Client.send(
+    new CopyObjectCommand({
+      Bucket: opts.bucket,
+      CopySource: `${opts.bucket}/${opts.sourceKey}`,
+      Key: opts.destKey,
+    })
+  );
+
+  // Write metadata sidecar (skip for Q Business company KB)
+  const preferredKb = window.sessionStorage.getItem('PREFERRED_KNOWLEDGE_BASE') || 'bedrock';
+  if (!(preferredKb === 'q' && opts.kbId === 'company')) {
+    await s3Client.send(
+      new PutObjectCommand({
+        Bucket: opts.bucket,
+        Key: `${opts.destKey}.metadata.json`,
+        Body: JSON.stringify({
+          metadataAttributes: {
+            kb_id: opts.kbId,
+            uploaded_at: new Date().toISOString(),
+            tenant_id: opts.tenantId,
+            uploader_id: opts.uploaderSub,
+            uploader_email: opts.uploaderEmail,
+          },
+        }),
+        ContentType: 'application/json',
+      })
+    );
+  }
+};
+
+export interface CopyItemsToKBProgress {
+  completed: number;
+  total: number;
+  currentFile: string;
+}
+
+/** Copy multiple files into a KB, reporting progress. */
+export const copyItemsToKB = async (
+  sourceKeys: string[],
+  destKbPrefix: string,
+  destFolder: string,
+  opts: Omit<CopyToKBOptions, 'sourceKey' | 'destKey'>,
+  onProgress?: (p: CopyItemsToKBProgress) => void
+): Promise<void> => {
+  for (let i = 0; i < sourceKeys.length; i++) {
+    const sourceKey = sourceKeys[i];
+    const fileName = sourceKey.split('/').pop() ?? sourceKey;
+    const folder = destFolder ? `${destFolder}/` : '';
+    const destKey = `${destKbPrefix}${folder}${fileName}`.replace(/\/{2,}/g, '/');
+    onProgress?.({ completed: i, total: sourceKeys.length, currentFile: fileName });
+    await copyFileToKB({ ...opts, sourceKey, destKey });
+  }
+  onProgress?.({ completed: sourceKeys.length, total: sourceKeys.length, currentFile: '' });
 };

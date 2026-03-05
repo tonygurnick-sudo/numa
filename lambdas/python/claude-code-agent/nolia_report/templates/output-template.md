@@ -5,21 +5,24 @@
 ## [AI PROCESSING INSTRUCTIONS - DO NOT OUTPUT THIS SECTION]
 
 **CRITICAL CONSTRAINTS:**
+
 - Output ONLY the content from "EVALUATION REPORT ASSESSMENT" onwards (starting at line 28)
 - Maximum 1-3 sentences per field (unless explicitly specified otherwise)
 - NO additional sections, analysis, or recommendations beyond template structure
 - NO explanatory text beyond what each section explicitly requests
-- Use ONLY facts and rules from provided knowledge base documents (Procurement-Activity-Rules.md and Global_KB_-_Evaluation_Reports.md)
+- Use ONLY facts and rules from provided knowledge base documents (Procurement-Activity-Rules.md and Global*KB*-\_Evaluation_Reports.md)
 - DO NOT use best practices, assumptions, or external knowledge
 - DO NOT make up information
 
 **OUTPUT FORMAT:**
+
 - Follow section numbering and titles exactly as shown
 - Include all subsection headers
 - Use specified status indicators: ✓ COMPLIANT / ⚠ NON-COMPLIANT / ⚠ REQUIRES REVISION
 - Use specified formatting for issue documentation
 
 **CONDITIONAL LOGIC:**
+
 - For each assessment area, use [IF ISSUES FOUND] format when issues exist
 - Use [IF NO ISSUES FOUND] format with ✓ COMPLIANT status when no issues exist
 - Do not output both - choose one based on findings
@@ -61,6 +64,7 @@
 **Total Issues Identified:** [Number]
 
 **Issue Breakdown by Category:**
+
 - Mandatory Requirement Issues (Green Cells): [Number]
 - Rated Criteria Issues (Orange Cells): [Number]
 - For Information Issues (White Cells): [Number]
@@ -80,6 +84,7 @@
 [IF ISSUES FOUND, use this format for EACH issue:]
 
 **Issue #[Number]:**
+
 - **Form Reference:** [Form 10A specific reference]
 - **Issue Description:** [Brief description - max 2 sentences]
 - **Rule Violated:** [Reference to Procurement-Activity-Rules.md with rule number]
@@ -104,6 +109,7 @@
 [IF ISSUES FOUND, use this format for EACH issue:]
 
 **Issue #[Number]:**
+
 - **Form Reference:** [Form 11A specific reference]
 - **Qualification Area:** [Which requirement]
 - **Issue Description:** [Brief description - max 2 sentences]
@@ -129,6 +135,7 @@
 [IF ISSUES FOUND, use this format for EACH issue:]
 
 **Issue #[Number]:**
+
 - **Cell Reference:** [Specific green cell location in technical specification]
 - **Requirement Description:** [What mandatory requirement]
 - **Issue Description:** [What's wrong - max 2 sentences]
@@ -145,6 +152,7 @@
 #### 3.2.2 RATED CRITERIA (Orange Cells) - Scoring
 
 **Weighting System Compliance Check:**
+
 - **Project-Specific Weighting:** [Extract from Bidding Documents ITB 40.1]
 - **World Bank Regulation Requirement:** [Reference PR2025 Article 5.50, page 37]
 - **Compliance Status:** [COMPLIANT / NON-COMPLIANT with explanation]
@@ -156,6 +164,7 @@
 [IF ISSUES FOUND, use this format for EACH issue:]
 
 **Issue #[Number]:**
+
 - **Cell Reference:** [Specific orange cell location]
 - **Criterion Description:** [What rated criterion]
 - **Issue Description:** [What's wrong with scoring - max 2 sentences]
@@ -176,6 +185,7 @@
 [IF ISSUES FOUND - e.g., white cells incorrectly used for scoring:]
 
 **Issue #[Number]:**
+
 - **Cell Reference:** [Specific white cell location]
 - **Issue Description:** [What's wrong - max 2 sentences]
 - **Required Correction:** [What must be corrected - 1 sentence]
@@ -188,9 +198,10 @@
 
 ## SECTION 4: WORLD BANK PROCUREMENT REGULATION COMPLIANCE
 
-**Source:** Global_KB_-_Evaluation_Reports.md (PR2025)
+**Source:** Global*KB*-\_Evaluation_Reports.md (PR2025)
 
 **Priority Key:**
+
 - **CRITICAL:** Non-compliance results in disqualification, exclusion, sanctions, misprocurement, or contract termination
 - **HIGH:** Requires Bank prior review/no-objection, mandatory for contract validity, or must be in Legal Agreement
 - **MEDIUM:** Mandatory timeframes, required procedural steps before proceeding, formal notifications
@@ -207,6 +218,7 @@
 [IF ISSUES FOUND, use this format for EACH issue:]
 
 **Issue #[Number]:**
+
 - **Issue Description:** [Description of World Bank requirement violation - max 2 sentences]
 - **Rule Violated:** [Reference to Global_KB_-_Evaluation_Reports.md with rule number]
 - **Document Citation:** [PR2025 citation with section and page]
@@ -272,6 +284,7 @@
 [IF ISSUES FOUND, use this format for EACH issue:]
 
 **Issue #[Number]:**
+
 - **Issue Category:** [Which assessment area above]
 - **Location:** [Where in document]
 - **Issue Description:** [What's wrong - max 2 sentences]
@@ -299,6 +312,7 @@
 
 **Final Recommendation:**
 [Paragraph 4: Select and justify ONE:
+
 - APPROVE EVALUATION AS-IS - [Brief justification]
 - REQUEST REVISION - [Brief summary of what must be corrected]
 - REJECT EVALUATION - [Brief summary of why evaluation must be redone]]

@@ -61,7 +61,7 @@ export function CreateBoardWizard({ show, onHide, onCreated }: CreateBoardWizard
   // ── Step 3: Workflow Customization ───────────────────────────────────────
   const [customStages, setCustomStages] = useState<PresetZone[] | null>(null);
   const [newStageByZone, setNewStageByZone] = useState<Record<number, { name: string; statusType: StatusType | '' }>>(
-    {},
+    {}
   );
 
   // ── Step 4: Access Control ───────────────────────────────────────────────
@@ -441,7 +441,7 @@ export function CreateBoardWizard({ show, onHide, onCreated }: CreateBoardWizard
                 checked={selectedTicketTypes.includes(tt.id)}
                 onChange={() =>
                   setSelectedTicketTypes((prev) =>
-                    prev.includes(tt.id) ? prev.filter((id) => id !== tt.id) : [...prev, tt.id],
+                    prev.includes(tt.id) ? prev.filter((id) => id !== tt.id) : [...prev, tt.id]
                   )
                 }
                 className="mb-2"
@@ -463,7 +463,7 @@ export function CreateBoardWizard({ show, onHide, onCreated }: CreateBoardWizard
                 checked={selectedTicketTypes.includes(ct.tempId)}
                 onChange={() =>
                   setSelectedTicketTypes((prev) =>
-                    prev.includes(ct.tempId) ? prev.filter((id) => id !== ct.tempId) : [...prev, ct.tempId],
+                    prev.includes(ct.tempId) ? prev.filter((id) => id !== ct.tempId) : [...prev, ct.tempId]
                   )
                 }
                 className="mb-2"

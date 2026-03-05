@@ -257,7 +257,7 @@ function generateHtml(
   exportedMessages: ExportedMessage[],
   dateStr: string,
   conversationId: string,
-  t: TFunction,
+  t: TFunction
 ): string {
   const messagesHtml = exportedMessages
     .map((msg) => {
@@ -395,7 +395,7 @@ function generatePlainText(
   exportedMessages: ExportedMessage[],
   dateStr: string,
   conversationId: string,
-  t: TFunction,
+  t: TFunction
 ): string {
   const title = t('workspace.export.title');
   const exportedOn = t('workspace.export.exportedOn', { date: dateStr });

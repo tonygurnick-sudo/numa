@@ -80,7 +80,7 @@ function getStatusVariant(status: string): string {
 function getDataSourceTypeDisplay(
   type: string,
   isWebCrawler: boolean | undefined,
-  labels: Record<string, string>,
+  labels: Record<string, string>
 ): string {
   if (isWebCrawler) return labels.webCrawler;
   if (!type) return labels.s3;

@@ -43,7 +43,7 @@ export const CalendarToolbar: React.FC<CalendarToolbarProps> = ({
       day: { label: t('scheduling.calendar.views.day'), icon: 'bi bi-calendar-date' },
       agenda: { label: t('scheduling.calendar.views.agenda'), icon: 'bi bi-list-ul' },
     }),
-    [t],
+    [t]
   );
   const rangeLabel = useMemo(() => {
     if (currentView === 'month') {

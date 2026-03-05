@@ -28,15 +28,15 @@ The Lambda accepts three formats of events:
 
 ```json
 {
-    "to": ["recipient@example.com"],
-    "subject": "Email Subject",
-    "body_html": "<p>HTML body</p>",
-    "body_text": "Plain text body",
-    "from": "sender@example.com",  // Required
-    "cc": ["cc@example.com"],  // Optional
-    "bcc": ["bcc@example.com"],  // Optional
-    "reply_to": ["reply@example.com"],  // Optional
-    "configuration_set": "ses-config-set"  // Optional, falls back to SES_CONFIGURATION_SET
+  "to": ["recipient@example.com"],
+  "subject": "Email Subject",
+  "body_html": "<p>HTML body</p>",
+  "body_text": "Plain text body",
+  "from": "sender@example.com", // Required
+  "cc": ["cc@example.com"], // Optional
+  "bcc": ["bcc@example.com"], // Optional
+  "reply_to": ["reply@example.com"], // Optional
+  "configuration_set": "ses-config-set" // Optional, falls back to SES_CONFIGURATION_SET
 }
 ```
 
@@ -46,22 +46,22 @@ The Lambda accepts three formats of events:
 
 ```json
 {
-    "to": ["recipient@example.com"],
-    "subject": "Email Subject",
-    "body_html": "<p>HTML body</p>",
-    "body_text": "Plain text body",
-    "from": "sender@example.com",  // Required
-    "cc": ["cc@example.com"],  // Optional
-    "bcc": ["bcc@example.com"],  // Optional
-    "reply_to": ["reply@example.com"],  // Optional
-    "configuration_set": "ses-config-set",  // Optional
-    "attachments": [
-        {
-            "bucket": "my-bucket",
-            "key": "path/to/attachment.pdf",
-            "filename": "report.pdf"  // Optional, defaults to the file name in the key
-        }
-    ]
+  "to": ["recipient@example.com"],
+  "subject": "Email Subject",
+  "body_html": "<p>HTML body</p>",
+  "body_text": "Plain text body",
+  "from": "sender@example.com", // Required
+  "cc": ["cc@example.com"], // Optional
+  "bcc": ["bcc@example.com"], // Optional
+  "reply_to": ["reply@example.com"], // Optional
+  "configuration_set": "ses-config-set", // Optional
+  "attachments": [
+    {
+      "bucket": "my-bucket",
+      "key": "path/to/attachment.pdf",
+      "filename": "report.pdf" // Optional, defaults to the file name in the key
+    }
+  ]
 }
 ```
 
@@ -69,18 +69,18 @@ The Lambda accepts three formats of events:
 
 ```json
 {
-    "to": ["recipient@example.com"],
-    "subject": "Email Subject",
-    "body_html": "<p>HTML body</p>",
-    "body_text": "Plain text body",
-    "from": "sender@example.com",  // Required
-    "attachments": [
-        {
-            "content": "Base64 encoded or string content",
-            "filename": "document.txt",
-            "content_type": "text/plain"  // Optional, defaults to "application/octet-stream"
-        }
-    ]
+  "to": ["recipient@example.com"],
+  "subject": "Email Subject",
+  "body_html": "<p>HTML body</p>",
+  "body_text": "Plain text body",
+  "from": "sender@example.com", // Required
+  "attachments": [
+    {
+      "content": "Base64 encoded or string content",
+      "filename": "document.txt",
+      "content_type": "text/plain" // Optional, defaults to "application/octet-stream"
+    }
+  ]
 }
 ```
 
@@ -88,7 +88,7 @@ The Lambda accepts three formats of events:
 
 ```json
 {
-    "email_data_s3_key": "path/to/email/data.json"  // S3 key containing complete email configuration
+  "email_data_s3_key": "path/to/email/data.json" // S3 key containing complete email configuration
 }
 ```
 
@@ -140,7 +140,6 @@ This Lambda depends on the following packages:
 - AWS Lambda Powertools
 - Internal helpers library
 - Internal s3_helpers library
-
 
 ## Integration Examples
 

@@ -40,7 +40,7 @@ async function getCurrentQuota(awsClientConfig: AWSClientConfig): Promise<number
       new GetServiceQuotaCommand({
         ServiceCode: 'bedrock',
         QuotaCode: CLAUDE_QUOTA_CODE,
-      }),
+      })
     );
     return response.Quota?.Value ?? 0;
   } catch (error) {
@@ -65,7 +65,7 @@ async function findBedrockCases(awsClientConfig: AWSClientConfig, clientName: st
       response.cases?.filter(
         (c) =>
           c.subject?.includes(`Bedrock Claude 3.5 Sonnet Quota Increase Request for ${clientName}`) &&
-          c.serviceCode === 'service-bedrock',
+          c.serviceCode === 'service-bedrock'
       ) ?? []
     );
   } catch (error) {
@@ -255,7 +255,7 @@ if (import.meta.filename === process?.argv[1]) {
         console.log(`==========================================`);
         console.log(`Total clients: ${summary.totalClients}`);
         console.log(
-          `Successfully processed: ${summary.processedClients - summary.errorClients}/${summary.totalClients}`,
+          `Successfully processed: ${summary.processedClients - summary.errorClients}/${summary.totalClients}`
         );
         console.log(`Clients with sufficient quota: ${summary.clientsWithSufficientQuota}/${summary.totalClients}`);
         console.log(`Clients with active cases: ${summary.clientsWithCases}/${summary.totalClients}`);
@@ -267,12 +267,12 @@ if (import.meta.filename === process?.argv[1]) {
 
         if (summary.totalClients - summary.clientsWithSufficientQuota > 0) {
           console.log(
-            `\nClients needing quota increase (${summary.totalClients - summary.clientsWithSufficientQuota}):`,
+            `\nClients needing quota increase (${summary.totalClients - summary.clientsWithSufficientQuota}):`
           );
           report.results
             .filter((r) => r.sufficientQuota === '❌')
             .forEach((r) =>
-              console.log(`- ${r.clientName}: Current quota ${r.currentQuota}, needed ${r.requiredQuota}`),
+              console.log(`- ${r.clientName}: Current quota ${r.currentQuota}, needed ${r.requiredQuota}`)
             );
         }
       })

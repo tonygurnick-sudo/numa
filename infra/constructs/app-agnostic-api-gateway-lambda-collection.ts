@@ -205,6 +205,20 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
         },
         {
           effect: 'Allow',
+          actions: ['s3:GetObject', 's3:PutObject', 's3:DeleteObject'],
+          resources: [
+            `${props.dataBucketArn}/files/*`,
+            `${props.dataBucketArn}/temp-pdf/*`,
+            `${props.dataBucketArn}/shared/*`,
+          ],
+        },
+        {
+          effect: 'Allow',
+          actions: ['s3:ListBucket'],
+          resources: [props.dataBucketArn],
+        },
+        {
+          effect: 'Allow',
           actions: ['bedrock:InvokeModel'],
           resources: ['arn:aws:bedrock:*::foundation-model/*', 'arn:aws:bedrock:*:*:inference-profile/*'],
         },
@@ -398,6 +412,37 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
       environment: adminDataConnectorEnv,
       additionalPolicyStatements: adminDataConnectorPolicy,
       route: { verb: 'PUT', path: 'settings/data-connectors/{connector}' },
+    });
+
+    // Admin Capabilities API (GET list, PUT single)
+    const adminCapabilitiesEnv = {
+      CAPABILITIES_TABLE_NAME: props.capabilitiesTableName,
+    } as Record<string, string>;
+    const adminCapabilitiesPolicy = [
+      {
+        effect: 'Allow',
+        actions: ['dynamodb:Scan', 'dynamodb:PutItem'],
+        resources: [`arn:aws:dynamodb:*:*:table/${props.capabilitiesTableName}`],
+      },
+    ];
+
+    this.addLambdaFunction(this, 'admin-capabilities-get', {
+      addAuthorizer: true,
+      lambdaDirectory: 'node/admin-capabilities',
+      runtime: 'nodejs22.x',
+      handler: 'index.handler',
+      environment: adminCapabilitiesEnv,
+      additionalPolicyStatements: adminCapabilitiesPolicy,
+      route: { verb: 'GET', path: 'capabilities' },
+    });
+    this.addLambdaFunction(this, 'admin-capabilities-put', {
+      addAuthorizer: true,
+      lambdaDirectory: 'node/admin-capabilities',
+      runtime: 'nodejs22.x',
+      handler: 'index.handler',
+      environment: adminCapabilitiesEnv,
+      additionalPolicyStatements: adminCapabilitiesPolicy,
+      route: { verb: 'PUT', path: 'capabilities/{flag}' },
     });
 
     // Admin Agents Settings API (GET/PUT policy)
@@ -652,6 +697,136 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
       route: { verb: 'DELETE', path: 'data-connectors/sync-configs/{id}' },
     });
 
+    // Vault Secrets API (per-user secret storage with Secrets Manager backend)
+    const vaultEnv = {
+      CLIENT_NAME: props.clientName,
+      VAULT_AUDIT_LOG_TABLE_NAME: props.vaultAuditLogTableName,
+      VAULT_SECRETS_PREFIX: `${props.clientName}/vault`,
+    } as Record<string, string>;
+
+    const vaultPolicy = [
+      // Audit log table access (keep existing)
+      {
+        effect: 'Allow',
+        actions: ['dynamodb:PutItem', 'dynamodb:Query'],
+        resources: [`arn:aws:dynamodb:*:*:table/${props.vaultAuditLogTableName}`],
+      },
+      // Consolidated vault secrets in Secrets Manager
+      {
+        effect: 'Allow',
+        actions: [
+          'secretsmanager:CreateSecret',
+          'secretsmanager:PutSecretValue',
+          'secretsmanager:GetSecretValue',
+          'secretsmanager:UpdateSecret',
+          'secretsmanager:DeleteSecret',
+          'secretsmanager:DescribeSecret',
+          'secretsmanager:ListSecrets',
+        ],
+        resources: [
+          `arn:aws:secretsmanager:*:*:secret:${props.clientName}/vault/users/*`,
+          `arn:aws:secretsmanager:*:*:secret:${props.clientName}/vault/company*`,
+        ],
+      },
+    ];
+
+    // Consolidated vault Lambda functions with increased timeout for large vault operations
+    const vaultLambdaConfig = {
+      addAuthorizer: true,
+      lambdaDirectory: 'python/vault-secrets',
+      handler: 'lambda_function.handler',
+      environment: vaultEnv,
+      additionalPolicyStatements: vaultPolicy,
+      timeout: 300, // 5 minutes for large vault operations with compression
+    };
+
+    this.addLambdaFunction(this, 'vault-secrets-list', {
+      ...vaultLambdaConfig,
+      route: { verb: 'GET', path: 'vault/secrets' },
+    });
+
+    this.addLambdaFunction(this, 'vault-secrets-get', {
+      ...vaultLambdaConfig,
+      route: { verb: 'GET', path: 'vault/secrets/{id}' },
+    });
+
+    this.addLambdaFunction(this, 'vault-secrets-create', {
+      ...vaultLambdaConfig,
+      route: { verb: 'POST', path: 'vault/secrets' },
+    });
+
+    this.addLambdaFunction(this, 'vault-secrets-update', {
+      ...vaultLambdaConfig,
+      route: { verb: 'PUT', path: 'vault/secrets/{id}' },
+    });
+
+    this.addLambdaFunction(this, 'vault-secrets-delete', {
+      ...vaultLambdaConfig,
+      route: { verb: 'DELETE', path: 'vault/secrets/{id}' },
+    });
+
+    this.addLambdaFunction(this, 'vault-categories-list', {
+      ...vaultLambdaConfig,
+      route: { verb: 'GET', path: 'vault/categories' },
+    });
+
+    this.addLambdaFunction(this, 'vault-audit-log', {
+      ...vaultLambdaConfig,
+      route: { verb: 'GET', path: 'vault/audit-log' },
+    });
+
+    // Company-level vault secrets (OAuth client configs, shared credentials, templates)
+    this.addLambdaFunction(this, 'vault-company-secrets-list', {
+      ...vaultLambdaConfig,
+      route: { verb: 'GET', path: 'vault/company-secrets' },
+    });
+
+    this.addLambdaFunction(this, 'vault-company-secrets-get', {
+      ...vaultLambdaConfig,
+      route: { verb: 'GET', path: 'vault/company-secrets/{id}' },
+    });
+
+    this.addLambdaFunction(this, 'vault-company-secrets-create', {
+      ...vaultLambdaConfig,
+      route: { verb: 'POST', path: 'vault/company-secrets' },
+    });
+
+    this.addLambdaFunction(this, 'vault-company-secrets-update', {
+      ...vaultLambdaConfig,
+      route: { verb: 'PUT', path: 'vault/company-secrets/{id}' },
+    });
+
+    this.addLambdaFunction(this, 'vault-company-secrets-delete', {
+      ...vaultLambdaConfig,
+      route: { verb: 'DELETE', path: 'vault/company-secrets/{id}' },
+    });
+
+    // Template management endpoints
+    this.addLambdaFunction(this, 'vault-templates-list', {
+      ...vaultLambdaConfig,
+      route: { verb: 'GET', path: 'vault/templates' },
+    });
+
+    this.addLambdaFunction(this, 'vault-templates-get', {
+      ...vaultLambdaConfig,
+      route: { verb: 'GET', path: 'vault/templates/{id}' },
+    });
+
+    this.addLambdaFunction(this, 'vault-templates-create', {
+      ...vaultLambdaConfig,
+      route: { verb: 'POST', path: 'vault/templates' },
+    });
+
+    this.addLambdaFunction(this, 'vault-templates-delete', {
+      ...vaultLambdaConfig,
+      route: { verb: 'DELETE', path: 'vault/templates/{id}' },
+    });
+
+    this.addLambdaFunction(this, 'vault-templates-stats', {
+      ...vaultLambdaConfig,
+      route: { verb: 'GET', path: 'vault/templates/stats' },
+    });
+
     // Agents API (list/create/update/delete/copy)
     const agentsEnv = {
       CLIENT_NAME: props.clientName,
@@ -723,9 +898,7 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
           CLIENT_NAME: props.clientName,
           REGION: props.region,
           FILES_TABLE_NAME: props.filesTableName,
-          OUTPUTS_BUCKET_NAME: props.outputsBucketName,
-          EXTRACTION_LAMBDA_ARN: this.extractContentLambda.arn,
-          MAX_CONCURRENT_EXTRACTIONS: '5',
+          DATA_BUCKET_NAME: props.dataBucketName,
         },
         additionalPolicyStatements: [
           {
@@ -742,22 +915,17 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
           {
             effect: 'Allow',
             actions: ['s3:PutObject', 's3:DeleteObject'],
-            resources: [`${props.outputsBucketArn}/files/*`],
+            resources: [`${props.dataBucketArn}/files/*`],
           },
           {
             effect: 'Allow',
             actions: ['s3:GetObject'],
-            resources: [`${props.outputsBucketArn}/*`],
+            resources: [`${props.dataBucketArn}/*`],
           },
           {
             effect: 'Allow',
             actions: ['s3:ListBucket'],
-            resources: [props.outputsBucketArn],
-          },
-          {
-            effect: 'Allow',
-            actions: ['lambda:InvokeFunction'],
-            resources: [this.extractContentLambda.arn],
+            resources: [props.dataBucketArn],
           },
         ],
         route: [
@@ -1117,13 +1285,17 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
   }
 }
 
-export interface AppAgnosticApiGatewayLambdaCollectionProps
-  extends Omit<ApiGatewayLambdaCollectionProps, 'apiGatewayId' | 'apiGatewayAuthorizerId'> {
+export interface AppAgnosticApiGatewayLambdaCollectionProps extends Omit<
+  ApiGatewayLambdaCollectionProps,
+  'apiGatewayId' | 'apiGatewayAuthorizerId'
+> {
   chatHistoryTableName: string;
   agentSchedulesTableName: string;
   notificationsTableName: string;
   clientName: string;
   dataBucketName: string;
+  /** Data bucket ARN for Files storage and IAM policies. */
+  dataBucketArn: string;
   logGroup: CloudwatchLogGroup;
   region: string;
   userPoolClientId: string;
@@ -1156,6 +1328,8 @@ export interface AppAgnosticApiGatewayLambdaCollectionProps
   dataConnectorsTableName: string;
   /** Data connector settings table name for admin feature flags. */
   dataConnectorsSettingsTableName: string;
+  /** Capabilities table name for admin feature flag overrides. */
+  capabilitiesTableName: string;
   /** Data connector selection configs table name. */
   dataConnectorsSyncConfigsTableName: string;
   /** Chat agent function URL for internal invocations (V1 — retained for other callers). */
@@ -1174,4 +1348,8 @@ export interface AppAgnosticApiGatewayLambdaCollectionProps
   filesTableName?: string;
   /** Files table ARN for IAM policy. */
   filesTableArn?: string;
+  /** Company bucket ARN for proxy file cross-bucket access. */
+  companyBucketArn?: string;
+  /** Vault audit log table name. */
+  vaultAuditLogTableName: string;
 }

@@ -25,12 +25,6 @@
     "incremental": true,
     "skipLibCheck": true
   },
-  "include": [
-    "**/*.ts"
-  ],
-  "exclude": [
-    "node_modules",
-    "dist",
-    "build"
-  ]
+  "include": ["**/*.ts"],
+  "exclude": ["node_modules", "dist", "build"]
 }

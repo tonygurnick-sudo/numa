@@ -159,7 +159,7 @@ function isBashTransient(cmd: string): boolean {
  */
 export function getToolCategoryAndIcon(
   toolName: string,
-  input: unknown,
+  input: unknown
 ): { category: ToolCategory; iconName?: string } {
   // Handle Skill tool - check skill name for icon
   if (toolName === 'Skill') {
@@ -289,7 +289,7 @@ export const INTEGRATION_MCP_TOOLS = new Set([
  */
 export function formatIntegrationToolLabel(
   toolName: string,
-  input: Record<string, unknown>,
+  input: Record<string, unknown>
 ): { label: string; actionName: string; description: string; integrationToolName: string } | null {
   if (toolName === 'mcp__integrations__run_action') {
     const actionKey = (input.action_key as string) || '';
@@ -514,7 +514,7 @@ export function createInitialToolSegment(toolName: string, toolUseId: string): W
 export function updateSegmentWithInput(
   segment: WorkspaceChatSegment,
   toolName: string,
-  input: unknown,
+  input: unknown
 ): WorkspaceChatSegment {
   const inputObj = input && typeof input === 'object' ? (input as Record<string, unknown>) : {};
 
@@ -614,7 +614,7 @@ export function updateSegmentWithInput(
  */
 export function createWorkspaceChatMessageHelpers(
   setMessages: (updater: (prev: WorkspaceChatMessage[]) => WorkspaceChatMessage[]) => void,
-  setButtonStatus: (status: 'idle' | 'loading' | 'streaming') => void,
+  setButtonStatus: (status: 'idle' | 'loading' | 'streaming') => void
 ): WorkspaceChatMessageHelpers {
   return { setMessages, setButtonStatus };
 }
@@ -738,7 +738,7 @@ function addInlineToolSegment(
   toolUseId: string,
   toolName: string,
   displayText: string,
-  filePath?: string,
+  filePath?: string
 ): void {
   helpers.setMessages((prev) => {
     const updated = ensureAssistantMessage(prev);
@@ -768,7 +768,7 @@ function addInlineToolSegment(
 function setApprovalDecision(
   helpers: WorkspaceChatMessageHelpers,
   toolUseId: string,
-  decision: 'approved' | 'denied' | 'timeout' | 'execution_timeout',
+  decision: 'approved' | 'denied' | 'timeout' | 'execution_timeout'
 ): void {
   helpers.setMessages((prev) => {
     const updated = [...prev];
@@ -776,7 +776,7 @@ function setApprovalDecision(
       const msg = updated[i];
       if (msg.role !== 'assistant' || !msg.segments) continue;
       const segIdx = msg.segments.findIndex(
-        (s) => s.kind === 'inline_tool' && (s as WorkspaceChatInlineToolSegment).toolUseId === toolUseId,
+        (s) => s.kind === 'inline_tool' && (s as WorkspaceChatInlineToolSegment).toolUseId === toolUseId
       );
       if (segIdx >= 0) {
         const newMsg = { ...msg, segments: [...msg.segments] };
@@ -805,7 +805,7 @@ function completeInlineTool(helpers: WorkspaceChatMessageHelpers, toolUseId: str
     const segments = [...(lastMsg.segments || [])] as WorkspaceChatSegment[];
 
     const idx = segments.findIndex(
-      (s) => s.kind === 'inline_tool' && (s as WorkspaceChatInlineToolSegment).toolUseId === toolUseId,
+      (s) => s.kind === 'inline_tool' && (s as WorkspaceChatInlineToolSegment).toolUseId === toolUseId
     );
 
     if (idx >= 0) {
@@ -865,7 +865,7 @@ function addSubagentEvent(helpers: WorkspaceChatMessageHelpers, parentToolUseId:
     const segments = [...(lastMsg.segments || [])] as WorkspaceChatSegment[];
 
     const idx = segments.findIndex(
-      (s) => s.kind === 'subagent' && (s as WorkspaceChatSubagentSegment).parentToolUseId === parentToolUseId,
+      (s) => s.kind === 'subagent' && (s as WorkspaceChatSubagentSegment).parentToolUseId === parentToolUseId
     );
 
     if (idx >= 0) {
@@ -894,7 +894,7 @@ function completeSubagent(helpers: WorkspaceChatMessageHelpers, parentToolUseId:
     const segments = [...(lastMsg.segments || [])] as WorkspaceChatSegment[];
 
     const idx = segments.findIndex(
-      (s) => s.kind === 'subagent' && (s as WorkspaceChatSubagentSegment).parentToolUseId === parentToolUseId,
+      (s) => s.kind === 'subagent' && (s as WorkspaceChatSubagentSegment).parentToolUseId === parentToolUseId
     );
 
     if (idx >= 0) {
@@ -933,7 +933,7 @@ function addTodoSegment(helpers: WorkspaceChatMessageHelpers, toolUseId: string,
         updated[i] = {
           ...msg,
           segments: msg.segments.map((s) =>
-            s.kind === 'todo' && !(s as WorkspaceChatTodoSegment).isComplete ? { ...s, isComplete: true } : s,
+            s.kind === 'todo' && !(s as WorkspaceChatTodoSegment).isComplete ? { ...s, isComplete: true } : s
           ),
         };
       }
@@ -945,7 +945,7 @@ function addTodoSegment(helpers: WorkspaceChatMessageHelpers, toolUseId: string,
 
     // Find existing todo with the same toolUseId to update, or add a new one
     const existingIdx = segments.findIndex(
-      (s) => s.kind === 'todo' && (s as WorkspaceChatTodoSegment).toolUseId === toolUseId,
+      (s) => s.kind === 'todo' && (s as WorkspaceChatTodoSegment).toolUseId === toolUseId
     );
     const newTodo: WorkspaceChatTodoSegment = {
       kind: 'todo',
@@ -1030,7 +1030,7 @@ function addCompactionSegment(helpers: WorkspaceChatMessageHelpers): void {
  */
 function updateCompactionMetadata(
   helpers: WorkspaceChatMessageHelpers,
-  metadata: { preTokens?: number; trigger?: 'auto' | 'manual' },
+  metadata: { preTokens?: number; trigger?: 'auto' | 'manual' }
 ): void {
   helpers.setMessages((prev) => {
     if (prev.length === 0) return prev;
@@ -1129,7 +1129,7 @@ function completeToolCard(
   helpers: WorkspaceChatMessageHelpers,
   toolUseId: string,
   result: unknown,
-  isError = false,
+  isError = false
 ): void {
   helpers.setMessages((prev) => {
     if (prev.length === 0) return prev;
@@ -1139,7 +1139,7 @@ function completeToolCard(
     const segments = [...(lastMsg.segments || [])] as WorkspaceChatSegment[];
 
     const idx = segments.findIndex(
-      (s) => s.kind === 'tool_card' && (s as WorkspaceChatToolCardSegment).toolUseId === toolUseId,
+      (s) => s.kind === 'tool_card' && (s as WorkspaceChatToolCardSegment).toolUseId === toolUseId
     );
 
     if (idx >= 0) {
@@ -1169,7 +1169,7 @@ function handleToolUseBlock(
   block: SDKToolUseBlock,
   parentToolUseId: string | null,
   context: SDKEventContext,
-  helpers: WorkspaceChatMessageHelpers,
+  helpers: WorkspaceChatMessageHelpers
 ): void {
   const { id, name, input } = block;
 
@@ -1258,7 +1258,7 @@ function handleToolUseBlock(
 function handleToolResultBlock(
   block: SDKToolResultBlock,
   context: SDKEventContext,
-  helpers: WorkspaceChatMessageHelpers,
+  helpers: WorkspaceChatMessageHelpers
 ): void {
   const { tool_use_id, is_error } = block;
 
@@ -1322,7 +1322,7 @@ function handleToolResultBlock(
 function handleSystemEvent(
   event: SDKSystemEvent,
   context: SDKEventContext,
-  helpers: WorkspaceChatMessageHelpers,
+  helpers: WorkspaceChatMessageHelpers
 ): void {
   if (event.subtype === 'init' && event.data?.session_id) {
     context.sessionId = event.data.session_id as string;
@@ -1367,7 +1367,7 @@ function handleSystemEvent(
 function handleAssistantEvent(
   event: SDKAssistantEvent,
   context: SDKEventContext,
-  helpers: WorkspaceChatMessageHelpers,
+  helpers: WorkspaceChatMessageHelpers
 ): void {
   const messageId = event.message.id;
   const content = event.message.content;
@@ -1416,7 +1416,7 @@ function handleAssistantEvent(
 function handleResultEvent(
   event: SDKResultEvent,
   context: SDKEventContext,
-  helpers: WorkspaceChatMessageHelpers,
+  helpers: WorkspaceChatMessageHelpers
 ): void {
   // Finalize all segments
   helpers.setMessages((prev) => {
@@ -1501,7 +1501,7 @@ function handleToolApprovalEvent(event: SDKToolApprovalEvent, helpers: Workspace
       const msg = updated[i];
       if (msg.role !== 'assistant' || !msg.segments) continue;
       const segIdx = msg.segments.findIndex(
-        (s) => s.kind === 'inline_tool' && (s as WorkspaceChatInlineToolSegment).toolUseId === event.tool_use_id,
+        (s) => s.kind === 'inline_tool' && (s as WorkspaceChatInlineToolSegment).toolUseId === event.tool_use_id
       );
       if (segIdx >= 0) {
         const newMsg = { ...msg, segments: [...msg.segments] };
@@ -1709,7 +1709,7 @@ export function handleSDKStreamComplete(context: SDKEventContext, helpers: Works
 export function handleSDKStreamError(
   error: Error,
   _context: SDKEventContext,
-  helpers: WorkspaceChatMessageHelpers,
+  helpers: WorkspaceChatMessageHelpers
 ): void {
   console.error('[WorkspaceChatSDK] Stream error:', error);
 
@@ -1858,7 +1858,7 @@ export function parseRawTraceToMessages(traceContent: string): WorkspaceChatMess
     const isSkillToolUseEvent =
       event.type === 'assistant' &&
       ((event as SDKAssistantEvent).message?.content ?? []).some(
-        (b: SDKContentBlock) => isSDKToolUseBlock(b) && b.name === 'Skill',
+        (b: SDKContentBlock) => isSDKToolUseBlock(b) && b.name === 'Skill'
       );
 
     // Exit Skill context only when we see an assistant message with actual text content
@@ -1869,7 +1869,7 @@ export function parseRawTraceToMessages(traceContent: string): WorkspaceChatMess
         (event as unknown as { content?: SDKContentBlock[] }).content ??
         [];
       const hasTextContent = (assistantContent as SDKContentBlock[]).some(
-        (b) => b.type === 'text' && (b as { text?: string }).text?.trim(),
+        (b) => b.type === 'text' && (b as { text?: string }).text?.trim()
       );
       if (hasTextContent) {
         activeSkillIds.clear();
@@ -1958,7 +1958,7 @@ export function parseRawTraceToMessages(traceContent: string): WorkspaceChatMess
       // Check if this is a tool_result message (skip it, don't break assistant grouping)
       if (Array.isArray(content)) {
         const hasOnlyToolResults = content.every(
-          (c) => typeof c === 'object' && c !== null && (c as { type?: string }).type === 'tool_result',
+          (c) => typeof c === 'object' && c !== null && (c as { type?: string }).type === 'tool_result'
         );
         if (hasOnlyToolResults) continue; // Skip tool result messages
       }
@@ -2181,7 +2181,7 @@ function processAssistantContent(
   context: SDKEventContext,
   message: WorkspaceChatMessage,
   toolResults: Map<string, { content: unknown; isError: boolean }>,
-  subagentEvents: Map<string, SDKEvent[]>,
+  subagentEvents: Map<string, SDKEvent[]>
 ): void {
   // Handle both streaming format (event.message.content) and trace format (event.content)
   const eventMessage = (event as SDKAssistantEvent).message;
@@ -2193,7 +2193,7 @@ function processAssistantContent(
     if (isSDKTextBlock(block)) {
       // Check if we already have this text
       const existingTextIdx = segments.findIndex(
-        (s) => s.kind === 'text' && (s as WorkspaceChatTextSegment).text === block.text,
+        (s) => s.kind === 'text' && (s as WorkspaceChatTextSegment).text === block.text
       );
       if (existingTextIdx === -1 && block.text.trim()) {
         segments.push({

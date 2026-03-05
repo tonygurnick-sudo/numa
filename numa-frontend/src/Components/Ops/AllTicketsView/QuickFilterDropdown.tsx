@@ -46,7 +46,7 @@ export function QuickFilterDropdown({
       const next = selected.includes(value) ? selected.filter((v) => v !== value) : [...selected, value];
       onChange(next);
     },
-    [selected, onChange],
+    [selected, onChange]
   );
 
   return (

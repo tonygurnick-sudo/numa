@@ -112,7 +112,7 @@ const buildCronExpression = (frequency: FrequencyType, config: CronBuilderConfig
               return `${dow}L`;
             }
             return `${dow}#${number}`;
-          }),
+          })
         );
         const daySegment = combos.join(',');
         return `cron(${minute} ${hour} ? * ${daySegment || 'MON'} *)`;
@@ -352,7 +352,7 @@ export const AgentScheduleModal = ({
       dailyInterval,
       dailyAnchorDay,
       monthlyAnchorMonth,
-    ],
+    ]
   );
 
   const handleSubmit = async (e: React.FormEvent) => {

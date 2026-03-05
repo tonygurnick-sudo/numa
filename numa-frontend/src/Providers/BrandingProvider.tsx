@@ -101,7 +101,7 @@ export const BrandingProvider: React.FC<{ children: ReactNode }> = ({ children }
   return React.createElement(
     BrandingContext.Provider,
     { value: contextValue },
-    initialized ? children : loadingPlaceholder,
+    initialized ? children : loadingPlaceholder
   );
 };
 

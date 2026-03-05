@@ -23,6 +23,7 @@ The proxy validates that calling accounts are explicitly authorized:
 - **Account Status**: Only accounts with `ACTIVE` status are permitted access
 
 **Security Features**:
+
 - **External User ID Format**: Must contain underscore separator (tenant_userid format)
 - **Cross-tenant Protection**: Security mapping prevents one account from accessing another account's external user IDs
 - **First-request Registration**: New security mappings created automatically on first valid request
@@ -42,13 +43,14 @@ The proxy validates that calling accounts are explicitly authorized:
   "external_user_id": "arcanum_tenant_user123",
   "sts_proof_url": "https://sts.us-east-1.amazonaws.com/?Action=GetCallerIdentity&...",
   "parameters": {
-    "app_name": "slack",       // Required for create_mcp_client; optional for disconnect_integration
-    "account_id": "pa_abc123"  // Optional for disconnect_integration (delete a specific account)
+    "app_name": "slack", // Required for create_mcp_client; optional for disconnect_integration
+    "account_id": "pa_abc123" // Optional for disconnect_integration (delete a specific account)
   }
 }
 ```
 
 **Required Fields:**
+
 - `operation`: One of the supported operations
 - `external_user_id`: Must follow format `tenant_userid` (contain underscore separator)
 - `sts_proof_url`: Fresh STS presigned GetCallerIdentity URL (max 2 minutes old, max 60 seconds expiration)
@@ -75,6 +77,7 @@ The proxy validates that calling accounts are explicitly authorized:
 ### 1. Generate Connect Token
 
 **Request:**
+
 ```json
 {
   "operation": "generate_connect_token",
@@ -84,6 +87,7 @@ The proxy validates that calling accounts are explicitly authorized:
 ```
 
 **Response:**
+
 ```json
 {
   "statusCode": 200,
@@ -103,6 +107,7 @@ The proxy validates that calling accounts are explicitly authorized:
 ### 2. Get Integration Status
 
 **Request:**
+
 ```json
 {
   "operation": "get_integration_status",
@@ -112,6 +117,7 @@ The proxy validates that calling accounts are explicitly authorized:
 ```
 
 **Response:**
+
 ```json
 {
   "statusCode": 200,
@@ -152,6 +158,7 @@ The proxy validates that calling accounts are explicitly authorized:
 ### 3. Create MCP Client
 
 **Request:**
+
 ```json
 {
   "operation": "create_mcp_client",
@@ -227,6 +234,7 @@ Response (idempotent if none found):
 ```
 
 **Response:**
+
 ```json
 {
   "statusCode": 200,
@@ -250,6 +258,7 @@ Response (idempotent if none found):
 ## Error Responses
 
 ### Security Validation Error (403)
+
 ```json
 {
   "statusCode": 403,
@@ -261,6 +270,7 @@ Response (idempotent if none found):
 ```
 
 ### Invalid Request (400)
+
 ```json
 {
   "statusCode": 400,
@@ -272,6 +282,7 @@ Response (idempotent if none found):
 ```
 
 ### Internal Server Error (500)
+
 ```json
 {
   "statusCode": 500,
@@ -285,12 +296,14 @@ Response (idempotent if none found):
 ## Environment Variables
 
 **Required:**
+
 - `SECURITY_MAPPING_TABLE` - DynamoDB table name for security mappings
 - `ALLOWED_ACCOUNTS_TABLE` - DynamoDB table name for allowed accounts
 - `PIPEDREAM_SECRET_ARN` - ARN of Secrets Manager secret containing Pipedream credentials
 - `SUPPORTED_INTEGRATIONS` - JSON array of supported integration app names (e.g., `["slack", "gmail", "notion"]`)
 
 **Optional:**
+
 - `LOG_LEVEL` - Logging level (INFO, DEBUG, etc.)
 - `ENVIRONMENT` - Environment name for logging context
 
@@ -298,8 +311,8 @@ Response (idempotent if none found):
 
 ```json
 {
-  "external_user_id": "arcanum_tenant_user123",  // Partition Key
-  "account_id": "123456789012",                   // AWS Account ID
+  "external_user_id": "arcanum_tenant_user123", // Partition Key
+  "account_id": "123456789012", // AWS Account ID
   "role_name": "numa-tenant-lambda-execution-role",
   "created_at": "2025-08-13T10:00:00Z",
   "last_accessed": "2025-08-13T10:30:00Z"

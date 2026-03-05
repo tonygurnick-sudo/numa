@@ -45,8 +45,8 @@ export const JobStatusProvider = ({ children }) => {
             jobsApi.getJobsByAppId(appId).catch((error) => {
               console.warn(`Failed to fetch jobs for app ${appId}:`, error);
               return { items: [] }; // Return empty items on error
-            }),
-          ),
+            })
+          )
       );
 
       const sortedJobs = jobResults

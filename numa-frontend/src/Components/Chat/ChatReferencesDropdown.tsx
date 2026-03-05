@@ -118,7 +118,7 @@ const ChatReferencesDropdown = ({
             displayName: ref,
             isS3: false,
           };
-        }),
+        })
       );
       const finalRefs = processed.filter(Boolean);
       console.log('[ChatReferencesDropdown] Processed references:', finalRefs);

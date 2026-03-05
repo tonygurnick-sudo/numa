@@ -143,7 +143,7 @@ function getStatusDisplayText(
     indexing: string;
     crawling: string;
     pending: string;
-  },
+  }
 ): string {
   if (status === 'indexed') return labels.indexed;
   if (status === 'failed') return labels.failed;
@@ -206,7 +206,7 @@ function filterTree(node: TreeNode, searchTerm: string): TreeNode {
   filtered.files = node.files.filter((f) =>
     safeDecodeURIComponent(f.Key.split('/').pop() || '')
       .toLowerCase()
-      .includes(lower),
+      .includes(lower)
   );
 
   for (const [folderName, folderNode] of Object.entries(node.children)) {
@@ -226,7 +226,7 @@ function filterTree(node: TreeNode, searchTerm: string): TreeNode {
 function collectFoldersToExpand(
   node: TreeNode,
   currentPath: string = '',
-  foldersToExpand: Set<string> = new Set(),
+  foldersToExpand: Set<string> = new Set()
 ): Set<string> {
   for (const [folderName, folderNode] of Object.entries(node.children)) {
     const folderPath = currentPath ? `${currentPath}/${folderName}` : folderName;
@@ -366,7 +366,7 @@ function buildRowsForTree(
   depth: number,
   parentPath: string,
   formatDate: (date: Date | undefined) => string,
-  formatSize: (size: number | undefined) => string,
+  formatSize: (size: number | undefined) => string
 ): TableRow[] {
   const rows: TableRow[] = [];
 
@@ -711,7 +711,7 @@ export const KBFileExplorer = forwardRef<KBFileExplorerHandle, KBFileExplorerPro
             Bucket: bucketName,
             Key: newKey,
             Body: '',
-          }),
+          })
         );
 
         setShowCreateFolderModal(false);
@@ -877,7 +877,7 @@ export const KBFileExplorer = forwardRef<KBFileExplorerHandle, KBFileExplorerPro
      */
     const rowsNested = useMemo(
       (): TableRow[] => unwrapSingleRootFolders(buildRowsForTree(tree, 0, '', formatDate, formatSize)),
-      [tree, formatDate, formatSize],
+      [tree, formatDate, formatSize]
     );
     const rows = useMemo((): TableRow[] => flattenRows(rowsNested, expandedFolders), [rowsNested, expandedFolders]);
 
@@ -1012,7 +1012,7 @@ export const KBFileExplorer = forwardRef<KBFileExplorerHandle, KBFileExplorerPro
      */
     async function getItemsToDelete(
       selectedItems: Set<string>,
-      rows: TableRow[],
+      rows: TableRow[]
     ): Promise<{ deleteKeys: string[]; visibleCount: number }> {
       const deleteKeys = new Set<string>();
       const visibleKeys = new Set<string>();
@@ -1095,7 +1095,7 @@ export const KBFileExplorer = forwardRef<KBFileExplorerHandle, KBFileExplorerPro
             t('fileExplorer.errors.partialDelete', {
               deleted: result.successful.length,
               failed: result.failed.length,
-            }),
+            })
           );
         }
 
@@ -1682,5 +1682,5 @@ export const KBFileExplorer = forwardRef<KBFileExplorerHandle, KBFileExplorerPro
         </Modal>
       </div>
     );
-  },
+  }
 );

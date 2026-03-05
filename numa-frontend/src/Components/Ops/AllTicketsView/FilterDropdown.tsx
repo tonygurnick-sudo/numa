@@ -92,7 +92,7 @@ function EnumFilter({
         : [...currentSelected, optionValue];
       onApply({ operator: 'in', value: next });
     },
-    [currentSelected, onApply],
+    [currentSelected, onApply]
   );
 
   return (
@@ -134,7 +134,7 @@ function DateFilter({
 }) {
   const [operator, setOperator] = useState<string>((currentFilter?.operator as string) || 'after');
   const [dateValue, setDateValue] = useState<string>(
-    typeof currentFilter?.value === 'string' ? currentFilter.value : '',
+    typeof currentFilter?.value === 'string' ? currentFilter.value : ''
   );
   const [dateEnd, setDateEnd] = useState<string>('');
 
@@ -142,7 +142,7 @@ function DateFilter({
     (preset: string) => {
       onApply({ operator: preset, value: preset });
     },
-    [onApply],
+    [onApply]
   );
 
   const handleApply = useCallback(() => {
@@ -281,7 +281,7 @@ export function FilterDropdown({
       onSort(column, dir);
       setIsOpen(false);
     },
-    [column, onSort],
+    [column, onSort]
   );
 
   const handleClear = useCallback(() => {

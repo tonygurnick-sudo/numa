@@ -37,7 +37,7 @@ createRoot(document.getElementById('root')).render(
         </ToastProvider>
       </Suspense>
     </I18nextProvider>
-  </StrictMode>,
+  </StrictMode>
 );
 
 // Start background version checking to prompt or reload when a new deploy appears.
@@ -60,7 +60,7 @@ try {
         window.location.reload();
       }
     },
-    5 * 60 * 1000,
+    5 * 60 * 1000
   );
 } catch {
   // ignore errors from version polling

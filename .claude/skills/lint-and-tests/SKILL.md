@@ -19,21 +19,24 @@ Run the appropriate linting and testing commands based on the files that were mo
 5. If there are failures, prioritize fixing them before considering the task complete
 
 **Important:** Always activate the correct Python environment first:
+
 ```bash
 eval "$(/Users/nathandouglas/miniforge3-arm64/bin/conda shell.bash hook)" && conda activate arcanum_3-13
 ```
 
-## Python Lambda Functions (lambdas/python/*)
+## Python Lambda Functions (lambdas/python/\*)
 
 For any modified Python Lambda functions, navigate to the Lambda directory and run:
 
 1. **Type checking** (if available):
+
    ```bash
    if poetry show mypy 2>/dev/null; then poetry run mypy .; fi
    if poetry show pyright 2>/dev/null; then poetry run pyright .; fi
    ```
 
 2. **Linting**:
+
    ```bash
    poetry run pylint . --verbose --recursive yes --ignore .venv,.poetry
    ```
@@ -43,7 +46,7 @@ For any modified Python Lambda functions, navigate to the Lambda directory and r
    poetry run python -m unittest
    ```
 
-## Services (services/*)
+## Services (services/\*)
 
 For any modified service code (e.g., `services/numa-workspace-agent`):
 
@@ -57,6 +60,7 @@ For any modified service code (e.g., `services/numa-workspace-agent`):
 For any modified frontend code:
 
 1. **Linting** (ESLint v9 flat config — no `--max-workers`, it runs single-threaded):
+
    ```bash
    yarn lint
    ```

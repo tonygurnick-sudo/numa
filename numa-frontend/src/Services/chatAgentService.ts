@@ -124,7 +124,7 @@ class ChatAgentHttpStream {
     onEvent: OnEvent | null,
     userAuth: Record<string, unknown> | null = null,
     enabledConnections: string[] = [],
-    enabledKBIds: string[] = [],
+    enabledKBIds: string[] = []
   ): Promise<() => void> {
     this.currentOnEvent = onEvent;
     this.responseCallbacks.set('current', (msg) => {
@@ -361,7 +361,7 @@ export const callChatAgentStreaming = (
   onEvent: OnEvent | null = null,
   userAuth: Record<string, unknown> | null = null,
   enabledConnections: string[] = [],
-  enabledKBIds: string[] = [],
+  enabledKBIds: string[] = []
 ) =>
   chatAgentWS.streamPrompt(
     prompt,
@@ -375,7 +375,7 @@ export const callChatAgentStreaming = (
     onEvent,
     userAuth,
     enabledConnections,
-    enabledKBIds,
+    enabledKBIds
   );
 
 /**

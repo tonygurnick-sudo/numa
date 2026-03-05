@@ -3,6 +3,7 @@
 This directory contains the Claude Code–based agent used by the Nolia app. It currently operates in a safe “dummy/test” mode to enable end‑to‑end API wiring without performing real analysis.
 
 ## Quick Facts
+
 - Entry point: `main.py` (function `run(event, context)`)
 - Prompts: `prompts.py` (currently a test prompt that returns a friendly placeholder message)
 - Settings/permissions: `settings.py` (tools and sandbox configuration for Claude CLI)
@@ -19,6 +20,7 @@ This directory contains the Claude Code–based agent used by the Nolia app. It 
   - Listing/reading: `lambdas/python/claude-code-agent/nolia/main.py:503,514`
 
 ## Event Shape (from Step Function)
+
 The Step Function invokes this Lambda via the generic runner with payload similar to:
 
 ```json
@@ -27,8 +29,8 @@ The Step Function invokes this Lambda via the generic runner with payload simila
   "app_id": "nolia",
   "job_id": "<jobId>",
   "user_id": "<userId>",
-  "extracted_content_key": "",               // empty in dummy mode
-  "kb_selection": "nolia-kb",               // dropdown selection
+  "extracted_content_key": "", // empty in dummy mode
+  "kb_selection": "nolia-kb", // dropdown selection
   "user_timezone": "UTC",
   "resume_session": true,
   "stream_events": true,
@@ -37,11 +39,13 @@ The Step Function invokes this Lambda via the generic runner with payload simila
 ```
 
 Notes:
+
 - In dummy mode, `ExtractContent` is skipped and `extracted_content_key` is empty.
 - The frontend triggers `HTTP_REQUEST_TASK` at endpoint `nolia/main` (wired by infra).
 - The KB dropdown supports selecting one or more options (e.g., `global`, `procurement-activity`).
 
 ## Execution Flow (high level)
+
 1. Set up working directories under `/tmp/cc_ws/{job_id}` (see `workspace.py`).
 2. If provided, download extracted content and write to `./user-inputs/uploaded-document.txt`.
 3. Download KB files from `s3://$OUTPUTS_BUCKET_NAME/nolia/knowledge-bases/{kb_name}/` into `./user-inputs/knowledge_base/`.
@@ -50,6 +54,7 @@ Notes:
 6. Upload outputs and write conversation/manifest/trace artifacts back to S3.
 
 ## Outputs and Artifacts
+
 - Base prefix for job artifacts: `nolia/{user_id}/{job_id}/`
 - Files written:
   - Results: `nolia/{user_id}/{job_id}/results*.md` (and `outputs/**`)
@@ -61,7 +66,9 @@ Notes:
 Relevant code: upload/manifest/trace in `main.py` around the `_process_outputs_and_get_result`, `_upload_output_artifacts`, and `_finalize_job_artifacts` helpers.
 
 ## Environment Variables (set by infra)
+
 Defined in `infra/constructs/apps/nolia-construct.ts` on the runner function:
+
 - `OUTPUTS_BUCKET_NAME`: target S3 bucket for inputs/outputs
 - `APP_ID`: `nolia`
 - `HOME`: `/tmp` (for CLI settings)
@@ -76,6 +83,7 @@ Defined in `infra/constructs/apps/nolia-construct.ts` on the runner function:
 The runner also has IAM permissions to read KB paths: `s3://$OUTPUTS_BUCKET_NAME/nolia/knowledge-bases/*` and invoke Bedrock.
 
 ## Dummy/Test Mode vs Real Mode
+
 - Dummy/Test mode (current):
   - `prompts.py` instructs the agent to output a brief “in development” message and not to use tools or produce files.
   - The Step Function’s `ExtractContent` is a `Pass` state that sets an empty `extracted.output_key`.
@@ -84,6 +92,7 @@ The runner also has IAM permissions to read KB paths: `s3://$OUTPUTS_BUCKET_NAME
   2. Re‑enable `ExtractContent` in `infra/constructs/apps/nolia-construct.ts` by switching the Pass state back to the original `addLambdaTask` using `props.sharedExtractContentLambdaArn`.
 
 ## Useful File References
+
 - Lambda runner router: `lambdas/python/claude-code-agent/lambda_function.py`
 - Nolia entry: `lambdas/python/claude-code-agent/nolia/main.py`
 - Nolia prompts: `lambdas/python/claude-code-agent/nolia/prompts.py`

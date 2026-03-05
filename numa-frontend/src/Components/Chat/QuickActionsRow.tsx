@@ -63,7 +63,7 @@ const QuickActionsRow: React.FC<QuickActionsRowProps> = ({
   // Track viewport width for responsive behavior
   const [isMobile, setIsMobile] = useState(() => (typeof window !== 'undefined' ? window.innerWidth <= 768 : false));
   const [isSmallMobile, setIsSmallMobile] = useState(() =>
-    typeof window !== 'undefined' ? window.innerWidth <= 400 : false,
+    typeof window !== 'undefined' ? window.innerWidth <= 400 : false
   );
 
   useEffect(() => {

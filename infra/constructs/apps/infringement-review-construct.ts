@@ -159,7 +159,7 @@ export class InfringementReview extends BaseNumaApp {
         ExtractContent: this.addExtractContentTaskWithArn(
           props.sharedExtractContentLambdaArn!,
           '$.evidence_key',
-          'InfringementReview',
+          'InfringementReview'
         ),
         InfringementReview: this.addLambdaTask(
           infringementReviewLambda.arn,
@@ -174,7 +174,7 @@ export class InfringementReview extends BaseNumaApp {
           'WriteSuccessStatus',
           {
             OutputPath: '$.Payload',
-          },
+          }
         ),
         WriteFailureStatus: this.writeFailureStatus(),
         WriteSuccessStatus: this.writeSuccessStatus(),

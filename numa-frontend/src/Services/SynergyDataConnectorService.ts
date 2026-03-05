@@ -8,7 +8,7 @@ type NumaDelete = (url: string, headers?: Record<string, string>) => Promise<unk
 export const SynergyDataConnectorService = {
   async listJobs(
     numaGet: NumaGet,
-    params?: { name?: string; page?: number; page_size?: number },
+    params?: { name?: string; page?: number; page_size?: number }
   ): Promise<SynergyJobsResponse> {
     return (await numaGet('/api/data-connectors/synergy/jobs', params)) as SynergyJobsResponse;
   },
@@ -31,7 +31,7 @@ export const SynergyDataConnectorService = {
 
   async createSyncConfig(
     numaPost: NumaPost,
-    payload: Omit<SyncConfig, 'user_id' | 'sync_config_id'>,
+    payload: Omit<SyncConfig, 'user_id' | 'sync_config_id'>
   ): Promise<SyncConfig> {
     const response = (await numaPost('/api/data-connectors/sync-configs', payload)) as { item?: SyncConfig };
     if (!response?.item) {
@@ -43,7 +43,7 @@ export const SynergyDataConnectorService = {
   async updateSyncConfig(
     numaPut: NumaPut,
     syncConfigId: string,
-    payload: Omit<SyncConfig, 'user_id' | 'sync_config_id'>,
+    payload: Omit<SyncConfig, 'user_id' | 'sync_config_id'>
   ): Promise<SyncConfig> {
     const response = (await numaPut(`/api/data-connectors/sync-configs/${syncConfigId}`, payload)) as {
       item?: SyncConfig;

@@ -41,7 +41,7 @@ export const Dash = ({ showFavorites = false, ...rest }: DashProps) => {
         appName: t(`dash.catalog.${app.id}.name`, { defaultValue: app.appName }),
         appDescription: t(`dash.catalog.${app.id}.description`, { defaultValue: app.appDescription || '' }),
       })),
-    [numaApps, i18n.language, t],
+    [numaApps, i18n.language, t]
   );
 
   // Fetch apps data and get unique categories

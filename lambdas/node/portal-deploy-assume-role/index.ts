@@ -15,7 +15,7 @@ export async function handler(event: Event = {}): Promise<{ Credentials: Credent
 
   const sts = withPRM(STSClient, {});
   const out = await sts.send(
-    new AssumeRoleCommand({ RoleArn: roleArn, RoleSessionName: sessionName, DurationSeconds: durationSeconds }),
+    new AssumeRoleCommand({ RoleArn: roleArn, RoleSessionName: sessionName, DurationSeconds: durationSeconds })
   );
   if (!out.Credentials) throw new Error('AssumeRole returned no credentials');
   return { Credentials: out.Credentials };

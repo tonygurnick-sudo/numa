@@ -42,7 +42,7 @@ describe('File Format Standardization', () => {
           id: expect.any(String),
           name: 'test_file.pdf',
           s3_key: 'test-app-id/test-job-id/test_file.pdf',
-        }),
+        })
       );
     });
 

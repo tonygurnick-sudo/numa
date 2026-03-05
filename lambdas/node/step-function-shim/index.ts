@@ -41,7 +41,7 @@ export async function handler(event: Event): Promise<{ event: string }> {
       await updateJobStatus(
         jobId,
         'FAILURE',
-        `Your job could not be completed. Status: ${getReadableStatus(describeResult?.status || 'UNKNOWN')}`,
+        `Your job could not be completed. Status: ${getReadableStatus(describeResult?.status || 'UNKNOWN')}`
       );
     }
     throw new Error('Execution did not succeed.');

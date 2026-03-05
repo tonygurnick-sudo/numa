@@ -11,7 +11,7 @@ export const DataConnectorsService = {
 
   async connect(
     numaPost: NumaPost,
-    payload: { connector_id: string; config: Record<string, unknown> },
+    payload: { connector_id: string; config: Record<string, unknown> }
   ): Promise<unknown> {
     return numaPost('/api/data-connectors/connect', payload);
   },

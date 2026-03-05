@@ -89,7 +89,7 @@ export class NumaLambda extends Construct {
         {
           role: role.name,
           policyArn: additionalPolicy.arn,
-        },
+        }
       );
       policyAttachmentAdditionalOld.moveTo(scope.node.id + name + '_role-policy-attachment-additional');
 
@@ -99,7 +99,7 @@ export class NumaLambda extends Construct {
         {
           role: role.name,
           policyArn: additionalPolicy.arn,
-        },
+        }
       );
       policyAttachmentAdditional.addMoveTarget(scope.node.id + name + '_role-policy-attachment-additional');
       this.policyAttachments.push(policyAttachmentAdditional);
@@ -111,7 +111,7 @@ export class NumaLambda extends Construct {
       '..',
       'lambdas',
       props.lambdaDirectory,
-      'lambda_function.zip',
+      'lambda_function.zip'
     );
 
     const honeycombConfig = otelLayersAndEnvironment(props.runtime, props.otelConfig);
@@ -168,7 +168,7 @@ type LambdaArchitecture = 'amd64' | 'arm64';
 
 function otelLayersAndEnvironment(
   runtime: string,
-  props?: OTelConfig,
+  props?: OTelConfig
 ): {
   environmentVariables: Record<string, string>;
   layers: string[];

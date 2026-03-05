@@ -90,7 +90,7 @@ export const DocxPreview: React.FC<DocxPreviewProps> = ({ data, filename: _filen
         console.error('Error rendering DOCX:', err);
         if (!cancelled) {
           setError(
-            'This document contains formatting that cannot be previewed in the browser. Please use the Download button to view it in Microsoft Word or another compatible application.',
+            'This document contains formatting that cannot be previewed in the browser. Please use the Download button to view it in Microsoft Word or another compatible application.'
           );
           setLoading(false);
         }
@@ -132,7 +132,7 @@ export const DocxPreview: React.FC<DocxPreviewProps> = ({ data, filename: _filen
         setCurrentPage(page);
       }
     },
-    [pages.length],
+    [pages.length]
   );
 
   const goPrev = useCallback(() => goToPage(currentPage - 1), [currentPage, goToPage]);

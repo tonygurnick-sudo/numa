@@ -28,7 +28,7 @@ export async function handler(event: Event): Promise<CleanupResult> {
           attribute: 'STARTED_AT',
           order: 'DESCENDING',
         },
-      }),
+      })
     );
 
     const latestJob = jobListResponse.ingestionJobSummaries?.[0];
@@ -49,7 +49,7 @@ export async function handler(event: Event): Promise<CleanupResult> {
         knowledgeBaseId,
         dataSourceId,
         ingestionJobId: latestJob.ingestionJobId,
-      }),
+      })
     );
 
     const failureReasons = jobDetailsResponse.ingestionJob?.failureReasons || [];
@@ -116,7 +116,7 @@ export async function handler(event: Event): Promise<CleanupResult> {
             new DeleteObjectCommand({
               Bucket: bucketName,
               Key: key,
-            }),
+            })
           );
           deletedCount++;
           console.log(`Deleted file with encoded key: ${key}`);
@@ -128,7 +128,7 @@ export async function handler(event: Event): Promise<CleanupResult> {
             new DeleteObjectCommand({
               Bucket: bucketName,
               Key: decodedKey,
-            }),
+            })
           );
           deletedCount++;
           console.log(`Deleted file with decoded key: ${decodedKey}`);
@@ -142,7 +142,7 @@ export async function handler(event: Event): Promise<CleanupResult> {
               Objects: batch.map((key) => ({ Key: key })),
               Quiet: false,
             },
-          }),
+          })
         );
 
         const deleted = deleteResult.Deleted?.length || 0;
@@ -161,7 +161,7 @@ export async function handler(event: Event): Promise<CleanupResult> {
                   new DeleteObjectCommand({
                     Bucket: bucketName,
                     Key: decodedKey,
-                  }),
+                  })
                 );
                 deletedCount++;
                 console.log(`Successfully deleted with decoded key: ${decodedKey}`);

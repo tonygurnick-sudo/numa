@@ -79,7 +79,7 @@ const scheduleName = (scheduleId: string): string => `${CLIENT_NAME}-${scheduleI
 
 const respond = (
   statusCode: number,
-  payload: unknown,
+  payload: unknown
 ): { statusCode: number; headers: Record<string, string>; body: string } => ({
   statusCode,
   headers: HEADERS,
@@ -158,7 +158,7 @@ const listSchedules = async (userId: string): Promise<ScheduleRecord[]> => {
       ExpressionAttributeValues: {
         ':u': userId,
       },
-    }),
+    })
   );
 
   console.log('AGENT_SCHEDULES DEBUG: DynamoDB query result:', {
@@ -181,7 +181,7 @@ const getCalendarEvents = async (
   userId: string,
   startDate?: string,
   endDate?: string,
-  eventTypes: string[] = ['agent', 'application', 'data_sync'],
+  eventTypes: string[] = ['agent', 'application', 'data_sync']
 ): Promise<ScheduleRecord[]> => {
   console.log('CALENDAR_EVENTS DEBUG: Querying with userId:', userId);
   console.log('CALENDAR_EVENTS DEBUG: Table name:', TABLE_NAME);
@@ -199,7 +199,7 @@ const getCalendarEvents = async (
         ':u': userId,
         ':deleted': 'deleted',
       },
-    }),
+    })
   );
 
   console.log('CALENDAR_EVENTS DEBUG: DynamoDB query result:', {
@@ -231,7 +231,7 @@ const getCalendarEvents = async (
 
 const createSchedule = async (
   auth: AuthContext,
-  payload: CreateSchedulePayload,
+  payload: CreateSchedulePayload
 ): Promise<{ scheduleId: string } & ScheduleRecord> => {
   // Validate payload with Zod
   const validatedPayload = validateCreatePayload(payload);
@@ -269,7 +269,7 @@ const createSchedule = async (
       TableName: TABLE_NAME,
       Item: validatedRecord,
       ConditionExpression: 'attribute_not_exists(user_id) AND attribute_not_exists(schedule_id)',
-    }),
+    })
   );
 
   try {
@@ -292,7 +292,7 @@ const createSchedule = async (
             tenantId: CLIENT_NAME,
           }),
         },
-      }),
+      })
     );
   } catch (error) {
     console.error('Failed to create scheduler entry, rolling back', error);
@@ -303,7 +303,7 @@ const createSchedule = async (
           user_id: auth.sub,
           schedule_id: scheduleId,
         },
-      }),
+      })
     );
     throw new Error('Failed to register schedule');
   }
@@ -314,7 +314,7 @@ const createSchedule = async (
 const updateSchedule = async (
   auth: AuthContext,
   scheduleId: string,
-  payload: UpdateSchedulePayload,
+  payload: UpdateSchedulePayload
 ): Promise<Record<string, unknown> | undefined> => {
   const validatedPayload = validateUpdatePayload(payload);
   const hasUpdates = Object.keys(validatedPayload).length > 0;
@@ -330,7 +330,7 @@ const updateSchedule = async (
         ':u': auth.sub,
         ':s': scheduleId,
       },
-    }),
+    })
   );
 
   const record = (existing.Items || [])[0] as ScheduleRecord | undefined;
@@ -407,7 +407,7 @@ const updateSchedule = async (
       ExpressionAttributeNames: expressionNames,
       ...(Object.keys(expressionValues).length > 0 ? { ExpressionAttributeValues: expressionValues } : {}),
       ReturnValues: 'ALL_NEW',
-    }),
+    })
   );
 
   const updatedStatus = validatedPayload.status ?? record.status;
@@ -417,7 +417,7 @@ const updateSchedule = async (
   const scheduleName = `${CLIENT_NAME}-${scheduleId}`;
   const description = updatedLabel || `Scheduled agent run for ${record.agent_title || record.agent_id}`;
   const hasScheduleChanges = Boolean(
-    validatedPayload.cronExpression || validatedPayload.timezone || validatedPayload.label,
+    validatedPayload.cronExpression || validatedPayload.timezone || validatedPayload.label
   );
 
   if (updatedStatus === 'paused' || updatedStatus === 'deleted') {
@@ -426,7 +426,7 @@ const updateSchedule = async (
         new DeleteScheduleCommand({
           Name: scheduleName,
           GroupName: SCHEDULE_GROUP,
-        }),
+        })
       );
     } catch (err) {
       console.warn('Failed to delete EventBridge schedule', err);
@@ -453,7 +453,7 @@ const updateSchedule = async (
             ScheduleExpressionTimezone: updatedTimezone,
             FlexibleTimeWindow: { Mode: 'OFF' },
             Target: target,
-          }),
+          })
         );
       } else if (hasScheduleChanges) {
         await scheduler.send(
@@ -465,7 +465,7 @@ const updateSchedule = async (
             ScheduleExpressionTimezone: updatedTimezone,
             FlexibleTimeWindow: { Mode: 'OFF' },
             Target: target,
-          }),
+          })
         );
       }
     } catch (err) {
@@ -486,7 +486,7 @@ const deleteSchedule = async (auth: AuthContext, scheduleId: string): Promise<vo
         ':u': auth.sub,
         ':s': scheduleId,
       },
-    }),
+    })
   );
 
   const record = (existing.Items || [])[0] as ScheduleRecord | undefined;
@@ -499,7 +499,7 @@ const deleteSchedule = async (auth: AuthContext, scheduleId: string): Promise<vo
       new DeleteScheduleCommand({
         Name: record.schedule_name,
         GroupName: SCHEDULE_GROUP,
-      }),
+      })
     )
     .catch((err) => {
       console.warn('Failed to delete scheduler entry', err);
@@ -520,6 +520,6 @@ const deleteSchedule = async (auth: AuthContext, scheduleId: string): Promise<vo
         ':deleted': 'deleted',
         ':ts': Date.now(),
       },
-    }),
+    })
   );
 };

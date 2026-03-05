@@ -1,15 +1,19 @@
 # Google Drive Integration
 
 ## Essential First Step
+
 Before performing Google Drive operations, establish context:
+
 - If the user has multiple drives, resolve drive via `configure_props` to see available options (My Drive + any Shared Drives)
 - For operations in a specific folder, either resolve `folderId`/`parentId` via `configure_props`, or use `find-folder` to search by name
 - To work with a specific file, use `find-file` to search by name, then use the returned `id` in subsequent operations
 
 ## Auth Structure
+
 Auth key is `googleDrive` (camelCase):
+
 ```json
-{"googleDrive": {"authProvisionId": "auto"}, "...other_params": "..."}
+{ "googleDrive": { "authProvisionId": "auto" }, "...other_params": "..." }
 ```
 
 ## Critical Gotchas
@@ -36,18 +40,20 @@ Auth key is `googleDrive` (camelCase):
 - **File IDs from search results:** Actions like `find-file`, `find-folder`, and `list-files` return arrays with objects containing `id`, `name`, and `mimeType`. Use the `id` value for subsequent operations.
 
 ## Example: Download a File
+
 ```json
 {
-  "googleDrive": {"authProvisionId": "auto"},
+  "googleDrive": { "authProvisionId": "auto" },
   "fileId": "abc123",
   "stash_id": "NEW"
 }
 ```
 
 ## Example: Upload a File
+
 ```json
 {
-  "googleDrive": {"authProvisionId": "auto"},
+  "googleDrive": { "authProvisionId": "auto" },
   "parentId": "folder-id-here",
   "filePath": "/workdir/uploads/report.pdf",
   "name": "My Report.pdf"

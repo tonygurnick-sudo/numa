@@ -301,7 +301,7 @@ export const PolicyReviewerDetail = () => {
         urls
           .filter(Boolean)
           .map((url) => validateUrl(url))
-          .filter(Boolean),
+          .filter(Boolean)
       );
       setActiveTab('upload');
     } catch (err) {
@@ -365,7 +365,7 @@ export const PolicyReviewerDetail = () => {
 
       if (
         policies.some(
-          (p) => p.name.toLowerCase() === policyName.toLowerCase() && p.id !== (isEditing ? editingJobId : undefined),
+          (p) => p.name.toLowerCase() === policyName.toLowerCase() && p.id !== (isEditing ? editingJobId : undefined)
         )
       ) {
         throw new Error(t('policyReviewer.errors.duplicatePolicy'));
@@ -440,7 +440,7 @@ export const PolicyReviewerDetail = () => {
             Bucket: getOutputBucketName(),
             Key: key,
           }),
-          { expiresIn: 3600 },
+          { expiresIn: 3600 }
         );
 
         await axios.put(presign, selectedFile, {
@@ -545,7 +545,7 @@ export const PolicyReviewerDetail = () => {
         Bucket: getOutputBucketName(),
         Key: key,
       }),
-      { expiresIn: 3600 },
+      { expiresIn: 3600 }
     );
 
     const res = await fetch(url);
@@ -668,7 +668,7 @@ export const PolicyReviewerDetail = () => {
           Bucket: getOutputBucketName(),
           Key: policy.jobDetails.uploadedFile.s3Key,
         }),
-        { expiresIn: 3600 },
+        { expiresIn: 3600 }
       );
 
       window.open(url, '_blank');

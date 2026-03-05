@@ -79,7 +79,7 @@ def list_job_folders(server: str, token: str, job_id: str) -> List[Dict[str, Any
 
 
 def get_folder_items(server: str, token: str, folder_id: str) -> Dict[str, Any]:
-    """Return subfolders and file counts for a folder."""
+    """Return subfolders and files for a folder."""
     base_url = _build_base_url(server)
     url = f"{base_url}/api/v1/folders/{folder_id}/items"
     headers = {
@@ -94,11 +94,19 @@ def get_folder_items(server: str, token: str, folder_id: str) -> Dict[str, Any]:
         for folder in data.get("SubFolders", [])
         if isinstance(folder, dict)
     ]
-    files = data.get("Files") or {}
+    files_data = data.get("Files") or {}
+    file_items = (
+        files_data.get("Result")
+        or files_data.get("Items")
+        or files_data.get("items")
+        or []
+    )
+    files = [_normalize_file(f) for f in file_items if isinstance(f, dict)]
     return {
         "folder_id": folder_id,
         "subfolders": subfolders,
-        "files_total": files.get("TotalRows"),
+        "files": files,
+        "files_total": files_data.get("TotalRows"),
     }
 
 
@@ -111,6 +119,17 @@ def _normalize_job(job: Dict[str, Any]) -> Dict[str, Any]:
         "path": job.get("Path"),
         "no_of_folders": job.get("NoOfFolders"),
         "no_of_children": job.get("NoOfChildren"),
+    }
+
+
+def _normalize_file(file: Dict[str, Any]) -> Dict[str, Any]:
+    file_id = (file.get("ID") or {}).get("IDString")
+    return {
+        "file_id": file_id or file.get("IDString"),
+        "name": file.get("FileName") or file.get("Name"),
+        "size": file.get("FileSize") or file.get("Size"),
+        "content_type": file.get("ContentType") or file.get("MimeType"),
+        "modified_at": file.get("ModifiedDate") or file.get("LastModified"),
     }
 
 

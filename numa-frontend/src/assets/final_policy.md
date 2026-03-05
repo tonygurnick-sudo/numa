@@ -39,7 +39,6 @@ This document serves as a guide for board members, staff, and the wider school c
 ## Table of Contents
 
 1. **Impact Policies**
-
    - Global Impact Policy
 
    - Fulfilment of Educational Potential
@@ -49,7 +48,6 @@ This document serves as a guide for board members, staff, and the wider school c
    - Respect for Te Tiriti o Waitangi
 
 2. **Board-Management Relationship Policies**
-
    - Global Board-Management Relationship Policy
 
    - Board Authority
@@ -67,7 +65,6 @@ This document serves as a guide for board members, staff, and the wider school c
    - Inclusive Education
 
 3. **Operational Expectation Policies**
-
    - Global Operational Expectation Policy
 
    - Expectations with Students
@@ -89,7 +86,6 @@ This document serves as a guide for board members, staff, and the wider school c
    - Community Engagement
 
 4. **Governance Culture Policies**
-
    - Global Governance Culture Policy
 
    - Governing Style

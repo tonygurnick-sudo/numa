@@ -28,13 +28,13 @@ interface ParsedAwsProfile {
 
 // Map of INI key names to ParsedAwsProfile field names
 const KEY_MAP: Record<string, keyof ParsedAwsProfile> = {
-  'role_arn': 'roleArn',
-  'source_profile': 'sourceProfile',
-  'region': 'region',
-  'sso_start_url': 'ssoStartUrl',
-  'sso_region': 'ssoRegion',
-  'sso_account_id': 'ssoAccountId',
-  'sso_role_name': 'ssoRoleName',
+  role_arn: 'roleArn',
+  source_profile: 'sourceProfile',
+  region: 'region',
+  sso_start_url: 'ssoStartUrl',
+  sso_region: 'ssoRegion',
+  sso_account_id: 'ssoAccountId',
+  sso_role_name: 'ssoRoleName',
 };
 
 /**
@@ -131,7 +131,11 @@ function categorizeProfile(profile: ParsedAwsProfile): ProfileMetadata {
     }
 
     // admin-delegated-access in known deployer accounts → deployer
-    if (roleName === 'admin-delegated-access' && accountId && (DEPLOYER_ACCOUNT_IDS as readonly string[]).includes(accountId)) {
+    if (
+      roleName === 'admin-delegated-access' &&
+      accountId &&
+      (DEPLOYER_ACCOUNT_IDS as readonly string[]).includes(accountId)
+    ) {
       return { category: 'deployer', accountId, region, roleArn, sourceProfile };
     }
 
@@ -197,8 +201,7 @@ const CATEGORY_ORDER: ProfileCategory[] = ['deployer', 'client', 'org', 'demo', 
  * Create the roles command with all subcommands.
  */
 export function createRolesCommand(): Command {
-  const roles = new Command('roles')
-    .description('Manage AWS profiles and roles');
+  const roles = new Command('roles').description('Manage AWS profiles and roles');
 
   // Scan profiles
   roles
@@ -229,9 +232,8 @@ export function createRolesCommand(): Command {
       }
 
       const total = Object.keys(rolesConfig.profiles).length;
-      const summary = CATEGORY_ORDER
-        .filter(cat => counts[cat])
-        .map(cat => `${counts[cat]} ${cat}`)
+      const summary = CATEGORY_ORDER.filter((cat) => counts[cat])
+        .map((cat) => `${counts[cat]} ${cat}`)
         .join(', ');
 
       console.log('Scanned ~/.aws/config');

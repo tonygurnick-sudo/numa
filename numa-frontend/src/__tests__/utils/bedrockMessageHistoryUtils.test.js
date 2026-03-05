@@ -98,7 +98,7 @@ describe('bedrockMessageHistoryUtils', () => {
         expect.stringContaining('Removing orphaned toolResult block'),
         'tooluse_INVALID_EXTRA_RESULT',
         'Tool name:',
-        'unknown',
+        'unknown'
       );
     });
 
@@ -141,7 +141,7 @@ describe('bedrockMessageHistoryUtils', () => {
         expect.stringContaining('Removing orphaned toolUse block'),
         'tooluse_2',
         'Tool name:',
-        'web_search',
+        'web_search'
       );
 
       // Verify result is properly formatted
@@ -295,14 +295,14 @@ describe('bedrockMessageHistoryUtils', () => {
 
       // Find the assistant message with tool calls
       const assistantToolMessage = result.find(
-        (msg) => msg.role === 'assistant' && msg.content.some((block) => block.toolUse),
+        (msg) => msg.role === 'assistant' && msg.content.some((block) => block.toolUse)
       );
       expect(assistantToolMessage).toBeDefined();
       expect(assistantToolMessage.content).toHaveLength(2); // Two tool calls
 
       // Find the user message with tool results
       const userResultMessage = result.find(
-        (msg) => msg.role === 'user' && msg.content.some((block) => block.toolResult),
+        (msg) => msg.role === 'user' && msg.content.some((block) => block.toolResult)
       );
       expect(userResultMessage).toBeDefined();
       expect(userResultMessage.content).toHaveLength(2); // Two tool results

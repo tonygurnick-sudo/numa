@@ -15,11 +15,11 @@ Browser ──HTTP──▶ CloudFront ──▶ Lambda Function URL ──SDK�
 
 ## Environment Variables
 
-| Variable | Description |
-|----------|-------------|
-| `AGENT_RUNTIME_ARN` | ARN of the AgentCore runtime to invoke |
-| `CLOUDFRONT_SHARED_SECRET` | Secret header for CloudFront auth |
-| `CLIENT_NAME` | Client name for logging |
+| Variable                   | Description                            |
+| -------------------------- | -------------------------------------- |
+| `AGENT_RUNTIME_ARN`        | ARN of the AgentCore runtime to invoke |
+| `CLOUDFRONT_SHARED_SECRET` | Secret header for CloudFront auth      |
+| `CLIENT_NAME`              | Client name for logging                |
 
 ## Endpoints
 

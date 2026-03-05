@@ -167,7 +167,7 @@ type NextStateDiag = {
 
 function explainNextDisabled<T extends VisibleTask[]>(
   i: NextDisableInputs<T>,
-  context: 'inputs' | 'results',
+  context: 'inputs' | 'results'
 ): NextStateDiag {
   const reasons: string[] = [];
   const total = i.tasks.length;
@@ -279,13 +279,13 @@ const AppWizard: React.FC<AppWizardProps> = ({ manifest = DEFAULT_MANIFEST }) =>
         updateTaskCompletionStatus(currentTask.id, true);
       }
     },
-    [visibleTasks, taskCompletionStatus, updateTaskCompletionStatus],
+    [visibleTasks, taskCompletionStatus, updateTaskCompletionStatus]
   );
 
   function isStepCompleteOriginal<T extends VisibleTask[]>(
     tasks: T,
     comp: TaskCompletionStatus<T>,
-    index: number,
+    index: number
   ): boolean {
     const task = tasks[index];
     if (!task) return false;
@@ -297,9 +297,9 @@ const AppWizard: React.FC<AppWizardProps> = ({ manifest = DEFAULT_MANIFEST }) =>
       isStepCompleteOriginal(
         visibleTasks as VisibleTask[],
         taskCompletionStatus as TaskCompletionStatus<VisibleTask[]>,
-        index,
+        index
       ),
-    [visibleTasks, taskCompletionStatus],
+    [visibleTasks, taskCompletionStatus]
   );
 
   const isStepDisabled = useCallback(
@@ -316,7 +316,7 @@ const AppWizard: React.FC<AppWizardProps> = ({ manifest = DEFAULT_MANIFEST }) =>
       }
       return false;
     },
-    [visibleTasks, hasRun, taskCompletionStatus],
+    [visibleTasks, hasRun, taskCompletionStatus]
   );
 
   const handleStepClick = useCallback(
@@ -353,7 +353,7 @@ const AppWizard: React.FC<AppWizardProps> = ({ manifest = DEFAULT_MANIFEST }) =>
       isStepDisabled,
       preRunTasks.length,
       setActiveStep,
-    ],
+    ]
   );
 
   const runApp = async (runNameOverride?: string): Promise<void> => {
@@ -473,7 +473,7 @@ const AppWizard: React.FC<AppWizardProps> = ({ manifest = DEFAULT_MANIFEST }) =>
         updateTaskCompletionStatus(taskId, complete);
       }
     },
-    [setTaskInputValues, updateTaskInputValue, updateTaskCompletionStatus, hasRun, findTask],
+    [setTaskInputValues, updateTaskInputValue, updateTaskCompletionStatus, hasRun, findTask]
   );
 
   const handlePrevStep: HandleStepNavigation = () => {
@@ -510,7 +510,7 @@ const AppWizard: React.FC<AppWizardProps> = ({ manifest = DEFAULT_MANIFEST }) =>
 
       return includeIncompleteCheck ? diagInputs.disabled : diagResults.disabled;
     },
-    [activeStep, visibleTasks, preRunTasks.length, appRunning, taskCompletionStatus],
+    [activeStep, visibleTasks, preRunTasks.length, appRunning, taskCompletionStatus]
   );
 
   const nextDisabledInputsView = isNextInputDisabled(true);

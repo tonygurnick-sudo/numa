@@ -85,7 +85,7 @@ export const DataAnalysisRenderer = ({ result, bare: _bare = false }: { result: 
   const payload = blocks[0]?.json ?? result;
   const outputs = useMemo(
     () => normalizeOutputs(payload, (index) => t('toolRenderers.dataAnalysis.outputTitle', { index })),
-    [payload, t],
+    [payload, t]
   );
 
   // Memoize filtered arrays to prevent useEffect from re-running on every render
@@ -96,13 +96,13 @@ export const DataAnalysisRenderer = ({ result, bare: _bare = false }: { result: 
         if (output.s3Key && output.contentType.includes('markdown')) return true;
         return false;
       }),
-    [outputs],
+    [outputs]
   );
 
   const markdownS3Outputs = useMemo(
     () =>
       markdownOutputs.filter((output) => !output.content && output.s3Key && output.contentType.includes('markdown')),
-    [markdownOutputs],
+    [markdownOutputs]
   );
 
   const [markdownFromS3, setMarkdownFromS3] = useState<Record<string, string>>({});
@@ -116,7 +116,7 @@ export const DataAnalysisRenderer = ({ result, bare: _bare = false }: { result: 
       markdownS3Outputs
         .map((o) => o.s3Key)
         .filter((key): key is string => !!key && !markdownFromS3[key] && !markdownErrors[key]),
-    [markdownS3Outputs, markdownFromS3, markdownErrors],
+    [markdownS3Outputs, markdownFromS3, markdownErrors]
   );
 
   useEffect(() => {

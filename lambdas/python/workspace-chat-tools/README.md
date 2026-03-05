@@ -39,6 +39,7 @@ workspace-chat-tools Lambda
 Query the company or user knowledge base with optional summarization.
 
 **Parameters:**
+
 - `query` (str, required): Natural language search query
 - `user_intent` (str, required): What the user is trying to accomplish
 - `max_results` (int, default=6, max=15): Number of results
@@ -47,6 +48,7 @@ Query the company or user knowledge base with optional summarization.
 - `all_kbs` (bool, default=false): Query all enabled KBs and synthesize results
 
 **Response:**
+
 - When `summarise_results=true`: Returns `summarised_content`
 - When `summarise_results=false`: Returns `raw_content` (list of content pieces)
 
@@ -55,11 +57,13 @@ Query the company or user knowledge base with optional summarization.
 Upload a file from the workspace to a knowledge base.
 
 **Parameters:**
+
 - `source_key` (str, required): S3 key of file to upload (in outputs bucket)
 - `kb_id` (str, default="company"): Target KB - "company" or user KB UUID
 - `destination_path` (str, optional): Folder path within KB
 
 **Response:**
+
 - `status`: "success" or "error"
 - `destination_uri`: S3 URI where file was uploaded
 
@@ -68,6 +72,7 @@ Upload a file from the workspace to a knowledge base.
 Download files from KB storage or list available files.
 
 **Parameters:**
+
 - `s3_uri` (str): S3 URI to download (mutually exclusive with list)
 - `list` (bool): List files in KB instead of downloading
 - `kb_id` (str, default="company"): KB ID for listing
@@ -76,15 +81,18 @@ Download files from KB storage or list available files.
 - `folder_path` (str): Folder path for download_folder mode
 
 **Response (download):**
+
 - `status`: "success" or "error"
 - `content_base64`: Base64 encoded file content
 - `filename`: Original filename
 
 **Response (list):**
+
 - `status`: "success" or "error"
 - `files`: Array of `{key, size, last_modified}`
 
 **Response (download_folder):**
+
 - `status`: "success" or "error"
 - `content_base64`: Base64 encoded zip file
 - `filename`: Zip filename
@@ -95,6 +103,7 @@ Download files from KB storage or list available files.
 Search the web using Brave Search API.
 
 **Parameters:**
+
 - `query` (str, required): Search query
 
 ### extract_content
@@ -102,6 +111,7 @@ Search the web using Brave Search API.
 Extract content from documents using AI vision/OCR.
 
 **Parameters:**
+
 - `source_key` (str, required): S3 key of file to process
 - `extraction_type` (str): Type of extraction
 
@@ -110,23 +120,24 @@ Extract content from documents using AI vision/OCR.
 Convert documents between formats.
 
 **Parameters:**
+
 - `source_key` (str, required): S3 key of source file
 - `target_format` (str, required): Target format
 
 ## Environment Variables
 
-| Variable | Description |
-|----------|-------------|
-| `CLIENT_NAME` | Client/tenant name for multi-tenant isolation |
-| `AWS_REGION` | AWS region |
-| `PREFERRED_KNOWLEDGE_BASE` | "q" or "bedrock" (default: bedrock) |
-| `Q_APPLICATION_ID` | Q Business application ID |
-| `Q_RETRIEVER_ID` | Q Business retriever ID |
-| `BEDROCK_KNOWLEDGE_BASE_ID` | Bedrock KB ID |
-| `FAST_MODEL_ID` | Model for summarization (default: amazon.nova-lite-v1:0) |
-| `DATA_BUCKET_NAME` | S3 bucket for KB data |
-| `OUTPUTS_BUCKET_NAME` | S3 bucket for workspace files |
-| `BRAVE_API_KEY_SECRET_ARN` | Secret ARN for Brave API key |
+| Variable                    | Description                                              |
+| --------------------------- | -------------------------------------------------------- |
+| `CLIENT_NAME`               | Client/tenant name for multi-tenant isolation            |
+| `AWS_REGION`                | AWS region                                               |
+| `PREFERRED_KNOWLEDGE_BASE`  | "q" or "bedrock" (default: bedrock)                      |
+| `Q_APPLICATION_ID`          | Q Business application ID                                |
+| `Q_RETRIEVER_ID`            | Q Business retriever ID                                  |
+| `BEDROCK_KNOWLEDGE_BASE_ID` | Bedrock KB ID                                            |
+| `FAST_MODEL_ID`             | Model for summarization (default: amazon.nova-lite-v1:0) |
+| `DATA_BUCKET_NAME`          | S3 bucket for KB data                                    |
+| `OUTPUTS_BUCKET_NAME`       | S3 bucket for workspace files                            |
+| `BRAVE_API_KEY_SECRET_ARN`  | Secret ARN for Brave API key                             |
 
 ## Required IAM Permissions
 

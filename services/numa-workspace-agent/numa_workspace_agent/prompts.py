@@ -70,6 +70,20 @@ The "Workspace" is this entire collaborative environment — the active working 
 - Reference files in responses using absolute paths
 - When asked to delete files, confirm the specific files first and warn that deleted files cannot be recovered
 
+## Finding Files Beyond the Workspace
+
+Files the user needs are often NOT in /workdir/ — they may live elsewhere:
+
+1. **Data Bucket (always available)** — The company's shared file storage. Contains "My Files" (per-user) and "Company Files" (shared). Check here first when looking for documents, templates, or data the user refers to.
+2. **Connected drives** — Google Drive, OneDrive, Dropbox, Synergy 12d, or other OAuth-connected services. Only check drives that are actually connected — use connect_status to find out. Do not attempt to use a disconnected drive.
+
+**When a user asks about a file that isn't in /workdir/:**
+- Load the `connect` skill, then check the data bucket first (it's always connected and fast)
+- If not found there, check any connected drives
+- If no drives are connected, tell the user what's available and where to connect more
+
+**Do NOT waste tool calls on disconnected connectors.** If connect_status shows a connector as "disconnected", skip it entirely.
+
 ## Security Restrictions
 
 You are running in a sandboxed environment. Understanding these restrictions will help you work efficiently:
@@ -340,6 +354,7 @@ Activate skills using the Skill tool. Available skills:
 | `docx-handling` | Creating, reading, manipulating, converting to/from Word documents/templates, and adding images/logos |
 | `spreadsheet-handling` | Reading, writing, and analyzing Excel, CSV, and TSV files |
 | `data-analysis` | Optimizing performance for large datasets (SQLite conversion, SQL querying, charts) |
+| `connect` | Finding files beyond the workspace — check the data bucket (My Files, Company Files) and connected drives (Google Drive, OneDrive, Dropbox, Synergy 12d). Use when a user asks about files not in /workdir/ |
 
 **Rules:**
 - **CRITICAL: Always load the relevant skill BEFORE attempting the task.** Do not try to figure things out by trial and error — the skill contains the exact commands, flags, and approaches you need. Loading the skill first saves time and avoids errors.
@@ -958,6 +973,7 @@ def build_workspace_system_prompt(
     identity_override: Optional[str] = None,
     user_profile: Optional[dict] = None,
     company_profile: Optional[str] = None,
+    feature_flags: Optional[dict[str, bool]] = None,
     **_kwargs,
 ) -> str:
     """
@@ -1070,6 +1086,19 @@ def build_workspace_system_prompt(
             enabled_integrations, email_signature
         )
         base_prompt = f"{base_prompt}\n\n{integrations_context}"
+
+    # Append disabled feature hints based on feature flags
+    _flags = feature_flags or {}
+    disabled_hints: list[str] = []
+    if not _flags.get("NUMA_FILES", False):
+        disabled_hints.append(
+            "The files operation (My Files / Company Files browsing) in numa_tool "
+            "is disabled for this account. Do not attempt to use it."
+        )
+    if disabled_hints:
+        base_prompt += "\n\n## Disabled Features\n" + "\n".join(
+            f"- {h}" for h in disabled_hints
+        )
 
     return base_prompt
 

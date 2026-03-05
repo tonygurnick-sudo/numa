@@ -1,35 +1,31 @@
-import {
-  ECRClient,
-  DescribeImagesCommand,
-  ImageDetail
-} from '@aws-sdk/client-ecr'
-import { fromCognitoIdentityPool } from '@aws-sdk/credential-providers'
-import { ECRImage } from '@/types'
-import { getConfigValue } from './configService'
-import { authService } from './authService'
-import { getAllImageMetadata, type ImageMetadata } from './imageTagService'
+import { ECRClient, DescribeImagesCommand, ImageDetail } from '@aws-sdk/client-ecr';
+import { fromCognitoIdentityPool } from '@aws-sdk/credential-providers';
+import { ECRImage } from '@/types';
+import { getConfigValue } from './configService';
+import { authService } from './authService';
+import { getAllImageMetadata, type ImageMetadata } from './imageTagService';
 
 export class ECRService {
-  private repositoryName = 'numa-deploy'  // Matches GitLab CI: ECR_REPO: ${ECR_BASE}/numa-deploy
-  private cachedImages: ECRImage[] = []
-  private lastFetchTime: number = 0
-  private readonly cacheDuration = 10 * 60 * 1000 // 10 minutes
+  private repositoryName = 'numa-deploy'; // Matches GitLab CI: ECR_REPO: ${ECR_BASE}/numa-deploy
+  private cachedImages: ECRImage[] = [];
+  private lastFetchTime: number = 0;
+  private readonly cacheDuration = 10 * 60 * 1000; // 10 minutes
 
   constructor() {}
 
   private getCredentialsProvider() {
     // Return a provider that ensures valid tokens before resolving credentials
-    if (!this.isInBrowser() || !this.hasCognitoConfig()) return undefined
+    if (!this.isInBrowser() || !this.hasCognitoConfig()) return undefined;
 
-    const region = getConfigValue('AWS_REGION') || 'us-east-1'
-    const identityPoolId = getConfigValue('IDENTITY_POOL_ID')!
-    const userPoolId = getConfigValue('USER_POOL_ID')!
+    const region = getConfigValue('AWS_REGION') || 'us-east-1';
+    const identityPoolId = getConfigValue('IDENTITY_POOL_ID')!;
+    const userPoolId = getConfigValue('USER_POOL_ID')!;
 
     return async () => {
-      const ensured = await authService.ensureValidSession(60 * 1000)
-      const session = ensured || authService.getCurrentSession()
-      if (!session) throw new Error('Not authenticated')
-      const idToken = session.idToken
+      const ensured = await authService.ensureValidSession(60 * 1000);
+      const session = ensured || authService.getCurrentSession();
+      if (!session) throw new Error('Not authenticated');
+      const idToken = session.idToken;
 
       const base = fromCognitoIdentityPool({
         identityPoolId,
@@ -37,40 +33,40 @@ export class ECRService {
           [`cognito-idp.${region}.amazonaws.com/${userPoolId}`]: idToken,
         },
         clientConfig: { region },
-      })
-      return base()
-    }
+      });
+      return base();
+    };
   }
 
   private isInBrowser(): boolean {
-    return typeof window !== 'undefined'
+    return typeof window !== 'undefined';
   }
 
   private hasCognitoConfig(): boolean {
-    return !!(getConfigValue('IDENTITY_POOL_ID') && getConfigValue('USER_POOL_ID'))
+    return !!(getConfigValue('IDENTITY_POOL_ID') && getConfigValue('USER_POOL_ID'));
   }
 
   async getAllImages(): Promise<ECRImage[]> {
-    const now = Date.now()
+    const now = Date.now();
     if (this.cachedImages.length > 0 && now - this.lastFetchTime < this.cacheDuration) {
-      return this.cachedImages
+      return this.cachedImages;
     }
 
     try {
-      const ecrRegion = getConfigValue('ECR_REGION') || getConfigValue('AWS_REGION') || 'us-east-1'
+      const ecrRegion = getConfigValue('ECR_REGION') || getConfigValue('AWS_REGION') || 'us-east-1';
       const ecrClient = new ECRClient({
         region: ecrRegion,
         credentials: this.getCredentialsProvider(),
-      })
-      const registryId = getConfigValue('ECR_REGISTRY_ID') || undefined
+      });
+      const registryId = getConfigValue('ECR_REGISTRY_ID') || undefined;
 
       // Fetch all pages of images (pagination required when > 100 images)
-      const allImageDetails: ImageDetail[] = []
-      let nextToken: string | undefined
+      const allImageDetails: ImageDetail[] = [];
+      let nextToken: string | undefined;
 
       do {
-        const controller = new AbortController()
-        const timeoutId = setTimeout(() => controller.abort(), 10000)
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 10000);
 
         try {
           const response = await ecrClient.send(
@@ -81,47 +77,50 @@ export class ECRService {
               nextToken,
             }),
             { abortSignal: controller.signal }
-          )
+          );
 
           if (response.imageDetails) {
-            allImageDetails.push(...response.imageDetails)
+            allImageDetails.push(...response.imageDetails);
           }
-          nextToken = response.nextToken
+          nextToken = response.nextToken;
         } finally {
-          clearTimeout(timeoutId)
+          clearTimeout(timeoutId);
         }
-      } while (nextToken)
+      } while (nextToken);
 
       if (allImageDetails.length === 0) {
-        return []
+        return [];
       }
 
       // Get image metadata for custom names
-      const imageMetadata = await getAllImageMetadata()
-      const metadataMap = new Map<string, ImageMetadata>()
-      imageMetadata.forEach(meta => {
-        metadataMap.set(`${meta.imageTag}:${meta.digest}`, meta)
-      })
+      const imageMetadata = await getAllImageMetadata();
+      const metadataMap = new Map<string, ImageMetadata>();
+      imageMetadata.forEach((meta) => {
+        metadataMap.set(`${meta.imageTag}:${meta.digest}`, meta);
+      });
 
-      this.cachedImages = this.mapImageDetailsToECRImages(allImageDetails, metadataMap)
-      this.lastFetchTime = now
+      this.cachedImages = this.mapImageDetailsToECRImages(allImageDetails, metadataMap);
+      this.lastFetchTime = now;
 
-      return this.cachedImages
+      return this.cachedImages;
     } catch (error) {
-      console.error('Failed to fetch ECR images:', error)
+      console.error('Failed to fetch ECR images:', error);
 
       // Return empty array when ECR is not accessible - no mock data
-      throw error
+      throw error;
     }
   }
 
-  private mapImageDetailsToECRImages(imageDetails: ImageDetail[], metadataMap?: Map<string, ImageMetadata>): ECRImage[] {
+  private mapImageDetailsToECRImages(
+    imageDetails: ImageDetail[],
+    metadataMap?: Map<string, ImageMetadata>
+  ): ECRImage[] {
     return imageDetails
-      .filter(image => image.imageTags && image.imageTags.length > 0)
-      .map(image => {
-        const tag = image.imageTags![0] // Use first tag
-        const digest = image.imageDigest || 'sha256:unknown'
-        const metadata = metadataMap?.get(`${tag}:${digest}`)
+      .filter((image) => image.imageTags && image.imageTags.length > 0)
+      .map((image) => {
+        const tag = image.imageTags![0]; // Use first tag
+        const digest = image.imageDigest || 'sha256:unknown';
+        const metadata = metadataMap?.get(`${tag}:${digest}`);
 
         return {
           repository: this.repositoryName,
@@ -133,41 +132,40 @@ export class ECRService {
           gitBranch: this.extractBranchFromTag(tag),
           customName: metadata?.customName,
           description: metadata?.description,
-        }
+        };
       })
-      .sort((a, b) => new Date(b.pushedAt).getTime() - new Date(a.pushedAt).getTime())
+      .sort((a, b) => new Date(b.pushedAt).getTime() - new Date(a.pushedAt).getTime());
   }
 
   private extractGitCommitFromTag(tag: string): string {
     // GitLab CI pushes images with short SHA as tag (e.g., "abc123de")
     if (/^[a-f0-9]{8}$/.test(tag)) {
-      return tag
+      return tag;
     }
-    return 'unknown'
+    return 'unknown';
   }
 
   private extractBranchFromTag(tag: string): string {
-    if (tag === 'latest') return 'main'
-    if (tag.startsWith('v')) return 'main' // Version tags usually from main
-    if (tag.includes('hotfix')) return 'hotfix'
-    return 'feature'
+    if (tag === 'latest') return 'main';
+    if (tag.startsWith('v')) return 'main'; // Version tags usually from main
+    if (tag.includes('hotfix')) return 'hotfix';
+    return 'feature';
   }
 
-
   async getImagesByTag(tags: string[]): Promise<ECRImage[]> {
-    const allImages = await this.getAllImages()
-    return allImages.filter(image => tags.includes(image.tag))
+    const allImages = await this.getAllImages();
+    return allImages.filter((image) => tags.includes(image.tag));
   }
 
   async getLatestImage(): Promise<ECRImage | undefined> {
-    const allImages = await this.getAllImages()
-    return allImages.find(image => image.tag === 'latest') || allImages[0]
+    const allImages = await this.getAllImages();
+    return allImages.find((image) => image.tag === 'latest') || allImages[0];
   }
 
   clearCache(): void {
-    this.cachedImages = []
-    this.lastFetchTime = 0
+    this.cachedImages = [];
+    this.lastFetchTime = 0;
   }
 }
 
-export const ecrService = new ECRService()
+export const ecrService = new ECRService();

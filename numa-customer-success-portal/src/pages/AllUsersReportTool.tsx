@@ -1,139 +1,121 @@
-import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
-import {
-  Card,
-  Button,
-  Form,
-  Alert,
-  Row,
-  Col,
-  ListGroup,
-  Badge,
-  Container,
-  Table,
-} from 'react-bootstrap'
-import { ArrowLeft, Download, People } from 'react-bootstrap-icons'
-import { ProgressTracker } from '@/components/tools/ProgressTracker'
-import { GroupedClientSelector } from '@/components/tools/GroupedClientSelector'
-import { getSelectionDisplayText } from '@/components/tools/clientSelectionUtils'
-import { useToolExecution } from '@/hooks/useToolExecution'
-import { AllUsersReportService } from '@/services/allUsersReportService'
-import { FileExportService } from '@/utils/fileExport'
-import { clientService } from '@/services/clientService'
-import type { Client } from '@/types'
-import type { ToolResult, ToolResultFile, AllUsersReportParameters, UserRecord } from '@/types/tools'
+import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { Card, Button, Form, Alert, Row, Col, ListGroup, Badge, Container, Table } from 'react-bootstrap';
+import { ArrowLeft, Download, People } from 'react-bootstrap-icons';
+import { ProgressTracker } from '@/components/tools/ProgressTracker';
+import { GroupedClientSelector } from '@/components/tools/GroupedClientSelector';
+import { getSelectionDisplayText } from '@/components/tools/clientSelectionUtils';
+import { useToolExecution } from '@/hooks/useToolExecution';
+import { AllUsersReportService } from '@/services/allUsersReportService';
+import { FileExportService } from '@/utils/fileExport';
+import { clientService } from '@/services/clientService';
+import type { Client } from '@/types';
+import type { ToolResult, ToolResultFile, AllUsersReportParameters, UserRecord } from '@/types/tools';
 
 export default function AllUsersReportTool() {
-  const navigate = useNavigate()
+  const navigate = useNavigate();
   const [parameters, setParameters] = useState<AllUsersReportParameters>({
     clientNames: [],
     userTypeFilter: 'all',
     outputFormat: 'csv',
     includeLastLogin: false,
-  })
-  const [clients, setClients] = useState<Client[]>([])
-  const [loadingClients, setLoadingClients] = useState(false)
-  const [resultFiles, setResultFiles] = useState<ToolResultFile[]>([])
+  });
+  const [clients, setClients] = useState<Client[]>([]);
+  const [loadingClients, setLoadingClients] = useState(false);
+  const [resultFiles, setResultFiles] = useState<ToolResultFile[]>([]);
 
   const { execution, isRunning, execute, cancel, reset } = useToolExecution({
     onCompleted: (result) => {
       if (result.files) {
-        setResultFiles(result.files)
+        setResultFiles(result.files);
       }
     },
     onFailed: (error) => {
-      console.error('Tool execution failed:', error)
+      console.error('Tool execution failed:', error);
     },
-  })
+  });
 
   // Load clients on component mount
   useEffect(() => {
-    loadClients()
-  }, [])
+    loadClients();
+  }, []);
 
   const loadClients = async () => {
-    setLoadingClients(true)
+    setLoadingClients(true);
     try {
-      const allClients = await clientService.getAllClients()
-      setClients(allClients)
+      const allClients = await clientService.getAllClients();
+      setClients(allClients);
     } catch (error) {
-      console.error('Failed to load clients:', error)
+      console.error('Failed to load clients:', error);
     } finally {
-      setLoadingClients(false)
+      setLoadingClients(false);
     }
-  }
+  };
 
   const handleClientToggle = (clientName: string) => {
-    setParameters(prev => {
+    setParameters((prev) => {
       const newClientNames = prev.clientNames.includes(clientName)
-        ? prev.clientNames.filter(n => n !== clientName)
-        : [...prev.clientNames, clientName]
-      return { ...prev, clientNames: newClientNames }
-    })
-  }
+        ? prev.clientNames.filter((n) => n !== clientName)
+        : [...prev.clientNames, clientName];
+      return { ...prev, clientNames: newClientNames };
+    });
+  };
 
   const handleSelectClients = (clientNames: string[]) => {
-    setParameters(prev => ({ ...prev, clientNames }))
-  }
+    setParameters((prev) => ({ ...prev, clientNames }));
+  };
 
   const handleExecute = async () => {
     // If all clients are selected, pass empty array to indicate "all clients"
-    const clientNamesToUse = parameters.clientNames.length === clients.length
-      ? []
-      : parameters.clientNames
-    const paramsToUse = { ...parameters, clientNames: clientNamesToUse }
+    const clientNamesToUse = parameters.clientNames.length === clients.length ? [] : parameters.clientNames;
+    const paramsToUse = { ...parameters, clientNames: clientNamesToUse };
 
     await execute('all-users-report', paramsToUse, async (params, onProgress, _signal) => {
       const { result, files } = await AllUsersReportService.generateReport(
         params as AllUsersReportParameters,
         onProgress
-      )
+      );
 
       return {
         type: 'file',
         files,
         data: result,
-      } as ToolResult
-    })
-  }
+      } as ToolResult;
+    });
+  };
 
   const handleDownloadFile = (file: ToolResultFile) => {
-    FileExportService.downloadFile(file)
-  }
+    FileExportService.downloadFile(file);
+  };
 
   const handleDownloadAll = () => {
-    FileExportService.downloadFiles(resultFiles)
-  }
+    FileExportService.downloadFiles(resultFiles);
+  };
 
   const handleReset = () => {
-    reset()
-    setResultFiles([])
+    reset();
+    setResultFiles([]);
     setParameters({
       clientNames: [],
       userTypeFilter: 'all',
       outputFormat: 'csv',
       includeLastLogin: false,
-    })
-  }
+    });
+  };
 
   const isFormValid = () => {
-    return parameters.clientNames.length > 0 && parameters.outputFormat
-  }
+    return parameters.clientNames.length > 0 && parameters.outputFormat;
+  };
 
   const getClientSelectionText = () => {
-    return getSelectionDisplayText(clients, parameters.clientNames)
-  }
+    return getSelectionDisplayText(clients, parameters.clientNames);
+  };
 
   return (
     <Container fluid>
       {/* Header */}
       <div className="d-flex align-items-center mb-4">
-        <Button
-          variant="secondary"
-          onClick={() => navigate('/tools')}
-          className="me-3"
-          disabled={isRunning}
-        >
+        <Button variant="secondary" onClick={() => navigate('/tools')} className="me-3" disabled={isRunning}>
           <ArrowLeft className="me-1" />
           Back to Tools
         </Button>
@@ -179,19 +161,19 @@ export default function AllUsersReportTool() {
                     <Form.Label>User Type Filter</Form.Label>
                     <Form.Select
                       value={parameters.userTypeFilter}
-                      onChange={(e) => setParameters(prev => ({
-                        ...prev,
-                        userTypeFilter: e.target.value as 'all' | 'admin' | 'user'
-                      }))}
+                      onChange={(e) =>
+                        setParameters((prev) => ({
+                          ...prev,
+                          userTypeFilter: e.target.value as 'all' | 'admin' | 'user',
+                        }))
+                      }
                       disabled={isRunning}
                     >
                       <option value="all">All Users</option>
                       <option value="admin">Admins Only</option>
                       <option value="user">Regular Users Only</option>
                     </Form.Select>
-                    <Form.Text className="text-muted">
-                      Filter by user type (admin group membership)
-                    </Form.Text>
+                    <Form.Text className="text-muted">Filter by user type (admin group membership)</Form.Text>
                   </Form.Group>
 
                   {/* Output Format */}
@@ -201,10 +183,12 @@ export default function AllUsersReportTool() {
                     </Form.Label>
                     <Form.Select
                       value={parameters.outputFormat}
-                      onChange={(e) => setParameters(prev => ({
-                        ...prev,
-                        outputFormat: e.target.value as 'csv' | 'json'
-                      }))}
+                      onChange={(e) =>
+                        setParameters((prev) => ({
+                          ...prev,
+                          outputFormat: e.target.value as 'csv' | 'json',
+                        }))
+                      }
                       disabled={isRunning}
                     >
                       <option value="csv">CSV File</option>
@@ -219,14 +203,17 @@ export default function AllUsersReportTool() {
                       id="include-last-login"
                       label="Include Last Login Time"
                       checked={parameters.includeLastLogin}
-                      onChange={(e) => setParameters(prev => ({
-                        ...prev,
-                        includeLastLogin: e.target.checked
-                      }))}
+                      onChange={(e) =>
+                        setParameters((prev) => ({
+                          ...prev,
+                          includeLastLogin: e.target.checked,
+                        }))
+                      }
                       disabled={isRunning}
                     />
                     <Form.Text className="text-muted">
-                      Enabling this will slow down report generation as it requires an additional API call for each user.
+                      Enabling this will slow down report generation as it requires an additional API call for each
+                      user.
                     </Form.Text>
                   </Form.Group>
 
@@ -250,10 +237,12 @@ export default function AllUsersReportTool() {
                     <strong>Clients:</strong> {getClientSelectionText()}
                   </div>
                   <div className="mb-2">
-                    <strong>User Type:</strong> {
-                      parameters.userTypeFilter === 'all' ? 'All Users' :
-                      parameters.userTypeFilter === 'admin' ? 'Admins Only' : 'Regular Users Only'
-                    }
+                    <strong>User Type:</strong>{' '}
+                    {parameters.userTypeFilter === 'all'
+                      ? 'All Users'
+                      : parameters.userTypeFilter === 'admin'
+                        ? 'Admins Only'
+                        : 'Regular Users Only'}
                   </div>
                   <div className="mb-2">
                     <strong>Output Format:</strong> {parameters.outputFormat.toUpperCase()}
@@ -280,9 +269,7 @@ export default function AllUsersReportTool() {
                 </div>
               )}
 
-              {loadingClients && (
-                <Alert variant="info">Loading client configurations...</Alert>
-              )}
+              {loadingClients && <Alert variant="info">Loading client configurations...</Alert>}
             </Card.Body>
           </Card>
         </Col>
@@ -291,15 +278,19 @@ export default function AllUsersReportTool() {
         <Col lg={8}>
           <Card className="border-0 shadow-sm h-100">
             <Card.Header className="d-flex justify-content-between align-items-center">
-              <h5 className="mb-0">
-                {execution ? 'Execution Progress' : 'Ready to Generate'}
-              </h5>
+              <h5 className="mb-0">{execution ? 'Execution Progress' : 'Ready to Generate'}</h5>
               {execution?.status && (
-                <Badge bg={
-                  execution.status === 'completed' ? 'success' :
-                    execution.status === 'failed' ? 'danger' :
-                      execution.status === 'running' ? 'primary' : 'secondary'
-                }>
+                <Badge
+                  bg={
+                    execution.status === 'completed'
+                      ? 'success'
+                      : execution.status === 'failed'
+                        ? 'danger'
+                        : execution.status === 'running'
+                          ? 'primary'
+                          : 'secondary'
+                  }
+                >
                   {execution.status.charAt(0).toUpperCase() + execution.status.slice(1)}
                 </Badge>
               )}
@@ -330,8 +321,7 @@ export default function AllUsersReportTool() {
                 <Alert variant="warning" className="mb-4">
                   <Alert.Heading>No Users Found</Alert.Heading>
                   <p className="mb-0">
-                    {execution.result?.data?.message ||
-                      'No users were found for the selected clients.'}
+                    {execution.result?.data?.message || 'No users were found for the selected clients.'}
                   </p>
                 </Alert>
               )}
@@ -364,21 +354,14 @@ export default function AllUsersReportTool() {
 
                   <ListGroup className="mb-4">
                     {resultFiles.map((file, index) => (
-                      <ListGroup.Item
-                        key={index}
-                        className="d-flex justify-content-between align-items-center"
-                      >
+                      <ListGroup.Item key={index} className="d-flex justify-content-between align-items-center">
                         <div>
                           <div className="fw-semibold">{file.name}</div>
                           <small className="text-muted">
                             {file.mimeType} • {FileExportService.formatFileSize(file.size)}
                           </small>
                         </div>
-                        <Button
-                          variant="outline-primary"
-                          size="sm"
-                          onClick={() => handleDownloadFile(file)}
-                        >
+                        <Button variant="outline-primary" size="sm" onClick={() => handleDownloadFile(file)}>
                           <Download />
                         </Button>
                       </ListGroup.Item>
@@ -399,33 +382,25 @@ export default function AllUsersReportTool() {
                         </Col>
                         <Col sm={3}>
                           <div className="text-center">
-                            <div className="h4 mb-0 text-success">
-                              {execution.result.data.metadata.totalUsers}
-                            </div>
+                            <div className="h4 mb-0 text-success">{execution.result.data.metadata.totalUsers}</div>
                             <small className="text-muted">Total Users</small>
                           </div>
                         </Col>
                         <Col sm={2}>
                           <div className="text-center">
-                            <div className="h4 mb-0 text-warning">
-                              {execution.result.data.metadata.adminUsers}
-                            </div>
+                            <div className="h4 mb-0 text-warning">{execution.result.data.metadata.adminUsers}</div>
                             <small className="text-muted">Admins</small>
                           </div>
                         </Col>
                         <Col sm={3}>
                           <div className="text-center">
-                            <div className="h4 mb-0 text-info">
-                              {execution.result.data.metadata.regularUsers}
-                            </div>
+                            <div className="h4 mb-0 text-info">{execution.result.data.metadata.regularUsers}</div>
                             <small className="text-muted">Regular Users</small>
                           </div>
                         </Col>
                         <Col sm={2}>
                           <div className="text-center">
-                            <div className="h4 mb-0 text-danger">
-                              {execution.result.data.metadata.clientsFailed}
-                            </div>
+                            <div className="h4 mb-0 text-danger">{execution.result.data.metadata.clientsFailed}</div>
                             <small className="text-muted">Failed</small>
                           </div>
                         </Col>
@@ -445,9 +420,7 @@ export default function AllUsersReportTool() {
           <Card.Header>
             <div className="d-flex align-items-center justify-content-between">
               <h5 className="mb-0">Users ({execution.result.data.users.length})</h5>
-              <small className="text-muted">
-                {execution.result.data.metadata.clientsProcessed} client(s)
-              </small>
+              <small className="text-muted">{execution.result.data.metadata.clientsProcessed} client(s)</small>
             </div>
           </Card.Header>
           <Card.Body>
@@ -468,19 +441,19 @@ export default function AllUsersReportTool() {
                 <tbody>
                   {execution.result.data.users.map((user: UserRecord, i: number) => (
                     <tr key={i}>
-                      <td><Badge bg="secondary">{user.clientName}</Badge></td>
-                      <td>{user.email}</td>
-                      <td><code>{user.username}</code></td>
                       <td>
-                        <Badge bg={user.userType === 'admin' ? 'warning' : 'info'}>
-                          {user.userType}
-                        </Badge>
+                        <Badge bg="secondary">{user.clientName}</Badge>
+                      </td>
+                      <td>{user.email}</td>
+                      <td>
+                        <code>{user.username}</code>
+                      </td>
+                      <td>
+                        <Badge bg={user.userType === 'admin' ? 'warning' : 'info'}>{user.userType}</Badge>
                       </td>
                       <td>{user.status}</td>
                       <td>
-                        <Badge bg={user.enabled ? 'success' : 'danger'}>
-                          {user.enabled ? 'Yes' : 'No'}
-                        </Badge>
+                        <Badge bg={user.enabled ? 'success' : 'danger'}>{user.enabled ? 'Yes' : 'No'}</Badge>
                       </td>
                       <td>{user.lastLoginAt ? new Date(user.lastLoginAt).toLocaleString() : '—'}</td>
                       <td>{new Date(user.createdAt).toLocaleDateString()}</td>
@@ -493,5 +466,5 @@ export default function AllUsersReportTool() {
         </Card>
       )}
     </Container>
-  )
+  );
 }

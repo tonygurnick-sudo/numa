@@ -38,7 +38,7 @@ async function createOrUpdateUser(
   userPoolId: string,
   username: string,
   password: string,
-  groupName: string,
+  groupName: string
 ): Promise<{ created: boolean; addedToGroup: boolean }> {
   let userExists = false;
 
@@ -48,7 +48,7 @@ async function createOrUpdateUser(
       new AdminGetUserCommand({
         UserPoolId: userPoolId,
         Username: username,
-      }),
+      })
     );
     userExists = true;
     console.log(`User ${username} already exists, will update password`);
@@ -73,7 +73,7 @@ async function createOrUpdateUser(
           { Name: 'email_verified', Value: 'true' },
         ],
         MessageAction: 'SUPPRESS', // Don't send welcome email
-      }),
+      })
     );
     console.log(`User ${username} created successfully`);
   }
@@ -86,7 +86,7 @@ async function createOrUpdateUser(
         Username: username,
         Password: password,
         Permanent: true,
-      }),
+      })
     );
     console.log(`Password set for user ${username}`);
   } catch (err) {
@@ -104,7 +104,7 @@ async function createOrUpdateUser(
     new AdminListGroupsForUserCommand({
       UserPoolId: userPoolId,
       Username: username,
-    }),
+    })
   );
 
   const isInGroup = groupsResponse.Groups?.some((g) => g.GroupName === groupName) ?? false;
@@ -117,7 +117,7 @@ async function createOrUpdateUser(
         UserPoolId: userPoolId,
         Username: username,
         GroupName: groupName,
-      }),
+      })
     );
     addedToGroup = true;
     console.log(`User ${username} added to group ${groupName}`);

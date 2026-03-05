@@ -118,7 +118,7 @@ export const WorkspaceChatInlineKBSource: React.FC<WorkspaceChatInlineKBSourcePr
           sourceRef.bucket,
           region,
           getCredentials,
-          3600, // 1 hour expiration
+          3600 // 1 hour expiration
         );
         window.open(signedUrl, '_blank');
       } catch (err) {
@@ -128,7 +128,7 @@ export const WorkspaceChatInlineKBSource: React.FC<WorkspaceChatInlineKBSourcePr
         setIsLoading(false);
       }
     },
-    [sourceRef, getCredentials, region, isLoading],
+    [sourceRef, getCredentials, region, isLoading]
   );
 
   // Title shows the full source URL or S3 URI

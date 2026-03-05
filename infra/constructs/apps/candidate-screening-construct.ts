@@ -173,7 +173,7 @@ export class CandidateScreening extends BaseNumaApp {
                   },
                   ResultPath: '$.resumeExtractOutput',
                   Catch: [],
-                },
+                }
               ),
               NoCoverLetter: {
                 Type: 'Pass',
@@ -202,7 +202,7 @@ export class CandidateScreening extends BaseNumaApp {
                 null,
                 {
                   Catch: [],
-                },
+                }
               ),
             },
           },
@@ -226,7 +226,7 @@ export class CandidateScreening extends BaseNumaApp {
           'WriteSuccessStatus',
           {
             OutputPath: '$.Payload',
-          },
+          }
         ),
         WriteFailureStatus: this.writeFailureStatus(),
         WriteSuccessStatus: this.writeSuccessStatus(),

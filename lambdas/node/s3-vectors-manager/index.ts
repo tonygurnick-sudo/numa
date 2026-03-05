@@ -51,7 +51,7 @@ export async function handler(event: Event): Promise<Response> {
 async function handleCreate(
   s3VectorsClient: S3VectorsClient,
   bedrockClient: BedrockAgentClient,
-  props: ResourceProperties,
+  props: ResourceProperties
 ): Promise<Response> {
   // Step 1: Create S3 Vector bucket (or get existing)
   console.log(`Creating vector bucket: ${props.VectorBucketName}`);
@@ -62,7 +62,7 @@ async function handleCreate(
         encryptionConfiguration: {
           sseType: 'AES256',
         },
-      }),
+      })
     );
     console.log('Vector bucket created');
   } catch (error) {
@@ -91,7 +91,7 @@ async function handleCreate(
             'AMAZON_BEDROCK_METADATA', // Bedrock stores document metadata here
           ],
         },
-      }),
+      })
     );
     console.log('Vector index created');
   } catch (error) {
@@ -106,14 +106,14 @@ async function handleCreate(
   const bucketResult = await s3VectorsClient.send(
     new GetVectorBucketCommand({
       vectorBucketName: props.VectorBucketName,
-    }),
+    })
   );
 
   const indexResult = await s3VectorsClient.send(
     new GetIndexCommand({
       vectorBucketName: props.VectorBucketName,
       indexName: props.IndexName,
-    }),
+    })
   );
 
   const vectorBucketArn = bucketResult.vectorBucket?.vectorBucketArn || '';
@@ -167,7 +167,7 @@ async function handleCreate(
           },
         },
         storageConfiguration: storageConfig,
-      }),
+      })
     );
     knowledgeBaseId = kbResult.knowledgeBase?.knowledgeBaseId || '';
     knowledgeBaseArn = kbResult.knowledgeBase?.knowledgeBaseArn || '';
@@ -209,7 +209,7 @@ async function handleCreate(
             inclusionPrefixes: ['documents/'],
           },
         },
-      }),
+      })
     );
     dataSourceId = dsResult.dataSource?.dataSourceId || '';
     console.log(`Data Source created: ${dataSourceId}`);
@@ -220,7 +220,7 @@ async function handleCreate(
       const listDsResult = await bedrockClient.send(
         new ListDataSourcesCommand({
           knowledgeBaseId: knowledgeBaseId,
-        }),
+        })
       );
       const existingDs = listDsResult.dataSourceSummaries?.find((ds) => ds.name === props.DataSourceName);
 
@@ -261,7 +261,7 @@ async function handleUpdate(): Promise<Response> {
     'Updates are not supported for S3 Vectors Knowledge Base. ' +
       'S3 Vectors indexes are immutable (dimensions, distance metric cannot be changed). ' +
       'To make changes, you must delete and recreate the stack, which will result in data loss. ' +
-      'If you need to update other properties, please destroy and recreate this resource.',
+      'If you need to update other properties, please destroy and recreate this resource.'
   );
 }
 
@@ -269,7 +269,7 @@ async function handleDelete(
   s3VectorsClient: S3VectorsClient,
   bedrockClient: BedrockAgentClient,
   props: ResourceProperties,
-  physicalResourceId?: string,
+  physicalResourceId?: string
 ): Promise<Response> {
   console.log('Deleting resources');
 
@@ -280,7 +280,7 @@ async function handleDelete(
       await bedrockClient.send(
         new DeleteKnowledgeBaseCommand({
           knowledgeBaseId: physicalResourceId,
-        }),
+        })
       );
       console.log('Knowledge Base deleted');
     } catch (error) {
@@ -295,7 +295,7 @@ async function handleDelete(
       new DeleteIndexCommand({
         vectorBucketName: props.VectorBucketName,
         indexName: props.IndexName,
-      }),
+      })
     );
     console.log('Vector index deleted');
   } catch (error) {
@@ -308,7 +308,7 @@ async function handleDelete(
     await s3VectorsClient.send(
       new DeleteVectorBucketCommand({
         vectorBucketName: props.VectorBucketName,
-      }),
+      })
     );
     console.log('Vector bucket deleted');
   } catch (error) {

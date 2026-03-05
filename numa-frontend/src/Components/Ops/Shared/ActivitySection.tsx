@@ -203,7 +203,7 @@ export function ActivitySection({
         console.error('[ActivitySection] Failed to delete activity', err);
       }
     },
-    [editingActivityId, entityType, entityId, handleCancelForm, numaDelete, t],
+    [editingActivityId, entityType, entityId, handleCancelForm, numaDelete, t]
   );
 
   const formatDate = (dateStr: string) => {

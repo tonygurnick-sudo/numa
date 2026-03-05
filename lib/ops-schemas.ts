@@ -2,15 +2,7 @@ import { z } from 'zod';
 
 // ─── Enums ──────────────────────────────────────────────────────────────────────
 
-export const statusTypeSchema = z.enum([
-  'backlog',
-  'scoped',
-  'queued',
-  'active',
-  'completed',
-  'ended',
-  'deleted',
-]);
+export const statusTypeSchema = z.enum(['backlog', 'scoped', 'queued', 'active', 'completed', 'ended', 'deleted']);
 
 export const prioritySchema = z.enum(['highest', 'high', 'medium', 'low', 'lowest']);
 
@@ -41,13 +33,7 @@ export const fieldTypeSchema = z.enum([
   'percentage',
 ]);
 
-export const fieldCategorySchema = z.enum([
-  'Common',
-  'Development',
-  'Call Centre',
-  'CRM',
-  'Operations',
-]);
+export const fieldCategorySchema = z.enum(['Common', 'Development', 'Call Centre', 'CRM', 'Operations']);
 
 export const ticketSourceTypeSchema = z.enum(['app', 'chat', 'agent', 'manual']);
 
@@ -57,15 +43,7 @@ export const activityDirectionSchema = z.enum(['inbound', 'outbound']);
 
 export const activityOutcomeSchema = z.enum(['positive', 'neutral', 'negative', 'info']);
 
-export const auditActionSchema = z.enum([
-  'created',
-  'updated',
-  'moved',
-  'commented',
-  'linked',
-  'deleted',
-  'restored',
-]);
+export const auditActionSchema = z.enum(['created', 'updated', 'moved', 'commented', 'linked', 'deleted', 'restored']);
 
 // ─── Reserved prefixes (cannot be used as ticket type prefixes) ─────────────────
 
@@ -513,7 +491,7 @@ export const createTeamZoneSchema = z.object({
     z.object({
       name: z.string().min(1),
       statusId: z.string(),
-    }),
+    })
   ),
 });
 
@@ -521,10 +499,18 @@ export const createTeamRequestSchema = z.object({
   name: z.string().min(1, 'Name is required'),
   color: z.string().optional(),
   preset: z.string().optional(),
-  customStages: z.union([
-    z.array(z.object({ name: z.string(), zoneType: zoneTypeSchema, stages: z.array(z.object({ name: z.string(), statusType: statusTypeSchema })) })),
-    z.record(z.string(), z.array(z.object({ name: z.string(), statusType: statusTypeSchema }))),
-  ]).optional(),
+  customStages: z
+    .union([
+      z.array(
+        z.object({
+          name: z.string(),
+          zoneType: zoneTypeSchema,
+          stages: z.array(z.object({ name: z.string(), statusType: statusTypeSchema })),
+        })
+      ),
+      z.record(z.string(), z.array(z.object({ name: z.string(), statusType: statusTypeSchema }))),
+    ])
+    .optional(),
   allowedTicketTypes: z.array(z.string()).min(1, 'At least one ticket type is required'),
   fieldOverrides: z.record(z.string(), fieldOverrideSchema).optional(),
   workUnitSeries: workUnitSeriesSchema.nullable().optional(),
@@ -818,7 +804,7 @@ export const batchUpdateZonesRequestSchema = z.array(
     name: z.string().min(1),
     zoneType: zoneTypeSchema,
     order: z.number(),
-  }),
+  })
 );
 
 export const batchUpdateStagesRequestSchema = z.array(
@@ -830,7 +816,7 @@ export const batchUpdateStagesRequestSchema = z.array(
     statusId: z.string(),
     workUnitId: z.string().nullable().optional(),
     order: z.number(),
-  }),
+  })
 );
 
 // ─── Exported Types ─────────────────────────────────────────────────────────────

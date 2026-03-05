@@ -72,7 +72,7 @@ export function UserKBDetailPage(): React.JSX.Element {
         setShowFilePreviewModal(true);
       }
     },
-    [openFilePreview, isMobile],
+    [openFilePreview, isMobile]
   );
 
   const handleDownloadFile = useCallback(
@@ -83,7 +83,7 @@ export function UserKBDetailPage(): React.JSX.Element {
         console.error('Error downloading file:', err);
       }
     },
-    [dataBucket, region, getCredentials],
+    [dataBucket, region, getCredentials]
   );
 
   // Find the current KB

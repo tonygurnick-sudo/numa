@@ -174,11 +174,16 @@
 
   // Header pulse animation for running apps
   @keyframes headerPulse {
-    0%, 100% {
+    0%,
+    100% {
       background-color: var(--bs-light);
     }
     50% {
-      background-color: color-mix(in srgb, var(--color-primary, var(--brand-primary, var(--bs-primary))) 12%, var(--bs-light));
+      background-color: color-mix(
+        in srgb,
+        var(--color-primary, var(--brand-primary, var(--bs-primary))) 12%,
+        var(--bs-light)
+      );
     }
   }
 }

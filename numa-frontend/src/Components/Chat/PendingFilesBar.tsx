@@ -156,7 +156,7 @@ export function PendingFilesBar({
             <FolderChip key={`folder-${item.folderPath}`} folder={item} onRemove={() => onRemove(item)} />
           ) : (
             <FileChip key={`file-${item.path}`} file={item} onRemove={() => onRemove(item)} />
-          ),
+          )
         )}
         {!expanded && hiddenCount > 0 && (
           <button className="pending-files-more" onClick={() => setExpanded(true)} type="button">

@@ -13,6 +13,7 @@ import {
 } from '@aws-sdk/client-cognito-identity-provider';
 import { DeleteUserCommand, GetUserCommand } from '@aws-sdk/client-qbusiness';
 import { withPRM } from './prmUtils';
+import { getFlag } from './featureFlags';
 
 // This is not secure, but will do fine for a temporary password.
 function genPassword(length = 16) {
@@ -217,7 +218,7 @@ export class UserManagementUtils {
         // For admin group removal, this is critical - throw the error
         if (groupName === 'admin') {
           throw new Error(
-            `User removed from ${groupName} group but failed to force logout: ${error.message}. The user may still have elevated privileges until they manually log out.`,
+            `User removed from ${groupName} group but failed to force logout: ${error.message}. The user may still have elevated privileges until they manually log out.`
           );
         }
       }
@@ -272,7 +273,7 @@ export class UserManagementUtils {
     try {
       const USER_POOL_ID = window.sessionStorage.getItem('USER_POOL_ID');
       const APPLICATION_ID = window.sessionStorage.getItem('Q_APPLICATION_ID');
-      const PROVISION_Q_RESOURCES = window.sessionStorage.getItem('PROVISION_Q_RESOURCES') === 'true';
+      const PROVISION_Q_RESOURCES = getFlag('PROVISION_Q_RESOURCES');
 
       // Only attempt Q user deletion if Q resources are provisioned and we have a Q application ID
       if (PROVISION_Q_RESOURCES && APPLICATION_ID && qClient) {

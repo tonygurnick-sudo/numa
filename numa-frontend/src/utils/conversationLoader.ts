@@ -27,7 +27,7 @@ export async function loadConversation(selectedConversationId, numaChatDynamoUti
         conversationHistory = await numaChatDynamoUtils.queryConversations(
           selectedConversationId,
           MAX_DYNAMO_MESSAGES,
-          sub,
+          sub
         );
         break;
       } catch (error) {

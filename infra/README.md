@@ -105,6 +105,7 @@ Portal deployments use a small Lambda to assume the backend role for Terraform (
 ```
 
 Notes:
+
 - This repo does not create/manage `admin-delegated-access`; the manual trust change will not be overwritten by deploys.
 - Ensure the backend role also has S3/DynamoDB permissions for the Terraform backend (bucket `arcanum-terraform-state`, table `arcanum-terraform-lock` in `ap-southeast-2`).
 
@@ -116,12 +117,14 @@ The Pipedream proxy stack provides secure cross-account access to Pipedream inte
 This account stores Pipedream OAuth credentials in AWS Secrets Manager. The secret is named `pipedream/credentials-prod` and is read by the proxy lambda in `us-east-1`.
 
 Pipedream Credentials Secret Format
+
 - `client_id`: string — Pipedream OAuth client ID
 - `client_secret`: string — Pipedream OAuth client secret
 - `project_id`: string — Pipedream Connect project ID
 - `environment`: string — Pipedream environment, by default we are using `production`
 
 # To update the secret (multi‑line)
+
 ```bash
 # Make sure you have the AWS CLI configured with access to the Pipedream proxy account
 aws secretsmanager update-secret \
@@ -135,6 +138,7 @@ aws secretsmanager update-secret \
 ```
 
 **Deployment:**
+
 ```bash
 # Package the relavant lambdas before deployment
 bash package-python-lambda.sh lambdas/python/pipedream-proxy
@@ -161,6 +165,7 @@ yarn cdktf deploy --auto-approve pipedream-proxy
 - **CloudWatch**: Log groups for both lambda functions
 
 **Security Model:**
+
 - Caller validation via presigned STS GetCallerIdentity URL (generated in the caller account). The proxy verifies the URL over HTTPS and parses the STS XML.
 - Role name validation against allowlist
 - First-request registration with negative case handling

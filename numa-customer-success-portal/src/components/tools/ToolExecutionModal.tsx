@@ -1,108 +1,105 @@
-import { useState, useEffect } from 'react'
-import { Modal, Button, Form, Alert, Row, Col, ListGroup } from 'react-bootstrap'
-import { Download, X } from 'react-bootstrap-icons'
-import { ProgressTracker } from './ProgressTracker'
-import { useToolExecution } from '@/hooks/useToolExecution'
-import { UsageReportService } from '@/services/usageReportService'
-import { FileExportService } from '@/utils/fileExport'
-import { DateUtils } from '@/utils/dateUtils'
-import { clientService } from '@/services/clientService'
-import type { Tool, ToolResult, ToolResultFile, ToolParameter, UsageReportParameters } from '@/types/tools'
+import { useState, useEffect } from 'react';
+import { Modal, Button, Form, Alert, Row, Col, ListGroup } from 'react-bootstrap';
+import { Download, X } from 'react-bootstrap-icons';
+import { ProgressTracker } from './ProgressTracker';
+import { useToolExecution } from '@/hooks/useToolExecution';
+import { UsageReportService } from '@/services/usageReportService';
+import { FileExportService } from '@/utils/fileExport';
+import { DateUtils } from '@/utils/dateUtils';
+import { clientService } from '@/services/clientService';
+import type { Tool, ToolResult, ToolResultFile, ToolParameter, UsageReportParameters } from '@/types/tools';
 
 interface ToolExecutionModalProps {
-  tool: Tool | null
-  show: boolean
-  onHide: () => void
+  tool: Tool | null;
+  show: boolean;
+  onHide: () => void;
 }
 
 export function ToolExecutionModal({ tool, show, onHide }: ToolExecutionModalProps) {
-  const [parameters, setParameters] = useState<Record<string, unknown>>({})
-  const [clients, setClients] = useState<Array<{ name: string }>>([])
-  const [loadingClients, setLoadingClients] = useState(false)
-  const [resultFiles, setResultFiles] = useState<ToolResultFile[]>([])
+  const [parameters, setParameters] = useState<Record<string, unknown>>({});
+  const [clients, setClients] = useState<Array<{ name: string }>>([]);
+  const [loadingClients, setLoadingClients] = useState(false);
+  const [resultFiles, setResultFiles] = useState<ToolResultFile[]>([]);
 
   const { execution, isRunning, execute, cancel, reset } = useToolExecution({
     onCompleted: (result) => {
       if (result.files) {
-        setResultFiles(result.files)
+        setResultFiles(result.files);
       }
     },
     onFailed: (error) => {
-      console.error('Tool execution failed:', error)
+      console.error('Tool execution failed:', error);
     },
-  })
+  });
 
   // Load clients when modal opens
   useEffect(() => {
     if (show && tool?.id === 'usage-report') {
-      loadClients()
+      loadClients();
     }
-  }, [show, tool])
+  }, [show, tool]);
 
   // Initialize parameters with defaults when tool changes
   useEffect(() => {
     if (tool) {
-      const defaultParams: Record<string, unknown> = {}
-      tool.parameters.forEach(param => {
+      const defaultParams: Record<string, unknown> = {};
+      tool.parameters.forEach((param) => {
         if (param.defaultValue !== undefined) {
-          defaultParams[param.name] = param.defaultValue
+          defaultParams[param.name] = param.defaultValue;
         }
-      })
-      setParameters(defaultParams)
+      });
+      setParameters(defaultParams);
     }
-  }, [tool])
+  }, [tool]);
 
   // Reset state when modal closes
   useEffect(() => {
     if (!show) {
-      reset()
-      setResultFiles([])
-      setParameters({})
+      reset();
+      setResultFiles([]);
+      setParameters({});
     }
-  }, [show, reset])
+  }, [show, reset]);
 
   const loadClients = async () => {
-    setLoadingClients(true)
+    setLoadingClients(true);
     try {
-      const allClients = await clientService.getAllClients()
-      setClients(allClients)
+      const allClients = await clientService.getAllClients();
+      setClients(allClients);
     } catch (error) {
-      console.error('Failed to load clients:', error)
+      console.error('Failed to load clients:', error);
     } finally {
-      setLoadingClients(false)
+      setLoadingClients(false);
     }
-  }
+  };
 
   const handleParameterChange = (paramName: string, value: unknown) => {
-    setParameters(prev => ({ ...prev, [paramName]: value }))
-  }
+    setParameters((prev) => ({ ...prev, [paramName]: value }));
+  };
 
   const handleExecute = async () => {
-    if (!tool) return
+    if (!tool) return;
 
     if (tool.id === 'usage-report') {
       await execute(tool.id, parameters, async (params, onProgress, _signal) => {
-        const { result, files } = await UsageReportService.generateReport(
-          params as UsageReportParameters,
-          onProgress
-        )
+        const { result, files } = await UsageReportService.generateReport(params as UsageReportParameters, onProgress);
 
         return {
           type: 'file',
           files,
           data: result,
-        } as ToolResult
-      })
+        } as ToolResult;
+      });
     }
-  }
+  };
 
   const handleDownloadFile = (file: ToolResultFile) => {
-    FileExportService.downloadFile(file)
-  }
+    FileExportService.downloadFile(file);
+  };
 
   const handleDownloadAll = () => {
-    FileExportService.downloadFiles(resultFiles)
-  }
+    FileExportService.downloadFiles(resultFiles);
+  };
 
   const renderParameterInput = (param: ToolParameter) => {
     switch (param.type) {
@@ -115,17 +112,17 @@ export function ToolExecutionModal({ tool, show, onHide }: ToolExecutionModalPro
               disabled={isRunning || loadingClients}
             >
               <option value="">Select a client...</option>
-              {clients.map(client => (
+              {clients.map((client) => (
                 <option key={client.name} value={client.name}>
                   {client.name}
                 </option>
               ))}
             </Form.Select>
-          )
+          );
         }
 
         if (param.name === 'timePeriod') {
-          const options = DateUtils.getTimePeriodOptions()
+          const options = DateUtils.getTimePeriodOptions();
           return (
             <Form.Select
               value={parameters[param.name] || ''}
@@ -133,13 +130,13 @@ export function ToolExecutionModal({ tool, show, onHide }: ToolExecutionModalPro
               disabled={isRunning}
             >
               <option value="">Select time period...</option>
-              {options.map(option => (
+              {options.map((option) => (
                 <option key={option.value} value={option.value}>
                   {option.label}
                 </option>
               ))}
             </Form.Select>
-          )
+          );
         }
 
         if (param.name === 'outputFormat') {
@@ -153,7 +150,7 @@ export function ToolExecutionModal({ tool, show, onHide }: ToolExecutionModalPro
               <option value="csv">CSV Files</option>
               <option value="json">JSON File</option>
             </Form.Select>
-          )
+          );
         }
 
         return (
@@ -169,7 +166,7 @@ export function ToolExecutionModal({ tool, show, onHide }: ToolExecutionModalPro
               </option>
             ))}
           </Form.Select>
-        )
+        );
 
       case 'text':
         return (
@@ -180,7 +177,7 @@ export function ToolExecutionModal({ tool, show, onHide }: ToolExecutionModalPro
             placeholder={param.placeholder}
             disabled={isRunning}
           />
-        )
+        );
 
       case 'number':
         return (
@@ -191,7 +188,7 @@ export function ToolExecutionModal({ tool, show, onHide }: ToolExecutionModalPro
             placeholder={param.placeholder}
             disabled={isRunning}
           />
-        )
+        );
 
       case 'boolean':
         return (
@@ -201,24 +198,24 @@ export function ToolExecutionModal({ tool, show, onHide }: ToolExecutionModalPro
             onChange={(e) => handleParameterChange(param.name, e.target.checked)}
             disabled={isRunning}
           />
-        )
+        );
 
       default:
-        return null
+        return null;
     }
-  }
+  };
 
   const isFormValid = () => {
-    if (!tool) return false
+    if (!tool) return false;
 
-    return tool.parameters.every(param => {
-      if (!param.required) return true
-      const value = parameters[param.name]
-      return value !== undefined && value !== null && value !== ''
-    })
-  }
+    return tool.parameters.every((param) => {
+      if (!param.required) return true;
+      const value = parameters[param.name];
+      return value !== undefined && value !== null && value !== '';
+    });
+  };
 
-  if (!tool) return null
+  if (!tool) return null;
 
   return (
     <Modal show={show} onHide={onHide} size="lg" centered backdrop="static">
@@ -241,9 +238,7 @@ export function ToolExecutionModal({ tool, show, onHide }: ToolExecutionModalPro
                       {param.required && <span className="text-danger ms-1">*</span>}
                     </Form.Label>
                     {renderParameterInput(param)}
-                    {param.description && (
-                      <Form.Text className="text-muted">{param.description}</Form.Text>
-                    )}
+                    {param.description && <Form.Text className="text-muted">{param.description}</Form.Text>}
                   </Form.Group>
                 </Col>
               ))}
@@ -277,21 +272,14 @@ export function ToolExecutionModal({ tool, show, onHide }: ToolExecutionModalPro
 
             <ListGroup>
               {resultFiles.map((file, index) => (
-                <ListGroup.Item
-                  key={index}
-                  className="d-flex justify-content-between align-items-center"
-                >
+                <ListGroup.Item key={index} className="d-flex justify-content-between align-items-center">
                   <div>
                     <div className="fw-semibold">{file.name}</div>
                     <small className="text-muted">
                       {file.mimeType} • {FileExportService.formatFileSize(file.size)}
                     </small>
                   </div>
-                  <Button
-                    variant="outline-primary"
-                    size="sm"
-                    onClick={() => handleDownloadFile(file)}
-                  >
+                  <Button variant="outline-primary" size="sm" onClick={() => handleDownloadFile(file)}>
                     <Download />
                   </Button>
                 </ListGroup.Item>
@@ -301,9 +289,7 @@ export function ToolExecutionModal({ tool, show, onHide }: ToolExecutionModalPro
         )}
 
         {/* Loading state */}
-        {loadingClients && (
-          <Alert variant="info">Loading client configurations...</Alert>
-        )}
+        {loadingClients && <Alert variant="info">Loading client configurations...</Alert>}
       </Modal.Body>
 
       <Modal.Footer>
@@ -318,11 +304,7 @@ export function ToolExecutionModal({ tool, show, onHide }: ToolExecutionModalPro
           </div>
 
           <div className="d-flex gap-2">
-            <Button
-              variant="secondary"
-              onClick={onHide}
-              disabled={isRunning}
-            >
+            <Button variant="secondary" onClick={onHide} disabled={isRunning}>
               {execution?.status === 'completed' ? 'Close' : 'Cancel'}
             </Button>
 
@@ -339,5 +321,5 @@ export function ToolExecutionModal({ tool, show, onHide }: ToolExecutionModalPro
         </div>
       </Modal.Footer>
     </Modal>
-  )
+  );
 }

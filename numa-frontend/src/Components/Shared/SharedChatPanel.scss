@@ -50,7 +50,7 @@
 
   &.message-user {
     .message-content {
-      background-color: var(--bs-primary);
+      background-color: var(--brand-primary, var(--bs-primary));
       color: var(--bs-white);
       border-radius: 1rem 1rem 0.25rem 1rem;
       margin-left: 2rem;
@@ -99,7 +99,7 @@
 
 .cursor {
   animation: blink 1s step-end infinite;
-  color: var(--bs-primary);
+  color: var(--brand-primary, var(--bs-primary));
 }
 
 @keyframes blink {
@@ -108,13 +108,72 @@
   }
 }
 
-.input-container {
+.limit-reached-banner {
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   gap: 0.75rem;
   padding: 1rem 1.25rem;
   border-top: 1px solid var(--bs-border-color, #dee2e6);
+  background-color: var(--bs-danger-bg-subtle, #f8d7da);
+  color: var(--bs-danger, #dc3545);
+
+  i {
+    font-size: 1.5rem;
+    flex-shrink: 0;
+  }
+
+  strong {
+    display: block;
+    font-size: 0.875rem;
+  }
+
+  p {
+    margin: 0;
+    font-size: 0.8125rem;
+    opacity: 0.85;
+  }
+}
+
+.processing-banner {
+  padding: 1rem 1.25rem;
+  border-top: 1px solid var(--bs-border-color, #dee2e6);
+  background-color: var(--bs-info-bg-subtle, #d1ecf1);
+  color: var(--bs-info, #0dcaf0);
+
+  strong {
+    display: block;
+    font-size: 0.875rem;
+    color: var(--bs-info-emphasis, #087990);
+  }
+
+  p {
+    font-size: 0.8125rem;
+    opacity: 0.85;
+    color: var(--bs-info-emphasis, #087990);
+  }
+
+  .spinner-border {
+    color: var(--bs-info, #0dcaf0);
+  }
+}
+
+.input-container {
+  padding: 0.75rem 1.25rem 1rem;
+  border-top: 1px solid var(--bs-border-color, #dee2e6);
   background-color: var(--bs-gray-50, #fafafa);
+
+  .questions-remaining {
+    font-size: 0.75rem;
+    color: var(--bs-secondary, #6c757d);
+    text-align: center;
+    margin-bottom: 0.5rem;
+  }
+
+  .input-row {
+    display: flex;
+    align-items: flex-end;
+    gap: 0.75rem;
+  }
 
   textarea {
     flex: 1;
@@ -127,11 +186,13 @@
     min-height: 44px;
     max-height: 120px;
     background-color: var(--bs-white);
-    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+    transition:
+      border-color 0.15s ease,
+      box-shadow 0.15s ease;
 
     &:focus {
       outline: none;
-      border-color: var(--bs-primary);
+      border-color: var(--brand-primary, var(--bs-primary));
       box-shadow: 0 0 0 3px rgba(var(--bs-primary-rgb), 0.1);
     }
 
@@ -153,13 +214,15 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    background-color: var(--bs-primary);
+    background-color: var(--brand-primary, var(--bs-primary));
     border: none;
     color: var(--bs-white);
-    transition: background-color 0.15s ease, transform 0.1s ease;
+    transition:
+      background-color 0.15s ease,
+      transform 0.1s ease;
 
     &:hover:not(:disabled) {
-      background-color: var(--bs-primary);
+      background-color: var(--brand-primary, var(--bs-primary));
       filter: brightness(1.1);
     }
 

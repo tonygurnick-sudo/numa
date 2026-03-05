@@ -206,7 +206,7 @@ class BrandingService {
   applyExternalBranding(
     theme: BrandingTheme,
     features: Record<string, boolean> = {},
-    options: ApplyOptions = {},
+    options: ApplyOptions = {}
   ): void {
     this._applyConfig(
       {
@@ -214,7 +214,7 @@ class BrandingService {
         features,
         tenantEnabled: options.tenantEnabled,
       },
-      options,
+      options
     );
     this.initialized = true;
   }
@@ -257,7 +257,7 @@ class BrandingService {
           features: parsed.features ?? {},
           tenantEnabled: parsed.tenantEnabled,
         },
-        { persist: false, tenantEnabled: parsed.tenantEnabled },
+        { persist: false, tenantEnabled: parsed.tenantEnabled }
       );
 
       const tsValue = window.localStorage.getItem(BRANDING_CACHE_TS_KEY);
@@ -457,7 +457,7 @@ class BrandingService {
           features: {},
           tenantEnabled: true,
         },
-        { persist: false, notify: true, tenantEnabled: true },
+        { persist: false, notify: true, tenantEnabled: true }
       );
 
       return true;
@@ -502,7 +502,7 @@ class BrandingService {
               branding: DEFAULT_BRANDING_THEME,
               features: {},
             },
-            { persist: false },
+            { persist: false }
           );
           this.initialized = true;
           return;
@@ -539,7 +539,7 @@ class BrandingService {
               features: {},
               tenantEnabled,
             },
-            { persist: false, tenantEnabled },
+            { persist: false, tenantEnabled }
           );
         }
 

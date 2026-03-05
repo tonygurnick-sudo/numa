@@ -1,4 +1,5 @@
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { getFlag } from '../utils/featureFlags';
 import { Tab, Button, Spinner, Modal, Alert, OverlayTrigger, Tooltip, Form } from 'react-bootstrap';
 import { useTranslation } from 'react-i18next';
 import { Bot } from 'lucide-react';
@@ -14,6 +15,8 @@ import {
   AdminDataConnectorsService,
   type GlobalDataConnectorSettingsMap,
 } from '../Services/AdminDataConnectorsService';
+import { DataConnectorsTab } from '../Components/DataConnectors/DataConnectorsTab';
+import { CapabilitiesService, type CapabilitySettingsMap } from '../Services/CapabilitiesService';
 import { AdminAgentsService, type AgentsMode } from '../Services/AdminAgentsService';
 import { getIntegrationsListFormat, type IntegrationListItem } from '../config/integrationsConfig';
 import { PipedreamProxyService } from '../Services/PipedreamProxyService';
@@ -26,9 +29,13 @@ import {
   DEFAULT_GLOBAL_CHAT_SETTINGS,
 } from '../Services/AdminChatSettingsService';
 import ExpandableOverflowBox from '../Components/ExpandableOverflowBox';
-import { SynergyIcon } from '../Components/DataConnectors/SynergyConnectorCard';
 import { fetchCompanyInfo, saveCompanyInfo, getProfileText } from '../utils/companyInfoUtils';
 import { manifestService } from '../Services/manifestService';
+import { loadCapabilities, groupByDependencies } from '../utils/capabilityRegistry';
+import { ROUTE_CONFIG } from '../utils/routeConfig';
+import type { CapabilityItem } from '../utils/capabilityRegistry';
+import { getFlagRegistry } from '../utils/featureFlags';
+import { loadAdminCapabilityGating } from '../utils/adminCapabilityGating';
 
 const useNavigationConfirm = (when: boolean, message: string) => {
   const navigationContext = useContext(UNSAFE_NavigationContext);
@@ -71,11 +78,9 @@ export default function SettingsPage() {
   const isAdmin = Boolean(user?.groups?.includes('admin'));
   const currentScope: 'user' | 'admin' = isAdmin ? settingsScope : 'user';
   const allowBrandingTab = brandingApiEnabled && isAdmin;
-  const agentsFeatureEnabled =
-    typeof window !== 'undefined' ? window.sessionStorage.getItem('AGENTS') === 'true' : false;
-  const mfaEnabled = typeof window !== 'undefined' ? window.sessionStorage.getItem('MFA_ENABLED') === 'true' : false;
-  const dataConnectorsEnabled =
-    typeof window !== 'undefined' ? window.sessionStorage.getItem('DATA_CONNECTORS_ENABLED') === 'true' : false;
+  const agentsFeatureEnabled = getFlag('AGENTS');
+  const dataConnectorsEnabled = getFlag('DATA_CONNECTORS_ENABLED');
+  const mfaEnabled = getFlag('MFA_ENABLED');
   const availableIntegrations = useMemo<IntegrationListItem[]>(() => getIntegrationsListFormat(), [i18n.language]);
 
   useEffect(() => {
@@ -86,9 +91,11 @@ export default function SettingsPage() {
 
   // Global (admin) settings — SWR: initialize from cache for instant render
   const [globalSettings, setGlobalSettings] = useState<GlobalIntegrationSettingsMap>(
-    () => AdminIntegrationsService.getCached() ?? {},
+    () => AdminIntegrationsService.getCached() ?? {}
   );
+  const [capabilitySettings, setCapabilitySettings] = useState<CapabilitySettingsMap>({});
   const [dataConnectorSettings, setDataConnectorSettings] = useState<GlobalDataConnectorSettingsMap>({});
+  const [capabilities, setCapabilities] = useState<CapabilityItem[]>([]);
   const [loadingSettings, setLoadingSettings] = useState<boolean>(() => !AdminIntegrationsService.getCached());
   const [error, setError] = useState<string | null>(null);
 
@@ -115,10 +122,10 @@ export default function SettingsPage() {
   const companyProfileBucket = companyProfileClientName ? `numa-${companyProfileClientName}-company` : '';
 
   // Pipedream feature + relay
-  const hasPipedreamFeature = window.sessionStorage.getItem('PIPEDREAM_INTEGRATIONS') === 'true';
+  const hasPipedreamFeature = getFlag('PIPEDREAM_INTEGRATIONS');
   const relayLambdaArn = window.sessionStorage.getItem('PIPEDREAM_RELAY_LAMBDA_ARN');
   const previewMode = !hasPipedreamFeature || !relayLambdaArn;
-  const workspaceChatEnabled = window.sessionStorage.getItem('NUMA_WORKSPACE_CHAT') === 'true';
+  const workspaceChatEnabled = getFlag('NUMA_WORKSPACE_CHAT');
 
   useEffect(() => {
     let isMounted = true;
@@ -169,22 +176,14 @@ export default function SettingsPage() {
     }
   };
 
-  const loadDataConnectorSettings = async () => {
+  const loadCapabilitySettings = async () => {
     try {
-      if (!isAdmin) {
-        setDataConnectorSettings({ synergy: { status: 'disabled' } });
-        return;
-      }
-      if (!dataConnectorsEnabled) {
-        setDataConnectorSettings({ synergy: { status: 'disabled' } });
-        return;
-      }
       if (!user) return;
-      const data = await AdminDataConnectorsService.listWithNuma(numaGet);
-      setDataConnectorSettings(data);
+      const data = await CapabilitiesService.list(numaGet);
+      setCapabilitySettings(data);
     } catch (e) {
-      console.warn('Settings: failed to load data connector settings', e);
-      setDataConnectorSettings({ synergy: { status: 'disabled' } });
+      console.warn('Settings: failed to load capability settings', e);
+      setCapabilitySettings({});
     }
   };
 
@@ -205,8 +204,63 @@ export default function SettingsPage() {
 
   useEffect(() => {
     if (!isAdmin) return;
-    loadDataConnectorSettings();
-  }, [isAdmin, user, numaGet, dataConnectorsEnabled]);
+    loadCapabilitySettings();
+
+    // Build capability list from config.json flags (DEPLOY_* keys in sessionStorage),
+    // enriched with metadata from capabilities.json where available.
+    loadCapabilities().then((meta) => {
+      const metaByFlag = new Map(meta.map((c) => [c.flag, c]));
+      const items: CapabilityItem[] = [];
+
+      // 1. Flags from config.json — show all except hard-denied (DEPLOY_FLAG=false)
+      for (let i = 0; i < sessionStorage.length; i++) {
+        const key = sessionStorage.key(i);
+        if (!key?.startsWith('DEPLOY_')) continue;
+        const flag = key.slice(7);
+        const deployValue = sessionStorage.getItem(key);
+        if (deployValue === 'false') continue; // Hard deny — do not show
+        const existing = metaByFlag.get(flag);
+        items.push(
+          existing ?? { flag, name: flag, description: '', deployRequired: false, devOnly: false, dependencies: [] }
+        );
+        metaByFlag.delete(flag); // Mark as handled
+      }
+
+      // 2. Collect all known flags: from route config featureFlags + code registry.
+      //    This ensures flags like NUMA_FILES and KNOWLEDGE_BASES always appear
+      //    even if they're not in config.json and Nav hasn't rendered them yet.
+      const allKnownFlags = new Set(getFlagRegistry());
+      for (const r of ROUTE_CONFIG) {
+        if (r.featureFlag) allKnownFlags.add(r.featureFlag);
+      }
+
+      for (const flag of allKnownFlags) {
+        if (items.some((c) => c.flag === flag)) continue; // Already in list
+        if (sessionStorage.getItem(`DEPLOY_${flag}`) === 'false') continue; // Hard denied
+        const existing = metaByFlag.get(flag);
+        items.push(
+          existing ?? {
+            flag,
+            name: flag,
+            description: '',
+            deployRequired: false,
+            devOnly: false,
+            dependencies: [],
+          }
+        );
+      }
+
+      setCapabilities(items);
+    });
+  }, [isAdmin, user, numaGet]);
+
+  // Load Data Connector admin settings
+  useEffect(() => {
+    if (!isAdmin || !dataConnectorsEnabled || !user) return;
+    AdminDataConnectorsService.listWithNuma(numaGet)
+      .then(setDataConnectorSettings)
+      .catch(() => setDataConnectorSettings({ synergy: { status: 'disabled' } }));
+  }, [isAdmin, dataConnectorsEnabled, user, numaGet]);
 
   // Load Agents settings
   useEffect(() => {
@@ -299,14 +353,10 @@ export default function SettingsPage() {
   const [toolsError, setToolsError] = useState<string | null>(null);
   const [toolList, setToolList] = useState<{ name: string; description?: string }[]>([]);
   const [toolToggles, setToolToggles] = useState<Record<string, boolean>>({});
-  const [integrationsTabKey, setIntegrationsTabKey] = useState<'connected-apps' | 'data-connectors'>('connected-apps');
+  const [_integrationsTabKey, _setIntegrationsTabKey] = useState<'connected-apps' | 'data-connectors'>(
+    'connected-apps'
+  );
   const [userSettingsTabKey, setUserSettingsTabKey] = useState<string>('my-profile');
-
-  useEffect(() => {
-    if (!dataConnectorsEnabled && integrationsTabKey === 'data-connectors') {
-      setIntegrationsTabKey('connected-apps');
-    }
-  }, [dataConnectorsEnabled, integrationsTabKey]);
 
   useEffect(() => {
     if (!workspaceChatEnabled && userSettingsTabKey === 'approval-settings') {
@@ -338,7 +388,7 @@ export default function SettingsPage() {
 
   useNavigationConfirm(
     isAdmin && activeKey === 'chat-defaults' && chatDefaultsDirty,
-    t('navigation.unsavedChatDefaults'),
+    t('navigation.unsavedChatDefaults')
   );
 
   useEffect(() => {
@@ -402,7 +452,7 @@ export default function SettingsPage() {
           status: globalSettings[manageToolsFor]?.status || 'disabled',
           denyTools,
         },
-        numaPut,
+        numaPut
       );
       await loadGlobal();
       setManageToolsFor(null);
@@ -423,7 +473,7 @@ export default function SettingsPage() {
           status: nextEnabled ? 'enabled' : 'disabled',
           denyTools: globalSettings[integrationId]?.denyTools || [],
         },
-        numaPut,
+        numaPut
       );
       await loadGlobal();
     } catch (e) {
@@ -431,20 +481,18 @@ export default function SettingsPage() {
     }
   };
 
-  const toggleDataConnector = async (connectorId: string, nextEnabled: boolean) => {
+  const toggleCapability = async (flagName: string, nextEnabled: boolean) => {
     try {
-      if (!nextEnabled && dataConnectorSettings[connectorId]?.status === 'enabled') {
-        const ok = window.confirm(t('confirm.disableDataConnector', { connectorId }));
+      const cap = capabilities.find((c) => c.flag === flagName);
+      if (!nextEnabled && capabilitySettings[flagName]?.status !== 'disabled') {
+        const displayName = cap?.labelKey ? t(cap.labelKey) : (cap?.name ?? flagName);
+        const ok = window.confirm(t('capabilities.disableConfirm', { name: displayName }));
         if (!ok) return;
       }
-      await AdminDataConnectorsService.updateWithNuma(
-        connectorId,
-        {
-          status: nextEnabled ? 'enabled' : 'disabled',
-        },
-        numaPut,
-      );
-      await loadDataConnectorSettings();
+      await CapabilitiesService.update(flagName, { status: nextEnabled ? 'enabled' : 'disabled' }, numaPut);
+      await loadCapabilitySettings();
+      // Refresh gating so Nav and Routes reflect the change immediately
+      await loadAdminCapabilityGating(numaGet);
     } catch (e) {
       setError((e as Error).message || t('errors.updateDataConnector'));
     }
@@ -472,7 +520,7 @@ export default function SettingsPage() {
 
       setActiveKey(nextKey);
     },
-    [activeKey, isBrandingDirty],
+    [activeKey, isBrandingDirty]
   );
 
   const renderIntegrationRow = (integration: IntegrationListItem) => {
@@ -568,18 +616,51 @@ export default function SettingsPage() {
     );
   };
 
-  const renderDataConnectorRow = (connector: { id: string; name: string; description: string }) => {
-    const enabled = dataConnectorSettings[connector.id]?.status === 'enabled';
+  /**
+   * Resolve effective devOnly / deployRequired for a capability.
+   * DynamoDB values (from per-instance admin settings) override the metadata defaults.
+   */
+  const resolveCapMeta = (cap: CapabilityItem) => {
+    return {
+      devOnly: cap.devOnly,
+      deployRequired: cap.deployRequired,
+    };
+  };
+
+  /** Filter: devOnly capabilities hidden unless user has DEVELOPER_MODE enabled. */
+  const isDeveloper = getFlag('DEVELOPER_MODE');
+  const visibleCapabilities = capabilities.filter((cap) => {
+    const meta = resolveCapMeta(cap);
+    return !meta.devOnly || isDeveloper;
+  });
+
+  /** Group visible capabilities by dependency for the UI. */
+  const capabilityGroups = groupByDependencies(visibleCapabilities);
+
+  const renderCapabilityRow = (cap: CapabilityItem, isChild = false) => {
+    const deployValue = typeof window !== 'undefined' ? window.sessionStorage.getItem(`DEPLOY_${cap.flag}`) : null;
+    // isDeployed: true if explicitly in config, or unknown (not yet wired up — dev flag)
+    const isDeployed = deployValue !== null ? deployValue === 'true' : true;
+    const capSetting = capabilitySettings[cap.flag];
+    // Default to enabled if no admin setting exists (user requirement: enabled by default)
+    const adminEnabled = capSetting ? capSetting.status === 'enabled' : true;
+    const meta = resolveCapMeta(cap);
+    const displayName = cap.labelKey ? t(cap.labelKey, { defaultValue: cap.name }) : cap.name;
+    const displayDescription = cap.descriptionKey
+      ? t(cap.descriptionKey, { defaultValue: cap.description })
+      : cap.description;
 
     return (
       <div
-        key={connector.id}
+        key={cap.flag}
         className="border rounded-3 p-3 mb-2 bg-white"
         style={{
           boxShadow: '0 2px 8px rgba(0,0,0,0.06)',
           transition: 'all 0.2s ease',
-          opacity: enabled ? 1 : 0.75,
+          opacity: isDeployed ? 1 : 0.5,
           cursor: 'default',
+          filter: !isDeployed ? 'grayscale(50%)' : 'none',
+          ...(isChild ? { marginLeft: '2rem', borderLeft: '3px solid #dee2e6' } : {}),
         }}
         onMouseEnter={(e) => {
           e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.1)';
@@ -589,43 +670,67 @@ export default function SettingsPage() {
         }}
       >
         <div className="row align-items-center">
-          <div className="col-md-6 d-flex align-items-center">
+          <div className="col-md-7 d-flex align-items-center">
             <div
               className="rounded-2 d-flex align-items-center justify-content-center me-3 flex-shrink-0"
               style={{ width: '48px', height: '48px', backgroundColor: '#f8f9fa', border: '1px solid #dee2e6' }}
             >
-              <SynergyIcon />
+              <i
+                className={`bi ${cap.icon ?? 'bi-gear'}`}
+                style={{ fontSize: '24px', color: isDeployed ? '#0d6efd' : '#6c757d' }}
+              />
             </div>
             <div>
-              <div className="fw-semibold settings-item-title">{connector.name}</div>
-              <div className="text-muted small settings-item-description">{connector.description}</div>
+              <div
+                className="fw-semibold settings-item-title d-flex align-items-center gap-2"
+                style={{ fontSize: '0.95rem' }}
+              >
+                {displayName}
+                {!isDeployed && <span className="badge bg-secondary small">{t('capabilities.notDeployed')}</span>}
+                {meta.deployRequired && (
+                  <span className="text-muted small">{t('capabilities.requiresDeployBadge')}</span>
+                )}
+              </div>
+              <div
+                className="text-muted small settings-item-description"
+                style={{ fontSize: '0.85rem', lineHeight: '1.4' }}
+              >
+                {displayDescription}
+              </div>
             </div>
           </div>
-          <div className="col-md-6 d-flex justify-content-end gap-2 align-items-center">
-            <Form.Check
-              type="switch"
-              id={`toggle-${connector.id}`}
-              checked={enabled}
-              onChange={() => toggleDataConnector(connector.id, !enabled)}
-              label={
-                <span className="small">
-                  {enabled ? t('integrations.status.enabled') : t('integrations.status.disabled')}
-                </span>
-              }
-            />
+          <div className="col-md-5 d-flex justify-content-end gap-2 align-items-center">
+            {!isDeployed ? (
+              <OverlayTrigger placement="top" overlay={<Tooltip>{t('capabilities.notDeployed')}</Tooltip>}>
+                <div>
+                  <Form.Check
+                    type="switch"
+                    id={`toggle-cap-${cap.flag}`}
+                    checked={false}
+                    disabled
+                    label={<span className="small text-muted">{t('capabilities.notDeployed')}</span>}
+                  />
+                </div>
+              </OverlayTrigger>
+            ) : (
+              <Form.Check
+                type="switch"
+                id={`toggle-cap-${cap.flag}`}
+                checked={adminEnabled}
+                onChange={() => toggleCapability(cap.flag, !adminEnabled)}
+                label={
+                  <span className="small">
+                    {adminEnabled ? t('capabilities.toggleEnabled') : t('capabilities.toggleDisabled')}
+                  </span>
+                }
+              />
+            )}
           </div>
         </div>
       </div>
     );
   };
 
-  const dataConnectors = [
-    {
-      id: 'synergy',
-      name: t('dataConnectors.synergyName'),
-      description: t('dataConnectors.synergyDescription'),
-    },
-  ];
   const adminTabs = useMemo(
     () => [
       { key: 'users', label: t('tabs.users'), iconClassName: 'bi bi-people' },
@@ -634,7 +739,13 @@ export default function SettingsPage() {
       { key: 'company-profile', label: t('tabs.companyProfile'), iconClassName: 'bi bi-building' },
       ...(agentsFeatureEnabled ? [{ key: 'agents', label: t('tabs.agents'), iconClassName: 'bi bi-robot' }] : []),
       { key: 'integrations', label: t('tabs.integrations'), iconClassName: 'bi bi-plug' },
+      ...(dataConnectorsEnabled
+        ? [{ key: 'data-connectors', label: t('tabs.dataConnectors'), iconClassName: 'bi bi-cloud-download' }]
+        : []),
+      { key: 'capabilities', label: t('capabilities.tabTitle'), iconClassName: 'bi bi-toggles' },
     ],
+    // REBASE RESOLUTION: Kept HEAD dep order. Incoming (8e1a6ca9) had [allowBrandingTab, agentsFeatureEnabled, dataConnectorsEnabled, mfaEnabled, t].
+    // Functionally identical — order doesn't matter for useMemo deps. Kept HEAD for consistency with body order.
     [allowBrandingTab, agentsFeatureEnabled, mfaEnabled, dataConnectorsEnabled, t]
   );
   const userTabs = useMemo(
@@ -655,6 +766,8 @@ export default function SettingsPage() {
         ? [{ key: 'trusted-devices', label: t('userProfile.trustedDevices.title'), iconClassName: 'bi bi-phone' }]
         : []),
     ],
+    // REBASE RESOLUTION: Kept HEAD — includes mfaEnabled in deps. Incoming (8e1a6ca9) omitted it,
+    // but mfaEnabled IS used in the useMemo body (line ~767), so omitting it was a bug.
     [workspaceChatEnabled, mfaEnabled, t]
   );
 
@@ -1052,7 +1165,7 @@ export default function SettingsPage() {
                                     defaultConnectionIds: globalChatSettings.defaultConnectionIds,
                                     allowUserDefaults: globalChatSettings.allowUserDefaults,
                                   },
-                                  numaPut,
+                                  numaPut
                                 );
                                 setGlobalChatSettings(saved);
                                 savedChatDefaultsRef.current = JSON.stringify(saved);
@@ -1281,53 +1394,69 @@ export default function SettingsPage() {
                   </span>
                 }
               >
-                <StyledTabs
-                  activeKey={integrationsTabKey}
-                  onSelect={(key) => setIntegrationsTabKey((key as typeof integrationsTabKey) || 'connected-apps')}
-                  className="mb-3 settings-subtabs--nested"
+                <Alert variant="secondary" className="mb-3">
+                  <div className="d-flex align-items-start">
+                    <i className="bi bi-building-gear me-2 mt-1"></i>
+                    <div>
+                      <div className="settings-section-title">{t('integrations.companySettingsTitle')}</div>
+                      <div className="small text-muted">{t('integrations.companySettingsDescription')}</div>
+                    </div>
+                  </div>
+                </Alert>
+                {previewMode && (
+                  <Alert variant="info" className="mb-3">
+                    {t('integrations.previewNotice')}
+                  </Alert>
+                )}
+                {loadingSettings ? (
+                  <div className="text-center py-5">
+                    <Spinner animation="border" variant="primary" />
+                  </div>
+                ) : (
+                  <div>
+                    {[...availableIntegrations].sort((a, b) => a.name.localeCompare(b.name)).map(renderIntegrationRow)}
+                  </div>
+                )}
+              </Tab>
+              {dataConnectorsEnabled && (
+                <Tab
+                  eventKey="data-connectors"
+                  title={
+                    <span>
+                      <i className="bi bi-cloud-download me-2"></i>
+                      {t('tabs.dataConnectors')}
+                    </span>
+                  }
                 >
-                  <Tab eventKey="connected-apps" title={t('tabs.connectedApps')}>
-                    <Alert variant="secondary" className="mb-3">
-                      <div className="d-flex align-items-start">
-                        <i className="bi bi-building-gear me-2 mt-1"></i>
-                        <div>
-                          <div className="settings-section-title">{t('integrations.companySettingsTitle')}</div>
-                          <div className="small text-muted">{t('integrations.companySettingsDescription')}</div>
-                        </div>
-                      </div>
-                    </Alert>
-                    {previewMode && (
-                      <Alert variant="info" className="mb-3">
-                        {t('integrations.previewNotice')}
-                      </Alert>
-                    )}
-                    {loadingSettings ? (
-                      <div className="text-center py-5">
-                        <Spinner animation="border" variant="primary" />
-                      </div>
-                    ) : (
-                      <div>
-                        {[...availableIntegrations]
-                          .sort((a, b) => a.name.localeCompare(b.name))
-                          .map(renderIntegrationRow)}
-                      </div>
-                    )}
-                  </Tab>
-                  {dataConnectorsEnabled && (
-                    <Tab eventKey="data-connectors" title={t('tabs.dataConnectors')}>
-                      <Alert variant="secondary" className="mb-3">
-                        <div className="d-flex align-items-start">
-                          <i className="bi bi-building-gear me-2 mt-1"></i>
-                          <div>
-                            <div className="settings-section-title">{t('dataConnectors.companySettingsTitle')}</div>
-                            <div className="small text-muted">{t('dataConnectors.companySettingsDescription')}</div>
-                          </div>
-                        </div>
-                      </Alert>
-                      <div className="mt-3">{dataConnectors.map(renderDataConnectorRow)}</div>
-                    </Tab>
-                  )}
-                </StyledTabs>
+                  <DataConnectorsTab adminSettings={dataConnectorSettings} />
+                </Tab>
+              )}
+              <Tab
+                eventKey="capabilities"
+                title={
+                  <span>
+                    <i className="bi bi-toggles me-2"></i>
+                    {t('capabilities.tabTitle')}
+                  </span>
+                }
+              >
+                <Alert variant="secondary" className="mb-3">
+                  <div className="d-flex align-items-start">
+                    <i className="bi bi-toggles me-2 mt-1"></i>
+                    <div>
+                      <div className="settings-section-title">{t('capabilities.companySettingsTitle')}</div>
+                      <div className="small text-muted">{t('capabilities.companySettingsDescription')}</div>
+                    </div>
+                  </div>
+                </Alert>
+                <div>
+                  {capabilityGroups.map((group) => (
+                    <div key={group.parent.flag}>
+                      {renderCapabilityRow(group.parent)}
+                      {group.children.map((child) => renderCapabilityRow(child, true))}
+                    </div>
+                  ))}
+                </div>
               </Tab>
             </StyledTabs>
           </div>
@@ -1406,7 +1535,7 @@ export default function SettingsPage() {
                           className="text-decoration-none"
                         >
                           [{linkText}]
-                        </a>,
+                        </a>
                       );
 
                       lastIndex = match.index + match[0].length;

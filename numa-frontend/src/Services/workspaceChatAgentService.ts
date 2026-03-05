@@ -8,6 +8,7 @@ import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import type { AwsCredentialIdentity } from '@aws-sdk/types';
 import axios from 'axios';
+import { sanitizeS3Filename } from '../utils/sanitizeFilename';
 import type {
   SDKEvent,
   WorkspaceChatRequest,
@@ -136,7 +137,7 @@ export async function streamWorkspaceChatAgent(
   onEvent: OnWorkspaceChatEvent,
   onComplete: OnWorkspaceChatComplete,
   onError: OnWorkspaceChatError,
-  onSessionEvent?: OnSessionEvent,
+  onSessionEvent?: OnSessionEvent
 ): Promise<{ abort: () => void; requestId: string }> {
   const abortController = new AbortController();
   const requestId =
@@ -160,6 +161,12 @@ export async function streamWorkspaceChatAgent(
     availableKBs: request.availableKBs,
     enabledTools: request.enabledTools,
     enabledConnections: request.enabledConnections,
+    // Feature flags for conditional tool registration in the workspace agent
+    featureFlags: {
+      NUMA_FILES: sessionStorage.getItem('NUMA_FILES') === 'true',
+      OAUTH_INTEGRATIONS_ENABLED: sessionStorage.getItem('OAUTH_AVAILABLE') === 'true',
+      SECRETS_VAULT_ENABLED: sessionStorage.getItem('SECRETS_VAULT_ENABLED') === 'true',
+    },
     // Model selection (global cross-region inference profile)
     modelId: request.modelId,
     // File attachments for workspace uploads
@@ -328,7 +335,7 @@ export async function stopWorkspaceChatAgent(conversationId: string, requestId: 
 export async function approveToolAction(
   approvalId: string,
   decision: 'approved' | 'denied',
-  conversationId: string,
+  conversationId: string
 ): Promise<void> {
   const res = await fetch(`${getApiUrl()}/invocations`, {
     method: 'POST',
@@ -357,7 +364,7 @@ export async function approveToolAction(
  * without triggering workspace sync or starting a session.
  */
 export async function getWorkspaceChatConversation(
-  conversationId: string,
+  conversationId: string
 ): Promise<WorkspaceChatConversationDetailResponse> {
   const res = await fetch(`${getApiUrl()}/history/${encodeURIComponent(conversationId)}`, {
     headers: getAuthHeaders(),
@@ -415,9 +422,7 @@ export async function getWorkspaceChatRawTrace(conversationId: string): Promise<
  * @returns Normalized filename with unicode spaces replaced
  */
 function normalizeFilename(name: string): string {
-  // Normalize to NFC form and replace various unicode spaces with regular ASCII space
-  // Non-breaking (U+00A0), figure (U+2007), and narrow no-break (U+202F) spaces
-  return name.normalize('NFC').replace(/[\u00a0\u2007\u202f]/g, ' ');
+  return sanitizeS3Filename(name);
 }
 
 /**
@@ -432,7 +437,7 @@ function normalizeFilename(name: string): string {
 export async function uploadWorkspaceChatFile(
   file: File,
   conversationId: string,
-  relativePath?: string,
+  relativePath?: string
 ): Promise<WorkspaceChatUploadResponse> {
   // Convert file to base64
   const arrayBuffer = await file.arrayBuffer();
@@ -477,7 +482,7 @@ export async function uploadWorkspaceChatFile(
  */
 export async function deleteWorkspaceChatUploads(
   conversationId: string,
-  paths: string[],
+  paths: string[]
 ): Promise<{ deleted: string[]; errors: Array<{ path: string; error: string }> }> {
   const res = await fetch(`${getApiUrl()}/invocations`, {
     method: 'POST',
@@ -586,7 +591,7 @@ async function notifyUploadComplete(
   conversationId: string,
   filename: string,
   s3Key: string,
-  size: number,
+  size: number
 ): Promise<WorkspaceChatUploadResponse> {
   const res = await fetch(`${getApiUrl()}/invocations`, {
     method: 'POST',
@@ -630,7 +635,7 @@ export async function uploadWorkspaceChatFileDirect(
   conversationId: string,
   relativePath: string | undefined,
   onProgress: (progress: number) => void,
-  getCredentials: () => Promise<AwsCredentialIdentity>,
+  getCredentials: () => Promise<AwsCredentialIdentity>
 ): Promise<WorkspaceChatUploadResponse> {
   // Get config from session storage
   const region = sessionStorage.getItem('REGION');
@@ -705,7 +710,7 @@ export async function saveInlineDocumentToS3(
   title: string,
   content: string,
   conversationId: string,
-  getCredentials: () => Promise<AwsCredentialIdentity>,
+  getCredentials: () => Promise<AwsCredentialIdentity>
 ): Promise<void> {
   const region = sessionStorage.getItem('REGION');
   const bucket = sessionStorage.getItem('OUTPUTS_BUCKET_NAME');
@@ -753,7 +758,7 @@ export async function saveInlineDocumentToS3(
  * document-summariser) rather than streamed chat output.
  */
 export async function invokeWorkspaceAgentSync(
-  request: WorkspaceChatRequest,
+  request: WorkspaceChatRequest
 ): Promise<import('../types/workspaceChatTypes').WorkspaceSyncResponse> {
   const requestId =
     request.requestId ||
@@ -769,6 +774,11 @@ export async function invokeWorkspaceAgentSync(
     availableKBs: request.availableKBs,
     enabledTools: request.enabledTools,
     enabledConnections: request.enabledConnections,
+    featureFlags: {
+      NUMA_FILES: sessionStorage.getItem('NUMA_FILES') === 'true',
+      OAUTH_INTEGRATIONS_ENABLED: sessionStorage.getItem('OAUTH_AVAILABLE') === 'true',
+      SECRETS_VAULT_ENABLED: sessionStorage.getItem('SECRETS_VAULT_ENABLED') === 'true',
+    },
     modelId: request.modelId,
     attachments: request.attachments,
     hasUploads: request.hasUploads,
@@ -811,7 +821,7 @@ export async function invokeWorkspaceAgentSync(
 export async function pollWorkspaceAgentRun(
   runId: string,
   intervalMs = 2000,
-  timeoutMs = 300_000,
+  timeoutMs = 300_000
 ): Promise<import('../types/workspaceChatTypes').WorkspaceSyncResponse> {
   const startTime = Date.now();
 
@@ -866,7 +876,7 @@ export async function listWorkspaceAgentTypes(): Promise<
 export async function convertDocxPreview(
   bucket: string,
   key: string,
-  format: string = 'pdf',
+  format: string = 'pdf'
 ): Promise<{ url: string; filename: string; size: number }> {
   const res = await fetch(`${getApiUrl()}/convert-preview`, {
     method: 'POST',

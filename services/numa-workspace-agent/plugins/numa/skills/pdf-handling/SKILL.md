@@ -9,29 +9,29 @@ Create, read, manipulate, and convert PDF files.
 
 ## Available Libraries
 
-| Library | Purpose | Import |
-|---------|---------|--------|
-| **pdfplumber** | Advanced text/table extraction with layout | `import pdfplumber` |
-| **PyMuPDF (fitz)** | Visual extraction, render pages as images, extract embedded images | `import fitz` |
-| **pdf2image** | PDF pages to PIL images (uses poppler) | `from pdf2image import convert_from_path` |
-| **weasyprint** | HTML-to-PDF conversion (styled reports, letters) | `from weasyprint import HTML` |
-| **reportlab** | Professional PDF creation with precise layout | `from reportlab.lib.pagesizes import A4` |
-| **fpdf2** | Quick & simple PDF creation | `from fpdf import FPDF` |
-| **PyPDF2** | Merge, split, rotate, watermark (PDF manipulation) | `from PyPDF2 import PdfReader, PdfWriter, PdfMerger` |
+| Library            | Purpose                                                            | Import                                               |
+| ------------------ | ------------------------------------------------------------------ | ---------------------------------------------------- |
+| **pdfplumber**     | Advanced text/table extraction with layout                         | `import pdfplumber`                                  |
+| **PyMuPDF (fitz)** | Visual extraction, render pages as images, extract embedded images | `import fitz`                                        |
+| **pdf2image**      | PDF pages to PIL images (uses poppler)                             | `from pdf2image import convert_from_path`            |
+| **weasyprint**     | HTML-to-PDF conversion (styled reports, letters)                   | `from weasyprint import HTML`                        |
+| **reportlab**      | Professional PDF creation with precise layout                      | `from reportlab.lib.pagesizes import A4`             |
+| **fpdf2**          | Quick & simple PDF creation                                        | `from fpdf import FPDF`                              |
+| **PyPDF2**         | Merge, split, rotate, watermark (PDF manipulation)                 | `from PyPDF2 import PdfReader, PdfWriter, PdfMerger` |
 
 ## Decision Matrix
 
-| Need | Best Tool | Why |
-|------|-----------|-----|
-| Styled reports, letters, documents | **WeasyPrint** (HTML→PDF) | Write HTML+CSS, professional output |
-| Precise layout control, subscripts | **reportlab** | Pixel-perfect positioning |
-| Quick data tables, simple PDFs | **fpdf2** | Lightweight, fast |
-| Read text/tables from PDFs | **pdfplumber** | Best layout-aware text extraction |
-| Merge, split, rotate PDFs | **PyPDF2** | Best for manipulation operations |
-| Extract images from PDFs | **PyMuPDF (fitz)** | Access embedded images directly |
-| Render pages as images | **pdf2image** or **PyMuPDF** | Page-to-image conversion |
-| Scanned/complex documents | `extract_content` tool (via `numa_tool` MCP) | Vision AI — better than local OCR |
-| Convert DOCX/PPTX → PDF | `soffice --headless` | Local LibreOffice conversion |
+| Need                               | Best Tool                                    | Why                                 |
+| ---------------------------------- | -------------------------------------------- | ----------------------------------- |
+| Styled reports, letters, documents | **WeasyPrint** (HTML→PDF)                    | Write HTML+CSS, professional output |
+| Precise layout control, subscripts | **reportlab**                                | Pixel-perfect positioning           |
+| Quick data tables, simple PDFs     | **fpdf2**                                    | Lightweight, fast                   |
+| Read text/tables from PDFs         | **pdfplumber**                               | Best layout-aware text extraction   |
+| Merge, split, rotate PDFs          | **PyPDF2**                                   | Best for manipulation operations    |
+| Extract images from PDFs           | **PyMuPDF (fitz)**                           | Access embedded images directly     |
+| Render pages as images             | **pdf2image** or **PyMuPDF**                 | Page-to-image conversion            |
+| Scanned/complex documents          | `extract_content` tool (via `numa_tool` MCP) | Vision AI — better than local OCR   |
+| Convert DOCX/PPTX → PDF            | `soffice --headless`                         | Local LibreOffice conversion        |
 
 ---
 
@@ -181,6 +181,7 @@ images = convert_from_path(
 ```
 
 Or use the CLI directly:
+
 ```bash
 pdftoppm -jpeg -r 150 /workdir/uploads/document.pdf /workdir/outputs/page
 # Creates page-01.jpg, page-02.jpg, etc.
@@ -243,6 +244,7 @@ HTML(filename="/workdir/outputs/report.html").write_pdf("/workdir/outputs/report
 ```
 
 **Why WeasyPrint over fpdf2:**
+
 - Full CSS support (flexbox excluded, but floats, tables, margins, colours all work)
 - Automatic page breaks
 - Professional typography
@@ -260,30 +262,36 @@ These patterns prevent common layout bugs (content spilling to extra pages, brok
   size: A4;
   margin: 25mm;
   @bottom-left {
-    content: "Company Name";
+    content: 'Company Name';
     font-size: 9pt;
     color: #666;
-    white-space: nowrap;  /* Prevents text stacking vertically */
+    white-space: nowrap; /* Prevents text stacking vertically */
   }
   @bottom-right {
-    content: "Page " counter(page) " of " counter(pages);
+    content: 'Page ' counter(page) ' of ' counter(pages);
     font-size: 9pt;
     color: #666;
   }
 }
 /* Suppress header/footer on title page */
 @page :first {
-  @bottom-left { content: none; }
-  @bottom-right { content: none; }
+  @bottom-left {
+    content: none;
+  }
+  @bottom-right {
+    content: none;
+  }
 }
 ```
 
 **2. Avoid forced page breaks** — prefer natural flow:
+
 - Use `page-break-inside: avoid` on atomic elements (cards, tables, callouts, stat boxes)
 - Only use `page-break-before: always` for deliberate section starts (e.g., title page → body)
 - Do NOT use `page-break-before: always` between content sections — it creates dead space
 
 **3. Professional document pattern** (most reliable for multi-page):
+
 - Generous margins: `25-30mm` all sides
 - Serif fonts (Georgia, Times) for body text
 - `text-align: justify` with `hyphens: auto`
@@ -291,6 +299,7 @@ These patterns prevent common layout bugs (content spilling to extra pages, brok
 - This style works more reliably than marketing layouts with gradients, cards, and flex rows
 
 **4. Common pitfalls:**
+
 - Footer text too long for margin box → add `white-space: nowrap`
 - Content slightly too tall for one page → cascading overflow pushes everything to extra pages
 - Tables splitting without repeated headers → keep small tables together with `page-break-inside: avoid`
@@ -487,6 +496,7 @@ doc.close()
 ```
 
 Or via CLI:
+
 ```bash
 pdftoppm -jpeg -r 150 /workdir/outputs/report.pdf /workdir/outputs/page
 ```
@@ -494,6 +504,7 @@ pdftoppm -jpeg -r 150 /workdir/outputs/report.pdf /workdir/outputs/page
 ### Visual Inspection Checklist
 
 After rendering, read the page images and check for:
+
 - Content spilling to unexpected extra pages
 - Footer/header text wrapping or stacking vertically
 - Massive dead space (half-empty pages)
@@ -645,6 +656,7 @@ subprocess.run(["soffice", "--headless", "--convert-to", "pdf", "--outdir", "/wo
 ```
 
 Or as bash commands (via execute_script with interpreter="bash"):
+
 ```bash
 # DOCX → PDF
 soffice --headless --convert-to pdf --outdir /workdir/outputs/ /workdir/uploads/document.docx
@@ -657,27 +669,29 @@ soffice --headless --convert-to pdf --outdir /workdir/outputs/ /workdir/uploads/
 
 ## When to Use the extract_content Tool vs Local Tools
 
-| Scenario | Recommended Tool |
-|----------|-----------------|
-| Text-based PDFs, simple text | **pdfplumber** (local, fast, layout-aware) |
-| Tables in PDFs | **pdfplumber** (local, `extract_tables()`) |
-| Scanned PDFs, images of text | `extract_content` tool via `numa_tool` MCP (uses vision AI) |
-| Handwritten text, forms | `extract_content` tool via `numa_tool` MCP |
-| Complex layouts, multi-column | Try pdfplumber first, fall back to `extract_content` tool |
-| Large documents (>50 pages) | `extract_content` tool via `numa_tool` MCP (handles chunking) |
-| Extract embedded images | **PyMuPDF (fitz)** |
-| Render pages as images | **pdf2image** or **PyMuPDF** |
-| Merge/split/rotate | **PyPDF2** |
-| Create from HTML+CSS | **WeasyPrint** |
-| Create with precise layout | **reportlab** |
-| Quick simple PDFs | **fpdf2** |
+| Scenario                      | Recommended Tool                                              |
+| ----------------------------- | ------------------------------------------------------------- |
+| Text-based PDFs, simple text  | **pdfplumber** (local, fast, layout-aware)                    |
+| Tables in PDFs                | **pdfplumber** (local, `extract_tables()`)                    |
+| Scanned PDFs, images of text  | `extract_content` tool via `numa_tool` MCP (uses vision AI)   |
+| Handwritten text, forms       | `extract_content` tool via `numa_tool` MCP                    |
+| Complex layouts, multi-column | Try pdfplumber first, fall back to `extract_content` tool     |
+| Large documents (>50 pages)   | `extract_content` tool via `numa_tool` MCP (handles chunking) |
+| Extract embedded images       | **PyMuPDF (fitz)**                                            |
+| Render pages as images        | **pdf2image** or **PyMuPDF**                                  |
+| Merge/split/rotate            | **PyPDF2**                                                    |
+| Create from HTML+CSS          | **WeasyPrint**                                                |
+| Create with precise layout    | **reportlab**                                                 |
+| Quick simple PDFs             | **fpdf2**                                                     |
 
 **Example — Extract from scanned PDF:**
+
 ```
 mcp__numa__numa_tool(name="extract_content", description="Extracting content from scanned invoice", params={"file_path": "/workdir/uploads/scanned_invoice.pdf"})
 ```
 
 **When pdfplumber or PyPDF2 return empty or garbled text**, it's usually because:
+
 - The PDF is scanned (images of text, not actual text)
 - The PDF uses custom fonts without proper encoding
 - The text is embedded in graphics
@@ -721,13 +735,13 @@ mcp__numa__numa_tool(name="convert_document", description="Converting DOCX to PD
 
 ## Common Issues
 
-| Issue | Solution |
-|-------|----------|
-| Empty text extraction | PDF may be scanned — use the `extract_content` tool (via `numa_tool` MCP) instead |
-| Font not found (fpdf2) | Use built-in fonts: Helvetica, Times, Courier |
-| Large file size | Compress images before embedding; use JPEG over PNG |
-| WeasyPrint missing fonts | System fonts are available; use common font families |
-| pdfplumber table extraction fails | Try `page.extract_tables(table_settings={...})` with custom settings |
+| Issue                             | Solution                                                                          |
+| --------------------------------- | --------------------------------------------------------------------------------- |
+| Empty text extraction             | PDF may be scanned — use the `extract_content` tool (via `numa_tool` MCP) instead |
+| Font not found (fpdf2)            | Use built-in fonts: Helvetica, Times, Courier                                     |
+| Large file size                   | Compress images before embedding; use JPEG over PNG                               |
+| WeasyPrint missing fonts          | System fonts are available; use common font families                              |
+| pdfplumber table extraction fails | Try `page.extract_tables(table_settings={...})` with custom settings              |
 
 ---
 

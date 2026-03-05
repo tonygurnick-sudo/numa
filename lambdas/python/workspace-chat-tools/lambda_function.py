@@ -59,6 +59,15 @@ from tools import (
     handle_update_memory,
     handle_web_search,
 )
+from tools.enhanced_vault_connectors import (
+    handle_oauth_create_connector,
+    handle_oauth_list_connectors,
+    handle_vault_create_custom_secret,
+    handle_vault_delete_secret,
+    handle_vault_list_consolidated_secrets,
+    handle_vault_list_templates,
+    handle_vault_request_consolidated_secret,
+)
 from tools.kb_permissions import verify_kb_access
 
 # ── Simple Logging Configuration ───────────────────────────────────────────────
@@ -125,6 +134,14 @@ TOOL_HANDLERS: Dict[str, Callable[[Dict[str, Any]], Dict[str, Any]]] = {
     "user_profile_list_memories": handle_list_memories,
     "user_profile_add_memory": handle_add_memory,
     "user_profile_update_memory": handle_update_memory,
+    # Consolidated Vault Tools
+    "vault_list_consolidated_secrets": handle_vault_list_consolidated_secrets,
+    "vault_request_consolidated_secret": handle_vault_request_consolidated_secret,
+    "oauth_list_connectors": handle_oauth_list_connectors,
+    "oauth_create_connector": handle_oauth_create_connector,
+    "vault_create_custom_secret": handle_vault_create_custom_secret,
+    "vault_delete_secret": handle_vault_delete_secret,
+    "vault_list_templates": handle_vault_list_templates,
 }
 
 
@@ -606,6 +623,39 @@ def handler(event: Dict[str, Any], context: LambdaContext) -> Dict[str, Any]:
         # This is called by the frontend API, not by the agent
         # Access control is handled at the API Gateway level
         pass
+
+    # Security: Validate consolidated vault tool access (require authentication)
+    vault_tools = {
+        "vault_list_consolidated_secrets",
+        "vault_request_consolidated_secret",
+        "oauth_list_connectors",
+        "oauth_create_connector",
+        "vault_create_custom_secret",
+        "vault_delete_secret",
+        "vault_list_templates",
+    }
+    if tool_name in vault_tools:
+        if not user_sub:
+            logger.warning(
+                "Vault tool access denied - no user_sub provided",
+                tool=tool_name,
+            )
+            return {
+                "status": "error",
+                "result": None,
+                "error": "User authentication required for vault operations",
+            }
+
+        # Pass user context and conversation ID
+        params["user_sub"] = user_sub
+        params["conversation_id"] = conversation_id
+
+        logger.info(
+            "Vault tool invoked",
+            tool=tool_name,
+            user_sub=user_sub[:8] + "..." if user_sub else "",
+            has_conversation_id=bool(conversation_id),
+        )
 
     # Pass allowed_kbs to handler for defensive validation
     params["__allowed_kbs"] = allowed_kbs

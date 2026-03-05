@@ -24,7 +24,9 @@
       width: 100%;
     }
 
-    tr, td, th {
+    tr,
+    td,
+    th {
       text-transform: capitalize;
       padding-right: 2em;
     }
@@ -36,7 +38,6 @@
     .status-error {
       color: var(--color-error-text);
     }
-
   }
 }
 
@@ -67,7 +68,7 @@
     left: 0;
     width: 100%;
     height: 100%;
-    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.6), transparent);
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.6), transparent);
     animation: shimmer 1.5s ease-in-out infinite;
   }
 }
@@ -89,7 +90,7 @@
     left: 0;
     width: 100%;
     height: 100%;
-    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.6), transparent);
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.6), transparent);
     animation: shimmer 1.5s ease-in-out infinite;
   }
 }

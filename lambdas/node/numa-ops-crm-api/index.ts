@@ -31,7 +31,7 @@ type Item = Record<string, unknown>;
 
 const jsonResponse = (
   statusCode: number,
-  payload: unknown,
+  payload: unknown
 ): { statusCode: number; headers: typeof HEADERS; body: string } => ({
   statusCode,
   headers: HEADERS,
@@ -110,7 +110,7 @@ const queryByPK = async (pk: string, skPrefix?: string): Promise<Item[]> => {
         KeyConditionExpression: skPrefix ? 'PK = :pk AND begins_with(SK, :sk)' : 'PK = :pk',
         ExpressionAttributeValues: skPrefix ? { ':pk': pk, ':sk': skPrefix } : { ':pk': pk },
         ExclusiveStartKey: lastKey,
-      }),
+      })
     );
     items.push(...((result.Items ?? []) as Item[]));
     lastKey = result.LastEvaluatedKey as Item | undefined;
@@ -122,7 +122,7 @@ const queryGSI1 = async (
   gsi1pk: string,
   gsi1skPrefix?: string,
   limit?: number,
-  cursor?: Item,
+  cursor?: Item
 ): Promise<{ items: Item[]; lastKey?: Item }> => {
   const result = await dynamo.send(
     new QueryCommand({
@@ -132,7 +132,7 @@ const queryGSI1 = async (
       ExpressionAttributeValues: gsi1skPrefix ? { ':pk': gsi1pk, ':sk': gsi1skPrefix } : { ':pk': gsi1pk },
       Limit: limit,
       ExclusiveStartKey: cursor,
-    }),
+    })
   );
   return { items: (result.Items ?? []) as Item[], lastKey: result.LastEvaluatedKey as Item | undefined };
 };
@@ -148,7 +148,7 @@ const queryGSI1All = async (gsi1pk: string, gsi1skPrefix?: string): Promise<Item
         KeyConditionExpression: gsi1skPrefix ? 'GSI1PK = :pk AND begins_with(GSI1SK, :sk)' : 'GSI1PK = :pk',
         ExpressionAttributeValues: gsi1skPrefix ? { ':pk': gsi1pk, ':sk': gsi1skPrefix } : { ':pk': gsi1pk },
         ExclusiveStartKey: lastKey,
-      }),
+      })
     );
     items.push(...((result.Items ?? []) as Item[]));
     lastKey = result.LastEvaluatedKey as Item | undefined;
@@ -160,7 +160,7 @@ const queryGSI2 = async (
   gsi2pk: string,
   gsi2skPrefix?: string,
   limit?: number,
-  cursor?: Item,
+  cursor?: Item
 ): Promise<{ items: Item[]; lastKey?: Item }> => {
   const result = await dynamo.send(
     new QueryCommand({
@@ -170,7 +170,7 @@ const queryGSI2 = async (
       ExpressionAttributeValues: gsi2skPrefix ? { ':pk': gsi2pk, ':sk': gsi2skPrefix } : { ':pk': gsi2pk },
       Limit: limit,
       ExclusiveStartKey: cursor,
-    }),
+    })
   );
   return { items: (result.Items ?? []) as Item[], lastKey: result.LastEvaluatedKey as Item | undefined };
 };
@@ -184,7 +184,7 @@ const getLinkedTicketCount = async (entityType: string, entityId: string): Promi
       KeyConditionExpression: 'GSI2PK = :pk AND begins_with(GSI2SK, :sk)',
       ExpressionAttributeValues: { ':pk': `${entityType}#${entityId}`, ':sk': 'TICKET#' },
       Select: 'COUNT',
-    }),
+    })
   );
   return result.Count ?? 0;
 };
@@ -196,7 +196,7 @@ const handleCustomers = async (
   segments: string[],
   body: Item,
   auth: AuthContext,
-  event: APIGatewayProxyEventV2,
+  event: APIGatewayProxyEventV2
 ): Promise<ReturnType<typeof jsonResponse>> => {
   const qp = event.queryStringParameters ?? {};
 
@@ -361,7 +361,7 @@ const handleSuppliers = async (
   segments: string[],
   body: Item,
   auth: AuthContext,
-  event: APIGatewayProxyEventV2,
+  event: APIGatewayProxyEventV2
 ): Promise<ReturnType<typeof jsonResponse>> => {
   const qp = event.queryStringParameters ?? {};
 
@@ -519,7 +519,7 @@ const handleActivities = async (
   method: string,
   segments: string[],
   body: Item,
-  auth: AuthContext,
+  auth: AuthContext
 ): Promise<ReturnType<typeof jsonResponse>> => {
   const pkPrefix = `${entityType}#${entityId}`;
 
@@ -609,7 +609,7 @@ const handleDocuments = async (
   method: string,
   segments: string[],
   body: Item,
-  auth: AuthContext,
+  auth: AuthContext
 ): Promise<ReturnType<typeof jsonResponse>> => {
   const pkPrefix = `${entityType}#${entityId}`;
 
@@ -732,7 +732,7 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
         error: err.message,
         name: err.name,
         stack: err.stack,
-      }),
+      })
     );
     return errorResponse(500, `Internal Server Error: ${err.message}`);
   }

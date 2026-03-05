@@ -115,13 +115,9 @@ async function fetchCognitoConfig(
     // Numa user pools are named: numa-{clientName} (prod) or numa-{clientName}-{env} (non-prod)
     const expectedPoolName = `numa-${clientName}`;
 
-    const poolsResponse = await cognitoClient.send(
-      new ListUserPoolsCommand({ MaxResults: 60 })
-    );
+    const poolsResponse = await cognitoClient.send(new ListUserPoolsCommand({ MaxResults: 60 }));
 
-    const userPool = poolsResponse.UserPools?.find(
-      pool => pool.Name === expectedPoolName
-    );
+    const userPool = poolsResponse.UserPools?.find((pool) => pool.Name === expectedPoolName);
 
     if (!userPool?.Id) {
       console.warn(`Warning: Could not find user pool '${expectedPoolName}'`);
@@ -137,9 +133,10 @@ async function fetchCognitoConfig(
     );
 
     // Find the web client (usually named numa-{clientName}-web-client or similar)
-    const webClient = clientsResponse.UserPoolClients?.find(
-      c => c.ClientName?.includes('web') || c.ClientName?.includes('frontend')
-    ) ?? clientsResponse.UserPoolClients?.[0];
+    const webClient =
+      clientsResponse.UserPoolClients?.find(
+        (c) => c.ClientName?.includes('web') || c.ClientName?.includes('frontend')
+      ) ?? clientsResponse.UserPoolClients?.[0];
 
     if (!webClient?.ClientId) {
       console.warn('Warning: Could not find user pool client');
@@ -182,8 +179,7 @@ function findRepoRoot(): string | undefined {
  * Create the env command with all subcommands.
  */
 export function createEnvCommand(): Command {
-  const env = new Command('env')
-    .description('Manage Numa environments');
+  const env = new Command('env').description('Manage Numa environments');
 
   // List environments
   env
@@ -194,7 +190,7 @@ export function createEnvCommand(): Command {
     .action(async (options: { all?: boolean }) => {
       const configuredEnvs = listEnvironments();
       const availableClients = await loadAvailableClients();
-      const configuredClientNames = new Set(configuredEnvs.map(e => e.config.clientName));
+      const configuredClientNames = new Set(configuredEnvs.map((e) => e.config.clientName));
 
       // Show configured environments
       if (configuredEnvs.length > 0) {
@@ -211,16 +207,14 @@ export function createEnvCommand(): Command {
           console.log('');
         }
 
-        if (!configuredEnvs.some(e => e.isCurrent)) {
+        if (!configuredEnvs.some((e) => e.isCurrent)) {
           console.log('No environment selected. Use "numa env use <name>" to select one.');
           console.log('');
         }
       }
 
       // Show available (not yet configured) environments
-      const availableNames = Object.keys(availableClients).filter(
-        name => !configuredClientNames.has(name)
-      );
+      const availableNames = Object.keys(availableClients).filter((name) => !configuredClientNames.has(name));
 
       if (options.all || configuredEnvs.length === 0) {
         if (availableNames.length > 0) {
@@ -285,11 +279,7 @@ export function createEnvCommand(): Command {
 
           // Fetch Cognito config from AWS
           console.log('Fetching Cognito configuration...');
-          const cognitoConfig = await fetchCognitoConfig(
-            name,
-            clientConfig.clientAccountId,
-            clientConfig.region
-          );
+          const cognitoConfig = await fetchCognitoConfig(name, clientConfig.clientAccountId, clientConfig.region);
           if (cognitoConfig) {
             envConfig.cognito = cognitoConfig;
             console.log('Cognito configuration retrieved successfully');
@@ -331,84 +321,89 @@ export function createEnvCommand(): Command {
     .option('-r, --region <region>', 'AWS region (e.g., us-east-1)')
     .option('-p, --profile <profile>', 'AWS CLI profile to use')
     .option('--use', 'Switch to this environment after adding')
-    .action(async (name: string, options: {
-      from?: string;
-      client?: string;
-      account?: string;
-      region?: string;
-      profile?: string;
-      use?: boolean;
-    }) => {
-      // Check if environment already exists
-      const existing = getEnvironment(name);
-      if (existing) {
-        console.error(`Error: Environment '${name}' already exists.`);
-        console.error('Use a different name or remove it first with "numa env remove".');
-        process.exit(1);
-      }
-
-      let envConfig: EnvironmentConfig;
-
-      if (options.from) {
-        // Import from available configs
-        const availableClients = await loadAvailableClients();
-        const clientConfig = availableClients[options.from];
-
-        if (!clientConfig) {
-          console.error(`Error: Client '${options.from}' not found.`);
-          console.error('Run "numa env ls -a" to see available clients.');
+    .action(
+      async (
+        name: string,
+        options: {
+          from?: string;
+          client?: string;
+          account?: string;
+          region?: string;
+          profile?: string;
+          use?: boolean;
+        }
+      ) => {
+        // Check if environment already exists
+        const existing = getEnvironment(name);
+        if (existing) {
+          console.error(`Error: Environment '${name}' already exists.`);
+          console.error('Use a different name or remove it first with "numa env remove".');
           process.exit(1);
         }
 
-        envConfig = {
-          clientName: options.from,
-          clientAccountId: clientConfig.clientAccountId,
-          region: clientConfig.region,
-          awsProfile: options.profile,
-        };
+        let envConfig: EnvironmentConfig;
 
-        // Fetch Cognito config from AWS
-        console.log('Fetching Cognito configuration...');
-        const cognitoConfig = await fetchCognitoConfig(
-          options.from,
-          clientConfig.clientAccountId,
-          clientConfig.region
-        );
-        if (cognitoConfig) {
-          envConfig.cognito = cognitoConfig;
-          console.log('Cognito configuration retrieved successfully');
+        if (options.from) {
+          // Import from available configs
+          const availableClients = await loadAvailableClients();
+          const clientConfig = availableClients[options.from];
+
+          if (!clientConfig) {
+            console.error(`Error: Client '${options.from}' not found.`);
+            console.error('Run "numa env ls -a" to see available clients.');
+            process.exit(1);
+          }
+
+          envConfig = {
+            clientName: options.from,
+            clientAccountId: clientConfig.clientAccountId,
+            region: clientConfig.region,
+            awsProfile: options.profile,
+          };
+
+          // Fetch Cognito config from AWS
+          console.log('Fetching Cognito configuration...');
+          const cognitoConfig = await fetchCognitoConfig(
+            options.from,
+            clientConfig.clientAccountId,
+            clientConfig.region
+          );
+          if (cognitoConfig) {
+            envConfig.cognito = cognitoConfig;
+            console.log('Cognito configuration retrieved successfully');
+          }
+        } else {
+          // Manual configuration
+          if (!options.client || !options.account || !options.region) {
+            console.error('Error: --client, --account, and --region are required.');
+            console.error('Or use --from <clientName> to import from available configs.');
+            process.exit(1);
+          }
+
+          envConfig = {
+            clientName: options.client,
+            clientAccountId: options.account,
+            region: options.region,
+            awsProfile: options.profile,
+          };
         }
-      } else {
-        // Manual configuration
-        if (!options.client || !options.account || !options.region) {
-          console.error('Error: --client, --account, and --region are required.');
-          console.error('Or use --from <clientName> to import from available configs.');
-          process.exit(1);
+
+        addEnvironment(name, envConfig);
+        console.log(`Added environment: ${name}`);
+        console.log(`  Client: ${envConfig.clientName}`);
+        console.log(`  Account: ${envConfig.clientAccountId}`);
+        console.log(`  Region: ${envConfig.region}`);
+        if (envConfig.awsProfile) {
+          console.log(`  Profile: ${envConfig.awsProfile}`);
         }
 
-        envConfig = {
-          clientName: options.client,
-          clientAccountId: options.account,
-          region: options.region,
-          awsProfile: options.profile,
-        };
+        if (options.use) {
+          setCurrentEnv(name);
+          console.log('');
+          console.log(`Switched to environment: ${name}`);
+        }
       }
-
-      addEnvironment(name, envConfig);
-      console.log(`Added environment: ${name}`);
-      console.log(`  Client: ${envConfig.clientName}`);
-      console.log(`  Account: ${envConfig.clientAccountId}`);
-      console.log(`  Region: ${envConfig.region}`);
-      if (envConfig.awsProfile) {
-        console.log(`  Profile: ${envConfig.awsProfile}`);
-      }
-
-      if (options.use) {
-        setCurrentEnv(name);
-        console.log('');
-        console.log(`Switched to environment: ${name}`);
-      }
-    });
+    );
 
   // Remove environment
   env
@@ -462,11 +457,7 @@ export function createEnvCommand(): Command {
       }
 
       console.log(`Refreshing Cognito configuration for: ${targetName}`);
-      const cognitoConfig = await fetchCognitoConfig(
-        envConfig.clientName,
-        envConfig.clientAccountId,
-        envConfig.region
-      );
+      const cognitoConfig = await fetchCognitoConfig(envConfig.clientName, envConfig.clientAccountId, envConfig.region);
 
       if (cognitoConfig) {
         envConfig.cognito = cognitoConfig;
@@ -486,7 +477,7 @@ export function createEnvCommand(): Command {
     .description('Show the current environment')
     .action(() => {
       const envs = listEnvironments();
-      const current = envs.find(e => e.isCurrent);
+      const current = envs.find((e) => e.isCurrent);
 
       if (!current) {
         console.log('No environment selected.');

@@ -19,7 +19,7 @@ describe('getContentType', () => {
 
   test('should return correct MIME type for DOCX', () => {
     expect(getContentType('document.docx')).toBe(
-      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
     );
   });
 

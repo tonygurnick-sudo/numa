@@ -39,10 +39,6 @@
         "TaskDescription": "Bluecurrent (AMS) - 3PL Central (Auckland) to D365 - Shipments"
       }
     ],
-    "byMessageContains": [
-      "Failed to get sale orders from Odoo",
-      "deprecated API warning",
-      "Connection reset by peer"
-    ]
+    "byMessageContains": ["Failed to get sale orders from Odoo", "deprecated API warning", "Connection reset by peer"]
   }
 }

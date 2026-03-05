@@ -51,7 +51,7 @@ export function SavedViewsDropdown({
         setNewViewName('');
       }
     },
-    [handleSave],
+    [handleSave]
   );
 
   return (

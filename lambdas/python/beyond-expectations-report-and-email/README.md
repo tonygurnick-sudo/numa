@@ -61,14 +61,15 @@ The Lambda accepts a JSON event with optional parameters:
 }
 ```
 
-| Parameter | Description |
-|-----------|-------------|
-| `date` | (Optional) Date in 'YYYY-MM-DD' format for processing logs (default: current date) |
-| `notificationEmail` | (Optional) Email for receiving the report (overrides environment variable) |
+| Parameter           | Description                                                                        |
+| ------------------- | ---------------------------------------------------------------------------------- |
+| `date`              | (Optional) Date in 'YYYY-MM-DD' format for processing logs (default: current date) |
+| `notificationEmail` | (Optional) Email for receiving the report (overrides environment variable)         |
 
 ## Input Data Structure
 
 The Lambda reads pre-analyzed logs from:
+
 ```
 beyond-expectations/logs_analysed/YYYY-MM-DD/chunk-N.json
 ```
@@ -107,6 +108,7 @@ The Lambda generates both notifications and persistent artifacts:
 ## Report Generation
 
 The HTML reports include:
+
 - **Executive Summary**: Top-level overview of error volumes and severity
 - **Critical Issues**: Prioritized list of high-severity errors
 - **Client Impact**: Breakdown of errors by affected clients
@@ -117,12 +119,14 @@ The HTML reports include:
 ## Email Generation
 
 The Lambda creates two distinct email types:
+
 1. **Internal Team Emails**: Comprehensive summaries with links to full reports
 2. **Client-Specific Emails**: Targeted notifications containing only relevant errors
 
 ## Configuration
 
 The Lambda requires the following environment variables:
+
 - `BUCKET`: S3 bucket for reading analyzed logs and storing reports
 - `NOTIFICATION_EMAIL`: Default email address for analysis notifications
 - `DEFAULT_SENDER_EMAIL`: Sender email address for notifications

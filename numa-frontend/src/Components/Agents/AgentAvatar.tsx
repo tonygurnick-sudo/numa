@@ -133,7 +133,7 @@ export const AgentAvatar = ({
 
   const dimensionStyle: CSSProperties = useMemo(
     () => ({ width: size, height: size, flexShrink: 0, ...style }),
-    [size, style],
+    [size, style]
   );
   const resolvedAlt = alt || agent?.title || t('avatar.defaultAlt');
 

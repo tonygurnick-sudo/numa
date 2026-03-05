@@ -1,4 +1,5 @@
 **Before performing Jira operations**, establish context:
+
 1. Resolve `cloudId` via `configure_props` — if multiple sites exist, ask the user which one
 2. If no project specified, use `jira-get-all-projects` to see available projects and confirm with the user
 3. For issue creation, resolve `issueTypeId` to see available types (Story, Bug, Epic, etc.)
@@ -8,16 +9,20 @@ When working with Jira, keep these tips in mind:
 - **Creating/updating issues — use `additionalProperties`:** The `jira-create-issue` and `jira-update-issue` actions require issue fields (summary, description, priority, labels, assignee, etc.) inside `additionalProperties`, NOT as top-level props:
   ```json
   {
-    "app": {"authProvisionId": "auto"},
+    "app": { "authProvisionId": "auto" },
     "cloudId": "...",
     "projectId": "...",
     "issueTypeId": "...",
     "additionalProperties": {
       "summary": "Issue title here",
-      "description": {"type": "doc", "version": 1, "content": [{"type": "paragraph", "content": [{"text": "Description here", "type": "text"}]}]},
-      "priority": {"name": "High"},
+      "description": {
+        "type": "doc",
+        "version": 1,
+        "content": [{ "type": "paragraph", "content": [{ "text": "Description here", "type": "text" }] }]
+      },
+      "priority": { "name": "High" },
       "labels": ["bug", "urgent"],
-      "assignee": {"accountId": "..."}
+      "assignee": { "accountId": "..." }
     }
   }
   ```

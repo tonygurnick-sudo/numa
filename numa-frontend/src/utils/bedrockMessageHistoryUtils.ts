@@ -37,7 +37,7 @@ const validateMessageLevelToolCounts = (messages) => {
         if (!nextMessage || nextMessage.role !== 'user') {
           console.warn(
             '[bedrockMessageHistoryUtils] Assistant message with tool calls not followed by user message, removing tool call message',
-            { messageIndex: i, toolCount: toolUseBlocks.length },
+            { messageIndex: i, toolCount: toolUseBlocks.length }
           );
           removedMessagePairs++;
           continue; // Skip this assistant message
@@ -66,7 +66,7 @@ const validateMessageLevelToolCounts = (messages) => {
               toolResultIds: Array.from(toolResultIds),
               countsMatch,
               idsMatch,
-            },
+            }
           );
           removedMessagePairs += 2;
           i++; // Skip the next message too since we're removing the pair
@@ -89,7 +89,7 @@ const validateMessageLevelToolCounts = (messages) => {
 
   if (removedMessagePairs > 0) {
     console.warn(
-      `[bedrockMessageHistoryUtils] Message-level validation removed ${removedMessagePairs} messages due to tool block mismatches`,
+      `[bedrockMessageHistoryUtils] Message-level validation removed ${removedMessagePairs} messages due to tool block mismatches`
     );
   }
 
@@ -143,7 +143,7 @@ const validateAndCleanToolPairs = (messages) => {
               '[bedrockMessageHistoryUtils] Removing orphaned toolResult block (no matching toolUse):',
               contentBlock.toolResult.toolUseId,
               'Tool name:',
-              contentBlock.toolResult.name || 'unknown',
+              contentBlock.toolResult.name || 'unknown'
             );
             removedToolResult++;
             return false;
@@ -157,7 +157,7 @@ const validateAndCleanToolPairs = (messages) => {
               '[bedrockMessageHistoryUtils] Removing orphaned toolUse block (no matching toolResult):',
               contentBlock.toolUse.toolUseId,
               'Tool name:',
-              contentBlock.toolUse.name || 'unknown',
+              contentBlock.toolUse.name || 'unknown'
             );
             removedToolUse++;
             return false;
@@ -184,7 +184,7 @@ const validateAndCleanToolPairs = (messages) => {
   // Log summary of cleanup
   if (removedToolUse > 0 || removedToolResult > 0) {
     console.warn(
-      `[bedrockMessageHistoryUtils] Tool cleanup summary - Removed ${removedToolUse} orphaned toolUse blocks and ${removedToolResult} orphaned toolResult blocks`,
+      `[bedrockMessageHistoryUtils] Tool cleanup summary - Removed ${removedToolUse} orphaned toolUse blocks and ${removedToolResult} orphaned toolResult blocks`
     );
   }
 
@@ -397,7 +397,7 @@ const prepareConversationHistoryForChat = async (conversationHistory, getCredent
 
   if (cleanedMessages.length !== formattedMessages.length) {
     console.warn(
-      `[bedrockMessageHistoryUtils] Cleaned conversation history from ${formattedMessages.length} to ${cleanedMessages.length} messages due to orphaned tool blocks`,
+      `[bedrockMessageHistoryUtils] Cleaned conversation history from ${formattedMessages.length} to ${cleanedMessages.length} messages due to orphaned tool blocks`
     );
   }
 

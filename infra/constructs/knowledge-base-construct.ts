@@ -162,7 +162,7 @@ export class KnowledgeBase extends Construct {
             resources: [`${dataBucketArn}/*`],
           },
         ],
-      },
+      }
     );
     const knowledgeBaseAccessS3Policy = new IamPolicy(this, 'knowledge-base-access-s3-policy', {
       name: props.clientName + '-knowledge-base-access-s3',
@@ -189,7 +189,7 @@ export class KnowledgeBase extends Construct {
             ],
           },
         ],
-      },
+      }
     );
 
     const knowledgeBaseRole = new IamRole(this, 'knowledge-base-role', {
@@ -212,7 +212,7 @@ export class KnowledgeBase extends Construct {
             ],
           },
         ],
-      },
+      }
     );
 
     const initFunctionPolicyDoc = new DataAwsIamPolicyDocument(this, 'init-function-policy-document', {
@@ -262,7 +262,7 @@ export class KnowledgeBase extends Construct {
             ],
           },
         ],
-      },
+      }
     );
 
     const cleanupFunctionPolicyDoc = new DataAwsIamPolicyDocument(this, 'cleanup-function-policy-document', {
@@ -338,7 +338,7 @@ export class KnowledgeBase extends Construct {
       '..',
       'lambdas',
       'node',
-      'bedrock-cleanup-failed-files',
+      'bedrock-cleanup-failed-files'
     );
     const cleanupFunctionFilename = path.resolve(cleanupFunctionPath, 'lambda_function.zip');
     const cleanupFunc = new LambdaFunction(this, 'cleanup-function', {
@@ -474,7 +474,7 @@ export class KnowledgeBase extends Construct {
             actions: ['sts:AssumeRole'],
           },
         ],
-      },
+      }
     );
     const stateMachineRole = new IamRole(this, 'state-machine-role', {
       name: props.clientName + '-ingestion-state-machine',
@@ -636,7 +636,7 @@ export class KnowledgeBase extends Construct {
             actions: ['sts:AssumeRole'],
           },
         ],
-      },
+      }
     );
 
     const scheduledEventRolePolicyDocument = new DataAwsIamPolicyDocument(
@@ -649,7 +649,7 @@ export class KnowledgeBase extends Construct {
             resources: [syncJobStateMachine.arn],
           },
         ],
-      },
+      }
     );
 
     const scheduledEventRolePolicy = new IamPolicy(this, 'scheduled-event-role-policy', {

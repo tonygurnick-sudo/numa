@@ -22,6 +22,7 @@ This Lambda function acts as a CDKTF custom resource handler to create, update, 
 ## Configuration
 
 Required parameters:
+
 - `VectorBucketName`: Name for the vector bucket (3-63 characters, lowercase)
 - `IndexName`: Name for the vector index
 - `Dimensions`: Vector dimensions (1-4096, typically 1024 for Titan embeddings)

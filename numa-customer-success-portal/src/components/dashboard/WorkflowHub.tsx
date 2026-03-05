@@ -1,27 +1,27 @@
-import { Card, Row, Col, Button } from 'react-bootstrap'
-import { Link } from 'react-router-dom'
-import { ReactNode } from 'react'
+import { Card, Row, Col, Button } from 'react-bootstrap';
+import { Link } from 'react-router-dom';
+import { ReactNode } from 'react';
 
 interface WorkflowAction {
-  label: string
-  link?: string
-  onClick?: () => void
-  variant?: string
-  icon?: ReactNode
+  label: string;
+  link?: string;
+  onClick?: () => void;
+  variant?: string;
+  icon?: ReactNode;
 }
 
 interface WorkflowHubProps {
-  title: string
-  description: string
-  icon: ReactNode
-  primaryAction: WorkflowAction
-  secondaryActions?: WorkflowAction[]
+  title: string;
+  description: string;
+  icon: ReactNode;
+  primaryAction: WorkflowAction;
+  secondaryActions?: WorkflowAction[];
   stats?: {
-    label: string
-    value: string | number
-  }[]
-  gradient?: boolean
-  color?: 'primary' | 'success' | 'info' | 'warning' | 'danger'
+    label: string;
+    value: string | number;
+  }[];
+  gradient?: boolean;
+  color?: 'primary' | 'success' | 'info' | 'warning' | 'danger';
 }
 
 export function WorkflowHub({
@@ -32,15 +32,15 @@ export function WorkflowHub({
   secondaryActions = [],
   stats,
   gradient = true,
-  color = 'primary'
+  color = 'primary',
 }: WorkflowHubProps) {
   const getColorClasses = () => {
-    const baseClasses = 'border-0 shadow-sm h-100'
+    const baseClasses = 'border-0 shadow-sm h-100';
     if (gradient) {
-      return `${baseClasses} workflow-hub-${color}`
+      return `${baseClasses} workflow-hub-${color}`;
     }
-    return baseClasses
-  }
+    return baseClasses;
+  };
 
   return (
     <Card className={getColorClasses()}>
@@ -54,9 +54,7 @@ export function WorkflowHub({
               </div>
               <h5 className="mb-0 fw-semibold">{title}</h5>
             </div>
-            <p className="text-muted mb-0 small">
-              {description}
-            </p>
+            <p className="text-muted mb-0 small">{description}</p>
           </div>
         </div>
 
@@ -82,15 +80,13 @@ export function WorkflowHub({
             variant={primaryAction.variant || color}
             className="d-flex align-items-center justify-content-center"
           >
-            {primaryAction.icon && (
-              <span className="me-2">{primaryAction.icon}</span>
-            )}
+            {primaryAction.icon && <span className="me-2">{primaryAction.icon}</span>}
             {primaryAction.label}
           </Button>
 
           {secondaryActions.length > 0 && (
             <div className="d-flex gap-2">
-              {secondaryActions.map((action, index) => (
+              {secondaryActions.map((action, index) =>
                 action.link ? (
                   <Button
                     key={index}
@@ -100,9 +96,7 @@ export function WorkflowHub({
                     size="sm"
                     className="flex-fill d-flex align-items-center justify-content-center"
                   >
-                    {action.icon && (
-                      <span className="me-1">{action.icon}</span>
-                    )}
+                    {action.icon && <span className="me-1">{action.icon}</span>}
                     {action.label}
                   </Button>
                 ) : (
@@ -113,19 +107,17 @@ export function WorkflowHub({
                     size="sm"
                     className="flex-fill d-flex align-items-center justify-content-center"
                   >
-                    {action.icon && (
-                      <span className="me-1">{action.icon}</span>
-                    )}
+                    {action.icon && <span className="me-1">{action.icon}</span>}
                     {action.label}
                   </Button>
                 )
-              ))}
+              )}
             </div>
           )}
         </div>
       </Card.Body>
     </Card>
-  )
+  );
 }
 
-export default WorkflowHub
+export default WorkflowHub;

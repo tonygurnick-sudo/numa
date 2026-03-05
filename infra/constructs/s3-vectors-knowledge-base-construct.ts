@@ -223,7 +223,7 @@ export class S3VectorsKnowledgeBase extends Construct {
       '..',
       'lambdas',
       'node',
-      'bedrock-cleanup-failed-files',
+      'bedrock-cleanup-failed-files'
     );
     const cleanupFunctionFilename = path.resolve(cleanupFunctionPath, 'lambda_function.zip');
     const cleanupFunc = new LambdaFunction(this, 'cleanup-function', {
@@ -279,7 +279,7 @@ export class S3VectorsKnowledgeBase extends Construct {
       '..',
       'lambdas',
       'node',
-      's3-kb-file-migrator',
+      's3-kb-file-migrator'
     );
     const migrationFunctionFilename = path.resolve(migrationFunctionPath, 'lambda_function.zip');
     const migrationFunc = new LambdaFunction(this, 'migration-function', {

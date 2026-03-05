@@ -159,7 +159,7 @@ export const NoliaMarkdown: React.FC<NoliaMarkdownProps> = ({ content, baseS3Key
     // This prevents showing nested folders at the top level in Generated Files
     return allRefs.filter((ref) => {
       const isChildOfAnother = allRefs.some(
-        (other) => other.fullPath !== ref.fullPath && ref.fullPath.startsWith(other.fullPath + '/'),
+        (other) => other.fullPath !== ref.fullPath && ref.fullPath.startsWith(other.fullPath + '/')
       );
       return !isChildOfAnother;
     });
@@ -257,7 +257,7 @@ export const NoliaMarkdown: React.FC<NoliaMarkdownProps> = ({ content, baseS3Key
     // This prevents showing nested files at the top level in Generated Files
     return allFileRefs.filter((fileRef) => {
       const isInsideReferencedFolder = folderReferences.some((folderRef) =>
-        fileRef.fullPath.startsWith(folderRef.fullPath + '/'),
+        fileRef.fullPath.startsWith(folderRef.fullPath + '/')
       );
       return !isInsideReferencedFolder;
     });
@@ -423,12 +423,12 @@ export const NoliaMarkdown: React.FC<NoliaMarkdownProps> = ({ content, baseS3Key
                                       Key: relKey,
                                       LastModified: new Date(),
                                       Size: 0,
-                                    })),
+                                    }))
                                   ),
                                   0,
-                                  '',
+                                  ''
                                 ),
-                                expandedTreeFolders[ref.fullPath] || new Set(),
+                                expandedTreeFolders[ref.fullPath] || new Set()
                               )}
                               expandedFolders={expandedTreeFolders[ref.fullPath] || new Set()}
                               onToggleFolder={(folderId) => toggleTreeFolder(ref.fullPath, folderId)}

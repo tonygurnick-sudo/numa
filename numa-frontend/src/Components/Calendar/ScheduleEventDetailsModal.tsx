@@ -39,7 +39,7 @@ type ScheduledRunLog = {
 const formatTimestamp = (
   timestamp: number | undefined,
   labels: { never: string; invalid: string },
-  timezone?: string,
+  timezone?: string
 ): string => {
   if (!timestamp) return labels.never;
   try {
@@ -87,7 +87,7 @@ export const ScheduleEventDetailsModal: React.FC<ScheduleEventDetailsModalProps>
   const [runLog, setRunLog] = useState<ScheduledRunLog | null>(null);
   const [isPolling, setIsPolling] = useState(false);
   const [runPreview, setRunPreview] = useState<{ prompt: string; assistant: string; conversationId?: string } | null>(
-    null,
+    null
   );
   const [runLogKey, setRunLogKey] = useState<string | null>(null);
   const resource = event?.resource;
@@ -132,7 +132,7 @@ export const ScheduleEventDetailsModal: React.FC<ScheduleEventDetailsModalProps>
       const text = await blob.text();
       return JSON.parse(text) as ScheduledRunLog;
     },
-    [getCredentials, outputsBucket, region, t],
+    [getCredentials, outputsBucket, region, t]
   );
 
   const loadRunLog = useCallback(
@@ -146,7 +146,7 @@ export const ScheduleEventDetailsModal: React.FC<ScheduleEventDetailsModalProps>
         setRunLogLoading(false);
       }
     },
-    [fetchRunLog],
+    [fetchRunLog]
   );
 
   const pollForRunLog = useCallback(
@@ -167,7 +167,7 @@ export const ScheduleEventDetailsModal: React.FC<ScheduleEventDetailsModalProps>
         }, 3000);
       }
     },
-    [fetchRunLog],
+    [fetchRunLog]
   );
 
   const isNotFoundError = (err: unknown) => {
@@ -369,7 +369,7 @@ export const ScheduleEventDetailsModal: React.FC<ScheduleEventDetailsModalProps>
                         never: t('scheduling.labels.never'),
                         invalid: t('scheduling.labels.invalidDate'),
                       },
-                      resource.timezone,
+                      resource.timezone
                     )}
                   </div>
                   <div className="col-md-4">
@@ -381,7 +381,7 @@ export const ScheduleEventDetailsModal: React.FC<ScheduleEventDetailsModalProps>
                         never: t('scheduling.labels.never'),
                         invalid: t('scheduling.labels.invalidDate'),
                       },
-                      resource.timezone,
+                      resource.timezone
                     )}
                   </div>
                   <div className="col-md-4">
@@ -393,7 +393,7 @@ export const ScheduleEventDetailsModal: React.FC<ScheduleEventDetailsModalProps>
                         never: t('scheduling.labels.never'),
                         invalid: t('scheduling.labels.invalidDate'),
                       },
-                      resource.timezone,
+                      resource.timezone
                     )}
                   </div>
                 </div>
@@ -415,7 +415,7 @@ export const ScheduleEventDetailsModal: React.FC<ScheduleEventDetailsModalProps>
                     <br />
                     {event.start.toLocaleString(
                       undefined,
-                      resource.timezone ? { timeZone: resource.timezone } : undefined,
+                      resource.timezone ? { timeZone: resource.timezone } : undefined
                     )}
                   </div>
                   <div className="col-md-6">
@@ -423,7 +423,7 @@ export const ScheduleEventDetailsModal: React.FC<ScheduleEventDetailsModalProps>
                     <br />
                     {event.end.toLocaleString(
                       undefined,
-                      resource.timezone ? { timeZone: resource.timezone } : undefined,
+                      resource.timezone ? { timeZone: resource.timezone } : undefined
                     )}
                   </div>
                 </div>

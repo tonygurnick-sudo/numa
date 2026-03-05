@@ -43,7 +43,7 @@ export function WorkflowTab({
       if (!zoneId) return [];
       return stages.filter((s) => s.zoneId === zoneId).sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
     },
-    [stages],
+    [stages]
   );
 
   // Get allowed statusType values for a given zone type
@@ -131,7 +131,7 @@ export function WorkflowTab({
         if (s === a) return { ...s, order: b.order };
         if (s === b) return { ...s, order: a.order };
         return s;
-      }),
+      })
     );
   };
 

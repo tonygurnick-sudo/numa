@@ -4,12 +4,12 @@ This package hosts the server-side logic that adapts Pipedream MCP integrations 
 
 ## Modules
 
-| File | Purpose |
-| --- | --- |
-| `router.py` | Implements the tools-only Numa router that folds all Pipedream tools for an integration into a single Strands tool, including payload generation, schema validation, execution, auto‑retry, and error normalization. |
-| `fallback.py` | Minimal passthrough shim for the legacy “sub-agent” behaviour (each MCP tool exposed directly without intervention). |
-| `prompts/` | Prompt snippets assembled at runtime. `base_prompt.md` provides generic guidance; any `*.md` named after an integration augments the base prompt with integration-specific instructions. |
-| `config.py` | Static per‑tool routing overrides (force tools‑only or backup sub‑agent without env vars). |
+| File          | Purpose                                                                                                                                                                                                              |
+| ------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `router.py`   | Implements the tools-only Numa router that folds all Pipedream tools for an integration into a single Strands tool, including payload generation, schema validation, execution, auto‑retry, and error normalization. |
+| `fallback.py` | Minimal passthrough shim for the legacy “sub-agent” behaviour (each MCP tool exposed directly without intervention).                                                                                                 |
+| `prompts/`    | Prompt snippets assembled at runtime. `base_prompt.md` provides generic guidance; any `*.md` named after an integration augments the base prompt with integration-specific instructions.                             |
+| `config.py`   | Static per‑tool routing overrides (force tools‑only or backup sub‑agent without env vars).                                                                                                                           |
 
 ## Key Concepts
 
@@ -52,6 +52,7 @@ Additionally, you can force per‑tool routing in code via `config.py` (see “S
 2. Describe defaults, field preferences, and domain-specific behaviour in plain English. The file content is appended to the base prompt automatically.
 
 Example guidance (see `prompts/google_calendar.md`):
+
 - Encourage the router to honour timezones supplied by Numa.
 - Default list endpoints to `maxResults = 30` unless the user explicitly requests a different limit.
 

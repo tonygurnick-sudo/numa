@@ -4,15 +4,15 @@ Agent types are different configurations of the same workspace agent engine. Eac
 
 ## Registered Agent Types
 
-| Type ID | Mode | Identity Override | Custom Prompt | Pipeline | Purpose |
-|---------|------|-------------------|---------------|----------|---------|
-| `numa-chat` | stream | No | No | No | Default Numa chat with full tool access |
-| `research-agent` | stream | No | No | No | Research-focused, no integrations |
-| `document-summariser` | sync | No | Yes | No | Reads docs, writes structured JSON |
-| `tony-comedian` | stream | Yes | Yes | No | Test/demo agent with custom persona |
-| `profile-creator` | sync | No | No | Yes (2 steps) | Orchestrates researcher + validator |
-| `profile-researcher` | sync | No | Yes | No | Pipeline step 1: research + draft |
-| `profile-validator` | sync | No | Yes | No | Pipeline step 2: validate + finalize |
+| Type ID               | Mode   | Identity Override | Custom Prompt | Pipeline      | Purpose                                 |
+| --------------------- | ------ | ----------------- | ------------- | ------------- | --------------------------------------- |
+| `numa-chat`           | stream | No                | No            | No            | Default Numa chat with full tool access |
+| `research-agent`      | stream | No                | No            | No            | Research-focused, no integrations       |
+| `document-summariser` | sync   | No                | Yes           | No            | Reads docs, writes structured JSON      |
+| `tony-comedian`       | stream | Yes               | Yes           | No            | Test/demo agent with custom persona     |
+| `profile-creator`     | sync   | No                | No            | Yes (2 steps) | Orchestrates researcher + validator     |
+| `profile-researcher`  | sync   | No                | Yes           | No            | Pipeline step 1: research + draft       |
+| `profile-validator`   | sync   | No                | Yes           | No            | Pipeline step 2: validate + finalize    |
 
 ## Key Concepts
 
@@ -32,20 +32,22 @@ Agent types are different configurations of the same workspace agent engine. Eac
 
 The workspace agent registers MCP servers conditionally based on agent type config. Each server groups related tools under a namespace:
 
-| MCP Server | Flag | Tools | Purpose |
-|------------|------|-------|---------|
-| `numa` | `enable_numa_mcp` | `numa_tool` | General platform tools — KB, web search, content extraction, document conversion, agents, memories |
-| `scripts` | `enable_scripts_mcp` | `execute_script` | Sandboxed Python/Bash/Node code execution |
-| `integrations` | `enable_integrations_mcp` | `run_action`, `configure_props`, `proxy_request` | Pipedream SaaS integration tools |
+| MCP Server     | Flag                      | Tools                                            | Purpose                                                                                            |
+| -------------- | ------------------------- | ------------------------------------------------ | -------------------------------------------------------------------------------------------------- |
+| `numa`         | `enable_numa_mcp`         | `numa_tool`                                      | General platform tools — KB, web search, content extraction, document conversion, agents, memories |
+| `scripts`      | `enable_scripts_mcp`      | `execute_script`                                 | Sandboxed Python/Bash/Node code execution                                                          |
+| `integrations` | `enable_integrations_mcp` | `run_action`, `configure_props`, `proxy_request` | Pipedream SaaS integration tools                                                                   |
 
 #### When to add a new MCP server vs a new operation in `numa_tool`
 
 **Add a new operation to `numa_tool`** when the capability is:
+
 - A general platform utility (content extraction, document conversion, etc.)
 - Always available to all customers (no feature flag gating)
 - Handled by the same `workspace-chat-tools` Lambda
 
 **Create a separate MCP server** when the capability:
+
 - Belongs to a distinct product domain (e.g., Numa Ops, a future analytics module)
 - Is feature-flagged — not all customers should have it, and you want the LLM to not even see the tool when it's disabled
 - Has its own backend service or Lambda
@@ -74,6 +76,7 @@ Two mechanisms for customizing the system prompt, from simple to full control:
 **`system_prompt_builder`** — Full override. A callable that returns the complete system prompt string. You can import individual sections from `prompts.py` (`WORKSPACE_ENVIRONMENT`, `TOOL_USAGE`, etc.) and compose your own prompt, skipping sections that don't apply.
 
 Example using both:
+
 ```python
 # Simple: just swap identity, keep everything else
 AgentTypeConfig(

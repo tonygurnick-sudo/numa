@@ -132,7 +132,7 @@ describe('Nav Component', () => {
           // Standard user should have at least 3 nav links
           expect(navLinks.length).toBeGreaterThan(2);
         },
-        { timeout: 5000 },
+        { timeout: 5000 }
       );
 
       expect(screen.queryByText('Interface')).not.toBeInTheDocument();
@@ -164,7 +164,7 @@ describe('Nav Component', () => {
           const navLinks = document.querySelectorAll('.nav-link');
           expect(navLinks.length).toBeGreaterThan(0);
         },
-        { timeout: 3000 },
+        { timeout: 3000 }
       );
 
       // Test dashboard navigation using title attribute
@@ -194,7 +194,7 @@ describe('Nav Component', () => {
           const navLinks = document.querySelectorAll('.nav-link');
           expect(navLinks.length).toBeGreaterThan(0);
         },
-        { timeout: 3000 },
+        { timeout: 3000 }
       );
 
       expect(screen.queryByText('Interface')).not.toBeInTheDocument();
@@ -212,7 +212,7 @@ describe('Nav Component', () => {
           const navLinks = document.querySelectorAll('.nav-link');
           expect(navLinks.length).toBeGreaterThan(0);
         },
-        { timeout: 3000 },
+        { timeout: 3000 }
       );
 
       expect(screen.queryByRole('button', { name: 'Build' })).not.toBeInTheDocument();
@@ -235,7 +235,7 @@ describe('Nav Component', () => {
           const navLinks = document.querySelectorAll('.nav-link');
           expect(navLinks.length).toBeGreaterThan(0);
         },
-        { timeout: 3000 },
+        { timeout: 3000 }
       );
 
       const navLinks = Array.from(document.querySelectorAll('.nav-link'));
@@ -266,7 +266,7 @@ describe('Nav Component', () => {
           const navLinks = document.querySelectorAll('.nav-link');
           expect(navLinks.length).toBeGreaterThan(0);
         },
-        { timeout: 3000 },
+        { timeout: 3000 }
       );
 
       // Check for navigation items by title attribute
@@ -291,7 +291,7 @@ describe('Nav Component', () => {
           const navLinks = document.querySelectorAll('.nav-link');
           expect(navLinks.length).toBeGreaterThan(0);
         },
-        { timeout: 3000 },
+        { timeout: 3000 }
       );
 
       // Get all navigation items by their title attributes
@@ -336,7 +336,7 @@ describe('Nav Component', () => {
           const navLinks = document.querySelectorAll('.nav-link');
           expect(navLinks.length).toBeGreaterThan(0);
         },
-        { timeout: 3000 },
+        { timeout: 3000 }
       );
 
       // Find navigation items by their title attributes instead of text
@@ -448,7 +448,7 @@ describe('Nav Component', () => {
 
       // Test dashboard navigation using dropdown items
       const appsItem = Array.from(document.querySelectorAll('.dropdown-item')).find((item) =>
-        item.textContent?.includes('Apps'),
+        item.textContent?.includes('Apps')
       );
       expect(appsItem).toBeTruthy();
       fireEvent.click(appsItem);
@@ -459,7 +459,7 @@ describe('Nav Component', () => {
 
       // Test chat navigation
       const chatItem = Array.from(document.querySelectorAll('.dropdown-item')).find((item) =>
-        item.textContent?.includes('Chat'),
+        item.textContent?.includes('Chat')
       );
       expect(chatItem).toBeTruthy();
       fireEvent.click(chatItem);
@@ -470,7 +470,7 @@ describe('Nav Component', () => {
 
       // Test Knowledge Base navigation
       const kbItem = Array.from(document.querySelectorAll('.dropdown-item')).find((item) =>
-        item.textContent?.includes('Knowledge Base'),
+        item.textContent?.includes('Knowledge Base')
       );
       expect(kbItem).toBeTruthy();
       fireEvent.click(kbItem);
@@ -546,7 +546,7 @@ describe('Nav Component', () => {
           const navLinks = document.querySelectorAll('.nav-link');
           expect(navLinks.length).toBeGreaterThan(0);
         },
-        { timeout: 5000 },
+        { timeout: 5000 }
       );
 
       // Both mobile and desktop nav are always rendered, just hidden with CSS
@@ -578,7 +578,7 @@ describe('Nav Component', () => {
           const menuButton = screen.getByTestId('mobile-menu-button');
           expect(menuButton).toBeInTheDocument();
         },
-        { timeout: 5000 },
+        { timeout: 5000 }
       );
 
       // Simulate resize to desktop width
@@ -595,7 +595,7 @@ describe('Nav Component', () => {
           const navLinks = document.querySelectorAll('.nav-link');
           expect(navLinks.length).toBeGreaterThan(0);
         },
-        { timeout: 5000 },
+        { timeout: 5000 }
       );
 
       // Mobile menu button should still be there (CSS controls visibility)

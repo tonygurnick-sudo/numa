@@ -222,7 +222,7 @@ export const WorkspaceChatMarkdown: React.FC<WorkspaceChatMarkdownProps> = React
           console.log('File preview not available:', ref.filename);
         }
       },
-      [onOpenFilePreview],
+      [onOpenFilePreview]
     );
 
     const handleOpenFolder = useCallback(
@@ -233,7 +233,7 @@ export const WorkspaceChatMarkdown: React.FC<WorkspaceChatMarkdownProps> = React
           console.log('Folder preview not available:', ref.name);
         }
       },
-      [onOpenFolderPreview],
+      [onOpenFolderPreview]
     );
 
     // Custom component to render text nodes with inline file/folder/kb-source references
@@ -287,7 +287,7 @@ export const WorkspaceChatMarkdown: React.FC<WorkspaceChatMarkdownProps> = React
           </>
         );
       },
-      [userSub, conversationId, region, handleOpenFile, handleOpenFolder, getCredentials],
+      [userSub, conversationId, region, handleOpenFile, handleOpenFolder, getCredentials]
     );
 
     // Custom components for ReactMarkdown that handle inline file/folder references
@@ -505,7 +505,7 @@ export const WorkspaceChatMarkdown: React.FC<WorkspaceChatMarkdownProps> = React
           );
         },
       }),
-      [TextWithReferences, userSub, conversationId, region, handleOpenFile, handleOpenFolder, getCredentials],
+      [TextWithReferences, userSub, conversationId, region, handleOpenFile, handleOpenFolder, getCredentials]
     );
 
     return (
@@ -515,7 +515,7 @@ export const WorkspaceChatMarkdown: React.FC<WorkspaceChatMarkdownProps> = React
         </ReactMarkdown>
       </div>
     );
-  },
+  }
 );
 
 export default WorkspaceChatMarkdown;

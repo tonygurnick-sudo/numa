@@ -419,7 +419,9 @@
   font-size: 0.875rem;
   cursor: pointer;
   flex-shrink: 0;
-  transition: background-color 0.15s ease, color 0.15s ease;
+  transition:
+    background-color 0.15s ease,
+    color 0.15s ease;
 
   &:hover {
     background: #f4f4f5;
@@ -485,7 +487,9 @@
   cursor: pointer;
   padding: 0;
   background: #fff;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
 
   &:hover {
     border-color: #a1a1aa;
@@ -618,7 +622,9 @@
   cursor: pointer;
   padding: 0;
   background: #fff;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
 
   &:hover {
     border-color: #a1a1aa;
@@ -737,7 +743,9 @@
   cursor: pointer;
   padding: 0;
   background: #fff;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
 
   &:hover {
     border-color: #a1a1aa;

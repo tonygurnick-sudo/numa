@@ -90,7 +90,7 @@ export const ScheduleService = {
     numaGet: NumaGet,
     startDate?: string,
     endDate?: string,
-    eventTypes?: string[],
+    eventTypes?: string[]
   ): Promise<AgentSchedule[]> => {
     const params: Record<string, unknown> = {};
     if (startDate) params.startDate = startDate;

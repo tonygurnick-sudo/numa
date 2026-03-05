@@ -143,7 +143,7 @@ export const CronExpressionBuilder = ({
         icon: 'bi-code-slash',
       },
     ],
-    [t],
+    [t]
   );
   const dayLabels = useMemo(
     () => ({
@@ -155,7 +155,7 @@ export const CronExpressionBuilder = ({
       saturday: { short: t('scheduling.days.saturday.short'), full: t('scheduling.days.saturday.full') },
       sunday: { short: t('scheduling.days.sunday.short'), full: t('scheduling.days.sunday.full') },
     }),
-    [t],
+    [t]
   );
   const weekNumberOptions = useMemo(
     () => [
@@ -166,7 +166,7 @@ export const CronExpressionBuilder = ({
       { value: 5 as const, label: t('scheduling.weekNumbers.fifth') },
       { value: 'last' as const, label: t('scheduling.weekNumbers.last') },
     ],
-    [t],
+    [t]
   );
   const timeLabel = useMemo(() => formatTimeForDisplay(startTime), [startTime]);
   const dateLabel = useMemo(() => formatDateForDisplay(startDate), [startDate]);
@@ -464,7 +464,7 @@ export const CronExpressionBuilder = ({
                     value={monthlyWeekNumber.toString()}
                     onChange={(e) =>
                       onMonthlyWeekNumberChange(
-                        e.target.value === 'last' ? 'last' : (parseInt(e.target.value, 10) as WeekNumber) || 1,
+                        e.target.value === 'last' ? 'last' : (parseInt(e.target.value, 10) as WeekNumber) || 1
                       )
                     }
                     disabled={submitting}

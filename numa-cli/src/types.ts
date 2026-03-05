@@ -93,11 +93,24 @@ export const clientConfigSchema = z.object({
   agentCoreRegion: z.string().optional(),
   dataConnectorsEnabled: z.boolean().optional(),
   scheduling: z.boolean().optional(),
-  budget: z.object({
-    name: z.string(),
-    limitAmount: z.number(),
-    alertThresholds: z.array(z.number()),
-  }).optional(),
+  numaFiles: z.boolean().optional(),
+  numaDropZones: z.boolean().optional(),
+  numaSharing: z.boolean().optional(),
+  developerMode: z.boolean().optional(),
+  oauthIntegrationsEnabled: z.boolean().optional(),
+  numaOps: z.boolean().optional(),
+  secretsVaultEnabled: z.boolean().optional(),
+  workspaceChatModelSelection: z.boolean().optional(),
+  mfa: z.boolean().optional(),
+  contentSearchEnabled: z.boolean().optional(),
+  recordsKBEnabled: z.boolean().optional(),
+  budget: z
+    .object({
+      name: z.string(),
+      limitAmount: z.number(),
+      alertThresholds: z.array(z.number()),
+    })
+    .optional(),
 });
 
 export type ClientConfig = z.infer<typeof clientConfigSchema>;

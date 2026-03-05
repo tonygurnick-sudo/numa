@@ -77,7 +77,7 @@ const sanitizeForBackend = (data: unknown): unknown => {
   if (Array.isArray(data)) return data.map(sanitizeForBackend);
   if (typeof data === 'object') {
     return Object.fromEntries(
-      Object.entries(data as Record<string, unknown>).map(([k, v]) => [k, sanitizeForBackend(v)]),
+      Object.entries(data as Record<string, unknown>).map(([k, v]) => [k, sanitizeForBackend(v)])
     );
   }
   return data;
@@ -539,7 +539,7 @@ export const StructuredDataQueryDetail = () => {
       runName,
       isJobNamingEnabled,
       setError,
-    ],
+    ]
   );
 
   // Handle file input change
@@ -875,7 +875,7 @@ export const StructuredDataQueryDetail = () => {
                           raw: message.debug?.raw,
                         },
                         null,
-                        2,
+                        2
                       )}
                     </pre>
                   </div>

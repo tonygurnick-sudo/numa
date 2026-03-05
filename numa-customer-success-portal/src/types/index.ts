@@ -1,39 +1,51 @@
-import { z } from 'zod'
+import { z } from 'zod';
 
 // Base app configuration schema (matching userConfigurableBaseNumaAppPropsSchema from infrastructure)
-const baseAppConfigSchema = z.object({
-  enableJobs: z.boolean().optional(),
-  urlPathPrefix: z.string().optional(),
-  s3KeyPrefix: z.string().optional(),
-  senderEmail: z.string().optional(),
-  receiverEmails: z.array(z.string()).optional(),
-}).strict()
+const baseAppConfigSchema = z
+  .object({
+    enableJobs: z.boolean().optional(),
+    urlPathPrefix: z.string().optional(),
+    s3KeyPrefix: z.string().optional(),
+    senderEmail: z.string().optional(),
+    receiverEmails: z.array(z.string()).optional(),
+  })
+  .strict();
 
 // Data source configuration schemas
-const webCrawlerConfigSchema = z.object({
-  url: z.string(),
-  maxDepth: z.number().optional(),
-  maxPages: z.number().optional(),
-}).optional()
+const webCrawlerConfigSchema = z
+  .object({
+    url: z.string(),
+    maxDepth: z.number().optional(),
+    maxPages: z.number().optional(),
+  })
+  .optional();
 
-const sharePointConfigSchema = z.object({
-  siteUrl: z.string(),
-  tenantId: z.string(),
-}).optional()
+const sharePointConfigSchema = z
+  .object({
+    siteUrl: z.string(),
+    tenantId: z.string(),
+  })
+  .optional();
 
-const boxConfigSchema = z.object({
-  clientId: z.string(),
-  clientSecret: z.string(),
-}).optional()
+const boxConfigSchema = z
+  .object({
+    clientId: z.string(),
+    clientSecret: z.string(),
+  })
+  .optional();
 
-const teamsConfigSchema = z.object({
-  tenantId: z.string(),
-}).optional()
+const teamsConfigSchema = z
+  .object({
+    tenantId: z.string(),
+  })
+  .optional();
 
-const s3ConfigSchema = z.object({
-  bucketName: z.string(),
-  prefix: z.string().optional(),
-}).optional()
+const s3ConfigSchema = z
+  .object({
+    bucketName: z.string(),
+    prefix: z.string().optional(),
+  })
+  .optional();
 
 // Complete Client Configuration Schema (matching infrastructure schema)
 export const clientConfigSchema = z.object({
@@ -96,18 +108,20 @@ export const clientConfigSchema = z.object({
   s3Configs: z.array(s3ConfigSchema).optional(),
 
   // Budget configuration
-  budget: z.object({
-    name: z.string(),
-    limitAmount: z.number(),
-    alertThresholds: z.array(z.number()),
-  }).optional(),
-})
+  budget: z
+    .object({
+      name: z.string(),
+      limitAmount: z.number(),
+      alertThresholds: z.array(z.number()),
+    })
+    .optional(),
+});
 
-export type ClientConfig = z.infer<typeof clientConfigSchema>
+export type ClientConfig = z.infer<typeof clientConfigSchema>;
 
 // Client metadata (non-deployment) — stored in a separate table from client config
-export const CLIENT_STATUS_VALUES = ['trial', 'paying', 'partner', 'internal', 'other', 'unclear'] as const
-export type ClientStatusValue = typeof CLIENT_STATUS_VALUES[number]
+export const CLIENT_STATUS_VALUES = ['trial', 'paying', 'partner', 'internal', 'other', 'unclear'] as const;
+export type ClientStatusValue = (typeof CLIENT_STATUS_VALUES)[number];
 
 export const clientMetadataSchema = z.object({
   clientName: z.string(),
@@ -117,9 +131,9 @@ export const clientMetadataSchema = z.object({
   notes: z.string().optional(),
   updatedAt: z.string().optional(),
   updatedBy: z.string().optional(),
-})
+});
 
-export type ClientMetadata = z.infer<typeof clientMetadataSchema>
+export type ClientMetadata = z.infer<typeof clientMetadataSchema>;
 
 export const CLIENT_STATUS_DISPLAY: Record<ClientStatusValue, { label: string; variant: string }> = {
   trial: { label: 'Trial', variant: 'warning' },
@@ -128,14 +142,14 @@ export const CLIENT_STATUS_DISPLAY: Record<ClientStatusValue, { label: string; v
   internal: { label: 'Internal', variant: 'primary' },
   other: { label: 'Other', variant: 'secondary' },
   unclear: { label: 'Unclear', variant: 'light' },
-}
+};
 
 export function getStatusBadgeInfo(metadata?: ClientMetadata): { label: string; variant: string } | null {
-  if (!metadata) return null
+  if (!metadata) return null;
   if (metadata.status === 'trial' && metadata.trialEndDate && new Date(metadata.trialEndDate) < new Date()) {
-    return { label: 'Trial - Expired', variant: 'danger' }
+    return { label: 'Trial - Expired', variant: 'danger' };
   }
-  return CLIENT_STATUS_DISPLAY[metadata.status]
+  return CLIENT_STATUS_DISPLAY[metadata.status];
 }
 
 // Helper to get default values for display
@@ -162,20 +176,20 @@ export const getDefaultClientConfigValues = () => ({
   workspaceChatModelSelection: false,
   numaOps: false,
   mfa: false,
-})
+});
 
 // Helper to check if a config value differs from default
 export const isCustomValue = (key: keyof ClientConfig, value: any): boolean => {
-  const defaults = getDefaultClientConfigValues()
-  const defaultValue = defaults[key as keyof typeof defaults]
+  const defaults = getDefaultClientConfigValues();
+  const defaultValue = defaults[key as keyof typeof defaults];
 
   // Special handling for different value types
   if (defaultValue === undefined) {
-    return value !== undefined && value !== null && value !== ''
+    return value !== undefined && value !== null && value !== '';
   }
 
-  return value !== defaultValue
-}
+  return value !== defaultValue;
+};
 
 // Helper to get human-readable field names
 export const getFieldDisplayName = (key: keyof ClientConfig): string => {
@@ -197,10 +211,10 @@ export const getFieldDisplayName = (key: keyof ClientConfig): string => {
     agents: 'Agents',
     scheduling: 'Agent Scheduling',
     mfa: 'Multi-Factor Authentication (MFA)',
-  }
+  };
 
-  return fieldNames[key] || key
-}
+  return fieldNames[key] || key;
+};
 
 // Helper to identify which fields are considered "advanced"
 export const isAdvancedField = (key: keyof ClientConfig): boolean => {
@@ -225,79 +239,79 @@ export const isAdvancedField = (key: keyof ClientConfig): boolean => {
     'temporaryPasswordValidityDays',
     'passwordLength',
     'mfa',
-  ]
+  ];
 
-  return advancedFields.includes(key)
-}
+  return advancedFields.includes(key);
+};
 
 // Client with status information
 export interface Client {
-  name: string
-  config: ClientConfig
-  status: 'healthy' | 'warning' | 'error' | 'pending'
+  name: string;
+  config: ClientConfig;
+  status: 'healthy' | 'warning' | 'error' | 'pending';
   lastDeployment?: {
-    timestamp: string
-    imageTag: string
-    status: 'success' | 'failed' | 'running'
-    deploymentId: string
-  }
-  deploymentCount: number
+    timestamp: string;
+    imageTag: string;
+    status: 'success' | 'failed' | 'running';
+    deploymentId: string;
+  };
+  deploymentCount: number;
 }
 
 // ECR Image Information
 export interface ECRImage {
-  repository: string
-  tag: string
-  digest: string
-  pushedAt: string
-  sizeMb: number
-  gitCommit?: string
-  gitBranch?: string
-  customName?: string
-  description?: string
+  repository: string;
+  tag: string;
+  digest: string;
+  pushedAt: string;
+  sizeMb: number;
+  gitCommit?: string;
+  gitBranch?: string;
+  customName?: string;
+  description?: string;
 }
 
 export interface DeploymentGroup {
-  groupName: string
-  clients: string[]
-  description?: string
-  maxConcurrency?: number
-  managed?: boolean
-  createdAt?: string
-  updatedAt?: string
+  groupName: string;
+  clients: string[];
+  description?: string;
+  maxConcurrency?: number;
+  managed?: boolean;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 // Deployment Record
 export interface DeploymentRecord {
-  deploymentId: string
-  clientName: string
-  imageTag: string
-  imageDigest: string
-  status: 'pending' | 'running' | 'success' | 'failed'
-  progress?: number // 0-100 for running deployments
-  initiatedBy: string
-  startTime: string
-  endTime?: string
-  logs?: string[]
-  error?: string
+  deploymentId: string;
+  clientName: string;
+  imageTag: string;
+  imageDigest: string;
+  status: 'pending' | 'running' | 'success' | 'failed';
+  progress?: number; // 0-100 for running deployments
+  initiatedBy: string;
+  startTime: string;
+  endTime?: string;
+  logs?: string[];
+  error?: string;
   // Mock indicator
-  isMock?: boolean
+  isMock?: boolean;
 }
 
 // Deployment Statistics
 export interface DeploymentStats {
-  totalDeployments: number
-  successfulDeployments: number
-  failedDeployments: number
-  averageDeploymentTime: number // in minutes
-  deploymentsToday: number
-  activeDeployments: number
+  totalDeployments: number;
+  successfulDeployments: number;
+  failedDeployments: number;
+  averageDeploymentTime: number; // in minutes
+  deploymentsToday: number;
+  activeDeployments: number;
 }
 
 // User Session
 export interface UserSession {
-  email: string
-  name: string
-  role: 'admin' | 'customer-success' | 'viewer'
-  isAuthenticated: boolean
+  email: string;
+  name: string;
+  role: 'admin' | 'customer-success' | 'viewer';
+  isAuthenticated: boolean;
 }

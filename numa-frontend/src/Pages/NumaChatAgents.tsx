@@ -110,24 +110,20 @@ const NumaChatAgents = () => {
   const [personalAgents, setPersonalAgents] = useState<AgentSummary[]>([]);
   const [personalAgentsLoading, setPersonalAgentsLoading] = useState(false);
   const [agentsMode, setAgentsMode] = useState<AgentsMode>('full');
-  const [agentsFeatureEnabled] = useState(() =>
-    typeof window !== 'undefined' ? window.sessionStorage.getItem('AGENTS') === 'true' : false,
-  );
-  const [schedulingEnabled] = useState(() =>
-    typeof window !== 'undefined' ? window.sessionStorage.getItem('SCHEDULING') === 'true' : false,
-  );
+  const [agentsFeatureEnabled] = useState(() => getFlag('AGENTS'));
+  const [schedulingEnabled] = useState(() => getFlag('SCHEDULING'));
   const [missingConfirm, setMissingConfirm] = useState<{ agent: AgentSummary; missing: string[] } | null>(null);
   const [isMobile, setIsMobile] = useState(() => (typeof window !== 'undefined' ? window.innerWidth <= 768 : false));
   const [showMobileActions, setShowMobileActions] = useState(false);
   const [showDocumentModal, setShowDocumentModal] = useState(false);
   // SWR: initialize from localStorage cache so chat settings are available instantly
   const [userChatSettings, setUserChatSettings] = useState<ChatSettings>(
-    () => ChatSettingsService.getCached() ?? DEFAULT_CHAT_SETTINGS,
+    () => ChatSettingsService.getCached() ?? DEFAULT_CHAT_SETTINGS
   );
   const [chatSettingsLoaded, setChatSettingsLoaded] = useState(() => !!ChatSettingsService.getCached());
   const [userSettingsModified, setUserSettingsModified] = useState(false);
   const [pendingConversationChatConfig, setPendingConversationChatConfig] = useState<ConversationChatConfig | null>(
-    null,
+    null
   );
   const [dataAnalysisBannerFiles, setDataAnalysisBannerFiles] = useState<DataAnalysisFile[] | null>(null);
   const [showScheduleModal, setShowScheduleModal] = useState(false);
@@ -192,7 +188,7 @@ const NumaChatAgents = () => {
 
   const connectedSet = useMemo(
     () => new Set(availableConnections.filter((conn) => conn.isConnected).map((conn) => conn.id)),
-    [availableConnections],
+    [availableConnections]
   );
 
   const applyConversationChatConfig = useCallback(
@@ -233,7 +229,7 @@ const NumaChatAgents = () => {
         isApplyingConversationChatConfigRef.current = false;
       }, 0);
     },
-    [agentsFeatureEnabled, availableConnections, availableKBs, dataAnalysisAvailable],
+    [agentsFeatureEnabled, availableConnections, availableKBs, dataAnalysisAvailable]
   );
 
   useEffect(() => {
@@ -246,7 +242,7 @@ const NumaChatAgents = () => {
       markUserSettingsModified();
       setWebSearchEnabled(value);
     },
-    [markUserSettingsModified],
+    [markUserSettingsModified]
   );
 
   const handleUserSetDataAnalysisEnabled = useCallback(
@@ -255,7 +251,7 @@ const NumaChatAgents = () => {
       markUserSettingsModified();
       setDataAnalysisEnabled(value);
     },
-    [dataAnalysisAvailable, markUserSettingsModified],
+    [dataAnalysisAvailable, markUserSettingsModified]
   );
 
   const handleUserSetCreateAgentEnabled = useCallback(
@@ -263,7 +259,7 @@ const NumaChatAgents = () => {
       markUserSettingsModified();
       setCreateAgentEnabled(value);
     },
-    [markUserSettingsModified],
+    [markUserSettingsModified]
   );
 
   const handleUserSetAutoToolsEnabled = useCallback(
@@ -271,7 +267,7 @@ const NumaChatAgents = () => {
       markUserSettingsModified();
       setAutoToolsEnabled(value);
     },
-    [markUserSettingsModified],
+    [markUserSettingsModified]
   );
 
   const handleUserSetEnabledConnections = useCallback(
@@ -279,7 +275,7 @@ const NumaChatAgents = () => {
       markUserSettingsModified();
       setEnabledConnections(value);
     },
-    [markUserSettingsModified],
+    [markUserSettingsModified]
   );
 
   const handleUserSetEnabledKBIds = useCallback(
@@ -287,7 +283,7 @@ const NumaChatAgents = () => {
       markUserSettingsModified();
       setEnabledKBIds(value);
     },
-    [markUserSettingsModified],
+    [markUserSettingsModified]
   );
 
   const isDataAnalysisFile = useCallback((file: { fileName?: string; fileType?: string }) => {
@@ -320,7 +316,7 @@ const NumaChatAgents = () => {
         setDataAnalysisBannerFiles(dataFiles);
       }
     },
-    [autoToolsEnabled, dataAnalysisAvailable, dataAnalysisEnabled, isDataAnalysisFile],
+    [autoToolsEnabled, dataAnalysisAvailable, dataAnalysisEnabled, isDataAnalysisFile]
   );
 
   const addToolCardSteps = useCallback((toolUseId: string, steps: string[]) => {
@@ -336,7 +332,7 @@ const NumaChatAgents = () => {
           seg !== null &&
           'kind' in seg &&
           (seg as { kind: string }).kind === 'tool_card' &&
-          (seg as { toolUseId?: string | null }).toolUseId === toolUseId,
+          (seg as { toolUseId?: string | null }).toolUseId === toolUseId
       );
       if (idx >= 0) {
         const seg = segs[idx] as { steps?: string[] };
@@ -399,7 +395,7 @@ const NumaChatAgents = () => {
       const timer = setInterval(poll, 5000);
       dataAnalysisPollersRef.current.set(toolUseId, timer);
     },
-    [addToolCardSteps, numaGet, stopDataAnalysisPolling],
+    [addToolCardSteps, numaGet, stopDataAnalysisPolling]
   );
 
   // Persist current chat controls to the conversation meta item so resuming a chat restores its last state.
@@ -464,7 +460,7 @@ const NumaChatAgents = () => {
 
   const defaultConnectionIdsFromSettings = useMemo(
     () => userChatSettings.defaultConnectionIds.filter((id) => connectedSet.has(id)),
-    [connectedSet, userChatSettings.defaultConnectionIds],
+    [connectedSet, userChatSettings.defaultConnectionIds]
   );
 
   const applyAgentConfiguration = useCallback(
@@ -515,7 +511,7 @@ const NumaChatAgents = () => {
         setEnabledKBIds(availableKBs.filter((kb) => allowedSet.has(kb.kb_id)).map((kb) => kb.kb_id));
       }
     },
-    [availableKBs, defaultConnectionIdsFromSettings, defaultKBIdsFromSettings, userChatSettings, dataAnalysisAvailable],
+    [availableKBs, defaultConnectionIdsFromSettings, defaultKBIdsFromSettings, userChatSettings, dataAnalysisAvailable]
   );
 
   const resetAgentState = useCallback(() => {
@@ -684,7 +680,7 @@ const NumaChatAgents = () => {
             JSON.stringify({
               data: deduplicatedAgents,
               timestamp: Date.now(),
-            }),
+            })
           );
         } catch (err) {
           console.warn('Failed to cache agents:', err);
@@ -796,7 +792,7 @@ const NumaChatAgents = () => {
   };
 
   // Pipedream integration feature flags - check config instead of Cognito groups
-  const hasPipedreamFeature = window.sessionStorage.getItem('PIPEDREAM_INTEGRATIONS') === 'true';
+  const hasPipedreamFeature = getFlag('PIPEDREAM_INTEGRATIONS');
   const relayLambdaArn = window.sessionStorage.getItem('PIPEDREAM_RELAY_LAMBDA_ARN');
   const [globalIntegrationSettings, setGlobalIntegrationSettings] = useState<
     Record<string, { status: 'enabled' | 'disabled'; denyTools: string[] }>
@@ -1105,7 +1101,7 @@ const NumaChatAgents = () => {
     idToken,
     companyProfile,
     user,
-    sub,
+    sub
   ) => {
     // Determine which model to use based on fallback status
     const clientName = window.sessionStorage.getItem('CLIENT_NAME');
@@ -1118,7 +1114,7 @@ const NumaChatAgents = () => {
       dataAnalysisEnabled,
       agentsFeatureEnabled ? createAgentEnabled : false,
       enabledKBIds,
-      dataAnalysisAvailable,
+      dataAnalysisAvailable
     );
 
     // Create the system prompt based on tool availability
@@ -1137,7 +1133,7 @@ const NumaChatAgents = () => {
       companyProfile,
       enabledConnections,
       agentsFeatureEnabled ? createAgentEnabled : false,
-      enabledKBMeta,
+      enabledKBMeta
     );
 
     if (currentAgent) {
@@ -1189,7 +1185,7 @@ const NumaChatAgents = () => {
       idToken,
       companyProfile,
       user,
-      sub,
+      sub
     );
     const runConfig: ScheduledRunConfig = {
       systemPrompt: scheduleConfig.systemPrompt,
@@ -1334,7 +1330,7 @@ const NumaChatAgents = () => {
     refreshSidebar,
     setUploadedFiles,
     setInputMessage,
-    inputRef,
+    inputRef
   ) => {
     return async (cid, userMsg, sub, chunkHandler) => {
       const { accumulatedResponse } = chunkHandler.getStreamingState();
@@ -1486,7 +1482,7 @@ const NumaChatAgents = () => {
               agentType: activeAgent.agentType,
               visibility: activeAgent.visibility,
             }
-          : undefined,
+          : undefined
       );
       // Add user message to local UI state
       const userMsgObject = { role: 'user', content: userMsg };
@@ -1548,7 +1544,7 @@ const NumaChatAgents = () => {
         idToken,
         companyProfile,
         user,
-        sub,
+        sub
       );
 
       // Show "thinking…" bubble for streaming response
@@ -1571,7 +1567,7 @@ const NumaChatAgents = () => {
         refreshSidebar,
         setUploadedFiles,
         setInputMessage,
-        inputRef,
+        inputRef
       );
 
       try {
@@ -1684,12 +1680,12 @@ const NumaChatAgents = () => {
                 conversationId: cid,
                 startDataAnalysisPolling,
                 stopDataAnalysisPolling,
-              },
+              }
             );
           },
           userAuth, // Pass user authentication context
           enabledConnections, // Pass enabled connections
-          enabledKBIds, // Multi‑KB enabled IDs for this turn
+          enabledKBIds // Multi‑KB enabled IDs for this turn
         );
 
         // Store the abort function for the stop button

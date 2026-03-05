@@ -174,7 +174,7 @@ export class CostingCalculator extends BaseNumaApp {
                 ResultPath: '$.error',
               },
             ],
-          },
+          }
         ),
         WriteFailureStatus: this.writeFailureStatus(),
         WriteSuccessStatus: this.writeSuccessStatus(),

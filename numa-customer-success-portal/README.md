@@ -33,6 +33,7 @@ Not included yet: a config editor (was part of the original plan but not in this
 - For Tools (Usage/Quota), assumes `arn:aws:iam::<client-account-id>:role/ArcanumAIAccess` in client accounts using STS
 
 Deployments architecture additions:
+
 - Step Functions state machine `NumaPortalDeployment` orchestrates each deploy
 - DynamoDB table `numa-portal-deployments` stores history and status (GSI `clientName-index`)
 - ECS Fargate task runs the `numa-deploy` container and executes `cdktf deploy numa-<client>`
@@ -49,14 +50,14 @@ Required keys and meaning:
 
 ```json
 {
-  "AWS_REGION": "us-east-1",                // Region of the portal stack and Cognito
-  "USER_POOL_ID": "us-east-1_XXXX",         // Cognito User Pool ID for login
-  "USER_POOL_CLIENT_ID": "xxxxxxxx",        // Cognito User Pool client (no secret)
-  "IDENTITY_POOL_ID": "us-east-1:uuid...",  // Cognito Identity Pool for AWS creds
+  "AWS_REGION": "us-east-1", // Region of the portal stack and Cognito
+  "USER_POOL_ID": "us-east-1_XXXX", // Cognito User Pool ID for login
+  "USER_POOL_CLIENT_ID": "xxxxxxxx", // Cognito User Pool client (no secret)
+  "IDENTITY_POOL_ID": "us-east-1:uuid...", // Cognito Identity Pool for AWS creds
   "CLIENT_CONFIG_TABLE": "numa-client-config", // DynamoDB table for client configs
 
-  "ECR_REGION": "ap-southeast-2",           // Where the images repo lives (optional)
-  "ECR_REGISTRY_ID": "826326270637",        // Images account (optional)
+  "ECR_REGION": "ap-southeast-2", // Where the images repo lives (optional)
+  "ECR_REGISTRY_ID": "826326270637", // Images account (optional)
   "ECR_REPOSITORY_URI": "https://.../numa-deploy", // Display only (optional)
 
   // Deployments (populated by infra when enabled)
@@ -91,9 +92,7 @@ Cross‑account ECR access requires a repository resource policy in the images a
       "Sid": "AllowPortalRead",
       "Effect": "Allow",
       "Principal": {
-        "AWS": [
-          "arn:aws:iam::207567759910:role/customer-success-portal-authenticated-role"
-        ]
+        "AWS": ["arn:aws:iam::207567759910:role/customer-success-portal-authenticated-role"]
       },
       "Action": ["ecr:DescribeImages", "ecr:ListImages"]
     }
@@ -106,11 +105,13 @@ Client accounts must have an `ArcanumAIAccess` role that the portal can assume. 
 ## Running Tools
 
 Credentials flow used by both tools:
+
 - Sign in with Cognito → Identity Pool issues browser credentials in the deployer account
 - The tool assumes `arn:aws:iam::<client-account-id>:role/ArcanumAIAccess` via STS for each target client/region
 - AWS SDK calls then run in the client account using that temporary role
 
 Usage Report (per‑client):
+
 - Navigate: Tools → Usage Report
 - Select client, time period, and output format (CSV or JSON)
 - Data sources in client account: `${clientName}-<app>-recent-jobs` (jobs), `numa-${clientName}-chat-history` (chat)
@@ -118,16 +119,19 @@ Usage Report (per‑client):
 - Output: CSVs (app runs, chat messages, summary) or a single JSON; progress updates shown during scans
 
 Quota Report (multi‑client):
+
 - Navigate: Tools → Quota Report
 - Choose scope (all/selected clients), regions, model families (Claude/Nova), optional filter text, and quota types (On‑demand/Cross‑region)
 - The tool discovers quota codes from the first selected client/region, then fetches values across all selected client accounts/regions
 - Output: CSV (and table in UI); missing/denied quotas appear as blank values
 
 Required setup for tools:
+
 - Client accounts must define `ArcanumAIAccess` with trust to the portal’s authenticated role principal (`arn:aws:iam::<deployer-account-id>:role/customer-success-portal-authenticated-role`)
 - Regions must be allowed by IAM condition (infra defaults to `us-east-1` and `ap-southeast-2`)
 
 Tool troubleshooting:
+
 - Access denied: verify client role trust and permissions, and that your user is authenticated (token still valid)
 - No data: tables may not exist yet for that client/time period; JSON export can help verify
 - Quota discovery empty: adjust families/types/filter or ensure Bedrock quotas exist in the discovery region
@@ -178,14 +182,14 @@ Node 18+ is recommended. This workspace is part of the monorepo and uses Yarn 4.
 
 The portal deploys as part of the deployer stack when `enableCustomerSuccessPortal` is true. Typical flow:
 
-1) Build the portal locally
+1. Build the portal locally
 
 ```bash
 cd numa-customer-success-portal
 yarn build
 ```
 
-2) Deploy infra (uploads `dist/` to S3 and writes `config.json`)
+2. Deploy infra (uploads `dist/` to S3 and writes `config.json`)
 
 ```bash
 cd ../infra
@@ -197,7 +201,7 @@ export CLIENT_OVERRIDE=none
 yarn cdktf deploy --auto-approve q-apps-deployer
 ```
 
-3) If the site still shows cached assets, create a CloudFront invalidation using the output distribution ID:
+3. If the site still shows cached assets, create a CloudFront invalidation using the output distribution ID:
 
 ```bash
 aws cloudfront create-invalidation --distribution-id <ID> --paths '/*'

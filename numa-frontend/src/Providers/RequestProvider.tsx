@@ -45,7 +45,7 @@ export const NumaRequestProvider = ({ children }) => {
     () => ({
       transformResponse: [...axios.defaults.transformResponse, (data) => parseNestedJson(data)],
     }),
-    [], // No dependencies needed since parseNestedJson is stable
+    [] // No dependencies needed since parseNestedJson is stable
   );
 
   // Common request methods — stable identities (never recreated on token refresh).
@@ -66,7 +66,7 @@ export const NumaRequestProvider = ({ children }) => {
         throw error;
       }
     },
-    [axiosConfig, getHeaders],
+    [axiosConfig, getHeaders]
   );
 
   const numaPost = useCallback(
@@ -84,7 +84,7 @@ export const NumaRequestProvider = ({ children }) => {
         throw error;
       }
     },
-    [axiosConfig, getHeaders],
+    [axiosConfig, getHeaders]
   );
 
   const numaPut = useCallback(
@@ -95,7 +95,7 @@ export const NumaRequestProvider = ({ children }) => {
       });
       return response.data;
     },
-    [axiosConfig, getHeaders],
+    [axiosConfig, getHeaders]
   );
 
   const numaDelete = useCallback(
@@ -106,7 +106,7 @@ export const NumaRequestProvider = ({ children }) => {
       });
       return response.data;
     },
-    [axiosConfig, getHeaders],
+    [axiosConfig, getHeaders]
   );
 
   const value = useMemo(
@@ -116,7 +116,7 @@ export const NumaRequestProvider = ({ children }) => {
       numaPut,
       numaDelete,
     }),
-    [numaGet, numaPost, numaPut, numaDelete],
+    [numaGet, numaPost, numaPut, numaDelete]
   );
 
   return <NumaRequestContext.Provider value={value}>{children}</NumaRequestContext.Provider>;

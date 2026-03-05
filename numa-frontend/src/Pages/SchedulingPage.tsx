@@ -192,7 +192,7 @@ export const SchedulingPage: React.FC = () => {
     (schedule: AgentSchedule) => {
       navigate(`/scheduling/${schedule.scheduleId}`, { state: { schedule } });
     },
-    [navigate],
+    [navigate]
   );
 
   const handleEditSchedule = useCallback((e: React.MouseEvent, schedule: AgentSchedule) => {
@@ -219,7 +219,7 @@ export const SchedulingPage: React.FC = () => {
 
       await loadSchedules();
     },
-    [editingSchedule, numaPut, loadSchedules],
+    [editingSchedule, numaPut, loadSchedules]
   );
 
   const handleTogglePause = useCallback(
@@ -237,7 +237,7 @@ export const SchedulingPage: React.FC = () => {
         setActionLoading(null);
       }
     },
-    [numaPut, loadSchedules, t],
+    [numaPut, loadSchedules, t]
   );
 
   const handleDeleteClick = useCallback((e: React.MouseEvent, schedule: AgentSchedule) => {
@@ -310,7 +310,7 @@ export const SchedulingPage: React.FC = () => {
         console.error('Failed to download artifact:', err);
       }
     },
-    [outputsBucket, region, getCredentials],
+    [outputsBucket, region, getCredentials]
   );
 
   const loadRunHistoryForSchedule = useCallback(
@@ -356,7 +356,7 @@ export const SchedulingPage: React.FC = () => {
             } catch {
               return { ...run, error: t('scheduling.errors.loadRunLog') };
             }
-          }),
+          })
         );
 
         // Sort newest first
@@ -368,7 +368,7 @@ export const SchedulingPage: React.FC = () => {
         setRunHistoryLoading((prev) => ({ ...prev, [schedule.scheduleId]: false }));
       }
     },
-    [outputsBucket, region, getCredentials, extractUserIdFromS3Key, getUserIdFromToken, fetchFileFromS3, t],
+    [outputsBucket, region, getCredentials, extractUserIdFromS3Key, getUserIdFromToken, fetchFileFromS3, t]
   );
 
   const handleToggleScheduleExpand = useCallback(
@@ -384,7 +384,7 @@ export const SchedulingPage: React.FC = () => {
         }
       }
     },
-    [expandedScheduleId, runHistoryBySchedule, runHistoryLoading, loadRunHistoryForSchedule],
+    [expandedScheduleId, runHistoryBySchedule, runHistoryLoading, loadRunHistoryForSchedule]
   );
 
   // Compute next run for each schedule
@@ -435,7 +435,7 @@ export const SchedulingPage: React.FC = () => {
 
   const agentFilterOptions = useMemo<FilterOption[]>(
     () => [{ value: 'all', label: t('scheduling.filters.agent.all') }, ...agentOptions],
-    [agentOptions, t],
+    [agentOptions, t]
   );
 
   const statusFilterOptions = useMemo<FilterOption[]>(
@@ -446,7 +446,7 @@ export const SchedulingPage: React.FC = () => {
       { value: 'paused', label: t('scheduling.status.paused') },
       { value: 'deleted', label: t('scheduling.status.deleted') },
     ],
-    [t],
+    [t]
   );
 
   const timezoneFilterOptions = useMemo<FilterOption[]>(
@@ -457,7 +457,7 @@ export const SchedulingPage: React.FC = () => {
         label: timezone === 'unknown' ? t('scheduling.filters.timezone.unknown') : timezone,
       })),
     ],
-    [timezoneOptions, t],
+    [timezoneOptions, t]
   );
 
   const filteredSchedules = useMemo(() => {
@@ -782,7 +782,7 @@ export const SchedulingPage: React.FC = () => {
                                     {formatDate(
                                       schedule.nextRun,
                                       { notAvailable: t('scheduling.labels.notAvailable') },
-                                      schedule.timezone,
+                                      schedule.timezone
                                     )}
                                   </td>
                                   <td>
@@ -790,7 +790,7 @@ export const SchedulingPage: React.FC = () => {
                                       ? formatDate(
                                           new Date(schedule.lastRunEpoch),
                                           { notAvailable: t('scheduling.labels.notAvailable') },
-                                          schedule.timezone,
+                                          schedule.timezone
                                         )
                                       : t('scheduling.labels.never')}
                                     {schedule.lastStatus && (
@@ -913,7 +913,7 @@ export const SchedulingPage: React.FC = () => {
                                                 >
                                                   {t(
                                                     `scheduling.details.runHistory.status.${run.log.agentStatus.status}`,
-                                                    run.log.agentStatus.status,
+                                                    run.log.agentStatus.status
                                                   )}
                                                 </Badge>
                                               ) : run.log ? (
@@ -929,7 +929,7 @@ export const SchedulingPage: React.FC = () => {
                                               const startedStr = run.log?.startedAt
                                                 ? new Date(run.log.startedAt).toLocaleString(
                                                     undefined,
-                                                    schedule.timezone ? { timeZone: schedule.timezone } : undefined,
+                                                    schedule.timezone ? { timeZone: schedule.timezone } : undefined
                                                   )
                                                 : null;
                                               const duration = formatDuration(run.log?.startedAt, run.log?.completedAt);

@@ -11,24 +11,24 @@ This plan proposes turning the manual “NextGen account provisioning” and “
 
 ## Tools In The Portal
 
-1) Setup Nextgen Client (wizard)
+1. Setup Nextgen Client (wizard)
    - Step A: Update account name to the client ID (Organizations `UpdateAccount`) via broker.
    - Step B: Create client config using the portal tool (validates and writes to `numa-client-config`).
    - Step C: Plan/Deploy via the existing Step Functions mechanism; show logs and manage locks.
    - Step D: Retrieve system user password (Secrets Manager) via broker for handover.
    - Optionally write/update a central registry (accountId ↔ clientName, region, status).
 
-2) Setup Non‑Nextgen Client (wizard)
+2. Setup Non‑Nextgen Client (wizard)
    - Step A: Pre‑checks – verify `ArcanumAIAccess` role exists in the customer account and trust relationships allow the deployer and portal roles.
    - Step B: Create client config via the portal tool.
    - Step C: Plan/Deploy via SFN; show logs and manage locks.
    - Step D: Retrieve system user password (if present) via broker.
 
-3) (Future) Provision Next Gen Accounts
+3. (Future) Provision Next Gen Accounts
    - Inputs: N (count), optional base label.
    - Starts executions of the management account’s `createAccount` state machine; shows progress; registers accounts in `numa-account-registry`.
 
-4) (Future) Update NextGen Accounts Table (admin)
+4. (Future) Update NextGen Accounts Table (admin)
    - Grid editor bound to `numa-account-registry` (accountId, allocatedClient, region, status, createdAt/updatedAt).
    - Supports add/update/delete entries; bulk paste import for reconciling with the Notion list.
 
@@ -141,6 +141,7 @@ This plan proposes turning the manual “NextGen account provisioning” and “
   - We could also create a seperate tool for this that just retrieves and shares the secret, if needed. In case the password needs to be retrieved again or the user missed it the first time.
 
 ## Client Config Tooling (Further Planning)
+
 Update: This has been done in the portal now; keep using the portal tools rather than brokering config writes.
 
 "Create client config (write to `numa-client-config` with validation)" needs a short design pass to define what CS can adjust safely and how the UI presents it. Proposal:

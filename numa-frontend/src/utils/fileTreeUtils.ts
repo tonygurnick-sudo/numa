@@ -117,7 +117,7 @@ export function filterTree(node: TreeNode, searchTerm: string): TreeNode {
   filtered.files = node.files.filter((f) =>
     safeDecodeURIComponent(f.Key.split('/').pop() || '')
       .toLowerCase()
-      .includes(lower),
+      .includes(lower)
   );
 
   // Recurse into subfolders
@@ -139,7 +139,7 @@ export function filterTree(node: TreeNode, searchTerm: string): TreeNode {
 export function collectFoldersToExpand(
   node: TreeNode,
   currentPath: string = '',
-  foldersToExpand: Set<string> = new Set(),
+  foldersToExpand: Set<string> = new Set()
 ): Set<string> {
   // Check each child folder
   for (const [folderName, folderNode] of Object.entries(node.children)) {
@@ -222,7 +222,7 @@ export function buildRowsForTree(
   node: TreeNode,
   depth: number = 0,
   parentPath: string = '',
-  options: BuildRowsOptions = {},
+  options: BuildRowsOptions = {}
 ): TableRow[] {
   const rows: TableRow[] = [];
   const {

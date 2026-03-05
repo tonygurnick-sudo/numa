@@ -1,5 +1,5 @@
-import { useEffect, useState, useMemo, type ChangeEvent } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useEffect, useState, useMemo, type ChangeEvent } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Card,
   Form,
@@ -13,29 +13,29 @@ import {
   Container,
   Row,
   Col,
-} from 'react-bootstrap'
-import { ArrowLeft, ArrowRight, Upload, CheckCircle, Download, FolderPlus } from 'react-bootstrap-icons'
-import { GroupedClientSelector } from '@/components/tools/GroupedClientSelector'
-import { clientService } from '@/services/clientService'
-import { saveDeploymentGroup } from '@/services/deploymentService'
-import { clientConfigSchema, type Client } from '@/types'
-import { parseClientNamesFromCSV, exportClientNamesToCSV } from '@/utils/csvUtils'
+} from 'react-bootstrap';
+import { ArrowLeft, ArrowRight, Upload, CheckCircle, Download, FolderPlus } from 'react-bootstrap-icons';
+import { GroupedClientSelector } from '@/components/tools/GroupedClientSelector';
+import { clientService } from '@/services/clientService';
+import { saveDeploymentGroup } from '@/services/deploymentService';
+import { clientConfigSchema, type Client } from '@/types';
+import { parseClientNamesFromCSV, exportClientNamesToCSV } from '@/utils/csvUtils';
 
 // Bulk-updatable fields configuration
 interface FieldConfig {
-  key: string
-  label: string
-  type: 'boolean' | 'enum' | 'string' | 'number' | 'json'
-  options?: { label: string; value: string }[]
-  description: string
-  allowUnset?: boolean
+  key: string;
+  label: string;
+  type: 'boolean' | 'enum' | 'string' | 'number' | 'json';
+  options?: { label: string; value: string }[];
+  description: string;
+  allowUnset?: boolean;
 }
 
 const REGION_OPTIONS = [
   { label: 'US East (N. Virginia) us-east-1', value: 'us-east-1' },
   { label: 'Asia Pacific (Sydney) ap-southeast-2', value: 'ap-southeast-2' },
   { label: 'Asia Pacific (Jakarta) ap-southeast-3', value: 'ap-southeast-3' },
-]
+];
 
 const BULK_UPDATABLE_FIELDS: FieldConfig[] = [
   {
@@ -91,7 +91,7 @@ const BULK_UPDATABLE_FIELDS: FieldConfig[] = [
     key: 'allowBedrockQuotaSharing',
     label: 'Allow Bedrock Quota Sharing',
     type: 'boolean',
-    description: 'Allow OTHER accounts to use THIS account\'s Bedrock quotas',
+    description: "Allow OTHER accounts to use THIS account's Bedrock quotas",
   },
   {
     key: 'allApps',
@@ -160,412 +160,410 @@ const BULK_UPDATABLE_FIELDS: FieldConfig[] = [
     allowUnset: true,
     description: 'JSON override for feature groups (e.g. {"standard":["chat"],"admin":["chat","manageUsers"]})',
   },
-]
+];
 
 interface PreviewRow {
-  clientName: string
-  currentValue: unknown
-  newValue: unknown
-  willChange: boolean
+  clientName: string;
+  currentValue: unknown;
+  newValue: unknown;
+  willChange: boolean;
 }
 
 interface UpdateResult {
-  clientName: string
-  success: boolean
-  error?: string
-  skipped?: boolean
+  clientName: string;
+  success: boolean;
+  error?: string;
+  skipped?: boolean;
 }
 
 export default function BulkUpdateClientConfig() {
-  const navigate = useNavigate()
+  const navigate = useNavigate();
 
   // Client data
-  const [clients, setClients] = useState<Client[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const [clients, setClients] = useState<Client[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   // Selection state
-  const [selectedClientNames, setSelectedClientNames] = useState<string[]>([])
+  const [selectedClientNames, setSelectedClientNames] = useState<string[]>([]);
 
   // Field selection
-  const [selectedField, setSelectedField] = useState<string>('')
-  const [booleanDraft, setBooleanDraft] = useState(false)
-  const [enumDraft, setEnumDraft] = useState('')
-  const [textDraft, setTextDraft] = useState('')
-  const [unsetField, setUnsetField] = useState(false)
-  const [valueError, setValueError] = useState<string | null>(null)
+  const [selectedField, setSelectedField] = useState<string>('');
+  const [booleanDraft, setBooleanDraft] = useState(false);
+  const [enumDraft, setEnumDraft] = useState('');
+  const [textDraft, setTextDraft] = useState('');
+  const [unsetField, setUnsetField] = useState(false);
+  const [valueError, setValueError] = useState<string | null>(null);
 
   // Preview modal
-  const [showPreview, setShowPreview] = useState(false)
-  const [previewData, setPreviewData] = useState<PreviewRow[]>([])
-  const [previewAccepted, setPreviewAccepted] = useState(false)
-  const [previewSelectedClient, setPreviewSelectedClient] = useState<string>('')
+  const [showPreview, setShowPreview] = useState(false);
+  const [previewData, setPreviewData] = useState<PreviewRow[]>([]);
+  const [previewAccepted, setPreviewAccepted] = useState(false);
+  const [previewSelectedClient, setPreviewSelectedClient] = useState<string>('');
 
   // Execution state
-  const [executing, setExecuting] = useState(false)
-  const [progress, setProgress] = useState(0)
-  const [results, setResults] = useState<UpdateResult[] | null>(null)
+  const [executing, setExecuting] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [results, setResults] = useState<UpdateResult[] | null>(null);
 
   // CSV import state
-  const [csvImportMessage, setCsvImportMessage] = useState<string | null>(null)
+  const [csvImportMessage, setCsvImportMessage] = useState<string | null>(null);
 
   // Save as deployment group modal state
-  const [showSaveGroupModal, setShowSaveGroupModal] = useState(false)
-  const [saveGroupName, setSaveGroupName] = useState('')
-  const [saveGroupDescription, setSaveGroupDescription] = useState('')
-  const [saveGroupError, setSaveGroupError] = useState('')
-  const [saveGroupBusy, setSaveGroupBusy] = useState(false)
+  const [showSaveGroupModal, setShowSaveGroupModal] = useState(false);
+  const [saveGroupName, setSaveGroupName] = useState('');
+  const [saveGroupDescription, setSaveGroupDescription] = useState('');
+  const [saveGroupError, setSaveGroupError] = useState('');
+  const [saveGroupBusy, setSaveGroupBusy] = useState(false);
 
   // Load clients on mount
   useEffect(() => {
-    loadClients()
-  }, [])
+    loadClients();
+  }, []);
 
   // Reset value when field changes
   useEffect(() => {
-    const fieldConfig = BULK_UPDATABLE_FIELDS.find(f => f.key === selectedField)
+    const fieldConfig = BULK_UPDATABLE_FIELDS.find((f) => f.key === selectedField);
     if (fieldConfig) {
-      setUnsetField(false)
-      setValueError(null)
+      setUnsetField(false);
+      setValueError(null);
       if (fieldConfig.type === 'boolean') {
-        setBooleanDraft(false)
+        setBooleanDraft(false);
       } else if (fieldConfig.type === 'enum' && fieldConfig.options) {
-        setEnumDraft(fieldConfig.options[0].value)
-        setTextDraft('')
+        setEnumDraft(fieldConfig.options[0].value);
+        setTextDraft('');
       } else {
-        setTextDraft('')
-        setEnumDraft('')
+        setTextDraft('');
+        setEnumDraft('');
       }
     }
-  }, [selectedField])
+  }, [selectedField]);
 
   // If inputs change after preview, require a fresh preview acceptance
   useEffect(() => {
-    setPreviewAccepted(false)
-  }, [selectedClientNames, selectedField, booleanDraft, enumDraft, textDraft, unsetField])
+    setPreviewAccepted(false);
+  }, [selectedClientNames, selectedField, booleanDraft, enumDraft, textDraft, unsetField]);
 
   const loadClients = async () => {
-    setLoading(true)
-    setError(null)
+    setLoading(true);
+    setError(null);
     try {
-      const list = await clientService.getAllClients()
-      setClients(list)
+      const list = await clientService.getAllClients();
+      setClients(list);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to load clients')
+      setError(e instanceof Error ? e.message : 'Failed to load clients');
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
+  };
 
   const handleClientToggle = (clientName: string) => {
-    setSelectedClientNames(prev =>
-      prev.includes(clientName)
-        ? prev.filter(n => n !== clientName)
-        : [...prev, clientName]
-    )
-  }
+    setSelectedClientNames((prev) =>
+      prev.includes(clientName) ? prev.filter((n) => n !== clientName) : [...prev, clientName]
+    );
+  };
 
   const handleSelectClients = (clientNames: string[]) => {
-    setSelectedClientNames(clientNames)
-  }
+    setSelectedClientNames(clientNames);
+  };
 
   const handleCsvUpload = async (e: ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
+    const file = e.target.files?.[0];
+    if (!file) return;
 
-    setCsvImportMessage(null)
+    setCsvImportMessage(null);
     try {
-      const text = await file.text()
-      const parsedNames = parseClientNamesFromCSV(text)
+      const text = await file.text();
+      const parsedNames = parseClientNamesFromCSV(text);
 
       if (parsedNames.length === 0) {
-        setCsvImportMessage('No client names found in CSV. Ensure the file has a "Client Name" column.')
-        return
+        setCsvImportMessage('No client names found in CSV. Ensure the file has a "Client Name" column.');
+        return;
       }
 
       // Match against loaded clients
-      const validClientNames = clients.map(c => c.name)
-      const matchedNames = parsedNames.filter(name => validClientNames.includes(name))
-      const unmatchedCount = parsedNames.length - matchedNames.length
+      const validClientNames = clients.map((c) => c.name);
+      const matchedNames = parsedNames.filter((name) => validClientNames.includes(name));
+      const unmatchedCount = parsedNames.length - matchedNames.length;
 
       // Add to selection (union with existing)
-      const newSelection = [...new Set([...selectedClientNames, ...matchedNames])]
-      setSelectedClientNames(newSelection)
+      const newSelection = [...new Set([...selectedClientNames, ...matchedNames])];
+      setSelectedClientNames(newSelection);
 
       if (unmatchedCount > 0) {
-        setCsvImportMessage(`Imported ${matchedNames.length} clients. ${unmatchedCount} names in CSV did not match any known client.`)
+        setCsvImportMessage(
+          `Imported ${matchedNames.length} clients. ${unmatchedCount} names in CSV did not match any known client.`
+        );
       } else {
-        setCsvImportMessage(`Imported ${matchedNames.length} clients from CSV.`)
+        setCsvImportMessage(`Imported ${matchedNames.length} clients from CSV.`);
       }
     } catch {
-      setCsvImportMessage('Failed to parse CSV file.')
+      setCsvImportMessage('Failed to parse CSV file.');
     }
 
     // Reset file input
-    e.target.value = ''
-  }
+    e.target.value = '';
+  };
 
   const selectedFieldConfig = useMemo(
-    () => BULK_UPDATABLE_FIELDS.find(f => f.key === selectedField),
+    () => BULK_UPDATABLE_FIELDS.find((f) => f.key === selectedField),
     [selectedField]
-  )
+  );
 
-  const canPreview = selectedClientNames.length > 0 && selectedField !== ''
+  const canPreview = selectedClientNames.length > 0 && selectedField !== '';
 
   const validateGroupsValue = (value: unknown): string | null => {
-    if (value === undefined) return null
-    if (typeof value !== 'object' || value === null || Array.isArray(value)) return 'Groups must be a JSON object'
-    const obj = value as Record<string, unknown>
-    const admin = obj.admin
-    const standard = obj.standard
-    const isStringArray = (v: unknown) => Array.isArray(v) && v.every(x => typeof x === 'string')
-    if (admin !== undefined && !isStringArray(admin)) return '"admin" must be an array of strings'
-    if (standard !== undefined && !isStringArray(standard)) return '"standard" must be an array of strings'
-    return null
-  }
+    if (value === undefined) return null;
+    if (typeof value !== 'object' || value === null || Array.isArray(value)) return 'Groups must be a JSON object';
+    const obj = value as Record<string, unknown>;
+    const admin = obj.admin;
+    const standard = obj.standard;
+    const isStringArray = (v: unknown) => Array.isArray(v) && v.every((x) => typeof x === 'string');
+    if (admin !== undefined && !isStringArray(admin)) return '"admin" must be an array of strings';
+    if (standard !== undefined && !isStringArray(standard)) return '"standard" must be an array of strings';
+    return null;
+  };
 
   const parseAndValidateNewValue = (): { ok: true; value: unknown } | { ok: false; error: string } => {
-    if (!selectedFieldConfig) return { ok: false, error: 'Select a field to update' }
+    if (!selectedFieldConfig) return { ok: false, error: 'Select a field to update' };
 
     if (selectedFieldConfig.allowUnset && unsetField) {
-      return { ok: true, value: undefined }
+      return { ok: true, value: undefined };
     }
 
-    let value: unknown
+    let value: unknown;
     if (selectedFieldConfig.type === 'boolean') {
-      value = booleanDraft
+      value = booleanDraft;
     } else if (selectedFieldConfig.type === 'enum') {
-      value = enumDraft
+      value = enumDraft;
     } else if (selectedFieldConfig.type === 'string') {
-      value = textDraft
+      value = textDraft;
     } else if (selectedFieldConfig.type === 'number') {
-      if (textDraft.trim() === '') return { ok: false, error: 'Enter a number' }
-      const num = Number(textDraft)
-      if (!Number.isFinite(num)) return { ok: false, error: 'Invalid number' }
-      value = num
+      if (textDraft.trim() === '') return { ok: false, error: 'Enter a number' };
+      const num = Number(textDraft);
+      if (!Number.isFinite(num)) return { ok: false, error: 'Invalid number' };
+      value = num;
     } else if (selectedFieldConfig.type === 'json') {
-      if (textDraft.trim() === '') return { ok: false, error: 'Enter valid JSON' }
+      if (textDraft.trim() === '') return { ok: false, error: 'Enter valid JSON' };
       try {
-        value = JSON.parse(textDraft)
+        value = JSON.parse(textDraft);
       } catch (e) {
-        return { ok: false, error: e instanceof Error ? e.message : 'Invalid JSON' }
+        return { ok: false, error: e instanceof Error ? e.message : 'Invalid JSON' };
       }
     } else {
-      return { ok: false, error: 'Unsupported field type' }
+      return { ok: false, error: 'Unsupported field type' };
     }
 
     // Validate values where possible (mirror Update Client Config strictness where available)
     if (selectedFieldConfig.key === 'groups') {
-      const groupsError = validateGroupsValue(value)
-      if (groupsError) return { ok: false, error: groupsError }
-      return { ok: true, value }
+      const groupsError = validateGroupsValue(value);
+      if (groupsError) return { ok: false, error: groupsError };
+      return { ok: true, value };
     }
 
     try {
-      clientConfigSchema.partial().pick({ [selectedFieldConfig.key]: true } as any).parse({ [selectedFieldConfig.key]: value } as any)
+      clientConfigSchema
+        .partial()
+        .pick({ [selectedFieldConfig.key]: true } as any)
+        .parse({ [selectedFieldConfig.key]: value } as any);
     } catch (e) {
-      return { ok: false, error: e instanceof Error ? e.message : 'Value failed validation' }
+      return { ok: false, error: e instanceof Error ? e.message : 'Value failed validation' };
     }
 
-    return { ok: true, value }
-  }
+    return { ok: true, value };
+  };
 
   const areValuesEqual = (a: unknown, b: unknown): boolean => {
-    if (a === b) return true
-    if (a === undefined || b === undefined) return false
-    if (a === null || b === null) return false
-    if (typeof a !== 'object' || typeof b !== 'object') return false
+    if (a === b) return true;
+    if (a === undefined || b === undefined) return false;
+    if (a === null || b === null) return false;
+    if (typeof a !== 'object' || typeof b !== 'object') return false;
     try {
-      return JSON.stringify(a) === JSON.stringify(b)
+      return JSON.stringify(a) === JSON.stringify(b);
     } catch {
-      return false
+      return false;
     }
-  }
+  };
 
   const handlePreview = () => {
-    if (!canPreview || !selectedFieldConfig) return
+    if (!canPreview || !selectedFieldConfig) return;
 
-    const parsed = parseAndValidateNewValue()
+    const parsed = parseAndValidateNewValue();
     if (!parsed.ok) {
-      setValueError(parsed.error)
-      return
+      setValueError(parsed.error);
+      return;
     }
-    setValueError(null)
+    setValueError(null);
 
-    const nextValue = parsed.value
-    const preview: PreviewRow[] = selectedClientNames.map(clientName => {
-      const client = clients.find(c => c.name === clientName)
-      const currentValue = (client?.config as any)?.[selectedFieldConfig.key]
+    const nextValue = parsed.value;
+    const preview: PreviewRow[] = selectedClientNames.map((clientName) => {
+      const client = clients.find((c) => c.name === clientName);
+      const currentValue = (client?.config as any)?.[selectedFieldConfig.key];
       return {
         clientName,
         currentValue,
         newValue: nextValue,
         willChange: !areValuesEqual(currentValue, nextValue),
-      }
-    })
+      };
+    });
 
-    setPreviewData(preview)
-    setPreviewAccepted(false)
-    setPreviewSelectedClient(preview[0]?.clientName || '')
-    setShowPreview(true)
-  }
+    setPreviewData(preview);
+    setPreviewAccepted(false);
+    setPreviewSelectedClient(preview[0]?.clientName || '');
+    setShowPreview(true);
+  };
 
   const handleExecute = async () => {
-    if (!selectedFieldConfig || previewData.length === 0 || !previewAccepted) return
+    if (!selectedFieldConfig || previewData.length === 0 || !previewAccepted) return;
 
-    setExecuting(true)
-    setProgress(0)
-    setResults(null)
+    setExecuting(true);
+    setProgress(0);
+    setResults(null);
 
-    const updateResults: UpdateResult[] = []
+    const updateResults: UpdateResult[] = [];
 
     for (let i = 0; i < previewData.length; i++) {
-      const { clientName, willChange, newValue } = previewData[i]
+      const { clientName, willChange, newValue } = previewData[i];
 
       if (!willChange) {
         // Skip clients that don't need updating
-        updateResults.push({ clientName, success: true, skipped: true })
+        updateResults.push({ clientName, success: true, skipped: true });
       } else {
         try {
-          await clientService.updateClientConfig(clientName, { [selectedFieldConfig.key]: newValue } as any)
-          updateResults.push({ clientName, success: true })
+          await clientService.updateClientConfig(clientName, { [selectedFieldConfig.key]: newValue } as any);
+          updateResults.push({ clientName, success: true });
         } catch (err) {
           updateResults.push({
             clientName,
             success: false,
             error: err instanceof Error ? err.message : 'Unknown error',
-          })
+          });
         }
       }
 
-      setProgress(Math.round(((i + 1) / previewData.length) * 100))
+      setProgress(Math.round(((i + 1) / previewData.length) * 100));
     }
 
-    setResults(updateResults)
-    setExecuting(false)
-    setShowPreview(false)
+    setResults(updateResults);
+    setExecuting(false);
+    setShowPreview(false);
 
     // Refresh client list to show updated values
-    await loadClients()
-  }
+    await loadClients();
+  };
 
   // Export clients that will change to CSV
   const handleExportChangedClients = () => {
-    const changedClients = previewData.filter(row => row.willChange).map(r => r.clientName)
-    if (changedClients.length === 0) return
-    exportClientNamesToCSV(changedClients, `changed-clients-${new Date().toISOString().slice(0, 10)}.csv`)
-  }
+    const changedClients = previewData.filter((row) => row.willChange).map((r) => r.clientName);
+    if (changedClients.length === 0) return;
+    exportClientNamesToCSV(changedClients, `changed-clients-${new Date().toISOString().slice(0, 10)}.csv`);
+  };
 
   // Open save as deployment group modal
   const handleOpenSaveGroupModal = () => {
-    setSaveGroupName('')
-    setSaveGroupDescription('')
-    setSaveGroupError('')
-    setShowSaveGroupModal(true)
-  }
+    setSaveGroupName('');
+    setSaveGroupDescription('');
+    setSaveGroupError('');
+    setShowSaveGroupModal(true);
+  };
 
   // Save changed clients as a deployment group
   const handleSaveAsDeploymentGroup = async () => {
-    const changedClients = previewData.filter(row => row.willChange).map(r => r.clientName)
-    if (changedClients.length === 0) return
+    const changedClients = previewData.filter((row) => row.willChange).map((r) => r.clientName);
+    if (changedClients.length === 0) return;
 
     if (!saveGroupName.trim()) {
-      setSaveGroupError('Group name is required.')
-      return
+      setSaveGroupError('Group name is required.');
+      return;
     }
 
-    setSaveGroupBusy(true)
-    setSaveGroupError('')
+    setSaveGroupBusy(true);
+    setSaveGroupError('');
 
     try {
       await saveDeploymentGroup({
         groupName: saveGroupName.trim(),
         clients: changedClients,
         description: saveGroupDescription.trim() || undefined,
-      })
-      setShowSaveGroupModal(false)
+      });
+      setShowSaveGroupModal(false);
       // Show success via results or alert
-      alert(`Deployment group "${saveGroupName}" created with ${changedClients.length} clients.`)
+      alert(`Deployment group "${saveGroupName}" created with ${changedClients.length} clients.`);
     } catch (err) {
-      setSaveGroupError(err instanceof Error ? err.message : 'Failed to save deployment group.')
+      setSaveGroupError(err instanceof Error ? err.message : 'Failed to save deployment group.');
     } finally {
-      setSaveGroupBusy(false)
+      setSaveGroupBusy(false);
     }
-  }
+  };
 
-  const successCount = results?.filter(r => r.success).length ?? 0
-  const failureCount = results?.filter(r => !r.success).length ?? 0
-  const changedCount = previewData.filter(p => p.willChange).length
-  const previewNewValue = previewData.length > 0 ? previewData[0].newValue : undefined
-  const previewSelectedClientConfig = clients.find(c => c.name === previewSelectedClient)?.config
-  const previewClientIndex = previewData.findIndex(p => p.clientName === previewSelectedClient)
+  const successCount = results?.filter((r) => r.success).length ?? 0;
+  const failureCount = results?.filter((r) => !r.success).length ?? 0;
+  const changedCount = previewData.filter((p) => p.willChange).length;
+  const previewNewValue = previewData.length > 0 ? previewData[0].newValue : undefined;
+  const previewSelectedClientConfig = clients.find((c) => c.name === previewSelectedClient)?.config;
+  const previewClientIndex = previewData.findIndex((p) => p.clientName === previewSelectedClient);
 
   const goToAdjacentPreviewClient = (direction: 'prev' | 'next') => {
-    if (previewData.length === 0) return
-    const currentIndex = previewClientIndex >= 0 ? previewClientIndex : 0
-    const nextIndex = direction === 'prev'
-      ? (currentIndex - 1 + previewData.length) % previewData.length
-      : (currentIndex + 1) % previewData.length
-    setPreviewSelectedClient(previewData[nextIndex].clientName)
-  }
+    if (previewData.length === 0) return;
+    const currentIndex = previewClientIndex >= 0 ? previewClientIndex : 0;
+    const nextIndex =
+      direction === 'prev'
+        ? (currentIndex - 1 + previewData.length) % previewData.length
+        : (currentIndex + 1) % previewData.length;
+    setPreviewSelectedClient(previewData[nextIndex].clientName);
+  };
 
   const buildUpdatedConfigForPreview = (config: unknown, key: string, value: unknown): unknown => {
-    if (!key) return config
-    if (!config || typeof config !== 'object') return config
-    let next: any
+    if (!key) return config;
+    if (!config || typeof config !== 'object') return config;
+    let next: any;
     try {
-      next = JSON.parse(JSON.stringify(config))
+      next = JSON.parse(JSON.stringify(config));
     } catch {
-      next = { ...(config as any) }
+      next = { ...(config as any) };
     }
     if (value === undefined) {
-      delete next[key]
-      return next
+      delete next[key];
+      return next;
     }
-    next[key] = value
-    return next
-  }
+    next[key] = value;
+    return next;
+  };
 
   const formatJson = (value: unknown): string => {
     try {
-      return JSON.stringify(value, null, 2)
+      return JSON.stringify(value, null, 2);
     } catch {
-      return String(value)
+      return String(value);
     }
-  }
+  };
 
   const formatValue = (value: unknown): string => {
-    if (value === undefined) return '(not set)'
-    if (value === null) return '(null)'
-    if (typeof value === 'boolean') return value ? 'true' : 'false'
+    if (value === undefined) return '(not set)';
+    if (value === null) return '(null)';
+    if (typeof value === 'boolean') return value ? 'true' : 'false';
     if (typeof value === 'object') {
       try {
-        const s = JSON.stringify(value)
-        return s.length > 160 ? `${s.slice(0, 157)}...` : s
+        const s = JSON.stringify(value);
+        return s.length > 160 ? `${s.slice(0, 157)}...` : s;
       } catch {
-        return '(object)'
+        return '(object)';
       }
     }
-    return String(value)
-  }
+    return String(value);
+  };
 
   return (
     <Container fluid>
       {/* Header */}
       <div className="d-flex align-items-center mb-4">
-        <Button
-          variant="secondary"
-          onClick={() => navigate('/tools')}
-          className="me-3"
-        >
+        <Button variant="secondary" onClick={() => navigate('/tools')} className="me-3">
           <ArrowLeft className="me-1" />
           Back to Tools
         </Button>
         <div>
           <h2 className="mb-0">Bulk Update Client Config</h2>
-          <p className="text-muted mb-0">
-            Update a single configuration field across multiple clients at once
-          </p>
+          <p className="text-muted mb-0">Update a single configuration field across multiple clients at once</p>
         </div>
       </div>
 
@@ -577,11 +575,7 @@ export default function BulkUpdateClientConfig() {
 
       {/* Results Summary (shown after execution) */}
       {results && (
-        <Alert
-          variant={failureCount === 0 ? 'success' : 'warning'}
-          dismissible
-          onClose={() => setResults(null)}
-        >
+        <Alert variant={failureCount === 0 ? 'success' : 'warning'} dismissible onClose={() => setResults(null)}>
           <Alert.Heading>
             {failureCount === 0 ? 'All updates completed successfully!' : 'Updates completed with some failures'}
           </Alert.Heading>
@@ -592,11 +586,13 @@ export default function BulkUpdateClientConfig() {
             <div>
               <strong>Failed clients:</strong>
               <ul className="mb-0">
-                {results.filter(r => !r.success).map(r => (
-                  <li key={r.clientName}>
-                    {r.clientName}: {r.error}
-                  </li>
-                ))}
+                {results
+                  .filter((r) => !r.success)
+                  .map((r) => (
+                    <li key={r.clientName}>
+                      {r.clientName}: {r.error}
+                    </li>
+                  ))}
               </ul>
             </div>
           )}
@@ -615,13 +611,7 @@ export default function BulkUpdateClientConfig() {
               <div className="mb-3">
                 <Form.Label className="fw-semibold">Import from CSV</Form.Label>
                 <div className="d-flex align-items-center gap-2">
-                  <Form.Control
-                    type="file"
-                    accept=".csv"
-                    onChange={handleCsvUpload}
-                    disabled={loading}
-                    size="sm"
-                  />
+                  <Form.Control type="file" accept=".csv" onChange={handleCsvUpload} disabled={loading} size="sm" />
                   <Upload className="text-muted" />
                 </div>
                 <Form.Text className="text-muted">
@@ -675,21 +665,17 @@ export default function BulkUpdateClientConfig() {
                 <Form.Label className="fw-semibold">Field to Update</Form.Label>
                 <Form.Select
                   value={selectedField}
-                  onChange={e => setSelectedField(e.target.value)}
+                  onChange={(e) => setSelectedField(e.target.value)}
                   disabled={loading}
                 >
                   <option value="">-- Select a field --</option>
-                  {BULK_UPDATABLE_FIELDS.map(field => (
+                  {BULK_UPDATABLE_FIELDS.map((field) => (
                     <option key={field.key} value={field.key}>
                       {field.label}
                     </option>
                   ))}
                 </Form.Select>
-                {selectedFieldConfig && (
-                  <Form.Text className="text-muted">
-                    {selectedFieldConfig.description}
-                  </Form.Text>
-                )}
+                {selectedFieldConfig && <Form.Text className="text-muted">{selectedFieldConfig.description}</Form.Text>}
               </Form.Group>
 
               {/* Value Input */}
@@ -702,9 +688,9 @@ export default function BulkUpdateClientConfig() {
                       type="checkbox"
                       id="unset-field"
                       checked={unsetField}
-                      onChange={e => {
-                        setUnsetField(e.target.checked)
-                        setValueError(null)
+                      onChange={(e) => {
+                        setUnsetField(e.target.checked);
+                        setValueError(null);
                       }}
                       label="Unset (remove this field from the config)"
                     />
@@ -715,22 +701,22 @@ export default function BulkUpdateClientConfig() {
                       id="value-switch"
                       label={booleanDraft ? 'Enabled (true)' : 'Disabled (false)'}
                       checked={booleanDraft === true}
-                      onChange={e => {
-                        setBooleanDraft(e.target.checked)
-                        setValueError(null)
+                      onChange={(e) => {
+                        setBooleanDraft(e.target.checked);
+                        setValueError(null);
                       }}
                       disabled={unsetField}
                     />
                   ) : selectedFieldConfig.type === 'enum' && selectedFieldConfig.options ? (
                     <Form.Select
                       value={enumDraft}
-                      onChange={e => {
-                        setEnumDraft(e.target.value)
-                        setValueError(null)
+                      onChange={(e) => {
+                        setEnumDraft(e.target.value);
+                        setValueError(null);
                       }}
                       disabled={unsetField}
                     >
-                      {selectedFieldConfig.options.map(opt => (
+                      {selectedFieldConfig.options.map((opt) => (
                         <option key={opt.value} value={opt.value}>
                           {opt.label}
                         </option>
@@ -740,9 +726,9 @@ export default function BulkUpdateClientConfig() {
                     <Form.Control
                       type="text"
                       value={textDraft}
-                      onChange={e => {
-                        setTextDraft(e.target.value)
-                        setValueError(null)
+                      onChange={(e) => {
+                        setTextDraft(e.target.value);
+                        setValueError(null);
                       }}
                       disabled={unsetField}
                       placeholder="Enter a value"
@@ -751,9 +737,9 @@ export default function BulkUpdateClientConfig() {
                     <Form.Control
                       type="number"
                       value={textDraft}
-                      onChange={e => {
-                        setTextDraft(e.target.value)
-                        setValueError(null)
+                      onChange={(e) => {
+                        setTextDraft(e.target.value);
+                        setValueError(null);
                       }}
                       disabled={unsetField}
                       placeholder="Enter a number"
@@ -763,13 +749,16 @@ export default function BulkUpdateClientConfig() {
                       as="textarea"
                       rows={6}
                       value={textDraft}
-                      onChange={e => {
-                        setTextDraft(e.target.value)
-                        setValueError(null)
+                      onChange={(e) => {
+                        setTextDraft(e.target.value);
+                        setValueError(null);
                       }}
                       disabled={unsetField}
                       placeholder='Enter JSON, e.g. {"key":"value"}'
-                      style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace' }}
+                      style={{
+                        fontFamily:
+                          'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
+                      }}
                     />
                   ) : null}
                   {valueError && (
@@ -782,12 +771,7 @@ export default function BulkUpdateClientConfig() {
 
               {/* Preview Button */}
               <div className="d-grid">
-                <Button
-                  variant="primary"
-                  size="lg"
-                  onClick={handlePreview}
-                  disabled={!canPreview || loading}
-                >
+                <Button variant="primary" size="lg" onClick={handlePreview} disabled={!canPreview || loading}>
                   Preview Changes
                 </Button>
               </div>
@@ -811,28 +795,21 @@ export default function BulkUpdateClientConfig() {
         backdrop={executing ? 'static' : true}
       >
         <Modal.Header closeButton={!executing}>
-          <Modal.Title>
-            {executing ? 'Applying Updates...' : 'Preview Changes'}
-          </Modal.Title>
+          <Modal.Title>{executing ? 'Applying Updates...' : 'Preview Changes'}</Modal.Title>
         </Modal.Header>
         <Modal.Body>
           {executing ? (
             <div className="py-4">
-              <ProgressBar
-                now={progress}
-                label={`${progress}%`}
-                animated
-                striped
-              />
-              <p className="text-center text-muted mt-3">
-                Updating clients... Please wait.
-              </p>
+              <ProgressBar now={progress} label={`${progress}%`} animated striped />
+              <p className="text-center text-muted mt-3">Updating clients... Please wait.</p>
             </div>
           ) : (
             <>
               <Alert variant="info" className="mb-3">
-                <strong>Field:</strong> {selectedFieldConfig?.label}<br />
-                <strong>New Value:</strong> {formatValue(previewNewValue)}<br />
+                <strong>Field:</strong> {selectedFieldConfig?.label}
+                <br />
+                <strong>New Value:</strong> {formatValue(previewNewValue)}
+                <br />
                 <strong>Clients to update:</strong> {changedCount} of {previewData.length} will be changed
               </Alert>
 
@@ -850,10 +827,10 @@ export default function BulkUpdateClientConfig() {
                     </Button>
                     <Form.Select
                       value={previewSelectedClient}
-                      onChange={e => setPreviewSelectedClient(e.target.value)}
+                      onChange={(e) => setPreviewSelectedClient(e.target.value)}
                       aria-label="Select client to preview"
                     >
-                      {previewData.map(row => (
+                      {previewData.map((row) => (
                         <option key={row.clientName} value={row.clientName}>
                           {row.clientName}
                         </option>
@@ -878,7 +855,13 @@ export default function BulkUpdateClientConfig() {
                 <Col md={6}>
                   <div className="text-muted small mb-1">Updated</div>
                   <pre className="bg-light p-2 rounded border" style={{ maxHeight: '38vh', overflow: 'auto' }}>
-                    {formatJson(buildUpdatedConfigForPreview(previewSelectedClientConfig, selectedFieldConfig?.key || '', previewData.find(r => r.clientName === previewSelectedClient)?.newValue))}
+                    {formatJson(
+                      buildUpdatedConfigForPreview(
+                        previewSelectedClientConfig,
+                        selectedFieldConfig?.key || '',
+                        previewData.find((r) => r.clientName === previewSelectedClient)?.newValue
+                      )
+                    )}
                   </pre>
                 </Col>
               </Row>
@@ -894,7 +877,7 @@ export default function BulkUpdateClientConfig() {
                     </tr>
                   </thead>
                   <tbody>
-                    {previewData.map(row => (
+                    {previewData.map((row) => (
                       <tr key={row.clientName}>
                         <td>{row.clientName}</td>
                         <td>
@@ -905,7 +888,9 @@ export default function BulkUpdateClientConfig() {
                         </td>
                         <td>
                           {row.willChange ? (
-                            <Badge bg="warning" text="dark">Will Change</Badge>
+                            <Badge bg="warning" text="dark">
+                              Will Change
+                            </Badge>
                           ) : (
                             <Badge bg="secondary">No Change</Badge>
                           )}
@@ -921,7 +906,7 @@ export default function BulkUpdateClientConfig() {
                 type="checkbox"
                 id="bulk-update-accept-preview"
                 checked={previewAccepted}
-                onChange={e => setPreviewAccepted(e.target.checked)}
+                onChange={(e) => setPreviewAccepted(e.target.checked)}
                 label="I have reviewed this preview and want to proceed."
               />
             </>
@@ -933,27 +918,15 @@ export default function BulkUpdateClientConfig() {
               <Button variant="secondary" onClick={() => setShowPreview(false)}>
                 Cancel
               </Button>
-              <Button
-                variant="outline-secondary"
-                onClick={handleExportChangedClients}
-                disabled={changedCount === 0}
-              >
+              <Button variant="outline-secondary" onClick={handleExportChangedClients} disabled={changedCount === 0}>
                 <Download className="me-1" />
                 Export Changed
               </Button>
-              <Button
-                variant="outline-secondary"
-                onClick={handleOpenSaveGroupModal}
-                disabled={changedCount === 0}
-              >
+              <Button variant="outline-secondary" onClick={handleOpenSaveGroupModal} disabled={changedCount === 0}>
                 <FolderPlus className="me-1" />
                 Save as Group
               </Button>
-              <Button
-                variant="primary"
-                onClick={handleExecute}
-                disabled={changedCount === 0 || !previewAccepted}
-              >
+              <Button variant="primary" onClick={handleExecute} disabled={changedCount === 0 || !previewAccepted}>
                 <CheckCircle className="me-1" />
                 Apply Changes ({changedCount} client{changedCount !== 1 ? 's' : ''})
               </Button>
@@ -970,14 +943,15 @@ export default function BulkUpdateClientConfig() {
         <Modal.Body>
           {saveGroupError && <Alert variant="danger">{saveGroupError}</Alert>}
           <p className="text-muted mb-3">
-            Create a new deployment group with the {changedCount} client{changedCount !== 1 ? 's' : ''} that will be changed.
+            Create a new deployment group with the {changedCount} client{changedCount !== 1 ? 's' : ''} that will be
+            changed.
           </p>
           <Form.Group className="mb-3">
             <Form.Label>Group Name</Form.Label>
             <Form.Control
               type="text"
               value={saveGroupName}
-              onChange={e => setSaveGroupName(e.target.value)}
+              onChange={(e) => setSaveGroupName(e.target.value)}
               placeholder="e.g. Bulk Update - Region Change"
               disabled={saveGroupBusy}
             />
@@ -989,7 +963,7 @@ export default function BulkUpdateClientConfig() {
               as="textarea"
               rows={2}
               value={saveGroupDescription}
-              onChange={e => setSaveGroupDescription(e.target.value)}
+              onChange={(e) => setSaveGroupDescription(e.target.value)}
               placeholder="Optional notes about this group"
               disabled={saveGroupBusy}
             />
@@ -999,12 +973,16 @@ export default function BulkUpdateClientConfig() {
           <Button variant="secondary" onClick={() => setShowSaveGroupModal(false)} disabled={saveGroupBusy}>
             Cancel
           </Button>
-          <Button variant="primary" onClick={handleSaveAsDeploymentGroup} disabled={saveGroupBusy || !saveGroupName.trim()}>
+          <Button
+            variant="primary"
+            onClick={handleSaveAsDeploymentGroup}
+            disabled={saveGroupBusy || !saveGroupName.trim()}
+          >
             {saveGroupBusy ? <Spinner size="sm" className="me-2" /> : null}
             Create Group
           </Button>
         </Modal.Footer>
       </Modal>
     </Container>
-  )
+  );
 }

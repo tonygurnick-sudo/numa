@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { getFlag } from '../utils/featureFlags';
 import { Button, Col, Container, Row, Spinner, Alert, Modal } from 'react-bootstrap';
 import { useNavigate } from 'react-router-dom';
 import { useNumaRequest } from '../Providers/NumaRequestContext';
@@ -28,10 +29,8 @@ export const AgentsManagement = () => {
   const { numaGet, numaDelete, numaPost, numaPut } = useNumaRequest();
   const { user, lambdaClient } = useAuth();
   const navigate = useNavigate();
-  const agentsFeatureEnabled =
-    typeof window !== 'undefined' ? window.sessionStorage.getItem('AGENTS') === 'true' : false;
-  const schedulingEnabled =
-    typeof window !== 'undefined' ? window.sessionStorage.getItem('SCHEDULING') === 'true' : false;
+  const agentsFeatureEnabled = getFlag('AGENTS');
+  const schedulingEnabled = getFlag('SCHEDULING');
 
   // Feature flag UX: do not redirect; show disabled preview panel instead
   const { branding } = useBranding();
@@ -241,7 +240,7 @@ export const AgentsManagement = () => {
 
   const handleStartChat = async (agent: AgentSummary) => {
     const needs = agent.requiredIntegrations || [];
-    const hasPipedreamFeature = window.sessionStorage.getItem('PIPEDREAM_INTEGRATIONS') === 'true';
+    const hasPipedreamFeature = getFlag('PIPEDREAM_INTEGRATIONS');
     if (!hasPipedreamFeature || needs.length === 0) {
       initiateChat(agent);
       return;
@@ -286,7 +285,7 @@ export const AgentsManagement = () => {
   const buildScheduleRunConfig = (agent: AgentSummary) => {
     const toolsConfig = agent.toolsConfig || {};
     const enabledConnections = Array.from(
-      new Set([...(toolsConfig.enabledConnections || []), ...(agent.requiredIntegrations || [])]),
+      new Set([...(toolsConfig.enabledConnections || []), ...(agent.requiredIntegrations || [])])
     );
     const enabledKBIds = Array.isArray(toolsConfig.allowedKnowledgeBases)
       ? toolsConfig.allowedKnowledgeBases
@@ -384,7 +383,7 @@ export const AgentsManagement = () => {
   useEffect(() => {
     const warmCache = async () => {
       try {
-        const hasPipedreamFeature = window.sessionStorage.getItem('PIPEDREAM_INTEGRATIONS') === 'true';
+        const hasPipedreamFeature = getFlag('PIPEDREAM_INTEGRATIONS');
         if (!hasPipedreamFeature || !user || !lambdaClient) return;
         const externalUserId = PipedreamProxyService.deriveExternalUserId(user);
         await PipedreamProxyService.getIntegrationStatus(lambdaClient, externalUserId, {
@@ -691,7 +690,7 @@ export const AgentsManagement = () => {
                     {renderAgentsGrid(
                       filteredMyAgents,
                       filter === 'personal' ? t('management.empty.personalOnly') : t('management.empty.none'),
-                      true,
+                      true
                     )}
                   </section>
                 )}

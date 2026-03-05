@@ -19,17 +19,18 @@ This skill helps interact with the Numa GitLab repository using the `glab` CLI t
 
 Numa's CI/CD pipeline has these stages in order:
 
-| Stage | Key Jobs | Description |
-|-------|----------|-------------|
-| **setup** | `install-common-dependencies` | Installs yarn dependencies, caches node_modules |
-| **lint** | `node-lint`, `infra-lint`, `client-list-lint`, `pre-commit` | Linting for all workspaces |
-| **test** | `frontend-test`, `node-test`, `python-lambdas-test`, `python-lambdas-lint`, `infra-test` | Tests and Python linting |
-| **build** | `frontend-build`, `node-build`, `infra-build`, `tools-build` | Build artifacts |
-| **package** | `claude-cli-artifact-build` | Package final artifacts |
+| Stage       | Key Jobs                                                                                 | Description                                     |
+| ----------- | ---------------------------------------------------------------------------------------- | ----------------------------------------------- |
+| **setup**   | `install-common-dependencies`                                                            | Installs yarn dependencies, caches node_modules |
+| **lint**    | `node-lint`, `infra-lint`, `client-list-lint`, `pre-commit`                              | Linting for all workspaces                      |
+| **test**    | `frontend-test`, `node-test`, `python-lambdas-test`, `python-lambdas-lint`, `infra-test` | Tests and Python linting                        |
+| **build**   | `frontend-build`, `node-build`, `infra-build`, `tools-build`                             | Build artifacts                                 |
+| **package** | `claude-cli-artifact-build`                                                              | Package final artifacts                         |
 
 ## Common glab Commands
 
 ### Check Pipeline Status
+
 ```bash
 # Current branch pipeline status
 glab ci status
@@ -45,6 +46,7 @@ glab ci status -b main
 ```
 
 ### View Job Logs
+
 ```bash
 # Interactive job selection
 glab ci trace
@@ -58,6 +60,7 @@ glab ci trace 12345678
 ```
 
 ### Retry Failed Jobs
+
 ```bash
 # Retry by job name
 glab ci retry node-lint
@@ -67,6 +70,7 @@ glab ci retry 12345678
 ```
 
 ### View Merge Request
+
 ```bash
 # Current branch MR
 glab mr view
@@ -79,6 +83,7 @@ glab mr view --web
 ```
 
 ### Interactive Pipeline View
+
 ```bash
 # Interactive job browser with keyboard navigation
 glab ci view
@@ -87,29 +92,37 @@ glab ci view
 ## Common Failure Patterns & Fixes
 
 ### 1. node-lint / infra-lint: AWS SDK Type Errors
+
 **Symptom:** `@smithy/types` has no exported member errors
 **Fix:** Get yarn.lock from main and reinstall:
+
 ```bash
 git checkout main -- yarn.lock
 yarn install
 ```
 
 ### 2. Prettier Formatting Errors
+
 **Symptom:** `Replace`, `Delete`, `Insert` errors from prettier/prettier
 **Fix:** Run prettier on affected files:
+
 ```bash
 npx prettier --write <file-path>
 ```
 
 ### 3. Python Lambda Lint: Score Below 10/10
+
 **Symptom:** pylint score like 9.69/10
 **Fix:**
+
 - Add missing disables to `.pylintrc` in the lambda directory
 - Or fix the actual lint issues (unused imports, etc.)
 
 ### 4. infra-lint: Cannot find module 'typescript'
+
 **Symptom:** `Cannot find module 'typescript/bin/tsc'`
 **Fix:** Usually a CI cache issue. Try:
+
 ```bash
 # Locally verify it works
 cd infra && yarn lint
@@ -119,11 +132,13 @@ glab ci retry infra-lint
 ```
 
 ### 5. client-list-lint: Pre-existing Failure
+
 **Note:** This job often fails on main too - check if it's a pre-existing issue before debugging.
 
 ## Local Testing Before Push
 
 ### Run All Lints
+
 ```bash
 # Node workspaces (excluding infra)
 yarn workspaces foreach --parallel --all --exclude infra run lint
@@ -138,6 +153,7 @@ poetry run pyright .
 ```
 
 ### Run Tests
+
 ```bash
 # Node workspaces
 yarn workspaces foreach --parallel --all --exclude infra run test
@@ -150,6 +166,7 @@ poetry run pytest
 ```
 
 ### Test Specific Python Lambda
+
 ```bash
 cd lambdas/python/<lambda-name>
 poetry run pytest
@@ -171,10 +188,10 @@ If a new lambda isn't in the pipeline, add it to `.gitlab-ci.yml`:
 
 ```yaml
 # For Python lambdas, find .python-lambdas-matrix and add:
-        - lambdas/python/<new-lambda-name>
+- lambdas/python/<new-lambda-name>
 
 # For Node lambdas, find .node-lambdas-matrix and add:
-        - lambdas/node/<new-lambda-name>
+- lambdas/node/<new-lambda-name>
 ```
 
 ## Checking if Lambdas are in CI

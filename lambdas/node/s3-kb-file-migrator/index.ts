@@ -128,7 +128,7 @@ export async function handler(event: LambdaEvent): Promise<MigrationResult> {
             new HeadObjectCommand({
               Bucket: bucketName,
               Key: destinationKey,
-            }),
+            })
           );
           console.log(`Skipping (destination exists): ${sourceKey} -> ${destinationKey}`);
           result.skipped++;
@@ -147,7 +147,7 @@ export async function handler(event: LambdaEvent): Promise<MigrationResult> {
             Bucket: bucketName,
             CopySource: `${bucketName}/${encodeURIComponent(sourceKey)}`,
             Key: destinationKey,
-          }),
+          })
         );
         result.copied++;
 
@@ -158,7 +158,7 @@ export async function handler(event: LambdaEvent): Promise<MigrationResult> {
             new DeleteObjectCommand({
               Bucket: bucketName,
               Key: sourceKey,
-            }),
+            })
           );
           result.deleted++;
         }

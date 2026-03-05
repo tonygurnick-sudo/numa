@@ -1,65 +1,62 @@
-import { Alert, Badge, Row, Col } from 'react-bootstrap'
-import { CheckCircle, ExclamationTriangle, XCircle, Clock } from 'react-bootstrap-icons'
-import { useAuth } from '@/contexts/AuthContext'
+import { Alert, Badge, Row, Col } from 'react-bootstrap';
+import { CheckCircle, ExclamationTriangle, XCircle, Clock } from 'react-bootstrap-icons';
+import { useAuth } from '@/contexts/AuthContext';
 
 export interface SystemStatus {
-  overall: 'healthy' | 'warning' | 'error'
+  overall: 'healthy' | 'warning' | 'error';
   services: {
-    name: string
-    status: 'healthy' | 'warning' | 'error'
-    message?: string
-  }[]
-  lastChecked?: string
+    name: string;
+    status: 'healthy' | 'warning' | 'error';
+    message?: string;
+  }[];
+  lastChecked?: string;
 }
 
 interface WelcomeBannerProps {
-  systemStatus?: SystemStatus
-  onQuickAction?: (action: string) => void
+  systemStatus?: SystemStatus;
+  onQuickAction?: (action: string) => void;
 }
 
-export function WelcomeBanner({
-  systemStatus,
-  onQuickAction: _onQuickAction
-}: WelcomeBannerProps) {
-  const { user } = useAuth()
+export function WelcomeBanner({ systemStatus, onQuickAction: _onQuickAction }: WelcomeBannerProps) {
+  const { user } = useAuth();
 
   const getStatusIcon = (status: string) => {
     switch (status) {
       case 'healthy':
-        return <CheckCircle className="text-success me-2" />
+        return <CheckCircle className="text-success me-2" />;
       case 'warning':
-        return <ExclamationTriangle className="text-warning me-2" />
+        return <ExclamationTriangle className="text-warning me-2" />;
       case 'error':
-        return <XCircle className="text-danger me-2" />
+        return <XCircle className="text-danger me-2" />;
       default:
-        return <Clock className="text-muted me-2" />
+        return <Clock className="text-muted me-2" />;
     }
-  }
+  };
 
   const getStatusVariant = (status: string) => {
     switch (status) {
       case 'healthy':
-        return 'success'
+        return 'success';
       case 'warning':
-        return 'warning'
+        return 'warning';
       case 'error':
-        return 'danger'
+        return 'danger';
       default:
-        return 'secondary'
+        return 'secondary';
     }
-  }
+  };
 
   const getGreeting = () => {
-    const hour = new Date().getHours()
-    if (hour < 12) return 'Good morning'
-    if (hour < 17) return 'Good afternoon'
-    return 'Good evening'
-  }
+    const hour = new Date().getHours();
+    if (hour < 12) return 'Good morning';
+    if (hour < 17) return 'Good afternoon';
+    return 'Good evening';
+  };
 
   const getUserName = () => {
-    if (!user?.name) return user?.email?.split('@')[0] || 'User'
-    return user.name.split(' ')[0] // First name only
-  }
+    if (!user?.name) return user?.email?.split('@')[0] || 'User';
+    return user.name.split(' ')[0]; // First name only
+  };
 
   const defaultSystemStatus: SystemStatus = {
     overall: 'healthy',
@@ -68,10 +65,10 @@ export function WelcomeBanner({
       { name: 'Deployments', status: 'healthy' },
       { name: 'Analytics', status: 'healthy' },
     ],
-    lastChecked: new Date().toISOString()
-  }
+    lastChecked: new Date().toISOString(),
+  };
 
-  const status = systemStatus || defaultSystemStatus
+  const status = systemStatus || defaultSystemStatus;
 
   return (
     <Alert
@@ -79,7 +76,7 @@ export function WelcomeBanner({
       className="border-0 shadow-sm mb-4 welcome-banner"
       style={{
         background: 'linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%)',
-        borderLeft: '4px solid var(--bs-primary)'
+        borderLeft: '4px solid var(--bs-primary)',
       }}
     >
       <Row className="align-items-center">
@@ -92,11 +89,21 @@ export function WelcomeBanner({
               <div className="d-flex align-items-center">
                 {getStatusIcon(status.overall)}
                 <span className="me-3">
-                  System Status: <strong className={`text-${getStatusVariant(status.overall) === 'success' ? 'success' :
-                    getStatusVariant(status.overall) === 'warning' ? 'warning' : 'danger'}`}>
-                    {status.overall === 'healthy' ? 'All Systems Operational' :
-                     status.overall === 'warning' ? 'Minor Issues Detected' :
-                     'Service Disruption'}
+                  System Status:{' '}
+                  <strong
+                    className={`text-${
+                      getStatusVariant(status.overall) === 'success'
+                        ? 'success'
+                        : getStatusVariant(status.overall) === 'warning'
+                          ? 'warning'
+                          : 'danger'
+                    }`}
+                  >
+                    {status.overall === 'healthy'
+                      ? 'All Systems Operational'
+                      : status.overall === 'warning'
+                        ? 'Minor Issues Detected'
+                        : 'Service Disruption'}
                   </strong>
                 </span>
 
@@ -119,14 +126,12 @@ export function WelcomeBanner({
           {status.overall !== 'healthy' && (
             <div className="mt-2 small text-muted">
               {status.services
-                .filter(s => s.status !== 'healthy')
-                .map(s => s.message || `${s.name} experiencing issues`)
-                .join(' • ')
-              }
+                .filter((s) => s.status !== 'healthy')
+                .map((s) => s.message || `${s.name} experiencing issues`)
+                .join(' • ')}
             </div>
           )}
         </Col>
-
       </Row>
 
       {status.lastChecked && (
@@ -135,7 +140,7 @@ export function WelcomeBanner({
         </div>
       )}
     </Alert>
-  )
+  );
 }
 
-export default WelcomeBanner
+export default WelcomeBanner;

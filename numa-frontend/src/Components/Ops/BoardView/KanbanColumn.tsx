@@ -47,7 +47,7 @@ const KanbanColumn: React.FC<KanbanColumnProps> = ({
 
   const selectedType = useMemo(
     () => ticketTypes.find((tt) => tt.id === selectedTypeId) ?? ticketTypes[0] ?? null,
-    [ticketTypes, selectedTypeId],
+    [ticketTypes, selectedTypeId]
   );
 
   useEffect(() => {

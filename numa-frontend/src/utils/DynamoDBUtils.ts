@@ -201,7 +201,7 @@ class NumaChatDynamoUtils {
     conversationId: string,
     userId: string,
     newName: string,
-    nameSource?: 'manual' | 'auto',
+    nameSource?: 'manual' | 'auto'
   ) {
     try {
       // 1. Query all items for this user with begins_with(sk, conversationId#)
@@ -241,7 +241,7 @@ class NumaChatDynamoUtils {
               }
             : {
                 ':newName': newName,
-              },
+              }
         ),
         ReturnValues: 'UPDATED_NEW',
       });
@@ -270,7 +270,7 @@ class NumaChatDynamoUtils {
             ':c': `${conversationId}#`,
             ':mtype': 'meta',
           }),
-        }),
+        })
       );
 
       const items = (queryResp.Items || []).map((it) => unmarshall(it as Record<string, AttributeValue>));

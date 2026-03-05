@@ -85,7 +85,7 @@ export const PdfPreview: React.FC<PdfPreviewProps> = ({ data }) => {
       setError(t('filePreview.pdf.parseError'));
       setLoading(false);
     },
-    [t],
+    [t]
   );
 
   // Navigate pages
@@ -95,7 +95,7 @@ export const PdfPreview: React.FC<PdfPreviewProps> = ({ data }) => {
         setCurrentPage(page);
       }
     },
-    [numPages],
+    [numPages]
   );
 
   const goPrev = useCallback(() => goToPage(currentPage - 1), [currentPage, goToPage]);

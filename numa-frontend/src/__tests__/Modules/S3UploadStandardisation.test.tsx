@@ -48,7 +48,7 @@ describe('S3UploadModule Standardisation', () => {
     global.fetch = vi.fn(() =>
       Promise.resolve({
         json: () => Promise.resolve({ CLIENT_NAME: 'test-client', REGION: 'us-east-1' }),
-      }),
+      })
     );
   });
 
@@ -81,7 +81,7 @@ describe('S3UploadModule Standardisation', () => {
 
     // Render the component with a string value
     const { rerender } = renderWithProviders(
-      <S3UploadModule task={mockTask} value={stringValue} onComplete={mockOnComplete} onChange={mockOnChange} />,
+      <S3UploadModule task={mockTask} value={stringValue} onComplete={mockOnComplete} onChange={mockOnChange} />
     );
 
     // Verify that the file name is displayed
@@ -113,7 +113,7 @@ describe('S3UploadModule Standardisation', () => {
 
     // Re-render with standardised format
     rerender(
-      <S3UploadModule task={mockTask} value={standardisedValue} onComplete={mockOnComplete} onChange={mockOnChange} />,
+      <S3UploadModule task={mockTask} value={standardisedValue} onComplete={mockOnComplete} onChange={mockOnChange} />
     );
 
     // Verify that both file names are displayed

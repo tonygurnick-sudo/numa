@@ -232,7 +232,7 @@ async function loadGlobalSettings(): Promise<GlobalChatSettings> {
       TableName: TABLE_NAME,
       Key: { user_id: GLOBAL_SETTINGS_KEY },
       ConsistentRead: true,
-    }),
+    })
   );
 
   const item = res.Item as Partial<GlobalChatSettings> | undefined;
@@ -305,7 +305,7 @@ async function loadUserItem(userId: string): Promise<Record<string, unknown> | n
       TableName: TABLE_NAME,
       Key: { user_id: userId },
       ConsistentRead: true,
-    }),
+    })
   );
   const item = res.Item as Record<string, unknown> | undefined;
   return item ?? null;
@@ -479,7 +479,7 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
         new PutCommand({
           TableName: TABLE_NAME,
           Item: updatedSettings,
-        }),
+        })
       );
       console.log('PUT scope=global saved successfully');
 
@@ -522,7 +522,7 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
             ':p': validated,
             ':u': new Date().toISOString(),
           },
-        }),
+        })
       );
       return { statusCode: 200, headers: HEADERS, body: JSON.stringify({ ok: true }) };
     }
@@ -808,7 +808,7 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
         new PutCommand({
           TableName: TABLE_NAME,
           Item: itemToStore,
-        }),
+        })
       );
 
       return { statusCode: 200, headers: HEADERS, body: JSON.stringify({ ok: true }) };

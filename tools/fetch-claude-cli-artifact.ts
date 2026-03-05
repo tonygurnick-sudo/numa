@@ -43,7 +43,7 @@ function usage(): void {
       '  --prefix  $CLAUDE_ARTIFACT_S3_PREFIX or claude-artifacts',
       '  --version $CLAUDE_CLI_VERSION or 2.0.37',
       '  --region  $AWS_REGION (optional; uses SDK default if unset)',
-    ].join('\n'),
+    ].join('\n')
   );
 }
 

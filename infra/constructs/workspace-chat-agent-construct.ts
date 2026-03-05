@@ -53,6 +53,8 @@ export interface WorkspaceChatAgentConstructProps {
   chatSettingsTableName?: string;
   /** Chat settings table ARN (for IAM permissions) */
   chatSettingsTableArn?: string;
+  /** Whether to enable vault secrets functionality (enables vault system prompt and tools) */
+  secretsVaultEnabled?: boolean;
   /** Company bucket name (for loading company profile into system prompt) */
   companyBucketName?: string;
   /** Company bucket ARN (for IAM permissions) */
@@ -61,6 +63,14 @@ export interface WorkspaceChatAgentConstructProps {
   agentCoreProvider?: AwsProvider;
   /** Region where AgentCore resources are deployed (defaults to props.region) */
   agentCoreRegion?: string;
+  /** OAuth workspace tools Lambda function name (for connect tools) */
+  oauthWorkspaceToolsLambdaName?: string;
+  /** OAuth workspace tools Lambda ARN (for IAM invoke permission) */
+  oauthWorkspaceToolsLambdaArn?: string;
+  /** Data bucket name (for downloading attached files from My Files / Company Files) */
+  dataBucketName?: string;
+  /** Data bucket ARN (for IAM read permissions) */
+  dataBucketArn?: string;
 }
 
 export class WorkspaceChatAgentConstruct extends Construct {
@@ -127,7 +137,7 @@ export class WorkspaceChatAgentConstruct extends Construct {
       'assets',
       'artifacts',
       'numa-workspace-agent',
-      'image.tar',
+      'image.tar'
     );
 
     // Compute content-based image tag from tar hash
@@ -332,6 +342,28 @@ echo "Successfully pushed image to ${this.ecrRepository.repositoryUrl}:${imageTa
                   effect: 'Allow',
                   actions: ['lambda:InvokeFunction'],
                   resources: [props.workspaceToolsLambdaArn],
+                },
+              ]
+            : []),
+          // OAuth workspace tools Lambda invoke permission (for connect tools)
+          ...(props.oauthWorkspaceToolsLambdaArn
+            ? [
+                {
+                  sid: 'LambdaInvokeOAuthWorkspaceTools',
+                  effect: 'Allow',
+                  actions: ['lambda:InvokeFunction'],
+                  resources: [props.oauthWorkspaceToolsLambdaArn],
+                },
+              ]
+            : []),
+          // Data bucket read-only access (for downloading attached files from My Files / Company Files)
+          ...(props.dataBucketArn
+            ? [
+                {
+                  sid: 'S3DataBucketRead',
+                  effect: 'Allow' as const,
+                  actions: ['s3:GetObject', 's3:ListBucket'],
+                  resources: [props.dataBucketArn, `${props.dataBucketArn}/*`],
                 },
               ]
             : []),
@@ -541,6 +573,10 @@ echo "Successfully pushed image to ${this.ecrRepository.repositoryUrl}:${imageTa
         ...(props.workspaceToolsLambdaArn && {
           WORKSPACE_TOOLS_LAMBDA_ARN: props.workspaceToolsLambdaArn,
         }),
+        // OAuth workspace tools Lambda for connect tools (OAuth, Synergy, S3 data bucket)
+        ...(props.oauthWorkspaceToolsLambdaName && {
+          OAUTH_WORKSPACE_TOOLS_LAMBDA_NAME: props.oauthWorkspaceToolsLambdaName,
+        }),
         // Cross-account Bedrock access (for global inference profiles)
         ...(props.bedrockAccount && {
           BEDROCK_ACCOUNT: props.bedrockAccount,
@@ -562,6 +598,10 @@ echo "Successfully pushed image to ${this.ecrRepository.repositoryUrl}:${imageTa
         // Company bucket for loading company profile into system prompt
         ...(props.companyBucketName && {
           COMPANY_BUCKET_NAME: props.companyBucketName,
+        }),
+        // Data bucket for downloading attached files (My Files / Company Files)
+        ...(props.dataBucketName && {
+          DATA_BUCKET_NAME: props.dataBucketName,
         }),
       },
     });

@@ -85,7 +85,7 @@ export const saveCompanyInfo = async (profileText, s3Bucket, region, getCredenti
       s3Bucket,
       COMPANY_INFO_KEY,
       region,
-      getCredentials,
+      getCredentials
     );
 
     // Update the sessionStorage cache so chat pages pick up changes immediately

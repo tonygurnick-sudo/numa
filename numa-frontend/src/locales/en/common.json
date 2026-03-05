@@ -61,7 +61,8 @@
       "integrations": "Integrations",
       "dataConnectors": "Data Connectors",
       "files": "Files",
-      "marketplace": "Marketplace"
+      "marketplace": "Marketplace",
+      "vault": "Secrets Vault"
     },
     "sections": {
       "build": "Build",
@@ -446,7 +447,18 @@
       "downloadLabel": "Download {{title}}",
       "opening": "Opening...",
       "file": "File",
-      "openInNewTab": "Open in New Tab"
+      "openInNewTab": "Open in New Tab",
+      "save": "Save",
+      "share": "Share",
+      "saveToFiles": "Save to Files",
+      "saveToFilesTitle": "Save to Files",
+      "shareFile": "Share this file",
+      "filename": "Filename",
+      "selectFolder": "Select folder",
+      "chooseFolderPlaceholder": "Choose a folder to save the file",
+      "saving": "Saving...",
+      "preparing": "Preparing...",
+      "folderPathHelp": "Enter folder path (e.g., \"documents\", \"reports/2024\", or leave empty for root)"
     },
     "invalidData": "Invalid data structure",
     "emptyValue": "-",
@@ -713,6 +725,23 @@
     "collapse": "Collapse event log",
     "expand": "Expand event log",
     "waiting": "Waiting for activity..."
+  },
+  "oauthCallback": {
+    "title": "OAuth Connection",
+    "processing": "Processing OAuth authorization...",
+    "invalidProvider": "Invalid OAuth provider specified",
+    "authorizationError": "Authorization failed: {{error}}",
+    "missingParameters": "Missing required OAuth parameters",
+    "notAuthenticated": "You must be logged in to complete OAuth flow",
+    "connectionSuccessful": "Successfully connected to {{provider}}!",
+    "connectionFailed": "Failed to complete OAuth connection",
+    "unknownError": "An unknown error occurred during OAuth processing",
+    "redirecting": "Redirecting to Files page...",
+    "returnToFiles": "Return to Files",
+    "pleaseWait": "Please wait while we complete the connection..."
+  },
+  "folderTreeSelector": {
+    "selected": "Selected: {{path}}"
   },
   "ian": {
     "breadcrumb": "IAN",

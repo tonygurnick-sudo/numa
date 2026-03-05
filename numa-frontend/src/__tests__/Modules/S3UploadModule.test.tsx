@@ -112,7 +112,7 @@ describe('S3UploadModule Component', () => {
 
   it('should accept valid file types', async () => {
     renderWithProviders(
-      <S3UploadModule task={{ id: 'test-task-id', parameters: { allowedFileTypes: ['application/pdf'] } }} />,
+      <S3UploadModule task={{ id: 'test-task-id', parameters: { allowedFileTypes: ['application/pdf'] } }} />
     );
 
     await waitForConfigReady();
@@ -129,7 +129,7 @@ describe('S3UploadModule Component', () => {
 
   it('should reject invalid file types', async () => {
     renderWithProviders(
-      <S3UploadModule task={{ id: 'test-task-id', parameters: { allowedFileTypes: ['application/pdf'] } }} />,
+      <S3UploadModule task={{ id: 'test-task-id', parameters: { allowedFileTypes: ['application/pdf'] } }} />
     );
 
     await waitForConfigReady();
@@ -198,7 +198,7 @@ describe('S3UploadModule Component', () => {
         onComplete={mockOnComplete}
         onNotComplete={mockOnNotComplete}
         onChange={mockOnChange}
-      />,
+      />
     );
 
     await waitForConfigReady();
@@ -249,7 +249,7 @@ describe('S3UploadModule Component', () => {
           },
         ],
       },
-      'files-uploaded',
+      'files-uploaded'
     );
 
     expect(updateJobMock).toHaveBeenCalledWith(
@@ -259,7 +259,7 @@ describe('S3UploadModule Component', () => {
       expect.objectContaining({
         'test-task-id': expect.any(Array),
       }),
-      'files-uploaded',
+      'files-uploaded'
     );
   });
 
@@ -287,7 +287,7 @@ describe('S3UploadModule Component', () => {
       existingJobId,
       undefined,
       mergedInputs,
-      'files-uploaded',
+      'files-uploaded'
     );
 
     expect(updateJobMock).toHaveBeenCalledWith(
@@ -298,7 +298,7 @@ describe('S3UploadModule Component', () => {
         'test-task-id': expect.any(Array),
         'existing-task': 'existing-value',
       }),
-      'files-uploaded',
+      'files-uploaded'
     );
 
     expect(createJobMock).not.toHaveBeenCalled();
@@ -315,7 +315,7 @@ describe('S3UploadModule Component', () => {
         onComplete={mockOnComplete}
         onNotComplete={mockOnNotComplete}
         onChange={mockOnChange}
-      />,
+      />
     );
 
     await waitFor(() => {
@@ -334,7 +334,7 @@ describe('S3UploadModule Component', () => {
         onComplete={mockOnComplete}
         onNotComplete={mockOnNotComplete}
         onChange={mockOnChange}
-      />,
+      />
     );
 
     await waitFor(() => {

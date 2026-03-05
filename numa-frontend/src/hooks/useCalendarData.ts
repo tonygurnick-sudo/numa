@@ -89,7 +89,7 @@ export const useCalendarData = ({
             numaGet,
             startDate.toISOString().split('T')[0],
             endDate.toISOString().split('T')[0],
-            selectedEventTypes,
+            selectedEventTypes
           );
         } else {
           // Fetch all active schedules
@@ -98,7 +98,7 @@ export const useCalendarData = ({
 
         // Filter by selected event types (for now, only 'agent' type exists)
         const filteredSchedules = fetchedSchedules.filter((schedule) =>
-          selectedEventTypes.includes((schedule.eventType ?? 'agent') as EventTypeFilter),
+          selectedEventTypes.includes((schedule.eventType ?? 'agent') as EventTypeFilter)
         );
 
         // Update cache
@@ -121,7 +121,7 @@ export const useCalendarData = ({
         setLoading(false);
       }
     },
-    [numaGet, selectedEventTypes, cacheTimeout],
+    [numaGet, selectedEventTypes, cacheTimeout]
   );
 
   // Load all schedules (default behavior)

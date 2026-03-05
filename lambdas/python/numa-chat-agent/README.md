@@ -27,6 +27,7 @@ A Python Lambda that provides real-time chat streaming over HTTP using AWS Lambd
 Streaming frames are passed through in the same style we used over WebSockets. Each frame is emitted as one NDJSON object with a top‑level `type: "event"` plus the original Strands/Bedrock fields. We do not flatten nested Bedrock structures and we do not synthesize `contentBlockDelta` from other fields — the frontend handles both nested and flat shapes.
 
 Key points:
+
 - Start: `{ "type": "start" }`
 - Events: `{ "type": "event", ...original event... }` (may include nested `event.contentBlockDelta`, top‑level `delta`, tool events, etc.)
 - Heartbeats: `{ "type": "ping", "ts": 1730000000 }` (periodic to keep CloudFront alive)
@@ -55,37 +56,41 @@ lambdas/python/numa-chat-agent/
 
 ## Environment Variables
 
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `MODEL_ID` | Claude model to use | `us.anthropic.claude-sonnet-4-20250514-v1:0` |
-| `Q_APPLICATION_ID` | Q Business application ID | - |
-| `Q_RETRIEVER_ID` | Q Business retriever ID | - |
-| `BEDROCK_KNOWLEDGE_BASE_ID` | Bedrock knowledge base ID | - |
-| `PREFERRED_KNOWLEDGE_BASE` | `'q'` or `'bedrock'` | `'bedrock'` |
-| `CLOUDFRONT_SHARED_SECRET` | Shared secret from CloudFront custom header | required |
-| `AWS_LAMBDA_EXEC_WRAPPER` | Must be `/opt/bootstrap` (LWA ZIP) | set by infra |
-| `AWS_LWA_INVOKE_MODE` | Must be `response_stream` | set by infra |
+| Variable                    | Description                                 | Default                                      |
+| --------------------------- | ------------------------------------------- | -------------------------------------------- |
+| `MODEL_ID`                  | Claude model to use                         | `us.anthropic.claude-sonnet-4-20250514-v1:0` |
+| `Q_APPLICATION_ID`          | Q Business application ID                   | -                                            |
+| `Q_RETRIEVER_ID`            | Q Business retriever ID                     | -                                            |
+| `BEDROCK_KNOWLEDGE_BASE_ID` | Bedrock knowledge base ID                   | -                                            |
+| `PREFERRED_KNOWLEDGE_BASE`  | `'q'` or `'bedrock'`                        | `'bedrock'`                                  |
+| `CLOUDFRONT_SHARED_SECRET`  | Shared secret from CloudFront custom header | required                                     |
+| `AWS_LAMBDA_EXEC_WRAPPER`   | Must be `/opt/bootstrap` (LWA ZIP)          | set by infra                                 |
+| `AWS_LWA_INVOKE_MODE`       | Must be `response_stream`                   | set by infra                                 |
 
 ## Input Format
 
 Endpoints (behind CloudFront):
+
 - `POST /api/numa-chat-agent/stream` – streaming NDJSON response
 - `POST /api/numa-chat-agent/invoke` – non‑streaming JSON response
 
 Required headers:
+
 - `Authorization: Bearer <cognito-id-token>`
 - `x-arcanum-cloudfront-secret: <secret>` is injected by CloudFront. If calling the Function URL directly for testing, you must supply this header and value (matches `CLOUDFRONT_SHARED_SECRET`).
 
 Request body (JSON):
+
 ```json
 {
-  "prompt": "User's question",                      // required
-  "conversationId": "abc123",                      // optional, loads history
+  "prompt": "User's question", // required
+  "conversationId": "abc123", // optional, loads history
   "enabledTools": ["query_knowledge_base", "web_search"],
-  "enabledConnections": ["notion", "slack"],       // optional MCP connections
-  "systemPrompt": "Custom system instructions",    // optional
+  "enabledConnections": ["notion", "slack"], // optional MCP connections
+  "systemPrompt": "Custom system instructions", // optional
   "modelId": "us.anthropic.claude-sonnet-4-20250514-v1:0", // optional override
-  "userAuth": {                                      // optional context override
+  "userAuth": {
+    // optional context override
     "email": "user@example.com",
     "groups": ["admin"]
   }
@@ -93,6 +98,7 @@ Request body (JSON):
 ```
 
 Streaming response (NDJSON): one JSON object per line. Example first/last frames:
+
 ```
 {"type":"start"}
 {"type":"event", "delta":{"text":"Hello"}}
@@ -101,6 +107,7 @@ Streaming response (NDJSON): one JSON object per line. Example first/last frames
 ```
 
 Non‑streaming response (JSON):
+
 ```json
 { "type": "result", "content": "Hello ...", "stop_reason": "complete" }
 ```

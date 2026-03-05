@@ -32,7 +32,7 @@ export async function createQUsers(
   awsClientConfig: AWSClientConfig,
   userPool: string,
   qUrl: string,
-  dryRun: boolean,
+  dryRun: boolean
 ): Promise<void> {
   const client = new CognitoIdentityProviderClient(awsClientConfig);
 
@@ -56,7 +56,7 @@ export async function createQUsers(
         familyName: row[1].trim(),
         email: row[2].trim(),
         password: generate(passwordConfig),
-      }),
+      })
     );
   result.push({
     givenName: 'Test',
@@ -91,7 +91,7 @@ async function createQUser(
   client: CognitoIdentityProviderClient,
   qUrl: string,
   userDetails: User,
-  userPool: string,
+  userPool: string
 ): Promise<void> {
   try {
     await client.send(
@@ -117,14 +117,12 @@ async function createQUser(
             Value: 'true',
           },
         ],
-      }),
+      })
     );
   } catch (e) {
     if (e instanceof UsernameExistsException) {
       console.log(
-        chalk.yellow(
-          `Username already exists: ${userDetails.givenName} ${userDetails.familyName} ${userDetails.email}`,
-        ),
+        chalk.yellow(`Username already exists: ${userDetails.givenName} ${userDetails.familyName} ${userDetails.email}`)
       );
     } else {
       throw e;
@@ -136,14 +134,14 @@ async function createQUser(
       Username: userDetails.email,
       Password: userDetails.password,
       Permanent: true,
-    }),
+    })
   );
   if (activateLicences) {
     try {
       await activateQLicence(qUrl, userDetails.email, userDetails.password);
     } catch {
       console.log(
-        chalk.red(`Activation failed for: ${userDetails.givenName} ${userDetails.familyName} ${userDetails.email}`),
+        chalk.red(`Activation failed for: ${userDetails.givenName} ${userDetails.familyName} ${userDetails.email}`)
       );
       try {
         await activateQLicence(qUrl, userDetails.email, userDetails.password);

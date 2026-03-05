@@ -105,7 +105,7 @@ describe('personal agent duplication helpers', () => {
     const payload = module.__testExports.buildPersonalDuplicatePayload(
       workspaceAgent as never,
       'Policy Coach (Copy)',
-      'workspace',
+      'workspace'
     );
 
     expect(payload.visibility).toBe('personal');

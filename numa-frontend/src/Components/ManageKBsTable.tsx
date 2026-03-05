@@ -202,7 +202,7 @@ export function ManageKBsTable({ refreshKey = 0 }: ManageKBsTableProps): React.J
           knowledgeBaseService.getKB(kb.kb_id).catch((err) => {
             console.error(`Error fetching KB ${kb.kb_id}:`, err);
             return null;
-          }),
+          })
         );
 
       const kbDetails = (await Promise.all(detailsPromises)).filter((kb) => kb !== null) as KnowledgeBase[];

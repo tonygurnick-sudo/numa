@@ -1,14 +1,17 @@
 # Enqueue URL Lambda
 
 ## Overview
+
 This Lambda function adds URLs to the DynamoDB queue for the web crawler workflow. It validates the input URL, sets the crawl depth, and adds it to DynamoDB with a "pending" status.
 
 It handles:
+
 - URL validation
 - Crawl depth verification
 - Conditional writes to prevent duplicate entries
 
 ## Inputs
+
 ```json
 {
   "url": "https://example.com",
@@ -24,6 +27,7 @@ It handles:
 - `creator` (required): Identifier for the user creating the request
 
 ## Outputs
+
 ```json
 {
   "url": "https://example.com",
@@ -36,4 +40,5 @@ It handles:
 ```
 
 ## Environment Variables
+
 - `TABLE_NAME`: Name of the DynamoDB table to store URLs

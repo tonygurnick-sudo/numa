@@ -54,7 +54,7 @@ vi.mock('docx', () => {
       toBlob: vi.fn().mockResolvedValue(
         new Blob(['DOCX content'], {
           type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-        }),
+        })
       ),
     },
     Paragraph: vi.fn(),

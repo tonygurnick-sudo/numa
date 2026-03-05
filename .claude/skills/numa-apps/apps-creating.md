@@ -8,17 +8,19 @@ This guide provides a technical overview for creating new apps in the Numa platf
 
 All Numa apps are **Step Function apps** - they use AWS Step Functions to orchestrate Lambda invocations. The key distinction is what type of Lambda does the processing:
 
-| App Type | Processing Lambda | Frontend Renderer | Use Case |
-|----------|-------------------|-------------------|----------|
-| **Traditional Apps** | Custom Lambda per app | Standard results display | Structured workflows (summarize, extract, analyze) |
-| **Claude Code Apps** | Shared `claude-code-agent` Lambda | Custom rich renderer | Interactive analysis, code execution, complex reasoning |
+| App Type             | Processing Lambda                 | Frontend Renderer        | Use Case                                                |
+| -------------------- | --------------------------------- | ------------------------ | ------------------------------------------------------- |
+| **Traditional Apps** | Custom Lambda per app             | Standard results display | Structured workflows (summarize, extract, analyze)      |
+| **Claude Code Apps** | Shared `claude-code-agent` Lambda | Custom rich renderer     | Interactive analysis, code execution, complex reasoning |
 
 ### Traditional Apps
+
 - Each app has its own processing Lambda(s)
 - Output is typically markdown or structured JSON
 - Frontend uses standard results rendering
 
 ### Claude Code Apps
+
 - All use the shared `claude-code-agent` Lambda
 - Route to different agent types via `agent_type` parameter (e.g., `data_analysis`)
 - Stream events (tool use, thinking, code execution) to frontend
@@ -53,8 +55,8 @@ export class MeetingAnalyser extends BaseNumaApp {
   constructor(scope: Construct, name: string, props: BaseNumaAppProps) {
     super(scope, name, {
       ...props,
-      appId: 'meeting-analyser',     // Unique identifier
-      enableJobs: true,               // Enable DynamoDB jobs table (RECOMMENDED)
+      appId: 'meeting-analyser', // Unique identifier
+      enableJobs: true, // Enable DynamoDB jobs table (RECOMMENDED)
     });
 
     // 1. Create processing Lambda
@@ -211,25 +213,25 @@ cd ../infra && yarn cdktf deploy --auto-approve numa-client-<client-name>
 
 When you extend `BaseNumaApp`, you automatically get:
 
-| Resource | Description |
-|----------|-------------|
-| CloudWatch Log Group | Centralized logging for all app Lambdas |
-| S3 Key Prefix | Isolated storage at `/{appId}/` |
-| URL Path Prefix | API routes at `/api/{appId}/` |
-| Step Function Endpoints | `POST/GET /api/{appId}/main` |
-| Jobs Table (optional) | DynamoDB table + CRUD API when `enableJobs: true` |
+| Resource                | Description                                       |
+| ----------------------- | ------------------------------------------------- |
+| CloudWatch Log Group    | Centralized logging for all app Lambdas           |
+| S3 Key Prefix           | Isolated storage at `/{appId}/`                   |
+| URL Path Prefix         | API routes at `/api/{appId}/`                     |
+| Step Function Endpoints | `POST/GET /api/{appId}/main`                      |
+| Jobs Table (optional)   | DynamoDB table + CRUD API when `enableJobs: true` |
 
 ### Helper Methods
 
-| Method | Purpose |
-|--------|---------|
-| `addLambdaFunction()` | Create a Lambda with standard config |
-| `addLambdaTask()` | Step Function Lambda task with retry/catch |
-| `addExtractContentTaskWithArn()` | Standard content extraction step |
-| `writeProcessingStatus()` | Write "PROCESSING" status |
-| `writeSuccessStatus()` | Write "SUCCESS" status with results |
-| `writeFailureStatus()` | Write "FAILURE" status with error |
-| `addStepFunction()` | Wire up Step Function with start/status endpoints |
+| Method                           | Purpose                                           |
+| -------------------------------- | ------------------------------------------------- |
+| `addLambdaFunction()`            | Create a Lambda with standard config              |
+| `addLambdaTask()`                | Step Function Lambda task with retry/catch        |
+| `addExtractContentTaskWithArn()` | Standard content extraction step                  |
+| `writeProcessingStatus()`        | Write "PROCESSING" status                         |
+| `writeSuccessStatus()`           | Write "SUCCESS" status with results               |
+| `writeFailureStatus()`           | Write "FAILURE" status with error                 |
+| `addStepFunction()`              | Wire up Step Function with start/status endpoints |
 
 ---
 
@@ -254,13 +256,13 @@ this.manifest = {
 
 ### Task Types
 
-| Type | Purpose | Key Params |
-|------|---------|------------|
-| `S3_UPLOAD_TASK` | File upload | `allowedFileTypes`, `maximumFileSize`, `minFiles`, `maxFiles` |
-| `TEXT_INPUT_TASK` | Text input | `placeholder`, `required` |
-| `DROPDOWN_TASK` | Select dropdown | `options: string[]` |
-| `HTTP_REQUEST_TASK` | Trigger Step Function | `endpoint`, `payload` (reference other tasks via `@task-id`) |
-| `TEXT_OUTPUT_TASK` | Display output | `dataRef` |
+| Type                | Purpose               | Key Params                                                    |
+| ------------------- | --------------------- | ------------------------------------------------------------- |
+| `S3_UPLOAD_TASK`    | File upload           | `allowedFileTypes`, `maximumFileSize`, `minFiles`, `maxFiles` |
+| `TEXT_INPUT_TASK`   | Text input            | `placeholder`, `required`                                     |
+| `DROPDOWN_TASK`     | Select dropdown       | `options: string[]`                                           |
+| `HTTP_REQUEST_TASK` | Trigger Step Function | `endpoint`, `payload` (reference other tasks via `@task-id`)  |
+| `TEXT_OUTPUT_TASK`  | Display output        | `dataRef`                                                     |
 
 ---
 
@@ -268,15 +270,15 @@ this.manifest = {
 
 ```typescript
 export const appLibrary: Record<string, AppDefinition> = {
-  'document-summariser': { app: DocumentSummariser, isProdApp: true },  // All clients
-  'nolia': { app: Nolia, isProdApp: false },                            // Specific clients
+  'document-summariser': { app: DocumentSummariser, isProdApp: true }, // All clients
+  nolia: { app: Nolia, isProdApp: false }, // Specific clients
 };
 ```
 
-| Flag | Meaning | When Deployed |
-|------|---------|---------------|
-| `isProdApp: true` | Production-ready, general-purpose | `allProdApps: true` or `allApps: true` |
-| `isProdApp: false` | Client-specific or experimental | Only when explicitly in `apps: {}` config |
+| Flag               | Meaning                           | When Deployed                             |
+| ------------------ | --------------------------------- | ----------------------------------------- |
+| `isProdApp: true`  | Production-ready, general-purpose | `allProdApps: true` or `allApps: true`    |
+| `isProdApp: false` | Client-specific or experimental   | Only when explicitly in `apps: {}` config |
 
 ### Client Config Examples
 
@@ -349,14 +351,14 @@ Frontend → API Gateway → step-function-start Lambda
 
 ### Key Differences from Traditional Apps
 
-| Aspect | Traditional Apps | Claude Code Apps |
-|--------|------------------|------------------|
-| Processing | Custom Lambda per app | Shared `claude-code-agent` Lambda |
-| Routing | N/A | `agent_type` parameter |
-| Output | Markdown/JSON | Rich event stream (tool use, thinking, artifacts) |
-| Frontend | Standard renderer | Custom renderer for events |
-| Timeout | Typically 5-10 min | Up to 15 min (Lambda max) |
-| Resources | Standard | High memory (3GB), large ephemeral storage (4GB) |
+| Aspect     | Traditional Apps      | Claude Code Apps                                  |
+| ---------- | --------------------- | ------------------------------------------------- |
+| Processing | Custom Lambda per app | Shared `claude-code-agent` Lambda                 |
+| Routing    | N/A                   | `agent_type` parameter                            |
+| Output     | Markdown/JSON         | Rich event stream (tool use, thinking, artifacts) |
+| Frontend   | Standard renderer     | Custom renderer for events                        |
+| Timeout    | Typically 5-10 min    | Up to 15 min (Lambda max)                         |
+| Resources  | Standard              | High memory (3GB), large ephemeral storage (4GB)  |
 
 ### Creating a New Claude Code Agent Type
 
@@ -451,17 +453,20 @@ AVAILABLE_AGENTS = [
 ## Key Files Reference
 
 ### Infrastructure
+
 - `/infra/constructs/apps/base-numa-app-construct.ts` - Base class for all apps
 - `/infra/constructs/types.ts` - TypeScript types for manifests
 - `/infra/stacks/numa-client-stack.ts` - App registration (search for `appLibrary`)
 - `/infra/constructs/apps/data-analysis-construct.ts` - Claude Code app example
 
 ### Lambdas
+
 - `/lambdas/python/claude-code-agent/` - Shared Lambda for Claude Code apps
 - `/lambdas/python/extract-content-from-file/` - Shared content extraction
 - `/lambdas/python/step-function-start/` - Step Function starter
 - `/lambdas/python/step-function-status/` - Status polling
 
 ### Frontend
+
 - `/numa-frontend/src/Services/manifestService.ts` - Manifest loading
 - `/numa-frontend/src/Pages/AppDetail.tsx` - App UI entry point

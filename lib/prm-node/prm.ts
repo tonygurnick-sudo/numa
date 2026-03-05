@@ -48,17 +48,12 @@ type AWSClientConstructor<T = any> = new (config: any) => T;
  * const dynamodb = withPRM(DynamoDBClient);
  * ```
  */
-export function withPRM<T extends AWSClientConstructor>(
-  ClientConstructor: T,
-  config: any = {}
-): InstanceType<T> {
+export function withPRM<T extends AWSClientConstructor>(ClientConstructor: T, config: any = {}): InstanceType<T> {
   // Merge PRM customUserAgent with any existing customUserAgent in config
   const existingUserAgent = config.customUserAgent || [];
   const mergedConfig = {
     ...config,
-    customUserAgent: Array.isArray(existingUserAgent)
-      ? [PRM_UA, ...existingUserAgent]
-      : [PRM_UA, existingUserAgent],
+    customUserAgent: Array.isArray(existingUserAgent) ? [PRM_UA, ...existingUserAgent] : [PRM_UA, existingUserAgent],
   };
 
   return new ClientConstructor(mergedConfig) as InstanceType<T>;

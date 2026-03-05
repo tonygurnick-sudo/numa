@@ -106,7 +106,7 @@ export class ContractAnalysis extends BaseNumaApp {
         ExtractContent: this.addExtractContentTaskWithArn(
           props.sharedExtractContentLambdaArn!,
           '$.contract_key',
-          'ContractAnalyzer',
+          'ContractAnalyzer'
         ),
         ContractAnalyzer: this.addLambdaTask(
           contractAnalysisLambda.arn,
@@ -122,7 +122,7 @@ export class ContractAnalysis extends BaseNumaApp {
           'WriteSuccessStatus',
           {
             OutputPath: '$.Payload',
-          },
+          }
         ),
         WriteFailureStatus: this.writeFailureStatus(),
         WriteSuccessStatus: this.writeSuccessStatus(),

@@ -203,7 +203,7 @@ const UserManagement = ({ embedded = false }: UserManagementProps) => {
           style={!isClickable ? { cursor: 'not-allowed', opacity: 0.6 } : {}}
         >
           {page}
-        </Pagination.Item>,
+        </Pagination.Item>
       );
     }
 
@@ -334,7 +334,7 @@ const UserManagement = ({ embedded = false }: UserManagementProps) => {
         fetchUsers,
         setUsersError,
         setDeletingUser,
-        qBusinessClient,
+        qBusinessClient
       );
     } catch (err) {
       console.error('Error deleting user:', err);

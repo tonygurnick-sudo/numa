@@ -91,7 +91,7 @@ const renderJobHistoryManager = () => {
   return renderWithProviders(
     <JobStatusProvider>
       <JobHistoryManager />
-    </JobStatusProvider>,
+    </JobStatusProvider>
   );
 };
 
@@ -112,7 +112,7 @@ describe('JobHistoryManager Component', () => {
       () => {
         expect(screen.getByText('Job History')).toBeInTheDocument();
       },
-      { timeout: 3000 },
+      { timeout: 3000 }
     );
   });
 
@@ -126,7 +126,7 @@ describe('JobHistoryManager Component', () => {
       () => {
         expect(screen.getByText('Job History')).toBeInTheDocument();
       },
-      { timeout: 3000 },
+      { timeout: 3000 }
     );
   });
 
@@ -142,7 +142,7 @@ describe('JobHistoryManager Component', () => {
         // When there are no jobs matching filters, we show the empty state
         expect(screen.getByText('No job history available matching your filters')).toBeInTheDocument();
       },
-      { timeout: 3000 },
+      { timeout: 3000 }
     );
 
     // We don't expect the API to be called in the test since we're mocking the context

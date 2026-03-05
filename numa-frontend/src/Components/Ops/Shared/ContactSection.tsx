@@ -106,7 +106,7 @@ export function ContactSection({ contacts, onChange }: ContactSectionProps): Rea
           if (byName !== 0) return byName;
           return a.index - b.index;
         }),
-    [contacts],
+    [contacts]
   );
 
   // ── Render ────────────────────────────────────────────────────────────────

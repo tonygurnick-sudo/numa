@@ -28,12 +28,14 @@ dynamodb = resource("dynamodb")
 ### Replace existing boto3 calls
 
 **Before:**
+
 ```python
 import boto3
 s3 = boto3.client("s3", region_name="us-east-1")
 ```
 
 **After:**
+
 ```python
 from prm import client
 s3 = client("s3", region="us-east-1")
@@ -42,6 +44,7 @@ s3 = client("s3", region="us-east-1")
 ## Configuration
 
 The product code is defined in `prm.py`:
+
 ```python
 PRODUCT_CODE = "cl23v3vsno0k35czlg7e3ld9p"
 ```

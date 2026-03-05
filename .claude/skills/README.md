@@ -47,13 +47,13 @@ Claude: Provides accurate, up-to-date guidance
 
 **You don't invoke skills manually.** Just ask naturally:
 
-| Your Question | Skill Activated |
-|---------------|-----------------|
-| "How do I create a new Numa app?" | `numa-apps` |
-| "What's the job status polling pattern?" | `numa-apps` |
-| "How do I create an agent?" | `numa-agents` |
-| "What's the agent database schema?" | `numa-agents` |
-| "Create a skill for X" | `skill-creator` |
+| Your Question                            | Skill Activated |
+| ---------------------------------------- | --------------- |
+| "How do I create a new Numa app?"        | `numa-apps`     |
+| "What's the job status polling pattern?" | `numa-apps`     |
+| "How do I create an agent?"              | `numa-agents`   |
+| "What's the agent database schema?"      | `numa-agents`   |
+| "Create a skill for X"                   | `skill-creator` |
 
 ## Available Skills
 
@@ -70,6 +70,7 @@ Comprehensive guide to Numa app development.
 **Activated by:** "create an app", "Step Function", "jobs", "manifest", "BaseNumaApp", "app construct"
 
 **Contains:**
+
 - `apps-creating.md` — Step-by-step guide to creating new apps (traditional & Claude Code apps)
 - `apps-backend-orchestration.md` — Step Functions, jobs system, S3/DynamoDB storage, status polling
 - `apps-frontend-integration.md` — React components, services, state management
@@ -81,6 +82,7 @@ Complete guide to Numa agents (AI chat wrappers with custom prompts and tools).
 **Activated by:** "create an agent", "agent builder", "AgentCreateModal", "agent API", "agent database", "agent tools config", "agent visibility"
 
 **Contains:**
+
 - `agents-overview.md` — How agents work as chat wrappers (not separate AI models)
 - `agents-frontend.md` — Agent builder form, UI components, services, types
 - `agents-backend.md` — CRUD APIs, chat integration, intent verification, security
@@ -95,7 +97,7 @@ Complete guide to Numa agents (AI chat wrappers with custom prompts and tools).
 
 ## Adding More Skills
 
-To create a new skill, just ask Claude: *"Create a skill for [topic]"* and it will use the `skill-creator` skill to scaffold it properly.
+To create a new skill, just ask Claude: _"Create a skill for [topic]"_ and it will use the `skill-creator` skill to scaffold it properly.
 
 ### Manual Creation
 
@@ -108,7 +110,6 @@ name: my-skill
 description: Brief description. Use when [trigger keywords].
 allowed-tools: Read, Write, Edit, Bash, Glob, Grep
 ---
-
 # My Skill
 
 Instructions and quick reference here...

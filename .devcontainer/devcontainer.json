@@ -30,7 +30,7 @@
   "mounts": [
     "source=${localEnv:HOME}${localEnv:USERPROFILE}/.aws,target=/home/vscode/.aws,type=bind,consistency=cached",
     "source=${localEnv:HOME}${localEnv:USERPROFILE}/.npmrc,target=/home/vscode/.npmrc,type=bind,consistency=cached",
-    "source=${localEnv:HOME}${localEnv:USERPROFILE}/.yarnrc.yml,target=/home/vscode/.yarnrc.yml,type=bind,consistency=cached",
+    "source=${localEnv:HOME}${localEnv:USERPROFILE}/.yarnrc.yml,target=/home/vscode/.yarnrc.yml,type=bind,consistency=cached"
     // The following are the mounts for poetry config from the host OS into the container. Uncomment the appropriate one for your system.
     // MacOS.
     // "source=${localEnv:HOME}/Library/Application Support/pypoetry/,target=/home/vscode/.config/pypoetry,type=bind,consistency=cached"

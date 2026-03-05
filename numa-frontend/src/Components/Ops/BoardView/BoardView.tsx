@@ -97,7 +97,7 @@ const BoardView = () => {
 
   const activeZone = useMemo(
     () => zones.find((z) => z.id === activeZoneId && z.zoneType === 'board') ?? null,
-    [zones, activeZoneId],
+    [zones, activeZoneId]
   );
 
   /** Filter tickets: only active zone, exclude archived, apply opt-in sprint filter */
@@ -122,7 +122,7 @@ const BoardView = () => {
 
   const planningUnits = useMemo(
     () => workUnits.filter((wu) => wu.status === 'planning' || wu.status === 'active'),
-    [workUnits],
+    [workUnits]
   );
 
   const [showAssignDropdown, setShowAssignDropdown] = useState(false);
@@ -158,8 +158,8 @@ const BoardView = () => {
               teamId: tk.teamId,
               workUnitId,
               version: tk.version,
-            }),
-          ),
+            })
+          )
         );
         await refreshTickets();
         setShowAssignDropdown(false);
@@ -169,7 +169,7 @@ const BoardView = () => {
         setAssigningToSprint(false);
       }
     },
-    [activeZone, assigningToSprint, filteredTickets, numaPut, refreshTickets],
+    [activeZone, assigningToSprint, filteredTickets, numaPut, refreshTickets]
   );
 
   /** Map: stageId -> zoneId (for resolving zone when dropping into a stage) */
@@ -187,7 +187,7 @@ const BoardView = () => {
     for (const zone of zones) {
       map.set(
         zone.id,
-        stages.filter((s) => s.zoneId === zone.id),
+        stages.filter((s) => s.zoneId === zone.id)
       );
     }
     return map;
@@ -198,7 +198,7 @@ const BoardView = () => {
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: { distance: 8 },
-    }),
+    })
   );
 
   // ── DnD Handlers ───────────────────────────────────────────────────
@@ -209,7 +209,7 @@ const BoardView = () => {
       const ticket = filteredTickets.find((tk) => tk.id === ticketId) ?? null;
       setActiveTicket(ticket);
     },
-    [filteredTickets],
+    [filteredTickets]
   );
 
   const handleDragEnd = useCallback(
@@ -253,8 +253,8 @@ const BoardView = () => {
         prev.map((tk) =>
           tk.id === ticketId
             ? { ...tk, stageId: newStageId, zoneId: newZoneId, order: newOrder, statusType: newStatusType }
-            : tk,
-        ),
+            : tk
+        )
       );
 
       try {
@@ -273,7 +273,7 @@ const BoardView = () => {
         await refreshTickets();
       }
     },
-    [filteredTickets, stageZoneMap, numaPut, refreshTickets, setTickets],
+    [filteredTickets, stageZoneMap, numaPut, refreshTickets, setTickets]
   );
 
   // ── Ticket interaction callbacks ──────────────────────────────────
@@ -303,7 +303,7 @@ const BoardView = () => {
         console.error('[BoardView] Failed to assign ticket:', err);
       }
     },
-    [tickets, numaPut, refreshTickets],
+    [tickets, numaPut, refreshTickets]
   );
 
   const handleContextMenuAction = useCallback(
@@ -393,7 +393,7 @@ const BoardView = () => {
         console.error('[BoardView] Context menu action failed:', err);
       }
     },
-    [ctxMenu.ticket, numaPut, refreshTickets, user, filteredTickets],
+    [ctxMenu.ticket, numaPut, refreshTickets, user, filteredTickets]
   );
 
   const handleQuickAdd = useCallback(
@@ -422,7 +422,7 @@ const BoardView = () => {
         console.error('[BoardView] Quick add failed:', err);
       }
     },
-    [team, config?.ticketTypes, stages, filteredTickets, numaPost, refreshTickets, selectedWorkUnitId],
+    [team, config?.ticketTypes, stages, filteredTickets, numaPost, refreshTickets, selectedWorkUnitId]
   );
 
   // ── Shared overlays (rendered regardless of board state) ─────────

@@ -51,7 +51,7 @@ describe('Breadcrumbs Component', () => {
           path: '/dash',
           label: 'Apps',
         }),
-      ]),
+      ])
     );
     expect(navigationStack).toHaveLength(1);
   });
@@ -78,7 +78,7 @@ describe('Breadcrumbs Component', () => {
           path: '/new/path',
           label: 'New Page',
         }),
-      ]),
+      ])
     );
     expect(actualStack).toHaveLength(2);
   });
@@ -112,7 +112,7 @@ describe('Breadcrumbs Component', () => {
             path: '/app/1/settings',
             label: 'Settings',
           }),
-        ]),
+        ])
       );
       expect(navigationStack).toHaveLength(3);
     });
@@ -311,7 +311,7 @@ describe('Breadcrumbs Component', () => {
           path: '/some/path',
           label: 'Apps',
         }),
-      ]),
+      ])
     );
   });
 });

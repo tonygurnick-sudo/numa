@@ -33,7 +33,7 @@ export function TicketCard({ ticket, onClick, onContextMenu, onAssign }: TicketC
       transition: transition ?? undefined,
       opacity: isDragging ? 0.4 : 1,
     }),
-    [transform, transition, isDragging],
+    [transform, transition, isDragging]
   );
 
   const ticketType = config?.ticketTypes.find((tt) => tt.id === ticket.ticketTypeId);
@@ -44,7 +44,7 @@ export function TicketCard({ ticket, onClick, onContextMenu, onAssign }: TicketC
 
   const assigneeStaff = useMemo(
     () => (ticket.assigneeId ? config?.staff?.find((s) => s.id === ticket.assigneeId) : undefined),
-    [ticket.assigneeId, config?.staff],
+    [ticket.assigneeId, config?.staff]
   );
 
   const handleClick = useCallback(() => {
@@ -55,7 +55,7 @@ export function TicketCard({ ticket, onClick, onContextMenu, onAssign }: TicketC
     (e: React.MouseEvent) => {
       onContextMenu(e, ticket);
     },
-    [onContextMenu, ticket],
+    [onContextMenu, ticket]
   );
 
   // ── Avatar assign picker state ──────────────────────────────────────────
@@ -92,7 +92,7 @@ export function TicketCard({ ticket, onClick, onContextMenu, onAssign }: TicketC
       }
       setShowAssignPicker((prev) => !prev);
     },
-    [onAssign],
+    [onAssign]
   );
 
   const handlePickAssignee = useCallback(
@@ -100,7 +100,7 @@ export function TicketCard({ ticket, onClick, onContextMenu, onAssign }: TicketC
       setShowAssignPicker(false);
       onAssign?.(ticket.id, assigneeId, ticket.version);
     },
-    [onAssign, ticket.id, ticket.version],
+    [onAssign, ticket.id, ticket.version]
   );
 
   const activeStaff = useMemo(() => config?.staff?.filter((s) => s.isActive) ?? [], [config?.staff]);
@@ -308,7 +308,7 @@ export function TicketCard({ ticket, onClick, onContextMenu, onAssign }: TicketC
                 </div>
               ))}
             </div>,
-            document.body,
+            document.body
           )}
       </div>
     </div>

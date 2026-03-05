@@ -53,6 +53,10 @@ export interface WorkspaceChatToolsConstructProps {
   chatSettingsTableName?: string;
   /** Chat settings table ARN (for IAM permissions) */
   chatSettingsTableArn?: string;
+  /** Vault audit log table name (for consolidated vault audit logging) */
+  vaultAuditLogTableName?: string;
+  /** Vault audit log table ARN (for IAM permissions) */
+  vaultAuditLogTableArn?: string;
 }
 
 /**
@@ -234,6 +238,35 @@ export class WorkspaceChatToolsConstruct extends Construct {
       });
     }
 
+    // DynamoDB permission for vault audit log table (consolidated vault audit logging)
+    if (props.vaultAuditLogTableArn) {
+      policyStatements.push({
+        sid: 'DynamoDBVaultAuditLog',
+        effect: 'Allow',
+        actions: ['dynamodb:PutItem', 'dynamodb:Query'],
+        resources: [props.vaultAuditLogTableArn],
+      });
+    }
+
+    // Secrets Manager permission for consolidated vault access
+    policyStatements.push({
+      sid: 'SecretsManagerVaultAccess',
+      effect: 'Allow',
+      actions: [
+        'secretsmanager:GetSecretValue',
+        'secretsmanager:PutSecretValue',
+        'secretsmanager:CreateSecret',
+        'secretsmanager:UpdateSecret',
+        'secretsmanager:DeleteSecret',
+        'secretsmanager:DescribeSecret',
+      ],
+      resources: [
+        `arn:aws:secretsmanager:*:*:secret:${props.clientName}/vault/users/*`,
+        `arn:aws:secretsmanager:*:*:secret:${props.clientName}/vault/company*`,
+        `arn:aws:secretsmanager:*:*:secret:${props.clientName}/vault/templates/*`,
+      ],
+    });
+
     // Lambda invoke permission for Pipedream relay (integration actions)
     if (props.pipedreamRelayLambdaArn) {
       policyStatements.push({
@@ -287,6 +320,11 @@ export class WorkspaceChatToolsConstruct extends Construct {
         ...(props.chatSettingsTableName && {
           CHAT_SETTINGS_TABLE_NAME: props.chatSettingsTableName,
         }),
+        // Consolidated vault configuration
+        ...(props.vaultAuditLogTableName && {
+          VAULT_AUDIT_LOG_TABLE_NAME: props.vaultAuditLogTableName,
+        }),
+        VAULT_SECRETS_PREFIX: `${props.clientName}/vault`,
         // Pipedream integrations (optional)
         INTEGRATIONS_APPROVAL_TABLE_NAME: props.integrationsApprovalTableName ?? '',
         PIPEDREAM_RELAY_LAMBDA_ARN: props.pipedreamRelayLambdaArn ?? '',

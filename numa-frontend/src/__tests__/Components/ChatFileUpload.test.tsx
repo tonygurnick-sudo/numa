@@ -153,7 +153,7 @@ describe('ChatFileUpload Component', () => {
           output_bucket: fileInfo.s3Bucket,
           documentInfo: { title: fileInfo.fileName },
         });
-      },
+      }
     );
   });
 
@@ -203,7 +203,7 @@ describe('ChatFileUpload Component', () => {
           user: expect.anything(),
         }),
         expect.any(Function),
-        expect.any(Function),
+        expect.any(Function)
       );
     });
 
@@ -226,7 +226,7 @@ describe('ChatFileUpload Component', () => {
           s3Key: 'test/path',
           s3Bucket: 'test-bucket',
           extractedContentS3Key: expect.any(String),
-        }),
+        })
       );
 
       expect(mockSetMessages).toHaveBeenCalled();

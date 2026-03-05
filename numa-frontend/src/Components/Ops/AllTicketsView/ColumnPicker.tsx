@@ -98,7 +98,7 @@ export function ColumnPicker({ show, onHide, columns, onColumnsChange }: ColumnP
       const updated = columns.map((c) => (c.id === id ? { ...c, visible: !c.visible } : c));
       onColumnsChange(updated);
     },
-    [columns, onColumnsChange],
+    [columns, onColumnsChange]
   );
 
   const moveColumn = useCallback(
@@ -129,7 +129,7 @@ export function ColumnPicker({ show, onHide, columns, onColumnsChange }: ColumnP
 
       onColumnsChange(reordered);
     },
-    [columns, onColumnsChange],
+    [columns, onColumnsChange]
   );
 
   const resetToDefaults = useCallback(() => {

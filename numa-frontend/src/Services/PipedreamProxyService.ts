@@ -44,7 +44,7 @@ export class PipedreamProxyService {
   static async getIntegrationStatus(
     lambdaClient: AwsLambdaClient,
     externalUserId: string,
-    options?: { forceRefresh?: boolean; ttlMs?: number },
+    options?: { forceRefresh?: boolean; ttlMs?: number }
   ): Promise<IntegrationStatusResult> {
     // Default to 30 seconds for safety; callers that want longer cache explicitly override
     const { forceRefresh = false, ttlMs = 30_000 } = options || {};
@@ -135,7 +135,7 @@ export class PipedreamProxyService {
    */
   static async generateConnectToken(
     lambdaClient: AwsLambdaClient,
-    externalUserId: string,
+    externalUserId: string
   ): Promise<ConnectTokenResult> {
     const payload: PipedreamProxyRequest = {
       operation: 'generate_connect_token',
@@ -164,7 +164,7 @@ export class PipedreamProxyService {
   static async listMcpTools(
     lambdaClient: AwsLambdaClient,
     externalUserId: string,
-    appName: string,
+    appName: string
   ): Promise<{ tools: { name: string; description?: string }[] }> {
     const payload: PipedreamProxyRequest = {
       operation: 'list_mcp_tools',
@@ -173,7 +173,7 @@ export class PipedreamProxyService {
     };
     const response = await this.invokePipedreamProxy<{ tools: { name: string; description?: string }[] }>(
       lambdaClient,
-      payload,
+      payload
     );
     if (!response.success) {
       throw new Error(response.error || i18n.t('errors:pipedream.listToolsFailed'));
@@ -184,7 +184,7 @@ export class PipedreamProxyService {
   static async getMcpPolicy(
     lambdaClient: AwsLambdaClient,
     externalUserId: string,
-    appName: string,
+    appName: string
   ): Promise<{ mode: 'deny' | 'allow'; denyTools: string[] }> {
     const payload: PipedreamProxyRequest = {
       operation: 'get_mcp_policy',
@@ -193,7 +193,7 @@ export class PipedreamProxyService {
     };
     const response = await this.invokePipedreamProxy<{ mode: 'deny' | 'allow'; denyTools: string[] }>(
       lambdaClient,
-      payload,
+      payload
     );
     if (!response.success) {
       throw new Error(response.error || i18n.t('errors:pipedream.getPolicyFailed'));
@@ -205,7 +205,7 @@ export class PipedreamProxyService {
     lambdaClient: AwsLambdaClient,
     externalUserId: string,
     appName: string,
-    policy: { mode: 'deny' | 'allow'; denyTools: string[] },
+    policy: { mode: 'deny' | 'allow'; denyTools: string[] }
   ): Promise<void> {
     const payload: PipedreamProxyRequest = {
       operation: 'set_mcp_policy',
@@ -227,7 +227,7 @@ export class PipedreamProxyService {
   static async disconnectIntegration(
     lambdaClient: AwsLambdaClient,
     externalUserId: string,
-    params: { appName?: string; accountId?: string },
+    params: { appName?: string; accountId?: string }
   ): Promise<DisconnectIntegrationData> {
     const payload: PipedreamProxyRequest = {
       operation: 'disconnect_integration',
@@ -255,7 +255,7 @@ export class PipedreamProxyService {
    */
   static async invokePipedreamProxy<T = unknown>(
     lambdaClient: AwsLambdaClient,
-    payload: PipedreamProxyRequest,
+    payload: PipedreamProxyRequest
   ): Promise<ApiResponse<T>> {
     // Get relay lambda ARN from session storage (set by ConfigSetup)
     const relayLambdaArn = sessionStorage.getItem('PIPEDREAM_RELAY_LAMBDA_ARN');
@@ -283,7 +283,7 @@ export class PipedreamProxyService {
         throw new Error(
           i18n.t('errors:pipedream.relayExecutionFailed', {
             message: responsePayload.body?.error || i18n.t('errors:unknown'),
-          }),
+          })
         );
       }
 

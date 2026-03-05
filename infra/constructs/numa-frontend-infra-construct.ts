@@ -143,7 +143,7 @@ export class NumaFrontendInfra extends Construct {
       'lambdas',
       'node',
       'api-gateway-authorizer',
-      'lambda_function.zip',
+      'lambda_function.zip'
     );
     const lambdaNameSuffix = '_' + name + '_authorizer-lambda';
     const authorizerLambda = new LambdaFunction(this, 'authorizer-lambda', {
@@ -332,7 +332,7 @@ export class NumaFrontendInfra extends Construct {
       const docsOriginDomain = Fn.replace(
         Fn.replace(this.openApiDocs.functionUrl.functionUrl, '/^https?:\/{2}/', ''),
         '/\/$/',
-        '',
+        ''
       );
       origins.push({
         customHeader: [{ name: 'x-arcanum-cloudfront-secret', value: cloudfrontSecretParameter.value }],
@@ -354,7 +354,7 @@ export class NumaFrontendInfra extends Construct {
       const workspaceChatProxyDomain = Fn.replace(
         Fn.replace(props.workspaceChatAgentProxyUrl, '/^https?:\/{2}/', ''),
         '/\/$/',
-        '',
+        ''
       );
       origins.push({
         customHeader: [{ name: 'x-arcanum-cloudfront-secret', value: cloudfrontSecretParameter.value }],

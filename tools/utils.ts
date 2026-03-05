@@ -36,7 +36,7 @@ export interface QInstanceDetails {
 
 export async function getQInstanceDetails(
   awsClientConfig: AWSClientConfig,
-  customerName?: string,
+  customerName?: string
 ): Promise<QInstanceDetails> {
   const applicationId = await getQApplicationId(awsClientConfig, customerName);
   const indexId = await getQIndexId(awsClientConfig, applicationId);
@@ -74,7 +74,7 @@ async function getQIndexId(awsClientConfig: AWSClientConfig, applicationId: stri
     await qBusiness.send(
       new ListIndicesCommand({
         applicationId,
-      }),
+      })
     )
   ).indices;
   if (hasExactlyOne(indices, 'index')) {
@@ -85,7 +85,7 @@ async function getQIndexId(awsClientConfig: AWSClientConfig, applicationId: stri
 async function getQDataSourceId(
   awsClientConfig: AWSClientConfig,
   applicationId: string,
-  indexId: string,
+  indexId: string
 ): Promise<string> {
   console.log('Get Q data source ID');
   const qBusiness = withPRM(QBusinessClient, awsClientConfig);
@@ -94,7 +94,7 @@ async function getQDataSourceId(
       new ListDataSourcesCommand({
         applicationId,
         indexId,
-      }),
+      })
     )
   ).dataSources.filter((dataSource) => dataSource.type == 'S3');
   if (hasExactlyOne(dataSources, 'data source')) {
@@ -105,7 +105,7 @@ async function getQDataSourceId(
 async function getQDataBucket(awsClientConfig: AWSClientConfig, customerName?: string): Promise<string> {
   const s3 = withPRM(S3Client, awsClientConfig);
   const buckets = (await s3.send(new ListBucketsCommand())).Buckets.filter((bucket) =>
-    bucket.Name.match(/^numa-.*-data$/),
+    bucket.Name.match(/^numa-.*-data$/)
   );
   if (customerName) customerName += '-data';
   return (
@@ -125,7 +125,7 @@ export async function getQUserPool(awsClientConfig: AWSClientConfig, customerNam
     await client.send(
       new ListUserPoolsCommand({
         MaxResults: 60,
-      }),
+      })
     )
   ).UserPools;
   return (
@@ -165,7 +165,7 @@ interface FilterProps<T> {
 async function customerNameFilter<T>(props: FilterProps<T>): Promise<T> {
   if (props.customerName) {
     const filteredCollection = await props.collection.filter((collectionObject) =>
-      collectionObject[props.nameName].match(`^numa-${props.customerName}$`),
+      collectionObject[props.nameName].match(`^numa-${props.customerName}$`)
     );
     if (hasExactlyOne(filteredCollection, props.resource)) {
       return filteredCollection[0];

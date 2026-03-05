@@ -1,4 +1,3 @@
-
 @use '../abstracts/mixins' as *;
 
 .dashboard.apps-grid-page {
@@ -152,289 +151,271 @@
 }
 
 .app-search-container {
+  width: 100%;
+  margin: 1rem auto 0.75rem;
+  padding: 0.75rem;
+  background: linear-gradient(180deg, #ffffff 0%, #fcfcfd 100%);
+  border: 1px solid #e4e4e7;
+  border-radius: 14px;
+  box-shadow: none;
+
+  @include mobile {
+    padding: 0.625rem;
+    border-radius: 12px;
+  }
+
+  .search-form {
     width: 100%;
-    margin: 1rem auto 0.75rem;
-    padding: 0.75rem;
-    background: linear-gradient(180deg, #ffffff 0%, #fcfcfd 100%);
+  }
+
+  .search-input-wrapper {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    width: 100%;
+    min-height: 46px;
+    background: #ffffff;
     border: 1px solid #e4e4e7;
-    border-radius: 14px;
-    box-shadow: none;
+    border-radius: 12px;
+    padding-left: 2.5rem;
+    transition:
+      border-color 0.16s ease,
+      background-color 0.16s ease;
 
-    @include mobile {
-      padding: 0.625rem;
-      border-radius: 12px;
-    }
-
-    .search-form {
-      width: 100%;
-    }
-
-    .search-input-wrapper {
-      position: relative;
-      display: flex;
-      align-items: center;
-      gap: 1rem;
-      width: 100%;
-      min-height: 46px;
+    &:focus-within {
+      border-color: color-mix(in srgb, var(--brand-primary, var(--color-magenta-700)) 55%, #d4d4d8 45%);
+      box-shadow: none;
       background: #ffffff;
-      border: 1px solid #e4e4e7;
-      border-radius: 12px;
-      padding-left: 2.5rem;
-      transition: border-color 0.16s ease, background-color 0.16s ease;
-
-      &:focus-within {
-        border-color: color-mix(in srgb, var(--brand-primary, var(--color-magenta-700)) 55%, #d4d4d8 45%);
-        box-shadow: none;
-        background: #ffffff;
-
-        .search-icon {
-          color: var(--brand-primary, var(--color-magenta-700));
-        }
-      }
 
       .search-icon {
-        position: absolute;
-        left: 0.9rem;
+        color: var(--brand-primary, var(--color-magenta-700));
+      }
+    }
+
+    .search-icon {
+      position: absolute;
+      left: 0.9rem;
+      color: #a1a1aa;
+      font-size: 0.95rem;
+      z-index: 1;
+      pointer-events: none;
+      transition: color 0.16s ease;
+    }
+
+    .search-indicator {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.75rem 1rem;
+      color: var(--color-magenta-700);
+      font-size: 0.875rem;
+      border-left: 1px solid var(--color-gray-200);
+      background: rgba(var(--color-magenta-700-rgb), 0.03);
+
+      i {
+        font-size: 1rem;
+      }
+    }
+
+    .search-input {
+      flex: 1;
+      padding: 0.7rem 0.9rem 0.7rem 0;
+      border: none;
+      border-radius: 8px;
+      font-size: 0.95rem;
+      line-height: 1.4;
+      color: #18181b;
+      background: transparent;
+      transition: color 0.16s ease;
+
+      &::placeholder {
         color: #a1a1aa;
-        font-size: 0.95rem;
-        z-index: 1;
-        pointer-events: none;
-        transition: color 0.16s ease;
       }
 
-      .search-indicator {
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-        padding: 0.75rem 1rem;
-        color: var(--color-magenta-700);
-        font-size: 0.875rem;
-        border-left: 1px solid var(--color-gray-200);
-        background: rgba(var(--color-magenta-700-rgb), 0.03);
+      &:focus {
+        outline: none;
+      }
+    }
 
-        i {
-          font-size: 1rem;
-        }
+    .search-button {
+      padding: 0.75rem 1.5rem;
+      background: var(--color-magenta-700);
+      border: none;
+      border-radius: 8px;
+      color: white;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+
+      &:hover {
+        opacity: 0.9;
       }
 
-      .search-input {
-        flex: 1;
-        padding: 0.7rem 0.9rem 0.7rem 0;
-        border: none;
-        border-radius: 8px;
-        font-size: 0.95rem;
-        line-height: 1.4;
-        color: #18181b;
-        background: transparent;
-        transition: color 0.16s ease;
+      i {
+        font-size: 1.125rem;
+      }
+    }
+  }
 
-        &::placeholder {
-          color: #a1a1aa;
-        }
+  .filter-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-top: 1rem;
 
-        &:focus {
-          outline: none;
-        }
+    .filter-tag {
+      background: var(--color-lt-gray);
+      border: none;
+      padding: 0.5rem 1rem;
+      border-radius: 20px;
+      font-size: 0.875rem;
+      font-weight: 500;
+      color: var(--color-text);
+      cursor: pointer;
+      transition: all 0.2s ease;
+
+      &:hover {
+        opacity: 0.8;
       }
 
-      .search-button {
-        padding: 0.75rem 1.5rem;
-        background: var(--color-magenta-700);
-        border: none;
-        border-radius: 8px;
+      &.active {
+        background: var(--color-primary);
         color: white;
-        font-weight: 500;
-        cursor: pointer;
-        transition: all 0.2s ease;
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
 
         &:hover {
           opacity: 0.9;
         }
-
-        i {
-          font-size: 1.125rem;
-        }
       }
     }
+  }
 
-    .filter-tags {
+  .filter-controls {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: 1rem;
+
+    .category-filters {
       display: flex;
+      gap: 0.75rem;
       flex-wrap: wrap;
-      gap: 0.5rem;
-      margin-top: 1rem;
+      align-items: center;
+      padding: 0 1rem 1rem;
 
-      .filter-tag {
-        background: var(--color-lt-gray);
-        border: none;
-        padding: 0.5rem 1rem;
-        border-radius: 20px;
+      .category-filter {
+        height: 2.25rem;
+        display: inline-flex;
+        align-items: center;
+        padding: 0.375rem 1rem;
         font-size: 0.875rem;
+        line-height: 1.5;
+        border-radius: 20px;
         font-weight: 500;
-        color: var(--color-text);
-        cursor: pointer;
+        border: 1px solid var(--color-gray-200);
         transition: all 0.2s ease;
 
         &:hover {
-          opacity: 0.8;
+          background-color: var(--brand-primary, var(--color-primary));
+          color: var(--brand-primaryContrast, white);
         }
 
-        &.active {
-          background: var(--color-primary);
-          color: white;
+        &[data-category='legal'] {
+          &.active {
+            background: var(--color-orange);
+            border-color: var(--color-orange);
+            color: white;
+          }
+        }
 
-          &:hover {
-            opacity: 0.9;
+        &[data-category='productivity'] {
+          &.active {
+            background: var(--color-primary);
+            border-color: var(--color-primary);
+            color: white;
+          }
+        }
+
+        &[data-category='finance'] {
+          &.active {
+            background: var(--color-royal-900);
+            border-color: var(--color-royal-900);
+            color: white;
+          }
+        }
+
+        &[data-category='compliance'] {
+          &.active {
+            background: var(--color-blue);
+            border-color: var(--color-blue);
+            color: white;
+          }
+        }
+
+        &[data-category='hr'] {
+          &.active {
+            background: var(--color-green-700);
+            border-color: var(--color-green-700);
+            color: white;
+          }
+        }
+
+        &[data-category='general'] {
+          &.active {
+            background: var(--color-magenta-700);
+            border-color: var(--color-magenta-700);
+            color: white;
+          }
+
+          &.clear {
+            background: none;
+            border: 1px solid #e9ecef;
+            color: var(--color-gray-700);
+            border-radius: 0.25rem;
+
+            &:hover {
+              color: var(--color-gray-900);
+              border-color: #dee2e6;
+              background-color: var(--color-gray-50);
+            }
+
+            .bi-x {
+              font-size: 1.1em;
+            }
           }
         }
       }
-    }
 
-    .filter-controls {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      margin-top: 1rem;
-
-      .category-filters {
-        display: flex;
-        gap: 0.75rem;
-        flex-wrap: wrap;
-        align-items: center;
-        padding: 0 1rem 1rem;
-
-        .category-filter {
+      .dropdown {
+        .dropdown-toggle {
           height: 2.25rem;
-          display: inline-flex;
-          align-items: center;
+          border-color: #e9ecef;
+          color: var(--color-gray-700);
           padding: 0.375rem 1rem;
           font-size: 0.875rem;
           line-height: 1.5;
-          border-radius: 20px;
-          font-weight: 500;
-          border: 1px solid var(--color-gray-200);
-          transition: all 0.2s ease;
+          display: inline-flex;
+          align-items: center;
 
-          &:hover {
-            background-color: var(--brand-primary, var(--color-primary));
-            color: var(--brand-primaryContrast, white);
+          &:hover,
+          &:focus {
+            background-color: var(--color-gray-50);
+            border-color: #dee2e6;
           }
 
-          &[data-category='legal'] {
-            &.active {
-              background: var(--color-orange);
-              border-color: var(--color-orange);
-              color: white;
-            }
-          }
-
-          &[data-category='productivity'] {
-            &.active {
-              background: var(--color-primary);
-              border-color: var(--color-primary);
-              color: white;
-            }
-          }
-
-          &[data-category='finance'] {
-            &.active {
-              background: var(--color-royal-900);
-              border-color: var(--color-royal-900);
-              color: white;
-            }
-          }
-
-          &[data-category='compliance'] {
-            &.active {
-              background: var(--color-blue);
-              border-color: var(--color-blue);
-              color: white;
-            }
-          }
-
-          &[data-category='hr'] {
-            &.active {
-              background: var(--color-green-700);
-              border-color: var(--color-green-700);
-              color: white;
-            }
-          }
-
-          &[data-category='general'] {
-            &.active {
-              background: var(--color-magenta-700);
-              border-color: var(--color-magenta-700);
-              color: white;
-            }
-
-            &.clear {
-              background: none;
-              border: 1px solid #e9ecef;
-              color: var(--color-gray-700);
-              border-radius: 0.25rem;
-
-              &:hover {
-                color: var(--color-gray-900);
-                border-color: #dee2e6;
-                background-color: var(--color-gray-50);
-              }
-
-              .bi-x {
-                font-size: 1.1em;
-              }
-            }
-          }
-        }
-
-        .dropdown {
-          .dropdown-toggle {
-            height: 2.25rem;
-            border-color: #e9ecef;
-            color: var(--color-gray-700);
-            padding: 0.375rem 1rem;
-            font-size: 0.875rem;
-            line-height: 1.5;
-            display: inline-flex;
-            align-items: center;
-
-            &:hover,
-            &:focus {
-              background-color: var(--color-gray-50);
-              border-color: #dee2e6;
-            }
-
-            &::after {
-              margin-left: 0.5rem;
-            }
+          &::after {
+            margin-left: 0.5rem;
           }
         }
       }
     }
+  }
 
-    .card-apps {
-      .header-right {
-        .favorite-button {
-          cursor: pointer;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-
-          &:hover {
-            transform: scale(1.1);
-            transition: transform 0.2s ease;
-          }
-
-          svg {
-            font-size: 1.2rem;
-
-            &.text-warning {
-              filter: drop-shadow(0 0 2px rgba(255, 193, 7, 0.3));
-            }
-          }
-        }
-      }
+  .card-apps {
+    .header-right {
       .favorite-button {
         cursor: pointer;
         display: flex;
@@ -446,106 +427,126 @@
           transition: transform 0.2s ease;
         }
 
-        &.fav-active {
-          svg {
+        svg {
+          font-size: 1.2rem;
+
+          &.text-warning {
             filter: drop-shadow(0 0 2px rgba(255, 193, 7, 0.3));
           }
         }
       }
     }
+    .favorite-button {
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
 
-    // Title star icon
-    svg.title-star {
-      width: 32px;
-      height: 32px;
-      vertical-align: baseline;
-      margin-right: 0.5rem;
-      margin-top: -4px;
-      filter: drop-shadow(0 0 3px rgba(255, 193, 7, 0.4));
-      animation: star-pulse 2s infinite;
-    }
-
-    @keyframes star-pulse {
-      0% {
-        transform: scale(1);
-      }
-      50% {
+      &:hover {
         transform: scale(1.1);
+        transition: transform 0.2s ease;
       }
-      100% {
-        transform: scale(1);
-      }
-    }
-  }
 
-  .category-filters {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.5rem;
-
-    .category-filter {
-      &.clear {
-        background: none;
-        border: 1px solid #e9ecef;
-        color: var(--color-gray-700);
-        padding: 0.375rem 0.75rem;
-        font-size: 0.875rem;
-        display: flex;
-        align-items: center;
-        border-radius: 0.25rem;
-
-        &:hover {
-          color: var(--color-gray-900);
-          border-color: #dee2e6;
-          background-color: var(--color-gray-50);
-        }
-
-        .bi-x {
-          font-size: 1.1em;
+      &.fav-active {
+        svg {
+          filter: drop-shadow(0 0 2px rgba(255, 193, 7, 0.3));
         }
       }
     }
   }
+
+  // Title star icon
+  svg.title-star {
+    width: 32px;
+    height: 32px;
+    vertical-align: baseline;
+    margin-right: 0.5rem;
+    margin-top: -4px;
+    filter: drop-shadow(0 0 3px rgba(255, 193, 7, 0.4));
+    animation: star-pulse 2s infinite;
+  }
+
+  @keyframes star-pulse {
+    0% {
+      transform: scale(1);
+    }
+    50% {
+      transform: scale(1.1);
+    }
+    100% {
+      transform: scale(1);
+    }
+  }
+}
+
+.category-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
 
   .category-filter {
-    background: #e4e4e4;
-    border: none;
-    border-radius: 20px;
-    padding: 0.25rem 1rem;
-    font-size: 0.875rem;
-    color: var(--color-gray-700);
-    cursor: pointer;
-    transition: all 0.2s ease;
+    &.clear {
+      background: none;
+      border: 1px solid #e9ecef;
+      color: var(--color-gray-700);
+      padding: 0.375rem 0.75rem;
+      font-size: 0.875rem;
+      display: flex;
+      align-items: center;
+      border-radius: 0.25rem;
 
-    &:hover {
-      opacity: 0.9;
-    }
-
-    &.active {
-      color: white;
-
-      &[data-category='legal'] {
-        background: #f9d400;
+      &:hover {
+        color: var(--color-gray-900);
+        border-color: #dee2e6;
+        background-color: var(--color-gray-50);
       }
 
-      &[data-category='productivity'] {
-        background: #9d64b5;
-      }
-
-      &[data-category='finance'] {
-        background: #026aa2;
-      }
-
-      &[data-category='compliance'] {
-        background: #56bcf2;
-      }
-
-      &[data-category='hr'] {
-        background: #28a07c;
-      }
-
-      &[data-category='general'] {
-        background: #b386c5;
+      .bi-x {
+        font-size: 1.1em;
       }
     }
   }
+}
+
+.category-filter {
+  background: #e4e4e4;
+  border: none;
+  border-radius: 20px;
+  padding: 0.25rem 1rem;
+  font-size: 0.875rem;
+  color: var(--color-gray-700);
+  cursor: pointer;
+  transition: all 0.2s ease;
+
+  &:hover {
+    opacity: 0.9;
+  }
+
+  &.active {
+    color: white;
+
+    &[data-category='legal'] {
+      background: #f9d400;
+    }
+
+    &[data-category='productivity'] {
+      background: #9d64b5;
+    }
+
+    &[data-category='finance'] {
+      background: #026aa2;
+    }
+
+    &[data-category='compliance'] {
+      background: #56bcf2;
+    }
+
+    &[data-category='hr'] {
+      background: #28a07c;
+    }
+
+    &[data-category='general'] {
+      background: #b386c5;
+    }
+  }
+}

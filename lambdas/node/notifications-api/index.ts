@@ -124,7 +124,7 @@ const listNotifications = async (userId: string): Promise<EventNotification[]> =
         // Note: DynamoDB sorts by notification_id (UUID), not time.
         // Frontend sorts by created_at for correct chronological order.
         // TTL auto-cleans notifications after 90 days.
-      }),
+      })
     );
     allItems.push(...((result.Items || []) as EventNotification[]));
     lastEvaluatedKey = result.LastEvaluatedKey as Record<string, unknown> | undefined;
@@ -153,7 +153,7 @@ const getUnreadCount = async (userId: string): Promise<number> => {
         },
         Select: 'COUNT',
         ExclusiveStartKey: lastEvaluatedKey,
-      }),
+      })
     );
     totalCount += result.Count || 0;
     lastEvaluatedKey = result.LastEvaluatedKey as Record<string, unknown> | undefined;
@@ -165,7 +165,7 @@ const getUnreadCount = async (userId: string): Promise<number> => {
 const updateNotification = async (
   auth: AuthContext,
   notificationId: string,
-  payload: unknown,
+  payload: unknown
 ): Promise<EventNotification | undefined> => {
   const validatedPayload = validateUpdateNotificationPayload(payload);
 
@@ -190,7 +190,7 @@ const updateNotification = async (
       ExpressionAttributeValues: expressionAttributeValues,
       ReturnValues: 'ALL_NEW',
       ConditionExpression: 'attribute_exists(user_id) AND attribute_exists(notification_id)',
-    }),
+    })
   );
 
   return result.Attributes as EventNotification | undefined;
@@ -205,6 +205,6 @@ const deleteNotification = async (auth: AuthContext, notificationId: string): Pr
         notification_id: notificationId,
       },
       ConditionExpression: 'attribute_exists(user_id) AND attribute_exists(notification_id)',
-    }),
+    })
   );
 };

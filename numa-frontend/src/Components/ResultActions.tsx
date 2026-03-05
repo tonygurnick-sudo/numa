@@ -375,7 +375,7 @@ const ResultActions: React.FC<ResultActionsProps> = ({ content, title, appType =
             row
               .split('|')
               .map((cell) => cell.trim())
-              .filter((cell) => cell),
+              .filter((cell) => cell)
           );
 
         if (tableRows.length > 0) {
@@ -431,7 +431,7 @@ const ResultActions: React.FC<ResultActionsProps> = ({ content, title, appType =
                   margin + (colIndex + 1) * colWidth,
                   currentY - 1,
                   margin + (colIndex + 1) * colWidth,
-                  currentY + rowHeight - 1,
+                  currentY + rowHeight - 1
                 );
               }
             });
@@ -625,7 +625,7 @@ const ResultActions: React.FC<ResultActionsProps> = ({ content, title, appType =
         t('resultActions.kbUploadSuccess', {
           fileName,
           kbName: selectedKB?.kb_name || t('resultActions.yourKnowledgeBase'),
-        }),
+        })
       );
       setModalStep('success');
     } catch (err: unknown) {

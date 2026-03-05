@@ -57,8 +57,8 @@ describe('File Processing Utils', () => {
         {
           status: 200,
           headers: { 'Content-Type': 'application/json' },
-        },
-      ),
+        }
+      )
     );
 
     // Mock fetchFileFromS3 to simulate successful file fetch from S3
@@ -69,9 +69,9 @@ describe('File Processing Utils', () => {
             JSON.stringify({
               pages: [{ text: 'Page 1 content' }, { text: 'Page 2 content' }],
               documentInfo: { title: 'Test Document' },
-            }),
+            })
           ),
-      }),
+      })
     );
 
     // Mock doesObjectExist to simulate polling behavior
@@ -130,7 +130,7 @@ describe('File Processing Utils', () => {
           output_bucket: 'input-bucket',
           output_key: expect.stringContaining('input/timeout.pdf.json'),
           file_name: 'timeout.pdf',
-        }),
+        })
       );
 
       // Verify S3 polling was attempted
@@ -140,7 +140,7 @@ describe('File Processing Utils', () => {
       expect(result).toEqual(
         expect.objectContaining({
           s3Key: 'input/timeout.pdf',
-        }),
+        })
       );
     });
   });

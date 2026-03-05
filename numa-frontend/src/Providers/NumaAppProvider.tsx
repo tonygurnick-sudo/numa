@@ -159,7 +159,7 @@ export const NumaAppProvider = ({ children }) => {
         if (append) {
           // Filter out any duplicates when appending
           const newJobs = sortedJobs.filter(
-            (newJob) => !prevJobs.some((existingJob) => existingJob.jobId === newJob.jobId),
+            (newJob) => !prevJobs.some((existingJob) => existingJob.jobId === newJob.jobId)
           );
           return [...prevJobs, ...newJobs];
         }
@@ -304,7 +304,7 @@ export const NumaAppProvider = ({ children }) => {
           (file) =>
             file &&
             // Check either standardized format (s3_key) or legacy format (filePath)
-            ((file.id && file.name && file.s3_key) || (file.randomId && file.fileName && file.filePath)),
+            ((file.id && file.name && file.s3_key) || (file.randomId && file.fileName && file.filePath))
         )) ||
         // Check legacy string format
         (typeof uploadedFiles === 'string' && uploadedFiles.length > 0) ||
@@ -1060,7 +1060,7 @@ export const NumaAppProvider = ({ children }) => {
       addSyntheticEvent(
         i18n.t('apps:processing.errorWithMessage', {
           message: error.message || i18n.t('errors:unknown'),
-        }),
+        })
       );
       setProcessingStatus(i18n.t('apps:processing.error'));
       setProcessingProgress(0);
@@ -1297,7 +1297,7 @@ export const NumaAppProvider = ({ children }) => {
           if (firstTaskWithResults) {
             // Find the task index in the filtered tasks list
             const visibleTasks = manifestToUse.tasks.filter(
-              (task) => !task.hidden && task.type !== 'q-app' && task.type !== 'http-request',
+              (task) => !task.hidden && task.type !== 'q-app' && task.type !== 'http-request'
             );
             const taskIndex = visibleTasks.findIndex((t) => t.id === firstTaskWithResults.taskId);
             if (taskIndex !== -1) {
@@ -1417,7 +1417,7 @@ export const NumaAppProvider = ({ children }) => {
       addSyntheticEvent(
         i18n.t('apps:processing.errorWithMessage', {
           message: error.message || i18n.t('errors:unknown'),
-        }),
+        })
       );
       throw new Error(i18n.t('apps:errors.startFollowUpFailed'));
     } finally {

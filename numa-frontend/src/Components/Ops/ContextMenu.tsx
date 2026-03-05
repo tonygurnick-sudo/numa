@@ -38,7 +38,7 @@ const ContextMenu = ({
     (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose();
     },
-    [onClose],
+    [onClose]
   );
 
   const handleMouseDown = useCallback(
@@ -47,7 +47,7 @@ const ContextMenu = ({
         onClose();
       }
     },
-    [onClose],
+    [onClose]
   );
 
   useEffect(() => {

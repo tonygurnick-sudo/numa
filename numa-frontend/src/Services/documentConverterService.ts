@@ -21,7 +21,7 @@ export const convertDocument = async (
   numaPost: NumaPost,
   markdown: string,
   format: 'docx' | 'pdf',
-  title?: string,
+  title?: string
 ): Promise<ConvertDocumentResponse> => {
   const response = (await numaPost('/api/document-converter', {
     markdown,

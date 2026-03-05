@@ -52,7 +52,7 @@ describe('S3 Utilities', () => {
 
     // Call the function and expect it to throw
     await expect(fetchFileFromS3(mockS3Key, mockS3Bucket, mockRegion, mockGetIdentityPoolCredentials)).rejects.toThrow(
-      'AWS Credentials are missing.',
+      'AWS Credentials are missing.'
     );
   });
 });

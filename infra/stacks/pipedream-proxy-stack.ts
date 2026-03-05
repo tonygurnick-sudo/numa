@@ -272,7 +272,7 @@ export class PipedreamProxyStack extends TerraformStack {
       'lambdas',
       'python',
       'pipedream-proxy',
-      'lambda_function.zip',
+      'lambda_function.zip'
     );
     this.proxyLambda = new LambdaFunction(this, 'pipedream-proxy-lambda', {
       functionName: 'pipedream-proxy',
@@ -312,7 +312,7 @@ export class PipedreamProxyStack extends TerraformStack {
       'lambdas',
       'python',
       'pipedream-account-sync',
-      'lambda_function.zip',
+      'lambda_function.zip'
     );
     this.accountSyncLambda = new LambdaFunction(this, 'pipedream-account-sync-lambda', {
       functionName: 'pipedream-account-sync',

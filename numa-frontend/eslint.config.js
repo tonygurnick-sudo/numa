@@ -8,7 +8,7 @@ import importPlugin from 'eslint-plugin-import';
 import i18nextPlugin from 'eslint-plugin-i18next';
 import tsParser from '@typescript-eslint/parser';
 import tsPlugin from '@typescript-eslint/eslint-plugin';
-import { eslintBase } from '@arcanumai/style';
+// Remove eslintBase to avoid prettier conflicts - root prettier is source of truth
 
 // ✅ Keep ESLint out of third-party & generated files
 const IGNORES = {
@@ -232,5 +232,8 @@ export default [
     },
   },
 
-  ...eslintBase,
+  // Standard ignores (from @arcanumai/style but without prettier conflicts)
+  {
+    ignores: ['build/**', 'dist/**', '**/*.d.ts', '**/.venv/**', '.vite', 'cdktf.out', '.gen'],
+  },
 ];

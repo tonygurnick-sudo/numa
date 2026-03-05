@@ -134,6 +134,55 @@
       }
     }
   }
+
+  // Activity chart bars (daily & hourly)
+  .activity-chart-card {
+    .activity-chart-bars {
+      display: flex;
+      align-items: flex-end;
+      margin-bottom: 1rem;
+
+      &--daily {
+        gap: 0.5rem;
+        height: 200px;
+      }
+
+      &--hourly {
+        gap: 0.25rem;
+        height: 150px;
+      }
+    }
+
+    .activity-chart-bar-col {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.25rem;
+    }
+
+    .activity-chart-bar {
+      width: 100%;
+      border-radius: 4px 4px 0 0;
+
+      &--daily {
+        background-color: #0d6efd;
+      }
+
+      &--hourly {
+        background-color: #198754;
+      }
+    }
+
+    .activity-chart-label {
+      font-size: 0.75rem;
+      color: var(--bs-secondary);
+
+      &--hourly {
+        font-size: 0.65rem;
+      }
+    }
+  }
 }
 
 .shared-analytics-loading,

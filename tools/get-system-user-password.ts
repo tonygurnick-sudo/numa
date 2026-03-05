@@ -22,7 +22,7 @@ if (import.meta.filename === process.argv[1]) {
       new GetSecretValueCommand({
         SecretId: `${clientId}-system-user-password`,
         VersionStage: 'AWSCURRENT',
-      }),
+      })
     )
   ).SecretString;
   console.log(JSON.parse(secret).password);

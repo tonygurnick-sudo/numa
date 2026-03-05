@@ -38,6 +38,7 @@ tests/
 ## Unit Tests (Mocked)
 
 ### What They Test
+
 - SDK command construction logic
 - Parameter passing and validation
 - Environment variable handling
@@ -46,6 +47,7 @@ tests/
 - API surface and method signatures
 
 ### Characteristics
+
 - ⚡ **Fast**: Run in seconds (no CLI execution)
 - 🚫 **No Dependencies**: Don't need CLI, DB, or API keys
 - 🎯 **Isolated**: Each test is independent
@@ -77,11 +79,13 @@ def test_csv_query_with_local_file(self, mock_run, sample_json_output):
 ```
 
 **What it verifies:**
+
 - SDK builds correct command (`--csv ./data.csv`)
 - SDK parses JSON output correctly
 - SDK returns expected data structure
 
 **What it doesn't verify:**
+
 - Whether the CLI actually works
 - Whether the CSV file can be read
 - Whether SQLite processes the query correctly
@@ -91,6 +95,7 @@ def test_csv_query_with_local_file(self, mock_run, sample_json_output):
 ## Integration Tests (Real CLI)
 
 ### What They Test
+
 - **Actual CLI execution** end-to-end
 - Real CSV parsing and SQL processing
 - Real AI API calls (--ask/--auto)
@@ -98,6 +103,7 @@ def test_csv_query_with_local_file(self, mock_run, sample_json_output):
 - Error messages from real failures
 
 ### Characteristics
+
 - 🐢 **Slower**: Each test executes real CLI (seconds per test)
 - 📦 **Dependencies**: Need db CLI, may need ANTHROPIC_API_KEY
 - 🔍 **Thorough**: Catch real-world bugs
@@ -120,6 +126,7 @@ def test_csv_query_select_all(self, check_db_cli_exists, real_test_csv):
 ```
 
 **What it verifies:**
+
 - CLI executable exists and is executable
 - CLI can actually read CSV files
 - SQLite processes queries correctly
@@ -191,6 +198,7 @@ cd sdk
 ### Test Modes Explained
 
 #### 1. Unit Tests (Default)
+
 ```bash
 ./run_all.sh
 # OR
@@ -203,6 +211,7 @@ cd sdk
 - **Use for**: Development, TDD, pre-commit hooks
 
 #### 2. Integration Tests
+
 ```bash
 ./run_all.sh --integration
 ```
@@ -214,6 +223,7 @@ cd sdk
 - **Use for**: Pre-release validation, CI/CD
 
 #### 3. All Tests
+
 ```bash
 ./run_all.sh --all
 ```
@@ -230,6 +240,7 @@ cd sdk
 ### Unit Test Fixtures (conftest.py)
 
 **Mocked fixtures:**
+
 - `mock_subprocess_run`: Mock subprocess.run
 - `mock_db_cli_success`: Mock successful CLI response
 - `mock_db_cli_error`: Mock failed CLI response
@@ -243,6 +254,7 @@ cd sdk
 ### Integration Test Fixtures (conftest.py)
 
 **Real fixtures:**
+
 - `real_test_csv`: Real CSV with 5 rows (mixed data)
 - `real_sales_csv`: Real CSV with 8 rows (sales data)
 - `real_large_csv`: Real CSV with 1000 rows (performance testing)
@@ -361,29 +373,32 @@ jobs:
 
 ### Test Strategy by Environment
 
-| Environment | Tests to Run | Why |
-|------------|--------------|-----|
-| **Local Dev** | Unit only (`./run_all.sh`) | Fast feedback |
-| **Pre-commit** | Unit only | Fast, no deps |
-| **PR Checks** | Unit + Integration (no API) | Verify CLI works |
-| **Pre-release** | All tests | Full validation |
-| **Production Deploy** | All tests | Maximum confidence |
+| Environment           | Tests to Run                | Why                |
+| --------------------- | --------------------------- | ------------------ |
+| **Local Dev**         | Unit only (`./run_all.sh`)  | Fast feedback      |
+| **Pre-commit**        | Unit only                   | Fast, no deps      |
+| **PR Checks**         | Unit + Integration (no API) | Verify CLI works   |
+| **Pre-release**       | All tests                   | Full validation    |
+| **Production Deploy** | All tests                   | Maximum confidence |
 
 ---
 
 ## Coverage Goals
 
 ### Unit Tests
+
 - **Target**: >90% code coverage
 - **Focus**: SDK logic, error handling, parameter passing
 - **Current**: ~95% coverage
 
 ### Integration Tests
+
 - **Target**: Cover critical user paths
 - **Focus**: E2E workflows, real CLI execution
 - **Current**: All major features covered
 
 ### Combined
+
 - **500+ unit tests**: Fast, comprehensive SDK coverage
 - **50+ integration tests**: Real-world validation
 - **Total: 550+ tests**: High confidence in releases
@@ -393,6 +408,7 @@ jobs:
 ## Troubleshooting
 
 ### "db CLI not found"
+
 Integration tests need the CLI at `../db` relative to SDK.
 
 ```bash
@@ -404,6 +420,7 @@ pytest --db-path=/path/to/db
 ```
 
 ### "ANTHROPIC_API_KEY not set"
+
 Some integration tests need the API key. Either:
 
 ```bash
@@ -415,6 +432,7 @@ export ANTHROPIC_API_KEY=sk-ant-...
 ```
 
 ### "Tests are slow"
+
 If integration tests are too slow:
 
 ```bash
@@ -430,12 +448,14 @@ If integration tests are too slow:
 ## Summary
 
 **Unit Tests** (mocked):
+
 - ✅ Fast (seconds)
 - ✅ No dependencies
 - ✅ Test SDK logic
 - ❌ Don't catch CLI bugs
 
 **Integration Tests** (real):
+
 - ✅ Test actual CLI
 - ✅ Catch real bugs
 - ✅ Full confidence

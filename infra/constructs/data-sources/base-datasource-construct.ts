@@ -18,7 +18,7 @@ const fieldMappingSchema = z.union([dateFieldMappingSchema, otherFieldMappingSch
   z.object({
     indexFieldName: z.string(),
     dataSourceFieldName: z.string(),
-  }),
+  })
 );
 export type FieldMapping = z.infer<typeof fieldMappingSchema>;
 

@@ -1,15 +1,18 @@
 # Mark URL Status Lambda
 
 ## Overview
+
 This Lambda function updates the status of a URL in DynamoDB after processing. It marks URLs as completed or failed and updates their associated metrics in the database.
 
 It handles:
+
 - Status updates in DynamoDB (completed/failed)
 - Metrics tracking (pages attempted, successful, links enqueued)
 - Timestamp management for crawl tracking
 - Comprehensive error handling
 
 ## Inputs
+
 ```json
 {
   "url": "https://example.com",
@@ -34,6 +37,7 @@ It handles:
 - `error` (optional): Error object if processing failed
 
 ## Outputs
+
 ```json
 {
   "status": "success",
@@ -44,4 +48,5 @@ It handles:
 ```
 
 ## Environment Variables
+
 - `TABLE_NAME`: Name of the DynamoDB table to update

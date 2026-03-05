@@ -67,7 +67,7 @@ export class NumaLogGroup extends Construct {
         {
           policyDocument: Token.asString(logPublishingPolicy.json),
           policyName: `numa-cloudwatchlogs-resource-policy_${cloudwatchResourcePolicyKey}`,
-        },
+        }
       );
     }
   }

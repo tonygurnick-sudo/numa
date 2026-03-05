@@ -119,7 +119,7 @@ export function AttachmentsSection({ ticketId }: AttachmentsSectionProps): React
             } catch {
               return att;
             }
-          }),
+          })
         );
         if (!cancelled) setFiles(withUrls);
       } catch {
@@ -183,7 +183,7 @@ export function AttachmentsSection({ ticketId }: AttachmentsSectionProps): React
         setUploading(false);
       }
     },
-    [numaPost, numaGet, ticketId, t],
+    [numaPost, numaGet, ticketId, t]
   );
 
   const handleFiles = useCallback(
@@ -191,7 +191,7 @@ export function AttachmentsSection({ ticketId }: AttachmentsSectionProps): React
       if (!fileList || fileList.length === 0) return;
       for (const file of Array.from(fileList)) void uploadFile(file);
     },
-    [uploadFile],
+    [uploadFile]
   );
 
   const handleDrop = useCallback(
@@ -200,7 +200,7 @@ export function AttachmentsSection({ ticketId }: AttachmentsSectionProps): React
       setDragOver(false);
       handleFiles(e.dataTransfer.files);
     },
-    [handleFiles],
+    [handleFiles]
   );
 
   // ── Open viewer ───────────────────────────────────────────────────────────

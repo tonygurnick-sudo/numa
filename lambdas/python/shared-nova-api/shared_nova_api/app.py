@@ -1,18 +1,26 @@
 """
-Shared Nova API - FastAPI application for public document Q&A.
+Shared Nova API - FastAPI application for public document Q&A and Drop Zones.
 
 Provides:
-- POST /shared - Create a share (authenticated via Cognito JWT)
-- GET /shared/{uuid} - Get share info (public)
+- POST /shared - Create a share or drop zone (authenticated via Cognito JWT)
+- GET /shared/{uuid} - Get share/drop zone info (public)
 - POST /shared/{uuid}/chat - Stream chat responses (public)
+- POST /shared/{uuid}/auth - Authenticate to a drop zone (passcode)
+- POST /shared/{uuid}/upload - Get presigned upload URL for drop zone
+- POST /shared/{uuid}/upload/confirm - Confirm upload completed
+- GET /shared/{uuid}/files - List uploaded files in a drop zone
 """
 
 from __future__ import annotations
 
+import hashlib
+import hmac
 import json
 import os
+import secrets
 import time
 from datetime import datetime, timezone
+from decimal import Decimal
 from typing import Any, AsyncGenerator, Dict
 from urllib.parse import parse_qs, unquote, urlparse
 from uuid import uuid4
@@ -39,10 +47,17 @@ MODEL_ID = os.environ.get("MODEL_ID", "global.amazon.nova-2-lite-v1:0")
 USER_POOL_ID = os.environ.get("COGNITO_USER_POOL_ID", "")
 USER_POOL_CLIENT_ID = os.environ.get("COGNITO_USER_POOL_CLIENT_ID", "")
 OUTPUTS_BUCKET_NAME = os.environ.get("OUTPUTS_BUCKET_NAME", "")
+DATA_BUCKET_NAME = os.environ.get("DATA_BUCKET_NAME", "")
+BEDROCK_KNOWLEDGE_BASE_ID = os.environ.get("BEDROCK_KNOWLEDGE_BASE_ID", "")
+CLIENT_NAME = os.environ.get("CLIENT_NAME", "")
+
+# Secret key for signing drop zone auth tokens (generated per Lambda instance)
+_DROPZONE_TOKEN_SECRET = secrets.token_hex(32)
 
 # Clients (lazily initialized)
 _dynamodb_table = None
 _bedrock_client = None
+_bedrock_kb_client = None
 _s3_client = None
 _jwks_cache: Dict[str, Any] = {"data": None}
 
@@ -150,6 +165,7 @@ class CreateShareRequest(BaseModel):
     description: str | None = None  # Brief description shown on share page
     enable_chat: bool = True  # Whether AI chat is enabled on the share page
     allow_download: bool = True  # Whether document download is allowed
+    kb_id: str | None = None  # Optional Knowledge Base ID for enhanced chat
 
 
 class CreateShareResponse(BaseModel):
@@ -171,6 +187,8 @@ class ShareInfoResponse(BaseModel):
     description: str | None = None
     enable_chat: bool = True
     allow_download: bool = True
+    max_calls: int | None = None  # None = unlimited
+    call_count: int = 0
 
 
 class ShareListItem(BaseModel):
@@ -186,12 +204,62 @@ class ShareListItem(BaseModel):
     view_count: int = 0
     enable_chat: bool = True
     allow_download: bool = True
+    # Drop zone fields (optional — only present for dropzone shares)
+    share_type: str = "document"
+    upload_count: int | None = None
+    total_quota_mb: int | None = None
+    used_quota_mb: float | None = None
+    folder_path: str | None = None
+    auth_mode: str | None = None
+    passcode: str | None = None  # Plain passcode for owner display
+    max_calls: int | None = None
 
 
 class ShareListResponse(BaseModel):
     """Response body for listing shares."""
 
     shares: list[ShareListItem]
+
+
+class CreateDropZoneRequest(BaseModel):
+    """Request body for creating a drop zone."""
+
+    folder_path: str  # User-facing folder path (e.g., "/reports/")
+    s3_folder_prefix: str  # S3 prefix where uploads land
+    instructions: str = ""  # Markdown instructions for uploaders
+    auth_mode: str = "passcode"  # 'none' | 'passcode' | 'email'
+    passcode: str | None = None  # Plain text passcode (hashed before storing)
+    expiry_hours: int | None = None
+    max_file_size_mb: int | None = None
+    total_quota_mb: int | None = None
+    allowed_extensions: list[str] | None = None
+    enable_api: bool = True
+    enable_chat: bool = True
+    description: str | None = None
+    max_calls: int | None = None  # Max chat questions (None = unlimited)
+    kb_id: str | None = None  # Optional Knowledge Base ID for chat
+
+
+class DropZoneAuthRequest(BaseModel):
+    """Request body for authenticating to a drop zone."""
+
+    passcode: str
+
+
+class DropZoneUploadRequest(BaseModel):
+    """Request body for requesting a presigned upload URL."""
+
+    filename: str
+    content_type: str = "application/octet-stream"
+    size_bytes: int
+
+
+class DropZoneUploadConfirmRequest(BaseModel):
+    """Request body for confirming a completed upload."""
+
+    file_id: str
+    filename: str
+    size_bytes: int
 
 
 class ChatRequest(BaseModel):
@@ -283,11 +351,30 @@ def fetch_document(s3_signed_url: str) -> str:
     For PDFs and other binary formats, invokes the extract-content-from-file Lambda.
     For text-based formats, fetches content directly.
     """
-    # Check if this is a PDF or other format that needs extraction
+    # Check if this is a binary format that needs extraction
     url_path = urlparse(s3_signed_url).path.lower()
-    needs_extraction = any(
-        url_path.endswith(ext) for ext in [".pdf", ".docx", ".xlsx", ".pptx"]
-    )
+    _BINARY_EXTENSIONS = [
+        ".pdf",
+        ".docx",
+        ".xlsx",
+        ".pptx",
+        ".png",
+        ".jpg",
+        ".jpeg",
+        ".gif",
+        ".webp",
+        ".bmp",
+        ".msg",
+        ".mp3",
+        ".mp4",
+        ".wav",
+        ".flac",
+        ".ogg",
+        ".amr",
+        ".webm",
+        ".m4a",
+    ]
+    needs_extraction = any(url_path.endswith(ext) for ext in _BINARY_EXTENSIONS)
 
     if needs_extraction:
         return _extract_document_content(s3_signed_url)
@@ -637,6 +724,81 @@ def get_or_extract_document_text(share: dict[str, Any]) -> str:
     return document_text
 
 
+# ── Drop Zone Helpers ──────────────────────────────────────────────────────
+
+
+def _hash_passcode(passcode: str) -> str:
+    """Hash a passcode using PBKDF2-HMAC-SHA256 with a random salt.
+
+    Returns a string in the format "salt:hash" (both hex-encoded).
+    """
+    salt = secrets.token_hex(16)
+    dk = hashlib.pbkdf2_hmac("sha256", passcode.encode(), salt.encode(), 100_000)
+    return f"{salt}:{dk.hex()}"
+
+
+def _verify_passcode(passcode: str, stored_hash: str) -> bool:
+    """Verify a passcode against a stored PBKDF2-HMAC-SHA256 hash."""
+    try:
+        salt, expected_hash = stored_hash.split(":", 1)
+        dk = hashlib.pbkdf2_hmac("sha256", passcode.encode(), salt.encode(), 100_000)
+        return hmac.compare_digest(dk.hex(), expected_hash)
+    except (ValueError, AttributeError):
+        return False
+
+
+def _create_dropzone_token(uuid: str, expires_in: int = 3600) -> str:
+    """Create a simple HMAC-signed token for drop zone authentication.
+
+    Returns a token string: "uuid:expiry:signature" (hex-encoded signature).
+    """
+    expiry = int(time.time()) + expires_in
+    payload = f"{uuid}:{expiry}"
+    sig = hmac.new(
+        _DROPZONE_TOKEN_SECRET.encode(), payload.encode(), hashlib.sha256
+    ).hexdigest()
+    return f"{payload}:{sig}"
+
+
+def _verify_dropzone_token(token: str, expected_uuid: str) -> bool:
+    """Verify a drop zone auth token."""
+    try:
+        parts = token.split(":")
+        if len(parts) != 3:
+            return False
+        uuid_part, expiry_str, signature = parts
+        if uuid_part != expected_uuid:
+            return False
+        expiry = int(expiry_str)
+        if time.time() > expiry:
+            return False
+        payload = f"{uuid_part}:{expiry_str}"
+        expected_sig = hmac.new(
+            _DROPZONE_TOKEN_SECRET.encode(), payload.encode(), hashlib.sha256
+        ).hexdigest()
+        return hmac.compare_digest(signature, expected_sig)
+    except (ValueError, AttributeError):
+        return False
+
+
+def _check_dropzone_auth(share: dict[str, Any], authorization: str | None) -> None:
+    """Check if the request is authorized to access a drop zone.
+
+    Raises HTTPException if auth is required and the token is invalid/missing.
+    For auth_mode='none', this is a no-op.
+    """
+    auth_mode = share.get("auth_mode", "none")
+    if auth_mode == "none":
+        return
+
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Authentication required")
+
+    token = authorization[7:]
+    if not _verify_dropzone_token(token, share["uuid"]):
+        raise HTTPException(status_code=401, detail="Invalid or expired token")
+
+
 # ── API Endpoints ───────────────────────────────────────────────────────────
 
 
@@ -669,25 +831,41 @@ async def create_share(
     logger.info("Parsed S3 coordinates", bucket=s3_bucket, key=s3_key)
 
     # Determine share expiry: None = permanent (no auto-deletion)
+    # Always use the user's explicit expiry_hours selection — the presigned URL
+    # expiry (~1 hour) is unrelated to the share's intended lifetime.
     expiry: int | None = None
     if body.expiry_hours is not None:
-        url_expiry = extract_s3_expiry(body.s3_signed_url)
-        fallback_expiry = int(time.time()) + (body.expiry_hours * 3600)
-
-        if url_expiry > int(time.time()):
-            expiry = url_expiry
-            logger.info("Using pre-signed URL expiry", expiry=expiry)
-        else:
-            expiry = fallback_expiry
-            logger.info("Using expiry_hours fallback", expiry=expiry)
+        expiry = int(time.time()) + (body.expiry_hours * 3600)
+        logger.info(
+            "Share expiry set from expiry_hours", expiry=expiry, hours=body.expiry_hours
+        )
     else:
         logger.info("Permanent share — no expiry set")
 
-    # Check if file needs binary extraction (PDF, DOCX, etc.)
+    # Check if file needs binary extraction (PDF, images, Office docs, audio/video, etc.)
     url_path = urlparse(body.s3_signed_url).path.lower()
-    needs_extraction = any(
-        url_path.endswith(ext) for ext in [".pdf", ".docx", ".xlsx", ".pptx"]
-    )
+    _BINARY_EXTENSIONS = [
+        ".pdf",
+        ".docx",
+        ".xlsx",
+        ".pptx",
+        ".png",
+        ".jpg",
+        ".jpeg",
+        ".gif",
+        ".webp",
+        ".bmp",
+        ".msg",
+        ".mp3",
+        ".mp4",
+        ".wav",
+        ".flac",
+        ".ogg",
+        ".amr",
+        ".webm",
+        ".m4a",
+    ]
+    needs_extraction = any(url_path.endswith(ext) for ext in _BINARY_EXTENSIONS)
 
     client_name = get_client_name()
 
@@ -715,6 +893,8 @@ async def create_share(
         item["description"] = body.description
     item["enable_chat"] = body.enable_chat
     item["allow_download"] = body.allow_download
+    if body.kb_id:
+        item["kb_id"] = body.kb_id
 
     if needs_extraction:
         # Check if the Files system already extracted this document.
@@ -808,6 +988,99 @@ def get_client_name() -> str:
     return ""
 
 
+@app.post("/api/shared/create-dropzone")
+async def create_dropzone(
+    body: CreateDropZoneRequest,
+    authorization: str | None = Header(None),
+):
+    """Create a new drop zone (authenticated endpoint).
+
+    A drop zone is a shared folder that external users can upload files to.
+    Unlike document shares, drop zones don't require file extraction.
+    """
+    user_id = validate_jwt(authorization)
+    share_uuid = str(uuid4())
+
+    expiry: int | None = None
+    if body.expiry_hours is not None:
+        expiry = int(time.time()) + (body.expiry_hours * 3600)
+
+    client_name = get_client_name()
+
+    item: Dict[str, Any] = {
+        "uuid": share_uuid,
+        "share_type": "dropzone",
+        "status": "ready",
+        "folder_path": body.folder_path,
+        "s3_folder_prefix": body.s3_folder_prefix,
+        "instructions": body.instructions,
+        "auth_mode": body.auth_mode,
+        "enable_api": body.enable_api,
+        "enable_chat": body.enable_chat,
+        "upload_count": 0,
+        "used_quota_mb": Decimal("0"),
+        "uploaded_files": [],
+        "call_count": 0,
+        "view_count": 0,
+        "created_at": int(time.time()),
+        "created_by": user_id,
+        "client_name": client_name,
+        # Store bucket/key info for consistency with document shares
+        "s3_bucket": (
+            DATA_BUCKET_NAME.split(":")[-1]
+            if DATA_BUCKET_NAME.startswith("arn:")
+            else DATA_BUCKET_NAME
+        ),
+        "s3_key": body.s3_folder_prefix,
+    }
+
+    if expiry is not None:
+        item["expiry"] = expiry
+    if body.description:
+        item["description"] = body.description
+    if body.max_file_size_mb is not None:
+        item["max_file_size_mb"] = body.max_file_size_mb
+    if body.total_quota_mb is not None:
+        item["total_quota_mb"] = body.total_quota_mb
+    if body.allowed_extensions:
+        item["allowed_extensions"] = body.allowed_extensions
+
+    if body.max_calls is not None:
+        item["max_calls"] = body.max_calls
+    if body.kb_id:
+        item["kb_id"] = body.kb_id
+
+    # Hash and store passcode (keep plain copy for owner display)
+    if body.auth_mode == "passcode" and body.passcode:
+        item["passcode_hash"] = _hash_passcode(body.passcode)
+        item["passcode_plain"] = body.passcode
+
+    table = get_dynamodb_table()
+    table.put_item(Item=item)
+
+    expires_at = (
+        datetime.fromtimestamp(expiry, tz=timezone.utc).isoformat()
+        if expiry is not None
+        else None
+    )
+
+    logger.info(
+        "Drop zone created",
+        uuid=share_uuid,
+        folder_path=body.folder_path,
+        auth_mode=body.auth_mode,
+        expires_at=expires_at or "permanent",
+        created_by=user_id,
+    )
+
+    return {
+        "uuid": share_uuid,
+        "expires_at": expires_at,
+        "status": "ready",
+        "share_type": "dropzone",
+    }
+
+
 @app.get("/api/shared/list", response_model=ShareListResponse)
 async def list_shares(authorization: str | None = Header(None)):
     """List all shares created by the authenticated user.
@@ -830,8 +1103,15 @@ async def list_shares(authorization: str | None = Header(None)):
         raw_expiry = item.get("expiry")
         expiry = int(raw_expiry) if raw_expiry is not None else None
 
-        s3_key = item.get("s3_key", "")
-        name = s3_key.split("/")[-1] if "/" in s3_key else "Shared document"
+        share_type = item.get("share_type", "document")
+
+        if share_type == "dropzone":
+            name = item.get("description") or item.get("folder_path", "/")
+            if name == "/":
+                name = "Drop Zone"
+        else:
+            s3_key = item.get("s3_key", "")
+            name = s3_key.split("/")[-1] if "/" in s3_key else "Shared document"
 
         expires_at = (
             datetime.fromtimestamp(expiry, tz=timezone.utc).isoformat()
@@ -839,24 +1119,44 @@ async def list_shares(authorization: str | None = Header(None)):
             else None
         )
 
-        shares.append(
-            ShareListItem(
-                uuid=item["uuid"],
-                name=name,
-                description=item.get("description", "") or "",
-                status=item.get("status", "ready"),
-                created_at=(
-                    float(item["created_at"]) if item.get("created_at") else None
+        # Build dropzone-specific fields
+        dropzone_fields: dict = {}
+        if share_type == "dropzone":
+            dropzone_fields = {
+                "upload_count": int(item.get("upload_count", 0)),
+                "total_quota_mb": (
+                    int(item["total_quota_mb"])
+                    if item.get("total_quota_mb") is not None
+                    else None
                 ),
-                expires_at=expires_at,
-                call_count=int(item.get("call_count", 0)),
-                view_count=int(item.get("view_count", 0)),
-                enable_chat=item.get("enable_chat", True),
-                allow_download=item.get("allow_download", True),
-            )
-        )
+                "used_quota_mb": float(item.get("used_quota_mb", 0)),
+                "folder_path": item.get("folder_path", "/"),
+                "auth_mode": item.get("auth_mode", "none"),
+                "passcode": item.get("passcode_plain"),
+                "max_calls": (
+                    int(item["max_calls"])
+                    if item.get("max_calls") is not None
+                    else None
+                ),
+            }
 
-    return ShareListResponse(shares=shares)
+        share_item = ShareListItem(
+            uuid=item["uuid"],
+            name=name,
+            description=item.get("description", "") or "",
+            status=item.get("status", "ready"),
+            created_at=(float(item["created_at"]) if item.get("created_at") else None),
+            expires_at=expires_at,
+            call_count=int(item.get("call_count", 0)),
+            view_count=int(item.get("view_count", 0)),
+            enable_chat=item.get("enable_chat", True),
+            allow_download=item.get("allow_download", True),
+            share_type=share_type,
+            **dropzone_fields,
+        )
+        shares.append(share_item)
+
+    return {"shares": shares}
 
 
 @app.get("/api/shared/activity")
@@ -985,7 +1285,7 @@ def record_view_event(
         logger.warning("Failed to record view event", uuid=share_uuid, error=str(e))
 
 
-@app.get("/api/shared/{uuid}", response_model=ShareInfoResponse)
+@app.get("/api/shared/{uuid}")
 async def get_share_info(uuid: str, request: Request):
     """Get share information (public endpoint)."""
     share = get_share(uuid)
@@ -1020,6 +1320,45 @@ async def get_share_info(uuid: str, request: Request):
     # Determine status (default "ready" for backward compat with existing shares)
     status = share.get("status", "ready")
 
+    # Check if this is a drop zone — return early before document-specific logic
+    share_type = share.get("share_type", "document")
+
+    if share_type == "dropzone":
+        # Return dropzone-specific response (no document URL needed)
+        return {
+            "uuid": uuid,
+            "share_type": "dropzone",
+            "status": status,
+            "expires_at": expires_at,
+            "client_name": client_name,
+            "description": share.get("description"),
+            "instructions": share.get("instructions", ""),
+            "auth_mode": share.get("auth_mode", "none"),
+            "enable_chat": share.get("enable_chat", False),
+            "enable_api": share.get("enable_api", True),
+            "folder_path": share.get("folder_path", "/"),
+            "upload_count": int(share.get("upload_count", 0)),
+            "max_file_size_mb": (
+                int(share["max_file_size_mb"])
+                if share.get("max_file_size_mb") is not None
+                else None
+            ),
+            "total_quota_mb": (
+                int(share["total_quota_mb"])
+                if share.get("total_quota_mb") is not None
+                else None
+            ),
+            "used_quota_mb": float(share.get("used_quota_mb", 0)),
+            "allowed_extensions": share.get("allowed_extensions"),
+            "view_count": int(share.get("view_count", 0)),
+            "max_calls": (
+                int(share["max_calls"]) if share.get("max_calls") is not None else None
+            ),
+            "call_count": int(share.get("call_count", 0)),
+        }
+
+    # ── Document share logic (extraction check + URL generation) ──
+
     # If still processing, check if extraction has completed in S3
     if status == "processing":
         result = _check_and_complete_extraction(share)
@@ -1032,21 +1371,26 @@ async def get_share_info(uuid: str, request: Request):
 
     if s3_bucket and s3_key:
         try:
-            fresh_url = generate_fresh_signed_url(s3_bucket, s3_key, expires_in=3600)
-            logger.info("Regenerated fresh pre-signed URL", uuid=uuid)
+            # Cap URL TTL at share's remaining time so URLs don't outlive the share
+            url_ttl = 3600
+            if expiry is not None:
+                remaining = int(expiry - time.time())
+                url_ttl = max(min(remaining, 3600), 60)
+            fresh_url = generate_fresh_signed_url(s3_bucket, s3_key, expires_in=url_ttl)
+            logger.info("Regenerated fresh pre-signed URL", uuid=uuid, url_ttl=url_ttl)
         except Exception as e:
             logger.warning(
                 "Failed to regenerate URL, falling back to stored URL",
                 uuid=uuid,
                 error=str(e),
             )
-            fresh_url = share["s3_signed_url"]
+            fresh_url = share.get("s3_signed_url", "")
     else:
         # Legacy share without bucket/key — use stored URL (may be expired)
         logger.warning(
             "Legacy share without s3_bucket/s3_key, using stored URL", uuid=uuid
         )
-        fresh_url = share["s3_signed_url"]
+        fresh_url = share.get("s3_signed_url", "")
 
     # Read permission flags (default True for backward compat with existing shares)
     allow_download = share.get("allow_download", True)
@@ -1063,7 +1407,57 @@ async def get_share_info(uuid: str, request: Request):
         description=share.get("description"),
         enable_chat=enable_chat,
         allow_download=allow_download,
+        max_calls=(
+            int(share["max_calls"]) if share.get("max_calls") is not None else None
+        ),
+        call_count=int(share.get("call_count", 0)),
     )
+
+
+def get_bedrock_kb_client():
+    """Get Bedrock Agent Runtime client for KB retrieval with PRM tracking."""
+    global _bedrock_kb_client  # pylint: disable=global-statement
+    if _bedrock_kb_client is None:
+        _bedrock_kb_client = prm_client("bedrock-agent-runtime", region=REGION)
+    return _bedrock_kb_client
+
+
+def query_knowledge_base(query: str, kb_id: str, max_results: int = 5) -> str:
+    """Query Bedrock KB with tenant+kb_id filter.
+
+    Returns combined text from retrieval results, or empty string on failure.
+    Falls back silently so chat can continue with document-only context.
+    """
+    if not BEDROCK_KNOWLEDGE_BASE_ID or not CLIENT_NAME:
+        return ""
+    try:
+        kb_client = get_bedrock_kb_client()
+        resp = kb_client.retrieve(
+            knowledgeBaseId=BEDROCK_KNOWLEDGE_BASE_ID,
+            retrievalQuery={"text": query},
+            retrievalConfiguration={
+                "vectorSearchConfiguration": {
+                    "numberOfResults": max_results,
+                    "filter": {
+                        "andAll": [
+                            {"equals": {"key": "tenant_id", "value": CLIENT_NAME}},
+                            {"equals": {"key": "kb_id", "value": kb_id}},
+                        ]
+                    },
+                }
+            },
+        )
+        pieces = [
+            item["content"]["text"]
+            for item in resp.get("retrievalResults", [])
+            if item.get("content", {}).get("text")
+        ]
+        return "\n\n".join(pieces)
+    except Exception as e:
+        logger.error(
+            "KB retrieval failed, falling back to doc-only", error=str(e), kb_id=kb_id
+        )
+        return ""
 
 
 @app.post("/api/shared/{uuid}/chat")
@@ -1089,25 +1483,59 @@ async def chat(uuid: str, body: ChatRequest, request: Request):
     if expiry is not None and time.time() > expiry:
         raise HTTPException(status_code=410, detail="Share expired")
 
-    # Check extraction status before allowing chat
-    status = share.get("status", "ready")
-    if status == "processing":
-        # Check if extraction just completed
-        result = _check_and_complete_extraction(share)
-        if not result:
-            raise HTTPException(
-                status_code=202, detail="Document is still being processed"
+    # For drop zones, use instructions as the document context
+    share_type = share.get("share_type", "document")
+    is_dropzone = share_type == "dropzone"
+
+    if is_dropzone:
+        # Drop zones use instructions + description as the "document"
+        instructions = share.get("instructions", "")
+        description = share.get("description", "")
+        if description and instructions:
+            document_text = (
+                f"Description: {description}\n\nUpload Instructions:\n{instructions}"
             )
-        # Extraction just completed — use the returned text
-        document_text = result
-    elif status == "error":
-        raise HTTPException(
-            status_code=502,
-            detail=share.get("error_message", "Document extraction failed"),
+        elif description:
+            document_text = f"Description: {description}"
+        else:
+            document_text = instructions
+        if not document_text:
+            raise HTTPException(
+                status_code=400, detail="No instructions configured for this drop zone"
+            )
+        # Use a specialized system prompt for drop zone instruction chat
+        system_prompt = (
+            "You are a helpful assistant answering questions about upload instructions "
+            "for a file drop zone. Help the user understand what files they need to "
+            "upload, any requirements or formatting guidelines, and answer any questions "
+            "about the process. Be concise and friendly."
         )
     else:
-        # Ready state — load document text (from S3 for large docs, DynamoDB for small)
-        document_text = _load_document_text(share)
+        system_prompt = share.get(
+            "system_prompt",
+            "You are a helpful assistant that answers questions about the shared document.",
+        )
+
+    # Check extraction status before allowing chat (document shares only)
+    if not is_dropzone:
+        status = share.get("status", "ready")
+        if status == "processing":
+            # Check if extraction just completed
+            result = _check_and_complete_extraction(share)
+            if not result:
+                raise HTTPException(
+                    status_code=202, detail="Document is still being processed"
+                )
+            # Extraction just completed — use the returned text
+            document_text = result
+        elif status == "error":
+            raise HTTPException(
+                status_code=502,
+                detail=share.get("error_message", "Document extraction failed"),
+            )
+        else:
+            # Ready state — load document text (from S3 for large docs, DynamoDB for small)
+            document_text = _load_document_text(share)
 
     # Check max_calls limit if set
     max_calls = share.get("max_calls")
@@ -1115,7 +1543,7 @@ async def chat(uuid: str, body: ChatRequest, request: Request):
     if max_calls is not None and call_count >= int(max_calls):
         raise HTTPException(status_code=429, detail="Call limit reached")
 
-    if not document_text:
+    if not document_text and not is_dropzone:
         # Fallback: extract on first request for legacy shares without pre-extracted text
         logger.warning(
             "No pre-extracted document_text, falling back to lazy extraction",
@@ -1181,16 +1609,31 @@ async def chat(uuid: str, body: ChatRequest, request: Request):
                         }
                     )
 
-            # Add current query with document context
-            # Document is ALWAYS included fresh (never compressed)
+            # Add current query with document/instructions context
+            if is_dropzone:
+                context_label = "Upload Instructions"
+            else:
+                context_label = "Document"
+
+            # Optionally augment with KB context
+            kb_id = share.get("kb_id")
+            kb_context = ""
+            if kb_id:
+                kb_context = query_knowledge_base(body.query, kb_id)
+
+            if kb_context:
+                user_text = (
+                    f"{context_label}:\n\n{document_text}\n\n---\n\n"
+                    f"Additional Knowledge Base Context:\n\n{kb_context}\n\n---\n\n"
+                    f"Question: {body.query}"
+                )
+            else:
+                user_text = f"{context_label}:\n\n{document_text}\n\n---\n\nQuestion: {body.query}"
+
             messages.append(
                 {
                     "role": "user",
-                    "content": [
-                        {
-                            "text": f"Document:\n\n{document_text}\n\n---\n\nQuestion: {body.query}"
-                        }
-                    ],
+                    "content": [{"text": user_text}],
                 }
             )
 
@@ -1198,7 +1641,7 @@ async def chat(uuid: str, body: ChatRequest, request: Request):
             bedrock = get_bedrock_client()
             response = bedrock.converse_stream(
                 modelId=MODEL_ID,
-                system=[{"text": share["system_prompt"]}],
+                system=[{"text": system_prompt}],
                 messages=messages,
                 inferenceConfig={"maxTokens": 4000, "temperature": 0.1},
             )
@@ -1270,6 +1713,341 @@ async def chat(uuid: str, body: ChatRequest, request: Request):
             "X-Accel-Buffering": "no",
         },
     )
+
+
+@app.post("/api/shared/{uuid}/auth")
+async def dropzone_auth(uuid: str, body: DropZoneAuthRequest):
+    """Authenticate to a drop zone (public endpoint).
+
+    Verifies the passcode and returns a short-lived token.
+    """
+    share = get_share(uuid)
+    if not share:
+        raise HTTPException(status_code=404, detail="Drop zone not found")
+
+    if share.get("share_type") != "dropzone":
+        raise HTTPException(status_code=400, detail="Not a drop zone")
+
+    # Check expiry
+    raw_expiry = share.get("expiry")
+    expiry = int(raw_expiry) if raw_expiry is not None else None
+    if expiry is not None and time.time() > expiry:
+        raise HTTPException(status_code=410, detail="Drop zone expired")
+
+    auth_mode = share.get("auth_mode", "none")
+    if auth_mode == "none":
+        # No auth needed, return token immediately
+        token = _create_dropzone_token(uuid)
+        return {"token": token, "expires_in": 3600}
+
+    if auth_mode == "passcode":
+        stored_hash = share.get("passcode_hash", "")
+        if not stored_hash or not _verify_passcode(body.passcode, stored_hash):
+            raise HTTPException(status_code=401, detail="Invalid passcode")
+
+        token = _create_dropzone_token(uuid)
+        logger.info("Drop zone passcode auth successful", uuid=uuid)
+        return {"token": token, "expires_in": 3600}
+
+    raise HTTPException(status_code=400, detail=f"Unsupported auth mode: {auth_mode}")
+
+
+@app.post("/api/shared/{uuid}/upload")
+async def dropzone_upload(
+    uuid: str,
+    body: DropZoneUploadRequest,
+    authorization: str | None = Header(None),
+):
+    """Request a presigned upload URL for a drop zone (public with optional auth).
+
+    Validates quotas, file size limits, and allowed extensions before
+    generating a presigned PUT URL.
+    """
+    share = get_share(uuid)
+    if not share:
+        raise HTTPException(status_code=404, detail="Drop zone not found")
+
+    if share.get("share_type") != "dropzone":
+        raise HTTPException(status_code=400, detail="Not a drop zone")
+
+    # Check expiry
+    raw_expiry = share.get("expiry")
+    expiry = int(raw_expiry) if raw_expiry is not None else None
+    if expiry is not None and time.time() > expiry:
+        raise HTTPException(status_code=410, detail="Drop zone expired")
+
+    # Check authentication
+    _check_dropzone_auth(share, authorization)
+
+    # Validate file size
+    max_file_size_mb = share.get("max_file_size_mb")
+    if max_file_size_mb is not None:
+        max_bytes = int(max_file_size_mb) * 1024 * 1024
+        if body.size_bytes > max_bytes:
+            raise HTTPException(
+                status_code=413,
+                detail=f"File exceeds {max_file_size_mb} MB limit",
+            )
+
+    # Validate quota
+    total_quota_mb = share.get("total_quota_mb")
+    if total_quota_mb is not None:
+        used_mb = float(share.get("used_quota_mb", 0))
+        new_mb = body.size_bytes / (1024 * 1024)
+        if used_mb + new_mb > float(total_quota_mb):
+            raise HTTPException(status_code=413, detail="Upload quota exceeded")
+
+    # Validate file extension
+    allowed_extensions = share.get("allowed_extensions")
+    if allowed_extensions:
+        ext = (
+            "." + body.filename.rsplit(".", 1)[-1].lower()
+            if "." in body.filename
+            else ""
+        )
+        if ext and ext not in [e.lower().strip() for e in allowed_extensions]:
+            raise HTTPException(
+                status_code=400,
+                detail=f"File type not allowed. Accepted: {', '.join(allowed_extensions)}",
+            )
+
+    # Generate presigned upload URL
+    s3_folder_prefix = share.get("s3_folder_prefix", "")
+    file_id = str(uuid4())
+
+    # Sanitize filename — strip path components to prevent traversal
+    safe_filename = (
+        body.filename.replace("/", "").replace("\\", "").replace("..", "").strip()
+    )
+    if not safe_filename:
+        raise HTTPException(status_code=400, detail="Invalid filename")
+
+    s3_key = f"{s3_folder_prefix.rstrip('/')}/{safe_filename}"
+    bucket = share.get("s3_bucket") or DATA_BUCKET_NAME
+    # Strip ARN prefix if present — bucket name must be plain name, not arn:aws:s3:::name
+    if bucket and bucket.startswith("arn:"):
+        bucket = bucket.split(":")[-1]
+
+    if not bucket:
+        logger.error(
+            "Storage not configured",
+            uuid=uuid,
+            s3_bucket=share.get("s3_bucket"),
+            data_bucket=DATA_BUCKET_NAME,
+        )
+        raise HTTPException(status_code=500, detail="Storage not configured")
+
+    try:
+        s3 = get_s3_client()
+        presigned_url = s3.generate_presigned_url(
+            "put_object",
+            Params={
+                "Bucket": bucket,
+                "Key": s3_key,
+                "ContentType": body.content_type,
+            },
+            ExpiresIn=3600,
+        )
+    except Exception as e:
+        logger.error(
+            "Failed to generate presigned upload URL",
+            uuid=uuid,
+            bucket=bucket,
+            s3_key=s3_key,
+            error=str(e),
+        )
+        raise HTTPException(
+            status_code=500, detail=f"Failed to generate upload URL: {e}"
+        ) from e
+
+    logger.info(
+        "Drop zone upload URL generated",
+        uuid=uuid,
+        file_id=file_id,
+        filename=safe_filename,
+        s3_key=s3_key,
+        bucket=bucket,
+    )
+
+    return {
+        "upload_url": presigned_url,
+        "file_id": file_id,
+        "s3_key": s3_key,
+        "expires_in": 3600,
+    }
+
+
+@app.post("/api/shared/{uuid}/upload/confirm")
+async def dropzone_upload_confirm(
+    uuid: str,
+    body: DropZoneUploadConfirmRequest,
+    authorization: str | None = Header(None),
+):
+    """Confirm a completed upload to a drop zone (public with optional auth).
+
+    Updates the upload counter, quota usage, and uploaded files list.
+    """
+    share = get_share(uuid)
+    if not share:
+        raise HTTPException(status_code=404, detail="Drop zone not found")
+
+    if share.get("share_type") != "dropzone":
+        raise HTTPException(status_code=400, detail="Not a drop zone")
+
+    # Check authentication
+    _check_dropzone_auth(share, authorization)
+
+    size_mb = Decimal(str(body.size_bytes / (1024 * 1024)))
+
+    table = get_dynamodb_table()
+    try:
+        table.update_item(
+            Key={"uuid": uuid},
+            UpdateExpression=(
+                "SET upload_count = if_not_exists(upload_count, :zero) + :inc, "
+                "used_quota_mb = if_not_exists(used_quota_mb, :zero_d) + :size_mb, "
+                "uploaded_files = list_append(if_not_exists(uploaded_files, :empty_list), :new_file)"
+            ),
+            ExpressionAttributeValues={
+                ":zero": 0,
+                ":inc": 1,
+                ":zero_d": Decimal("0"),
+                ":size_mb": size_mb,
+                ":empty_list": [],
+                ":new_file": [
+                    {
+                        "file_id": body.file_id,
+                        "name": body.filename,
+                        "size_bytes": body.size_bytes,
+                        "uploaded_at": int(time.time()),
+                    }
+                ],
+            },
+        )
+    except Exception as e:
+        logger.error("Failed to confirm upload", uuid=uuid, error=str(e))
+        raise HTTPException(status_code=500, detail="Failed to register upload")
+
+    # Get updated quota
+    updated_share = get_share(uuid) or share
+    used_quota_mb = float(updated_share.get("used_quota_mb", 0))
+    total_quota_mb = (
+        int(updated_share["total_quota_mb"])
+        if updated_share.get("total_quota_mb") is not None
+        else None
+    )
+
+    logger.info(
+        "Drop zone upload confirmed",
+        uuid=uuid,
+        filename=body.filename,
+        size_mb=float(size_mb),
+        used_quota_mb=used_quota_mb,
+    )
+
+    return {
+        "status": "confirmed",
+        "used_quota_mb": used_quota_mb,
+        "total_quota_mb": total_quota_mb,
+    }
+
+
+@app.get("/api/shared/{uuid}/files")
+async def dropzone_files(
+    uuid: str,
+    authorization: str | None = Header(None),
+):
+    """List uploaded files in a drop zone (public with optional auth)."""
+    share = get_share(uuid)
+    if not share:
+        raise HTTPException(status_code=404, detail="Drop zone not found")
+
+    if share.get("share_type") != "dropzone":
+        raise HTTPException(status_code=400, detail="Not a drop zone")
+
+    # Check expiry
+    raw_expiry = share.get("expiry")
+    expiry = int(raw_expiry) if raw_expiry is not None else None
+    if expiry is not None and time.time() > expiry:
+        raise HTTPException(status_code=410, detail="Drop zone expired")
+
+    # Check authentication
+    _check_dropzone_auth(share, authorization)
+
+    uploaded_files = share.get("uploaded_files", [])
+
+    # Convert DynamoDB types
+    files = []
+    for f in uploaded_files:
+        files.append(
+            {
+                "file_id": f.get("file_id", ""),
+                "name": f.get("name", ""),
+                "size_bytes": int(f.get("size_bytes", 0)),
+                "uploaded_at": int(f.get("uploaded_at", 0)),
+            }
+        )
+
+    return {
+        "files": files,
+        "quota": {
+            "used_mb": float(share.get("used_quota_mb", 0)),
+            "total_mb": (
+                int(share["total_quota_mb"])
+                if share.get("total_quota_mb") is not None
+                else None
+            ),
+        },
+    }
+
+
+@app.delete("/api/shared/{uuid}")
+async def delete_share(uuid: str, authorization: str | None = Header(None)):
+    """Delete a share or drop zone (authenticated, owner-only)."""
+    user_id = validate_jwt(authorization)
+
+    share = get_share(uuid)
+    if not share:
+        raise HTTPException(status_code=404, detail="Share not found")
+
+    # Only the creator can delete
+    if share.get("created_by") != user_id:
+        raise HTTPException(
+            status_code=403, detail="Not authorized to delete this share"
+        )
+
+    table = get_dynamodb_table()
+    table.delete_item(Key={"uuid": uuid})
+
+    # Also clean up chat history
+    try:
+        from .chat_history import (  # pylint: disable=import-outside-toplevel
+            get_chat_history_table,
+        )
+
+        history_table = get_chat_history_table()
+        # Query all items for this share
+        response = history_table.query(
+            KeyConditionExpression="uuid = :uuid",
+            ExpressionAttributeValues={":uuid": uuid},
+            ProjectionExpression="uuid, sk",
+        )
+        # Batch delete chat history items
+        with history_table.batch_writer() as batch:
+            for item in response.get("Items", []):
+                batch.delete_item(Key={"uuid": item["uuid"], "sk": item["sk"]})
+    except Exception as e:
+        # Non-fatal — share is already deleted
+        logger.warning("Failed to clean up chat history", uuid=uuid, error=str(e))
+
+    logger.info(
+        "Share deleted",
+        uuid=uuid,
+        share_type=share.get("share_type", "document"),
+        deleted_by=user_id,
+    )
+
+    return {"status": "deleted", "uuid": uuid}
 
 
 @app.get("/api/shared/{uuid}/analytics")

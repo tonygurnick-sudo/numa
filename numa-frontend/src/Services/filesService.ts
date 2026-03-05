@@ -5,6 +5,8 @@
  * three scopes: My Files, Company, and Projects.
  */
 
+import { sanitizeS3Filename } from '../utils/sanitizeFilename';
+
 const API_BASE = '/api/files';
 
 type Scope = { type: 'my' } | { type: 'company' } | { type: 'project'; projectId: string };
@@ -55,18 +57,10 @@ export interface FolderItem {
 }
 
 export interface FileItem {
-  file_id: string;
   name: string;
   parent_path: string;
   size_bytes: number;
-  content_type: string;
-  source_type: string;
-  extraction_status: 'queued' | 'processing' | 'ready' | 'error' | 'not_applicable';
-  extracted_words?: number;
-  extracted_pages?: number;
-  created_at: string;
-  updated_at: string;
-  created_by: string;
+  last_modified: string;
   item_type: 'file';
 }
 
@@ -111,77 +105,47 @@ export const createFolder = async (scope: Scope, parentPath: string, name: strin
   return handleResponse<FolderItem>(res);
 };
 
-export const registerFile = async (
-  scope: Scope,
-  fileId: string,
-  name: string,
-  parentPath: string,
-  contentType: string,
-  sizeBytes: number,
-): Promise<FileItem> => {
-  const res = await fetch(scopePath(scope), {
-    method: 'POST',
-    headers: getAuthHeaders(),
-    body: JSON.stringify({
-      action: 'register',
-      file_id: fileId,
-      name,
-      parent_path: parentPath,
-      content_type: contentType,
-      size_bytes: sizeBytes,
-    }),
-  });
-  return handleResponse<FileItem>(res);
-};
-
-export const getFile = async (scope: Scope, fileId: string): Promise<FileItem> => {
-  const res = await fetch(`${scopePath(scope)}/${fileId}`, {
-    headers: getAuthHeaders(),
-  });
-  return handleResponse<FileItem>(res);
-};
-
-export const getDownloadUrl = async (scope: Scope, fileId: string): Promise<{ url: string; key: string }> => {
-  const res = await fetch(`${scopePath(scope)}/${fileId}/download`, {
+export const getDownloadUrl = async (scope: Scope, filePath: string): Promise<{ url: string; key: string }> => {
+  const res = await fetch(`${scopePath(scope)}/download?path=${encodeURIComponent(filePath)}`, {
     headers: getAuthHeaders(),
   });
   return handleResponse<{ url: string; key: string }>(res);
 };
 
-export const renameFile = async (scope: Scope, fileId: string, newName: string): Promise<FileItem> => {
-  const res = await fetch(`${scopePath(scope)}/${fileId}`, {
+export const renameFile = async (scope: Scope, filePath: string, newName: string): Promise<unknown> => {
+  const res = await fetch(`${scopePath(scope)}/file`, {
     method: 'PUT',
     headers: getAuthHeaders(),
-    body: JSON.stringify({ name: newName }),
+    body: JSON.stringify({ path: filePath, name: newName }),
   });
-  return handleResponse<FileItem>(res);
+  return handleResponse<unknown>(res);
 };
 
-export const moveFile = async (scope: Scope, fileId: string, newParentPath: string): Promise<FileItem> => {
-  const res = await fetch(`${scopePath(scope)}/${fileId}`, {
+export const moveFile = async (scope: Scope, filePath: string, newParentPath: string): Promise<unknown> => {
+  const res = await fetch(`${scopePath(scope)}/file`, {
     method: 'PUT',
     headers: getAuthHeaders(),
-    body: JSON.stringify({ parent_path: newParentPath }),
+    body: JSON.stringify({ path: filePath, parent_path: newParentPath }),
   });
-  return handleResponse<FileItem>(res);
+  return handleResponse<unknown>(res);
 };
 
 export const copyFile = async (
   scope: Scope,
-  fileId: string,
+  filePath: string,
   targetParentPath?: string,
-  targetName?: string,
-): Promise<FileItem> => {
-  const res = await fetch(`${scopePath(scope)}/${fileId}/copy`, {
+  targetName?: string
+): Promise<unknown> => {
+  const res = await fetch(`${scopePath(scope)}/copy`, {
     method: 'POST',
     headers: getAuthHeaders(),
-    body: JSON.stringify({ parent_path: targetParentPath, name: targetName }),
+    body: JSON.stringify({ path: filePath, parent_path: targetParentPath, name: targetName }),
   });
-  return handleResponse<FileItem>(res);
+  return handleResponse<unknown>(res);
 };
 
-export const deleteFile = async (scope: Scope, fileId: string): Promise<void> => {
-  const res = await fetch(`${scopePath(scope)}/${fileId}`, {
+export const deleteFile = async (scope: Scope, filePath: string): Promise<void> => {
+  const res = await fetch(`${scopePath(scope)}/file?path=${encodeURIComponent(filePath)}`, {
     method: 'DELETE',
     headers: getAuthHeaders(),
   });
@@ -248,7 +212,7 @@ export const deleteProject = async (projectId: string): Promise<void> => {
 export const addProjectMember = async (
   projectId: string,
   userId: string,
-  role: 'owner' | 'editor' | 'viewer',
+  role: 'owner' | 'editor' | 'viewer'
 ): Promise<unknown> => {
   const res = await fetch(`${API_BASE}/projects/${projectId}/members`, {
     method: 'POST',
@@ -271,39 +235,73 @@ export const removeProjectMember = async (projectId: string, userId: string): Pr
 // ---------------------------------------------------------------------------
 
 /**
- * Build the S3 key for a file upload based on scope.
+ * Build the virtual path for a file from its parent_path + name.
  */
-export const buildS3Key = (scope: Scope, fileId: string, fileName: string, userSub: string): string => {
+export const filePath = (file: FileItem): string => `${file.parent_path}${file.name}`;
+
+/**
+ * Build the S3 key for a file upload based on scope and path.
+ * Files are stored directly at {prefix}{path}{fileName} — no UUIDs.
+ */
+export const buildS3Key = (scope: Scope, fileName: string, currentPath: string, userSub: string): string => {
+  const safeName = sanitizeS3Filename(fileName);
+  // Strip leading slash so the key doesn't start with double slashes
+  const pathSegment = currentPath.replace(/^\//, '');
   switch (scope.type) {
     case 'my':
-      return `files/user/${userSub}/${fileId}/original/${fileName}`;
+      return `files/user/${userSub}/${pathSegment}${safeName}`;
     case 'company':
-      return `files/company/${fileId}/original/${fileName}`;
+      return `files/company/${pathSegment}${safeName}`;
     case 'project':
-      return `files/project/${scope.projectId}/${fileId}/original/${fileName}`;
+      return `files/project/${scope.projectId}/${pathSegment}${safeName}`;
   }
 };
 
 /**
- * Get the icon class for a source type.
+ * Get the icon class for a file based on its name/extension.
  */
-export const getFileIcon = (sourceType: string): string => {
-  switch (sourceType) {
-    case 'pdf':
-      return 'bi bi-file-earmark-pdf';
-    case 'docx':
-      return 'bi bi-file-earmark-word';
-    case 'xlsx':
-      return 'bi bi-file-earmark-spreadsheet';
-    case 'image':
-      return 'bi bi-file-earmark-image';
-    case 'audio':
-      return 'bi bi-file-earmark-music';
-    case 'text':
-      return 'bi bi-file-earmark-text';
-    default:
-      return 'bi bi-file-earmark';
-  }
+export const getFileIcon = (fileName: string): string => {
+  const dot = fileName.lastIndexOf('.');
+  if (dot < 0) return 'bi bi-file-earmark';
+
+  const ext = fileName.slice(dot).toLowerCase();
+
+  if (ext === '.pdf') return 'bi bi-file-earmark-pdf';
+  if (['.doc', '.docx', '.odt', '.rtf'].includes(ext)) return 'bi bi-file-earmark-word';
+  if (['.xls', '.xlsx', '.ods', '.csv', '.tsv'].includes(ext)) return 'bi bi-file-earmark-spreadsheet';
+  if (['.ppt', '.pptx', '.odp'].includes(ext)) return 'bi bi-file-earmark-slides';
+  if (['.db', '.sqlite', '.sqlite3', '.mdb', '.accdb', '.dbf', '.sql'].includes(ext)) return 'bi bi-database-add';
+  if (['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.svg', '.webp', '.ico', '.tiff'].includes(ext))
+    return 'bi bi-file-earmark-image';
+  if (['.mp3', '.wav', '.ogg', '.flac', '.aac', '.m4a', '.wma'].includes(ext)) return 'bi bi-file-earmark-music';
+  if (['.mp4', '.avi', '.mov', '.mkv', '.webm', '.wmv', '.flv'].includes(ext)) return 'bi bi-file-earmark-play';
+  if (['.zip', '.tar', '.gz', '.rar', '.7z', '.bz2'].includes(ext)) return 'bi bi-file-earmark-zip';
+  if (
+    [
+      '.js',
+      '.ts',
+      '.py',
+      '.java',
+      '.c',
+      '.cpp',
+      '.go',
+      '.rs',
+      '.rb',
+      '.php',
+      '.html',
+      '.css',
+      '.json',
+      '.xml',
+      '.yaml',
+      '.yml',
+      '.sh',
+      '.bat',
+    ].includes(ext)
+  )
+    return 'bi bi-file-earmark-code';
+  if (['.txt', '.md', '.log', '.ini', '.cfg', '.conf'].includes(ext)) return 'bi bi-file-earmark-text';
+
+  return 'bi bi-file-earmark';
 };
 
 /**
@@ -315,82 +313,4 @@ export const formatFileSize = (bytes: number): string => {
   const i = Math.floor(Math.log(bytes) / Math.log(1024));
   const size = bytes / Math.pow(1024, i);
   return `${size.toFixed(i > 0 ? 1 : 0)} ${units[i]}`;
-};
-
-// ---------------------------------------------------------------------------
-// Orphan operations — unregistered S3 files
-// ---------------------------------------------------------------------------
-
-export interface OrphanItem {
-  key: string;
-  name: string;
-  size: number;
-  last_modified: string;
-  source: string;
-}
-
-export interface OrphanListResponse {
-  orphans: OrphanItem[];
-  next_cursor?: string;
-  total_scanned: number;
-}
-
-export const listOrphans = async (cursor?: string, limit = 50): Promise<OrphanListResponse> => {
-  const params = new URLSearchParams();
-  if (cursor) params.set('cursor', cursor);
-  if (limit !== 50) params.set('limit', String(limit));
-  const qs = params.toString();
-  const res = await fetch(`${API_BASE}/my/orphans${qs ? `?${qs}` : ''}`, {
-    headers: getAuthHeaders(),
-  });
-  return handleResponse<OrphanListResponse>(res);
-};
-
-export const getOrphanDownloadUrl = async (key: string): Promise<{ url: string; key: string; name: string }> => {
-  const encodedKey = btoa(key).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-  const res = await fetch(`${API_BASE}/my/orphans/${encodedKey}/download`, {
-    headers: getAuthHeaders(),
-  });
-  return handleResponse<{ url: string; key: string; name: string }>(res);
-};
-
-export const adoptOrphan = async (key: string, name?: string, parentPath?: string): Promise<FileItem> => {
-  const res = await fetch(`${API_BASE}/my/orphans/adopt`, {
-    method: 'POST',
-    headers: getAuthHeaders(),
-    body: JSON.stringify({ key, name, parent_path: parentPath }),
-  });
-  return handleResponse<FileItem>(res);
-};
-
-// ---------------------------------------------------------------------------
-// Company orphan operations — unregistered company-level S3 files
-// ---------------------------------------------------------------------------
-
-export const listCompanyOrphans = async (cursor?: string, limit = 50): Promise<OrphanListResponse> => {
-  const params = new URLSearchParams();
-  if (cursor) params.set('cursor', cursor);
-  if (limit !== 50) params.set('limit', String(limit));
-  const qs = params.toString();
-  const res = await fetch(`${API_BASE}/company/orphans${qs ? `?${qs}` : ''}`, {
-    headers: getAuthHeaders(),
-  });
-  return handleResponse<OrphanListResponse>(res);
-};
-
-export const getCompanyOrphanDownloadUrl = async (key: string): Promise<{ url: string; key: string; name: string }> => {
-  const encodedKey = btoa(key).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-  const res = await fetch(`${API_BASE}/company/orphans/${encodedKey}/download`, {
-    headers: getAuthHeaders(),
-  });
-  return handleResponse<{ url: string; key: string; name: string }>(res);
-};
-
-export const adoptCompanyOrphan = async (key: string, name?: string, parentPath?: string): Promise<FileItem> => {
-  const res = await fetch(`${API_BASE}/company/orphans/adopt`, {
-    method: 'POST',
-    headers: getAuthHeaders(),
-    body: JSON.stringify({ key, name, parent_path: parentPath }),
-  });
-  return handleResponse<FileItem>(res);
 };

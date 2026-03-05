@@ -14,5 +14,6 @@ This Lambda function processes Terms of Reference (ToR) documents and generates 
 ## Outputs
 
 Two markdown files stored in S3:
+
 1. **Assessment** (`assessment.md`): Structured evaluation following the assessment template
 2. **Suggestions** (`suggestions.md`): Recommended changes in bold format following the suggestions template

@@ -32,6 +32,7 @@ The Lambda expects a JSON event with the S3 path to a chunk of error logs:
 ```
 
 Input files contain logs in this structure:
+
 ```json
 {
   "logs": [
@@ -68,15 +69,21 @@ The Lambda generates detailed analysis results for each log entry and saves them
       "internal_notification": "Yes",
       "explanation": "Error explanation...",
       "recommended_action": "Action recommendation...",
-      "log_entry": { /* Original log entry data */ }
+      "log_entry": {
+        /* Original log entry data */
+      }
     }
   ],
-  "notifications_not_required": [ /* Similar structure for logs not requiring notification */ ],
+  "notifications_not_required": [
+    /* Similar structure for logs not requiring notification */
+  ],
   "error_categories": {
     "Connection Error": 5,
     "Data Validation Error": 3
   },
-  "all_results": [ /* All analyzed log entries with their results */ ]
+  "all_results": [
+    /* All analyzed log entries with their results */
+  ]
 }
 ```
 
@@ -100,6 +107,7 @@ The Lambda supports customizable behavior through configuration files stored in 
 Configuration files are validated against a JSON schema to ensure they adhere to the expected structure. This validation happens when the configuration is loaded, providing early detection of configuration issues.
 
 The schema is defined in `config_schema.py` and enforces:
+
 - Required notification criteria for both internal and external stakeholders
 - Proper structure for log filtering rules
 - Type validation for all configuration properties
@@ -127,9 +135,7 @@ See `example_config.json` for a complete reference configuration. The configurat
         "TaskDescription": "Task to ignore"
       }
     ],
-    "byMessageContains": [
-      "Text pattern to ignore"
-    ]
+    "byMessageContains": ["Text pattern to ignore"]
   }
 }
 ```
@@ -137,6 +143,7 @@ See `example_config.json` for a complete reference configuration. The configurat
 ## AI Capabilities
 
 The Lambda leverages Claude's capabilities to:
+
 - Identify error patterns not obvious to human reviewers
 - Categorize diverse error types into a consistent taxonomy
 - Assess business impact based on error context and client information
@@ -166,11 +173,13 @@ This Lambda implements a multi-level caching strategy to improve performance and
 #### Schema Validation
 
 The Lambda implements JSON Schema validation for configuration files to ensure:
+
 - All required fields are present
 - Field types match expected data types
 - Configuration changes don't break functionality
 
 When a config file fails validation:
+
 - A detailed error is logged
 - The system falls back to default configuration
 - The Lambda continues execution with valid settings
@@ -178,6 +187,7 @@ When a config file fails validation:
 #### Graceful Fallbacks
 
 The system has multi-tiered fallbacks to ensure resiliency:
+
 - Primary: Custom configuration from S3
 - Secondary: Default in-code configuration
 

@@ -31,7 +31,7 @@ export const queryQBusinessKnowledgeBase = async (
   applicationId,
   retrieverId,
   query,
-  maxResults = 6,
+  maxResults = 6
 ) => {
   try {
     const dsResponse = await qBusinessClient.send(
@@ -40,7 +40,7 @@ export const queryQBusinessKnowledgeBase = async (
         queryText: query,
         contentSource: { retriever: { retrieverId } },
         maxResults,
-      }),
+      })
     );
 
     if (dsResponse.relevantContent?.length) {
@@ -51,7 +51,7 @@ export const queryQBusinessKnowledgeBase = async (
           const snippet = ds.content || '';
           return `[${i + 1}] ${snippet}\nDocument URI: ${uri}`;
         },
-        (ds) => ds.documentUri || '',
+        (ds) => ds.documentUri || ''
       );
 
       return {
@@ -120,7 +120,7 @@ export const queryBedrockKnowledgeBase = async (bedrockAgentClient, knowledgeBas
           const score = r.score ? ` (Relevance: ${(r.score * 100).toFixed(1)}%)` : '';
           return txt ? `[${i + 1}] ${txt}\nSource: ${src}${score}` : '';
         },
-        (r) => extractSourceUri(r.location),
+        (r) => extractSourceUri(r.location)
       );
 
       return {

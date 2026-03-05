@@ -12,7 +12,7 @@ dotenv.config();
 export async function login(
   page: Page,
   username: string = process.env.TEST_USERNAME!,
-  password: string = process.env.TEST_PASSWORD!,
+  password: string = process.env.TEST_PASSWORD!
 ): Promise<void> {
   await page.goto('/login');
 

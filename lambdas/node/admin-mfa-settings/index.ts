@@ -104,6 +104,10 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
         };
       }
 
+      // REBASE RESOLUTION: Kept HEAD (session settings support).
+      // Incoming (8e1a6ca9) had only the single device-remember PutCommand.
+      // To rollback: remove session validation + writes below, keep only the device-remember PutCommand.
+
       // Session settings (optional — only written when provided)
       const sessionIdleTimeoutMinutes =
         body.sessionIdleTimeoutMinutes !== undefined ? Number(body.sessionIdleTimeoutMinutes) : undefined;
@@ -187,7 +191,7 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
         new GetCommand({
           TableName: TABLE_NAME,
           Key: { setting: 'device-remember' },
-        }),
+        })
       );
       const cfgItem = configRes.Item as { rememberDurationHours?: number; rememberDurationDays?: number } | undefined;
       let durationHours = 0;
@@ -210,7 +214,7 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
             rememberedAt: new Date().toISOString(),
             ttl,
           },
-        }),
+        })
       );
       return { statusCode: 200, headers: HEADERS, body: JSON.stringify({ ok: true }) };
     }
@@ -225,7 +229,7 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
       }
       // Read trust record
       const trustRes = await ddb.send(
-        new GetCommand({ TableName: TABLE_NAME, Key: { setting: `device-trust#${deviceKey}` } }),
+        new GetCommand({ TableName: TABLE_NAME, Key: { setting: `device-trust#${deviceKey}` } })
       );
       if (!trustRes.Item?.rememberedAt) {
         return { statusCode: 200, headers: HEADERS, body: JSON.stringify({ valid: false }) };
@@ -268,7 +272,7 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
       }
       // Verify the trust record belongs to the caller before deleting
       const existing = await ddb.send(
-        new GetCommand({ TableName: TABLE_NAME, Key: { setting: `device-trust#${deviceKey}` } }),
+        new GetCommand({ TableName: TABLE_NAME, Key: { setting: `device-trust#${deviceKey}` } })
       );
       if (existing.Item && existing.Item.userSub !== userSub) {
         return { statusCode: 403, headers: HEADERS, body: JSON.stringify({ error: 'Forbidden' }) };

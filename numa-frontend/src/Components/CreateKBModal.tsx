@@ -124,11 +124,11 @@ export function CreateKBModal(props: CreateKBModalProps): React.JSX.Element {
 
   const normalizedViewers = useMemo(
     () => (isShared ? normalizeIdentifiers([...viewerChips, ...editorChips]) : ([] as ReadonlyArray<UserIdentifier>)),
-    [isShared, viewerChips, editorChips],
+    [isShared, viewerChips, editorChips]
   );
   const normalizedEditors = useMemo(
     () => (isShared ? normalizeIdentifiers(editorChips) : ([] as ReadonlyArray<UserIdentifier>)),
-    [isShared, editorChips],
+    [isShared, editorChips]
   );
 
   const invalidViewers = useMemo(() => findInvalidEmailLikes(normalizedViewers), [normalizedViewers]);

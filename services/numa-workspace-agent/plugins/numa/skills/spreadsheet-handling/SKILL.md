@@ -1,6 +1,6 @@
 ---
 name: spreadsheet-handling
-description: "Read, write, and analyze spreadsheet files (Excel, CSV, TSV). Use when working with .xlsx, .xls, .xlsm, .csv, .tsv files, data analysis, pivot tables, or format conversion."
+description: 'Read, write, and analyze spreadsheet files (Excel, CSV, TSV). Use when working with .xlsx, .xls, .xlsm, .csv, .tsv files, data analysis, pivot tables, or format conversion.'
 ---
 
 # Spreadsheet Handling Skill
@@ -9,12 +9,12 @@ Read, write, and analyze spreadsheet files using pandas, openpyxl, and XlsxWrite
 
 ## Available Libraries
 
-| Library | Purpose | Import |
-|---------|---------|--------|
-| **pandas** | Read/write Excel, CSV, TSV; data analysis | `import pandas as pd` |
-| **openpyxl** | Read/write .xlsx files; cell formatting | `from openpyxl import load_workbook, Workbook` |
-| **xlrd** | Read legacy .xls files | `engine='xlrd'` in pandas |
-| **XlsxWriter** | Create Excel files with advanced formatting | `import xlsxwriter` |
+| Library        | Purpose                                     | Import                                         |
+| -------------- | ------------------------------------------- | ---------------------------------------------- |
+| **pandas**     | Read/write Excel, CSV, TSV; data analysis   | `import pandas as pd`                          |
+| **openpyxl**   | Read/write .xlsx files; cell formatting     | `from openpyxl import load_workbook, Workbook` |
+| **xlrd**       | Read legacy .xls files                      | `engine='xlrd'` in pandas                      |
+| **XlsxWriter** | Create Excel files with advanced formatting | `import xlsxwriter`                            |
 
 ---
 
@@ -767,21 +767,22 @@ df_2024 = df[mask]
 
 ## Common Issues
 
-| Issue | Solution |
-|-------|----------|
-| "File not found" | Check path; use `/workdir/uploads/` for input files |
-| Encoding errors in CSV | Try `encoding='latin-1'` or `encoding='utf-8-sig'` |
-| Excel dates as numbers | Use `pd.to_datetime()` to convert |
-| Memory error on large file | Read in chunks or use `dtype` parameter |
-| Sheet name too long | Excel limits sheet names to 31 characters |
-| Formulas not preserved | openpyxl reads values by default; use `data_only=False` |
-| "Command contains ${}" error | Write Python to a file first, then run it (see below) |
+| Issue                        | Solution                                                |
+| ---------------------------- | ------------------------------------------------------- |
+| "File not found"             | Check path; use `/workdir/uploads/` for input files     |
+| Encoding errors in CSV       | Try `encoding='latin-1'` or `encoding='utf-8-sig'`      |
+| Excel dates as numbers       | Use `pd.to_datetime()` to convert                       |
+| Memory error on large file   | Read in chunks or use `dtype` parameter                 |
+| Sheet name too long          | Excel limits sheet names to 31 characters               |
+| Formulas not preserved       | openpyxl reads values by default; use `data_only=False` |
+| "Command contains ${}" error | Write Python to a file first, then run it (see below)   |
 
 ### Dollar Sign in Python (Currency Formatting)
 
 The Bash tool blocks `${...}` patterns for security, which affects inline Python with dollar signs like `python3 -c "print(f'${total:.2f}')"`.
 
 **Solution:** Write your analysis script to a file, then execute it:
+
 ```python
 # 1. Write the script (using Write tool)
 # /workdir/outputs/analysis.py
@@ -796,16 +797,16 @@ This is actually better practice for any non-trivial analysis anyway.
 
 ## When to Use Each Library
 
-| Task | Best Library |
-|------|--------------|
-| Quick data analysis | pandas |
-| Read/write simple Excel/CSV | pandas |
-| Pivot tables and aggregations | pandas |
-| Preserve Excel formatting | openpyxl |
-| Modify existing Excel files | openpyxl |
-| Create charts and graphs | XlsxWriter |
-| Conditional formatting | XlsxWriter |
-| Very large files | pandas with chunks |
+| Task                          | Best Library       |
+| ----------------------------- | ------------------ |
+| Quick data analysis           | pandas             |
+| Read/write simple Excel/CSV   | pandas             |
+| Pivot tables and aggregations | pandas             |
+| Preserve Excel formatting     | openpyxl           |
+| Modify existing Excel files   | openpyxl           |
+| Create charts and graphs      | XlsxWriter         |
+| Conditional formatting        | XlsxWriter         |
+| Very large files              | pandas with chunks |
 
 ---
 

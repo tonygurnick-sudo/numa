@@ -3,11 +3,13 @@
 Use the built-in portal wizard to create a NextGen client end‑to‑end without touching the AWS consoles.
 
 ## Prerequisites
+
 - You can sign in to the Customer Success Portal.
 - The portal is configured with a broker Lambda (NEXTGEN_BROKER_LAMBDA and NEXTGEN_BROKER_REGION in `config.json`).
 - Your portal identity has permission to invoke the broker Lambda.
 
 ## Steps
+
 1. Open Tools → Setup NextGen Client.
 2. Step A — Rename AWS Account
    - Enter the 12‑digit account ID and the desired client ID (e.g., `acme-demo`).
@@ -28,6 +30,7 @@ Use the built-in portal wizard to create a NextGen client end‑to‑end without
    - You can also use the standalone tool “Retrieve System User Secret” (Tools → Retrieve System User Secret) at any time.
 
 ## How It’s Set Up (Security + IAM)
+
 - Broker Lambda: `portal-nextgen-broker` (deployer account, us‑east‑1)
   - Invoked directly from the browser using Cognito Identity Pool credentials.
   - Scoped invocation: optionally restricted to principals in the NextGen organization (by `aws:PrincipalOrgID`).
@@ -39,6 +42,7 @@ Use the built-in portal wizard to create a NextGen client end‑to‑end without
   - The portal logs rename attempts and outcomes for auditing.
 
 ## Tips
+
 - Use “Download current JSON” from Update to get a baseline config to edit and re‑upload.
 - If “Rename Account” fails, confirm that the broker and the management role are deployed and that your portal session can invoke the broker.
 - If secret retrieval fails, verify the `ArcanumAIAccess` role exists in the client account and trust is correct.

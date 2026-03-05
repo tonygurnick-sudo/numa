@@ -53,7 +53,7 @@ interface ReportSummary {
 export async function fixUserPasswordState(
   awsClientConfig: AWSClientConfig,
   userPoolId: string,
-  username: string,
+  username: string
 ): Promise<void> {
   const cognito = new CognitoIdentityProvider(awsClientConfig);
   const temporaryPassword = generateSecurePassword();
@@ -65,7 +65,7 @@ export async function fixUserPasswordState(
         Username: username,
         Password: temporaryPassword,
         Permanent: true,
-      }),
+      })
     );
     console.log(`Set new permanent password for ${username}`);
   } catch (error) {
@@ -86,7 +86,7 @@ function generateSecurePassword(): string {
 
 export async function findPasswordResetUsers(
   awsClientConfig: AWSClientConfig,
-  userPoolId: string,
+  userPoolId: string
 ): Promise<PasswordResetUser[]> {
   const cognito = new CognitoIdentityProvider(awsClientConfig);
   const passwordResetUsers: PasswordResetUser[] = [];
@@ -100,7 +100,7 @@ export async function findPasswordResetUsers(
           UserPoolId: userPoolId,
           Limit: 60,
           PaginationToken: paginationToken,
-        }),
+        })
       );
 
       if (response.Users) {
@@ -131,7 +131,7 @@ export async function findPasswordResetUsers(
 
 export async function fixPasswordResetUsers(
   awsClientConfig: AWSClientConfig,
-  users: PasswordResetUser[],
+  users: PasswordResetUser[]
 ): Promise<void> {
   for (const user of users) {
     try {
@@ -149,7 +149,7 @@ export async function findUserPoolId(awsClientConfig: AWSClientConfig, clientNam
     const response = await cognito.send(
       new ListUserPoolsCommand({
         MaxResults: 60,
-      }),
+      })
     );
 
     const userPool = response.UserPools?.find((pool) => pool.Name === `numa-${clientName}`);
@@ -372,7 +372,7 @@ async function handleMultipleClients(): Promise<void> {
     console.log(`Total clients: ${summary.totalClients}`);
     console.log(`Successfully processed: ${summary.processedClients - summary.errorClients}/${summary.totalClients}`);
     console.log(
-      `Clients with users in FORCE_CHANGE_PASSWORD state: ${summary.clientsWithPasswordResetUsers}/${summary.totalClients}`,
+      `Clients with users in FORCE_CHANGE_PASSWORD state: ${summary.clientsWithPasswordResetUsers}/${summary.totalClients}`
     );
     console.log(`Total users in FORCE_CHANGE_PASSWORD state: ${summary.totalPasswordResetUsers}`);
 

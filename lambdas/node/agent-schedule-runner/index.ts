@@ -382,7 +382,7 @@ const handleSchedulerEvent = async (rawEvent: RunnerEvent | unknown): Promise<vo
       console.info(
         'Skipping schedule because maxRuns reached',
         schedule.schedule_id,
-        `${schedule.total_runs}/${schedule.max_runs}`,
+        `${schedule.total_runs}/${schedule.max_runs}`
       );
       await pauseScheduleForMaxRuns(schedule);
       return;
@@ -413,7 +413,7 @@ const getSchedule = async (scheduleId: string): Promise<ScheduleRecord | null> =
         ':s': scheduleId,
       },
       Limit: 1,
-    }),
+    })
   );
   const record = (result.Items || [])[0] as ScheduleRecord | undefined;
   return record || null;
@@ -551,14 +551,14 @@ const executeRun = async ({
         'failed',
         errorMessage,
         runConversationId,
-        runLogKey,
+        runLogKey
       );
       await NotificationService.notifyScheduleFailed(
         schedule.user_id,
         schedule.schedule_id,
         'agent',
         scheduleName,
-        errorMessage,
+        errorMessage
       );
       await createJobRecord(
         schedule.user_id,
@@ -567,7 +567,7 @@ const executeRun = async ({
         runPrompt,
         'FAILED',
         undefined,
-        errorMessage,
+        errorMessage
       );
     }
     throw err instanceof Error ? err : new Error('Agent invocation failed');
@@ -631,7 +631,7 @@ const executeRun = async ({
         effectiveStatus,
         effectiveStatus !== 'success' ? notificationMessage : null,
         runConversationId,
-        runLogKey,
+        runLogKey
       );
 
       // Notification metadata includes runId so the frontend can deeplink
@@ -645,7 +645,7 @@ const executeRun = async ({
           'agent',
           scheduleName,
           notificationMessage,
-          notifExtra,
+          notifExtra
         );
         await createJobRecord(
           schedule.user_id,
@@ -654,7 +654,7 @@ const executeRun = async ({
           runPrompt,
           'FAILED',
           undefined,
-          notificationMessage,
+          notificationMessage
         );
       } else if (agentReportedStatus === 'partial') {
         await NotificationService.notifySchedulePartial(
@@ -663,7 +663,7 @@ const executeRun = async ({
           'agent',
           scheduleName,
           notificationMessage,
-          notifExtra,
+          notifExtra
         );
         await createJobRecord(
           schedule.user_id,
@@ -671,7 +671,7 @@ const executeRun = async ({
           scheduleName,
           runPrompt,
           'COMPLETED',
-          notificationMessage,
+          notificationMessage
         );
       } else {
         await NotificationService.notifyScheduleCompleted(
@@ -680,7 +680,7 @@ const executeRun = async ({
           'agent',
           scheduleName,
           notificationMessage,
-          notifExtra,
+          notifExtra
         );
         await createJobRecord(
           schedule.user_id,
@@ -688,7 +688,7 @@ const executeRun = async ({
           scheduleName,
           runPrompt,
           'COMPLETED',
-          notificationMessage,
+          notificationMessage
         );
       }
     }
@@ -702,14 +702,14 @@ const executeRun = async ({
         'failed',
         errorMessage,
         runConversationId,
-        runLogKey,
+        runLogKey
       );
       await NotificationService.notifyScheduleFailed(
         schedule.user_id,
         schedule.schedule_id,
         'agent',
         scheduleName,
-        errorMessage,
+        errorMessage
       );
       await createJobRecord(
         schedule.user_id,
@@ -718,7 +718,7 @@ const executeRun = async ({
         runPrompt,
         'FAILED',
         undefined,
-        errorMessage,
+        errorMessage
       );
     }
     throw err instanceof Error ? err : new Error('Unable to persist response');
@@ -740,7 +740,7 @@ const createJobRecord = async (
   promptText: string,
   status: 'STARTED' | 'COMPLETED' | 'FAILED',
   result?: string,
-  error?: string,
+  error?: string
 ): Promise<ScheduledJobRecord> => {
   // Create a job record for scheduled agent runs to appear in job history
   const jobRecord = {
@@ -774,7 +774,7 @@ const markScheduleStatus = async (
   status: string,
   error: string | null,
   runConversationId?: string | null,
-  runLogKey?: string | null,
+  runLogKey?: string | null
 ): Promise<void> => {
   const updateExpressions = ['last_run_epoch = :ts', 'last_status = :status', 'last_error = :err'];
   const expressionAttributeValues: Record<string, unknown> = {
@@ -804,7 +804,7 @@ const markScheduleStatus = async (
       Key: { user_id: userId, schedule_id: scheduleId },
       UpdateExpression: `SET ${updateExpressions.join(', ')}`,
       ExpressionAttributeValues: expressionAttributeValues,
-    }),
+    })
   );
 };
 
@@ -821,7 +821,7 @@ const pauseScheduleForMaxRuns = async (schedule: ScheduleRecord): Promise<void> 
           ':paused': 'paused',
           ':ts': Date.now(),
         },
-      }),
+      })
     );
     const scheduleName = schedule.label || schedule.agent_title || schedule.agent_id || 'Unknown Schedule';
     await NotificationService.notifyScheduleCompleted(
@@ -829,7 +829,7 @@ const pauseScheduleForMaxRuns = async (schedule: ScheduleRecord): Promise<void> 
       schedule.schedule_id,
       'agent',
       scheduleName,
-      `Schedule paused: reached maximum of ${schedule.max_runs} runs.`,
+      `Schedule paused: reached maximum of ${schedule.max_runs} runs.`
     );
     console.info('Schedule auto-paused due to maxRuns limit', schedule.schedule_id);
   } catch (err) {
@@ -878,7 +878,7 @@ const appendMessage = async ({
         isScheduledRun,
         scheduleId,
       },
-    }),
+    })
   );
 };
 
@@ -895,7 +895,7 @@ const updateConversationMeta = async (conversationId: string, userId: string, la
         ':meta': 'meta',
       },
       Limit: 1,
-    }),
+    })
   );
   const meta = (result.Items || [])[0];
   if (!meta) return;
@@ -911,7 +911,7 @@ const updateConversationMeta = async (conversationId: string, userId: string, la
         ':ts': Date.now(),
         ':msg': latestMessage.slice(0, 1000),
       },
-    }),
+    })
   );
 };
 
@@ -962,7 +962,7 @@ const ensureConversationMeta = async ({
         isScheduledRun,
         scheduleId,
       },
-    }),
+    })
   );
 };
 
@@ -1033,7 +1033,7 @@ const writeRunLogToS3 = async ({
         Key: key,
         Body: JSON.stringify(payload),
         ContentType: 'application/json',
-      }),
+      })
     );
     return key;
   } catch (error) {
@@ -1078,7 +1078,7 @@ const readWorkspaceStatus = async (userId: string, conversationId: string): Prom
         new GetObjectCommand({
           Bucket: OUTPUTS_BUCKET,
           Key: key,
-        }),
+        })
       );
       const body = await response.Body?.transformToString();
       if (!body) return null;
@@ -1254,7 +1254,7 @@ const invokeRunnerAsync = async (event: RunnerEvent): Promise<void> => {
       FunctionName: functionName,
       InvocationType: 'Event',
       Payload: Buffer.from(JSON.stringify(event)),
-    }),
+    })
   );
 };
 
@@ -1287,7 +1287,7 @@ const refreshAgentSnapshot = async (agentId: string | undefined, userId: string)
         new GetCommand({
           TableName: USER_AGENTS_TABLE,
           Key: { user_id: userId, agent_id: agentId },
-        }),
+        })
       );
       if (result.Item) {
         console.info('Refreshed agent snapshot from user table', { agentId, userId });
@@ -1305,7 +1305,7 @@ const refreshAgentSnapshot = async (agentId: string | undefined, userId: string)
         new GetCommand({
           TableName: WORKSPACE_AGENTS_TABLE,
           Key: { tenant_id: CLIENT_NAME, agent_id: agentId },
-        }),
+        })
       );
       if (result.Item) {
         console.info('Refreshed agent snapshot from workspace table', { agentId });
@@ -1360,7 +1360,7 @@ const fetchAccessibleKBIds = async (userSub: string): Promise<string[]> => {
           ':skPrefix': 'KB#',
         },
         ProjectionExpression: 'SK, viewers, editors, created_by',
-      }),
+      })
     );
 
     const items = result.Items ?? [];
@@ -1424,7 +1424,7 @@ const extractStringList = (attr: unknown): string[] => {
  */
 const mergeRunConfig = (
   runConfig: ScheduledRunConfig | undefined,
-  agentSnapshot?: AgentSnapshot,
+  agentSnapshot?: AgentSnapshot
 ): ScheduledRunConfig | undefined => {
   if (!runConfig && !agentSnapshot) return runConfig;
 

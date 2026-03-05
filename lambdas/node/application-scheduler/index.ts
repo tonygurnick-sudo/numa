@@ -195,7 +195,7 @@ const getSchedule = async (scheduleId: string): Promise<ApplicationScheduleRecor
         ':event_type': 'application',
       },
       Limit: 1,
-    }),
+    })
   );
   const record = (result.Items || [])[0] as ApplicationScheduleRecord | undefined;
   return record || null;
@@ -254,7 +254,7 @@ const executeApplicationRun = async ({
           appId: schedule.app_id,
           tenantId: CLIENT_NAME,
         }),
-      }),
+      })
     );
 
     executionArn = response.executionArn!;
@@ -288,7 +288,7 @@ const markScheduleStatus = async (
   userId: string,
   scheduleId: string,
   status: string,
-  error: string | null,
+  error: string | null
 ): Promise<void> => {
   await dynamo.send(
     new UpdateCommand({
@@ -300,7 +300,7 @@ const markScheduleStatus = async (
         ':status': status,
         ':err': error,
       },
-    }),
+    })
   );
 };
 

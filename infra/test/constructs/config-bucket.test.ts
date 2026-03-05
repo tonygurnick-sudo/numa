@@ -20,7 +20,7 @@ describe('Config Bucket construct', () => {
     assert(
       Testing.toHaveResourceWithProperties(synthesized, 'aws_s3_bucket', {
         bucket: 'numa-bob-config',
-      }),
+      })
     );
   });
 });

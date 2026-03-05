@@ -95,7 +95,7 @@ export const PptxPreview: React.FC<PptxPreviewProps> = ({ data }) => {
         setCurrentSlide(index);
       }
     },
-    [slideHtmls.length],
+    [slideHtmls.length]
   );
 
   const goPrev = useCallback(() => goToSlide(currentSlide - 1), [currentSlide, goToSlide]);

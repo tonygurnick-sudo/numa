@@ -16,7 +16,7 @@ export const getPolicyBuilderBucketInfo = async (
   s3Client,
   fileExtension = '.pdf',
   userId,
-  jobDetails = null,
+  jobDetails = null
 ) => {
   // Check if CLIENT_NAME is defined
   if (config.CLIENT_NAME === undefined) {

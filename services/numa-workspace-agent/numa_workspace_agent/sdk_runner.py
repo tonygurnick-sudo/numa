@@ -18,6 +18,7 @@ from typing import TYPE_CHECKING, Any, AsyncIterator, Awaitable, Callable, Optio
 if TYPE_CHECKING:
     from numa_workspace_agent.agent_types import AgentTypeConfig
 
+import boto3
 import structlog
 from claude_agent_sdk import (
     AssistantMessage,
@@ -50,6 +51,13 @@ from numa_workspace_agent.workspace import (
 )
 
 logger = structlog.get_logger()
+
+# Data bucket configuration (for downloading attached files from My Files / Company Files)
+DATA_BUCKET_NAME = os.environ.get("DATA_BUCKET_NAME", "")
+# Allowed S3 prefixes for attached file downloads (security boundary)
+_ALLOWED_ATTACHMENT_PREFIXES = ("files/user/", "files/company/")
+# Maximum file size for attached file downloads (50MB)
+_MAX_ATTACHMENT_SIZE = 50 * 1024 * 1024
 
 RunKey = tuple[str, str, str]
 
@@ -250,6 +258,91 @@ def serialize_message(message: Any) -> dict[str, Any]:
         }
 
 
+def _download_attached_data_bucket_files(
+    attached_files: list[dict],
+    uploads_dir: Path,
+) -> int:
+    """Download data-bucket files referenced in attachments to /workdir/uploads/.
+
+    When the frontend sends file metadata from "My Files" or "Company Files"
+    (e.g., for summarization or share description), the files live in the S3
+    data bucket — not in the conversation workspace. This function downloads
+    them so Claude can read them like normal uploads.
+
+    Only processes files whose path starts with an allowed prefix (files/user/
+    or files/company/). Returns the number of files downloaded.
+    """
+    logger.info(
+        "Attempting to download attached data-bucket files",
+        data_bucket=DATA_BUCKET_NAME or "(not set)",
+        file_count=len(attached_files),
+    )
+
+    if not DATA_BUCKET_NAME:
+        logger.warning("DATA_BUCKET_NAME not set — skipping data-bucket file downloads")
+        return 0
+
+    downloads = 0
+    uploads_dir.mkdir(parents=True, exist_ok=True)
+    s3 = boto3.client("s3")
+
+    for file_info in attached_files:
+        s3_key = file_info.get("path", "")
+        filename = file_info.get("filename", "") or s3_key.rsplit("/", 1)[-1]
+
+        if not s3_key:
+            continue
+
+        # Security: only allow known data-bucket prefixes
+        if not any(s3_key.startswith(p) for p in _ALLOWED_ATTACHMENT_PREFIXES):
+            logger.debug(
+                "Skipping attachment — not a data-bucket file path",
+                s3_key=s3_key,
+            )
+            continue
+
+        dest = uploads_dir / filename
+        if dest.exists():
+            logger.debug("Attachment already in uploads", filename=filename)
+            downloads += 1
+            continue
+
+        try:
+            logger.info(
+                "Downloading attachment",
+                s3_key=s3_key,
+                dest=str(dest),
+                bucket=DATA_BUCKET_NAME,
+            )
+            # Check size before downloading
+            head = s3.head_object(Bucket=DATA_BUCKET_NAME, Key=s3_key)
+            size = head.get("ContentLength", 0)
+            if size > _MAX_ATTACHMENT_SIZE:
+                logger.warning(
+                    "Attachment too large, skipping",
+                    s3_key=s3_key,
+                    size_mb=size // (1024 * 1024),
+                )
+                continue
+
+            s3.download_file(DATA_BUCKET_NAME, s3_key, str(dest))
+            downloads += 1
+            logger.info(
+                "Downloaded attached data-bucket file",
+                s3_key=s3_key,
+                dest=str(dest),
+                size=size,
+            )
+        except Exception as e:
+            logger.warning(
+                "Failed to download attached file from data bucket",
+                s3_key=s3_key,
+                error=str(e),
+            )
+
+    return downloads
+
+
 async def stream_claude_sdk(
     conversation_id: str,
     prompt: str,
@@ -277,6 +370,7 @@ async def stream_claude_sdk(
     agent_type_config: Optional["AgentTypeConfig"] = None,
     user_profile: Optional[dict] = None,
     company_profile: Optional[str] = None,
+    feature_flags: Optional[dict[str, bool]] = None,
 ) -> AsyncIterator[bytes]:
     """
     Stream Claude SDK output for a conversation.
@@ -379,6 +473,13 @@ async def stream_claude_sdk(
             # Also restore the trace file to preserve conversation history.
             restore_trace_from_s3(user_sub, conversation_id)
 
+    # 1b. Download attached data-bucket files to /workdir/uploads/
+    #     When the frontend sends file metadata from "My Files" or "Company Files"
+    #     (e.g., for summarization or share description), the actual files live in
+    #     the S3 data bucket. Download them so Claude can read them like uploads.
+    if attached_files:
+        _download_attached_data_bucket_files(attached_files, paths["uploads"])
+
     # 2. List uploaded files for context
     uploaded_files: list[str] = []
     if paths["uploads"].exists():
@@ -415,6 +516,7 @@ async def stream_claude_sdk(
         agent_type_config=agent_type_config,
         user_profile=user_profile,
         company_profile=company_profile,
+        feature_flags=feature_flags,
     )
 
     logger.info(
@@ -896,6 +998,7 @@ async def run_claude_sdk(
     agent_type_config: Optional["AgentTypeConfig"] = None,
     user_profile: Optional[dict] = None,
     company_profile: Optional[str] = None,
+    feature_flags: Optional[dict[str, bool]] = None,
 ) -> dict[str, Any]:
     """Run Claude SDK to completion and return the collected result.
 
@@ -987,6 +1090,7 @@ async def run_claude_sdk(
         agent_type_config=agent_type_config,
         user_profile=user_profile,
         company_profile=company_profile,
+        feature_flags=feature_flags,
     )
 
     logger.info(

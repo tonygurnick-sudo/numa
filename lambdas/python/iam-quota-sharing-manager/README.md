@@ -42,6 +42,7 @@ This makes deployments fully idempotent - safe to run multiple times or from mul
 ## IAM Permissions Required
 
 The Lambda execution role needs:
+
 - `iam:GetRole`, `iam:CreateRole` on `arn:aws:iam::*:role/bedrock-quota-sharing`
 - `iam:GetPolicy`, `iam:CreatePolicy` on `arn:aws:iam::*:policy/bedrock-quota-sharing`
 - `iam:ListAttachedRolePolicies`, `iam:AttachRolePolicy` on the above resources

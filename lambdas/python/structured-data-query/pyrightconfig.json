@@ -1,10 +1,5 @@
 {
   "typeCheckingMode": "basic",
   "reportMissingTypeStubs": "none",
-  "exclude": [
-    "**/sdk/tests",
-    "**/tests",
-    "**/.venv",
-    "**/.poetry"
-  ]
+  "exclude": ["**/sdk/tests", "**/tests", "**/.venv", "**/.poetry"]
 }

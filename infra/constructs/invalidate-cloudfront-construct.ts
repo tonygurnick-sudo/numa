@@ -76,8 +76,8 @@ export class InvalidateCloudfront extends Construct {
         sourceHash: Fn.sha256(
           Fn.join(
             '',
-            props.dependsOn.map((dependency) => Fn.coalesce([dependency.sourceHash, dependency.content])),
-          ),
+            props.dependsOn.map((dependency) => Fn.coalesce([dependency.sourceHash, dependency.content]))
+          )
         ),
       },
       dependsOn: [...props.dependsOn, func, basicPolicyAttachment, inlinePolicy],

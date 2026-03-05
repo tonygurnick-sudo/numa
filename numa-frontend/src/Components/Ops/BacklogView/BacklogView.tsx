@@ -199,7 +199,7 @@ function BacklogGroupFooter({ zoneId, stageId, ticketTypes, onQuickAdd, onCreate
 
   const selectedType = useMemo(
     () => ticketTypes.find((tt) => tt.id === selectedTypeId) ?? ticketTypes[0] ?? null,
-    [ticketTypes, selectedTypeId],
+    [ticketTypes, selectedTypeId]
   );
 
   useEffect(() => {
@@ -551,7 +551,7 @@ const BacklogView = () => {
         setDeletingSprint(false);
       }
     },
-    [teamId, deletingSprint, numaDelete, refreshWorkUnits, refreshTickets, t],
+    [teamId, deletingSprint, numaDelete, refreshWorkUnits, refreshTickets, t]
   );
 
   // ── Filters ────────────────────────────────────────────────────
@@ -617,7 +617,7 @@ const BacklogView = () => {
   // ── Backlog zone IDs ─────────────────────────────────────────
   const backlogZoneIds = useMemo(
     () => new Set(zones.filter((z) => z.zoneType === 'backlog').map((z) => z.id)),
-    [zones],
+    [zones]
   );
 
   const firstBacklogZoneId = useMemo(() => zones.find((z) => z.zoneType === 'backlog')?.id ?? '', [zones]);
@@ -625,7 +625,7 @@ const BacklogView = () => {
   // ── All tickets in backlog zones (exclude archived) ────────
   const backlogTickets = useMemo(
     () => tickets.filter((tk) => backlogZoneIds.has(tk.zoneId) && !tk.archived),
-    [tickets, backlogZoneIds],
+    [tickets, backlogZoneIds]
   );
 
   // ── Filtered tickets (search + assignee + type + priority) ────
@@ -676,7 +676,7 @@ const BacklogView = () => {
   // ── Planning work units ────────────────────────────────────────
   const planningUnits = useMemo(
     () => workUnits.filter((wu) => wu.status === 'planning').sort((a, b) => a.order - b.order),
-    [workUnits],
+    [workUnits]
   );
 
   // ── Backlog stages (ordered) ──────────────────────────────────
@@ -790,7 +790,7 @@ const BacklogView = () => {
         console.error('[BacklogView] Quick add failed:', err);
       }
     },
-    [teamId, config?.ticketTypes, teamData?.stages, numaPost, refreshTickets],
+    [teamId, config?.ticketTypes, teamData?.stages, numaPost, refreshTickets]
   );
 
   const toggleAssignee = useCallback((assigneeId: string) => {
@@ -809,7 +809,7 @@ const BacklogView = () => {
       const ticket = filteredTickets.find((tk) => tk.id === ticketId) ?? null;
       setActiveTicket(ticket);
     },
-    [filteredTickets],
+    [filteredTickets]
   );
 
   const handleDragEnd = useCallback(
@@ -867,8 +867,8 @@ const BacklogView = () => {
         prev.map((tk) =>
           tk.id === ticketId
             ? { ...tk, stageId: newStageId, zoneId: newZoneId, workUnitId: newWorkUnitId, order: newOrder }
-            : tk,
-        ),
+            : tk
+        )
       );
 
       try {
@@ -886,7 +886,7 @@ const BacklogView = () => {
         await refreshTickets();
       }
     },
-    [filteredTickets, groupMap, stageMap, numaPut, refreshTickets, setTickets],
+    [filteredTickets, groupMap, stageMap, numaPut, refreshTickets, setTickets]
   );
 
   return (

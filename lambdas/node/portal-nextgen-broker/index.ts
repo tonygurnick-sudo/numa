@@ -65,7 +65,7 @@ async function doUpdateAccountName(e: UpdateAccountNameEvent): Promise<{ account
 }
 
 async function doGetSystemUserSecret(
-  e: GetSystemUserSecretEvent,
+  e: GetSystemUserSecretEvent
 ): Promise<{ secretName: string; secretString?: string }> {
   if (!e.accountId && !e.roleArn) throw new Error('Missing accountId or roleArn');
   const roleArn = e.roleArn || `arn:aws:iam::${e.accountId}:role/${CLIENT_ASSUME_ROLE_NAME}`;

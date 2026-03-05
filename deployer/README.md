@@ -6,19 +6,19 @@ This project is a Streamlit-based interface for managing and deploying Q Apps in
 
 1. Install dependencies using Poetry:
 
-    poetry install
+   poetry install
 
 2. Add a valid AWS Profile to a new .env file in the root, or a profile with the name 'qapps' will be used
 
-    AWS_PROFILE=account_name_here
+   AWS_PROFILE=account_name_here
 
 3. Run the Streamlit app using Poetry:
 
-    streamlit run app.py
+   streamlit run app.py
 
 4. The deployer is accessible at
 
-    http://localhost:8501/
+   http://localhost:8501/
 
 ## Secrets Format
 

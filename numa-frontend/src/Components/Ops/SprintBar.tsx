@@ -39,12 +39,12 @@ const SprintBar = () => {
   // ── Derived counts ──────────────────────────────────────────────────────
   const backlogZoneIds = useMemo(
     () => new Set(zones.filter((z) => z.zoneType === 'backlog').map((z) => z.id)),
-    [zones],
+    [zones]
   );
 
   const backlogCount = useMemo(
     () => tickets.filter((tk) => !tk.workUnitId && backlogZoneIds.has(tk.zoneId)).length,
-    [tickets, backlogZoneIds],
+    [tickets, backlogZoneIds]
   );
 
   const workUnitStats = useMemo(() => {
@@ -137,7 +137,7 @@ const SprintBar = () => {
         setDeleting(false);
       }
     },
-    [teamId, deleting, numaDelete, selectWorkUnit, refreshWorkUnits, refreshTickets, t],
+    [teamId, deleting, numaDelete, selectWorkUnit, refreshWorkUnits, refreshTickets, t]
   );
 
   return (

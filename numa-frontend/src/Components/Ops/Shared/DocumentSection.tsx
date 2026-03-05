@@ -182,7 +182,7 @@ export function DocumentSection({
         console.error('[DocumentSection] Failed to delete document', err);
       }
     },
-    [entityType, entityId, numaDelete, t],
+    [entityType, entityId, numaDelete, t]
   );
 
   const formatDate = (dateStr: string) => {

@@ -45,7 +45,7 @@ async function getQuotas(): Promise<Quota[]> {
         ServiceCode,
         MaxResults: 100,
         NextToken,
-      }),
+      })
     );
     NextToken = result.NextToken;
     quotas.push(
@@ -54,7 +54,7 @@ async function getQuotas(): Promise<Quota[]> {
         QuotaCode: quota.QuotaCode,
         Type: quota.QuotaName.match(/^On-demand/) ? 'On-demand' : 'Cross-region',
         Model: quota.QuotaName.split('Anthropic ')[1],
-      })),
+      }))
     );
   } while (NextToken);
   CACHE.set(cacheKey, quotas);
@@ -69,7 +69,7 @@ const accounts = Object.fromEntries(
   Object.entries(await getAllClientConfigs<ClientConfig>()).map(([clientName, clientConfig]) => [
     clientConfig.clientAccountId,
     { name: clientName },
-  ]),
+  ])
 );
 
 async function checkAccount(account: string, regions: string[], quotas: Quota[]): Promise<QuotaOutput[]> {
@@ -87,7 +87,7 @@ async function checkAccount(account: string, regions: string[], quotas: Quota[])
               new GetServiceQuotaCommand({
                 ServiceCode,
                 QuotaCode: quota.QuotaCode,
-              }),
+              })
             );
             return {
               Value: result.then((r) => r.Quota.Value),
@@ -95,9 +95,9 @@ async function checkAccount(account: string, regions: string[], quotas: Quota[])
               Region: region,
               Account: account,
             };
-          }),
+          })
         );
-      }),
+      })
     )
   ).flat();
 }
@@ -124,7 +124,7 @@ if (import.meta.filename == process.argv[1]) {
 
   console.log('Retrieving quotas...');
   const result = await Promise.all(
-    Object.keys(accounts).map(async (account) => checkAccount(account, regions, quotas)),
+    Object.keys(accounts).map(async (account) => checkAccount(account, regions, quotas))
   ).then((r) => r.flat().filter((r) => r));
 
   console.log('Producing report...');

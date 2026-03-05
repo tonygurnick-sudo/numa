@@ -90,7 +90,7 @@ describe('AppWizard Component', () => {
       // Mock the handleNextStep function
       const handleNextStep = () => {
         const visibleTasks = manifest.tasks.filter(
-          (task) => !['q-app', 'http-request'].includes(task.type) && !task.hidden,
+          (task) => !['q-app', 'http-request'].includes(task.type) && !task.hidden
         );
 
         // Get the next step index
@@ -565,7 +565,7 @@ describe('AppWizard Component', () => {
       // Mock the isStepComplete function from AppWizard
       const isStepComplete = (index) => {
         const visibleTasks = manifest.tasks.filter(
-          (task) => !['q-app', 'http-request'].includes(task.type) && !task.hidden,
+          (task) => !['q-app', 'http-request'].includes(task.type) && !task.hidden
         );
         const task = visibleTasks[index];
         return task ? customContext.taskCompletionStatus[task.id] || false : false;
@@ -574,7 +574,7 @@ describe('AppWizard Component', () => {
       // Mock the isStepDisabled function from AppWizard
       const isStepDisabled = (index) => {
         const visibleTasks = manifest.tasks.filter(
-          (task) => !['q-app', 'http-request'].includes(task.type) && !task.hidden,
+          (task) => !['q-app', 'http-request'].includes(task.type) && !task.hidden
         );
         const task = visibleTasks[index];
         // For output tasks, only disable if we haven't run yet
@@ -759,7 +759,7 @@ describe('AppWizard Component', () => {
       />,
       {
         numaAppContext: initialContext,
-      },
+      }
     );
 
     // Verify initial navigation flags
@@ -784,7 +784,7 @@ describe('AppWizard Component', () => {
         activeStep={updatedContext.activeStep}
         appRunning={updatedContext.appRunning}
         taskCompletionStatus={updatedContext.taskCompletionStatus}
-      />,
+      />
     );
 
     // Verify updated navigation flags
@@ -1051,7 +1051,7 @@ describe('AppWizard Component', () => {
       expect(mockSetError).toHaveBeenCalledWith(
         expect.objectContaining({
           message: 'Test error',
-        }),
+        })
       );
     });
   });

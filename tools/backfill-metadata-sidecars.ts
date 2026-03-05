@@ -109,7 +109,7 @@ async function backfillForClient(clientName: string, dryRun: boolean): Promise<v
           Key: metaKey,
           Body: JSON.stringify(payload),
           ContentType: 'application/json',
-        }),
+        })
       );
       created++;
     }

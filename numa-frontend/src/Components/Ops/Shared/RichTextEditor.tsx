@@ -34,7 +34,7 @@ type FormatCmd =
  */
 export const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(function RichTextEditor(
   { value, onSave, placeholder = 'Add a description…', minHeight = 120, disabled = false },
-  ref,
+  ref
 ) {
   const { t } = useTranslation('ops');
   const editorRef = useRef<HTMLDivElement>(null);
@@ -67,7 +67,7 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorPro
       if (disabled) return;
       document.execCommand(cmd, false, val);
     },
-    [disabled],
+    [disabled]
   );
 
   const handleLink = useCallback(() => {
@@ -200,12 +200,12 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorPro
         {divider}
         {toolbarBtn('Bold (Ctrl+B)', <strong style={{ fontSize: '0.85rem' }}>B</strong>, () => exec('bold'))}
         {toolbarBtn('Italic (Ctrl+I)', <em style={{ fontSize: '0.85rem', fontStyle: 'italic' }}>I</em>, () =>
-          exec('italic'),
+          exec('italic')
         )}
         {toolbarBtn(
           'Underline (Ctrl+U)',
           <span style={{ fontSize: '0.85rem', textDecoration: 'underline' }}>U</span>,
-          () => exec('underline'),
+          () => exec('underline')
         )}
         {divider}
         {toolbarBtn('Bullet list', <i className="bi bi-list-ul" />, () => exec('insertUnorderedList'))}

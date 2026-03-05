@@ -17,6 +17,7 @@
     "integrations": "Integrations",
     "connectedApps": "Connected Apps",
     "dataConnectors": "Data Connectors",
+    "capabilities": "Capabilities",
     "companyProfile": "Company Profile",
     "mfa": "MFA & Devices"
   },
@@ -135,14 +136,104 @@
     "toolsOff": "{{count}} off",
     "status": {
       "enabled": "Enabled",
-      "disabled": "Disabled"
+      "disabled": "Disabled",
+      "unavailable": "Unavailable"
     }
   },
   "dataConnectors": {
     "companySettingsTitle": "Company-wide settings",
     "companySettingsDescription": "These settings apply to everyone in your Numa environment. Use the toggle to enable or disable each data connector for your company.",
-    "synergyName": "Synergy",
-    "synergyDescription": "Data connector for Synergy job data."
+    "numaFilesName": "Numa Files",
+    "numaFilesDescription": "Enable the Numa Files virtual file system with folder workflows, file extraction, and database ingestion.",
+    "synergyName": "Synergy 12d",
+    "synergyDescription": "Connect jobs and folders from Synergy 12d for automated knowledge base sync.",
+    "oauthName": "OAuth Connector",
+    "oauthDescription": "Connect external services using OAuth authentication for secure data access.",
+    "unavailableHelp": "This connector is not available in the current environment.",
+    "unavailableTooltip": "This connector requires additional configuration to be enabled."
+  },
+  "capabilities": {
+    "tabTitle": "Capabilities",
+    "companySettingsTitle": "Feature Capabilities",
+    "companySettingsDescription": "Control which features are available to users. Greyed-out items require a deployment change to enable.",
+    "numaFiles": {
+      "name": "Numa Files",
+      "description": "Virtual file system with folder workflows, file extraction, and database ingestion."
+    },
+    "workspaceChat": {
+      "name": "Workspace Chat (V2)",
+      "description": "Next-gen AI chat with sandboxed code execution and persistent workspaces."
+    },
+    "scheduling": {
+      "name": "Scheduling",
+      "description": "Agent scheduling, recurring runs, and notification system."
+    },
+    "dataConnectors": {
+      "name": "Data Connectors",
+      "description": "Connect external data sources (Synergy 12d, OAuth providers) for knowledge base sync."
+    },
+    "oauth": {
+      "name": "OAuth Providers",
+      "description": "OAuth-based file providers (Google Drive, OneDrive, etc.) in the Remote Files tab."
+    },
+    "ops": {
+      "name": "Numa Ops",
+      "description": "Work management and operational task tracking."
+    },
+    "vault": {
+      "name": "Secrets Vault",
+      "description": "Secure credential storage for integrations and connections."
+    },
+    "agents": {
+      "name": "Agents",
+      "description": "Custom AI agent creation, management, and marketplace."
+    },
+    "integrations": {
+      "name": "Pipedream Integrations",
+      "description": "SaaS tool integrations via Pipedream (Gmail, Slack, Jira, etc.)."
+    },
+    "branding": {
+      "name": "Custom Branding",
+      "description": "White-label branding with custom logos, colors, and names."
+    },
+    "modelSelection": {
+      "name": "Model Selection",
+      "description": "Allow users to choose between AI models in Workspace Chat."
+    },
+    "developerMode": {
+      "name": "Developer Mode",
+      "description": "Enables developer actions such as file system drill-down, metadata inspection, and debug views."
+    },
+    "mfa": {
+      "name": "Multi-Factor Authentication",
+      "description": "Require TOTP-based multi-factor authentication for all users."
+    },
+    "dropZones": {
+      "name": "Drop Zones",
+      "description": "Shared upload folders for receiving files from external users."
+    },
+    "sharing": {
+      "name": "Sharing",
+      "description": "Share documents with external users for public Q&A conversations."
+    },
+    "oauthGoogleDrive": {
+      "name": "Google Drive",
+      "description": "Enable Google Drive as a data connector."
+    },
+    "oauthOnedrive": {
+      "name": "OneDrive",
+      "description": "Enable Microsoft OneDrive as a data connector."
+    },
+    "oauthDropbox": {
+      "name": "Dropbox",
+      "description": "Enable Dropbox as a data connector."
+    },
+    "notDeployed": "Not deployed",
+    "requiresDeployBadge": "Requires deploy",
+    "devOnlyBadge": "Dev only",
+    "toggleEnabled": "Enabled",
+    "toggleDisabled": "Disabled",
+    "disableConfirm": "Disabling {{name}} will prevent users from accessing it. Continue?"
   },
   "brandingAdmin": {
     "title": "Branding Controls",

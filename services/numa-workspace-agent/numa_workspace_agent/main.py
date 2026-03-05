@@ -1284,6 +1284,7 @@ async def _handle_chat(
     if not prompt:
         raise HTTPException(status_code=400, detail="Missing prompt")
 
+    feature_flags = body.get("featureFlags", {})
     timezone = body.get("timezone")
     user_email = body.get("userEmail")
     today_string = body.get("todayString")
@@ -1710,6 +1711,7 @@ async def _handle_chat(
                 agent_type_config=agent_type_config,  # Agent type configuration
                 user_profile=user_profile,  # User profile for AI personalisation
                 company_profile=company_profile,  # Company profile for system prompt
+                feature_flags=feature_flags,  # Feature flags for conditional tools
             )
             async for chunk in sdk_stream:
                 # Stream chunk directly to frontend via HTTP SSE
@@ -1793,6 +1795,7 @@ async def _handle_sync(
     )
 
     # Extract the same parameters as _handle_chat for SDK options
+    feature_flags = body.get("featureFlags", {})
     timezone = body.get("timezone")
     user_email = body.get("userEmail")
     today_string = body.get("todayString")
@@ -1943,6 +1946,7 @@ async def _handle_sync(
             approval_mode=effective_approval_mode,
             agent_type_config=agent_type_config,
             company_profile=company_profile,
+            feature_flags=feature_flags,
         )
 
     # If the agent type uses result_file mode, read /workdir/outputs/result.json
@@ -2049,6 +2053,7 @@ async def _handle_fire_and_forget(
     )
 
     # Extract the same parameters as _handle_chat
+    feature_flags = body.get("featureFlags", {})
     timezone = body.get("timezone")
     user_email = body.get("userEmail")
     today_string = body.get("todayString")
@@ -2196,6 +2201,7 @@ async def _handle_fire_and_forget(
                     approval_mode=effective_approval_mode,
                     agent_type_config=agent_type_config,
                     company_profile=company_profile,
+                    feature_flags=feature_flags,
                 )
 
             # If the agent type uses result_file mode, read result.json

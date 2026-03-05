@@ -88,7 +88,7 @@ export function useStagedFiles({ conversationId, isEnabled }: UseStagedFilesOpti
         return grouped;
       });
     },
-    [conversationId],
+    [conversationId]
   );
 
   // Remove a staged item and delete from backend
@@ -125,7 +125,7 @@ export function useStagedFiles({ conversationId, isEnabled }: UseStagedFilesOpti
         return updated;
       });
     },
-    [conversationId],
+    [conversationId]
   );
 
   // Clear all staged items (called after message send)

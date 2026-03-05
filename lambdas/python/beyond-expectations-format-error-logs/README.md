@@ -32,13 +32,13 @@ The Lambda accepts a JSON event with the following parameters:
 }
 ```
 
-| Parameter | Description |
-|-----------|-------------|
-| `timeWindow` | Look-back period in hours for log collection |
-| `bucket` | S3 bucket containing the error logs |
-| `errorPrefix` | S3 prefix where raw error logs are stored |
-| `outputPrefix` | Base prefix for output chunk files |
-| `chunkSize` | Number of log entries per chunk (default: 10) |
+| Parameter      | Description                                   |
+| -------------- | --------------------------------------------- |
+| `timeWindow`   | Look-back period in hours for log collection  |
+| `bucket`       | S3 bucket containing the error logs           |
+| `errorPrefix`  | S3 prefix where raw error logs are stored     |
+| `outputPrefix` | Base prefix for output chunk files            |
+| `chunkSize`    | Number of log entries per chunk (default: 10) |
 
 ## Output
 
@@ -63,18 +63,19 @@ Output files are written to S3 at:
 ## Required Permissions
 
 The Lambda requires S3 permissions for:
+
 - `s3:ListBucket`
 - `s3:GetObject`
 - `s3:PutObject`
 
 ## Dependencies
 
-* **boto3** (via `s3_helpers`)
-* **structlog**
-* **aws\_lambda\_powertools** typing utilities
-* Custom helper modules:
-  * `helpers` (initializes logging)
-  * `s3_helpers` (wraps S3 operations)
+- **boto3** (via `s3_helpers`)
+- **structlog**
+- **aws_lambda_powertools** typing utilities
+- Custom helper modules:
+  - `helpers` (initializes logging)
+  - `s3_helpers` (wraps S3 operations)
 
 ## Integration
 

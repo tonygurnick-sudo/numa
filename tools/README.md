@@ -286,7 +286,7 @@ The tool provides detailed output including:
 
 Examples:
 
-```bash
+````bash
 # See what changes would be made to all clients (default dry run)
 AWS_PROFILE=arcanum-q-deployer-prod yarn update-q-deploy-config
 
@@ -314,9 +314,10 @@ AWS_PROFILE=arcanum-q-deployer-prod yarn list-clients
 
 # Retrieve a specific client's config to confirm access
 AWS_PROFILE=arcanum-q-deployer-prod yarn retrieve-config <client-name>
-```
+````
 
 Usage:
+
 ```bash
 # Dry run (no changes): shows what would be deleted/stopped/detached
 AWS_PROFILE=arcanum-q-deployer-prod yarn teardown-client --check <client-name>
@@ -348,16 +349,19 @@ AWS_PROFILE=arcanum-q-deployer-prod yarn teardown-client --yes --delete-config -
 ```
 
 What it does:
+
 - S3: empties client buckets `numa-<client>-data`, `numa-<client>-outputs`, `numa-<client>-fe`.
 - Step Functions: stops RUNNING executions on state machines matching the client name.
 - IAM: detaches known client policies from roles/users/groups.
 - RDS: deletes knowledge base Aurora instance(s) and cluster (respects `--no-skip-final-snapshot`).
 
 Notes:
+
 - The script uses optional AWS SDK clients for SFN/IAM/RDS. If a client library is not installed, that section will be skipped with a log message.
 - For CDKTF destroy, the default stack is `numa-<client>`. Many deployments use shared environment stacks instead (e.g., `numa-dev-hams`). In that case, pass `--stack <name>`.
 
 Find your CDKTF stack name:
+
 - Using Yarn from repo root: `yarn -C infra cdktf list`
 - Or check existing outputs: `ls infra/cdktf.out/*/stacks`
 - After it completes, destroy remaining infra via CDKTF, e.g.:
@@ -368,11 +372,13 @@ Find your CDKTF stack name:
 - Common error: `Requested resource not found` usually means the client config cannot be found. Use `list-clients`/`retrieve-config` to verify.
 
 Safety & confirmation:
+
 - By default (non `--check`), the script requires interactive confirmation before performing destructive actions. You must type `<client> <accountId>` exactly to proceed (e.g., `bendigo-council 183295422459`).
 - Use `--yes` to skip confirmation for automation. Be careful.
 - You do not need per-client AWS config profiles. Use `--profile` to select the delegated admin profile (defaults to `arcanum-q-deployer-prod`). Per-client profiles will also work if preferred.
 
 Post-teardown options:
+
 - `--delete-config`: deletes the client config from the `numa-client-config` DynamoDB table (uses admin-delegated-access role in us-east-1). Honors `--yes` to skip that tool's prompt.
 - `--destroy-infra`: runs `yarn cdktf destroy --auto-approve numa-<client-name>` from `infra/` and streams output, printing clear success/failure.
 
@@ -593,6 +599,7 @@ yarn generate-usage-report <client-name> [time-period] [format]
 ```
 
 **Parameters:**
+
 - `client-name` (required): The client name key from infra/stacks/numa-client-stack.ts:clientsProd, e.g. arcanum-demo
 - `time-period` (optional): Time period to generate reports for (defaults to 'current-year')
   - `current-year` - Current year (default)
@@ -602,6 +609,7 @@ yarn generate-usage-report <client-name> [time-period] [format]
 - `format` (optional): Output format - 'csv' (default) or 'json'
 
 **Examples:**
+
 ```bash
 # Generate CSV reports for current year (default)
 yarn generate-usage-report arcanum-demo
@@ -622,9 +630,11 @@ yarn generate-usage-report arcanum-demo previous-month json
 #### Output Files
 
 **CSV Format (default):**
+
 - `{client}-app-runs-{period}-{timestamp}.csv` - Detailed app run records
 - `{client}-chat-messages-{period}-{timestamp}.csv` - Detailed chat message records
 - `{client}-usage-summary-{period}-{timestamp}.csv` - Aggregated monthly usage summary
 
 **JSON Format:**
+
 - `{client}-usage-report-{period}-{timestamp}.json` - Complete report with metadata and all data

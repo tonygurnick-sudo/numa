@@ -27,6 +27,10 @@ export interface SharedChatConstructProps {
   outputsBucketArn: string;
   /** Name of the outputs bucket (for generating pre-signed URLs) */
   outputsBucketName: string;
+  /** ARN of the data bucket (for presigned URL generation on files/* ) */
+  dataBucketArn?: string;
+  /** Bedrock Knowledge Base ID for optional KB-enhanced chat */
+  bedrockKnowledgeBaseId?: string;
 }
 
 /**
@@ -61,6 +65,12 @@ export class SharedChatConstruct extends Construct {
         EXTRACTION_LAMBDA_NAME: props.extractionLambdaArn.split(':').pop() ?? '',
         // S3 outputs bucket name for generating fresh pre-signed URLs
         OUTPUTS_BUCKET_NAME: props.outputsBucketName,
+        // Data bucket name for drop zone uploads (extract bucket name from ARN: arn:aws:s3:::bucket-name)
+        ...(props.dataBucketArn ? { DATA_BUCKET_NAME: props.dataBucketArn.split(':').pop() ?? '' } : {}),
+        // Bedrock KB for knowledge-augmented shared chat
+        ...(props.bedrockKnowledgeBaseId
+          ? { BEDROCK_KNOWLEDGE_BASE_ID: props.bedrockKnowledgeBaseId, CLIENT_NAME: props.clientName }
+          : {}),
         // LWA configuration for response streaming
         AWS_LAMBDA_EXEC_WRAPPER: '/opt/bootstrap',
         AWS_LWA_INVOKE_MODE: 'response_stream',
@@ -82,13 +92,25 @@ export class SharedChatConstruct extends Construct {
         // DynamoDB access for shared table (including GSI for listing shares by user)
         {
           effect: 'Allow',
-          actions: ['dynamodb:GetItem', 'dynamodb:PutItem', 'dynamodb:UpdateItem', 'dynamodb:Query'],
+          actions: [
+            'dynamodb:GetItem',
+            'dynamodb:PutItem',
+            'dynamodb:UpdateItem',
+            'dynamodb:DeleteItem',
+            'dynamodb:Query',
+          ],
           resources: [props.sharedTableArn, `${props.sharedTableArn}/index/*`],
         },
         // DynamoDB access for chat history table
         {
           effect: 'Allow',
-          actions: ['dynamodb:GetItem', 'dynamodb:PutItem', 'dynamodb:Query', 'dynamodb:DeleteItem'],
+          actions: [
+            'dynamodb:GetItem',
+            'dynamodb:PutItem',
+            'dynamodb:Query',
+            'dynamodb:DeleteItem',
+            'dynamodb:BatchWriteItem',
+          ],
           resources: [props.sharedChatHistoryTableArn],
         },
         // Lambda invoke for content extraction
@@ -103,6 +125,32 @@ export class SharedChatConstruct extends Construct {
           actions: ['s3:GetObject', 's3:PutObject'],
           resources: [`${props.outputsBucketArn}/*`],
         },
+        // S3 access for data bucket: read original files + existing extractions,
+        // and read/write extraction output and document text for shares
+        ...(props.dataBucketArn
+          ? [
+              {
+                effect: 'Allow' as const,
+                actions: ['s3:GetObject', 's3:PutObject'],
+                resources: [`${props.dataBucketArn}/files/*`],
+              },
+              {
+                effect: 'Allow' as const,
+                actions: ['s3:GetObject', 's3:PutObject'],
+                resources: [`${props.dataBucketArn}/shared/*`],
+              },
+            ]
+          : []),
+        // Bedrock KB retrieval (only when KB is configured)
+        ...(props.bedrockKnowledgeBaseId
+          ? [
+              {
+                effect: 'Allow' as const,
+                actions: ['bedrock:Retrieve'],
+                resources: [`arn:aws:bedrock:${props.region}:*:knowledge-base/${props.bedrockKnowledgeBaseId}`],
+              },
+            ]
+          : []),
       ],
     });
 

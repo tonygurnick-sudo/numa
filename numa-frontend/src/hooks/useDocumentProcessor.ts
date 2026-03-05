@@ -99,7 +99,7 @@ export const useDocumentProcessor = () => {
       }
       return docBlock;
     },
-    [processDocumentFromResponse, updateMessageWithDocument, saveDocumentMetadata],
+    [processDocumentFromResponse, updateMessageWithDocument, saveDocumentMetadata]
   );
 
   return {

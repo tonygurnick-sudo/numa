@@ -5,6 +5,7 @@ A powerful, AI-enhanced command-line tool for querying databases using SQL or na
 ## Features
 
 ### 🎯 Core Capabilities
+
 - **Direct SQL Queries**: Execute SQL against any configured datasource
 - **Natural Language Mode** (`--ask`): Convert English questions to SQL automatically
 - **Agentic Investigation** (`--auto`): AI conducts multi-hop investigations autonomously
@@ -15,12 +16,15 @@ A powerful, AI-enhanced command-line tool for querying databases using SQL or na
 ### 🤖 AI-Powered Features
 
 #### Single Query Mode (`--ask`)
+
 Convert natural language to SQL and get instant answers:
+
 ```bash
 db --ask "how many users registered this month?"
 ```
 
 **How it works:**
+
 1. Claude AI converts your question to SQL
 2. Query executes against your database
 3. Results are analyzed and explained in natural language
@@ -30,12 +34,15 @@ db --ask "how many users registered this month?"
 **Cost**: ~$0.02 per query
 
 #### Agentic Investigation Mode (`--ask --auto`)
+
 AI conducts full database investigations autonomously:
+
 ```bash
 db --ask "why are our API response times slow?" --auto
 ```
 
 **How it works:**
+
 1. AI breaks down your question into investigation phases
 2. Executes multiple queries iteratively (up to 20)
 3. Builds understanding across queries using memory store
@@ -49,6 +56,7 @@ db --ask "why are our API response times slow?" --auto
 ## Installation
 
 ### Requirements
+
 - Bash 4.0+ (for associative arrays)
 - `psql` (for PostgreSQL datasources)
 - `sqlite3` (for SQLite datasources)
@@ -67,11 +75,13 @@ wget https://github.com/duckdb/duckdb/releases/download/v1.1.3/duckdb_cli-linux-
 1. **Clone or download** this tool
 
 2. **Copy the example config:**
+
    ```bash
    cp .env.example .env
    ```
 
 3. **Edit `.env`** and add your credentials:
+
    ```bash
    # Required for AI features
    ANTHROPIC_API_KEY=sk-ant-your-key-here
@@ -85,6 +95,7 @@ wget https://github.com/duckdb/duckdb/releases/download/v1.1.3/duckdb_cli-linux-
    ```
 
 4. **Load environment variables:**
+
    ```bash
    source .env
    export PGPASSWORD="$DB_PASSWORD"  # For PostgreSQL
@@ -96,6 +107,7 @@ wget https://github.com/duckdb/duckdb/releases/download/v1.1.3/duckdb_cli-linux-
    - Add custom datasources as needed
 
 6. **Make executable and create symlink** (optional):
+
    ```bash
    chmod +x db
    ln -sf $(pwd)/db ~/.local/bin/db
@@ -123,10 +135,10 @@ The `config.yaml` file uses a simple, declarative format. Each datasource define
 datasources:
   production:
     type: postgres
-    description: "Production database"
+    description: 'Production database'
 
     connection:
-      host_env: DB_HOST          # Load from environment variable
+      host_env: DB_HOST # Load from environment variable
       port_env: DB_PORT
       database_env: DB_NAME
       user_env: DB_USER
@@ -145,7 +157,7 @@ datasources:
 datasources:
   local_sqlite:
     type: sqlite
-    description: "Local SQLite database"
+    description: 'Local SQLite database'
 
     connection:
       database_path: ./data.db
@@ -163,7 +175,7 @@ datasources:
 datasources:
   s3_csv_data:
     type: s3-csv-sqlite
-    description: "CSV in S3, queried via SQLite"
+    description: 'CSV in S3, queried via SQLite'
 
     connection:
       bucket: my-data-bucket
@@ -248,12 +260,14 @@ db --format table "SELECT * FROM data;"
 **Use when**: You have a specific question that can be answered with one query
 
 **Process**:
+
 1. Your question → Claude generates SQL
 2. SQL executes → Returns results
 3. Claude analyzes results → Generates natural language answer
 4. Shows both answer and raw data
 
 **Example**:
+
 ```bash
 $ db --ask "how many active users do we have?"
 
@@ -284,6 +298,7 @@ count
 **Use when**: You need deep investigation across multiple queries
 
 **Process**:
+
 1. AI conducts 6-phase investigation
 2. Executes multiple queries iteratively
 3. Maintains context using STORE/RECALL memory
@@ -291,6 +306,7 @@ count
 5. Synthesizes comprehensive answer
 
 **Investigation Phases**:
+
 - **Phase 1**: Reconnaissance & Schema Discovery
 - **Phase 2**: Initial Exploration (Hop 1)
 - **Phase 3**: Targeted Investigation (Hop 2)
@@ -299,6 +315,7 @@ count
 - **Phase 6**: Synthesis & Reporting
 
 **Example**:
+
 ```bash
 $ db --ask "why are orders failing?" --auto
 
@@ -402,7 +419,7 @@ Add your own datasources to `config.yaml`:
 datasources:
   my_custom_db:
     type: custom
-    description: "My custom database"
+    description: 'My custom database'
 
     connection:
       host: mydb.example.com
@@ -423,6 +440,7 @@ datasources:
    - Rotate credentials regularly
 
 2. **Use read-only database users** for queries
+
    ```sql
    -- PostgreSQL example
    CREATE USER readonly_user WITH PASSWORD 'secure_password';
@@ -442,16 +460,19 @@ datasources:
 ## Troubleshooting
 
 ### "ANTHROPIC_API_KEY not set"
+
 ```bash
 export ANTHROPIC_API_KEY='sk-ant-your-key-here'
 ```
 
 ### "Connection refused" (PostgreSQL)
+
 - Check `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`
 - Verify network access to database
 - Check firewall rules
 
 ### "sqlite3: command not found"
+
 ```bash
 # macOS
 brew install sqlite3
@@ -464,7 +485,9 @@ sudo dnf install sqlite
 ```
 
 ### Large output causing issues
+
 Use `--verbose` flag or pagination:
+
 ```bash
 db --id <output_id> --start 1 --offset 100
 ```
@@ -472,17 +495,21 @@ db --id <output_id> --start 1 --offset 100
 ## Supported Datasources
 
 ### Currently Implemented
+
 - ✅ **PostgreSQL** (via `psql`)
 - ✅ **SQLite** (via `sqlite3`)
 
 ### Planned/Example Configs Provided
+
 - 📝 **S3 CSV → SQLite** (download and query)
 - 📝 **AWS Athena** (serverless S3 SQL)
 - 📝 **DuckDB** (fast analytical queries on CSV/Parquet)
 - 📝 **Pandas** (Python-based CSV querying)
 
 ### Adding Your Own
+
 Simply edit `config.yaml` and define:
+
 1. Connection instructions
 2. Query command template
 3. Schema command
@@ -493,11 +520,13 @@ Simply edit `config.yaml` and define:
 ### AI Features Pricing
 
 **Single Query Mode** (`--ask`):
+
 - Model: Claude Sonnet 4.5
 - Cost: ~$0.02 per query
 - Queries: 2 API calls (SQL generation + answer generation)
 
 **Agentic Mode** (`--ask --auto`):
+
 - Model: Claude Haiku 3.5
 - Cost: ~$0.001-$0.008 per iteration
 - Max iterations: 20 (configurable)
@@ -505,6 +534,7 @@ Simply edit `config.yaml` and define:
 - Most investigations complete in 3-7 iterations
 
 ### Database Costs
+
 - Depends on your database provider
 - Use connection pooling for production
 - Consider read replicas for analytics queries
@@ -541,6 +571,7 @@ Contributions welcome! To add a new datasource:
 ## Changelog
 
 ### Version 4.0 (Current)
+
 - ✨ Agentic investigation mode with multi-hop reasoning
 - ✨ STORE/RECALL memory system for AI agents
 - ✨ Configuration file support for multiple datasources
@@ -548,11 +579,13 @@ Contributions welcome! To add a new datasource:
 - ✨ Support for S3, SQLite, and custom datasources
 
 ### Version 2.0
+
 - ✨ Natural language SQL generation (`--ask`)
 - ✨ Automatic answer generation from results
 - ✨ Schema-aware query generation
 
 ### Version 1.0
+
 - ✨ Direct SQL query execution
 - ✨ Output truncation and pagination
 - ✨ Multiple output formats (CSV, JSON, table)

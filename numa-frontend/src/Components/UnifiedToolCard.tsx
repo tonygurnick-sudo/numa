@@ -39,7 +39,7 @@ type Props = {
     }) => Promise<unknown>;
   };
   setMessages?: (
-    fn: (prev: Array<{ role: string; segments?: unknown[] }>) => Array<{ role: string; segments?: unknown[] }>,
+    fn: (prev: Array<{ role: string; segments?: unknown[] }>) => Array<{ role: string; segments?: unknown[] }>
   ) => void;
 };
 
@@ -128,7 +128,7 @@ export const UnifiedToolCard = ({
   // Only Web Search and Knowledge Base have collapsible details
   const hasDetails = useMemo(
     () => effectiveToolName === 'web_search' || effectiveToolName === 'query_knowledge_base',
-    [effectiveToolName],
+    [effectiveToolName]
   );
 
   // Choose body renderer (bare/inner only) for tools that support collapsible details

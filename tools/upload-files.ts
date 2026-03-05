@@ -40,7 +40,7 @@ export async function startSync(awsClientConfig, applicationId: string, indexId:
       applicationId,
       dataSourceId,
       indexId,
-    }),
+    })
   );
   console.log(response.executionId);
 }
@@ -62,6 +62,6 @@ if (import.meta.filename === process?.argv[1]) {
     awsClientConfig,
     accountDetails.qApplicationId,
     accountDetails.qIndexId,
-    accountDetails.qDataSourceId,
+    accountDetails.qDataSourceId
   );
 }

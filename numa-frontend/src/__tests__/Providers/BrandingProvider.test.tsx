@@ -47,7 +47,7 @@ describe('BrandingProvider', () => {
     render(
       <BrandingProviderComponent>
         <TestConsumer />
-      </BrandingProviderComponent>,
+      </BrandingProviderComponent>
     );
 
     await waitFor(() => {

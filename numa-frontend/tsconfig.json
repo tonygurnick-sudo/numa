@@ -1,6 +1,5 @@
 {
   "compilerOptions": {
-
     /* Type checking enhancements (kept relaxed) */
     "strict": false,
     "noImplicitAny": false,
@@ -28,7 +27,6 @@
 
     /* Migration-friendly settings (lenient so builds never block) */
 
-
     "strictFunctionTypes": false,
     "strictBindCallApply": false,
     "strictPropertyInitialization": false,
@@ -36,7 +34,6 @@
     "noImplicitThis": false,
     "noUnusedLocals": false,
     "noUnusedParameters": false,
-
 
     /* Additional lenient settings */
     "noErrorTruncation": true,
@@ -53,8 +50,7 @@
       "@/providers/*": ["./src/Providers/*"],
       "@/hooks/*": ["./src/hooks/*"],
       "@/modules/*": ["./src/Modules/*"],
-      "@/layouts/*": ["./src/Layouts/*"],
-
+      "@/layouts/*": ["./src/Layouts/*"]
     },
 
     /* React / tooling */
@@ -70,22 +66,9 @@
 
     /* Perf / caching */
     "incremental": true,
-    "tsBuildInfoFile": ".tsbuildinfo",
-
-
-
-
-
+    "tsBuildInfoFile": ".tsbuildinfo"
   },
   "include": ["src/**/*", "src/**/*.json", "src/**/__tests__/**/*"],
-  "exclude": [
-    "node_modules",
-    "dist",
-    "coverage",
-    "playwright-report",
-    "test-results",
-    "**/*.js",
-    "**/*.jsx"
-  ],
+  "exclude": ["node_modules", "dist", "coverage", "playwright-report", "test-results", "**/*.js", "**/*.jsx"],
   "references": [{ "path": "./tsconfig.node.json" }]
 }

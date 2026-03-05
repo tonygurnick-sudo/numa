@@ -1,4 +1,5 @@
 import React, { useRef, useEffect, useState } from 'react';
+import { getFlag } from '../../utils/featureFlags';
 import { Button, Form, Spinner, Modal, Dropdown, Badge, OverlayTrigger, Tooltip } from 'react-bootstrap';
 import { Search, Robot, BarChart } from 'react-bootstrap-icons';
 import { Paperclip, Send } from 'lucide-react';
@@ -82,8 +83,7 @@ const ChatInput = ({
     selectKBById: _selectKBById,
     refreshKBs,
   } = useKnowledgeBase();
-  const agentsFeatureEnabled =
-    typeof window !== 'undefined' ? window.sessionStorage.getItem('AGENTS') === 'true' : false;
+  const agentsFeatureEnabled = getFlag('AGENTS');
 
   const maxVisibleConnectionIcons = isMobile ? 2 : 4;
   const visibleConnectionIds = enabledConnections.slice(0, maxVisibleConnectionIcons);
@@ -790,7 +790,7 @@ const ChatInput = ({
                         <span className="model-indicator">
                           {WORKSPACE_MODEL_OPTIONS.find((m) => m.id === selectedModelId)?.label.replace(
                             'Claude ',
-                            '',
+                            ''
                           ) || 'Sonnet'}
                         </span>
                       )}

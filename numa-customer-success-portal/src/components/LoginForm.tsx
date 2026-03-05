@@ -1,22 +1,12 @@
-import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
-import {
-  Container,
-  Card,
-  Form,
-  Button,
-  Alert,
-  Spinner,
-  Row,
-  Col,
-  Badge
-} from 'react-bootstrap'
-import { Lock, Person } from 'react-bootstrap-icons'
-import { useAuth } from '@/contexts/AuthContext'
-import ArcanumLogo from '@/assets/arc_logo_black.svg?react'
+import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { Container, Card, Form, Button, Alert, Spinner, Row, Col, Badge } from 'react-bootstrap';
+import { Lock, Person } from 'react-bootstrap-icons';
+import { useAuth } from '@/contexts/AuthContext';
+import ArcanumLogo from '@/assets/arc_logo_black.svg?react';
 
 export default function LoginForm() {
-  const navigate = useNavigate()
+  const navigate = useNavigate();
   const {
     signIn,
     completePasswordChange,
@@ -27,8 +17,8 @@ export default function LoginForm() {
     passwordChangeRequired,
     mfaSetupRequired,
     mfaCodeRequired,
-    clearError
-  } = useAuth()
+    clearError,
+  } = useAuth();
 
   const [formData, setFormData] = useState({
     username: '',
@@ -38,69 +28,68 @@ export default function LoginForm() {
     fullName: '',
     mfaCode: '',
     mfaSetupCode: '',
-  })
+  });
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { name, value } = e.target
-    setFormData(prev => ({
+    const { name, value } = e.target;
+    setFormData((prev) => ({
       ...prev,
-      [name]: value
-    }))
+      [name]: value,
+    }));
 
     // Clear error when user starts typing
-    if (error) clearError()
-  }
+    if (error) clearError();
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
+    e.preventDefault();
 
     if (passwordChangeRequired) {
       // Handle password change submission
       if (!formData.newPassword || formData.newPassword !== formData.confirmPassword || !formData.fullName) {
-        return
+        return;
       }
 
       try {
-        await completePasswordChange(formData.newPassword, formData.fullName)
+        await completePasswordChange(formData.newPassword, formData.fullName);
       } catch {
         // Error is handled by the AuthContext
       }
     } else if (mfaSetupRequired) {
       // Handle MFA setup verify submission
       if (!formData.mfaSetupCode) {
-        return
+        return;
       }
 
       try {
-        await completeMfaSetup(formData.mfaSetupCode)
+        await completeMfaSetup(formData.mfaSetupCode);
       } catch {
         // Error handled by context
       }
     } else if (mfaCodeRequired) {
       // Handle MFA code submission
       if (!formData.mfaCode) {
-        return
+        return;
       }
 
       try {
-        await submitMfaCode(formData.mfaCode)
+        await submitMfaCode(formData.mfaCode);
       } catch {
         // Error handled by context
       }
     } else {
       // Handle initial sign in
       if (!formData.username || !formData.password) {
-        return
+        return;
       }
 
       try {
-        await signIn(formData.username, formData.password)
+        await signIn(formData.username, formData.password);
       } catch {
         // Error is handled by the AuthContext
       }
     }
-  }
-
+  };
 
   return (
     <div className="min-vh-100 d-flex align-items-center bg-light">
@@ -112,9 +101,7 @@ export default function LoginForm() {
                 <div className="mb-3 d-flex justify-content-center">
                   <ArcanumLogo style={{ height: '48px', width: 'auto' }} className="login-logo" />
                 </div>
-                <h3 className="mb-1 text-dark">
-                  Customer Success Portal
-                </h3>
+                <h3 className="mb-1 text-dark">Customer Success Portal</h3>
                 <small className="text-muted">
                   {passwordChangeRequired
                     ? 'Password Change Required'
@@ -132,7 +119,6 @@ export default function LoginForm() {
                     {error}
                   </Alert>
                 )}
-
 
                 <Form onSubmit={handleSubmit}>
                   {passwordChangeRequired ? (
@@ -198,11 +184,11 @@ export default function LoginForm() {
                             placeholder="Confirm your new password"
                             required
                             disabled={loading}
-                            isInvalid={formData.confirmPassword !== '' && formData.newPassword !== formData.confirmPassword}
+                            isInvalid={
+                              formData.confirmPassword !== '' && formData.newPassword !== formData.confirmPassword
+                            }
                           />
-                          <Form.Control.Feedback type="invalid">
-                            Passwords do not match.
-                          </Form.Control.Feedback>
+                          <Form.Control.Feedback type="invalid">Passwords do not match.</Form.Control.Feedback>
                         </div>
                       </Form.Group>
 
@@ -211,7 +197,12 @@ export default function LoginForm() {
                           type="submit"
                           className="btn-login"
                           size="lg"
-                          disabled={loading || !formData.fullName || !formData.newPassword || formData.newPassword !== formData.confirmPassword}
+                          disabled={
+                            loading ||
+                            !formData.fullName ||
+                            !formData.newPassword ||
+                            formData.newPassword !== formData.confirmPassword
+                          }
                         >
                           {loading ? (
                             <>
@@ -230,20 +221,18 @@ export default function LoginForm() {
                       <Alert variant="info" className="mb-3">
                         <strong>MFA is required for your account.</strong>
                         <br />
-                        Add the account to your authenticator app using the code below, then enter a 6‑digit code to verify.
+                        Add the account to your authenticator app using the code below, then enter a 6‑digit code to
+                        verify.
                       </Alert>
 
                       <Form.Group className="mb-3">
                         <Form.Label>Secret Key</Form.Label>
                         <div className="input-group">
-                          <Form.Control
-                            type="text"
-                            value={mfaSetupRequired.secretCode}
-                            readOnly
-                          />
+                          <Form.Control type="text" value={mfaSetupRequired.secretCode} readOnly />
                         </div>
                         <Form.Text className="text-muted">
-                          Add this key to Google Authenticator, 1Password, or Authy. If preferred, you can use this link: <a href={mfaSetupRequired.otpauthUrl}>otpauth://</a>
+                          Add this key to Google Authenticator, 1Password, or Authy. If preferred, you can use this
+                          link: <a href={mfaSetupRequired.otpauthUrl}>otpauth://</a>
                         </Form.Text>
                       </Form.Group>
 
@@ -309,12 +298,7 @@ export default function LoginForm() {
                       </Form.Group>
 
                       <div className="d-grid gap-2">
-                        <Button
-                          type="submit"
-                          className="btn-login"
-                          size="lg"
-                          disabled={loading || !formData.mfaCode}
-                        >
+                        <Button type="submit" className="btn-login" size="lg" disabled={loading || !formData.mfaCode}>
                           {loading ? (
                             <>
                               <Spinner animation="border" size="sm" className="me-2" />
@@ -400,7 +384,9 @@ export default function LoginForm() {
 
               <Card.Footer className="text-center text-muted">
                 <small>
-                  <Badge bg="info" className="me-1">POC</Badge>
+                  <Badge bg="info" className="me-1">
+                    POC
+                  </Badge>
                   Arcanum AI Customer Success Portal
                 </small>
               </Card.Footer>
@@ -409,5 +395,5 @@ export default function LoginForm() {
         </Row>
       </Container>
     </div>
-  )
+  );
 }

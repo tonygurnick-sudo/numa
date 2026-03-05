@@ -65,7 +65,7 @@ export async function handler(event: Event): Promise<void> {
   const roleSql = `CREATE USER ${role} PASSWORD '${password}';`;
 
   const rdsExecuteStatement = retryWrapper(async (params: Parameters<typeof rdsClient.executeStatement>[0]) =>
-    rdsClient.executeStatement(params),
+    rdsClient.executeStatement(params)
   );
   await rdsExecuteStatement(adminInput('CREATE EXTENSION IF NOT EXISTS vector;'));
   await rdsExecuteStatement(adminInput('CREATE SCHEMA IF NOT EXISTS bedrock_integration;'));
@@ -86,18 +86,18 @@ export async function handler(event: Event): Promise<void> {
   await rdsExecuteStatement(adminInput('GRANT ALL ON SCHEMA bedrock_integration TO bedrock_user;'));
   await rdsExecuteStatement(
     userInput(
-      `CREATE TABLE IF NOT EXISTS bedrock_integration.bedrock_knowledge_base (id uuid PRIMARY KEY,embedding vector('${event.ResourceProperties.VectorDimensions}'),chunks text,metadata jsonb);`,
-    ),
+      `CREATE TABLE IF NOT EXISTS bedrock_integration.bedrock_knowledge_base (id uuid PRIMARY KEY,embedding vector('${event.ResourceProperties.VectorDimensions}'),chunks text,metadata jsonb);`
+    )
   );
   await rdsExecuteStatement(
     userInput(
-      'CREATE INDEX IF NOT EXISTS vector_index ON bedrock_integration.bedrock_knowledge_base USING hnsw (embedding vector_cosine_ops);',
-    ),
+      'CREATE INDEX IF NOT EXISTS vector_index ON bedrock_integration.bedrock_knowledge_base USING hnsw (embedding vector_cosine_ops);'
+    )
   );
   await rdsExecuteStatement(
     userInput(
-      "CREATE INDEX IF NOT EXISTS text_index ON bedrock_integration.bedrock_knowledge_base USING gin (to_tsvector('simple'::regconfig, chunks));",
-    ),
+      "CREATE INDEX IF NOT EXISTS text_index ON bedrock_integration.bedrock_knowledge_base USING gin (to_tsvector('simple'::regconfig, chunks));"
+    )
   );
 
   const responseData = {

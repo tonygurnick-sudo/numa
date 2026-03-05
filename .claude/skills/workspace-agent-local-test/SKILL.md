@@ -23,39 +23,40 @@ The `.env` file at the project root (`/Users/nathandouglas/arcanum/numa/.env`) s
 
 ### Required (minimum for basic chat)
 
-| Variable | Example Value | How to Find |
-|----------|---------------|-------------|
-| `AWS_REGION_WORKSPACE` | `us-east-1` | Region where Bedrock and client resources live |
-| `CLIENT_NAME` | `nd-labs` | Client identifier from `clientConfigProd.json` or infra |
-| `CLAUDE_CODE_USE_BEDROCK` | `1` | Always `1` for Bedrock |
+| Variable                  | Example Value | How to Find                                             |
+| ------------------------- | ------------- | ------------------------------------------------------- |
+| `AWS_REGION_WORKSPACE`    | `us-east-1`   | Region where Bedrock and client resources live          |
+| `CLIENT_NAME`             | `nd-labs`     | Client identifier from `clientConfigProd.json` or infra |
+| `CLAUDE_CODE_USE_BEDROCK` | `1`           | Always `1` for Bedrock                                  |
 
 ### Storage (for workspace file persistence)
 
-| Variable | Naming Pattern | Example |
-|----------|---------------|---------|
+| Variable              | Naming Pattern              | Example                |
+| --------------------- | --------------------------- | ---------------------- |
 | `OUTPUTS_BUCKET_NAME` | `numa-{clientName}-outputs` | `numa-nd-labs-outputs` |
-| `DATA_BUCKET` | `numa-{clientName}-data` | `numa-nd-labs-data` |
+| `DATA_BUCKET`         | `numa-{clientName}-data`    | `numa-nd-labs-data`    |
 
 ### DynamoDB (for conversation history, agents, settings)
 
-| Variable | Naming Pattern | Example |
-|----------|---------------|---------|
-| `DYNAMODB_TABLE_NAME` | `numa-{clientName}-chat-history` | `numa-nd-labs-chat-history` |
-| `WORKSPACE_AGENTS_TABLE` | `numa-{clientName}-agents` | `numa-nd-labs-agents` |
-| `USER_AGENTS_TABLE` | `numa-{clientName}-user-agents` | `numa-nd-labs-user-agents` |
-| `CHAT_SETTINGS_TABLE_NAME` | `numa-{clientName}-chat-settings` | `numa-nd-labs-chat-settings` |
+| Variable                           | Naming Pattern                            | Example                              |
+| ---------------------------------- | ----------------------------------------- | ------------------------------------ |
+| `DYNAMODB_TABLE_NAME`              | `numa-{clientName}-chat-history`          | `numa-nd-labs-chat-history`          |
+| `WORKSPACE_AGENTS_TABLE`           | `numa-{clientName}-agents`                | `numa-nd-labs-agents`                |
+| `USER_AGENTS_TABLE`                | `numa-{clientName}-user-agents`           | `numa-nd-labs-user-agents`           |
+| `CHAT_SETTINGS_TABLE_NAME`         | `numa-{clientName}-chat-settings`         | `numa-nd-labs-chat-settings`         |
 | `INTEGRATIONS_APPROVAL_TABLE_NAME` | `numa-{clientName}-integrations-approval` | `numa-nd-labs-integrations-approval` |
 
 ### Lambdas (for KB queries, web search, integrations)
 
-| Variable | Naming Pattern | Example |
-|----------|---------------|---------|
-| `WORKSPACE_TOOLS_LAMBDA_NAME` | `numa-{clientName}_workspace-chat-tools` | `numa-nd-labs_workspace-chat-tools` |
-| `PIPEDREAM_RELAY_LAMBDA_ARN` | Full ARN | `arn:aws:lambda:us-east-1:905418183804:function:numa-nd-labs_pipedream-relay` |
+| Variable                      | Naming Pattern                           | Example                                                                       |
+| ----------------------------- | ---------------------------------------- | ----------------------------------------------------------------------------- |
+| `WORKSPACE_TOOLS_LAMBDA_NAME` | `numa-{clientName}_workspace-chat-tools` | `numa-nd-labs_workspace-chat-tools`                                           |
+| `PIPEDREAM_RELAY_LAMBDA_ARN`  | Full ARN                                 | `arn:aws:lambda:us-east-1:905418183804:function:numa-nd-labs_pipedream-relay` |
 
 ### What works WITHOUT optional variables
 
 Even without DynamoDB/S3/Lambda vars, these features work:
+
 - Bedrock model calls (chat, thinking)
 - Code execution via `execute_script` MCP tool
 - File operations (Read, Write, Edit, Glob, Grep)
@@ -139,6 +140,7 @@ You should see all agent types registered and `Uvicorn running on http://0.0.0.0
 Use `nathan-local-test` as the user sub and conversation ID prefix to clearly identify local test data.
 
 **Health check:**
+
 ```bash
 curl -s http://localhost:8080/ping | jq .
 ```
@@ -153,11 +155,11 @@ The workspace agent supports multiple agent types, each with different tools, re
 
 ### Agent Type Overview
 
-| Type ID | Response Mode | Tools | Use Case |
-|---------|--------------|-------|----------|
-| `numa-chat` | stream | Full (SDK + scripts MCP + integrations MCP) | Interactive chat |
-| `research-agent` | stream | SDK + scripts MCP (no integrations) | Research & analysis |
-| `document-summariser` | sync | Minimal (Read, Write, Glob, Grep only) | Structured JSON output |
+| Type ID               | Response Mode | Tools                                       | Use Case               |
+| --------------------- | ------------- | ------------------------------------------- | ---------------------- |
+| `numa-chat`           | stream        | Full (SDK + scripts MCP + integrations MCP) | Interactive chat       |
+| `research-agent`      | stream        | SDK + scripts MCP (no integrations)         | Research & analysis    |
+| `document-summariser` | sync          | Minimal (Read, Write, Glob, Grep only)      | Structured JSON output |
 
 ### Test: numa-chat (streaming)
 
@@ -169,6 +171,7 @@ curl -s -X POST http://localhost:8080/invocations \
 ```
 
 **What to verify:**
+
 - `session_init` event with `isNewSession: true`
 - `system` init event shows tools including `mcp__integrations__run_action` and `mcp__scripts__execute_script`
 - MCP servers: `scripts` AND `integrations` both connected
@@ -185,6 +188,7 @@ curl -s -X POST http://localhost:8080/invocations \
 ```
 
 **What to verify:**
+
 - `system` init shows `mcp__scripts__execute_script` but NO `mcp__integrations__*` tools
 - MCP servers: only `scripts` (no `integrations`)
 - Response streams successfully
@@ -199,6 +203,7 @@ curl -s -X POST http://localhost:8080/invocations \
 ```
 
 **What to verify:**
+
 - `system` init shows only `Glob, Grep, Read, Write, TodoWrite` (no Bash, no MCP tools)
 - MCP servers: empty `[]`
 - Agent writes `/workdir/outputs/result.json` with structured output
@@ -252,6 +257,7 @@ curl -s -X POST http://localhost:8080/invocations \
 ```
 
 **What to verify:**
+
 - Agent uses `mcp__scripts__execute_script` tool
 - Python executes successfully inside the container
 - Output includes the current datetime
@@ -280,18 +286,19 @@ The `/invocations` endpoint accepts these fields (mimicking what the proxy Lambd
 }
 ```
 
-| Field | Required | Default | Description |
-|-------|----------|---------|-------------|
-| `action` | Yes | - | `chat`, `stop`, `upload`, `upload_complete`, `delete_uploads`, `cleanup_session` |
-| `prompt` | Yes (for chat) | - | User message text |
-| `conversationId` | Yes | - | Use `nathan-local-test-{type}-NNN` pattern |
-| `type` | No | `numa-chat` | Agent type ID |
-| `responseMode` | No | From agent type config | `stream`, `sync`, or `fire-and-forget` |
-| `modelId` | No | Sonnet 4.5 | Bedrock model ID override |
-| `attachments` | No | `[]` | File attachment metadata |
-| `timezone` | No | UTC | User timezone for date formatting |
+| Field            | Required       | Default                | Description                                                                      |
+| ---------------- | -------------- | ---------------------- | -------------------------------------------------------------------------------- |
+| `action`         | Yes            | -                      | `chat`, `stop`, `upload`, `upload_complete`, `delete_uploads`, `cleanup_session` |
+| `prompt`         | Yes (for chat) | -                      | User message text                                                                |
+| `conversationId` | Yes            | -                      | Use `nathan-local-test-{type}-NNN` pattern                                       |
+| `type`           | No             | `numa-chat`            | Agent type ID                                                                    |
+| `responseMode`   | No             | From agent type config | `stream`, `sync`, or `fire-and-forget`                                           |
+| `modelId`        | No             | Sonnet 4.5             | Bedrock model ID override                                                        |
+| `attachments`    | No             | `[]`                   | File attachment metadata                                                         |
+| `timezone`       | No             | UTC                    | User timezone for date formatting                                                |
 
 Headers:
+
 - `x-user-sub: nathan-local-test` (required, identifies the user)
 - `Content-Type: application/json` (required)
 
@@ -312,23 +319,28 @@ These are OpenTelemetry/AWS resource detectors that only work in cloud environme
 ## Troubleshooting
 
 ### JSON Parse Error: "Invalid escape"
+
 **Cause:** Bash escaped special characters in the prompt
 **Fix:** Use simple prompts without shell metacharacters (no quotes, apostrophes, backslashes)
 
 ### Exit Code 1 Errors
+
 - Check `CLAUDE_CODE_USE_BEDROCK=1` is set
 - Verify AWS credentials are valid: `AWS_PROFILE=q-demo aws sts get-caller-identity`
 - Check container logs for `SDK CLI stderr` messages (shows actual error)
 - Ensure the model is accessible in us-east-1
 
 ### AccessDenied on AssumeRole
+
 **Cause:** The `q-demo` profile is already assumed into the target role
 **Fix:** Use `eval "$(AWS_PROFILE=q-demo aws configure export-credentials --format env)"` instead of `sts assume-role`
 
 ### S3/DynamoDB Warnings
+
 These are expected if the optional storage env vars are not set. Basic chat still works without them.
 
 ### Container Won't Start
+
 ```bash
 # Check if port 8080 is in use
 lsof -i :8080
@@ -350,6 +362,7 @@ cd /Users/nathandouglas/arcanum/numa/services
 ```
 
 This single command:
+
 1. Loads the Docker image
 2. Exports AWS credentials from q-demo profile
 3. Sources `.env` for workspace vars
@@ -358,6 +371,7 @@ This single command:
 6. Opens your browser to `http://localhost:3000`
 
 The test UI provides:
+
 - Agent type selector (numa-chat, research-agent, document-summariser)
 - Auto-set response mode per agent type
 - Streaming response rendering with collapsible thinking blocks and tool calls

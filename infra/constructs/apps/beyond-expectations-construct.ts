@@ -41,7 +41,7 @@ export class BeyondExpectations extends BaseNumaApp {
     lambdaArn: string,
     payload: Record<string, string | boolean>,
     next: string | null,
-    extra?: AdditionalLambdaParameters,
+    extra?: AdditionalLambdaParameters
   ) => asl.State {
     return (lambdaArn, payload, next, extra = {}) =>
       this.addLambdaTask(lambdaArn, payload, next, { ...extra, Catch: [] });
@@ -239,7 +239,7 @@ export class BeyondExpectations extends BaseNumaApp {
             'user_id.$': '$.user_id',
           },
           'PrepareChunksMap',
-          { ResultPath: '$.formatResult' },
+          { ResultPath: '$.formatResult' }
         ),
 
         // List generated chunks
@@ -299,7 +299,7 @@ export class BeyondExpectations extends BaseNumaApp {
                   'user_id.$': '$.user_id',
                 } as Record<string, string | boolean>,
                 null,
-                { ResultPath: '$.analysisResult' },
+                { ResultPath: '$.analysisResult' }
               ),
             },
           },
@@ -325,7 +325,7 @@ export class BeyondExpectations extends BaseNumaApp {
             'user_id.$': '$.user_id',
           },
           'SendEmail',
-          { ResultPath: '$.reportResult' },
+          { ResultPath: '$.reportResult' }
         ),
 
         // Send email
@@ -339,7 +339,7 @@ export class BeyondExpectations extends BaseNumaApp {
             configuration_set: sesConfig?.configurationSet.name || '', // Explicitly pass the configuration set name
           },
           'WriteSuccessStatus',
-          { ResultPath: '$.emailResult' },
+          { ResultPath: '$.emailResult' }
         ),
 
         // Final status updates

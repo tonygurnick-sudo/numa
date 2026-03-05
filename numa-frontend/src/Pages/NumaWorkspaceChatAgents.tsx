@@ -4,6 +4,7 @@ import { Bot, Clock, Plus, Settings } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../Providers/AuthProvider';
 import { LayoutDashboard } from '../Layouts/LayoutDashboard';
+import { getFlag } from '../utils/featureFlags';
 import { PageHeader } from '../Components/PageHeader';
 import { ChatHistorySidebar, type ChatHistorySidebarRef } from '../Components/Chat/ChatHistorySidebar';
 import { AgentAvatar } from '../Components/Agents/AgentAvatar';
@@ -123,9 +124,7 @@ const NumaWorkspaceChatAgents = () => {
   const [personalAgents, setPersonalAgents] = useState<AgentSummary[]>([]);
   const [personalAgentsLoading, setPersonalAgentsLoading] = useState(false);
   const [agentsMode, setAgentsMode] = useState<AgentsMode>('full');
-  const [agentsFeatureEnabled] = useState(() =>
-    typeof window !== 'undefined' ? window.sessionStorage.getItem('AGENTS') === 'true' : false,
-  );
+  const [agentsFeatureEnabled] = useState(() => getFlag('AGENTS'));
   const [missingConfirm, setMissingConfirm] = useState<{ agent: AgentSummary; missing: string[] } | null>(null);
   const [isMobile, setIsMobile] = useState(() => (typeof window !== 'undefined' ? window.innerWidth <= 768 : false));
   const [isHistoryPanelOpen, setIsHistoryPanelOpen] = useState(false);
@@ -134,12 +133,12 @@ const NumaWorkspaceChatAgents = () => {
   const [showFilePreviewModal, setShowFilePreviewModal] = useState(false);
   // SWR: initialize from localStorage cache so chat settings are available instantly
   const [userChatSettings, setUserChatSettings] = useState<ChatSettings>(
-    () => ChatSettingsService.getCached() ?? DEFAULT_CHAT_SETTINGS,
+    () => ChatSettingsService.getCached() ?? DEFAULT_CHAT_SETTINGS
   );
   const [chatSettingsLoaded, setChatSettingsLoaded] = useState(() => !!ChatSettingsService.getCached());
   const [userSettingsModified, setUserSettingsModified] = useState(false);
   const [pendingConversationChatConfig, setPendingConversationChatConfig] = useState<ConversationChatConfig | null>(
-    null,
+    null
   );
   /** Initialization state - true when workspace is syncing files */
   const [isInitializing, setIsInitializing] = useState(false);
@@ -148,9 +147,7 @@ const NumaWorkspaceChatAgents = () => {
   /** Selected model for workspace chat (global cross-region inference profile) */
   const [selectedModelId, setSelectedModelId] = useState<WorkspaceChatModelId>(DEFAULT_WORKSPACE_MODEL);
   /** Whether model selection is enabled for workspace chat (from runtime config) */
-  const [workspaceModelSelectionEnabled] = useState(() =>
-    typeof window !== 'undefined' ? window.sessionStorage.getItem('WORKSPACE_CHAT_MODEL_SELECTION') === 'true' : false,
-  );
+  const [workspaceModelSelectionEnabled] = useState(() => getFlag('WORKSPACE_CHAT_MODEL_SELECTION'));
   /** Tracks when a conversation was pre-minted via file upload but user hasn't sent a message yet */
   const [isPreMintedConversation, setIsPreMintedConversation] = useState(false);
   /** Tracks when a V1 conversation needs to be migrated to V2 on first message */
@@ -333,7 +330,7 @@ const NumaWorkspaceChatAgents = () => {
         setShowFilePreviewModal(true);
       }
     },
-    [openFilePreview, isMobile, settingsPanel],
+    [openFilePreview, isMobile, settingsPanel]
   );
 
   const handleOpenFolderPreviewForChat = useCallback(
@@ -349,12 +346,12 @@ const NumaWorkspaceChatAgents = () => {
         setShowFilePreviewModal(true);
       }
     },
-    [openFolderPreview, isMobile, settingsPanel],
+    [openFolderPreview, isMobile, settingsPanel]
   );
 
   const connectedSet = useMemo(
     () => new Set(availableConnections.filter((conn) => conn.isConnected).map((conn) => conn.id)),
-    [availableConnections],
+    [availableConnections]
   );
 
   const applyConversationChatConfig = useCallback(
@@ -395,7 +392,7 @@ const NumaWorkspaceChatAgents = () => {
         isApplyingConversationChatConfigRef.current = false;
       }, 0);
     },
-    [agentsFeatureEnabled, availableConnections, availableKBs],
+    [agentsFeatureEnabled, availableConnections, availableKBs]
   );
 
   useEffect(() => {
@@ -408,7 +405,7 @@ const NumaWorkspaceChatAgents = () => {
       markUserSettingsModified();
       setWebSearchEnabled(value);
     },
-    [markUserSettingsModified],
+    [markUserSettingsModified]
   );
 
   const handleUserSetCreateAgentEnabled = useCallback(
@@ -416,7 +413,7 @@ const NumaWorkspaceChatAgents = () => {
       markUserSettingsModified();
       setCreateAgentEnabled(value);
     },
-    [markUserSettingsModified],
+    [markUserSettingsModified]
   );
 
   const handleUserSetMemoriesEnabled = useCallback(
@@ -424,7 +421,7 @@ const NumaWorkspaceChatAgents = () => {
       markUserSettingsModified();
       setMemoriesEnabled(value);
     },
-    [markUserSettingsModified],
+    [markUserSettingsModified]
   );
 
   const handleUserSetAutoToolsEnabled = useCallback(
@@ -432,7 +429,7 @@ const NumaWorkspaceChatAgents = () => {
       markUserSettingsModified();
       setAutoToolsEnabled(value);
     },
-    [markUserSettingsModified],
+    [markUserSettingsModified]
   );
 
   const handleUserSetEnabledConnections = useCallback(
@@ -440,7 +437,7 @@ const NumaWorkspaceChatAgents = () => {
       markUserSettingsModified();
       setEnabledConnections(value);
     },
-    [markUserSettingsModified],
+    [markUserSettingsModified]
   );
 
   const handleUserSetEnabledKBIds = useCallback(
@@ -448,7 +445,7 @@ const NumaWorkspaceChatAgents = () => {
       markUserSettingsModified();
       setEnabledKBIds(value);
     },
-    [markUserSettingsModified],
+    [markUserSettingsModified]
   );
 
   // Persist current chat controls to the conversation meta item so resuming a chat restores its last state.
@@ -513,7 +510,7 @@ const NumaWorkspaceChatAgents = () => {
 
   const defaultConnectionIdsFromSettings = useMemo(
     () => userChatSettings.defaultConnectionIds.filter((id) => connectedSet.has(id)),
-    [connectedSet, userChatSettings.defaultConnectionIds],
+    [connectedSet, userChatSettings.defaultConnectionIds]
   );
 
   const applyAgentConfiguration = useCallback(
@@ -564,7 +561,7 @@ const NumaWorkspaceChatAgents = () => {
         setEnabledKBIds(availableKBs.filter((kb) => allowedSet.has(kb.kb_id)).map((kb) => kb.kb_id));
       }
     },
-    [availableKBs, defaultConnectionIdsFromSettings, defaultKBIdsFromSettings, userChatSettings],
+    [availableKBs, defaultConnectionIdsFromSettings, defaultKBIdsFromSettings, userChatSettings]
   );
 
   const resetAgentState = useCallback(() => {
@@ -725,7 +722,7 @@ const NumaWorkspaceChatAgents = () => {
             JSON.stringify({
               data: deduplicatedAgents,
               timestamp: Date.now(),
-            }),
+            })
           );
         } catch (err) {
           console.warn('Failed to cache agents:', err);
@@ -834,7 +831,7 @@ const NumaWorkspaceChatAgents = () => {
   };
 
   // Pipedream integration feature flags - check config instead of Cognito groups
-  const hasPipedreamFeature = window.sessionStorage.getItem('PIPEDREAM_INTEGRATIONS') === 'true';
+  const hasPipedreamFeature = getFlag('PIPEDREAM_INTEGRATIONS');
   const relayLambdaArn = window.sessionStorage.getItem('PIPEDREAM_RELAY_LAMBDA_ARN');
   const [globalIntegrationSettings, setGlobalIntegrationSettings] = useState<
     Record<string, { status: 'enabled' | 'disabled'; denyTools: string[] }>
@@ -1222,7 +1219,7 @@ const NumaWorkspaceChatAgents = () => {
         console.error('[WorkspaceChat] Auto-naming failed:', e);
       }
     },
-    [bedrockRuntimeClient, numaChatDynamoUtils, sub, REGION],
+    [bedrockRuntimeClient, numaChatDynamoUtils, sub, REGION]
   );
 
   // Workspace chat streaming hook - handles SDK events, tool tracking, document extraction
@@ -1300,7 +1297,7 @@ const NumaWorkspaceChatAgents = () => {
               agentType: activeAgent.agentType,
               visibility: activeAgent.visibility,
             }
-          : undefined,
+          : undefined
       );
       setIsPreMintedConversation(true);
     }
@@ -1331,7 +1328,7 @@ const NumaWorkspaceChatAgents = () => {
   const readDirectoryRecursively = useCallback(
     async (
       dirEntry: FileSystemDirectoryEntry,
-      basePath: string,
+      basePath: string
     ): Promise<Array<{ file: File; relativePath: string }>> => {
       const results: Array<{ file: File; relativePath: string }> = [];
       const readEntries = (reader: FileSystemDirectoryReader): Promise<FileSystemEntry[]> =>
@@ -1349,7 +1346,7 @@ const NumaWorkspaceChatAgents = () => {
         const entryPath = basePath ? `${basePath}/${entry.name}` : entry.name;
         if (entry.isFile) {
           const file = await new Promise<File>((resolve, reject) =>
-            (entry as FileSystemFileEntry).file(resolve, reject),
+            (entry as FileSystemFileEntry).file(resolve, reject)
           );
           results.push({ file, relativePath: entryPath });
         } else if (entry.isDirectory) {
@@ -1359,7 +1356,7 @@ const NumaWorkspaceChatAgents = () => {
       }
       return results;
     },
-    [],
+    []
   );
 
   /**
@@ -1383,7 +1380,7 @@ const NumaWorkspaceChatAgents = () => {
           for (const entry of entries) {
             if (entry.isFile) {
               const file = await new Promise<File>((resolve, reject) =>
-                (entry as FileSystemFileEntry).file(resolve, reject),
+                (entry as FileSystemFileEntry).file(resolve, reject)
               );
               if (file.size > 0) allFiles.push({ file });
             } else if (entry.isDirectory) {
@@ -1400,7 +1397,7 @@ const NumaWorkspaceChatAgents = () => {
         .filter((f) => f.size > 0)
         .map((file) => ({ file }));
     },
-    [readDirectoryRecursively],
+    [readDirectoryRecursively]
   );
 
   const handleChatDragEnter = useCallback((e: React.DragEvent<HTMLDivElement>) => {
@@ -1449,7 +1446,7 @@ const NumaWorkspaceChatAgents = () => {
                 agentType: activeAgent.agentType,
                 visibility: activeAgent.visibility,
               }
-            : undefined,
+            : undefined
         );
         setIsPreMintedConversation(true);
       }
@@ -1478,7 +1475,7 @@ const NumaWorkspaceChatAgents = () => {
             (progress) => {
               setUploadingFiles((prev) => prev.map((f) => (f.id === entry.id ? { ...f, progress } : f)));
             },
-            getCredentials,
+            getCredentials
           );
 
           // Remove from uploading list on success
@@ -1490,8 +1487,8 @@ const NumaWorkspaceChatAgents = () => {
             prev.map((f) =>
               f.id === entry.id
                 ? { ...f, status: 'error' as const, error: (error as Error).message || 'Upload failed' }
-                : f,
-            ),
+                : f
+            )
           );
           return null;
         }
@@ -1543,7 +1540,7 @@ const NumaWorkspaceChatAgents = () => {
       sub,
       refreshSidebar,
       settingsPanel,
-    ],
+    ]
   );
 
   const handleChatDrop = useCallback(
@@ -1554,7 +1551,7 @@ const NumaWorkspaceChatAgents = () => {
       const entries = await extractDroppedEntries(e.dataTransfer);
       handleDroppedFiles(entries);
     },
-    [extractDroppedEntries, handleDroppedFiles],
+    [extractDroppedEntries, handleDroppedFiles]
   );
 
   const handleCancelUpload = useCallback((id: string) => {
@@ -1577,7 +1574,7 @@ const NumaWorkspaceChatAgents = () => {
       agentsFeatureEnabled ? createAgentEnabled : false,
       enabledKBIds,
       true, // dataAnalysisAvailable
-      memoriesEnabled,
+      memoriesEnabled
     );
 
     // Create the system prompt based on tool availability
@@ -1596,7 +1593,7 @@ const NumaWorkspaceChatAgents = () => {
       null,
       enabledConnections,
       agentsFeatureEnabled ? createAgentEnabled : false,
-      enabledKBMeta,
+      enabledKBMeta
     );
 
     if (currentAgent) {
@@ -1694,7 +1691,7 @@ const NumaWorkspaceChatAgents = () => {
               agentType: activeAgent.agentType,
               visibility: activeAgent.visibility,
             }
-          : undefined,
+          : undefined
       );
       const userMsg = messageToSend;
 
@@ -1783,7 +1780,7 @@ const NumaWorkspaceChatAgents = () => {
         createAgentEnabled,
         idToken,
         user,
-        sub,
+        sub
       );
 
       // Show "processing…" spinner while waiting for any response from backend
@@ -1848,7 +1845,7 @@ const NumaWorkspaceChatAgents = () => {
         handleSubmit(syntheticEvent, action.prompt);
       }
     },
-    [handleSubmit],
+    [handleSubmit]
   );
 
   // Load single conversation from DB using extracted utility
@@ -1907,11 +1904,11 @@ const NumaWorkspaceChatAgents = () => {
             const conversationHistory = await numaChatDynamoUtils.queryConversations(
               selectedConversationId,
               1000, // Must be large enough to include the meta record (oldest item, query is newest-first)
-              sub,
+              sub
             );
             if (isCancelled()) return;
             const metaItem = conversationHistory.find(
-              (item: { message_type?: string }) => item.message_type === 'meta',
+              (item: { message_type?: string }) => item.message_type === 'meta'
             );
             if (metaItem?.isAgentConversation && metaItem?.agentId) {
               try {

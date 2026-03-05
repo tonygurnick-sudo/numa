@@ -187,7 +187,7 @@ export class NZSBAPolicyBuilder extends BaseNumaApp {
           lambdaDirectory: directory,
           timeout: 900,
         }),
-      ]),
+      ])
     );
 
     // TODO: Remove this once PDFs are generated in the FE from the MD

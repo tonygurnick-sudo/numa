@@ -58,7 +58,7 @@ export const OpsHomeView = ({
   const [customerCount, setCustomerCount] = useState<number>(() => getCached<Customer[]>('customers')?.length ?? 0);
   const [supplierCount, setSupplierCount] = useState<number>(() => getCached<Supplier[]>('suppliers')?.length ?? 0);
   const [loading, setLoading] = useState(
-    () => !getCached('metrics') && !getCached('customers') && !getCached('suppliers'),
+    () => !getCached('metrics') && !getCached('customers') && !getCached('suppliers')
   );
 
   useEffect(() => {

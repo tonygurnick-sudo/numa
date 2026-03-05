@@ -30,7 +30,7 @@ export interface WorkspaceChatHistoryPanelProps {
 
 const formatRelativeTime = (
   timestamp: number,
-  t: (key: string, options?: Record<string, unknown>) => string,
+  t: (key: string, options?: Record<string, unknown>) => string
 ): string => {
   if (!timestamp || timestamp < 86400000) return '';
 
@@ -351,7 +351,7 @@ export const WorkspaceChatHistoryPanel = forwardRef<WorkspaceChatHistoryPanelRef
         </div>
       </div>
     );
-  },
+  }
 );
 
 export default WorkspaceChatHistoryPanel;

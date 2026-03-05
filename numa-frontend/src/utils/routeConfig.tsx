@@ -8,13 +8,13 @@ const AppDetail = lazy(() => import('../Pages/AppDetail'));
 const UserManagement = lazy(() => import('../Pages/UserManagement'));
 const SettingsPage = lazy(() => import('../Pages/Settings'));
 const NumaWorkspaceChatAgents = lazy(() =>
-  import('../Pages/NumaWorkspaceChatAgents').then((m) => ({ default: m.NumaWorkspaceChatAgents })),
+  import('../Pages/NumaWorkspaceChatAgents').then((m) => ({ default: m.NumaWorkspaceChatAgents }))
 );
 const CompanyKnowledgeBase = lazy(() =>
-  import('../Pages/CompanyKnowledgeBase').then((m) => ({ default: m.CompanyKnowledgeBase })),
+  import('../Pages/CompanyKnowledgeBase').then((m) => ({ default: m.CompanyKnowledgeBase }))
 );
 const UserKnowledgeBases = lazy(() =>
-  import('../Pages/UserKnowledgeBases').then((m) => ({ default: m.UserKnowledgeBases })),
+  import('../Pages/UserKnowledgeBases').then((m) => ({ default: m.UserKnowledgeBases }))
 );
 const UserKBDetailPage = lazy(() => import('../Pages/UserKBDetailPage').then((m) => ({ default: m.UserKBDetailPage })));
 const AgentsManagement = lazy(() => import('../Pages/AgentsManagement').then((m) => ({ default: m.AgentsManagement })));
@@ -25,15 +25,17 @@ const JobHistoryManager = lazy(() => import('../Pages/JobHistoryManager'));
 const FilesPage = lazy(() => import('../Pages/Files').then((m) => ({ default: m.FilesPage })));
 const SchedulingPage = lazy(() => import('../Pages/SchedulingPage').then((m) => ({ default: m.SchedulingPage })));
 const DataConnectorsPage = lazy(() =>
-  import('../Pages/DataConnectorsPage').then((m) => ({ default: m.DataConnectorsPage })),
+  import('../Pages/DataConnectorsPage').then((m) => ({ default: m.DataConnectorsPage }))
 );
 const ScheduleDetailPage = lazy(() =>
-  import('../Pages/ScheduleDetailPage').then((m) => ({ default: m.ScheduleDetailPage })),
+  import('../Pages/ScheduleDetailPage').then((m) => ({ default: m.ScheduleDetailPage }))
 );
 const NotificationsPage = lazy(() =>
-  import('../Pages/NotificationsPage').then((m) => ({ default: m.NotificationsPage })),
+  import('../Pages/NotificationsPage').then((m) => ({ default: m.NotificationsPage }))
 );
 const SupportPage = lazy(() => import('../Pages/SupportPage').then((m) => ({ default: m.SupportPage })));
+const VaultSecretsPage = lazy(() => import('../Pages/VaultSecretsPage').then((m) => ({ default: m.VaultSecretsPage })));
+const OAuthCallback = lazy(() => import('../Pages/OAuthCallback'));
 
 export const ROUTE_CONFIG = [
   // Chat
@@ -41,10 +43,12 @@ export const ROUTE_CONFIG = [
     path: '/chat',
     element: () => <NumaWorkspaceChatAgents />,
     requiredFeature: 'chat',
+    featureFlag: 'NUMA_WORKSPACE_CHAT',
     nav: {
       label: 'Chat',
       labelKey: 'nav.items.chat',
       icon: 'bi bi-chat-square-dots-fill',
+      featureFlag: 'NUMA_WORKSPACE_CHAT',
       order: 1,
     },
   },
@@ -77,18 +81,20 @@ export const ROUTE_CONFIG = [
   {
     path: '/agents',
     element: () => <AgentsManagement />,
+    featureFlag: 'AGENTS',
     nav: {
       label: 'Agents',
       labelKey: 'nav.items.agents',
       icon: 'bi bi-robot',
       section: 'workflows',
       sectionKey: 'nav.sections.workflows',
+      featureFlag: 'AGENTS',
       order: 5,
     },
   },
 
   {
-    path: '/files',
+    path: '/files/*',
     element: () => <FilesPage />,
     featureFlag: 'NUMA_FILES',
     nav: {
@@ -164,12 +170,14 @@ export const ROUTE_CONFIG = [
     path: '/company-knowledge-base',
     element: () => <CompanyKnowledgeBase />,
     requiredFeature: 'useCompanyData',
+    featureFlag: 'KNOWLEDGE_BASES',
     nav: {
       label: 'Company KB',
       labelKey: 'nav.items.companyKnowledgeBase',
       icon: 'bi bi-file-earmark-text',
       section: 'knowledgeBases',
       sectionKey: 'nav.sections.knowledgeBases',
+      featureFlag: 'KNOWLEDGE_BASES',
       order: 9,
     },
   },
@@ -177,12 +185,14 @@ export const ROUTE_CONFIG = [
     path: '/user-knowledge-bases',
     element: () => <UserKnowledgeBases />,
     requiredFeature: 'useCompanyData',
+    featureFlag: 'KNOWLEDGE_BASES',
     nav: {
       label: 'User KBs',
       labelKey: 'nav.items.userKnowledgeBase',
       icon: 'bi bi-person-lines-fill',
       section: 'knowledgeBases',
       sectionKey: 'nav.sections.knowledgeBases',
+      featureFlag: 'KNOWLEDGE_BASES',
       order: 10,
     },
   },
@@ -191,10 +201,12 @@ export const ROUTE_CONFIG = [
   {
     path: '/integrations',
     element: () => <NumaIntegrations />,
+    featureFlag: 'PIPEDREAM_INTEGRATIONS',
     nav: {
       label: 'Integrations',
       labelKey: 'nav.items.integrations',
       icon: 'bi bi-link-45deg',
+      featureFlag: 'PIPEDREAM_INTEGRATIONS',
       order: 12,
     },
   },
@@ -225,19 +237,26 @@ export const ROUTE_CONFIG = [
     },
   },
 
-  // Data Connectors
+  // Data Connectors — hidden from nav (now a tab in Admin Settings)
   {
     path: '/data-connectors',
     element: () => <DataConnectorsPage />,
-    nav: {
-      label: 'Data Connectors',
-      icon: 'bi bi-cloud-download',
-      featureFlag: 'DATA_CONNECTORS_ENABLED',
-      section: 'knowledgeBases',
-      sectionKey: 'nav.sections.knowledgeBases',
-      order: 11,
-    },
     featureFlag: 'DATA_CONNECTORS_ENABLED',
+  },
+
+  // Vault Secrets
+  {
+    path: '/vault-secrets',
+    element: () => <VaultSecretsPage />,
+    nav: {
+      label: 'Secrets Vault',
+      labelKey: 'nav.items.vault',
+      icon: 'bi bi-shield-lock-fill',
+      featureFlag: 'SECRETS_VAULT_ENABLED',
+      footerOnly: true,
+      order: 15,
+    },
+    featureFlag: 'SECRETS_VAULT_ENABLED',
   },
 
   // Support
@@ -258,6 +277,7 @@ export const ROUTE_CONFIG = [
     path: '/user-knowledge-bases/:kbId',
     element: () => <UserKBDetailPage />,
     requiredFeature: 'useCompanyData',
+    featureFlag: 'KNOWLEDGE_BASES',
   },
   {
     path: '/user-management',
@@ -272,5 +292,11 @@ export const ROUTE_CONFIG = [
     path: '/scheduling/:scheduleId',
     element: () => <ScheduleDetailPage />,
     featureFlag: 'SCHEDULING',
+  },
+
+  // OAuth callback handler
+  {
+    path: '/oauth/callback/:provider',
+    element: () => <OAuthCallback />,
   },
 ];

@@ -19,11 +19,11 @@ mcp__numa__numa_tool(
 
 ## Parameters
 
-| Parameter | Required | Default | Description |
-|-----------|----------|---------|-------------|
-| `query` | Yes | - | Search query |
-| `user_intent` | Yes | - | What the user is trying to accomplish |
-| `max_results` | No | 3 | Number of pages to scrape (max: 10) |
+| Parameter     | Required | Default | Description                           |
+| ------------- | -------- | ------- | ------------------------------------- |
+| `query`       | Yes      | -       | Search query                          |
+| `user_intent` | Yes      | -       | What the user is trying to accomplish |
+| `max_results` | No       | 3       | Number of pages to scrape (max: 10)   |
 
 ## Examples
 
@@ -53,6 +53,7 @@ mcp__numa__numa_tool(
 ## Output
 
 JSON response with:
+
 - `summarised_content` - AI-synthesized summary of web results
 - `references` - URLs of sources
 - `results_count` - Number of pages scraped

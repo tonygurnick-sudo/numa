@@ -101,7 +101,7 @@ export class PolicyReviewer extends BaseNumaApp {
         ExtractContent: this.addExtractContentTaskWithArn(
           props.sharedExtractContentLambdaArn!,
           '$.policy_key',
-          'PolicyReviewer',
+          'PolicyReviewer'
         ),
         PolicyReviewer: this.addLambdaTask(
           policyReviewerLambda.arn,
@@ -118,7 +118,7 @@ export class PolicyReviewer extends BaseNumaApp {
           'WriteSuccessStatus',
           {
             OutputPath: '$.Payload',
-          },
+          }
         ),
         WriteFailureStatus: this.writeFailureStatus(),
         WriteSuccessStatus: this.writeSuccessStatus(),

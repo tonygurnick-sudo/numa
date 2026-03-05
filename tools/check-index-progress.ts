@@ -16,14 +16,14 @@ const args = argv.slice(2);
 async function listDataSources(
   awsClientConfig: AWSClientConfig,
   applicationId: string,
-  indexId: string,
+  indexId: string
 ): Promise<DataSource[]> {
   const qbusiness = withPRM(QBusinessClient, awsClientConfig);
   const response = await qbusiness.send(
     new ListDataSourcesCommand({
       applicationId,
       indexId,
-    }),
+    })
   );
   return response.dataSources;
 }
@@ -32,7 +32,7 @@ async function findSyncJobs(
   awsClientConfig: AWSClientConfig,
   applicationId: string,
   indexId: string,
-  dataSourceId: string,
+  dataSourceId: string
 ): Promise<DataSourceSyncJob[]> {
   const qbusiness = withPRM(QBusinessClient, awsClientConfig);
   const response = await qbusiness.send(
@@ -40,7 +40,7 @@ async function findSyncJobs(
       applicationId,
       dataSourceId,
       indexId,
-    }),
+    })
   );
   return response.history;
 }
@@ -49,7 +49,7 @@ async function startSync(
   awsClientConfig: AWSClientConfig,
   applicationId: string,
   indexId: string,
-  dataSourceId: string,
+  dataSourceId: string
 ): Promise<void> {
   const qbusiness = withPRM(QBusinessClient, awsClientConfig);
   await qbusiness.send(
@@ -57,7 +57,7 @@ async function startSync(
       applicationId,
       indexId,
       dataSourceId,
-    }),
+    })
   );
   console.log(`Started sync for data source: ${dataSourceId}`);
 }
@@ -102,7 +102,7 @@ if (import.meta.filename === process?.argv[1]) {
           awsClientConfig,
           accountDetails.qApplicationId,
           accountDetails.qIndexId,
-          dataSource.dataSourceId,
+          dataSource.dataSourceId
         );
       }
     } else {
@@ -112,7 +112,7 @@ if (import.meta.filename === process?.argv[1]) {
           awsClientConfig,
           accountDetails.qApplicationId,
           accountDetails.qIndexId,
-          s3DataSource.dataSourceId,
+          s3DataSource.dataSourceId
         );
       }
     }
@@ -124,7 +124,7 @@ if (import.meta.filename === process?.argv[1]) {
           awsClientConfig,
           accountDetails.qApplicationId,
           accountDetails.qIndexId,
-          dataSource.dataSourceId,
+          dataSource.dataSourceId
         );
         console.log(`\nSync Status for ${dataSource.displayName}:`);
         console.log(JSON.stringify(syncJobs[0], null, 2));
@@ -135,7 +135,7 @@ if (import.meta.filename === process?.argv[1]) {
           awsClientConfig,
           accountDetails.qApplicationId,
           accountDetails.qIndexId,
-          dataSource.dataSourceId,
+          dataSource.dataSourceId
         );
         console.log(`\nSync Status for ${dataSource.displayName}:`);
         if (syncJobs.length > 0) {
@@ -150,7 +150,7 @@ if (import.meta.filename === process?.argv[1]) {
       awsClientConfig,
       accountDetails.qApplicationId,
       accountDetails.qIndexId,
-      accountDetails.qDataSourceId,
+      accountDetails.qDataSourceId
     );
     console.log(JSON.stringify(syncJobs[0]));
   }

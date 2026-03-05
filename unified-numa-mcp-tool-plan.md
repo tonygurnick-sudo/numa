@@ -16,6 +16,7 @@ After:   Claude → numa_tool MCP → invoke_workspace_tool() → Lambda
 ```
 
 **Example call:**
+
 ```
 numa_tool(
   name="query_knowledge_base",
@@ -23,6 +24,7 @@ numa_tool(
   description="Searching knowledge base for annual leave policy"
 )
 ```
+
 User sees in the frontend: `Searching knowledge base for annual leave policy [spinner]`
 
 **Tool params:**
@@ -33,6 +35,7 @@ User sees in the frontend: `Searching knowledge base for annual leave policy [sp
 | `description` | string | Human-readable text shown in the frontend (same pattern as `execute_script`) |
 
 **Why single tool, not individual tools:**
+
 - **Token efficient** — 1 tool description (~300 tokens) vs 8 (~5000+ tokens) in every request
 - **HITL in one place** — inspect `name`, decide per-tool whether to require approval
 - **Cross-cutting concerns** — logging, rate-limiting, error handling all centralized
@@ -51,6 +54,7 @@ Extract `_invoke_workspace_tool()` from `integrations.py` (lines 78-151) into a 
 - Also extract `_save_result()` (line 154) and `_extract_status()` (line 34) as shared helpers
 
 **Important:** Add an `extra_event_fields` parameter so per-handler functions can add top-level fields to the Lambda event. The Lambda expects `allowed_kbs` and `allowed_kbs_with_names` at the **top level** (not inside `params`) for KB tools. Example:
+
 ```python
 def invoke_workspace_tool(tool_name: str, params: dict, extra_event_fields: dict | None = None) -> dict:
     event = {
@@ -67,6 +71,7 @@ def invoke_workspace_tool(tool_name: str, params: dict, extra_event_fields: dict
 ```
 
 KB handler calls it as:
+
 ```python
 invoke_workspace_tool("query_knowledgebase", params, extra_event_fields={
     "allowed_kbs": allowed_kb_ids,
@@ -87,6 +92,7 @@ Extract the `ensure_file_in_s3()` + S3 download logic from `extract_content.py` 
 - **Create:** `services/numa-workspace-agent/numa_workspace_agent/mcp_tools/numa_tool.py`
 
 The tool definition:
+
 ```python
 @tool(
     name="numa_tool",
@@ -125,16 +131,16 @@ async def numa_tool(args):
 
 Per-tool handlers port the core logic from each bash script:
 
-| Handler | Ports from | Key logic |
-|---------|-----------|-----------|
-| `_handle_query_kb` | `knowledge_base.py:cmd_query` (line 195) | Validate KB allowlist, build payload, invoke Lambda, return results |
-| `_handle_web_search` | `web_search.py:main` (line 33) | Validate `NUMA_ENABLED_TOOLS`, build payload, invoke Lambda |
-| `_handle_extract_content` | `extract_content.py:main` (line 122) | `ensure_file_in_s3()`, invoke Lambda, download result from S3 |
-| `_handle_convert_document` | `convert_document.py:main` (line 138) | Validate format/mode, `ensure_file_in_s3()`, invoke Lambda, download from S3 |
-| `_handle_kb_upload` | `knowledge_base.py:cmd_upload` | Validate KB permissions, build payload with file content |
-| `_handle_kb_download` | `knowledge_base.py:cmd_download` | Build payload, handle presigned URL download |
-| `_handle_kb_list` | `knowledge_base.py:cmd_list` | Build payload, invoke Lambda |
-| `_handle_kb_download_folder` | `knowledge_base.py:cmd_download_folder` | Build payload, download zip |
+| Handler                      | Ports from                               | Key logic                                                                    |
+| ---------------------------- | ---------------------------------------- | ---------------------------------------------------------------------------- |
+| `_handle_query_kb`           | `knowledge_base.py:cmd_query` (line 195) | Validate KB allowlist, build payload, invoke Lambda, return results          |
+| `_handle_web_search`         | `web_search.py:main` (line 33)           | Validate `NUMA_ENABLED_TOOLS`, build payload, invoke Lambda                  |
+| `_handle_extract_content`    | `extract_content.py:main` (line 122)     | `ensure_file_in_s3()`, invoke Lambda, download result from S3                |
+| `_handle_convert_document`   | `convert_document.py:main` (line 138)    | Validate format/mode, `ensure_file_in_s3()`, invoke Lambda, download from S3 |
+| `_handle_kb_upload`          | `knowledge_base.py:cmd_upload`           | Validate KB permissions, build payload with file content                     |
+| `_handle_kb_download`        | `knowledge_base.py:cmd_download`         | Build payload, handle presigned URL download                                 |
+| `_handle_kb_list`            | `knowledge_base.py:cmd_list`             | Build payload, invoke Lambda                                                 |
+| `_handle_kb_download_folder` | `knowledge_base.py:cmd_download_folder`  | Build payload, download zip                                                  |
 
 Each handler: validates params → optional pre-processing (S3 upload) → `invoke_workspace_tool()` → optional post-processing (S3 download) → return MCP response.
 
@@ -191,6 +197,7 @@ Check all agent types that use `enabled_numa_tools`. Types with `enabled_numa_to
 ### Step 12 (Later): Clean up legacy scripts
 
 After validation in staging:
+
 - Delete bash scripts: `tools/numa/knowledge_base.py`, `web_search.py`, `extract_content.py`, `convert_document.py`
 - Remove corresponding `TOOL_FILE_MAP` entries in `base.py`
 - Remove `/workdir/tools/numa/` bypass in security hooks
@@ -198,6 +205,7 @@ After validation in staging:
 ### Step (Frontend): Full frontend updates
 
 **A. Inline tool display** — `numa-frontend/src/utils/workspaceChatEventHandlers.ts`
+
 - In `getInlineToolDisplay()`, add a case for `mcp__numa__numa_tool`:
   ```typescript
   case 'mcp__numa__numa_tool': {
@@ -211,18 +219,18 @@ After validation in staging:
 - In `getToolCategoryAndIcon()`, add icon/category mapping for `mcp__numa__numa_tool`
 
 **B. Tool card rendering** — `numa-frontend/src/Components/UnifiedToolCard.tsx`
+
 - The card currently uses `toolName` to select renderers (e.g., `toolName === 'query_knowledge_base'` → `KnowledgeBaseRenderer`).
 - Since `mcp__numa__numa_tool` wraps multiple tools, we need to extract the sub-tool name from the tool input's `name` field and route accordingly:
   ```typescript
   // When toolName is 'mcp__numa__numa_tool', check the input's name param
-  const effectiveToolName = toolName === 'mcp__numa__numa_tool'
-    ? (toolInput?.name || toolName)
-    : toolName;
+  const effectiveToolName = toolName === 'mcp__numa__numa_tool' ? toolInput?.name || toolName : toolName;
   // Then use effectiveToolName for renderer selection
   ```
 - This way `query_knowledge_base` still routes to `KnowledgeBaseRenderer`, `web_search` to `WebSearchRenderer`, etc.
 
 **C. Tool config** — `numa-frontend/src/utils/ToolConfig.ts`
+
 - Add static entry for `mcp__numa__numa_tool` with appropriate icon and label
 
 ## What Stays the Same
@@ -233,21 +241,21 @@ After validation in staging:
 
 ## Files Summary
 
-| Action | File |
-|--------|------|
-| Create | `numa_workspace_agent/mcp_tools/lambda_client.py` |
-| Create | `numa_workspace_agent/mcp_tools/s3_helpers.py` |
-| Create | `numa_workspace_agent/mcp_tools/numa_tool.py` |
-| Create | `tests/test_numa_tool.py` |
-| Create | `tests/test_lambda_client.py` |
-| Modify | `numa_workspace_agent/mcp_tools/__init__.py` |
-| Modify | `numa_workspace_agent/mcp_tools/integrations.py` (use shared client) |
-| Modify | `numa_workspace_agent/sdk_config.py` (register MCP server + env vars) |
-| Modify | `numa_workspace_agent/agent_types/base.py` (add flag) |
+| Action | File                                                                   |
+| ------ | ---------------------------------------------------------------------- |
+| Create | `numa_workspace_agent/mcp_tools/lambda_client.py`                      |
+| Create | `numa_workspace_agent/mcp_tools/s3_helpers.py`                         |
+| Create | `numa_workspace_agent/mcp_tools/numa_tool.py`                          |
+| Create | `tests/test_numa_tool.py`                                              |
+| Create | `tests/test_lambda_client.py`                                          |
+| Modify | `numa_workspace_agent/mcp_tools/__init__.py`                           |
+| Modify | `numa_workspace_agent/mcp_tools/integrations.py` (use shared client)   |
+| Modify | `numa_workspace_agent/sdk_config.py` (register MCP server + env vars)  |
+| Modify | `numa_workspace_agent/agent_types/base.py` (add flag)                  |
 | Modify | `numa_workspace_agent/agent_types/numa_chat.py` (allowed_tools + flag) |
-| Modify | `plugins/numa/skills/knowledge-search/SKILL.md` |
-| Modify | `plugins/numa/skills/web-search/SKILL.md` |
-| Modify | `numa_workspace_agent/prompts.py` |
+| Modify | `plugins/numa/skills/knowledge-search/SKILL.md`                        |
+| Modify | `plugins/numa/skills/web-search/SKILL.md`                              |
+| Modify | `numa_workspace_agent/prompts.py`                                      |
 
 All paths above relative to `services/numa-workspace-agent/`.
 

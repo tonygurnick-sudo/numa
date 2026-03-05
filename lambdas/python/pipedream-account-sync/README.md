@@ -27,9 +27,11 @@ This lambda synchronizes allowed client accounts from the deployer account to th
 ## IAM Requirements
 
 ### In Proxy Account
+
 - Read/write access to allowed accounts table
 
 ### In Deployer Account
+
 - DynamoDB resource policy on numa-client-config table allows read access from proxy account sync lambda role
 
 ## Monitoring

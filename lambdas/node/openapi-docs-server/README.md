@@ -23,22 +23,26 @@ This Lambda function serves as a centralized documentation hub for all Numa APIs
 ### API Coverage
 
 #### Chat Agent APIs
+
 - Health check endpoint
 - Streaming and non-streaming chat
 - Knowledge base management (CRUD operations)
 
 #### Core Lambda APIs
+
 - Authentication (SRP hasher)
 - Web search and content scraping
 - Document processing and conversion
 - Web crawler management
 
 #### Admin APIs
+
 - Integration settings management
 - Agent configuration and management
 - Branding configuration
 
 #### Numa Apps
+
 - Document Summariser
 - Policy Builder
 - Candidate Screening
@@ -60,13 +64,14 @@ const openApiDocs = new OpenAPIDocsConstruct(this, 'openapi-docs', {
   cognitoUserPoolClientId: 'xxxxxxxxxx',
   apiBaseUrl: 'https://api.your-domain.com',
   cloudfrontSecretArn: 'arn:aws:ssm:...',
-  logGroup: logGroup
+  logGroup: logGroup,
 });
 ```
 
 ### CloudFront Integration
 
 The documentation is accessible via CloudFront at `/docs/*` paths:
+
 - `/docs/` or `/docs` - Main Swagger UI
 - `/docs/api/{spec}.yaml` - OpenAPI specifications
 - `/docs/static/*` - Swagger UI static assets
@@ -95,6 +100,7 @@ Visit `https://{your-domain}/docs` to access the interactive API documentation.
 ### API Testing
 
 Once authenticated, you can:
+
 - Browse all available APIs organized by service
 - View detailed request/response schemas
 - Test APIs directly from the browser
@@ -169,6 +175,7 @@ specs/
 ### Logging
 
 All requests and errors are logged to CloudWatch. Search for:
+
 - `INFO: Processing request` - Request details
 - `ERROR: Error processing request` - General errors
 - `WARN: Unknown spec file requested` - Missing specification files
@@ -186,6 +193,7 @@ All requests and errors are logged to CloudWatch. Search for:
 ### Extensibility
 
 The modular design supports easy extension:
+
 - Add new specification files in `specs/`
 - Implement custom authentication flows
 - Add new output formats (PDF, JSON, etc.)
@@ -194,6 +202,7 @@ The modular design supports easy extension:
 ## Support
 
 For issues or questions:
+
 1. Check CloudWatch logs for error details
 2. Verify infrastructure configuration
 3. Test individual API specifications

@@ -43,7 +43,7 @@ export function GeneralTab({
 
   const owner = useMemo(
     () => (createdBy && staff ? staff.find((s) => s.id === createdBy) : undefined),
-    [createdBy, staff],
+    [createdBy, staff]
   );
 
   const wuEnabled = Boolean(workUnitSeries?.enabled);

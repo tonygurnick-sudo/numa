@@ -7,20 +7,20 @@ description: "Use this skill any time a .pptx file is involved — as input, out
 
 ## Quick Reference
 
-| Task | Approach |
-|------|----------|
-| Read/extract text | `python -m markitdown presentation.pptx` |
-| Create from scratch | PptxGenJS (Node.js) — read [pptxgenjs.md](pptxgenjs.md) |
-| Edit existing/template | python-pptx — read [editing.md](editing.md) |
+| Task                   | Approach                                                |
+| ---------------------- | ------------------------------------------------------- |
+| Read/extract text      | `python -m markitdown presentation.pptx`                |
+| Create from scratch    | PptxGenJS (Node.js) — read [pptxgenjs.md](pptxgenjs.md) |
+| Edit existing/template | python-pptx — read [editing.md](editing.md)             |
 
 **Decision matrix:**
 
-| Scenario | Best Tool | Why |
-|----------|-----------|-----|
-| New deck, no template | PptxGenJS (Node.js) | Icons, shadows, charSpacing, charts, full design control |
-| Edit existing PPTX | python-pptx | Preserves formatting, layouts, and branding |
-| Fill template with data | python-pptx | Works with existing placeholders and structure |
-| Quick text extraction | markitdown | Fast CLI, no code needed |
+| Scenario                | Best Tool           | Why                                                      |
+| ----------------------- | ------------------- | -------------------------------------------------------- |
+| New deck, no template   | PptxGenJS (Node.js) | Icons, shadows, charSpacing, charts, full design control |
+| Edit existing PPTX      | python-pptx         | Preserves formatting, layouts, and branding              |
+| Fill template with data | python-pptx         | Works with existing placeholders and structure           |
+| Quick text extraction   | markitdown          | Fast CLI, no code needed                                 |
 
 > **Tool preference:** Use `execute_script` for inline code (Node.js, Python, Bash). Use the Bash tool when running an already-written script file on disk (e.g., `node /workdir/outputs/create_deck.js`).
 
@@ -34,12 +34,14 @@ python -m markitdown presentation.pptx
 ```
 
 For visual overview, convert to images using `execute_script`:
+
 ```
 execute_script(interpreter="bash", description="Converting PPTX to images for visual QA", code="""
 soffice --headless --convert-to pdf --outdir /workdir/outputs/ /workdir/uploads/presentation.pptx
 pdftoppm -jpeg -r 150 /workdir/outputs/presentation.pdf /workdir/outputs/slide
 """)
 ```
+
 This creates `slide-01.jpg`, `slide-02.jpg`, etc.
 
 ---
@@ -64,6 +66,7 @@ pres.writeFile({ fileName: "/workdir/outputs/presentation.pptx" });
 ```
 
 Or write a `.js` file and run with Bash:
+
 ```bash
 node /workdir/outputs/create_deck.js
 ```
@@ -106,21 +109,22 @@ prs.save("/workdir/outputs/filled_presentation.pptx")
 
 ### Colour Palettes
 
-| Theme | Primary | Secondary | Accent |
-|-------|---------|-----------|--------|
-| **Midnight Executive** | `1E2761` (navy) | `CADCFC` (ice blue) | `FFFFFF` (white) |
-| **Forest & Moss** | `2C5F2D` (forest) | `97BC62` (moss) | `F5F5F5` (cream) |
-| **Coral Energy** | `F96167` (coral) | `F9E795` (gold) | `2F3C7E` (navy) |
-| **Warm Terracotta** | `B85042` (terracotta) | `E7E8D1` (sand) | `A7BEAE` (sage) |
-| **Ocean Gradient** | `065A82` (deep blue) | `1C7293` (teal) | `21295C` (midnight) |
-| **Charcoal Minimal** | `36454F` (charcoal) | `F2F2F2` (off-white) | `212121` (black) |
-| **Teal Trust** | `028090` (teal) | `00A896` (seafoam) | `02C39A` (mint) |
+| Theme                  | Primary               | Secondary            | Accent              |
+| ---------------------- | --------------------- | -------------------- | ------------------- |
+| **Midnight Executive** | `1E2761` (navy)       | `CADCFC` (ice blue)  | `FFFFFF` (white)    |
+| **Forest & Moss**      | `2C5F2D` (forest)     | `97BC62` (moss)      | `F5F5F5` (cream)    |
+| **Coral Energy**       | `F96167` (coral)      | `F9E795` (gold)      | `2F3C7E` (navy)     |
+| **Warm Terracotta**    | `B85042` (terracotta) | `E7E8D1` (sand)      | `A7BEAE` (sage)     |
+| **Ocean Gradient**     | `065A82` (deep blue)  | `1C7293` (teal)      | `21295C` (midnight) |
+| **Charcoal Minimal**   | `36454F` (charcoal)   | `F2F2F2` (off-white) | `212121` (black)    |
+| **Teal Trust**         | `028090` (teal)       | `00A896` (seafoam)   | `02C39A` (mint)     |
 
 ### For Each Slide
 
 **Every slide needs a visual element** — image, chart, icon, or shape. Text-only slides are forgettable.
 
 **Layout options:**
+
 - Two-column (text left, illustration right)
 - Icon + text rows (icon in coloured circle, bold header, description)
 - 2x2 or 2x3 grid of content blocks
@@ -130,19 +134,19 @@ prs.save("/workdir/outputs/filled_presentation.pptx")
 
 ### Typography
 
-| Header Font | Body Font |
-|-------------|-----------|
-| Georgia | Calibri |
-| Arial Black | Arial |
-| Cambria | Calibri |
-| Trebuchet MS | Calibri |
+| Header Font  | Body Font |
+| ------------ | --------- |
+| Georgia      | Calibri   |
+| Arial Black  | Arial     |
+| Cambria      | Calibri   |
+| Trebuchet MS | Calibri   |
 
-| Element | Size |
-|---------|------|
-| Slide title | 36-44pt bold |
-| Section header | 20-24pt bold |
-| Body text | 14-16pt |
-| Captions | 10-12pt muted |
+| Element        | Size          |
+| -------------- | ------------- |
+| Slide title    | 36-44pt bold  |
+| Section header | 20-24pt bold  |
+| Body text      | 14-16pt       |
+| Captions       | 10-12pt muted |
 
 ### Spacing
 
@@ -184,6 +188,7 @@ Check for missing content, typos, wrong order, leftover placeholder text.
 ### Visual Inspection
 
 After converting to images, read each slide image and check for:
+
 - Overlapping elements (text through shapes, stacked elements)
 - Text overflow or cut off at edges
 - Elements too close (< 0.3" gaps)
@@ -206,11 +211,11 @@ After converting to images, read each slide image and check for:
 For icons in presentations, write inline SVGs and rasterise with `sharp`:
 
 ```javascript
-const sharp = require("sharp");
+const sharp = require('sharp');
 
 async function svgToBase64(svgString, size = 256) {
   const buf = await sharp(Buffer.from(svgString)).resize(size, size).png().toBuffer();
-  return "image/png;base64," + buf.toString("base64");
+  return 'image/png;base64,' + buf.toString('base64');
 }
 
 // Example: checkmark icon
@@ -228,6 +233,7 @@ main();
 ```
 
 Common icon patterns (simple inline SVGs):
+
 - **Checkmark**: Circle + checkmark path
 - **Arrow**: Triangle or chevron path
 - **Chart**: Bar chart rectangles
@@ -240,6 +246,7 @@ Common icon patterns (simple inline SVGs):
 ## Dependencies
 
 All pre-installed in the workspace:
+
 - `markitdown[pptx]` — text extraction
 - `python-pptx` — editing existing PPTX
 - `pptxgenjs` (Node.js) — creating from scratch

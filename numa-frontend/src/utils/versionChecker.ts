@@ -54,7 +54,7 @@ export function startVersionChecker(onNewVersion?: OnNewVersionFn, pollIntervalM
         check().catch(() => {
           // ignore transient version fetch errors
         }),
-      pollIntervalMs,
+      pollIntervalMs
     );
   }
 

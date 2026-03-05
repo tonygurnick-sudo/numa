@@ -155,7 +155,7 @@ export class MeetingAnalyser extends BaseNumaApp {
                 null,
                 {
                   Catch: [],
-                },
+                }
               ),
             },
           },
@@ -203,7 +203,7 @@ export class MeetingAnalyser extends BaseNumaApp {
           'WriteSuccessStatus',
           {
             OutputPath: '$.Payload',
-          },
+          }
         ),
         WriteFailureStatus: this.writeFailureStatus(),
         WriteSuccessStatus: this.writeSuccessStatus(),

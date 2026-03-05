@@ -53,6 +53,7 @@ deploy: init get
 	lambdas/package-all.sh
 	yarn --cwd numa-frontend build
 	$(CDKTF) deploy $(STACK) --auto-approve
+	@echo "🚀 Deploy completed at: $$(date)"
 
 clean:
 	rm -rf cdktf.out .gen tf-debug.log "$(TF_PLUGIN_CACHE_DIR)" || true

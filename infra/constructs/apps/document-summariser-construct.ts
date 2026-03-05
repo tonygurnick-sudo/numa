@@ -134,7 +134,7 @@ export class DocumentSummariser extends BaseNumaApp {
                     'output_key.$': '$.Payload.output_key',
                   },
                   ResultPath: '$.extracted',
-                },
+                }
               ),
               SummariseDocument: this.addLambdaTask(
                 summariseDocumentLambda.arn,
@@ -153,7 +153,7 @@ export class DocumentSummariser extends BaseNumaApp {
                     'output_key.$': '$.Payload.output_key',
                   },
                   ResultPath: '$.summarised',
-                },
+                }
               ),
             },
           },
@@ -180,7 +180,7 @@ export class DocumentSummariser extends BaseNumaApp {
           'WriteSuccessStatus',
           {
             OutputPath: '$.Payload',
-          },
+          }
         ),
         WriteFailureStatus: this.writeFailureStatus(),
         WriteSuccessStatus: this.writeSuccessStatus(),

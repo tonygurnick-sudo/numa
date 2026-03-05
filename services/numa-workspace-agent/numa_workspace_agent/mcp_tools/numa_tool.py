@@ -20,10 +20,15 @@ import base64
 import json
 import logging
 import os
+import re
 from pathlib import Path
 from typing import Any
 
 from claude_agent_sdk import tool
+
+# _invoke_connect_tool is imported from connect module because the files/data-bucket
+# operations use the oauth-workspace-tools Lambda (not workspace-chat-tools).
+from numa_workspace_agent.mcp_tools.connect import _format_size, _invoke_connect_tool
 from numa_workspace_agent.mcp_tools.lambda_client import invoke_workspace_tool
 from numa_workspace_agent.mcp_tools.s3_helpers import (
     download_from_presigned_url,
@@ -546,6 +551,7 @@ _OPERATION_TO_ENABLED_TOOL_KEYS: dict[str, list[str]] = {
     "web_search": ["web_search"],
     "agents": ["create_agent_tool"],
     "memories": ["memories_tool"],
+    "files": ["files_tool"],
 }
 
 
@@ -573,6 +579,7 @@ def _check_operation_allowed(operation: str) -> str | None:
                 "web_search": "Web search is not enabled. Enable 'Web Search' in chat settings.",
                 "agents": "Agent tools are not enabled. Enable 'Agent Creation' in chat settings.",
                 "memories": "Memory management is not enabled. Enable 'Update Memory' in chat settings.",
+                "files": "Files browsing is not enabled for this account.",
             }
             return messages.get(
                 operation, f"'{operation}' is not enabled in chat settings."
@@ -724,6 +731,150 @@ async def _handle_memories(params: dict[str, Any]) -> dict[str, Any]:
 
 
 # ═════════════════════════════════════════════════════════════════════════════
+# Files handler (My Files / Company Files via S3 data bucket)
+# ═════════════════════════════════════════════════════════════════════════════
+
+
+async def _handle_files_list(params: dict[str, Any]) -> dict[str, Any]:
+    """List files in My Files or Company Files."""
+    result = _invoke_connect_tool("connect_s3data_list", params)
+
+    if isinstance(result, dict) and result.get("error"):
+        return _err(f"Error: {result['error']}")
+
+    data = result.get("result", {}) if isinstance(result, dict) else {}
+    folders = data.get("folders", [])
+    files = data.get("files", [])
+
+    if not folders and not files:
+        return _ok("No files or folders found.")
+
+    lines = ["Files:\n"]
+    for folder in folders:
+        name = folder.get("name", "")
+        folder_id = folder.get("folder_id", "")
+        lines.append(f"  [folder] {name}  (folder_id: {folder_id})")
+
+    if files:
+        if folders:
+            lines.append("")
+        for file in files:
+            name = file.get("name", "")
+            size = file.get("size", 0)
+            modified = file.get("modified_at", "")
+            file_id = file.get("file_id", "")
+            size_str = f" ({_format_size(size)})" if size else ""
+            date_str = f" - {modified[:10]}" if modified else ""
+            lines.append(f"  [file] {name}{size_str}{date_str}  (file_id: {file_id})")
+
+    total = data.get("total_count", len(folders) + len(files))
+    lines.append(f"\nTotal: {total} items")
+    return _ok("\n".join(lines))
+
+
+async def _handle_files_search(params: dict[str, Any]) -> dict[str, Any]:
+    """Search files across My Files and Company Files."""
+    result = _invoke_connect_tool("connect_s3data_search", params)
+
+    if isinstance(result, dict) and result.get("error"):
+        return _err(f"Error: {result['error']}")
+
+    data = result.get("result", {}) if isinstance(result, dict) else {}
+    files = data.get("files", [])
+    query = data.get("query", params.get("query", ""))
+
+    if not files:
+        return _ok(f"No results matching '{query}'.")
+
+    lines = [f"Search results for '{query}':\n"]
+    for file in files:
+        name = file.get("name", "")
+        size = file.get("size", 0)
+        file_id = file.get("file_id", "")
+        path = file.get("path", "")
+        size_str = f" ({_format_size(size)})" if size else ""
+        path_str = f"\n     Path: {path}" if path else ""
+        lines.append(f"  [file] {name}{size_str}  (file_id: {file_id}){path_str}")
+
+    total = data.get("total_count", len(files))
+    lines.append(f"\nFound {total} matching items")
+    return _ok("\n".join(lines))
+
+
+async def _handle_files_download(params: dict[str, Any]) -> dict[str, Any]:
+    """Download a file from My Files or Company Files to the workspace."""
+    result = _invoke_connect_tool("connect_s3data_download", params)
+
+    if isinstance(result, dict) and result.get("error"):
+        return _err(f"Error: {result['error']}")
+
+    data = result.get("result", {}) if isinstance(result, dict) else {}
+    file_content_hex = data.get("file_content", "")
+
+    if not file_content_hex:
+        return _err("No file content received.")
+
+    file_id = params.get("file_id", "unknown")
+    filename = data.get("filename", f"download_{file_id[:8]}")
+    safe_filename = re.sub(r"[^\w\s.-]", "_", os.path.basename(filename))
+    safe_filename = safe_filename.strip(". ") or f"download_{file_id[:8]}"
+    workspace_path = f"/workdir/uploads/files/{safe_filename}"
+
+    # Validate resolved path stays within allowed directory
+    real_path = os.path.realpath(workspace_path)
+    if not real_path.startswith("/workdir/uploads/"):
+        return _err("Invalid file path — directory traversal blocked.")
+
+    file_content = bytes.fromhex(file_content_hex)
+    os.makedirs(os.path.dirname(workspace_path), exist_ok=True)
+
+    with open(workspace_path, "wb") as f:
+        f.write(file_content)
+
+    size = data.get("size", 0)
+    size_str = _format_size(size) if size else f"{len(file_content)} bytes"
+
+    return _ok(
+        json.dumps(
+            {
+                "status": "success",
+                "message": f"Downloaded {filename}",
+                "output_path": workspace_path,
+                "size": size_str,
+            },
+            indent=2,
+        )
+    )
+
+
+_FILES_OPERATIONS = {
+    "list": _handle_files_list,
+    "search": _handle_files_search,
+    "download": _handle_files_download,
+}
+
+
+async def _handle_files(params: dict[str, Any]) -> dict[str, Any]:
+    """Files operations — list, search, download from My Files / Company Files.
+
+    Params:
+        operation: One of list, search, download
+        folder_id: For list — use "files:my" for My Files, "files:company" for
+            Company Files, or omit for root (shows both)
+        query: For search — search term
+        file_id: For download — the S3 key of the file to download
+    """
+    operation = params.get("operation")
+    handler = _FILES_OPERATIONS.get(operation or "")
+    if not handler:
+        valid = ", ".join(_FILES_OPERATIONS)
+        return _err(f"Invalid files operation: '{operation}'. Valid: {valid}")
+
+    sub_params = {k: v for k, v in params.items() if k != "operation"}
+    return await handler(sub_params)
+
+
+# ═════════════════════════════════════════════════════════════════════════════
 # Handler dispatch map
 # ═════════════════════════════════════════════════════════════════════════════
 
@@ -734,6 +885,7 @@ TOOL_HANDLERS = {
     "convert_document": _handle_convert_document,
     "agents": _handle_agents,
     "memories": _handle_memories,
+    "files": _handle_files,
 }
 
 TOOL_NAMES = list(TOOL_HANDLERS.keys())
@@ -749,7 +901,7 @@ TOOL_NAMES = list(TOOL_HANDLERS.keys())
     description=(
         "Execute a Numa platform tool. Use for knowledge base operations, "
         "web search, content extraction, document conversion, agent management, "
-        "and memory management. "
+        "memory management, and file browsing (My Files / Company Files). "
         "Always load the relevant Skill first to learn each tool's expected params."
     ),
     input_schema={

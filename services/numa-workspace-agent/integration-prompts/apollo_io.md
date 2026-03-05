@@ -1,4 +1,5 @@
 **Before performing Apollo.io operations**, establish context:
+
 1. Use `search-contacts`, `search-accounts`, or `search-sequences` with empty search param to list existing data
 2. Resolve dynamic props via `configure_props` for stages, owners, email accounts, etc.
 3. For `accountStageId`, use proxy API workaround (`configure_props` returns 500 error)
@@ -6,11 +7,13 @@
 When working with Apollo.io, keep these tips in mind:
 
 - **Auth key is `apolloIo`:** Use camelCase in props:
+
   ```json
-  {"apolloIo": {"authProvisionId": "auto"}, "email": "..."}
+  { "apolloIo": { "authProvisionId": "auto" }, "email": "..." }
   ```
 
 - **`accountStageId` `configure_props` fails:** Use proxy API to get account stages directly:
+
   ```
   proxy_request(method="GET", upstream_url="https://api.apollo.io/v1/account_stages", integration_slug="apollo_io")
   ```
@@ -31,5 +34,5 @@ When working with Apollo.io, keep these tips in mind:
 
 - **Stage updates accept arrays:** Both `update-contact-stage` and `update-account-stage` can batch update multiple records:
   ```json
-  {"apolloIo": {"authProvisionId": "auto"}, "contactIds": ["id1", "id2"], "contactStageId": "stage_id"}
+  { "apolloIo": { "authProvisionId": "auto" }, "contactIds": ["id1", "id2"], "contactStageId": "stage_id" }
   ```

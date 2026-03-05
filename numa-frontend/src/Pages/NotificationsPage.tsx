@@ -31,7 +31,7 @@ const formatTimestamp = (
     minutesAgo: (count: number) => string;
     hoursAgo: (count: number) => string;
     daysAgo: (count: number) => string;
-  },
+  }
 ): string => {
   const date = new Date(timestamp);
   const now = new Date();
@@ -122,8 +122,8 @@ export const NotificationsPage: React.FC = () => {
         prev.map((n) =>
           n.notification_id === notificationId
             ? { ...n, status: updated.status ?? 'read', read_at: updated.read_at ?? Date.now() }
-            : n,
-        ),
+            : n
+        )
       );
       refreshUnreadCount(numaGet);
     } catch (err) {
@@ -158,7 +158,7 @@ export const NotificationsPage: React.FC = () => {
       { key: 'read', label: t('notifications.tabs.read', { count: readCount }) },
       { key: 'all', label: t('notifications.tabs.all', { count: notifications.length }) },
     ],
-    [notifications.length, readCount, t, unreadCount],
+    [notifications.length, readCount, t, unreadCount]
   );
 
   const filteredNotifications = useMemo(() => {

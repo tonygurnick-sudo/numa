@@ -1,17 +1,17 @@
-import { Form, Button } from 'react-bootstrap'
-import { ReactNode } from 'react'
+import { Form, Button } from 'react-bootstrap';
+import { ReactNode } from 'react';
 
 interface ConfigFieldProps {
-  label: string
-  value: string | boolean | number
-  defaultValue: string | boolean | number
-  onChange: (value: any) => void
-  type?: 'text' | 'switch' | 'select'
-  options?: { label: string; value: string }[]
-  placeholder?: string
-  disabled?: boolean
-  helpText?: string
-  children?: ReactNode
+  label: string;
+  value: string | boolean | number;
+  defaultValue: string | boolean | number;
+  onChange: (value: any) => void;
+  type?: 'text' | 'switch' | 'select';
+  options?: { label: string; value: string }[];
+  placeholder?: string;
+  disabled?: boolean;
+  helpText?: string;
+  children?: ReactNode;
 }
 
 export function ConfigField({
@@ -24,28 +24,24 @@ export function ConfigField({
   placeholder,
   disabled = false,
   helpText,
-  children
+  children,
 }: ConfigFieldProps) {
-  const isDefault = value === defaultValue
-  const showReset = !isDefault && !disabled
+  const isDefault = value === defaultValue;
+  const showReset = !isDefault && !disabled;
 
   const handleReset = () => {
-    onChange(defaultValue)
-  }
+    onChange(defaultValue);
+  };
 
   const renderDefaultIndicator = () => {
     if (isDefault) {
-      return (
-        <Form.Text className="text-muted">
-          Default: {String(defaultValue)}
-        </Form.Text>
-      )
+      return <Form.Text className="text-muted">Default: {String(defaultValue)}</Form.Text>;
     }
-    return null
-  }
+    return null;
+  };
 
   const renderResetButton = () => {
-    if (!showReset) return null
+    if (!showReset) return null;
 
     return (
       <Button
@@ -57,10 +53,10 @@ export function ConfigField({
       >
         Reset to default
       </Button>
-    )
-  }
+    );
+  };
 
-  const fieldId = `config-${label.replace(/\s+/g, '-').toLowerCase()}`
+  const fieldId = `config-${label.replace(/\s+/g, '-').toLowerCase()}`;
 
   return (
     <Form.Group className="mb-3">
@@ -77,7 +73,7 @@ export function ConfigField({
           id={fieldId}
           type="text"
           value={String(value)}
-          onChange={e => onChange(e.target.value)}
+          onChange={(e) => onChange(e.target.value)}
           placeholder={placeholder || `Default: ${String(defaultValue)}`}
           disabled={disabled}
           className={!isDefault ? 'border-primary' : ''}
@@ -88,11 +84,11 @@ export function ConfigField({
         <Form.Select
           id={fieldId}
           value={String(value)}
-          onChange={e => onChange(e.target.value)}
+          onChange={(e) => onChange(e.target.value)}
           disabled={disabled}
           className={!isDefault ? 'border-primary' : ''}
         >
-          {options.map(option => (
+          {options.map((option) => (
             <option key={option.value} value={option.value}>
               {option.label}
             </option>
@@ -106,7 +102,7 @@ export function ConfigField({
           type="switch"
           label={helpText}
           checked={Boolean(value)}
-          onChange={e => onChange(e.target.checked)}
+          onChange={(e) => onChange(e.target.checked)}
           disabled={disabled}
           className={!isDefault ? 'text-primary' : ''}
         />
@@ -114,15 +110,11 @@ export function ConfigField({
 
       {children}
 
-      {helpText && type !== 'switch' && (
-        <Form.Text className="text-muted">
-          {helpText}
-        </Form.Text>
-      )}
+      {helpText && type !== 'switch' && <Form.Text className="text-muted">{helpText}</Form.Text>}
 
       {renderDefaultIndicator()}
     </Form.Group>
-  )
+  );
 }
 
-export default ConfigField
+export default ConfigField;

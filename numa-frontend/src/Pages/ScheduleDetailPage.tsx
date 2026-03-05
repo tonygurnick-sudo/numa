@@ -44,7 +44,7 @@ const formatDate = (date: Date | null | undefined, labels: { notAvailable: strin
 const formatTimestamp = (
   timestamp: number | undefined,
   labels: { never: string; invalid: string },
-  timezone?: string,
+  timezone?: string
 ): string => {
   if (!timestamp) return labels.never;
   try {
@@ -126,7 +126,7 @@ export const ScheduleDetailPage: React.FC = () => {
         console.error('Failed to download artifact:', err);
       }
     },
-    [outputsBucket, region, getCredentials],
+    [outputsBucket, region, getCredentials]
   );
 
   const loadSchedule = useCallback(async () => {
@@ -222,7 +222,7 @@ export const ScheduleDetailPage: React.FC = () => {
         return { error: t('scheduling.details.runHistory.status.error') };
       }
     },
-    [outputsBucket, region, getCredentials, t],
+    [outputsBucket, region, getCredentials, t]
   );
 
   const loadRunLogsForRuns = useCallback(
@@ -237,14 +237,14 @@ export const ScheduleDetailPage: React.FC = () => {
         const batch = pending.slice(i, i + batchSize);
 
         setRunHistory((prev) =>
-          prev.map((item) => (batch.some((run) => run.runId === item.runId) ? { ...item, loading: true } : item)),
+          prev.map((item) => (batch.some((run) => run.runId === item.runId) ? { ...item, loading: true } : item))
         );
 
         const results = await Promise.all(
           batch.map(async (run) => {
             const result = await fetchRunLog(run);
             return { runId: run.runId, ...result };
-          }),
+          })
         );
 
         setRunHistory((prev) =>
@@ -266,12 +266,12 @@ export const ScheduleDetailPage: React.FC = () => {
                 loading: false,
                 error: result.error ?? t('scheduling.details.runHistory.status.error'),
               };
-            }),
-          ),
+            })
+          )
         );
       }
     },
-    [fetchRunLog, outputsBucket, region, getCredentials, sortRunHistory, t],
+    [fetchRunLog, outputsBucket, region, getCredentials, sortRunHistory, t]
   );
 
   const loadRunHistory = useCallback(async () => {
@@ -389,11 +389,11 @@ export const ScheduleDetailPage: React.FC = () => {
               loading: false,
               error: result.error ?? t('scheduling.details.runHistory.status.error'),
             };
-          }),
-        ),
+          })
+        )
       );
     },
-    [outputsBucket, region, getCredentials, fetchRunLog, sortRunHistory, t],
+    [outputsBucket, region, getCredentials, fetchRunLog, sortRunHistory, t]
   );
 
   const handleToggleExpand = useCallback(
@@ -407,7 +407,7 @@ export const ScheduleDetailPage: React.FC = () => {
         }
       }
     },
-    [expandedRun, loadRunLog],
+    [expandedRun, loadRunLog]
   );
 
   const handleTogglePause = useCallback(async () => {
@@ -468,7 +468,7 @@ export const ScheduleDetailPage: React.FC = () => {
       });
       await reloadSchedule();
     },
-    [schedule, numaPut, reloadSchedule],
+    [schedule, numaPut, reloadSchedule]
   );
 
   const nextRun = useMemo(() => {
@@ -676,7 +676,7 @@ export const ScheduleDetailPage: React.FC = () => {
                       {formatTimestamp(
                         schedule.lastRunEpoch,
                         { never: t('scheduling.labels.never'), invalid: t('scheduling.labels.invalidDate') },
-                        schedule.timezone,
+                        schedule.timezone
                       )}
                       {schedule.lastStatus && <span className="ms-2 text-muted">({schedule.lastStatus})</span>}
                     </dd>
@@ -686,7 +686,7 @@ export const ScheduleDetailPage: React.FC = () => {
                       {formatTimestamp(
                         schedule.createdAt,
                         { never: t('scheduling.labels.never'), invalid: t('scheduling.labels.invalidDate') },
-                        schedule.timezone,
+                        schedule.timezone
                       )}
                     </dd>
                   </dl>
@@ -800,7 +800,7 @@ export const ScheduleDetailPage: React.FC = () => {
                                 {run.log?.startedAt
                                   ? new Date(run.log.startedAt).toLocaleString(
                                       undefined,
-                                      schedule.timezone ? { timeZone: schedule.timezone } : undefined,
+                                      schedule.timezone ? { timeZone: schedule.timezone } : undefined
                                     )
                                   : t('scheduling.details.runHistory.placeholder')}
                               </td>
@@ -808,7 +808,7 @@ export const ScheduleDetailPage: React.FC = () => {
                                 {run.log?.completedAt
                                   ? new Date(run.log.completedAt).toLocaleString(
                                       undefined,
-                                      schedule.timezone ? { timeZone: schedule.timezone } : undefined,
+                                      schedule.timezone ? { timeZone: schedule.timezone } : undefined
                                     )
                                   : t('scheduling.details.runHistory.placeholder')}
                               </td>
@@ -835,7 +835,7 @@ export const ScheduleDetailPage: React.FC = () => {
                                   >
                                     {t(
                                       `scheduling.details.runHistory.status.${run.log.agentStatus.status}`,
-                                      run.log.agentStatus.status,
+                                      run.log.agentStatus.status
                                     )}
                                   </Badge>
                                 ) : run.log ? (

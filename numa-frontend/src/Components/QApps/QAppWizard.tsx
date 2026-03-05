@@ -74,7 +74,7 @@ const QAppWizard = ({ qAppData, onInputChange, qCardInputValues, onRunApp, sessi
     (cardId) => {
       return cardDependencies.has(cardId);
     },
-    [cardDependencies],
+    [cardDependencies]
   );
 
   // Organize cards by type
@@ -86,7 +86,7 @@ const QAppWizard = ({ qAppData, onInputChange, qCardInputValues, onRunApp, sessi
         const cardData = getCardData(card);
         return cardData.type === 'text-input' || cardData.type === 'file-input';
       }),
-    [cards, getCardData],
+    [cards, getCardData]
   );
 
   const outputCards = useMemo(
@@ -95,7 +95,7 @@ const QAppWizard = ({ qAppData, onInputChange, qCardInputValues, onRunApp, sessi
         const cardData = getCardData(card);
         return cardData.type === 'q-query' || cardData.type === 'text-output';
       }),
-    [cards, getCardData],
+    [cards, getCardData]
   );
 
   // Move to first output step when app starts running
@@ -123,19 +123,19 @@ const QAppWizard = ({ qAppData, onInputChange, qCardInputValues, onRunApp, sessi
       // For output cards, they're complete if their status is COMPLETED
       return sessionResults?.cardStatus?.[cardId]?.currentState === 'COMPLETED';
     },
-    [inputCards, outputCards, qCardInputValues, completedSteps, sessionResults, getCardData],
+    [inputCards, outputCards, qCardInputValues, completedSteps, sessionResults, getCardData]
   );
 
   const handleStepClick = useCallback(
     (index) => {
       const maxAllowedStep = [...inputCards, ...outputCards].findIndex(
-        (card, i) => !isStepComplete(i) && i !== activeStep,
+        (card, i) => !isStepComplete(i) && i !== activeStep
       );
       if (maxAllowedStep === -1 || index <= maxAllowedStep) {
         setActiveStep(index);
       }
     },
-    [inputCards, outputCards, isStepComplete, activeStep],
+    [inputCards, outputCards, isStepComplete, activeStep]
   );
 
   const handleRunApp = useCallback(
@@ -161,7 +161,7 @@ const QAppWizard = ({ qAppData, onInputChange, qCardInputValues, onRunApp, sessi
         setProcessingProgress(0);
       }
     },
-    [completedSteps, inputCards, onRunApp, setAppRunning, getCardData, setProcessingProgress],
+    [completedSteps, inputCards, onRunApp, setAppRunning, getCardData, setProcessingProgress]
   );
 
   // Effect to track session results and update progress
@@ -214,7 +214,7 @@ const QAppWizard = ({ qAppData, onInputChange, qCardInputValues, onRunApp, sessi
           required: isCardRequired(cardData.id),
         };
       }),
-    [inputCards, getCardData, isCardRequired],
+    [inputCards, getCardData, isCardRequired]
   );
 
   const postRunSteps = useMemo(
@@ -226,17 +226,17 @@ const QAppWizard = ({ qAppData, onInputChange, qCardInputValues, onRunApp, sessi
           title: cardData.title || 'Untitled',
         };
       }),
-    [outputCards, getCardData],
+    [outputCards, getCardData]
   );
 
   const isStepDisabled = useCallback(
     (index) => {
       const maxAllowedStep = [...inputCards, ...outputCards].findIndex(
-        (card, i) => !isStepComplete(i) && i !== activeStep,
+        (card, i) => !isStepComplete(i) && i !== activeStep
       );
       return maxAllowedStep !== -1 && index > maxAllowedStep;
     },
-    [inputCards, outputCards, isStepComplete, activeStep],
+    [inputCards, outputCards, isStepComplete, activeStep]
   );
 
   const allCards = useMemo(() => [...inputCards, ...outputCards], [inputCards, outputCards]);

@@ -310,7 +310,7 @@ export const isToolEventFrame = (f: AgentEventFrame): f is ToolUseRelatedFrame =
     Array.isArray(m?.content) &&
     (m.content as unknown[]).some((i: Record<string, unknown>) => i?.toolUse || i?.toolResult);
   return Boolean(
-    hasStart || hasCurrent || hasDirectResult || arrayTool || hasToolStream || f.type === 'tool_use_complete',
+    hasStart || hasCurrent || hasDirectResult || arrayTool || hasToolStream || f.type === 'tool_use_complete'
   );
 };
 

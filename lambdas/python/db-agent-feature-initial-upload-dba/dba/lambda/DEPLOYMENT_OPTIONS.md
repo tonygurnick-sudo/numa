@@ -6,16 +6,16 @@ This document explains the two deployment options available for the DB CLI Lambd
 
 ## TL;DR - Which Should I Use?
 
-| Use Case | Recommendation |
-|----------|---------------|
-| **Simple, internal tool** | ✅ **Function URL** |
-| **Quick prototype/demo** | ✅ **Function URL** |
-| **AI agent integration** | ✅ **Function URL** |
-| **Cost-sensitive** | ✅ **Function URL** |
-| **Need throttling/quotas** | ⚠️ **API Gateway** |
-| **Need caching** | ⚠️ **API Gateway** |
-| **Need custom domain** | ⚠️ **API Gateway** |
-| **Complex API management** | ⚠️ **API Gateway** |
+| Use Case                   | Recommendation      |
+| -------------------------- | ------------------- |
+| **Simple, internal tool**  | ✅ **Function URL** |
+| **Quick prototype/demo**   | ✅ **Function URL** |
+| **AI agent integration**   | ✅ **Function URL** |
+| **Cost-sensitive**         | ✅ **Function URL** |
+| **Need throttling/quotas** | ⚠️ **API Gateway**  |
+| **Need caching**           | ⚠️ **API Gateway**  |
+| **Need custom domain**     | ⚠️ **API Gateway**  |
+| **Complex API management** | ⚠️ **API Gateway**  |
 
 **Default recommendation:** Use **Function URL** (`deploy-function-url.sh`) - it's simpler, cheaper, and sufficient for most use cases.
 
@@ -24,14 +24,17 @@ This document explains the two deployment options available for the DB CLI Lambd
 ## Option 1: Lambda Function URL (Recommended)
 
 **Deploy with:**
+
 ```bash
 ./deploy-function-url.sh
 ```
 
 ### What It Is
+
 Lambda Function URLs are built-in HTTPS endpoints that AWS Lambda provides. No additional services required.
 
 ### Pros ✅
+
 - **Simpler** - No API Gateway setup needed
 - **Cheaper** - ~80% less expensive than API Gateway
   - Function URL: $0.20 per million requests
@@ -42,18 +45,22 @@ Lambda Function URLs are built-in HTTPS endpoints that AWS Lambda provides. No a
 - **Same functionality** - Works identically for AI agents
 
 ### Cons ❌
+
 - **No throttling** - Can't set rate limits per client
 - **No caching** - Every request hits Lambda
 - **No custom domains** - URL is `https://abc123.lambda-url.us-east-1.on.aws/`
 - **Basic auth only** - Either public (NONE) or IAM authentication
 
 ### Cost Example
+
 1 million requests/month:
+
 - **Function URL:** $0.20
 - **Lambda execution:** $20 (assuming 1s avg @ 512MB)
 - **Total:** ~$20.20/month
 
 ### Use Cases
+
 - Internal tools and dashboards
 - AI agent integrations
 - Prototypes and MVPs
@@ -61,6 +68,7 @@ Lambda Function URLs are built-in HTTPS endpoints that AWS Lambda provides. No a
 - Simple APIs without complex requirements
 
 ### Example Deployment
+
 ```bash
 # Simple deployment (public access)
 ./deploy-function-url.sh
@@ -77,14 +85,17 @@ Lambda Function URLs are built-in HTTPS endpoints that AWS Lambda provides. No a
 ## Option 2: API Gateway
 
 **Deploy with:**
+
 ```bash
 ./deploy.sh
 ```
 
 ### What It Is
+
 Amazon API Gateway is a fully managed API management service that sits in front of Lambda.
 
 ### Pros ✅
+
 - **Throttling** - Rate limiting and quotas per API key
 - **Caching** - Cache responses to reduce Lambda invocations
 - **Custom domains** - Use your own domain name (e.g., api.mycompany.com)
@@ -95,19 +106,23 @@ Amazon API Gateway is a fully managed API management service that sits in front 
 - **More monitoring** - Detailed CloudWatch metrics
 
 ### Cons ❌
+
 - **More expensive** - ~5x more than Function URL
 - **More complex** - Two services to configure and debug
 - **Slower deployment** - More setup steps
 - **More maintenance** - More things that can break
 
 ### Cost Example
+
 1 million requests/month:
+
 - **API Gateway:** $1.00
 - **Lambda execution:** $20 (assuming 1s avg @ 512MB)
 - **CloudWatch logs:** $0.50
 - **Total:** ~$21.50/month (plus $3.50/month base)
 
 ### Use Cases
+
 - Production APIs with many consumers
 - Need rate limiting per customer
 - Need response caching
@@ -116,6 +131,7 @@ Amazon API Gateway is a fully managed API management service that sits in front 
 - Multi-region deployments with CloudFront
 
 ### Example Deployment
+
 ```bash
 # Standard deployment
 ./deploy.sh
@@ -131,21 +147,21 @@ Amazon API Gateway is a fully managed API management service that sits in front 
 
 ## Feature Comparison
 
-| Feature | Function URL | API Gateway |
-|---------|--------------|-------------|
-| **Setup Complexity** | ⭐ Simple | ⭐⭐⭐ Complex |
-| **Cost** | ⭐⭐⭐ Cheap | ⭐ Expensive |
-| **HTTPS Endpoint** | ✅ Built-in | ✅ Built-in |
-| **Custom Domain** | ❌ No | ✅ Yes |
-| **CORS** | ✅ Auto | ✅ Configurable |
-| **Authentication** | NONE or IAM | API Keys, IAM, Cognito |
-| **Rate Limiting** | ❌ No | ✅ Yes |
-| **Caching** | ❌ No | ✅ Yes (TTL up to 1 hour) |
-| **Request Validation** | ❌ No | ✅ Yes |
-| **WebSocket** | ❌ No | ✅ Yes |
-| **API Versioning** | ❌ Manual | ✅ Built-in |
-| **Usage Plans** | ❌ No | ✅ Yes |
-| **CloudFront** | ❌ Manual | ✅ Easy integration |
+| Feature                | Function URL | API Gateway               |
+| ---------------------- | ------------ | ------------------------- |
+| **Setup Complexity**   | ⭐ Simple    | ⭐⭐⭐ Complex            |
+| **Cost**               | ⭐⭐⭐ Cheap | ⭐ Expensive              |
+| **HTTPS Endpoint**     | ✅ Built-in  | ✅ Built-in               |
+| **Custom Domain**      | ❌ No        | ✅ Yes                    |
+| **CORS**               | ✅ Auto      | ✅ Configurable           |
+| **Authentication**     | NONE or IAM  | API Keys, IAM, Cognito    |
+| **Rate Limiting**      | ❌ No        | ✅ Yes                    |
+| **Caching**            | ❌ No        | ✅ Yes (TTL up to 1 hour) |
+| **Request Validation** | ❌ No        | ✅ Yes                    |
+| **WebSocket**          | ❌ No        | ✅ Yes                    |
+| **API Versioning**     | ❌ Manual    | ✅ Built-in               |
+| **Usage Plans**        | ❌ No        | ✅ Yes                    |
+| **CloudFront**         | ❌ Manual    | ✅ Easy integration       |
 
 ---
 
@@ -154,21 +170,26 @@ Amazon API Gateway is a fully managed API management service that sits in front 
 ### Function URL Authentication
 
 **Option 1: NONE (Public)**
+
 ```bash
 ./deploy-function-url.sh --auth-type NONE
 ```
+
 - Anyone can call the API
 - Implement custom auth via `API_KEY` environment variable
 - Good for: Internal tools, trusted networks
 
 **Option 2: AWS_IAM**
+
 ```bash
 ./deploy-function-url.sh --auth-type AWS_IAM
 ```
+
 - Requests must be signed with AWS credentials
 - Good for: AWS-to-AWS communication, programmatic access
 
 **Custom API Key (via env var):**
+
 ```bash
 # Set in Lambda
 API_KEY=my-secret-key
@@ -180,6 +201,7 @@ curl -H "X-Api-Key: my-secret-key" https://...
 ### API Gateway Authentication
 
 **Built-in Options:**
+
 - API Keys (managed by API Gateway)
 - IAM authentication
 - Cognito User Pools
@@ -192,12 +214,14 @@ More flexible but more complex to set up.
 ## Performance Comparison
 
 ### Function URL
+
 - **Cold start:** ~2-3s
 - **Warm request:** ~50-200ms
 - **Concurrency:** Up to 1000 (default), 10,000 (with increase)
 - **Max payload:** 6MB
 
 ### API Gateway
+
 - **Cold start:** ~2-3s (same - Lambda is the bottleneck)
 - **Warm request:** ~100-300ms (additional 50-100ms overhead)
 - **Concurrency:** Same as Lambda
@@ -215,6 +239,7 @@ More flexible but more complex to set up.
 If you start with Function URL and need API Gateway features later:
 
 1. Deploy API Gateway version:
+
    ```bash
    ./deploy.sh --function-name my-db-lambda
    ```
@@ -236,6 +261,7 @@ If you start with Function URL and need API Gateway features later:
 If you want to simplify and reduce costs:
 
 1. Deploy Function URL version:
+
    ```bash
    ./deploy-function-url.sh --function-name my-db-lambda
    ```
@@ -256,6 +282,7 @@ If you want to simplify and reduce costs:
 **No, the API is identical!**
 
 Both deployment options expose the same endpoints:
+
 - `POST /query`
 - `POST /csv`
 - `POST /ask`
@@ -284,6 +311,7 @@ response = requests.post(
 ## Recommendations by Scenario
 
 ### Scenario 1: Personal Project / Internal Tool
+
 **Use:** Function URL
 **Why:** Simplest and cheapest. You don't need advanced features.
 
@@ -292,6 +320,7 @@ response = requests.post(
 ```
 
 ### Scenario 2: AI Agent Integration
+
 **Use:** Function URL
 **Why:** AI agents just need a reliable HTTP endpoint. No complex features needed.
 
@@ -301,6 +330,7 @@ response = requests.post(
 ```
 
 ### Scenario 3: Startup MVP
+
 **Use:** Function URL
 **Why:** Launch fast, keep costs low. Migrate to API Gateway later if needed.
 
@@ -309,6 +339,7 @@ response = requests.post(
 ```
 
 ### Scenario 4: Enterprise Production API
+
 **Use:** API Gateway
 **Why:** Need rate limiting, caching, custom domains, and professional features.
 
@@ -319,6 +350,7 @@ response = requests.post(
 ```
 
 ### Scenario 5: Multi-Tenant SaaS
+
 **Use:** API Gateway
 **Why:** Need usage plans, API keys per customer, throttling.
 
@@ -334,6 +366,7 @@ response = requests.post(
 You can also invoke Lambda directly without any HTTP layer:
 
 ### Via AWS SDK (Python)
+
 ```python
 import boto3
 import json
@@ -354,6 +387,7 @@ result = json.loads(response['Payload'].read())
 ```
 
 ### Via AWS CLI
+
 ```bash
 aws lambda invoke \
   --function-name db-cli-lambda \
@@ -364,6 +398,7 @@ cat response.json
 ```
 
 **When to use:**
+
 - AWS-to-AWS communication (EC2 → Lambda, Lambda → Lambda)
 - No need for HTTP endpoint
 - Tightest AWS integration
@@ -375,6 +410,7 @@ cat response.json
 ## Cost Breakdown (1M Requests/Month)
 
 ### Function URL
+
 ```
 Lambda execution (1s avg, 512MB): $20.00
 Function URL requests:            $0.20
@@ -383,6 +419,7 @@ Total:                           $21.10/month
 ```
 
 ### API Gateway (REST)
+
 ```
 Lambda execution (1s avg, 512MB): $20.00
 API Gateway requests:             $1.00
@@ -393,6 +430,7 @@ Total:                           $25.90/month
 ```
 
 ### API Gateway with Caching (90% cache hit)
+
 ```
 Lambda execution (100k hits):     $2.00
 API Gateway requests:             $1.00
@@ -410,6 +448,7 @@ Total:                           $7.92/month
 ## Summary
 
 ### Use Function URL if:
+
 ✅ You want the simplest deployment
 ✅ You want the lowest cost
 ✅ You're building an AI agent integration
@@ -417,6 +456,7 @@ Total:                           $7.92/month
 ✅ You're prototyping or building an MVP
 
 ### Use API Gateway if:
+
 ✅ You need rate limiting per client
 ✅ You need response caching
 ✅ You need custom domain names
@@ -425,6 +465,7 @@ Total:                           $7.92/month
 ✅ You're building a production SaaS API
 
 ### Default Recommendation
+
 Start with **Function URL** (`deploy-function-url.sh`). It's simpler and cheaper. You can always migrate to API Gateway later if you need advanced features.
 
 ---

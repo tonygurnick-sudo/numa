@@ -25,7 +25,7 @@ export function KnowledgeBaseSelector({
       if (!kb) return '';
       return kb.kb_id === 'company' ? t('selector.companyKbName') : kb.kb_name;
     },
-    [t],
+    [t]
   );
 
   const handleToggle = useCallback(
@@ -36,7 +36,7 @@ export function KnowledgeBaseSelector({
         });
       }
     },
-    [refreshKBs],
+    [refreshKBs]
   );
 
   const [portalContainer, setPortalContainer] = useState<HTMLElement | null>(null);
@@ -56,7 +56,7 @@ export function KnowledgeBaseSelector({
         if (!portalContainer) return <div {...props} ref={ref} />;
         return createPortal(<div {...props} ref={ref} />, portalContainer);
       }),
-    [portalContainer],
+    [portalContainer]
   );
 
   const isCompact = variant === 'compact';

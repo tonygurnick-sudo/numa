@@ -44,13 +44,13 @@ const AllTeamsView = () => {
   // Ticket count per team (only available for the selected team)
   const selectedTeamTicketCount = useMemo(
     () => (selectedTeamId ? tickets.filter((tk) => !tk.archived).length : 0),
-    [selectedTeamId, tickets],
+    [selectedTeamId, tickets]
   );
 
   // Active work unit for the selected team
   const activeWorkUnit = useMemo(
     () => (hasWorkUnits ? (workUnits.find((wu) => wu.status === 'active') ?? null) : null),
-    [hasWorkUnits, workUnits],
+    [hasWorkUnits, workUnits]
   );
 
   if (teams.length === 0) {

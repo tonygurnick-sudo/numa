@@ -60,7 +60,7 @@ async function findUserPoolId(awsClientConfig: AWSClientConfig, clientName: stri
     const response = await cognito.send(
       new ListUserPoolsCommand({
         MaxResults: 60,
-      }),
+      })
     );
 
     const userPool = response.UserPools?.find((pool) => pool.Name === `numa-${clientName}`);
@@ -77,7 +77,7 @@ async function findUserPoolId(awsClientConfig: AWSClientConfig, clientName: stri
 async function getUserEmails(
   awsClientConfig: AWSClientConfig,
   userPoolId: string,
-  userIds: string[],
+  userIds: string[]
 ): Promise<Record<string, string>> {
   const cognito = new CognitoIdentityProvider(awsClientConfig);
   const userEmails: Record<string, string> = {};
@@ -90,7 +90,7 @@ async function getUserEmails(
         new AdminGetUserCommand({
           UserPoolId: userPoolId,
           Username: userId,
-        }),
+        })
       );
 
       const emailAttr = response.UserAttributes?.find((attr) => attr.Name === 'email');
@@ -107,7 +107,7 @@ async function getUserEmails(
 function enrichDataWithEmails(
   appRuns: AppRunRecord[],
   chatMessages: ChatMessageRecord[],
-  userEmails: Record<string, string>,
+  userEmails: Record<string, string>
 ): { appRuns: AppRunRecord[]; chatMessages: ChatMessageRecord[] } {
   const enrichedAppRuns = appRuns.map((run) => ({
     ...run,
@@ -235,7 +235,7 @@ async function getJobsTableNames(dynamoClient: DynamoDBDocumentClient): Promise<
 
   const jobsTables =
     result.TableNames?.filter(
-      (tableName) => tableName.startsWith(`${clientName}-`) && tableName.endsWith('-recent-jobs'),
+      (tableName) => tableName.startsWith(`${clientName}-`) && tableName.endsWith('-recent-jobs')
     ) || [];
 
   console.log(chalk.green(`Found ${jobsTables.length} jobs tables: ${jobsTables.join(', ')}`));
@@ -255,7 +255,7 @@ async function getAllAppRuns(
   dynamoClient: DynamoDBDocumentClient,
   jobsTableNames: string[],
   startDate: Date,
-  endDate: Date,
+  endDate: Date
 ): Promise<AppRunRecord[]> {
   console.log(chalk.blue('Fetching app runs...'));
   const allRuns: AppRunRecord[] = [];
@@ -305,7 +305,7 @@ async function getAllChatMessages(
   dynamoClient: DynamoDBDocumentClient,
   chatTableName: string,
   startDate: Date,
-  endDate: Date,
+  endDate: Date
 ): Promise<ChatMessageRecord[]> {
   console.log(chalk.blue(`Fetching chat messages from: ${chatTableName}`));
   const allMessages: ChatMessageRecord[] = [];
@@ -408,7 +408,7 @@ function exportToCSV(
   appRuns: AppRunRecord[],
   chatMessages: ChatMessageRecord[],
   summary: UsageSummary[],
-  period: string,
+  period: string
 ): void {
   console.log(chalk.blue('Exporting to CSV files...'));
 
@@ -428,7 +428,7 @@ function exportToCSV(
     (err, output) => {
       if (err) throw err;
       writeFileSync(join(outputDir, `${clientName}-app-runs-${period}-${timestamp}.csv`), output);
-    },
+    }
   );
 
   // Export detailed chat messages
@@ -441,7 +441,7 @@ function exportToCSV(
     (err, output) => {
       if (err) throw err;
       writeFileSync(join(outputDir, `${clientName}-chat-messages-${period}-${timestamp}.csv`), output);
-    },
+    }
   );
 
   // Export usage summary
@@ -460,7 +460,7 @@ function exportToCSV(
     (err, output) => {
       if (err) throw err;
       writeFileSync(join(outputDir, `${clientName}-usage-summary-${period}-${timestamp}.csv`), output);
-    },
+    }
   );
 
   console.log(chalk.green(`✅ Exported 3 CSV files to ${outputDir}:`));
@@ -474,7 +474,7 @@ function exportToJSON(
   chatMessages: ChatMessageRecord[],
   summary: UsageSummary[],
   period: string,
-  displayName: string,
+  displayName: string
 ): void {
   console.log(chalk.blue('Exporting to JSON file...'));
 
@@ -571,13 +571,13 @@ async function generateUsageReport(): Promise<void> {
       console.log(chalk.yellow(`Total chat messages: ${enrichedChatMessages.length}`));
       console.log(
         chalk.yellow(
-          `Unique users: ${new Set([...enrichedAppRuns.map((r) => r.userId), ...enrichedChatMessages.map((m) => m.userId)]).size}`,
-        ),
+          `Unique users: ${new Set([...enrichedAppRuns.map((r) => r.userId), ...enrichedChatMessages.map((m) => m.userId)]).size}`
+        )
       );
       console.log(
         chalk.yellow(
-          `Months covered: ${new Set([...enrichedAppRuns.map((r) => r.month), ...enrichedChatMessages.map((m) => m.month)]).size}`,
-        ),
+          `Months covered: ${new Set([...enrichedAppRuns.map((r) => r.month), ...enrichedChatMessages.map((m) => m.month)]).size}`
+        )
       );
 
       // Export data

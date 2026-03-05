@@ -26,7 +26,7 @@ const parseCronField = (
   field: string,
   min: number,
   max: number,
-  fieldName: 'minute' | 'hour' | 'dayOfMonth' | 'month' | 'dayOfWeek',
+  fieldName: 'minute' | 'hour' | 'dayOfMonth' | 'month' | 'dayOfWeek'
 ) => {
   const rawField = field.trim();
   if (!rawField) return null;
@@ -174,7 +174,7 @@ const makeUtcDateFromZonedParts = (
   hour: number,
   minute: number,
   second: number,
-  timezone: string,
+  timezone: string
 ): Date => {
   // We want to find the UTC timestamp that, when displayed in the target timezone,
   // shows the specified date/time values.
@@ -358,7 +358,7 @@ export interface NextRunInfo {
  * EventBridge format: cron(minute hour day-of-month month day-of-week year)
  */
 const parseEventBridgeCron = (
-  cronExpr: string,
+  cronExpr: string
 ): { cronFields: string[]; isOneTime: boolean; targetYear?: number } | null => {
   // Remove 'cron(' prefix and ')' suffix if present
   let expr = cronExpr.trim();
@@ -466,7 +466,7 @@ const convertRateToCron = (rateExpr: string): string | null => {
 export const calculateNextRun = (
   cronExpression: string,
   timezone: string = 'UTC',
-  status: 'active' | 'paused' | 'deleted' = 'active',
+  status: 'active' | 'paused' | 'deleted' = 'active'
 ): NextRunInfo => {
   const defaultResult: NextRunInfo = {
     nextRun: null,
@@ -730,7 +730,7 @@ export const describeCronExpression = (cronExpression: string): string => {
 
     // Helper to parse day-of-week with #N or L suffix
     const parseDayOfWeekSpecifier = (
-      dow: string,
+      dow: string
     ): { days: string[]; weekNumbers: (number | 'last')[]; isNthPattern: boolean } => {
       const days: string[] = [];
       const weekNumbers: (number | 'last')[] = [];
@@ -981,7 +981,7 @@ export const getCalendarRunTimes = (
   cronExpression: string,
   timezone: string = 'UTC',
   pastCount: number = 10,
-  futureCount: number = 30,
+  futureCount: number = 30
 ): Date[] => {
   try {
     let parsedCron: { cronFields: string[]; isOneTime: boolean; targetYear?: number } | null = null;
@@ -1040,7 +1040,7 @@ export const getRunTimesInRange = (
   startDate: Date,
   endDate: Date,
   timezone: string = 'UTC',
-  maxOccurrences: number = 1000,
+  maxOccurrences: number = 1000
 ): Date[] => {
   try {
     if (startDate > endDate) return [];
@@ -1070,7 +1070,7 @@ export const getRunTimesInRange = (
 
     if (parsedCron.isOneTime && parsedCron.targetYear) {
       return generateOneTimeEvent(parsedCron.cronFields, parsedCron.targetYear, timezone).filter(
-        (date) => date >= startDate && date <= endDate,
+        (date) => date >= startDate && date <= endDate
       );
     }
 
@@ -1109,7 +1109,7 @@ const generatePastOccurrences = (cronFields: string[], from: Date, timezone: str
     if (occurrence && occurrence < from) {
       // Check if this occurrence is not already in our list
       const isDuplicate = occurrences.some(
-        (existing) => Math.abs(existing.getTime() - occurrence.getTime()) < 60000, // Within 1 minute
+        (existing) => Math.abs(existing.getTime() - occurrence.getTime()) < 60000 // Within 1 minute
       );
 
       if (!isDuplicate) {

@@ -127,7 +127,7 @@ describe('bucketNameUtil', () => {
         stepFunctionJobId,
         s3Client,
         '.pdf',
-        userId,
+        userId
       );
 
       // Verify the result

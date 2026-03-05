@@ -18,7 +18,6 @@ These 9 principles guide the high-performance, functional architecture:
 9. Debuggability - Logs + Metrics at Boundaries: Observability at key decision points
 10. Idempotent systems - Safe, repeatable, well thought out, Idempotent and logical side effects.
 
-
 # context 7
 
 Always use context7 when I need code generation, setup or configuration steps, or
@@ -28,6 +27,7 @@ tools to resolve library id and get library docs without me having to explicitly
 # AWS Profile
 
 When running AWS CLI commands for this project, use `AWS_PROFILE=q-demo`. For example:
+
 ```bash
 AWS_PROFILE=q-demo aws iot list-targets-for-policy --policy-name "some-policy"
 ```
@@ -69,6 +69,7 @@ Numa is a multi‑tenant, serverless enterprise AI platform on AWS. Each client 
 - Integrations UX: When enabled and configured, the chat UI can query connected integrations (via a cross‑account proxy relay). Admins can also set default allow/deny policies for tool usage.
 
 Dev commands:
+
 - `yarn install`, `yarn run dev`, `yarn build`, `yarn test`
 - Lint all workspaces (excluding infra): `yarn workspaces foreach --parallel --all --exclude infra run lint --fix`
 
@@ -83,6 +84,7 @@ The frontend uses `react-i18next` for internationalization:
 - **Lint enforcement:** ESLint rule `i18next/no-literal-string` will error on hardcoded UI strings
 
 **Common namespaces:**
+
 - `common` - Shared UI elements (buttons, labels, navigation, tool renderers)
 - `apps` - Apps pages and components
 - `agents` - Agent builder and management
@@ -93,6 +95,7 @@ The frontend uses `react-i18next` for internationalization:
 - `errors` - Error messages
 
 **Usage example:**
+
 ```tsx
 import { useTranslation } from 'react-i18next';
 
@@ -107,6 +110,7 @@ const MyComponent = () => {
 ```
 
 **Adding new translations:**
+
 1. Add keys to the appropriate namespace in `public/locales/en/<namespace>.json`
 2. Use the `t()` function with the key path (e.g., `t('section.subsection.key')`)
 3. For interpolation, use `{{variable}}` in JSON: `"greeting": "Hello, {{name}}!"`
@@ -266,7 +270,7 @@ CloudFront routing: The frontend distribution forwards `/api/*` to API Gateway a
 
 ## Mental Model for Agents
 
-1) If deploying to clients, it runs out of the numa-client-stack where we assume an ArcanumAIAccess role from the deployer accounts creds to be able to create all the resources in the client account. This is also useful for local dev to access/see resources in the client account.
-2) For chat tasks, the `numa-chat-agent` Lambda is the hub: it streams tokens, invokes Bedrock, queries the selected knowledge base, and optionally calls MCP tools through the Pipedream proxy.
-3) For app tasks, follow the app construct → Step Function → Lambda chain, with S3 prefixes in the outputs bucket and optional job status in DynamoDB.
-4) For integrations, treat Pipedream access as cross‑account and centrally secured; rely on the relay/proxy pattern.
+1. If deploying to clients, it runs out of the numa-client-stack where we assume an ArcanumAIAccess role from the deployer accounts creds to be able to create all the resources in the client account. This is also useful for local dev to access/see resources in the client account.
+2. For chat tasks, the `numa-chat-agent` Lambda is the hub: it streams tokens, invokes Bedrock, queries the selected knowledge base, and optionally calls MCP tools through the Pipedream proxy.
+3. For app tasks, follow the app construct → Step Function → Lambda chain, with S3 prefixes in the outputs bucket and optional job status in DynamoDB.
+4. For integrations, treat Pipedream access as cross‑account and centrally secured; rely on the relay/proxy pattern.

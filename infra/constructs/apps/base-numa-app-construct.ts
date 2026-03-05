@@ -128,7 +128,7 @@ export abstract class BaseNumaApp extends ApiGatewayLambdaCollection {
       }).json,
     });
 
-    new IamRolePolicyAttachment(this, name + '_policy-attachment', {
+    const policyAttachment = new IamRolePolicyAttachment(this, name + '_policy-attachment', {
       role: stepFunctionRole.name,
       policyArn: stepFunctionPolicy.arn,
     });
@@ -142,6 +142,7 @@ export abstract class BaseNumaApp extends ApiGatewayLambdaCollection {
         logDestination: `${this.logGroup.arn}:*`,
       },
       publish: true,
+      dependsOn: [policyAttachment],
     });
 
     this.addLambdaFunction(scope, name + '-start', {
@@ -195,7 +196,7 @@ export abstract class BaseNumaApp extends ApiGatewayLambdaCollection {
     lambdaArn: string,
     payload: Record<string, string | boolean | number>,
     next: string | null,
-    additionalParameters?: AdditionalLambdaParameters,
+    additionalParameters?: AdditionalLambdaParameters
   ): asl.State {
     return {
       Type: 'Task',
@@ -277,7 +278,7 @@ export abstract class BaseNumaApp extends ApiGatewayLambdaCollection {
     extractContentLambda: LambdaFunction,
     input_key: string,
     next: string,
-    additionalParameters?: AdditionalLambdaParameters,
+    additionalParameters?: AdditionalLambdaParameters
   ): asl.State {
     return this.addLambdaTask(
       extractContentLambda.arn,
@@ -293,7 +294,7 @@ export abstract class BaseNumaApp extends ApiGatewayLambdaCollection {
         },
         ResultPath: '$.extracted',
         ...additionalParameters,
-      },
+      }
     );
   }
 
@@ -304,7 +305,7 @@ export abstract class BaseNumaApp extends ApiGatewayLambdaCollection {
     extractContentLambdaArn: string,
     input_key: string,
     next: string,
-    additionalParameters?: AdditionalLambdaParameters,
+    additionalParameters?: AdditionalLambdaParameters
   ): asl.State {
     return this.addLambdaTask(
       extractContentLambdaArn,
@@ -320,7 +321,7 @@ export abstract class BaseNumaApp extends ApiGatewayLambdaCollection {
         },
         ResultPath: '$.extracted',
         ...additionalParameters,
-      },
+      }
     );
   }
 
@@ -486,7 +487,7 @@ export abstract class BaseNumaApp extends ApiGatewayLambdaCollection {
         status: 'FAILURE',
         'message.$': "States.Format('{}: {}', $.CatcherOutput.Error, $.CatcherOutput.Cause)",
       },
-      'Failure',
+      'Failure'
     );
   }
 
@@ -496,7 +497,7 @@ export abstract class BaseNumaApp extends ApiGatewayLambdaCollection {
         status: 'SUCCESS',
         'results.$': resultPath ?? '$',
       },
-      'Success',
+      'Success'
     );
   }
 

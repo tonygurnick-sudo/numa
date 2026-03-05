@@ -1,0 +1,144 @@
+{
+  "vault": {
+    "title": "Secrets Vault",
+    "description": "Securely store and manage your credentials, API keys, and sensitive data.",
+    "empty": "No secrets stored yet. Create your first secret to get started.",
+    "search": "Search secrets...",
+    "allCategories": "All Categories",
+    "createSecret": "Create Secret",
+    "editSecret": "Edit Secret",
+    "deleteSecret": "Delete Secret",
+    "deleteConfirm": "Are you sure you want to permanently delete \"{{name}}\"? This cannot be undone.",
+    "tabs": {
+      "secrets": "Secrets",
+      "companySecrets": "Company Secrets",
+      "auditLog": "Audit Log"
+    },
+    "companySecrets": {
+      "heading": "Company Secrets",
+      "description": "Shared credentials managed by administrators. Regular users can see these exist but cannot view their values.",
+      "empty": "No company secrets configured. An administrator can add them.",
+      "adminOnly": "Admin access required to view details",
+      "configured": "Configured",
+      "notConfigured": "Not configured"
+    },
+    "columns": {
+      "name": "Name",
+      "type": "Type",
+      "category": "Category",
+      "lastAccessed": "Last Accessed",
+      "created": "Created",
+      "actions": "Actions"
+    },
+    "types": {
+      "login": "Login",
+      "api_key": "API Key",
+      "bearer_token": "Bearer Token",
+      "secure_note": "Secure Note",
+      "custom": "Custom"
+    },
+    "typeDescriptions": {
+      "login": "Username and password with optional URL",
+      "api_key": "API key and secret with optional endpoint",
+      "bearer_token": "Bearer token for API authentication",
+      "secure_note": "Encrypted text note",
+      "custom": "Custom key/value pairs"
+    },
+    "form": {
+      "name": "Secret Name",
+      "namePlaceholder": "e.g. GitHub Personal Access Token",
+      "type": "Secret Type",
+      "category": "Category",
+      "categoryPlaceholder": "e.g. Work, Personal, APIs",
+      "newCategory": "Create new category...",
+      "description": "Description",
+      "descriptionPlaceholder": "Optional description for this secret",
+      "dangerMode": "Danger Mode",
+      "dangerModeDescription": "Allow AI to access this secret without approval. Use with caution.",
+      "dangerModeWarning": "When enabled, the AI assistant can use this secret automatically without asking for your permission.",
+      "favorite": "Favorite",
+      "fields": "Secret Fields",
+      "addField": "Add Field",
+      "removeField": "Remove",
+      "fieldKey": "Key",
+      "fieldValue": "Value",
+      "fieldKeyPlaceholder": "e.g. api_key",
+      "fieldValuePlaceholder": "Enter value...",
+      "helpUrl": "Help URL",
+      "helpUrlPlaceholder": "https://example.com/setup-instructions",
+      "openHelpLink": "Open setup instructions"
+    },
+    "loginFields": {
+      "username": "Username",
+      "password": "Password",
+      "url": "URL",
+      "totp_seed": "TOTP Seed"
+    },
+    "apiKeyFields": {
+      "key": "API Key",
+      "secret": "API Secret",
+      "endpoint": "Endpoint URL"
+    },
+    "bearerTokenFields": {
+      "token": "Token",
+      "endpoint": "Endpoint URL",
+      "prefix": "Authorization Prefix"
+    },
+    "secureNoteFields": {
+      "content": "Note Content"
+    },
+    "detail": {
+      "reveal": "Reveal",
+      "hide": "Hide",
+      "copy": "Copy",
+      "copied": "Copied!",
+      "hidden": "••••••••",
+      "autoHideWarning": "Values auto-hide after 30 seconds",
+      "helpLink": "Setup instructions"
+    },
+    "audit": {
+      "title": "Access Audit Log",
+      "empty": "No access history recorded yet.",
+      "columns": {
+        "timestamp": "Timestamp",
+        "secretName": "Secret",
+        "action": "Action",
+        "accessor": "Accessed By",
+        "purpose": "Purpose",
+        "approvedBy": "Approved By"
+      },
+      "actions": {
+        "ai_access": "AI Access",
+        "user_view": "User View",
+        "user_update": "User Update",
+        "user_delete": "User Delete",
+        "admin_view": "Admin View",
+        "admin_create": "Admin Create",
+        "admin_update": "Admin Update",
+        "admin_delete": "Admin Delete",
+        "system_access": "System Access"
+      },
+      "approvals": {
+        "user": "User Approval",
+        "danger_mode": "Danger Mode (Auto)"
+      }
+    },
+    "errors": {
+      "loadFailed": "Failed to load secrets: {{message}}",
+      "createFailed": "Failed to create secret: {{message}}",
+      "updateFailed": "Failed to update secret: {{message}}",
+      "deleteFailed": "Failed to delete secret: {{message}}",
+      "loadAuditFailed": "Failed to load audit log: {{message}}"
+    },
+    "success": {
+      "created": "Secret \"{{name}}\" created successfully",
+      "updated": "Secret \"{{name}}\" updated successfully",
+      "deleted": "Secret deleted successfully"
+    }
+  },
+  "nav": {
+    "items": {
+      "vault": "Secrets Vault"
+    }
+  }
+}

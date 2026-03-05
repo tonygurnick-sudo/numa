@@ -3,6 +3,7 @@
 ## Critical Limitation: Business Accounts Only
 
 The SharePoint integration **only works with Microsoft 365 business/organizational accounts**. Personal Microsoft accounts (MSA) are not supported and will fail with:
+
 > "This API is not supported for MSA accounts"
 
 **Actions affected:** All site operations (`list-sites`, `search-sites`, `get-site`), search operations (`search-files`, `search-and-filter-files`), and `configure_props` for `siteId` (returns empty arrays).
@@ -14,6 +15,7 @@ The SharePoint integration **only works with Microsoft 365 business/organization
 ## Before Performing SharePoint Operations
 
 **Establish context first:**
+
 1. Resolve `siteId` via `configure_props` — if multiple sites exist, ask the user which one
 2. Most actions require the full siteId (format: `hostname,siteGuid,webGuid`)
 3. For file operations, resolve `driveId` after selecting site — each site can have multiple drives (usually "Documents")
@@ -22,11 +24,13 @@ The SharePoint integration **only works with Microsoft 365 business/organization
 ## Prop Resolution Chain
 
 Many props depend on earlier selections:
+
 ```
 siteId → driveId → folderId/fileId
 siteId → listId → itemId
 siteId → itemId (for Excel files)
 ```
+
 Always resolve in sequence using `configure_props`.
 
 ## Key Tips
@@ -52,6 +56,7 @@ Always resolve in sequence using `configure_props`.
 - **Search doesn't support wildcards:** The `find-file-by-name` action doesn't accept wildcards like `*` or `%`. Using them returns a 400 Bad Request error. Use specific search terms, or use `list-files-in-folder` to browse directory contents instead.
 
 - **OData filtering on lists requires indexed columns:** Filtering on non-indexed columns (like `Title` on custom lists) returns error:
+
   > "Field 'X' cannot be referenced in filter or orderby as it is not indexed"
 
   Document library columns like `ContentType` are typically indexed and work for filtering. For custom list columns, ensure they're indexed in SharePoint site settings, or retrieve all items and filter client-side.
@@ -67,12 +72,14 @@ Always resolve in sequence using `configure_props`.
 ## OData Filter Examples
 
 For document libraries (`search-and-filter-files`):
+
 ```
 fields/ContentType eq 'Document'     # Files only (excludes folders)
 fields/FileLeafRef eq 'report.docx'  # Exact filename match
 ```
 
 For lists (`find-files-with-metadata`):
+
 ```
 # Only works on indexed columns!
 fields/Status eq 'Active'
@@ -81,25 +88,26 @@ fields/Modified gt '2024-01-01'
 
 ## Common Prop Dependencies
 
-| Action | Required Props Chain |
-|--------|---------------------|
-| `list-files-in-folder` | siteId → driveId → (optional) folderId |
-| `download-file` | siteId → driveId → fileId + filename (required!) |
-| `upload-file` | siteId → driveId → (optional) uploadFolderId |
-| `create-folder` | siteId → driveId → (optional) folderId |
-| `create-link` | siteId → driveId → fileId |
-| `get-excel-table` | siteId → itemId → tableName |
-| `create-list` | siteId |
-| `create-item` | siteId → listId → columnNames |
-| `update-item` | siteId → listId → itemId |
-| `find-files-with-metadata` | siteId → listId |
+| Action                     | Required Props Chain                             |
+| -------------------------- | ------------------------------------------------ |
+| `list-files-in-folder`     | siteId → driveId → (optional) folderId           |
+| `download-file`            | siteId → driveId → fileId + filename (required!) |
+| `upload-file`              | siteId → driveId → (optional) uploadFolderId     |
+| `create-folder`            | siteId → driveId → (optional) folderId           |
+| `create-link`              | siteId → driveId → fileId                        |
+| `get-excel-table`          | siteId → itemId → tableName                      |
+| `create-list`              | siteId                                           |
+| `create-item`              | siteId → listId → columnNames                    |
+| `update-item`              | siteId → listId → itemId                         |
+| `find-files-with-metadata` | siteId → listId                                  |
 
 ## Working JSON Examples
 
 **Download file (use stash_id="NEW" in run_action call):**
+
 ```json
 {
-  "sharepoint": {"authProvisionId": "auto"},
+  "sharepoint": { "authProvisionId": "auto" },
   "siteId": "contoso.sharepoint.com,abc...,def...",
   "driveId": "b!...",
   "fileId": "01ABC123...",
@@ -108,9 +116,10 @@ fields/Modified gt '2024-01-01'
 ```
 
 **Create list item:**
+
 ```json
 {
-  "sharepoint": {"authProvisionId": "auto"},
+  "sharepoint": { "authProvisionId": "auto" },
   "siteId": "contoso.sharepoint.com,abc...,def...",
   "listId": "list-guid-here",
   "columnNames": ["Title"],
@@ -119,9 +128,10 @@ fields/Modified gt '2024-01-01'
 ```
 
 **Upload file to folder:**
+
 ```json
 {
-  "sharepoint": {"authProvisionId": "auto"},
+  "sharepoint": { "authProvisionId": "auto" },
   "siteId": "contoso.sharepoint.com,abc...,def...",
   "driveId": "b!...",
   "uploadFolderId": "folder-id-here",
@@ -131,9 +141,10 @@ fields/Modified gt '2024-01-01'
 ```
 
 **Create organization sharing link:**
+
 ```json
 {
-  "sharepoint": {"authProvisionId": "auto"},
+  "sharepoint": { "authProvisionId": "auto" },
   "siteId": "contoso.sharepoint.com,abc...,def...",
   "driveId": "b!...",
   "fileId": "file-id-here",
@@ -146,24 +157,25 @@ fields/Modified gt '2024-01-01'
 
 Use `proxy_request` with `integration_slug: "sharepoint"` for operations not covered by built-in actions:
 
-| Operation | Method | Endpoint |
-|-----------|--------|----------|
-| Delete file/folder | DELETE | `/drives/{driveId}/items/{itemId}` |
-| Delete list item | DELETE | `/sites/{siteId}/lists/{listId}/items/{itemId}` |
-| Delete list | DELETE | `/sites/{siteId}/lists/{listId}` |
-| Delete column | DELETE | `/sites/{siteId}/lists/{listId}/columns/{columnId}` |
-| Copy file | POST | `/drives/{driveId}/items/{itemId}/copy` |
-| Move file | PATCH | `/drives/{driveId}/items/{itemId}` (with new parentReference) |
-| Get file versions | GET | `/drives/{driveId}/items/{itemId}/versions` |
-| Get permissions | GET | `/drives/{driveId}/items/{itemId}/permissions` |
-| Get list columns | GET | `/sites/{siteId}/lists/{listId}/columns` |
-| Add list column | POST | `/sites/{siteId}/lists/{listId}/columns` |
-| List site users | GET | `/sites/{siteId}/users` |
-| List org users | GET | `/users` |
+| Operation          | Method | Endpoint                                                      |
+| ------------------ | ------ | ------------------------------------------------------------- |
+| Delete file/folder | DELETE | `/drives/{driveId}/items/{itemId}`                            |
+| Delete list item   | DELETE | `/sites/{siteId}/lists/{listId}/items/{itemId}`               |
+| Delete list        | DELETE | `/sites/{siteId}/lists/{listId}`                              |
+| Delete column      | DELETE | `/sites/{siteId}/lists/{listId}/columns/{columnId}`           |
+| Copy file          | POST   | `/drives/{driveId}/items/{itemId}/copy`                       |
+| Move file          | PATCH  | `/drives/{driveId}/items/{itemId}` (with new parentReference) |
+| Get file versions  | GET    | `/drives/{driveId}/items/{itemId}/versions`                   |
+| Get permissions    | GET    | `/drives/{driveId}/items/{itemId}/permissions`                |
+| Get list columns   | GET    | `/sites/{siteId}/lists/{listId}/columns`                      |
+| Add list column    | POST   | `/sites/{siteId}/lists/{listId}/columns`                      |
+| List site users    | GET    | `/sites/{siteId}/users`                                       |
+| List org users     | GET    | `/users`                                                      |
 
 **Proxy examples:**
 
 Delete a file:
+
 ```
 proxy_request(
   method="DELETE",
@@ -173,6 +185,7 @@ proxy_request(
 ```
 
 Copy a file:
+
 ```
 proxy_request(
   method="POST",
@@ -183,6 +196,7 @@ proxy_request(
 ```
 
 Add a column to a list:
+
 ```
 proxy_request(
   method="POST",
@@ -193,6 +207,7 @@ proxy_request(
 ```
 
 List organization users:
+
 ```
 proxy_request(
   method="GET",
@@ -200,4 +215,5 @@ proxy_request(
   integration_slug="sharepoint"
 )
 ```
+
 Returns array of users with `id`, `displayName`, `mail`, `userPrincipalName`, etc.

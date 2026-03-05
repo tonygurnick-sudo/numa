@@ -12,30 +12,32 @@ The Lambda accepts requests from the frontend with seed URLs and crawl settings 
 
 ```json
 {
-    "urls": ["https://example.com"],  // List of seed URLs to crawl
-    "maxPages": 100,                  // Optional: Maximum number of pages to crawl (default: 1000)
-    "maxDepth": 2                     // Optional: Maximum crawl depth (default: 2)
+  "urls": ["https://example.com"], // List of seed URLs to crawl
+  "maxPages": 100, // Optional: Maximum number of pages to crawl (default: 1000)
+  "maxDepth": 2 // Optional: Maximum crawl depth (default: 2)
 }
 ```
 
 ### Output
 
 Success:
+
 ```json
 {
-    "success": true,
-    "message": "Web crawler started successfully",
-    "executionArn": "arn:aws:states:us-east-1:123456789012:execution:web-crawler:execution-id",
-    "executionName": "web-crawler-abcd1234"
+  "success": true,
+  "message": "Web crawler started successfully",
+  "executionArn": "arn:aws:states:us-east-1:123456789012:execution:web-crawler:execution-id",
+  "executionName": "web-crawler-abcd1234"
 }
 ```
 
 Error:
+
 ```json
 {
-    "success": false,
-    "error": "Error message",
-    "message": "Detailed error message"
+  "success": false,
+  "error": "Error message",
+  "message": "Detailed error message"
 }
 ```
 

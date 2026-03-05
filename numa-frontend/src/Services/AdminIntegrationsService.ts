@@ -59,7 +59,7 @@ export const AdminIntegrationsService = {
 
   // Preferred: use shared RequestProvider helpers so auth header matches our authorizer
   async listWithNuma(
-    numaGet: (url: string, params?: unknown, headers?: Record<string, string>) => Promise<unknown>,
+    numaGet: (url: string, params?: unknown, headers?: Record<string, string>) => Promise<unknown>
   ): Promise<GlobalIntegrationSettingsMap> {
     const items = (await numaGet('/api/settings/integrations')) as GlobalIntegrationSetting[];
     const result = toMap(items || []);
@@ -70,7 +70,7 @@ export const AdminIntegrationsService = {
   async update(
     integration: string,
     payload: { status: IntegrationStatus; denyTools: string[] },
-    getAccessToken?: () => Promise<string | null>,
+    getAccessToken?: () => Promise<string | null>
   ): Promise<void> {
     const API_ENDPOINT = sessionStorage.getItem('API_ENDPOINT') || '/api';
     const headers = {
@@ -92,7 +92,7 @@ export const AdminIntegrationsService = {
   async updateWithNuma(
     integration: string,
     payload: { status: IntegrationStatus; denyTools: string[] },
-    numaPut: (url: string, data?: unknown, headers?: Record<string, string>) => Promise<unknown>,
+    numaPut: (url: string, data?: unknown, headers?: Record<string, string>) => Promise<unknown>
   ): Promise<void> {
     await numaPut(`/api/settings/integrations/${encodeURIComponent(integration)}`, payload);
   },

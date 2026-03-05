@@ -35,7 +35,7 @@ export class CognitoEmailHandler extends Construct {
       'lambdas',
       'python',
       'cognito-email-handler',
-      'lambda_function.zip',
+      'lambda_function.zip'
     );
 
     const lambdaPrefix = `cognito-email-handler-`;

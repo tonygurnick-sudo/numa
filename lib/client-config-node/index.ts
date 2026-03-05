@@ -101,14 +101,15 @@ export async function getClientConfig<ClientConfig>(props: GetClientConfigProps)
 export async function getClientConfig<ClientConfig>(
   clientName: string,
   schema?: ZodTypeAny,
-  credentials?: RuntimeConfigAwsCredentialIdentityProvider,
+  credentials?: RuntimeConfigAwsCredentialIdentityProvider
 ): Promise<ClientConfig>;
 export async function getClientConfig<ClientConfig>(
   x: GetClientConfigProps | string,
   schema?: ZodTypeAny,
-  credentials?: RuntimeConfigAwsCredentialIdentityProvider,
+  credentials?: RuntimeConfigAwsCredentialIdentityProvider
 ): Promise<ClientConfig> {
   const props = typeof x === 'string' ? { clientName: x, schema, credentials } : x;
+  // JSON file is a local dev override; DynamoDB is the fallback (always exists in deployed environments)
   const config =
     getClientConfigFromJson(props.clientName) ?? (await getClientConfigFromDynamo(props.clientName, props.credentials));
   if (!config) {
@@ -125,15 +126,15 @@ interface GetClientConfigFromDynamoProps {
   credentials?: RuntimeConfigAwsCredentialIdentityProvider;
 }
 export async function getClientConfigFromDynamo<ClientConfig>(
-  props: GetClientConfigFromDynamoProps,
+  props: GetClientConfigFromDynamoProps
 ): Promise<ClientConfig | undefined>;
 export async function getClientConfigFromDynamo<ClientConfig>(
   clientName: string,
-  credentials?: RuntimeConfigAwsCredentialIdentityProvider,
+  credentials?: RuntimeConfigAwsCredentialIdentityProvider
 ): Promise<ClientConfig | undefined>;
 export async function getClientConfigFromDynamo<ClientConfig>(
   x: string | GetClientConfigFromDynamoProps,
-  credentials?: RuntimeConfigAwsCredentialIdentityProvider,
+  credentials?: RuntimeConfigAwsCredentialIdentityProvider
 ): Promise<ClientConfig | undefined> {
   const props = typeof x === 'string' ? { clientName: x, credentials } : x;
   const ddbdc = await getDocument(props.credentials);
@@ -153,7 +154,7 @@ function getClientConfigFromJson<ClientConfig>(clientName: string): ClientConfig
 }
 
 async function getAllClientsFromDynamo<ClientConfig>(
-  credentials?: RuntimeConfigAwsCredentialIdentityProvider,
+  credentials?: RuntimeConfigAwsCredentialIdentityProvider
 ): Promise<Record<string, ClientConfig>> {
   const ddbdc = await getDocument(credentials);
   const result = await ddbdc.scan({
@@ -173,9 +174,12 @@ interface GetAllClientConfigsProps {
   credentials?: RuntimeConfigAwsCredentialIdentityProvider;
 }
 export async function getAllClientConfigs<ClientConfig>(
-  props?: GetAllClientConfigsProps,
+  props?: GetAllClientConfigsProps
 ): Promise<Record<string, ClientConfig>> {
-  return { ...(await getAllClientsFromDynamo(props?.credentials)), ...getAllClientsFromJSON() };
+  // JSON provides local dev overrides; DynamoDB is the base (always exists in deployed environments)
+  const dynamoConfigs = await getAllClientsFromDynamo<ClientConfig>(props?.credentials);
+  const jsonConfigs = getAllClientsFromJSON<ClientConfig>();
+  return { ...dynamoConfigs, ...jsonConfigs };
 }
 
 interface PutClientConfigProps<ClientConfig> {
@@ -189,13 +193,13 @@ export async function putClientConfig<ClientConfig>(
   clientName: string,
   config: ClientConfig,
   schema?: ZodTypeAny,
-  credentials?: RuntimeConfigAwsCredentialIdentityProvider,
+  credentials?: RuntimeConfigAwsCredentialIdentityProvider
 ): Promise<boolean>;
 export async function putClientConfig<ClientConfig>(
   x: string | PutClientConfigProps<ClientConfig>,
   config?: ClientConfig,
   schema?: ZodTypeAny,
-  credentials?: RuntimeConfigAwsCredentialIdentityProvider,
+  credentials?: RuntimeConfigAwsCredentialIdentityProvider
 ): Promise<boolean> {
   const props = typeof x === 'string' ? { clientName: x, config, schema, credentials } : x;
 

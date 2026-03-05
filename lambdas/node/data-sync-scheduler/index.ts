@@ -201,7 +201,7 @@ const getSchedule = async (scheduleId: string): Promise<DataSyncScheduleRecord |
         ':event_type': 'data_sync',
       },
       Limit: 1,
-    }),
+    })
   );
   const record = (result.Items || [])[0] as DataSyncScheduleRecord | undefined;
   return record || null;
@@ -274,7 +274,7 @@ const syncKnowledgeBase = async (schedule: DataSyncScheduleRecord, runId: string
       knowledgeBaseId: BEDROCK_KB_ID,
       dataSourceId: BEDROCK_DATA_SOURCE_ID,
       description: `Scheduled sync: ${schedule.label || schedule.schedule_id} (Run: ${runId})`,
-    }),
+    })
   );
 
   const ingestionJobId = ingestionResponse.ingestionJob?.ingestionJobId;
@@ -305,7 +305,7 @@ const syncS3Data = async (schedule: DataSyncScheduleRecord, runId: string) => {
       Bucket: sourceBucket,
       Prefix: sourcePrefix,
       MaxKeys: 1000, // Limit for this example
-    }),
+    })
   );
 
   const objects = listResponse.Contents || [];
@@ -323,7 +323,7 @@ const syncS3Data = async (schedule: DataSyncScheduleRecord, runId: string) => {
           Bucket: DATA_BUCKET,
           CopySource: `${sourceBucket}/${obj.Key}`,
           Key: destinationKey,
-        }),
+        })
       );
       syncedCount++;
     } catch (err) {
@@ -394,6 +394,6 @@ const markScheduleStatus = async (userId: string, scheduleId: string, status: st
         ':status': status,
         ':err': error,
       },
-    }),
+    })
   );
 };

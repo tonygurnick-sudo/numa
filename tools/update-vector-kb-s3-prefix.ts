@@ -51,7 +51,7 @@ async function findKbAndDs(ba: BedrockAgentClient, clientName: string): Promise<
   if (!ds?.dataSourceId) return null;
   try {
     const got = await ba.send(
-      new GetDataSourceCommand({ knowledgeBaseId: kb.knowledgeBaseId, dataSourceId: ds.dataSourceId }),
+      new GetDataSourceCommand({ knowledgeBaseId: kb.knowledgeBaseId, dataSourceId: ds.dataSourceId })
     );
     const s3cfg = got.dataSource?.dataSourceConfiguration?.s3Configuration;
     const inclusionPrefixes = s3cfg?.inclusionPrefixes;
@@ -75,7 +75,7 @@ async function updateInclusionPrefixes(
   clientName: string,
   aws: AWSClientConfig,
   kbds: KbDs,
-  dryRun: boolean,
+  dryRun: boolean
 ): Promise<void> {
   const ba = new BedrockAgentClient(aws);
   const desired = ['documents/'];
@@ -86,7 +86,7 @@ async function updateInclusionPrefixes(
   }
 
   console.log(
-    `[${clientName}] Will set inclusionPrefixes from ${JSON.stringify(kbds.inclusionPrefixes)} to ${JSON.stringify(desired)} (KB: ${kbds.kbName}, DS: ${kbds.dsName})`,
+    `[${clientName}] Will set inclusionPrefixes from ${JSON.stringify(kbds.inclusionPrefixes)} to ${JSON.stringify(desired)} (KB: ${kbds.kbName}, DS: ${kbds.dsName})`
   );
   if (dryRun) return;
 
@@ -117,7 +117,7 @@ async function updateInclusionPrefixes(
     console.log(`[${clientName}] UpdateDataSource succeeded (DS: ${kbds.dsName})`);
   } catch (e) {
     console.error(
-      `[${clientName}] UpdateDataSource failed. BucketArn=${bucketArn} Desired=${JSON.stringify(desired)} Reason: ${(e as Error).message}`,
+      `[${clientName}] UpdateDataSource failed. BucketArn=${bucketArn} Desired=${JSON.stringify(desired)} Reason: ${(e as Error).message}`
     );
     throw e;
   }

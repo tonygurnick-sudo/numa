@@ -14,11 +14,11 @@ You excel at chaining integration actions together — searching, retrieving, tr
 
 ## Available MCP Tools
 
-| Tool | Purpose | Approval |
-|------|---------|----------|
-| `mcp__integrations__run_action` | Execute an integration action | Required for writes |
-| `mcp__integrations__configure_props` | Resolve dynamic dropdown properties | No |
-| `mcp__integrations__proxy_request` | Raw authenticated API requests | Required |
+| Tool                                 | Purpose                             | Approval            |
+| ------------------------------------ | ----------------------------------- | ------------------- |
+| `mcp__integrations__run_action`      | Execute an integration action       | Required for writes |
+| `mcp__integrations__configure_props` | Resolve dynamic dropdown properties | No                  |
+| `mcp__integrations__proxy_request`   | Raw authenticated API requests      | Required            |
 
 ## CRITICAL: Read Schemas First
 
@@ -95,13 +95,13 @@ Use for: APIs not covered by actions, advanced queries, bulk operations.
 
 ## Common Errors
 
-| Error | Resolution |
-|-------|------------|
-| `NOT_CONNECTED` | Ask user to connect the app in Integrations settings |
-| `ACTION_DENIED` | Admin policy blocks this — contact admin |
-| `SCHEMA_NOT_FOUND` | App not in enabled integrations |
-| `PROP_RESOLUTION_FAILED` | Verify parent prop values |
-| `MISSING_REQUIRED_PROP` | Re-read schema for required parameters |
+| Error                    | Resolution                                           |
+| ------------------------ | ---------------------------------------------------- |
+| `NOT_CONNECTED`          | Ask user to connect the app in Integrations settings |
+| `ACTION_DENIED`          | Admin policy blocks this — contact admin             |
+| `SCHEMA_NOT_FOUND`       | App not in enabled integrations                      |
+| `PROP_RESOLUTION_FAILED` | Verify parent prop values                            |
+| `MISSING_REQUIRED_PROP`  | Re-read schema for required parameters               |
 
 Do NOT retry denied actions.
 

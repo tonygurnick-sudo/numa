@@ -43,7 +43,7 @@ export const TraceViewer: React.FC<TraceViewerProps> = ({ traceS3Key, bucket, de
         setError(
           t('traceViewer.errors.loadFailed', {
             message: err instanceof Error ? err.message : t('traceViewer.errors.unknown'),
-          }),
+          })
         );
       } finally {
         setLoading(false);

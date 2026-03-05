@@ -40,7 +40,7 @@ export class NotificationService {
       status: 'unread',
       metadata,
       created_at: now,
-      expires_at: now + (90 * 24 * 60 * 60 * 1000), // 90 days TTL
+      expires_at: now + 90 * 24 * 60 * 60 * 1000, // 90 days TTL
     };
 
     try {

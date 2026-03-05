@@ -9,11 +9,11 @@ Execute actions, search data, and make API calls to connected external applicati
 
 ## Available MCP Tools
 
-| Tool | Purpose | Approval |
-|------|---------|----------|
-| `mcp__integrations__run_action` | Execute an integration action (search, create, update, etc.) | Required for writes |
-| `mcp__integrations__configure_props` | Resolve dynamic dropdown properties before running actions | No |
-| `mcp__integrations__proxy_request` | Make raw authenticated API requests to connected apps | Required |
+| Tool                                 | Purpose                                                      | Approval            |
+| ------------------------------------ | ------------------------------------------------------------ | ------------------- |
+| `mcp__integrations__run_action`      | Execute an integration action (search, create, update, etc.) | Required for writes |
+| `mcp__integrations__configure_props` | Resolve dynamic dropdown properties before running actions   | No                  |
+| `mcp__integrations__proxy_request`   | Make raw authenticated API requests to connected apps        | Required            |
 
 ---
 
@@ -57,16 +57,17 @@ mcp__integrations__run_action(
 )
 ```
 
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `action_key` | string | Yes | Full action identifier from schema |
-| `props` | JSON string | Yes | Auth object + action parameters |
-| `description` | string | Yes | Clear description shown to user for approval |
-| `stash_id` | string | No | Use `"NEW"` for file download operations |
+| Parameter     | Type        | Required | Description                                  |
+| ------------- | ----------- | -------- | -------------------------------------------- |
+| `action_key`  | string      | Yes      | Full action identifier from schema           |
+| `props`       | JSON string | Yes      | Auth object + action parameters              |
+| `description` | string      | Yes      | Clear description shown to user for approval |
+| `stash_id`    | string      | No       | Use `"NEW"` for file download operations     |
 
 ### Props Structure
 
 Always include the auth object:
+
 ```json
 {"appName": {"authProvisionId": "auto"}, ...params}
 ```
@@ -158,12 +159,14 @@ When downloading files from integrations:
 The `description` parameter is shown to users before they approve.
 
 **Read operations** — brief is fine:
+
 ```
 "Search for Q4 reports"
 "List recent messages in #general"
 ```
 
 **Write operations** — include the full content verbatim so users can review:
+
 ```
 "Send message to #general:
 Hey team, standup is at 10am today. Please have your updates ready."
@@ -178,13 +181,13 @@ Description: Users report login fails intermittently"
 
 ## Error Handling
 
-| Error | Resolution |
-|-------|------------|
-| `NOT_CONNECTED` | User needs to connect the app via Integrations settings |
-| `ACTION_DENIED` | Admin policy blocks this — user must contact admin |
-| `SCHEMA_NOT_FOUND` | App not in enabled integrations list |
-| `PROP_RESOLUTION_FAILED` | Check parent prop values are correct |
-| `MISSING_REQUIRED_PROP` | Re-read schema for required parameters |
+| Error                    | Resolution                                              |
+| ------------------------ | ------------------------------------------------------- |
+| `NOT_CONNECTED`          | User needs to connect the app via Integrations settings |
+| `ACTION_DENIED`          | Admin policy blocks this — user must contact admin      |
+| `SCHEMA_NOT_FOUND`       | App not in enabled integrations list                    |
+| `PROP_RESOLUTION_FAILED` | Check parent prop values are correct                    |
+| `MISSING_REQUIRED_PROP`  | Re-read schema for required parameters                  |
 
 Do NOT retry denied actions. Read error messages carefully — they indicate what's wrong.
 

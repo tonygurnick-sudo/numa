@@ -195,7 +195,7 @@ export const shouldShowLargeDataFileWarning = (file) => {
   if (file && file.size > 1024 * 1024) {
     // Log for files > 1MB
     console.log(
-      `File: ${file.name}, Size: ${formatFileSize(file.size)}, IsRaw: ${isRaw}, IsLarge: ${isLarge}, ShouldWarn: ${shouldWarn}`,
+      `File: ${file.name}, Size: ${formatFileSize(file.size)}, IsRaw: ${isRaw}, IsLarge: ${isLarge}, ShouldWarn: ${shouldWarn}`
     );
   }
 

@@ -179,14 +179,14 @@ export class Nolia extends BaseNumaApp {
       'assets',
       'artifacts',
       'claude-cli',
-      'claude-x86_64.zip',
+      'claude-x86_64.zip'
     );
     if (!fs.existsSync(cliLayerZipPath)) {
       throw new Error(
         `Claude CLI artifact ZIP not found at ${cliLayerZipPath}.\n` +
           'Fix locally by fetching the prebuilt ZIP from the deployer S3 bucket:\n' +
           '  yarn workspace @arcanumai/q-apps-deployer-tools fetch-claude-cli-artifact\n' +
-          'Or build the ZIP in CI and bake it into the deploy image (see .gitlab-ci.yml).',
+          'Or build the ZIP in CI and bake it into the deploy image (see .gitlab-ci.yml).'
       );
     }
 
@@ -520,7 +520,7 @@ export class Nolia extends BaseNumaApp {
           'RunPhases2And3Parallel',
           {
             ResultPath: '$.phase1_result',
-          },
+          }
         ),
         // Phases 2 & 3 in Parallel
         // Note: Tasks inside Parallel branches cannot reference states outside the branch.
@@ -551,7 +551,7 @@ export class Nolia extends BaseNumaApp {
                       stream_events: true,
                       use_dynamodb: true,
                     },
-                    null, // End in branch, let Parallel handle Next
+                    null // End in branch, let Parallel handle Next
                   ),
                   // Override Catch to use End instead of WriteFailureStatus (which doesn't exist in branch)
                   Catch: [
@@ -600,7 +600,7 @@ export class Nolia extends BaseNumaApp {
                       stream_events: true,
                       use_dynamodb: true,
                     },
-                    null, // End in branch, let Parallel handle Next
+                    null // End in branch, let Parallel handle Next
                   ),
                   // Override Catch to use End instead of WriteFailureStatus (which doesn't exist in branch)
                   Catch: [
@@ -629,7 +629,7 @@ export class Nolia extends BaseNumaApp {
                       stream_events: true,
                       use_dynamodb: true,
                     },
-                    null, // End in branch, let Parallel handle Next
+                    null // End in branch, let Parallel handle Next
                   ),
                   // Override Catch to use End instead of WriteFailureStatus (which doesn't exist in branch)
                   Catch: [
@@ -677,7 +677,7 @@ export class Nolia extends BaseNumaApp {
           'CheckOutputLanguage',
           {
             ResultPath: '$.phase4_result',
-          },
+          }
         ),
         // Check if translation is needed (output_language != 'english')
         CheckOutputLanguage: {
@@ -715,7 +715,7 @@ export class Nolia extends BaseNumaApp {
           'WriteSuccessStatus',
           {
             OutputPath: '$.Payload',
-          },
+          }
         ),
         WriteFailureStatus: this.writeFailureStatus(),
         WriteSuccessStatus: this.writeSuccessStatus(),

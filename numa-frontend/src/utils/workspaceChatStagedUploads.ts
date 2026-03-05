@@ -139,7 +139,7 @@ export function getPathsFromStagedItem(item: StagedItem): string[] {
  * Returns an array of folder info objects for folders in the staged items
  */
 export function extractFolderMetadata(
-  items: StagedItem[],
+  items: StagedItem[]
 ): Array<{ name: string; path: string; fileCount: number; totalSize: number }> {
   const folders: Array<{ name: string; path: string; fileCount: number; totalSize: number }> = [];
 

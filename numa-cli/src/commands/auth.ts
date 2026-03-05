@@ -123,8 +123,8 @@ function getCognitoConfig(clientName: string, region: string): ResolvedCognitoCo
   if (!env?.cognito) {
     throw new Error(
       `Cognito configuration not found for ${clientName}.\n` +
-      `Run "numa env use ${clientName}" to fetch Cognito details from AWS.\n` +
-      `Or manually add Cognito config with "numa env refresh".`
+        `Run "numa env use ${clientName}" to fetch Cognito details from AWS.\n` +
+        `Or manually add Cognito config with "numa env refresh".`
     );
   }
 
@@ -156,7 +156,7 @@ async function fetchSecretHash(apiEndpoint: string, identifier: string): Promise
     throw new Error(`Failed to fetch secret hash: ${response.status}`);
   }
 
-  const data = await response.json() as { hash: string };
+  const data = (await response.json()) as { hash: string };
   if (!data.hash) {
     throw new Error('Secret hash not received from server');
   }
@@ -310,13 +310,15 @@ async function login(usernameArg?: string, passwordArg?: string): Promise<void> 
   const cognitoConfig = getCognitoConfig(env.clientName, env.region);
 
   // Prompt for credentials if not provided
-  const username = usernameArg ?? await prompt('Email: ');
-  const password = passwordArg ?? await prompt('Password: ', true);
+  const username = usernameArg ?? (await prompt('Email: '));
+  const password = passwordArg ?? (await prompt('Password: ', true));
 
   const lowercaseUsername = username.toLowerCase();
 
   const verbose = process.env['NUMA_DEBUG'] === '1';
-  const log = (msg: string) => { if (verbose) console.log(`  [debug] ${msg}`); };
+  const log = (msg: string) => {
+    if (verbose) console.log(`  [debug] ${msg}`);
+  };
 
   console.log('Authenticating...');
 
@@ -332,12 +334,7 @@ async function login(usernameArg?: string, passwordArg?: string): Promise<void> 
 
   // Create SRP session
   log(`Creating SRP session for pool ${cognitoConfig.userPoolId}`);
-  const srpSession = createSrpSession(
-    lowercaseUsername,
-    password,
-    cognitoConfig.userPoolId,
-    false
-  );
+  const srpSession = createSrpSession(lowercaseUsername, password, cognitoConfig.userPoolId, false);
   log(`SRP_A generated (${srpSession.largeA.length} chars)`);
 
   // Initiate authentication
@@ -454,8 +451,8 @@ async function adminLogin(usernameArg?: string, passwordArg?: string): Promise<v
   console.log(`Logging in to: ${env.clientName} (admin mode)`);
 
   const cognitoConfig = getCognitoConfig(env.clientName, env.region);
-  const username = usernameArg ?? await prompt('Email: ');
-  const password = passwordArg ?? await prompt('Password: ', true);
+  const username = usernameArg ?? (await prompt('Email: '));
+  const password = passwordArg ?? (await prompt('Password: ', true));
   const lowercaseUsername = username.toLowerCase();
 
   console.log('Authenticating via admin auth...');
@@ -548,13 +545,16 @@ function saveTokens(result: AuthResult, envName: string): void {
   const expiresIn = result.ExpiresIn ?? 3600;
   const expiresAt = Math.floor(Date.now() / 1000) + expiresIn;
 
-  saveCredentials({
-    accessToken: result.AccessToken,
-    idToken: result.IdToken,
-    refreshToken: result.RefreshToken,
-    expiresAt,
-    environment: envName,
-  }, envName);
+  saveCredentials(
+    {
+      accessToken: result.AccessToken,
+      idToken: result.IdToken,
+      refreshToken: result.RefreshToken,
+      expiresAt,
+      environment: envName,
+    },
+    envName
+  );
 }
 
 /**
@@ -579,7 +579,7 @@ function getAdminCognitoClient(accountId: string, region: string): CognitoIdenti
  */
 export function createSetPasswordCommand(): Command {
   const cmd = new Command('set-password')
-    .description('Set a user\'s password (admin operation)')
+    .description("Set a user's password (admin operation)")
     .option('-u, --username <email>', 'User email address')
     .option('-p, --password <password>', 'New password (will prompt if not provided)')
     .option('--temporary', 'Set as temporary (user must change on next login)')
@@ -611,7 +611,7 @@ async function setPassword(usernameArg?: string, passwordArg?: string, temporary
     process.exit(1);
   }
 
-  const username = usernameArg ?? await prompt('Email: ');
+  const username = usernameArg ?? (await prompt('Email: '));
   const lowercaseUsername = username.toLowerCase();
 
   // Verify user exists
@@ -635,7 +635,7 @@ async function setPassword(usernameArg?: string, passwordArg?: string, temporary
     throw error;
   }
 
-  const password = passwordArg ?? await prompt('New password: ', true);
+  const password = passwordArg ?? (await prompt('New password: ', true));
 
   if (!password) {
     console.error('Password cannot be empty.');
@@ -658,12 +658,10 @@ async function setPassword(usernameArg?: string, passwordArg?: string, temporary
  * Create the logout command.
  */
 export function createLogoutCommand(): Command {
-  const cmd = new Command('logout')
-    .description('Log out of Numa')
-    .action(() => {
-      clearCredentials();
-      console.log('Logged out successfully.');
-    });
+  const cmd = new Command('logout').description('Log out of Numa').action(() => {
+    clearCredentials();
+    console.log('Logged out successfully.');
+  });
 
   return cmd;
 }
@@ -672,41 +670,41 @@ export function createLogoutCommand(): Command {
  * Create the whoami command.
  */
 export function createWhoamiCommand(): Command {
-  const cmd = new Command('whoami')
-    .description('Show current logged-in user')
-    .action(async () => {
-      const creds = loadCredentials();
-      if (!creds) {
-        console.log('Not logged in.');
-        console.log('Run "numa login" to authenticate.');
-        process.exit(1);
-      }
+  const cmd = new Command('whoami').description('Show current logged-in user').action(async () => {
+    const creds = loadCredentials();
+    if (!creds) {
+      console.log('Not logged in.');
+      console.log('Run "numa login" to authenticate.');
+      process.exit(1);
+    }
 
-      // Check if token is still valid
-      const now = Math.floor(Date.now() / 1000);
-      if (creds.expiresAt <= now) {
-        console.log('Session expired.');
-        console.log('Run "numa login" to authenticate again.');
-        process.exit(1);
-      }
+    // Check if token is still valid
+    const now = Math.floor(Date.now() / 1000);
+    if (creds.expiresAt <= now) {
+      console.log('Session expired.');
+      console.log('Run "numa login" to authenticate again.');
+      process.exit(1);
+    }
 
-      // Decode the ID token to get user info
-      try {
-        const payload = JSON.parse(
-          Buffer.from(creds.idToken.split('.')[1] ?? '', 'base64').toString()
-        ) as { email?: string; sub?: string; 'cognito:username'?: string };
+    // Decode the ID token to get user info
+    try {
+      const payload = JSON.parse(Buffer.from(creds.idToken.split('.')[1] ?? '', 'base64').toString()) as {
+        email?: string;
+        sub?: string;
+        'cognito:username'?: string;
+      };
 
-        console.log(`Logged in as: ${payload.email ?? payload['cognito:username'] ?? payload.sub ?? 'unknown'}`);
-        console.log(`Environment: ${creds.environment}`);
+      console.log(`Logged in as: ${payload.email ?? payload['cognito:username'] ?? payload.sub ?? 'unknown'}`);
+      console.log(`Environment: ${creds.environment}`);
 
-        const expiresIn = creds.expiresAt - now;
-        const minutes = Math.floor(expiresIn / 60);
-        console.log(`Token expires in: ${minutes} minutes`);
-      } catch {
-        console.log(`Environment: ${creds.environment}`);
-        console.log('Unable to decode token details.');
-      }
-    });
+      const expiresIn = creds.expiresAt - now;
+      const minutes = Math.floor(expiresIn / 60);
+      console.log(`Token expires in: ${minutes} minutes`);
+    } catch {
+      console.log(`Environment: ${creds.environment}`);
+      console.log('Unable to decode token details.');
+    }
+  });
 
   return cmd;
 }
@@ -755,7 +753,9 @@ async function listUsers(): Promise<void> {
 
           const email = user.Attributes?.find((a: any) => a.Name === 'email')?.Value || 'N/A';
           const status = user.UserStatus || 'UNKNOWN';
-          const createdStr: string = user.UserCreateDate ? user.UserCreateDate.toISOString().split('T')[0] ?? 'N/A' : 'N/A';
+          const createdStr: string = user.UserCreateDate
+            ? (user.UserCreateDate.toISOString().split('T')[0] ?? 'N/A')
+            : 'N/A';
           const displayEmail = email.length > 30 ? email.substring(0, 27) + '...' : email;
 
           // Fetch groups for this user
@@ -768,16 +768,14 @@ async function listUsers(): Promise<void> {
                   Username: user.Username,
                 })
               );
-              const groups = (userGroupsResponse.Groups ?? []).map(g => g.GroupName).filter(Boolean) as string[];
+              const groups = (userGroupsResponse.Groups ?? []).map((g) => g.GroupName).filter(Boolean) as string[];
               role = groups.length > 0 ? groups.join(', ') : 'standard';
             } catch {
               role = '?';
             }
           }
 
-          console.log(
-            `${displayEmail.padEnd(34)} ${status.padEnd(11)} ${createdStr.padEnd(11)} ${role}`
-          );
+          console.log(`${displayEmail.padEnd(34)} ${status.padEnd(11)} ${createdStr.padEnd(11)} ${role}`);
         }
       }
 
@@ -786,7 +784,6 @@ async function listUsers(): Promise<void> {
 
     console.log('─'.repeat(80));
     console.log(`Total users: ${userCount}`);
-
   } catch (error) {
     if (error instanceof Error) {
       console.error(`Error listing users: ${error.message}`);
@@ -809,7 +806,7 @@ async function promoteUser(emailArg?: string): Promise<void> {
     process.exit(1);
   }
 
-  const email = (emailArg ?? await prompt('Email: ')).toLowerCase();
+  const email = (emailArg ?? (await prompt('Email: '))).toLowerCase();
   const cognitoClient = getAdminCognitoClient(env.clientAccountId, env.cognito.region);
 
   // Verify user exists
@@ -827,7 +824,7 @@ async function promoteUser(emailArg?: string): Promise<void> {
   const groupsResponse = await cognitoClient.send(
     new AdminListGroupsForUserCommand({ UserPoolId: env.cognito.userPoolId, Username: email })
   );
-  const currentGroups = (groupsResponse.Groups ?? []).map(g => g.GroupName ?? '').filter(Boolean);
+  const currentGroups = (groupsResponse.Groups ?? []).map((g) => g.GroupName ?? '').filter(Boolean);
 
   if (currentGroups.includes('admin')) {
     console.log(`${email} is already admin.`);
@@ -854,7 +851,7 @@ async function demoteUser(emailArg?: string): Promise<void> {
     process.exit(1);
   }
 
-  const email = (emailArg ?? await prompt('Email: ')).toLowerCase();
+  const email = (emailArg ?? (await prompt('Email: '))).toLowerCase();
   const cognitoClient = getAdminCognitoClient(env.clientAccountId, env.cognito.region);
 
   // Verify user exists
@@ -872,7 +869,7 @@ async function demoteUser(emailArg?: string): Promise<void> {
   const groupsResponse = await cognitoClient.send(
     new AdminListGroupsForUserCommand({ UserPoolId: env.cognito.userPoolId, Username: email })
   );
-  const currentGroups = (groupsResponse.Groups ?? []).map(g => g.GroupName ?? '').filter(Boolean);
+  const currentGroups = (groupsResponse.Groups ?? []).map((g) => g.GroupName ?? '').filter(Boolean);
 
   if (!currentGroups.includes('admin')) {
     console.log(`${email} is not admin.`);
@@ -902,7 +899,7 @@ async function deleteUser(usernameArg?: string, force = false): Promise<void> {
     process.exit(1);
   }
 
-  const username = usernameArg ?? await prompt('Email address of user to delete: ');
+  const username = usernameArg ?? (await prompt('Email address of user to delete: '));
   const lowercaseUsername = username.toLowerCase();
 
   console.log(`Environment: ${env.clientName}`);
@@ -926,7 +923,6 @@ async function deleteUser(usernameArg?: string, force = false): Promise<void> {
     console.log(`Enabled: ${user.Enabled ? 'Yes' : 'No'}`);
     console.log(`Created: ${user.UserCreateDate?.toISOString().split('T')[0] ?? 'N/A'}`);
     console.log('');
-
   } catch (error) {
     if (error instanceof Error && error.name === 'UserNotFoundException') {
       console.error(`User '${lowercaseUsername}' not found.`);
@@ -937,7 +933,9 @@ async function deleteUser(usernameArg?: string, force = false): Promise<void> {
 
   // Confirmation prompt (skip if --force)
   if (!force) {
-    const confirmation = await prompt(`Are you sure you want to delete user '${lowercaseUsername}'? Type 'DELETE' to confirm: `);
+    const confirmation = await prompt(
+      `Are you sure you want to delete user '${lowercaseUsername}'? Type 'DELETE' to confirm: `
+    );
 
     if (confirmation !== 'DELETE') {
       console.log('User deletion cancelled.');
@@ -955,7 +953,6 @@ async function deleteUser(usernameArg?: string, force = false): Promise<void> {
     );
 
     console.log(`✅ User '${lowercaseUsername}' has been deleted successfully.`);
-
   } catch (error) {
     if (error instanceof Error) {
       console.error(`Error deleting user: ${error.message}`);
@@ -991,7 +988,7 @@ async function manageUserAdmin(usernameArg?: string, makeAdmin?: boolean, remove
     process.exit(1);
   }
 
-  const username = usernameArg ?? await prompt('Email address of user: ');
+  const username = usernameArg ?? (await prompt('Email address of user: '));
   const lowercaseUsername = username.toLowerCase();
 
   console.log(`Environment: ${env.clientName}`);
@@ -1029,15 +1026,14 @@ async function manageUserAdmin(usernameArg?: string, makeAdmin?: boolean, remove
       })
     );
 
-    const adminGroup = groupsResponse.Groups?.find(g =>
-      g.GroupName?.toLowerCase().includes('admin') ||
-      g.GroupName?.toLowerCase().includes('administrator')
+    const adminGroup = groupsResponse.Groups?.find(
+      (g) => g.GroupName?.toLowerCase().includes('admin') || g.GroupName?.toLowerCase().includes('administrator')
     );
 
     if (!adminGroup || !adminGroup.GroupName) {
       console.error('No admin group found in User Pool.');
       console.error('Available groups:');
-      groupsResponse.Groups?.forEach(g => {
+      groupsResponse.Groups?.forEach((g) => {
         console.error(`  - ${g.GroupName}: ${g.Description || 'No description'}`);
       });
       process.exit(1);
@@ -1053,7 +1049,7 @@ async function manageUserAdmin(usernameArg?: string, makeAdmin?: boolean, remove
       })
     );
 
-    const currentGroups = userGroupsResponse.Groups?.map(g => g.GroupName) || [];
+    const currentGroups = userGroupsResponse.Groups?.map((g) => g.GroupName) || [];
     const isCurrentlyAdmin = currentGroups.includes(adminGroup.GroupName);
 
     console.log(`Current groups: ${currentGroups.join(', ') || 'None'}`);
@@ -1091,7 +1087,6 @@ async function manageUserAdmin(usernameArg?: string, makeAdmin?: boolean, remove
 
       console.log(`✅ User '${lowercaseUsername}' has been removed from admin group '${adminGroup.GroupName}'.`);
     }
-
   } catch (error) {
     if (error instanceof Error) {
       console.error(`Error managing admin privileges: ${error.message}`);

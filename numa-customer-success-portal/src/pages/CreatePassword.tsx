@@ -1,108 +1,116 @@
-import { useState, useEffect } from 'react'
-import { useNavigate, useSearchParams } from 'react-router-dom'
-import { Container, Form, Button, Alert, Card, OverlayTrigger, Popover } from 'react-bootstrap'
-import { Key, CheckCircle } from 'react-bootstrap-icons'
-import { useAuth } from '@/contexts/AuthContext'
+import { useState, useEffect } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { Container, Form, Button, Alert, Card, OverlayTrigger, Popover } from 'react-bootstrap';
+import { Key, CheckCircle } from 'react-bootstrap-icons';
+import { useAuth } from '@/contexts/AuthContext';
 
 export default function CreatePassword() {
-  const [email, setEmail] = useState('')
-  const [resetCode, setResetCode] = useState('')
-  const [newPassword, setNewPassword] = useState('')
-  const [confirmPassword, setConfirmPassword] = useState('')
-  const [isCodeSent, setIsCodeSent] = useState(false)
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [success, setSuccess] = useState<string | null>(null)
-  const [passwordErrors, setPasswordErrors] = useState<React.ReactNode[] | null>(null)
+  const [email, setEmail] = useState('');
+  const [resetCode, setResetCode] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [isCodeSent, setIsCodeSent] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
+  const [passwordErrors, setPasswordErrors] = useState<React.ReactNode[] | null>(null);
 
-  const navigate = useNavigate()
-  const [searchParams] = useSearchParams()
-  const { requestPasswordReset, confirmPasswordReset } = useAuth()
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const { requestPasswordReset, confirmPasswordReset } = useAuth();
 
   // Check for email, code, and mode in URL parameters
   useEffect(() => {
-    const emailFromUrl = searchParams.get('email')
-    const codeFromUrl = searchParams.get('code')
+    const emailFromUrl = searchParams.get('email');
+    const codeFromUrl = searchParams.get('code');
 
     if (emailFromUrl) {
-      setEmail(emailFromUrl)
+      setEmail(emailFromUrl);
     }
     if (codeFromUrl) {
-      setResetCode(codeFromUrl)
-      setIsCodeSent(true)
+      setResetCode(codeFromUrl);
+      setIsCodeSent(true);
     }
-  }, [searchParams])
+  }, [searchParams]);
 
   // Determine if this is reset mode or create mode
-  const isResetMode = searchParams.get('mode') === 'reset'
-  const pageTitle = isResetMode ? 'Reset Your Password' : 'Create Your Password'
+  const isResetMode = searchParams.get('mode') === 'reset';
+  const pageTitle = isResetMode ? 'Reset Your Password' : 'Create Your Password';
   const codePrompt = isResetMode
     ? 'Enter your email to receive a password reset code.'
-    : 'Enter your email to receive an activation code.'
+    : 'Enter your email to receive an activation code.';
   const codeInstructions = isResetMode
     ? 'Enter the reset code and create your new password.'
-    : 'Enter the activation code and create your password.'
-  const buttonText = isResetMode ? 'Send Reset Code' : 'Send Activation Code'
-  const submitText = isResetMode ? 'Reset Password' : 'Create Password'
-  const loadingText = isResetMode ? 'Resetting Password...' : 'Creating Password...'
+    : 'Enter the activation code and create your password.';
+  const buttonText = isResetMode ? 'Send Reset Code' : 'Send Activation Code';
+  const submitText = isResetMode ? 'Reset Password' : 'Create Password';
+  const loadingText = isResetMode ? 'Resetting Password...' : 'Creating Password...';
   const successMessage = isResetMode
     ? 'Password reset successfully! Redirecting to login...'
-    : 'Password created successfully! Redirecting to login...'
+    : 'Password created successfully! Redirecting to login...';
 
   const handleRequestCode = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setError(null)
-    setSuccess(null)
-    setLoading(true)
+    e.preventDefault();
+    setError(null);
+    setSuccess(null);
+    setLoading(true);
 
     try {
-      await requestPasswordReset(email.toLowerCase())
-      setIsCodeSent(true)
+      await requestPasswordReset(email.toLowerCase());
+      setIsCodeSent(true);
       const successMsg = isResetMode
         ? 'Reset code sent! Please check your email and enter the code below.'
-        : 'Activation code sent! Please check your email and enter the code below.'
-      setSuccess(successMsg)
+        : 'Activation code sent! Please check your email and enter the code below.';
+      setSuccess(successMsg);
     } catch (err: unknown) {
       const errorMsg = isResetMode
-        ? (err instanceof Error ? err.message : 'Failed to send reset code')
-        : (err instanceof Error ? err.message : 'Failed to send activation code')
-      setError(errorMsg)
+        ? err instanceof Error
+          ? err.message
+          : 'Failed to send reset code'
+        : err instanceof Error
+          ? err.message
+          : 'Failed to send activation code';
+      setError(errorMsg);
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
+  };
 
   const handleCreatePassword = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setError(null)
-    setSuccess(null)
-    setLoading(true)
+    e.preventDefault();
+    setError(null);
+    setSuccess(null);
+    setLoading(true);
 
     if (newPassword !== confirmPassword) {
-      setError('Passwords do not match.')
-      setLoading(false)
-      return
+      setError('Passwords do not match.');
+      setLoading(false);
+      return;
     }
 
     if (passwordErrors && passwordErrors.length > 0) {
-      setError('Please fix the password requirements above.')
-      setLoading(false)
-      return
+      setError('Please fix the password requirements above.');
+      setLoading(false);
+      return;
     }
 
     try {
-      await confirmPasswordReset(email.toLowerCase(), resetCode, newPassword)
-      setSuccess(successMessage)
-      setTimeout(() => navigate('/'), 3000)
+      await confirmPasswordReset(email.toLowerCase(), resetCode, newPassword);
+      setSuccess(successMessage);
+      setTimeout(() => navigate('/'), 3000);
     } catch (err: unknown) {
       const errorMsg = isResetMode
-        ? (err instanceof Error ? err.message : 'Failed to reset password')
-        : (err instanceof Error ? err.message : 'Failed to create password')
-      setError(errorMsg)
+        ? err instanceof Error
+          ? err.message
+          : 'Failed to reset password'
+        : err instanceof Error
+          ? err.message
+          : 'Failed to create password';
+      setError(errorMsg);
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
+  };
 
   const validatePassword = (password: string) => {
     const requirements = [
@@ -111,23 +119,19 @@ export default function CreatePassword() {
       { message: 'at least one uppercase letter', pattern: /[A-Z]/ },
       { message: 'at least one number', pattern: /[0-9]/ },
       { message: 'at least one symbol (!@#$%^&*)', pattern: /[!@#$%^&*(),.?":{}|<>]/ },
-    ]
+    ];
 
     const errors = requirements
-      .filter(req => !password.match(req.pattern))
-      .map(req => (
-        <div key={req.message}>
-          Password must contain {req.message}
-        </div>
-      ))
+      .filter((req) => !password.match(req.pattern))
+      .map((req) => <div key={req.message}>Password must contain {req.message}</div>);
 
-    setPasswordErrors(errors.length > 0 ? errors : null)
-  }
+    setPasswordErrors(errors.length > 0 ? errors : null);
+  };
 
   const handleNewPasswordChange = (password: string) => {
-    setNewPassword(password)
-    validatePassword(password)
-  }
+    setNewPassword(password);
+    validatePassword(password);
+  };
 
   return (
     <Container className="d-flex justify-content-center align-items-center min-vh-100">
@@ -136,9 +140,7 @@ export default function CreatePassword() {
           <div className="text-center mb-4">
             <Key size={48} className="text-primary mb-3" />
             <h2 className="mb-2">{pageTitle}</h2>
-            <p className="text-muted">
-              {!isCodeSent ? codePrompt : codeInstructions}
-            </p>
+            <p className="text-muted">{!isCodeSent ? codePrompt : codeInstructions}</p>
           </div>
 
           {error && (
@@ -170,8 +172,7 @@ export default function CreatePassword() {
                 <Form.Text className="text-muted">
                   {isResetMode
                     ? 'Enter the email address associated with your account.'
-                    : 'This should be the email address your administrator used when creating your account.'
-                  }
+                    : 'This should be the email address your administrator used when creating your account.'}
                 </Form.Text>
               </Form.Group>
 
@@ -191,13 +192,7 @@ export default function CreatePassword() {
             <Form onSubmit={handleCreatePassword}>
               <Form.Group className="mb-3">
                 <Form.Label>Email address</Form.Label>
-                <Form.Control
-                  type="email"
-                  value={email}
-                  readOnly
-                  disabled
-                  autoComplete="email"
-                />
+                <Form.Control type="email" value={email} readOnly disabled autoComplete="email" />
               </Form.Group>
 
               <Form.Group className="mb-3">
@@ -240,11 +235,7 @@ export default function CreatePassword() {
                     autoComplete="new-password"
                   />
                 </OverlayTrigger>
-                {passwordErrors && (
-                  <div className="text-danger small mt-1">
-                    {passwordErrors}
-                  </div>
-                )}
+                {passwordErrors && <div className="text-danger small mt-1">{passwordErrors}</div>}
               </Form.Group>
 
               <Form.Group className="mb-4">
@@ -280,5 +271,5 @@ export default function CreatePassword() {
         </Card.Body>
       </Card>
     </Container>
-  )
+  );
 }

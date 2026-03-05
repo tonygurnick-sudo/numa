@@ -1,39 +1,39 @@
-import { useEffect, useState } from 'react'
-import { Alert, Spinner, Container } from 'react-bootstrap'
-import { fetchConfigAndAddToSession, hasConfigInSession } from '@/services/configService'
+import { useEffect, useState } from 'react';
+import { Alert, Spinner, Container } from 'react-bootstrap';
+import { fetchConfigAndAddToSession, hasConfigInSession } from '@/services/configService';
 
 interface ConfigLoaderProps {
-  children: React.ReactNode
+  children: React.ReactNode;
 }
 
 export default function ConfigLoader({ children }: ConfigLoaderProps) {
-  const [isLoading, setIsLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const loadConfig = async () => {
       try {
-        setError(null)
+        setError(null);
         // If we already have config, render immediately, but trigger a background refresh
         if (hasConfigInSession()) {
-          setIsLoading(false)
+          setIsLoading(false);
           // Background refresh respects cache TTL and will reload if changed
-          fetchConfigAndAddToSession().catch((e) => console.debug('Background config refresh skipped:', e))
-          return
+          fetchConfigAndAddToSession().catch((e) => console.debug('Background config refresh skipped:', e));
+          return;
         }
 
         // Otherwise, fetch config before rendering
-        await fetchConfigAndAddToSession()
-        setIsLoading(false)
+        await fetchConfigAndAddToSession();
+        setIsLoading(false);
       } catch (error) {
-        console.error('Failed to load configuration:', error)
-        setError(error instanceof Error ? error.message : 'Failed to load configuration')
-        setIsLoading(false)
+        console.error('Failed to load configuration:', error);
+        setError(error instanceof Error ? error.message : 'Failed to load configuration');
+        setIsLoading(false);
       }
-    }
+    };
 
-    loadConfig()
-  }, [])
+    loadConfig();
+  }, []);
 
   if (isLoading) {
     return (
@@ -46,7 +46,7 @@ export default function ConfigLoader({ children }: ConfigLoaderProps) {
           </div>
         </Container>
       </div>
-    )
+    );
   }
 
   if (error) {
@@ -59,10 +59,7 @@ export default function ConfigLoader({ children }: ConfigLoaderProps) {
               <p>{error}</p>
               <hr />
               <div className="d-flex justify-content-center">
-                <button
-                  className="btn btn-outline-danger"
-                  onClick={() => window.location.reload()}
-                >
+                <button className="btn btn-outline-danger" onClick={() => window.location.reload()}>
                   Reload Page
                 </button>
               </div>
@@ -70,8 +67,8 @@ export default function ConfigLoader({ children }: ConfigLoaderProps) {
           </div>
         </Container>
       </div>
-    )
+    );
   }
 
-  return <>{children}</>
+  return <>{children}</>;
 }

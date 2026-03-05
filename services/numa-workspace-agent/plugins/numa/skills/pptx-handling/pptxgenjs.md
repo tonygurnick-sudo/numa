@@ -5,22 +5,23 @@ Create presentations from scratch using PptxGenJS (Node.js). Use `execute_script
 ## Setup & Basic Structure
 
 ```javascript
-const pptxgen = require("pptxgenjs");
+const pptxgen = require('pptxgenjs');
 
 let pres = new pptxgen();
-pres.layout = "LAYOUT_16x9";  // 10" x 5.625"
-pres.author = "Numa";
-pres.title = "Presentation Title";
+pres.layout = 'LAYOUT_16x9'; // 10" x 5.625"
+pres.author = 'Numa';
+pres.title = 'Presentation Title';
 
 let slide = pres.addSlide();
-slide.addText("Hello World!", { x: 0.5, y: 0.5, fontSize: 36, color: "363636" });
+slide.addText('Hello World!', { x: 0.5, y: 0.5, fontSize: 36, color: '363636' });
 
-pres.writeFile({ fileName: "/workdir/outputs/presentation.pptx" });
+pres.writeFile({ fileName: '/workdir/outputs/presentation.pptx' });
 ```
 
 **Preferred:** Use `execute_script(interpreter="node", code="...")` to run this inline.
 
 **Alternative:** Save as `/workdir/outputs/create_deck.js` and run with Bash:
+
 ```bash
 node /workdir/outputs/create_deck.js
 ```
@@ -28,6 +29,7 @@ node /workdir/outputs/create_deck.js
 ## Layout Dimensions
 
 Coordinates are in inches:
+
 - `LAYOUT_16x9`: 10" x 5.625" (default, recommended)
 - `LAYOUT_16x10`: 10" x 6.25"
 - `LAYOUT_4x3`: 10" x 7.5"
@@ -39,31 +41,48 @@ Coordinates are in inches:
 
 ```javascript
 // Basic text
-slide.addText("Simple Text", {
-  x: 1, y: 1, w: 8, h: 2, fontSize: 24, fontFace: "Arial",
-  color: "363636", bold: true, align: "center", valign: "middle"
+slide.addText('Simple Text', {
+  x: 1,
+  y: 1,
+  w: 8,
+  h: 2,
+  fontSize: 24,
+  fontFace: 'Arial',
+  color: '363636',
+  bold: true,
+  align: 'center',
+  valign: 'middle',
 });
 
 // Character spacing (use charSpacing, NOT letterSpacing which is silently ignored)
-slide.addText("SPACED TEXT", { x: 1, y: 1, w: 8, h: 1, charSpacing: 6 });
+slide.addText('SPACED TEXT', { x: 1, y: 1, w: 8, h: 1, charSpacing: 6 });
 
 // Rich text arrays
-slide.addText([
-  { text: "Bold ", options: { bold: true } },
-  { text: "Italic ", options: { italic: true } }
-], { x: 1, y: 3, w: 8, h: 1 });
+slide.addText(
+  [
+    { text: 'Bold ', options: { bold: true } },
+    { text: 'Italic ', options: { italic: true } },
+  ],
+  { x: 1, y: 3, w: 8, h: 1 }
+);
 
 // Multi-line text (requires breakLine: true)
-slide.addText([
-  { text: "Line 1", options: { breakLine: true } },
-  { text: "Line 2", options: { breakLine: true } },
-  { text: "Line 3" }  // Last item doesn't need breakLine
-], { x: 0.5, y: 0.5, w: 8, h: 2 });
+slide.addText(
+  [
+    { text: 'Line 1', options: { breakLine: true } },
+    { text: 'Line 2', options: { breakLine: true } },
+    { text: 'Line 3' }, // Last item doesn't need breakLine
+  ],
+  { x: 0.5, y: 0.5, w: 8, h: 2 }
+);
 
 // Text box margin (internal padding)
-slide.addText("Title", {
-  x: 0.5, y: 0.3, w: 9, h: 0.6,
-  margin: 0  // Use 0 when aligning text with shapes or icons
+slide.addText('Title', {
+  x: 0.5,
+  y: 0.3,
+  w: 9,
+  h: 0.6,
+  margin: 0, // Use 0 when aligning text with shapes or icons
 });
 ```
 
@@ -96,48 +115,66 @@ slide.addText([
 ```javascript
 // Rectangle
 slide.addShape(pres.shapes.RECTANGLE, {
-  x: 0.5, y: 0.8, w: 1.5, h: 3.0,
-  fill: { color: "FF0000" }, line: { color: "000000", width: 2 }
+  x: 0.5,
+  y: 0.8,
+  w: 1.5,
+  h: 3.0,
+  fill: { color: 'FF0000' },
+  line: { color: '000000', width: 2 },
 });
 
 // Oval
-slide.addShape(pres.shapes.OVAL, { x: 4, y: 1, w: 2, h: 2, fill: { color: "0000FF" } });
+slide.addShape(pres.shapes.OVAL, { x: 4, y: 1, w: 2, h: 2, fill: { color: '0000FF' } });
 
 // Line (dashed)
 slide.addShape(pres.shapes.LINE, {
-  x: 1, y: 3, w: 5, h: 0, line: { color: "FF0000", width: 3, dashType: "dash" }
+  x: 1,
+  y: 3,
+  w: 5,
+  h: 0,
+  line: { color: 'FF0000', width: 3, dashType: 'dash' },
 });
 
 // With transparency
 slide.addShape(pres.shapes.RECTANGLE, {
-  x: 1, y: 1, w: 3, h: 2,
-  fill: { color: "0088CC", transparency: 50 }
+  x: 1,
+  y: 1,
+  w: 3,
+  h: 2,
+  fill: { color: '0088CC', transparency: 50 },
 });
 
 // Rounded rectangle (rectRadius only works with ROUNDED_RECTANGLE)
 slide.addShape(pres.shapes.ROUNDED_RECTANGLE, {
-  x: 1, y: 1, w: 3, h: 2,
-  fill: { color: "FFFFFF" }, rectRadius: 0.1
+  x: 1,
+  y: 1,
+  w: 3,
+  h: 2,
+  fill: { color: 'FFFFFF' },
+  rectRadius: 0.1,
 });
 
 // With shadow
 slide.addShape(pres.shapes.RECTANGLE, {
-  x: 1, y: 1, w: 3, h: 2,
-  fill: { color: "FFFFFF" },
-  shadow: { type: "outer", color: "000000", blur: 6, offset: 2, angle: 135, opacity: 0.15 }
+  x: 1,
+  y: 1,
+  w: 3,
+  h: 2,
+  fill: { color: 'FFFFFF' },
+  shadow: { type: 'outer', color: '000000', blur: 6, offset: 2, angle: 135, opacity: 0.15 },
 });
 ```
 
 ### Shadow Options
 
-| Property | Type | Range | Notes |
-|----------|------|-------|-------|
-| `type` | string | `"outer"`, `"inner"` | |
-| `color` | string | 6-char hex (e.g. `"000000"`) | No `#` prefix, no 8-char hex |
-| `blur` | number | 0-100 pt | |
-| `offset` | number | 0-200 pt | Must be non-negative |
-| `angle` | number | 0-359 degrees | 135 = bottom-right, 270 = upward |
-| `opacity` | number | 0.0-1.0 | Use this for transparency, never encode in colour string |
+| Property  | Type   | Range                        | Notes                                                    |
+| --------- | ------ | ---------------------------- | -------------------------------------------------------- |
+| `type`    | string | `"outer"`, `"inner"`         |                                                          |
+| `color`   | string | 6-char hex (e.g. `"000000"`) | No `#` prefix, no 8-char hex                             |
+| `blur`    | number | 0-100 pt                     |                                                          |
+| `offset`  | number | 0-200 pt                     | Must be non-negative                                     |
+| `angle`   | number | 0-359 degrees                | 135 = bottom-right, 270 = upward                         |
+| `opacity` | number | 0.0-1.0                      | Use this for transparency, never encode in colour string |
 
 **Note**: Gradient fills are not natively supported. Use a gradient image as a background instead.
 
@@ -147,22 +184,25 @@ slide.addShape(pres.shapes.RECTANGLE, {
 
 ```javascript
 // From file path
-slide.addImage({ path: "/workdir/uploads/chart.png", x: 1, y: 1, w: 5, h: 3 });
+slide.addImage({ path: '/workdir/uploads/chart.png', x: 1, y: 1, w: 5, h: 3 });
 
 // From base64 (faster, no file I/O — preferred for icons)
-slide.addImage({ data: "image/png;base64,iVBORw0KGgo...", x: 1, y: 1, w: 5, h: 3 });
+slide.addImage({ data: 'image/png;base64,iVBORw0KGgo...', x: 1, y: 1, w: 5, h: 3 });
 ```
 
 ### Image Options
 
 ```javascript
 slide.addImage({
-  path: "/workdir/uploads/image.png",
-  x: 1, y: 1, w: 5, h: 3,
-  rotate: 45,              // 0-359 degrees
-  rounding: true,          // Circular crop
-  transparency: 50,        // 0-100
-  altText: "Description"   // Accessibility
+  path: '/workdir/uploads/image.png',
+  x: 1,
+  y: 1,
+  w: 5,
+  h: 3,
+  rotate: 45, // 0-359 degrees
+  rounding: true, // Circular crop
+  transparency: 50, // 0-100
+  altText: 'Description', // Accessibility
 });
 ```
 
@@ -182,11 +222,13 @@ slide.addImage({
 ### Calculate Dimensions (preserve aspect ratio)
 
 ```javascript
-const origWidth = 1978, origHeight = 923, maxHeight = 3.0;
+const origWidth = 1978,
+  origHeight = 923,
+  maxHeight = 3.0;
 const calcWidth = maxHeight * (origWidth / origHeight);
 const centerX = (10 - calcWidth) / 2;
 
-slide.addImage({ path: "/workdir/uploads/image.png", x: centerX, y: 1.2, w: calcWidth, h: maxHeight });
+slide.addImage({ path: '/workdir/uploads/image.png', x: centerX, y: 1.2, w: calcWidth, h: maxHeight });
 ```
 
 ---
@@ -196,11 +238,11 @@ slide.addImage({ path: "/workdir/uploads/image.png", x: centerX, y: 1.2, w: calc
 Use inline SVGs and rasterise with `sharp` for crisp icons. No react-icons needed.
 
 ```javascript
-const sharp = require("sharp");
+const sharp = require('sharp');
 
 async function svgToBase64(svgString, size = 256) {
   const buf = await sharp(Buffer.from(svgString)).resize(size, size).png().toBuffer();
-  return "image/png;base64," + buf.toString("base64");
+  return 'image/png;base64,' + buf.toString('base64');
 }
 
 // Example icons
@@ -249,13 +291,13 @@ To change icon colour, modify the `fill` attribute in the SVG string.
 
 ```javascript
 // Solid colour
-slide.background = { color: "F1F1F1" };
+slide.background = { color: 'F1F1F1' };
 
 // Colour with transparency
-slide.background = { color: "FF3399", transparency: 50 };
+slide.background = { color: 'FF3399', transparency: 50 };
 
 // Image
-slide.background = { data: "image/png;base64,iVBORw0KGgo..." };
+slide.background = { data: 'image/png;base64,iVBORw0KGgo...' };
 ```
 
 ---
@@ -264,21 +306,25 @@ slide.background = { data: "image/png;base64,iVBORw0KGgo..." };
 
 ```javascript
 // Basic table
-slide.addTable([
-  ["Header 1", "Header 2"],
-  ["Cell 1", "Cell 2"]
-], {
-  x: 1, y: 1, w: 8, h: 2,
-  border: { pt: 1, color: "999999" }, fill: { color: "F1F1F1" }
-});
+slide.addTable(
+  [
+    ['Header 1', 'Header 2'],
+    ['Cell 1', 'Cell 2'],
+  ],
+  {
+    x: 1,
+    y: 1,
+    w: 8,
+    h: 2,
+    border: { pt: 1, color: '999999' },
+    fill: { color: 'F1F1F1' },
+  }
+);
 
 // Advanced with merged cells and styling
 let tableData = [
-  [
-    { text: "Header", options: { fill: { color: "6699CC" }, color: "FFFFFF", bold: true } },
-    "Cell"
-  ],
-  [{ text: "Merged across two columns", options: { colspan: 2 } }]
+  [{ text: 'Header', options: { fill: { color: '6699CC' }, color: 'FFFFFF', bold: true } }, 'Cell'],
+  [{ text: 'Merged across two columns', options: { colspan: 2 } }],
 ];
 slide.addTable(tableData, { x: 1, y: 3.5, w: 8, colW: [4, 4] });
 ```
@@ -289,27 +335,64 @@ slide.addTable(tableData, { x: 1, y: 3.5, w: 8, colW: [4, 4] });
 
 ```javascript
 // Bar chart
-slide.addChart(pres.charts.BAR, [{
-  name: "Sales", labels: ["Q1", "Q2", "Q3", "Q4"], values: [4500, 5500, 6200, 7100]
-}], {
-  x: 0.5, y: 0.6, w: 6, h: 3, barDir: "col",
-  showTitle: true, title: "Quarterly Sales"
-});
+slide.addChart(
+  pres.charts.BAR,
+  [
+    {
+      name: 'Sales',
+      labels: ['Q1', 'Q2', 'Q3', 'Q4'],
+      values: [4500, 5500, 6200, 7100],
+    },
+  ],
+  {
+    x: 0.5,
+    y: 0.6,
+    w: 6,
+    h: 3,
+    barDir: 'col',
+    showTitle: true,
+    title: 'Quarterly Sales',
+  }
+);
 
 // Line chart
-slide.addChart(pres.charts.LINE, [{
-  name: "Temp", labels: ["Jan", "Feb", "Mar"], values: [32, 35, 42]
-}], { x: 0.5, y: 4, w: 6, h: 3, lineSize: 3, lineSmooth: true });
+slide.addChart(
+  pres.charts.LINE,
+  [
+    {
+      name: 'Temp',
+      labels: ['Jan', 'Feb', 'Mar'],
+      values: [32, 35, 42],
+    },
+  ],
+  { x: 0.5, y: 4, w: 6, h: 3, lineSize: 3, lineSmooth: true }
+);
 
 // Pie chart
-slide.addChart(pres.charts.PIE, [{
-  name: "Share", labels: ["A", "B", "Other"], values: [35, 45, 20]
-}], { x: 7, y: 1, w: 5, h: 4, showPercent: true });
+slide.addChart(
+  pres.charts.PIE,
+  [
+    {
+      name: 'Share',
+      labels: ['A', 'B', 'Other'],
+      values: [35, 45, 20],
+    },
+  ],
+  { x: 7, y: 1, w: 5, h: 4, showPercent: true }
+);
 
 // Doughnut chart
-slide.addChart(pres.charts.DOUGHNUT, [{
-  name: "Usage", labels: ["Active", "Inactive"], values: [72, 28]
-}], { x: 1, y: 1, w: 4, h: 4, showPercent: true });
+slide.addChart(
+  pres.charts.DOUGHNUT,
+  [
+    {
+      name: 'Usage',
+      labels: ['Active', 'Inactive'],
+      values: [72, 28],
+    },
+  ],
+  { x: 1, y: 1, w: 4, h: 4, showPercent: true }
+);
 ```
 
 ### Better-Looking Charts
@@ -318,26 +401,30 @@ Default charts look dated. Apply these options for a modern appearance:
 
 ```javascript
 slide.addChart(pres.charts.BAR, chartData, {
-  x: 0.5, y: 1, w: 9, h: 4, barDir: "col",
+  x: 0.5,
+  y: 1,
+  w: 9,
+  h: 4,
+  barDir: 'col',
 
   // Custom colours (match your presentation palette)
-  chartColors: ["0D9488", "14B8A6", "5EEAD4"],
+  chartColors: ['0D9488', '14B8A6', '5EEAD4'],
 
   // Clean background
-  chartArea: { fill: { color: "FFFFFF" }, roundedCorners: true },
+  chartArea: { fill: { color: 'FFFFFF' }, roundedCorners: true },
 
   // Muted axis labels
-  catAxisLabelColor: "64748B",
-  valAxisLabelColor: "64748B",
+  catAxisLabelColor: '64748B',
+  valAxisLabelColor: '64748B',
 
   // Subtle grid (value axis only)
-  valGridLine: { color: "E2E8F0", size: 0.5 },
-  catGridLine: { style: "none" },
+  valGridLine: { color: 'E2E8F0', size: 0.5 },
+  catGridLine: { style: 'none' },
 
   // Data labels on bars
   showValue: true,
-  dataLabelPosition: "outEnd",
-  dataLabelColor: "1E293B",
+  dataLabelPosition: 'outEnd',
+  dataLabelColor: '1E293B',
 
   // Hide legend for single series
   showLegend: false,
@@ -350,15 +437,17 @@ slide.addChart(pres.charts.BAR, chartData, {
 
 ```javascript
 pres.defineSlideMaster({
-  title: "TITLE_SLIDE",
-  background: { color: "283A5E" },
-  objects: [{
-    placeholder: { options: { name: "title", type: "title", x: 1, y: 2, w: 8, h: 2 } }
-  }]
+  title: 'TITLE_SLIDE',
+  background: { color: '283A5E' },
+  objects: [
+    {
+      placeholder: { options: { name: 'title', type: 'title', x: 1, y: 2, w: 8, h: 2 } },
+    },
+  ],
 });
 
-let titleSlide = pres.addSlide({ masterName: "TITLE_SLIDE" });
-titleSlide.addText("My Title", { placeholder: "title" });
+let titleSlide = pres.addSlide({ masterName: 'TITLE_SLIDE' });
+titleSlide.addText('My Title', { placeholder: 'title' });
 ```
 
 ---
@@ -368,12 +457,14 @@ titleSlide.addText("My Title", { placeholder: "title" });
 These issues cause file corruption, visual bugs, or broken output. Avoid them.
 
 1. **NEVER use "#" with hex colours** — causes file corruption
+
    ```javascript
-   color: "FF0000"      // CORRECT
-   color: "#FF0000"     // WRONG — corrupts file
+   color: 'FF0000'; // CORRECT
+   color: '#FF0000'; // WRONG — corrupts file
    ```
 
 2. **NEVER encode opacity in hex colour strings** — 8-char colours (e.g., `"00000020"`) corrupt the file. Use the `opacity` property instead.
+
    ```javascript
    shadow: { color: "00000020" }                     // WRONG — corrupts file
    shadow: { color: "000000", opacity: 0.12 }        // CORRECT
@@ -388,6 +479,7 @@ These issues cause file corruption, visual bugs, or broken output. Avoid them.
 6. **Each presentation needs a fresh instance** — don't reuse `pptxgen()` objects
 
 7. **NEVER reuse option objects across calls** — PptxGenJS mutates objects in-place. Share one object between multiple calls corrupts the second shape.
+
    ```javascript
    // WRONG — second call gets already-converted values
    const shadow = { type: "outer", blur: 6, offset: 2, color: "000000", opacity: 0.15 };

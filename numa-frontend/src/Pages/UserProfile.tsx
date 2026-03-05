@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { getFlag } from '../utils/featureFlags';
 import { Alert, Button, Dropdown, Form, Spinner, Tab } from 'react-bootstrap';
 import { PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
@@ -99,7 +100,8 @@ export default function UserProfilePage({
   const savedDefaultsRef = useRef('');
   const savedDefaultsEnabledRef = useRef(false);
   const savedProfileRef = useRef('');
-
+  const hasWorkspaceChat = getFlag('NUMA_WORKSPACE_CHAT');
+  const hasPipedreamFeature = getFlag('PIPEDREAM_INTEGRATIONS');
   const hasMfa = window.sessionStorage.getItem('MFA_ENABLED') === 'true';
 
   type DeviceInfo = {
@@ -143,11 +145,9 @@ export default function UserProfilePage({
         setDeviceRevoking(null);
       }
     },
-    [forgetDevice],
+    [forgetDevice]
   );
 
-  const hasWorkspaceChat = window.sessionStorage.getItem('NUMA_WORKSPACE_CHAT') === 'true';
-  const hasPipedreamFeature = window.sessionStorage.getItem('PIPEDREAM_INTEGRATIONS') === 'true';
   const relayLambdaArn = window.sessionStorage.getItem('PIPEDREAM_RELAY_LAMBDA_ARN');
   const previewMode = !hasPipedreamFeature || !relayLambdaArn;
   // Profile image upload state
@@ -193,7 +193,7 @@ export default function UserProfilePage({
         URL.revokeObjectURL(url);
       }
     },
-    [t],
+    [t]
   );
 
   const handleImageUpload = useCallback(
@@ -250,7 +250,7 @@ export default function UserProfilePage({
         if (fileInputRef.current) fileInputRef.current.value = '';
       }
     },
-    [getCredentials, resizeToCanvas, t, user, userProfile.profileImage],
+    [getCredentials, resizeToCanvas, t, user, userProfile.profileImage]
   );
 
   const handleRemoveImage = useCallback(() => {
@@ -389,7 +389,7 @@ export default function UserProfilePage({
 
   const kbIdsSorted = useMemo(
     () => availableKBs.map((kb) => kb.kb_id).filter((id) => typeof id === 'string'),
-    [availableKBs],
+    [availableKBs]
   );
 
   const canEditUserDefaults = globalLoaded && globalAllowUserDefaults;
@@ -475,7 +475,7 @@ export default function UserProfilePage({
   const enabledKBSet = useMemo(() => new Set(displayedSettings.defaultKBIds), [displayedSettings.defaultKBIds]);
   const enabledConnectionSet = useMemo(
     () => new Set(displayedSettings.defaultConnectionIds),
-    [displayedSettings.defaultConnectionIds],
+    [displayedSettings.defaultConnectionIds]
   );
   const getKBLabel = (kbId: string, kbName?: string) => {
     if (kbId === 'company') {
@@ -538,7 +538,7 @@ export default function UserProfilePage({
           emailSignatureText: userDefaults.emailSignatureText,
           chatScrollMode: userDefaults.chatScrollMode,
         },
-        numaPut,
+        numaPut
       );
       // Persist scroll mode to localStorage as a reliable local fallback
       if (userDefaults.chatScrollMode) {
@@ -944,7 +944,7 @@ export default function UserProfilePage({
                                   </div>
                                   {availableConnections
                                     .sort((a, b) =>
-                                      getConnectionDisplayName(a.id).localeCompare(getConnectionDisplayName(b.id)),
+                                      getConnectionDisplayName(a.id).localeCompare(getConnectionDisplayName(b.id))
                                     )
                                     .map((conn) => (
                                       <Dropdown.Item
@@ -980,7 +980,7 @@ export default function UserProfilePage({
                                 memories: prev.memories.map((m) =>
                                   m.id === memory.id
                                     ? { ...m, content: editingMemoryContent.trim(), scope: editingMemoryScope }
-                                    : m,
+                                    : m
                                 ),
                               }));
                               setEditingMemoryId(null);
@@ -1132,7 +1132,7 @@ export default function UserProfilePage({
                               </div>
                               {availableConnections
                                 .sort((a, b) =>
-                                  getConnectionDisplayName(a.id).localeCompare(getConnectionDisplayName(b.id)),
+                                  getConnectionDisplayName(a.id).localeCompare(getConnectionDisplayName(b.id))
                                 )
                                 .map((conn) => (
                                   <Dropdown.Item
@@ -1336,7 +1336,7 @@ export default function UserProfilePage({
               'userProfile.actions.resetBrowser',
               resetToBrowserDefaults,
               handleSaveProfileLanguage,
-              canEditProfile,
+              canEditProfile
             )}
           </Form>
         </Tab>
@@ -1603,7 +1603,7 @@ export default function UserProfilePage({
                   'userProfile.actions.reset',
                   resetToCompanyDefaults,
                   handleSaveUserDefaults,
-                  canEditUserDefaults,
+                  canEditUserDefaults
                 )}
               </>
             )}
@@ -1667,7 +1667,7 @@ export default function UserProfilePage({
                 'userProfile.actions.reset',
                 resetToCompanyDefaults,
                 handleSaveUserDefaults,
-                canEditUserDefaults,
+                canEditUserDefaults
               )}
             </Form>
           </Tab>

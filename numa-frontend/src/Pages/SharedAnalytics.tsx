@@ -8,6 +8,7 @@ import {
   ShareAnalytics as AnalyticsData,
   ActivityItem,
 } from '../Services/sharedChatService';
+import { buildHourlyActivity, buildDailyActivity, formatHour, formatDateShort } from '../utils/messageAnalyticsUtils';
 import './SharedAnalytics.scss';
 
 type TabKey = 'analytics' | 'activity';
@@ -67,6 +68,9 @@ export const SharedAnalytics = () => {
       </div>
     );
   }
+
+  const hourlyData = buildHourlyActivity(analytics);
+  const dailyData = buildDailyActivity(analytics);
 
   return (
     <div className="shared-analytics">
@@ -202,6 +206,65 @@ export const SharedAnalytics = () => {
                   )}
                 </Col>
               </Row>
+            </Card.Body>
+          </Card>
+
+          {/* Daily Activity Chart */}
+          <Card className="activity-chart-card mb-4">
+            <Card.Header>
+              <h5 className="mb-0">{t('analytics.dailyActivity')}</h5>
+            </Card.Header>
+            <Card.Body>
+              <div className="activity-chart-bars activity-chart-bars--daily">
+                {dailyData.map((day) => {
+                  const maxCount = Math.max(...dailyData.map((d) => d.count), 1);
+                  const height = (day.count / maxCount) * 100;
+                  return (
+                    <div key={day.date} className="activity-chart-bar-col" title={`${day.date}: ${day.count} messages`}>
+                      <div
+                        className="activity-chart-bar activity-chart-bar--daily"
+                        style={{
+                          height: `${height}%`,
+                          minHeight: day.count > 0 ? '4px' : '0',
+                        }}
+                      />
+                      <small className="activity-chart-label">{formatDateShort(day.date).split(' ')[0]}</small>
+                    </div>
+                  );
+                })}
+              </div>
+              <small className="text-muted">{t('analytics.dailyDescription')}</small>
+            </Card.Body>
+          </Card>
+
+          {/* Hourly Activity Chart */}
+          <Card className="activity-chart-card mb-4">
+            <Card.Header>
+              <h5 className="mb-0">{t('analytics.hourlyActivity')}</h5>
+            </Card.Header>
+            <Card.Body>
+              <div className="activity-chart-bars activity-chart-bars--hourly">
+                {hourlyData.map((count, hour) => {
+                  const maxCount = Math.max(...hourlyData, 1);
+                  const height = (count / maxCount) * 100;
+                  return (
+                    <div key={hour} className="activity-chart-bar-col" title={`${formatHour(hour)}: ${count} messages`}>
+                      <div
+                        className="activity-chart-bar activity-chart-bar--hourly"
+                        style={{
+                          height: `${height}%`,
+                          minHeight: count > 0 ? '4px' : '0',
+                          backgroundColor: count > 0 ? undefined : '#dee2e6',
+                        }}
+                      />
+                      {hour % 3 === 0 && (
+                        <small className="activity-chart-label activity-chart-label--hourly">{formatHour(hour)}</small>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+              <small className="text-muted mt-3 d-block">{t('analytics.hourlyDescription')}</small>
             </Card.Body>
           </Card>
 

@@ -10,7 +10,7 @@ const { convertTo } = require('@shelf/aws-lambda-libreoffice') as {
 const nodePandoc = require('node-pandoc') as (
   src: string,
   args: string,
-  callback: (err: Error | null, result: string | boolean) => void,
+  callback: (err: Error | null, result: string | boolean) => void
 ) => void;
 
 /**

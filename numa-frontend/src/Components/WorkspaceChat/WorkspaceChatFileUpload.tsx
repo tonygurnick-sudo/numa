@@ -183,7 +183,7 @@ export function WorkspaceChatFileUpload({
 
       setFiles((prev) => [...prev, ...items]);
     },
-    [isFolderEntry],
+    [isFolderEntry]
   );
 
   /**
@@ -218,11 +218,11 @@ export function WorkspaceChatFileUpload({
           conversationId,
           item.relativePath,
           onProgress,
-          getCredentials,
+          getCredentials
         );
 
         setFiles((prev) =>
-          prev.map((f, idx) => (idx === i ? { ...f, status: 'success' as const, progress: 100, response } : f)),
+          prev.map((f, idx) => (idx === i ? { ...f, status: 'success' as const, progress: 100, response } : f))
         );
 
         responses.push(response);
@@ -237,8 +237,8 @@ export function WorkspaceChatFileUpload({
                   progress: 0,
                   error: (error as Error).message || 'Upload failed',
                 }
-              : f,
-          ),
+              : f
+          )
         );
       }
     }
@@ -313,7 +313,7 @@ export function WorkspaceChatFileUpload({
    */
   const readDirectoryRecursively = async (
     dirEntry: FileSystemDirectoryEntry,
-    basePath: string,
+    basePath: string
   ): Promise<Array<{ file: File; relativePath: string }>> => {
     const results: Array<{ file: File; relativePath: string }> = [];
 

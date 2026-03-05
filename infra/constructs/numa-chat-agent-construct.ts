@@ -55,7 +55,7 @@ export class NumaChatAgent extends Construct {
       if (config.preferredKnowledgeBase === 'q') {
         if (!config.qApplicationId || !config.qRetrieverId) {
           throw new Error(
-            `Chat agent prefers Q Business but missing required fields: ${!config.qApplicationId ? 'qApplicationId ' : ''}${!config.qRetrieverId ? 'qRetrieverId' : ''}`,
+            `Chat agent prefers Q Business but missing required fields: ${!config.qApplicationId ? 'qApplicationId ' : ''}${!config.qRetrieverId ? 'qRetrieverId' : ''}`
           );
         }
       } else if (config.preferredKnowledgeBase === 'bedrock') {
@@ -78,13 +78,13 @@ export class NumaChatAgent extends Construct {
     if (props.workspaceAgentsTableName) {
       agentTableArns.push(
         `arn:aws:dynamodb:${props.region}:${callerIdentity.accountId}:table/${props.workspaceAgentsTableName}`,
-        `arn:aws:dynamodb:${props.region}:${callerIdentity.accountId}:table/${props.workspaceAgentsTableName}/index/*`,
+        `arn:aws:dynamodb:${props.region}:${callerIdentity.accountId}:table/${props.workspaceAgentsTableName}/index/*`
       );
     }
     if (props.userAgentsTableName) {
       agentTableArns.push(
         `arn:aws:dynamodb:${props.region}:${callerIdentity.accountId}:table/${props.userAgentsTableName}`,
-        `arn:aws:dynamodb:${props.region}:${callerIdentity.accountId}:table/${props.userAgentsTableName}/index/*`,
+        `arn:aws:dynamodb:${props.region}:${callerIdentity.accountId}:table/${props.userAgentsTableName}/index/*`
       );
     }
     const agentSettingsArn = props.agentsSettingsTableName

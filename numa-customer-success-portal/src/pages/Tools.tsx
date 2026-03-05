@@ -1,35 +1,38 @@
-import { useState } from 'react'
-import { Row, Col, Card, Form, InputGroup } from 'react-bootstrap'
-import { Tools as ToolsIcon, Search } from 'react-bootstrap-icons'
-import { ToolCard } from '@/components/tools/ToolCard'
-import { AVAILABLE_TOOLS, getToolsByCategory } from '@/data/tools'
+import { useState } from 'react';
+import { Row, Col, Card, Form, InputGroup } from 'react-bootstrap';
+import { Tools as ToolsIcon, Search } from 'react-bootstrap-icons';
+import { ToolCard } from '@/components/tools/ToolCard';
+import { AVAILABLE_TOOLS, getToolsByCategory } from '@/data/tools';
 
 export default function Tools() {
-  const [searchTerm, setSearchTerm] = useState('')
-  const [selectedCategory, setSelectedCategory] = useState('all')
+  const [searchTerm, setSearchTerm] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState('all');
 
-  const categories = getToolsByCategory()
-  const allTools = AVAILABLE_TOOLS
+  const categories = getToolsByCategory();
+  const allTools = AVAILABLE_TOOLS;
 
   // Filter tools based on search and category
-  const filteredTools = allTools.filter(tool => {
-    const matchesSearch = searchTerm === '' ||
+  const filteredTools = allTools.filter((tool) => {
+    const matchesSearch =
+      searchTerm === '' ||
       tool.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      tool.description.toLowerCase().includes(searchTerm.toLowerCase())
+      tool.description.toLowerCase().includes(searchTerm.toLowerCase());
 
-    const matchesCategory = selectedCategory === 'all' || tool.category === selectedCategory
+    const matchesCategory = selectedCategory === 'all' || tool.category === selectedCategory;
 
-    return matchesSearch && matchesCategory
-  })
+    return matchesSearch && matchesCategory;
+  });
 
   const getFilteredCategories = () => {
-    return categories.map(category => ({
-      ...category,
-      tools: category.tools.filter(tool => filteredTools.includes(tool))
-    })).filter(category => category.tools.length > 0)
-  }
+    return categories
+      .map((category) => ({
+        ...category,
+        tools: category.tools.filter((tool) => filteredTools.includes(tool)),
+      }))
+      .filter((category) => category.tools.length > 0);
+  };
 
-  const displayCategories = getFilteredCategories()
+  const displayCategories = getFilteredCategories();
 
   return (
     <div>
@@ -40,9 +43,7 @@ export default function Tools() {
             <ToolsIcon className="me-2" />
             All Tools
           </h1>
-          <p className="text-muted mb-0">
-            Complete toolkit for customer success operations
-          </p>
+          <p className="text-muted mb-0">Complete toolkit for customer success operations</p>
         </div>
         <div className="text-muted small">
           {filteredTools.length} tool{filteredTools.length !== 1 ? 's' : ''}
@@ -67,10 +68,7 @@ export default function Tools() {
               </InputGroup>
             </Col>
             <Col md={3}>
-              <Form.Select
-                value={selectedCategory}
-                onChange={(e) => setSelectedCategory(e.target.value)}
-              >
+              <Form.Select value={selectedCategory} onChange={(e) => setSelectedCategory(e.target.value)}>
                 <option value="all">All Categories</option>
                 <option value="analytics">Analytics & Reports</option>
                 <option value="management">Client Operations</option>
@@ -86,9 +84,7 @@ export default function Tools() {
           <Card.Body className="text-center py-5">
             <ToolsIcon size={48} className="text-muted mb-3" />
             <h5 className="text-muted mb-2">No tools found</h5>
-            <p className="text-muted small">
-              Try adjusting your search terms or filter settings
-            </p>
+            <p className="text-muted small">Try adjusting your search terms or filter settings</p>
           </Card.Body>
         </Card>
       )}
@@ -129,5 +125,5 @@ export default function Tools() {
         </div>
       )}
     </div>
-  )
+  );
 }

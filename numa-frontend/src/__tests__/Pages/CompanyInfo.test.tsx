@@ -109,7 +109,7 @@ describe('CompanyInfo Component', () => {
     customRender(
       <MemoryRouter>
         <CompanyInfo />
-      </MemoryRouter>,
+      </MemoryRouter>
     );
     expect(screen.getByText('Company Info')).toBeInTheDocument();
     expect(screen.getByText('Edit Company Information')).toBeInTheDocument();
@@ -121,7 +121,7 @@ describe('CompanyInfo Component', () => {
     customRender(
       <MemoryRouter>
         <CompanyInfo />
-      </MemoryRouter>,
+      </MemoryRouter>
     );
     expect(screen.getByRole('status')).toBeInTheDocument();
     expect(screen.getByText('Loading...')).toBeInTheDocument();
@@ -131,10 +131,10 @@ describe('CompanyInfo Component', () => {
     customRender(
       <MemoryRouter>
         <CompanyInfo />
-      </MemoryRouter>,
+      </MemoryRouter>
     );
     expect(
-      screen.getByText('Enter your company information below. This will be used in chat interactions.'),
+      screen.getByText('Enter your company information below. This will be used in chat interactions.')
     ).toBeInTheDocument();
     expect(screen.getByText('Company Info')).toBeInTheDocument();
     expect(screen.getByText('Manage your company information and settings')).toBeInTheDocument();
@@ -146,7 +146,7 @@ describe('CompanyInfo Component', () => {
     customRender(
       <MemoryRouter>
         <CompanyInfo />
-      </MemoryRouter>,
+      </MemoryRouter>
     );
     expect(fetchCompanyInfo).toHaveBeenCalled();
   });
@@ -163,7 +163,7 @@ describe('CompanyInfo Component', () => {
     customRender(
       <MemoryRouter>
         <CompanyInfo />
-      </MemoryRouter>,
+      </MemoryRouter>
     );
 
     // Wait for the loading spinner to disappear and the textarea to appear
@@ -185,12 +185,12 @@ describe('CompanyInfo Component', () => {
     customRender(
       <MemoryRouter>
         <CompanyInfo />
-      </MemoryRouter>,
+      </MemoryRouter>
     );
 
     // Wait for the alert to appear
     const alert = await waitFor(() =>
-      screen.getByText('No company information exists yet. Enter your company information and click Save.'),
+      screen.getByText('No company information exists yet. Enter your company information and click Save.')
     );
     expect(alert).toBeInTheDocument();
   });
@@ -202,7 +202,7 @@ describe('CompanyInfo Component', () => {
     customRender(
       <MemoryRouter>
         <CompanyInfo />
-      </MemoryRouter>,
+      </MemoryRouter>
     );
 
     // Wait for the error alert to appear
@@ -217,7 +217,7 @@ describe('CompanyInfo Component', () => {
     customRender(
       <MemoryRouter>
         <CompanyInfo />
-      </MemoryRouter>,
+      </MemoryRouter>
     );
 
     // Wait for the textarea to appear
@@ -238,7 +238,7 @@ describe('CompanyInfo Component', () => {
     customRender(
       <MemoryRouter>
         <CompanyInfo />
-      </MemoryRouter>,
+      </MemoryRouter>
     );
 
     // Wait for the textarea to appear
@@ -270,7 +270,7 @@ describe('CompanyInfo Component', () => {
     customRender(
       <MemoryRouter>
         <CompanyInfo />
-      </MemoryRouter>,
+      </MemoryRouter>
     );
 
     // Wait for the textarea to appear
@@ -300,7 +300,7 @@ describe('CompanyInfo Component', () => {
     customRender(
       <MemoryRouter>
         <CompanyInfo />
-      </MemoryRouter>,
+      </MemoryRouter>
     );
 
     // Wait for the textarea to appear
@@ -322,12 +322,12 @@ describe('CompanyInfo Component', () => {
     customRender(
       <MemoryRouter>
         <CompanyInfo />
-      </MemoryRouter>,
+      </MemoryRouter>
     );
 
     // Wait for the alert to appear
     await waitFor(() =>
-      screen.getByText('No company information exists yet. Enter your company information and click Save.'),
+      screen.getByText('No company information exists yet. Enter your company information and click Save.')
     );
 
     // Find and click the close button (using aria-label)
@@ -337,7 +337,7 @@ describe('CompanyInfo Component', () => {
     // Check that the alert is no longer displayed
     await waitFor(() => {
       expect(
-        screen.queryByText('No company information exists yet. Enter your company information and click Save.'),
+        screen.queryByText('No company information exists yet. Enter your company information and click Save.')
       ).not.toBeInTheDocument();
     });
   });
@@ -349,7 +349,7 @@ describe('CompanyInfo Component', () => {
     customRender(
       <MemoryRouter>
         <CompanyInfo />
-      </MemoryRouter>,
+      </MemoryRouter>
     );
 
     // Wait for the textarea to appear
@@ -366,7 +366,7 @@ describe('CompanyInfo Component', () => {
     customRender(
       <MemoryRouter>
         <CompanyInfo />
-      </MemoryRouter>,
+      </MemoryRouter>
     );
 
     // Wait for the textarea to appear
@@ -408,7 +408,7 @@ describe('CompanyInfo Component', () => {
       customRender(
         <MemoryRouter>
           <CompanyInfo />
-        </MemoryRouter>,
+        </MemoryRouter>
       );
 
       // Wait for the textarea to appear
@@ -435,7 +435,7 @@ describe('CompanyInfo Component', () => {
       customRender(
         <MemoryRouter>
           <CompanyInfo />
-        </MemoryRouter>,
+        </MemoryRouter>
       );
 
       // Wait for the textarea to appear
@@ -452,7 +452,7 @@ describe('CompanyInfo Component', () => {
       customRender(
         <MemoryRouter>
           <CompanyInfo />
-        </MemoryRouter>,
+        </MemoryRouter>
       );
 
       // Wait for the textarea to appear

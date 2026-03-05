@@ -5,6 +5,7 @@ Use python-pptx to edit existing PPTX files or fill templates with data.
 ## Template-Based Workflow
 
 1. **Analyse the template** — understand structure before modifying:
+
    ```python
    from pptx import Presentation
 
@@ -21,11 +22,13 @@ Use python-pptx to edit existing PPTX files or fill templates with data.
    ```
 
 2. **Extract text for review**:
+
    ```bash
    python -m markitdown /workdir/uploads/template.pptx
    ```
 
 3. **Visual overview** (convert to images):
+
    ```bash
    soffice --headless --convert-to pdf --outdir /workdir/outputs/ /workdir/uploads/template.pptx
    pdftoppm -jpeg -r 150 /workdir/outputs/template.pdf /workdir/outputs/slide
@@ -314,11 +317,13 @@ prs.save("/workdir/outputs/with_notes.pptx")
 ### Template Adaptation
 
 When source content has fewer items than the template:
+
 - **Remove excess elements entirely** (images, shapes, text boxes), don't just clear text
 - Check for orphaned visuals after clearing text content
 - Run visual QA to catch mismatched counts
 
 When replacing text with different length content:
+
 - **Shorter replacements**: Usually safe
 - **Longer replacements**: May overflow or wrap unexpectedly
 - Test with visual QA after text changes

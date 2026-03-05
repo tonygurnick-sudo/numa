@@ -1,12 +1,24 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
+import { Button, Modal } from 'react-bootstrap';
 
 import { useAuth } from '../../Providers/AuthProvider';
 import { useNumaApp } from '../../Providers/NumaAppContext';
-import { downloadFileFromS3, downloadFileWithSignedUrl, openFileWithSignedUrl } from '../../utils/s3Utils';
+import {
+  downloadFileFromS3,
+  downloadFileWithSignedUrl,
+  openFileWithSignedUrl,
+  fetchFileFromS3,
+} from '../../utils/s3Utils';
 import { MarkdownContent } from './MarkdownContent';
 import { ResultActions } from '../ResultActions';
 import { DataAnalysisMarkdown } from './DataAnalysisMarkdown';
+import { CreateShareModal } from '../Files/CreateShareModal';
+import { Form } from 'react-bootstrap';
+import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+import { withPRM } from '../../utils/prmUtils';
+import { buildS3Key, type FileScope } from '../../Services/filesService';
 
 // Shared tab navigation component for both JSON and CSV renderers
 const TabNavigation = ({ items, activeIndex, setActiveIndex, getLabel, alwaysShow = false }) => {
@@ -531,7 +543,7 @@ const CsvRenderer = ({ data }) => {
                       .map(
                         (row) => `
                       <tr>${row.map((cell) => `<td style="padding: 8px;">${cell}</td>`).join('')}</tr>
-                    `,
+                    `
                       )
                       .join('')}
                   </tbody>
@@ -591,69 +603,225 @@ const isCSVContent = (content, contentType) => {
   return false;
 };
 
-// Shared component for file download/open buttons in ResultsRenderer
+// Shared component for file download/open/save/share buttons in ResultsRenderer
 const FileDownloadButtons = ({ output, getCredentials, loadingActions, setLoadingActions }) => {
   const { t } = useTranslation('common');
+  const [showSaveModal, setShowSaveModal] = useState(false);
+  const [showShareModal, setShowShareModal] = useState(false);
+  const [selectedFolder, setSelectedFolder] = useState('/');
+  const [savingToFiles, setSavingToFiles] = useState(false);
+
+  // Extract filename from output
+  const filename = output.title || output.data.key?.split('/').pop() || 'artifact.file';
+
+  const handleSaveToFiles = async () => {
+    if (!selectedFolder) return;
+
+    setSavingToFiles(true);
+    try {
+      // First download the file content from workspace output
+      const region = window.sessionStorage.getItem('REGION') || 'us-east-1';
+      const credentials = await getCredentials();
+      if (!credentials) throw new Error('No credentials');
+
+      // Download the file content from the workspace output bucket
+      const blob = await fetchFileFromS3(output.data.key, output.data.bucket, region, getCredentials);
+      const file = new File([blob], filename, { type: blob.type || 'application/octet-stream' });
+
+      // Now upload to DATA_BUCKET in the user's Files system
+      const dataBucket = window.sessionStorage.getItem('DATA_BUCKET');
+      type WindowWithUser = typeof window & { user?: { decoded_tokens?: { idToken?: { sub?: string } } } };
+      const userSub = (window as WindowWithUser).user?.decoded_tokens?.idToken?.sub;
+
+      if (!dataBucket) {
+        throw new Error('DATA_BUCKET not configured');
+      }
+      if (!userSub) {
+        throw new Error('User not authenticated');
+      }
+
+      // Build the S3 key for the user's files
+      const scope: FileScope = { type: 'my' };
+      const s3Key = buildS3Key(scope, filename, selectedFolder, userSub);
+
+      // Create S3 client and upload
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const s3Client = withPRM(S3Client as any, { region, credentials });
+
+      const command = new PutObjectCommand({
+        Bucket: dataBucket,
+        Key: s3Key,
+        ContentType: file.type || 'application/octet-stream',
+      });
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const presignedUrl = await getSignedUrl(s3Client as any, command, { expiresIn: 3600 });
+
+      await new Promise<void>((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.addEventListener('load', () => {
+          if (xhr.status >= 200 && xhr.status < 300) resolve();
+          else reject(new Error(`Upload failed: ${xhr.status}`));
+        });
+        xhr.addEventListener('error', () => reject(new Error('Upload failed')));
+        xhr.open('PUT', presignedUrl);
+        xhr.setRequestHeader('Content-Type', file.type || 'application/octet-stream');
+        xhr.send(file);
+      });
+
+      setShowSaveModal(false);
+      // TODO: Show success toast
+      console.log('Successfully saved file to Files system:', selectedFolder, filename);
+    } catch (error) {
+      console.error('Failed to save file:', error);
+      // TODO: Show error toast
+    } finally {
+      setSavingToFiles(false);
+    }
+  };
+
+  const handleShare = () => {
+    setShowShareModal(true);
+  };
+
   return (
-    <div className="btn-group">
-      <button
-        className="btn btn-primary"
-        style={{
-          backgroundColor: 'var(--color-primary)',
-          borderColor: 'var(--color-primary)',
-          color: 'white',
-        }}
-        onClick={() => {
-          setLoadingActions((prev) => ({ ...prev, [`${output.data.key}-download`]: true }));
-          const region = window.sessionStorage.getItem('REGION');
-          downloadFileWithSignedUrl(
-            output.data.key,
-            output.data.bucket,
-            region,
-            getCredentials,
-            output.title || null,
-          ).finally(() => {
-            setLoadingActions((prev) => ({ ...prev, [`${output.data.key}-download`]: false }));
-          });
-        }}
-        disabled={loadingActions[`${output.data.key}-download`] || loadingActions[`${output.data.key}-open`]}
-      >
-        {loadingActions[`${output.data.key}-download`] ? (
-          <>
-            <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
-            {t('resultRenderer.actions.downloading')}
-          </>
-        ) : (
-          <>
-            <i className="bi bi-download me-1"></i>
-            {t('resultRenderer.actions.downloadLabel', { title: output.title || t('resultRenderer.actions.file') })}
-          </>
-        )}
-      </button>
-      <button
-        className="btn btn-outline-secondary"
-        onClick={() => {
-          setLoadingActions((prev) => ({ ...prev, [`${output.data.key}-open`]: true }));
-          const region = window.sessionStorage.getItem('REGION');
-          openFileWithSignedUrl(output.data.key, output.data.bucket, region, getCredentials).finally(() => {
-            setLoadingActions((prev) => ({ ...prev, [`${output.data.key}-open`]: false }));
-          });
-        }}
-        disabled={loadingActions[`${output.data.key}-download`] || loadingActions[`${output.data.key}-open`]}
-      >
-        {loadingActions[`${output.data.key}-open`] ? (
-          <>
-            <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
-            {t('resultRenderer.actions.opening')}
-          </>
-        ) : (
-          <>
-            <i className="bi bi-box-arrow-up-right me-1"></i>
-            {t('resultRenderer.actions.openInNewTab')}
-          </>
-        )}
-      </button>
-    </div>
+    <>
+      <div className="btn-group">
+        <button
+          className="btn btn-primary"
+          style={{
+            backgroundColor: 'var(--color-primary)',
+            borderColor: 'var(--color-primary)',
+            color: 'white',
+          }}
+          onClick={() => {
+            setLoadingActions((prev) => ({ ...prev, [`${output.data.key}-download`]: true }));
+            const region = window.sessionStorage.getItem('REGION');
+            downloadFileWithSignedUrl(
+              output.data.key,
+              output.data.bucket,
+              region,
+              getCredentials,
+              output.title || null
+            ).finally(() => {
+              setLoadingActions((prev) => ({ ...prev, [`${output.data.key}-download`]: false }));
+            });
+          }}
+          disabled={loadingActions[`${output.data.key}-download`] || loadingActions[`${output.data.key}-open`]}
+        >
+          {loadingActions[`${output.data.key}-download`] ? (
+            <>
+              <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+              {t('resultRenderer.actions.downloading')}
+            </>
+          ) : (
+            <>
+              <i className="bi bi-download me-1"></i>
+              {t('resultRenderer.actions.downloadLabel', { title: output.title || t('resultRenderer.actions.file') })}
+            </>
+          )}
+        </button>
+
+        <button
+          className="btn btn-outline-success"
+          onClick={() => setShowSaveModal(true)}
+          disabled={loadingActions[`${output.data.key}-download`] || loadingActions[`${output.data.key}-open`]}
+          title={t('resultRenderer.actions.saveToFiles')}
+        >
+          <i className="bi bi-folder-plus me-1"></i>
+          {t('resultRenderer.actions.save')}
+        </button>
+
+        <button
+          className="btn btn-outline-info"
+          onClick={handleShare}
+          disabled={loadingActions[`${output.data.key}-download`] || loadingActions[`${output.data.key}-open`]}
+          title={t('resultRenderer.actions.shareFile')}
+        >
+          <i className="bi bi-share me-1"></i>
+          {t('resultRenderer.actions.share')}
+        </button>
+
+        <button
+          className="btn btn-outline-secondary"
+          onClick={() => {
+            setLoadingActions((prev) => ({ ...prev, [`${output.data.key}-open`]: true }));
+            const region = window.sessionStorage.getItem('REGION');
+            openFileWithSignedUrl(output.data.key, output.data.bucket, region, getCredentials).finally(() => {
+              setLoadingActions((prev) => ({ ...prev, [`${output.data.key}-open`]: false }));
+            });
+          }}
+          disabled={loadingActions[`${output.data.key}-download`] || loadingActions[`${output.data.key}-open`]}
+        >
+          {loadingActions[`${output.data.key}-open`] ? (
+            <>
+              <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+              {t('resultRenderer.actions.opening')}
+            </>
+          ) : (
+            <>
+              <i className="bi bi-box-arrow-up-right me-1"></i>
+              {t('resultRenderer.actions.openInNewTab')}
+            </>
+          )}
+        </button>
+      </div>
+
+      {/* Save to Files Modal */}
+      <Modal show={showSaveModal} onHide={() => setShowSaveModal(false)} size="lg">
+        <Modal.Header closeButton>
+          <Modal.Title>{t('resultRenderer.actions.saveToFilesTitle')}</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          <div className="mb-3">
+            <strong>{t('resultRenderer.actions.filename')}:</strong> {filename}
+          </div>
+          <div className="mb-3">
+            <Form.Label htmlFor="folder-path-input">{t('resultRenderer.actions.selectFolder')}:</Form.Label>
+            <Form.Control
+              id="folder-path-input"
+              type="text"
+              value={selectedFolder}
+              onChange={(e) => setSelectedFolder(e.target.value)}
+              placeholder={t('resultRenderer.actions.chooseFolderPlaceholder')}
+            />
+            <Form.Text className="text-muted">{t('resultRenderer.actions.folderPathHelp')}</Form.Text>
+          </div>
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="secondary" onClick={() => setShowSaveModal(false)} disabled={savingToFiles}>
+            {t('common.cancel')}
+          </Button>
+          <Button variant="primary" onClick={handleSaveToFiles} disabled={!selectedFolder || savingToFiles}>
+            {savingToFiles ? (
+              <>
+                <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                {t('resultRenderer.actions.saving')}
+              </>
+            ) : (
+              <>
+                <i className="bi bi-folder-plus me-1"></i>
+                {t('resultRenderer.actions.saveToFiles')}
+              </>
+            )}
+          </Button>
+        </Modal.Footer>
+      </Modal>
+
+      {/* Share Modal - using CreateShareModal with pre-selected file */}
+      {showShareModal && (
+        <CreateShareModal
+          show={showShareModal}
+          onHide={() => setShowShareModal(false)}
+          onCreated={() => setShowShareModal(false)}
+          preSelectedFile={{
+            path: `/${filename}`,
+            name: filename,
+            scope: { type: 'my' },
+          }}
+        />
+      )}
+    </>
   );
 };
 

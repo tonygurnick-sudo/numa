@@ -11,15 +11,15 @@ Create and configure agent types for the `numa-workspace-agent` service. Agent t
 
 ## Key Files
 
-| File | Purpose |
-|------|---------|
-| `services/numa-workspace-agent/numa_workspace_agent/agent_types/base.py` | `AgentTypeConfig` dataclass — all config fields |
-| `services/numa-workspace-agent/numa_workspace_agent/agent_types/registry.py` | Registration and lookup functions |
-| `services/numa-workspace-agent/numa_workspace_agent/agent_types/__init__.py` | Side-effect imports that register all types |
-| `services/numa-workspace-agent/numa_workspace_agent/prompts.py` | System prompt sections and builders |
-| `services/numa-workspace-agent/numa_workspace_agent/sdk_config.py` | Bridges config to Claude SDK invocation |
-| `services/numa-workspace-agent/tests/test_agent_types.py` | Tests for agent type configs |
-| `services/numa-workspace-agent/tests/test_type_resolution.py` | Tests for config -> SDK options flow |
+| File                                                                         | Purpose                                         |
+| ---------------------------------------------------------------------------- | ----------------------------------------------- |
+| `services/numa-workspace-agent/numa_workspace_agent/agent_types/base.py`     | `AgentTypeConfig` dataclass — all config fields |
+| `services/numa-workspace-agent/numa_workspace_agent/agent_types/registry.py` | Registration and lookup functions               |
+| `services/numa-workspace-agent/numa_workspace_agent/agent_types/__init__.py` | Side-effect imports that register all types     |
+| `services/numa-workspace-agent/numa_workspace_agent/prompts.py`              | System prompt sections and builders             |
+| `services/numa-workspace-agent/numa_workspace_agent/sdk_config.py`           | Bridges config to Claude SDK invocation         |
+| `services/numa-workspace-agent/tests/test_agent_types.py`                    | Tests for agent type configs                    |
+| `services/numa-workspace-agent/tests/test_type_resolution.py`                | Tests for config -> SDK options flow            |
 
 ## AgentTypeConfig Fields Reference
 
@@ -79,27 +79,33 @@ class AgentTypeConfig:
 
 ## Response Modes
 
-| Mode | Behaviour | Use Case |
-|------|-----------|----------|
-| `stream` | SSE/NDJSON streaming to frontend | Interactive chat |
-| `sync` | Caller waits for full response | Structured output, pipeline steps |
-| `fire-and-forget` | Accept request, return immediately, write results to S3/DynamoDB | Background processing |
+| Mode              | Behaviour                                                        | Use Case                          |
+| ----------------- | ---------------------------------------------------------------- | --------------------------------- |
+| `stream`          | SSE/NDJSON streaming to frontend                                 | Interactive chat                  |
+| `sync`            | Caller waits for full response                                   | Structured output, pipeline steps |
+| `fire-and-forget` | Accept request, return immediately, write results to S3/DynamoDB | Background processing             |
 
 ## Three Tool Layers
 
 ### Layer 1: Claude SDK Tools
+
 Built-in capabilities controlled by `tools` and `allowed_tools`:
+
 - File ops: `Read`, `Write`, `Edit`, `Glob`, `Grep`
 - Shell: `Bash`, `KillShell` (with granular command allow-list like `Bash(python:*)`)
 - Tasks: `Task`, `TaskOutput`, `TodoWrite`, `Skill`
 
 ### Layer 2: MCP Tools
+
 Server-side endpoints:
+
 - `enable_scripts_mcp=True` enables `mcp__scripts__execute_script` (sandboxed code execution)
 - `enable_integrations_mcp=True` enables `mcp__integrations__run_action`, `configure_props`, `proxy_request`
 
 ### Layer 3: Numa CLI Tools
+
 Python scripts copied to `/workdir/tools/` at startup. Available tool names:
+
 - `knowledge_search` -> `knowledge_base.py`
 - `web_search` -> `web_search.py`
 - `agents` -> `numa-agents.py`
@@ -111,6 +117,7 @@ Python scripts copied to `/workdir/tools/` at startup. Available tool names:
 Two mechanisms, from simple to full control:
 
 ### identity_override (simple)
+
 Replaces just the `IDENTITY_AND_ROLE` section while keeping all other sections (workspace, tools, style, etc.):
 
 ```python
@@ -121,9 +128,11 @@ AgentTypeConfig(
 ```
 
 ### system_prompt_builder (full control)
+
 A callable that returns the complete system prompt. Import individual sections from `prompts.py` and compose your own:
 
 Available sections to import from `prompts.py`:
+
 - `IDENTITY_AND_ROLE` — "You are Numa" identity block
 - `WORKSPACE_ENVIRONMENT` — /workdir structure, security restrictions
 - `STYLE_AND_COMMUNICATION` — Tone, emojis, markdown, document generation
@@ -147,6 +156,7 @@ def build_my_prompt(**kwargs):
 **Note:** `ENVIRONMENT_AND_META` contains `{working_directory}`, `{platform}`, and `{today_date}` format placeholders. If you compose sections manually, you must call `.format()` on the result. Custom identity text should NOT contain `{curly_braces}` unless intended as format variables.
 
 ### Combining both
+
 Use `identity_override` to swap the identity, and `system_prompt_builder` to append extra instructions:
 
 ```python
@@ -237,7 +247,7 @@ register_agent_type(QUOTING_AGENT)
 
 Like `document-summariser` — caller waits for a structured JSON result. No streaming.
 
-```python
+````python
 """
 Invoice Parser — extracts structured data from uploaded invoices.
 """
@@ -264,17 +274,18 @@ You are an invoice parser. Read uploaded invoice files and extract structured da
     "total": 115.00,
     "currency": "NZD"
 }
-```
+````
+
 """
 
 def build_parser_prompt(**kwargs):
-    base = build_workspace_system_prompt(**kwargs)
-    return base + PARSER_ADDENDUM
+base = build_workspace_system_prompt(**kwargs)
+return base + PARSER_ADDENDUM
 
 INVOICE_PARSER = AgentTypeConfig(
-    type_id="invoice-parser",
-    display_name="Invoice Parser",
-    response_mode="sync",
+type_id="invoice-parser",
+display_name="Invoice Parser",
+response_mode="sync",
 
     system_prompt_builder=build_parser_prompt,
 
@@ -296,10 +307,12 @@ INVOICE_PARSER = AgentTypeConfig(
 
     max_turns=10,
     max_thinking_tokens=5000,
+
 )
 
 register_agent_type(INVOICE_PARSER)
-```
+
+````
 
 ### Example 3: Pipeline Agent (Chained Steps)
 
@@ -400,7 +413,7 @@ REPORT_GENERATOR = AgentTypeConfig(
     max_thinking_tokens=1000,
 )
 register_agent_type(REPORT_GENERATOR)
-```
+````
 
 ### Example 4: Fire-and-Forget Agent (Background Processing)
 
@@ -538,12 +551,12 @@ def test_identity_override_applied(self):
 
 ## Registered Agent Types
 
-| Type ID | Mode | Identity Override | Custom Prompt | Pipeline | Purpose |
-|---------|------|-------------------|---------------|----------|---------|
-| `numa-chat` | stream | No | No | No | Default Numa chat with full tool access |
-| `research-agent` | stream | No | No | No | Research-focused, no integrations |
-| `document-summariser` | sync | No | Yes | No | Reads docs, writes structured JSON |
-| `tony-comedian` | stream | Yes | Yes | No | Test/demo agent with custom persona |
-| `profile-creator` | sync | No | No | Yes (2 steps) | Orchestrates researcher + validator |
-| `profile-researcher` | sync | No | Yes | No | Pipeline step 1: research + draft |
-| `profile-validator` | sync | No | Yes | No | Pipeline step 2: validate + finalize |
+| Type ID               | Mode   | Identity Override | Custom Prompt | Pipeline      | Purpose                                 |
+| --------------------- | ------ | ----------------- | ------------- | ------------- | --------------------------------------- |
+| `numa-chat`           | stream | No                | No            | No            | Default Numa chat with full tool access |
+| `research-agent`      | stream | No                | No            | No            | Research-focused, no integrations       |
+| `document-summariser` | sync   | No                | Yes           | No            | Reads docs, writes structured JSON      |
+| `tony-comedian`       | stream | Yes               | Yes           | No            | Test/demo agent with custom persona     |
+| `profile-creator`     | sync   | No                | No            | Yes (2 steps) | Orchestrates researcher + validator     |
+| `profile-researcher`  | sync   | No                | Yes           | No            | Pipeline step 1: research + draft       |
+| `profile-validator`   | sync   | No                | Yes           | No            | Pipeline step 2: validate + finalize    |

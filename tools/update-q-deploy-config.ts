@@ -79,7 +79,7 @@ async function analyzeClients(): Promise<UpdateSummary[]> {
       const msConnectors = connectors.length > 0 ? connectors.join(', ') : 'None';
       console.log(`   Q-Required Connectors: ${msConnectors}`);
       console.log(
-        `   Current Q Resources: ${currentProvisionQResources ?? 'undefined'} → New: ${newProvisionQResources}`,
+        `   Current Q Resources: ${currentProvisionQResources ?? 'undefined'} → New: ${newProvisionQResources}`
       );
       console.log(`   Status: ${status}\n`);
     } catch (error) {
@@ -140,7 +140,7 @@ async function updateClientConfig(clientName: string, dryRun: boolean = false): 
 
     console.log(`   📝 ${clientName}: Changes to apply:`);
     console.log(
-      `      provisionQResources: ${config.provisionQResources ?? 'undefined'} → ${newProvisionQResources ?? 'undefined'}`,
+      `      provisionQResources: ${config.provisionQResources ?? 'undefined'} → ${newProvisionQResources ?? 'undefined'}`
     );
 
     if (!dryRun) {
@@ -197,7 +197,7 @@ async function main(options: { apply?: boolean; clients?: string[] } = {}): Prom
     console.log(`   • ${summary.clientName}`);
     console.log(`     Q-Required Connectors: ${connectors}`);
     console.log(
-      `     Q Resources: ${summary.currentProvisionQResources ?? 'undefined'} → ${summary.newProvisionQResources}`,
+      `     Q Resources: ${summary.currentProvisionQResources ?? 'undefined'} → ${summary.newProvisionQResources}`
     );
   });
 

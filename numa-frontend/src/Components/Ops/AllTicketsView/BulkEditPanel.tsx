@@ -51,7 +51,7 @@ export function BulkEditPanel({
 
   const hasChanges = useMemo(
     () => stageId !== KEEP_AS_IS || assigneeId !== KEEP_AS_IS || priority !== KEEP_AS_IS || workUnitId !== KEEP_AS_IS,
-    [stageId, assigneeId, priority, workUnitId],
+    [stageId, assigneeId, priority, workUnitId]
   );
 
   const ticketIds = useMemo(() => selectedTickets.map((t) => t.id), [selectedTickets]);

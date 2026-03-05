@@ -24,11 +24,13 @@ A comprehensive Python wrapper for the `db` CLI tool with YAML configuration man
 ## Features
 
 ✨ **Primary Features** (Main Focus):
+
 - 🤖 **AI Natural Language Queries** (`--ask`) - Ask questions in plain English
 - 🔬 **Agentic Investigations** (`--ask --auto`) - Multi-hop AI reasoning for complex analysis
 - 📊 **CSV Data Analysis** - Query local files, URLs, and Google Sheets with SQL
 
 📦 **Additional Features**:
+
 - 🐘 **PostgreSQL Support** - Direct database queries with datasource management
 - ⚙️ **YAML Configuration** - Manage datasources and engines via `config.engines.yaml`
 - 🚀 **Multiple Engines** - SQLite (simple), DuckDB (fast), AWS Athena (serverless)
@@ -51,6 +53,7 @@ A comprehensive Python wrapper for the `db` CLI tool with YAML configuration man
 ### Optional Dependencies
 
 For different features:
+
 - **PostgreSQL**: `psql` command-line tool
 - **CSV (SQLite)**: `sqlite3` (usually pre-installed)
 - **CSV (DuckDB)**: `duckdb` binary
@@ -93,7 +96,7 @@ ai:
 datasources:
   production:
     type: postgres
-    description: "Production database"
+    description: 'Production database'
     connection:
       host_env: DB_HOST
       port_env: DB_PORT
@@ -103,7 +106,7 @@ datasources:
 
   staging:
     type: postgres
-    description: "Staging database"
+    description: 'Staging database'
     connection:
       host_env: STAGING_DB_HOST
       port_env: STAGING_DB_PORT
@@ -114,7 +117,7 @@ datasources:
 # Engines for ad-hoc queries
 engines:
   csv-sqlite:
-    description: "Query CSV files using SQLite"
+    description: 'Query CSV files using SQLite'
     # ... (defined in config.engines.yaml)
 ```
 
@@ -850,7 +853,7 @@ DB(
 
 #### Methods
 
-**`csv(csv_file, sql, engine="csv-sqlite", format="json", **kwargs)`**
+**`csv(csv_file, sql, engine="csv-sqlite", format="json", **kwargs)`\*\*
 
 Query CSV file (local, URL, or Google Sheets).
 
@@ -861,7 +864,7 @@ Query CSV file (local, URL, or Google Sheets).
   - `format`: "json" (default), "csv", or "table"
 - **Returns:** List of dicts (JSON) or string (CSV/table)
 
-**`ask(question, csv_file=None, datasource=None, engine="csv-sqlite", **kwargs)`**
+**`ask(question, csv_file=None, datasource=None, engine="csv-sqlite", **kwargs)`\*\*
 
 Natural language query - single-shot AI.
 
@@ -872,7 +875,7 @@ Natural language query - single-shot AI.
   - `engine`: Engine for CSV files
 - **Returns:** Natural language answer string
 
-**`investigate(question, csv_file=None, datasource=None, engine="csv-sqlite", **kwargs)`**
+**`investigate(question, csv_file=None, datasource=None, engine="csv-sqlite", **kwargs)`\*\*
 
 Agentic investigation - multi-hop AI reasoning.
 
@@ -883,7 +886,7 @@ Agentic investigation - multi-hop AI reasoning.
   - `engine`: Engine for CSV files
 - **Returns:** Dict with `{'answer': str, 'iterations': int, 'raw_output': str}`
 
-**`query(sql, datasource=None, format="json", **kwargs)`**
+**`query(sql, datasource=None, format="json", **kwargs)`\*\*
 
 Execute SQL against configured datasource.
 
@@ -893,11 +896,11 @@ Execute SQL against configured datasource.
   - `format`: Output format
 - **Returns:** List of dicts (JSON) or string
 
-**`s3(s3_path, sql, region="us-east-1", format="json", **kwargs)`**
+**`s3(s3_path, sql, region="us-east-1", format="json", **kwargs)`\*\*
 
 Query S3 CSV file (downloads then queries).
 
-**`athena(sql, database, output_location, region="us-east-1", **kwargs)`**
+**`athena(sql, database, output_location, region="us-east-1", **kwargs)`\*\*
 
 Query AWS Athena (serverless S3 SQL).
 
@@ -912,6 +915,7 @@ Config(config_path: Optional[str] = None)
 ```
 
 **Methods:**
+
 - `get_active_datasource()` → str
 - `set_active_datasource(name: str)`
 - `list_datasources()` → List[str]
@@ -1000,6 +1004,7 @@ except ConfigError as e:
 ### Performance Tips
 
 1. **Use DuckDB for large files (>10MB)**:
+
    ```python
    db.csv("./large.csv", "SELECT * FROM read_csv_auto('./large.csv')", engine="csv-duckdb")
    ```
@@ -1007,6 +1012,7 @@ except ConfigError as e:
 2. **URL caching is automatic** - queries within 1 hour use cache
 
 3. **Limit result sets during development**:
+
    ```python
    db.query("SELECT * FROM users LIMIT 100")
    ```
@@ -1038,6 +1044,7 @@ with open('investigation_results.txt', 'w') as f:
 ## Examples
 
 See `TEST_DATASETS.md` for more datasets and examples:
+
 - Air travel analysis
 - COVID-19 trends
 - Weather patterns
@@ -1050,21 +1057,26 @@ See `TEST_DATASETS.md` for more datasets and examples:
 ## Troubleshooting
 
 **"db executable not found"**
+
 - Ensure `db` script is in parent directory
 - Or: `DB(db_path="/path/to/db")`
 
 **"ANTHROPIC_API_KEY not set"**
+
 - Set in `.env` or: `DB(anthropic_api_key="sk-ant-...")`
 
 **"Datasource not found"**
+
 - Check `config.engines.yaml` has the datasource defined
 - Verify active_datasource setting
 
 **"Cannot connect to PostgreSQL"**
-- Verify DB_* environment variables in `.env`
+
+- Verify DB\_\* environment variables in `.env`
 - Test with CLI: `./db "SELECT 1"`
 
 **CSV file not found**
+
 - Use absolute paths or paths relative to execution directory
 
 ---

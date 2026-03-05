@@ -469,7 +469,7 @@ export function SupplierMirrorView(): React.JSX.Element {
       const supplier = filteredSuppliers.find((s) => s.id === active.id);
       if (supplier) setActiveSupplier(supplier);
     },
-    [filteredSuppliers],
+    [filteredSuppliers]
   );
 
   const handleDragOver = useCallback(
@@ -513,7 +513,7 @@ export function SupplierMirrorView(): React.JSX.Element {
         });
       });
     },
-    [suppliers],
+    [suppliers]
   );
 
   const handleDragEnd = useCallback(
@@ -564,7 +564,7 @@ export function SupplierMirrorView(): React.JSX.Element {
 
       // Optimistic update
       setSuppliers((prev) =>
-        prev.map((s) => (s.id === supplier.id ? { ...s, lifecycleStage: newStageId!, order: newOrder } : s)),
+        prev.map((s) => (s.id === supplier.id ? { ...s, lifecycleStage: newStageId!, order: newOrder } : s))
       );
 
       try {
@@ -574,7 +574,7 @@ export function SupplierMirrorView(): React.JSX.Element {
         await loadSuppliers();
       }
     },
-    [suppliers, filteredSuppliers, numaPost, loadSuppliers],
+    [suppliers, filteredSuppliers, numaPost, loadSuppliers]
   );
 
   // ── Detail Modal ───────────────────────────────────────────────────────

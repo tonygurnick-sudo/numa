@@ -53,7 +53,7 @@ export class QBusinessChatControlConfigurer extends Construct {
       'lambdas',
       'node',
       'q-business-chat-control-configurer',
-      'lambda_function.zip',
+      'lambda_function.zip'
     );
     const func = new LambdaFunction(this, 'function', {
       functionName: Fn.substr('q-business-chat-control-configurer-' + props.applicationId, 0, 64),

@@ -146,7 +146,7 @@ export class PolicyDrafter extends BaseNumaApp {
         ExtractContent: this.addExtractContentTaskWithArn(
           props.sharedExtractContentLambdaArn!,
           '$.example_policy_key',
-          'PolicyDrafter',
+          'PolicyDrafter'
         ),
         PolicyDrafter: this.addLambdaTask(
           policyDrafterLambda.arn,
@@ -163,7 +163,7 @@ export class PolicyDrafter extends BaseNumaApp {
           'WriteSuccessStatus',
           {
             OutputPath: '$.Payload',
-          },
+          }
         ),
         WriteFailureStatus: this.writeFailureStatus(),
         WriteSuccessStatus: this.writeSuccessStatus(),

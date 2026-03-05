@@ -16,7 +16,7 @@ async function sign(
   method,
   url: URL,
   service: string,
-  body?: string,
+  body?: string
 ): Promise<Request> {
   const req = new HttpRequest({
     method,
@@ -53,7 +53,7 @@ interface Subscription {
 
 async function listSubscriptions(
   awsClientConfig: AWSClientConfig,
-  applicationId: string,
+  applicationId: string
 ): Promise<Array<Subscription>> {
   const baseUrl = `https://qbusiness.us-east-1.api.aws/applications/${applicationId}/subscriptions?maxResults=100`;
   const subs: Subscription[] = [];
@@ -70,13 +70,13 @@ async function listSubscriptions(
 async function setSubscription(
   awsClientConfig: AWSClientConfig,
   applicationId: string,
-  subscriptionId: string,
+  subscriptionId: string
 ): Promise<boolean> {
   const url = new URL(
-    `https://qbusiness.${awsClientConfig.region}.api.aws/applications/${applicationId}/subscriptions/${subscriptionId}`,
+    `https://qbusiness.${awsClientConfig.region}.api.aws/applications/${applicationId}/subscriptions/${subscriptionId}`
   );
   const res = await fetch(
-    await sign(awsClientConfig, 'PUT', url, 'qbusiness', JSON.stringify({ type: desiredSubscription })),
+    await sign(awsClientConfig, 'PUT', url, 'qbusiness', JSON.stringify({ type: desiredSubscription }))
   );
   return res.status == 200;
 }
@@ -84,11 +84,11 @@ async function setSubscription(
 async function deleteSubscription(
   awsClientConfig: AWSClientConfig,
   applicationId: string,
-  subscriptionId: string,
+  subscriptionId: string
 ): Promise<boolean> {
   console.log('deleting...');
   const url = new URL(
-    `https://qbusiness.us-east-1.api.aws/applications/${applicationId}/subscriptions/${subscriptionId}`,
+    `https://qbusiness.us-east-1.api.aws/applications/${applicationId}/subscriptions/${subscriptionId}`
   );
   const res = await fetch(await sign(awsClientConfig, 'DELETE', url, 'qbusiness', 'us-east-1'));
   return res.status == 200;
@@ -97,7 +97,7 @@ async function deleteSubscription(
 async function getCognitoUserEmail(
   client: CognitoIdentityProviderClient,
   userPool: string,
-  userArn: string,
+  userArn: string
 ): Promise<string | false> {
   const req = new AdminGetUserCommand({
     UserPoolId: userPool,

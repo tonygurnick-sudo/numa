@@ -70,15 +70,18 @@ Numa supports two storage patterns for app runs, controlled by the `enableJobs` 
 **Status:** Legacy pattern, maintained for backwards compatibility only.
 
 **When to use:**
+
 - ⚠️ **NOT recommended for new apps** - use DynamoDB pattern instead
 - Legacy apps that haven't been migrated yet (Document Summariser, Policy Builder, etc.)
 
 **Storage locations:**
+
 - **Status**: `s3://{bucket}/{app-id}/{user-id}/{job-id}/status.json`
 - **Outputs**: `s3://{bucket}/{app-id}/{user-id}/{job-id}/outputs/`
 - **Artifacts**: `s3://{bucket}/{app-id}/{user-id}/{job-id}/`
 
 **Status file structure:**
+
 ```json
 {
   "status": "PROCESSING | SUCCESS | FAILURE",
@@ -91,6 +94,7 @@ Numa supports two storage patterns for app runs, controlled by the `enableJobs` 
 ```
 
 **Characteristics:**
+
 - ✅ Simple, no DynamoDB table needed
 - ✅ Status persists indefinitely in S3
 - ❌ No job history UI
@@ -105,17 +109,20 @@ Numa supports two storage patterns for app runs, controlled by the `enableJobs` 
 **Status:** ✅ **Current standard - use this for all new apps.**
 
 **When to use:**
+
 - ✅ **All new apps should use this pattern**
 - Apps with job history requirements
 - Apps needing user-scoped job queries
 - Apps using event streaming
 
 **Storage locations:**
+
 - **Job metadata**: DynamoDB `{client}-{app-id}-recent-jobs` table
 - **Outputs**: `s3://{bucket}/{app-id}/{user-id}/{job-id}/outputs/`
 - **Artifacts**: `s3://{bucket}/{app-id}/{user-id}/{job-id}/`
 
 **DynamoDB record structure:**
+
 ```typescript
 {
   jobId: string;              // Primary key
@@ -142,11 +149,13 @@ Numa supports two storage patterns for app runs, controlled by the `enableJobs` 
 ```
 
 **DynamoDB indexes:**
+
 - **Primary key**: `jobId`
 - **GSI: date-time-index**: Partition key = `dateTime`, for chronological queries
 - **GSI: user-date-index**: Partition key = `userId`, Range key = `dateTime`, for user-scoped queries
 
 **Characteristics:**
+
 - ✅ Fast status checks (DynamoDB GetItem ~10ms)
 - ✅ Job history UI with user filtering
 - ✅ Queryable metadata (date range, user, status)
@@ -160,6 +169,7 @@ Numa supports two storage patterns for app runs, controlled by the `enableJobs` 
 ### 1. Start Phase
 
 **Frontend initiates:**
+
 ```typescript
 // User clicks "Run" button
 const response = await numaPost(`/api/${appId}/main`, {
@@ -167,12 +177,13 @@ const response = await numaPost(`/api/${appId}/main`, {
     prompt: userPrompt,
     uploaded_files: s3Keys,
     // ... app-specific inputs
-  }
+  },
 });
 const { job_id } = response;
 ```
 
 **step-function-start Lambda:**
+
 ```python
 def handler(event: APIGatewayProxyEvent, context: LambdaContext):
     app_id, job_id, payload = helpers.get_api_gateway_parameters(event)
@@ -194,6 +205,7 @@ def handler(event: APIGatewayProxyEvent, context: LambdaContext):
 ```
 
 **Step Function begins:**
+
 ```json
 {
   "StartAt": "WriteProcessingStatus",
@@ -221,12 +233,14 @@ def handler(event: APIGatewayProxyEvent, context: LambdaContext):
 ### 2. Processing Phase
 
 During processing, application Lambdas:
+
 1. **Execute business logic** (analysis, generation, extraction)
 2. **Optionally emit events** for real-time progress updates
 3. **Write outputs to S3** under `{app-id}/{user-id}/{job-id}/outputs/`
 4. **Write artifacts to S3** (trace files, session data, intermediate results)
 
 **Event streaming (optional):**
+
 ```python
 # In application Lambda
 helpers.append_event(
@@ -244,6 +258,7 @@ helpers.append_event(
 ### 3. Completion Phase
 
 **Step Function final state (Success):**
+
 ```json
 {
   "WriteSuccessStatus": {
@@ -252,8 +267,8 @@ helpers.append_event(
     "Parameters": {
       "UpdateExpression": "SET #status = :status, #results = :results, ...",
       "ExpressionAttributeValues": {
-        ":status": {"S": "SUCCESS"},
-        ":results": {"S.$": "States.JsonToString($.results)"}
+        ":status": { "S": "SUCCESS" },
+        ":results": { "S.$": "States.JsonToString($.results)" }
       }
     },
     "Next": "Success"
@@ -262,6 +277,7 @@ helpers.append_event(
 ```
 
 **Failure:**
+
 ```json
 {
   "WriteFailureStatus": {
@@ -270,8 +286,8 @@ helpers.append_event(
     "Parameters": {
       "UpdateExpression": "SET #status = :status, #message = :message, ...",
       "ExpressionAttributeValues": {
-        ":status": {"S": "FAILURE"},
-        ":message": {"S.$": "States.Format('{}: {}', $.Error, $.Cause)"}
+        ":status": { "S": "FAILURE" },
+        ":message": { "S.$": "States.Format('{}: {}', $.Error, $.Cause)" }
       }
     },
     "Next": "Failure"
@@ -288,13 +304,14 @@ The Jobs system (enabled via `enableJobs: true`) provides a complete job lifecyc
 ### Infrastructure Setup
 
 **In app construct:**
+
 ```typescript
 export class DataAnalysis extends BaseNumaApp {
   constructor(scope: Construct, name: string, props: BaseNumaAppProps) {
     super(scope, name, {
       ...props,
       appId: 'data-analysis',
-      enableJobs: true  // ← Enables DynamoDB jobs table
+      enableJobs: true, // ← Enables DynamoDB jobs table
     });
 
     // Jobs table is automatically created: {client}-data-analysis-recent-jobs
@@ -304,6 +321,7 @@ export class DataAnalysis extends BaseNumaApp {
 ```
 
 **What gets created:**
+
 1. **DynamoDB table** with GSIs for querying
 2. **Four Lambda endpoints:**
    - `POST /jobs` - Create job (createJob)
@@ -315,22 +333,25 @@ export class DataAnalysis extends BaseNumaApp {
 ### API Operations
 
 #### Create Job
+
 ```typescript
 const jobResponse = await jobsApi.createJob(numaAppData, taskInputs, runName);
 // Returns: { jobId: "uuid", status: "PROCESSING", ... }
 ```
 
 #### List Jobs
+
 ```typescript
 const { items, nextToken } = await jobsApi.getJobsByAppId(appId, {
   userId: currentUserId,
   limit: 20,
   nextToken: previousToken,
-  sortOrder: 'desc'  // Newest first
+  sortOrder: 'desc', // Newest first
 });
 ```
 
 #### Get Job Status
+
 ```typescript
 const job = await jobsApi.getJobById(appId, jobId);
 // Returns full job object with events, results, status
@@ -368,7 +389,7 @@ const pollJobStatus = async ({ jobId, pollInterval = 10000, maxPollingTime = 180
     }
 
     // 5. Wait before next poll
-    await new Promise(resolve => setTimeout(resolve, pollInterval));
+    await new Promise((resolve) => setTimeout(resolve, pollInterval));
   }
 };
 ```
@@ -391,6 +412,7 @@ def handler(event, context):
 ```
 
 **Characteristics:**
+
 - ⚡ Fast: ~10ms GetItem operation
 - ✅ Includes events array automatically
 
@@ -412,6 +434,7 @@ def handler(event: APIGatewayProxyEvent, context: LambdaContext):
 ```
 
 **Characteristics:**
+
 - 🐌 Slower: ~50-200ms S3 GetObject
 
 ---
@@ -423,6 +446,7 @@ Event streaming allows apps to emit progress updates in real-time during executi
 ### Backend Implementation
 
 **Lambda emits events:**
+
 ```python
 def handler(event: Dict[str, Any], context: LambdaContext):
     use_dynamodb = bool(os.environ.get("DYNAMODB_TABLE"))
@@ -444,6 +468,7 @@ def handler(event: Dict[str, Any], context: LambdaContext):
 ```
 
 **Events stored in DynamoDB:**
+
 ```python
 table.update_item(
     Key={"jobId": job_id},
@@ -489,6 +514,7 @@ const EventStreamViewer: React.FC<{events: JobEvent[], isRunning: boolean}> = ({
 All routes are prefixed with `/api/{app-id}/`
 
 #### Start Execution
+
 - **Path:** `/main`
 - **Method:** `POST`
 - **Handler:** `/lambdas/python/step-function-start/lambda_function.py`
@@ -503,10 +529,11 @@ All routes are prefixed with `/api/{app-id}/`
   ```
 - **Response:**
   ```json
-  {"job_id": "821ffa40-813e-457a-86cf-8364740f03fa"}
+  { "job_id": "821ffa40-813e-457a-86cf-8364740f03fa" }
   ```
 
 #### Get Status (S3-backed apps)
+
 - **Path:** `/status`
 - **Method:** `GET`
 - **Handler:** `/lambdas/python/step-function-status/lambda_function.py`
@@ -515,21 +542,25 @@ All routes are prefixed with `/api/{app-id}/`
 ### Jobs API Routes (DynamoDB-backed apps only)
 
 #### Create Job
+
 - **Path:** `/jobs`
 - **Method:** `POST`
 - **Handler:** `/lambdas/python/numa-recent-jobs/create_job.py`
 
 #### Get Job
+
 - **Path:** `/jobs/{jobId}`
 - **Method:** `GET`
 - **Handler:** `/lambdas/python/numa-recent-jobs/get_job.py`
 
 #### List Jobs
+
 - **Path:** `/jobs?userId={user-id}&limit=20&nextToken=...`
 - **Method:** `GET`
 - **Handler:** `/lambdas/python/numa-recent-jobs/list_jobs.py`
 
 #### Update Job
+
 - **Path:** `/jobs/{jobId}`
 - **Method:** `PUT`
 - **Handler:** `/lambdas/python/numa-recent-jobs/update_job.py`
@@ -541,22 +572,26 @@ All routes are prefixed with `/api/{app-id}/`
 ### 1. When to Enable Jobs
 
 ✅ **Use `enableJobs: true` for:**
+
 - ✅ **ALL NEW APPS (recommended)**
 - Apps with job history UI requirements
 - Apps needing user-scoped queries
 - Apps using event streaming
 
 ❌ **Use `enableJobs: false` only for:**
+
 - ⚠️ Legacy apps already in production (to avoid breaking changes)
 
 ### 2. Event Streaming Best Practices
 
 ✅ **Do:**
+
 - Emit meaningful progress updates (file names, stages, counts)
 - Use consistent event patterns across apps
 - Handle append_event failures gracefully
 
 ❌ **Don't:**
+
 - Emit every single line of output (too verbose)
 - Include sensitive data in event messages
 - Emit events in tight loops without throttling
@@ -564,11 +599,13 @@ All routes are prefixed with `/api/{app-id}/`
 ### 3. Status Polling Best Practices
 
 ✅ **Do:**
+
 - Use 10-second intervals (balance between UX and API costs)
 - Implement exponential backoff for errors
 - Show timeout warnings after 5-10 minutes
 
 ❌ **Don't:**
+
 - Poll faster than 5 seconds (wastes resources)
 - Poll indefinitely (implement max timeout)
 
@@ -579,11 +616,13 @@ All routes are prefixed with `/api/{app-id}/`
 ### Job Not Found (404)
 
 **Causes:**
+
 1. Job not created yet (race condition)
 2. Wrong storage pattern (using jobs API on S3-only app)
 3. User ID mismatch
 
 **Solutions:**
+
 - Add retry logic with exponential backoff
 - Verify `enableJobs: true` in app construct
 - Check Lambda logs for user ID extraction
@@ -591,11 +630,13 @@ All routes are prefixed with `/api/{app-id}/`
 ### Events Not Appearing
 
 **Causes:**
+
 1. Lambda not calling `helpers.append_event()`
 2. `DYNAMODB_TABLE` env var not set
 3. Lambda lacks DynamoDB UpdateItem permission
 
 **Solutions:**
+
 - Verify Lambda is calling `helpers.append_event()`
 - Check Lambda environment variables
 - Review IAM policies on Lambda execution role
@@ -603,11 +644,13 @@ All routes are prefixed with `/api/{app-id}/`
 ### Step Function Execution Failed
 
 **Causes:**
+
 1. Application Lambda threw unhandled exception
 2. Lambda timeout (15 min max)
 3. Step Function didn't write final status
 
 **Solutions:**
+
 - Check Step Function execution logs in AWS Console
 - Check application Lambda CloudWatch logs
 - Add retry and catch policies to Step Function states

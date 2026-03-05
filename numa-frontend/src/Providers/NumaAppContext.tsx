@@ -139,7 +139,7 @@ export const resolveReference = (key: string, taskResults: Record<string, unknow
           id: fileObj.randomId ?? fileObj.id ?? '',
           name: fileObj.fileName ?? fileObj.name ?? '',
           s3_key: fileObj.filePath ?? fileObj.s3_key ?? '',
-        }),
+        })
       );
     }
     console.warn(`Cannot navigate to subpath ${subPaths.join('/')} after file array transformation`);
@@ -167,7 +167,7 @@ export const resolveReference = (key: string, taskResults: Record<string, unknow
 export function createPayloadFromTemplate(
   template: unknown,
   inputValues: Record<string, unknown>,
-  taskResults: Record<string, unknown>,
+  taskResults: Record<string, unknown>
 ): unknown {
   if (typeof template === 'string') {
     if (template.match(/^@[\w-]+$/)) {

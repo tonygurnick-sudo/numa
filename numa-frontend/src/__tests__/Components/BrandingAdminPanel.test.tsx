@@ -154,7 +154,7 @@ describe('BrandingAdminPanel', () => {
         expect.any(Function),
         expect.objectContaining({
           createVersion: undefined,
-        }),
+        })
       );
     });
   });
@@ -189,7 +189,7 @@ describe('BrandingAdminPanel', () => {
         expect.any(Function),
         expect.objectContaining({
           createVersion: true,
-        }),
+        })
       );
     });
   });
@@ -222,7 +222,7 @@ describe('BrandingAdminPanel', () => {
       expect.objectContaining({
         variant: 'success',
         message: 'Branding settings saved successfully.',
-      }),
+      })
     );
   });
 
@@ -252,7 +252,7 @@ describe('BrandingAdminPanel', () => {
       expect.objectContaining({
         variant: 'error',
         title: 'Save failed',
-      }),
+      })
     );
   });
 
@@ -313,7 +313,7 @@ describe('BrandingAdminPanel', () => {
         variant: 'warning',
         title: 'Upload blocked',
         message: expect.stringContaining('Navigation Logo'),
-      }),
+      })
     );
   });
 
@@ -346,7 +346,7 @@ describe('BrandingAdminPanel', () => {
         expect.objectContaining({
           variant: 'success',
           title: 'Navigation Logo',
-        }),
+        })
       );
     });
 
@@ -384,7 +384,7 @@ describe('BrandingAdminPanel', () => {
         expect.objectContaining({
           variant: 'error',
           title: 'Navigation Logo',
-        }),
+        })
       );
     });
 
@@ -433,7 +433,7 @@ describe('BrandingAdminPanel', () => {
     expect(toastMocks.showToast).toHaveBeenCalledWith(
       expect.objectContaining({
         variant: 'success',
-      }),
+      })
     );
   });
 
@@ -455,7 +455,7 @@ describe('BrandingAdminPanel', () => {
     expect(toastMocks.showToast).toHaveBeenCalledWith(
       expect.objectContaining({
         variant: 'error',
-      }),
+      })
     );
   });
 });

@@ -76,7 +76,7 @@ export function UserTableView({
     count: number,
     expanded: boolean,
     section: 'admin' | 'standard',
-    variant: 'primary' | 'secondary',
+    variant: 'primary' | 'secondary'
   ) => (
     <tr className="section-header" style={{ cursor: 'pointer' }} onClick={() => onToggleSection(section)}>
       <td colSpan={5} className="py-2" style={{ backgroundColor: 'var(--color-bg-light, #f8f9fa)' }}>
@@ -128,7 +128,7 @@ export function UserTableView({
                 standardUsers.length,
                 sectionsExpanded.standard,
                 'standard',
-                'secondary',
+                'secondary'
               )}
               {sectionsExpanded.standard && standardUsers.length > 0 && standardUsers.map(renderUserRow)}
               {sectionsExpanded.standard && standardUsers.length === 0 && (

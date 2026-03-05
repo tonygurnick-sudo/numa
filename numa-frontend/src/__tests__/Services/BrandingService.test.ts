@@ -37,7 +37,7 @@ const createBrandingResponse = () =>
       headers: {
         'Content-Type': 'application/json',
       },
-    },
+    }
   );
 
 describe('BrandingService', () => {
@@ -109,7 +109,7 @@ describe('BrandingService', () => {
             Accept: 'application/json',
             Authorization: 'fakeAccessToken',
           }),
-        }),
+        })
       );
     });
 
@@ -134,12 +134,12 @@ describe('BrandingService', () => {
     fetchMock.mockResolvedValueOnce(
       new Response('', {
         status: 404,
-      }),
+      })
     );
     fetchMock.mockResolvedValueOnce(
       new Response('', {
         status: 404,
-      }),
+      })
     );
 
     const { brandingService } = await import('../../Services/BrandingService');

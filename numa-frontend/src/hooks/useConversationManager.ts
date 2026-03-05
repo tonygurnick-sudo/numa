@@ -176,7 +176,7 @@ export const useConversationManager = (options: UseConversationManagerOptions = 
       storageKey,
       workspaceStorageKey,
       isWorkspaceMode,
-    ],
+    ]
   );
 
   /**
@@ -249,7 +249,7 @@ export const useConversationManager = (options: UseConversationManagerOptions = 
           // Update sessionStorage with workspace status from first conversation
           sessionStorage.setItem(
             workspaceStorageKey,
-            metaItems[0].isWorkspaceConversation === false ? 'false' : 'true',
+            metaItems[0].isWorkspaceConversation === false ? 'false' : 'true'
           );
         }
       } catch (err) {

@@ -24,10 +24,12 @@ from numa_workspace_agent.hooks import (
 )
 from numa_workspace_agent.mcp_tools import (
     configure_props,
+    connectors,
     execute_script,
     numa_tool,
     proxy_request,
     run_action,
+    vault,
 )
 from numa_workspace_agent.prompts import build_workspace_system_prompt
 
@@ -264,6 +266,12 @@ ALLOWED_TOOLS = [
     "mcp__integrations__run_action",  # Execute integration actions (with approval)
     "mcp__integrations__configure_props",  # Get dynamic prop options (no approval)
     "mcp__integrations__proxy_request",  # Raw API proxy calls (with approval)
+    # Unified Numa platform tools (KB, web search, files, agents, memories)
+    "mcp__numa__numa_tool",
+    # External connectors (OAuth cloud storage, Synergy, generic HTTP)
+    "mcp__connectors__connectors",
+    # Secrets vault (user credentials with approval flow)
+    "mcp__vault__vault",
     # Bash with allowed commands
     "Bash(python:*)",
     "Bash(python3:*)",
@@ -335,6 +343,7 @@ def create_agent_options(
     agent_type_config: Optional[AgentTypeConfig] = None,
     user_profile: Optional[dict] = None,
     company_profile: Optional[str] = None,
+    feature_flags: Optional[dict[str, bool]] = None,
 ) -> ClaudeAgentOptions:
     """
     Create ClaudeAgentOptions for the Numa Workspace Agent.
@@ -364,6 +373,8 @@ def create_agent_options(
     # Agent types can supply a custom builder via system_prompt_builder; when
     # None we fall back to the default build_workspace_system_prompt().
     prompt_builder = type_config.system_prompt_builder or build_workspace_system_prompt
+    flags = feature_flags or {}
+
     system_prompt = prompt_builder(
         working_dir=str(LOCAL_ROOT),
         user_timezone=user_timezone,
@@ -377,6 +388,7 @@ def create_agent_options(
         identity_override=type_config.identity_override,
         user_profile=user_profile,
         company_profile=company_profile,
+        feature_flags=flags,
     )
 
     # Build environment variables for SDK subprocess
@@ -384,6 +396,10 @@ def create_agent_options(
     # access to the container metadata service from the parent environment
     # Get workspace tools Lambda name from parent environment
     workspace_tools_lambda = os.environ.get("WORKSPACE_TOOLS_LAMBDA_NAME", "")
+    # Get OAuth workspace tools Lambda name from parent environment
+    oauth_workspace_tools_lambda = os.environ.get(
+        "OAUTH_WORKSPACE_TOOLS_LAMBDA_NAME", ""
+    )
 
     env: dict[str, str] = {
         # SDK Bedrock configuration
@@ -400,6 +416,8 @@ def create_agent_options(
         "HOME": str(LOCAL_ROOT / ".system"),
         # Workspace tools Lambda for custom tools (KB queries, etc.)
         "WORKSPACE_TOOLS_LAMBDA_NAME": workspace_tools_lambda,
+        # OAuth workspace tools Lambda for OAuth cloud storage tools
+        "OAUTH_WORKSPACE_TOOLS_LAMBDA_NAME": oauth_workspace_tools_lambda,
     }
 
     # Pass allowed KBs (with id and name) to custom tools for security and attribution
@@ -471,6 +489,7 @@ def create_agent_options(
         "NUMA_LOCAL_AWS_ACCESS_KEY_ID",
         "NUMA_LOCAL_AWS_SECRET_ACCESS_KEY",
         "NUMA_LOCAL_AWS_SESSION_TOKEN",
+        "OAUTH_WORKSPACE_TOOLS_LAMBDA_NAME",
     ):
         if _key in env:
             os.environ[_key] = env[_key]
@@ -487,8 +506,8 @@ def create_agent_options(
         logger = structlog.get_logger()
         logger.warning("SDK CLI stderr", message=msg)
 
-    # Create MCP servers based on agent type config
-    mcp_servers: dict = {}
+    # Build MCP servers conditionally based on agent type config and feature flags
+    mcp_servers: dict[str, Any] = {}
 
     if type_config.enable_scripts_mcp:
         mcp_servers["scripts"] = create_sdk_mcp_server(
@@ -511,6 +530,24 @@ def create_agent_options(
             tools=[numa_tool],
         )
 
+    # Connectors: only register if OAuth integrations feature is enabled
+    if type_config.enable_connect_mcp and flags.get(
+        "OAUTH_INTEGRATIONS_ENABLED", False
+    ):
+        mcp_servers["connectors"] = create_sdk_mcp_server(
+            name="connectors",
+            version="1.0.0",
+            tools=[connectors],
+        )
+
+    # Vault: only register if secrets vault feature is enabled
+    if type_config.enable_vault_mcp and flags.get("SECRETS_VAULT_ENABLED", False):
+        mcp_servers["vault"] = create_sdk_mcp_server(
+            name="vault",
+            version="1.0.0",
+            tools=[vault],
+        )
+
     import structlog as _structlog
 
     _logger = _structlog.get_logger()
@@ -519,6 +556,8 @@ def create_agent_options(
         _name="SDK_ENV_TOOLS",
         phase="sdk",
         agent_type=type_config.type_id,
+        mcp_servers=list(mcp_servers.keys()),
+        feature_flags=flags,
         numa_enabled_tools=env.get("NUMA_ENABLED_TOOLS", "NOT SET"),
         numa_enabled_integrations=env.get("NUMA_ENABLED_INTEGRATIONS", "NOT SET"),
         numa_external_user_id=env.get("NUMA_EXTERNAL_USER_ID", "NOT SET"),
@@ -536,9 +575,9 @@ def create_agent_options(
         max_buffer_size=10 * 1024 * 1024,  # 10MB
         # Working directory
         cwd=str(LOCAL_ROOT),
-        # Tools from agent type config (always populated via dataclass defaults)
-        tools=type_config.tools,
-        # MCP servers (conditionally built based on type config)
+        # Tools - explicitly set which tools are available (reduces token overhead)
+        tools=TOOLS,
+        # MCP servers — conditionally built above based on feature flags
         mcp_servers=mcp_servers,
         # Permissions - use acceptEdits mode with Python hooks for security
         # acceptEdits auto-approves file operations; hooks handle deny logic

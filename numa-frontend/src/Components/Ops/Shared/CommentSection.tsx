@@ -105,7 +105,7 @@ export function CommentSection({ ticketId }: CommentSectionProps): React.JSX.Ele
     try {
       const response = await OpsService.listComments(numaGet, ticketId);
       const sorted = [...response.comments].sort(
-        (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+        (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
       );
       setComments(sorted);
     } catch (err) {

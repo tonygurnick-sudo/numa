@@ -67,7 +67,7 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
         new PutCommand({
           TableName: TABLE_NAME,
           Item: { setting: 'policy', mode, updatedAt: new Date().toISOString() },
-        }),
+        })
       );
       return { statusCode: 200, headers: HEADERS, body: JSON.stringify({ ok: true }) };
     }

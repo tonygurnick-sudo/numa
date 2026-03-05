@@ -52,7 +52,7 @@ async function generatePresignedUrl(): Promise<string> {
       ['s3', 'presign', `s3://${bucket}/${key}`, '--region', region, '--expires-in', '7200'],
       {
         encoding: 'utf8',
-      },
+      }
     );
 
     if (result.status === 0) {
@@ -66,7 +66,7 @@ async function generatePresignedUrl(): Promise<string> {
   } catch (err) {
     console.warn(
       'Could not access S3 artifact (will build from installer):',
-      err instanceof Error ? err.message : String(err),
+      err instanceof Error ? err.message : String(err)
     );
     return '';
   }

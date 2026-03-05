@@ -40,12 +40,16 @@ NUMA_CHAT = AgentTypeConfig(
         "KillShell",
         # MCP tools (our custom tools)
         "mcp__scripts__execute_script",  # Execute code without shell heredocs
-        # Numa platform tools (KB, web search, extract, convert)
+        # Numa platform tools (KB, web search, files, agents, memories)
         "mcp__numa__numa_tool",  # Unified Numa tool dispatcher
         # Pipedream integration tools
         "mcp__integrations__run_action",  # Execute integration actions (with approval)
         "mcp__integrations__configure_props",  # Get dynamic prop options (no approval)
         "mcp__integrations__proxy_request",  # Raw API proxy calls (with approval)
+        # External connectors (OAuth cloud storage, Synergy, generic HTTP)
+        "mcp__connectors__connectors",
+        # Secrets vault (user credentials with approval flow)
+        "mcp__vault__vault",
         # Bash with allowed commands
         "Bash(python:*)",
         "Bash(python3:*)",
@@ -91,6 +95,7 @@ NUMA_CHAT = AgentTypeConfig(
     enable_scripts_mcp=True,
     enable_integrations_mcp=True,
     enable_numa_mcp=True,
+    enable_connect_mcp=True,
     # Layer 3: Numa tool reference docs (copied to /workdir/tools/ for Claude to read)
     enabled_numa_tools=[
         "agents",

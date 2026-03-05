@@ -262,7 +262,7 @@ export function KnowledgeBaseProvider({ children }: { children: React.ReactNode 
         setSelectedKB(kb);
       }
     },
-    [availableKBs, setSelectedKB],
+    [availableKBs, setSelectedKB]
   );
 
   /**
@@ -293,14 +293,14 @@ export function KnowledgeBaseProvider({ children }: { children: React.ReactNode 
               };
             }
             return kb;
-          }),
+          })
         );
       } catch (error) {
         // Silently fail - this is a background refresh, not critical
         console.debug('Failed to fetch KB details for count update:', error);
       }
     },
-    [numaGet, setAvailableKBs],
+    [numaGet, setAvailableKBs]
   );
 
   /**

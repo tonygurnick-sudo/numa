@@ -107,19 +107,19 @@ export const useOpsData = (): OpsDataState => {
 
   // ── Team Data ───────────────────────────────────────────────────────────
   const [teamData, setTeamData] = useState<TeamResponse | null>(() =>
-    initialTeamId ? getCached<TeamResponse>(`team_${initialTeamId}`) : null,
+    initialTeamId ? getCached<TeamResponse>(`team_${initialTeamId}`) : null
   );
   const [teamLoading, setTeamLoading] = useState(false);
 
   // ── Tickets ─────────────────────────────────────────────────────────────
   const [tickets, setTickets] = useState<Ticket[]>(
-    () => (initialTeamId ? getCached<Ticket[]>(`tickets_${initialTeamId}`) : null) ?? [],
+    () => (initialTeamId ? getCached<Ticket[]>(`tickets_${initialTeamId}`) : null) ?? []
   );
   const [ticketsLoading, setTicketsLoading] = useState(false);
 
   // ── Work Units ──────────────────────────────────────────────────────────
   const [workUnits, setWorkUnits] = useState<WorkUnit[]>(
-    () => (initialTeamId ? getCached<WorkUnit[]>(`workUnits_${initialTeamId}`) : null) ?? [],
+    () => (initialTeamId ? getCached<WorkUnit[]>(`workUnits_${initialTeamId}`) : null) ?? []
   );
   const [selectedWorkUnitId, setSelectedWorkUnitId] = useState<string | null>(() => {
     try {
@@ -234,7 +234,7 @@ export const useOpsData = (): OpsDataState => {
         setTeamLoading(false);
       }
     },
-    [numaGet],
+    [numaGet]
   );
 
   const loadTickets = useCallback(
@@ -251,7 +251,7 @@ export const useOpsData = (): OpsDataState => {
         setTicketsLoading(false);
       }
     },
-    [numaGet],
+    [numaGet]
   );
 
   const loadWorkUnits = useCallback(
@@ -265,7 +265,7 @@ export const useOpsData = (): OpsDataState => {
         setWorkUnits([]);
       }
     },
-    [numaGet],
+    [numaGet]
   );
 
   // ── Initial Mount ─────────────────────────────────────────────────────
@@ -318,7 +318,7 @@ export const useOpsData = (): OpsDataState => {
               staff: result.staff as StaffProfile[],
               lastStaffSyncedAt: result.lastSyncedAt,
             }
-          : prev,
+          : prev
       );
     } catch (err) {
       console.warn('[useOpsData] Staff sync failed:', err);
@@ -389,7 +389,7 @@ export const useOpsData = (): OpsDataState => {
         setSelectedWorkUnitId(null);
       }
     },
-    [persistTeam],
+    [persistTeam]
   );
 
   const setTopView = useCallback((view: OpsTopView) => {
@@ -406,7 +406,7 @@ export const useOpsData = (): OpsDataState => {
       setBoardViewModeState(mode);
       persistBoardViewMode(mode);
     },
-    [persistBoardViewMode],
+    [persistBoardViewMode]
   );
 
   const setActiveZone = useCallback((zoneId: string | null) => {
@@ -432,7 +432,7 @@ export const useOpsData = (): OpsDataState => {
         /* quota or private mode */
       }
     },
-    [selectedTeamId],
+    [selectedTeamId]
   );
 
   const refreshWorkUnits = useCallback(async () => {

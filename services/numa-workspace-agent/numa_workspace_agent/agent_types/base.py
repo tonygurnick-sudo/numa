@@ -122,6 +122,8 @@ class AgentTypeConfig:
     enable_integrations_mcp: bool = True
     enable_numa_mcp: bool = True
     allowed_numa_operations: Optional[list[str]] = None  # None = all, list = only these
+    enable_connect_mcp: bool = True
+    enable_vault_mcp: bool = True
 
     # ── Layer 3: Numa tool reference docs ─────────────────────────────────
     enabled_numa_tools: list[str] = field(default_factory=list)

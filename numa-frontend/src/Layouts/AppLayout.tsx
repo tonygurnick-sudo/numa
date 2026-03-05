@@ -19,7 +19,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
   });
 
   const [windowWidth, setWindowWidth] = useState<number>(
-    typeof window !== 'undefined' ? window.innerWidth : SIDEBAR_COLLAPSE_BREAKPOINT,
+    typeof window !== 'undefined' ? window.innerWidth : SIDEBAR_COLLAPSE_BREAKPOINT
   );
 
   // Skip auto-collapse on initial mount so localStorage preference is respected

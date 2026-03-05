@@ -132,7 +132,7 @@ export class CouncilResourceConsents extends BaseNumaApp {
                     'output_key.$': '$.Payload.output_key',
                   },
                   ResultPath: '$.extracted',
-                },
+                }
               ),
             },
           },
@@ -160,7 +160,7 @@ export class CouncilResourceConsents extends BaseNumaApp {
               'output_key.$': '$.Payload.output_key',
             },
             ResultPath: '$.application_extracted',
-          },
+          }
         ),
         AnalyzeDocuments: this.addLambdaTask(
           analyzeDocumentsLambda.arn,
@@ -175,7 +175,7 @@ export class CouncilResourceConsents extends BaseNumaApp {
           'WriteSuccessStatus',
           {
             OutputPath: '$.Payload',
-          },
+          }
         ),
         WriteFailureStatus: this.writeFailureStatus(),
         WriteSuccessStatus: this.writeSuccessStatus(),

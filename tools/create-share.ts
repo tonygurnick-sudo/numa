@@ -134,7 +134,7 @@ Example:
       Key: s3Key,
       Body: fileContent,
       ContentType: contentType,
-    }),
+    })
   );
 
   console.log('File uploaded successfully');
@@ -151,7 +151,7 @@ Example:
       Key: s3Key,
       ResponseContentDisposition: `inline; filename="${safeFileName}"`,
     }),
-    { expiresIn },
+    { expiresIn }
   );
   /* eslint-enable @typescript-eslint/no-explicit-any */
 
@@ -188,7 +188,7 @@ Example:
     new PutItemCommand({
       TableName: tableName,
       Item: item,
-    }),
+    })
   );
 
   console.log('Share record created in DynamoDB');

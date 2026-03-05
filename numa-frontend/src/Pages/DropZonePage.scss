@@ -1,0 +1,144 @@
+.dropzone-page {
+  height: 100vh;
+  width: 100vw;
+  display: flex;
+  flex-direction: column;
+  background-color: #f8f9fa;
+}
+
+.dropzone-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem 1.5rem;
+  background: #fff;
+  border-bottom: 1px solid var(--bs-border-color, #dee2e6);
+  flex-shrink: 0;
+}
+
+.dropzone-body {
+  flex: 1;
+  display: flex;
+  flex-direction: row;
+  min-height: 0; // prevent overflow in flex child
+
+  #dropzone-panels {
+    flex: 1;
+    height: 100%;
+  }
+}
+
+.dropzone-page .nav-collapsed {
+  width: 48px;
+  min-width: 48px;
+  max-width: 48px;
+  flex-shrink: 0;
+  background: #fff;
+  border-right: 1px solid var(--bs-border-color, #dee2e6);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 1rem;
+
+  .expand-button {
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--bs-border-color, #dee2e6);
+    border-radius: 4px;
+    background: transparent;
+    color: var(--bs-secondary, #6c757d);
+    cursor: pointer;
+    transition: all 0.2s ease;
+
+    &:hover {
+      background: var(--bs-gray-100, #f8f9fa);
+      border-color: var(--bs-gray-400, #ced4da);
+    }
+
+    i {
+      font-size: 1rem;
+    }
+  }
+}
+
+.dropzone-panel {
+  height: 100%;
+  overflow-y: auto;
+  background: #fff;
+}
+
+.dropzone-main-panel {
+  background: #f8f9fa;
+}
+
+// Constrain markdown headings inside the nav panel so they don't render as full-size h1/h2
+.dropzone-page .shared-nav-panel .info-section {
+  overflow-y: auto;
+
+  .description {
+    h1,
+    h2,
+    h3 {
+      font-size: 0.875rem;
+      font-weight: 600;
+      margin: 0.75rem 0 0.25rem;
+    }
+
+    h4,
+    h5,
+    h6 {
+      font-size: 0.8125rem;
+      font-weight: 600;
+      margin: 0.5rem 0 0.25rem;
+    }
+
+    ul,
+    ol {
+      padding-left: 1.25rem;
+      font-size: 0.8125rem;
+    }
+
+    p {
+      font-size: 0.8125rem;
+      margin-bottom: 0.5rem;
+    }
+  }
+}
+
+// Loading / error states — centered full viewport
+.dropzone-loading,
+.dropzone-error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100vh;
+  width: 100vw;
+  text-align: center;
+  color: var(--bs-secondary);
+  background-color: #f8f9fa;
+}
+
+.dropzone-error {
+  .error-icon {
+    font-size: 3rem;
+    color: var(--bs-danger);
+    margin-bottom: 1rem;
+  }
+}
+
+// Resize handle — same style as SharedDocumentChat
+.dropzone-page .resize-handle {
+  width: 4px;
+  background-color: var(--bs-border-color, #dee2e6);
+  cursor: col-resize;
+  transition: background-color 0.15s ease;
+
+  &:hover,
+  &[data-resize-handle-active] {
+    background-color: var(--bs-primary, #0d6efd);
+  }
+}

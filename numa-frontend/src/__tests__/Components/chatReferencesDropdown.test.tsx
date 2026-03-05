@@ -139,7 +139,7 @@ describe('ChatReferencesDropdown', () => {
       'file.txt',
       'bucket',
       null, // Region is null in the test environment
-      mockGetIdentityPoolCredentials,
+      mockGetIdentityPoolCredentials
     );
 
     // Verify that the function was called, but we can't easily check the return value

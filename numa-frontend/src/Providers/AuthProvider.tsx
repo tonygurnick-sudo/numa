@@ -105,7 +105,7 @@ export const AuthProvider = ({ children, initialTokens }) => {
       accessToken: localStorage.getItem('accessToken'),
       idToken: localStorage.getItem('idToken'),
       refreshToken: localStorage.getItem('refreshToken'),
-    },
+    }
   );
 
   // Separate ref for decoded tokens to avoid re-renders
@@ -280,7 +280,7 @@ export const AuthProvider = ({ children, initialTokens }) => {
         '🚫 validateTokenWithCognito: Token validation failed with Cognito:',
         error.message,
         'Error name:',
-        error.name,
+        error.name
       );
 
       const message = error.message?.toLowerCase() || '';
@@ -596,7 +596,7 @@ export const AuthProvider = ({ children, initialTokens }) => {
               console.warn(
                 `⚠️ Transient error during token refresh (attempt ${attempt + 1}/${MAX_RETRIES + 1}), ` +
                   `retrying in ${delay}ms:`,
-                (error as Error).message,
+                (error as Error).message
               );
 
               // If offline, wait for the network to come back (with a timeout)
@@ -1638,8 +1638,8 @@ export const AuthProvider = ({ children, initialTokens }) => {
                   DEVICE_KEY: storedDeviceKey,
                 },
                 Session: respondToAuthChallengeResponse.Session,
-              }),
-            ),
+              })
+            )
           );
 
           // DEBUG: Log what Cognito returned — if ChallengeName is not DEVICE_PASSWORD_VERIFIER,
@@ -1655,7 +1655,7 @@ export const AuthProvider = ({ children, initialTokens }) => {
             srpSession,
             deviceSrpResponse,
             deviceGroupKey,
-            deviceRandomPassword,
+            deviceRandomPassword
           );
 
           // Step 3: Respond to DEVICE_PASSWORD_VERIFIER — proves we know the device password
@@ -1670,8 +1670,8 @@ export const AuthProvider = ({ children, initialTokens }) => {
                   DEVICE_KEY: storedDeviceKey,
                 },
                 Session: deviceSrpResponse.Session,
-              }),
-            ),
+              })
+            )
           );
         } catch (deviceErr) {
           // Device SRP failed — clear stale trust so next login falls back to MFA
@@ -1776,7 +1776,7 @@ export const AuthProvider = ({ children, initialTokens }) => {
     authResult: { NewDeviceMetadata?: { DeviceKey?: string; DeviceGroupKey?: string } },
     cognitoClient: CognitoIdentityProviderClient,
     accessToken: string,
-    rememberDevice: boolean,
+    rememberDevice: boolean
   ): Promise<void> => {
     const newDeviceMetadata = authResult.NewDeviceMetadata;
     if (!newDeviceMetadata?.DeviceKey || !newDeviceMetadata?.DeviceGroupKey) return;
@@ -1785,7 +1785,7 @@ export const AuthProvider = ({ children, initialTokens }) => {
       // Generate the SRP verifier for this device (salt + password verifier)
       const { DeviceSecretVerifierConfig, DeviceRandomPassword } = createDeviceVerifier(
         newDeviceMetadata.DeviceKey,
-        newDeviceMetadata.DeviceGroupKey,
+        newDeviceMetadata.DeviceGroupKey
       );
 
       // Confirm the device with Cognito, including the SRP verifier
@@ -1795,7 +1795,7 @@ export const AuthProvider = ({ children, initialTokens }) => {
           DeviceKey: newDeviceMetadata.DeviceKey,
           DeviceName: navigator.userAgent,
           DeviceSecretVerifierConfig,
-        }),
+        })
       );
 
       // Always store device credentials after ConfirmDeviceCommand. Cognito
@@ -1813,7 +1813,7 @@ export const AuthProvider = ({ children, initialTokens }) => {
             AccessToken: accessToken,
             DeviceKey: newDeviceMetadata.DeviceKey,
             DeviceRememberedStatus: 'remembered',
-          }),
+          })
         );
         // Record trust timestamp server-side (non-blocking). The server stores the
         // rememberedAt time so the client cannot tamper with expiry via DevTools.
@@ -1883,7 +1883,7 @@ export const AuthProvider = ({ children, initialTokens }) => {
         authResponse.AuthenticationResult,
         cognitoClient,
         authResponse.AuthenticationResult.AccessToken,
-        rememberDevice ?? false,
+        rememberDevice ?? false
       );
       return { success: true };
     }
@@ -1933,7 +1933,7 @@ export const AuthProvider = ({ children, initialTokens }) => {
         authResponse.AuthenticationResult,
         cognitoClient,
         authResponse.AuthenticationResult.AccessToken,
-        rememberDevice ?? false,
+        rememberDevice ?? false
       );
       return { success: true };
     }
@@ -1946,7 +1946,7 @@ export const AuthProvider = ({ children, initialTokens }) => {
       try {
         const { response, cognitoClient, lowercaseUsername, SECRET_HASH, CLIENT_ID } = await performSrpAuthentication(
           username,
-          oldPassword,
+          oldPassword
         );
 
         if (response.ChallengeName === 'NEW_PASSWORD_REQUIRED') {
@@ -1975,7 +1975,7 @@ export const AuthProvider = ({ children, initialTokens }) => {
         throw error;
       }
     },
-    [login],
+    [login]
   );
 
   const handleLoginSuccess = async (tokens) => {
@@ -2144,14 +2144,25 @@ export const AuthProvider = ({ children, initialTokens }) => {
         return null;
       }
 
-      const credentials = await fromWebToken({
-        roleSessionName: 'numa-frontend',
-        roleArn: roleArn,
-        webIdentityToken: idToken,
-        durationSeconds: 1800, // Reduced from 1 hour to 30 minutes for better security
-      })();
+      const makeCredentials = (token: string) =>
+        fromWebToken({
+          roleSessionName: 'numa-frontend',
+          roleArn: roleArn,
+          webIdentityToken: token,
+          durationSeconds: 1800,
+        })();
 
-      return credentials;
+      try {
+        return await makeCredentials(idToken);
+      } catch (stsError) {
+        // STS rejected the token — refresh and retry once before giving up
+        console.debug('STS rejected token, refreshing and retrying…', stsError);
+        const retryRefreshed = await refreshTokens();
+        if (retryRefreshed && tokensRef.current.idToken) {
+          return await makeCredentials(tokensRef.current.idToken);
+        }
+        throw stsError;
+      }
     } catch (error) {
       console.error('Error getting credentials:', error);
       throw error;
@@ -2199,7 +2210,7 @@ export const AuthProvider = ({ children, initialTokens }) => {
         clearDeviceTrust();
       }
     },
-    [getAccessToken],
+    [getAccessToken]
   );
 
   const value = useMemo(() => {
@@ -2358,7 +2369,7 @@ const isTransientError = (error: unknown): boolean => {
     // Use word-boundary-safe checks to avoid false positives like "Failed to fetch secret hash".
     if (
       ['network', 'timeout', 'abort', 'dns', 'econnrefused', 'enotfound', 'load failed'].some((kw) =>
-        msg.includes(kw),
+        msg.includes(kw)
       ) ||
       msg === 'failed to fetch'
     ) {

@@ -23,9 +23,18 @@ export type SynergyJobsResponse = {
   items: SynergyJob[];
 };
 
+export type SynergyFile = {
+  file_id: string;
+  name: string;
+  size?: number;
+  content_type?: string;
+  modified_at?: string;
+};
+
 export type SynergyFolderItemsResponse = {
   folder_id: string;
   subfolders: SynergyFolder[];
+  files: SynergyFile[];
   files_total?: number;
 };
 

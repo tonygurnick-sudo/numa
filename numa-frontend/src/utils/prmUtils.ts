@@ -58,7 +58,7 @@ type AWSClientConstructor<TClient, TConfig extends ClientConfig> = new (config: 
  */
 export function withPRM<TClient, TConfig extends ClientConfig = ClientConfig>(
   ClientConstructor: AWSClientConstructor<TClient, TConfig>,
-  config?: Partial<TConfig>,
+  config?: Partial<TConfig>
 ): TClient {
   // Merge PRM customUserAgent with any existing customUserAgent in config
   const existingUserAgent = config?.customUserAgent ?? [];

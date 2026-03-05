@@ -12,7 +12,6 @@ Helpful links for poetry with Lambda functions:
 - https://stackoverflow.com/questions/74292510/how-to-create-a-deployable-python-lamba-zip-using-poetry
 - https://aws.plainenglish.io/streamline-lambda-development-with-poetry-25fbc212a846
 
-
 ## Input
 
 ```json

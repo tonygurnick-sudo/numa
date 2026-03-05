@@ -27,7 +27,7 @@ interface CreateOptions {
   direct?: boolean;
   profile?: string;
   open?: boolean;
-  skipApi?: boolean;  // For debugging: bypass API and write directly to DynamoDB
+  skipApi?: boolean; // For debugging: bypass API and write directly to DynamoDB
 }
 
 /** API response for creating a share */
@@ -132,7 +132,9 @@ async function createSharedDocument(filePath: string, options: CreateOptions): P
     const tokenValid = await isTokenValid();
     if (!tokenValid) {
       console.error('Error: You must be logged in to create shares.');
-      console.error('Run "numa login" first, or use "numa --debug create shared doc <file> --skip-api" for direct DynamoDB access.');
+      console.error(
+        'Run "numa login" first, or use "numa --debug create shared doc <file> --skip-api" for direct DynamoDB access.'
+      );
       process.exit(1);
     }
     idToken = getIdToken();
@@ -149,7 +151,9 @@ async function createSharedDocument(filePath: string, options: CreateOptions): P
     try {
       const payload = JSON.parse(Buffer.from(rawToken.split('.')[1] ?? '', 'base64').toString());
       userSub = payload.sub ?? userSub;
-    } catch { /* keep fallback */ }
+    } catch {
+      /* keep fallback */
+    }
   }
 
   // Log configuration
@@ -203,7 +207,7 @@ async function createSharedDocument(filePath: string, options: CreateOptions): P
       Key: s3Key,
       Body: fileContent,
       ContentType: contentType,
-    }),
+    })
   );
 
   console.log('File uploaded successfully');
@@ -220,7 +224,7 @@ async function createSharedDocument(filePath: string, options: CreateOptions): P
       Key: s3Key,
       ResponseContentDisposition: `inline; filename="${safeFileName}"`,
     }),
-    { expiresIn },
+    { expiresIn }
   );
 
   console.log('Generated pre-signed URL');
@@ -258,13 +262,13 @@ async function createSharedDocument(filePath: string, options: CreateOptions): P
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${idToken}`,
+          Authorization: `Bearer ${idToken}`,
         },
         body: JSON.stringify(requestBody),
       });
 
       if (response.ok) {
-        const result = await response.json() as CreateShareApiResponse;
+        const result = (await response.json()) as CreateShareApiResponse;
         uuid = result.uuid;
         expiresAt = result.expires_at;
         usedApi = true;
@@ -281,7 +285,7 @@ async function createSharedDocument(filePath: string, options: CreateOptions): P
         }
         throw new Error(
           `API returned ${response.status}. The shared-chat infrastructure may not be deployed.\n` +
-          `  Use "numa --debug create shared doc <file> --skip-api" to write directly to DynamoDB.`
+            `  Use "numa --debug create shared doc <file> --skip-api" to write directly to DynamoDB.`
         );
       }
     } catch (error) {
@@ -293,7 +297,7 @@ async function createSharedDocument(filePath: string, options: CreateOptions): P
       }
       throw new Error(
         `Could not reach API at ${apiUrl}.\n` +
-        `  Use "numa --debug create shared doc <file> --skip-api" to write directly to DynamoDB.`
+          `  Use "numa --debug create shared doc <file> --skip-api" to write directly to DynamoDB.`
       );
     }
   }
@@ -338,7 +342,7 @@ async function createSharedDocument(filePath: string, options: CreateOptions): P
       new PutItemCommand({
         TableName: tableName,
         Item: item,
-      }),
+      })
     );
 
     console.log('Share record created directly in DynamoDB');

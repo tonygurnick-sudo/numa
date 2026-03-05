@@ -906,13 +906,20 @@ def handle_add_to_kb(params: Dict[str, Any]) -> Dict[str, Any]:
             f"Access denied: You don't have permission to add to this knowledge base '{kb_id}'"
         )
 
+    # Sanitize filename for safe S3 key usage
+    safe_filename = filename.replace("\\", "/").replace("..", "")
+    safe_filename = re.sub(r"[\x00-\x1f\x7f-\x9f]", "", safe_filename)
+    safe_filename = re.sub(r"/+", "/", safe_filename).strip("/")
+    if not safe_filename:
+        safe_filename = "unnamed_file"
+
     # Build S3 key - keep system KB ids as-is, prefix user KBs with "kb-".
     prefix_part = _get_s3_kb_id(kb_id)
 
     if kb_path:
-        s3_key = f"documents/{prefix_part}/{kb_path}/{filename}"
+        s3_key = f"documents/{prefix_part}/{kb_path}/{safe_filename}"
     else:
-        s3_key = f"documents/{prefix_part}/{filename}"
+        s3_key = f"documents/{prefix_part}/{safe_filename}"
 
     # Decode content
     try:

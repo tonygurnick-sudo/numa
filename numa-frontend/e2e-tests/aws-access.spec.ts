@@ -222,7 +222,7 @@ async function authenticateUser(userType: 'standard' | 'admin') {
   } catch (error) {
     console.error(`Failed to authenticate ${userType} user:`, error);
     throw new Error(
-      `Authentication failed for ${userType} user: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      `Authentication failed for ${userType} user: ${error instanceof Error ? error.message : 'Unknown error'}`
     );
   }
 }
@@ -316,7 +316,7 @@ function checkEnvVariables() {
 async function testAWSOperation<T = unknown>(
   operation: () => Promise<T>,
   operationName: string,
-  shouldSucceed: boolean = true,
+  shouldSucceed: boolean = true
 ): Promise<AWSOperationResult<T>> {
   try {
     const result = await operation();
@@ -389,7 +389,7 @@ test.describe('AWS Access Permission Tests', () => {
       const { groups } = extractGroupsAndFeatures(decodedIdToken);
       const { credentials, username } = await getAWSCredentials(tokens.idToken, groups);
 
-  const s3Client = withPRM(S3Client, {
+      const s3Client = withPRM(S3Client, {
         region: derivedConfig.REGION,
         credentials,
       });
@@ -417,7 +417,7 @@ test.describe('AWS Access Permission Tests', () => {
       const { groups } = extractGroupsAndFeatures(decodedIdToken);
       const { credentials } = await getAWSCredentials(tokens.idToken, groups);
 
-  const s3Client = withPRM(S3Client, {
+      const s3Client = withPRM(S3Client, {
         region: derivedConfig.REGION,
         credentials,
       });
@@ -432,7 +432,7 @@ test.describe('AWS Access Permission Tests', () => {
           return await s3Client.send(putCommand);
         },
         'access to other user outputs path',
-        false,
+        false
       );
 
       expect(result.success).toBe(false);
@@ -446,7 +446,7 @@ test.describe('AWS Access Permission Tests', () => {
       const { groups } = extractGroupsAndFeatures(decodedIdToken);
       const { credentials } = await getAWSCredentials(tokens.idToken, groups);
 
-  const s3Client = withPRM(S3Client, {
+      const s3Client = withPRM(S3Client, {
         region: derivedConfig.REGION,
         credentials,
       });
@@ -514,7 +514,7 @@ test.describe('AWS Access Permission Tests', () => {
       const { groups } = extractGroupsAndFeatures(decodedIdToken);
       const { credentials } = await getAWSCredentials(tokens.idToken, groups);
 
-  const s3Client = withPRM(S3Client, {
+      const s3Client = withPRM(S3Client, {
         region: derivedConfig.REGION,
         credentials,
       });
@@ -671,7 +671,7 @@ test.describe('AWS Access Permission Tests', () => {
       const { groups } = extractGroupsAndFeatures(decodedIdToken);
       const { credentials } = await getAWSCredentials(tokens.idToken, groups);
 
-  const s3Client = withPRM(S3Client, {
+      const s3Client = withPRM(S3Client, {
         region: derivedConfig.REGION,
         credentials,
       });
@@ -685,7 +685,7 @@ test.describe('AWS Access Permission Tests', () => {
           return await s3Client.send(deleteCommand);
         },
         'data bucket delete for standard user',
-        false,
+        false
       );
 
       expect(result.success).toBe(false);
@@ -699,7 +699,7 @@ test.describe('AWS Access Permission Tests', () => {
       const { groups } = extractGroupsAndFeatures(decodedIdToken);
       const { credentials } = await getAWSCredentials(tokens.idToken, groups);
 
-  const s3Client = withPRM(S3Client, {
+      const s3Client = withPRM(S3Client, {
         region: derivedConfig.REGION,
         credentials,
       });
@@ -743,7 +743,7 @@ test.describe('AWS Access Permission Tests', () => {
       const { groups } = extractGroupsAndFeatures(decodedIdToken);
       const { credentials } = await getAWSCredentials(tokens.idToken, groups);
 
-  const s3Client = withPRM(S3Client, {
+      const s3Client = withPRM(S3Client, {
         region: derivedConfig.REGION,
         credentials,
       });
@@ -758,7 +758,7 @@ test.describe('AWS Access Permission Tests', () => {
           return await s3Client.send(putCommand);
         },
         'data bucket put for standard user',
-        false,
+        false
       );
 
       expect(result.success).toBe(false);
@@ -772,7 +772,7 @@ test.describe('AWS Access Permission Tests', () => {
       const { groups } = extractGroupsAndFeatures(decodedIdToken);
       const { credentials } = await getAWSCredentials(tokens.idToken, groups);
 
-  const s3Client = withPRM(S3Client, {
+      const s3Client = withPRM(S3Client, {
         region: derivedConfig.REGION,
         credentials,
       });
@@ -816,7 +816,7 @@ test.describe('AWS Access Permission Tests', () => {
           return await cognitoClient.send(listUsersCommand);
         },
         'user management for standard user',
-        false,
+        false
       );
 
       expect(result.success).toBe(false);
@@ -897,7 +897,7 @@ test.describe('AWS Access Permission Tests', () => {
       const { groups: adminGroups } = extractGroupsAndFeatures(adminDecoded);
       const { credentials: adminCredentials, username: adminUsername } = await getAWSCredentials(
         adminTokens.idToken,
-        adminGroups,
+        adminGroups
       );
 
       const adminS3Client = withPRM(S3Client, {
@@ -911,7 +911,7 @@ test.describe('AWS Access Permission Tests', () => {
           Bucket: derivedConfig.OUTPUTS_BUCKET_NAME,
           Key: adminTestKey,
           Body: 'Admin secret output data',
-        }),
+        })
       );
 
       // Now try to access it as standard user - this should fail due to IAM path restriction
@@ -934,7 +934,7 @@ test.describe('AWS Access Permission Tests', () => {
           return await standardS3Client.send(getCommand);
         },
         'standard user accessing admin outputs',
-        false,
+        false
       );
 
       expect(result.success).toBe(false);
@@ -949,7 +949,7 @@ test.describe('AWS Access Permission Tests', () => {
       const { groups: adminGroups } = extractGroupsAndFeatures(adminDecoded);
       const { credentials: adminCredentials, username: adminUsername } = await getAWSCredentials(
         adminTokens.idToken,
-        adminGroups,
+        adminGroups
       );
 
       const adminDynamoClient = new DynamoDBClient({
@@ -973,7 +973,7 @@ test.describe('AWS Access Permission Tests', () => {
             role: { S: 'user' },
             content: { S: 'Admin secret message' },
           },
-        }),
+        })
       );
 
       // Now try to access it as standard user - this should fail due to row-level security
@@ -1001,7 +1001,7 @@ test.describe('AWS Access Permission Tests', () => {
           return await standardDynamoClient.send(queryCommand);
         },
         'standard user accessing admin chat history',
-        false,
+        false
       );
 
       expect(result.success).toBe(false);
@@ -1031,7 +1031,7 @@ test.describe('AWS Access Permission Tests', () => {
           return await s3Client.send(listCommand);
         },
         'standard user listing all outputs directory',
-        false,
+        false
       );
 
       expect(listAllResult.success).toBe(false);
@@ -1061,7 +1061,7 @@ test.describe('AWS Access Permission Tests', () => {
           return await s3Client.send(putCommand);
         },
         'standard user writing to company bucket',
-        false,
+        false
       );
 
       expect(result.success).toBe(false);
@@ -1090,7 +1090,7 @@ test.describe('AWS Access Permission Tests', () => {
           return await dynamoClient.send(scanCommand);
         },
         'standard user scanning entire chat history table',
-        false,
+        false
       );
 
       expect(result.success).toBe(false);
@@ -1119,7 +1119,7 @@ test.describe('AWS Access Permission Tests', () => {
           return await cognitoClient.send(listCommand);
         },
         'standard user listing Cognito users',
-        false,
+        false
       );
 
       expect(result.success).toBe(false);
@@ -1159,7 +1159,7 @@ test.describe('AWS Access Permission Tests', () => {
               Bucket: derivedConfig.COMPANY_BUCKET,
               Key: fileName,
               Body: 'Test content for unauthorized access test',
-            }),
+            })
           );
         } catch {
           console.log(`Could not create test file ${fileName} for unauthorized access test`);
@@ -1177,7 +1177,7 @@ test.describe('AWS Access Permission Tests', () => {
             return await s3Client.send(getCommand);
           },
           `standard user accessing unauthorized company file: ${fileName}`,
-          false,
+          false
         );
 
         expect(result.success).toBe(false);

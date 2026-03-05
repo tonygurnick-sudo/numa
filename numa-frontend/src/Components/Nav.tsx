@@ -33,6 +33,8 @@ import { ChatSettingsService, type UserProfile } from '../Services/ChatSettingsS
 import ProfileAvatar from './ProfileAvatar';
 import { getCachedUserProfile } from '../utils/userProfileCache';
 import { VersionDisplay } from './VersionDisplay';
+import { CAPABILITIES_CHANGED_EVENT } from '../utils/adminCapabilityGating';
+import { getFlag } from '../utils/featureFlags';
 
 interface NavProps {
   isCollapsed?: boolean;
@@ -168,6 +170,16 @@ const Nav = ({ isCollapsed = false, onToggleCollapse }: NavProps) => {
     setShowMobileDropdown(false);
   }, []);
 
+  // Re-render counter — incremented when admin capability gating changes
+  const [capVersion, setCapVersion] = useState(0);
+
+  // Listen for admin capability changes so nav rebuilds when toggles flip
+  useEffect(() => {
+    const handler = () => setCapVersion((v) => v + 1);
+    window.addEventListener(CAPABILITIES_CHANGED_EVENT, handler);
+    return () => window.removeEventListener(CAPABILITIES_CHANGED_EVENT, handler);
+  }, []);
+
   // Use CSS media queries for responsive behavior instead of JavaScript state
 
   useEffect(() => {
@@ -175,9 +187,9 @@ const Nav = ({ isCollapsed = false, onToggleCollapse }: NavProps) => {
     import('../utils/routeConfig.tsx').then((mod) => {
       if (!isMounted) return;
       const navRoutes = mod.ROUTE_CONFIG.filter((r) => r.nav).filter((r) => {
-        // Hide items with featureFlag if flag is not enabled in sessionStorage
+        // Hide items with featureFlag if flag is explicitly disabled
         if (r.nav.featureFlag) {
-          return window.sessionStorage.getItem(r.nav.featureFlag) === 'true';
+          return getFlag(r.nav.featureFlag);
         }
         return true;
       });
@@ -203,7 +215,7 @@ const Nav = ({ isCollapsed = false, onToggleCollapse }: NavProps) => {
 
         // Add the nav item
         items.push({
-          to: r.path,
+          to: r.path.replace(/\/\*$/, ''),
           label: r.nav.label,
           labelKey: r.nav.labelKey,
           icon: r.nav.icon,
@@ -219,7 +231,7 @@ const Nav = ({ isCollapsed = false, onToggleCollapse }: NavProps) => {
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [capVersion]);
 
   const visibleMainNavItems = navItems.filter((item) => {
     if (item.footerOnly || item.sectionOnly) {

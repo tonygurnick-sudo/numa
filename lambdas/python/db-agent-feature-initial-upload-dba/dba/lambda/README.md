@@ -47,11 +47,13 @@ chmod +x deploy.sh
 ### 1. Deploy to AWS Lambda
 
 **Option A: Function URL (simpler)**
+
 ```bash
 ./deploy-function-url.sh --function-name my-db-lambda --region us-east-1
 ```
 
 **Option B: API Gateway (more features)**
+
 ```bash
 ./deploy.sh --function-name my-db-lambda --region us-east-1
 ```
@@ -63,6 +65,7 @@ Both will output your API endpoint URL (just different formats)
 In AWS Lambda Console, set these environment variables:
 
 **Required for PostgreSQL:**
+
 - `DB_HOST` - Database host
 - `DB_PORT` - Database port
 - `DB_NAME` - Database name
@@ -70,9 +73,11 @@ In AWS Lambda Console, set these environment variables:
 - `DB_PASSWORD` - Database password
 
 **Required for AI features:**
+
 - `ANTHROPIC_API_KEY` - Anthropic API key (for `--ask` and `--investigate`)
 
 **Optional:**
+
 - `API_KEY` - API key for authentication (if not set, API is open)
 - `AWS_REGION` - AWS region for S3/Athena (default: us-east-1)
 
@@ -93,11 +98,13 @@ curl https://YOUR-API-URL/health
 Check if the API is running.
 
 **Example:**
+
 ```bash
 curl https://YOUR-API-URL/health
 ```
 
 **Response:**
+
 ```json
 {
   "status": "healthy",
@@ -115,15 +122,17 @@ curl https://YOUR-API-URL/health
 Execute SQL query against PostgreSQL database.
 
 **Request Body:**
+
 ```json
 {
   "sql": "SELECT * FROM users LIMIT 5",
-  "datasource": "production",  // optional
-  "format": "json"  // optional: json, csv, table
+  "datasource": "production", // optional
+  "format": "json" // optional: json, csv, table
 }
 ```
 
 **Example:**
+
 ```bash
 curl -X POST https://YOUR-API-URL/query \
   -H 'Content-Type: application/json' \
@@ -135,12 +144,11 @@ curl -X POST https://YOUR-API-URL/query \
 ```
 
 **Response:**
+
 ```json
 {
   "status": "success",
-  "data": [
-    {"user_count": 1523}
-  ],
+  "data": [{ "user_count": 1523 }],
   "query": "SELECT COUNT(*) as user_count FROM users"
 }
 ```
@@ -154,16 +162,18 @@ curl -X POST https://YOUR-API-URL/query \
 Query a CSV file (local path, URL, or Google Sheets).
 
 **Request Body:**
+
 ```json
 {
   "csv_file": "https://example.com/data.csv",
   "sql": "SELECT * FROM data WHERE amount > 1000",
-  "engine": "csv-sqlite",  // optional: csv-sqlite, csv-duckdb
-  "format": "json"  // optional
+  "engine": "csv-sqlite", // optional: csv-sqlite, csv-duckdb
+  "format": "json" // optional
 }
 ```
 
 **Example:**
+
 ```bash
 curl -X POST https://YOUR-API-URL/csv \
   -H 'Content-Type: application/json' \
@@ -174,6 +184,7 @@ curl -X POST https://YOUR-API-URL/csv \
 ```
 
 **Response:**
+
 ```json
 {
   "status": "success",
@@ -196,16 +207,18 @@ curl -X POST https://YOUR-API-URL/csv \
 Ask questions in natural language - Claude AI converts to SQL and returns answer.
 
 **Request Body:**
+
 ```json
 {
   "question": "what are total sales by region?",
-  "csv_file": "https://example.com/sales.csv",  // optional
-  "datasource": "production",  // optional (for PostgreSQL)
-  "engine": "csv-sqlite"  // optional
+  "csv_file": "https://example.com/sales.csv", // optional
+  "datasource": "production", // optional (for PostgreSQL)
+  "engine": "csv-sqlite" // optional
 }
 ```
 
 **Example - CSV Query:**
+
 ```bash
 curl -X POST https://YOUR-API-URL/ask \
   -H 'Content-Type: application/json' \
@@ -216,6 +229,7 @@ curl -X POST https://YOUR-API-URL/ask \
 ```
 
 **Response:**
+
 ```json
 {
   "status": "success",
@@ -225,6 +239,7 @@ curl -X POST https://YOUR-API-URL/ask \
 ```
 
 **Example - PostgreSQL Query:**
+
 ```bash
 curl -X POST https://YOUR-API-URL/ask \
   -H 'Content-Type: application/json' \
@@ -243,16 +258,18 @@ curl -X POST https://YOUR-API-URL/ask \
 Conduct autonomous, multi-query investigation with Claude AI. Perfect for complex questions requiring analysis across multiple queries.
 
 **Request Body:**
+
 ```json
 {
   "question": "why did sales drop in Q3?",
-  "csv_file": "https://example.com/sales.csv",  // optional
-  "datasource": "production",  // optional (for PostgreSQL)
-  "engine": "csv-sqlite"  // optional
+  "csv_file": "https://example.com/sales.csv", // optional
+  "datasource": "production", // optional (for PostgreSQL)
+  "engine": "csv-sqlite" // optional
 }
 ```
 
 **Example:**
+
 ```bash
 curl -X POST https://YOUR-API-URL/investigate \
   -H 'Content-Type: application/json' \
@@ -263,6 +280,7 @@ curl -X POST https://YOUR-API-URL/investigate \
 ```
 
 **Response:**
+
 ```json
 {
   "status": "success",
@@ -273,6 +291,7 @@ curl -X POST https://YOUR-API-URL/investigate \
 ```
 
 **Note:** The `investigate` endpoint uses multiple SQL queries iteratively, building understanding through progressive refinement. This is ideal for:
+
 - Root cause analysis ("why did X happen?")
 - Pattern detection ("find anomalies in the data")
 - Trend analysis ("what patterns exist over time?")
@@ -287,16 +306,18 @@ curl -X POST https://YOUR-API-URL/investigate \
 Query CSV file stored in S3 (downloads and queries).
 
 **Request Body:**
+
 ```json
 {
   "s3_path": "s3://my-bucket/data.csv",
   "sql": "SELECT * FROM data LIMIT 10",
-  "region": "us-east-1",  // optional
-  "format": "json"  // optional
+  "region": "us-east-1", // optional
+  "format": "json" // optional
 }
 ```
 
 **Example:**
+
 ```bash
 curl -X POST https://YOUR-API-URL/s3 \
   -H 'Content-Type: application/json' \
@@ -328,6 +349,7 @@ If `API_KEY` is not set, the API is open (use for internal/private deployments o
 ## For AI Agents: Usage Patterns
 
 ### Pattern 1: Direct SQL Query
+
 Use when you know the exact SQL query to execute.
 
 ```python
@@ -342,6 +364,7 @@ print(data['data'])
 ```
 
 ### Pattern 2: Natural Language Query
+
 Use when you want to ask a question in natural language.
 
 ```python
@@ -357,6 +380,7 @@ print(answer)
 ```
 
 ### Pattern 3: Agentic Investigation
+
 Use for complex questions requiring multi-step analysis.
 
 ```python
@@ -373,6 +397,7 @@ print(f"Iterations: {result['iterations']}")
 ```
 
 ### Pattern 4: CSV Analysis
+
 Use to analyze CSV data from URLs or S3.
 
 ```python
@@ -401,6 +426,7 @@ All endpoints return consistent error responses:
 ```
 
 **HTTP Status Codes:**
+
 - `200` - Success
 - `400` - Bad Request (missing required fields)
 - `401` - Unauthorized (invalid API key)
@@ -408,6 +434,7 @@ All endpoints return consistent error responses:
 - `500` - Internal Server Error
 
 **Example Error Handling:**
+
 ```python
 import requests
 
@@ -472,11 +499,13 @@ aws lambda update-function-configuration \
 ## Performance Considerations
 
 ### Lambda Configuration
+
 - **Memory:** 512MB (default) - increase to 1024MB for large CSV files
 - **Timeout:** 300s (5 min) - increase to 600s for agentic investigations
 - **Cold Start:** ~2-3 seconds for first request
 
 ### Optimization Tips
+
 1. **Use CSV caching:** URL CSVs are cached for 1 hour
 2. **Limit result sets:** Use `LIMIT` in SQL to reduce response size
 3. **Batch queries:** Multiple simple queries are faster than one complex agentic investigation
@@ -516,16 +545,19 @@ print(json.dumps(response, indent=2))
 ### CloudWatch Logs
 
 Logs are automatically sent to CloudWatch Logs:
+
 ```
 /aws/lambda/db-cli-lambda
 ```
 
 ### View Logs
+
 ```bash
 aws logs tail /aws/lambda/db-cli-lambda --follow
 ```
 
 ### Key Metrics
+
 - Invocations
 - Duration
 - Error count
@@ -547,20 +579,24 @@ aws logs tail /aws/lambda/db-cli-lambda --follow
 ## Troubleshooting
 
 ### "Unauthorized" Error
+
 - Check that `X-Api-Key` header matches `API_KEY` environment variable
 - Ensure API key is set correctly
 
 ### "Database Error"
+
 - Verify `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD` are set
 - Check Lambda has network access to database (VPC configuration)
 - Verify database allows connections from Lambda's IP
 
 ### "Timeout" Error
+
 - Increase Lambda timeout for long-running queries
 - Optimize SQL queries to run faster
 - Consider breaking agentic investigations into smaller queries
 
 ### "Internal Server Error"
+
 - Check CloudWatch Logs for detailed error messages
 - Verify all dependencies are included in deployment package
 - Ensure Lambda has sufficient memory
@@ -570,6 +606,7 @@ aws logs tail /aws/lambda/db-cli-lambda --follow
 ## Examples for AI Agents
 
 ### Example 1: Daily User Signup Report
+
 ```python
 import requests
 
@@ -581,6 +618,7 @@ print(response.json()['answer'])
 ```
 
 ### Example 2: Sales Trend Analysis
+
 ```python
 url = "https://YOUR-API-URL/investigate"
 response = requests.post(url, json={
@@ -592,6 +630,7 @@ print(result['answer'])
 ```
 
 ### Example 3: CSV Data Exploration
+
 ```python
 url = "https://YOUR-API-URL/csv"
 response = requests.post(url, json={
@@ -608,6 +647,7 @@ for row in data:
 ## Support
 
 For issues or questions:
+
 1. Check CloudWatch Logs for errors
 2. Review this documentation
 3. Check the main README.md for CLI-specific issues

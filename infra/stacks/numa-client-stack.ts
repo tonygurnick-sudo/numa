@@ -50,6 +50,7 @@ import { S3VectorsKnowledgeBase } from '../constructs/s3-vectors-knowledge-base-
 import { LambdaInvocation } from '@cdktf/provider-aws/lib/lambda-invocation';
 import { DataAwsSsmParameter } from '@cdktf/provider-aws/lib/data-aws-ssm-parameter';
 import { NumaLambda } from '../constructs/numa-lambda';
+import { OAuthIntegrationConstruct } from '../constructs/oauth-integration-construct';
 import { OpsConstruct } from '../constructs/ops-construct';
 import { WorkspaceChatAgentConstruct } from '../constructs/workspace-chat-agent-construct';
 import { WorkspaceChatAgentProxy } from '../constructs/workspace-chat-agent-proxy-construct';
@@ -289,6 +290,8 @@ export class NumaClientStack extends TerraformStack {
       extractionLambdaArn: sharedChatExtractLambdaArn,
       outputsBucketArn: core.outputsBucket.bucket.arn,
       outputsBucketName: core.outputsBucket.bucket.bucket,
+      dataBucketArn: core.dataBucket.bucket.arn,
+      bedrockKnowledgeBaseId: knowledgeBase?.knowledgeBaseId,
     });
 
     // Numa Workspace Chat Agent (AgentCore runtime + proxy Lambda, routed through main CloudFront)
@@ -314,6 +317,10 @@ export class NumaClientStack extends TerraformStack {
       // Compute the expected document-converter lambda name (created later in coreApis)
       const documentConverterLambdaName = awsNameWithHashedPrefix(props.clientName, '_document-converter', 64);
       const documentConverterLambdaArn = `arn:aws:lambda:${clientConfig.region}:${clientConfig.clientAccountId}:function:${documentConverterLambdaName}`;
+
+      // Compute the expected oauth-workspace-tools Lambda name (created later in OAuth construct)
+      const oauthWorkspaceToolsLambdaName = awsNameWithHashedPrefix(props.clientName, '_oauth_workspace_tools', 64);
+      const oauthWorkspaceToolsLambdaArn = `arn:aws:lambda:${clientConfig.region}:${clientConfig.clientAccountId}:function:${oauthWorkspaceToolsLambdaName}`;
 
       // Shared secret for file redirect HMAC tokens (used by both tools and proxy Lambdas)
       const fileRedirectSecret = new SsmParameter(this, 'file-redirect-secret', {
@@ -355,6 +362,11 @@ export class NumaClientStack extends TerraformStack {
         // File redirect for integration uploads (clean URLs to avoid Slack filename length issues)
         fileRedirectSecret: fileRedirectSecret.value,
         fileRedirectBaseUrl: `https://${domainName}/api/workspace-chat-agent`,
+        // Vault secrets (optional, only if enabled) - now using consolidated Secrets Manager approach
+        ...(clientConfig.secretsVaultEnabled && {
+          vaultAuditLogTableName: core.vaultAuditLogTable.name,
+          vaultAuditLogTableArn: core.vaultAuditLogTable.arn,
+        }),
       });
 
       // Create the AgentCore runtime
@@ -379,12 +391,20 @@ export class NumaClientStack extends TerraformStack {
         // Chat settings table (for reading user approval mode preferences)
         chatSettingsTableName: core.chatSettingsTable.name,
         chatSettingsTableArn: core.chatSettingsTable.arn,
+        // Vault secrets feature flag (enables vault system prompt and tools)
+        secretsVaultEnabled: clientConfig.secretsVaultEnabled ?? false,
         // Company bucket (for loading company profile into system prompt)
-        companyBucketName: core.companyBucket.bucket.bucket,
-        companyBucketArn: core.companyBucket.bucket.arn,
+        companyBucketName: core.companyBucket?.bucket.bucket,
+        companyBucketArn: core.companyBucket?.bucket.arn,
         // Cross-region AgentCore support (when client region doesn't support AgentCore)
         agentCoreProvider,
         agentCoreRegion,
+        // OAuth workspace tools Lambda for unified connect tools (OAuth, Synergy, S3 data bucket)
+        oauthWorkspaceToolsLambdaName: oauthWorkspaceToolsLambdaName,
+        oauthWorkspaceToolsLambdaArn: oauthWorkspaceToolsLambdaArn,
+        // Data bucket for downloading attached files (My Files / Company Files)
+        dataBucketName: core.dataBucket.bucket.bucket,
+        dataBucketArn: core.dataBucket.bucket.arn,
       });
 
       // Create the proxy Lambda that bridges CloudFront to AgentCore SDK
@@ -455,6 +475,8 @@ export class NumaClientStack extends TerraformStack {
       chatHistoryTableName: core.chatHistoryTable.name,
       clientName: props.clientName,
       dataBucketName: core.dataBucket.bucket.bucket,
+      dataBucketArn: core.dataBucket.bucket.arn,
+      companyBucketArn: core.companyBucket?.bucket.arn,
       logGroup: core.logGroup,
       region: clientConfig.region,
       userPoolClientId: core.userPoolClient.id,
@@ -478,7 +500,9 @@ export class NumaClientStack extends TerraformStack {
       chatSettingsTableName: core.chatSettingsTable.name,
       dataConnectorsTableName: core.dataConnectorsTable.name,
       dataConnectorsSettingsTableName: core.dataConnectorsSettingsTable.name,
+      capabilitiesTableName: core.capabilitiesTable.name,
       dataConnectorsSyncConfigsTableName: core.dataConnectorsSyncConfigsTable.name,
+      vaultAuditLogTableName: core.vaultAuditLogTable.name,
       agentSchedulesTableName: core.agentSchedulesTable.name,
       notificationsTableName: core.notificationsTable.name,
       chatAgentFunctionUrl: chatAgent.functionUrl,
@@ -513,12 +537,36 @@ export class NumaClientStack extends TerraformStack {
       });
     }
 
+    // OAuth cloud storage integration (Google Drive, OneDrive, Dropbox)
+    // Also deploys the workspace tools Lambda for unified connect access
+    // (OAuth, Synergy, S3 data bucket, generic HTTP)
+    new OAuthIntegrationConstruct(this, safeConstructId + '-oauth', {
+      apiGatewayAuthorizerId: fe.authorizer.id,
+      apiGatewayId: fe.apiGateway.id,
+      clientName: props.clientName,
+      region: clientConfig.region,
+      vaultAuditLogTableName: core.vaultAuditLogTable.name,
+      frontendBaseUrl: `https://${domainName}`,
+      oauthProviders: clientConfig.oauthProviders ?? {},
+      otelConfig: {
+        otelConfigPath: core.otelConfigPath,
+        honeycombIngestKey: honeycombBackendKey,
+        region: clientConfig.region,
+      },
+      // Data connectors table (for Synergy credential resolution)
+      dataConnectorsTableName: core.dataConnectorsTable.name,
+      dataConnectorsTableArn: core.dataConnectorsTable.arn,
+      // Data bucket (for S3 data bucket connector)
+      dataBucketName: core.dataBucket.bucket.bucket,
+      dataBucketArn: core.dataBucket.bucket.arn,
+    });
+
     const appConfigsToDeploy = getAppConfigsToDeploy(
       appLibrary,
       clientConfig.apps ?? {},
       clientConfig.allApps ?? false,
       clientConfig.allProdApps ?? false,
-      clientConfig.devInstance ?? false,
+      clientConfig.devInstance ?? false
     );
     const apps = appConfigsToDeploy.map(([configuredAppId, appConfig]) => {
       const app = lookupAppFromId(configuredAppId);
@@ -606,14 +654,26 @@ export class NumaClientStack extends TerraformStack {
         BEDROCK_ACCOUNT: clientConfig.bedrockAccount,
         PIPEDREAM_RELAY_LAMBDA_ARN: core.pipedreamRelayLambdaArn ?? undefined,
         PIPEDREAM_INTEGRATIONS: clientConfig.pipedreamIntegrations ?? false,
+        // Parent flags
         DATA_CONNECTORS_ENABLED: clientConfig.dataConnectorsEnabled ?? false,
         AGENTS: clientConfig.agents ?? false,
         NUMA_WORKSPACE_CHAT: clientConfig.numaWorkspaceChat ?? true,
         SCHEDULING: clientConfig.scheduling ?? false,
         NUMA_FILES: clientConfig.numaFiles ?? false,
-        WORKSPACE_CHAT_MODEL_SELECTION: clientConfig.workspaceChatModelSelection ?? false,
+        KNOWLEDGE_BASES: clientConfig.knowledgeBases ?? true,
+        DEVELOPER_MODE: clientConfig.developerMode ?? false,
         NUMA_OPS: clientConfig.numaOps ?? false,
         MFA_ENABLED: clientConfig.mfa ?? false,
+        SECRETS_VAULT_ENABLED: clientConfig.secretsVaultEnabled ?? false,
+        // Dependency cascade — children forced off when parent is off
+        NUMA_DROP_ZONES: (clientConfig.numaFiles ?? false) ? (clientConfig.numaDropZones ?? false) : false,
+        NUMA_SHARING: (clientConfig.numaFiles ?? false) ? (clientConfig.numaSharing ?? false) : false,
+        WORKSPACE_CHAT_MODEL_SELECTION:
+          (clientConfig.numaWorkspaceChat ?? false) ? (clientConfig.workspaceChatModelSelection ?? false) : false,
+        OAUTH_AVAILABLE: true, // Always available - infrastructure always deployed, admin flags control UI access only
+        OAUTH_INTEGRATIONS_ENABLED: clientConfig.oauthIntegrationsEnabled ?? false, // Controls UI access to OAuth setup
+        // Per-provider flags removed — providers are now configured dynamically via COMPANY vault secrets.
+        // OAUTH_GOOGLE_DRIVE, OAUTH_ONEDRIVE, OAUTH_DROPBOX are no longer needed in config.json.
         // Direct Lambda Function URL for workspace chat agent (bypasses CloudFront buffering for streaming)
         WORKSPACE_CHAT_AGENT_FUNCTION_URL: workspaceChatAgentProxy?.functionUrl,
         NUMA_VERSION: siteVersion,
@@ -644,7 +704,7 @@ export class NumaClientStack extends TerraformStack {
           displayVersion: versionLabel ?? undefined,
         },
         undefined,
-        2,
+        2
       ),
       contentType: 'application/json',
       cacheControl: 'no-cache, no-store, must-revalidate',
@@ -946,6 +1006,28 @@ export const clientConfigSchema = coreNumaInfraPropsSchema
         numaFiles: z.boolean().optional().default(false),
 
         /**
+         * Whether to enable Drop Zone creation in the Files shared tab.
+         *
+         * @default false
+         */
+        numaDropZones: z.boolean().optional().default(false),
+
+        /**
+         * Whether to enable Sharing creation (share documents for public Q&A).
+         *
+         * @default false
+         */
+        numaSharing: z.boolean().optional().default(false),
+
+        /**
+         * Whether to enable developer mode (developer/power-user actions).
+         * When enabled, allows file system drill-down, metadata inspection, and debug views.
+         *
+         * @default false
+         */
+        developerMode: z.boolean().optional().default(false),
+
+        /**
          * Whether to allow users to select AI models in Chat V2.
          * When false, Sonnet 4.5 is always used.
          *
@@ -959,8 +1041,61 @@ export const clientConfigSchema = coreNumaInfraPropsSchema
          * @default false
          */
         numaOps: z.boolean().optional().default(false),
+
+        /**
+         * Whether to enable Knowledge Bases feature (company/user file management).
+         *
+         * @default true
+         */
+        knowledgeBases: z.boolean().optional().default(true),
+
+        /**
+         * Whether to enable Records Knowledge Base functionality.
+         *
+         * @default false
+         */
+        recordsKBEnabled: z.boolean().optional().default(false),
+
+        /**
+         * Whether to enable Secrets Vault functionality for secure credential storage.
+         *
+         * @default false
+         */
+        secretsVaultEnabled: z.boolean().optional().default(false),
+
+        /**
+         * Whether to enable Content Search functionality.
+         *
+         * @default false
+         */
+        contentSearchEnabled: z.boolean().optional().default(false),
+
+        /**
+         * Whether OAuth cloud storage integrations (Google Drive, OneDrive, Dropbox) are enabled.
+         * Controls both the backend OAuth Lambda/routes and the frontend OAuth UI.
+         * Requires dataConnectorsEnabled for the frontend flag.
+         *
+         * @default false
+         */
+        oauthIntegrationsEnabled: z.boolean().optional().default(false),
+
+        /**
+         * OAuth provider configurations keyed by provider ID.
+         * Each provider specifies enabled status and OAuth scopes.
+         */
+        oauthProviders: z
+          .record(
+            z.string(),
+            z.object({
+              enabled: z.boolean(),
+              clientId: z.string().optional().default(''),
+              clientSecret: z.string().optional().default(''),
+              scopes: z.array(z.string()),
+            })
+          )
+          .optional(),
       })
-      .strict(),
+      .strict()
   );
 export type ClientConfig = z.infer<typeof clientConfigSchema>;
 
@@ -1017,7 +1152,7 @@ export function getAppConfigsToDeploy(
   appConfigs: Record<string, UserConfigurableBaseNumaAppProps>,
   allApps: boolean,
   allProdApps: boolean,
-  isDevInstance: boolean,
+  isDevInstance: boolean
 ): Array<[string, UserConfigurableBaseNumaAppProps]> {
   const appConfigsToDeploy: Array<[string, UserConfigurableBaseNumaAppProps]> = Object.entries(appConfigs);
 

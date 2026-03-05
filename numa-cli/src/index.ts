@@ -13,16 +13,24 @@
  *   numa users demote <email>     - Remove admin from user
  *   numa users delete <email>     - Delete a user
  *   numa create shared doc <file> - Create a shareable document Q&A link
- *   numa flags                   - Display feature flags and their current state
  */
 
 import { Command } from 'commander';
 import { createInitCommand } from './commands/init.js';
 import { createEnvCommand } from './commands/env.js';
-import { createLoginCommand, createLogoutCommand, createWhoamiCommand, createSetPasswordCommand, createUsersListCommand, createUserDeleteCommand, createUserAdminCommand, createUserPromoteCommand, createUserDemoteCommand } from './commands/auth.js';
+import {
+  createLoginCommand,
+  createLogoutCommand,
+  createWhoamiCommand,
+  createSetPasswordCommand,
+  createUsersListCommand,
+  createUserDeleteCommand,
+  createUserAdminCommand,
+  createUserPromoteCommand,
+  createUserDemoteCommand,
+} from './commands/auth.js';
 import { createSharedDocumentCommand } from './commands/create-shared-document.js';
 import { createRolesCommand } from './commands/roles.js';
-import { createFlagsCommand } from './commands/flags.js';
 import { getCurrentEnvName } from './config.js';
 
 const program = new Command();
@@ -56,20 +64,15 @@ program.addCommand(createEnvCommand());
 // Add roles management commands
 program.addCommand(createRolesCommand());
 
-// Add flags command
-program.addCommand(createFlagsCommand());
-
 // Auth commands
-const authCmd = new Command('auth')
-  .description('Authentication and user management');
+const authCmd = new Command('auth').description('Authentication and user management');
 authCmd.addCommand(createLoginCommand());
 authCmd.addCommand(createLogoutCommand());
 authCmd.addCommand(createWhoamiCommand());
 authCmd.addCommand(createSetPasswordCommand());
 
 // Add 'users' subcommand group to auth
-const authUsersCmd = new Command('users')
-  .description('User management');
+const authUsersCmd = new Command('users').description('User management');
 authUsersCmd.addCommand(createUsersListCommand());
 authUsersCmd.addCommand(createUserPromoteCommand());
 authUsersCmd.addCommand(createUserDemoteCommand());
@@ -80,20 +83,17 @@ authCmd.addCommand(authUsersCmd);
 program.addCommand(authCmd);
 
 // Create command group
-const createCmd = new Command('create')
-  .description('Create resources');
+const createCmd = new Command('create').description('Create resources');
 
 // Add 'shared' subcommand group
-const sharedCmd = new Command('shared')
-  .description('Create shared resources');
+const sharedCmd = new Command('shared').description('Create shared resources');
 
 sharedCmd.addCommand(createSharedDocumentCommand());
 createCmd.addCommand(sharedCmd);
 program.addCommand(createCmd);
 
 // Top-level users command
-const usersCmd = new Command('users')
-  .description('User management');
+const usersCmd = new Command('users').description('User management');
 usersCmd.addCommand(createUsersListCommand());
 usersCmd.addCommand(createUserPromoteCommand());
 usersCmd.addCommand(createUserDemoteCommand());

@@ -36,7 +36,7 @@ interface Props {
  * Group consecutive inline_tool segments together.
  */
 function groupSegments(
-  segments: WorkspaceChatSegment[],
+  segments: WorkspaceChatSegment[]
 ): Array<WorkspaceChatSegment | WorkspaceChatInlineToolSegment[]> {
   const result: Array<WorkspaceChatSegment | WorkspaceChatInlineToolSegment[]> = [];
   let currentInlineGroup: WorkspaceChatInlineToolSegment[] = [];

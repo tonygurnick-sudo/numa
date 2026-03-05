@@ -125,7 +125,7 @@ function WorkspaceChatInlineTool({ segment, conversationId }: Props) {
         setSubmitting(false);
       }
     },
-    [approval, conversationId],
+    [approval, conversationId]
   );
 
   // Countdown timer — ticks every second while approval panel is shown

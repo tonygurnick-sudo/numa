@@ -222,7 +222,7 @@ export function useWorkspaceChatStreaming({
 
               const textDelta = parseChunkWithoutDocComments(
                 rawTextDelta,
-                workspaceChatEventContextRef.current.docStripState,
+                workspaceChatEventContextRef.current.docStripState
               );
 
               if (!textDelta) return;
@@ -344,7 +344,7 @@ export function useWorkspaceChatStreaming({
                   const segments = [...(lastMsg.segments || [])];
 
                   const parentIdx = segments.findIndex(
-                    (s) => s.kind === 'subagent' && s.parentToolUseId === effectiveParentId,
+                    (s) => s.kind === 'subagent' && s.parentToolUseId === effectiveParentId
                   );
 
                   if (parentIdx >= 0) {
@@ -437,7 +437,7 @@ export function useWorkspaceChatStreaming({
                     const segments = [...(lastMsg.segments || [])];
 
                     const parentIdx = segments.findIndex(
-                      (s) => s.kind === 'subagent' && s.parentToolUseId === toolInfo.parentToolUseId,
+                      (s) => s.kind === 'subagent' && s.parentToolUseId === toolInfo.parentToolUseId
                     );
 
                     if (parentIdx >= 0) {
@@ -538,7 +538,7 @@ export function useWorkspaceChatStreaming({
 
                     // Find the inline tool with matching toolUseId
                     const toolIdx = segments.findIndex(
-                      (seg) => seg.kind === 'inline_tool' && seg.toolUseId === toolUseId && !seg.isComplete,
+                      (seg) => seg.kind === 'inline_tool' && seg.toolUseId === toolUseId && !seg.isComplete
                     );
 
                     if (toolIdx < 0) return prev;
@@ -583,7 +583,7 @@ export function useWorkspaceChatStreaming({
                 typeof b === 'object' &&
                 b !== null &&
                 (b as { type?: string; name?: string }).type === 'tool_use' &&
-                (b as { name?: string }).name === 'Task',
+                (b as { name?: string }).name === 'Task'
             );
 
             if (!hasTaskTool) {
@@ -596,7 +596,7 @@ export function useWorkspaceChatStreaming({
                 const segments = [...(lastMsg.segments || [])];
 
                 const parentIdx = segments.findIndex(
-                  (s) => s.kind === 'subagent' && s.parentToolUseId === activeTaskId,
+                  (s) => s.kind === 'subagent' && s.parentToolUseId === activeTaskId
                 );
 
                 if (parentIdx >= 0) {
@@ -653,7 +653,7 @@ export function useWorkspaceChatStreaming({
               // Auto-save inline document to S3 outputs (fire-and-forget)
               if (getCredentials && conversationId) {
                 saveInlineDocumentToS3(docBlock.docTitle, docBlock.docContent, conversationId, getCredentials).then(
-                  () => refreshSessionFiles?.(),
+                  () => refreshSessionFiles?.()
                 );
               }
             }
@@ -718,7 +718,7 @@ export function useWorkspaceChatStreaming({
               setIsInitializing(switchEvent.status === 'switching');
             }
           }
-        },
+        }
       );
 
       workspaceChatAbortRef.current = abortWorkspaceChat;
@@ -739,7 +739,7 @@ export function useWorkspaceChatStreaming({
       onStreamComplete,
       getCredentials,
       refreshSessionFiles,
-    ],
+    ]
   );
 
   return {

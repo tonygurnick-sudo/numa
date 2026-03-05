@@ -274,7 +274,7 @@ export function TicketDetailModal({
         setSaving(false);
       }
     },
-    [ticket, ticketId, numaPut, refreshTickets, refreshCrmData, loadTicket, t],
+    [ticket, ticketId, numaPut, refreshTickets, refreshCrmData, loadTicket, t]
   );
 
   // ── Title editing handlers ──────────────────────────────────────────────
@@ -369,7 +369,7 @@ export function TicketDetailModal({
       const updatedFields = { ...(ticket.fields ?? {}), [fieldId]: value };
       await handleUpdate({ fields: updatedFields });
     },
-    [ticket, handleUpdate],
+    [ticket, handleUpdate]
   );
 
   // ── Get ticket type fields with overrides ─────────────────────────────
@@ -411,7 +411,7 @@ export function TicketDetailModal({
       })
       .filter(
         (item): item is { field: FieldDefinition; override: { visible: boolean; required: boolean } | undefined } =>
-          item !== null,
+          item !== null
       );
   }, [ticketType, config, team]);
 

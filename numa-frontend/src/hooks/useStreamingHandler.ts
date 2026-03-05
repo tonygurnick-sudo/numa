@@ -114,7 +114,7 @@ export const useStreamingHandler = () => {
         accumulatedResponse: () => accumulatedResponse,
       };
     },
-    [],
+    []
   );
 
   /**

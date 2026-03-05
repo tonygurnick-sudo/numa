@@ -211,7 +211,7 @@ const MarkdownContent = React.memo(({ content }: MarkdownContentProps) => {
         </h6>
       ),
     }),
-    [copied],
+    [copied]
   );
 
   return (

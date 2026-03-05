@@ -42,11 +42,11 @@ mcp__numa__numa_tool(name="memories", description="Update preference", params={
 
 ## Operations
 
-| Operation | Purpose |
-|-----------|---------|
-| `list` | List memories (optionally filtered by scope) |
-| `add` | Add a new memory |
-| `update` | Update an existing memory's content |
+| Operation | Purpose                                      |
+| --------- | -------------------------------------------- |
+| `list`    | List memories (optionally filtered by scope) |
+| `add`     | Add a new memory                             |
+| `update`  | Update an existing memory's content          |
 
 ---
 
@@ -56,10 +56,10 @@ List the user's memories, optionally filtered by scope.
 
 ### Parameters
 
-| Parameter | Required | Default | Description |
-|-----------|----------|---------|-------------|
-| `operation` | Yes | - | `"list"` |
-| `scope` | No | all | Filter: `general`, `integration:{slug}`, or `agent:{agentId}` |
+| Parameter   | Required | Default | Description                                                   |
+| ----------- | -------- | ------- | ------------------------------------------------------------- |
+| `operation` | Yes      | -       | `"list"`                                                      |
+| `scope`     | No       | all     | Filter: `general`, `integration:{slug}`, or `agent:{agentId}` |
 
 ### Examples
 
@@ -88,6 +88,7 @@ mcp__numa__numa_tool(name="memories", description="List agent memories", params=
 ### Output Format
 
 JSON response with:
+
 - `memories` - Array of memory objects, each containing:
   - `id` - Memory ID (e.g., `mem_abc123def456`)
   - `content` - The memory text (max 300 characters)
@@ -103,11 +104,11 @@ Add a new memory for the user.
 
 ### Parameters
 
-| Parameter | Required | Default | Description |
-|-----------|----------|---------|-------------|
-| `operation` | Yes | - | `"add"` |
-| `content` | Yes | - | Memory content (max 300 characters) |
-| `scope` | No | `"general"` | `general`, `integration:{slug}`, or `agent:{agentId}` |
+| Parameter   | Required | Default     | Description                                           |
+| ----------- | -------- | ----------- | ----------------------------------------------------- |
+| `operation` | Yes      | -           | `"add"`                                               |
+| `content`   | Yes      | -           | Memory content (max 300 characters)                   |
+| `scope`     | No       | `"general"` | `general`, `integration:{slug}`, or `agent:{agentId}` |
 
 ### Examples
 
@@ -153,11 +154,11 @@ Update the content of an existing memory. The scope and creation date are preser
 
 ### Parameters
 
-| Parameter | Required | Description |
-|-----------|----------|-------------|
-| `operation` | Yes | `"update"` |
-| `memory_id` | Yes | Memory ID to update |
-| `content` | Yes | New memory content (max 300 characters) |
+| Parameter   | Required | Description                             |
+| ----------- | -------- | --------------------------------------- |
+| `operation` | Yes      | `"update"`                              |
+| `memory_id` | Yes      | Memory ID to update                     |
+| `content`   | Yes      | New memory content (max 300 characters) |
 
 ### Examples
 
@@ -180,11 +181,11 @@ mcp__numa__numa_tool(name="memories", description="Update preference", params={
 
 ## Scope Reference
 
-| Scope | When to use | Example |
-|-------|-------------|---------|
-| `general` | User preferences, facts, communication style | "Prefers concise responses" |
-| `integration:{slug}` | Integration-specific operational details | "Jira Cloud ID: abc123" |
-| `agent:{agentId}` | Agent-specific user preferences | "Wants weekly summaries" |
+| Scope                | When to use                                  | Example                     |
+| -------------------- | -------------------------------------------- | --------------------------- |
+| `general`            | User preferences, facts, communication style | "Prefers concise responses" |
+| `integration:{slug}` | Integration-specific operational details     | "Jira Cloud ID: abc123"     |
+| `agent:{agentId}`    | Agent-specific user preferences              | "Wants weekly summaries"    |
 
 Common integration slugs: `jira`, `slack`, `google_drive`, `gmail`, `notion`, `sharepoint`, `hubspot`, `xero`, `outlook`, `teams`
 
@@ -197,6 +198,7 @@ Common integration slugs: `jira`, `slack`, `google_drive`, `gmail`, `notion`, `s
 **ALWAYS ask the user before adding or updating a memory.** Never silently save memories.
 
 Examples of good confirmation:
+
 - "I'd like to save a memory that you prefer concise bullet-point responses. Shall I go ahead?"
 - "I noticed your Jira Cloud ID is abc123-def456. Want me to remember that for future Jira tasks?"
 - "You mentioned you prefer dark mode — shall I save that as a memory so I remember next time?"
@@ -206,11 +208,13 @@ Only run the add/update command **after the user confirms**.
 ### When to Suggest Adding Memories
 
 **DO suggest adding memories when:**
+
 - The user explicitly says "remember this", "keep this in mind", "save this for next time", or semantically similar
 - Working with integrations and discovering useful operational details (cloud IDs, channel IDs, project boards, preferred settings)
 - The user shares a persistent preference about how they like to work
 
 **DO NOT suggest adding memories when:**
+
 - It's a one-off instruction for the current conversation only
 - The user is telling you about their profile (name, job title, etc.) - direct them to the Profile page in Settings
 - The information is already captured in an existing memory (update it instead)

@@ -1,98 +1,98 @@
 Docs and set up sets are detailed below
 
-| Account id | Organisation | Allocated client |
-| --- | --- | --- |
-| 006043185629 | NextGen | nolia |
-| 776126713613 | NextGen | thealternativeboard |
-| 760023434717 | NextGen | springload |
-| 042666117240 | NextGen | collegeoflaw |
-| 805629929118 | NextGen | rollexgroup |
-| 392928624335 | NextGen | capitalfootball |
-| 950318176385 | NextGen | quantiq |
-| 858955002160 | NextGen | huddle-advisory |
-| 377977678801 | NextGen | uplift-education |
-| 382337760991 | NextGen | colliers |
-| 047471738088 | NextGen | newzealandai |
-| 038785695707 | NextGen | mexted |
-| 947931883577 | NextGen | tleaft |
-| 728951503701 | NextGen | worldbank |
-| 017117988822 | NextGen | goodmans-nz |
-| 288862304077 | NextGen | rocketscience |
-| 753747399340 | NextGen | tech-connect |
-| 450119683782 | NextGen | uplift-admin |
-| 234026642139 | NextGen | justcabins |
-| 706859116098 | NextGen | vadacom |
-| 396531909098     | NextGen | alexandergroup |
-| 001187921205     | NextGen | median |
-| 114657496115     | NextGen | mkcl |
-| 998716768892     | NextGen | synergy-tech |
-| 698752407583     | NextGen | tregaskisbrown |
-| 837801696792     | NextGen | myriad |
-| 919586550650     | NextGen | racetech |
-| 954690186230     | NextGen | otc |
-| 942204942465     | NextGen | pcl |
-| 866994607941     | NextGen |  |
-| 910599465907     | NextGen |  |
-| 340234701983     | NextGen |  |
-| 737771471445     | NextGen |  |
-| 538269500074     | NextGen |  |
-| 838207858000     | NextGen |  |
-| 825200688101     | NextGen |  |
-| 830101142393     | NextGen |  |
-| 798555099573     | NextGen |  |
-| 489975610175     | NextGen |  |
-| 727529935650     | NextGen |  |
-| 339126663632	 | NextGen |  |
-| 464115713868	 | NextGen |  |
-| 597482567576	 | NextGen |  |
-| 444625565534	 | NextGen |  |
-| 148590264296	 | NextGen |  |
-| 326246079726	 | NextGen |  |
-| 048119077582	 | NextGen |  |
-| 170407096871	 | NextGen |  |
-| 532442478361	 | NextGen |  |
-| 849695476748	 | NextGen |  |
-| 187641964244	 | NextGen |  |
-| 851936785814	 | NextGen |  |
-| 861536898047	 | NextGen |  |
-| 753916465016	 | NextGen |  |
-| 550357520907	 | NextGen |  |
-| 997439899063	 | NextGen |  |
-| 032896315914	 | NextGen |  |
-| 384236450119	 | NextGen |  |
-| 669409471969	 | NextGen |  |
-| 231866325831	 | NextGen |  |
-| 289259597350	 | NextGen |  |
-| 724663511818	 | NextGen |  |
-| 035904364368	 | NextGen |  |
-| 732132791560	 | NextGen |  |
-| 578941298075	 | NextGen |  |
-| 037776137953	 | NextGen |  |
-| 579939802812	 | NextGen |  |
-| 334419247435	 | NextGen |  |
-| 635146785917	 | NextGen |  |
-| 803355016775	 | NextGen |  |
-| 323041436535	 | NextGen |  |
-| 564103198730	 | NextGen |  |
-| 398564003032	 | NextGen |  |
-| 025434362039	 | NextGen |  |
-| 012079073878	 | NextGen |  |
-| 205251327521	 | NextGen |  |
-| 879390138559	 | NextGen |  |
-| 935542360612	 | NextGen |  |
-| 844892156540	 | NextGen |  |
-| 902747178819	 | NextGen |  |
-| 825738202612	 | NextGen |  |
-| 423452794458	 | NextGen |  |
-| 245003609975	 | NextGen |  |
-| 364301298809	 | NextGen |  |
-| 309642614677	 | NextGen |  |
-| 602695720054	 | NextGen |  |
-| 665565853077	 | NextGen |  |
-| 100403449979	 | NextGen |  |
-| 599273006016	 | NextGen |  |
-| 200937443847	 | NextGen |  |
-| 593067253426	 | NextGen |  |
+| Account id   | Organisation | Allocated client    |
+| ------------ | ------------ | ------------------- |
+| 006043185629 | NextGen      | nolia               |
+| 776126713613 | NextGen      | thealternativeboard |
+| 760023434717 | NextGen      | springload          |
+| 042666117240 | NextGen      | collegeoflaw        |
+| 805629929118 | NextGen      | rollexgroup         |
+| 392928624335 | NextGen      | capitalfootball     |
+| 950318176385 | NextGen      | quantiq             |
+| 858955002160 | NextGen      | huddle-advisory     |
+| 377977678801 | NextGen      | uplift-education    |
+| 382337760991 | NextGen      | colliers            |
+| 047471738088 | NextGen      | newzealandai        |
+| 038785695707 | NextGen      | mexted              |
+| 947931883577 | NextGen      | tleaft              |
+| 728951503701 | NextGen      | worldbank           |
+| 017117988822 | NextGen      | goodmans-nz         |
+| 288862304077 | NextGen      | rocketscience       |
+| 753747399340 | NextGen      | tech-connect        |
+| 450119683782 | NextGen      | uplift-admin        |
+| 234026642139 | NextGen      | justcabins          |
+| 706859116098 | NextGen      | vadacom             |
+| 396531909098 | NextGen      | alexandergroup      |
+| 001187921205 | NextGen      | median              |
+| 114657496115 | NextGen      | mkcl                |
+| 998716768892 | NextGen      | synergy-tech        |
+| 698752407583 | NextGen      | tregaskisbrown      |
+| 837801696792 | NextGen      | myriad              |
+| 919586550650 | NextGen      | racetech            |
+| 954690186230 | NextGen      | otc                 |
+| 942204942465 | NextGen      | pcl                 |
+| 866994607941 | NextGen      |                     |
+| 910599465907 | NextGen      |                     |
+| 340234701983 | NextGen      |                     |
+| 737771471445 | NextGen      |                     |
+| 538269500074 | NextGen      |                     |
+| 838207858000 | NextGen      |                     |
+| 825200688101 | NextGen      |                     |
+| 830101142393 | NextGen      |                     |
+| 798555099573 | NextGen      |                     |
+| 489975610175 | NextGen      |                     |
+| 727529935650 | NextGen      |                     |
+| 339126663632 | NextGen      |                     |
+| 464115713868 | NextGen      |                     |
+| 597482567576 | NextGen      |                     |
+| 444625565534 | NextGen      |                     |
+| 148590264296 | NextGen      |                     |
+| 326246079726 | NextGen      |                     |
+| 048119077582 | NextGen      |                     |
+| 170407096871 | NextGen      |                     |
+| 532442478361 | NextGen      |                     |
+| 849695476748 | NextGen      |                     |
+| 187641964244 | NextGen      |                     |
+| 851936785814 | NextGen      |                     |
+| 861536898047 | NextGen      |                     |
+| 753916465016 | NextGen      |                     |
+| 550357520907 | NextGen      |                     |
+| 997439899063 | NextGen      |                     |
+| 032896315914 | NextGen      |                     |
+| 384236450119 | NextGen      |                     |
+| 669409471969 | NextGen      |                     |
+| 231866325831 | NextGen      |                     |
+| 289259597350 | NextGen      |                     |
+| 724663511818 | NextGen      |                     |
+| 035904364368 | NextGen      |                     |
+| 732132791560 | NextGen      |                     |
+| 578941298075 | NextGen      |                     |
+| 037776137953 | NextGen      |                     |
+| 579939802812 | NextGen      |                     |
+| 334419247435 | NextGen      |                     |
+| 635146785917 | NextGen      |                     |
+| 803355016775 | NextGen      |                     |
+| 323041436535 | NextGen      |                     |
+| 564103198730 | NextGen      |                     |
+| 398564003032 | NextGen      |                     |
+| 025434362039 | NextGen      |                     |
+| 012079073878 | NextGen      |                     |
+| 205251327521 | NextGen      |                     |
+| 879390138559 | NextGen      |                     |
+| 935542360612 | NextGen      |                     |
+| 844892156540 | NextGen      |                     |
+| 902747178819 | NextGen      |                     |
+| 825738202612 | NextGen      |                     |
+| 423452794458 | NextGen      |                     |
+| 245003609975 | NextGen      |                     |
+| 364301298809 | NextGen      |                     |
+| 309642614677 | NextGen      |                     |
+| 602695720054 | NextGen      |                     |
+| 665565853077 | NextGen      |                     |
+| 100403449979 | NextGen      |                     |
+| 599273006016 | NextGen      |                     |
+| 200937443847 | NextGen      |                     |
+| 593067253426 | NextGen      |                     |
 
 # Nextgen AWS Account Customer Setup Guide
 
@@ -115,7 +115,6 @@ Docs and set up sets are detailed below
   "allowBedrockQuotaSharing": false,
   "preferredKnowledgeBase": "bedrock"
 }
-
 ```
 
 ### 1.2 Select Account ID
@@ -177,7 +176,6 @@ Create a JSON file (e.g., `customer-name.json`) with your configuration:
   "allowBedrockQuotaSharing": false,
   "preferredKnowledgeBase": "bedrock"
 }
-
 ```
 
 ### 2.3 Write Configuration to Database
@@ -209,7 +207,7 @@ yarn retrieve-config {customer-name}
 
 ### 4.1 Find the most recent prod pipeline in GitLab
 
-- *Note: Ensure main is stable, else deploy from the latest known stable merged pipeline*
+- _Note: Ensure main is stable, else deploy from the latest known stable merged pipeline_
 
 This can be done by navigating to https://gitlab.com/arcanumai/numa/-/pipelines?page=1&scope=all&ref=main and finding the most recent pipeline where jobs in the deploy:customer stage have been run.
 
@@ -254,28 +252,28 @@ This file contains a list of all our customers and needs to be kept up-to-date s
 
 ### Configuration Fields
 
-| Field | Required | Default Value | Description |
-| --- | --- | --- | --- |
-| `clientAccountId` | Yes | N/A | AWS Account ID (must be unique per customer) |
-| `region` | Yes | N/A | AWS region (`us-east-1` or `ap-southeast-2`) |
-| `allProdApps` | No | `false` | Enable all production applications |
-| `allApps` | No | `false` | Enable *all* apps (for dev use only) |
-| `apps` | No | `{}` | Map of appId: configuration to deploy (configuration is currently always `{}`) |
-| `allowBedrockQuotaSharing` | No | `false` | Allow other accounts to use this account’s Bedrock quota |
-| `bedrockAccount`  | No | `undefined`  | An account id to use for making Bedrock calls (for quota sharing). That account must have `allowBedrockQuotaSharing` set to `true`. |
-| `provisionQResources` | No | `false` | Whether to provision Q for this stack. |
-| `preferredKnowledgeBase` | No | `"q"` if `provisionQResources`, otherwise `"bedrock"` | Which type of knowledge base to use. |
+| Field                      | Required | Default Value                                         | Description                                                                                                                         |
+| -------------------------- | -------- | ----------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| `clientAccountId`          | Yes      | N/A                                                   | AWS Account ID (must be unique per customer)                                                                                        |
+| `region`                   | Yes      | N/A                                                   | AWS region (`us-east-1` or `ap-southeast-2`)                                                                                        |
+| `allProdApps`              | No       | `false`                                               | Enable all production applications                                                                                                  |
+| `allApps`                  | No       | `false`                                               | Enable _all_ apps (for dev use only)                                                                                                |
+| `apps`                     | No       | `{}`                                                  | Map of appId: configuration to deploy (configuration is currently always `{}`)                                                      |
+| `allowBedrockQuotaSharing` | No       | `false`                                               | Allow other accounts to use this account’s Bedrock quota                                                                            |
+| `bedrockAccount`           | No       | `undefined`                                           | An account id to use for making Bedrock calls (for quota sharing). That account must have `allowBedrockQuotaSharing` set to `true`. |
+| `provisionQResources`      | No       | `false`                                               | Whether to provision Q for this stack.                                                                                              |
+| `preferredKnowledgeBase`   | No       | `"q"` if `provisionQResources`, otherwise `"bedrock"` | Which type of knowledge base to use.                                                                                                |
 
 ### Region Selection Guidelines
 
 - **us-east-1**: Recommended for customers in:
-    - United States
-    - Canada
-    - Other North American regions
+  - United States
+  - Canada
+  - Other North American regions
 - **ap-southeast-2**: Recommended for customers in:
-    - Australia
-    - New Zealand
-    - Other Asia-Pacific regions
+  - Australia
+  - New Zealand
+  - Other Asia-Pacific regions
 
 ## Post-Deployment Verification
 
@@ -288,7 +286,7 @@ After successful deployment:
 
 ## Notes
 
-- Each customer must have a unique `clientAccountId`  allocated from the table of available accounts
+- Each customer must have a unique `clientAccountId` allocated from the table of available accounts
 - Configuration changes require rebuilding and redeployment
 - Keep track of used account IDs to avoid conflicts. The table should mirror the DB.
 - The `write-config` tool includes built-in validation to prevent invalid configurations

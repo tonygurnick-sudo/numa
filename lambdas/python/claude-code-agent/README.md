@@ -16,9 +16,11 @@ The lambda routes to different agent implementations based on the `agent_type` p
 ### Available Agent Types
 
 #### `data_analysis`
+
 Full-featured agent optimized for data analysis, visualization, and document processing.
 
 **Key Features:**
+
 - Enhanced Python package access (pandas, plotly, openpyxl, PyPDF2, python-docx, etc.)
 - Session continuity support (resume previous work with `--resume`)
 - Conversation history management across turns
@@ -31,15 +33,18 @@ Full-featured agent optimized for data analysis, visualization, and document pro
 **Best for:** Data exploration, visualization, multi-turn analysis workflows, document processing
 
 **Settings:**
+
 - Permission mode: `acceptEdits`
 - Thinking tokens: 10,000
 - Tools: Read, Write, Edit, Glob, Grep, TodoWrite, Task, WebFetch, BashOutput, KillShell
 - Bash: python, ls, cat, tar, unzip, mkdir, mv, cp, and more
 
 #### `default`
+
 Minimal agent providing basic Claude CLI functionality with restricted permissions.
 
 **Key Features:**
+
 - Single-turn execution (no session continuity)
 - Basic file operations (read, write, edit)
 - Restricted bash commands (ls, pwd, echo, cat, head, tail, wc, date, whoami, env, which, file)
@@ -49,6 +54,7 @@ Minimal agent providing basic Claude CLI functionality with restricted permissio
 **Best for:** Simple one-off tasks, testing, or when minimal permissions are desired
 
 **Settings:**
+
 - Permission mode: `allowed_tools`
 - Thinking tokens: 80,000
 - Tools: Read, Write, Edit, Glob, Grep
@@ -71,40 +77,44 @@ Specify the `agent_type` in your event payload:
 ```
 
 **Default Behavior:**
+
 - If `agent_type` is omitted, defaults to `default`
 - If `agent_type` is invalid/unknown, falls back to `default`
 - Fallback includes error logging for debugging
 
 ### Feature Comparison
 
-| Feature | default | data_analysis |
-|---------|---------|---------------|
-| Session continuity | ❌ | ✅ |
-| Conversation history | ❌ | ✅ |
-| Event streaming | ❌ | ✅ |
-| Python data packages | Limited | Full (pandas, plotly, etc.) |
-| Document parsing | ❌ | ✅ (PDF, Word, Excel) |
-| Thinking tokens | 80,000 | 10,000 |
-| Permission mode | allowed_tools | acceptEdits |
-| Bash commands | Very restricted | Broad (python, file ops) |
-| WebFetch | ❌ | ✅ (Arcanum domains) |
-| TodoWrite/Task | ❌ | ✅ |
-| Tool narration | ❌ | ✅ (LLM-based) |
+| Feature              | default         | data_analysis               |
+| -------------------- | --------------- | --------------------------- |
+| Session continuity   | ❌              | ✅                          |
+| Conversation history | ❌              | ✅                          |
+| Event streaming      | ❌              | ✅                          |
+| Python data packages | Limited         | Full (pandas, plotly, etc.) |
+| Document parsing     | ❌              | ✅ (PDF, Word, Excel)       |
+| Thinking tokens      | 80,000          | 10,000                      |
+| Permission mode      | allowed_tools   | acceptEdits                 |
+| Bash commands        | Very restricted | Broad (python, file ops)    |
+| WebFetch             | ❌              | ✅ (Arcanum domains)        |
+| TodoWrite/Task       | ❌              | ✅                          |
+| Tool narration       | ❌              | ✅ (LLM-based)              |
 
 ## Event Payload
 
 Required fields:
+
 - `app_id` (string): app identifier (e.g., `data-analysis`)
 - `job_id` (string): unique job identifier
 - `user_id` (string): user identifier
 - `uploaded_files` (array): list of S3 keys for input files
 
 Optional fields (all agents):
+
 - `agent_type` (string): agent type to use (`data_analysis` or `default`, default: `default`)
 - `prompt` (string): custom prompt for the task
 - `include_uploads_in_prompt` (boolean): override whether to preface the user prompt with a list of uploaded files (see below)
 
 Optional fields (data_analysis agent only):
+
 - `resume_session` (boolean): enable session continuity (default: `false`, see "Session Continuity" below)
 - `stream_events` (boolean): enable real-time event streaming (default: `true`)
 - `use_dynamodb` (boolean): write events to DynamoDB for real-time status (default: `true`)
@@ -113,6 +123,7 @@ Optional fields (data_analysis agent only):
 ## Environment Variables
 
 Shared across all agents:
+
 - `OUTPUTS_BUCKET_NAME` (required): outputs bucket for artifacts
 - `HOME` (default `/tmp`): home dir for Claude session files
 - `CLAUDE_BIN` (default `claude`): CLI binary name
@@ -121,6 +132,7 @@ Shared across all agents:
 - `CLAUDE_CODE_MAX_OUTPUT_TOKENS` (default 64000): token cap
 
 Agent-specific (configured in each agent's `settings.py`):
+
 - `MAX_THINKING_TOKENS`: extended thinking token budget (default: 10,000 for data_analysis, 80,000 for default)
 - `INCLUDE_UPLOADS_IN_PROMPT` (default enabled): when truthy, the agent prompt is prefaced with a list of files found in `./user-inputs/`. Accepts values like `true/false`, `1/0`, `on/off`.
 
@@ -156,23 +168,27 @@ The conversation history written to `history/conversation.json` always records t
 The data_analysis agent includes full infrastructure for session resumption. The default agent does not support session continuity.
 
 **Current Behavior (resume_session=false, default):**
+
 - Every invocation starts a fresh Claude CLI session
 - Session artifacts (Claude home archive, session metadata, conversation history, trace files) are **always saved** to S3 to prepare for potential future resumed runs
 - Prior outputs are not restored; the agent starts with a clean workspace
 
 **Future Behavior (resume_session=true):**
 When enabled, the Lambda will:
+
 1. Restore the Claude session archive (`~/.claude`) from S3
 2. Hydrate prior outputs so the agent can reference previous work
 3. Load the previous `ccSessionId` and pass `--resume` to the Claude CLI
 4. Continue the conversation from the last turn in `history/conversation.json`
 
 **Requirements to Enable:**
+
 - Pass `resume_session: true` in the event payload
 - Reuse the same `job_id` across invocations (frontend must track and pass stable job IDs)
 - Frontend "Continue this analysis" button or equivalent workflow
 
 **S3 Artifact Structure:**
+
 ```
 {app_id}/{user_id}/{job_id}/
   outputs/
@@ -197,6 +213,7 @@ Each invocation creates an isolated workspace under `/tmp/cc_ws/<job_id>`:
 - `tmp/` — scratch and intermediates not shown to the user
 
 Isolation & concurrency:
+
 - Each Lambda invocation gets its own ephemeral `/tmp`. Concurrent users cannot see each other’s files.
 - The workspace is recreated on each run to prevent leakage across invocations.
 - S3 keys are scoped by `app_id/user_id/job_id`, ensuring cross-user/run isolation.
@@ -218,11 +235,13 @@ To add a new agent type to this lambda:
 4. **Configure infrastructure:** Set `agent_type` in your Step Function task definition (see `infra/constructs/apps/data-analysis-construct.ts` for example)
 
 **Required exports:**
+
 - `main.py` must export `run(event, context)` function
 - `settings.py` must export `ENV_VARS` and `SETTINGS_JSON`
 - `SETTINGS_JSON` must include: `permissions`, `tools`, `sandbox` configurations
 
 **Shared resources:**
+
 - `base_prompt.py` — `NUMA_BASE_SYSTEM_PROMPT` for consistent base instructions
 - `utils/` — Shared utilities (s3_operations, cli_runner, session, trace_parser, appoutput)
 - `helpers.py` — Event streaming and DynamoDB helpers

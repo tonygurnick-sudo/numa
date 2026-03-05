@@ -14,7 +14,7 @@ class SynergyConnector(BaseDataConnector):
     """Connector for validating Synergy API credentials."""
 
     connector_id = "synergy"
-    display_name = "Synergy"
+    display_name = "Synergy 12d"
 
     def sanitize_config(self, config: Dict[str, Any]) -> Dict[str, Any]:
         return {
@@ -58,7 +58,7 @@ class SynergyConnector(BaseDataConnector):
         response = httpx.post(url, json=payload, headers=headers, timeout=60)
         if response.status_code >= 400:
             raise ValueError(
-                f"Synergy API returned {response.status_code}: {response.text[:300]}"
+                f"Synergy 12d API returned {response.status_code}: {response.text[:300]}"
             )
 
         jobs_found = None
@@ -75,7 +75,7 @@ class SynergyConnector(BaseDataConnector):
             jobs_found = None
 
         return {
-            "message": "Synergy connection verified.",
+            "message": "Synergy 12d connection verified.",
             "jobs_found": jobs_found,
         }
 

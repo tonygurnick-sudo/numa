@@ -1,0 +1,29 @@
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.coverage.run]
+omit = ["**/tests/**/*"]
+source = ["."]
+
+[tool.mypy]
+python_version = "3.13"
+ignore_missing_imports = true
+
+[tool.poetry]
+name = "vault-secrets"
+version = "0.1.0"
+description = "Bitwarden-style secrets vault for Numa"
+authors = ["Arcanum AI"]
+packages = [{ include = "**/*.py" }]
+
+[tool.poetry.dependencies]
+python = "~3.13.0"
+structlog = "^25.2.0"
+aws-lambda-powertools = "3.9.0"
+prm = { path = "../../../lib/prm", develop = true }
+
+[tool.poetry.group.dev.dependencies]
+mypy = "1.17.1"
+pylint = "3.3.8"
+pyright = "1.1.403"

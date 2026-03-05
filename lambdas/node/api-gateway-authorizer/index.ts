@@ -41,9 +41,20 @@ export const handler: APIGatewayRequestSimpleAuthorizerHandlerV2 = async (event)
   const cleanJwt = jwt.startsWith('Bearer ') ? jwt.slice(7) : jwt;
 
   try {
-    await verifier.verify(cleanJwt);
+    const payload = await verifier.verify(cleanJwt);
     console.info('JWT is valid');
-    return { isAuthorized: true };
+    return {
+      isAuthorized: true,
+      context: {
+        jwt: JSON.stringify({
+          claims: {
+            sub: payload.sub,
+            'cognito:groups': (payload as Record<string, unknown>)['cognito:groups'] ?? '',
+            username: (payload as Record<string, unknown>).username ?? '',
+          },
+        }),
+      },
+    };
   } catch (err) {
     console.error('JWT verification failed:', err);
     return { isAuthorized: false };

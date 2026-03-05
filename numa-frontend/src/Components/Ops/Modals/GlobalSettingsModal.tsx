@@ -294,7 +294,7 @@ export function GlobalSettingsModal({
   // ── CRM Config state ───────────────────────────────────────────────────────
   const [editingLifecycleStage, setEditingLifecycleStage] = useState<CrmLifecycleStage | null>(null);
   const [lifecycleStageForm, setLifecycleStageForm] = useState<{ name: string; colorPosition: number; color?: string }>(
-    { name: '', colorPosition: 6 },
+    { name: '', colorPosition: 6 }
   );
   const [showLifecycleStageModal, setShowLifecycleStageModal] = useState(false);
 
@@ -359,7 +359,7 @@ export function GlobalSettingsModal({
               documentTypes: [],
               territories: [],
               industries: [],
-            },
+            }
       );
       setSupplierConfig(
         config.supplierConfig
@@ -373,7 +373,7 @@ export function GlobalSettingsModal({
               ],
               supplierFlags: [],
               documentTypes: [],
-            },
+            }
       );
       setLinkConfig(config.linkConfig ? structuredClone(config.linkConfig) : { linkTypes: [] });
       setError(null);
@@ -464,7 +464,7 @@ export function GlobalSettingsModal({
         setError(t('errors.saveFailed', { message: String(err) }));
       }
     },
-    [numaDelete, t],
+    [numaDelete, t]
   );
 
   // ── Supplier delete handler ────────────────────────────────────────────────
@@ -477,7 +477,7 @@ export function GlobalSettingsModal({
         setError(t('errors.saveFailed', { message: String(err) }));
       }
     },
-    [numaDelete, t],
+    [numaDelete, t]
   );
 
   // ── Board delete handler ──────────────────────────────────────────────────
@@ -495,7 +495,7 @@ export function GlobalSettingsModal({
         }
       }
     },
-    [numaDelete, refreshTeams, t],
+    [numaDelete, refreshTeams, t]
   );
 
   // ── New customer handler ───────────────────────────────────────────────────
@@ -549,7 +549,7 @@ export function GlobalSettingsModal({
                 fieldType: newFieldType,
                 options: parsedOptions,
               }
-            : f,
+            : f
         );
       } else {
         // Create new field
@@ -739,7 +739,7 @@ export function GlobalSettingsModal({
         <i className="bi bi-info-circle me-1" />
         {t(
           'globalSettings.ticketTypesInfo',
-          'A ticket type is a piece of work. Create ticket types for bugs, features, tasks, or anything else your boards need to track.',
+          'A ticket type is a piece of work. Create ticket types for bugs, features, tasks, or anything else your boards need to track.'
         )}
       </div>
       <Table size="sm" hover className="mb-0 ops-settings-table">
@@ -2568,7 +2568,7 @@ export function GlobalSettingsModal({
               const catFields = fields.filter(
                 (f) =>
                   f.category === cat &&
-                  (!fieldSelectionSearch || f.name.toLowerCase().includes(fieldSelectionSearch.toLowerCase())),
+                  (!fieldSelectionSearch || f.name.toLowerCase().includes(fieldSelectionSearch.toLowerCase()))
               );
               if (catFields.length === 0) return null;
 

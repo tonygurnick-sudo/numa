@@ -189,7 +189,7 @@ const getFileValidationError = (
   t: (key: string, options?: Record<string, unknown>) => string,
   constraints: Record<AssetType, AssetConstraint>,
   type: AssetType,
-  file: File,
+  file: File
 ): string | null => {
   const constraint = constraints[type];
   if (!constraint) {
@@ -289,7 +289,7 @@ const BrandingAdminPanel: React.FC<BrandingAdminPanelProps> = ({ onDirtyChange }
         setLoading(false);
       }
     },
-    [numaGet],
+    [numaGet]
   );
 
   const resetToDefault = useCallback(() => {
@@ -496,17 +496,17 @@ const BrandingAdminPanel: React.FC<BrandingAdminPanelProps> = ({ onDirtyChange }
 
   const handleSplashUpdate =
     (field: 'title' | 'description' | 'textColor' | 'showPanel') =>
-      (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-        const value = field === 'showPanel' ? (event.target as HTMLInputElement).checked : event.target.value;
-        markDirty();
-        setBranding((prev) => ({
-          ...prev,
-          splashScreen: {
-            ...prev.splashScreen,
-            [field]: value,
-          },
-        }));
-      };
+    (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+      const value = field === 'showPanel' ? (event.target as HTMLInputElement).checked : event.target.value;
+      markDirty();
+      setBranding((prev) => ({
+        ...prev,
+        splashScreen: {
+          ...prev.splashScreen,
+          [field]: value,
+        },
+      }));
+    };
 
   // Convert S3 URI or HTTPS URL to unsigned HTTPS URL for display
   // (used for thumbnails where signing isn't critical)
@@ -571,7 +571,7 @@ const BrandingAdminPanel: React.FC<BrandingAdminPanelProps> = ({ onDirtyChange }
             console.error('Failed to generate preview URL for asset', { type, error });
             return [type, uri] as const;
           }
-        }),
+        })
       );
 
       if (!cancelled) {
@@ -706,7 +706,7 @@ const BrandingAdminPanel: React.FC<BrandingAdminPanelProps> = ({ onDirtyChange }
       showToast({ variant: 'info', message: t('brandingAdmin.toasts.savingChanges') });
 
       const trimmedColors = Object.fromEntries(
-        Object.entries(branding.colors).map(([key, value]) => [key, value?.trim?.() ?? value ?? '']),
+        Object.entries(branding.colors).map(([key, value]) => [key, value?.trim?.() ?? value ?? ''])
       ) as BrandingFormState['colors'];
 
       const payload: BrandingSavePayload = {
@@ -823,7 +823,7 @@ const BrandingAdminPanel: React.FC<BrandingAdminPanelProps> = ({ onDirtyChange }
       brandingService.applyExternalBranding(
         revertedEnabled ? { ...merged } : { ...DEFAULT_BRANDING_THEME },
         {},
-        { persist: true, tenantEnabled: revertedEnabled },
+        { persist: true, tenantEnabled: revertedEnabled }
       );
       setHistory(result.history ?? []);
       setHistoryLoaded(true);
@@ -928,9 +928,9 @@ const BrandingAdminPanel: React.FC<BrandingAdminPanelProps> = ({ onDirtyChange }
                     console.log('Version history item:', item);
                     const formattedTimestamp = item.updatedAt
                       ? new Date(item.updatedAt).toLocaleString(i18n.language, {
-                        dateStyle: 'medium',
-                        timeStyle: 'short',
-                      })
+                          dateStyle: 'medium',
+                          timeStyle: 'short',
+                        })
                       : undefined;
                     const displayLabel = item.label || formattedTimestamp || item.versionId;
                     const metaParts: string[] = [];

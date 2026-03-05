@@ -33,7 +33,7 @@ export type AgentsSidebarHandle = {
 
 const AgentsSidebarComponent: ForwardRefRenderFunction<AgentsSidebarHandle, AgentsSidebarProps> = (
   { onSelectAgent, currentAgentId, recentConversations },
-  ref,
+  ref
 ) => {
   const { numaGet } = useNumaRequest();
   const { t } = useTranslation('agents');
@@ -95,7 +95,7 @@ const AgentsSidebarComponent: ForwardRefRenderFunction<AgentsSidebarHandle, Agen
       refreshAgents: loadAgents,
       toggleSidebar: () => setShow((prev) => !prev),
     }),
-    [],
+    []
   );
 
   useEffect(() => {

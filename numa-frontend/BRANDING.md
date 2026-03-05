@@ -4,11 +4,11 @@ This document explains how client-specific branding is loaded and applied in the
 
 ## Components
 
-| Layer | Responsibility | Key File |
-| --- | --- | --- |
-| `BrandingService` | Loads and caches the branding payload, resolves assets, injects CSS variables, exposes helpers. | `src/Services/BrandingService.tsx` |
-| `BrandingProvider` | React context provider that initialises the service and exposes values to the component tree. | `src/Providers/BrandingProvider.tsx` |
-| `BrandingContext` | Type definitions plus defaults for the branding theme and helpers. | `src/Providers/BrandingContext.tsx` |
+| Layer              | Responsibility                                                                                  | Key File                             |
+| ------------------ | ----------------------------------------------------------------------------------------------- | ------------------------------------ |
+| `BrandingService`  | Loads and caches the branding payload, resolves assets, injects CSS variables, exposes helpers. | `src/Services/BrandingService.tsx`   |
+| `BrandingProvider` | React context provider that initialises the service and exposes values to the component tree.   | `src/Providers/BrandingProvider.tsx` |
+| `BrandingContext`  | Type definitions plus defaults for the branding theme and helpers.                              | `src/Providers/BrandingContext.tsx`  |
 
 The app bootstraps branding by wrapping the route tree in `<BrandingProvider>` inside `src/App.tsx`.
 
@@ -99,11 +99,11 @@ const navLogo = useBrandingAsset('logoNav');
 
 ## Troubleshooting
 
-| Symptom | Likely Cause | Next Steps |
-| --- | --- | --- |
-| App stuck on "Loading…" | Branding API unreachable and caching disabled. | Check `API_ENDPOINT`, browser console, and CORS. |
-| Colours not updating | Buttons use legacy `--color-*` tokens. | Swap to `var(--brand-*, var(--color-*)))` as part of branding refresh. |
-| Logos missing | `BRANDING_ASSETS_BUCKET` or `REGION` incorrect, or asset path lacks protocol. | Verify S3 bucket and ensure `assets` entries are absolute, `s3://bucket/key`, or `/prefix`. |
+| Symptom                 | Likely Cause                                                                  | Next Steps                                                                                  |
+| ----------------------- | ----------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| App stuck on "Loading…" | Branding API unreachable and caching disabled.                                | Check `API_ENDPOINT`, browser console, and CORS.                                            |
+| Colours not updating    | Buttons use legacy `--color-*` tokens.                                        | Swap to `var(--brand-*, var(--color-*)))` as part of branding refresh.                      |
+| Logos missing           | `BRANDING_ASSETS_BUCKET` or `REGION` incorrect, or asset path lacks protocol. | Verify S3 bucket and ensure `assets` entries are absolute, `s3://bucket/key`, or `/prefix`. |
 
 ## Related Files
 

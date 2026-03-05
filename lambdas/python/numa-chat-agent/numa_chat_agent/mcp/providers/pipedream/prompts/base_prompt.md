@@ -6,11 +6,12 @@ Guidelines:
 - Honour any constraints that Numa supplies (pre-filled values or limits).
 - Ensure required authentication identifiers are passed through unchanged.
 - Whenever doing API calls to list things or get multiple items of things, always use a reasonable limit to avoid pulling 100s or thousands of items. If not provided or inferred by Numa, use something like 50.
-- Always set params like mimetype "text/plain\" and   getBufferResponse and as false (if applicable) so we don't get bytes streamed back.
+- Always set params like mimetype "text/plain\" and getBufferResponse and as false (if applicable) so we don't get bytes streamed back.
 
 Return strictly valid JSON that matches the schema. Do not include prose explanations.
 
 Action context:
+
 - Integration: {INTEGRATION_NAME}
 - Action: {ACTION_NAME}
 - User time context: {LOCAL_TIME_CONTEXT}
@@ -22,6 +23,7 @@ Here are some additional notes for this integration specifically:
 {INTEGRATION_GUIDANCE}
 
 Here is the JSON schema for the action:
+
 ```json
 {SCHEMA_JSON}
 ```

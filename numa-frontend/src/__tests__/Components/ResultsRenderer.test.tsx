@@ -293,7 +293,7 @@ describe('ResultsRenderer Component', () => {
         'test-bucket',
         'us-east-1',
         expect.any(Function),
-        'PDF Output',
+        'PDF Output'
       );
     });
   });
@@ -334,7 +334,7 @@ describe('ResultsRenderer Component', () => {
         'test-key',
         'test-bucket',
         'us-east-1',
-        expect.any(Function),
+        expect.any(Function)
       );
     });
   });

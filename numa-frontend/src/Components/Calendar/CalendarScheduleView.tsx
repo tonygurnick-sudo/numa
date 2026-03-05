@@ -107,7 +107,7 @@ export const CalendarScheduleView: React.FC<CalendarScheduleViewProps> = ({
         onEventClick(event);
       }
     },
-    [onEventClick],
+    [onEventClick]
   );
 
   // Handle slot selection (empty space clicks)
@@ -117,7 +117,7 @@ export const CalendarScheduleView: React.FC<CalendarScheduleViewProps> = ({
         onSlotClick(slotInfo);
       }
     },
-    [onSlotClick],
+    [onSlotClick]
   );
 
   // Custom event component styling based on event type

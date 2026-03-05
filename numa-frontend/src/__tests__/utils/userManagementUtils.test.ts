@@ -113,7 +113,7 @@ describe('UserManagementUtils', () => {
               },
             ]),
           }),
-        }),
+        })
       );
 
       // Verify that send was called with correct parameters for setting password
@@ -126,7 +126,7 @@ describe('UserManagementUtils', () => {
             Password: expect.any(String),
             Permanent: true,
           }),
-        }),
+        })
       );
 
       expect(result).toEqual({
@@ -142,7 +142,7 @@ describe('UserManagementUtils', () => {
 
       // Execute & Assert
       await expect(userManagementUtils.createUser(mockEmail, mockUserPoolId)).rejects.toThrow(
-        'A user with this email already exists',
+        'A user with this email already exists'
       );
     });
 
@@ -186,7 +186,7 @@ describe('UserManagementUtils', () => {
               },
             ]),
           }),
-        }),
+        })
       );
 
       // Verify the command was created with lowercase email for password setting
@@ -199,7 +199,7 @@ describe('UserManagementUtils', () => {
             Password: expect.any(String),
             Permanent: true,
           }),
-        }),
+        })
       );
 
       // Verify the response
@@ -218,7 +218,7 @@ describe('UserManagementUtils', () => {
       });
 
       await expect(userManagementUtils.createUser(email, userPoolId)).rejects.toThrow(
-        'A user with this email already exists',
+        'A user with this email already exists'
       );
     });
   });
@@ -377,7 +377,7 @@ describe('UserManagementUtils', () => {
             Limit: limit,
             PaginationToken: paginationToken,
           }),
-        }),
+        })
       );
 
       // Verify that the ListUsersInGroupCommand was called with correct parameters
@@ -388,7 +388,7 @@ describe('UserManagementUtils', () => {
             UserPoolId: userPoolId,
             GroupName: 'admin',
           }),
-        }),
+        })
       );
     });
   });
@@ -412,7 +412,7 @@ describe('UserManagementUtils', () => {
             UserPoolId: userPoolId,
             GroupName: groupName,
           }),
-        }),
+        })
       );
 
       expect(result).toEqual(['admin1@example.com', 'admin2@example.com']);

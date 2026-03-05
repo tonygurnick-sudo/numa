@@ -36,7 +36,7 @@ describe('companyInfoUtils', () => {
         mockS3Bucket,
         'company-data.json',
         mockRegion,
-        mockGetCredentials,
+        mockGetCredentials
       );
 
       // Check the result
@@ -45,13 +45,13 @@ describe('companyInfoUtils', () => {
 
     it('should throw an error if region is missing', async () => {
       await expect(saveCompanyInfo(mockProfileText, mockS3Bucket, null, mockGetCredentials)).rejects.toThrow(
-        'Region is missing for saveCompanyInfo',
+        'Region is missing for saveCompanyInfo'
       );
     });
 
     it('should throw an error if S3 bucket is missing', async () => {
       await expect(saveCompanyInfo(mockProfileText, null, mockRegion, mockGetCredentials)).rejects.toThrow(
-        'S3 bucket name is missing for saveCompanyInfo',
+        'S3 bucket name is missing for saveCompanyInfo'
       );
     });
 
@@ -60,7 +60,7 @@ describe('companyInfoUtils', () => {
       uploadFileToS3.mockRejectedValueOnce(new Error('Upload failed'));
 
       await expect(saveCompanyInfo(mockProfileText, mockS3Bucket, mockRegion, mockGetCredentials)).rejects.toThrow(
-        'Upload failed',
+        'Upload failed'
       );
     });
   });

@@ -8,7 +8,7 @@
 // Regex pattern: lowercase letters, numbers, and dashes
 // - Must start and end with alphanumeric character
 // - Dashes only allowed between segments (no consecutive dashes)
-const CLIENT_NAME_PATTERN = /^[a-z0-9]+(-[a-z0-9]+)*$/
+const CLIENT_NAME_PATTERN = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 
 /**
  * Validates a client name against naming conventions
@@ -32,9 +32,9 @@ const CLIENT_NAME_PATTERN = /^[a-z0-9]+(-[a-z0-9]+)*$/
  */
 export function isValidClientName(clientName: string): boolean {
   if (!clientName || clientName.trim().length === 0) {
-    return false
+    return false;
   }
-  return CLIENT_NAME_PATTERN.test(clientName.trim())
+  return CLIENT_NAME_PATTERN.test(clientName.trim());
 }
 
 /**
@@ -45,32 +45,32 @@ export function isValidClientName(clientName: string): boolean {
  */
 export function validateClientName(clientName: string): string | null {
   if (!clientName || clientName.trim().length === 0) {
-    return 'Client name is required'
+    return 'Client name is required';
   }
 
-  const trimmedName = clientName.trim()
+  const trimmedName = clientName.trim();
 
   // Check for invalid characters (this catches uppercase, special chars, spaces, etc.)
   if (!/^[a-z0-9-]+$/.test(trimmedName)) {
-    return 'Client name can only contain lowercase letters, numbers, and dashes'
+    return 'Client name can only contain lowercase letters, numbers, and dashes';
   }
 
   // Check for leading/trailing dashes
   if (trimmedName.startsWith('-') || trimmedName.endsWith('-')) {
-    return 'Client name cannot start or end with a dash'
+    return 'Client name cannot start or end with a dash';
   }
 
   // Check for consecutive dashes
   if (trimmedName.includes('--')) {
-    return 'Client name cannot contain consecutive dashes'
+    return 'Client name cannot contain consecutive dashes';
   }
 
   // Final pattern check
   if (!CLIENT_NAME_PATTERN.test(trimmedName)) {
-    return 'Client name format is invalid'
+    return 'Client name format is invalid';
   }
 
-  return null // Valid
+  return null; // Valid
 }
 
 /**
@@ -81,15 +81,17 @@ export function validateClientName(clientName: string): string | null {
  * @returns Sanitized client name
  */
 export function sanitizeClientName(clientName: string): string {
-  return clientName
-    .toLowerCase()
-    .trim()
-    // Replace underscores and spaces with dashes
-    .replace(/[_\s]+/g, '-')
-    // Remove any character that's not lowercase letter, number, or dash
-    .replace(/[^a-z0-9-]/g, '')
-    // Replace consecutive dashes with single dash
-    .replace(/-+/g, '-')
-    // Remove leading/trailing dashes
-    .replace(/^-+|-+$/g, '')
+  return (
+    clientName
+      .toLowerCase()
+      .trim()
+      // Replace underscores and spaces with dashes
+      .replace(/[_\s]+/g, '-')
+      // Remove any character that's not lowercase letter, number, or dash
+      .replace(/[^a-z0-9-]/g, '')
+      // Replace consecutive dashes with single dash
+      .replace(/-+/g, '-')
+      // Remove leading/trailing dashes
+      .replace(/^-+|-+$/g, '')
+  );
 }

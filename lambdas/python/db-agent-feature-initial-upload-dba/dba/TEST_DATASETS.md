@@ -4,17 +4,17 @@ This document lists diverse public CSV datasets with direct download URLs for te
 
 ## Quick Reference
 
-| Category | Dataset | Size | Records | URL |
-|----------|---------|------|---------|-----|
-| **Air Travel** | Monthly passengers | 14 KB | 144 | https://people.sc.fsu.edu/~jburkardt/data/csv/airtravel.csv |
-| **COVID-19** | Countries aggregated | 5.3 MB | 161,569 | https://raw.githubusercontent.com/datasets/covid-19/main/data/countries-aggregated.csv |
-| **Weather** | Seattle 1948-2016 | ~200 KB | ~25,000 | https://raw.githubusercontent.com/plotly/datasets/master/2016-weather-data-seattle.csv |
-| **Finance** | Apple stock | ~500 KB | ~3,000 | https://raw.githubusercontent.com/plotly/datasets/master/finance-charts-apple.csv |
-| **Sales** | Monthly car sales | 3 KB | 108 | https://raw.githubusercontent.com/jbrownlee/Datasets/master/monthly-car-sales.csv |
-| **Titanic** | Passengers | 60 KB | 891 | https://raw.githubusercontent.com/datasciencedojo/datasets/master/titanic.csv |
-| **Education** | College grads | 75 KB | 173 | https://raw.githubusercontent.com/fivethirtyeight/data/master/college-majors/recent-grads.csv |
-| **Iris** | Flower measurements | 5 KB | 150 | https://raw.githubusercontent.com/mwaskom/seaborn-data/master/iris.csv |
-| **Google Sheets** | Student class data | ~2 KB | ~30 | https://docs.google.com/spreadsheets/d/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms/export?format=csv&gid=0 |
+| Category          | Dataset              | Size    | Records | URL                                                                                                         |
+| ----------------- | -------------------- | ------- | ------- | ----------------------------------------------------------------------------------------------------------- |
+| **Air Travel**    | Monthly passengers   | 14 KB   | 144     | https://people.sc.fsu.edu/~jburkardt/data/csv/airtravel.csv                                                 |
+| **COVID-19**      | Countries aggregated | 5.3 MB  | 161,569 | https://raw.githubusercontent.com/datasets/covid-19/main/data/countries-aggregated.csv                      |
+| **Weather**       | Seattle 1948-2016    | ~200 KB | ~25,000 | https://raw.githubusercontent.com/plotly/datasets/master/2016-weather-data-seattle.csv                      |
+| **Finance**       | Apple stock          | ~500 KB | ~3,000  | https://raw.githubusercontent.com/plotly/datasets/master/finance-charts-apple.csv                           |
+| **Sales**         | Monthly car sales    | 3 KB    | 108     | https://raw.githubusercontent.com/jbrownlee/Datasets/master/monthly-car-sales.csv                           |
+| **Titanic**       | Passengers           | 60 KB   | 891     | https://raw.githubusercontent.com/datasciencedojo/datasets/master/titanic.csv                               |
+| **Education**     | College grads        | 75 KB   | 173     | https://raw.githubusercontent.com/fivethirtyeight/data/master/college-majors/recent-grads.csv               |
+| **Iris**          | Flower measurements  | 5 KB    | 150     | https://raw.githubusercontent.com/mwaskom/seaborn-data/master/iris.csv                                      |
+| **Google Sheets** | Student class data   | ~2 KB   | ~30     | https://docs.google.com/spreadsheets/d/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms/export?format=csv&gid=0 |
 
 ---
 
@@ -27,12 +27,14 @@ This document lists diverse public CSV datasets with direct download URLs for te
 **Columns**: Month, 1958, 1959, 1960 (passenger counts by year)
 
 **Good for testing**:
+
 - Basic aggregations
 - Trend analysis over time
 - Year-over-year comparisons
 - Small dataset performance
 
 **Example queries**:
+
 ```bash
 # Simple count
 ./db --csv "https://people.sc.fsu.edu/~jburkardt/data/csv/airtravel.csv" "SELECT COUNT(*) FROM data"
@@ -55,6 +57,7 @@ This document lists diverse public CSV datasets with direct download URLs for te
 **Columns**: Date, Country, Confirmed, Recovered, Deaths
 
 **Good for testing**:
+
 - Large dataset performance
 - Time series analysis
 - Multi-country comparisons
@@ -62,6 +65,7 @@ This document lists diverse public CSV datasets with direct download URLs for te
 - Aggregations and GROUP BY
 
 **Example queries**:
+
 ```bash
 # Top countries by cases
 ./db --csv "https://raw.githubusercontent.com/datasets/covid-19/main/data/countries-aggregated.csv" \
@@ -87,6 +91,7 @@ This document lists diverse public CSV datasets with direct download URLs for te
 **Columns**: Date, Max_TemperatureC, Mean_TemperatureC, Min_TemperatureC, Dew_PointC, MeanDew_PointC, Min_DewpointC, Max_Humidity, Mean_Humidity, Min_Humidity, Max_Sea_Level_PressurehPa, Mean_Sea_Level_PressurehPa, Min_Sea_Level_PressurehPa, Max_VisibilityKm, Mean_VisibilityKm, Min_VisibilitykM, Max_Wind_SpeedKm_h, Mean_Wind_SpeedKm_h, Max_Gust_SpeedKm_h, Precipitationmm, CloudCover, Events, WindDirDegrees
 
 **Good for testing**:
+
 - Historical weather analysis
 - Seasonal patterns
 - Temperature extremes
@@ -94,6 +99,7 @@ This document lists diverse public CSV datasets with direct download URLs for te
 - Date range queries
 
 **Example queries**:
+
 ```bash
 # Hottest days
 ./db --csv "https://raw.githubusercontent.com/plotly/datasets/master/2016-weather-data-seattle.csv" \
@@ -119,6 +125,7 @@ This document lists diverse public CSV datasets with direct download URLs for te
 **Columns**: Date, AAPL.Open, AAPL.High, AAPL.Low, AAPL.Close, AAPL.Volume, AAPL.Adjusted, dn, mavg, up, direction
 
 **Good for testing**:
+
 - Financial data analysis
 - Price trends
 - Volume analysis
@@ -126,6 +133,7 @@ This document lists diverse public CSV datasets with direct download URLs for te
 - Technical indicators
 
 **Example queries**:
+
 ```bash
 # Highest closing price
 ./db --csv "https://raw.githubusercontent.com/plotly/datasets/master/finance-charts-apple.csv" \
@@ -151,12 +159,14 @@ This document lists diverse public CSV datasets with direct download URLs for te
 **Columns**: Month, Sales
 
 **Good for testing**:
+
 - Time series forecasting
 - Seasonal patterns
 - Simple trend analysis
 - Fast queries
 
 **Example queries**:
+
 ```bash
 # Average sales per month
 ./db --csv "https://raw.githubusercontent.com/jbrownlee/Datasets/master/monthly-car-sales.csv" \
@@ -182,6 +192,7 @@ This document lists diverse public CSV datasets with direct download URLs for te
 **Columns**: PassengerId, Survived, Pclass, Name, Sex, Age, SibSp, Parch, Ticket, Fare, Cabin, Embarked
 
 **Good for testing**:
+
 - Survival analysis
 - Demographic patterns
 - Class-based analysis
@@ -189,6 +200,7 @@ This document lists diverse public CSV datasets with direct download URLs for te
 - Multiple categorical variables
 
 **Example queries**:
+
 ```bash
 # Survival rate by class
 ./db --csv "https://raw.githubusercontent.com/datasciencedojo/datasets/master/titanic.csv" \
@@ -214,6 +226,7 @@ This document lists diverse public CSV datasets with direct download URLs for te
 **Columns**: Rank, Major_code, Major, Major_category, Total, Sample_size, Men, Women, ShareWomen, Employed, Full_time, Part_time, Full_time_year_round, Unemployed, Unemployment_rate, Median, P25th, P75th, College_jobs, Non_college_jobs, Low_wage_jobs
 
 **Good for testing**:
+
 - Education data analysis
 - Salary comparisons
 - Employment rates
@@ -221,6 +234,7 @@ This document lists diverse public CSV datasets with direct download URLs for te
 - Career outcomes
 
 **Example queries**:
+
 ```bash
 # Highest median salaries
 ./db --csv "https://raw.githubusercontent.com/fivethirtyeight/data/master/college-majors/recent-grads.csv" \
@@ -246,12 +260,14 @@ This document lists diverse public CSV datasets with direct download URLs for te
 **Columns**: sepal_length, sepal_width, petal_length, petal_width, species
 
 **Good for testing**:
+
 - Classification analysis
 - Statistical measures
 - Species comparisons
 - Scientific data
 
 **Example queries**:
+
 ```bash
 # Average measurements by species
 ./db --csv "https://raw.githubusercontent.com/mwaskom/seaborn-data/master/iris.csv" \
@@ -279,12 +295,14 @@ This document lists diverse public CSV datasets with direct download URLs for te
 **Columns**: Name, Gender, Class Level, State, Major, Extracurricular
 
 **Good for testing**:
+
 - Google Sheets integration
 - Student demographics
 - Educational data
 - Categorical grouping
 
 **Example queries**:
+
 ```bash
 # Count by major
 ./db --csv "https://docs.google.com/spreadsheets/d/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms/export?format=csv&gid=0" \
@@ -310,6 +328,7 @@ This document lists diverse public CSV datasets with direct download URLs for te
 For testing with very large files (100K - 2M records), use these Google Drive links:
 
 **Customers Dataset** (synthetic data):
+
 - 100K records: https://drive.google.com/uc?id=1N1xoxgcw2K3d-49tlchXAWw4wuxLj7EV&export=download
 - 1M records: https://drive.google.com/uc?id=16WH96smhIT0KK0ZVJRpjymLa_XDhKOoD&export=download
 - 2M records: https://drive.google.com/uc?id=1IXQDp8Um3d-o7ysZLxkDyuvFj9gtlxqz&export=download
@@ -321,24 +340,28 @@ For testing with very large files (100K - 2M records), use these Google Drive li
 ## Testing Strategy by Category
 
 ### Performance Testing
+
 - **Tiny (< 10 KB)**: Iris, Car Sales
 - **Small (< 100 KB)**: Air Travel, Titanic, College Grads
 - **Medium (100 KB - 1 MB)**: Seattle Weather, Apple Stock
 - **Large (> 1 MB)**: COVID-19 (5.3 MB)
 
 ### Query Complexity Testing
+
 - **Simple SELECT/COUNT**: Iris, Car Sales
 - **Aggregations/GROUP BY**: Titanic, College Grads, COVID-19
 - **Time Series**: Air Travel, Weather, Apple Stock, Car Sales
 - **Multi-dimensional**: COVID-19, Titanic, College Grads
 
 ### AI Feature Testing
+
 - **Simple --ask questions**: All datasets
 - **Trend analysis --auto**: Weather, Stock, Air Travel, COVID-19
 - **Root cause --auto**: Titanic, College Grads
 - **Pattern detection --auto**: COVID-19, Weather, Stock
 
 ### Engine Testing
+
 - **csv-sqlite (default)**: All datasets
 - **csv-duckdb (performance)**: COVID-19, Weather, Apple Stock
 - **URL caching**: All GitHub/URL datasets
@@ -348,6 +371,7 @@ For testing with very large files (100K - 2M records), use these Google Drive li
 ## Running Comprehensive Tests
 
 ### Test All Datasets (Basic)
+
 ```bash
 # Create a quick test script
 for url in \
@@ -363,6 +387,7 @@ done
 ```
 
 ### Test AI Features on Diverse Datasets
+
 ```bash
 # Export API key first
 export ANTHROPIC_API_KEY='your-key-here'
@@ -384,15 +409,15 @@ export ANTHROPIC_API_KEY='your-key-here'
 
 ## Dataset Characteristics Summary
 
-| Feature | Best Datasets |
-|---------|---------------|
+| Feature                  | Best Datasets                                   |
+| ------------------------ | ----------------------------------------------- |
 | **Time series analysis** | Air Travel, Weather, Stock, Car Sales, COVID-19 |
-| **Categorical analysis** | Titanic, Iris, College Grads |
-| **Large aggregations** | COVID-19, Weather |
-| **Financial analysis** | Apple Stock |
-| **Scientific data** | Iris, Weather |
-| **Social data** | Titanic, College Grads |
-| **Health data** | COVID-19 |
+| **Categorical analysis** | Titanic, Iris, College Grads                    |
+| **Large aggregations**   | COVID-19, Weather                               |
+| **Financial analysis**   | Apple Stock                                     |
+| **Scientific data**      | Iris, Weather                                   |
+| **Social data**          | Titanic, College Grads                          |
+| **Health data**          | COVID-19                                        |
 
 ---
 

@@ -58,7 +58,7 @@ type AuthContext = { sub: string; email?: string; name?: string; groups: string[
 
 const jsonResponse = (
   statusCode: number,
-  payload: unknown,
+  payload: unknown
 ): { statusCode: number; headers: typeof HEADERS; body: string } => ({
   statusCode,
   headers: HEADERS,
@@ -122,7 +122,7 @@ const queryGSI1 = async (
   gsi1pk: string,
   skPrefix?: string,
   limit?: number,
-  startKey?: Record<string, unknown>,
+  startKey?: Record<string, unknown>
 ): Promise<{ items: Record<string, unknown>[]; lastKey?: Record<string, unknown> }> => {
   const result = await dynamo.send(
     new QueryCommand({
@@ -132,7 +132,7 @@ const queryGSI1 = async (
       ExpressionAttributeValues: skPrefix ? { ':pk': gsi1pk, ':sk': skPrefix } : { ':pk': gsi1pk },
       ...(limit ? { Limit: limit } : {}),
       ...(startKey ? { ExclusiveStartKey: startKey } : {}),
-    }),
+    })
   );
   return {
     items: (result.Items ?? []) as Record<string, unknown>[],
@@ -144,7 +144,7 @@ const queryGSI2 = async (
   gsi2pk: string,
   skPrefix?: string,
   limit?: number,
-  startKey?: Record<string, unknown>,
+  startKey?: Record<string, unknown>
 ): Promise<{ items: Record<string, unknown>[]; lastKey?: Record<string, unknown> }> => {
   const result = await dynamo.send(
     new QueryCommand({
@@ -154,7 +154,7 @@ const queryGSI2 = async (
       ExpressionAttributeValues: skPrefix ? { ':pk': gsi2pk, ':sk': skPrefix } : { ':pk': gsi2pk },
       ...(limit ? { Limit: limit } : {}),
       ...(startKey ? { ExclusiveStartKey: startKey } : {}),
-    }),
+    })
   );
   return {
     items: (result.Items ?? []) as Record<string, unknown>[],
@@ -170,7 +170,7 @@ const queryGSI3 = async (gsi3pk: string, gsi3sk?: string): Promise<Record<string
       KeyConditionExpression: gsi3sk ? 'GSI3PK = :pk AND GSI3SK = :sk' : 'GSI3PK = :pk',
       ExpressionAttributeValues: gsi3sk ? { ':pk': gsi3pk, ':sk': gsi3sk } : { ':pk': gsi3pk },
       Limit: 1,
-    }),
+    })
   );
   return (result.Items ?? [])[0] as Record<string, unknown> | undefined;
 };
@@ -181,7 +181,7 @@ const queryByPK = async (pk: string, skPrefix?: string): Promise<Record<string, 
       TableName: OPS_TABLE,
       KeyConditionExpression: skPrefix ? 'PK = :pk AND begins_with(SK, :sk)' : 'PK = :pk',
       ExpressionAttributeValues: skPrefix ? { ':pk': pk, ':sk': skPrefix } : { ':pk': pk },
-    }),
+    })
   );
   return (result.Items ?? []) as Record<string, unknown>[];
 };
@@ -205,7 +205,7 @@ const buildAuditItem = (
   ticketId: string,
   auth: AuthContext,
   action: string,
-  changes?: Record<string, unknown>,
+  changes?: Record<string, unknown>
 ): Record<string, unknown> => {
   const ts = now();
   const auditId = randomUUID();
@@ -230,7 +230,7 @@ const handleTeams = async (
   method: string,
   segments: string[],
   body: Record<string, unknown>,
-  auth: AuthContext,
+  auth: AuthContext
 ): Promise<ReturnType<typeof jsonResponse>> => {
   // GET /ops/teams — list teams (filtered by access)
   if (method === 'GET' && segments.length === 0) {
@@ -535,7 +535,7 @@ const handleTeams = async (
     // Check for active tickets in this zone
     const ticketItems = await queryByPK(`TEAM#${teamId}`, 'TICKET#');
     const activeTicketsInZone = ticketItems.filter(
-      (t) => String(t.zoneId) === zoneId && String(t.statusType) !== 'deleted',
+      (t) => String(t.zoneId) === zoneId && String(t.statusType) !== 'deleted'
     );
     if (activeTicketsInZone.length > 0) {
       return errorResponse(409, 'Cannot delete zone with active tickets. Move or delete them first.');
@@ -543,7 +543,7 @@ const handleTeams = async (
 
     // Delete the zone and all its stages
     const stagesToDelete = teamItems.items.filter(
-      (i) => String(i.SK ?? '').startsWith('STAGE#') && String(i.zoneId) === zoneId,
+      (i) => String(i.SK ?? '').startsWith('STAGE#') && String(i.zoneId) === zoneId
     );
     const deleteOps = [
       deleteItem(`TEAM#${teamId}`, `ZONE#${zoneId}`),
@@ -580,7 +580,7 @@ const handleTeams = async (
       if (zoneType && !isStatusTypeAllowedInZone(statusType as StatusType, zoneType)) {
         return errorResponse(
           400,
-          `Status type '${statusType}' is not allowed in '${zoneType}' zone. Allowed: ${ZONE_STATUS_TYPES[zoneType].join(', ')}`,
+          `Status type '${statusType}' is not allowed in '${zoneType}' zone. Allowed: ${ZONE_STATUS_TYPES[zoneType].join(', ')}`
         );
       }
     }
@@ -695,7 +695,7 @@ const handleTeams = async (
           // Find all tickets assigned to this sprint that are in backlog zones
           const sprintTickets = await queryGSI2(`WORKUNIT#${id}`, 'TICKET#');
           const ticketsToMove = sprintTickets.items.filter(
-            (t) => String(t.entityType ?? '') === 'TICKET' && backlogZoneIds.has(String(t.zoneId)),
+            (t) => String(t.entityType ?? '') === 'TICKET' && backlogZoneIds.has(String(t.zoneId))
           );
 
           // Batch-update tickets to move to the board zone
@@ -738,7 +738,7 @@ const handleTeams = async (
       // Find incomplete tickets for this sprint
       const sprintTickets = await queryGSI2(`WORKUNIT#${id}`, 'TICKET#');
       const incompleteTickets = sprintTickets.items.filter(
-        (t) => String(t.entityType ?? '') === 'TICKET' && t.statusType !== 'completed' && t.statusType !== 'ended',
+        (t) => String(t.entityType ?? '') === 'TICKET' && t.statusType !== 'completed' && t.statusType !== 'ended'
       );
 
       if (incompleteTickets.length > 0 && backlogZoneId && firstBacklogStage) {
@@ -751,7 +751,7 @@ const handleTeams = async (
         if (rolloverToWorkUnitId === 'next') {
           const allUnits = await queryGSI1(`TEAM#${teamId}`, 'WORKUNIT#STATUS#planning#');
           const nextPlanning = allUnits.items.sort(
-            (a, b) => ((a.order as number) ?? 0) - ((b.order as number) ?? 0),
+            (a, b) => ((a.order as number) ?? 0) - ((b.order as number) ?? 0)
           )[0];
           resolvedRolloverWuId = nextPlanning ? String(nextPlanning.id) : undefined;
         } else if (rolloverToWorkUnitId) {
@@ -872,7 +872,7 @@ const getNextDisplayId = async (prefix: string): Promise<{ displayId: string; se
       UpdateExpression: 'ADD nextSequence :inc',
       ExpressionAttributeValues: { ':inc': 1 },
       ReturnValues: 'ALL_NEW',
-    }),
+    })
   );
   const seq = (result.Attributes?.nextSequence as number) ?? 1;
   const displayId = `${prefix}-${String(seq).padStart(3, '0')}`;
@@ -891,7 +891,7 @@ const getLastTicketOrder = async (teamId: string, stageId: string): Promise<numb
       },
       ScanIndexForward: false,
       Limit: 1,
-    }),
+    })
   );
   const last = (result.Items ?? [])[0];
   if (!last) return 0;
@@ -903,7 +903,7 @@ const resolveTicketTypePrefix = async (ticketTypeId: string): Promise<string> =>
     new GetCommand({
       TableName: OPS_CONFIG_TABLE,
       Key: { PK: 'CONFIG', SK: `TICKET_TYPE#${ticketTypeId}` },
-    }),
+    })
   );
   const item = result.Item;
   if (!item || !item.prefix) return 'TKT';
@@ -916,7 +916,7 @@ const buildTicketIndexItems = (
   assigneeId: string | undefined,
   customerId: string | undefined,
   workUnitId: string | undefined,
-  updatedAt: string,
+  updatedAt: string
 ): Record<string, unknown>[] => {
   const items: Record<string, unknown>[] = [];
 
@@ -970,7 +970,7 @@ const handleTickets = async (
   segments: string[],
   body: Record<string, unknown>,
   auth: AuthContext,
-  event: APIGatewayProxyEventV2,
+  event: APIGatewayProxyEventV2
 ): Promise<ReturnType<typeof jsonResponse>> => {
   const qp = event.queryStringParameters ?? {};
 
@@ -1022,7 +1022,7 @@ const handleTickets = async (
             Key: { PK: String(ticket.PK), SK: String(ticket.SK) },
             UpdateExpression: 'ADD commentCount :inc',
             ExpressionAttributeValues: { ':inc': 1 },
-          }),
+          })
         );
       } catch (e) {
         console.warn('Failed to increment commentCount', (e as Error).message);
@@ -1071,7 +1071,7 @@ const handleTickets = async (
             Key: { PK: `TEAM#${String(body.teamId)}`, SK: `TICKET#${ticketId}` },
             UpdateExpression: 'ADD commentCount :dec',
             ExpressionAttributeValues: { ':dec': -1 },
-          }),
+          })
         );
       } catch (e) {
         console.warn('Failed to decrement commentCount', (e as Error).message);
@@ -1213,7 +1213,7 @@ const handleTickets = async (
               Key: { PK: `TEAM#${teamId}`, SK: `TICKET#${ticketId}` },
               UpdateExpression: 'ADD linkCount :dec',
               ExpressionAttributeValues: { ':dec': -1 },
-            }),
+            })
           ),
           dynamo.send(
             new UpdateCommand({
@@ -1221,7 +1221,7 @@ const handleTickets = async (
               Key: { PK: `TEAM#${linkedTeamId}`, SK: `TICKET#${linkedId}` },
               UpdateExpression: 'ADD linkCount :dec',
               ExpressionAttributeValues: { ':dec': -1 },
-            }),
+            })
           ),
         ]);
       } catch (e) {
@@ -1511,7 +1511,7 @@ const handleTickets = async (
       assigneeId ? String(assigneeId) : undefined,
       customerId ? String(customerId) : undefined,
       workUnitId ? String(workUnitId) : undefined,
-      ts,
+      ts
     );
 
     // Build audit entry
@@ -1644,7 +1644,7 @@ const handleTickets = async (
             zoneIdOverride = String(targetZone.id);
             // Find the first stage in the target zone that matches the statusType
             const matchingStage = allStages.find(
-              (s) => String(s.zoneId) === zoneIdOverride && String(s.statusType) === statusType,
+              (s) => String(s.zoneId) === zoneIdOverride && String(s.statusType) === statusType
             );
             // Fallback: first stage in the target zone
             const fallbackStage = allStages.find((s) => String(s.zoneId) === zoneIdOverride);
@@ -1703,7 +1703,7 @@ const handleTickets = async (
         updated.assigneeId ? String(updated.assigneeId) : undefined,
         updated.customerId ? String(updated.customerId) : undefined,
         updated.workUnitId ? String(updated.workUnitId) : undefined,
-        ts,
+        ts
       );
 
       const transactItems: Record<string, unknown>[] = [
@@ -1742,7 +1742,7 @@ const handleTickets = async (
           Item: updated,
           ConditionExpression: 'version = :expectedVersion',
           ExpressionAttributeValues: { ':expectedVersion': existing.version },
-        }),
+        })
       );
     } catch (err) {
       if ((err as Error).name === 'ConditionalCheckFailedException') {
@@ -1776,7 +1776,7 @@ const handleTickets = async (
             ticketId,
             teamId: targetTeamId,
             assigneeId: String(body.assigneeId),
-          }),
+          })
         );
       }
     }
@@ -1795,7 +1795,7 @@ const handleTickets = async (
             ticketId,
             teamId: targetTeamId,
             customerId: String(body.customerId),
-          }),
+          })
         );
       }
     }
@@ -1814,7 +1814,7 @@ const handleTickets = async (
             ticketId,
             teamId: targetTeamId,
             workUnitId: String(body.workUnitId),
-          }),
+          })
         );
       }
     }
@@ -1900,7 +1900,7 @@ const handleTickets = async (
 
 const handleMetrics = async (
   _auth: AuthContext,
-  event: APIGatewayProxyEventV2,
+  event: APIGatewayProxyEventV2
 ): Promise<ReturnType<typeof jsonResponse>> => {
   const qp = event.queryStringParameters ?? {};
   const teamIds = qp.teamIds ? qp.teamIds.split(',') : [];
@@ -1930,7 +1930,7 @@ const handleUploads = async (
   method: string,
   segments: string[],
   body: Record<string, unknown>,
-  queryParams: Record<string, string> = {},
+  queryParams: Record<string, string> = {}
 ): Promise<ReturnType<typeof jsonResponse>> => {
   // GET /ops/uploads/presigned-url?s3Key=... — generate a presigned download URL
   if (method === 'GET' && segments.length === 1 && segments[0] === 'presigned-url') {
@@ -1980,7 +1980,7 @@ const handleUserPreferences = async (
   method: string,
   segments: string[],
   body: Record<string, unknown>,
-  auth: AuthContext,
+  auth: AuthContext
 ): Promise<ReturnType<typeof jsonResponse>> => {
   if (segments.length !== 1) return errorResponse(404, 'Route not found');
 
@@ -2075,7 +2075,7 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
         error: err.message,
         name: err.name,
         stack: err.stack,
-      }),
+      })
     );
     return errorResponse(500, `Internal Server Error: ${err.message}`);
   }

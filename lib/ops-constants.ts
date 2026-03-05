@@ -266,8 +266,7 @@ export const isStatusTypeAllowedInZone = (statusType: StatusType, zoneType: Zone
   ZONE_STATUS_TYPES[zoneType].includes(statusType);
 
 /** Get the first valid zone for a statusType (used for auto-move). */
-export const getDefaultZoneForStatusType = (statusType: StatusType): ZoneType =>
-  STATUS_TYPE_TO_ZONES[statusType][0];
+export const getDefaultZoneForStatusType = (statusType: StatusType): ZoneType => STATUS_TYPE_TO_ZONES[statusType][0];
 
 /** Get a team preset by ID, falling back to 'standard'. */
 export const getPreset = (presetId?: string): TeamPreset =>

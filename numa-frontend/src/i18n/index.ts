@@ -27,6 +27,7 @@ i18n
       'errors',
       'shared',
       'files',
+      'vault',
       'ops',
       'support',
     ],

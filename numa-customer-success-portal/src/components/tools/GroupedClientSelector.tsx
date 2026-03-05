@@ -1,15 +1,15 @@
-import { Form, Badge, Button } from 'react-bootstrap'
-import { X } from 'react-bootstrap-icons'
-import { groupClientsByType } from '@/services/clientService'
-import type { Client } from '@/types'
+import { Form, Badge, Button } from 'react-bootstrap';
+import { X } from 'react-bootstrap-icons';
+import { groupClientsByType } from '@/services/clientService';
+import type { Client } from '@/types';
 
 interface GroupedClientSelectorProps {
-  clients: Client[]
-  selectedClientNames: string[]
-  onClientToggle: (clientName: string) => void
-  onSelectClients: (clientNames: string[]) => void
-  disabled?: boolean
-  loading?: boolean
+  clients: Client[];
+  selectedClientNames: string[];
+  onClientToggle: (clientName: string) => void;
+  onSelectClients: (clientNames: string[]) => void;
+  disabled?: boolean;
+  loading?: boolean;
 }
 
 /**
@@ -27,60 +27,58 @@ export function GroupedClientSelector({
   disabled = false,
   loading = false,
 }: GroupedClientSelectorProps) {
-  const { devClients, productionClients } = groupClientsByType(clients)
+  const { devClients, productionClients } = groupClientsByType(clients);
 
-  const allInternalSelected = devClients.length > 0 &&
-    devClients.every(c => selectedClientNames.includes(c.name))
-  const someInternalSelected = devClients.some(c => selectedClientNames.includes(c.name))
+  const allInternalSelected = devClients.length > 0 && devClients.every((c) => selectedClientNames.includes(c.name));
+  const someInternalSelected = devClients.some((c) => selectedClientNames.includes(c.name));
 
-  const allClientsSelected = productionClients.length > 0 &&
-    productionClients.every(c => selectedClientNames.includes(c.name))
-  const someClientsSelected = productionClients.some(c => selectedClientNames.includes(c.name))
+  const allClientsSelected =
+    productionClients.length > 0 && productionClients.every((c) => selectedClientNames.includes(c.name));
+  const someClientsSelected = productionClients.some((c) => selectedClientNames.includes(c.name));
 
-  const allSelected = clients.length > 0 &&
-    clients.every(c => selectedClientNames.includes(c.name))
+  const allSelected = clients.length > 0 && clients.every((c) => selectedClientNames.includes(c.name));
 
   const handleSelectAllToggle = () => {
     if (allSelected) {
-      onSelectClients([])
+      onSelectClients([]);
     } else {
-      onSelectClients(clients.map(c => c.name))
+      onSelectClients(clients.map((c) => c.name));
     }
-  }
+  };
 
   const handleInternalToggle = () => {
     if (allInternalSelected) {
       // Remove all internal clients from selection
-      const internalNames = new Set(devClients.map(c => c.name))
-      onSelectClients(selectedClientNames.filter(name => !internalNames.has(name)))
+      const internalNames = new Set(devClients.map((c) => c.name));
+      onSelectClients(selectedClientNames.filter((name) => !internalNames.has(name)));
     } else {
       // Add all internal clients to selection
-      const newSelection = new Set(selectedClientNames)
-      devClients.forEach(c => newSelection.add(c.name))
-      onSelectClients(Array.from(newSelection))
+      const newSelection = new Set(selectedClientNames);
+      devClients.forEach((c) => newSelection.add(c.name));
+      onSelectClients(Array.from(newSelection));
     }
-  }
+  };
 
   const handleClientsToggle = () => {
     if (allClientsSelected) {
       // Remove all client accounts from selection
-      const clientNames = new Set(productionClients.map(c => c.name))
-      onSelectClients(selectedClientNames.filter(name => !clientNames.has(name)))
+      const clientNames = new Set(productionClients.map((c) => c.name));
+      onSelectClients(selectedClientNames.filter((name) => !clientNames.has(name)));
     } else {
       // Add all client accounts to selection
-      const newSelection = new Set(selectedClientNames)
-      productionClients.forEach(c => newSelection.add(c.name))
-      onSelectClients(Array.from(newSelection))
+      const newSelection = new Set(selectedClientNames);
+      productionClients.forEach((c) => newSelection.add(c.name));
+      onSelectClients(Array.from(newSelection));
     }
-  }
+  };
 
   const handleUnselectAll = () => {
-    onSelectClients([])
-  }
+    onSelectClients([]);
+  };
 
   // Determine indeterminate state for checkboxes
-  const isInternalIndeterminate = someInternalSelected && !allInternalSelected
-  const isClientsIndeterminate = someClientsSelected && !allClientsSelected
+  const isInternalIndeterminate = someInternalSelected && !allInternalSelected;
+  const isClientsIndeterminate = someClientsSelected && !allClientsSelected;
 
   return (
     <div>
@@ -102,7 +100,7 @@ export function GroupedClientSelector({
                 type="checkbox"
                 id="select-all-internal"
                 ref={(el: HTMLInputElement | null) => {
-                  if (el) el.indeterminate = isInternalIndeterminate
+                  if (el) el.indeterminate = isInternalIndeterminate;
                 }}
                 label={
                   <span>
@@ -121,7 +119,7 @@ export function GroupedClientSelector({
                 type="checkbox"
                 id="select-all-production"
                 ref={(el: HTMLInputElement | null) => {
-                  if (el) el.indeterminate = isClientsIndeterminate
+                  if (el) el.indeterminate = isClientsIndeterminate;
                 }}
                 label={
                   <span>
@@ -138,12 +136,7 @@ export function GroupedClientSelector({
             </div>
           </div>
           {selectedClientNames.length > 0 && (
-            <Button
-              size="sm"
-              variant="outline-secondary"
-              onClick={handleUnselectAll}
-              disabled={disabled || loading}
-            >
+            <Button size="sm" variant="outline-secondary" onClick={handleUnselectAll} disabled={disabled || loading}>
               Clear
             </Button>
           )}
@@ -151,18 +144,17 @@ export function GroupedClientSelector({
       </div>
 
       {/* Individual Client Selection - Always visible */}
-      <div
-        className="border rounded p-2"
-        style={{ maxHeight: '250px', overflowY: 'auto' }}
-      >
+      <div className="border rounded p-2" style={{ maxHeight: '250px', overflowY: 'auto' }}>
         {/* Internal/Dev Clients Section */}
         {devClients.length > 0 && (
           <div className="mb-3">
             <div className="text-muted small mb-1 d-flex align-items-center">
-              <Badge bg="warning" text="dark" className="me-1">Internal</Badge>
+              <Badge bg="warning" text="dark" className="me-1">
+                Internal
+              </Badge>
               Dev / Test Accounts
             </div>
-            {devClients.map(client => (
+            {devClients.map((client) => (
               <Form.Check
                 key={client.name}
                 type="checkbox"
@@ -181,10 +173,12 @@ export function GroupedClientSelector({
         {productionClients.length > 0 && (
           <div>
             <div className="text-muted small mb-1 d-flex align-items-center">
-              <Badge bg="success" className="me-1">Client</Badge>
+              <Badge bg="success" className="me-1">
+                Client
+              </Badge>
               Production Accounts
             </div>
-            {productionClients.map(client => (
+            {productionClients.map((client) => (
               <Form.Check
                 key={client.name}
                 type="checkbox"
@@ -203,8 +197,8 @@ export function GroupedClientSelector({
       {/* Selected Client Badges */}
       {selectedClientNames.length > 0 && (
         <div className="mt-2 d-flex flex-wrap gap-1">
-          {selectedClientNames.slice(0, 5).map(name => {
-            const isInternal = devClients.some(c => c.name === name)
+          {selectedClientNames.slice(0, 5).map((name) => {
+            const isInternal = devClients.some((c) => c.name === name);
             return (
               <Badge
                 key={name}
@@ -217,19 +211,13 @@ export function GroupedClientSelector({
                 {name}
                 <X className="ms-1" size={12} />
               </Badge>
-            )
+            );
           })}
-          {selectedClientNames.length > 5 && (
-            <Badge bg="secondary">
-              +{selectedClientNames.length - 5} more
-            </Badge>
-          )}
+          {selectedClientNames.length > 5 && <Badge bg="secondary">+{selectedClientNames.length - 5} more</Badge>}
         </div>
       )}
 
-      <Form.Text className="text-muted">
-        Select individual clients or use group checkboxes above
-      </Form.Text>
+      <Form.Text className="text-muted">Select individual clients or use group checkboxes above</Form.Text>
     </div>
-  )
+  );
 }

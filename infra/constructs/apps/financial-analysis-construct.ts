@@ -137,7 +137,7 @@ export class FinancialAnalysis extends BaseNumaApp {
                     'output_key.$': '$.Payload.output_key',
                   },
                   ResultPath: '$.extracted',
-                },
+                }
               ),
               ExtractFinancialData: this.addLambdaTask(
                 extractFinancialDataLambda.arn,
@@ -156,7 +156,7 @@ export class FinancialAnalysis extends BaseNumaApp {
                     'output_key.$': '$.Payload.output_key',
                   },
                   ResultPath: '$.structured',
-                },
+                }
               ),
             },
           },
@@ -183,7 +183,7 @@ export class FinancialAnalysis extends BaseNumaApp {
           'WriteSuccessStatus',
           {
             OutputPath: '$.Payload',
-          },
+          }
         ),
         WriteFailureStatus: this.writeFailureStatus(),
         WriteSuccessStatus: this.writeSuccessStatus(),

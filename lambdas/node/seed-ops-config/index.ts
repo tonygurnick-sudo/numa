@@ -32,7 +32,7 @@ async function putIfNotExists(tableName: string, item: Record<string, unknown>, 
         TableName: tableName,
         Item: item,
         ConditionExpression: 'attribute_not_exists(PK)',
-      }),
+      })
     );
     result.created++;
   } catch (err: unknown) {

@@ -96,7 +96,7 @@ describe('autoChatTitle - prompt-only title generation', () => {
       conversationId,
       userId,
       'Sky and grass colours',
-      'auto',
+      'auto'
     );
   });
 

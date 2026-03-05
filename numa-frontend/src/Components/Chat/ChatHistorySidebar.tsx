@@ -53,7 +53,7 @@ const HistoryAvatar = ({ convo }: { convo: ConversationMeta }) => {
 /** Format timestamp as relative time using i18n labels */
 const formatRelativeTime = (
   timestamp: number,
-  t: (key: string, options?: Record<string, unknown>) => string,
+  t: (key: string, options?: Record<string, unknown>) => string
 ): string => {
   const now = Date.now();
   const diff = now - timestamp;
@@ -78,7 +78,7 @@ const formatRelativeTime = (
 export const ChatHistorySidebar = forwardRef<ChatHistorySidebarRef, ChatHistorySidebarProps>(
   function ChatHistorySidebar(
     { onSelectConversation, setError, currentConversationId, excludeWorkspaceConversations },
-    ref,
+    ref
   ) {
     const { t } = useTranslation('chat');
     const [isLoading, setIsLoading] = useState(false);
@@ -360,5 +360,5 @@ export const ChatHistorySidebar = forwardRef<ChatHistorySidebarRef, ChatHistoryS
         </div>
       </div>
     );
-  },
+  }
 );

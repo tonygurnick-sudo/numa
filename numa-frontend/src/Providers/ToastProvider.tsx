@@ -134,7 +134,7 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             );
           })}
         </ToastContainer>,
-        document.body,
+        document.body
       )}
     </ToastContext.Provider>
   );

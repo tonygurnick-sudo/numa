@@ -195,7 +195,7 @@ export const DataAnalysisMarkdown: React.FC<DataAnalysisMarkdownProps> = ({ cont
     // This prevents showing nested folders at the top level in Generated Files
     return allRefs.filter((ref) => {
       const isChildOfAnother = allRefs.some(
-        (other) => other.fullPath !== ref.fullPath && ref.fullPath.startsWith(other.fullPath + '/'),
+        (other) => other.fullPath !== ref.fullPath && ref.fullPath.startsWith(other.fullPath + '/')
       );
       return !isChildOfAnother;
     });
@@ -300,7 +300,7 @@ export const DataAnalysisMarkdown: React.FC<DataAnalysisMarkdownProps> = ({ cont
     // This prevents showing nested files at the top level in Generated Files
     return allFileRefs.filter((fileRef) => {
       const isInsideReferencedFolder = folderReferences.some((folderRef) =>
-        fileRef.fullPath.startsWith(folderRef.fullPath + '/'),
+        fileRef.fullPath.startsWith(folderRef.fullPath + '/')
       );
       return !isInsideReferencedFolder;
     });
@@ -771,7 +771,7 @@ export const DataAnalysisMarkdown: React.FC<DataAnalysisMarkdownProps> = ({ cont
 
   // Helper function to split message content into sections with file and folder references
   const createContentSections = (
-    messageText: string,
+    messageText: string
   ): Array<{
     type: 'markdown' | 'file' | 'folder';
     content: string;
@@ -919,7 +919,7 @@ export const DataAnalysisMarkdown: React.FC<DataAnalysisMarkdownProps> = ({ cont
               // Find the index of the last assistant message
               const lastAssistantIndex = conversationMessages.reduce(
                 (lastIdx, msg, idx) => (msg.role === 'assistant' ? idx : lastIdx),
-                -1,
+                -1
               );
 
               return conversationMessages.map((message, index) => {
@@ -1051,12 +1051,12 @@ export const DataAnalysisMarkdown: React.FC<DataAnalysisMarkdownProps> = ({ cont
                                   Key: relKey,
                                   LastModified: new Date(),
                                   Size: 0,
-                                })),
+                                }))
                               ),
                               0,
-                              '',
+                              ''
                             ),
-                            expandedTreeFolders[ref.fullPath] || new Set(),
+                            expandedTreeFolders[ref.fullPath] || new Set()
                           )}
                           expandedFolders={expandedTreeFolders[ref.fullPath] || new Set()}
                           onToggleFolder={(folderId) => toggleTreeFolder(ref.fullPath, folderId)}

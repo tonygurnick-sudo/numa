@@ -187,12 +187,15 @@ svg.text-success {
 
 .input-group > .form-control:focus {
   border-color: var(--arcanum-purple-light);
-  box-shadow: inset 0 1px 1px rgba(0, 0, 0, 0.075), 0 0 0 0.2rem rgba(142, 80, 167, 0.25);
+  box-shadow:
+    inset 0 1px 1px rgba(0, 0, 0, 0.075),
+    0 0 0 0.2rem rgba(142, 80, 167, 0.25);
 }
 
 /* Login form specific styling */
 .login-logo {
-  filter: brightness(0) saturate(100%) invert(22%) sepia(76%) saturate(2300%) hue-rotate(266deg) brightness(91%) contrast(91%);
+  filter: brightness(0) saturate(100%) invert(22%) sepia(76%) saturate(2300%) hue-rotate(266deg) brightness(91%)
+    contrast(91%);
 }
 
 /* Login button - sleek black theme */

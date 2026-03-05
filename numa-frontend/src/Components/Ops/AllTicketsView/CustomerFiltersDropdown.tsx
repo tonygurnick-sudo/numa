@@ -50,7 +50,7 @@ export function CustomerFiltersDropdown({
 
   const customerOptions = useMemo(
     () => customers.map((c) => ({ value: c.id, label: c.companyName })).sort((a, b) => a.label.localeCompare(b.label)),
-    [customers],
+    [customers]
   );
 
   const stageOptions = useMemo(
@@ -59,7 +59,7 @@ export function CustomerFiltersDropdown({
         value: s.id,
         label: s.name,
       })),
-    [crmConfig],
+    [crmConfig]
   );
 
   const territoryOptions = useMemo(() => {
@@ -77,7 +77,7 @@ export function CustomerFiltersDropdown({
 
   const accountOwnerOptions = useMemo(
     () => staff.map((s) => ({ value: s.id, label: s.name || s.email })).sort((a, b) => a.label.localeCompare(b.label)),
-    [staff],
+    [staff]
   );
 
   const industryOptions = useMemo(() => {
@@ -111,7 +111,7 @@ export function CustomerFiltersDropdown({
       const next = current.includes(value) ? current.filter((v) => v !== value) : [...current, value];
       onChange({ ...filters, [field]: next });
     },
-    [filters, onChange],
+    [filters, onChange]
   );
 
   const clearAll = useCallback(() => {
@@ -124,7 +124,7 @@ export function CustomerFiltersDropdown({
     label: string,
     options: { value: string; label: string }[],
     selected: string[],
-    fieldKey: keyof CustomerFilterState,
+    fieldKey: keyof CustomerFilterState
   ) => (
     <div className="d-flex flex-column" style={{ minWidth: 0, flex: '1 1 0', minHeight: 0 }}>
       <div className="px-3 py-2 fw-semibold small text-muted border-bottom flex-shrink-0">{label}</div>

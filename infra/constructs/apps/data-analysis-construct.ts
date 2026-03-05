@@ -127,14 +127,14 @@ export class DataAnalysis extends BaseNumaApp {
       'assets',
       'artifacts',
       'claude-cli',
-      'claude-x86_64.zip',
+      'claude-x86_64.zip'
     );
     if (!fs.existsSync(cliLayerZipPath)) {
       throw new Error(
         `Claude CLI artifact ZIP not found at ${cliLayerZipPath}.\n` +
           'Fix locally by fetching the prebuilt ZIP from the deployer S3 bucket:\n' +
           '  yarn workspace @arcanumai/q-apps-deployer-tools fetch-claude-cli-artifact\n' +
-          'Or build the ZIP in CI and bake it into the deploy image (see .gitlab-ci.yml).',
+          'Or build the ZIP in CI and bake it into the deploy image (see .gitlab-ci.yml).'
       );
     }
     // Resolve version (pin S3 key by version). Defaults align with tooling/docs.
@@ -260,7 +260,7 @@ export class DataAnalysis extends BaseNumaApp {
           'WriteSuccessStatus',
           {
             OutputPath: '$.Payload',
-          },
+          }
         ),
         WriteFailureStatus: this.writeFailureStatus(),
         WriteSuccessStatus: this.writeSuccessStatus(),

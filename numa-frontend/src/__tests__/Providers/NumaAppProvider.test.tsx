@@ -129,7 +129,7 @@ describe('NumaAppProvider', () => {
         <NumaAppProvider>
           <TestComponent />
         </NumaAppProvider>
-      </MockNumaRequestProvider>,
+      </MockNumaRequestProvider>
     );
 
     expect(screen.getByTestId('running-state')).toHaveTextContent('Not Running');
@@ -156,7 +156,7 @@ describe('NumaAppProvider', () => {
               }}
             />
           </NumaAppProvider>
-        </MockNumaRequestProvider>,
+        </MockNumaRequestProvider>
       );
 
       // Set the numaAppData directly on the context
@@ -200,7 +200,7 @@ describe('NumaAppProvider', () => {
               }}
             />
           </NumaAppProvider>
-        </MockNumaRequestProvider>,
+        </MockNumaRequestProvider>
       );
 
       // Set the numaAppData directly on the context

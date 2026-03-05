@@ -8,6 +8,31 @@
     "numa-frontend",
     "numa-customer-success-portal",
     "lib/client-config-node",
+    "lib/usage-analytics-schemas",
     "lambdas/node/*"
-  ]
+  ],
+  "scripts": {
+    "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,css,scss,md}\" --ignore-path .gitignore",
+    "format:check": "prettier --check \"**/*.{ts,tsx,js,jsx,json,css,scss,md}\" --ignore-path .gitignore",
+    "lint": "yarn workspaces foreach -A run lint",
+    "lint:fix": "cd numa-frontend && eslint \"src/**/*.{ts,tsx}\" --fix; cd ../infra && eslint . --fix",
+    "typecheck": "yarn workspace @arcanumai/numa-frontend typecheck; yarn workspace @arcanumai/q-apps-deployer-infra run build",
+    "py:lint": "black --check lambdas/python/ lib/ services/",
+    "py:fix": "black lambdas/python/ lib/ services/",
+    "py:typecheck": "find lambdas/python services -name 'pyproject.toml' -execdir sh -c 'if [ -d .venv ]; then poetry run mypy . --ignore-missing-imports 2>/dev/null; fi' \\;",
+    "py:ci": "bash scripts/py-ci-lint.sh",
+    "check": "yarn format:check; yarn lint; yarn typecheck; yarn py:lint",
+    "fix": "yarn format && yarn lint:fix && yarn py:fix && yarn typecheck"
+  },
+  "devDependencies": {
+    "prettier": "^3.8.1"
+  },
+  "prettier": {
+    "semi": true,
+    "singleQuote": true,
+    "printWidth": 120,
+    "trailingComma": "es5",
+    "tabWidth": 2,
+    "useTabs": false
+  }
 }

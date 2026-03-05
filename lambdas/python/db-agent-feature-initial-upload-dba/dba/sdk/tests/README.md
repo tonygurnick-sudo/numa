@@ -52,6 +52,7 @@ cd sdk
 ## Test Files
 
 ### test_config.py (Config Class)
+
 - **90+ tests** for YAML configuration management
 - Datasource CRUD operations
 - Engine management
@@ -59,6 +60,7 @@ cd sdk
 - Persistence and error handling
 
 **Key test classes:**
+
 - `TestConfigInit`: Initialization and defaults
 - `TestDatasourceOperations`: Add, remove, get, set datasources
 - `TestEngineOperations`: Engine CRUD operations
@@ -67,25 +69,29 @@ cd sdk
 - `TestConfigPersistence`: Save/load operations
 
 ### test_db_init.py (DB Initialization)
+
 - **60+ tests** for DB class initialization
 - Environment variable handling
 - Datasource configuration
 - Custom paths and overrides
 
 **Key test classes:**
+
 - `TestDBInit`: Basic initialization
 - `TestDBEnvironmentVariables`: Env var overrides (DB_HOST, DB_PORT, etc.)
 - `TestDBConfigAttribute`: Config integration
-- `TestDBRunMethod`: Internal _run() method
+- `TestDBRunMethod`: Internal \_run() method
 - `TestDBDefaultPath`: Default path resolution
 
 ### test_csv_queries.py (CSV Queries - PRIMARY FEATURE)
+
 - **70+ tests** for CSV query operations
 - Local files, URLs, Google Sheets
 - Engines: csv-sqlite, csv-duckdb, s3-csv-sqlite
 - Complex queries and edge cases
 
 **Key test classes:**
+
 - `TestCSVBasicQueries`: SELECT, WHERE, aggregations
 - `TestCSVEngines`: sqlite vs duckdb
 - `TestCSVComplexQueries`: JOINs, GROUP BY, ORDER BY
@@ -94,11 +100,13 @@ cd sdk
 - `TestCSVLargeFiles`: Performance with DuckDB
 
 ### test_natural_language.py (--ask & --auto - MOST IMPORTANT)
+
 - **80+ tests** for natural language queries and agentic investigations
 - CSV and PostgreSQL modes
 - Answer extraction and parsing
 
 **Key test classes:**
+
 - `TestAskCSV`: Natural language queries on CSV (PRIMARY USE CASE)
 - `TestAskPostgreSQL`: Natural language queries on PostgreSQL
 - `TestInvestigateCSV`: Agentic investigations on CSV (PRIMARY USE CASE)
@@ -107,12 +115,14 @@ cd sdk
 - `TestNaturalLanguageKwargs`: Additional arguments
 
 ### test_postgres_queries.py (PostgreSQL Queries)
+
 - **55+ tests** for PostgreSQL operations
 - Standard SQL queries
 - Output formats (json, csv, table)
 - Transactions and meta queries
 
 **Key test classes:**
+
 - `TestPostgreSQLBasicQueries`: SELECT, WHERE, JOIN, GROUP BY
 - `TestPostgreSQLFormats`: json, csv, table outputs
 - `TestPostgreSQLDatasource`: Datasource parameter
@@ -122,11 +132,13 @@ cd sdk
 - `TestPostgreSQLMetaQueries`: Schema inspection
 
 ### test_datasource.py (Datasource Parameters)
+
 - **50+ tests** for datasource handling across all methods
 - Instance vs override datasources
 - CSV vs PostgreSQL mode behavior
 
 **Key test classes:**
+
 - `TestDatasourceInQuery`: query() datasource handling
 - `TestDatasourceInAsk`: ask() datasource handling
 - `TestDatasourceInInvestigate`: investigate() datasource handling
@@ -135,12 +147,14 @@ cd sdk
 - `TestDatasourceConsistency`: Behavior across methods
 
 ### test_error_handling.py (Error Cases)
+
 - **60+ tests** for error scenarios
 - DBError and ConfigError exceptions
 - CLI errors, subprocess errors
 - Return code handling
 
 **Key test classes:**
+
 - `TestDBErrorHandling`: DBError exceptions
 - `TestConfigErrorHandling`: ConfigError exceptions
 - `TestCLIErrors`: SQL syntax, permissions, connections
@@ -149,11 +163,13 @@ cd sdk
 - `TestPartialFailures`: Graceful degradation
 
 ### test_convenience_functions.py (Module-Level Functions)
+
 - **45+ tests** for convenience functions
 - query(), csv(), ask(), investigate()
 - Module exports and usability
 
 **Key test classes:**
+
 - `TestConvenienceQuery`: Module-level query()
 - `TestConvenienceCSV`: Module-level csv()
 - `TestConvenienceAsk`: Module-level ask()
@@ -161,13 +177,14 @@ cd sdk
 - `TestConvenienceFunctionErrors`: Error propagation
 - `TestConvenienceFunctionDefaultBehavior`: Environment, config
 - `TestConvenienceFunctionUsability`: One-liner usage
-- `TestModuleLevelImports`: __all__ exports
+- `TestModuleLevelImports`: **all** exports
 
 ## Test Fixtures
 
 All tests use mocked subprocess calls - **no actual database or CLI required**.
 
 **Shared fixtures** (from `conftest.py`):
+
 - `temp_config_file`: Temporary YAML config
 - `temp_csv_file`: Temporary CSV for testing
 - `mock_subprocess_run`: Mock subprocess.run
@@ -330,21 +347,25 @@ The test suite is designed for CI/CD:
 ## Troubleshooting
 
 ### pytest not found
+
 ```bash
 pip install pytest pytest-cov
 ```
 
 ### PyYAML not installed
+
 ```bash
 pip install pyyaml
 ```
 
 ### Permission denied on run_all.sh
+
 ```bash
 chmod +x run_all.sh
 ```
 
 ### Import errors
+
 ```bash
 # Add parent directory to PYTHONPATH
 export PYTHONPATH="$PYTHONPATH:$(pwd)/.."

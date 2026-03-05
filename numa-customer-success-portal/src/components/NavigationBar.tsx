@@ -1,6 +1,6 @@
-import { Navbar, Nav, Container, NavDropdown } from 'react-bootstrap'
-import { useState } from 'react'
-import { Link, useLocation } from 'react-router-dom'
+import { Navbar, Nav, Container, NavDropdown } from 'react-bootstrap';
+import { useState } from 'react';
+import { Link, useLocation } from 'react-router-dom';
 import {
   BoxSeam,
   PersonCircle,
@@ -9,26 +9,26 @@ import {
   PersonGear,
   House,
   Clock,
-  Tools
-} from 'react-bootstrap-icons'
-import { Book } from 'react-bootstrap-icons'
-import { useAuth } from '@/contexts/AuthContext'
-import NumaLogo from '@/assets/numa-logo.svg?react'
+  Tools,
+} from 'react-bootstrap-icons';
+import { Book } from 'react-bootstrap-icons';
+import { useAuth } from '@/contexts/AuthContext';
+import NumaLogo from '@/assets/numa-logo.svg?react';
 
 export default function NavigationBar() {
-  const location = useLocation()
-  const { user, signOut } = useAuth()
-  const [expanded, setExpanded] = useState(false)
+  const location = useLocation();
+  const { user, signOut } = useAuth();
+  const [expanded, setExpanded] = useState(false);
 
   const handleSignOut = async () => {
     try {
-      await signOut()
+      await signOut();
     } catch (error) {
-      console.error('Error signing out:', error)
+      console.error('Error signing out:', error);
     }
-  }
+  };
 
-  const handleNavClick = () => setExpanded(false)
+  const handleNavClick = () => setExpanded(false);
 
   return (
     <Navbar
@@ -166,5 +166,5 @@ export default function NavigationBar() {
         </Navbar.Collapse>
       </Container>
     </Navbar>
-  )
+  );
 }

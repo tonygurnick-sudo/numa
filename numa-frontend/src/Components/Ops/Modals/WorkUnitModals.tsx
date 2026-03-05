@@ -164,7 +164,7 @@ export function StartWorkUnitModal({
   // When a sprint is selected, populate its name
   const selectedUnit = useMemo(
     () => planningUnits.find((wu) => wu.id === selectedId) ?? null,
-    [planningUnits, selectedId],
+    [planningUnits, selectedId]
   );
   const handleSelectSprint = useCallback(
     (id: string) => {
@@ -172,7 +172,7 @@ export function StartWorkUnitModal({
       const wu = planningUnits.find((u) => u.id === id);
       if (wu) setSprintName(wu.name);
     },
-    [planningUnits],
+    [planningUnits]
   );
 
   // Computed dates

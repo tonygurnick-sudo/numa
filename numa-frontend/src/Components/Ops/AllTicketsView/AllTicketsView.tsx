@@ -284,15 +284,7 @@ export function AllTicketsView(): React.JSX.Element {
       quickSprintFilter,
       customerFilters,
     }),
-    [
-      activeFilters,
-      visibleColumnKeys,
-      sortColumn,
-      sortDirection,
-      quickStatusFilter,
-      quickSprintFilter,
-      customerFilters,
-    ],
+    [activeFilters, visibleColumnKeys, sortColumn, sortDirection, quickStatusFilter, quickSprintFilter, customerFilters]
   );
 
   const isViewModified = useMemo(() => {
@@ -353,7 +345,7 @@ export function AllTicketsView(): React.JSX.Element {
   const projects = config?.projects ?? [];
   const selectedTeamName = useMemo(
     () => teams.find((tm) => tm.id === selectedTeamId)?.name ?? '',
-    [teams, selectedTeamId],
+    [teams, selectedTeamId]
   );
 
   // ── Column definitions ──────────────────────────────────────────────────
@@ -535,13 +527,13 @@ export function AllTicketsView(): React.JSX.Element {
         render: (tk) => tk.reporterName || <span className="text-muted">{t('fields.unknown')}</span>,
       },
     ],
-    [t, ticketTypes, teamData?.stages, staff, workUnits, projects, selectedTeamName],
+    [t, ticketTypes, teamData?.stages, staff, workUnits, projects, selectedTeamName]
   );
 
   // ── Visible columns (ordered) ─────────────────────────────────────────
   const visibleColumns = useMemo(
     () => visibleColumnKeys.map((key) => columns.find((c) => c.key === key)).filter(Boolean) as ColumnDef[],
-    [columns, visibleColumnKeys],
+    [columns, visibleColumnKeys]
   );
 
   // ── Build column lookup for filter type ─────────────────────────────────
@@ -563,7 +555,7 @@ export function AllTicketsView(): React.JSX.Element {
     if (!debouncedSearch) return sourceTickets;
     const lower = debouncedSearch.toLowerCase();
     return sourceTickets.filter(
-      (tk) => tk.title.toLowerCase().includes(lower) || tk.displayId.toLowerCase().includes(lower),
+      (tk) => tk.title.toLowerCase().includes(lower) || tk.displayId.toLowerCase().includes(lower)
     );
   }, [sourceTickets, debouncedSearch]);
 
@@ -632,7 +624,7 @@ export function AllTicketsView(): React.JSX.Element {
         if (!col) return true;
         const value = col.accessor(tk);
         return matchesFilter(value, activeFilters[key], col.filterType);
-      }),
+      })
     );
   }, [quickFilteredTickets, activeFilters, columnMap]);
 
@@ -677,7 +669,7 @@ export function AllTicketsView(): React.JSX.Element {
       }
       setLastClickedIndex(null);
     },
-    [sortedTickets],
+    [sortedTickets]
   );
 
   const handleSelectRow = useCallback(
@@ -703,7 +695,7 @@ export function AllTicketsView(): React.JSX.Element {
       });
       setLastClickedIndex(index);
     },
-    [lastClickedIndex, sortedTickets],
+    [lastClickedIndex, sortedTickets]
   );
 
   // ── Saved Views callbacks ───────────────────────────────────────────────
@@ -719,7 +711,7 @@ export function AllTicketsView(): React.JSX.Element {
         console.error('[AllTicketsView] Failed to persist saved views:', err);
       }
     },
-    [selectedTeamId, numaPut],
+    [selectedTeamId, numaPut]
   );
 
   const handleSaveView = useCallback(
@@ -732,7 +724,7 @@ export function AllTicketsView(): React.JSX.Element {
       setViewSnapshot(JSON.stringify(viewConfig));
       await persistViews(updatedViews);
     },
-    [buildCurrentViewConfig, savedViews, persistViews],
+    [buildCurrentViewConfig, savedViews, persistViews]
   );
 
   const handleLoadView = useCallback((filter: SavedFilter) => {
@@ -758,7 +750,7 @@ export function AllTicketsView(): React.JSX.Element {
     if (!currentViewName) return;
     const viewConfig = buildCurrentViewConfig();
     const updatedViews = savedViews.map((v) =>
-      v.name === currentViewName ? { ...v, config: viewConfig as unknown as Record<string, unknown> } : v,
+      v.name === currentViewName ? { ...v, config: viewConfig as unknown as Record<string, unknown> } : v
     );
     setSavedViews(updatedViews);
     setViewSnapshot(JSON.stringify(viewConfig));
@@ -775,7 +767,7 @@ export function AllTicketsView(): React.JSX.Element {
       }
       await persistViews(updatedViews);
     },
-    [savedViews, currentViewName, persistViews],
+    [savedViews, currentViewName, persistViews]
   );
 
   const handleClearView = useCallback(() => {
@@ -874,7 +866,7 @@ export function AllTicketsView(): React.JSX.Element {
         console.error('[AllTicketsView] Context menu action failed:', err);
       }
     },
-    [ctxMenu.ticket, numaPut, refreshTickets, user],
+    [ctxMenu.ticket, numaPut, refreshTickets, user]
   );
 
   // ── Active filter keys for display ──────────────────────────────────────
@@ -887,7 +879,7 @@ export function AllTicketsView(): React.JSX.Element {
 
   const selectedTicketsList = useMemo(
     () => sortedTickets.filter((tk) => selectedIds.has(tk.id)),
-    [sortedTickets, selectedIds],
+    [sortedTickets, selectedIds]
   );
 
   // ── Column picker data ──────────────────────────────────────────────────
@@ -899,7 +891,7 @@ export function AllTicketsView(): React.JSX.Element {
         category: 'system',
         visible: visibleColumnKeys.includes(col.key),
       })),
-    [columns, visibleColumnKeys],
+    [columns, visibleColumnKeys]
   );
 
   // ── Render ──────────────────────────────────────────────────────────────

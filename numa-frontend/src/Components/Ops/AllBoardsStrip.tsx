@@ -15,7 +15,7 @@ const AllBoardsStrip = () => {
     (teamId: string) => {
       selectTeam(teamId);
     },
-    [selectTeam],
+    [selectTeam]
   );
 
   if (teams.length === 0) {

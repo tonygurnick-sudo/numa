@@ -44,6 +44,16 @@ export const DocumentViewer = ({ url, allowDownload = true }: DocumentViewerProp
     );
   }
 
+  if (fileType === 'image') {
+    return (
+      <div className="document-viewer">
+        <div className="image-container">
+          <img src={url} alt="Shared document" className="image-preview" onError={() => setHasError(true)} />
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="document-viewer">
       <iframe
@@ -150,6 +160,7 @@ function getFileType(url: string): string {
     if (path.endsWith('.docx') || path.endsWith('.doc')) return 'docx';
     if (path.endsWith('.xlsx') || path.endsWith('.xls')) return 'xlsx';
     if (path.endsWith('.pptx') || path.endsWith('.ppt')) return 'pptx';
+    if (/\.(png|jpe?g|gif|webp|bmp|svg)$/.test(path)) return 'image';
     return 'unknown';
   } catch {
     return 'unknown';

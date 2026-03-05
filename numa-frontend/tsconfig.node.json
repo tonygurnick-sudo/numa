@@ -33,10 +33,5 @@
     /* Ambient types for tools you’re using here */
     "types": ["node", "vitest", "vite/client", "playwright", "eslint"]
   },
-  "include": [
-    "vite.config.ts",
-    "vitest.config.ts",
-    "playwright.config.ts",
-    "eslint.config.js"
-  ]
+  "include": ["vite.config.ts", "vitest.config.ts", "playwright.config.ts", "eslint.config.js"]
 }

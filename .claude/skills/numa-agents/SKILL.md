@@ -37,39 +37,39 @@ Responses reflect agent's personality and capabilities
 
 ### Key Components
 
-| Component | Location | Purpose |
-|-----------|----------|---------|
-| **AgentCreateModal** | `/numa-frontend/src/Components/Agents/AgentCreateModal.tsx` | Form for creating/editing agents |
-| **AgentsManagement** | `/numa-frontend/src/Pages/AgentsManagement.tsx` | List and manage agents |
-| **AgentsService** | `/numa-frontend/src/Services/AgentsService.ts` | CRUD API calls |
-| **agents Lambda** | `/lambdas/node/agents/index.ts` | Backend CRUD API |
-| **agent_creation tool** | `/lambdas/python/numa-chat-agent/.../agent_creation.py` | Create agents from chat |
+| Component               | Location                                                    | Purpose                          |
+| ----------------------- | ----------------------------------------------------------- | -------------------------------- |
+| **AgentCreateModal**    | `/numa-frontend/src/Components/Agents/AgentCreateModal.tsx` | Form for creating/editing agents |
+| **AgentsManagement**    | `/numa-frontend/src/Pages/AgentsManagement.tsx`             | List and manage agents           |
+| **AgentsService**       | `/numa-frontend/src/Services/AgentsService.ts`              | CRUD API calls                   |
+| **agents Lambda**       | `/lambdas/node/agents/index.ts`                             | Backend CRUD API                 |
+| **agent_creation tool** | `/lambdas/python/numa-chat-agent/.../agent_creation.py`     | Create agents from chat          |
 
 ### Database Tables
 
-| Table | Purpose | Primary Key |
-|-------|---------|-------------|
-| `{client}-agents` | Workspace (public) agents | `tenant_id` + `agent_id` |
-| `{client}-user-agents` | Personal agents | `user_id` + `agent_id` |
-| `{client}-agents-settings` | Feature policy | `setting` |
+| Table                      | Purpose                   | Primary Key              |
+| -------------------------- | ------------------------- | ------------------------ |
+| `{client}-agents`          | Workspace (public) agents | `tenant_id` + `agent_id` |
+| `{client}-user-agents`     | Personal agents           | `user_id` + `agent_id`   |
+| `{client}-agents-settings` | Feature policy            | `setting`                |
 
 ### Agent Visibility
 
-| Visibility | Storage | Who Can See |
-|------------|---------|-------------|
-| `personal` | user-agents table | Only creator |
-| `public` | workspace-agents table | All workspace users |
+| Visibility | Storage                | Who Can See         |
+| ---------- | ---------------------- | ------------------- |
+| `personal` | user-agents table      | Only creator        |
+| `public`   | workspace-agents table | All workspace users |
 
 ### API Endpoints
 
-| Method | Path | Purpose |
-|--------|------|---------|
-| GET | `/api/agents` | List agents |
-| GET | `/api/agents/{id}` | Get agent |
-| POST | `/api/agents` | Create agent |
-| PUT | `/api/agents/{id}` | Update agent |
-| DELETE | `/api/agents/{id}` | Delete agent |
-| POST | `/api/agents/{id}/duplicate` | Clone agent |
+| Method | Path                         | Purpose      |
+| ------ | ---------------------------- | ------------ |
+| GET    | `/api/agents`                | List agents  |
+| GET    | `/api/agents/{id}`           | Get agent    |
+| POST   | `/api/agents`                | Create agent |
+| PUT    | `/api/agents/{id}`           | Update agent |
+| DELETE | `/api/agents/{id}`           | Delete agent |
+| POST   | `/api/agents/{id}/duplicate` | Clone agent  |
 
 ## Detailed Guides
 
@@ -123,8 +123,8 @@ For comprehensive documentation, see supporting files:
 
 Controlled via `/api/settings/agents`:
 
-| Mode | Behavior |
-|------|----------|
-| `off` | Agents feature disabled |
+| Mode            | Behavior                     |
+| --------------- | ---------------------------- |
+| `off`           | Agents feature disabled      |
 | `personal_only` | Only personal agents allowed |
-| `full` | Full agent sharing enabled |
+| `full`          | Full agent sharing enabled   |

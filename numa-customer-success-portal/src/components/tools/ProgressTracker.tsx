@@ -1,85 +1,79 @@
-import { ProgressBar, Alert } from 'react-bootstrap'
-import { CheckCircleFill, XCircleFill, Clock } from 'react-bootstrap-icons'
-import type { ToolProgress, ToolExecutionStatus } from '@/types/tools'
+import { ProgressBar, Alert } from 'react-bootstrap';
+import { CheckCircleFill, XCircleFill, Clock } from 'react-bootstrap-icons';
+import type { ToolProgress, ToolExecutionStatus } from '@/types/tools';
 
 interface ProgressTrackerProps {
-  status: ToolExecutionStatus
-  progress?: ToolProgress
-  error?: string
-  startedAt?: Date
-  completedAt?: Date
+  status: ToolExecutionStatus;
+  progress?: ToolProgress;
+  error?: string;
+  startedAt?: Date;
+  completedAt?: Date;
 }
 
-export function ProgressTracker({
-  status,
-  progress,
-  error,
-  startedAt,
-  completedAt
-}: ProgressTrackerProps) {
+export function ProgressTracker({ status, progress, error, startedAt, completedAt }: ProgressTrackerProps) {
   const getStatusIcon = () => {
     switch (status) {
       case 'completed':
-        return <CheckCircleFill className="text-success me-2" />
+        return <CheckCircleFill className="text-success me-2" />;
       case 'failed':
       case 'cancelled':
-        return <XCircleFill className="text-danger me-2" />
+        return <XCircleFill className="text-danger me-2" />;
       case 'running':
-        return <Clock className="text-primary me-2" />
+        return <Clock className="text-primary me-2" />;
       default:
-        return null
+        return null;
     }
-  }
+  };
 
   const getStatusText = () => {
     switch (status) {
       case 'idle':
-        return 'Ready to start'
+        return 'Ready to start';
       case 'running':
-        return 'Running...'
+        return 'Running...';
       case 'completed':
-        return 'Completed successfully'
+        return 'Completed successfully';
       case 'failed':
-        return 'Failed'
+        return 'Failed';
       case 'cancelled':
-        return 'Cancelled'
+        return 'Cancelled';
       default:
-        return 'Unknown status'
+        return 'Unknown status';
     }
-  }
+  };
 
   const getVariant = () => {
     switch (status) {
       case 'completed':
-        return 'success'
+        return 'success';
       case 'failed':
       case 'cancelled':
-        return 'danger'
+        return 'danger';
       case 'running':
-        return 'primary'
+        return 'primary';
       default:
-        return 'secondary'
+        return 'secondary';
     }
-  }
+  };
 
   const formatDuration = () => {
-    if (!startedAt) return ''
+    if (!startedAt) return '';
 
-    const endTime = completedAt || new Date()
-    const durationMs = endTime.getTime() - startedAt.getTime()
-    const seconds = Math.floor(durationMs / 1000)
+    const endTime = completedAt || new Date();
+    const durationMs = endTime.getTime() - startedAt.getTime();
+    const seconds = Math.floor(durationMs / 1000);
 
     if (seconds < 60) {
-      return `${seconds}s`
+      return `${seconds}s`;
     }
 
-    const minutes = Math.floor(seconds / 60)
-    const remainingSeconds = seconds % 60
-    return `${minutes}m ${remainingSeconds}s`
-  }
+    const minutes = Math.floor(seconds / 60);
+    const remainingSeconds = seconds % 60;
+    return `${minutes}m ${remainingSeconds}s`;
+  };
 
-  const progressValue = progress ? (progress.current / progress.total) * 100 : 0
-  const progressPercentage = parseFloat(progressValue.toFixed(2)).toString()
+  const progressValue = progress ? (progress.current / progress.total) * 100 : 0;
+  const progressPercentage = parseFloat(progressValue.toFixed(2)).toString();
 
   return (
     <div className="progress-tracker">
@@ -113,23 +107,13 @@ export function ProgressTracker({
               {progress.current.toFixed(2)} / {progress.total}
             </small>
           </div>
-          {progress.details && (
-            <small className="text-muted d-block mt-1">
-              {progress.details}
-            </small>
-          )}
+          {progress.details && <small className="text-muted d-block mt-1">{progress.details}</small>}
         </div>
       )}
 
       {/* Completed Progress Bar */}
       {status === 'completed' && (
-        <ProgressBar
-          variant="success"
-          now={100}
-          label="100%"
-          className="mb-2"
-          style={{ height: '8px' }}
-        />
+        <ProgressBar variant="success" now={100} label="100%" className="mb-2" style={{ height: '8px' }} />
       )}
 
       {/* Error Display */}
@@ -146,5 +130,5 @@ export function ProgressTracker({
         </Alert>
       )}
     </div>
-  )
+  );
 }

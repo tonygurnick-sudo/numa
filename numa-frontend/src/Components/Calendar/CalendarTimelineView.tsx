@@ -124,7 +124,7 @@ export const CalendarTimelineView: React.FC<CalendarTimelineViewProps> = ({
         const futureRuns = getNextRunTimes(
           schedule.cronExpression,
           schedule.timezone || 'UTC',
-          200, // Generate enough events to cover the visible range
+          200 // Generate enough events to cover the visible range
         );
 
         console.log('CALENDAR_TIMELINE_VIEW DEBUG: getNextRunTimes returned:', {
@@ -172,7 +172,7 @@ export const CalendarTimelineView: React.FC<CalendarTimelineViewProps> = ({
         });
 
         console.log(
-          `CALENDAR_TIMELINE_VIEW DEBUG: Created ${eventsCreatedForSchedule} events for schedule ${schedule.scheduleId}`,
+          `CALENDAR_TIMELINE_VIEW DEBUG: Created ${eventsCreatedForSchedule} events for schedule ${schedule.scheduleId}`
         );
       } catch (error) {
         console.error('CALENDAR_TIMELINE_VIEW ERROR: Failed to process schedule:', {
@@ -229,7 +229,7 @@ export const CalendarTimelineView: React.FC<CalendarTimelineViewProps> = ({
         onEventClick(event);
       }
     },
-    [onEventClick],
+    [onEventClick]
   );
 
   // Handle slot selection
@@ -239,7 +239,7 @@ export const CalendarTimelineView: React.FC<CalendarTimelineViewProps> = ({
         onSlotClick(slotInfo);
       }
     },
-    [onSlotClick],
+    [onSlotClick]
   );
 
   // Custom event styling

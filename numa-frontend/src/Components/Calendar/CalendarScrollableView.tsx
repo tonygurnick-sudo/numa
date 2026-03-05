@@ -109,7 +109,7 @@ export const CalendarScrollableView: React.FC<CalendarScrollableViewProps> = ({
 
       return periods;
     },
-    [],
+    []
   );
 
   // Initialize periods with current date centered
@@ -382,7 +382,7 @@ export const CalendarScrollableView: React.FC<CalendarScrollableViewProps> = ({
         onEventClick(event);
       }
     },
-    [onEventClick],
+    [onEventClick]
   );
 
   // Handle slot selection
@@ -392,7 +392,7 @@ export const CalendarScrollableView: React.FC<CalendarScrollableViewProps> = ({
         onSlotClick(slotInfo);
       }
     },
-    [onSlotClick],
+    [onSlotClick]
   );
 
   // Custom event styling

@@ -66,12 +66,12 @@ const addAvatarPresignedUrls = async (staffRecords: Record<string, unknown>[]): 
           new GetObjectCommand({ Bucket: parsed.bucket, Key: parsed.key }),
           {
             expiresIn: AVATAR_URL_EXPIRY,
-          },
+          }
         );
       } catch {
         // If signing fails, leave avatarPresignedUrl unset — frontend shows initials
       }
-    }),
+    })
   );
 };
 
@@ -81,7 +81,7 @@ type AuthContext = { sub: string; email?: string; name?: string; groups: string[
 
 const jsonResponse = (
   statusCode: number,
-  payload: unknown,
+  payload: unknown
 ): { statusCode: number; headers: typeof HEADERS; body: string } => ({
   statusCode,
   headers: HEADERS,
@@ -192,7 +192,7 @@ const loadAllConfig = async (): Promise<OpsConfigResponse> => {
         KeyConditionExpression: 'PK = :pk',
         ExpressionAttributeValues: { ':pk': 'CONFIG' },
         ExclusiveStartKey: lastEvaluatedKey,
-      }),
+      })
     );
 
     for (const item of response.Items ?? []) {
@@ -238,7 +238,7 @@ const listConfigByPrefix = async (prefix: string): Promise<Record<string, unknow
       TableName: OPS_CONFIG_TABLE,
       KeyConditionExpression: 'PK = :pk AND begins_with(SK, :prefix)',
       ExpressionAttributeValues: { ':pk': 'CONFIG', ':prefix': prefix },
-    }),
+    })
   );
   return (response.Items ?? []) as Record<string, unknown>[];
 };
@@ -249,7 +249,7 @@ const handleTicketTypes = async (
   method: string,
   segments: string[],
   body: Record<string, unknown>,
-  auth: AuthContext,
+  auth: AuthContext
 ): Promise<ReturnType<typeof jsonResponse>> => {
   // GET /config/ticket-types
   if (method === 'GET' && segments.length === 0) {
@@ -320,7 +320,7 @@ const handleStatuses = async (
   method: string,
   segments: string[],
   body: Record<string, unknown>,
-  auth: AuthContext,
+  auth: AuthContext
 ): Promise<ReturnType<typeof jsonResponse>> => {
   if (method === 'GET' && segments.length === 0) {
     const items = await listConfigByPrefix('STATUS#');
@@ -366,7 +366,7 @@ const handleFields = async (
   method: string,
   segments: string[],
   body: Record<string, unknown>,
-  auth: AuthContext,
+  auth: AuthContext
 ): Promise<ReturnType<typeof jsonResponse>> => {
   if (method === 'GET' && segments.length === 0) {
     const items = await listConfigByPrefix('FIELD#');
@@ -417,7 +417,7 @@ const handleStaff = async (
   method: string,
   segments: string[],
   body: Record<string, unknown>,
-  auth: AuthContext,
+  auth: AuthContext
 ): Promise<ReturnType<typeof jsonResponse>> => {
   if (method === 'GET' && segments.length === 0) {
     const items = await listConfigByPrefix('STAFF#');
@@ -517,7 +517,7 @@ const batchGetUserProfiles = async (userIds: string[]): Promise<Map<string, Chat
             ProjectionExpression: 'user_id, userProfile',
           },
         },
-      }),
+      })
     );
 
     const items = response.Responses?.[CHAT_SETTINGS_TABLE] ?? [];
@@ -548,7 +548,7 @@ const batchGetUserProfiles = async (userIds: string[]): Promise<Map<string, Chat
  */
 const handleStaffSync = async (
   event: APIGatewayProxyEventV2,
-  auth: AuthContext,
+  auth: AuthContext
 ): Promise<ReturnType<typeof jsonResponse>> => {
   if (!USER_POOL_ID) {
     return errorResponse(500, 'USER_POOL_ID not configured — staff sync unavailable');
@@ -577,7 +577,7 @@ const handleStaffSync = async (
         UserPoolId: USER_POOL_ID,
         Limit: 60,
         PaginationToken: paginationToken,
-      }),
+      })
     );
 
     for (const user of response.Users ?? []) {
@@ -677,7 +677,7 @@ const handleProjects = async (
   method: string,
   segments: string[],
   body: Record<string, unknown>,
-  auth: AuthContext,
+  auth: AuthContext
 ): Promise<ReturnType<typeof jsonResponse>> => {
   if (method === 'GET' && segments.length === 0) {
     const items = await listConfigByPrefix('PROJECT#');
@@ -723,7 +723,7 @@ const handleProjects = async (
 const handleCrmSettings = async (
   method: string,
   body: Record<string, unknown>,
-  auth: AuthContext,
+  auth: AuthContext
 ): Promise<ReturnType<typeof jsonResponse>> => {
   if (method === 'GET') {
     const item = await getConfigItem('CRM_CONFIG');
@@ -742,7 +742,7 @@ const handleCrmSettings = async (
 const handleSupplierSettings = async (
   method: string,
   body: Record<string, unknown>,
-  auth: AuthContext,
+  auth: AuthContext
 ): Promise<ReturnType<typeof jsonResponse>> => {
   if (method === 'GET') {
     const item = await getConfigItem('SUPPLIER_CONFIG');
@@ -831,7 +831,7 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
         error: err.message,
         name: err.name,
         stack: err.stack,
-      }),
+      })
     );
     return errorResponse(500, `Internal Server Error: ${err.message}`);
   }

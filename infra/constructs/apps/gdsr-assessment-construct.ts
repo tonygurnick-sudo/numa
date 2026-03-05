@@ -110,7 +110,7 @@ export class GdsrAssessment extends BaseNumaApp {
         ExtractContent: this.addExtractContentTaskWithArn(
           props.sharedExtractContentLambdaArn!,
           '$.application_key',
-          'CheckSupportingData',
+          'CheckSupportingData'
         ),
         CheckSupportingData: {
           Type: 'Choice',
@@ -129,7 +129,7 @@ export class GdsrAssessment extends BaseNumaApp {
           'GdsrAssessmentWithSupportingData',
           {
             ResultPath: '$.extracted_supporting_data',
-          },
+          }
         ),
         GdsrAssessmentWithSupportingData: this.addLambdaTask(
           assessGdsrLambda.arn,
@@ -145,7 +145,7 @@ export class GdsrAssessment extends BaseNumaApp {
           'WriteSuccessStatus',
           {
             OutputPath: '$.Payload',
-          },
+          }
         ),
         GdsrAssessmentWithoutSupportingData: this.addLambdaTask(
           assessGdsrLambda.arn,
@@ -160,7 +160,7 @@ export class GdsrAssessment extends BaseNumaApp {
           'WriteSuccessStatus',
           {
             OutputPath: '$.Payload',
-          },
+          }
         ),
         WriteFailureStatus: this.writeFailureStatus(),
         WriteSuccessStatus: this.writeSuccessStatus(),

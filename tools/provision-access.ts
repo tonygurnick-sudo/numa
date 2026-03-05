@@ -48,7 +48,7 @@ async function deployStack(account: string): Promise<string> {
       StackName: 'ArcanaumAIInitialSetup',
       TemplateURL: 'https://arcanum-numa-templates.s3.amazonaws.com/arcanum-ai-initial-setup.yaml',
       Capabilities: ['CAPABILITY_NAMED_IAM'],
-    }),
+    })
   );
   return result.StackId;
 }

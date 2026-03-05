@@ -30,14 +30,14 @@ doc.save('/workdir/outputs/result.docx')
 
 Before working with DOCX files, understand their architecture:
 
-| Component | What It Is | How to Access |
-|-----------|------------|---------------|
-| **Document** | The entire file | `doc = Document(path)` |
-| **Paragraphs** | Text blocks | `doc.paragraphs` |
-| **Tables** | Grid layouts | `doc.tables` |
-| **Rows/Cells** | Table contents | `table.rows[i].cells[j]` |
-| **Runs** | Formatted text spans | `paragraph.runs` |
-| **Sections** | Page layout areas | `doc.sections` |
+| Component      | What It Is           | How to Access            |
+| -------------- | -------------------- | ------------------------ |
+| **Document**   | The entire file      | `doc = Document(path)`   |
+| **Paragraphs** | Text blocks          | `doc.paragraphs`         |
+| **Tables**     | Grid layouts         | `doc.tables`             |
+| **Rows/Cells** | Table contents       | `table.rows[i].cells[j]` |
+| **Runs**       | Formatted text spans | `paragraph.runs`         |
+| **Sections**   | Page layout areas    | `doc.sections`           |
 
 **Key insight**: Word documents are ZIP archives containing XML. Tables are often the primary layout mechanism for structured content like invoices, forms, and reports.
 
@@ -164,12 +164,12 @@ doc.save('/workdir/outputs/with_images.docx')
 
 **Common image use cases:**
 
-| Use Case | Technique |
-|----------|-----------|
-| Company letterhead | Image in table cell at document start |
-| Report charts | `doc.add_picture()` after relevant section |
-| Signature images | Small image in table cell |
-| Centered banners | Paragraph alignment + `run.add_picture()` |
+| Use Case           | Technique                                  |
+| ------------------ | ------------------------------------------ |
+| Company letterhead | Image in table cell at document start      |
+| Report charts      | `doc.add_picture()` after relevant section |
+| Signature images   | Small image in table cell                  |
+| Centered banners   | Paragraph alignment + `run.add_picture()`  |
 
 ---
 
@@ -226,6 +226,7 @@ This is where most DOCX work happens. The goal is to take an existing template a
 ### Philosophy
 
 Templates indicate "fill here" in many different ways. Don't assume a specific syntax. Instead:
+
 1. **Analyze the template** to understand its structure
 2. **Identify where content goes** by looking at the template's cues
 3. **Choose the right technique** for each type of content
@@ -285,6 +286,7 @@ print(f"Potential placeholders: {len(analysis['potential_placeholders'])}")
 ```
 
 **Questions to answer during analysis:**
+
 - What type of document is this? (invoice, contract, letter, form, report)
 - Is it table-heavy or paragraph-heavy?
 - Where does content need to go?
@@ -295,24 +297,24 @@ print(f"Potential placeholders: {len(analysis['potential_placeholders'])}")
 
 Templates signal "fill here" in various ways:
 
-| Signal Type | Examples | How to Detect |
-|-------------|----------|---------------|
-| Placeholder text | `<Name>`, `[Company]`, `{{date}}`, `ENTER NAME HERE` | Look for brackets, braces, or ALL CAPS instructions |
-| Empty cells/rows | Blank table cells | Check `cell.text.strip() == ''` |
-| Instructions | "Add paragraph here", "Insert below" | Search for instructional text |
-| Formatting cues | Underlined blanks, highlighted areas | Check run formatting properties |
-| Structural patterns | Repeated row structures | Identify repeating table row patterns |
+| Signal Type         | Examples                                             | How to Detect                                       |
+| ------------------- | ---------------------------------------------------- | --------------------------------------------------- |
+| Placeholder text    | `<Name>`, `[Company]`, `{{date}}`, `ENTER NAME HERE` | Look for brackets, braces, or ALL CAPS instructions |
+| Empty cells/rows    | Blank table cells                                    | Check `cell.text.strip() == ''`                     |
+| Instructions        | "Add paragraph here", "Insert below"                 | Search for instructional text                       |
+| Formatting cues     | Underlined blanks, highlighted areas                 | Check run formatting properties                     |
+| Structural patterns | Repeated row structures                              | Identify repeating table row patterns               |
 
 **Key principle**: Look for what the template is telling you. Don't assume a specific syntax.
 
 ### Step 3: Choose the Right Technique
 
-| Content Type | Best Technique | Example Use |
-|--------------|----------------|-------------|
-| Simple field replacement | Text replace in cell/paragraph | Name, date, invoice number |
-| Repeated/list items | Iterate through rows, fill cells | Line items, table entries |
-| Long text blocks | Add paragraphs or set cell text | Descriptions, notes, contract clauses |
-| Calculated values | Compute then insert | Totals, taxes, percentages |
+| Content Type             | Best Technique                   | Example Use                           |
+| ------------------------ | -------------------------------- | ------------------------------------- |
+| Simple field replacement | Text replace in cell/paragraph   | Name, date, invoice number            |
+| Repeated/list items      | Iterate through rows, fill cells | Line items, table entries             |
+| Long text blocks         | Add paragraphs or set cell text  | Descriptions, notes, contract clauses |
+| Calculated values        | Compute then insert              | Totals, taxes, percentages            |
 
 ### Step 4: Filling Techniques
 
@@ -449,6 +451,7 @@ doc.save('/workdir/outputs/with_paragraphs.docx')
 Adding content increases document height and can cause page breaks in unwanted places.
 
 **Critical sections that must stay together:**
+
 - Signature blocks
 - Totals and summaries
 - Legal disclaimers
@@ -456,11 +459,11 @@ Adding content increases document height and can cause page breaks in unwanted p
 
 **Strategies when content exceeds template capacity:**
 
-| Strategy | When to Use | How to Implement |
-|----------|-------------|------------------|
-| **Reduce** | Too many items to fit | Summarize or truncate; show top items + "and X more" |
-| **Compress** | Slightly over capacity | Reduce font sizes or row heights slightly |
-| **Split** | Much more content than fits | Add intentional page breaks before critical sections |
+| Strategy     | When to Use                 | How to Implement                                     |
+| ------------ | --------------------------- | ---------------------------------------------------- |
+| **Reduce**   | Too many items to fit       | Summarize or truncate; show top items + "and X more" |
+| **Compress** | Slightly over capacity      | Reduce font sizes or row heights slightly            |
+| **Split**    | Much more content than fits | Add intentional page breaks before critical sections |
 
 ```python
 from docx.shared import Pt
@@ -555,6 +558,7 @@ mcp__numa__numa_tool(name="convert_document", description="Converting markdown r
 ```
 
 **Why this approach works well:**
+
 - Pandoc produces clean, well-structured DOCX files
 - Markdown is easier to write and review than python-docx code
 - Supports headings, lists, tables, code blocks automatically
@@ -562,12 +566,12 @@ mcp__numa__numa_tool(name="convert_document", description="Converting markdown r
 
 **When to use each approach:**
 
-| Need | Best Approach |
-|------|---------------|
+| Need                          | Best Approach                     |
+| ----------------------------- | --------------------------------- |
 | Quick report with text/tables | Write markdown → `pandoc` (local) |
-| Fill existing DOCX template | python-docx (this skill) |
-| Complex formatting/styling | python-docx (this skill) |
-| Programmatic data insertion | python-docx (this skill) |
+| Fill existing DOCX template   | python-docx (this skill)          |
+| Complex formatting/styling    | python-docx (this skill)          |
+| Programmatic data insertion   | python-docx (this skill)          |
 
 ---
 
@@ -585,15 +589,15 @@ mcp__numa__numa_tool(name="convert_document", description="Converting markdown r
 
 ## Common Issues
 
-| Issue | Cause | Solution |
-|-------|-------|----------|
-| Text replacement didn't work | Placeholder split across runs (e.g., Word formatted `<pla` and `ceholder>` separately) | Use run-level iteration and join text, or rebuild the paragraph |
-| Lost formatting after replacement | Used `cell.text =` which clears formatting | Use run-level replacement to preserve styles |
-| Content split across pages | Added too much content | Use pagination strategies: reduce, compress, or add page breaks |
-| Signature block on wrong page | Content pushed it to page 2 | Reduce earlier content or add explicit page break before signature |
-| Table cells overflow | Text too long for column | Truncate text or allow cell to wrap (default behavior) |
-| Document won't open | Corrupted XML during manipulation | Save to new file; check for invalid characters |
-| Wrong data in wrong cells | Hardcoded row/column indices that don't match template | Re-analyze template structure; use content-based detection |
+| Issue                             | Cause                                                                                  | Solution                                                           |
+| --------------------------------- | -------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| Text replacement didn't work      | Placeholder split across runs (e.g., Word formatted `<pla` and `ceholder>` separately) | Use run-level iteration and join text, or rebuild the paragraph    |
+| Lost formatting after replacement | Used `cell.text =` which clears formatting                                             | Use run-level replacement to preserve styles                       |
+| Content split across pages        | Added too much content                                                                 | Use pagination strategies: reduce, compress, or add page breaks    |
+| Signature block on wrong page     | Content pushed it to page 2                                                            | Reduce earlier content or add explicit page break before signature |
+| Table cells overflow              | Text too long for column                                                               | Truncate text or allow cell to wrap (default behavior)             |
+| Document won't open               | Corrupted XML during manipulation                                                      | Save to new file; check for invalid characters                     |
+| Wrong data in wrong cells         | Hardcoded row/column indices that don't match template                                 | Re-analyze template structure; use content-based detection         |
 
 ---
 
@@ -629,22 +633,22 @@ mcp__numa__numa_tool(name="convert_document", description="Converting markdown t
 
 ### Conversion Quality
 
-| Conversion | Quality | Notes |
-|------------|---------|-------|
-| DOCX → PDF | Excellent | LibreOffice handles this very well |
-| PDF → DOCX | Variable | PDFs are presentation format; complex layouts may not convert cleanly |
-| Markdown → DOCX | Good | Works well for properly formatted markdown |
+| Conversion      | Quality   | Notes                                                                 |
+| --------------- | --------- | --------------------------------------------------------------------- |
+| DOCX → PDF      | Excellent | LibreOffice handles this very well                                    |
+| PDF → DOCX      | Variable  | PDFs are presentation format; complex layouts may not convert cleanly |
+| Markdown → DOCX | Good      | Works well for properly formatted markdown                            |
 
 ### When to Use python-docx vs. Conversion Tools
 
-| Scenario | Recommended Approach |
-|----------|---------------------|
-| Creating new DOCX from scratch | python-docx (this skill) |
-| Filling DOCX templates | python-docx (this skill) |
-| Modifying existing DOCX | python-docx (this skill) |
-| Converting DOCX → PDF | `soffice --headless` (local) |
-| Converting Markdown → DOCX | `pandoc` (local) |
-| Complex/scanned PDFs | `extract_content` tool (via `numa_tool` MCP) + `pandoc` |
+| Scenario                       | Recommended Approach                                    |
+| ------------------------------ | ------------------------------------------------------- |
+| Creating new DOCX from scratch | python-docx (this skill)                                |
+| Filling DOCX templates         | python-docx (this skill)                                |
+| Modifying existing DOCX        | python-docx (this skill)                                |
+| Converting DOCX → PDF          | `soffice --headless` (local)                            |
+| Converting Markdown → DOCX     | `pandoc` (local)                                        |
+| Complex/scanned PDFs           | `extract_content` tool (via `numa_tool` MCP) + `pandoc` |
 
 ### Alternative: Extract + Convert (for complex PDFs)
 

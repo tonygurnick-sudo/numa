@@ -41,7 +41,7 @@ export async function deleteQUsers(awsClientConfig: AWSClientConfig, userPool: s
           new AdminDeleteUserCommand({
             UserPoolId: userPool,
             Username: email,
-          }),
+          })
         );
         console.log(chalk.green(`Successfully deleted: ${email}`));
       } catch (error) {

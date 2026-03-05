@@ -1,22 +1,12 @@
-import { useEffect, useMemo, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
-import {
-  Card,
-  Button,
-  Form,
-  Alert,
-  Row,
-  Col,
-  ListGroup,
-  Badge,
-  Container,
-} from 'react-bootstrap'
-import { ArrowLeft, Download, BarChart } from 'react-bootstrap-icons'
-import { useToolExecution } from '@/hooks/useToolExecution'
-import { ProgressTracker } from '@/components/tools/ProgressTracker'
-import { clientService } from '@/services/clientService'
-import { FileExportService } from '@/utils/fileExport'
-import { QuotaReportService } from '@/services/quotaReportService'
+import { useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { Card, Button, Form, Alert, Row, Col, ListGroup, Badge, Container } from 'react-bootstrap';
+import { ArrowLeft, Download, BarChart } from 'react-bootstrap-icons';
+import { useToolExecution } from '@/hooks/useToolExecution';
+import { ProgressTracker } from '@/components/tools/ProgressTracker';
+import { clientService } from '@/services/clientService';
+import { FileExportService } from '@/utils/fileExport';
+import { QuotaReportService } from '@/services/quotaReportService';
 import type {
   QuotaReportParameters,
   ToolResult,
@@ -26,31 +16,31 @@ import type {
   ModelFamily,
   QuotaMetric,
   QuotaType,
-} from '@/types/tools'
+} from '@/types/tools';
 
-const DEFAULT_TYPES: QuotaType[] = ['On-demand', 'Cross-region', 'Global cross-region']
-const DEFAULT_FAMILIES: ModelFamily[] = ['sonnet', 'opus', 'haiku', 'nova']
-const DEFAULT_METRICS: QuotaMetric[] = ['requests-per-minute', 'tokens-per-minute']
+const DEFAULT_TYPES: QuotaType[] = ['On-demand', 'Cross-region', 'Global cross-region'];
+const DEFAULT_FAMILIES: ModelFamily[] = ['sonnet', 'opus', 'haiku', 'nova'];
+const DEFAULT_METRICS: QuotaMetric[] = ['requests-per-minute', 'tokens-per-minute'];
 
 const FAMILY_LABELS: Record<ModelFamily, string> = {
   sonnet: 'Sonnet',
   opus: 'Opus',
   haiku: 'Haiku',
   nova: 'Nova',
-}
+};
 
 const METRIC_LABELS: Record<QuotaMetric, string> = {
   'requests-per-minute': 'Requests/min',
   'tokens-per-minute': 'Tokens/min',
-}
+};
 
 export default function QuotaReportTool() {
-  const navigate = useNavigate()
-  const [clients, setClients] = useState<Array<{ name: string }>>([])
-  const [loadingClients, setLoadingClients] = useState(false)
-  const [resultFiles, setResultFiles] = useState<ToolResultFile[]>([])
-  const [resultQuotas, setResultQuotas] = useState<QuotaDescriptor[]>([])
-  const [resultRows, setResultRows] = useState<QuotaReportRow[]>([])
+  const navigate = useNavigate();
+  const [clients, setClients] = useState<Array<{ name: string }>>([]);
+  const [loadingClients, setLoadingClients] = useState(false);
+  const [resultFiles, setResultFiles] = useState<ToolResultFile[]>([]);
+  const [resultQuotas, setResultQuotas] = useState<QuotaDescriptor[]>([]);
+  const [resultRows, setResultRows] = useState<QuotaReportRow[]>([]);
 
   const [parameters, setParameters] = useState<QuotaReportParameters>({
     clientScope: 'all',
@@ -61,58 +51,57 @@ export default function QuotaReportTool() {
     advancedFilter: '',
     types: DEFAULT_TYPES,
     output: 'table+csv',
-  })
+  });
 
   const { execution, isRunning, execute, cancel, reset } = useToolExecution({
     onCompleted: (result) => {
-      if (result.files) setResultFiles(result.files)
-      if (result.data?.quotas) setResultQuotas(result.data.quotas)
-      if (result.data?.rows) setResultRows(result.data.rows)
+      if (result.files) setResultFiles(result.files);
+      if (result.data?.quotas) setResultQuotas(result.data.quotas);
+      if (result.data?.rows) setResultRows(result.data.rows);
     },
     onFailed: (error) => {
-      console.error('Tool execution failed:', error)
+      console.error('Tool execution failed:', error);
     },
-  })
+  });
 
-  useEffect(() => { loadClients() }, [])
+  useEffect(() => {
+    loadClients();
+  }, []);
 
   const loadClients = async () => {
-    setLoadingClients(true)
+    setLoadingClients(true);
     try {
-      const allClients = await clientService.getAllClients()
-      setClients(allClients)
+      const allClients = await clientService.getAllClients();
+      setClients(allClients);
     } catch (err) {
-      console.error('Failed to load clients:', err)
+      console.error('Failed to load clients:', err);
     } finally {
-      setLoadingClients(false)
+      setLoadingClients(false);
     }
-  }
+  };
 
   const handleParamChange = (patch: Partial<QuotaReportParameters>) => {
-    setParameters(prev => ({ ...prev, ...patch }))
-  }
+    setParameters((prev) => ({ ...prev, ...patch }));
+  };
 
   const handleExecute = async () => {
-    setResultFiles([])
-    setResultQuotas([])
-    setResultRows([])
+    setResultFiles([]);
+    setResultQuotas([]);
+    setResultRows([]);
     await execute('quota-report', parameters, async (params, onProgress) => {
-      const { result, files } = await QuotaReportService.generateReport(
-        params as QuotaReportParameters,
-        onProgress,
-      )
-      return { type: 'file', files, data: result } as ToolResult
-    })
-  }
+      const { result, files } = await QuotaReportService.generateReport(params as QuotaReportParameters, onProgress);
+      return { type: 'file', files, data: result } as ToolResult;
+    });
+  };
 
-  const handleDownloadFile = (file: ToolResultFile) => FileExportService.downloadFile(file)
-  const handleDownloadAll = () => FileExportService.downloadFiles(resultFiles)
+  const handleDownloadFile = (file: ToolResultFile) => FileExportService.downloadFile(file);
+  const handleDownloadAll = () => FileExportService.downloadFiles(resultFiles);
 
   const handleReset = () => {
-    reset()
-    setResultFiles([])
-    setResultQuotas([])
-    setResultRows([])
+    reset();
+    setResultFiles([]);
+    setResultQuotas([]);
+    setResultRows([]);
     setParameters({
       clientScope: 'all',
       clients: [],
@@ -122,34 +111,33 @@ export default function QuotaReportTool() {
       advancedFilter: '',
       types: DEFAULT_TYPES,
       output: 'table+csv',
-    })
-  }
+    });
+  };
 
   const isFormValid = () => {
-    if (!parameters.clientScope) return false
-    if (parameters.clientScope === 'selected' && (!parameters.clients || parameters.clients.length === 0)) return false
-    if (!parameters.modelFamilies || parameters.modelFamilies.length === 0) return false
-    if (!parameters.quotaMetrics || parameters.quotaMetrics.length === 0) return false
-    if (!parameters.types || parameters.types.length === 0) return false
-    if (!parameters.output) return false
-    return true
-  }
+    if (!parameters.clientScope) return false;
+    if (parameters.clientScope === 'selected' && (!parameters.clients || parameters.clients.length === 0)) return false;
+    if (!parameters.modelFamilies || parameters.modelFamilies.length === 0) return false;
+    if (!parameters.quotaMetrics || parameters.quotaMetrics.length === 0) return false;
+    if (!parameters.types || parameters.types.length === 0) return false;
+    if (!parameters.output) return false;
+    return true;
+  };
 
-  const quotaColumns = useMemo(() => resultQuotas.map(q => {
-    const metricSuffix = q.Metric === 'tokens-per-minute' ? ' (TPM)' : ' (RPM)'
-    return `${q.Model}-${q.Type}${metricSuffix}`
-  }), [resultQuotas])
+  const quotaColumns = useMemo(
+    () =>
+      resultQuotas.map((q) => {
+        const metricSuffix = q.Metric === 'tokens-per-minute' ? ' (TPM)' : ' (RPM)';
+        return `${q.Model}-${q.Type}${metricSuffix}`;
+      }),
+    [resultQuotas]
+  );
 
   return (
     <Container fluid>
       {/* Header */}
       <div className="d-flex align-items-center mb-4">
-        <Button
-          variant="secondary"
-          onClick={() => navigate('/tools')}
-          className="me-3"
-          disabled={isRunning}
-        >
+        <Button variant="secondary" onClick={() => navigate('/tools')} className="me-3" disabled={isRunning}>
           <ArrowLeft className="me-1" />
           Back to Tools
         </Button>
@@ -159,7 +147,8 @@ export default function QuotaReportTool() {
             <h2 className="mb-0">Quota Report</h2>
           </div>
           <p className="text-muted mb-0">
-            Fetch Bedrock quotas (RPM & TPM) across client accounts. Dev accounts are consolidated and always check both regions.
+            Fetch Bedrock quotas (RPM & TPM) across client accounts. Dev accounts are consolidated and always check both
+            regions.
           </p>
         </div>
       </div>
@@ -175,10 +164,14 @@ export default function QuotaReportTool() {
               {!execution && (
                 <Form>
                   <Form.Group className="mb-3">
-                    <Form.Label>Client Scope <span className="text-danger">*</span></Form.Label>
+                    <Form.Label>
+                      Client Scope <span className="text-danger">*</span>
+                    </Form.Label>
                     <Form.Select
                       value={parameters.clientScope}
-                      onChange={(e) => handleParamChange({ clientScope: e.target.value as 'all' | 'selected' | 'arcanum-internal' })}
+                      onChange={(e) =>
+                        handleParamChange({ clientScope: e.target.value as 'all' | 'selected' | 'arcanum-internal' })
+                      }
                       disabled={isRunning}
                     >
                       <option value="all">All clients</option>
@@ -194,19 +187,23 @@ export default function QuotaReportTool() {
 
                   {parameters.clientScope === 'selected' && (
                     <Form.Group className="mb-3">
-                      <Form.Label>Clients <span className="text-danger">*</span></Form.Label>
+                      <Form.Label>
+                        Clients <span className="text-danger">*</span>
+                      </Form.Label>
                       <Form.Select
                         multiple
                         value={parameters.clients || []}
                         onChange={(e) => {
-                          const opts = Array.from(e.target.selectedOptions).map(o => o.value)
-                          handleParamChange({ clients: opts })
+                          const opts = Array.from(e.target.selectedOptions).map((o) => o.value);
+                          handleParamChange({ clients: opts });
                         }}
                         disabled={isRunning || loadingClients}
                         style={{ minHeight: 140 }}
                       >
-                        {clients.map(c => (
-                          <option key={c.name} value={c.name}>{c.name}</option>
+                        {clients.map((c) => (
+                          <option key={c.name} value={c.name}>
+                            {c.name}
+                          </option>
                         ))}
                       </Form.Select>
                       <Form.Text className="text-muted">Hold Cmd/Ctrl to select multiple</Form.Text>
@@ -217,7 +214,9 @@ export default function QuotaReportTool() {
                     <Form.Label>Region Mode</Form.Label>
                     <Form.Select
                       value={parameters.regionMode}
-                      onChange={(e) => handleParamChange({ regionMode: e.target.value as 'client-region' | 'all-regions' })}
+                      onChange={(e) =>
+                        handleParamChange({ regionMode: e.target.value as 'client-region' | 'all-regions' })
+                      }
                       disabled={isRunning}
                     >
                       <option value="client-region">Client&apos;s configured region</option>
@@ -227,18 +226,21 @@ export default function QuotaReportTool() {
                   </Form.Group>
 
                   <Form.Group className="mb-3">
-                    <Form.Label>Model Families <span className="text-danger">*</span></Form.Label>
+                    <Form.Label>
+                      Model Families <span className="text-danger">*</span>
+                    </Form.Label>
                     <div className="d-flex flex-wrap gap-3">
-                      {(Object.keys(FAMILY_LABELS) as ModelFamily[]).map(family => (
+                      {(Object.keys(FAMILY_LABELS) as ModelFamily[]).map((family) => (
                         <Form.Check
                           key={family}
                           type="checkbox"
                           label={FAMILY_LABELS[family]}
                           checked={parameters.modelFamilies.includes(family)}
                           onChange={(e) => {
-                            const next = new Set(parameters.modelFamilies)
-                            if (e.target.checked) next.add(family); else next.delete(family)
-                            handleParamChange({ modelFamilies: Array.from(next) })
+                            const next = new Set(parameters.modelFamilies);
+                            if (e.target.checked) next.add(family);
+                            else next.delete(family);
+                            handleParamChange({ modelFamilies: Array.from(next) });
                           }}
                           disabled={isRunning}
                         />
@@ -248,18 +250,21 @@ export default function QuotaReportTool() {
                   </Form.Group>
 
                   <Form.Group className="mb-3">
-                    <Form.Label>Quota Metrics <span className="text-danger">*</span></Form.Label>
+                    <Form.Label>
+                      Quota Metrics <span className="text-danger">*</span>
+                    </Form.Label>
                     <div className="d-flex gap-3">
-                      {(Object.keys(METRIC_LABELS) as QuotaMetric[]).map(metric => (
+                      {(Object.keys(METRIC_LABELS) as QuotaMetric[]).map((metric) => (
                         <Form.Check
                           key={metric}
                           type="checkbox"
                           label={METRIC_LABELS[metric]}
                           checked={parameters.quotaMetrics.includes(metric)}
                           onChange={(e) => {
-                            const next = new Set(parameters.quotaMetrics)
-                            if (e.target.checked) next.add(metric); else next.delete(metric)
-                            handleParamChange({ quotaMetrics: Array.from(next) })
+                            const next = new Set(parameters.quotaMetrics);
+                            if (e.target.checked) next.add(metric);
+                            else next.delete(metric);
+                            handleParamChange({ quotaMetrics: Array.from(next) });
                           }}
                           disabled={isRunning}
                         />
@@ -281,16 +286,19 @@ export default function QuotaReportTool() {
                   </Form.Group>
 
                   <Form.Group className="mb-3">
-                    <Form.Label>Quota Types <span className="text-danger">*</span></Form.Label>
+                    <Form.Label>
+                      Quota Types <span className="text-danger">*</span>
+                    </Form.Label>
                     <div className="d-flex gap-3">
                       <Form.Check
                         type="checkbox"
                         label="On-demand"
                         checked={parameters.types.includes('On-demand')}
                         onChange={(e) => {
-                          const next = new Set(parameters.types)
-                          if (e.target.checked) next.add('On-demand'); else next.delete('On-demand')
-                          handleParamChange({ types: Array.from(next) as QuotaType[] })
+                          const next = new Set(parameters.types);
+                          if (e.target.checked) next.add('On-demand');
+                          else next.delete('On-demand');
+                          handleParamChange({ types: Array.from(next) as QuotaType[] });
                         }}
                         disabled={isRunning}
                       />
@@ -299,9 +307,10 @@ export default function QuotaReportTool() {
                         label="Cross-region"
                         checked={parameters.types.includes('Cross-region')}
                         onChange={(e) => {
-                          const next = new Set(parameters.types)
-                          if (e.target.checked) next.add('Cross-region'); else next.delete('Cross-region')
-                          handleParamChange({ types: Array.from(next) as QuotaType[] })
+                          const next = new Set(parameters.types);
+                          if (e.target.checked) next.add('Cross-region');
+                          else next.delete('Cross-region');
+                          handleParamChange({ types: Array.from(next) as QuotaType[] });
                         }}
                         disabled={isRunning}
                       />
@@ -310,9 +319,10 @@ export default function QuotaReportTool() {
                         label="Global cross-region"
                         checked={parameters.types.includes('Global cross-region')}
                         onChange={(e) => {
-                          const next = new Set(parameters.types)
-                          if (e.target.checked) next.add('Global cross-region'); else next.delete('Global cross-region')
-                          handleParamChange({ types: Array.from(next) as QuotaType[] })
+                          const next = new Set(parameters.types);
+                          if (e.target.checked) next.add('Global cross-region');
+                          else next.delete('Global cross-region');
+                          handleParamChange({ types: Array.from(next) as QuotaType[] });
                         }}
                         disabled={isRunning}
                       />
@@ -320,7 +330,9 @@ export default function QuotaReportTool() {
                   </Form.Group>
 
                   <Form.Group className="mb-4">
-                    <Form.Label>Output <span className="text-danger">*</span></Form.Label>
+                    <Form.Label>
+                      Output <span className="text-danger">*</span>
+                    </Form.Label>
                     <Form.Select
                       value={parameters.output}
                       onChange={(e) => handleParamChange({ output: e.target.value as 'table+csv' | 'csv' })}
@@ -342,37 +354,60 @@ export default function QuotaReportTool() {
               {execution && (
                 <div>
                   <h6 className="mb-3">Current Parameters</h6>
-                  <div className="mb-2"><strong>Scope:</strong> {
-                    parameters.clientScope === 'arcanum-internal' ? 'Arcanum Internal Accounts' :
-                    parameters.clientScope === 'all' ? 'All clients' : 'Selected clients'
-                  }</div>
+                  <div className="mb-2">
+                    <strong>Scope:</strong>{' '}
+                    {parameters.clientScope === 'arcanum-internal'
+                      ? 'Arcanum Internal Accounts'
+                      : parameters.clientScope === 'all'
+                        ? 'All clients'
+                        : 'Selected clients'}
+                  </div>
                   {parameters.clientScope === 'selected' && (
-                    <div className="mb-2"><strong>Clients:</strong> {parameters.clients?.join(', ') || '—'}</div>
+                    <div className="mb-2">
+                      <strong>Clients:</strong> {parameters.clients?.join(', ') || '—'}
+                    </div>
                   )}
-                  <div className="mb-2"><strong>Region Mode:</strong> {parameters.regionMode === 'client-region' ? "Client's region" : 'All regions'}</div>
-                  <div className="mb-2"><strong>Families:</strong> {parameters.modelFamilies.map(f => FAMILY_LABELS[f]).join(', ')}</div>
-                  <div className="mb-2"><strong>Metrics:</strong> {parameters.quotaMetrics.map(m => METRIC_LABELS[m]).join(', ')}</div>
+                  <div className="mb-2">
+                    <strong>Region Mode:</strong>{' '}
+                    {parameters.regionMode === 'client-region' ? "Client's region" : 'All regions'}
+                  </div>
+                  <div className="mb-2">
+                    <strong>Families:</strong> {parameters.modelFamilies.map((f) => FAMILY_LABELS[f]).join(', ')}
+                  </div>
+                  <div className="mb-2">
+                    <strong>Metrics:</strong> {parameters.quotaMetrics.map((m) => METRIC_LABELS[m]).join(', ')}
+                  </div>
                   {parameters.advancedFilter && (
-                    <div className="mb-2"><strong>Advanced Filter:</strong> {parameters.advancedFilter}</div>
+                    <div className="mb-2">
+                      <strong>Advanced Filter:</strong> {parameters.advancedFilter}
+                    </div>
                   )}
-                  <div className="mb-4"><strong>Types:</strong> {parameters.types.join(', ')}</div>
+                  <div className="mb-4">
+                    <strong>Types:</strong> {parameters.types.join(', ')}
+                  </div>
 
                   {isRunning && (
                     <div className="d-grid">
-                      <Button variant="outline-danger" onClick={cancel}>Cancel</Button>
+                      <Button variant="outline-danger" onClick={cancel}>
+                        Cancel
+                      </Button>
                     </div>
                   )}
 
                   {execution.status === 'completed' && (
                     <div className="d-grid">
-                      <Button variant="outline-primary" onClick={handleReset}>Run New Report</Button>
+                      <Button variant="outline-primary" onClick={handleReset}>
+                        Run New Report
+                      </Button>
                     </div>
                   )}
                 </div>
               )}
 
               {loadingClients && (
-                <Alert variant="info" className="mt-3">Loading client configurations...</Alert>
+                <Alert variant="info" className="mt-3">
+                  Loading client configurations...
+                </Alert>
               )}
             </Card.Body>
           </Card>
@@ -384,11 +419,17 @@ export default function QuotaReportTool() {
             <Card.Header className="d-flex justify-content-between align-items-center">
               <h5 className="mb-0">{execution ? 'Execution Progress' : 'Ready to Run'}</h5>
               {execution?.status && (
-                <Badge bg={
-                  execution.status === 'completed' ? 'success' :
-                    execution.status === 'failed' ? 'danger' :
-                      execution.status === 'running' ? 'primary' : 'secondary'
-                }>
+                <Badge
+                  bg={
+                    execution.status === 'completed'
+                      ? 'success'
+                      : execution.status === 'failed'
+                        ? 'danger'
+                        : execution.status === 'running'
+                          ? 'primary'
+                          : 'secondary'
+                  }
+                >
                   {execution.status.charAt(0).toUpperCase() + execution.status.slice(1)}
                 </Badge>
               )}
@@ -415,7 +456,9 @@ export default function QuotaReportTool() {
               )}
 
               {execution?.status === 'completed' && resultFiles.length === 0 && (
-                <Alert variant="warning" className="mb-0">No results generated. Adjust filters and try again.</Alert>
+                <Alert variant="warning" className="mb-0">
+                  No results generated. Adjust filters and try again.
+                </Alert>
               )}
 
               {resultFiles.length > 0 && (
@@ -433,7 +476,9 @@ export default function QuotaReportTool() {
                       <ListGroup.Item key={idx} className="d-flex justify-content-between align-items-center">
                         <div>
                           <div className="fw-semibold">{file.name}</div>
-                          <small className="text-muted">{file.mimeType} • {FileExportService.formatFileSize(file.size)}</small>
+                          <small className="text-muted">
+                            {file.mimeType} • {FileExportService.formatFileSize(file.size)}
+                          </small>
                         </div>
                         <Button variant="outline-primary" size="sm" onClick={() => handleDownloadFile(file)}>
                           <Download />
@@ -455,12 +500,18 @@ export default function QuotaReportTool() {
             <h5 className="mb-0">Quota Report Table</h5>
           </Card.Header>
           <Card.Body>
-            {resultQuotas.some(q => q.isPriority) && (
+            {resultQuotas.some((q) => q.isPriority) && (
               <Alert variant="success" className="mb-3">
                 <strong>Key Models (4.5/4.6)</strong>{' '}
                 <span className="text-muted">
-                  {resultQuotas.filter(q => q.isPriority).map(q => q.Model).filter((v, i, a) => a.indexOf(v) === i).join(', ')}
-                  {' \u2014 '}{resultQuotas.filter(q => q.isPriority).length} quota column{resultQuotas.filter(q => q.isPriority).length !== 1 ? 's' : ''} highlighted in green
+                  {resultQuotas
+                    .filter((q) => q.isPriority)
+                    .map((q) => q.Model)
+                    .filter((v, i, a) => a.indexOf(v) === i)
+                    .join(', ')}
+                  {' \u2014 '}
+                  {resultQuotas.filter((q) => q.isPriority).length} quota column
+                  {resultQuotas.filter((q) => q.isPriority).length !== 1 ? 's' : ''} highlighted in green
                 </span>
               </Alert>
             )}
@@ -491,10 +542,20 @@ export default function QuotaReportTool() {
                     <tr key={i} className={row.isDev ? 'table-info' : ''}>
                       <td>{row.accountName}</td>
                       <td>{row.stackNames?.join(', ') || '—'}</td>
-                      <td><code className="small">{row.accountId}</code></td>
+                      <td>
+                        <code className="small">{row.accountId}</code>
+                      </td>
                       <td>{row.region}</td>
                       <td>{row.isDev ? <Badge bg="info">Dev</Badge> : '—'}</td>
-                      <td>{row.bedrockAccount ? <Badge bg="success" title={row.bedrockAccount}>Enabled</Badge> : '—'}</td>
+                      <td>
+                        {row.bedrockAccount ? (
+                          <Badge bg="success" title={row.bedrockAccount}>
+                            Enabled
+                          </Badge>
+                        ) : (
+                          '—'
+                        )}
+                      </td>
                       {resultQuotas.map((q, j) => (
                         <td key={j} className={q.isPriority ? 'fw-semibold' : ''}>
                           {row.values[q.QuotaCode] ?? ''}
@@ -509,5 +570,5 @@ export default function QuotaReportTool() {
         </Card>
       )}
     </Container>
-  )
+  );
 }

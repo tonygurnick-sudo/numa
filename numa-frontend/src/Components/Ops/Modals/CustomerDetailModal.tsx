@@ -60,7 +60,7 @@ function toDateInputValue(dateStr: string | null | undefined): string {
 
 function formatRelativeDateLabel(
   dateStr: string | null | undefined,
-  t: (key: string, options?: Record<string, unknown>) => string,
+  t: (key: string, options?: Record<string, unknown>) => string
 ): string {
   if (!dateStr) return t('crm.noLastContact');
 
@@ -80,7 +80,7 @@ function formatRelativeDateLabel(
 
 function getRenewalUrgency(
   renewalDate: string | null | undefined,
-  t: (key: string, options?: Record<string, unknown>) => string,
+  t: (key: string, options?: Record<string, unknown>) => string
 ): { className: string; label: string } | null {
   if (!renewalDate) return null;
   const timestamp = new Date(renewalDate).getTime();
@@ -218,7 +218,7 @@ export function CustomerDetailModal({
                 });
                 return null;
               }
-            }),
+            })
           );
 
           // Deduplicate hydrated tickets and exclude deleted.
@@ -294,7 +294,7 @@ export function CustomerDetailModal({
         setSaving(false);
       }
     },
-    [customer, customerId, numaPut, onUpdated],
+    [customer, customerId, numaPut, onUpdated]
   );
 
   // ── Inline edit helpers ───────────────────────────────────────────────
@@ -343,7 +343,7 @@ export function CustomerDetailModal({
       setCustomer({ ...customer, contacts: newContacts });
       void handleUpdate({ contacts: newContacts });
     },
-    [customer, handleUpdate],
+    [customer, handleUpdate]
   );
 
   // ── Flag toggle ───────────────────────────────────────────────────────
@@ -357,7 +357,7 @@ export function CustomerDetailModal({
       setCustomer({ ...customer, flags: newFlags });
       void handleUpdate({ flags: newFlags });
     },
-    [customer, handleUpdate],
+    [customer, handleUpdate]
   );
 
   const teamNameById = useMemo(() => {
@@ -411,7 +411,7 @@ export function CustomerDetailModal({
       if (ticket.teamId !== selectedTeamId) return ticket.zoneId || t('common.none');
       return selectedTeamZoneNameById.get(ticket.zoneId) ?? t('common.none');
     },
-    [selectedTeamId, selectedTeamZoneNameById, t],
+    [selectedTeamId, selectedTeamZoneNameById, t]
   );
 
   const resolveLinkedTicketStageName = useCallback(
@@ -425,7 +425,7 @@ export function CustomerDetailModal({
       if (!ticket.statusType) return t('common.none');
       return t(`globalSettings.statusTypes.${ticket.statusType}`);
     },
-    [selectedTeamId, selectedTeamStageNameById, t],
+    [selectedTeamId, selectedTeamStageNameById, t]
   );
 
   const resolveLinkedTicketStatusLabel = useCallback(
@@ -433,7 +433,7 @@ export function CustomerDetailModal({
       if (!ticket.statusType) return t('common.none');
       return t(`globalSettings.statusTypes.${ticket.statusType}`);
     },
-    [t],
+    [t]
   );
 
   const resolveLinkedTicketStatusBadgeBg = useCallback((ticket: Ticket): string => {
@@ -455,7 +455,7 @@ export function CustomerDetailModal({
       if (!ticket.priority) return t('common.none');
       return t(`priority.${ticket.priority}`);
     },
-    [t],
+    [t]
   );
 
   const groupedLinkedTickets = useMemo(() => {
@@ -472,7 +472,7 @@ export function CustomerDetailModal({
 
   const lastContactLabel = useMemo(
     () => formatRelativeDateLabel(customer?.lastContactDate, t),
-    [customer?.lastContactDate, t],
+    [customer?.lastContactDate, t]
   );
   const renewalUrgency = useMemo(() => getRenewalUrgency(customer?.renewalDate, t), [customer?.renewalDate, t]);
 
@@ -485,7 +485,7 @@ export function CustomerDetailModal({
     label: string,
     field: string,
     currentValue: string | null | undefined,
-    type: 'text' | 'url' | 'date' = 'text',
+    type: 'text' | 'url' | 'date' = 'text'
   ) => {
     const displayValue =
       type === 'date' && currentValue ? new Date(currentValue).toLocaleDateString() : (currentValue ?? '');
@@ -539,7 +539,7 @@ export function CustomerDetailModal({
     label: string,
     field: string,
     currentValue: string | null | undefined,
-    options: { value: string; label: string; color?: string }[],
+    options: { value: string; label: string; color?: string }[]
   ) => (
     <div className="d-flex align-items-start py-2 border-bottom" style={{ fontSize: '0.875rem' }}>
       <span className="text-muted fw-semibold me-2" style={{ minWidth: 120, flexShrink: 0 }}>

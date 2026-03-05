@@ -39,12 +39,12 @@ mcp__numa__numa_tool(name="agents", description="Create policy expert agent", pa
 
 ## Operations
 
-| Operation | Purpose |
-|-----------|---------|
-| `list` | List agents (owned, public, or all) |
-| `get` | Get details of a specific agent |
-| `create` | Create a new agent |
-| `update` | Update an existing agent |
+| Operation   | Purpose                                |
+| ----------- | -------------------------------------- |
+| `list`      | List agents (owned, public, or all)    |
+| `get`       | Get details of a specific agent        |
+| `create`    | Create a new agent                     |
+| `update`    | Update an existing agent               |
 | `duplicate` | Copy an agent to your personal library |
 
 ---
@@ -55,11 +55,11 @@ List agents with scope filtering.
 
 ### Parameters
 
-| Parameter | Required | Default | Description |
-|-----------|----------|---------|-------------|
-| `operation` | Yes | - | `"list"` |
-| `scope` | No | `"owned"` | `owned`, `public`, or `all` |
-| `agent_type` | No | - | Filter by agent type |
+| Parameter    | Required | Default   | Description                 |
+| ------------ | -------- | --------- | --------------------------- |
+| `operation`  | Yes      | -         | `"list"`                    |
+| `scope`      | No       | `"owned"` | `owned`, `public`, or `all` |
+| `agent_type` | No       | -         | Filter by agent type        |
 
 ### Examples
 
@@ -88,6 +88,7 @@ mcp__numa__numa_tool(name="agents", description="List task agents", params={
 ### Output Format
 
 JSON response with:
+
 - `agents` - Array of agent summaries, each containing:
   - `agentId` - Unique agent ID
   - `title` - Agent display name
@@ -106,10 +107,10 @@ Get detailed information about a specific agent.
 
 ### Parameters
 
-| Parameter | Required | Description |
-|-----------|----------|-------------|
-| `operation` | Yes | `"get"` |
-| `agent_id` | Yes | Agent ID to retrieve |
+| Parameter   | Required | Description          |
+| ----------- | -------- | -------------------- |
+| `operation` | Yes      | `"get"`              |
+| `agent_id`  | Yes      | Agent ID to retrieve |
 
 ### Examples
 
@@ -122,6 +123,7 @@ mcp__numa__numa_tool(name="agents", description="Get agent details", params={
 ### Output Format
 
 JSON response with full agent details including:
+
 - `agentId`, `title`, `description`
 - `systemPrompt` - The agent's instructions
 - `userWelcomeMessage` - Welcome message shown to users
@@ -136,18 +138,18 @@ Create a new agent with custom instructions.
 
 ### Parameters
 
-| Parameter | Required | Default | Description |
-|-----------|----------|---------|-------------|
-| `operation` | Yes | - | `"create"` |
-| `title` | Yes | - | Agent display name |
-| `systemPrompt` | Yes | - | Core instructions for the agent |
-| `visibility` | No | `"personal"` | `personal` or `public` |
-| `description` | No | - | One-line description |
-| `agentType` | No | `"task"` | Agent type label |
-| `userWelcomeMessage` | No | - | Greeting shown when agent starts |
-| `estimatedTimeSavedMinutes` | No | - | Estimated time saved in minutes |
-| `toolsConfig` | No | - | Tools configuration object |
-| `attach_files` | No | - | Array of workspace file paths to attach (max 5) |
+| Parameter                   | Required | Default      | Description                                     |
+| --------------------------- | -------- | ------------ | ----------------------------------------------- |
+| `operation`                 | Yes      | -            | `"create"`                                      |
+| `title`                     | Yes      | -            | Agent display name                              |
+| `systemPrompt`              | Yes      | -            | Core instructions for the agent                 |
+| `visibility`                | No       | `"personal"` | `personal` or `public`                          |
+| `description`               | No       | -            | One-line description                            |
+| `agentType`                 | No       | `"task"`     | Agent type label                                |
+| `userWelcomeMessage`        | No       | -            | Greeting shown when agent starts                |
+| `estimatedTimeSavedMinutes` | No       | -            | Estimated time saved in minutes                 |
+| `toolsConfig`               | No       | -            | Tools configuration object                      |
+| `attach_files`              | No       | -            | Array of workspace file paths to attach (max 5) |
 
 ### Examples
 
@@ -208,6 +210,7 @@ mcp__numa__numa_tool(name="agents", description="Create research agent", params=
 ### Policy Restrictions
 
 Admin policies may restrict agent creation:
+
 - **off** - Agent creation disabled for all users
 - **personal_only** - Only personal agents allowed (public blocked)
 - **full** - Both personal and public allowed
@@ -220,19 +223,19 @@ Update an existing agent you own or have permission to edit.
 
 ### Parameters
 
-| Parameter | Required | Description |
-|-----------|----------|-------------|
-| `operation` | Yes | `"update"` |
-| `agent_id` | Yes | Agent ID to update |
-| `title` | No | New title |
-| `systemPrompt` | No | New instructions |
-| `visibility` | No | Change visibility (`personal` or `public`) |
-| `description` | No | New description |
-| `agentType` | No | New agent type |
-| `userWelcomeMessage` | No | New welcome message |
-| `estimatedTimeSavedMinutes` | No | New time saved estimate |
-| `toolsConfig` | No | New tools configuration object |
-| `attach_files` | No | Workspace files to attach (max 5 total) |
+| Parameter                   | Required | Description                                |
+| --------------------------- | -------- | ------------------------------------------ |
+| `operation`                 | Yes      | `"update"`                                 |
+| `agent_id`                  | Yes      | Agent ID to update                         |
+| `title`                     | No       | New title                                  |
+| `systemPrompt`              | No       | New instructions                           |
+| `visibility`                | No       | Change visibility (`personal` or `public`) |
+| `description`               | No       | New description                            |
+| `agentType`                 | No       | New agent type                             |
+| `userWelcomeMessage`        | No       | New welcome message                        |
+| `estimatedTimeSavedMinutes` | No       | New time saved estimate                    |
+| `toolsConfig`               | No       | New tools configuration object             |
+| `attach_files`              | No       | Workspace files to attach (max 5 total)    |
 
 ### Examples
 
@@ -282,6 +285,7 @@ Agents can have reference files attached that provide context for answering ques
 ### Supported Locations
 
 Files can be attached from these workspace locations:
+
 - `/workdir/uploads/` - User-uploaded files
 - `/workdir/outputs/` - Files created during the conversation
 - `/workdir/chat-workflows/` - Workflow output files
@@ -326,10 +330,10 @@ Create a personal copy of any agent you can access.
 
 ### Parameters
 
-| Parameter | Required | Description |
-|-----------|----------|-------------|
-| `operation` | Yes | `"duplicate"` |
-| `agent_id` | Yes | Agent ID to duplicate |
+| Parameter   | Required | Description           |
+| ----------- | -------- | --------------------- |
+| `operation` | Yes      | `"duplicate"`         |
+| `agent_id`  | Yes      | Agent ID to duplicate |
 
 ### Examples
 
@@ -352,6 +356,7 @@ The duplicate is always created as a **personal** agent with "(Copy)" appended t
 ## When to Use
 
 Use this skill when the user:
+
 - Asks to "create an agent" or "make a bot"
 - Wants to "see my agents" or "list agents"
 - Asks to "update/modify/edit an agent"
@@ -415,6 +420,7 @@ Based on the use case, ask about the tools and capabilities the agent needs:
   - If yes: "All knowledge bases, or specific ones?"
 
 Build the `toolsConfig` based on their answers:
+
 ```json
 {
   "webSearchEnabled": true/false,
@@ -477,6 +483,7 @@ Before creating anything, present a complete draft for review:
 - Only proceed to creation after receiving clear approval
 
 Once confirmed, execute the create call:
+
 ```python
 mcp__numa__numa_tool(name="agents", description="Create agent", params={
     "operation": "create",

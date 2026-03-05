@@ -1,32 +1,28 @@
-import { Row, Col, Card } from 'react-bootstrap'
-import { ToolCard } from '@/components/tools/ToolCard'
-import type { Tool } from '@/types/tools'
+import { Row, Col, Card } from 'react-bootstrap';
+import { ToolCard } from '@/components/tools/ToolCard';
+import type { Tool } from '@/types/tools';
 
 interface ToolsSectionProps {
-  tools: Tool[]
-  disabled?: boolean
+  tools: Tool[];
+  disabled?: boolean;
 }
 
 interface ToolCategory {
-  id: string
-  name: string
-  description: string
-  tools: Tool[]
-  priority: number
+  id: string;
+  name: string;
+  description: string;
+  tools: Tool[];
+  priority: number;
 }
 
-export function ToolsSection({
-  tools,
-  disabled = false
-}: ToolsSectionProps) {
-
+export function ToolsSection({ tools, disabled = false }: ToolsSectionProps) {
   // Organize tools by category
   const categories: ToolCategory[] = [
     {
       id: 'client-management',
       name: 'Client Operations',
       description: 'Configuration and user management tools',
-      tools: tools.filter(tool =>
+      tools: tools.filter((tool) =>
         [
           'update-client-config',
           'delete-client-config',
@@ -38,24 +34,23 @@ export function ToolsSection({
           'support-docs-manager',
         ].includes(tool.id)
       ),
-      priority: 1
+      priority: 1,
     },
     {
       id: 'analytics',
       name: 'Analytics & Reports',
       description: 'System monitoring and usage analytics',
-      tools: tools.filter(tool =>
-        tool.category === 'analytics'
-      ),
-      priority: 2
-    }
-  ].filter(category => category.tools.length > 0)
-    .sort((a, b) => a.priority - b.priority)
+      tools: tools.filter((tool) => tool.category === 'analytics'),
+      priority: 2,
+    },
+  ]
+    .filter((category) => category.tools.length > 0)
+    .sort((a, b) => a.priority - b.priority);
 
   const renderToolCategories = () => {
-    const otherCategories = categories
+    const otherCategories = categories;
 
-    if (otherCategories.length === 0) return null
+    if (otherCategories.length === 0) return null;
 
     return (
       <>
@@ -83,10 +78,7 @@ export function ToolsSection({
                 <Row className="g-3">
                   {category.tools.map((tool) => (
                     <Col lg={4} md={6} key={tool.id}>
-                      <ToolCard
-                        tool={tool}
-                        disabled={disabled}
-                      />
+                      <ToolCard tool={tool} disabled={disabled} />
                     </Col>
                   ))}
                 </Row>
@@ -95,8 +87,8 @@ export function ToolsSection({
           </div>
         ))}
       </>
-    )
-  }
+    );
+  };
 
   if (tools.length === 0) {
     return (
@@ -108,14 +100,10 @@ export function ToolsSection({
           </div>
         </Card.Body>
       </Card>
-    )
+    );
   }
 
-  return (
-    <div>
-      {renderToolCategories()}
-    </div>
-  )
+  return <div>{renderToolCategories()}</div>;
 }
 
-export default ToolsSection
+export default ToolsSection;

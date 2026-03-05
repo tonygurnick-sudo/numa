@@ -34,7 +34,7 @@ function formatCurrency(value: number | null | undefined): string {
  */
 function formatLastContactLabel(
   dateStr: string | null | undefined,
-  t: (key: string, options?: Record<string, unknown>) => string,
+  t: (key: string, options?: Record<string, unknown>) => string
 ): string {
   if (!dateStr) return t('crm.noLastContact');
 
@@ -72,12 +72,12 @@ export function SupplierCard({ supplier, supplierConfig, onClick }: SupplierCard
 
   // Resolve the lifecycle stage for the bottom border color.
   const stage: CrmLifecycleStage | undefined = supplierConfig.lifecycleStages.find(
-    (s) => s.id === supplier.lifecycleStage,
+    (s) => s.id === supplier.lifecycleStage
   );
 
   const lastContactLabel = useMemo(
     () => formatLastContactLabel(supplier.lastContactDate, t),
-    [supplier.lastContactDate, t],
+    [supplier.lastContactDate, t]
   );
 
   // Evaluate flags to display the orange dot

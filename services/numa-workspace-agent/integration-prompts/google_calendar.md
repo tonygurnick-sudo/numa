@@ -1,15 +1,19 @@
 # Google Calendar Integration
 
 ## Essential First Step
+
 Always call `get-current-user` first to obtain primary calendar ID, timezone, accessible calendars, and color palettes. This saves time and prevents timezone issues.
 
 ## Auth Structure
+
 Auth key is `googleCalendar` (camelCase):
+
 ```json
-{"googleCalendar": {"authProvisionId": "auto"}, "...other_params": "..."}
+{ "googleCalendar": { "authProvisionId": "auto" }, "...other_params": "..." }
 ```
 
 ## Critical Gotchas
+
 - **Date/time format:** RFC3339 with timezone offset required: `2026-02-10T14:00:00+10:00`
 - **`query-free-busy-calendars`:** `calendarId` is an **ARRAY**, not a string:
   ```json
@@ -20,6 +24,7 @@ Auth key is `googleCalendar` (camelCase):
 - **`maxResults` default:** 250 events. Max 2500. Use pagination for more.
 
 ## Resolving Attendee Emails
+
 If the user refers to someone by name without providing their email, use `list-events` with the `q` parameter to search past events (e.g., `q: "Tony"`). Extract the correct email from the `attendees` list in matching events rather than guessing the address format. If no match is found, ask the user for the email directly.
 
 ## When to Use What
@@ -38,30 +43,37 @@ If the user refers to someone by name without providing their email, use `list-e
   - Adds dial-in details to `conferenceData`
 
 ## Key Parameters
+
 - `calendarId`: Defaults to `"primary"` if omitted
 - `sendUpdates`: Use `"none"` for testing, `"all"` to notify attendees
 - `createMeetRoom: true`: Returns `hangoutLink` and full `conferenceData` with dial-in
 - `timeZone`: Supports IANA timezones, get from `get-current-user`
 
 ## Dynamic Props (`configure_props`)
+
 Three props support remote options:
+
 - `calendarId`: User's accessible calendars
 - `colorId`: Event color IDs (1-11)
 - `timeZone`: Full IANA timezone list
 
 ## Example: Check Availability
+
 ```json
 {
-  "googleCalendar": {"authProvisionId": "auto"},
+  "googleCalendar": { "authProvisionId": "auto" },
   "calendarId": ["colleague@company.com"],
   "timeMin": "2026-02-03T09:00:00+10:00",
   "timeMax": "2026-02-03T17:00:00+10:00",
   "timeZone": "Australia/Brisbane"
 }
 ```
+
 Returns busy blocks. Gaps = free time.
 
 ## Note on Transcription
+
 Google Meet transcription cannot be enabled via the Calendar API. Users must:
+
 - Enable it manually in each meeting, or
 - Set as default in Google Workspace admin console settings

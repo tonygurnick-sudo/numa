@@ -313,7 +313,7 @@ describe('PolicyBuilderDetail Component', () => {
 
     // Fill in the school context field
     const schoolContextInput = screen.getByPlaceholderText(
-      "Describe your school's characteristics, values, and community...",
+      "Describe your school's characteristics, values, and community..."
     );
     fireEvent.change(schoolContextInput, { target: { value: 'This is a test school context.' } });
 
@@ -346,7 +346,7 @@ describe('PolicyBuilderDetail Component', () => {
     // In mobile view, the download button should be an icon without text
     const downloadButtons = screen.getAllByRole('button');
     const downloadIconButton = downloadButtons.find(
-      (button) => !button.textContent.includes('Download...') && button.closest('.dropdown'),
+      (button) => !button.textContent.includes('Download...') && button.closest('.dropdown')
     );
 
     expect(downloadIconButton).toBeDefined();
@@ -380,7 +380,7 @@ describe('PolicyBuilderDetail Component', () => {
   it('should display loading state when fetching policies', async () => {
     // Delay the response to show loading state
     numaRequestContextValues.numaGet.mockImplementationOnce(
-      () => new Promise((resolve) => setTimeout(() => resolve({ items: [] }), 100)),
+      () => new Promise((resolve) => setTimeout(() => resolve({ items: [] }), 100))
     );
 
     renderWithProviders(<PolicyBuilderDetail />, {

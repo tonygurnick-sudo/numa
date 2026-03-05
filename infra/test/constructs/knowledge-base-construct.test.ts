@@ -56,7 +56,7 @@ Object.entries(testCases).forEach(([name, props]) =>
           tags: {
             Name: props.clientName + '-knowledge-base',
           },
-        }),
+        })
       );
     });
     it('Creates subnets', () => {
@@ -72,7 +72,7 @@ Object.entries(testCases).forEach(([name, props]) =>
           tags: {
             Name: props.clientName + '-knowledge-base-ap-southeast-2a',
           },
-        }),
+        })
       );
       assert(
         Testing.toHaveResourceWithProperties(synthesized, 'aws_subnet', {
@@ -82,7 +82,7 @@ Object.entries(testCases).forEach(([name, props]) =>
           tags: {
             Name: props.clientName + '-knowledge-base-ap-southeast-2b',
           },
-        }),
+        })
       );
     });
 
@@ -93,7 +93,7 @@ Object.entries(testCases).forEach(([name, props]) =>
       assert(
         Testing.toHaveResourceWithProperties(synthesized, 'aws_db_subnet_group', {
           subnetIds: ['${aws_subnet.' + subnetIds[0] + '.id}', '${aws_subnet.' + subnetIds[1] + '.id}'],
-        }),
+        })
       );
     });
 
@@ -105,7 +105,7 @@ Object.entries(testCases).forEach(([name, props]) =>
       assert(
         Testing.toHaveResourceWithProperties(synthesized, 'aws_security_group', {
           vpcId: '${aws_vpc.' + vpcId + '.id}',
-        }),
+        })
       );
 
       const securityGroupEgress = stackObject.resource.aws_vpc_security_group_egress_rule;
@@ -135,7 +135,7 @@ Object.entries(testCases).forEach(([name, props]) =>
           lifecycle: {
             ignoreChanges: ['engine_version'],
           },
-        }),
+        })
       );
     });
 
@@ -152,7 +152,7 @@ Object.entries(testCases).forEach(([name, props]) =>
           lifecycle: {
             ignoreChanges: ['engine_version'],
           },
-        }),
+        })
       );
     });
 
@@ -160,24 +160,24 @@ Object.entries(testCases).forEach(([name, props]) =>
       assert(
         Testing.toHaveResourceWithProperties(synthesized, 'aws_iam_role', {
           name: props.clientName + '-knowledge-base',
-        }),
+        })
       );
       const roleId = Object.entries(stackObject.resource.aws_iam_role as Record<string, { name: string }>).filter(
-        ([, value]) => value.name === props.clientName + '-knowledge-base',
+        ([, value]) => value.name === props.clientName + '-knowledge-base'
       )[0][0];
       assert(
         Testing.toHaveResourceWithProperties(synthesized, 'aws_iam_policy', {
           name: props.clientName + '-knowledge-base',
-        }),
+        })
       );
       assert(
         Testing.toHaveResourceWithProperties(synthesized, 'aws_iam_role_policy_attachment', {
           role: '${aws_iam_role.' + roleId + '.name}',
-        }),
+        })
       );
 
       const secretId = Object.entries(
-        stackObject.resource.aws_secretsmanager_secret as Record<string, { name: string }>,
+        stackObject.resource.aws_secretsmanager_secret as Record<string, { name: string }>
       ).filter(([, value]) => value.name === props.clientName + '-bedrock-user')[0][0];
       assert(
         Testing.toHaveResourceWithProperties(synthesized, 'aws_bedrockagent_knowledge_base', {
@@ -194,7 +194,7 @@ Object.entries(testCases).forEach(([name, props]) =>
               ],
             },
           ],
-        }),
+        })
       );
     });
 
@@ -202,7 +202,7 @@ Object.entries(testCases).forEach(([name, props]) =>
       assert(
         Testing.toHaveResourceWithProperties(synthesized, 'aws_secretsmanager_secret', {
           name: props.clientName + '-bedrock-user',
-        }),
+        })
       );
     });
 
@@ -210,30 +210,30 @@ Object.entries(testCases).forEach(([name, props]) =>
       assert(
         Testing.toHaveResourceWithProperties(synthesized, 'aws_iam_role', {
           name: props.clientName + '-knowledge-base-init',
-        }),
+        })
       );
       const roleId = Object.entries(stackObject.resource.aws_iam_role as Record<string, { name: string }>).filter(
-        ([, value]) => value.name === props.clientName + '-knowledge-base-init',
+        ([, value]) => value.name === props.clientName + '-knowledge-base-init'
       )[0][0];
       assert(
         Testing.toHaveResourceWithProperties(synthesized, 'aws_iam_policy', {
           name: props.clientName + '-knowledge-base-init',
-        }),
+        })
       );
       const policyId = Object.entries(stackObject.resource.aws_iam_policy as Record<string, { name: string }>).filter(
-        ([, value]) => value.name === props.clientName + '-knowledge-base-init',
+        ([, value]) => value.name === props.clientName + '-knowledge-base-init'
       )[0][0];
       assert(
         Testing.toHaveResourceWithProperties(synthesized, 'aws_iam_role_policy_attachment', {
           role: '${aws_iam_role.' + roleId + '.name}',
           policyArn: 'arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole',
-        }),
+        })
       );
       assert(
         Testing.toHaveResourceWithProperties(synthesized, 'aws_iam_role_policy_attachment', {
           role: '${aws_iam_role.' + roleId + '.name}',
           policyArn: '${aws_iam_policy.' + policyId + '.arn}',
-        }),
+        })
       );
 
       const lambdaFunction = stackObject.resource.aws_lambda_function;
@@ -245,7 +245,7 @@ Object.entries(testCases).forEach(([name, props]) =>
           runtime: 'nodejs22.x',
           timeout: 60,
           role: '${aws_iam_role.' + roleId + '.arn}',
-        }),
+        })
       );
 
       assert(
@@ -254,10 +254,10 @@ Object.entries(testCases).forEach(([name, props]) =>
           handler: 'index.handler',
           runtime: 'nodejs22.x',
           timeout: 300,
-        }),
+        })
       );
 
       assert(Testing.toHaveResourceWithProperties(synthesized, 'aws_lambda_invocation', {}));
     });
-  }),
+  })
 );

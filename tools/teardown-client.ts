@@ -79,7 +79,7 @@ async function emptyBucketIfExists(s3: S3Client, bucket: string, checkOnly: bool
             new DeleteObjectsCommand({
               Bucket: bucket,
               Delete: { Objects: Objects.map((o) => ({ Key: o.Key! })) },
-            }),
+            })
           );
           console.log(`${bucket}: deleted ${Objects.length} objects`);
         }
@@ -108,7 +108,7 @@ async function stopRunningExecutions(sfn: SFNClient, client: string, checkOnly: 
       new ListExecutionsCommand({
         stateMachineArn: sm.stateMachineArn,
         statusFilter: 'RUNNING',
-      }),
+      })
     );
     const running = execs.executions ?? [];
     if (running.length === 0) {
@@ -167,7 +167,7 @@ async function deleteRds(
   rds: RDSClient,
   client: string,
   checkOnly: boolean,
-  skipFinalSnapshot: boolean,
+  skipFinalSnapshot: boolean
 ): Promise<void> {
   const clusterId = `${client}-knowledge-base`;
   const instanceId = `${client}-knowledge-base-instance`;
@@ -181,7 +181,7 @@ async function deleteRds(
       } else {
         for (const inst of ours) {
           await rds.send(
-            new DeleteDBInstanceCommand({ DBInstanceIdentifier: inst.DBInstanceIdentifier!, SkipFinalSnapshot: true }),
+            new DeleteDBInstanceCommand({ DBInstanceIdentifier: inst.DBInstanceIdentifier!, SkipFinalSnapshot: true })
           );
           console.log(`RDS: deleting instance ${inst.DBInstanceIdentifier}`);
         }
@@ -212,7 +212,7 @@ async function deleteRds(
           DBClusterIdentifier: clusterId,
           DeletionProtection: false,
           ApplyImmediately: true,
-        }),
+        })
       );
     }
     await rds.send(
@@ -220,7 +220,7 @@ async function deleteRds(
         DBClusterIdentifier: clusterId,
         SkipFinalSnapshot: !!skipFinalSnapshot,
         ...(skipFinalSnapshot ? {} : { FinalDBSnapshotIdentifier: `${clusterId}-final-${Date.now()}` }),
-      }),
+      })
     );
     console.log(`RDS: delete initiated for cluster ${clusterId}`);
   } catch (e: any) {
@@ -322,7 +322,7 @@ async function main(): Promise<void> {
                   success = true;
                 } else {
                   console.error(
-                    `CDKTF destroy failed with code ${code}. You can run: yarn -C infra cdktf destroy ${stackName}`,
+                    `CDKTF destroy failed with code ${code}. You can run: yarn -C infra cdktf destroy ${stackName}`
                   );
                 }
                 resolve();
@@ -357,7 +357,7 @@ async function main(): Promise<void> {
         if (opts.destroyInfra && destroySucceeded === false) {
           const hint = opts.stack ? opts.stack : `numa-${client}`;
           console.log(
-            `\nDone. Next: try 'yarn -C infra cdktf destroy ${hint}' or pass --stack with the exact stack name.`,
+            `\nDone. Next: try 'yarn -C infra cdktf destroy ${hint}' or pass --stack with the exact stack name.`
           );
         } else if (!opts.destroyInfra) {
           console.log('\nDone. Next: run `yarn -C infra cdktf destroy numa-' + client + '` to remove remaining infra.');

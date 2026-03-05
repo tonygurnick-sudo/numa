@@ -6,6 +6,7 @@ import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { useAuth } from '../Providers/AuthProvider';
 import { withPRM } from '../utils/prmUtils';
 import { useTranslation } from 'react-i18next';
+import { sanitizeS3Path } from '../utils/sanitizeFilename';
 
 // Type definitions
 interface Config {
@@ -100,7 +101,7 @@ const FileUploader: React.FC<FileUploaderProps> = ({
         relativePath: file.webkitRelativePath || file.name,
         size: formatKB(file.size),
         type: file.type || 'application/octet-stream',
-      })),
+      }))
     );
 
     // Always call onFileSelect first to allow parent to handle validation and warnings
@@ -201,7 +202,7 @@ const FileUploader: React.FC<FileUploaderProps> = ({
           console.log('Requesting presigned URL for:', relativePath);
 
           // Build S3 key with KB prefix and optional folder prefix
-          const sanitizedRelativePath = (relativePath || file.name).replace(/^\/+/, '');
+          const sanitizedRelativePath = sanitizeS3Path((relativePath || file.name).replace(/^\/+/, ''));
           const folderPrefix = selectedFolder ? `${selectedFolder}/` : '';
           const s3Key = `${kbPrefix}${folderPrefix}${sanitizedRelativePath}`;
 
@@ -285,7 +286,7 @@ const FileUploader: React.FC<FileUploaderProps> = ({
                   Key: `${s3Key}.metadata.json`,
                   Body: JSON.stringify(metadataPayload),
                   ContentType: 'application/json',
-                }),
+                })
               );
             } catch (metadataError) {
               console.warn('Failed to upload metadata sidecar for S3 Vectors KB', {
@@ -542,7 +543,7 @@ const FileUploader: React.FC<FileUploaderProps> = ({
 
         return acc;
       },
-      {},
+      {}
     );
 
     return (

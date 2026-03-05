@@ -1,9 +1,11 @@
 # Crawl Page Lambda
 
 ## Overview
+
 This Lambda function scrapes content from a URL and processes it for the web crawler workflow. It extracts page content, saves it to S3, and identifies links for recursive crawling.
 
 It handles:
+
 - Web page content extraction (text, title)
 - Link discovery for recursive crawling
 - Content storage in S3
@@ -11,6 +13,7 @@ It handles:
 - Depth tracking for crawl limits
 
 ## Inputs
+
 ```json
 {
   "url": "https://example.com",
@@ -26,6 +29,7 @@ It handles:
 - `creator` (required): Identifier for the user creating the request
 
 ## Outputs
+
 ```json
 {
   "url": "https://example.com",
@@ -39,5 +43,6 @@ It handles:
 ```
 
 ## Environment Variables
+
 - `BUCKET_NAME`: Name of the S3 bucket to store scraped content
 - `TABLE_NAME`: Name of the DynamoDB table for enqueueing discovered links

@@ -29,7 +29,7 @@ describe('Honeycomb construct', () => {
       Testing.toHaveResourceWithProperties(synthesized, 'honeycombio_environment', {
         name: 'bob',
         color: 'purple',
-      }),
+      })
     );
   });
 
@@ -47,7 +47,7 @@ describe('Honeycomb construct', () => {
             create_datasets: false,
           },
         ],
-      }),
+      })
     );
   });
 
@@ -66,7 +66,7 @@ describe('Honeycomb construct', () => {
             create_datasets: true,
           },
         ],
-      }),
+      })
     );
   });
 });

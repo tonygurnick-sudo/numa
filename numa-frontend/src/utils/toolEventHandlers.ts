@@ -122,7 +122,7 @@ export function createMessageHelpers(setMessages: (updater: (prev: UiMessage[]) 
       const lastMsg: UiMessage = { ...updated[lastIdx] };
       const segs: UiSegment[] = [...(lastMsg.segments || [])];
       const idx = segs.findIndex(
-        (seg) => seg.kind === 'tool_card' && (seg as UiToolCardSegment).toolUseId === toolUseId,
+        (seg) => seg.kind === 'tool_card' && (seg as UiToolCardSegment).toolUseId === toolUseId
       );
       if (idx >= 0) {
         const seg = segs[idx] as UiToolCardSegment;
@@ -271,7 +271,7 @@ export function handleToolUseStart(
   toolUseMap: Map<string, string>,
   messageHelpers: ReturnType<typeof createMessageHelpers>,
   flushPendingText: (conversationId?: string | null, preserveContent?: boolean) => void,
-  conversationId: string | null,
+  conversationId: string | null
 ) {
   const nestedStart =
     eventMsg.event && 'contentBlockStart' in eventMsg.event
@@ -348,7 +348,7 @@ export function handleToolResults(
   conversationId: string | null,
   saveToolResult?: (payload: ToolPersistencePayload) => void,
   processedEventIds?: Set<string>,
-  stopDataAnalysisPolling?: (toolUseId: string) => void,
+  stopDataAnalysisPolling?: (toolUseId: string) => void
 ) {
   // minimal logging: omit result batch counts
   flushPendingText(conversationId); // Don't preserve content for mid-stream flushes
@@ -424,7 +424,7 @@ export interface ProcessToolEventCallbacks {
 export function processToolEvent(
   eventMsg: AgentEventFrame,
   context: ProcessToolEventContext,
-  callbacks: ProcessToolEventCallbacks,
+  callbacks: ProcessToolEventCallbacks
 ) {
   const { processedEventIds, toolUseMap, hasStreamingStarted, setHasStreamingStarted } = context;
 
@@ -461,8 +461,8 @@ export function processToolEvent(
     Boolean(eventMsg.contentBlockStart?.start?.toolUse) ||
     Boolean(
       eventMsg.event &&
-        'contentBlockStart' in eventMsg.event &&
-        (eventMsg.event.contentBlockStart as ContentBlockStartEvent | undefined)?.start?.toolUse,
+      'contentBlockStart' in eventMsg.event &&
+      (eventMsg.event.contentBlockStart as ContentBlockStartEvent | undefined)?.start?.toolUse
     );
   if (hasToolUseStart) {
     const startKey = `start:${extractEventKey(eventMsg) || 'unknown'}`;
@@ -570,7 +570,7 @@ export function processToolEvent(
       conversationId,
       saveToolResult,
       processedEventIds,
-      stopDataAnalysisPolling,
+      stopDataAnalysisPolling
     );
     return;
   }

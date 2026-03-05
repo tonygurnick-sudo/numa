@@ -163,7 +163,7 @@ type UpdateAgentPayload = CreateAgentPayload & {
 
 const jsonResponse = (
   statusCode: number,
-  payload: unknown,
+  payload: unknown
 ): { statusCode: number; headers: typeof HEADERS; body: string } => ({
   statusCode,
   headers: HEADERS,
@@ -277,12 +277,12 @@ const resolveSourceAgentId = (agent: WorkspaceAgentItem | UserAgentItem): string
 const buildPersonalDuplicatePayload = (
   agent: WorkspaceAgentItem | UserAgentItem,
   duplicateTitle: string,
-  referenceFileFallbackSource?: string,
+  referenceFileFallbackSource?: string
 ): CreateAgentPayload => {
   const referenceFiles = normaliseReferenceFiles(agent.reference_files);
   const processedReferenceFiles = referenceFiles.length
     ? referenceFiles.map((file) =>
-        referenceFileFallbackSource && !file.source ? { ...file, source: referenceFileFallbackSource } : file,
+        referenceFileFallbackSource && !file.source ? { ...file, source: referenceFileFallbackSource } : file
       )
     : undefined;
 
@@ -311,7 +311,7 @@ const normaliseWelcomeMessage = (value?: string | null): string | undefined => {
 
 const resolveWelcomeMessageFromPayload = (
   payload: CreateAgentPayload | UpdateAgentPayload,
-  existing?: { user_instructions?: string },
+  existing?: { user_instructions?: string }
 ): string | undefined => {
   if (Object.prototype.hasOwnProperty.call(payload, 'userWelcomeMessage')) {
     return normaliseWelcomeMessage(payload.userWelcomeMessage);
@@ -380,7 +380,7 @@ const buildWorkspaceItem = (
   payload: CreateAgentPayload,
   auth: AuthContext,
   timestamp: number,
-  agentId: string,
+  agentId: string
 ): WorkspaceAgentItem => {
   const userWelcomeMessage = normaliseWelcomeMessage(payload.userWelcomeMessage);
   return {
@@ -415,7 +415,7 @@ const buildUserItem = (
   auth: AuthContext,
   timestamp: number,
   agentId: string,
-  existing?: UserAgentItem,
+  existing?: UserAgentItem
 ): UserAgentItem => {
   const userWelcomeMessage = resolveWelcomeMessageFromPayload(payload, existing);
   return {
@@ -472,7 +472,7 @@ const getWorkspaceAgentById = async (agentId: string): Promise<WorkspaceAgentIte
         tenant_id: CLIENT_NAME,
         agent_id: agentId,
       },
-    }),
+    })
   );
   return result.Item as WorkspaceAgentItem | undefined;
 };
@@ -485,7 +485,7 @@ const getUserAgentById = async (agentId: string, userId: string): Promise<UserAg
         user_id: userId,
         agent_id: agentId,
       },
-    }),
+    })
   );
   return result.Item as UserAgentItem | undefined;
 };
@@ -498,7 +498,7 @@ const listUserAgents = async (userId: string): Promise<UserAgentItem[]> => {
       ExpressionAttributeValues: {
         ':uid': userId,
       },
-    }),
+    })
   );
   const items = (response.Items || []) as UserAgentItem[];
   return items;
@@ -512,7 +512,7 @@ const listWorkspaceAgentsForTenant = async (): Promise<WorkspaceAgentItem[]> => 
       ExpressionAttributeValues: {
         ':tenant': CLIENT_NAME,
       },
-    }),
+    })
   );
   return (response.Items || []) as WorkspaceAgentItem[];
 };
@@ -526,7 +526,7 @@ const listWorkspaceAgentsByCreator = async (userId: string): Promise<WorkspaceAg
       ExpressionAttributeValues: {
         ':uid': userId,
       },
-    }),
+    })
   );
   const items = (response.Items || []) as WorkspaceAgentItem[];
   return items.filter((item) => item.tenant_id === CLIENT_NAME);
@@ -551,7 +551,7 @@ const parseJsonBody = <T>(body: string | undefined): T | null => {
 
 const handleListAgents = async (
   event: APIGatewayProxyEventV2,
-  auth: AuthContext,
+  auth: AuthContext
 ): Promise<ReturnType<typeof jsonResponse>> => {
   const scope = (event.queryStringParameters?.scope || 'owned').toLowerCase();
   const includeOwned = scope === 'owned' || scope === 'all' || scope === '';
@@ -631,7 +631,7 @@ const validateCreatePayload = (payload: CreateAgentPayload | null): string | nul
 
 const handleCreateAgent = async (
   payload: CreateAgentPayload | null,
-  auth: AuthContext,
+  auth: AuthContext
 ): Promise<ReturnType<typeof jsonResponse>> => {
   const validationError = validateCreatePayload(payload);
   if (validationError) return errorResponse(400, validationError);
@@ -659,7 +659,7 @@ const handleCreateAgent = async (
               Key: destKey,
               CopySource: `${img.s3Bucket}/${encodeURIComponent(img.s3Key)}`,
               MetadataDirective: 'COPY',
-            }),
+            })
           );
           workspaceItem.icon_image = { s3Bucket: OUTPUTS_BUCKET_NAME, s3Key: destKey };
         }
@@ -671,7 +671,7 @@ const handleCreateAgent = async (
       new PutCommand({
         TableName: WORKSPACE_TABLE,
         Item: workspaceItem,
-      }),
+      })
     );
     return jsonResponse(201, { agent: mapWorkspaceAgent(workspaceItem) });
   }
@@ -681,7 +681,7 @@ const handleCreateAgent = async (
     new PutCommand({
       TableName: USER_TABLE,
       Item: userItem,
-    }),
+    })
   );
   return jsonResponse(201, { agent: mapUserAgent(userItem) });
 };
@@ -689,7 +689,7 @@ const handleCreateAgent = async (
 const handleUpdateAgent = async (
   agentId: string,
   payload: UpdateAgentPayload | null,
-  auth: AuthContext,
+  auth: AuthContext
 ): Promise<ReturnType<typeof jsonResponse>> => {
   if (!payload) {
     return errorResponse(400, 'Invalid JSON body');
@@ -719,7 +719,7 @@ const handleUpdateAgent = async (
       new PutCommand({
         TableName: USER_TABLE,
         Item: merged,
-      }),
+      })
     );
 
     if (merged.visibility === 'public') {
@@ -764,7 +764,7 @@ const handleUpdateAgent = async (
                 Key: destKey,
                 CopySource: `${img.s3Bucket}/${encodeURIComponent(img.s3Key)}`,
                 MetadataDirective: 'COPY',
-              }),
+              })
             );
             workspaceItem.icon_image = { s3Bucket: OUTPUTS_BUCKET_NAME, s3Key: destKey };
           }
@@ -780,7 +780,7 @@ const handleUpdateAgent = async (
         new PutCommand({
           TableName: WORKSPACE_TABLE,
           Item: workspaceItem,
-        }),
+        })
       );
     } else if (workspaceAgent && workspaceAgent.created_by_user_id === auth.sub) {
       await dynamo.send(
@@ -790,7 +790,7 @@ const handleUpdateAgent = async (
             tenant_id: CLIENT_NAME!,
             agent_id: agentId,
           },
-        }),
+        })
       );
     }
 
@@ -851,7 +851,7 @@ const handleUpdateAgent = async (
               Key: destKey,
               CopySource: `${img.s3Bucket}/${encodeURIComponent(img.s3Key)}`,
               MetadataDirective: 'COPY',
-            }),
+            })
           );
           merged.icon_image = { s3Bucket: OUTPUTS_BUCKET_NAME, s3Key: destKey };
         }
@@ -867,7 +867,7 @@ const handleUpdateAgent = async (
       new PutCommand({
         TableName: WORKSPACE_TABLE,
         Item: merged,
-      }),
+      })
     );
     return jsonResponse(200, { agent: mapWorkspaceAgent(merged) });
   }
@@ -908,7 +908,7 @@ const handleDeleteAgent = async (agentId: string, auth: AuthContext): Promise<Re
           user_id: auth.sub,
           agent_id: agentId,
         },
-      }),
+      })
     );
     return jsonResponse(200, { ok: true });
   }
@@ -943,7 +943,7 @@ const handleDeleteAgent = async (agentId: string, auth: AuthContext): Promise<Re
           tenant_id: CLIENT_NAME,
           agent_id: agentId,
         },
-      }),
+      })
     );
     return jsonResponse(200, { ok: true });
   }
@@ -954,7 +954,7 @@ const handleDeleteAgent = async (agentId: string, auth: AuthContext): Promise<Re
 const duplicateWorkspaceAgent = async (
   agentId: string,
   workspaceAgent: WorkspaceAgentItem,
-  auth: AuthContext,
+  auth: AuthContext
 ): Promise<ReturnType<typeof jsonResponse>> => {
   const existingAgents = await listUserAgents(auth.sub);
   const duplicateTitle = generateDuplicateTitle(workspaceAgent.title, existingAgents);
@@ -979,7 +979,7 @@ const duplicateWorkspaceAgent = async (
           Key: destKey,
           CopySource: `${srcBucket}/${encodeURIComponent(srcKey)}`,
           MetadataDirective: 'COPY',
-        }),
+        })
       );
       duplicatePayload.iconImage = { s3Bucket: OUTPUTS_BUCKET_NAME, s3Key: destKey };
       delete duplicatePayload.icon;
@@ -995,7 +995,7 @@ const duplicateWorkspaceAgent = async (
       TableName: USER_TABLE,
       Item: userItem,
       ConditionExpression: 'attribute_not_exists(agent_id) AND attribute_not_exists(user_id)',
-    }),
+    })
   );
 
   return jsonResponse(201, { agent: mapUserAgent(userItem) });
@@ -1003,7 +1003,7 @@ const duplicateWorkspaceAgent = async (
 
 const duplicatePersonalAgent = async (
   agent: UserAgentItem,
-  auth: AuthContext,
+  auth: AuthContext
 ): Promise<ReturnType<typeof jsonResponse>> => {
   if (agent.user_id !== auth.sub) {
     return errorResponse(403, 'You do not have permission to duplicate this agent');
@@ -1022,7 +1022,7 @@ const duplicatePersonalAgent = async (
       TableName: USER_TABLE,
       Item: userItem,
       ConditionExpression: 'attribute_not_exists(agent_id) AND attribute_not_exists(user_id)',
-    }),
+    })
   );
 
   return jsonResponse(201, { agent: mapUserAgent(userItem) });
@@ -1078,7 +1078,7 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
     if (AGENTS_SETTINGS_TABLE_NAME) {
       try {
         const res = await dynamo.send(
-          new DdbGetCommand({ TableName: AGENTS_SETTINGS_TABLE_NAME, Key: { setting: 'policy' } }),
+          new DdbGetCommand({ TableName: AGENTS_SETTINGS_TABLE_NAME, Key: { setting: 'policy' } })
         );
         const item = res.Item as { mode?: AgentsMode } | undefined;
         if (item && (item.mode === 'off' || item.mode === 'personal_only' || item.mode === 'full')) {

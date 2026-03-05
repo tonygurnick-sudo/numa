@@ -31,5 +31,5 @@ vi.mock(
   () => ({
     Nav: MockNav,
   }),
-  { virtual: true },
+  { virtual: true }
 );

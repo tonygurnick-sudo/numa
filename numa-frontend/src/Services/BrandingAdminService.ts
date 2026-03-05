@@ -91,7 +91,7 @@ const normalizePresignResponse = (raw: unknown): PresignResponse => {
     if (trimmed.startsWith('<')) {
       console.error(
         'Branding presign response returned HTML payload. Check API base URL or auth.',
-        trimmed.slice(0, 200),
+        trimmed.slice(0, 200)
       );
       throw new Error(i18n.t('errors:branding.presignHtml'));
     }
@@ -194,14 +194,14 @@ export const BrandingAdminService = {
   async revertVersion(numaPost: NumaPost, versionId: string): Promise<BrandingConfigResponse> {
     const clientId = getClientId();
     const result = (await numaPost(
-      `${getBaseUrl()}/branding/${clientId}/versions/${versionId}/revert`,
+      `${getBaseUrl()}/branding/${clientId}/versions/${versionId}/revert`
     )) as BrandingConfigResponse;
     return result || {};
   },
   async fetchVersion(numaGet: NumaGet, versionId: string): Promise<BrandingConfigResponse> {
     const clientId = getClientId();
     const result = (await numaGet(
-      `${getBaseUrl()}/branding/${clientId}/versions/${versionId}`,
+      `${getBaseUrl()}/branding/${clientId}/versions/${versionId}`
     )) as BrandingConfigResponse;
     return result || {};
   },

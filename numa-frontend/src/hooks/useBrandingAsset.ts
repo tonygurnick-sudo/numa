@@ -17,7 +17,7 @@ const DEFAULT_OPTIONS: Required<UseBrandingAssetOptions> = {
 export const useBrandingAsset = (
   rawValue: unknown,
   fallback: string,
-  options: UseBrandingAssetOptions = {},
+  options: UseBrandingAssetOptions = {}
 ): string => {
   const { getCredentials } = useAuth();
   const { sign, expiresIn, useCache } = { ...DEFAULT_OPTIONS, ...options };

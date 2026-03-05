@@ -15,12 +15,14 @@ A skill is a modular capability that Claude automatically discovers and uses bas
 Skills go in `.claude/skills/<skill-name>/` (project) or `~/.claude/skills/<skill-name>/` (personal).
 
 **Minimum structure:**
+
 ```
 skill-name/
 └── SKILL.md    (required)
 ```
 
 **Full structure:**
+
 ```
 skill-name/
 ├── SKILL.md              # Main definition (required)
@@ -41,7 +43,7 @@ skill-name/
 
 ## SKILL.md Template
 
-```yaml
+````yaml
 ---
 name: skill-name
 description: Brief description of what this skill does. Use when [specific triggers/keywords that should activate this skill].
@@ -68,7 +70,7 @@ Step-by-step guidance for Claude:
 
 ```language
 code example here
-```
+````
 
 ## Requirements
 
@@ -77,7 +79,8 @@ Any dependencies or prerequisites needed.
 ## Notes
 
 Additional context or edge cases to handle.
-```
+
+````
 
 ## Frontmatter Fields
 
@@ -96,9 +99,10 @@ The description is critical for discovery. Include:
 **Effective:**
 ```yaml
 description: Generate unit tests for Python code using pytest. Use when the user asks to create tests, add test coverage, write unit tests, or test Python functions.
-```
+````
 
 **Too vague (won't be discovered):**
+
 ```yaml
 description: Helps with testing
 ```
@@ -131,6 +135,7 @@ mkdir -p .claude/skills/code-reviewer
 ```
 
 **`.claude/skills/code-reviewer/SKILL.md`:**
+
 ```yaml
 ---
 name: code-reviewer
@@ -169,12 +174,12 @@ Organize findings by severity:
 
 ## Skills vs Slash Commands
 
-| Aspect | Slash Commands | Skills |
-|--------|----------------|--------|
-| Location | `.claude/commands/` | `.claude/skills/` |
-| Invocation | Manual (`/command`) | Automatic |
-| Structure | Single `.md` file | Directory with `SKILL.md` |
-| Use case | Quick prompts | Complex capabilities |
+| Aspect     | Slash Commands      | Skills                    |
+| ---------- | ------------------- | ------------------------- |
+| Location   | `.claude/commands/` | `.claude/skills/`         |
+| Invocation | Manual (`/command`) | Automatic                 |
+| Structure  | Single `.md` file   | Directory with `SKILL.md` |
+| Use case   | Quick prompts       | Complex capabilities      |
 
 **Use slash commands** for frequently-typed prompts you want explicit control over.
 **Use skills** for capabilities Claude should discover and use automatically.

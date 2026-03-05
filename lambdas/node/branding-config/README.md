@@ -8,7 +8,7 @@ This Lambda powers the branding API exposed via API Gateway.
   Returns the current branding blob for the requested client when
   `BRANDING_PROVIDER_ENABLED` is true and an item exists.
 
-- **PUT** `/api/branding/{clientId}` *(admin only)*
+- **PUT** `/api/branding/{clientId}` _(admin only)_
   Persists a branding blob (including an optional `enabled` flag) for the
   requested client when the feature flag is enabled.
 

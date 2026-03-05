@@ -13,6 +13,7 @@ import { LambdaPermission } from '@cdktf/provider-aws/lib/lambda-permission';
 import { AwsProvider } from '@cdktf/provider-aws/lib/provider';
 import { S3Object } from '@cdktf/provider-aws/lib/s3-object';
 import { S3BucketCorsConfiguration } from '@cdktf/provider-aws/lib/s3-bucket-cors-configuration';
+import { S3BucketNotification } from '@cdktf/provider-aws/lib/s3-bucket-notification';
 import { SecretsmanagerSecret } from '@cdktf/provider-aws/lib/secretsmanager-secret';
 import { SecretsmanagerSecretVersion } from '@cdktf/provider-aws/lib/secretsmanager-secret-version';
 import { password } from '@cdktf/provider-random';
@@ -59,6 +60,7 @@ export class CoreNumaInfra extends Construct {
   readonly outputsBucket: NumaCorsEnabledBucket;
   readonly otelConfigPath: string;
   readonly dataBucket: NumaCorsEnabledBucket;
+  readonly companyBucket?: NumaCorsEnabledBucket;
   readonly chatHistoryTable: DynamodbTable;
   readonly brandingTable: DynamodbTable;
   readonly brandingAssetsBucket: PublicS3Bucket;
@@ -74,14 +76,15 @@ export class CoreNumaInfra extends Construct {
   readonly chatSettingsTable: DynamodbTable;
   readonly dataConnectorsTable: DynamodbTable;
   readonly dataConnectorsSettingsTable: DynamodbTable;
+  readonly capabilitiesTable: DynamodbTable;
   readonly dataConnectorsSyncConfigsTable: DynamodbTable;
+  readonly vaultAuditLogTable: DynamodbTable;
   readonly sharedTable: DynamodbTable;
   readonly sharedChatHistoryTable: DynamodbTable;
   readonly mfaSettingsTable: DynamodbTable;
   readonly filesTable?: DynamodbTable;
   readonly webCrawler: WebCrawlerConstruct;
   readonly cognitoGroups!: CognitoGroupsConstruct;
-  readonly companyBucket: NumaCorsEnabledBucket;
   readonly pipedreamRelayLambdaArn?: string;
   readonly mcpPolicyTable?: DynamodbTable;
   readonly integrationsApprovalTable?: DynamodbTable;
@@ -675,6 +678,18 @@ export class CoreNumaInfra extends Construct {
       },
     });
 
+    this.capabilitiesTable = new DynamodbTable(this, 'capabilities-table', {
+      name: `${numaClient}-capabilities`,
+      billingMode: 'PAY_PER_REQUEST',
+      hashKey: 'flag',
+      attribute: [{ name: 'flag', type: 'S' }],
+      tags: {
+        Name: `${numaClient}-capabilities`,
+        Environment: props.environmentName,
+        Purpose: 'capabilities',
+      },
+    });
+
     this.dataConnectorsSyncConfigsTable = new DynamodbTable(this, 'data-connector-sync-configs', {
       name: `${numaClient}-data-connector-sync-configs`,
       billingMode: 'PAY_PER_REQUEST',
@@ -688,6 +703,25 @@ export class CoreNumaInfra extends Construct {
         Name: `${numaClient}-data-connector-sync-configs`,
         Environment: props.environmentName,
         Purpose: 'data-connector-sync-configs',
+      },
+    });
+
+    // Vault audit log table (tracks secret access by users and AI)
+    // NOTE: Vault secrets are now stored directly in AWS Secrets Manager as consolidated JSON per user
+    this.vaultAuditLogTable = new DynamodbTable(this, 'vault-audit-log-table', {
+      name: `${numaClient}-vault-audit-log`,
+      billingMode: 'PAY_PER_REQUEST',
+      hashKey: 'user_id',
+      rangeKey: 'timestamp_audit_id',
+      attribute: [
+        { name: 'user_id', type: 'S' },
+        { name: 'timestamp_audit_id', type: 'S' },
+      ],
+      ttl: { attributeName: 'ttl', enabled: true },
+      tags: {
+        Name: `${numaClient}-vault-audit-log`,
+        Environment: props.environmentName,
+        Purpose: 'vault-audit-log',
       },
     });
 
@@ -757,6 +791,60 @@ export class CoreNumaInfra extends Construct {
           Environment: props.environmentName,
           Purpose: 'user-file-system',
         },
+      });
+
+      // S3 → DynamoDB index sync Lambda (keeps DynamoDB cache in sync with S3 source of truth)
+      const filesIndexSyncLambda = new NumaLambda(this, 'files-index-sync', {
+        clientName: props.clientName,
+        lambdaDirectory: 'node/files-index-sync/',
+        logGroup: this.logGroup,
+        resourceNameSuffix: '_files-index-sync',
+        environment: {
+          FILES_TABLE_NAME: this.filesTable.name,
+          DATA_BUCKET_NAME: this.dataBucket.bucket.bucket,
+        },
+        additionalPolicyStatements: [
+          {
+            effect: 'Allow',
+            actions: ['dynamodb:Query', 'dynamodb:GetItem', 'dynamodb:PutItem', 'dynamodb:DeleteItem'],
+            resources: [this.filesTable.arn],
+          },
+          {
+            effect: 'Allow',
+            actions: ['s3:GetObject'],
+            resources: [`${this.dataBucket.bucket.arn}/files/*`],
+          },
+        ],
+      });
+
+      // Permission for S3 to invoke the sync Lambda
+      const filesIndexSyncS3Permission = new LambdaPermission(this, 'files-index-sync-s3-permission', {
+        statementId: 'AllowS3InvokeFilesIndexSync',
+        functionName: filesIndexSyncLambda.lambda.functionName,
+        action: 'lambda:InvokeFunction',
+        principal: 's3.amazonaws.com',
+        sourceArn: this.dataBucket.bucket.arn,
+      });
+
+      // S3 bucket notification: trigger sync Lambda on metadata.json and _folder.json changes
+      // dependsOn ensures the Lambda permission exists before S3 tries to validate the destination
+      new S3BucketNotification(this, 'files-data-bucket-notification', {
+        bucket: this.dataBucket.bucket.id,
+        dependsOn: [filesIndexSyncS3Permission],
+        lambdaFunction: [
+          {
+            events: ['s3:ObjectCreated:*', 's3:ObjectRemoved:*'],
+            filterPrefix: 'files/',
+            filterSuffix: 'metadata.json',
+            lambdaFunctionArn: filesIndexSyncLambda.lambda.arn,
+          },
+          {
+            events: ['s3:ObjectCreated:*', 's3:ObjectRemoved:*'],
+            filterPrefix: 'files/',
+            filterSuffix: '_folder.json',
+            lambdaFunctionArn: filesIndexSyncLambda.lambda.arn,
+          },
+        ],
       });
     }
 
@@ -1210,7 +1298,9 @@ export class CoreNumaInfra extends Construct {
 
     // Always output bucket information
     new TerraformOutput(this, 'data-bucket', { value: this.dataBucket.bucket.bucket });
-    new TerraformOutput(this, 'company-bucket', { value: this.companyBucket.bucket.bucket });
+    if (this.companyBucket) {
+      new TerraformOutput(this, 'company-bucket', { value: this.companyBucket.bucket.bucket });
+    }
 
     // Create Pipedream relay lambda if Pipedream integrations are enabled
     let pipedreamRelayLambda: NumaLambda | undefined;
@@ -1353,6 +1443,10 @@ export class CoreNumaInfra extends Construct {
       new TerraformOutput(this, 'pipedream-relay-lambda-arn', { value: pipedreamRelayLambda.lambda.arn });
     }
 
+    // Note: OAuth integration construct is created in the client stack (like OpsConstruct)
+    // when oauthIntegrationsEnabled is true. It extends ApiGatewayLambdaCollection and
+    // wires its own Lambda functions to API Gateway routes.
+
     // Note: System user admin group membership is now handled by the SystemUserCreator Lambda
     // This ensures the user is always in the admin group, even if previous deployments failed
 
@@ -1437,7 +1531,7 @@ export class CoreNumaInfra extends Construct {
             input,
           },
           dependsOn: dependsOnList,
-        },
+        }
       );
       modelAccessInvocations.push(invocation);
       previousInvocation = invocation;
@@ -1522,11 +1616,49 @@ const _coreNumaInfraPropsSchema = z
      */
     agents: z.boolean().optional().default(false),
     /**
+     * Whether to enable Secrets Vault functionality for secure credential storage.
+     *
+     * @default false
+     */
+    secretsVaultEnabled: z.boolean().optional().default(false),
+    /**
      * Whether to enable the Numa Files feature (file management page and backend).
      *
      * @default false
      */
     numaFiles: z.boolean().optional().default(false),
+    /**
+     * Whether to enable Drop Zone creation (shared upload folders for external users).
+     *
+     * @default false
+     */
+    numaDropZones: z.boolean().optional().default(false),
+    /**
+     * Whether to enable Sharing creation (share documents with external users for Q&A).
+     *
+     * @default false
+     */
+    numaSharing: z.boolean().optional().default(false),
+    /**
+     * Whether to enable OAuth integrations for cloud storage providers (Google Drive, OneDrive, Dropbox).
+     * Allows users to connect and access files from their cloud storage accounts.
+     * @default false
+     */
+    oauthIntegrationsEnabled: z.boolean().optional().default(false),
+    /**
+     * Configuration for OAuth providers. Only used when oauthIntegrationsEnabled is true.
+     */
+    oauthProviders: z
+      .record(
+        z.string(),
+        z.object({
+          enabled: z.boolean(),
+          clientId: z.string().optional().default(''),
+          clientSecret: z.string().optional().default(''),
+          scopes: z.array(z.string()),
+        })
+      )
+      .optional(),
     /**
      * Additional origins to allow in the S3 bucket CORS policies.
      * Useful for whitelabel frontends that need to access the same S3 buckets.
@@ -1543,7 +1675,7 @@ export const coreNumaInfraPropsSchema = _coreNumaInfraPropsSchema
       groups: z.record(z.string(), z.array(z.enum(FEATURE_SET_NAMES as [string, ...string[]]))).optional(),
       brandingAssetsBucketArn: z.string().optional(),
       brandingAssetsPrefix: z.string().optional(),
-    }),
+    })
   );
 export type CoreNumaInfraProps = z.infer<typeof coreNumaInfraPropsSchema> & {
   clientName: string;

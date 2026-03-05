@@ -22,13 +22,13 @@ Frontend (React) → API Gateway → step-function-start Lambda
 
 ### Key Patterns
 
-| Pattern | Description |
-|---------|-------------|
-| **App Construct** | TypeScript class extending `BaseNumaApp` in `/infra/constructs/apps/` |
-| **Step Function** | ASL state machine orchestrating Lambda invocations |
-| **Jobs (DynamoDB)** | `enableJobs: true` - recommended for new apps |
-| **Jobs (S3)** | `enableJobs: false` - legacy, status in S3 bucket |
-| **Manifest** | Static JSON generated at deploy time, defines UI wizard |
+| Pattern             | Description                                                           |
+| ------------------- | --------------------------------------------------------------------- |
+| **App Construct**   | TypeScript class extending `BaseNumaApp` in `/infra/constructs/apps/` |
+| **Step Function**   | ASL state machine orchestrating Lambda invocations                    |
+| **Jobs (DynamoDB)** | `enableJobs: true` - recommended for new apps                         |
+| **Jobs (S3)**       | `enableJobs: false` - legacy, status in S3 bucket                     |
+| **Manifest**        | Static JSON generated at deploy time, defines UI wizard               |
 
 ### Creating a New App
 
@@ -40,12 +40,14 @@ Frontend (React) → API Gateway → step-function-start Lambda
 ### Storage Patterns
 
 **DynamoDB (recommended):**
+
 - Fast status checks (~10ms)
 - Job history UI with pagination
 - Real-time event streaming
 - Set `enableJobs: true` in construct
 
 **S3 (legacy):**
+
 - Status at `s3://{bucket}/{app-id}/{user-id}/{job-id}/status.json`
 - No job history UI
 - Only for apps not yet migrated
@@ -53,15 +55,18 @@ Frontend (React) → API Gateway → step-function-start Lambda
 ### Key Files
 
 **Infrastructure:**
+
 - `infra/constructs/apps/base-numa-app-construct.ts` - Base class
 - `infra/constructs/apps/document-summariser-construct.ts` - Example app
 - `infra/stacks/numa-client-stack.ts` - App registration
 
 **Lambdas:**
+
 - `lambdas/python/step-function-start/` - Start endpoint
 - `lambdas/python/step-function-status/` - Status endpoint
 
 **Frontend:**
+
 - `numa-frontend/src/Pages/AppDetail.tsx` - App UI
 - `numa-frontend/src/Services/jobsApi.ts` - Jobs API
 - `numa-frontend/src/Providers/NumaAppProvider.tsx` - State management

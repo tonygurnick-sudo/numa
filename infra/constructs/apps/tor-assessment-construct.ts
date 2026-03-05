@@ -96,7 +96,7 @@ export class TorAssessment extends BaseNumaApp {
         ExtractContent: this.addExtractContentTaskWithArn(
           props.sharedExtractContentLambdaArn!,
           '$.tor_document_key',
-          'TorAssessment',
+          'TorAssessment'
         ),
         TorAssessment: this.addLambdaTask(
           assessTorLambda.arn,
@@ -112,7 +112,7 @@ export class TorAssessment extends BaseNumaApp {
           'WriteSuccessStatus',
           {
             OutputPath: '$.Payload',
-          },
+          }
         ),
         WriteFailureStatus: this.writeFailureStatus(),
         WriteSuccessStatus: this.writeSuccessStatus(),

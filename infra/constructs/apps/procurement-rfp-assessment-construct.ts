@@ -127,7 +127,7 @@ export class ProcurementRfpAssessment extends BaseNumaApp {
         ExtractApplicationContent: this.addExtractContentTaskWithArn(
           props.sharedExtractContentLambdaArn!,
           '$.input_key',
-          'ExtractRfpReferenceContent',
+          'ExtractRfpReferenceContent'
         ),
         ExtractRfpReferenceContent: {
           Type: 'Task',
@@ -163,7 +163,7 @@ export class ProcurementRfpAssessment extends BaseNumaApp {
           'WriteSuccessStatus',
           {
             OutputPath: '$.Payload',
-          },
+          }
         ),
         WriteFailureStatus: this.writeFailureStatus(),
         WriteSuccessStatus: this.writeSuccessStatus(),

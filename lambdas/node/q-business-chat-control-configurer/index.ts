@@ -20,6 +20,6 @@ export const handler: Handler<ChatControlConfiguration, void> = async (event) =>
       creatorModeConfiguration: {
         creatorModeControl: event.enableDirectLLMAccess ? 'ENABLED' : 'DISABLED',
       },
-    }),
+    })
   );
 };

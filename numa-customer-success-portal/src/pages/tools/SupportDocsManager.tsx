@@ -1,125 +1,114 @@
-import { useEffect, useMemo, useState, type ChangeEvent } from 'react'
-import {
-  Alert,
-  Badge,
-  Button,
-  Card,
-  Form,
-  ProgressBar,
-  Spinner,
-  Tab,
-  Table,
-  Tabs,
-} from 'react-bootstrap'
-import { ArrowLeft, CloudUpload, Download, FileEarmarkText, Trash } from 'react-bootstrap-icons'
-import { useNavigate } from 'react-router-dom'
-import { GroupedClientSelector } from '@/components/tools/GroupedClientSelector'
-import { useAuth } from '@/contexts/AuthContext'
-import { activityService } from '@/services/activityService'
-import { clientService } from '@/services/clientService'
-import { supportDocsService, type MasterSupportDoc } from '@/services/supportDocsService'
-import type { Client } from '@/types'
+import { useEffect, useMemo, useState, type ChangeEvent } from 'react';
+import { Alert, Badge, Button, Card, Form, ProgressBar, Spinner, Tab, Table, Tabs } from 'react-bootstrap';
+import { ArrowLeft, CloudUpload, Download, FileEarmarkText, Trash } from 'react-bootstrap-icons';
+import { useNavigate } from 'react-router-dom';
+import { GroupedClientSelector } from '@/components/tools/GroupedClientSelector';
+import { useAuth } from '@/contexts/AuthContext';
+import { activityService } from '@/services/activityService';
+import { clientService } from '@/services/clientService';
+import { supportDocsService, type MasterSupportDoc } from '@/services/supportDocsService';
+import type { Client } from '@/types';
 
-type DeployState = 'idle' | 'queued' | 'running' | 'success' | 'failed'
+type DeployState = 'idle' | 'queued' | 'running' | 'success' | 'failed';
 
 interface ClientDeployStatus {
-  state: DeployState
-  message: string
-  progress: number
+  state: DeployState;
+  message: string;
+  progress: number;
 }
 
 function formatBytes(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`
-  const kb = bytes / 1024
-  if (kb < 1024) return `${kb.toFixed(1)} KB`
-  const mb = kb / 1024
-  return `${mb.toFixed(1)} MB`
+  if (bytes < 1024) return `${bytes} B`;
+  const kb = bytes / 1024;
+  if (kb < 1024) return `${kb.toFixed(1)} KB`;
+  const mb = kb / 1024;
+  return `${mb.toFixed(1)} MB`;
 }
 
 export default function SupportDocsManager() {
-  const navigate = useNavigate()
-  const { user } = useAuth()
-  const [activeTab, setActiveTab] = useState('manage')
-  const [masterDocs, setMasterDocs] = useState<MasterSupportDoc[]>([])
-  const [loadingDocs, setLoadingDocs] = useState(true)
-  const [docsError, setDocsError] = useState<string | null>(null)
-  const [uploading, setUploading] = useState(false)
-  const [deletingKey, setDeletingKey] = useState<string | null>(null)
+  const navigate = useNavigate();
+  const { user } = useAuth();
+  const [activeTab, setActiveTab] = useState('manage');
+  const [masterDocs, setMasterDocs] = useState<MasterSupportDoc[]>([]);
+  const [loadingDocs, setLoadingDocs] = useState(true);
+  const [docsError, setDocsError] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [deletingKey, setDeletingKey] = useState<string | null>(null);
 
-  const [clients, setClients] = useState<Client[]>([])
-  const [loadingClients, setLoadingClients] = useState(true)
-  const [selectedClientNames, setSelectedClientNames] = useState<string[]>([])
-  const [deploying, setDeploying] = useState(false)
-  const [deployError, setDeployError] = useState<string | null>(null)
-  const [deployStatuses, setDeployStatuses] = useState<Record<string, ClientDeployStatus>>({})
+  const [clients, setClients] = useState<Client[]>([]);
+  const [loadingClients, setLoadingClients] = useState(true);
+  const [selectedClientNames, setSelectedClientNames] = useState<string[]>([]);
+  const [deploying, setDeploying] = useState(false);
+  const [deployError, setDeployError] = useState<string | null>(null);
+  const [deployStatuses, setDeployStatuses] = useState<Record<string, ClientDeployStatus>>({});
 
   const selectedClients = useMemo(
     () => clients.filter((client) => selectedClientNames.includes(client.name)),
-    [clients, selectedClientNames],
-  )
+    [clients, selectedClientNames]
+  );
 
   const loadMasterDocs = async () => {
-    setLoadingDocs(true)
-    setDocsError(null)
+    setLoadingDocs(true);
+    setDocsError(null);
     try {
-      const docs = await supportDocsService.listMasterDocs()
-      setMasterDocs(docs)
+      const docs = await supportDocsService.listMasterDocs();
+      setMasterDocs(docs);
     } catch (error) {
-      setDocsError(error instanceof Error ? error.message : 'Failed to load master support docs.')
+      setDocsError(error instanceof Error ? error.message : 'Failed to load master support docs.');
     } finally {
-      setLoadingDocs(false)
+      setLoadingDocs(false);
     }
-  }
+  };
 
   const loadClients = async () => {
-    setLoadingClients(true)
+    setLoadingClients(true);
     try {
-      const allClients = await clientService.getAllClients()
-      setClients(allClients)
+      const allClients = await clientService.getAllClients();
+      setClients(allClients);
     } catch (error) {
-      setDeployError(error instanceof Error ? error.message : 'Failed to load clients.')
+      setDeployError(error instanceof Error ? error.message : 'Failed to load clients.');
     } finally {
-      setLoadingClients(false)
+      setLoadingClients(false);
     }
-  }
+  };
 
   useEffect(() => {
-    loadMasterDocs()
-    loadClients()
-  }, [])
+    loadMasterDocs();
+    loadClients();
+  }, []);
 
   const handleUploadFiles = async (event: ChangeEvent<HTMLInputElement>) => {
-    const files = event.target.files
+    const files = event.target.files;
     if (!files || files.length === 0) {
-      return
+      return;
     }
-    setUploading(true)
-    setDocsError(null)
+    setUploading(true);
+    setDocsError(null);
     try {
       for (const file of Array.from(files)) {
-        await supportDocsService.uploadMasterDoc(file, user?.email)
+        await supportDocsService.uploadMasterDoc(file, user?.email);
       }
-      await loadMasterDocs()
+      await loadMasterDocs();
     } catch (error) {
-      setDocsError(error instanceof Error ? error.message : 'Failed to upload support documents.')
+      setDocsError(error instanceof Error ? error.message : 'Failed to upload support documents.');
     } finally {
-      setUploading(false)
-      event.target.value = ''
+      setUploading(false);
+      event.target.value = '';
     }
-  }
+  };
 
   const handleDeleteDoc = async (key: string) => {
-    setDeletingKey(key)
-    setDocsError(null)
+    setDeletingKey(key);
+    setDocsError(null);
     try {
-      await supportDocsService.deleteMasterDoc(key)
-      await loadMasterDocs()
+      await supportDocsService.deleteMasterDoc(key);
+      await loadMasterDocs();
     } catch (error) {
-      setDocsError(error instanceof Error ? error.message : 'Failed to delete support document.')
+      setDocsError(error instanceof Error ? error.message : 'Failed to delete support document.');
     } finally {
-      setDeletingKey(null)
+      setDeletingKey(null);
     }
-  }
+  };
 
   const updateDeployStatus = (clientName: string, status: Partial<ClientDeployStatus>) => {
     setDeployStatuses((prev) => ({
@@ -129,24 +118,24 @@ export default function SupportDocsManager() {
         message: status.message ?? prev[clientName]?.message ?? '',
         progress: status.progress ?? prev[clientName]?.progress ?? 0,
       },
-    }))
-  }
+    }));
+  };
 
   const deployToClients = async (targets: Client[]) => {
-    setDeploying(true)
-    setDeployError(null)
+    setDeploying(true);
+    setDeployError(null);
 
-    const initialStatuses: Record<string, ClientDeployStatus> = {}
+    const initialStatuses: Record<string, ClientDeployStatus> = {};
     for (const client of targets) {
-      initialStatuses[client.name] = { state: 'queued', message: 'Waiting...', progress: 0 }
+      initialStatuses[client.name] = { state: 'queued', message: 'Waiting...', progress: 0 };
     }
-    setDeployStatuses(initialStatuses)
+    setDeployStatuses(initialStatuses);
 
     try {
-      const docsToDeploy = await supportDocsService.listMasterDocs()
+      const docsToDeploy = await supportDocsService.listMasterDocs();
 
       for (const client of targets) {
-        updateDeployStatus(client.name, { state: 'running', message: 'Starting deployment...', progress: 0 })
+        updateDeployStatus(client.name, { state: 'running', message: 'Starting deployment...', progress: 0 });
 
         try {
           const result = await supportDocsService.deployToClient(
@@ -155,14 +144,14 @@ export default function SupportDocsManager() {
             client.config.region,
             docsToDeploy,
             (progress) => {
-              const percent = progress.total === 0 ? 100 : Math.round((progress.current / progress.total) * 100)
+              const percent = progress.total === 0 ? 100 : Math.round((progress.current / progress.total) * 100);
               updateDeployStatus(client.name, {
                 state: 'running',
                 message: progress.message,
                 progress: percent,
-              })
-            },
-          )
+              });
+            }
+          );
 
           updateDeployStatus(client.name, {
             state: 'success',
@@ -170,7 +159,7 @@ export default function SupportDocsManager() {
             message: `Uploaded ${result.uploadedCount} files, cleaned ${result.cleanedCount}, KB ${
               result.kbCreated ? 'created' : 'verified'
             }.`,
-          })
+          });
 
           await activityService.logActivity({
             type: 'system',
@@ -185,14 +174,14 @@ export default function SupportDocsManager() {
               },
             },
             success: true,
-          })
+          });
         } catch (error) {
-          const message = error instanceof Error ? error.message : 'Deployment failed'
+          const message = error instanceof Error ? error.message : 'Deployment failed';
           updateDeployStatus(client.name, {
             state: 'failed',
             progress: 100,
             message,
-          })
+          });
           await activityService.logActivity({
             type: 'system',
             action: 'deployed',
@@ -205,15 +194,15 @@ export default function SupportDocsManager() {
             },
             success: false,
             errorMessage: message,
-          })
+          });
         }
       }
     } catch (error) {
-      setDeployError(error instanceof Error ? error.message : 'Bulk deployment failed.')
+      setDeployError(error instanceof Error ? error.message : 'Bulk deployment failed.');
     } finally {
-      setDeploying(false)
+      setDeploying(false);
     }
-  }
+  };
 
   return (
     <div>
@@ -320,7 +309,7 @@ export default function SupportDocsManager() {
                   selectedClientNames={selectedClientNames}
                   onClientToggle={(name) =>
                     setSelectedClientNames((prev) =>
-                      prev.includes(name) ? prev.filter((item) => item !== name) : [...prev, name],
+                      prev.includes(name) ? prev.filter((item) => item !== name) : [...prev, name]
                     )
                   }
                   onSelectClients={setSelectedClientNames}
@@ -400,5 +389,5 @@ export default function SupportDocsManager() {
         </Tab>
       </Tabs>
     </div>
-  )
+  );
 }

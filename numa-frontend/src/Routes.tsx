@@ -6,17 +6,19 @@ import { ProtectedRoute } from './Components/RequiredFeaturesWrapper';
 import { ROUTE_CONFIG } from './utils/routeConfig';
 import AppLayout from './Layouts/AppLayout';
 import { useTranslation } from 'react-i18next';
+import { getFlag } from './utils/featureFlags';
 
 // Lazy load non-critical pages
 const ResetPassword = lazy(() => import('./Pages/ResetPassword').then((m) => ({ default: m.ResetPassword })));
 const NumaLogin = lazy(() => import('./Pages/Login').then((m) => ({ default: m.NumaLogin })));
 const Ian = lazy(() => import('./Pages/Ian').then((m) => ({ default: m.Ian })));
 const SharedDocumentChat = lazy(() =>
-  import('./Pages/SharedDocumentChat').then((m) => ({ default: m.SharedDocumentChat })),
+  import('./Pages/SharedDocumentChat').then((m) => ({ default: m.SharedDocumentChat }))
 );
 const SharedAnalytics = lazy(() => import('./Pages/SharedAnalytics').then((m) => ({ default: m.SharedAnalytics })));
+const DropZonePage = lazy(() => import('./Pages/DropZonePage').then((m) => ({ default: m.DropZonePage })));
 const FilePreviewFullScreen = lazy(() =>
-  import('./Pages/FilePreviewFullScreen').then((m) => ({ default: m.FilePreviewFullScreen })),
+  import('./Pages/FilePreviewFullScreen').then((m) => ({ default: m.FilePreviewFullScreen }))
 );
 
 // Component to wrap authenticated routes with AppLayout
@@ -44,8 +46,7 @@ const AppRoutes = () => {
   const { t } = useTranslation('common');
   const isFeatureEnabled = (flag?: string) => {
     if (!flag) return true;
-    if (typeof window === 'undefined') return false;
-    return window.sessionStorage.getItem(flag) === 'true';
+    return getFlag(flag);
   };
 
   if (loading || !tokenValidationComplete) {
@@ -81,6 +82,8 @@ const AppRoutes = () => {
         <Route path="/ian" element={<Ian />} />
         {/* Public shared document Q&A page - no authentication required */}
         <Route path="/shared/:uuid" element={<SharedDocumentChat />} />
+        {/* Public drop zone upload page - no authentication required */}
+        <Route path="/dropzone/:uuid" element={<DropZonePage />} />
         {/* Protected share analytics page - only accessible to share creator */}
         <Route
           path="/analyze/shared/:uuid"

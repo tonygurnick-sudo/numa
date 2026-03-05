@@ -63,7 +63,7 @@ vi.mock('docx', () => {
       toBlob: vi.fn().mockResolvedValue(
         new Blob(['mock-docx-content'], {
           type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-        }),
+        })
       ),
     },
   };
@@ -108,14 +108,14 @@ describe('fileConverter', () => {
           text: docTitle,
           bold: true,
           size: 36,
-        }),
+        })
       );
 
       // Check proper heading level for title
       expect(docx.Paragraph).toHaveBeenCalledWith(
         expect.objectContaining({
           heading: docx.HeadingLevel.HEADING_1,
-        }),
+        })
       );
     });
 
@@ -150,14 +150,14 @@ describe('fileConverter', () => {
       expect(docx.TextRun).toHaveBeenCalledWith(
         expect.objectContaining({
           bold: true,
-        }),
+        })
       );
 
       // Italic formatting
       expect(docx.TextRun).toHaveBeenCalledWith(
         expect.objectContaining({
           italic: true,
-        }),
+        })
       );
 
       // Code formatting (highlighted text)
@@ -165,7 +165,7 @@ describe('fileConverter', () => {
         expect.objectContaining({
           highlight: 'lightGray',
           font: 'Courier New',
-        }),
+        })
       );
     });
 
@@ -178,14 +178,14 @@ describe('fileConverter', () => {
         expect.objectContaining({
           bold: true,
           text: 'underscore bold',
-        }),
+        })
       );
 
       expect(docx.TextRun).toHaveBeenCalledWith(
         expect.objectContaining({
           italic: true,
           text: 'underscore italic',
-        }),
+        })
       );
     });
 
@@ -200,7 +200,7 @@ describe('fileConverter', () => {
           bold: true,
           italic: true,
           text: 'nested italic',
-        }),
+        })
       );
     });
 
@@ -213,19 +213,19 @@ describe('fileConverter', () => {
       expect(docx.Paragraph).toHaveBeenCalledWith(
         expect.objectContaining({
           heading: docx.HeadingLevel.HEADING_1,
-        }),
+        })
       );
 
       expect(docx.Paragraph).toHaveBeenCalledWith(
         expect.objectContaining({
           heading: docx.HeadingLevel.HEADING_2,
-        }),
+        })
       );
 
       expect(docx.Paragraph).toHaveBeenCalledWith(
         expect.objectContaining({
           heading: docx.HeadingLevel.HEADING_3,
-        }),
+        })
       );
     });
 
@@ -238,21 +238,21 @@ describe('fileConverter', () => {
       expect(docx.Paragraph).toHaveBeenCalledWith(
         expect.objectContaining({
           bullet: expect.anything(),
-        }),
+        })
       );
 
       // Check for first level indent
       expect(docx.Paragraph).toHaveBeenCalledWith(
         expect.objectContaining({
           indent: expect.objectContaining({ left: 240 }),
-        }),
+        })
       );
 
       // Check for nested level indent
       expect(docx.Paragraph).toHaveBeenCalledWith(
         expect.objectContaining({
           indent: expect.objectContaining({ left: 480 }),
-        }),
+        })
       );
     });
 
@@ -280,7 +280,7 @@ describe('fileConverter', () => {
             reference: 'custom-numbering',
             level: 0,
           }),
-        }),
+        })
       );
 
       // Check for nested level
@@ -290,7 +290,7 @@ describe('fileConverter', () => {
             reference: 'custom-numbering',
             level: 1,
           }),
-        }),
+        })
       );
     });
 
@@ -303,13 +303,13 @@ describe('fileConverter', () => {
       expect(docx.TextRun).toHaveBeenCalledWith(
         expect.objectContaining({
           text: 'a) ',
-        }),
+        })
       );
 
       expect(docx.TextRun).toHaveBeenCalledWith(
         expect.objectContaining({
           text: 'b) ',
-        }),
+        })
       );
 
       // Check for proper hanging indent
@@ -319,7 +319,7 @@ describe('fileConverter', () => {
             left: 240,
             hanging: 240,
           }),
-        }),
+        })
       );
     });
 
@@ -336,7 +336,7 @@ describe('fileConverter', () => {
               style: docx.BorderStyle.SINGLE,
             }),
           }),
-        }),
+        })
       );
     });
 
@@ -348,7 +348,7 @@ describe('fileConverter', () => {
       // Check that multiple horizontal rules are created with different syntax
       const paragraphCalls = docx.Paragraph.mock.calls.map((call) => call[0]);
       const horizontalRules = paragraphCalls.filter(
-        (arg) => arg.border && arg.border.bottom && arg.border.bottom.style === docx.BorderStyle.SINGLE,
+        (arg) => arg.border && arg.border.bottom && arg.border.bottom.style === docx.BorderStyle.SINGLE
       );
 
       expect(horizontalRules.length).toBe(2);
@@ -368,7 +368,7 @@ describe('fileConverter', () => {
             }),
           }),
           indent: expect.objectContaining({ left: 240 }),
-        }),
+        })
       );
     });
 
@@ -399,7 +399,7 @@ describe('fileConverter', () => {
           font: 'Courier New',
           size: 20,
           text: expect.stringContaining('const x = 1;'),
-        }),
+        })
       );
 
       expect(docx.Paragraph).toHaveBeenCalledWith(
@@ -410,7 +410,7 @@ describe('fileConverter', () => {
             left: expect.anything(),
             right: expect.anything(),
           }),
-        }),
+        })
       );
     });
 
@@ -424,7 +424,7 @@ describe('fileConverter', () => {
         expect.objectContaining({
           font: 'Courier New',
           text: expect.stringContaining('const x = 1;'),
-        }),
+        })
       );
 
       expect(docx.Paragraph).toHaveBeenCalledWith(
@@ -435,7 +435,7 @@ describe('fileConverter', () => {
           shading: expect.objectContaining({
             fill: 'F8F8F8',
           }),
-        }),
+        })
       );
     });
 
@@ -455,7 +455,7 @@ describe('fileConverter', () => {
       expect(docx.TableRow).toHaveBeenCalledWith(
         expect.objectContaining({
           tableHeader: true,
-        }),
+        })
       );
     });
 
@@ -471,7 +471,7 @@ describe('fileConverter', () => {
         expect.objectContaining({
           highlight: 'lightGray',
           font: 'Courier New',
-        }),
+        })
       );
     });
 
@@ -485,7 +485,7 @@ describe('fileConverter', () => {
         expect.objectContaining({
           text: 'References:',
           bold: true,
-        }),
+        })
       );
 
       // Check for indentation in references
@@ -495,7 +495,7 @@ describe('fileConverter', () => {
             left: 240,
             hanging: 240,
           }),
-        }),
+        })
       );
     });
 
@@ -509,14 +509,14 @@ describe('fileConverter', () => {
         expect.objectContaining({
           text: '1. ',
           bold: false,
-        }),
+        })
       );
 
       expect(docx.TextRun).toHaveBeenCalledWith(
         expect.objectContaining({
           text: '2. ',
           bold: false,
-        }),
+        })
       );
 
       // Check paragraph formatting is consistent
@@ -526,7 +526,7 @@ describe('fileConverter', () => {
             left: 240,
             hanging: 240,
           }),
-        }),
+        })
       );
     });
 
@@ -540,7 +540,7 @@ describe('fileConverter', () => {
         expect.objectContaining({
           highlight: 'lightGray',
           font: 'Courier New',
-        }),
+        })
       );
 
       // Bold inside italic should be properly handled
@@ -548,7 +548,7 @@ describe('fileConverter', () => {
         expect.objectContaining({
           bold: true,
           italic: true,
-        }),
+        })
       );
     });
 

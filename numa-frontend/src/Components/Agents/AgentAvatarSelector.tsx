@@ -88,7 +88,7 @@ export const AgentAvatarSelector = ({ value, onChange, disabled = false, preview
         URL.revokeObjectURL(url);
       }
     },
-    [t],
+    [t]
   );
 
   const handleUpload = useCallback(
@@ -137,12 +137,12 @@ export const AgentAvatarSelector = ({ value, onChange, disabled = false, preview
         setIsUploading(false);
       }
     },
-    [bucketName, getCredentials, onChange, region, resizeToCanvas, t],
+    [bucketName, getCredentials, onChange, region, resizeToCanvas, t]
   );
 
   const clearImage = useCallback(
     () => onChange({ icon: currentValue.icon || 'bi bi-robot', iconImage: null }),
-    [currentValue.icon, onChange],
+    [currentValue.icon, onChange]
   );
 
   return (

@@ -49,16 +49,17 @@ SSE Stream back to Frontend
 
 **Endpoints:**
 
-| Endpoint | Method | Purpose |
-|----------|--------|---------|
-| `/ping` | GET | AgentCore health check |
-| `/invocations` | POST | Main request handler (routes by action) |
-| `/history/{conversation_id}` | GET | Fetch conversation history from S3 |
-| `/trace/{conversation_id}` | GET | Raw trace.jsonl content |
-| `/files` | GET | List workspace files |
-| `/status` | GET | Agent status and capabilities |
+| Endpoint                     | Method | Purpose                                 |
+| ---------------------------- | ------ | --------------------------------------- |
+| `/ping`                      | GET    | AgentCore health check                  |
+| `/invocations`               | POST   | Main request handler (routes by action) |
+| `/history/{conversation_id}` | GET    | Fetch conversation history from S3      |
+| `/trace/{conversation_id}`   | GET    | Raw trace.jsonl content                 |
+| `/files`                     | GET    | List workspace files                    |
+| `/status`                    | GET    | Agent status and capabilities           |
 
 **Actions (via /invocations):**
+
 - `chat` - Main chat streaming
 - `upload` - Upload file to workspace
 - `delete_uploads` - Remove staged files
@@ -102,10 +103,12 @@ Handles Claude Agent SDK streaming:
 ### prompts.py - System Prompts
 
 Two-part system prompt:
+
 1. **NUMA_BASE_SYSTEM_PROMPT** - Core Numa personality and capabilities
 2. **WORKSPACE_SYSTEM_PROMPT** - Workspace-specific instructions
 
 Key prompt sections:
+
 - Identity override (Numa, not Claude)
 - Workspace directory structure (`/workdir/` paths)
 - Document generation (inline streaming vs file creation)
@@ -124,6 +127,7 @@ messages = parse_trace_content_to_messages(trace_content)
 ```
 
 Handles:
+
 - User messages (type="user")
 - Assistant messages with partial merging (type="assistant")
 - Tool use and tool results
@@ -135,12 +139,14 @@ Handles:
 S3 sync operations for workspace files:
 
 **Key Functions:**
+
 - `sync_from_s3()` - Download workspace on cold start
 - `sync_to_s3()` - Upload changed files after request
 - `sync_conversation_switch()` - Archive old + restore new conversation
 - `restore_claude_session()` / `archive_claude_session()` - SDK session state
 
 **S3 Paths:**
+
 ```
 s3://{outputs_bucket}/workspaces/{user_sub}/{conversation_id}/
 ├── .system/          # Claude SDK session state
@@ -155,15 +161,15 @@ s3://{outputs_bucket}/workspaces/{user_sub}/{conversation_id}/
 All Numa tool operations go through the unified `mcp__numa__numa_tool` MCP tool.
 The files at `/workdir/tools/numa/` are **documentation-only reference cards** — direct bash execution is blocked by security hooks.
 
-| MCP Tool Name | Purpose |
-|---------------|---------|
-| `query_knowledge_base` | Search knowledge bases |
-| `kb_upload` / `kb_download` / `kb_list` / `kb_download_folder` | KB file operations |
-| `web_search` | Internet search via Lambda proxy |
-| `extract_content` | AI-powered content extraction (OCR, transcription) |
-| `convert_document` | Document format conversion (DOCX↔PDF, Markdown→PDF/DOCX) |
-| `agents` | Manage saved Numa agents |
-| `memories` | Manage user memories |
+| MCP Tool Name                                                  | Purpose                                                  |
+| -------------------------------------------------------------- | -------------------------------------------------------- |
+| `query_knowledge_base`                                         | Search knowledge bases                                   |
+| `kb_upload` / `kb_download` / `kb_list` / `kb_download_folder` | KB file operations                                       |
+| `web_search`                                                   | Internet search via Lambda proxy                         |
+| `extract_content`                                              | AI-powered content extraction (OCR, transcription)       |
+| `convert_document`                                             | Document format conversion (DOCX↔PDF, Markdown→PDF/DOCX) |
+| `agents`                                                       | Manage saved Numa agents                                 |
+| `memories`                                                     | Manage user memories                                     |
 
 **Implementation:** `numa_workspace_agent/mcp_tools/numa_tool.py` (unified dispatcher)
 and `numa_workspace_agent/mcp_tools/lambda_client.py` (shared Lambda invocation client).
@@ -173,6 +179,7 @@ and `numa_workspace_agent/mcp_tools/lambda_client.py` (shared Lambda invocation 
 When using cross-account Bedrock credentials, local services (Lambda, S3) need local credentials:
 
 **Environment Variables:**
+
 - `AWS_*` - Cross-account Bedrock credentials
 - `NUMA_LOCAL_AWS_*` - Local account credentials for Lambda/S3 calls
 
@@ -186,40 +193,40 @@ All logs use structlog with consistent fields for CloudWatch Logs Insights query
 
 ### Required Fields
 
-| Field | Purpose |
-|-------|---------|
+| Field   | Purpose                                                                                        |
+| ------- | ---------------------------------------------------------------------------------------------- |
 | `_name` | Log identifier (sorts first alphabetically). Examples: `REQUEST_RECEIVED`, `SDK_START`, `COST` |
-| `phase` | Request lifecycle phase for filtering |
+| `phase` | Request lifecycle phase for filtering                                                          |
 
 ### Phases
 
-| Phase | When |
-|-------|------|
-| `init` | Cold start, KB listings fetch |
-| `request` | Request received, validation |
-| `auth` | Authentication/authorization |
-| `assistant` | Pre-request assistant (Nova) |
-| `sdk` | Claude SDK execution |
-| `sync` | S3 workspace sync |
-| `cleanup` | Post-request cleanup (DynamoDB meta update) |
+| Phase       | When                                        |
+| ----------- | ------------------------------------------- |
+| `init`      | Cold start, KB listings fetch               |
+| `request`   | Request received, validation                |
+| `auth`      | Authentication/authorization                |
+| `assistant` | Pre-request assistant (Nova)                |
+| `sdk`       | Claude SDK execution                        |
+| `sync`      | S3 workspace sync                           |
+| `cleanup`   | Post-request cleanup (DynamoDB meta update) |
 
 ### Key Log Names
 
-| `_name` | Description |
-|---------|-------------|
-| `REQUEST_RECEIVED` | Incoming request via proxy |
-| `INVOCATION` | Action dispatch (chat, upload, etc.) |
-| `CHAT_REQUEST` | Chat action started |
-| `KB_LISTINGS` | KB file listings fetched (not cached) |
-| `ASSISTANT_ADVICE` | Pre-Numa assistant hint generated |
-| `SDK_START` | Claude SDK execution starting |
-| `SDK_RESULT` | SDK completion summary |
-| `SDK_COMPLETE` | Full SDK stream finished |
-| `STREAM_COMPLETE` | Verbose stream summary with conversation flow |
-| `COST` | Dedicated cost log for aggregation |
-| `S3_SYNC_DOWNLOAD` | Files downloaded from S3 |
-| `S3_SYNC_UPLOAD` | Files uploaded to S3 |
-| `CONVERSATION_META_UPDATED` | DynamoDB meta record updated |
+| `_name`                     | Description                                   |
+| --------------------------- | --------------------------------------------- |
+| `REQUEST_RECEIVED`          | Incoming request via proxy                    |
+| `INVOCATION`                | Action dispatch (chat, upload, etc.)          |
+| `CHAT_REQUEST`              | Chat action started                           |
+| `KB_LISTINGS`               | KB file listings fetched (not cached)         |
+| `ASSISTANT_ADVICE`          | Pre-Numa assistant hint generated             |
+| `SDK_START`                 | Claude SDK execution starting                 |
+| `SDK_RESULT`                | SDK completion summary                        |
+| `SDK_COMPLETE`              | Full SDK stream finished                      |
+| `STREAM_COMPLETE`           | Verbose stream summary with conversation flow |
+| `COST`                      | Dedicated cost log for aggregation            |
+| `S3_SYNC_DOWNLOAD`          | Files downloaded from S3                      |
+| `S3_SYNC_UPLOAD`            | Files uploaded to S3                          |
+| `CONVERSATION_META_UPDATED` | DynamoDB meta record updated                  |
 
 ### Log Examples
 
@@ -249,6 +256,7 @@ logger.debug(
 **Log Stream:** `{client}/numa-chat-workspace-agent`
 
 ### Find Request by Conversation ID
+
 ```sql
 fields @timestamp, _name, @message
 | filter conversation_id = "abc123-full-id-here"
@@ -256,6 +264,7 @@ fields @timestamp, _name, @message
 ```
 
 ### Cost Analysis
+
 ```sql
 fields @timestamp, total_cost_usd, input_tokens, output_tokens, conversation_id
 | filter _name = "COST"
@@ -264,6 +273,7 @@ fields @timestamp, total_cost_usd, input_tokens, output_tokens, conversation_id
 ```
 
 ### Filter by Phase
+
 ```sql
 fields @timestamp, _name, @message
 | filter phase = "sdk"
@@ -271,6 +281,7 @@ fields @timestamp, _name, @message
 ```
 
 ### Find Errors
+
 ```sql
 fields @timestamp, _name, error, @message
 | filter level = "error" OR is_error = true
@@ -278,6 +289,7 @@ fields @timestamp, _name, error, @message
 ```
 
 ### Request Flow (Single Request)
+
 ```sql
 fields @timestamp, _name, phase, @message
 | filter conversation_id = "your-conversation-id"
@@ -286,6 +298,7 @@ fields @timestamp, _name, phase, @message
 ```
 
 ### Cost by User
+
 ```sql
 stats sum(total_cost_usd) as total_cost by user_sub
 | filter _name = "COST"
@@ -297,12 +310,15 @@ stats sum(total_cost_usd) as total_cost by user_sub
 ## Local Development
 
 ### Docker Test
+
 Use the `workspace-agent-local-test` skill to test locally:
+
 ```
 /workspace-agent-local-test
 ```
 
 ### Key Environment Variables
+
 ```bash
 AWS_REGION=us-east-1
 CLIENT_NAME=your-client
@@ -313,6 +329,7 @@ BEDROCK_ACCOUNT_ID=  # Optional cross-account
 ```
 
 ### Running Tests
+
 ```bash
 cd services/numa-workspace-agent
 poetry install
@@ -362,14 +379,15 @@ logger.info(
 
 Two security layers validate bash commands:
 
-| Layer | Source | Error Pattern | Configurable? |
-|-------|--------|---------------|---------------|
-| SDK built-in | Claude Agent SDK | "Command contains ${} parameter substitution" | No |
-| Custom hooks | `hooks/security.py` | "SECURITY_POLICY_VIOLATION: ..." | Yes |
+| Layer        | Source              | Error Pattern                                 | Configurable? |
+| ------------ | ------------------- | --------------------------------------------- | ------------- |
+| SDK built-in | Claude Agent SDK    | "Command contains ${} parameter substitution" | No            |
+| Custom hooks | `hooks/security.py` | "SECURITY_POLICY_VIOLATION: ..."              | Yes           |
 
 **SDK layer blocks:** `${...}` and `$'...'` patterns (even in inline Python like `python3 -c "print(f'${x}')"`)
 
 **Workaround:** Write Python scripts to files instead of inline execution:
+
 ```bash
 # Instead of: python3 -c "print(f'${total:.2f}')"  # BLOCKED
 # Do this:

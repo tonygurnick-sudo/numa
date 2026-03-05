@@ -1,59 +1,61 @@
-import { useState } from 'react'
-import { Card, Button, Alert, Badge, ProgressBar, Spinner } from 'react-bootstrap'
-import { BarChart } from 'react-bootstrap-icons'
-import { QuotaReportService } from '@/services/quotaReportService'
-import type { QuotaDescriptor, ToolProgress } from '@/types/tools'
+import { useState } from 'react';
+import { Card, Button, Alert, Badge, ProgressBar, Spinner } from 'react-bootstrap';
+import { BarChart } from 'react-bootstrap-icons';
+import { QuotaReportService } from '@/services/quotaReportService';
+import type { QuotaDescriptor, ToolProgress } from '@/types/tools';
 
 interface QuotaCheckCardProps {
-  accountId: string
-  region: string
-  disabled?: boolean
+  accountId: string;
+  region: string;
+  disabled?: boolean;
 }
 
 export function QuotaCheckCard({ accountId, region, disabled }: QuotaCheckCardProps) {
-  const [quotas, setQuotas] = useState<QuotaDescriptor[]>([])
-  const [values, setValues] = useState<Record<string, number | null>>({})
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [progress, setProgress] = useState<ToolProgress | null>(null)
-  const [hasRun, setHasRun] = useState(false)
+  const [quotas, setQuotas] = useState<QuotaDescriptor[]>([]);
+  const [values, setValues] = useState<Record<string, number | null>>({});
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [progress, setProgress] = useState<ToolProgress | null>(null);
+  const [hasRun, setHasRun] = useState(false);
 
   const handleCheck = async () => {
-    setLoading(true)
-    setError(null)
-    setHasRun(true)
+    setLoading(true);
+    setError(null);
+    setHasRun(true);
     try {
       const result = await QuotaReportService.checkSingleAccountQuotas({
         accountId,
         region,
         onProgress: setProgress,
-      })
-      setQuotas(result.quotas)
-      setValues(result.values)
+      });
+      setQuotas(result.quotas);
+      setValues(result.values);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to check quotas')
+      setError(err instanceof Error ? err.message : 'Failed to check quotas');
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
+  };
 
-  const priorityQuotas = quotas.filter(q => q.isPriority)
-  const otherQuotas = quotas.filter(q => !q.isPriority)
+  const priorityQuotas = quotas.filter((q) => q.isPriority);
+  const otherQuotas = quotas.filter((q) => !q.isPriority);
 
   const formatValue = (v: number | null | undefined): string => {
-    if (v === null || v === undefined) return '-'
-    return v.toLocaleString()
-  }
+    if (v === null || v === undefined) return '-';
+    return v.toLocaleString();
+  };
 
   const renderQuotaRows = (items: QuotaDescriptor[], highlight: boolean) =>
-    items.map(q => (
+    items.map((q) => (
       <tr key={q.QuotaCode} className={highlight ? 'table-success' : ''}>
-        <td className={highlight ? 'fw-semibold' : ''} title={q.QuotaName}>{q.Model}</td>
+        <td className={highlight ? 'fw-semibold' : ''} title={q.QuotaName}>
+          {q.Model}
+        </td>
         <td>{q.Type}</td>
         <td>{q.Metric === 'requests-per-minute' ? 'RPM' : 'TPM'}</td>
         <td className="text-end">{formatValue(values[q.QuotaCode])}</td>
       </tr>
-    ))
+    ));
 
   return (
     <Card className="border-0 shadow-sm mt-4">
@@ -75,7 +77,10 @@ export function QuotaCheckCard({ accountId, region, disabled }: QuotaCheckCardPr
             disabled={disabled || loading || !accountId || !region}
           >
             {loading ? (
-              <><Spinner size="sm" className="me-1" />Checking...</>
+              <>
+                <Spinner size="sm" className="me-1" />
+                Checking...
+              </>
             ) : hasRun ? (
               'Re-check'
             ) : (
@@ -111,7 +116,10 @@ export function QuotaCheckCard({ accountId, region, disabled }: QuotaCheckCardPr
               {priorityQuotas.length > 0 && (
                 <Alert variant="success" className="py-2 mb-3">
                   <strong>Key Models:</strong>{' '}
-                  {priorityQuotas.map(q => q.Model).filter((v, i, a) => a.indexOf(v) === i).join(', ')}
+                  {priorityQuotas
+                    .map((q) => q.Model)
+                    .filter((v, i, a) => a.indexOf(v) === i)
+                    .join(', ')}
                   <div className="small mt-1 text-muted">Good RPM value is 50+</div>
                 </Alert>
               )}
@@ -132,7 +140,9 @@ export function QuotaCheckCard({ accountId, region, disabled }: QuotaCheckCardPr
                         <tr style={{ backgroundColor: 'var(--bs-success-bg-subtle)' }}>
                           <td colSpan={4} className="fw-bold py-1 px-3 small">
                             Priority Models (4.5/4.6)
-                            <Badge bg="success" className="ms-2">{priorityQuotas.length}</Badge>
+                            <Badge bg="success" className="ms-2">
+                              {priorityQuotas.length}
+                            </Badge>
                           </td>
                         </tr>
                         {renderQuotaRows(priorityQuotas, true)}
@@ -143,7 +153,9 @@ export function QuotaCheckCard({ accountId, region, disabled }: QuotaCheckCardPr
                         <tr style={{ backgroundColor: 'var(--bs-light)' }}>
                           <td colSpan={4} className="fw-bold py-1 px-3 small text-muted">
                             Other Models
-                            <Badge bg="secondary" className="ms-2">{otherQuotas.length}</Badge>
+                            <Badge bg="secondary" className="ms-2">
+                              {otherQuotas.length}
+                            </Badge>
                           </td>
                         </tr>
                         {renderQuotaRows(otherQuotas, false)}
@@ -157,5 +169,5 @@ export function QuotaCheckCard({ accountId, region, disabled }: QuotaCheckCardPr
         </Card.Body>
       )}
     </Card>
-  )
+  );
 }

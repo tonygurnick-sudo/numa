@@ -397,7 +397,7 @@ const CrmMirrorView = (): React.JSX.Element => {
         break;
       case 'at_risk':
         result = result.filter((c) =>
-          c.flags.some((f) => f.toLowerCase().includes('at_risk') || f.toLowerCase().includes('at-risk')),
+          c.flags.some((f) => f.toLowerCase().includes('at_risk') || f.toLowerCase().includes('at-risk'))
         );
         break;
       case 'prospects':
@@ -418,11 +418,11 @@ const CrmMirrorView = (): React.JSX.Element => {
       all: customers.length,
       active_tickets: customers.filter((c) => c.openTicketCount > 0).length,
       at_risk: customers.filter((c) =>
-        c.flags.some((f) => f.toLowerCase().includes('at_risk') || f.toLowerCase().includes('at-risk')),
+        c.flags.some((f) => f.toLowerCase().includes('at_risk') || f.toLowerCase().includes('at-risk'))
       ).length,
       prospects: stages.length > 0 ? customers.filter((c) => c.lifecycleStage === stages[0].id).length : 0,
     }),
-    [customers, stages],
+    [customers, stages]
   );
 
   // ── Create customer ───────────────────────────────────────────────────────
@@ -464,7 +464,7 @@ const CrmMirrorView = (): React.JSX.Element => {
     (event: DragStartEvent) => {
       setActiveCustomer(filteredCustomers.find((c) => c.id === event.active.id) ?? null);
     },
-    [filteredCustomers],
+    [filteredCustomers]
   );
 
   const handleDragOver = useCallback(
@@ -508,7 +508,7 @@ const CrmMirrorView = (): React.JSX.Element => {
         });
       });
     },
-    [customers],
+    [customers]
   );
 
   const handleDragEnd = useCallback(
@@ -559,7 +559,7 @@ const CrmMirrorView = (): React.JSX.Element => {
       if (customer.lifecycleStage === newStageId && customer.order === newOrder) return;
 
       setCustomers((prev) =>
-        prev.map((c) => (c.id === customer.id ? { ...c, lifecycleStage: newStageId!, order: newOrder } : c)),
+        prev.map((c) => (c.id === customer.id ? { ...c, lifecycleStage: newStageId!, order: newOrder } : c))
       );
 
       try {
@@ -569,7 +569,7 @@ const CrmMirrorView = (): React.JSX.Element => {
         await loadCustomers();
       }
     },
-    [customers, numaPut, loadCustomers],
+    [customers, numaPut, loadCustomers]
   );
 
   // ── Grouped by stage ──────────────────────────────────────────────────────
@@ -578,7 +578,7 @@ const CrmMirrorView = (): React.JSX.Element => {
     for (const stage of stages) {
       map.set(
         stage.id,
-        filteredCustomers.filter((c) => c.lifecycleStage === stage.id).sort((a, b) => (a.order ?? 0) - (b.order ?? 0)),
+        filteredCustomers.filter((c) => c.lifecycleStage === stage.id).sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
       );
     }
     return map;

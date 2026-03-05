@@ -69,7 +69,7 @@ async function fetchHistory(clientId: string): Promise<BrandingVersionSummary[]>
       },
       ScanIndexForward: false,
       Limit: HISTORY_LIMIT,
-    }),
+    })
   );
 
   const items = (queryRes.Items as Record<string, unknown>[] | undefined) ?? [];
@@ -146,7 +146,7 @@ async function presignBrandingAssets(config: Record<string, unknown>): Promise<R
   await Promise.all(
     assetKeys.map(async (key) => {
       presignedAssets[key] = await presignS3Uri(assets[key]);
-    }),
+    })
   );
 
   return {
@@ -207,7 +207,7 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
         new GetCommand({
           TableName: TABLE_NAME,
           Key: { client_id: clientId, config_id: versionKey },
-        }),
+        })
       );
 
       if (!versionRes.Item) {
@@ -241,7 +241,7 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
         new GetCommand({
           TableName: TABLE_NAME,
           Key: { client_id: clientId, config_id: CURRENT_CONFIG_ID },
-        }),
+        })
       );
       if (!getRes.Item) {
         // No record → return 404 with minimal default indicator
@@ -332,7 +332,7 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
         new GetCommand({
           TableName: TABLE_NAME,
           Key: { client_id: clientId, config_id: versionKey },
-        }),
+        })
       );
 
       if (!versionRes.Item) {
@@ -344,7 +344,7 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
       const configWithoutFlag: BrandingPayload =
         versionConfigRaw && typeof versionConfigRaw === 'object'
           ? Object.fromEntries(
-              Object.entries(versionConfigRaw as Record<string, unknown>).filter(([key]) => key !== 'createVersion'),
+              Object.entries(versionConfigRaw as Record<string, unknown>).filter(([key]) => key !== 'createVersion')
             )
           : {};
 

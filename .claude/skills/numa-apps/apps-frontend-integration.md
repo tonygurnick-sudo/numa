@@ -116,27 +116,27 @@ NumaAppProvider.handleRunButtonClick()
 
 ### Input Modules (Pre-run Tasks)
 
-| Component | Purpose | Value Type |
-|-----------|---------|------------|
-| `S3UploadModule.tsx` | File uploads | `FileResult[]` with `{id, name, s3_key}` |
-| `TextInputModule.tsx` | Text entry | `string` |
-| `DropdownModule.tsx` | Single select | Selection value |
-| `DropdownTableModule.tsx` | Table-based data | Object |
+| Component                 | Purpose          | Value Type                               |
+| ------------------------- | ---------------- | ---------------------------------------- |
+| `S3UploadModule.tsx`      | File uploads     | `FileResult[]` with `{id, name, s3_key}` |
+| `TextInputModule.tsx`     | Text entry       | `string`                                 |
+| `DropdownModule.tsx`      | Single select    | Selection value                          |
+| `DropdownTableModule.tsx` | Table-based data | Object                                   |
 
 ### Output Modules (Post-run Tasks)
 
-| Component | Purpose |
-|-----------|---------|
-| `TextOutputModule.tsx` | Static text display |
-| `ResultsRenderer.tsx` | Renders `job.results` array with content_type handling |
+| Component              | Purpose                                                |
+| ---------------------- | ------------------------------------------------------ |
+| `TextOutputModule.tsx` | Static text display                                    |
+| `ResultsRenderer.tsx`  | Renders `job.results` array with content_type handling |
 
 ### Navigation & Status
 
-| Component | Purpose |
-|-----------|---------|
-| `WizardNavigation.tsx` | Step bar with pre-run (inputs) and post-run (results) sections |
-| `JobHistorySidebar.tsx` | Offcanvas sidebar with paginated job list |
-| `EventStreamViewer.tsx` | Real-time event log display |
+| Component               | Purpose                                                        |
+| ----------------------- | -------------------------------------------------------------- |
+| `WizardNavigation.tsx`  | Step bar with pre-run (inputs) and post-run (results) sections |
+| `JobHistorySidebar.tsx` | Offcanvas sidebar with paginated job list                      |
+| `EventStreamViewer.tsx` | Real-time event log display                                    |
 
 ---
 
@@ -248,21 +248,21 @@ useEffect(() => {
 
 ## 7. File Locations Summary
 
-| File Path | Purpose |
-|-----------|---------|
-| `/numa-frontend/src/Pages/AppDetail.tsx` | Main app page (loads manifest, renders wizard) |
-| `/numa-frontend/src/Services/jobsApi.tsx` | Job CRUD operations |
-| `/numa-frontend/src/Services/manifestService.ts` | App catalog (cached JSON) |
-| `/numa-frontend/src/Components/Apps/AppWizard.tsx` | Multi-step form with run button logic |
-| `/numa-frontend/src/Modules/S3UploadModule.tsx` | File upload input |
-| `/numa-frontend/src/Modules/TextInputModule.tsx` | Text input |
-| `/numa-frontend/src/Components/Renderers/ResultsRenderer.tsx` | Output rendering |
-| `/numa-frontend/src/Components/WizardNavigation.tsx` | Step indicator & run button UI |
-| `/numa-frontend/src/Components/JobHistorySidebar.tsx` | Job history list with pagination |
-| `/numa-frontend/src/Components/EventStreamViewer.tsx` | Real-time event log display |
-| `/numa-frontend/src/Providers/NumaAppContext.tsx` | Context definition |
-| `/numa-frontend/src/Providers/NumaAppProvider.tsx` | State management & polling logic |
-| `/numa-frontend/src/types/apps.ts` | TypeScript interfaces |
+| File Path                                                     | Purpose                                        |
+| ------------------------------------------------------------- | ---------------------------------------------- |
+| `/numa-frontend/src/Pages/AppDetail.tsx`                      | Main app page (loads manifest, renders wizard) |
+| `/numa-frontend/src/Services/jobsApi.tsx`                     | Job CRUD operations                            |
+| `/numa-frontend/src/Services/manifestService.ts`              | App catalog (cached JSON)                      |
+| `/numa-frontend/src/Components/Apps/AppWizard.tsx`            | Multi-step form with run button logic          |
+| `/numa-frontend/src/Modules/S3UploadModule.tsx`               | File upload input                              |
+| `/numa-frontend/src/Modules/TextInputModule.tsx`              | Text input                                     |
+| `/numa-frontend/src/Components/Renderers/ResultsRenderer.tsx` | Output rendering                               |
+| `/numa-frontend/src/Components/WizardNavigation.tsx`          | Step indicator & run button UI                 |
+| `/numa-frontend/src/Components/JobHistorySidebar.tsx`         | Job history list with pagination               |
+| `/numa-frontend/src/Components/EventStreamViewer.tsx`         | Real-time event log display                    |
+| `/numa-frontend/src/Providers/NumaAppContext.tsx`             | Context definition                             |
+| `/numa-frontend/src/Providers/NumaAppProvider.tsx`            | State management & polling logic               |
+| `/numa-frontend/src/types/apps.ts`                            | TypeScript interfaces                          |
 
 ---
 
@@ -289,11 +289,7 @@ const handleRunButtonClick = async () => {
   setAppRunning(true);
 
   // Create job record
-  const jobResponse = await jobsApi.createJob(
-    numaAppData,
-    taskInputValues,
-    runName || undefined
-  );
+  const jobResponse = await jobsApi.createJob(numaAppData, taskInputValues, runName || undefined);
 
   setCurrentJobId(jobResponse.jobId);
 
@@ -301,7 +297,7 @@ const handleRunButtonClick = async () => {
   const { status, result } = await pollJobStatus({
     jobId: jobResponse.jobId,
     pollInterval: 10000,
-    maxPollingTime: 1800000
+    maxPollingTime: 1800000,
   });
 
   if (status === 'completed') {
@@ -330,10 +326,7 @@ const { jobEvents, appRunning } = useNumaApp();
 
 ```typescript
 const loadAppJobs = async () => {
-  const { items, nextToken } = await jobsApi.getJobsByAppId(
-    numaAppData.id,
-    { limit: 20, sortOrder: 'desc' }
-  );
+  const { items, nextToken } = await jobsApi.getJobsByAppId(numaAppData.id, { limit: 20, sortOrder: 'desc' });
   setJobHistory(items);
   setHasMoreJobs(!!nextToken);
 };
@@ -346,6 +339,7 @@ const loadAppJobs = async () => {
 To add a new input type:
 
 1. **Create the module** in `/numa-frontend/src/Modules/`:
+
    ```typescript
    // MyNewInputModule.tsx
    interface MyNewInputModuleProps {
@@ -363,6 +357,7 @@ To add a new input type:
    ```
 
 2. **Register in AppWizard** task renderer:
+
    ```typescript
    // In AppWizard.tsx or task renderer
    case 'my-new-input':
@@ -370,6 +365,7 @@ To add a new input type:
    ```
 
 3. **Add type constant** in `/infra/constructs/types.ts`:
+
    ```typescript
    export const MY_NEW_INPUT_TASK = 'my-new-input';
    ```
@@ -383,6 +379,6 @@ To add a new input type:
        title: 'My Input',
        required: true,
        order: 1,
-     }
-   ]
+     },
+   ];
    ```

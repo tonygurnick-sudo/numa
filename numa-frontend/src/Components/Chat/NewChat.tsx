@@ -275,12 +275,12 @@ const NewChat = ({
       window.removeEventListener(
         'dragenter',
         blockDefault as EventListener,
-        { capture: true } as AddEventListenerOptions,
+        { capture: true } as AddEventListenerOptions
       );
       window.removeEventListener(
         'dragover',
         blockDefault as EventListener,
-        { capture: true } as AddEventListenerOptions,
+        { capture: true } as AddEventListenerOptions
       );
       window.removeEventListener('drop', blockDefault as EventListener, { capture: true } as AddEventListenerOptions);
     };
@@ -666,7 +666,7 @@ const NewChat = ({
                                     handleRename(
                                       e,
                                       convo.conversation_id,
-                                      convo.conversationName || t('newChat.untitled'),
+                                      convo.conversationName || t('newChat.untitled')
                                     )
                                   }
                                   style={{ lineHeight: 1 }}
@@ -890,7 +890,7 @@ const NewChat = ({
                                     handleRename(
                                       e,
                                       convo.conversation_id,
-                                      convo.conversationName || t('newChat.untitled'),
+                                      convo.conversationName || t('newChat.untitled')
                                     )
                                   }
                                   style={{ lineHeight: 1 }}

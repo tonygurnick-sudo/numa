@@ -18,6 +18,7 @@ lambda/
 ### Use `deploy-function-url.sh` (Recommended) ⭐
 
 **Perfect for:**
+
 - AI agent integrations
 - Internal tools
 - Prototypes/MVPs
@@ -25,6 +26,7 @@ lambda/
 - When you want simplicity
 
 **Advantages:**
+
 - Simpler (one service instead of two)
 - Cheaper (~80% less expensive)
 - Faster to deploy
@@ -37,6 +39,7 @@ lambda/
 ### Use `deploy.sh`
 
 **Perfect for:**
+
 - Production SaaS APIs
 - Need rate limiting per customer
 - Need response caching
@@ -44,6 +47,7 @@ lambda/
 - Complex API management
 
 **Advantages:**
+
 - Built-in throttling and quotas
 - Response caching (reduce costs at scale)
 - Custom domains
@@ -56,18 +60,21 @@ lambda/
 ## Quick Deploy Commands
 
 ### Simplest Deployment (Function URL)
+
 ```bash
 cd /home/ubuntu/app/backend/scripts/db_clean/lambda
 ./deploy-function-url.sh
 ```
 
 ### Production Deployment (API Gateway)
+
 ```bash
 cd /home/ubuntu/app/backend/scripts/db_clean/lambda
 ./deploy.sh --memory 1024 --timeout 600
 ```
 
 ### Update Existing Function
+
 ```bash
 ./deploy-function-url.sh --update
 # or
@@ -77,6 +84,7 @@ cd /home/ubuntu/app/backend/scripts/db_clean/lambda
 ## Post-Deployment Checklist
 
 1. **Set environment variables** (required):
+
    ```bash
    aws lambda update-function-configuration \
      --function-name db-cli-lambda \
@@ -91,6 +99,7 @@ cd /home/ubuntu/app/backend/scripts/db_clean/lambda
    ```
 
 2. **Test health endpoint**:
+
    ```bash
    curl https://YOUR-URL/health
    ```
@@ -106,14 +115,14 @@ cd /home/ubuntu/app/backend/scripts/db_clean/lambda
 
 Both deployment methods expose identical endpoints:
 
-| Endpoint | Method | Purpose |
-|----------|--------|---------|
-| `/health` | GET | Health check |
-| `/query` | POST | Execute SQL (PostgreSQL) |
-| `/csv` | POST | Query CSV file |
-| `/ask` | POST | Natural language query |
-| `/investigate` | POST | Agentic investigation |
-| `/s3` | POST | Query S3 CSV |
+| Endpoint       | Method | Purpose                  |
+| -------------- | ------ | ------------------------ |
+| `/health`      | GET    | Health check             |
+| `/query`       | POST   | Execute SQL (PostgreSQL) |
+| `/csv`         | POST   | Query CSV file           |
+| `/ask`         | POST   | Natural language query   |
+| `/investigate` | POST   | Agentic investigation    |
+| `/s3`          | POST   | Query S3 CSV             |
 
 See [README.md](./README.md) for detailed API documentation.
 
@@ -159,10 +168,10 @@ print(f"Iterations: {result['iterations']}")
 
 ## Cost Comparison (1M requests/month)
 
-| Method | Lambda | Gateway/URL | Logs | Total |
-|--------|--------|-------------|------|-------|
-| **Function URL** | $20 | $0.20 | $0.50 | **~$21** |
-| **API Gateway** | $20 | $4.50 | $0.50 | **~$25** |
+| Method           | Lambda | Gateway/URL | Logs  | Total    |
+| ---------------- | ------ | ----------- | ----- | -------- |
+| **Function URL** | $20    | $0.20       | $0.50 | **~$21** |
+| **API Gateway**  | $20    | $4.50       | $0.50 | **~$25** |
 
 **Savings with Function URL: ~16%**
 
@@ -171,16 +180,19 @@ Plus Function URL is simpler to manage!
 ## Troubleshooting
 
 ### Deployment fails
+
 - Check AWS CLI is configured: `aws sts get-caller-identity`
 - Check you have required permissions
 - Check region is correct
 
 ### Function URL not working
+
 - Check auth type (NONE vs AWS_IAM)
 - Check environment variables are set
 - Check CloudWatch logs: `aws logs tail /aws/lambda/db-cli-lambda --follow`
 
 ### API Gateway 403 error
+
 - Check API key if using authentication
 - Check CORS settings
 - Check Lambda permissions

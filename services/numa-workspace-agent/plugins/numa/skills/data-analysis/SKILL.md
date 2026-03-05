@@ -1,6 +1,6 @@
 ---
 name: data-analysis
-description: "Optimize performance for large dataset analysis. Use when working with files over 50MB, running multiple queries, or when pandas operations are slow. Covers SQLite conversion for 100x+ speedups and basic matplotlib charts."
+description: 'Optimize performance for large dataset analysis. Use when working with files over 50MB, running multiple queries, or when pandas operations are slow. Covers SQLite conversion for 100x+ speedups and basic matplotlib charts.'
 ---
 
 # Data Analysis Optimization Skill
@@ -23,11 +23,11 @@ Is your file > 50MB?
 
 ## Performance Comparison
 
-| Approach | Query Time (1M rows) | Memory Usage | Best For |
-|----------|---------------------|--------------|----------|
-| pandas (naive) | 45-60s/query | High (full dataset in RAM) | Small files, single queries |
-| pandas (optimized) | 15-30s/query | Medium | Medium files, few queries |
-| **SQLite** | **0.3-0.5s/query** | Low (disk-based) | Large files, multiple queries |
+| Approach           | Query Time (1M rows) | Memory Usage               | Best For                      |
+| ------------------ | -------------------- | -------------------------- | ----------------------------- |
+| pandas (naive)     | 45-60s/query         | High (full dataset in RAM) | Small files, single queries   |
+| pandas (optimized) | 15-30s/query         | Medium                     | Medium files, few queries     |
+| **SQLite**         | **0.3-0.5s/query**   | Low (disk-based)           | Large files, multiple queries |
 
 ---
 
@@ -298,6 +298,7 @@ print(df_sample.describe())
 **Default to HTML** unless the user specifically asks for a chart/graph or the data is best represented as one.
 
 ### Use HTML (`.html`) when:
+
 - Dashboards, boards, status views (e.g., sprint boards, kanban, project overviews)
 - Reports with mixed content (tables, metrics, cards, progress bars)
 - Layouts with interactive elements (clickable items, hover tooltips, expandable sections)
@@ -305,6 +306,7 @@ print(df_sample.describe())
 - The user says "visualize" or "represent" something that isn't inherently a chart
 
 ### Use matplotlib/PNG (`.png`) when:
+
 - The user explicitly asks for a "chart", "graph", or "plot"
 - The data is best shown as a bar chart, line chart, pie chart, scatter plot, histogram, etc.
 - Comparing numeric values across categories or over time
@@ -634,13 +636,13 @@ conn.close()
 
 ## Common Issues
 
-| Issue | Solution |
-|-------|----------|
-| "SQLite query still slow" | Create an INDEX on the columns you're filtering/grouping by |
-| "Memory error loading CSV" | Use `chunksize` parameter or read directly to SQLite |
-| "Matplotlib figure not showing" | Use `plt.savefig()` then close with `plt.close()` |
-| "Database locked" | Close other connections, use single connection |
-| "Date comparisons not working" | Ensure dates are in 'YYYY-MM-DD' format |
+| Issue                           | Solution                                                    |
+| ------------------------------- | ----------------------------------------------------------- |
+| "SQLite query still slow"       | Create an INDEX on the columns you're filtering/grouping by |
+| "Memory error loading CSV"      | Use `chunksize` parameter or read directly to SQLite        |
+| "Matplotlib figure not showing" | Use `plt.savefig()` then close with `plt.close()`           |
+| "Database locked"               | Close other connections, use single connection              |
+| "Date comparisons not working"  | Ensure dates are in 'YYYY-MM-DD' format                     |
 
 ---
 

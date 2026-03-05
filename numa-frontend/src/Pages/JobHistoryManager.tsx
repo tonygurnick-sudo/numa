@@ -333,7 +333,7 @@ const JobHistoryManager = () => {
       { key: 'apps', label: t('jobHistory.filters.jobType.apps') },
       { key: 'agents', label: t('jobHistory.filters.jobType.agents') },
     ],
-    [t],
+    [t]
   );
 
   const appFilterOptions = useMemo(
@@ -343,7 +343,7 @@ const JobHistoryManager = () => {
         .filter((app) => app.id !== 'policy-builder-app' && app.id !== 'policy-reviewer-app')
         .map((app) => ({ value: app.id, label: app.appName || app.id })),
     ],
-    [manifestApps, t],
+    [manifestApps, t]
   );
 
   const statusFilterOptions = useMemo(
@@ -354,7 +354,7 @@ const JobHistoryManager = () => {
       { value: 'failed', label: t('jobHistory.status.failed') },
       { value: 'files-uploaded', label: t('jobHistory.status.filesUploaded') },
     ],
-    [t],
+    [t]
   );
 
   const agentFilterOptions = useMemo(() => {

@@ -1,16 +1,16 @@
-import { Table, Button, Badge } from 'react-bootstrap'
-import { PencilSquare } from 'react-bootstrap-icons'
-import { Client, getStatusBadgeInfo } from '@/types'
-import type { ClientMetadata } from '@/types'
-import { groupClientsByType } from '@/services/clientService'
+import { Table, Button, Badge } from 'react-bootstrap';
+import { PencilSquare } from 'react-bootstrap-icons';
+import { Client, getStatusBadgeInfo } from '@/types';
+import type { ClientMetadata } from '@/types';
+import { groupClientsByType } from '@/services/clientService';
 
 interface ClientTableGroupProps {
-  clients: Client[]
-  selectedClient?: Client
-  onSelectClient?: (client: Client) => void
-  onUpdateClient?: (client: Client) => void
-  searchTerm?: string
-  metadataMap?: Map<string, ClientMetadata>
+  clients: Client[];
+  selectedClient?: Client;
+  onSelectClient?: (client: Client) => void;
+  onUpdateClient?: (client: Client) => void;
+  searchTerm?: string;
+  metadataMap?: Map<string, ClientMetadata>;
 }
 
 export function ClientTableGroup({
@@ -23,52 +23,46 @@ export function ClientTableGroup({
 }: ClientTableGroupProps) {
   // Filter clients by search term if provided
   const filteredClients = searchTerm
-    ? clients.filter(c => c.name.toLowerCase().includes(searchTerm.toLowerCase()))
-    : clients
+    ? clients.filter((c) => c.name.toLowerCase().includes(searchTerm.toLowerCase()))
+    : clients;
 
-  const { devClients, productionClients } = groupClientsByType(filteredClients)
+  const { devClients, productionClients } = groupClientsByType(filteredClients);
 
   const renderClientRow = (client: Client) => {
-    const badgeInfo = getStatusBadgeInfo(metadataMap?.get(client.name))
+    const badgeInfo = getStatusBadgeInfo(metadataMap?.get(client.name));
     return (
-    <tr
-      key={client.name}
-      className={selectedClient?.name === client.name ? 'table-primary' : ''}
-    >
-      <td
-        className="fw-semibold text-truncate"
-        title={client.name}
-        role="button"
-        onClick={() => onSelectClient?.(client)}
-      >
-        {client.name}
-        {badgeInfo && (
-          <Badge bg={badgeInfo.variant} className="ms-2" style={{ fontSize: '0.65rem' }}>
-            {badgeInfo.label}
-          </Badge>
-        )}
-      </td>
-      <td
-        role="button"
-        onClick={() => onSelectClient?.(client)}
-      >
-        {client.config.region}
-      </td>
-      <td className="text-center" style={{ width: '100px' }}>
-        <Button
-          size="sm"
-          variant="outline-primary"
-          onClick={(e) => {
-            e.stopPropagation()
-            onUpdateClient?.(client)
-          }}
+      <tr key={client.name} className={selectedClient?.name === client.name ? 'table-primary' : ''}>
+        <td
+          className="fw-semibold text-truncate"
+          title={client.name}
+          role="button"
+          onClick={() => onSelectClient?.(client)}
         >
-          <PencilSquare size={14} />
-        </Button>
-      </td>
-    </tr>
-    )
-  }
+          {client.name}
+          {badgeInfo && (
+            <Badge bg={badgeInfo.variant} className="ms-2" style={{ fontSize: '0.65rem' }}>
+              {badgeInfo.label}
+            </Badge>
+          )}
+        </td>
+        <td role="button" onClick={() => onSelectClient?.(client)}>
+          {client.config.region}
+        </td>
+        <td className="text-center" style={{ width: '100px' }}>
+          <Button
+            size="sm"
+            variant="outline-primary"
+            onClick={(e) => {
+              e.stopPropagation();
+              onUpdateClient?.(client);
+            }}
+          >
+            <PencilSquare size={14} />
+          </Button>
+        </td>
+      </tr>
+    );
+  };
 
   const renderSectionHeader = (title: string) => (
     <tr style={{ backgroundColor: 'var(--bs-primary-bg-subtle)' }}>
@@ -76,9 +70,9 @@ export function ClientTableGroup({
         {title}
       </td>
     </tr>
-  )
+  );
 
-  const hasResults = devClients.length > 0 || productionClients.length > 0
+  const hasResults = devClients.length > 0 || productionClients.length > 0;
 
   return (
     <Table hover responsive className="mb-0 w-100">
@@ -86,7 +80,9 @@ export function ClientTableGroup({
         <tr>
           <th style={{ width: '50%' }}>Client</th>
           <th style={{ width: '35%' }}>Region</th>
-          <th style={{ width: '15%' }} className="text-center">Actions</th>
+          <th style={{ width: '15%' }} className="text-center">
+            Actions
+          </th>
         </tr>
       </thead>
       <tbody>
@@ -115,5 +111,5 @@ export function ClientTableGroup({
         )}
       </tbody>
     </Table>
-  )
+  );
 }

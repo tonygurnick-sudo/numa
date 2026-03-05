@@ -28,12 +28,14 @@ const lambda = withPRM(LambdaClient, { region: 'us-west-2' });
 ### Replace existing SDK v3 calls
 
 **Before:**
+
 ```typescript
 import { S3Client } from '@aws-sdk/client-s3';
 const s3 = new S3Client({ region: 'us-east-1' });
 ```
 
 **After:**
+
 ```typescript
 import { S3Client } from '@aws-sdk/client-s3';
 import { withPRM } from '@numa/prm';
@@ -43,6 +45,7 @@ const s3 = withPRM(S3Client, { region: 'us-east-1' });
 ## Configuration
 
 The product code is defined in `prm.ts`:
+
 ```typescript
 export const PRODUCT_CODE = 'cl23v3vsno0k35czlg7e3ld9p';
 ```

@@ -46,10 +46,10 @@ This enables warnings when checking out or branching from `main` instead of `dev
 
 ### Branches
 
-| Branch | Purpose | Deploy |
-|--------|---------|--------|
-| `dev` | Integration branch. Feature branches merge here via MR. | Optional deploy to `arcanum-demo` via manual pipeline gate. |
-| `main` | Production release branch. `dev` merges here when ready. | Full pipeline: package, build, deploy to all customers. |
+| Branch | Purpose                                                  | Deploy                                                      |
+| ------ | -------------------------------------------------------- | ----------------------------------------------------------- |
+| `dev`  | Integration branch. Feature branches merge here via MR.  | Optional deploy to `arcanum-demo` via manual pipeline gate. |
+| `main` | Production release branch. `dev` merges here when ready. | Full pipeline: package, build, deploy to all customers.     |
 
 ### Day-to-day workflow
 

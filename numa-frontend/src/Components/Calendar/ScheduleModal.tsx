@@ -77,7 +77,7 @@ export const ScheduleModal: React.FC<ScheduleModalProps> = ({
       { label: t('scheduling.scheduleModal.commonCron.weeklyFriday'), value: 'cron(0 17 ? * FRI *)' },
       { label: t('scheduling.scheduleModal.commonCron.monthlyFirst'), value: 'cron(0 9 1 * ? *)' },
     ],
-    [t],
+    [t]
   );
   const availableApps = useMemo(
     () => [
@@ -86,7 +86,7 @@ export const ScheduleModal: React.FC<ScheduleModalProps> = ({
       { id: 'candidate-screening', name: t('scheduling.scheduleModal.apps.candidateScreening') },
       { id: 'financial-analysis', name: t('scheduling.scheduleModal.apps.financialAnalysis') },
     ],
-    [t],
+    [t]
   );
 
   const isEditing = Boolean(editSchedule);
@@ -232,7 +232,7 @@ export const ScheduleModal: React.FC<ScheduleModalProps> = ({
       onScheduleUpdated,
       onHide,
       t,
-    ],
+    ]
   );
 
   const handleClose = useCallback(() => {

@@ -7,7 +7,7 @@ describe('getAppConfigsToDeploy', () => {
   const reducedAppLibrary = Object.fromEntries(
     Object.entries(appLibrary).filter(([appId]) => {
       return ['document-summariser', 'financial-analysis', 'nzsba-policy-builder'].includes(appId);
-    }),
+    })
   );
   const appConfigs: Record<string, UserConfigurableBaseNumaAppProps> = {
     'document-summariser': {
@@ -18,7 +18,7 @@ describe('getAppConfigsToDeploy', () => {
     const appConfigsToDeploy = getAppConfigsToDeploy(reducedAppLibrary, appConfigs, true, false, false);
     assert.deepEqual(
       appConfigsToDeploy.map(([appId, _]) => appId),
-      ['document-summariser', 'financial-analysis', 'nzsba-policy-builder'],
+      ['document-summariser', 'financial-analysis', 'nzsba-policy-builder']
     );
     assert.deepEqual(appConfigsToDeploy[0][1], { s3KeyPrefix: 'foobar' });
     assert.deepEqual(appConfigsToDeploy[1][1], {});
@@ -27,7 +27,7 @@ describe('getAppConfigsToDeploy', () => {
     const appConfigsToDeploy = getAppConfigsToDeploy(reducedAppLibrary, appConfigs, true, true, false);
     assert.deepEqual(
       appConfigsToDeploy.map(([appId, _]) => appId),
-      ['document-summariser', 'financial-analysis', 'nzsba-policy-builder'],
+      ['document-summariser', 'financial-analysis', 'nzsba-policy-builder']
     );
     assert.deepEqual(appConfigsToDeploy[0][1], { s3KeyPrefix: 'foobar' });
     assert.deepEqual(appConfigsToDeploy[1][1], {});
@@ -36,7 +36,7 @@ describe('getAppConfigsToDeploy', () => {
     const appConfigsToDeploy = getAppConfigsToDeploy(reducedAppLibrary, appConfigs, false, true, false);
     assert.deepEqual(
       appConfigsToDeploy.map(([appId, _]) => appId),
-      ['document-summariser', 'financial-analysis'],
+      ['document-summariser', 'financial-analysis']
     );
     assert.deepEqual(appConfigsToDeploy[0][1], { s3KeyPrefix: 'foobar' });
     assert.deepEqual(appConfigsToDeploy[1][1], {});
@@ -45,7 +45,7 @@ describe('getAppConfigsToDeploy', () => {
     const appConfigsToDeploy = getAppConfigsToDeploy(reducedAppLibrary, appConfigs, false, false, false);
     assert.deepEqual(
       appConfigsToDeploy.map(([appId, _]) => appId),
-      ['document-summariser'],
+      ['document-summariser']
     );
     assert.deepEqual(appConfigsToDeploy[0][1], { s3KeyPrefix: 'foobar' });
   });
@@ -53,7 +53,7 @@ describe('getAppConfigsToDeploy', () => {
     const appConfigsToDeploy = getAppConfigsToDeploy(reducedAppLibrary, appConfigs, false, false, true);
     assert.deepEqual(
       appConfigsToDeploy.map(([appId, _]) => appId),
-      ['document-summariser', 'e2e-test'],
+      ['document-summariser', 'e2e-test']
     );
     assert.deepEqual(appConfigsToDeploy[0][1], { s3KeyPrefix: 'foobar' });
     assert.deepEqual(appConfigsToDeploy[1][1], {});
@@ -67,7 +67,7 @@ describe('getAppConfigsToDeploy', () => {
     const appConfigsToDeploy = getAppConfigsToDeploy(reducedAppLibrary, specificAppConfigs, false, true, false);
     assert.deepEqual(
       appConfigsToDeploy.map(([appId, _]) => appId),
-      ['document-summariser', 'financial-analysis', 'nzsba-policy-builder'],
+      ['document-summariser', 'financial-analysis', 'nzsba-policy-builder']
     );
     assert.deepEqual(appConfigsToDeploy[0][1], {});
     assert.deepEqual(appConfigsToDeploy[1][1], {});

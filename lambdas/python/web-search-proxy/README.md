@@ -26,6 +26,7 @@ The web search functionality is implemented as follows:
 **GET** `/api/web-search`
 
 Query parameters:
+
 - `query` (required): The search query to perform
 - `max_results` (optional, default 5): Number of results to return (max 10)
 

@@ -195,7 +195,7 @@ export const PolicyBuilderDetail = () => {
           s3Client,
           '.pdf',
           userId,
-          policy.jobDetails, // Pass the job details to extract the S3 key from results
+          policy.jobDetails // Pass the job details to extract the S3 key from results
         );
         bucketName = bucket;
         key = fileKey;
@@ -588,7 +588,7 @@ export const PolicyBuilderDetail = () => {
         s3Client,
         '.md',
         userId,
-        policy.jobDetails,
+        policy.jobDetails
       );
 
       // Create the command to get the markdown content

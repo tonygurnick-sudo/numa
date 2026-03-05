@@ -209,7 +209,7 @@ const S3UploadModuleInner: ForwardRefRenderFunction<UploaderHandle, S3UploadModu
     disabled = false,
     kb_id = null,
   },
-  ref,
+  ref
 ) => {
   const {
     numaAppId,
@@ -560,7 +560,7 @@ const S3UploadModuleInner: ForwardRefRenderFunction<UploaderHandle, S3UploadModu
               numaAppData,
               {},
               'uploading',
-              createOptions,
+              createOptions
             ) as Promise<JobCreateResult>;
           }
 
@@ -613,7 +613,7 @@ const S3UploadModuleInner: ForwardRefRenderFunction<UploaderHandle, S3UploadModu
         const file = rawFiles[i];
         updateUploadStatus(
           'uploading',
-          t('uploads.uploadingFileProgress', { current: i + 1, total: rawFiles.length, name: file.name }),
+          t('uploads.uploadingFileProgress', { current: i + 1, total: rawFiles.length, name: file.name })
         );
         setUploadProgress(0);
 
@@ -681,7 +681,7 @@ const S3UploadModuleInner: ForwardRefRenderFunction<UploaderHandle, S3UploadModu
                   Key: `${s3Key}.metadata.json`,
                   Body: JSON.stringify({ metadataAttributes }),
                   ContentType: 'application/json',
-                }),
+                })
               );
             } catch (metadataError) {
               console.warn('Failed to upload metadata sidecar for chat file', metadataError);

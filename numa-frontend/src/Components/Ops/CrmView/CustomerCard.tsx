@@ -34,7 +34,7 @@ function formatCurrency(value: number | null | undefined): string {
  */
 function formatLastContactLabel(
   dateStr: string | null | undefined,
-  t: (key: string, options?: Record<string, unknown>) => string,
+  t: (key: string, options?: Record<string, unknown>) => string
 ): string {
   if (!dateStr) return t('crm.noLastContact');
 
@@ -86,7 +86,7 @@ export function CustomerCard({ customer, crmConfig, onClick }: CustomerCardProps
 
   const lastContactLabel = useMemo(
     () => formatLastContactLabel(customer.lastContactDate, t),
-    [customer.lastContactDate, t],
+    [customer.lastContactDate, t]
   );
   // Evaluate flags to display the orange dot
   const hasUpdatesOrRisk = customer.flags && customer.flags.length > 0;

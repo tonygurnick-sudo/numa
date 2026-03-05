@@ -1,342 +1,378 @@
 // Knowledge Base Management Page Styles
 
 .knowledge-base-management {
-    // Custom card styling
-    .card {
-        border-radius: 8px;
-        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
-        margin-bottom: 1.5rem;
+  // Custom card styling
+  .card {
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+    margin-bottom: 1.5rem;
 
-        .card-header {
-            background-color: var(--brand-surface, var(--color-eggplant-100));
-            border-bottom: 1px solid var(--brand-border, var(--color-eggplant-200));
-            padding: 1rem 1.25rem;
+    .card-header {
+      background-color: var(--brand-surface, var(--color-eggplant-100));
+      border-bottom: 1px solid var(--brand-border, var(--color-eggplant-200));
+      padding: 1rem 1.25rem;
 
-            .card-title {
-                color: var(--brand-primary, var(--color-eggplant-900));
-                font-weight: 600;
-            }
-        }
-
-        .card-body {
-            background-color: #fff;
-        }
-    }
-
-    // Custom tabs styling
-    .nav-tabs {
-        border-bottom: 1px solid var(--color-eggplant-200);
-
-        .nav-link {
-            color: var(--color-text-body);
-            border: none;
-            padding: 0.75rem 1rem;
-            margin-right: 0.5rem;
-            border-bottom: 2px solid transparent;
-
-            &:hover {
-                color: var(--brand-primary, var(--color-primary));
-                border-bottom: 2px solid color-mix(in srgb, var(--brand-primary, var(--color-primary)) 25%, transparent);
-            }
-
-            &.active {
-                color: var(--brand-primary, var(--color-primary));
-                background-color: transparent;
-                border-bottom: 2px solid var(--brand-primary, var(--color-primary));
-                font-weight: 500;
-            }
-        }
-    }
-
-    // Data source row styling
-    table.table {
-        tr {
-            transition: background-color 0.15s ease;
-
-            &:hover {
-                background-color: var(--color-eggplant-100);
-            }
-
-            &.table-light {
-                background-color: var(--color-bg-lightest);
-
-                &:hover {
-                    background-color: var(--color-eggplant-100);
-                }
-            }
-        }
-    }
-
-    padding-bottom: 3rem;
-
-    // File table container
-    .file-table-container {
-      width: 100%;
-      display: flex;
-      flex-direction: column;
-
-      &.scrollable {
-        .table-body-container {
-          max-height: 500px;
-          overflow-y: auto;
-        }
-      }
-
-      .table-body-container {
-        width: 100%;
-        overflow-x: hidden; // Prevent horizontal scrolling
-        border-bottom: 1px solid #dee2e6;
-      }
-
-      // Ensure header and body tables have same width
-      table {
-        width: 100%;
-        table-layout: fixed; // Important for consistent column widths
-      }
-
-      // Column width specifications
-      th, td {
-        &:nth-child(1) { width: 50%; } // Name column
-        &:nth-child(2) { width: 25%; } // Date column
-        &:nth-child(3) { width: 15%; } // Size column
-        &:nth-child(4), &:nth-child(5) { width: 10%; } // Status/Select column
-      }
-    }
-
-    // Search input container
-    .search-container {
-      max-width: 300px;
-    }
-
-    // Empty state styling
-    .empty-state {
-      padding: 1rem;
-    }
-
-    // Action bar styling
-    .sticky-action-bar {
-      transition: opacity 0.2s ease-in-out, background-color 0.2s ease-in-out;
-
-      &.no-selection {
-        opacity: 0.7;
-        background-color: #f8f9fa !important;
-      }
-    }
-
-    // Main file table
-    .file-table {
-      table-layout: fixed;
-      background-color: #fff;
-      min-width: 100%;
-      margin-bottom: 0; // Remove bottom margin to prevent gaps
-
-      th {
-        cursor: default;
-        position: sticky;
-        top: 0;
-        background-color: var(--brand-surface, var(--color-eggplant-100));
-        z-index: 10;
-        border-bottom: 2px solid var(--brand-border, var(--color-eggplant-200));
+      .card-title {
         color: var(--brand-primary, var(--color-eggplant-900));
         font-weight: 600;
-
-        &.sortable-header {
-          cursor: pointer;
-          user-select: none;
-          transition: background-color 0.2s;
-
-          &:hover {
-            background-color: #e9ecef;
-          }
-
-          i {
-            color: #4b007d;
-          }
-        }
-
-        &.col-name {
-          width: 60%;
-
-          &.with-error-column {
-            width: 50%;
-          }
-        }
-
-        &.col-date {
-          width: 20%;
-        }
-
-        &.col-size {
-          width: 10%;
-        }
-
-        &.col-status {
-          width: 10%;
-        }
-
-        &.col-select {
-          width: 10%;
-        }
       }
     }
 
-    // Tree structure indentation and styling
-    .file-tree-item {
-      display: flex;
-      align-items: center;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      width: 100%;
-
-      // Icons should not shrink
-      i, .file-icon-spacer {
-        flex-shrink: 0;
-      }
-
-      // File/folder name should truncate
-      strong, span:not(.badge) {
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-      }
-
-      // Dynamic indentation levels
-      &.depth-0 { padding-left: 0; }
-      &.depth-1 { padding-left: 20px; }
-      &.depth-2 { padding-left: 40px; }
-      &.depth-3 { padding-left: 60px; }
-      &.depth-4 { padding-left: 80px; }
-      &.depth-5 { padding-left: 100px; }
-      &.depth-6 { padding-left: 120px; }
-      &.depth-7 { padding-left: 140px; }
-      &.depth-8 { padding-left: 160px; }
-      &.depth-9 { padding-left: 180px; }
-    }
-
-    // Folder toggle chevron
-    .folder-toggle {
-      cursor: pointer;
-    }
-
-    // Icon spacing
-    .file-icon-spacer {
-      margin-left: 1rem;
-    }
-
-    // File and folder icons
-    .folder-icon {
-      color: var(--brand-primary, var(--color-primary));
-    }
-
-    .file-icon {
-      color: #000;
-    }
-
-    // Failed documents section
-    .failed-documents-container {
-      overflow-x: auto;
-      overflow-y: auto;
-      width: 100%;
-      max-height: 400px;
-    }
-
-    .failed-documents-table {
-      table-layout: fixed;
+    .card-body {
       background-color: #fff;
-      min-width: 100%;
-
-      th {
-        &.col-failed-name {
-          width: 40%;
-        }
-
-        &.col-failed-error {
-          width: 40%;
-        }
-
-        &.col-failed-date {
-          width: 20%;
-        }
-      }
-
-      .failed-document-name {
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        max-width: 200px;
-      }
-
-      .failed-error-message {
-
-        overflow-x: auto;
-      }
     }
+  }
 
-    // Sticky table header
-    .sticky-table-header {
-      position: sticky;
-      top: 0;
-      z-index: 1;
-      background-color: #fff;
-      border-bottom: 2px solid #dee2e6;
-    }
+  // Custom tabs styling
+  .nav-tabs {
+    border-bottom: 1px solid var(--color-eggplant-200);
 
-    // Ensure table cells in header and body have same width
-    th, td {
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
+    .nav-link {
+      color: var(--color-text-body);
+      border: none;
+      padding: 0.75rem 1rem;
+      margin-right: 0.5rem;
+      border-bottom: 2px solid transparent;
 
-    // Ensure text truncation works properly in the file tree items
-    .file-tree-item {
-      .text-truncate {
-        display: inline-block;
-        max-width: calc(100% - 30px); // Account for icons
-        vertical-align: middle;
-      }
-    }
-
-    // Sticky action bar for bulk operations
-    .sticky-action-bar {
-      position: sticky;
-      top: 0;
-      background-color: #fff;
-      z-index: 11;
-      padding-top: 8px;
-      padding-bottom: 8px;
-      border-bottom: 1px solid #dee2e6;
-      width: 100%;
-    }
-
-    // Custom styling for the fixed refresh button
-    .fixed-refresh-button {
       &:hover {
-        background-color: #f8f9fa !important;
-        color: #212529 !important;
-      }
-    }
-
-    // Checkbox styling
-    .checkbox {
-      input[type="checkbox"]:checked {
-        background-color: var(--brand-primary, var(--color-primary)) !important;
-        border-color: var(--brand-primary, var(--color-primary)) !important;
+        color: var(--brand-primary, var(--color-primary));
+        border-bottom: 2px solid color-mix(in srgb, var(--brand-primary, var(--color-primary)) 25%, transparent);
       }
 
-      input[type="checkbox"]:focus {
-        border-color: var(--brand-primary, var(--color-primary)) !important;
-        box-shadow: 0 0 0 0.25rem rgba(142, 80, 167, 0.25) !important;
+      &.active {
+        color: var(--brand-primary, var(--color-primary));
+        background-color: transparent;
+        border-bottom: 2px solid var(--brand-primary, var(--color-primary));
+        font-weight: 500;
       }
     }
   }
+
+  // Data source row styling
+  table.table {
+    tr {
+      transition: background-color 0.15s ease;
+
+      &:hover {
+        background-color: var(--color-eggplant-100);
+      }
+
+      &.table-light {
+        background-color: var(--color-bg-lightest);
+
+        &:hover {
+          background-color: var(--color-eggplant-100);
+        }
+      }
+    }
+  }
+
+  padding-bottom: 3rem;
+
+  // File table container
+  .file-table-container {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+
+    &.scrollable {
+      .table-body-container {
+        max-height: 500px;
+        overflow-y: auto;
+      }
+    }
+
+    .table-body-container {
+      width: 100%;
+      overflow-x: hidden; // Prevent horizontal scrolling
+      border-bottom: 1px solid #dee2e6;
+    }
+
+    // Ensure header and body tables have same width
+    table {
+      width: 100%;
+      table-layout: fixed; // Important for consistent column widths
+    }
+
+    // Column width specifications
+    th,
+    td {
+      &:nth-child(1) {
+        width: 50%;
+      } // Name column
+      &:nth-child(2) {
+        width: 25%;
+      } // Date column
+      &:nth-child(3) {
+        width: 15%;
+      } // Size column
+      &:nth-child(4),
+      &:nth-child(5) {
+        width: 10%;
+      } // Status/Select column
+    }
+  }
+
+  // Search input container
+  .search-container {
+    max-width: 300px;
+  }
+
+  // Empty state styling
+  .empty-state {
+    padding: 1rem;
+  }
+
+  // Action bar styling
+  .sticky-action-bar {
+    transition:
+      opacity 0.2s ease-in-out,
+      background-color 0.2s ease-in-out;
+
+    &.no-selection {
+      opacity: 0.7;
+      background-color: #f8f9fa !important;
+    }
+  }
+
+  // Main file table
+  .file-table {
+    table-layout: fixed;
+    background-color: #fff;
+    min-width: 100%;
+    margin-bottom: 0; // Remove bottom margin to prevent gaps
+
+    th {
+      cursor: default;
+      position: sticky;
+      top: 0;
+      background-color: var(--brand-surface, var(--color-eggplant-100));
+      z-index: 10;
+      border-bottom: 2px solid var(--brand-border, var(--color-eggplant-200));
+      color: var(--brand-primary, var(--color-eggplant-900));
+      font-weight: 600;
+
+      &.sortable-header {
+        cursor: pointer;
+        user-select: none;
+        transition: background-color 0.2s;
+
+        &:hover {
+          background-color: #e9ecef;
+        }
+
+        i {
+          color: #4b007d;
+        }
+      }
+
+      &.col-name {
+        width: 60%;
+
+        &.with-error-column {
+          width: 50%;
+        }
+      }
+
+      &.col-date {
+        width: 20%;
+      }
+
+      &.col-size {
+        width: 10%;
+      }
+
+      &.col-status {
+        width: 10%;
+      }
+
+      &.col-select {
+        width: 10%;
+      }
+    }
+  }
+
+  // Tree structure indentation and styling
+  .file-tree-item {
+    display: flex;
+    align-items: center;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    width: 100%;
+
+    // Icons should not shrink
+    i,
+    .file-icon-spacer {
+      flex-shrink: 0;
+    }
+
+    // File/folder name should truncate
+    strong,
+    span:not(.badge) {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    // Dynamic indentation levels
+    &.depth-0 {
+      padding-left: 0;
+    }
+    &.depth-1 {
+      padding-left: 20px;
+    }
+    &.depth-2 {
+      padding-left: 40px;
+    }
+    &.depth-3 {
+      padding-left: 60px;
+    }
+    &.depth-4 {
+      padding-left: 80px;
+    }
+    &.depth-5 {
+      padding-left: 100px;
+    }
+    &.depth-6 {
+      padding-left: 120px;
+    }
+    &.depth-7 {
+      padding-left: 140px;
+    }
+    &.depth-8 {
+      padding-left: 160px;
+    }
+    &.depth-9 {
+      padding-left: 180px;
+    }
+  }
+
+  // Folder toggle chevron
+  .folder-toggle {
+    cursor: pointer;
+  }
+
+  // Icon spacing
+  .file-icon-spacer {
+    margin-left: 1rem;
+  }
+
+  // File and folder icons
+  .folder-icon {
+    color: var(--brand-primary, var(--color-primary));
+  }
+
+  .file-icon {
+    color: #000;
+  }
+
+  // Failed documents section
+  .failed-documents-container {
+    overflow-x: auto;
+    overflow-y: auto;
+    width: 100%;
+    max-height: 400px;
+  }
+
+  .failed-documents-table {
+    table-layout: fixed;
+    background-color: #fff;
+    min-width: 100%;
+
+    th {
+      &.col-failed-name {
+        width: 40%;
+      }
+
+      &.col-failed-error {
+        width: 40%;
+      }
+
+      &.col-failed-date {
+        width: 20%;
+      }
+    }
+
+    .failed-document-name {
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 200px;
+    }
+
+    .failed-error-message {
+      overflow-x: auto;
+    }
+  }
+
+  // Sticky table header
+  .sticky-table-header {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    background-color: #fff;
+    border-bottom: 2px solid #dee2e6;
+  }
+
+  // Ensure table cells in header and body have same width
+  th,
+  td {
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  // Ensure text truncation works properly in the file tree items
+  .file-tree-item {
+    .text-truncate {
+      display: inline-block;
+      max-width: calc(100% - 30px); // Account for icons
+      vertical-align: middle;
+    }
+  }
+
+  // Sticky action bar for bulk operations
+  .sticky-action-bar {
+    position: sticky;
+    top: 0;
+    background-color: #fff;
+    z-index: 11;
+    padding-top: 8px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #dee2e6;
+    width: 100%;
+  }
+
+  // Custom styling for the fixed refresh button
+  .fixed-refresh-button {
+    &:hover {
+      background-color: #f8f9fa !important;
+      color: #212529 !important;
+    }
+  }
+
+  // Checkbox styling
+  .checkbox {
+    input[type='checkbox']:checked {
+      background-color: var(--brand-primary, var(--color-primary)) !important;
+      border-color: var(--brand-primary, var(--color-primary)) !important;
+    }
+
+    input[type='checkbox']:focus {
+      border-color: var(--brand-primary, var(--color-primary)) !important;
+      box-shadow: 0 0 0 0.25rem rgba(142, 80, 167, 0.25) !important;
+    }
+  }
+}
 
 // File preview action buttons in KB file table rows
 .kb-file-action-btn {
   line-height: 1;
   color: var(--bs-secondary);
   opacity: 0.6;
-  transition: opacity 0.15s ease, color 0.15s ease;
+  transition:
+    opacity 0.15s ease,
+    color 0.15s ease;
 
   &:hover {
     opacity: 1;

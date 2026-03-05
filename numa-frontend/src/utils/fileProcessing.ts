@@ -24,7 +24,7 @@ export const processFile = async (fileInfo, authContext, getCredentials, numaPos
       fileName,
       authContext,
       getCredentials,
-      numaPost,
+      numaPost
     );
 
     // Return the processed file data
@@ -108,7 +108,7 @@ const pollS3ForFile = async (bucket, key, getCredentials) => {
   const statusKey = key.endsWith('.json') ? key.replace(/\.json$/, '.status.json') : `${key}.status.json`;
 
   console.log(
-    `Starting polling for ${key} (status: ${statusKey}) with ${POLL_INTERVAL / 1000}s intervals (max ${MAX_POLL_TIME / 60000}m)`,
+    `Starting polling for ${key} (status: ${statusKey}) with ${POLL_INTERVAL / 1000}s intervals (max ${MAX_POLL_TIME / 60000}m)`
   );
 
   while (Date.now() < maxEndTime) {

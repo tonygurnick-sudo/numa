@@ -164,7 +164,7 @@ describe('AuthProvider', () => {
       <AuthProvider initialTokens={null}>
         <TestComponent onAuth={onAuth} />
       </AuthProvider>,
-      { container },
+      { container }
     );
 
     await waitFor(() => {
@@ -202,7 +202,7 @@ describe('AuthProvider', () => {
       <AuthProvider initialTokens={null}>
         <TestComponent onAuth={onAuth} />
       </AuthProvider>,
-      { container },
+      { container }
     );
 
     await waitFor(() => {
@@ -259,7 +259,7 @@ describe('AuthProvider', () => {
         }}
       >
         <TestComponent onAuth={onAuth} />
-      </TestAuthProvider>,
+      </TestAuthProvider>
     );
 
     await waitFor(() => {
@@ -280,7 +280,7 @@ describe('AuthProvider', () => {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userSub: TEST_TOKENS.expired.decoded.idToken.sub }),
-      }),
+      })
     );
 
     // Verify localStorage was updated with proper JWT tokens
@@ -336,7 +336,7 @@ describe('AuthProvider', () => {
           }}
         >
           <TestComponent onAuth={onAuth} />
-        </TestAuthProvider>,
+        </TestAuthProvider>
       );
 
       await waitFor(() => {
@@ -357,7 +357,7 @@ describe('AuthProvider', () => {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ userSub: TEST_TOKENS.expired.decoded.idToken.sub }),
-        }),
+        })
       );
 
       // Verify localStorage was updated with new tokens — this is the authoritative
@@ -386,7 +386,7 @@ describe('AuthProvider', () => {
           }}
         >
           <TestComponent onAuth={onAuth} />
-        </TestAuthProvider>,
+        </TestAuthProvider>
       );
 
       const auth = await waitFor(() => onAuth.mock.calls[0][0]);
@@ -414,7 +414,7 @@ describe('AuthProvider', () => {
       render(
         <TestAuthProvider refreshHandler={vi.fn()} initialTokens={null}>
           <TestComponent onAuth={onAuth} />
-        </TestAuthProvider>,
+        </TestAuthProvider>
       );
 
       const auth = await waitFor(() => onAuth.mock.calls[0][0]);
@@ -454,7 +454,7 @@ describe('AuthProvider', () => {
           }}
         >
           <TestComponent onAuth={onAuth} />
-        </TestAuthProvider>,
+        </TestAuthProvider>
       );
 
       await waitFor(() => {
@@ -479,7 +479,7 @@ describe('AuthProvider', () => {
       render(
         <TestAuthProvider refreshHandler={vi.fn()} initialTokens={null}>
           <TestComponent onAuth={onAuth} />
-        </TestAuthProvider>,
+        </TestAuthProvider>
       );
 
       await waitFor(() => {
@@ -535,7 +535,7 @@ describe('AuthProvider', () => {
           }}
         >
           <TestComponent onAuth={onAuth} />
-        </TestAuthProvider>,
+        </TestAuthProvider>
       );
 
       await waitFor(() => {
@@ -568,7 +568,7 @@ describe('AuthProvider', () => {
       render(
         <TestAuthProvider refreshHandler={mockRefreshHandler} initialTokens={null}>
           <TestComponent onAuth={onAuth} />
-        </TestAuthProvider>,
+        </TestAuthProvider>
       );
 
       await waitFor(() => {
@@ -602,7 +602,7 @@ describe('AuthProvider', () => {
       const { rerender } = render(
         <TestAuthProvider refreshHandler={mockRefreshHandler} initialTokens={authTestTokens.expired}>
           <TestComponent onAuth={onAuth} />
-        </TestAuthProvider>,
+        </TestAuthProvider>
       );
 
       const auth = await waitFor(() => {
@@ -626,7 +626,7 @@ describe('AuthProvider', () => {
       rerender(
         <TestAuthProvider refreshHandler={mockRefreshHandler} initialTokens={null}>
           <TestComponent onAuth={onAuth} />
-        </TestAuthProvider>,
+        </TestAuthProvider>
       );
 
       // Now check that the auth state is cleared
@@ -677,7 +677,7 @@ describe('AuthProvider', () => {
           }}
         >
           <TestComponent onAuth={onAuth} />
-        </TestAuthProvider>,
+        </TestAuthProvider>
       );
 
       await waitFor(() => {
@@ -726,7 +726,7 @@ describe('AuthProvider', () => {
           }}
         >
           <TestComponent onAuth={onAuth} />
-        </TestAuthProvider>,
+        </TestAuthProvider>
       );
 
       await waitFor(() => {
@@ -753,7 +753,7 @@ describe('AuthProvider', () => {
           }}
         >
           <TestComponent onAuth={onAuth} />
-        </TestAuthProvider>,
+        </TestAuthProvider>
       );
 
       // Wait for initial render and client initialization
@@ -798,7 +798,7 @@ describe('AuthProvider', () => {
       render(
         <TestAuthProvider refreshHandler={vi.fn()} initialTokens={null}>
           <TestComponent onAuth={onAuth} />
-        </TestAuthProvider>,
+        </TestAuthProvider>
       );
 
       const auth = await waitFor(() => onAuth.mock.calls[0][0]);
@@ -812,7 +812,7 @@ describe('AuthProvider', () => {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ email: 'test@example.com' }),
-        }),
+        })
       );
 
       expect(result).toEqual({ success: true });
@@ -828,13 +828,13 @@ describe('AuthProvider', () => {
       render(
         <TestAuthProvider refreshHandler={vi.fn()} initialTokens={null}>
           <TestComponent onAuth={onAuth} />
-        </TestAuthProvider>,
+        </TestAuthProvider>
       );
 
       const auth = await waitFor(() => onAuth.mock.calls[0][0]);
 
       await expect(auth.requestPasswordReset('test@example.com')).rejects.toThrow(
-        'Error requesting password reset: Password reset failed',
+        'Error requesting password reset: Password reset failed'
       );
     });
 
@@ -850,7 +850,7 @@ describe('AuthProvider', () => {
       render(
         <TestAuthProvider refreshHandler={vi.fn()} initialTokens={null}>
           <TestComponent onAuth={onAuth} />
-        </TestAuthProvider>,
+        </TestAuthProvider>
       );
 
       const auth = await waitFor(() => onAuth.mock.calls[0][0]);
@@ -864,7 +864,7 @@ describe('AuthProvider', () => {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ email: 'test@example.com' }),
-        }),
+        })
       );
 
       expect(result).toEqual({ success: true });
@@ -880,13 +880,13 @@ describe('AuthProvider', () => {
       render(
         <TestAuthProvider refreshHandler={vi.fn()} initialTokens={null}>
           <TestComponent onAuth={onAuth} />
-        </TestAuthProvider>,
+        </TestAuthProvider>
       );
 
       const auth = await waitFor(() => onAuth.mock.calls[0][0]);
 
       await expect(auth.confirmPasswordReset('test@example.com', '123456', 'newPassword123')).rejects.toThrow(
-        'Error resetting password: Invalid confirmation code',
+        'Error resetting password: Invalid confirmation code'
       );
     });
   });
@@ -909,7 +909,7 @@ describe('AuthProvider', () => {
       <AuthProvider initialTokens={null}>
         <TestComponent onAuth={onAuth} />
       </AuthProvider>,
-      { container },
+      { container }
     );
 
     await waitFor(() => {
@@ -931,7 +931,7 @@ describe('AuthProvider', () => {
       expect.stringContaining('/srp-hasher'),
       expect.objectContaining({
         body: JSON.stringify({ email: mockUser.username.toLowerCase() }),
-      }),
+      })
     );
   });
 
@@ -949,7 +949,7 @@ describe('AuthProvider', () => {
       <AuthProvider initialTokens={null}>
         <TestComponent onAuth={onAuth} />
       </AuthProvider>,
-      { container },
+      { container }
     );
 
     await waitFor(() => {
@@ -971,7 +971,7 @@ describe('AuthProvider', () => {
       expect.stringContaining('/srp-hasher'),
       expect.objectContaining({
         body: JSON.stringify({ email: mockEmail.toLowerCase() }),
-      }),
+      })
     );
   });
 
@@ -993,7 +993,7 @@ describe('AuthProvider', () => {
       <AuthProvider initialTokens={null}>
         <TestComponent onAuth={onAuth} />
       </AuthProvider>,
-      { container },
+      { container }
     );
 
     await waitFor(() => {
@@ -1015,7 +1015,7 @@ describe('AuthProvider', () => {
       expect.stringContaining('/srp-hasher'),
       expect.objectContaining({
         body: JSON.stringify({ email: mockUser.username.toLowerCase() }),
-      }),
+      })
     );
   });
 
@@ -1089,7 +1089,7 @@ describe('AuthProvider', () => {
       render(
         <AuthProvider initialTokens={null}>
           <TestComponent onAuth={onAuth} />
-        </AuthProvider>,
+        </AuthProvider>
       );
 
       await waitFor(() => expect(onAuth).toHaveBeenCalled());
@@ -1133,7 +1133,7 @@ describe('AuthProvider', () => {
       render(
         <AuthProvider initialTokens={null}>
           <TestComponent onAuth={onAuth} />
-        </AuthProvider>,
+        </AuthProvider>
       );
 
       await waitFor(() => expect(onAuth).toHaveBeenCalled());
@@ -1168,7 +1168,7 @@ describe('AuthProvider', () => {
       render(
         <AuthProvider initialTokens={null}>
           <TestComponent onAuth={onAuth} />
-        </AuthProvider>,
+        </AuthProvider>
       );
 
       await waitFor(() => expect(onAuth).toHaveBeenCalled());

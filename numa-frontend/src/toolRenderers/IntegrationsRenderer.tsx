@@ -41,7 +41,7 @@ const FileDownloadButton = ({
     }) => Promise<unknown>;
   };
   setMessages?: (
-    fn: (prev: Array<{ role: string; segments?: unknown[] }>) => Array<{ role: string; segments?: unknown[] }>,
+    fn: (prev: Array<{ role: string; segments?: unknown[] }>) => Array<{ role: string; segments?: unknown[] }>
   ) => void;
 }) => {
   const { getCredentials } = useAuth() as { getCredentials: () => Promise<AwsCredentialIdentity> };
@@ -207,7 +207,7 @@ export const IntegrationsRenderer = ({
     }) => Promise<unknown>;
   };
   setMessages?: (
-    fn: (prev: Array<{ role: string; segments?: unknown[] }>) => Array<{ role: string; segments?: unknown[] }>,
+    fn: (prev: Array<{ role: string; segments?: unknown[] }>) => Array<{ role: string; segments?: unknown[] }>
   ) => void;
 }) => {
   const rawName = (result && (result.name || result.toolName)) || 'tool';

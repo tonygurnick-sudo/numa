@@ -122,7 +122,9 @@ strong {
 
 .vh-100 {
   @include mobile {
-    height: calc(100dvh - 60px - env(safe-area-inset-top, 0px)) !important; // Override Bootstrap's vh-100 with dynamic viewport height
+    height: calc(
+      100dvh - 60px - env(safe-area-inset-top, 0px)
+    ) !important; // Override Bootstrap's vh-100 with dynamic viewport height
   }
 }
 

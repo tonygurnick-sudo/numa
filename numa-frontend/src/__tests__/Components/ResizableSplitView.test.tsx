@@ -19,7 +19,7 @@ describe('ResizableSplitView Component', () => {
         showRight={true}
         leftFraction={0.5}
         onLeftFractionChange={onLeftFractionChange}
-      />,
+      />
     );
 
     // Left panel should be rendered
@@ -37,7 +37,7 @@ describe('ResizableSplitView Component', () => {
         showRight={false}
         leftFraction={0.5}
         onLeftFractionChange={onLeftFractionChange}
-      />,
+      />
     );
 
     // Left panel is still rendered
@@ -59,7 +59,7 @@ describe('ResizableSplitView Component', () => {
         onLeftFractionChange={onLeftFractionChange}
         minLeft={200}
         minRight={200}
-      />,
+      />
     );
     // Get the main container element and override its getBoundingClientRect to simulate dimensions.
     const containerDiv = container.firstChild;
@@ -95,7 +95,7 @@ describe('ResizableSplitView Component', () => {
         showRight={true}
         leftFraction={0.5}
         onLeftFractionChange={onLeftFractionChange}
-      />,
+      />
     );
     // Find the divider by its col-resize cursor
     const divider = container.querySelector('div[style*="cursor: col-resize"]');

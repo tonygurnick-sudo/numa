@@ -218,7 +218,7 @@ class KnowledgeBaseService {
 
       const data = await this.parseJsonResponse<{ kbs?: UserKB[] }>(
         response,
-        i18n.t('errors:knowledgeBase.listFailed'),
+        i18n.t('errors:knowledgeBase.listFailed')
       );
       return data.kbs || [];
     } catch (error) {
@@ -239,7 +239,7 @@ class KnowledgeBaseService {
 
       const data = await this.parseJsonResponse<{ kb: KnowledgeBase }>(
         response,
-        i18n.t('errors:knowledgeBase.detailsFailed'),
+        i18n.t('errors:knowledgeBase.detailsFailed')
       );
       return data.kb;
     } catch (error) {
@@ -261,7 +261,7 @@ class KnowledgeBaseService {
 
       const data = await this.parseJsonResponse<{ kb: KnowledgeBase }>(
         response,
-        i18n.t('errors:knowledgeBase.createFailed'),
+        i18n.t('errors:knowledgeBase.createFailed')
       );
       return data.kb;
     } catch (error) {
@@ -323,7 +323,7 @@ class KnowledgeBaseService {
 
       const result = await this.parseJsonResponse<ListKBFilesResponse>(
         response,
-        i18n.t('errors:knowledgeBase.listFilesFailed'),
+        i18n.t('errors:knowledgeBase.listFilesFailed')
       );
       // Persist to localStorage for instant load on next visit.
       // Skip caching if payload is over 500KB to avoid filling localStorage for huge KBs.

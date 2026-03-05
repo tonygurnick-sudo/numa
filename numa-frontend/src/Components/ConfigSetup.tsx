@@ -2,6 +2,8 @@ const CONFIG_CACHE_DURATION = 7 * 60 * 1000; // 7 minutes (offset from 5-minute 
 const CONFIG_TIMESTAMP_KEY = 'CONFIG_TIMESTAMP';
 const CONFIG_VERSION_STORAGE_KEY = 'NUMA_BUILD_VERSION';
 const CONFIG_VERSION_QUERY_PARAM = '_numaVersion';
+// Required properties are validated on fetch — a warning is logged if any are missing.
+// All other keys in config.json are stored dynamically (no whitelist needed).
 const CONFIG_REQUIRED_PROPERTIES = [
   'ROLE_ARN',
   'REGION',
@@ -16,7 +18,7 @@ const CONFIG_REQUIRED_PROPERTIES = [
   'PREFERRED_KNOWLEDGE_BASE',
   'BEDROCK_KNOWLEDGE_BASE_ID',
 ];
-const CONFIG_OPTIONAL_PROPERTIES = [
+const _CONFIG_OPTIONAL_PROPERTIES = [
   'Q_APPLICATION_ID',
   'Q_INDEX_ID',
   'Q_RETRIEVER_ID',
@@ -37,9 +39,13 @@ const CONFIG_OPTIONAL_PROPERTIES = [
   'NUMA_FILES', // Feature flag for Numa Files (file management)
   'WORKSPACE_CHAT_MODEL_SELECTION', // Feature flag for model selection in Chat V2
   'NUMA_OPS', // Feature flag for Numa Ops work management
-  'MFA_ENABLED', // Feature flag for MFA device trust settings
+  'SECRETS_VAULT_ENABLED', // Feature flag for Secrets Vault
+  'DEVELOPER_MODE', // Feature flag for developer actions (file detail drill-down, etc.)
+  'OAUTH_AVAILABLE', // Feature flag for OAuth file providers
+  'FILE_BROWSER_DETAIL', // Feature flag for file browser detail drill-down
+  'MFA_ENABLED', // Feature flag for multi-factor authentication
 ];
-const CONFIG_PROPERTIES = [...CONFIG_REQUIRED_PROPERTIES, ...CONFIG_OPTIONAL_PROPERTIES];
+const _CONFIG_PROPERTIES = [...CONFIG_REQUIRED_PROPERTIES, ..._CONFIG_OPTIONAL_PROPERTIES];
 
 export const fetchConfigAddtoSession = async (forceRefresh = false) => {
   // Check if we need to refresh the config
@@ -94,28 +100,42 @@ export const fetchConfigAddtoSession = async (forceRefresh = false) => {
       console.error('Missing required property in config: GROUPS');
     }
 
-    // Handle regular string properties
-    CONFIG_PROPERTIES.forEach((property) => {
-      const existing = sessionStorage.getItem(property);
-      const configValue = configData[property];
+    // Dynamically store every key from config.json into sessionStorage.
+    // No whitelist — new flags added to config.json via DynamoDB + sync
+    // are picked up automatically without a frontend redeploy.
+    for (const [property, configValue] of Object.entries(configData)) {
+      // GROUPS is handled separately above as a JSON object
+      if (property === 'GROUPS') continue;
 
-      // Handle boolean values specially
+      const existing = sessionStorage.getItem(property);
+
+      // Handle boolean values specially (feature flags)
       if (typeof configValue === 'boolean') {
         const stringValue = configValue.toString();
+        // Store raw deployment flag for capability gating (always overwrite
+        // so the Capabilities admin UI sees the true config.json value).
+        sessionStorage.setItem(`DEPLOY_${property}`, stringValue);
         if (stringValue !== existing) {
           sessionStorage.setItem(property, stringValue);
           needsRefresh = true;
         }
-      } else if (!configValue && existing) {
+      } else if (typeof configValue === 'object' && configValue !== null) {
+        // Store objects as JSON strings
+        const jsonValue = JSON.stringify(configValue);
+        if (jsonValue !== existing) {
+          sessionStorage.setItem(property, jsonValue);
+          needsRefresh = true;
+        }
+      } else if (configValue == null && existing) {
         // If a value has been removed from the config, remove it from session.
         sessionStorage.removeItem(property);
         needsRefresh = true;
-      } else if (configValue != existing) {
+      } else if (String(configValue) !== existing) {
         // If a value is different from the config, update it.
-        sessionStorage.setItem(property, configValue);
+        sessionStorage.setItem(property, String(configValue));
         needsRefresh = true;
       }
-    });
+    }
 
     // Update the timestamp to mark when config was last fetched
     sessionStorage.setItem(CONFIG_TIMESTAMP_KEY, Date.now().toString());

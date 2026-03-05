@@ -40,12 +40,14 @@ export function loadConfig(): NumaConfig {
       const config = parsed as Record<string, unknown>;
       return {
         currentEnv: typeof config['currentEnv'] === 'string' ? config['currentEnv'] : undefined,
-        environments: typeof config['environments'] === 'object' && config['environments'] !== null
-          ? config['environments'] as Record<string, EnvironmentConfig>
-          : {},
-        roles: typeof config['roles'] === 'object' && config['roles'] !== null
-          ? config['roles'] as RolesConfig
-          : undefined,
+        environments:
+          typeof config['environments'] === 'object' && config['environments'] !== null
+            ? (config['environments'] as Record<string, EnvironmentConfig>)
+            : {},
+        roles:
+          typeof config['roles'] === 'object' && config['roles'] !== null
+            ? (config['roles'] as RolesConfig)
+            : undefined,
       };
     }
 
@@ -171,4 +173,30 @@ export function saveRolesConfig(roles: RolesConfig): void {
   const config = loadConfig();
   config.roles = roles;
   saveConfig(config);
+}
+
+/**
+ * Resolve the environment config from an optional name or the current env.
+ * Exits the process with an error if neither is available.
+ */
+export function resolveEnvConfig(envName?: string): EnvironmentConfig {
+  const config = loadConfig();
+
+  if (envName) {
+    const env = config.environments[envName];
+    if (!env) {
+      console.error(`❌ Environment '${envName}' not found.`);
+      console.log('Available environments:', Object.keys(config.environments).join(', '));
+      process.exit(1);
+    }
+    return env;
+  }
+
+  const currentEnvResult = getCurrentEnv();
+  if (!currentEnvResult) {
+    console.error('❌ No current environment set.');
+    console.log('Use "numa env use <name>" to set an environment or --env <name> to specify one.');
+    process.exit(1);
+  }
+  return currentEnvResult;
 }

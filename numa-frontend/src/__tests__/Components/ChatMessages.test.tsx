@@ -57,7 +57,7 @@ describe('ChatMessages Component - Additional Tests', () => {
         loadingIndicatorStyle={loadingIndicatorStyle}
         onOpenDocument={noop}
         isConversationLoading={false}
-      />,
+      />
     );
     expect(screen.getByText('Initializing chat...')).toBeInTheDocument();
   });
@@ -77,7 +77,7 @@ describe('ChatMessages Component - Additional Tests', () => {
         loadingIndicatorStyle={loadingIndicatorStyle}
         onOpenDocument={noop}
         isConversationLoading={false}
-      />,
+      />
     );
     expect(screen.getByText('Processing Upload...')).toBeInTheDocument();
   });
@@ -97,7 +97,7 @@ describe('ChatMessages Component - Additional Tests', () => {
         loadingIndicatorStyle={loadingIndicatorStyle}
         onOpenDocument={noop}
         isConversationLoading={false}
-      />,
+      />
     );
     expect(screen.getByText('Thinking...')).toBeInTheDocument();
   });
@@ -116,7 +116,7 @@ describe('ChatMessages Component - Additional Tests', () => {
         loadingIndicatorStyle={loadingIndicatorStyle}
         onOpenDocument={noop}
         isConversationLoading={false}
-      />,
+      />
     );
     expect(screen.getByText('You:')).toBeInTheDocument();
     expect(screen.getByText('Hello, this is a user message.')).toBeInTheDocument();
@@ -137,7 +137,7 @@ describe('ChatMessages Component - Additional Tests', () => {
         loadingIndicatorStyle={loadingIndicatorStyle}
         onOpenDocument={noop}
         isConversationLoading={false}
-      />,
+      />
     );
     // Assuming that the ChatReferencesDropdown renders a button with text "Show References"
     expect(screen.getByText(/show references/i)).toBeInTheDocument();
@@ -159,7 +159,7 @@ describe('ChatMessages Component - Additional Tests', () => {
         loadingIndicatorStyle={loadingIndicatorStyle}
         onOpenDocument={noop}
         isConversationLoading={false}
-      />,
+      />
     );
     // The container should have a message with class "message-with-doc"
     const messageElement = container.querySelector('.message-with-doc');
@@ -181,7 +181,7 @@ describe('ChatMessages Component - Additional Tests', () => {
         loadingIndicatorStyle={loadingIndicatorStyle}
         onOpenDocument={noop}
         isConversationLoading={false}
-      />,
+      />
     );
     expect(screen.queryByText('Querying data sources...')).not.toBeInTheDocument();
   });
@@ -201,7 +201,7 @@ describe('ChatMessages Component - Additional Tests', () => {
         loadingIndicatorStyle={loadingIndicatorStyle}
         onOpenDocument={noop}
         isConversationLoading={false}
-      />,
+      />
     );
     expect(screen.getByText('This is segment text')).toBeInTheDocument();
     expect(screen.queryByText('Fallback content')).not.toBeInTheDocument();

@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
+import { getFlag } from '../utils/featureFlags';
 import type { TFunction } from 'i18next';
 import { useTranslation } from 'react-i18next';
 import { Container, Row, Col, Button, Alert, Spinner, Collapse, Modal } from 'react-bootstrap';
@@ -10,17 +11,11 @@ import { GenericTestConnection } from '../Components/GenericTestConnection';
 import { getIntegrationsListFormat, type IntegrationListItem } from '../config/integrationsConfig';
 import { PipedreamProxyService } from '../Services/PipedreamProxyService';
 import { AdminIntegrationsService, type GlobalIntegrationSettingsMap } from '../Services/AdminIntegrationsService';
-import {
-  AdminDataConnectorsService,
-  type GlobalDataConnectorSettingsMap,
-} from '../Services/AdminDataConnectorsService';
 import { useNumaRequest } from '../Providers/NumaRequestContext';
 import type { ConnectionStatus } from '../types/pipedream';
 import { getDefaultDenyTools } from '../config/integrationToolsDefault';
 import { PageHeader } from '../Components/PageHeader';
 import { LayoutDashboard } from '../Layouts/LayoutDashboard';
-import { DataConnectorsTab } from '../Components/DataConnectors/DataConnectorsTab';
-import { SubHeaderTabBar } from '../Components/SubHeaderTabBar';
 
 // Use the proper ConnectionStatus type from the types file
 type PipedreamConnection = ConnectionStatus & {
@@ -45,29 +40,18 @@ export const NumaIntegrations = () => {
   const [settingsError, setSettingsError] = useState<string | null>(null);
   const [availableTools, setAvailableTools] = useState<{ name: string; description?: string }[]>([]);
   const [toolToggles, setToolToggles] = useState<Record<string, boolean>>({});
-  const [activeTab, setActiveTab] = useState<'connected-apps' | 'data-connectors'>('connected-apps');
-  const dataConnectorsEnabled =
-    typeof window !== 'undefined' ? window.sessionStorage.getItem('DATA_CONNECTORS_ENABLED') === 'true' : false;
-  const tabItems = useMemo(
-    () => [
-      { key: 'connected-apps', label: t('tabs.connectedApps') },
-      ...(dataConnectorsEnabled ? [{ key: 'data-connectors', label: t('tabs.dataConnectors') }] : []),
-    ],
-    [dataConnectorsEnabled, t],
-  );
   // Version removed: last-write-wins policy
   const [recentlyConnectedApp, setRecentlyConnectedApp] = useState<string | null>(null);
   // Track per-app default policy application in-flight to avoid race in Settings
   const [defaultsApplying, setDefaultsApplying] = useState<Record<string, boolean>>({});
   // Global admin integration settings
   const [globalSettings, setGlobalSettings] = useState<GlobalIntegrationSettingsMap>({});
-  const [dataConnectorSettings, setDataConnectorSettings] = useState<GlobalDataConnectorSettingsMap>({});
 
   // Detect preview mode when integrations proxy is not configured
   useEffect(() => {
     if (!user) return;
     const relayLambdaArn = sessionStorage.getItem('PIPEDREAM_RELAY_LAMBDA_ARN');
-    const enabledFlag = sessionStorage.getItem('PIPEDREAM_INTEGRATIONS') === 'true';
+    const enabledFlag = getFlag('PIPEDREAM_INTEGRATIONS');
     if (!relayLambdaArn || !enabledFlag) {
       setPreviewMode(true);
       setLoading(false);
@@ -93,31 +77,10 @@ export const NumaIntegrations = () => {
     }
   }, [user, numaGet]);
 
-  const loadDataConnectorSettings = useCallback(async () => {
-    try {
-      if (!dataConnectorsEnabled) {
-        setDataConnectorSettings({ synergy: { status: 'disabled' } });
-        return;
-      }
-      if (!user) return;
-      const data = await AdminDataConnectorsService.listWithNuma(numaGet);
-      setDataConnectorSettings(data);
-    } catch {
-      setDataConnectorSettings({ synergy: { status: 'disabled' } });
-    }
-  }, [user, numaGet, dataConnectorsEnabled]);
-
   // Initial fetch for global settings
   useEffect(() => {
     loadGlobalSettings();
-    loadDataConnectorSettings();
-  }, [loadGlobalSettings, loadDataConnectorSettings]);
-
-  useEffect(() => {
-    if (!dataConnectorsEnabled && activeTab === 'data-connectors') {
-      setActiveTab('connected-apps');
-    }
-  }, [dataConnectorsEnabled, activeTab]);
+  }, [loadGlobalSettings]);
 
   const loadConnectionStatus = useCallback(
     async (forceRefresh = false) => {
@@ -161,7 +124,7 @@ export const NumaIntegrations = () => {
         setLoadingStatus(false);
       }
     },
-    [lambdaClient, user, loadingStatus],
+    [lambdaClient, user, loadingStatus]
   );
 
   const connectApp = async (appName: string) => {
@@ -200,8 +163,8 @@ export const NumaIntegrations = () => {
                     pipedream_account_id: account.id,
                     last_auth_check: new Date().toISOString(),
                   }
-                : conn,
-            ),
+                : conn
+            )
           );
           try {
             await PipedreamProxyService.invalidateIntegrationStatus(externalUserId);
@@ -267,7 +230,7 @@ export const NumaIntegrations = () => {
           t('errors.connectFailedGeneric', {
             appName,
             message: error.message || t('errors.tryAgain'),
-          }),
+          })
         );
       }
     } finally {
@@ -294,14 +257,14 @@ export const NumaIntegrations = () => {
       if (!result.disconnected && result.reason === 'not_connected') {
         // Already disconnected - just refresh state to be safe
         setConnections((prev) =>
-          prev.map((c) => (c.app_name === appName ? { ...c, status: 'not_connected', pipedream_account_id: null } : c)),
+          prev.map((c) => (c.app_name === appName ? { ...c, status: 'not_connected', pipedream_account_id: null } : c))
         );
         return;
       }
 
       // Mark as not connected locally and collapse test UI
       setConnections((prev) =>
-        prev.map((c) => (c.app_name === appName ? { ...c, status: 'not_connected', pipedream_account_id: null } : c)),
+        prev.map((c) => (c.app_name === appName ? { ...c, status: 'not_connected', pipedream_account_id: null } : c))
       );
       setExpandedTestUI((prev) => ({ ...prev, [appName]: false }));
 
@@ -579,17 +542,10 @@ export const NumaIntegrations = () => {
         }
       />
 
-      <SubHeaderTabBar
-        items={tabItems}
-        activeKey={activeTab}
-        onSelect={(key) => setActiveTab((key as 'connected-apps' | 'data-connectors') || 'connected-apps')}
-        ariaLabel={t('header.title')}
-      />
-
       <LayoutDashboard>
         <Container fluid className="integrations-page-content">
           <div className="integrations-page-content__inner">
-            <div hidden={activeTab !== 'connected-apps'} aria-hidden={activeTab !== 'connected-apps'}>
+            <div>
               {previewMode && (
                 <Alert variant="info" className="mb-3">
                   {t('preview.notice')}
@@ -730,12 +686,6 @@ export const NumaIntegrations = () => {
                 )}
               </div>
             </div>
-
-            {dataConnectorsEnabled && (
-              <div hidden={activeTab !== 'data-connectors'} aria-hidden={activeTab !== 'data-connectors'}>
-                <DataConnectorsTab adminSettings={dataConnectorSettings} />
-              </div>
-            )}
           </div>
         </Container>
       </LayoutDashboard>
@@ -787,7 +737,7 @@ const formatDescriptionWithLinks = (description: string, translate: TFunction) =
         style={{ fontSize: 'inherit' }}
       >
         [{linkText}]
-      </a>,
+      </a>
     );
 
     lastIndex = match.index + match[0].length;

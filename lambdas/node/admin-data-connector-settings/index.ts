@@ -11,6 +11,8 @@ const ddbDoc = DynamoDBDocumentClient.from(withPRM(DynamoDBClient, {}));
 type ConnectorItem = {
   connector: string;
   status: 'enabled' | 'disabled';
+  devOnly?: boolean;
+  requiresDeploy?: boolean;
   updatedAt?: string;
   updatedBy?: string;
 };
@@ -58,6 +60,8 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
       const items = (scan.Items || []).map((i) => ({
         connector: i.connector,
         status: (i.status as string) || 'disabled',
+        ...(i.devOnly !== undefined && { devOnly: i.devOnly }),
+        ...(i.requiresDeploy !== undefined && { requiresDeploy: i.requiresDeploy }),
       }));
       return { statusCode: 200, headers, body: JSON.stringify(items) };
     }
@@ -75,6 +79,8 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
       const updated: ConnectorItem = {
         connector,
         status,
+        ...(typeof body.devOnly === 'boolean' && { devOnly: body.devOnly }),
+        ...(typeof body.requiresDeploy === 'boolean' && { requiresDeploy: body.requiresDeploy }),
         updatedAt: new Date().toISOString(),
         updatedBy: 'admin',
       };

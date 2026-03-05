@@ -160,7 +160,7 @@ export function CreateTicketModal({
 
   const selectedType: TicketType | undefined = useMemo(
     () => allowedTypes.find((tt) => tt.id === selectedTypeId),
-    [allowedTypes, selectedTypeId],
+    [allowedTypes, selectedTypeId]
   );
 
   const zones = useMemo(() => teamData?.zones ?? [], [teamData]);

@@ -12,35 +12,35 @@ The Agent Builder is a modal form with accordion sections:
 
 #### Section 0: Agent Setup (Required)
 
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| Agent Title | text | Yes | Display name |
-| System Prompt | textarea (monospace) | Yes | Core instructions for the agent |
-| Description | textarea | No | What the agent does |
-| Welcome Message | textarea | No | Shown at session start |
+| Field           | Type                 | Required | Description                     |
+| --------------- | -------------------- | -------- | ------------------------------- |
+| Agent Title     | text                 | Yes      | Display name                    |
+| System Prompt   | textarea (monospace) | Yes      | Core instructions for the agent |
+| Description     | textarea             | No       | What the agent does             |
+| Welcome Message | textarea             | No       | Shown at session start          |
 
 #### Section 1: Appearance & Sharing
 
-| Field | Type | Description |
-|-------|------|-------------|
-| Avatar | icon picker / image upload | Visual representation |
-| Visibility | radio | `personal` or `public` |
-| Time Saved | hours + minutes inputs | Productivity estimate |
+| Field      | Type                       | Description            |
+| ---------- | -------------------------- | ---------------------- |
+| Avatar     | icon picker / image upload | Visual representation  |
+| Visibility | radio                      | `personal` or `public` |
+| Time Saved | hours + minutes inputs     | Productivity estimate  |
 
 #### Section 2: Tools & Capabilities
 
-| Field | Type | Description |
-|-------|------|-------------|
-| Auto-select tools | toggle | Let agent choose tools |
-| Knowledge Base | 3-way radio | None / All / Specific KBs |
-| Web Search | toggle | Enable web search |
-| Agent Creation | toggle | Can create sub-agents |
-| Integrations | multi-select (max 4) | Pipedream integrations |
+| Field             | Type                 | Description               |
+| ----------------- | -------------------- | ------------------------- |
+| Auto-select tools | toggle               | Let agent choose tools    |
+| Knowledge Base    | 3-way radio          | None / All / Specific KBs |
+| Web Search        | toggle               | Enable web search         |
+| Agent Creation    | toggle               | Can create sub-agents     |
+| Integrations      | multi-select (max 4) | Pipedream integrations    |
 
 #### Section 3: Reference Files
 
-| Field | Type | Constraints |
-|-------|------|-------------|
+| Field       | Type      | Constraints                 |
+| ----------- | --------- | --------------------------- |
 | File Upload | drag-drop | Max 5 files, 40+ file types |
 
 ### Form State Structure
@@ -89,6 +89,7 @@ type AgentPayload = {
 **Location:** `/numa-frontend/src/Components/Agents/AgentCard.tsx`
 
 Each card displays:
+
 - Avatar (icon or image)
 - Title + visibility badge
 - Description (clamped to 3 lines)
@@ -98,6 +99,7 @@ Each card displays:
 - Tools summary
 
 **Actions:**
+
 - **Chat** - Start new session with agent
 - **Edit** - Open form (if owner)
 - **Duplicate** - Copy to personal
@@ -132,6 +134,7 @@ AgentsManagement.proceedToChat()
 ### Agent Configuration Application
 
 When agent is selected, `applyAgentConfiguration()` sets:
+
 - `autoToolsEnabled` - Auto tool selection mode
 - `webSearchEnabled` - Web search capability
 - `createAgentEnabled` - Agent creation capability
@@ -141,6 +144,7 @@ When agent is selected, `applyAgentConfiguration()` sets:
 ### Missing Integration Check
 
 Before starting agent chat:
+
 1. If agent requires integrations user hasn't connected
 2. Show modal: "Missing integrations"
 3. Options: Connect now / Continue without / Go to settings
@@ -197,6 +201,7 @@ AdminAgentsService.update(mode, numaPut?)
 ### chatAgentService.ts Integration
 
 When sending chat with agent:
+
 ```typescript
 callChatAgentStreaming(
   prompt,
@@ -270,30 +275,33 @@ type AgentSummary = {
 
 ## Supporting Components
 
-| Component | Location | Purpose |
-|-----------|----------|---------|
-| `AgentAvatar.tsx` | `/Components/Agents/` | Icon/image display with S3 URL handling |
-| `AgentFileUpload.tsx` | `/Components/Agents/` | Multi-file uploader with extraction |
-| `AgentAvatarSelector.tsx` | `/Components/Agents/` | Icon picker + image upload |
-| `AgentIconPicker.tsx` | `/Components/Agents/` | Bootstrap icon selection |
-| `AgentsSidebar.tsx` | `/Components/Agents/` | Chat sidebar for agent selection |
+| Component                 | Location              | Purpose                                 |
+| ------------------------- | --------------------- | --------------------------------------- |
+| `AgentAvatar.tsx`         | `/Components/Agents/` | Icon/image display with S3 URL handling |
+| `AgentFileUpload.tsx`     | `/Components/Agents/` | Multi-file uploader with extraction     |
+| `AgentAvatarSelector.tsx` | `/Components/Agents/` | Icon picker + image upload              |
+| `AgentIconPicker.tsx`     | `/Components/Agents/` | Bootstrap icon selection                |
+| `AgentsSidebar.tsx`       | `/Components/Agents/` | Chat sidebar for agent selection        |
 
 ---
 
 ## Utility Functions
 
 ### agentUtils.ts
+
 ```typescript
-formatAgentDisplayName(title) // Ensures exactly one "Numa" prefix
+formatAgentDisplayName(title); // Ensures exactly one "Numa" prefix
 ```
 
 ### agentSortingUtils.ts
+
 ```typescript
-sortAgentsByPriority(agents, recentConversations)
+sortAgentsByPriority(agents, recentConversations);
 // Sort by: Favorites → Recently Used → Recently Updated
 ```
 
 ### agentExport.ts
+
 ```typescript
 serializeAgentSummaryToExport(agent)    // Create JSON export
 downloadAgentExport(export, title)       // Download JSON file
@@ -304,11 +312,11 @@ parseAgentImport(jsonString)             // Parse and validate import
 
 ## Feature Flags
 
-| Flag | Purpose |
-|------|---------|
-| `AGENTS` (session) | Feature enabled/disabled |
-| `agentsMode` | Controls sharing: 'off' / 'personal_only' / 'full' |
-| `PIPEDREAM_INTEGRATIONS` | Integrations feature enabled |
+| Flag                     | Purpose                                            |
+| ------------------------ | -------------------------------------------------- |
+| `AGENTS` (session)       | Feature enabled/disabled                           |
+| `agentsMode`             | Controls sharing: 'off' / 'personal_only' / 'full' |
+| `PIPEDREAM_INTEGRATIONS` | Integrations feature enabled                       |
 
 ---
 
