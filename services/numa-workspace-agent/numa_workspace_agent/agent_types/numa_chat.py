@@ -42,6 +42,7 @@ NUMA_CHAT = AgentTypeConfig(
         "mcp__scripts__execute_script",  # Execute code without shell heredocs
         # Numa platform tools (KB, web search, files, agents, memories)
         "mcp__numa__numa_tool",  # Unified Numa tool dispatcher
+        "mcp__numa__numa_ops_tool",  # Numa Ops tool (tickets, teams, CRM — feature-flagged)
         # Pipedream integration tools
         "mcp__integrations__run_action",  # Execute integration actions (with approval)
         "mcp__integrations__configure_props",  # Get dynamic prop options (no approval)
@@ -100,6 +101,7 @@ NUMA_CHAT = AgentTypeConfig(
     enabled_numa_tools=[
         "agents",
         "memories",
+        "numa-ops",
     ],
     tools_source_dirs=["numa"],
     # Full plugins
