@@ -5,13 +5,13 @@ Routes ops operations to the appropriate ops Lambda (numa-ops-api,
 numa-ops-config-api, numa-ops-crm-api) by constructing API Gateway-like
 events and invoking the Lambdas directly.
 
-Auth context is forwarded by constructing a synthetic JWT from the
-user_sub, email, and groups passed through the event chain. The ops
-Lambdas' parseJwt function base64-decodes the payload segment, so
-we create a minimal token: `x.<base64-payload>.x`.
+Auth context is forwarded via a `userContext` field on the event payload.
+The ops Lambdas check for this field first (direct invocation path)
+before falling back to JWT parsing (API Gateway path). The security
+boundary is IAM — only callers with lambda:InvokeFunction permission
+can reach the ops Lambdas directly.
 """
 
-import base64
 import json
 import logging
 import os
@@ -36,31 +36,21 @@ def _get_lambda_client():
     return prm_client("lambda", region=AWS_REGION)
 
 
-def _build_synthetic_token(user_sub: str, email: str = "", groups: list = None) -> str:
-    """Build a synthetic JWT-like token for cross-Lambda auth.
-
-    The ops Lambdas extract auth context by base64-decoding the second
-    segment of the bearer token. We construct: `x.<base64-payload>.x`
-    """
-    payload = {
-        "sub": user_sub,
-        "email": email,
-        "cognito:groups": groups or [],
-    }
-    encoded = base64.b64encode(
-        json.dumps(payload).encode("utf-8")
-    ).decode("utf-8")
-    return f"x.{encoded}.x"
-
-
 def _build_apigw_event(
     method: str,
     path: str,
     body: dict = None,
     query_params: dict = None,
-    auth_token: str = "",
+    user_sub: str = "",
+    user_email: str = "",
+    user_groups: list = None,
 ) -> dict:
-    """Build a minimal API Gateway V2 event for Lambda invocation."""
+    """Build a minimal API Gateway V2 event for direct Lambda invocation.
+
+    Auth context is passed via ``userContext`` — the ops Lambdas check this
+    field first (direct invocation path) before falling back to JWT parsing
+    (API Gateway path).  IAM controls who can invoke the Lambda directly.
+    """
     event = {
         "requestContext": {
             "http": {
@@ -70,10 +60,14 @@ def _build_apigw_event(
         },
         "rawPath": f"/api/{path}",
         "headers": {
-            "authorization": f"Bearer {auth_token}",
             "content-type": "application/json",
         },
         "queryStringParameters": query_params or {},
+        "userContext": {
+            "sub": user_sub,
+            "email": user_email,
+            "groups": user_groups or [],
+        },
     }
     if body is not None:
         event["body"] = json.dumps(body)
@@ -94,8 +88,10 @@ def _invoke_ops_lambda(
     if not lambda_name:
         raise ValueError(f"Ops Lambda not configured for path: {path}")
 
-    token = _build_synthetic_token(user_sub, user_email, user_groups)
-    event = _build_apigw_event(method, path, body, query_params, token)
+    event = _build_apigw_event(
+        method, path, body, query_params,
+        user_sub=user_sub, user_email=user_email, user_groups=user_groups,
+    )
 
     lambda_client = _get_lambda_client()
 

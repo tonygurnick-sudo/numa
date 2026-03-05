@@ -101,6 +101,21 @@ const parseJwt = (token: string): Record<string, unknown> => {
 };
 
 const resolveAuthContext = (event: APIGatewayProxyEventV2): AuthContext | null => {
+  // Path 1: Direct Lambda invocation with pre-authenticated context
+  // (e.g. workspace-chat-tools calling us — IAM controls who can invoke)
+  const uc = (event as Record<string, unknown>).userContext as Record<string, unknown> | undefined;
+  if (uc && typeof uc.sub === 'string') {
+    return {
+      sub: uc.sub,
+      email: typeof uc.email === 'string' ? uc.email : undefined,
+      name: typeof uc.name === 'string' ? uc.name : undefined,
+      groups: Array.isArray(uc.groups)
+        ? (uc.groups as unknown[]).filter((g): g is string => typeof g === 'string')
+        : [],
+    };
+  }
+
+  // Path 2: API Gateway with JWT (already verified by Cognito authorizer)
   const authHeader = event.headers?.authorization || event.headers?.Authorization;
   if (!authHeader) return null;
   const token = String(authHeader).replace(/^Bearer\s+/i, '');
