@@ -2775,6 +2775,7 @@ $border-radius-pill: 1rem;
 // Matches kanban board styling: glassmorphism cards, priority dots, status
 // pills, monospace IDs, zinc palette.
 .ops-renderer {
+  font-family: 'Metropolis Regular';
   font-size: 0.82rem;
   line-height: 1.5;
   color: var(--ops-text-default, #3f3f46);
@@ -2791,6 +2792,7 @@ $border-radius-pill: 1rem;
     padding: 10px 12px;
     background: rgba(255, 255, 255, 0.95);
     backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
     border: 1px solid rgba(229, 231, 235, 0.8);
     border-radius: 10px;
     transition: all 0.15s ease;
@@ -2809,6 +2811,7 @@ $border-radius-pill: 1rem;
   }
 
   .ops-renderer-ticket-title {
+    font-family: 'Metropolis Semi Bold';
     font-size: 0.84rem;
     font-weight: 500;
     color: #111827;
@@ -2920,6 +2923,7 @@ $border-radius-pill: 1rem;
     padding: 10px 12px;
     background: rgba(255, 255, 255, 0.95);
     backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
     border: 1px solid rgba(229, 231, 235, 0.8);
     border-radius: 10px;
     transition: all 0.15s ease;
@@ -2964,6 +2968,7 @@ $border-radius-pill: 1rem;
   }
 
   .ops-renderer-entity-name {
+    font-family: 'Metropolis Semi Bold';
     font-size: 0.84rem;
     font-weight: 600;
     color: #0f172a;
@@ -3011,6 +3016,7 @@ $border-radius-pill: 1rem;
     padding: 14px 16px;
     background: rgba(255, 255, 255, 0.95);
     backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
     border: 1px solid rgba(229, 231, 235, 0.8);
     border-radius: 10px;
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.02), 0 1px 2px rgba(0, 0, 0, 0.03);
@@ -3025,6 +3031,7 @@ $border-radius-pill: 1rem;
   }
 
   .ops-renderer-detail-title {
+    font-family: 'Metropolis Semi Bold';
     font-size: 0.92rem;
     font-weight: 600;
     color: #111827;
@@ -3056,6 +3063,7 @@ $border-radius-pill: 1rem;
     gap: 1px;
 
     .ops-renderer-field-label {
+      font-family: 'Metropolis Semi Bold';
       font-size: 0.67rem;
       font-weight: 600;
       color: var(--ops-text-secondary, #a1a1aa);
@@ -3080,6 +3088,7 @@ $border-radius-pill: 1rem;
   }
 
   .ops-renderer-comment-author {
+    font-family: 'Metropolis Semi Bold';
     font-size: 0.78rem;
     font-weight: 600;
     color: #0f172a;
@@ -3110,6 +3119,7 @@ $border-radius-pill: 1rem;
   }
 
   .ops-renderer-config-label {
+    font-family: 'Metropolis Semi Bold';
     font-size: 0.7rem;
     font-weight: 600;
     color: var(--ops-text-secondary, #a1a1aa);
@@ -3141,6 +3151,7 @@ $border-radius-pill: 1rem;
     }
 
     .ops-renderer-write-verb {
+      font-family: 'Metropolis Semi Bold';
       font-weight: 600;
       margin-right: 4px;
     }
