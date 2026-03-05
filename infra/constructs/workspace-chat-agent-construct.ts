@@ -79,6 +79,8 @@ export interface WorkspaceChatAgentConstructProps {
   extractContentLambdaArn?: string;
   /** Document converter Lambda ARN (for DOCX/Office → PDF conversion) */
   documentConverterLambdaArn?: string;
+  /** Whether Numa Ops feature is enabled for this client */
+  numaOpsEnabled?: boolean;
 }
 
 export class WorkspaceChatAgentConstruct extends Construct {
@@ -674,6 +676,10 @@ echo "Successfully pushed image to ${this.ecrRepository.repositoryUrl}:${imageTa
         // Document converter Lambda for DOCX/Office → PDF conversion
         ...(props.documentConverterLambdaArn && {
           DOCUMENT_CONVERTER_LAMBDA_NAME: props.documentConverterLambdaArn.split(':').pop() ?? '',
+        }),
+        // Numa Ops feature flag (enables the ops MCP tool)
+        ...(props.numaOpsEnabled && {
+          NUMA_OPS_ENABLED: 'true',
         }),
       },
     });

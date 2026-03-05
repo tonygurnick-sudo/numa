@@ -57,6 +57,12 @@ export interface WorkspaceChatToolsConstructProps {
   vaultAuditLogTableName?: string;
   /** Vault audit log table ARN (for IAM permissions) */
   vaultAuditLogTableArn?: string;
+  /** Numa Ops API Lambda ARN (for invoking ops operations) */
+  opsApiLambdaArn?: string;
+  /** Numa Ops Config API Lambda ARN (for invoking config operations) */
+  opsConfigApiLambdaArn?: string;
+  /** Numa Ops CRM API Lambda ARN (for invoking CRM operations) */
+  opsCrmApiLambdaArn?: string;
 }
 
 /**
@@ -267,6 +273,21 @@ export class WorkspaceChatToolsConstruct extends Construct {
       ],
     });
 
+    // Lambda invoke permission for Numa Ops Lambdas (ops tool)
+    const opsLambdaArns = [
+      props.opsApiLambdaArn,
+      props.opsConfigApiLambdaArn,
+      props.opsCrmApiLambdaArn,
+    ].filter(Boolean) as string[];
+    if (opsLambdaArns.length > 0) {
+      policyStatements.push({
+        sid: 'InvokeOpsLambdas',
+        effect: 'Allow',
+        actions: ['lambda:InvokeFunction'],
+        resources: opsLambdaArns,
+      });
+    }
+
     // Lambda invoke permission for Pipedream relay (integration actions)
     if (props.pipedreamRelayLambdaArn) {
       policyStatements.push({
@@ -334,6 +355,16 @@ export class WorkspaceChatToolsConstruct extends Construct {
         }),
         ...(props.fileRedirectBaseUrl && {
           FILE_REDIRECT_BASE_URL: props.fileRedirectBaseUrl,
+        }),
+        // Numa Ops Lambda names (for cross-Lambda invocation from ops tool)
+        ...(props.opsApiLambdaArn && {
+          OPS_API_LAMBDA_NAME: props.opsApiLambdaArn.split(':').pop() ?? '',
+        }),
+        ...(props.opsConfigApiLambdaArn && {
+          OPS_CONFIG_API_LAMBDA_NAME: props.opsConfigApiLambdaArn.split(':').pop() ?? '',
+        }),
+        ...(props.opsCrmApiLambdaArn && {
+          OPS_CRM_API_LAMBDA_NAME: props.opsCrmApiLambdaArn.split(':').pop() ?? '',
         }),
         // Note: Lambda's native logging goes to the shared log group via logGroup prop
       },

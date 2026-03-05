@@ -27,6 +27,7 @@ const TOOL_RENDERERS: Record<string, ToolRenderer> = {
   data_analysis: DataAnalysisRenderer,
   integrations: IntegrationsRenderer,
   mcp__numa__numa_tool: FallbackRenderer,
+  mcp__numa__numa_ops_tool: FallbackRenderer,
   // Numa sub-tool renderers (used when effectiveToolName resolves from mcp__numa__numa_tool input)
   knowledge_base: KnowledgeBaseRenderer,
   extract_content: FallbackRenderer,
@@ -43,6 +44,7 @@ const TOOL_LABEL_KEYS: Record<string, string> = {
   data_analysis: 'common:toolLabels.dataAnalysis',
   integrations: 'common:toolLabels.integration',
   mcp__numa__numa_tool: 'common:toolLabels.numaTool',
+  mcp__numa__numa_ops_tool: 'common:toolLabels.numaOps',
   // Numa sub-tool labels (resolved from mcp__numa__numa_tool input name)
   knowledge_base: 'common:toolLabels.knowledgeBase',
   extract_content: 'common:toolLabels.extractContent',
@@ -125,6 +127,7 @@ export function resolveToolVisual(toolName: string | null | undefined): ToolVisu
 
   // Numa MCP tool and sub-tools
   if (name === 'mcp__numa__numa_tool') return { kind: 'icon', className: 'bi bi-tools' };
+  if (name === 'mcp__numa__numa_ops_tool') return { kind: 'icon', className: 'bi bi-kanban' };
   if (name === 'knowledge_base') return { kind: 'icon', className: 'bi bi-folder2-open' };
   if (name === 'extract_content') return { kind: 'icon', className: 'bi bi-file-earmark-text' };
   if (name === 'convert_document') return { kind: 'icon', className: 'bi bi-file-earmark-arrow-down' };
@@ -214,6 +217,22 @@ export function getToolActionSteps(toolName: string | null | undefined, inputPay
       /* ignore */
     }
     return [i18n.t('common:toolSteps.numaTool.running')];
+  }
+
+  // Numa Ops tool: extract operation from input
+  if (name === 'mcp__numa__numa_ops_tool') {
+    try {
+      if (inputPayload && typeof inputPayload === 'object') {
+        const obj = inputPayload as Record<string, unknown>;
+        const op = obj.operation;
+        if (typeof op === 'string' && op.trim()) {
+          return [op.replace(/_/g, ' ')];
+        }
+      }
+    } catch {
+      /* ignore */
+    }
+    return [i18n.t('common:toolSteps.numaOps.running')];
   }
 
   // Integrations: the `input` typically contains `tool: <action-name>`

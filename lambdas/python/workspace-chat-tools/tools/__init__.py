@@ -32,6 +32,7 @@ from .user_profile import (
     handle_list_memories,
     handle_update_memory,
 )
+from .ops import handle_ops_operation
 from .web_search import handle_web_search
 
 __all__ = [
@@ -56,4 +57,5 @@ __all__ = [
     "handle_add_memory",
     "handle_list_memories",
     "handle_update_memory",
+    "handle_ops_operation",
 ]

@@ -76,6 +76,7 @@ const INLINE_TOOLS = new Set([
   'Skill',
   'mcp__scripts__execute_script',
   'mcp__numa__numa_tool',
+  'mcp__numa__numa_ops_tool',
   'TaskOutput',
 ]);
 
@@ -110,6 +111,8 @@ const IMPORTANT_TOOLS = new Map<string, { icon: string; name: string }>([
   ['Edit', { icon: 'bi-pencil-square', name: 'Edited' }],
   // Script execution (MCP tool)
   ['mcp__scripts__execute_script', { icon: 'bi-terminal', name: 'Running script' }],
+  // Numa Ops tool
+  ['mcp__numa__numa_ops_tool', { icon: 'bi-kanban', name: 'Numa Ops' }],
 ]);
 
 /**
@@ -1097,6 +1100,12 @@ function addToolCard(helpers: WorkspaceChatMessageHelpers, toolUseId: string, to
   if (toolName === 'mcp__numa__numa_tool' && !integrationInfo) {
     const subTool = inputObj.name as string | undefined;
     if (subTool) effectiveLabel = resolveToolDescriptor(subTool).label;
+    effectiveSteps = getToolActionSteps(toolName, input);
+  }
+
+  // For mcp__numa__numa_ops_tool, derive label and steps from the operation
+  if (toolName === 'mcp__numa__numa_ops_tool' && !integrationInfo) {
+    effectiveLabel = resolveToolDescriptor(toolName).label;
     effectiveSteps = getToolActionSteps(toolName, input);
   }
 
@@ -2310,6 +2319,12 @@ function processAssistantContent(
       if (toolName === 'mcp__numa__numa_tool' && !integrationInfo) {
         const subTool = input?.name as string | undefined;
         if (subTool) effectiveLabel = resolveToolDescriptor(subTool).label;
+        effectiveSteps = getToolActionSteps(toolName, input);
+      }
+
+      // For mcp__numa__numa_ops_tool, derive label and steps from the operation
+      if (toolName === 'mcp__numa__numa_ops_tool' && !integrationInfo) {
+        effectiveLabel = resolveToolDescriptor(toolName).label;
         effectiveSteps = getToolActionSteps(toolName, input);
       }
 

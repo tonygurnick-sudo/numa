@@ -503,6 +503,7 @@
     "dataAnalysis": "Data Analysis",
     "integration": "Integration",
     "numaTool": "Numa Tool",
+    "numaOps": "Numa Ops",
     "extractContent": "Extract Content",
     "convertDocument": "Convert Document",
     "agents": "Agents",
@@ -525,6 +526,9 @@
     },
     "numaTool": {
       "running": "Running Numa tool..."
+    },
+    "numaOps": {
+      "running": "Running Numa Ops..."
     },
     "integration": {
       "actionFallback": "Executing action",

@@ -330,6 +330,17 @@ export class NumaClientStack extends TerraformStack {
       const oauthWorkspaceToolsLambdaName = awsNameWithHashedPrefix(props.clientName, '_oauth_workspace_tools', 64);
       const oauthWorkspaceToolsLambdaArn = `arn:aws:lambda:${clientConfig.region}:${clientConfig.clientAccountId}:function:${oauthWorkspaceToolsLambdaName}`;
 
+      // Compute the expected ops Lambda names (created later in OpsConstruct, conditional on numaOps)
+      const opsApiLambdaArn = clientConfig.numaOps
+        ? `arn:aws:lambda:${clientConfig.region}:${clientConfig.clientAccountId}:function:${awsNameWithHashedPrefix(props.clientName, '_ops-api', 64)}`
+        : undefined;
+      const opsConfigApiLambdaArn = clientConfig.numaOps
+        ? `arn:aws:lambda:${clientConfig.region}:${clientConfig.clientAccountId}:function:${awsNameWithHashedPrefix(props.clientName, '_ops-config-api', 64)}`
+        : undefined;
+      const opsCrmApiLambdaArn = clientConfig.numaOps
+        ? `arn:aws:lambda:${clientConfig.region}:${clientConfig.clientAccountId}:function:${awsNameWithHashedPrefix(props.clientName, '_ops-crm-api', 64)}`
+        : undefined;
+
       // Shared secret for file redirect HMAC tokens (used by both tools and proxy Lambdas)
       const fileRedirectSecret = new SsmParameter(this, 'file-redirect-secret', {
         name: `${props.clientName}_workspace-chat_file-redirect-secret`,
@@ -371,6 +382,10 @@ export class NumaClientStack extends TerraformStack {
         fileRedirectSecret: fileRedirectSecret.value,
         fileRedirectBaseUrl: `https://${domainName}/api/workspace-chat-agent`,
         // Vault secrets integration removed in favor of usage analytics
+        // Numa Ops Lambda ARNs (conditional on numaOps flag)
+        opsApiLambdaArn,
+        opsConfigApiLambdaArn,
+        opsCrmApiLambdaArn,
       });
 
       // Create the AgentCore runtime
@@ -411,6 +426,8 @@ export class NumaClientStack extends TerraformStack {
         dataBucketArn: core.dataBucket.bucket.arn,
         // Extract content Lambda for Nolia PDF vision extraction
         extractContentLambdaArn: extractContentLambdaArn,
+        // Numa Ops feature flag
+        numaOpsEnabled: clientConfig.numaOps,
       });
 
       // Create the proxy Lambda that bridges CloudFront to AgentCore SDK

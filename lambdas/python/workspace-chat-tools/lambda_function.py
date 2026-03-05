@@ -51,6 +51,7 @@ from tools import (
     handle_list_agents,
     handle_list_kb_files,
     handle_list_memories,
+    handle_ops_operation,
     handle_proxy_request,
     handle_query_knowledgebase,
     handle_retrieve_kb_file,
@@ -192,6 +193,9 @@ def handler(event: Dict[str, Any], context: LambdaContext) -> Dict[str, Any]:
         }
 
     handler_fn = TOOL_HANDLERS.get(tool_name)
+    # Route ops_* tool names to the generic ops handler
+    if not handler_fn and tool_name and tool_name.startswith("ops_"):
+        handler_fn = handle_ops_operation
     if not handler_fn:
         logger.warning(
             "Unknown tool requested",

@@ -497,6 +497,12 @@ async def stream_claude_sdk(
 
     # 4. Create SDK options with validated model
     validated_model = validate_model_id(model_id)
+
+    # Map integrations approval mode to ops approval mode for the ops MCP tool.
+    # integrations: always/non_destructive/never → ops: manual/non_destructive/auto
+    _ops_mode_map = {"always": "manual", "non_destructive": "non_destructive", "never": "auto"}
+    os.environ["NUMA_OPS_APPROVAL_MODE"] = _ops_mode_map.get(approval_mode, "non_destructive")
+
     options = create_agent_options(
         session_id=session_id,
         conversation_id=conversation_id,
@@ -1096,6 +1102,10 @@ async def run_claude_sdk(
     # 3b. Default approval mode env var — overridden per tool call in the
     # message loop below (same as the streaming path in stream_claude_sdk).
     os.environ["NUMA_APPROVAL_MODE"] = "manual"
+
+    # Map integrations approval mode to ops approval mode for the ops MCP tool.
+    _ops_mode_map = {"always": "manual", "non_destructive": "non_destructive", "never": "auto"}
+    os.environ["NUMA_OPS_APPROVAL_MODE"] = _ops_mode_map.get(approval_mode, "non_destructive")
 
     # 4. Create SDK options
     validated_model = validate_model_id(model_id)

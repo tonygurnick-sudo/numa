@@ -1,0 +1,388 @@
+"""
+Numa Ops tool handlers for workspace-chat-tools Lambda.
+
+Routes ops operations to the appropriate ops Lambda (numa-ops-api,
+numa-ops-config-api, numa-ops-crm-api) by constructing API Gateway-like
+events and invoking the Lambdas directly.
+
+Auth context is forwarded by constructing a synthetic JWT from the
+user_sub, email, and groups passed through the event chain. The ops
+Lambdas' parseJwt function base64-decodes the payload segment, so
+we create a minimal token: `x.<base64-payload>.x`.
+"""
+
+import base64
+import json
+import logging
+import os
+from typing import Any, Dict
+
+import structlog
+from botocore.exceptions import ClientError
+
+from prm import client as prm_client
+
+logger = structlog.get_logger()
+
+# Environment variables for ops Lambda names (set conditionally when NUMA_OPS is enabled)
+OPS_API_LAMBDA = os.environ.get("OPS_API_LAMBDA_NAME", "")
+OPS_CONFIG_API_LAMBDA = os.environ.get("OPS_CONFIG_API_LAMBDA_NAME", "")
+OPS_CRM_API_LAMBDA = os.environ.get("OPS_CRM_API_LAMBDA_NAME", "")
+AWS_REGION = os.environ.get("AWS_REGION", "us-east-1")
+
+
+def _get_lambda_client():
+    """Get Lambda client with PRM tracking."""
+    return prm_client("lambda", region=AWS_REGION)
+
+
+def _build_synthetic_token(user_sub: str, email: str = "", groups: list = None) -> str:
+    """Build a synthetic JWT-like token for cross-Lambda auth.
+
+    The ops Lambdas extract auth context by base64-decoding the second
+    segment of the bearer token. We construct: `x.<base64-payload>.x`
+    """
+    payload = {
+        "sub": user_sub,
+        "email": email,
+        "cognito:groups": groups or [],
+    }
+    encoded = base64.b64encode(
+        json.dumps(payload).encode("utf-8")
+    ).decode("utf-8")
+    return f"x.{encoded}.x"
+
+
+def _build_apigw_event(
+    method: str,
+    path: str,
+    body: dict = None,
+    query_params: dict = None,
+    auth_token: str = "",
+) -> dict:
+    """Build a minimal API Gateway V2 event for Lambda invocation."""
+    event = {
+        "requestContext": {
+            "http": {
+                "method": method,
+                "path": f"/api/{path}",
+            },
+        },
+        "rawPath": f"/api/{path}",
+        "headers": {
+            "authorization": f"Bearer {auth_token}",
+            "content-type": "application/json",
+        },
+        "queryStringParameters": query_params or {},
+    }
+    if body is not None:
+        event["body"] = json.dumps(body)
+    return event
+
+
+def _invoke_ops_lambda(
+    lambda_name: str,
+    method: str,
+    path: str,
+    body: dict = None,
+    query_params: dict = None,
+    user_sub: str = "",
+    user_email: str = "",
+    user_groups: list = None,
+) -> Dict[str, Any]:
+    """Invoke an ops Lambda and return the parsed response body."""
+    if not lambda_name:
+        raise ValueError(f"Ops Lambda not configured for path: {path}")
+
+    token = _build_synthetic_token(user_sub, user_email, user_groups)
+    event = _build_apigw_event(method, path, body, query_params, token)
+
+    lambda_client = _get_lambda_client()
+
+    logger.info(
+        "Invoking ops Lambda",
+        lambda_name=lambda_name,
+        method=method,
+        path=path,
+        user_sub=user_sub[:8] + "..." if user_sub else "unknown",
+    )
+
+    response = lambda_client.invoke(
+        FunctionName=lambda_name,
+        Payload=json.dumps(event),
+        InvocationType="RequestResponse",
+    )
+
+    response_payload = json.loads(response["Payload"].read())
+
+    if response.get("FunctionError"):
+        logger.error(
+            "Ops Lambda execution failed",
+            function_error=response["FunctionError"],
+            response_payload=str(response_payload)[:500],
+        )
+        raise Exception(f"Ops Lambda failed: {response_payload}")
+
+    # The ops Lambdas return { statusCode, headers, body }
+    status_code = response_payload.get("statusCode", 500)
+    body_str = response_payload.get("body", "{}")
+
+    try:
+        result = json.loads(body_str)
+    except (json.JSONDecodeError, TypeError):
+        result = {"raw": body_str}
+
+    if status_code >= 400:
+        error_msg = result.get("error", f"HTTP {status_code}")
+        raise Exception(f"Ops API error ({status_code}): {error_msg}")
+
+    return result
+
+
+# ── Operation-to-Lambda routing ───────────────────────────────────────────────
+
+# Operations that route to numa-ops-api
+OPS_API_OPERATIONS = {
+    "list_teams", "get_team", "create_team", "update_team",
+    "list_tickets", "get_ticket", "search_tickets",
+    "create_ticket", "update_ticket", "delete_ticket",
+    "add_comment", "list_comments",
+    "upload_attachment", "get_metrics",
+}
+
+# Operations that route to numa-ops-config-api
+OPS_CONFIG_OPERATIONS = {
+    "get_config", "list_projects", "create_project", "update_project",
+}
+
+# Operations that route to numa-ops-crm-api
+OPS_CRM_OPERATIONS = {
+    "list_customers", "get_customer", "create_customer",
+    "update_customer", "delete_customer",
+    "list_suppliers", "get_supplier", "create_supplier",
+    "update_supplier", "delete_supplier",
+}
+
+
+def _resolve_lambda_and_request(
+    operation: str,
+    params: dict,
+) -> tuple:
+    """Resolve the Lambda name, HTTP method, path, body, and query params for an operation.
+
+    Returns: (lambda_name, method, path, body, query_params)
+    """
+    # ── Config operations → numa-ops-config-api ──
+    if operation == "get_config":
+        return (OPS_CONFIG_API_LAMBDA, "GET", "ops/config", None, None)
+
+    if operation == "list_projects":
+        return (OPS_CONFIG_API_LAMBDA, "GET", "ops/config/projects", None, None)
+
+    if operation == "create_project":
+        return (OPS_CONFIG_API_LAMBDA, "POST", "ops/config/projects", params, None)
+
+    if operation == "update_project":
+        project_id = params.pop("project_id", "")
+        return (OPS_CONFIG_API_LAMBDA, "PUT", f"ops/config/projects/{project_id}", params, None)
+
+    # ── CRM operations → numa-ops-crm-api ──
+    if operation == "list_customers":
+        qp = {}
+        if params.get("search"):
+            qp["search"] = params["search"]
+        return (OPS_CRM_API_LAMBDA, "GET", "ops/customers", None, qp or None)
+
+    if operation == "get_customer":
+        return (OPS_CRM_API_LAMBDA, "GET", f"ops/customers/{params.get('customer_id', '')}", None, None)
+
+    if operation == "create_customer":
+        return (OPS_CRM_API_LAMBDA, "POST", "ops/customers", params, None)
+
+    if operation == "update_customer":
+        customer_id = params.pop("customer_id", "")
+        return (OPS_CRM_API_LAMBDA, "PUT", f"ops/customers/{customer_id}", params, None)
+
+    if operation == "delete_customer":
+        return (OPS_CRM_API_LAMBDA, "DELETE", f"ops/customers/{params.get('customer_id', '')}", None, None)
+
+    if operation == "list_suppliers":
+        qp = {}
+        if params.get("search"):
+            qp["search"] = params["search"]
+        return (OPS_CRM_API_LAMBDA, "GET", "ops/suppliers", None, qp or None)
+
+    if operation == "get_supplier":
+        return (OPS_CRM_API_LAMBDA, "GET", f"ops/suppliers/{params.get('supplier_id', '')}", None, None)
+
+    if operation == "create_supplier":
+        return (OPS_CRM_API_LAMBDA, "POST", "ops/suppliers", params, None)
+
+    if operation == "update_supplier":
+        supplier_id = params.pop("supplier_id", "")
+        return (OPS_CRM_API_LAMBDA, "PUT", f"ops/suppliers/{supplier_id}", params, None)
+
+    if operation == "delete_supplier":
+        return (OPS_CRM_API_LAMBDA, "DELETE", f"ops/suppliers/{params.get('supplier_id', '')}", None, None)
+
+    # ── Core ops operations → numa-ops-api ──
+    if operation == "list_teams":
+        return (OPS_API_LAMBDA, "GET", "ops/teams", None, None)
+
+    if operation == "get_team":
+        return (OPS_API_LAMBDA, "GET", f"ops/teams/{params.get('team_id', '')}", None, None)
+
+    if operation == "create_team":
+        return (OPS_API_LAMBDA, "POST", "ops/teams", params, None)
+
+    if operation == "update_team":
+        team_id = params.pop("team_id", "")
+        return (OPS_API_LAMBDA, "PUT", f"ops/teams/{team_id}", params, None)
+
+    if operation == "list_tickets":
+        qp = {}
+        for key in ("team_id", "status", "assignee", "priority", "zone"):
+            if params.get(key):
+                # The API expects teamId not team_id
+                api_key = "teamId" if key == "team_id" else key
+                qp[api_key] = params[key]
+        return (OPS_API_LAMBDA, "GET", "ops/tickets", None, qp or None)
+
+    if operation == "get_ticket":
+        if params.get("display_id"):
+            return (OPS_API_LAMBDA, "GET", f"ops/tickets/by-display-id/{params['display_id']}", None, None)
+        return (OPS_API_LAMBDA, "GET", f"ops/tickets/{params.get('ticket_id', '')}", None, None)
+
+    if operation == "search_tickets":
+        qp = {"search": params.get("query", "")}
+        if params.get("team_id"):
+            qp["teamId"] = params["team_id"]
+        return (OPS_API_LAMBDA, "GET", "ops/tickets", None, qp)
+
+    if operation == "create_ticket":
+        # Map snake_case params to camelCase expected by the API
+        body = {}
+        mapping = {
+            "team_id": "teamId",
+            "title": "title",
+            "ticket_type_id": "ticketTypeId",
+            "description": "description",
+            "status_id": "statusId",
+            "priority": "priority",
+            "assignee_id": "assigneeId",
+            "due_date": "dueDate",
+            "project_id": "projectId",
+            "customer_id": "customerId",
+            "supplier_id": "supplierId",
+            "custom_fields": "customFields",
+        }
+        for snake, camel in mapping.items():
+            if params.get(snake) is not None:
+                body[camel] = params[snake]
+        return (OPS_API_LAMBDA, "POST", "ops/tickets", body, None)
+
+    if operation == "update_ticket":
+        ticket_id = params.pop("ticket_id", "")
+        body = {}
+        mapping = {
+            "team_id": "teamId",
+            "title": "title",
+            "description": "description",
+            "status_id": "statusId",
+            "priority": "priority",
+            "assignee_id": "assigneeId",
+            "due_date": "dueDate",
+            "project_id": "projectId",
+            "customer_id": "customerId",
+            "supplier_id": "supplierId",
+            "custom_fields": "customFields",
+        }
+        for snake, camel in mapping.items():
+            if params.get(snake) is not None:
+                body[camel] = params[snake]
+        return (OPS_API_LAMBDA, "PUT", f"ops/tickets/{ticket_id}", body, None)
+
+    if operation == "delete_ticket":
+        ticket_id = params.get("ticket_id", "")
+        return (OPS_API_LAMBDA, "DELETE", f"ops/tickets/{ticket_id}", None, None)
+
+    if operation == "add_comment":
+        ticket_id = params.get("ticket_id", "")
+        body = {
+            "content": params.get("content", ""),
+            "teamId": params.get("team_id"),
+            "displayId": params.get("display_id"),
+        }
+        return (OPS_API_LAMBDA, "POST", f"ops/tickets/{ticket_id}/comments", body, None)
+
+    if operation == "list_comments":
+        ticket_id = params.get("ticket_id", "")
+        return (OPS_API_LAMBDA, "GET", f"ops/tickets/{ticket_id}/comments", None, None)
+
+    if operation == "upload_attachment":
+        body = {
+            "fileName": params.get("file_name", ""),
+            "contentType": params.get("content_type", "application/octet-stream"),
+            "ticketId": params.get("ticket_id"),
+        }
+        return (OPS_API_LAMBDA, "POST", "ops/uploads", body, None)
+
+    if operation == "get_metrics":
+        qp = {}
+        if params.get("team_id"):
+            qp["teamId"] = params["team_id"]
+        return (OPS_API_LAMBDA, "GET", "ops/metrics", None, qp or None)
+
+    raise ValueError(f"Unknown ops operation: {operation}")
+
+
+def handle_ops_operation(event: Dict[str, Any]) -> Dict[str, Any]:
+    """Handle a generic ops operation.
+
+    Expected event format (from workspace-chat-tools dispatch):
+    {
+        "tool": "ops_<operation>",
+        "user_sub": "...",
+        "params": {
+            "operation": "list_tickets",
+            "params": { ... },
+            "description": "...",
+            "auto_approved": true/false
+        }
+    }
+    """
+    params = event.get("params", {})
+    operation = params.get("operation", "")
+    op_params = params.get("params", {})
+    user_sub = event.get("user_sub", "")
+    user_email = event.get("user_email", "")
+    user_groups = event.get("user_groups", [])
+
+    # Make a copy of params to avoid mutating the original
+    op_params = dict(op_params)
+
+    try:
+        lambda_name, method, path, body, query_params = _resolve_lambda_and_request(
+            operation, op_params
+        )
+
+        result = _invoke_ops_lambda(
+            lambda_name=lambda_name,
+            method=method,
+            path=path,
+            body=body,
+            query_params=query_params,
+            user_sub=user_sub,
+            user_email=user_email,
+            user_groups=user_groups,
+        )
+
+        return result
+
+    except Exception as e:
+        logger.error(
+            "Ops operation failed",
+            operation=operation,
+            error=str(e),
+        )
+        raise

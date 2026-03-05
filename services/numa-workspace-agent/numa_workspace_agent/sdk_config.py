@@ -529,10 +529,16 @@ def create_agent_options(
         )
 
     if type_config.enable_numa_mcp:
+        numa_tools = [numa_tool]
+        # Add the ops tool when the feature flag is enabled
+        if os.environ.get("NUMA_OPS_ENABLED", "").lower() in ("1", "true", "yes"):
+            from numa_workspace_agent.mcp_tools import numa_ops_tool
+
+            numa_tools.append(numa_ops_tool)
         mcp_servers["numa"] = create_sdk_mcp_server(
             name="numa",
             version="1.0.0",
-            tools=[numa_tool],
+            tools=numa_tools,
         )
 
     # Connectors: only register if OAuth integrations feature is enabled
