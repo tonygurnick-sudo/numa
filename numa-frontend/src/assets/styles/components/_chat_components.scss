@@ -2771,6 +2771,433 @@ $border-radius-pill: 1rem;
   }
 }
 
+// ── Numa Ops Tool Renderer ──────────────────────────────────────────────
+// Matches kanban board styling: glassmorphism cards, priority dots, status
+// pills, monospace IDs, zinc palette.
+.ops-renderer {
+  font-size: 0.82rem;
+  line-height: 1.5;
+  color: var(--ops-text-default, #3f3f46);
+
+  // ── List container ─────────────────────────────────────────────────
+  .ops-renderer-list {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  // ── Ticket row ─────────────────────────────────────────────────────
+  .ops-renderer-ticket-row {
+    padding: 10px 12px;
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(8px);
+    border: 1px solid rgba(229, 231, 235, 0.8);
+    border-radius: 10px;
+    transition: all 0.15s ease;
+
+    &:hover {
+      border-color: #d1d5db;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+    }
+  }
+
+  .ops-renderer-ticket-row-top {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 6px;
+  }
+
+  .ops-renderer-ticket-title {
+    font-size: 0.84rem;
+    font-weight: 500;
+    color: #111827;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    flex: 1;
+    min-width: 0;
+  }
+
+  .ops-renderer-ticket-row-meta {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+
+  // ── Shared components ──────────────────────────────────────────────
+  .ops-renderer-priority-dot {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .ops-renderer-status-pill {
+    display: inline-flex;
+    align-items: center;
+    font-size: 0.67rem;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 100px;
+    letter-spacing: 0.01em;
+    white-space: nowrap;
+  }
+
+  .ops-renderer-type-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 0.67rem;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 100px;
+    border: 1px solid;
+    letter-spacing: 0.01em;
+    white-space: nowrap;
+
+    i {
+      font-size: 0.62rem;
+    }
+  }
+
+  .ops-renderer-ticket-id {
+    font-family: 'SF Mono', 'Cascadia Code', 'Fira Code', monospace;
+    font-size: 0.68rem;
+    font-weight: 500;
+    color: var(--ops-text-secondary, #a1a1aa);
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  .ops-renderer-meta-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    font-size: 0.68rem;
+    color: var(--ops-text-secondary, #a1a1aa);
+    white-space: nowrap;
+
+    i {
+      font-size: 0.62rem;
+    }
+  }
+
+  .ops-renderer-context-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    font-size: 0.65rem;
+    font-weight: 500;
+    padding: 1px 6px;
+    border-radius: 4px;
+    white-space: nowrap;
+
+    i {
+      font-size: 0.6rem;
+    }
+  }
+
+  .ops-renderer-badge-customer {
+    background: #dbeafe;
+    color: #1d4ed8;
+    border: 1px solid #bfdbfe;
+  }
+
+  .ops-renderer-badge-supplier {
+    background: #f3e8ff;
+    color: #7c3aed;
+    border: 1px solid #e9d5ff;
+  }
+
+  // ── Entity rows (teams, customers, suppliers, projects) ────────────
+  .ops-renderer-entity-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(8px);
+    border: 1px solid rgba(229, 231, 235, 0.8);
+    border-radius: 10px;
+    transition: all 0.15s ease;
+
+    &:hover {
+      border-color: #d1d5db;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+    }
+  }
+
+  .ops-renderer-entity-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    background: rgba(249, 250, 251, 0.8);
+    color: #64748b;
+    font-size: 1rem;
+    flex-shrink: 0;
+    border: 1px solid rgba(226, 232, 240, 0.8);
+
+    &.ops-renderer-icon-customer {
+      background: #eff6ff;
+      color: #3b82f6;
+      border-color: #dbeafe;
+    }
+
+    &.ops-renderer-icon-supplier {
+      background: #faf5ff;
+      color: #8b5cf6;
+      border-color: #f3e8ff;
+    }
+  }
+
+  .ops-renderer-entity-body {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    flex: 1;
+  }
+
+  .ops-renderer-entity-name {
+    font-size: 0.84rem;
+    font-weight: 600;
+    color: #0f172a;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .ops-renderer-entity-desc {
+    font-size: 0.72rem;
+    color: var(--ops-text-muted, #71717a);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .ops-renderer-entity-stats {
+    display: flex;
+    gap: 8px;
+    flex-shrink: 0;
+  }
+
+  .ops-renderer-ticket-count {
+    font-size: 0.72rem;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 8px;
+    white-space: nowrap;
+
+    &.ops-renderer-count-customer {
+      background: #fffbeb;
+      color: #d97706;
+      border: 1px solid #fde68a;
+    }
+
+    &.ops-renderer-count-supplier {
+      background: #f0fdf4;
+      color: #059669;
+      border: 1px solid #bbf7d0;
+    }
+  }
+
+  // ── Detail card (get_ticket) ───────────────────────────────────────
+  .ops-renderer-detail-card {
+    padding: 14px 16px;
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(8px);
+    border: 1px solid rgba(229, 231, 235, 0.8);
+    border-radius: 10px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.02), 0 1px 2px rgba(0, 0, 0, 0.03);
+  }
+
+  .ops-renderer-detail-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+    flex-wrap: wrap;
+  }
+
+  .ops-renderer-detail-title {
+    font-size: 0.92rem;
+    font-weight: 600;
+    color: #111827;
+    margin-bottom: 6px;
+    line-height: 1.4;
+  }
+
+  .ops-renderer-detail-desc {
+    font-size: 0.8rem;
+    color: var(--ops-text-muted, #71717a);
+    margin-bottom: 10px;
+    line-height: 1.55;
+    // Clamp to 4 lines
+    display: -webkit-box;
+    -webkit-line-clamp: 4;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  .ops-renderer-detail-fields {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 6px 16px;
+  }
+
+  .ops-renderer-field {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+
+    .ops-renderer-field-label {
+      font-size: 0.67rem;
+      font-weight: 600;
+      color: var(--ops-text-secondary, #a1a1aa);
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+    }
+  }
+
+  // ── Comments ───────────────────────────────────────────────────────
+  .ops-renderer-comment {
+    padding: 10px 12px;
+    background: rgba(255, 255, 255, 0.95);
+    border: 1px solid rgba(229, 231, 235, 0.8);
+    border-radius: 10px;
+  }
+
+  .ops-renderer-comment-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 4px;
+  }
+
+  .ops-renderer-comment-author {
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: #0f172a;
+  }
+
+  .ops-renderer-comment-date {
+    font-size: 0.67rem;
+    color: var(--ops-text-secondary, #a1a1aa);
+  }
+
+  .ops-renderer-comment-body {
+    font-size: 0.8rem;
+    color: var(--ops-text-default, #3f3f46);
+    line-height: 1.5;
+  }
+
+  // ── Config view ────────────────────────────────────────────────────
+  .ops-renderer-config {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .ops-renderer-config-section {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .ops-renderer-config-label {
+    font-size: 0.7rem;
+    font-weight: 600;
+    color: var(--ops-text-secondary, #a1a1aa);
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+  }
+
+  .ops-renderer-config-items {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+
+  // ── Write confirmation ─────────────────────────────────────────────
+  .ops-renderer-write-confirm {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+    background: #f0fdf4;
+    border: 1px solid #bbf7d0;
+    border-radius: 10px;
+    color: #166534;
+
+    .ops-renderer-write-icon {
+      font-size: 1.1rem;
+      color: #22c55e;
+      flex-shrink: 0;
+    }
+
+    .ops-renderer-write-verb {
+      font-weight: 600;
+      margin-right: 4px;
+    }
+
+    .ops-renderer-write-id {
+      font-weight: 500;
+      color: #15803d;
+    }
+  }
+
+  // ── Error view ─────────────────────────────────────────────────────
+  .ops-renderer-error {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 14px;
+    background: #fef2f2;
+    border: 1px solid #fecaca;
+    border-radius: 10px;
+    color: #991b1b;
+    font-size: 0.8rem;
+
+    i {
+      font-size: 1rem;
+      color: #ef4444;
+      flex-shrink: 0;
+    }
+  }
+
+  // ── Empty state ────────────────────────────────────────────────────
+  .ops-renderer-empty {
+    padding: 12px 16px;
+    text-align: center;
+    color: var(--ops-text-secondary, #a1a1aa);
+    font-size: 0.78rem;
+    font-style: italic;
+  }
+
+  // ── Raw JSON fallback ──────────────────────────────────────────────
+  .ops-renderer-raw {
+    padding: 10px 12px;
+    background: #f9fafb;
+    border: 1px solid rgba(229, 231, 235, 0.8);
+    border-radius: 8px;
+    font-size: 0.72rem;
+    font-family: 'SF Mono', 'Cascadia Code', 'Fira Code', monospace;
+    color: var(--ops-text-default, #3f3f46);
+    overflow-x: auto;
+    max-height: 300px;
+    overflow-y: auto;
+    white-space: pre-wrap;
+    word-break: break-word;
+    margin: 0;
+  }
+}
+// ── End Numa Ops Tool Renderer ─────────────────────────────────────────
+
 // File Message Component Styling
 .file-message {
   display: inline-flex;

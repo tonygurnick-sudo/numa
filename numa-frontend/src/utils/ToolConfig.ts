@@ -5,6 +5,7 @@ import { FallbackRenderer } from '../toolRenderers/FallbackRenderer';
 import { DataAnalysisRenderer } from '../toolRenderers/DataAnalysisRenderer';
 import { AgentCreationRenderer } from '../toolRenderers/AgentCreationRenderer';
 import { IntegrationsRenderer } from '../toolRenderers/IntegrationsRenderer';
+import { OpsToolRenderer } from '../toolRenderers/OpsToolRenderer';
 import { getConnectionDisplayName, getConnectionIcon, getConnectionFallbackIcon } from '../config/integrationsConfig';
 import i18n from '../i18n';
 
@@ -27,7 +28,7 @@ const TOOL_RENDERERS: Record<string, ToolRenderer> = {
   data_analysis: DataAnalysisRenderer,
   integrations: IntegrationsRenderer,
   mcp__numa__numa_tool: FallbackRenderer,
-  mcp__numa__numa_ops_tool: FallbackRenderer,
+  mcp__numa__numa_ops_tool: OpsToolRenderer,
   // Numa sub-tool renderers (used when effectiveToolName resolves from mcp__numa__numa_tool input)
   knowledge_base: KnowledgeBaseRenderer,
   extract_content: FallbackRenderer,

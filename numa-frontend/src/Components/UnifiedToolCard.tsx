@@ -17,6 +17,8 @@ import {
   type ToolResultLike,
 } from '../toolRenderers/helpers';
 import { getAgentCreationSummary } from '../toolRenderers/agentCreationHelpers';
+import { OpsToolRenderer } from '../toolRenderers/OpsToolRenderer';
+import { getOpsSummary } from '../toolRenderers/opsHelpers';
 
 type Props = {
   toolName: string;
@@ -117,6 +119,8 @@ export const UnifiedToolCard = ({
     if (effectiveToolName === 'query_knowledge_base') return getKnowledgeBaseSummary(result as ToolResultLike);
     if (effectiveToolName === 'create_agent_tool') return getAgentCreationSummary(result as ToolResultLike);
     if (effectiveToolName === 'data_analysis') return getDataAnalysisSummary(result as ToolResultLike);
+    // Numa Ops tool
+    if (effectiveToolName === 'mcp__numa__numa_ops_tool') return getOpsSummary(result as ToolResultLike);
     // Check if it's an integration tool (ends with _integration)
     if (effectiveToolName.endsWith('_integration')) {
       // Use enhanced status message for integrations
@@ -164,6 +168,12 @@ export const UnifiedToolCard = ({
   const inlineDataAnalysisContent = useMemo(() => {
     if (!hasResult || effectiveToolName !== 'data_analysis') return null;
     return <DataAnalysisRenderer result={result as ToolResultLike} bare />;
+  }, [effectiveToolName, result, hasResult]);
+
+  // Numa Ops tool renders inline (tickets, teams, config, write confirmations)
+  const inlineOpsContent = useMemo(() => {
+    if (!hasResult || effectiveToolName !== 'mcp__numa__numa_ops_tool') return null;
+    return <OpsToolRenderer result={result as ToolResultLike} bare />;
   }, [effectiveToolName, result, hasResult]);
 
   const toggle = () => setExpanded((e) => !e);
@@ -239,6 +249,7 @@ export const UnifiedToolCard = ({
       {inlineIntegrationContent && <div className="tool-card-indent mt-2">{inlineIntegrationContent}</div>}
       {inlineAgentCreationContent && <div className="tool-card-indent mt-2">{inlineAgentCreationContent}</div>}
       {inlineDataAnalysisContent && <div className="tool-card-indent mt-2">{inlineDataAnalysisContent}</div>}
+      {inlineOpsContent && <div className="tool-card-indent mt-2">{inlineOpsContent}</div>}
       {/* Toggle details for tools with collapsible details (web search, KB).
           Show the toggle as soon as the card exists; render body once results arrive. */}
       {hasDetails && (

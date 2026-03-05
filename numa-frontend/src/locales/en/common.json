@@ -581,6 +581,19 @@
       "failed": "Agent creation failed",
       "completed": "Agent creation completed"
     },
+    "numaOps": {
+      "default": "Numa Ops results",
+      "success": "Operation completed successfully",
+      "failed": "⚠️ {{operation}} failed",
+      "configLoaded": "Configuration loaded",
+      "listResult_one": "{{count}} {{category}} found",
+      "listResult_other": "{{count}} {{category}} found",
+      "getResult": "{{category}} details loaded",
+      "created": "Created successfully",
+      "updated": "Updated successfully",
+      "deleted": "Deleted successfully",
+      "completed": "Operation completed"
+    },
     "statusFallback": "completed"
   },
   "toolRenderers": {
@@ -621,6 +634,33 @@
       "adding": "Adding...",
       "useInChat": "Use in chat",
       "useInChatHint": "Click \"Use in chat\" to upload files to this conversation for AI to reference."
+    },
+    "numaOps": {
+      "noTickets": "No tickets found",
+      "noTeams": "No teams found",
+      "noCustomers": "No customers found",
+      "noSuppliers": "No suppliers found",
+      "noProjects": "No projects found",
+      "noComments": "No comments yet",
+      "fields": {
+        "assignee": "Assignee",
+        "dueDate": "Due Date",
+        "project": "Project",
+        "customer": "Customer",
+        "supplier": "Supplier"
+      },
+      "config": {
+        "ticketTypes": "Ticket Types",
+        "statuses": "Statuses",
+        "staff": "Staff",
+        "projects": "Projects"
+      },
+      "write": {
+        "created": "Created",
+        "updated": "Updated",
+        "deleted": "Deleted",
+        "completed": "Completed"
+      }
     }
   },
   "traceViewer": {
