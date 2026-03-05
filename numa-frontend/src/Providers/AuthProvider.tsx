@@ -2229,13 +2229,21 @@ const isTransientError = (error: unknown): boolean => {
 
     const msg = typeof err.message === 'string' ? err.message.toLowerCase() : '';
 
-    // TypeError from fetch() rejection specifically says "failed to fetch" or "network"
+    // TypeError from fetch() rejection — message varies by browser:
+    // Chrome: "Failed to fetch", Safari: "Load failed", Firefox: "NetworkError"
     if (error instanceof TypeError) {
-      return ['failed to fetch', 'network', 'abort'].some((kw) => msg.includes(kw));
+      return ['failed to fetch', 'load failed', 'network', 'abort'].some((kw) => msg.includes(kw));
     }
 
-    // Other errors with network-related messages
-    if (['network', 'timeout', 'abort', 'dns', 'econnrefused', 'enotfound'].some((kw) => msg.includes(kw))) {
+    // Other errors with network-related messages (includes re-wrapped fetch errors
+    // where the original TypeError is caught and re-thrown as a plain Error).
+    // Use word-boundary-safe checks to avoid false positives like "Failed to fetch secret hash".
+    if (
+      ['network', 'timeout', 'abort', 'dns', 'econnrefused', 'enotfound', 'load failed'].some((kw) =>
+        msg.includes(kw),
+      ) ||
+      msg === 'failed to fetch'
+    ) {
       return true;
     }
   }

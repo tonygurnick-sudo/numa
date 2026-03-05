@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   Card,
@@ -9,9 +9,13 @@ import {
   Col,
   ListGroup,
   Badge,
-  Container
+  Collapse,
+  Container,
+  Dropdown
 } from 'react-bootstrap'
-import { ArrowLeft, Download, BarChart } from 'react-bootstrap-icons'
+import { ArrowLeft, Download, BarChart, Funnel, XCircle } from 'react-bootstrap-icons'
+import DatePicker from 'react-datepicker'
+import 'react-datepicker/dist/react-datepicker.css'
 import { Tabs, Tab } from 'react-bootstrap'
 import { ProgressTracker } from '@/components/tools/ProgressTracker'
 import { GroupedClientSelector } from '@/components/tools/GroupedClientSelector'
@@ -21,8 +25,9 @@ import { UsageReportService } from '@/services/usageReportService'
 import { FileExportService } from '@/utils/fileExport'
 import { DateUtils } from '@/utils/dateUtils'
 import { clientService } from '@/services/clientService'
-import type { Client } from '@/types'
-import { CLIENT_STATUS_DISPLAY } from '@/types'
+import { clientMetadataService } from '@/services/clientMetadataService'
+import type { Client, ClientMetadata } from '@/types'
+import { CLIENT_STATUS_DISPLAY, CLIENT_STATUS_VALUES } from '@/types'
 import type { ClientStatusValue } from '@/types'
 import type {
   AgentRecord,
@@ -85,6 +90,14 @@ export default function UsageReportTool() {
   // Separate state for month inputs to allow free editing
   const [startMonthInput, setStartMonthInput] = useState('')
   const [endMonthInput, setEndMonthInput] = useState('')
+  // Client filter state
+  const [metadataMap, setMetadataMap] = useState<Map<string, ClientMetadata>>(new Map())
+  const [statusFilters, setStatusFilters] = useState<string[]>([])
+  const [trialStartFrom, setTrialStartFrom] = useState('')
+  const [trialStartTo, setTrialStartTo] = useState('')
+  const [trialEndFrom, setTrialEndFrom] = useState('')
+  const [trialEndTo, setTrialEndTo] = useState('')
+  const [showFilters, setShowFilters] = useState(false)
 
   const { execution, isRunning, execute, cancel, reset } = useToolExecution({
     onCompleted: (result) => {
@@ -114,14 +127,100 @@ export default function UsageReportTool() {
   const loadClients = async () => {
     setLoadingClients(true)
     try {
-      const allClients = await clientService.getAllClients()
+      const [allClients, metadata] = await Promise.all([
+        clientService.getAllClients(),
+        clientMetadataService.getAllMetadata(),
+      ])
       setClients(allClients)
+      setMetadataMap(metadata)
     } catch (error) {
       console.error('Failed to load clients:', error)
     } finally {
       setLoadingClients(false)
     }
   }
+
+  const activeFilterCount = useMemo(() => {
+    let count = 0
+    if (statusFilters.length > 0) count++
+    if (trialStartFrom || trialStartTo) count++
+    if (trialEndFrom || trialEndTo) count++
+    return count
+  }, [statusFilters, trialStartFrom, trialStartTo, trialEndFrom, trialEndTo])
+
+  const clearFilters = () => {
+    setStatusFilters([])
+    setTrialStartFrom('')
+    setTrialStartTo('')
+    setTrialEndFrom('')
+    setTrialEndTo('')
+  }
+
+  const handleStatusToggle = (value: string) => {
+    setStatusFilters(prev =>
+      prev.includes(value) ? prev.filter(s => s !== value) : [...prev, value]
+    )
+  }
+
+  const statusOptions: { value: string; label: string }[] = [
+    ...CLIENT_STATUS_VALUES.map(s => ({ value: s, label: CLIENT_STATUS_DISPLAY[s].label })),
+    { value: 'expired', label: 'Trial - Expired' },
+    { value: 'unset', label: 'No Status Set' },
+  ]
+
+  const filteredClients = useMemo(() => {
+    let result = clients
+
+    if (statusFilters.length > 0) {
+      result = result.filter(c => {
+        const meta = metadataMap.get(c.name)
+        if (!meta) return statusFilters.includes('unset')
+        const isExpired = meta.status === 'trial' && meta.trialEndDate && new Date(meta.trialEndDate) < new Date()
+        return statusFilters.some(f => {
+          if (f === 'expired') return isExpired
+          if (f === 'unset') return false
+          return meta.status === f
+        })
+      })
+    }
+
+    if (trialStartFrom) {
+      result = result.filter(c => {
+        const meta = metadataMap.get(c.name)
+        return meta?.trialStartDate && meta.trialStartDate >= trialStartFrom
+      })
+    }
+    if (trialStartTo) {
+      result = result.filter(c => {
+        const meta = metadataMap.get(c.name)
+        return meta?.trialStartDate && meta.trialStartDate <= trialStartTo
+      })
+    }
+
+    if (trialEndFrom) {
+      result = result.filter(c => {
+        const meta = metadataMap.get(c.name)
+        return meta?.trialEndDate && meta.trialEndDate >= trialEndFrom
+      })
+    }
+    if (trialEndTo) {
+      result = result.filter(c => {
+        const meta = metadataMap.get(c.name)
+        return meta?.trialEndDate && meta.trialEndDate <= trialEndTo
+      })
+    }
+
+    return result
+  }, [clients, statusFilters, trialStartFrom, trialStartTo, trialEndFrom, trialEndTo, metadataMap])
+
+  // Remove selected clients that are no longer in the filtered list
+  useEffect(() => {
+    const filteredNames = new Set(filteredClients.map(c => c.name))
+    const validSelections = parameters.clientNames.filter(n => filteredNames.has(n))
+    if (validSelections.length !== parameters.clientNames.length) {
+      setParameters(prev => ({ ...prev, clientNames: validSelections }))
+    }
+  }, [filteredClients])
 
   const handleClientToggle = (clientName: string) => {
     setParameters(prev => {
@@ -211,6 +310,8 @@ export default function UsageReportTool() {
     setActiveTab('summary')
     setStartMonthInput('')
     setEndMonthInput('')
+    clearFilters()
+    setShowFilters(false)
     setParameters({
       clientNames: [],
       timePeriod: 'current-year',
@@ -960,8 +1061,126 @@ export default function UsageReportTool() {
                       Clients <span className="text-danger">*</span>
                     </Form.Label>
 
+                    <div className="d-flex align-items-center gap-2 mb-2">
+                      <Button
+                        variant={activeFilterCount > 0 ? 'primary' : 'outline-secondary'}
+                        size="sm"
+                        onClick={() => setShowFilters(!showFilters)}
+                      >
+                        <Funnel size={12} className="me-1" />
+                        Filters
+                        {activeFilterCount > 0 && (
+                          <Badge bg="light" text="dark" pill className="ms-1">
+                            {activeFilterCount}
+                          </Badge>
+                        )}
+                      </Button>
+                      {activeFilterCount > 0 && (
+                        <Button
+                          variant="outline-danger"
+                          size="sm"
+                          onClick={clearFilters}
+                          title="Clear all filters"
+                        >
+                          <XCircle size={12} className="me-1" />
+                          Clear
+                        </Button>
+                      )}
+                    </div>
+                    <Collapse in={showFilters}>
+                      <div className="mb-2 p-2 bg-light rounded border">
+                        <Row className="g-2">
+                          <Col xs={12}>
+                            <Form.Label className="small fw-semibold text-muted mb-1">Status</Form.Label>
+                            <Dropdown autoClose="outside">
+                              <Dropdown.Toggle variant="outline-secondary" size="sm" className="w-100 text-start">
+                                {statusFilters.length === 0
+                                  ? 'All Statuses'
+                                  : statusFilters.map(f => statusOptions.find(o => o.value === f)?.label).join(', ')}
+                              </Dropdown.Toggle>
+                              <Dropdown.Menu className="w-100">
+                                {statusOptions.map(opt => (
+                                  <Dropdown.Item
+                                    key={opt.value}
+                                    as="div"
+                                    className="py-1"
+                                    onClick={() => handleStatusToggle(opt.value)}
+                                  >
+                                    <Form.Check
+                                      type="checkbox"
+                                      label={opt.label}
+                                      checked={statusFilters.includes(opt.value)}
+                                      onChange={() => handleStatusToggle(opt.value)}
+                                    />
+                                  </Dropdown.Item>
+                                ))}
+                              </Dropdown.Menu>
+                            </Dropdown>
+                          </Col>
+                          <Col xs={6}>
+                            <Form.Label className="small fw-semibold text-muted mb-1">Trial Start From</Form.Label>
+                            <DatePicker
+                              selected={trialStartFrom ? new Date(trialStartFrom) : null}
+                              onChange={(date: Date | null) => setTrialStartFrom(date ? date.toISOString().split('T')[0] : '')}
+                              dateFormat="yyyy-MM-dd"
+                              className="form-control form-control-sm"
+                              placeholderText="Select date"
+                              isClearable
+                              showMonthDropdown
+                              showYearDropdown
+                              dropdownMode="select"
+                            />
+                          </Col>
+                          <Col xs={6}>
+                            <Form.Label className="small fw-semibold text-muted mb-1">Trial Start To</Form.Label>
+                            <DatePicker
+                              selected={trialStartTo ? new Date(trialStartTo) : null}
+                              onChange={(date: Date | null) => setTrialStartTo(date ? date.toISOString().split('T')[0] : '')}
+                              dateFormat="yyyy-MM-dd"
+                              className="form-control form-control-sm"
+                              placeholderText="Select date"
+                              isClearable
+                              showMonthDropdown
+                              showYearDropdown
+                              dropdownMode="select"
+                              minDate={trialStartFrom ? new Date(trialStartFrom) : undefined}
+                            />
+                          </Col>
+                          <Col xs={6}>
+                            <Form.Label className="small fw-semibold text-muted mb-1">Trial End From</Form.Label>
+                            <DatePicker
+                              selected={trialEndFrom ? new Date(trialEndFrom) : null}
+                              onChange={(date: Date | null) => setTrialEndFrom(date ? date.toISOString().split('T')[0] : '')}
+                              dateFormat="yyyy-MM-dd"
+                              className="form-control form-control-sm"
+                              placeholderText="Select date"
+                              isClearable
+                              showMonthDropdown
+                              showYearDropdown
+                              dropdownMode="select"
+                            />
+                          </Col>
+                          <Col xs={6}>
+                            <Form.Label className="small fw-semibold text-muted mb-1">Trial End To</Form.Label>
+                            <DatePicker
+                              selected={trialEndTo ? new Date(trialEndTo) : null}
+                              onChange={(date: Date | null) => setTrialEndTo(date ? date.toISOString().split('T')[0] : '')}
+                              dateFormat="yyyy-MM-dd"
+                              className="form-control form-control-sm"
+                              placeholderText="Select date"
+                              isClearable
+                              showMonthDropdown
+                              showYearDropdown
+                              dropdownMode="select"
+                              minDate={trialEndFrom ? new Date(trialEndFrom) : undefined}
+                            />
+                          </Col>
+                        </Row>
+                      </div>
+                    </Collapse>
+
                     <GroupedClientSelector
-                      clients={clients}
+                      clients={filteredClients}
                       selectedClientNames={parameters.clientNames}
                       onClientToggle={handleClientToggle}
                       onSelectClients={handleSelectClients}

@@ -171,6 +171,8 @@ deploy-dev-gate:
         - yarn-cache-$CI_DEFAULT_BRANCH
       paths:
         - .yarn/cache/
+        - node_modules/
+        - .pnp.*
   before_script:
     - !reference [.yarn, setup-private-auth]
     - corepack enable
