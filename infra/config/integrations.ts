@@ -35,6 +35,10 @@ export const SUPPORTED_INTEGRATIONS = [
   'microsoft_excel',
   'smartsheet',
   'box',
+  'zoho_books',
+  'odoo',
+  'jobber',
+  'canva',
 ] as const;
 
 export type SupportedIntegration = (typeof SUPPORTED_INTEGRATIONS)[number];

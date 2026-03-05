@@ -39,6 +39,10 @@ import zoomIcon from '../assets/icons/zoom.svg';
 import microsoftExcelIcon from '../assets/icons/microsoft_excel.svg';
 import boxIcon from '../assets/icons/box.svg';
 import smartsheetIcon from '../assets/icons/smartsheet.svg';
+import odooIcon from '../assets/icons/odoo.svg';
+import zohoBooksIcon from '../assets/icons/zoho_books.svg';
+import jobberIcon from '../assets/icons/jobber.svg';
+import canvaIcon from '../assets/icons/canva.svg';
 import i18n from '../i18n';
 
 export type BootstrapColor =
@@ -396,6 +400,46 @@ const getConnectionsConfig = (): Record<string, ConnectionConfigEntry> => ({
     fallback_icon: 'bi bi-box-seam',
     fallback_color: 'primary',
     example_query: connectionText('box', 'example_query'),
+  },
+  odoo: {
+    id: 'odoo',
+    name: connectionText('odoo', 'name'),
+    description: connectionText('odoo', 'description'),
+    auth_type: 'oauth',
+    img_src: odooIcon,
+    fallback_icon: 'bi bi-database',
+    fallback_color: 'primary',
+    example_query: connectionText('odoo', 'example_query'),
+  },
+  zoho_books: {
+    id: 'zoho_books',
+    name: connectionText('zoho_books', 'name'),
+    description: connectionText('zoho_books', 'description'),
+    auth_type: 'oauth',
+    img_src: zohoBooksIcon,
+    fallback_icon: 'bi bi-book',
+    fallback_color: 'success',
+    example_query: connectionText('zoho_books', 'example_query'),
+  },
+  jobber: {
+    id: 'jobber',
+    name: connectionText('jobber', 'name'),
+    description: connectionText('jobber', 'description'),
+    auth_type: 'oauth',
+    img_src: jobberIcon,
+    fallback_icon: 'bi bi-tools',
+    fallback_color: 'success',
+    example_query: connectionText('jobber', 'example_query'),
+  },
+  canva: {
+    id: 'canva',
+    name: connectionText('canva', 'name'),
+    description: connectionText('canva', 'description'),
+    auth_type: 'oauth',
+    img_src: canvaIcon,
+    fallback_icon: 'bi bi-palette',
+    fallback_color: 'info',
+    example_query: connectionText('canva', 'example_query'),
   },
 });
 

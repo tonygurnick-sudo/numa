@@ -172,6 +172,7 @@ const CONNECTION_PROMPTS: Record<string, string> = {
 	- Statuses & lifecycle: Prefer creating DRAFT documents, then AUTHORISE when ready.
   Reports
 	- Bank statement pulls: require a bank account and (ideally) a date range; stage these calls carefully due to volume.`,
+  zoho_books: `When using Zoho Books tools: resolve the organisation ID first if multiple orgs exist. Use absolute YYYY-MM-DD dates. Prefer creating DRAFT documents before authorising.`,
 };
 
 /**

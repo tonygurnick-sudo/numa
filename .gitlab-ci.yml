@@ -12,6 +12,7 @@ include:
 workflow:
   auto_cancel:
     on_new_commit: interruptible
+    on_job_failure: all
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
     - if: $CI_COMMIT_BRANCH && $CI_OPEN_MERGE_REQUESTS
@@ -709,6 +710,7 @@ deploy-to-arcanum-demo:
       when: on_success
     - if: $CI_COMMIT_BRANCH == "dev"
       when: on_success
+
 
 deploy-to-median:
   extends: .deploy-infra

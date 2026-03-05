@@ -185,6 +185,26 @@
       "name": "Box",
       "description": "Manage files, folders, and sharing in Box.",
       "example_query": "Find the latest proposal PDF in the shared Box folder."
+    },
+    "odoo": {
+      "name": "Odoo",
+      "description": "Integrated enterprise application platform for ERP and CRM.",
+      "example_query": "List my recent sales orders."
+    },
+    "zoho_books": {
+      "name": "Zoho Books",
+      "description": "Online accounting software to manage your commerce and finances.",
+      "example_query": "List all invoices and expenses."
+    },
+    "jobber": {
+      "name": "Jobber",
+      "description": "Manage service operations, scheduling, and customer communications.",
+      "example_query": "List all my jobs scheduled for today."
+    },
+    "canva": {
+      "name": "Canva",
+      "description": "Design and publish custom graphics, presentations, and social media content.",
+      "example_query": "List all my recent designs."
     }
   },
   "tabs": {

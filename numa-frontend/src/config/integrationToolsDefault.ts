@@ -144,6 +144,18 @@ export const DEFAULT_DENY_TOOLS: DefaultToolDenyList = {
 
   // Box
   box: [],
+
+  // Zoho Books
+  zoho_books: [],
+
+  // Odoo
+  odoo: [],
+
+  // Jobber
+  jobber: [],
+
+  // Canva
+  canva: [],
 };
 
 export const getDefaultDenyTools = (appName: string): string[] => {
