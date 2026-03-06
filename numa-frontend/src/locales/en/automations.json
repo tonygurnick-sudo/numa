@@ -1,0 +1,254 @@
+{
+  "page": {
+    "title": "Automations",
+    "subtitle": "Create workflows that run your agents automatically on a schedule or in response to events.",
+    "newAutomation": "New Automation",
+    "empty": {
+      "title": "No automations yet",
+      "description": "Automations run your agents automatically on a schedule or when something happens. Create your first one to get started.",
+      "cta": "Create Automation"
+    },
+    "loading": "Loading automations...",
+    "viewMode": {
+      "cards": "Card view",
+      "table": "Table view"
+    },
+    "filters": {
+      "search": "Search automations...",
+      "status": {
+        "all": "All statuses",
+        "active": "Active",
+        "paused": "Paused"
+      },
+      "agent": {
+        "all": "All agents"
+      }
+    }
+  },
+  "card": {
+    "scheduled": "Scheduled",
+    "triggered": "Triggered",
+    "lastRun": "Last run",
+    "nextRun": "Next run",
+    "runs": "{{current}} / {{max}} runs",
+    "runsUnlimited": "{{current}} runs",
+    "never": "Never",
+    "noMoreRuns": "No more runs scheduled",
+    "noSchedule": "No schedule set",
+    "type": {
+      "schedule": "Scheduled"
+    },
+    "untitled": "Untitled Automation"
+  },
+  "table": {
+    "name": "Name",
+    "agent": "Agent",
+    "schedule": "Schedule",
+    "status": "Status",
+    "lastRun": "Last Run",
+    "nextRun": "Next Run",
+    "runs": "Runs",
+    "actions": "Actions"
+  },
+  "actions": {
+    "edit": "Edit",
+    "delete": "Delete",
+    "pause": "Pause",
+    "resume": "Resume",
+    "runNow": "Run Now",
+    "running": "Running...",
+    "view": "View Details",
+    "duplicate": "Duplicate",
+    "backToList": "Back to Automations"
+  },
+  "tabs": {
+    "automations": "Automations",
+    "create": "Create",
+    "runs": "Runs"
+  },
+  "sections": {
+    "active": "Active",
+    "completedInactive": "Completed / Inactive",
+    "noActive": "No active automations",
+    "noInactive": "No completed or inactive automations"
+  },
+  "pipeline": {
+    "trigger": "Trigger",
+    "schedule": "Schedule",
+    "agent": "Agent",
+    "type": {
+      "schedule": "Schedule"
+    }
+  },
+  "runs": {
+    "title": "All Runs",
+    "empty": "No automation runs yet.",
+    "loading": "Loading runs...",
+    "automation": "Automation",
+    "agent": "Agent",
+    "runAt": "Run At",
+    "duration": "Duration",
+    "status": "Status",
+    "refresh": "Refresh",
+    "noRuns": "No runs found across your automations."
+  },
+  "status": {
+    "active": "Active",
+    "paused": "Paused",
+    "deleted": "Deleted",
+    "completed": "Completed"
+  },
+  "builder": {
+    "title": {
+      "create": "New Automation",
+      "edit": "Edit Automation"
+    },
+    "subtitle": {
+      "create": "Set up an automated workflow that runs your agent on a schedule or in response to events.",
+      "edit": "Modify your automation settings."
+    },
+    "steps": {
+      "trigger": "Trigger",
+      "schedule": "Schedule",
+      "agent": "Agent",
+      "prompt": "Details",
+      "review": "Review"
+    },
+    "nav": {
+      "back": "Back",
+      "next": "Next",
+      "save": "Save Automation",
+      "saving": "Saving...",
+      "cancel": "Cancel"
+    }
+  },
+  "trigger": {
+    "title": "When should this run?",
+    "subtitle": "Choose what triggers your automation.",
+    "schedule": {
+      "title": "On a schedule",
+      "description": "Run your agent automatically at set times — daily, weekly, or on a custom schedule."
+    },
+    "event": {
+      "title": "When something happens",
+      "description": "Run your agent when an event occurs, like a new email, a file upload, or a CRM update.",
+      "comingSoon": "Coming soon"
+    }
+  },
+  "schedule": {
+    "title": "Set the schedule",
+    "subtitle": "Choose when and how often your automation should run.",
+    "minIntervalWarning": "For recurring schedules, the minimum interval is 30 minutes."
+  },
+  "agent": {
+    "title": "Choose an agent",
+    "subtitle": "Select the agent that will run when this automation fires.",
+    "search": "Search agents...",
+    "empty": "No agents found. Create an agent first to use in automations.",
+    "selected": "Selected agent"
+  },
+  "prompt": {
+    "title": "Configure details",
+    "subtitle": "Give your automation a name and optional instructions for the agent.",
+    "name": {
+      "label": "Automation name",
+      "placeholder": "e.g. Weekly sales report, Daily email digest"
+    },
+    "instructions": {
+      "label": "Instructions (optional)",
+      "placeholder": "Tell the agent what to do when this automation runs. You can include output instructions like 'email the results to team@company.com when done'.",
+      "help": "These instructions are sent to the agent each time the automation runs, in addition to the agent's built-in prompt."
+    },
+    "maxRuns": {
+      "label": "Maximum runs",
+      "help": "The automation will pause after reaching this limit. Set to 0 for unlimited.",
+      "unlimited": "Unlimited"
+    },
+    "emailNotifications": {
+      "label": "Email me when this automation runs",
+      "comingSoon": "Coming soon"
+    },
+    "timezone": {
+      "label": "Timezone"
+    }
+  },
+  "review": {
+    "title": "Review your automation",
+    "subtitle": "Check everything looks right before saving.",
+    "triggerType": "Trigger type",
+    "scheduleLabel": "Schedule",
+    "agentLabel": "Agent",
+    "promptLabel": "Instructions",
+    "nameLabel": "Name",
+    "maxRunsLabel": "Max runs",
+    "timezoneLabel": "Timezone",
+    "emailLabel": "Email notifications",
+    "noPrompt": "No additional instructions",
+    "unlimited": "Unlimited",
+    "enabled": "Enabled",
+    "disabled": "Disabled",
+    "edit": "Edit"
+  },
+  "detail": {
+    "title": "Automation Details",
+    "tabs": {
+      "overview": "Overview",
+      "history": "Run History"
+    },
+    "overview": {
+      "trigger": "Trigger",
+      "schedule": "Schedule",
+      "agent": "Agent",
+      "instructions": "Instructions",
+      "instructionsTitle": "Job Instructions",
+      "instructionsEmpty": "No additional instructions provided.",
+      "maxRuns": "Max runs",
+      "totalRuns": "Total runs",
+      "timezone": "Timezone",
+      "created": "Created",
+      "lastRun": "Last run",
+      "nextRun": "Next run",
+      "status": "Status",
+      "noInstructions": "No additional instructions",
+      "frequency": "Frequency",
+      "scheduleDetails": "Schedule Details"
+    },
+    "history": {
+      "title": "Run History",
+      "empty": "No runs yet. This automation hasn't been triggered.",
+      "loading": "Loading run history...",
+      "runAt": "Run at",
+      "started": "Started",
+      "completed": "Completed",
+      "status": "Status",
+      "duration": "Duration",
+      "viewOutput": "View Output",
+      "total": "{{count}} runs",
+      "succeeded": "{{count}} succeeded",
+      "failed": "{{count}} failed",
+      "successRate": "success rate"
+    }
+  },
+  "confirm": {
+    "delete": "Delete automation \"{{name}}\"?",
+    "deleteDescription": "This will permanently remove this automation and its schedule. Run history will be preserved."
+  },
+  "errors": {
+    "load": "Failed to load automations",
+    "create": "Failed to create automation",
+    "update": "Failed to update automation",
+    "delete": "Failed to delete automation",
+    "run": "Failed to run automation",
+    "nameRequired": "Automation name is required",
+    "agentRequired": "Please select an agent",
+    "scheduleRequired": "Please configure a schedule"
+  },
+  "toast": {
+    "created": "Automation created successfully",
+    "updated": "Automation updated successfully",
+    "deleted": "Automation deleted",
+    "paused": "Automation paused",
+    "resumed": "Automation resumed",
+    "runStarted": "Automation run started"
+  }
+}

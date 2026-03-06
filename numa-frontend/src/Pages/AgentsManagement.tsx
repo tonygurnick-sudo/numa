@@ -275,11 +275,9 @@ export const AgentsManagement = () => {
     await loadAgents();
   };
 
-  const handleScheduleAgent = (agent: AgentSummary) => {
-    // Open the edit modal directly at the scheduling section
-    setEditingAgent(agent);
-    setEditModalAccordionKey('4'); // "4" is the scheduling accordion key
-    setIsModalOpen(true);
+  const handleScheduleAgent = (_agent: AgentSummary) => {
+    // Navigate to the Automations page — scheduling is managed there
+    navigate('/automations');
   };
 
   const buildScheduleRunConfig = (agent: AgentSummary) => {
@@ -573,7 +571,7 @@ export const AgentsManagement = () => {
                     size="sm"
                     className="p-0 text-decoration-none"
                     style={{ color: brandPrimaryColor }}
-                    onClick={() => navigate('/scheduling')}
+                    onClick={() => navigate('/automations')}
                   >
                     {t('management.upcomingSchedules.viewAll')}
                   </Button>
@@ -593,7 +591,7 @@ export const AgentsManagement = () => {
                       style={{ fontSize: '0.85rem', cursor: 'pointer' }}
                       role="button"
                       tabIndex={0}
-                      onClick={() => navigate(`/scheduling/${schedule.scheduleId}`, { state: { schedule } })}
+                      onClick={() => navigate(`/automations/${schedule.scheduleId}`, { state: { schedule } })}
                       onKeyDown={(e) => {
                         if (e.key === 'Enter' || e.key === ' ') {
                           e.preventDefault();

@@ -22,6 +22,7 @@ import {
   Store,
   Star,
   UserRound,
+  Zap,
 } from 'lucide-react';
 import { FeatureWrapper } from './RequiredFeaturesWrapper';
 import { useBranding } from '../Providers/BrandingContext';
@@ -606,6 +607,8 @@ function getPlannedNavIcon(item, interfaceMode) {
       return History;
     case 'nav.items.scheduling':
       return CalendarDays;
+    case 'nav.items.automations':
+      return Zap;
     case 'nav.items.companyKnowledgeBase':
       return Building2;
     case 'nav.items.userKnowledgeBase':

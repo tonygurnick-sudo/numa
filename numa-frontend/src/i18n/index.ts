@@ -30,6 +30,7 @@ i18n
       'vault',
       'ops',
       'support',
+      'automations',
     ],
     interpolation: { escapeValue: false },
     detection: {

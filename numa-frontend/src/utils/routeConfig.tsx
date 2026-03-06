@@ -30,6 +30,13 @@ const DataConnectorsPage = lazy(() =>
 const ScheduleDetailPage = lazy(() =>
   import('../Pages/ScheduleDetailPage').then((m) => ({ default: m.ScheduleDetailPage }))
 );
+const AutomationsPage = lazy(() => import('../Pages/AutomationsPage').then((m) => ({ default: m.AutomationsPage })));
+const AutomationBuilderPage = lazy(() =>
+  import('../Pages/AutomationBuilderPage').then((m) => ({ default: m.AutomationBuilderPage }))
+);
+const AutomationDetailPage = lazy(() =>
+  import('../Pages/AutomationDetailPage').then((m) => ({ default: m.AutomationDetailPage }))
+);
 const NotificationsPage = lazy(() =>
   import('../Pages/NotificationsPage').then((m) => ({ default: m.NotificationsPage }))
 );
@@ -95,6 +102,21 @@ export const ROUTE_CONFIG = [
   },
 
   {
+    path: '/automations',
+    element: () => <AutomationsPage />,
+    featureFlag: 'SCHEDULING',
+    nav: {
+      label: 'Automations',
+      labelKey: 'nav.items.automations',
+      icon: 'bi bi-lightning-charge-fill',
+      section: 'workflows',
+      sectionKey: 'nav.sections.workflows',
+      featureFlag: 'SCHEDULING',
+      order: 5.5,
+    },
+  },
+
+  {
     path: '/files/*',
     element: () => <FilesPage />,
     featureFlag: 'NUMA_FILES',
@@ -105,7 +127,7 @@ export const ROUTE_CONFIG = [
       section: 'workflows',
       sectionKey: 'nav.sections.workflows',
       featureFlag: 'NUMA_FILES',
-      order: 5.5,
+      order: 5.7,
     },
   },
 
@@ -138,19 +160,11 @@ export const ROUTE_CONFIG = [
       order: 6,
     },
   },
+  // Legacy scheduling route — kept for backward compatibility, no longer in nav
   {
     path: '/scheduling',
     element: () => <SchedulingPage />,
     featureFlag: 'SCHEDULING',
-    nav: {
-      label: 'Scheduling',
-      labelKey: 'nav.items.scheduling',
-      icon: 'bi bi-calendar-event',
-      section: 'timeline',
-      sectionKey: 'nav.sections.timeline',
-      featureFlag: 'SCHEDULING',
-      order: 7,
-    },
   },
   {
     path: '/notifications',
@@ -289,6 +303,7 @@ export const ROUTE_CONFIG = [
     path: '/app/:appId',
     element: () => <AppDetail />,
   },
+  // Legacy schedule detail — backward compat
   {
     path: '/apps/v2/:appId',
     element: () => <V2AppDetail />,
@@ -297,6 +312,22 @@ export const ROUTE_CONFIG = [
   {
     path: '/scheduling/:scheduleId',
     element: () => <ScheduleDetailPage />,
+    featureFlag: 'SCHEDULING',
+  },
+  // Automation sub-routes (hidden — no nav)
+  {
+    path: '/automations/new',
+    element: () => <AutomationBuilderPage />,
+    featureFlag: 'SCHEDULING',
+  },
+  {
+    path: '/automations/:automationId',
+    element: () => <AutomationDetailPage />,
+    featureFlag: 'SCHEDULING',
+  },
+  {
+    path: '/automations/:automationId/edit',
+    element: () => <AutomationBuilderPage />,
     featureFlag: 'SCHEDULING',
   },
 

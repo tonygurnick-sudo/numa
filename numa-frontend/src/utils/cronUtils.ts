@@ -612,6 +612,7 @@ const formatNextRunTime = (nextRun: Date): string => {
  * Converts a cron expression to a human-readable description
  */
 export const describeCronExpression = (cronExpression: string): string => {
+  if (!cronExpression) return '';
   try {
     // Handle rate expressions first
     if (cronExpression.startsWith('rate(')) {
