@@ -13,12 +13,10 @@ can reach the ops Lambdas directly.
 """
 
 import json
-import logging
 import os
 from typing import Any, Dict
 
 import structlog
-from botocore.exceptions import ClientError
 
 from prm import client as prm_client
 
@@ -89,8 +87,13 @@ def _invoke_ops_lambda(
         raise ValueError(f"Ops Lambda not configured for path: {path}")
 
     event = _build_apigw_event(
-        method, path, body, query_params,
-        user_sub=user_sub, user_email=user_email, user_groups=user_groups,
+        method,
+        path,
+        body,
+        query_params,
+        user_sub=user_sub,
+        user_email=user_email,
+        user_groups=user_groups,
     )
 
     lambda_client = _get_lambda_client()
@@ -117,7 +120,7 @@ def _invoke_ops_lambda(
             function_error=response["FunctionError"],
             response_payload=str(response_payload)[:500],
         )
-        raise Exception(f"Ops Lambda failed: {response_payload}")
+        raise RuntimeError(f"Ops Lambda failed: {response_payload}")
 
     # The ops Lambdas return { statusCode, headers, body }
     status_code = response_payload.get("statusCode", 500)
@@ -130,7 +133,7 @@ def _invoke_ops_lambda(
 
     if status_code >= 400:
         error_msg = result.get("error", f"HTTP {status_code}")
-        raise Exception(f"Ops API error ({status_code}): {error_msg}")
+        raise RuntimeError(f"Ops API error ({status_code}): {error_msg}")
 
     return result
 
@@ -139,24 +142,42 @@ def _invoke_ops_lambda(
 
 # Operations that route to numa-ops-api
 OPS_API_OPERATIONS = {
-    "list_teams", "get_team", "create_team", "update_team",
-    "list_tickets", "get_ticket", "search_tickets",
-    "create_ticket", "update_ticket", "delete_ticket",
-    "add_comment", "list_comments",
-    "upload_attachment", "get_metrics",
+    "list_teams",
+    "get_team",
+    "create_team",
+    "update_team",
+    "list_tickets",
+    "get_ticket",
+    "search_tickets",
+    "create_ticket",
+    "update_ticket",
+    "delete_ticket",
+    "add_comment",
+    "list_comments",
+    "upload_attachment",
+    "get_metrics",
 }
 
 # Operations that route to numa-ops-config-api
 OPS_CONFIG_OPERATIONS = {
-    "get_config", "list_projects", "create_project", "update_project",
+    "get_config",
+    "list_projects",
+    "create_project",
+    "update_project",
 }
 
 # Operations that route to numa-ops-crm-api
 OPS_CRM_OPERATIONS = {
-    "list_customers", "get_customer", "create_customer",
-    "update_customer", "delete_customer",
-    "list_suppliers", "get_supplier", "create_supplier",
-    "update_supplier", "delete_supplier",
+    "list_customers",
+    "get_customer",
+    "create_customer",
+    "update_customer",
+    "delete_customer",
+    "list_suppliers",
+    "get_supplier",
+    "create_supplier",
+    "update_supplier",
+    "delete_supplier",
 }
 
 
@@ -180,7 +201,13 @@ def _resolve_lambda_and_request(
 
     if operation == "update_project":
         project_id = params.pop("project_id", "")
-        return (OPS_CONFIG_API_LAMBDA, "PUT", f"ops/config/projects/{project_id}", params, None)
+        return (
+            OPS_CONFIG_API_LAMBDA,
+            "PUT",
+            f"ops/config/projects/{project_id}",
+            params,
+            None,
+        )
 
     # ── CRM operations → numa-ops-crm-api ──
     if operation == "list_customers":
@@ -190,7 +217,13 @@ def _resolve_lambda_and_request(
         return (OPS_CRM_API_LAMBDA, "GET", "ops/customers", None, qp or None)
 
     if operation == "get_customer":
-        return (OPS_CRM_API_LAMBDA, "GET", f"ops/customers/{params.get('customer_id', '')}", None, None)
+        return (
+            OPS_CRM_API_LAMBDA,
+            "GET",
+            f"ops/customers/{params.get('customer_id', '')}",
+            None,
+            None,
+        )
 
     if operation == "create_customer":
         return (OPS_CRM_API_LAMBDA, "POST", "ops/customers", params, None)
@@ -200,7 +233,13 @@ def _resolve_lambda_and_request(
         return (OPS_CRM_API_LAMBDA, "PUT", f"ops/customers/{customer_id}", params, None)
 
     if operation == "delete_customer":
-        return (OPS_CRM_API_LAMBDA, "DELETE", f"ops/customers/{params.get('customer_id', '')}", None, None)
+        return (
+            OPS_CRM_API_LAMBDA,
+            "DELETE",
+            f"ops/customers/{params.get('customer_id', '')}",
+            None,
+            None,
+        )
 
     if operation == "list_suppliers":
         qp = {}
@@ -209,7 +248,13 @@ def _resolve_lambda_and_request(
         return (OPS_CRM_API_LAMBDA, "GET", "ops/suppliers", None, qp or None)
 
     if operation == "get_supplier":
-        return (OPS_CRM_API_LAMBDA, "GET", f"ops/suppliers/{params.get('supplier_id', '')}", None, None)
+        return (
+            OPS_CRM_API_LAMBDA,
+            "GET",
+            f"ops/suppliers/{params.get('supplier_id', '')}",
+            None,
+            None,
+        )
 
     if operation == "create_supplier":
         return (OPS_CRM_API_LAMBDA, "POST", "ops/suppliers", params, None)
@@ -219,14 +264,26 @@ def _resolve_lambda_and_request(
         return (OPS_CRM_API_LAMBDA, "PUT", f"ops/suppliers/{supplier_id}", params, None)
 
     if operation == "delete_supplier":
-        return (OPS_CRM_API_LAMBDA, "DELETE", f"ops/suppliers/{params.get('supplier_id', '')}", None, None)
+        return (
+            OPS_CRM_API_LAMBDA,
+            "DELETE",
+            f"ops/suppliers/{params.get('supplier_id', '')}",
+            None,
+            None,
+        )
 
     # ── Core ops operations → numa-ops-api ──
     if operation == "list_teams":
         return (OPS_API_LAMBDA, "GET", "ops/teams", None, None)
 
     if operation == "get_team":
-        return (OPS_API_LAMBDA, "GET", f"ops/teams/{params.get('team_id', '')}", None, None)
+        return (
+            OPS_API_LAMBDA,
+            "GET",
+            f"ops/teams/{params.get('team_id', '')}",
+            None,
+            None,
+        )
 
     if operation == "create_team":
         return (OPS_API_LAMBDA, "POST", "ops/teams", params, None)
@@ -246,8 +303,20 @@ def _resolve_lambda_and_request(
 
     if operation == "get_ticket":
         if params.get("display_id"):
-            return (OPS_API_LAMBDA, "GET", f"ops/tickets/by-display-id/{params['display_id']}", None, None)
-        return (OPS_API_LAMBDA, "GET", f"ops/tickets/{params.get('ticket_id', '')}", None, None)
+            return (
+                OPS_API_LAMBDA,
+                "GET",
+                f"ops/tickets/by-display-id/{params['display_id']}",
+                None,
+                None,
+            )
+        return (
+            OPS_API_LAMBDA,
+            "GET",
+            f"ops/tickets/{params.get('ticket_id', '')}",
+            None,
+            None,
+        )
 
     if operation == "search_tickets":
         qp = {"search": params.get("query", "")}

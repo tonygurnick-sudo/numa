@@ -110,9 +110,7 @@ const TRUNCATED_RE = /\n\.\.\. \(truncated,.*\)$/;
  * The ops tool always returns text blocks (never JSON blocks).
  */
 function extractText(result: ToolResultLike): string {
-  const blocks = Array.isArray(result?.content)
-    ? (result.content as Array<{ text?: string }>)
-    : undefined;
+  const blocks = Array.isArray(result?.content) ? (result.content as Array<{ text?: string }>) : undefined;
   if (Array.isArray(blocks)) {
     return blocks.map((b) => b?.text ?? '').join('');
   }
@@ -165,7 +163,17 @@ export function getOpsPayload(result: ToolResultLike): OpsPayload | null {
 // Operation classification
 // ---------------------------------------------------------------------------
 
-type OpsCategory = 'tickets' | 'teams' | 'customers' | 'suppliers' | 'projects' | 'config' | 'comments' | 'metrics' | 'upload' | 'unknown';
+type OpsCategory =
+  | 'tickets'
+  | 'teams'
+  | 'customers'
+  | 'suppliers'
+  | 'projects'
+  | 'config'
+  | 'comments'
+  | 'metrics'
+  | 'upload'
+  | 'unknown';
 
 export function getOpsCategory(operation: string): OpsCategory {
   if (operation === 'get_config') return 'config';

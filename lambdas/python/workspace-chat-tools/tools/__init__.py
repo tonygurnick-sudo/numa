@@ -20,6 +20,7 @@ from .knowledge_base import (
     handle_retrieve_kb_file,
 )
 from .list_kb_files import handle_list_kb_files
+from .ops import handle_ops_operation
 from .pipedream_integration import (
     handle_approve_action,
     handle_configure_props,
@@ -32,7 +33,6 @@ from .user_profile import (
     handle_list_memories,
     handle_update_memory,
 )
-from .ops import handle_ops_operation
 from .web_search import handle_web_search
 
 __all__ = [

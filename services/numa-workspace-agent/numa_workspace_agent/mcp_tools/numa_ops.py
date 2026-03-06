@@ -25,40 +25,44 @@ from numa_workspace_agent.mcp_tools.lambda_client import invoke_workspace_tool
 logger = logging.getLogger(__name__)
 
 # Operations that are read-only and can be auto-approved
-SAFE_OPERATIONS = frozenset({
-    "get_config",
-    "list_teams",
-    "get_team",
-    "list_tickets",
-    "get_ticket",
-    "search_tickets",
-    "list_comments",
-    "list_customers",
-    "get_customer",
-    "list_suppliers",
-    "get_supplier",
-    "list_projects",
-    "get_metrics",
-})
+SAFE_OPERATIONS = frozenset(
+    {
+        "get_config",
+        "list_teams",
+        "get_team",
+        "list_tickets",
+        "get_ticket",
+        "search_tickets",
+        "list_comments",
+        "list_customers",
+        "get_customer",
+        "list_suppliers",
+        "get_supplier",
+        "list_projects",
+        "get_metrics",
+    }
+)
 
 # All valid operations
-VALID_OPERATIONS = SAFE_OPERATIONS | frozenset({
-    "create_team",
-    "update_team",
-    "create_ticket",
-    "update_ticket",
-    "delete_ticket",
-    "add_comment",
-    "create_customer",
-    "update_customer",
-    "delete_customer",
-    "create_supplier",
-    "update_supplier",
-    "delete_supplier",
-    "create_project",
-    "update_project",
-    "upload_attachment",
-})
+VALID_OPERATIONS = SAFE_OPERATIONS | frozenset(
+    {
+        "create_team",
+        "update_team",
+        "create_ticket",
+        "update_ticket",
+        "delete_ticket",
+        "add_comment",
+        "create_customer",
+        "update_customer",
+        "delete_customer",
+        "create_supplier",
+        "update_supplier",
+        "delete_supplier",
+        "create_project",
+        "update_project",
+        "upload_attachment",
+    }
+)
 
 
 def _ok(text: str) -> dict[str, Any]:

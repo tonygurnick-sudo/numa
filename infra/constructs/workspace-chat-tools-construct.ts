@@ -274,11 +274,9 @@ export class WorkspaceChatToolsConstruct extends Construct {
     });
 
     // Lambda invoke permission for Numa Ops Lambdas (ops tool)
-    const opsLambdaArns = [
-      props.opsApiLambdaArn,
-      props.opsConfigApiLambdaArn,
-      props.opsCrmApiLambdaArn,
-    ].filter(Boolean) as string[];
+    const opsLambdaArns = [props.opsApiLambdaArn, props.opsConfigApiLambdaArn, props.opsCrmApiLambdaArn].filter(
+      Boolean
+    ) as string[];
     if (opsLambdaArns.length > 0) {
       policyStatements.push({
         sid: 'InvokeOpsLambdas',

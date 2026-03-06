@@ -655,6 +655,7 @@
         "staff": "Staff",
         "projects": "Projects"
       },
+      "openTickets": "{{count}} open",
       "write": {
         "created": "Created",
         "updated": "Updated",

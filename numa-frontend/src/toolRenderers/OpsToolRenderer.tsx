@@ -32,13 +32,7 @@ import {
 const PriorityDot = ({ priority }: { priority?: string }) => {
   if (!priority) return null;
   const color = getPriorityColor(priority);
-  return (
-    <span
-      className="ops-renderer-priority-dot"
-      style={{ backgroundColor: color }}
-      title={priority}
-    />
-  );
+  return <span className="ops-renderer-priority-dot" style={{ backgroundColor: color }} title={priority} />;
 };
 
 const StatusPill = ({ status }: { status?: { name?: string; type?: string } }) => {
@@ -75,9 +69,7 @@ const TicketId = ({ id }: { id?: string }) => {
   return <span className="ops-renderer-ticket-id">{id}</span>;
 };
 
-const EmptyState = ({ message }: { message: string }) => (
-  <div className="ops-renderer-empty">{message}</div>
-);
+const EmptyState = ({ message }: { message: string }) => <div className="ops-renderer-empty">{message}</div>;
 
 // ── Ticket views ───────────────────────────────────────────────────────
 
@@ -142,9 +134,7 @@ const TicketDetail = ({ ticket }: { ticket: OpsTicket }) => {
         <TypeBadge type={ticket.ticketType} />
       </div>
       <div className="ops-renderer-detail-title">{ticket.title}</div>
-      {ticket.description && (
-        <div className="ops-renderer-detail-desc">{ticket.description}</div>
-      )}
+      {ticket.description && <div className="ops-renderer-detail-desc">{ticket.description}</div>}
       <div className="ops-renderer-detail-fields">
         {ticket.assignee?.name && (
           <div className="ops-renderer-field">
@@ -190,9 +180,7 @@ const TeamRow = ({ team }: { team: OpsTeam }) => (
     </div>
     <div className="ops-renderer-entity-body">
       <span className="ops-renderer-entity-name">{team.name}</span>
-      {team.description && (
-        <span className="ops-renderer-entity-desc">{team.description}</span>
-      )}
+      {team.description && <span className="ops-renderer-entity-desc">{team.description}</span>}
     </div>
     {(team.memberCount != null || team.ticketCount != null) && (
       <div className="ops-renderer-entity-stats">
@@ -225,24 +213,25 @@ const TeamList = ({ teams }: { teams: OpsTeam[] }) => {
 
 // ── Customer / Supplier views ──────────────────────────────────────────
 
-const CrmRow = ({ entity, type }: { entity: OpsCustomer | OpsSupplier; type: 'customer' | 'supplier' }) => (
-  <div className="ops-renderer-entity-row">
-    <div className={`ops-renderer-entity-icon ops-renderer-icon-${type}`}>
-      <i className={type === 'customer' ? 'bi bi-building' : 'bi bi-truck'} />
-    </div>
-    <div className="ops-renderer-entity-body">
-      <span className="ops-renderer-entity-name">{entity.companyName}</span>
-      {entity.contactName && (
-        <span className="ops-renderer-entity-desc">{entity.contactName}</span>
+const CrmRow = ({ entity, type }: { entity: OpsCustomer | OpsSupplier; type: 'customer' | 'supplier' }) => {
+  const { t } = useTranslation('common');
+  return (
+    <div className="ops-renderer-entity-row">
+      <div className={`ops-renderer-entity-icon ops-renderer-icon-${type}`}>
+        <i className={type === 'customer' ? 'bi bi-building' : 'bi bi-truck'} />
+      </div>
+      <div className="ops-renderer-entity-body">
+        <span className="ops-renderer-entity-name">{entity.companyName}</span>
+        {entity.contactName && <span className="ops-renderer-entity-desc">{entity.contactName}</span>}
+      </div>
+      {entity.openTicketCount != null && entity.openTicketCount > 0 && (
+        <span className={`ops-renderer-ticket-count ops-renderer-count-${type}`}>
+          {t('toolRenderers.numaOps.openTickets', { count: entity.openTicketCount })}
+        </span>
       )}
     </div>
-    {entity.openTicketCount != null && entity.openTicketCount > 0 && (
-      <span className={`ops-renderer-ticket-count ops-renderer-count-${type}`}>
-        {entity.openTicketCount} open
-      </span>
-    )}
-  </div>
-);
+  );
+};
 
 const CrmList = ({ entities, type }: { entities: (OpsCustomer | OpsSupplier)[]; type: 'customer' | 'supplier' }) => {
   const { t } = useTranslation('common');
@@ -266,7 +255,10 @@ const ProjectList = ({ projects }: { projects: OpsProject[] }) => {
     <div className="ops-renderer-list">
       {projects.map((p, idx) => (
         <div key={p.id || idx} className="ops-renderer-entity-row">
-          <div className="ops-renderer-entity-icon" style={p.color ? { backgroundColor: `${p.color}18`, color: p.color } : undefined}>
+          <div
+            className="ops-renderer-entity-icon"
+            style={p.color ? { backgroundColor: `${p.color}18`, color: p.color } : undefined}
+          >
             <i className="bi bi-folder2" />
           </div>
           <div className="ops-renderer-entity-body">
@@ -295,9 +287,7 @@ const CommentList = ({ comments }: { comments: OpsComment[] }) => {
         <div key={c.id || idx} className="ops-renderer-comment">
           <div className="ops-renderer-comment-header">
             <span className="ops-renderer-comment-author">{c.authorName || c.authorEmail || 'Unknown'}</span>
-            {c.createdAt && (
-              <span className="ops-renderer-comment-date">{new Date(c.createdAt).toLocaleString()}</span>
-            )}
+            {c.createdAt && <span className="ops-renderer-comment-date">{new Date(c.createdAt).toLocaleString()}</span>}
           </div>
           <div className="ops-renderer-comment-body">{c.content}</div>
         </div>
@@ -452,9 +442,7 @@ const OpsBody = ({ payload }: { payload: OpsPayload }) => {
   // Metrics / unknown — show as formatted JSON
   if (result) {
     return (
-      <pre className="ops-renderer-raw">
-        {typeof result === 'string' ? result : JSON.stringify(result, null, 2)}
-      </pre>
+      <pre className="ops-renderer-raw">{typeof result === 'string' ? result : JSON.stringify(result, null, 2)}</pre>
     );
   }
 
