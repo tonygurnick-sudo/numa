@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useMemo, useCallback, type ReactNode, type SetStateAction } from 'react';
-import { Button, Alert, Modal } from 'react-bootstrap';
+import { Button, Alert, Modal, Collapse } from 'react-bootstrap';
 import { Bot, Clock, Plus, Settings } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../Providers/AuthProvider';
@@ -127,6 +127,7 @@ const NumaWorkspaceChatAgents = () => {
   const [agentsFeatureEnabled] = useState(() => getFlag('AGENTS'));
   const [missingConfirm, setMissingConfirm] = useState<{ agent: AgentSummary; missing: string[] } | null>(null);
   const [isMobile, setIsMobile] = useState(() => (typeof window !== 'undefined' ? window.innerWidth <= 768 : false));
+  const [showMobileActions, setShowMobileActions] = useState(false);
   const [isHistoryPanelOpen, setIsHistoryPanelOpen] = useState(false);
   const [isAgentsPanelOpen, setIsAgentsPanelOpen] = useState(false);
   const [showDocumentModal, setShowDocumentModal] = useState(false);
@@ -2096,6 +2097,87 @@ const NumaWorkspaceChatAgents = () => {
     }
   };
 
+  const renderActionButtons = () => (
+    <>
+      <button
+        type="button"
+        className="workspace-chat-history-btn"
+        onClick={() => void handleHeaderNewChat()}
+        title={t('page.newChat')}
+        aria-label={t('page.newChat')}
+      >
+        <Plus size={14} className="workspace-chat-header-btn-icon" />
+        <span>{t('page.newChat')}</span>
+      </button>
+
+      <button
+        type="button"
+        className={`workspace-chat-history-btn chat-history-btn ${isHistoryPanelOpen ? 'is-open' : ''}`}
+        onClick={handleToggleHistory}
+        title={t('page.chatHistory')}
+        aria-label={t('page.chatHistory')}
+      >
+        <Clock size={14} className="workspace-chat-header-btn-icon" />
+        <span>{t('page.historyButton')}</span>
+      </button>
+
+      {agentsFeatureEnabled && (
+        <button
+          type="button"
+          className={`workspace-chat-history-btn ${isAgentsPanelOpen ? 'is-open' : ''}`}
+          onClick={handleToggleAgents}
+          title={t('page.agentsButton')}
+          aria-label={t('page.agentsButton')}
+        >
+          <Bot size={14} className="workspace-chat-header-btn-icon" />
+          <span>{t('page.agentsButton')}</span>
+        </button>
+      )}
+
+      {conversationId && <ExportConversationButton messages={messages} conversationId={conversationId} />}
+
+      {!isMobile && (
+        <button
+          type="button"
+          className={`workspace-chat-settings-btn ${settingsPanel.isPanelOpen ? 'is-open' : ''}`}
+          onClick={handleToggleSettings}
+          title={t('input.tooltips.settings')}
+          aria-label={t('input.tooltips.settings')}
+          aria-pressed={settingsPanel.isPanelOpen}
+        >
+          <Settings size={18} />
+        </button>
+      )}
+    </>
+  );
+
+  const mobileActionsPanelId = 'mobile-chat-actions-panel';
+  const handleMobileActionClick = () => setShowMobileActions(false);
+
+  // Ensure mobile actions start collapsed on mount/navigation
+  useEffect(() => {
+    setShowMobileActions(false);
+  }, []);
+
+  // Close mobile actions when clicking/tapping outside
+  useEffect(() => {
+    if (!isMobile || !showMobileActions) return;
+
+    const handleOutsideClick = (event: MouseEvent | TouchEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (!target) return;
+      if (target.closest('.mobile-chat-actions')) return;
+      setShowMobileActions(false);
+    };
+
+    document.addEventListener('mousedown', handleOutsideClick);
+    document.addEventListener('touchstart', handleOutsideClick);
+    return () => {
+      document.removeEventListener('mousedown', handleOutsideClick);
+      document.removeEventListener('touchstart', handleOutsideClick);
+    };
+  }, [isMobile, showMobileActions]);
+
   return (
     <div
       className={`dashboard workspace-chat-v2 ${!isMobile && (settingsPanel.isPanelOpen || isHistoryPanelOpen || isAgentsPanelOpen) ? 'settings-drawer-open' : ''}`}
@@ -2112,69 +2194,52 @@ const NumaWorkspaceChatAgents = () => {
 
         <div className="chat-layout d-flex">
           <div className="flex-grow-1 d-flex flex-column min-h-0">
-            <PageHeader
-              title={activeAgent?.title || t('page.title')}
-              subtitle={activeAgent?.description || t('page.subtitle', { defaultValue: 'Your AI workspace assistant' })}
-              icon={
-                activeAgent
-                  ? {
-                      element: <AgentAvatar agent={activeAgent} size={36} />,
-                    }
-                  : undefined
-              }
-              actionsClassName="workspace-chat-header-actions"
-              actions={
-                <>
-                  <button
-                    type="button"
-                    className="workspace-chat-history-btn"
-                    onClick={() => {
-                      void handleHeaderNewChat();
-                    }}
-                    title={t('page.newChat')}
-                    aria-label={t('page.newChat')}
-                  >
-                    <Plus size={14} className="workspace-chat-header-btn-icon" />
-                    <span>{t('page.newChat')}</span>
-                  </button>
-                  <button
-                    type="button"
-                    className={`workspace-chat-history-btn chat-history-btn ${isHistoryPanelOpen ? 'is-open' : ''}`}
-                    onClick={handleToggleHistory}
-                    title={t('page.chatHistory')}
-                    aria-label={t('page.chatHistory')}
-                  >
-                    <Clock size={14} className="workspace-chat-header-btn-icon" />
-                    <span>{t('page.historyButton')}</span>
-                  </button>
-                  {agentsFeatureEnabled && (
-                    <button
-                      type="button"
-                      className={`workspace-chat-history-btn ${isAgentsPanelOpen ? 'is-open' : ''}`}
-                      onClick={handleToggleAgents}
-                      title={t('page.agentsButton')}
-                      aria-label={t('page.agentsButton')}
+            {/* Desktop header */}
+            {!isMobile && (
+              <PageHeader
+                title={activeAgent?.title || t('page.title')}
+                subtitle={
+                  activeAgent?.description || t('page.subtitle', { defaultValue: 'Your AI workspace assistant' })
+                }
+                icon={
+                  activeAgent
+                    ? {
+                        element: <AgentAvatar agent={activeAgent} size={36} />,
+                      }
+                    : undefined
+                }
+                actionsClassName="workspace-chat-header-actions"
+                actions={<>{renderActionButtons()}</>}
+              />
+            )}
+
+            {/* Mobile action toggle lives just below the nav bar */}
+            {isMobile && !shouldShowNewChatView && (
+              <div className="mobile-chat-actions">
+                <button
+                  type="button"
+                  className={`mobile-actions-toggle ${showMobileActions ? 'open' : ''}`}
+                  onClick={() => setShowMobileActions((open) => !open)}
+                  aria-expanded={showMobileActions}
+                  aria-controls={mobileActionsPanelId}
+                  aria-label={showMobileActions ? t('page.mobileActions.hide') : t('page.mobileActions.show')}
+                >
+                  <span className="toggle-icon">
+                    <i className="bi bi-plus"></i>
+                  </span>
+                </button>
+                <Collapse in={showMobileActions}>
+                  <div id={mobileActionsPanelId} className="mobile-actions-panel">
+                    <div
+                      className="d-flex flex-wrap gap-2 workspace-chat-header-actions"
+                      onClick={handleMobileActionClick}
                     >
-                      <Bot size={14} className="workspace-chat-header-btn-icon" />
-                      <span>{t('page.agentsButton')}</span>
-                    </button>
-                  )}
-                  {conversationId && <ExportConversationButton messages={messages} conversationId={conversationId} />}
-                  {!isMobile && (
-                    <button
-                      type="button"
-                      className={`workspace-chat-settings-btn ${settingsPanel.isPanelOpen ? 'is-open' : ''}`}
-                      onClick={handleToggleSettings}
-                      title={t('input.tooltips.settings')}
-                      aria-label={t('input.tooltips.settings')}
-                      aria-pressed={settingsPanel.isPanelOpen}
-                    >
-                      <Settings size={18} />
-                    </button>
-                  )}
-                </>
-              }
-            />
+                      {renderActionButtons()}
+                    </div>
+                  </div>
+                </Collapse>
+              </div>
+            )}
 
             <Modal show={!!missingConfirm} onHide={() => setMissingConfirm(null)} centered>
               <Modal.Header closeButton>
@@ -2308,6 +2373,8 @@ const NumaWorkspaceChatAgents = () => {
                           setWebSearchEnabled={handleUserSetWebSearchEnabled}
                           createAgentEnabled={agentsFeatureEnabled ? createAgentEnabled : false}
                           setCreateAgentEnabled={handleUserSetCreateAgentEnabled}
+                          dataAnalysisEnabled={false}
+                          setDataAnalysisEnabled={() => {}}
                           autoToolsEnabled={autoToolsEnabled}
                           setAutoToolsEnabled={handleUserSetAutoToolsEnabled}
                           availableConnections={availableConnections}
