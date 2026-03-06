@@ -53,7 +53,7 @@ export function KBSettingsTab({ kbId, kbType, role: _role = 'VIEWER' }: KBSettin
   const [kbDetails, setKbDetails] = useState<KBDetails | null>(null);
   // Permissions edit state (user KBs only)
   const [editingPerms, setEditingPerms] = useState<boolean>(false);
-  const [visibility, setVisibility] = useState<'personal' | 'shared' | 'public'>('shared');
+  const [visibility, setVisibility] = useState<'personal' | 'shared' | 'public' | 'public_editor'>('shared');
   const [viewerChips, setViewerChips] = useState<string[]>([]);
   const [editorChips, setEditorChips] = useState<string[]>([]);
   const [permError, setPermError] = useState<string | null>(null);
@@ -119,8 +119,8 @@ export function KBSettingsTab({ kbId, kbType, role: _role = 'VIEWER' }: KBSettin
 
   function startEditPermissions(): void {
     if (!kbDetails) return;
-    let vis: 'personal' | 'shared' | 'public' = 'shared';
-    if (kbDetails.viewers.includes('*')) vis = 'public';
+    let vis: 'personal' | 'shared' | 'public' | 'public_editor' = 'shared';
+    if (kbDetails.viewers.includes('*')) vis = kbDetails.editors.includes('*') ? 'public_editor' : 'public';
     else if (kbDetails.viewers.length === 1 && kbDetails.editors.length === 1) vis = 'personal';
     setVisibility(vis);
 
@@ -148,6 +148,9 @@ export function KBSettingsTab({ kbId, kbType, role: _role = 'VIEWER' }: KBSettin
       if (visibility === 'public') {
         viewers = ['*'];
         editors = normalizeIdentifiers(editorChips);
+      } else if (visibility === 'public_editor') {
+        viewers = ['*'];
+        editors = ['*'];
       } else if (visibility === 'personal') {
         viewers = [];
         editors = [];
@@ -426,6 +429,14 @@ export function KBSettingsTab({ kbId, kbType, role: _role = 'VIEWER' }: KBSettin
                               onChange={() => setVisibility('public')}
                               disabled={permSaving}
                             />
+                            <Form.Check
+                              type="radio"
+                              id="kb-vis-public-editor"
+                              label={t('settings.permissions.visibility.publicEditor')}
+                              checked={visibility === 'public_editor'}
+                              onChange={() => setVisibility('public_editor')}
+                              disabled={permSaving}
+                            />
                           </div>
                           <Form.Text className="text-muted">{t('settings.permissions.visibility.help')}</Form.Text>
                         </Form.Group>
@@ -492,7 +503,12 @@ export function KBSettingsTab({ kbId, kbType, role: _role = 'VIEWER' }: KBSettin
                   ) : kbDetails.viewers.includes('*') ? (
                     <Alert variant="info">
                       <i className="bi bi-globe me-2"></i>
-                      {t('settings.permissions.publicPrefix')} <strong>{t('settings.permissions.publicLabel')}</strong>{' '}
+                      {t('settings.permissions.publicPrefix')}{' '}
+                      <strong>
+                        {kbDetails.editors.includes('*')
+                          ? t('settings.permissions.visibility.publicEditor')
+                          : t('settings.permissions.publicLabel')}
+                      </strong>{' '}
                       {t('settings.permissions.publicSuffix')}
                     </Alert>
                   ) : kbDetails.viewers.length === 1 && kbDetails.editors.length === 1 ? (

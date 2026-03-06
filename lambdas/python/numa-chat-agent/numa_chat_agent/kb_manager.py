@@ -294,7 +294,7 @@ class KnowledgeBaseManager:
             # Owner takes precedence over editor/viewer
             if kb.get("created_by") == user_id:
                 role = "OWNER"
-            elif user_id in editors:
+            elif "*" in editors or user_id in editors:
                 role = "EDITOR"
             elif "*" in viewers or user_id in viewers:
                 role = "VIEWER"

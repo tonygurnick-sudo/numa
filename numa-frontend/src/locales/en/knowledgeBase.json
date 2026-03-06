@@ -230,6 +230,7 @@
         "personal": "Personal (only you)",
         "shared": "Shared (specific users)",
         "public": "Public (everyone can view)",
+        "publicEditor": "Public (everyone can view and edit)",
         "help": "Public allows all users in your organization to view this knowledge base. Editors still must be explicitly granted."
       },
       "viewers": {

@@ -127,6 +127,7 @@ def verify_kb_access(
         # Wildcard "*" means all authenticated users have access.
         has_access = (
             "*" in viewers
+            or "*" in editors
             or user_sub in viewers
             or user_sub in editors
             or user_sub == created_by
@@ -137,8 +138,8 @@ def verify_kb_access(
             kb_id=kb_id,
             user_sub=user_sub[:8] + "...",
             has_access=has_access,
-            is_viewer=user_sub in viewers,
-            is_editor=user_sub in editors,
+            is_viewer=("*" in viewers or user_sub in viewers),
+            is_editor=("*" in editors or user_sub in editors),
             is_creator=user_sub == created_by,
         )
 
