@@ -9,6 +9,7 @@ export type AgentToolsConfig = {
   webSearchEnabled?: boolean;
   createAgentEnabled?: boolean;
   memoriesEnabled?: boolean;
+  numaOpsEnabled?: boolean;
   enabledConnections?: string[];
   // Multi-KB support: which knowledge bases the agent can access
   // null/undefined = all KBs (backwards compat with queryDataSources: true)

@@ -84,6 +84,7 @@ type ConversationChatConfig = {
   webSearchEnabled?: boolean;
   createAgentEnabled?: boolean;
   memoriesEnabled?: boolean;
+  numaOpsEnabled?: boolean;
   enabledKBIds?: string[];
   enabledConnectionIds?: string[];
 };
@@ -109,6 +110,8 @@ const NumaWorkspaceChatAgents = () => {
   const [webSearchEnabled, setWebSearchEnabled] = useState(false);
   const [createAgentEnabled, setCreateAgentEnabled] = useState(false);
   const [memoriesEnabled, setMemoriesEnabled] = useState(true);
+  const [numaOpsEnabled, setNumaOpsEnabled] = useState(false);
+  const [numaOpsFeatureEnabled] = useState(() => getFlag('NUMA_OPS'));
   const [availableConnections, setAvailableConnections] = useState<
     Array<{ id: string; name: string; isConnected: boolean; mcpServerUrl?: string }>
   >([]);
@@ -375,6 +378,9 @@ const NumaWorkspaceChatAgents = () => {
       if (typeof parsed.memoriesEnabled === 'boolean') {
         setMemoriesEnabled(parsed.memoriesEnabled);
       }
+      if (typeof parsed.numaOpsEnabled === 'boolean') {
+        setNumaOpsEnabled(numaOpsFeatureEnabled ? parsed.numaOpsEnabled : false);
+      }
 
       if (Array.isArray(parsed.enabledKBIds)) {
         if (availableKBs.length > 0) {
@@ -394,7 +400,7 @@ const NumaWorkspaceChatAgents = () => {
         isApplyingConversationChatConfigRef.current = false;
       }, 0);
     },
-    [agentsFeatureEnabled, availableConnections, availableKBs]
+    [agentsFeatureEnabled, numaOpsFeatureEnabled, availableConnections, availableKBs]
   );
 
   useEffect(() => {
@@ -422,6 +428,14 @@ const NumaWorkspaceChatAgents = () => {
     (value: SetStateAction<boolean>) => {
       markUserSettingsModified();
       setMemoriesEnabled(value);
+    },
+    [markUserSettingsModified]
+  );
+
+  const handleUserSetNumaOpsEnabled = useCallback(
+    (value: SetStateAction<boolean>) => {
+      markUserSettingsModified();
+      setNumaOpsEnabled(value);
     },
     [markUserSettingsModified]
   );
@@ -470,6 +484,7 @@ const NumaWorkspaceChatAgents = () => {
         webSearchEnabled,
         createAgentEnabled: agentsFeatureEnabled ? createAgentEnabled : false,
         memoriesEnabled,
+        numaOpsEnabled: numaOpsFeatureEnabled ? numaOpsEnabled : false,
         enabledKBIds,
         enabledConnectionIds: enabledConnections,
       };
@@ -490,9 +505,11 @@ const NumaWorkspaceChatAgents = () => {
     conversationId,
     createAgentEnabled,
     memoriesEnabled,
+    numaOpsEnabled,
     enabledConnections,
     enabledKBIds,
     agentsFeatureEnabled,
+    numaOpsFeatureEnabled,
     isConversationLoading,
     numaChatDynamoUtils,
     sub,
@@ -525,6 +542,7 @@ const NumaWorkspaceChatAgents = () => {
         setWebSearchEnabled(autoTools || userChatSettings.webSearchEnabled);
         setCreateAgentEnabled(autoTools || userChatSettings.createAgentEnabled);
         setMemoriesEnabled(autoTools || userChatSettings.memoriesEnabled);
+        setNumaOpsEnabled(autoTools || (userChatSettings.numaOpsEnabled ?? false));
         setEnabledConnections(defaultConnectionIdsFromSettings);
         // Apply user's default KB selection, filtered by what's available
         setEnabledKBIds(defaultKBIdsFromSettings);
@@ -538,6 +556,7 @@ const NumaWorkspaceChatAgents = () => {
       setWebSearchEnabled(autoTools || (config.webSearchEnabled ?? false));
       setCreateAgentEnabled(autoTools || (config.createAgentEnabled ?? false));
       setMemoriesEnabled(autoTools || (config.memoriesEnabled ?? true));
+      setNumaOpsEnabled(autoTools || (config.numaOpsEnabled ?? false));
       setEnabledConnections(config.enabledConnections ?? []);
 
       // Apply KB constraints from agent
@@ -1594,7 +1613,8 @@ const NumaWorkspaceChatAgents = () => {
       agentsFeatureEnabled ? createAgentEnabled : false,
       enabledKBIds,
       true, // dataAnalysisAvailable
-      memoriesEnabled
+      memoriesEnabled,
+      numaOpsFeatureEnabled ? numaOpsEnabled : false
     );
 
     // Create the system prompt based on tool availability
@@ -2076,7 +2096,8 @@ const NumaWorkspaceChatAgents = () => {
     enabledKBIds.length === 0 &&
     !webSearchEnabled &&
     !createAgentEnabled &&
-    !memoriesEnabled;
+    !memoriesEnabled &&
+    !numaOpsEnabled;
 
   // Derived active agent for header display (pending takes priority during transitions)
   const activeAgent = pendingAgent || currentAgent;
@@ -2711,6 +2732,9 @@ const NumaWorkspaceChatAgents = () => {
             setCreateAgentEnabled={handleUserSetCreateAgentEnabled}
             memoriesEnabled={memoriesEnabled}
             setMemoriesEnabled={handleUserSetMemoriesEnabled}
+            numaOpsEnabled={numaOpsFeatureEnabled ? numaOpsEnabled : false}
+            setNumaOpsEnabled={handleUserSetNumaOpsEnabled}
+            numaOpsFeatureEnabled={numaOpsFeatureEnabled}
             agentsFeatureEnabled={agentsFeatureEnabled}
             enabledKBIds={enabledKBIds}
             setEnabledKBIds={handleUserSetEnabledKBIds}

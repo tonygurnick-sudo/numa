@@ -122,6 +122,8 @@ function validateGlobal(data: unknown): GlobalChatSettings {
         : DEFAULT_GLOBAL_CHAT_SETTINGS.createAgentEnabled,
     memoriesEnabled:
       typeof obj.memoriesEnabled === 'boolean' ? obj.memoriesEnabled : DEFAULT_GLOBAL_CHAT_SETTINGS.memoriesEnabled,
+    numaOpsEnabled:
+      typeof obj.numaOpsEnabled === 'boolean' ? obj.numaOpsEnabled : DEFAULT_GLOBAL_CHAT_SETTINGS.numaOpsEnabled,
     dataAnalysisEnabled:
       typeof obj.dataAnalysisEnabled === 'boolean'
         ? obj.dataAnalysisEnabled

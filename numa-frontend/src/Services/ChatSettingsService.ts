@@ -19,6 +19,7 @@ export type ChatSettings = {
   webSearchEnabled: boolean;
   createAgentEnabled: boolean;
   memoriesEnabled: boolean;
+  numaOpsEnabled: boolean;
   dataAnalysisEnabled: boolean;
   defaultConnectionIds: string[];
   language: string | null;
@@ -90,6 +91,7 @@ export const DEFAULT_CHAT_SETTINGS: ChatSettings = {
   webSearchEnabled: true,
   createAgentEnabled: true, // Should be true when autoToolsEnabled is true
   memoriesEnabled: true,
+  numaOpsEnabled: true,
   dataAnalysisEnabled: true,
   defaultConnectionIds: [],
   language: 'browser',
@@ -291,6 +293,7 @@ function validateSettings(data: unknown): ChatSettings {
       typeof obj.createAgentEnabled === 'boolean' ? obj.createAgentEnabled : DEFAULT_CHAT_SETTINGS.createAgentEnabled,
     memoriesEnabled:
       typeof obj.memoriesEnabled === 'boolean' ? obj.memoriesEnabled : DEFAULT_CHAT_SETTINGS.memoriesEnabled,
+    numaOpsEnabled: typeof obj.numaOpsEnabled === 'boolean' ? obj.numaOpsEnabled : DEFAULT_CHAT_SETTINGS.numaOpsEnabled,
     dataAnalysisEnabled:
       typeof obj.dataAnalysisEnabled === 'boolean'
         ? obj.dataAnalysisEnabled

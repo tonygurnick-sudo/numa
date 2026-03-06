@@ -75,10 +75,12 @@ export const getEnabledTools = (
   createAgentEnabled = false,
   enabledKBIds: string[] = [],
   dataAnalysisAvailable = true,
-  memoriesEnabled = true
+  memoriesEnabled = true,
+  numaOpsEnabled = false
 ) => {
   const enabledTools: string[] = [];
   const agentsFeatureEnabled = getFlag('AGENTS');
+  const numaOpsFeatureEnabled = getFlag('NUMA_OPS');
 
   if (autoToolsEnabled) {
     // In all tools mode, enable tools; include agent creation only when feature enabled
@@ -87,6 +89,7 @@ export const getEnabledTools = (
     if (dataAnalysisAvailable) enabledTools.push('data_analysis');
     if (agentsFeatureEnabled) enabledTools.push('create_agent_tool');
     enabledTools.push('memories_tool');
+    if (numaOpsFeatureEnabled) enabledTools.push('numa_ops_tool');
   } else {
     // In manual mode, only enable selected tools based on what's selected
     if (Array.isArray(enabledKBIds) && enabledKBIds.length > 0) enabledTools.push('knowledge_base');
@@ -94,6 +97,7 @@ export const getEnabledTools = (
     if (dataAnalysisEnabled && dataAnalysisAvailable) enabledTools.push('data_analysis');
     if (agentsFeatureEnabled && createAgentEnabled) enabledTools.push('create_agent_tool');
     if (memoriesEnabled) enabledTools.push('memories_tool');
+    if (numaOpsFeatureEnabled && numaOpsEnabled) enabledTools.push('numa_ops_tool');
   }
 
   return enabledTools;
@@ -274,6 +278,12 @@ Today's Date: ${TODAY}`;
     if ((enabledTools.includes('create_agent_tool') || createAgentEnabled) && agentsFeatureEnabled) {
       toolLines.push(
         '- Use create_agent_tool to create an Agent based on inputs from the user/current chat history. Agents in Numa are pre-configured chat agents that have custom instructions, names, knowledge, and referenced files, as well as pre-defined which tools/integrations are enabled. E.g. a meeting analyser agent or a marketing content generator agent etc would have specific instructions, files, tools etc defined for them. You can create agents through this tool at the users request. A user may want to create an agent from an existing chat, or ask you to help it create an agent in general. **IMPORTANT** Always confirm with the user the agent definition before calling this tool. After creating an agent, a user can then start new chats with that Agent if they like.'
+      );
+    }
+
+    if (enabledTools.includes('numa_ops_tool')) {
+      toolLines.push(
+        '- Use numa_ops_tool to manage work items, tickets, projects, teams, customers, and suppliers in Numa Ops. Use this when the user asks about tasks, work management, project tracking, or kanban boards.'
       );
     }
 

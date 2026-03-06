@@ -15,6 +15,7 @@ import {
   FolderOpen,
   Globe,
   Info,
+  Kanban,
   LifeBuoy,
   Lightbulb,
   Plug,
@@ -75,6 +76,9 @@ export interface WorkspaceChatSettingsPanelProps {
   setCreateAgentEnabled: Dispatch<SetStateAction<boolean>>;
   memoriesEnabled: boolean;
   setMemoriesEnabled: Dispatch<SetStateAction<boolean>>;
+  numaOpsEnabled: boolean;
+  setNumaOpsEnabled: Dispatch<SetStateAction<boolean>>;
+  numaOpsFeatureEnabled: boolean;
   agentsFeatureEnabled: boolean;
 
   // Knowledge Bases
@@ -125,6 +129,9 @@ export const WorkspaceChatSettingsPanel: React.FC<WorkspaceChatSettingsPanelProp
   setCreateAgentEnabled,
   memoriesEnabled,
   setMemoriesEnabled,
+  numaOpsEnabled,
+  setNumaOpsEnabled,
+  numaOpsFeatureEnabled,
   agentsFeatureEnabled,
   enabledKBIds,
   setEnabledKBIds,
@@ -201,6 +208,9 @@ export const WorkspaceChatSettingsPanel: React.FC<WorkspaceChatSettingsPanelProp
       setMemoriesEnabled(true);
       if (agentsFeatureEnabled) {
         setCreateAgentEnabled(true);
+      }
+      if (numaOpsFeatureEnabled) {
+        setNumaOpsEnabled(true);
       }
     }
   };
@@ -291,9 +301,10 @@ export const WorkspaceChatSettingsPanel: React.FC<WorkspaceChatSettingsPanelProp
                 <span className="workspace-settings-collapsed-summary">
                   {autoToolsEnabled
                     ? t('workspaceSettings.allToolsEnabledSummary')
-                    : [webSearchEnabled, createAgentEnabled, memoriesEnabled].filter(Boolean).length > 0
+                    : [webSearchEnabled, createAgentEnabled, memoriesEnabled, numaOpsEnabled].filter(Boolean).length > 0
                       ? t('workspaceSettings.toolsPartialSummary', {
-                          count: [webSearchEnabled, createAgentEnabled, memoriesEnabled].filter(Boolean).length,
+                          count: [webSearchEnabled, createAgentEnabled, memoriesEnabled, numaOpsEnabled].filter(Boolean)
+                            .length,
                         })
                       : t('workspaceSettings.noneEnabled')}
                 </span>
@@ -362,6 +373,23 @@ export const WorkspaceChatSettingsPanel: React.FC<WorkspaceChatSettingsPanelProp
                     </span>
                   }
                 />
+
+                {numaOpsFeatureEnabled && (
+                  <Form.Check
+                    type="checkbox"
+                    id="panel-numa-ops"
+                    className="workspace-settings-list-item"
+                    checked={numaOpsEnabled}
+                    onChange={(e) => setNumaOpsEnabled(e.target.checked)}
+                    disabled={isDisabled || autoToolsEnabled}
+                    label={
+                      <span className={`d-flex align-items-center gap-2 ${autoToolsEnabled ? 'text-muted' : ''}`}>
+                        <Kanban size={14} />
+                        {t('workspaceSettings.numaOps')}
+                      </span>
+                    }
+                  />
+                )}
               </div>
             </div>
           )}

@@ -445,6 +445,7 @@
     "webSearch": "Web Search",
     "agentCreation": "Agent Creation",
     "memoryManagement": "Update Memory",
+    "numaOps": "Numa Ops",
     "model": "Model",
     "integrations": "Integrations",
     "integrationsHelper": "Connect external services",
