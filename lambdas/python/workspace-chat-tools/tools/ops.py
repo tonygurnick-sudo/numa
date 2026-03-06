@@ -37,11 +37,11 @@ def _get_lambda_client():
 def _build_apigw_event(
     method: str,
     path: str,
-    body: dict = None,
-    query_params: dict = None,
+    body: dict | None = None,
+    query_params: dict | None = None,
     user_sub: str = "",
     user_email: str = "",
-    user_groups: list = None,
+    user_groups: list | None = None,
 ) -> dict:
     """Build a minimal API Gateway V2 event for direct Lambda invocation.
 
@@ -76,11 +76,11 @@ def _invoke_ops_lambda(
     lambda_name: str,
     method: str,
     path: str,
-    body: dict = None,
-    query_params: dict = None,
+    body: dict | None = None,
+    query_params: dict | None = None,
     user_sub: str = "",
     user_email: str = "",
-    user_groups: list = None,
+    user_groups: list | None = None,
 ) -> Dict[str, Any]:
     """Invoke an ops Lambda and return the parsed response body."""
     if not lambda_name:
