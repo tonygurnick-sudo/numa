@@ -104,7 +104,6 @@ export const AutomationRunsFeed = ({ automations, agentMap }: AutomationRunsFeed
   const [runs, setRuns] = useState<FeedRunItem[]>(() => loadFromCache());
   const [loading, setLoading] = useState(true);
   const [expandedRun, setExpandedRun] = useState<string | null>(null);
-  const isMounted = useRef(true);
   const loadingRef = useRef(false);
 
   const outputsBucket = window.sessionStorage.getItem('OUTPUTS_BUCKET_NAME') || '';
@@ -116,13 +115,14 @@ export const AutomationRunsFeed = ({ automations, agentMap }: AutomationRunsFeed
   const getAccessTokenRef = useRef(getAccessToken);
   getAccessTokenRef.current = getAccessToken;
 
-  useEffect(() => {
-    return () => {
-      isMounted.current = false;
-    };
-  }, []);
-
   const loadAllRuns = useCallback(async () => {
+    console.log('[RunsFeed] loadAllRuns called', {
+      outputsBucket: !!outputsBucket,
+      region: !!region,
+      hasCreds: !!credentialsRef.current,
+      automationsCount: automations.length,
+      alreadyLoading: loadingRef.current,
+    });
     if (!outputsBucket || !region || !credentialsRef.current || automations.length === 0) {
       setLoading(false);
       return;
@@ -150,6 +150,7 @@ export const AutomationRunsFeed = ({ automations, agentMap }: AutomationRunsFeed
           /* ignore */
         }
       }
+      console.log('[RunsFeed] userId resolved:', userId);
       if (!userId) return; // finally will set loading=false
 
       const creds = credentialsRef.current;
@@ -190,8 +191,8 @@ export const AutomationRunsFeed = ({ automations, agentMap }: AutomationRunsFeed
         }
       }
 
+      console.log('[RunsFeed] Phase 1 done — total run keys:', allRuns.length);
       // Show the run list immediately (phase 2 loads logs in background)
-      if (!isMounted.current) return;
       setRuns(sortRuns(allRuns));
       setLoading(false);
 
@@ -204,8 +205,6 @@ export const AutomationRunsFeed = ({ automations, agentMap }: AutomationRunsFeed
           return { runId: item.runId, log };
         })
       );
-
-      if (!isMounted.current) return;
 
       const logMap = new Map<string, ScheduledRunLog>();
       for (const result of logResults) {
@@ -220,22 +219,23 @@ export const AutomationRunsFeed = ({ automations, agentMap }: AutomationRunsFeed
       });
       const sorted = sortRuns(withLogs);
       saveToCache(sorted);
-      if (isMounted.current) setRuns(sorted);
+      setRuns(sorted);
     } catch (err) {
-      console.error('[AutomationRunsFeed] Failed to load runs:', err);
+      console.error('[RunsFeed] Failed to load runs:', err);
     } finally {
+      console.log('[RunsFeed] finally block — setting loading=false');
       loadingRef.current = false;
-      if (isMounted.current) setLoading(false);
+      setLoading(false);
     }
     // Only re-run when automations change — credentials accessed via refs
   }, [automations, outputsBucket, region]);
 
-  // Load once when we have credentials, or when automations change
+  // Load once when automations change — credentials accessed via refs (stable)
   useEffect(() => {
-    if (getCredentials && automations.length > 0) {
+    if (automations.length > 0) {
       loadAllRuns();
     }
-  }, [loadAllRuns, getCredentials, automations]);
+  }, [loadAllRuns]);
 
   const loadRunLog = useCallback(
     async (runId: string) => {

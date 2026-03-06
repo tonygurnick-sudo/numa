@@ -610,7 +610,7 @@ const JobHistoryManager = () => {
         <Button
           variant="outline-primary"
           size="sm"
-          onClick={() => navigate(`/scheduling/${job.scheduleId || job.results?.scheduleId}`)}
+          onClick={() => navigate(`/automations/${job.scheduleId || job.results?.scheduleId}`)}
           className="d-flex align-items-center job-history-action-btn"
         >
           {t('jobHistory.actions.viewSchedule')}

@@ -322,9 +322,8 @@ export const NotificationsPage: React.FC = () => {
                               if (notification.status === 'unread') {
                                 await markAsRead(notification.notification_id);
                               }
-                              const runId = notification.metadata?.runId as string | undefined;
-                              const path = `/scheduling/${encodeURIComponent(notification.schedule_id)}`;
-                              navigate(runId ? `${path}?run=${encodeURIComponent(runId)}` : path);
+                              const path = `/automations/${encodeURIComponent(notification.schedule_id)}`;
+                              navigate(path);
                             }}
                           >
                             <Eye size={14} aria-hidden="true" />
