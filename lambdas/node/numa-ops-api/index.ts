@@ -80,7 +80,7 @@ const parseJwt = (token: string): Record<string, unknown> => {
 const resolveAuthContext = (event: APIGatewayProxyEventV2): AuthContext | null => {
   // Path 1: Direct Lambda invocation with pre-authenticated context
   // (e.g. workspace-chat-tools calling us — IAM controls who can invoke)
-  const uc = (event as Record<string, unknown>).userContext as Record<string, unknown> | undefined;
+  const uc = (event as unknown as Record<string, unknown>).userContext as Record<string, unknown> | undefined;
   if (uc && typeof uc.sub === 'string') {
     return {
       sub: uc.sub,
