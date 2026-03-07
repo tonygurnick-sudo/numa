@@ -59,13 +59,11 @@ def process_legislation_url(
             logger.info(
                 f"URL {document_index}/{total_docs} is not a PDF or recognized legislation page: {url}"
             )
-            return {
-                "entry": f"""
+            return {"entry": f"""
                 ### LEGISLATIVE DOCUMENT {document_index}
                 **Source URL:** {url}
                 **Status:** Unsupported format (only PDF or NZ legislation pages are supported)
-                """
-            }
+                """}
         else:
             logger.info(f"Processing PDF URL {document_index}/{total_docs}: {url}")
 
@@ -77,8 +75,7 @@ def process_legislation_url(
             pdf_text = pdf_text[:MAX_PDF_LENGTH] + "...[truncated due to length]"
 
         # Step 4: Format the document entry
-        return {
-            "entry": f"""
+        return {"entry": f"""
             ### LEGISLATIVE DOCUMENT {document_index}
             **Source URL:** {source_url}
             **PDF URL:** {pdf_url if source_url != pdf_url else 'Same as source'}
@@ -87,20 +84,17 @@ def process_legislation_url(
 
             **FULL TEXT:**
             {pdf_text}
-            """
-        }
+            """}
 
     except Exception as e:
         logger.error(
             f"Error processing URL {document_index}/{total_docs} - {url}: {str(e)}"
         )
-        return {
-            "entry": f"""
+        return {"entry": f"""
             ### LEGISLATIVE DOCUMENT {document_index}
             **Source URL:** {url}
             **Status:** Error processing URL - {str(e)}
-            """
-        }
+            """}
 
 
 def get_nz_legislation_pdf_url(html_url: str) -> str:

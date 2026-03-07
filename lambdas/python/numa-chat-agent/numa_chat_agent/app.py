@@ -1318,6 +1318,22 @@ Q_APPLICATION_ID = os.environ.get("Q_APPLICATION_ID")
 Q_INDEX_ID = os.environ.get("Q_INDEX_ID")
 CRAWL_URLS_TABLE_NAME = os.environ.get("CRAWL_URLS_TABLE_NAME")
 
+# File types supported by Bedrock Knowledge Base for indexing
+BEDROCK_SUPPORTED_EXTENSIONS = {
+    ".pdf",
+    ".txt",
+    ".md",
+    ".html",
+    ".htm",
+    ".csv",
+    ".doc",
+    ".docx",
+    ".xls",
+    ".xlsx",
+    ".ppt",
+    ".pptx",
+}
+
 
 def _sanitize_failed_s3_uri(uri: str) -> Optional[str]:
     """Clean up S3 URI from failure reason messages."""
@@ -1989,39 +2005,67 @@ def _enrich_file_info_with_metadata(
         file_info["uploadedAt"] = uploaded_at
 
 
-def _list_kb_files(bucket_name: str, prefix: str) -> Tuple[List[Dict[str, Any]], int]:
+def _list_kb_files(
+    bucket_name: str, prefix: str, subpath: str = ""
+) -> Tuple[List[Dict[str, Any]], List[str], int]:
     """
-    List all files in an S3 bucket prefix with metadata.
-    Includes folder marker objects (keys ending with "/") so empty folders are visible.
+    List files and immediate sub-folders at one level of an S3 prefix.
+
+    Uses ``Delimiter='/'`` so only the current directory level is returned,
+    keeping the response fast even for KBs with tens of thousands of objects.
+    The frontend calls again with a deeper *subpath* when the user drills
+    into a folder.
 
     Args:
         bucket_name: S3 bucket name
-        prefix: S3 prefix to search (e.g., "documents/kb-123/")
+        prefix: Base S3 prefix for the KB (e.g. ``documents/kb-123/``)
+        subpath: Optional relative path within the prefix (e.g. ``reports/``)
 
     Returns:
-        Tuple of:
-            - List of objects with key, lastModified, size, and optionally urlTag,
-              uploadedBy, uploadedAt
-            - Document count (excludes folder markers)
+        Tuple of (files, folders, doc_count):
+            - files  – objects at this level (key, lastModified, size, …)
+            - folders – subfolder *names* at this level
+            - doc_count – number of files (excludes folder markers)
     """
     try:
         s3_client = prm_client("s3", region=REGION)
+        full_prefix = prefix + subpath
         paginator = s3_client.get_paginator("list_objects_v2")
 
         files: List[Dict[str, Any]] = []
+        folders: List[str] = []
         doc_count = 0
-        for page in paginator.paginate(Bucket=bucket_name, Prefix=prefix):
-            contents = page.get("Contents", [])
-            for obj in contents:
+
+        for page in paginator.paginate(
+            Bucket=bucket_name, Prefix=full_prefix, Delimiter="/"
+        ):
+            # Collect subfolder names from CommonPrefixes
+            for cp in page.get("CommonPrefixes", []):
+                folder_full = cp.get("Prefix", "")
+                folder_name = folder_full[len(full_prefix) :].rstrip("/")
+                if folder_name:
+                    folders.append(folder_name)
+
+            # Collect files at this level
+            for obj in page.get("Contents", []):
                 key_val = obj.get("Key") if isinstance(obj, dict) else None
                 if not isinstance(key_val, str):
+                    continue
+                # Skip the prefix marker itself
+                if key_val == full_prefix:
                     continue
                 # Skip metadata sidecar files
                 if key_val.endswith(".metadata.json"):
                     continue
 
-                last_modified = obj.get("LastModified")
+                # Skip files not supported by Bedrock (S3 is backup, browser only sees indexable files)
                 is_folder = key_val.endswith("/")
+                if not is_folder:
+                    ext = os.path.splitext(key_val)[1].lower()
+                    if ext not in BEDROCK_SUPPORTED_EXTENSIONS:
+                        continue
+
+                last_modified = obj.get("LastModified")
                 file_info: Dict[str, Any] = {
                     "key": key_val,
                     "lastModified": (
@@ -2049,21 +2093,21 @@ def _list_kb_files(bucket_name: str, prefix: str) -> Tuple[List[Dict[str, Any]],
                     doc_count += 1
 
         logger.debug(
-            "Listed S3 files",
+            "Listed S3 files (level)",
             bucket=bucket_name,
-            prefix=prefix,
-            count=len(files),
-            doc_count=doc_count,
+            prefix=full_prefix,
+            file_count=len(files),
+            folder_count=len(folders),
         )
-        return files, doc_count
+        return files, folders, doc_count
     except Exception as e:
         logger.error(
             "Error listing S3 files",
             bucket=bucket_name,
-            prefix=prefix,
+            prefix=full_prefix,
             error=str(e),
         )
-        return [], 0
+        return [], [], 0
 
 
 @app.get("/api/kb/{kb_id}/files")
@@ -2154,21 +2198,36 @@ async def list_kb_files(request: Request, kb_id: str) -> Response:
         data_bucket = f"numa-{CLIENT_NAME}-data"
         s3_prefix = kb["s3_prefix"]
 
-        # List files from S3
-        files, doc_count = _list_kb_files(data_bucket, s3_prefix)
+        # Optional subpath for hierarchical drill-down
+        subpath = request.query_params.get("path", "")
+        if subpath:
+            subpath = subpath.strip("/") + "/"
+            if ".." in subpath:
+                return JSONResponse({"error": "Invalid path"}, status_code=400)
 
-        # Update cached document count in DynamoDB
-        kb_manager.update_document_count(kb_id, doc_count)
+        # List files and folders at this level from S3
+        files, folders, doc_count = _list_kb_files(data_bucket, s3_prefix, subpath)
+
+        # Only update cached document count for root-level listings
+        if not subpath:
+            kb_manager.update_document_count(kb_id, doc_count)
 
         logger.info(
             "Listed KB files",
             kb_id=kb_id,
             user_id=user_id,
             file_count=doc_count,
+            folder_count=len(folders),
+            subpath=subpath or "(root)",
         )
 
         return JSONResponse(
-            {"files": files, "document_count": doc_count}, status_code=200
+            {
+                "files": files,
+                "folders": folders,
+                "document_count": doc_count,
+            },
+            status_code=200,
         )
 
     except Exception as exc:  # pylint: disable=broad-except

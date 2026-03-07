@@ -54,6 +54,7 @@ export interface S3FileInfo {
 
 export interface ListKBFilesResponse {
   files: S3FileInfo[];
+  folders?: string[];
   document_count: number;
 }
 
@@ -311,12 +312,16 @@ class KnowledgeBaseService {
   }
 
   /**
-   * List files in a KB's S3 prefix
-   * This also updates the document count in the backend
+   * List files and folders at one level of a KB's S3 prefix.
+   * Pass `path` to drill into a subfolder (e.g. "reports/" or "reports/2024/").
    */
-  async listKBFiles(kbId: string): Promise<ListKBFilesResponse> {
+  async listKBFiles(kbId: string, path?: string): Promise<ListKBFilesResponse> {
     try {
-      const response = await fetch(this.buildUrl(`${this.baseUrl}/${kbId}/files`), {
+      let url = `${this.baseUrl}/${kbId}/files`;
+      if (path) {
+        url += `?path=${encodeURIComponent(path)}`;
+      }
+      const response = await fetch(this.buildUrl(url), {
         method: 'GET',
         headers: this.getHeaders(),
       });

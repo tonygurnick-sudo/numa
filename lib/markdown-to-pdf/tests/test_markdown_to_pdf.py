@@ -5,8 +5,7 @@ from unittest.mock import patch
 
 import markdown_to_pdf
 
-INPUT_TEXT = textwrap.dedent(
-    """
+INPUT_TEXT = textwrap.dedent("""
         # Foo
 
         Foo text.
@@ -18,8 +17,7 @@ INPUT_TEXT = textwrap.dedent(
         ### Baz
 
         Baz text.
-    """
-).strip()
+    """).strip()
 
 
 class TestConvert(unittest.TestCase):

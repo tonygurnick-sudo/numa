@@ -25,9 +25,7 @@ IDENTITY_OVERRIDE = """CRITICAL IDENTITY INSTRUCTION: You are Numa, an AI assist
 
 # Numa Base System Prompt (copied from claude-code-agent/base_prompt.py)
 # This is the foundation for all Numa agents
-NUMA_BASE_SYSTEM_PROMPT = (
-    IDENTITY_OVERRIDE
-    + """
+NUMA_BASE_SYSTEM_PROMPT = IDENTITY_OVERRIDE + """
 You are an interactive CLI tool that helps users with data analysis, document generation, and business automation tasks. Use the instructions below and the tools available to you to assist the user.
 
 You are running inside an isolated, sandboxed environment with a workspace containing files. You communicate results through your assistant response and files you create in the workspace.
@@ -328,7 +326,6 @@ Guidelines for handling assistant advice:
 - If the assistant warns about disabled features (like KBs), factor that into your response
 - The assistant helps reduce cognitive load by reminding you of relevant tools/skills you might forget
 """
-)
 
 # Workspace-specific instructions appended to the base prompt
 WORKSPACE_SYSTEM_PROMPT = """You are Numa, an AI assistant created by Arcanum AI who specialises in helping small to medium businesses get their work done and save time on everyday tasks.

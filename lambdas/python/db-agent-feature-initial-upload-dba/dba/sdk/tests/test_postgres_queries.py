@@ -52,13 +52,11 @@ class TestPostgreSQLBasicQueries:
 
         with patch("db_sdk.db_sdk.Config"):
             db = DB()
-            result = db.query(
-                """
+            result = db.query("""
                 SELECT u.id as user_id, o.id as order_id, o.total
                 FROM users u
                 JOIN orders o ON u.id = o.user_id
-            """
-            )
+            """)
 
             assert len(result) == 1
             assert result[0]["order_id"] == 100
@@ -327,13 +325,11 @@ class TestPostgreSQLMetaQueries:
 
         with patch("db_sdk.db_sdk.Config"):
             db = DB()
-            result = db.query(
-                """
+            result = db.query("""
                 SELECT tablename
                 FROM pg_catalog.pg_tables
                 WHERE schemaname = 'public'
-            """
-            )
+            """)
 
             assert len(result) == 2
             assert result[0]["tablename"] == "users"
@@ -346,13 +342,11 @@ class TestPostgreSQLMetaQueries:
 
         with patch("db_sdk.db_sdk.Config"):
             db = DB()
-            result = db.query(
-                """
+            result = db.query("""
                 SELECT column_name, data_type
                 FROM information_schema.columns
                 WHERE table_name = 'users'
-            """
-            )
+            """)
 
             assert result[0]["column_name"] == "id"
             assert result[0]["data_type"] == "integer"

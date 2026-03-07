@@ -1,6 +1,6 @@
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v5.0.0
+    rev: v6.0.0
     hooks:
       - id: check-yaml
         args: [--unsafe]
@@ -15,15 +15,35 @@ repos:
         files: \.(ts|tsx|js|jsx|json|css|scss|md)$
         exclude: ^(.*\.d\.ts|dist/|build/|coverage/|node_modules/|\.next/).*$
   - repo: https://github.com/psf/black
-    rev: 25.1.0
+    rev: 26.1.0
     hooks:
       - id: black
   - repo: https://github.com/PyCQA/isort
-    rev: 6.0.1
+    rev: 7.0.0
     hooks:
       - id: isort
+  - repo: local
+    hooks:
+      - id: eslint-frontend
+        name: ESLint (Frontend)
+        entry: bash -c 'command -v yarn >/dev/null 2>&1 && cd numa-frontend && yarn lint || echo "Yarn not available, skipping ESLint (will be checked in CI)"'
+        language: system
+        files: ^numa-frontend/.*\.(js|jsx|ts|tsx)$
+        pass_filenames: false
+      - id: prettier-frontend
+        name: Prettier (Frontend)
+        entry: bash -c 'command -v yarn >/dev/null 2>&1 && cd numa-frontend && yarn lint --fix || echo "Yarn not available, skipping Prettier (will be checked in CI)"'
+        language: system
+        files: ^numa-frontend/.*\.(js|jsx|ts|tsx|json|css|scss|md)$
+        pass_filenames: false
+      - id: typescript-check-frontend
+        name: TypeScript Check (Frontend)
+        entry: bash -c 'command -v yarn >/dev/null 2>&1 && cd numa-frontend && yarn typecheck || echo "Yarn not available, skipping TypeScript check (will be checked in CI)"'
+        language: system
+        files: ^numa-frontend/.*\.(ts|tsx)$
+        pass_filenames: false
   - repo: https://github.com/compilerla/conventional-pre-commit
-    rev: v4.2.0
+    rev: v4.3.0
     hooks:
       - id: conventional-pre-commit
         stages: [commit-msg]

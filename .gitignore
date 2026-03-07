@@ -160,6 +160,7 @@ clientConfigProd.json
 !.claude/skills/
 
 infra/assets/artifacts/numa-workspace-agent/image.tar
+# Pipeline retry Wed 18 Feb 2026 02:00:45 NZDT
 
 # Personal scripts
 claude-bedrock.sh

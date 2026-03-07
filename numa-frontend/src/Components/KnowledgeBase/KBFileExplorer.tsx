@@ -538,6 +538,9 @@ export const KBFileExplorer = forwardRef<KBFileExplorerHandle, KBFileExplorerPro
     const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
     const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set());
 
+    const [loadedFolders, setLoadedFolders] = useState<Set<string>>(new Set());
+    const [loadingFolders, setLoadingFolders] = useState<Set<string>>(new Set());
+
     const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
     const [showBulkDeleteConfirmation, setShowBulkDeleteConfirmation] = useState<boolean>(false);
     const [bulkDeleteProgress, setBulkDeleteProgress] = useState<BulkDeleteProgress | null>(null);
@@ -604,6 +607,35 @@ export const KBFileExplorer = forwardRef<KBFileExplorerHandle, KBFileExplorerPro
      * Fetch files via backend API (replaces direct S3 calls)
      * The backend also updates the document count in DynamoDB
      */
+    /**
+     * Convert API file infos to S3Objects and create folder marker objects.
+     * Folder markers let buildFileTree discover folders even before their
+     * contents have been fetched.
+     */
+    function apiResponseToS3Objects(
+      fileInfos: S3FileInfo[],
+      folderNames: string[],
+      parentPrefix: string
+    ): { s3Files: S3Object[]; keys: string[] } {
+      const s3Files: S3Object[] = fileInfos.map((f) => ({
+        Key: f.key,
+        LastModified: f.lastModified ? new Date(f.lastModified) : new Date(),
+        Size: f.size,
+        urlTag: f.urlTag,
+        uploadedBy: f.uploadedBy,
+        uploadedAt: f.uploadedAt,
+      }));
+
+      // Create synthetic folder marker objects so buildFileTree creates nodes
+      for (const folder of folderNames) {
+        const markerKey = `${parentPrefix}${folder}/`;
+        s3Files.push({ Key: markerKey, LastModified: new Date(), Size: 0 });
+      }
+
+      const keys = s3Files.map((f) => f.Key);
+      return { s3Files, keys };
+    }
+
     async function fetchFiles(): Promise<void> {
       // Set loading state for user-initiated refresh or initial load,
       // but only if we have no cached files to show
@@ -611,24 +643,16 @@ export const KBFileExplorer = forwardRef<KBFileExplorerHandle, KBFileExplorerPro
         setIsLoadingFiles(true);
       }
       try {
-        // Use backend API to list files - this also updates the doc count
-        const { files: fileInfos } = await knowledgeBaseService.listKBFiles(kbId);
+        // Fetch only root level — folders are returned separately
+        const { files: fileInfos, folders: folderNames = [] } = await knowledgeBaseService.listKBFiles(kbId);
 
-        // Transform API response to S3Object format expected by the component
-        const s3Files: S3Object[] = fileInfos.map((f: S3FileInfo) => ({
-          Key: f.key,
-          LastModified: f.lastModified ? new Date(f.lastModified) : new Date(),
-          Size: f.size,
-          urlTag: f.urlTag,
-          uploadedBy: f.uploadedBy,
-          uploadedAt: f.uploadedAt,
-        }));
-
-        // Build set of all keys for folder detection
-        const allKeys = new Set<string>(fileInfos.map((f: S3FileInfo) => f.key));
+        const { s3Files, keys } = apiResponseToS3Objects(fileInfos, folderNames, basePrefix);
 
         setFiles(s3Files);
-        setAllObjectKeys(allKeys);
+        setAllObjectKeys(new Set(keys));
+        // Reset lazy-load tracking on full refresh
+        setLoadedFolders(new Set());
+        setExpandedFolders(new Set());
       } catch (err) {
         console.error('Failed to list KB files', err);
       } finally {
@@ -882,12 +906,60 @@ export const KBFileExplorer = forwardRef<KBFileExplorerHandle, KBFileExplorerPro
     const rows = useMemo((): TableRow[] => flattenRows(rowsNested, expandedFolders), [rowsNested, expandedFolders]);
 
     /**
-     * Toggle folder
+     * Toggle folder — lazily fetches contents the first time a folder is expanded.
+     *
+     * The folderId is the tree path built by buildRowsForTree, e.g.
+     * "documents/kb-abc123/reports".  We derive the API subpath by stripping
+     * the basePrefix.
      */
     function toggleFolder(folderId: string): void {
+      const isExpanding = !expandedFolders.has(folderId);
+
+      // Toggle the visual expand/collapse immediately
       const newSet = new Set(expandedFolders);
-      newSet.has(folderId) ? newSet.delete(folderId) : newSet.add(folderId);
+      isExpanding ? newSet.add(folderId) : newSet.delete(folderId);
       setExpandedFolders(newSet);
+
+      // If collapsing or already loaded, nothing more to do
+      if (!isExpanding || loadedFolders.has(folderId)) return;
+
+      // Derive the subpath the API expects (relative to the KB's S3 prefix)
+      const basePrefixNoSlash = basePrefix.replace(/\/$/, '');
+      const subpath = folderId.startsWith(basePrefixNoSlash) ? folderId.slice(basePrefixNoSlash.length + 1) : folderId;
+
+      // Mark folder as loading
+      setLoadingFolders((prev) => new Set(prev).add(folderId));
+
+      knowledgeBaseService
+        .listKBFiles(kbId, subpath)
+        .then(({ files: fileInfos, folders: folderNames = [] }) => {
+          const folderPrefix = `${basePrefix}${subpath}/`.replace(/\/{2,}/g, '/');
+          const { s3Files, keys } = apiResponseToS3Objects(fileInfos, folderNames, folderPrefix);
+
+          // Merge new files into existing state (avoid duplicates by key)
+          setFiles((prev) => {
+            const existing = new Set(prev.map((f) => f.Key));
+            const merged = [...prev];
+            for (const f of s3Files) {
+              if (!existing.has(f.Key)) merged.push(f);
+            }
+            return merged;
+          });
+          setAllObjectKeys((prev) => {
+            const next = new Set(prev);
+            keys.forEach((k) => next.add(k));
+            return next;
+          });
+          setLoadedFolders((prev) => new Set(prev).add(folderId));
+        })
+        .catch((err) => console.error('Failed to load folder', folderId, err))
+        .finally(() => {
+          setLoadingFolders((prev) => {
+            const next = new Set(prev);
+            next.delete(folderId);
+            return next;
+          });
+        });
     }
 
     /**
@@ -1343,7 +1415,10 @@ export const KBFileExplorer = forwardRef<KBFileExplorerHandle, KBFileExplorerPro
                 {rows.map((row) => {
                   const isFolder = row.type === 'folder';
                   const isExpanded = expandedFolders.has(row.id);
-                  const isEmptyFolder = isFolder && (row.children?.length ?? 0) === 0;
+                  const isFolderLoading = isFolder && loadingFolders.has(row.id);
+                  const isFolderLoaded = isFolder && loadedFolders.has(row.id);
+                  const isEmptyFolder =
+                    isFolder && !isFolderLoading && isFolderLoaded && (row.children?.length ?? 0) === 0;
 
                   return (
                     <tr key={row.id}>
@@ -1357,10 +1432,20 @@ export const KBFileExplorer = forwardRef<KBFileExplorerHandle, KBFileExplorerPro
                       >
                         <div className={`file-tree-item depth-${row.depth}`} title={row.displayName || row.name}>
                           {isFolder ? (
-                            <i
-                              className={`bi bi-chevron-${isExpanded ? 'down' : 'right'} me-1 folder-toggle flex-shrink-0`}
-                              onClick={() => toggleFolder(row.id)}
-                            />
+                            isFolderLoading ? (
+                              <Spinner
+                                animation="border"
+                                size="sm"
+                                variant="secondary"
+                                className="me-1 flex-shrink-0"
+                                style={{ width: '0.75rem', height: '0.75rem' }}
+                              />
+                            ) : (
+                              <i
+                                className={`bi bi-chevron-${isExpanded ? 'down' : 'right'} me-1 folder-toggle flex-shrink-0`}
+                                onClick={() => toggleFolder(row.id)}
+                              />
+                            )
                           ) : (
                             <span className="file-icon-spacer flex-shrink-0" />
                           )}

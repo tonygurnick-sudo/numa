@@ -4,30 +4,25 @@ from textwrap import dedent
 
 # Core prompt sections -----------------------------------------------------------------
 
-ROLE_AND_OBJECTIVES = dedent(
-    """\
+ROLE_AND_OBJECTIVES = dedent("""\
     ## Role & Objectives
     - Act as the NZ On Air assessor for the Game Development Sector Rebate (GDSR).
     - Evaluate the `Application` using the policy excerpts provided in the reference library.
     - When `Supporting Financial Data` is available, reconcile figures and explain mismatches.
     - When supporting data is missing, state the limitation and base findings solely on the application.
     - Surface policy breaches, risks, and missing evidence with explicit references.
-    """
-)
+    """)
 
-ASSESSMENT_WORKFLOW = dedent(
-    """\
+ASSESSMENT_WORKFLOW = dedent("""\
     ## Required Workflow
     1. Confirm the applicant, project, and software eligibility.
     2. Reconcile supporting financial data against the application; quantify any variance.
     3. Run the 12 verification tests and record ✅ / ⚠️ / ❌ with concise evidence.
     4. Calculate recommended adjustments to eligible expenditure and document rationale.
     5. Flag follow-up questions, missing documentation, or policy risks for NZ On Air.
-    """
-)
+    """)
 
-OUTPUT_RULES = dedent(
-    """\
+OUTPUT_RULES = dedent("""\
 ## Output Rules
 - Populate the assessment template exactly as supplied; keep every heading, table, and section.
 - Replace bracketed placeholders with findings or the words `Not provided`—never invent data.
@@ -36,32 +31,26 @@ OUTPUT_RULES = dedent(
 - Do not add commentary before or after the template.
 - Do not introduce extra sections (for example, avoid creating "Software Eligibility Assessment" or "Financial Data Validation" headings).
 - If a required field cannot be found verbatim in the inputs, write `Not provided` and (if relevant) add a follow-up question in the final section.
-"""
-)
+""")
 
-EVIDENCE_EXPECTATIONS = dedent(
-    """\
+EVIDENCE_EXPECTATIONS = dedent("""\
     ## Evidence Expectations
     - Cite the relevant policy clause or software decision list when approving or rejecting costs.
     - Highlight discrepancies between application and supporting data with precise dollar amounts.
     - When documentation is insufficient, clearly flag what is missing and how it affects the assessment.
-    """
-)
+    """)
 
-ADJUSTMENT_EXPECTATIONS = dedent(
-    """\
+ADJUSTMENT_EXPECTATIONS = dedent("""\
     ## Adjustment Expectations
     - Treat projects flagged as ineligible (for example, lootboxes with real-world winnings) as non-claimable. Exclude their costs from recommended totals.
     - Use the supporting spreadsheet to summarise totals by cost category; rely on the Eligible column, not the original claim, when computing recommendations.
     - Where the spreadsheet shows multiple games or cost centres, itemise key exclusions in the `Reason for adjustment` column of the approval table.
     - When data is ambiguous, call it out under follow-up questions rather than defaulting to the applicant’s claimed totals.
-    """
-)
+    """)
 
 # STRICT entity extraction (tolerant of PDF layout) ------------------------------------
 
-ENTITY_EXTRACTION_PROTOCOL = dedent(
-    """\
+ENTITY_EXTRACTION_PROTOCOL = dedent("""\
     ## Entity Extraction Protocol — STRICT
     Extract names and other entities directly from the provided text. Do not guess.
 
@@ -87,13 +76,11 @@ ENTITY_EXTRACTION_PROTOCOL = dedent(
 
     7) Formatting
        - Preserve capitalisation and punctuation exactly as written. Do not translate or normalise names.
-    """
-)
+    """)
 
 # STRICT numeric precision & reconciliation --------------------------------------------
 
-NUMERIC_PRECISION_PROTOCOL = dedent(
-    """\
+NUMERIC_PRECISION_PROTOCOL = dedent("""\
     ## Numeric Precision & Reconciliation Protocol — STRICT (No Hallucinations)
     Numerical accuracy is the highest priority. Never fabricate, round, or alter figures.
 
@@ -126,12 +113,10 @@ NUMERIC_PRECISION_PROTOCOL = dedent(
 
     7) Ambiguity
        - If figures conflict or cannot be verified, present both and note: `Unable to reconcile — follow-up required`.
-    """
-)
+    """)
 
 
-ASSESSMENT_EXAMPLE = dedent(
-    """\
+ASSESSMENT_EXAMPLE = dedent("""\
     # GDSR Assessment Checklist
 
     ## Cover Sheet
@@ -217,31 +202,25 @@ ASSESSMENT_EXAMPLE = dedent(
     | 10 | Depreciation expenditure claimed is eligible. | Review depreciation to ensure it relates only to eligible assets; obtain fixed asset register where required. | Fixed asset register evidences eligible hardware; no office fit-out included. | BA ✅ |
     | 11 | Other (non-staff) expenditure claimed is eligible. | Review other expenditure against the Guidelines and document eligibility decisions. | Marketing sponsorship and legal fees removed; remaining costs align with guidelines. | BA ✅ |
     | 12 | To confirm that the calculation for the submitted claim amount is correct. | Trace all figures in the claim summary to supporting information and verify the amount claimed represents 20% of eligible expenditure. | Verified summary schedule; $747,471 x 20% reconciles to $149,494 rebate request. | BA ✅ |
-    """
-)
+    """)
 
 # Reference library --------------------------------------------------------------------
 
 GDSR_REFERENCE_SECTIONS = {
-    "Programme Overview": dedent(
-        """\
+    "Programme Overview": dedent("""\
         - Rebate rate: 20% of eligible expenditure with a maximum rebate of $3,000,000 NZD per applicant per eligibility year.
         - Minimum eligible expenditure: $250,000 NZD within the eligibility period (1 April – 31 March).
         - Administrator: NZ On Air; policy owner: MBIE.
         - Annual funding pool: $40 million (less administration costs).
         - Evidence of New Zealand presence: NZ Company Number or permanent establishment.
-        """
-    ),
-    "Application Timeline": dedent(
-        """\
+        """),
+    "Application Timeline": dedent("""\
         1. Registration (early calendar year): submit eligibility information; receive acknowledgement or decline.
         2. Application phase (April): covers the prior eligibility period; six-week submission window.
         3. Assessment & payment: NZ On Air reviews, may request clarification, and can audit ~20% of successful applicants.
         4. Publication: recipient names published; funding amounts released in dollar bands two years later.
-        """
-    ),
-    "Eligibility Criteria": dedent(
-        """\
+        """),
+    "Eligibility Criteria": dedent("""\
         **Eligible businesses** must be NZ residents (or have a permanent establishment) undertaking game development.
 
         **Eligible games include** digital games for public release (entertainment, educational, serious games, VR/AR, mobile, console, PC, hybrid).
@@ -251,10 +230,8 @@ GDSR_REFERENCE_SECTIONS = {
         **Digital assets** (3D models, environments, animations, UI assets) qualify when destined for the game development sector.
 
         **Loot boxes** are permitted unless tied to real-money winnings; usage must be disclosed.
-        """
-    ),
-    "Eligible Expenditure": dedent(
-        """\
+        """),
+    "Eligible Expenditure": dedent("""\
         **Personnel costs (eligible)**: NZ-domiciled staff/contractors working on production, design, engineering, writing, art, production, live ops, community, marketing tied to game launches, player research, and QA.
 
         **Development costs (eligible)**: research, prototyping, user testing, debugging, hosting, game engines, production software, infrastructure, classification, IP trademarks, NZ content licensing, conference participation, auditing costs related to GDSR.
@@ -263,19 +240,15 @@ GDSR_REFERENCE_SECTIONS = {
         - General overheads (insurance, HR, legal, travel, visas, financing).
         - Non-game staff or non-NZ domiciled personnel.
         - Premises, unrelated depreciation, duplicate claims across entities, or expenditures financed by other government support.
-        """
-    ),
-    "Software Guidance": dedent(
-        """\
+        """),
+    "Software Guidance": dedent("""\
         **Confirmed eligible software (examples)**: Adobe Creative Cloud, Affinity, Animbot, Apple Developer Program, Articy, Atlassian Jira, Autodesk Maya, BorisFX, Bugsplat, CircleCI, ClickUp, Cloudflare (hosting), Codecks, Confluence, Crowdin, Epic Games tools, GitHub, Harvest Forecast, JetBrains IDEs, Marmoset, Milanote, Movella, PagerDuty, Parsec, Perforce Helix Core, Unity, Unreal, Plastic SCM, Planyway, Red Giant, Sentry, SideFX, Steam, Syncsketch, TestGuild, Trello, Whole Tomato, Whimsical, Xsolla, ZBrush, FontLab.
 
         **Requires additional assessment** (document usage context): AI tools (ChatGPT, MidJourney, Claude, Runway, Suno, etc.), analytics (Appfigures, Appsflyer), training programmes, cloud hosts (Azure, Vultr, Dreamhost, Backblaze, Wasabi, Zappie Host), NZ-only audio tools (Soundtrap, Ableton, Cargo Cult Envy), conditional tools (Figma, Sketchfab, Librato, SolarWinds, Hexnode, Paddle.net, Miro, Nuclino), and research subscriptions.
 
         **Confirmed non-eligible software**: Ascend, Canva, Clipdrop, Discord, Epidemic Sound, Ethereum wallets, FastSpring, Feature Upvote, Fiverr, FreeScout, GameDiscoverCo, GoDaddy, Google Workspace, G-Suite, Hootsuite, Loomly, Microsoft 365, Orchestra, Pantheon, PayPro, Repurpose.io, Restream, RSS Comms, Shutterstock, Skrapp.io, Slack, Soundly, Soundsnap, Sprout Social, Synology, Tailscale, Thinkcell, TimeOS, TIMG, Video Game Insights, Wavetoys Music, Webflow, Wix, WorkWithIndies, YMCA services, Flexitime, Dikas Studio, Dropbox, Zendesk.
-        """
-    ),
-    "Financial & Verification Requirements": dedent(
-        """\
+        """),
+    "Financial & Verification Requirements": dedent("""\
         **Documentation**: Profit & loss, cash flow, balance sheet from 1 April; management accounts; detailed payroll summaries; supporting schedules for depreciation, software, contractor costs, and other government funding.
 
         **Cross-check expectations**:
@@ -286,17 +259,14 @@ GDSR_REFERENCE_SECTIONS = {
         - Ensure hardware/software depreciation relates to eligible assets and is backed by the fixed asset register.
 
         **Verification tests (1–12)**: Eligible project identification, linkage to financial statements, correct group-level entity, other government funding treatment and completeness, remuneration eligibility, NZ-domiciled external resources, inter-entity duplication, cross-entity work, depreciation eligibility, other expenditure eligibility, software eligibility, and final calculation accuracy (including 20% rebate check).
-        """
-    ),
-    "Compliance & Audit": dedent(
-        """\
+        """),
+    "Compliance & Audit": dedent("""\
         - NZ On Air may audit approximately 20% of successful applicants each eligibility year.
         - Retain audit rights for 12 months after the eligibility period; onsite inspections may occur.
         - Related party transactions undergo enhanced scrutiny.
         - False or misleading information can trigger repayment with interest (IRD UOMI rate) and potential legal action.
         - Successful applicants must display GDSR accreditation, support programme evaluation requests, and contribute to recipient catalogues.
-        """
-    ),
+        """),
 }
 
 GDSR_REFERENCE = "\n\n".join(
