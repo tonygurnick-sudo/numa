@@ -19,7 +19,11 @@
     "dataConnectors": "Data Connectors",
     "capabilities": "Capabilities",
     "companyProfile": "Company Profile",
-    "mfa": "MFA & Devices"
+    "mfa": "MFA & Devices",
+    "usageAnalytics": "Usage Analytics",
+    "developer": "Developer",
+    "audit": "Audit",
+    "usage": "Usage"
   },
   "navigation": {
     "unsavedBranding": "You have unsaved branding changes. Leaving this page will discard them. Continue?",
@@ -687,6 +691,99 @@
         "setUpProfile": "Set Up My Profile",
         "skip": "Maybe Later"
       }
+    }
+  },
+  "usageAnalytics": {
+    "title": "Usage Analytics",
+    "description": "Configure test data ingestion and view usage events.",
+    "apiConfig": "API Configuration",
+    "testEndpoint": "Test Endpoint",
+    "keyCreated": "Created",
+    "keyExpires": "Expires",
+    "lastUsed": "Last used",
+    "regenerateKey": "Regenerate Key",
+    "viewContract": "View API Contract",
+    "deleteTestData": "Delete Test Data",
+    "eventsTitle": "Events",
+    "eventDetails": "Event Details",
+    "eventType": "Event Type",
+    "deleteTestDataTitle": "Delete All Test Data",
+    "deleteTestDataWarning": "This will permanently delete all test events. This cannot be undone. Continue?",
+    "confirmDelete": "Delete All Test Data",
+    "deleteSuccess": "Deleted {{count}} test events",
+    "deleteError": "Failed to delete test data",
+    "heatmap": {
+      "title": "Login Activity",
+      "subtitle": "Weekly logins per user · last 12 months",
+      "legendLess": "Less",
+      "legendMore": "More",
+      "noData": "No login data yet",
+      "loadError": "Failed to load activity data",
+      "tooltipWeek": "{{start}} – {{end}}",
+      "tooltipLogins_one": "{{count}} login",
+      "tooltipLogins_other": "{{count}} logins"
+    },
+    "copied": "Copied to clipboard",
+    "newKeyWarning": "This is your new API key. Store it securely - it will not be shown again.",
+    "confirm": {
+      "regenerateKey": "Regenerate API key? The current key will stop working immediately. Continue?"
+    },
+    "errors": {
+      "loadKey": "Failed to load API key metadata",
+      "regenerateKey": "Failed to regenerate API key",
+      "updateRetention": "Failed to update retention setting",
+      "loadContract": "Failed to load API contract"
+    },
+    "filters": {
+      "allTypes": "All Event Types",
+      "allData": "All Data",
+      "testOnly": "Test Only",
+      "prodOnly": "Production Only",
+      "eventType": "Filter by event type",
+      "testFilter": "Filter by test/prod"
+    },
+    "eventTypes": {
+      "login": "Login",
+      "chatMessage": "Chat Message",
+      "chatConversation": "Chat Conversation",
+      "agentCreated": "Agent Created",
+      "agentExecuted": "Agent Executed",
+      "fileUpload": "File Upload",
+      "fileDelete": "File Delete",
+      "kbCreated": "KB Created",
+      "kbDeleted": "KB Deleted",
+      "kbQuery": "KB Query",
+      "integrationActivated": "Integration Activated",
+      "integrationToolCall": "Integration Tool Call",
+      "secretAccessed": "Secret Accessed"
+    },
+    "table": {
+      "timestamp": "Timestamp",
+      "eventType": "Event Type",
+      "userId": "User ID",
+      "isTest": "Test",
+      "actions": "Actions",
+      "showing": "Showing {{count}} events",
+      "loadMore": "Load More",
+      "noEvents": "No events found",
+      "test": "Test",
+      "prod": "Prod"
+    },
+    "dataRetention": "Data Retention",
+    "month": "month",
+    "months": "months",
+    "mth": "mth",
+    "mths": "mths",
+    "dataRetentionHelp": "Events will be automatically deleted after the selected retention period",
+    "apiContract": {
+      "title": "Numa Usage Analytics API",
+      "version": "Version {{version}}",
+      "description": "Description",
+      "defaultDescription": "API for ingesting usage analytics events",
+      "baseUrl": "Base URL",
+      "authentication": "Authentication",
+      "authDescription": "All requests require an API key in the X-Analytics-API-Key header.",
+      "fullSpec": "Full Specification"
     }
   }
 }

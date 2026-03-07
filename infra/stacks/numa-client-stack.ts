@@ -213,6 +213,9 @@ export class NumaClientStack extends TerraformStack {
 
     const core = new CoreNumaInfra(this, 'numa', {
       ...clientConfig,
+      secretsVaultEnabled: clientConfig.secretsVaultEnabled ?? false,
+      numaDropZones: clientConfig.numaDropZones ?? false,
+      oauthIntegrationsEnabled: clientConfig.oauthIntegrationsEnabled ?? false,
       additionalOrigins: coreAdditionalOrigins,
       environmentName: props.environmentName,
       qBusinessProvider: qBusinessProvider,
@@ -363,11 +366,7 @@ export class NumaClientStack extends TerraformStack {
         // File redirect for integration uploads (clean URLs to avoid Slack filename length issues)
         fileRedirectSecret: fileRedirectSecret.value,
         fileRedirectBaseUrl: `https://${domainName}/api/workspace-chat-agent`,
-        // Vault secrets (optional, only if enabled) - now using consolidated Secrets Manager approach
-        ...(clientConfig.secretsVaultEnabled && {
-          vaultAuditLogTableName: core.vaultAuditLogTable.name,
-          vaultAuditLogTableArn: core.vaultAuditLogTable.arn,
-        }),
+        // Vault secrets integration removed in favor of usage analytics
       });
 
       // Create the AgentCore runtime
@@ -477,7 +476,6 @@ export class NumaClientStack extends TerraformStack {
       clientName: props.clientName,
       dataBucketName: core.dataBucket.bucket.bucket,
       dataBucketArn: core.dataBucket.bucket.arn,
-      companyBucketArn: core.companyBucket?.bucket.arn,
       logGroup: core.logGroup,
       region: clientConfig.region,
       userPoolClientId: core.userPoolClient.id,
@@ -503,7 +501,6 @@ export class NumaClientStack extends TerraformStack {
       dataConnectorsSettingsTableName: core.dataConnectorsSettingsTable.name,
       capabilitiesTableName: core.capabilitiesTable.name,
       dataConnectorsSyncConfigsTableName: core.dataConnectorsSyncConfigsTable.name,
-      vaultAuditLogTableName: core.vaultAuditLogTable.name,
       agentSchedulesTableName: core.agentSchedulesTable.name,
       notificationsTableName: core.notificationsTable.name,
       chatAgentFunctionUrl: chatAgent.functionUrl,
@@ -514,6 +511,13 @@ export class NumaClientStack extends TerraformStack {
       bedrockDataSourceId: knowledgeBase?.dataSourceId,
       filesTableName: core.filesTable?.name,
       filesTableArn: core.filesTable?.arn,
+      usageAnalyticsEventsTableName: core.usageAnalyticsEventsTable.name,
+      usageAnalyticsEventsTableArn: core.usageAnalyticsEventsTable.arn,
+      usageAnalyticsKeysTableName: core.usageAnalyticsKeysTable.name,
+      usageAnalyticsKeysTableArn: core.usageAnalyticsKeysTable.arn,
+      usageAnalyticsCountersTableName: core.usageAnalyticsCountersTable.name,
+      usageAnalyticsCountersTableArn: core.usageAnalyticsCountersTable.arn,
+      domainName,
     });
 
     // Numa Ops (work management, kanban boards, CRM, supplier management)
@@ -546,7 +550,6 @@ export class NumaClientStack extends TerraformStack {
       apiGatewayId: fe.apiGateway.id,
       clientName: props.clientName,
       region: clientConfig.region,
-      vaultAuditLogTableName: core.vaultAuditLogTable.name,
       frontendBaseUrl: `https://${domainName}`,
       oauthProviders: clientConfig.oauthProviders ?? {},
       otelConfig: {
@@ -560,6 +563,8 @@ export class NumaClientStack extends TerraformStack {
       // Data bucket (for S3 data bucket connector)
       dataBucketName: core.dataBucket.bucket.bucket,
       dataBucketArn: core.dataBucket.bucket.arn,
+      // Vault audit log table (for tracking vault access)
+      vaultAuditLogTableName: core.vaultAuditLogTable.name,
     });
 
     // V2 Apps (workspace-agent-based apps: data analysis, quoting, etc.)
@@ -677,7 +682,7 @@ export class NumaClientStack extends TerraformStack {
         NUMA_WORKSPACE_CHAT: clientConfig.numaWorkspaceChat ?? true,
         SCHEDULING: clientConfig.scheduling ?? false,
         NUMA_FILES: clientConfig.numaFiles ?? false,
-        KNOWLEDGE_BASES: clientConfig.knowledgeBases ?? true,
+        KNOWLEDGE_BASES: true,
         DEVELOPER_MODE: clientConfig.developerMode ?? false,
         NUMA_OPS: clientConfig.numaOps ?? false,
         MFA_ENABLED: clientConfig.mfa ?? false,
@@ -1061,57 +1066,14 @@ export const clientConfigSchema = coreNumaInfraPropsSchema
         numaOps: z.boolean().optional().default(false),
 
         /**
-         * Whether to enable Knowledge Bases feature (company/user file management).
-         *
-         * @default true
+         * Feature flags from other branches (not yet implemented in this branch)
+         * Added to schema for forward compatibility with configs that include them
          */
         knowledgeBases: z.boolean().optional().default(true),
-
-        /**
-         * Whether to enable Records Knowledge Base functionality.
-         *
-         * @default false
-         */
-        recordsKBEnabled: z.boolean().optional().default(false),
-
-        /**
-         * Whether to enable Secrets Vault functionality for secure credential storage.
-         *
-         * @default false
-         */
-        secretsVaultEnabled: z.boolean().optional().default(false),
-
-        /**
-         * Whether to enable Content Search functionality.
-         *
-         * @default false
-         */
-        contentSearchEnabled: z.boolean().optional().default(false),
-
-        /**
-         * Whether OAuth cloud storage integrations (Google Drive, OneDrive, Dropbox) are enabled.
-         * Controls both the backend OAuth Lambda/routes and the frontend OAuth UI.
-         * Requires dataConnectorsEnabled for the frontend flag.
-         *
-         * @default false
-         */
-        oauthIntegrationsEnabled: z.boolean().optional().default(false),
-
-        /**
-         * OAuth provider configurations keyed by provider ID.
-         * Each provider specifies enabled status and OAuth scopes.
-         */
-        oauthProviders: z
-          .record(
-            z.string(),
-            z.object({
-              enabled: z.boolean(),
-              clientId: z.string().optional().default(''),
-              clientSecret: z.string().optional().default(''),
-              scopes: z.array(z.string()),
-            })
-          )
-          .optional(),
+        recordsKBEnabled: z.boolean().optional(),
+        oauthProviders: z.record(z.string(), z.any()).optional(), // Object with provider configs
+        oauthIntegrationsEnabled: z.boolean().optional(),
+        contentSearchEnabled: z.boolean().optional(),
 
         /**
          * Whether to enable V2 Apps (next-generation app framework with agents, workspace, runs).

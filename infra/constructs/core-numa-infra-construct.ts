@@ -88,6 +88,9 @@ export class CoreNumaInfra extends Construct {
   readonly pipedreamRelayLambdaArn?: string;
   readonly mcpPolicyTable?: DynamodbTable;
   readonly integrationsApprovalTable?: DynamodbTable;
+  readonly usageAnalyticsEventsTable!: DynamodbTable;
+  readonly usageAnalyticsKeysTable!: DynamodbTable;
+  readonly usageAnalyticsCountersTable!: DynamodbTable;
 
   constructor(scope: Construct, name: string, props: CoreNumaInfraProps) {
     super(scope, name);
@@ -1347,6 +1350,119 @@ export class CoreNumaInfra extends Construct {
           Environment: props.environmentName,
           Purpose: 'global-integration-settings',
         },
+      });
+
+      // Usage Analytics: Events table
+      this.usageAnalyticsEventsTable = new DynamodbTable(this, 'usage-analytics-events', {
+        name: `${props.clientName}-usage-analytics`,
+        billingMode: 'PAY_PER_REQUEST',
+        hashKey: 'PK',
+        rangeKey: 'SK',
+        attribute: [
+          { name: 'PK', type: 'S' }, // USER#{userId}
+          { name: 'SK', type: 'S' }, // EVENT#{timestamp}#{eventId}
+          { name: 'eventType', type: 'S' },
+          { name: 'timestamp', type: 'N' },
+          { name: 'isTest', type: 'S' }, // "true" | "false" (DynamoDB doesn't support bool in GSI)
+        ],
+        globalSecondaryIndex: [
+          {
+            name: 'EventTypeIndex',
+            hashKey: 'eventType',
+            rangeKey: 'timestamp',
+            projectionType: 'ALL',
+          },
+          {
+            name: 'TestDataIndex',
+            hashKey: 'isTest',
+            rangeKey: 'timestamp',
+            projectionType: 'KEYS_ONLY',
+          },
+        ],
+        ttl: {
+          enabled: true,
+          attributeName: 'ttl',
+        },
+        pointInTimeRecovery: { enabled: true },
+        tags: {
+          Name: `${props.clientName}-usage-analytics`,
+          Environment: props.environmentName,
+          Purpose: 'usage-analytics-events',
+        },
+      });
+
+      // Usage Analytics: API Keys table
+      this.usageAnalyticsKeysTable = new DynamodbTable(this, 'usage-analytics-keys', {
+        name: `${props.clientName}-usage-analytics-keys`,
+        billingMode: 'PAY_PER_REQUEST',
+        hashKey: 'PK',
+        rangeKey: 'SK',
+        attribute: [
+          { name: 'PK', type: 'S' }, // CLIENT#{clientName}
+          { name: 'SK', type: 'S' }, // KEY#active
+        ],
+        pointInTimeRecovery: { enabled: true },
+        tags: {
+          Name: `${props.clientName}-usage-analytics-keys`,
+          Environment: props.environmentName,
+          Purpose: 'usage-analytics-api-keys',
+        },
+      });
+
+      // Usage Analytics: Counters table (pre-aggregated login counts per user per day)
+      this.usageAnalyticsCountersTable = new DynamodbTable(this, 'usage-analytics-counters', {
+        name: `${props.clientName}-usage-analytics-counters`,
+        billingMode: 'PAY_PER_REQUEST',
+        hashKey: 'PK',
+        rangeKey: 'SK',
+        attribute: [
+          { name: 'PK', type: 'S' }, // USER#{userId}
+          { name: 'SK', type: 'S' }, // EVENT#{eventType}#DATE#{YYYY-MM-DD}
+        ],
+        pointInTimeRecovery: { enabled: true },
+        tags: {
+          Name: `${props.clientName}-usage-analytics-counters`,
+          Environment: props.environmentName,
+          Purpose: 'usage-analytics-counters',
+        },
+      });
+
+      // Usage Analytics: Seed initial API key
+      const seedApiKeyLambda = new NumaLambda(this, 'seed-api-key', {
+        clientName: props.clientName,
+        lambdaDirectory: 'node/seed-api-key',
+        logGroup: this.logGroup,
+        resourceNameSuffix: '_seed-api-key',
+        runtime: 'nodejs22.x',
+        handler: 'index.handler',
+        environment: {
+          CLIENT_NAME: props.clientName,
+          KEYS_TABLE_NAME: this.usageAnalyticsKeysTable.name,
+          REGION: props.region,
+        },
+        additionalPolicyStatements: [
+          {
+            effect: 'Allow',
+            actions: ['dynamodb:GetItem', 'dynamodb:PutItem'],
+            resources: [this.usageAnalyticsKeysTable.arn],
+          },
+        ],
+      });
+
+      // Invoke seed Lambda once on stack creation
+      new LambdaInvocation(this, 'seed-api-key-invocation', {
+        functionName: seedApiKeyLambda.lambda.functionName,
+        input: JSON.stringify({}),
+        triggers: {
+          keysTableName: this.usageAnalyticsKeysTable.name,
+          seedApiKeySourceHash: seedApiKeyLambda.lambda.sourceCodeHash,
+        },
+        dependsOn: [
+          this.usageAnalyticsKeysTable,
+          seedApiKeyLambda.lambda,
+          ...seedApiKeyLambda.additionalPolicies,
+          ...seedApiKeyLambda.policyAttachments,
+        ],
       });
 
       const pipedreamRelayPolicyStatements = [

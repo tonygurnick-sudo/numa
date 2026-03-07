@@ -245,7 +245,7 @@ export class NumaFrontendInfra extends Construct {
         headersConfig: {
           headerBehavior: 'whitelist',
           headers: {
-            items: ['authorization'],
+            items: ['authorization', 'x-analytics-api-key'],
           },
         },
         queryStringsConfig: {

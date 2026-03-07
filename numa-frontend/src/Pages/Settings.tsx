@@ -22,6 +22,9 @@ import { getIntegrationsListFormat, type IntegrationListItem } from '../config/i
 import { PipedreamProxyService } from '../Services/PipedreamProxyService';
 import { useNumaRequest } from '../Providers/NumaRequestContext';
 import BrandingAdminPanel from '../Components/Branding/BrandingAdminPanel';
+import UsageAnalyticsPanel from '../Components/UsageAnalytics/UsageAnalyticsPanel';
+import AuditPanel from '../Components/UsageAnalytics/AuditPanel';
+import LoginHeatmap from '../Components/UsageAnalytics/LoginHeatmap';
 import { UNSAFE_NavigationContext } from 'react-router-dom';
 import {
   AdminChatSettingsService,
@@ -739,10 +742,9 @@ export default function SettingsPage() {
       { key: 'company-profile', label: t('tabs.companyProfile'), iconClassName: 'bi bi-building' },
       ...(agentsFeatureEnabled ? [{ key: 'agents', label: t('tabs.agents'), iconClassName: 'bi bi-robot' }] : []),
       { key: 'integrations', label: t('tabs.integrations'), iconClassName: 'bi bi-plug' },
-      ...(dataConnectorsEnabled
-        ? [{ key: 'data-connectors', label: t('tabs.dataConnectors'), iconClassName: 'bi bi-cloud-download' }]
-        : []),
-      { key: 'capabilities', label: t('capabilities.tabTitle'), iconClassName: 'bi bi-toggles' },
+      { key: 'usage-analytics', label: t('tabs.developer'), iconClassName: 'bi bi-code-slash' },
+      { key: 'audit', label: t('tabs.audit'), iconClassName: 'bi bi-clock-history' },
+      { key: 'usage', label: t('tabs.usage'), iconClassName: 'bi bi-bar-chart-line' },
     ],
     // REBASE RESOLUTION: Kept HEAD dep order. Incoming (8e1a6ca9) had [allowBrandingTab, agentsFeatureEnabled, dataConnectorsEnabled, mfaEnabled, t].
     // Functionally identical — order doesn't matter for useMemo deps. Kept HEAD for consistency with body order.
@@ -1458,6 +1460,45 @@ export default function SettingsPage() {
                   ))}
                 </div>
               </Tab>
+              {isAdmin && (
+                <Tab
+                  eventKey="usage-analytics"
+                  title={
+                    <span>
+                      <i className="bi bi-code-slash me-2"></i>
+                      {t('tabs.developer')}
+                    </span>
+                  }
+                >
+                  <UsageAnalyticsPanel />
+                </Tab>
+              )}
+              {isAdmin && (
+                <Tab
+                  eventKey="audit"
+                  title={
+                    <span>
+                      <i className="bi bi-clock-history me-2"></i>
+                      {t('tabs.audit')}
+                    </span>
+                  }
+                >
+                  <AuditPanel />
+                </Tab>
+              )}
+              {isAdmin && (
+                <Tab
+                  eventKey="usage"
+                  title={
+                    <span>
+                      <i className="bi bi-bar-chart-line me-2"></i>
+                      {t('tabs.usage')}
+                    </span>
+                  }
+                >
+                  <LoginHeatmap />
+                </Tab>
+              )}
             </StyledTabs>
           </div>
         )}

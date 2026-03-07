@@ -334,9 +334,12 @@
   border-radius: 10px;
   margin-bottom: 10px;
   cursor: grab;
-  border: 1px solid rgba(229, 231, 235, 0.8);
-  padding: 14px 16px;
-  transition: all 0.25s cubic-bezier(0.2, 0.8, 0.2, 1);
+  border: 1px solid var(--ops-border);
+  padding: 12px 14px;
+  transition:
+    box-shadow 0.15s,
+    border-color 0.15s,
+    transform 0.1s;
   position: relative;
   user-select: none;
   box-shadow:

@@ -1,0 +1,26 @@
+{
+  "name": "@numa/usage-analytics-schemas",
+  "packageManager": "yarn@4.9.2",
+  "type": "module",
+  "version": "1.0.0",
+  "description": "Shared Zod schemas for Numa usage analytics events",
+  "main": "index.ts",
+  "types": "index.ts",
+  "scripts": {
+    "build": "node ../../node_modules/typescript/bin/tsc",
+    "lint": "eslint && tsc --noEmit",
+    "test": "echo \"No tests yet\""
+  },
+  "dependencies": {
+    "zod": "^3.22.4",
+    "zod-to-json-schema": "^3.22.3"
+  },
+  "devDependencies": {
+    "@arcanumai/style": "workspace:*",
+    "@types/node": "^20.11.0",
+    "@typescript-eslint/eslint-plugin": "^8.17.0",
+    "@typescript-eslint/parser": "^8.17.0",
+    "eslint": "^9.16.0",
+    "typescript": "^5.3.3"
+  }
+}

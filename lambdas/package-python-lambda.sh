@@ -131,11 +131,11 @@ fi
 
 # Use the last modification date of the lambda for all files in the ZIP to make
 # it deterministic
-LAST_MODIFIED=$(git log -1 --format=%cd --date format:"%FT%T" "${LAMBDA_DIRECTORY}" || true)
-if test -z "${LAST_MODIFIED}"; then
-    LAST_MODIFIED=$(date -u +"%FT%T")
+LAST_MODIFIED_ISO=$(git log -1 --format=%cd --date=format:"%Y%m%d%H%M.%S" "${LAMBDA_DIRECTORY}" || true)
+if test -z "${LAST_MODIFIED_ISO}"; then
+    LAST_MODIFIED_ISO=$(date -u +"%Y%m%d%H%M.%S")
 fi
-find "${BUILD_DIR}" -exec touch -d "${LAST_MODIFIED}" {} +
+find "${BUILD_DIR}" -exec touch -t "${LAST_MODIFIED_ISO}" {} +
 
 pushd "${BUILD_DIR}";
     # use -X (--no-extra, which isn't supported on Mac) to not save attributes

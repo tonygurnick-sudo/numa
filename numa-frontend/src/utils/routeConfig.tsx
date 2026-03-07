@@ -44,6 +44,7 @@ const SupportPage = lazy(() => import('../Pages/SupportPage').then((m) => ({ def
 const VaultSecretsPage = lazy(() => import('../Pages/VaultSecretsPage').then((m) => ({ default: m.VaultSecretsPage })));
 const OAuthCallback = lazy(() => import('../Pages/OAuthCallback'));
 const V2AppDetail = lazy(() => import('../Pages/V2AppDetail').then((m) => ({ default: m.V2AppDetail })));
+const ApiContractPage = lazy(() => import('../Pages/ApiContractPage'));
 
 export const ROUTE_CONFIG = [
   // Chat
@@ -329,6 +330,12 @@ export const ROUTE_CONFIG = [
     path: '/automations/:automationId/edit',
     element: () => <AutomationBuilderPage />,
     featureFlag: 'SCHEDULING',
+  },
+
+  // Usage analytics contract
+  {
+    path: '/usage-analytics-contract',
+    element: () => <ApiContractPage />,
   },
 
   // OAuth callback handler

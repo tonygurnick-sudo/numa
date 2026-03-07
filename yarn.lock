@@ -178,6 +178,7 @@ __metadata:
     micromark-extension-gfm: "npm:^3.0.0"
     moment: "npm:^2.30.1"
     papaparse: "npm:^5.5.3"
+    prettier: "npm:^3.8.1"
     qrcode.react: "npm:^4.2.0"
     react: "npm:^19.0.0"
     react-big-calendar: "npm:^1.19.4"
@@ -11014,6 +11015,21 @@ __metadata:
   languageName: unknown
   linkType: soft
 
+"@numa/usage-analytics-schemas@workspace:*, @numa/usage-analytics-schemas@workspace:lib/usage-analytics-schemas":
+  version: 0.0.0-use.local
+  resolution: "@numa/usage-analytics-schemas@workspace:lib/usage-analytics-schemas"
+  dependencies:
+    "@arcanumai/style": "workspace:*"
+    "@types/node": "npm:^20.11.0"
+    "@typescript-eslint/eslint-plugin": "npm:^8.17.0"
+    "@typescript-eslint/parser": "npm:^8.17.0"
+    eslint: "npm:^9.16.0"
+    typescript: "npm:^5.3.3"
+    zod: "npm:^3.22.4"
+    zod-to-json-schema: "npm:^3.22.3"
+  languageName: unknown
+  linkType: soft
+
 "@oozcitak/dom@npm:1.15.5":
   version: 1.15.5
   resolution: "@oozcitak/dom@npm:1.15.5"
@@ -17608,6 +17624,15 @@ __metadata:
   dependencies:
     undici-types: "npm:~6.21.0"
   checksum: 10c0/9eecc4be04f1a8afbb8f8059b322fd0bbceeb02f96669bbaa52fb0b264c2e3269432a8833ada4be7b335e18d6b438b2d2c0274f5b3f54cc2081cb7c5374a6561
+  languageName: node
+  linkType: hard
+
+"@types/node@npm:^20.11.0":
+  version: 20.19.33
+  resolution: "@types/node@npm:20.19.33"
+  dependencies:
+    undici-types: "npm:~6.21.0"
+  checksum: 10c0/a1a6234a2b6fa577fbb1ccc471e5e54a79c6e1a51be10a67b034461b752a50017854810e943494f20b3c3c6d14df84c93757e0a2ec57aa81c830d6faeab72cf2
   languageName: node
   linkType: hard
 
@@ -28645,6 +28670,25 @@ __metadata:
   languageName: node
   linkType: hard
 
+"seed-api-key@workspace:lambdas/node/seed-api-key":
+  version: 0.0.0-use.local
+  resolution: "seed-api-key@workspace:lambdas/node/seed-api-key"
+  dependencies:
+    "@arcanumai/style": "workspace:*"
+    "@aws-sdk/client-dynamodb": "npm:^3.699.0"
+    "@aws-sdk/lib-dynamodb": "npm:^3.699.0"
+    "@types/aws-lambda": "npm:^8.10.146"
+    "@types/node": "npm:^22.10.1"
+    "@typescript-eslint/eslint-plugin": "npm:^8.17.0"
+    "@typescript-eslint/parser": "npm:^8.17.0"
+    esbuild: "npm:^0.25.0"
+    eslint: "npm:^9.16.0"
+    rimraf: "npm:^6.0.1"
+    tsx: "npm:^4.19.2"
+    typescript: "npm:^5.7.2"
+  languageName: unknown
+  linkType: soft
+
 "seed-ops-config@workspace:lambdas/node/seed-ops-config":
   version: 0.0.0-use.local
   resolution: "seed-ops-config@workspace:lambdas/node/seed-ops-config"
@@ -30145,7 +30189,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"typescript@npm:^5.7.0, typescript@npm:^5.7.2":
+"typescript@npm:^5.3.3, typescript@npm:^5.7.0, typescript@npm:^5.7.2":
   version: 5.9.3
   resolution: "typescript@npm:5.9.3"
   bin:
@@ -30175,7 +30219,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"typescript@patch:typescript@npm%3A^5.7.0#optional!builtin<compat/typescript>, typescript@patch:typescript@npm%3A^5.7.2#optional!builtin<compat/typescript>":
+"typescript@patch:typescript@npm%3A^5.3.3#optional!builtin<compat/typescript>, typescript@patch:typescript@npm%3A^5.7.0#optional!builtin<compat/typescript>, typescript@patch:typescript@npm%3A^5.7.2#optional!builtin<compat/typescript>":
   version: 5.9.3
   resolution: "typescript@patch:typescript@npm%3A5.9.3#optional!builtin<compat/typescript>::version=5.9.3&hash=5786d5"
   bin:
@@ -30449,6 +30493,66 @@ __metadata:
   checksum: 10c0/f0a1c7d99ac35dd68a8962bc7b3dd38f08d457387fc686f0669ff881b00a68eabd9cb3aded09dfbe25401d7b632fc4a9c074cb373f6a4bd1d8b5324d1d442a0d
   languageName: node
   linkType: hard
+
+"usage-analytics-admin@workspace:lambdas/node/usage-analytics-admin":
+  version: 0.0.0-use.local
+  resolution: "usage-analytics-admin@workspace:lambdas/node/usage-analytics-admin"
+  dependencies:
+    "@arcanumai/style": "workspace:*"
+    "@aws-sdk/client-dynamodb": "npm:^3.699.0"
+    "@aws-sdk/lib-dynamodb": "npm:^3.699.0"
+    "@types/aws-lambda": "npm:^8.10.146"
+    "@types/node": "npm:^22.10.1"
+    "@typescript-eslint/eslint-plugin": "npm:^8.17.0"
+    "@typescript-eslint/parser": "npm:^8.17.0"
+    esbuild: "npm:^0.25.0"
+    eslint: "npm:^9.16.0"
+    rimraf: "npm:^6.0.1"
+    tsx: "npm:^4.19.2"
+    typescript: "npm:^5.7.2"
+  languageName: unknown
+  linkType: soft
+
+"usage-analytics-contract@workspace:lambdas/node/usage-analytics-contract":
+  version: 0.0.0-use.local
+  resolution: "usage-analytics-contract@workspace:lambdas/node/usage-analytics-contract"
+  dependencies:
+    "@arcanumai/style": "workspace:*"
+    "@numa/usage-analytics-schemas": "workspace:*"
+    "@types/aws-lambda": "npm:^8.10.146"
+    "@types/node": "npm:^22.10.1"
+    "@typescript-eslint/eslint-plugin": "npm:^8.17.0"
+    "@typescript-eslint/parser": "npm:^8.17.0"
+    esbuild: "npm:^0.25.0"
+    eslint: "npm:^9.16.0"
+    rimraf: "npm:^6.0.1"
+    tsx: "npm:^4.19.2"
+    typescript: "npm:^5.7.2"
+    zod: "npm:^3.22.4"
+    zod-to-json-schema: "npm:^3.22.3"
+  languageName: unknown
+  linkType: soft
+
+"usage-analytics-ingest@workspace:lambdas/node/usage-analytics-ingest":
+  version: 0.0.0-use.local
+  resolution: "usage-analytics-ingest@workspace:lambdas/node/usage-analytics-ingest"
+  dependencies:
+    "@arcanumai/style": "workspace:*"
+    "@aws-sdk/client-dynamodb": "npm:^3.699.0"
+    "@aws-sdk/lib-dynamodb": "npm:^3.699.0"
+    "@numa/usage-analytics-schemas": "workspace:*"
+    "@types/aws-lambda": "npm:^8.10.146"
+    "@types/node": "npm:^22.10.1"
+    "@typescript-eslint/eslint-plugin": "npm:^8.17.0"
+    "@typescript-eslint/parser": "npm:^8.17.0"
+    esbuild: "npm:^0.25.0"
+    eslint: "npm:^9.16.0"
+    rimraf: "npm:^6.0.1"
+    tsx: "npm:^4.19.2"
+    typescript: "npm:^5.7.2"
+    zod: "npm:^3.22.4"
+  languageName: unknown
+  linkType: soft
 
 "use-callback-ref@npm:^1.3.3":
   version: 1.3.3
@@ -31491,6 +31595,15 @@ __metadata:
   languageName: node
   linkType: hard
 
+"zod-to-json-schema@npm:^3.22.3":
+  version: 3.25.1
+  resolution: "zod-to-json-schema@npm:3.25.1"
+  peerDependencies:
+    zod: ^3.25 || ^4
+  checksum: 10c0/711b30e34d1f1211f1afe64bf457f0d799234199dc005cca720b236ea808804c03164039c232f5df33c46f462023874015a8a0b3aab1585eca14124c324db7e2
+  languageName: node
+  linkType: hard
+
 "zod@npm:3.24.4":
   version: 3.24.4
   resolution: "zod@npm:3.24.4"
@@ -31498,7 +31611,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"zod@npm:^3.23.8, zod@npm:^3.24.0, zod@npm:^3.24.4":
+"zod@npm:^3.22.4, zod@npm:^3.23.8, zod@npm:^3.24.0, zod@npm:^3.24.4":
   version: 3.25.76
   resolution: "zod@npm:3.25.76"
   checksum: 10c0/5718ec35e3c40b600316c5b4c5e4976f7fee68151bc8f8d90ec18a469be9571f072e1bbaace10f1e85cf8892ea12d90821b200e980ab46916a6166a4260a983c

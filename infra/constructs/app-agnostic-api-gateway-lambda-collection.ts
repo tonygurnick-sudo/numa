@@ -697,136 +697,6 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
       route: { verb: 'DELETE', path: 'data-connectors/sync-configs/{id}' },
     });
 
-    // Vault Secrets API (per-user secret storage with Secrets Manager backend)
-    const vaultEnv = {
-      CLIENT_NAME: props.clientName,
-      VAULT_AUDIT_LOG_TABLE_NAME: props.vaultAuditLogTableName,
-      VAULT_SECRETS_PREFIX: `${props.clientName}/vault`,
-    } as Record<string, string>;
-
-    const vaultPolicy = [
-      // Audit log table access (keep existing)
-      {
-        effect: 'Allow',
-        actions: ['dynamodb:PutItem', 'dynamodb:Query'],
-        resources: [`arn:aws:dynamodb:*:*:table/${props.vaultAuditLogTableName}`],
-      },
-      // Consolidated vault secrets in Secrets Manager
-      {
-        effect: 'Allow',
-        actions: [
-          'secretsmanager:CreateSecret',
-          'secretsmanager:PutSecretValue',
-          'secretsmanager:GetSecretValue',
-          'secretsmanager:UpdateSecret',
-          'secretsmanager:DeleteSecret',
-          'secretsmanager:DescribeSecret',
-          'secretsmanager:ListSecrets',
-        ],
-        resources: [
-          `arn:aws:secretsmanager:*:*:secret:${props.clientName}/vault/users/*`,
-          `arn:aws:secretsmanager:*:*:secret:${props.clientName}/vault/company*`,
-        ],
-      },
-    ];
-
-    // Consolidated vault Lambda functions with increased timeout for large vault operations
-    const vaultLambdaConfig = {
-      addAuthorizer: true,
-      lambdaDirectory: 'python/vault-secrets',
-      handler: 'lambda_function.handler',
-      environment: vaultEnv,
-      additionalPolicyStatements: vaultPolicy,
-      timeout: 300, // 5 minutes for large vault operations with compression
-    };
-
-    this.addLambdaFunction(this, 'vault-secrets-list', {
-      ...vaultLambdaConfig,
-      route: { verb: 'GET', path: 'vault/secrets' },
-    });
-
-    this.addLambdaFunction(this, 'vault-secrets-get', {
-      ...vaultLambdaConfig,
-      route: { verb: 'GET', path: 'vault/secrets/{id}' },
-    });
-
-    this.addLambdaFunction(this, 'vault-secrets-create', {
-      ...vaultLambdaConfig,
-      route: { verb: 'POST', path: 'vault/secrets' },
-    });
-
-    this.addLambdaFunction(this, 'vault-secrets-update', {
-      ...vaultLambdaConfig,
-      route: { verb: 'PUT', path: 'vault/secrets/{id}' },
-    });
-
-    this.addLambdaFunction(this, 'vault-secrets-delete', {
-      ...vaultLambdaConfig,
-      route: { verb: 'DELETE', path: 'vault/secrets/{id}' },
-    });
-
-    this.addLambdaFunction(this, 'vault-categories-list', {
-      ...vaultLambdaConfig,
-      route: { verb: 'GET', path: 'vault/categories' },
-    });
-
-    this.addLambdaFunction(this, 'vault-audit-log', {
-      ...vaultLambdaConfig,
-      route: { verb: 'GET', path: 'vault/audit-log' },
-    });
-
-    // Company-level vault secrets (OAuth client configs, shared credentials, templates)
-    this.addLambdaFunction(this, 'vault-company-secrets-list', {
-      ...vaultLambdaConfig,
-      route: { verb: 'GET', path: 'vault/company-secrets' },
-    });
-
-    this.addLambdaFunction(this, 'vault-company-secrets-get', {
-      ...vaultLambdaConfig,
-      route: { verb: 'GET', path: 'vault/company-secrets/{id}' },
-    });
-
-    this.addLambdaFunction(this, 'vault-company-secrets-create', {
-      ...vaultLambdaConfig,
-      route: { verb: 'POST', path: 'vault/company-secrets' },
-    });
-
-    this.addLambdaFunction(this, 'vault-company-secrets-update', {
-      ...vaultLambdaConfig,
-      route: { verb: 'PUT', path: 'vault/company-secrets/{id}' },
-    });
-
-    this.addLambdaFunction(this, 'vault-company-secrets-delete', {
-      ...vaultLambdaConfig,
-      route: { verb: 'DELETE', path: 'vault/company-secrets/{id}' },
-    });
-
-    // Template management endpoints
-    this.addLambdaFunction(this, 'vault-templates-list', {
-      ...vaultLambdaConfig,
-      route: { verb: 'GET', path: 'vault/templates' },
-    });
-
-    this.addLambdaFunction(this, 'vault-templates-get', {
-      ...vaultLambdaConfig,
-      route: { verb: 'GET', path: 'vault/templates/{id}' },
-    });
-
-    this.addLambdaFunction(this, 'vault-templates-create', {
-      ...vaultLambdaConfig,
-      route: { verb: 'POST', path: 'vault/templates' },
-    });
-
-    this.addLambdaFunction(this, 'vault-templates-delete', {
-      ...vaultLambdaConfig,
-      route: { verb: 'DELETE', path: 'vault/templates/{id}' },
-    });
-
-    this.addLambdaFunction(this, 'vault-templates-stats', {
-      ...vaultLambdaConfig,
-      route: { verb: 'GET', path: 'vault/templates/stats' },
-    });
-
     // Agents API (list/create/update/delete/copy)
     const agentsEnv = {
       CLIENT_NAME: props.clientName,
@@ -1238,9 +1108,143 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
       ],
     });
 
-    // Update the agent-schedules Lambda to use the extended environment
-    // Note: This would require modifying the existing Lambda's environment
-    // For now, the ARNs are available for EventBridge schedule targets
+    // Usage Analytics API - Ingest endpoint (no auth, API key only)
+    this.addLambdaFunction(this, 'usage-analytics-ingest', {
+      addAuthorizer: false,
+      lambdaDirectory: 'node/usage-analytics-ingest',
+      runtime: 'nodejs22.x',
+      handler: 'index.handler',
+      route: { verb: 'POST', path: 'usage-analytics/ingest' },
+      environment: {
+        CLIENT_NAME: props.clientName,
+        REGION: props.region,
+        EVENTS_TABLE_NAME: props.usageAnalyticsEventsTableName,
+        KEYS_TABLE_NAME: props.usageAnalyticsKeysTableName,
+        COUNTERS_TABLE_NAME: props.usageAnalyticsCountersTableName,
+      },
+      additionalPolicyStatements: [
+        {
+          effect: 'Allow',
+          actions: ['dynamodb:GetItem', 'dynamodb:PutItem', 'dynamodb:UpdateItem'],
+          resources: [
+            props.usageAnalyticsKeysTableArn,
+            props.usageAnalyticsEventsTableArn,
+            props.usageAnalyticsCountersTableArn,
+          ],
+        },
+      ],
+    });
+
+    // Usage Analytics API - Admin endpoints (Cognito + admin check)
+    const usageAnalyticsAdminEnv = {
+      CLIENT_NAME: props.clientName,
+      REGION: props.region,
+      EVENTS_TABLE_NAME: props.usageAnalyticsEventsTableName,
+      KEYS_TABLE_NAME: props.usageAnalyticsKeysTableName,
+      COUNTERS_TABLE_NAME: props.usageAnalyticsCountersTableName,
+    } as Record<string, string>;
+
+    const usageAnalyticsAdminPolicy = [
+      {
+        effect: 'Allow',
+        actions: [
+          'dynamodb:Scan',
+          'dynamodb:Query',
+          'dynamodb:BatchWriteItem',
+          'dynamodb:GetItem',
+          'dynamodb:PutItem',
+          'dynamodb:UpdateItem',
+        ],
+        resources: [
+          props.usageAnalyticsKeysTableArn,
+          props.usageAnalyticsEventsTableArn,
+          `${props.usageAnalyticsEventsTableArn}/index/*`,
+          props.usageAnalyticsCountersTableArn,
+        ],
+      },
+    ];
+
+    this.addLambdaFunction(this, 'usage-analytics-admin-events', {
+      addAuthorizer: true,
+      lambdaDirectory: 'node/usage-analytics-admin',
+      runtime: 'nodejs22.x',
+      handler: 'index.handler',
+      environment: usageAnalyticsAdminEnv,
+      additionalPolicyStatements: usageAnalyticsAdminPolicy,
+      route: { verb: 'GET', path: 'usage-analytics/events' },
+    });
+
+    this.addLambdaFunction(this, 'usage-analytics-admin-delete', {
+      addAuthorizer: true,
+      lambdaDirectory: 'node/usage-analytics-admin',
+      runtime: 'nodejs22.x',
+      handler: 'index.handler',
+      environment: usageAnalyticsAdminEnv,
+      additionalPolicyStatements: usageAnalyticsAdminPolicy,
+      route: { verb: 'DELETE', path: 'usage-analytics/test-data' },
+    });
+
+    this.addLambdaFunction(this, 'usage-analytics-admin-key', {
+      addAuthorizer: true,
+      lambdaDirectory: 'node/usage-analytics-admin',
+      runtime: 'nodejs22.x',
+      handler: 'index.handler',
+      environment: usageAnalyticsAdminEnv,
+      additionalPolicyStatements: usageAnalyticsAdminPolicy,
+      route: { verb: 'GET', path: 'usage-analytics/key' },
+    });
+
+    this.addLambdaFunction(this, 'usage-analytics-admin-regenerate', {
+      addAuthorizer: true,
+      lambdaDirectory: 'node/usage-analytics-admin',
+      runtime: 'nodejs22.x',
+      handler: 'index.handler',
+      environment: usageAnalyticsAdminEnv,
+      additionalPolicyStatements: usageAnalyticsAdminPolicy,
+      route: { verb: 'POST', path: 'usage-analytics/key/regenerate' },
+    });
+
+    this.addLambdaFunction(this, 'usage-analytics-admin-get-retention', {
+      addAuthorizer: true,
+      lambdaDirectory: 'node/usage-analytics-admin',
+      runtime: 'nodejs22.x',
+      handler: 'index.handler',
+      environment: usageAnalyticsAdminEnv,
+      additionalPolicyStatements: usageAnalyticsAdminPolicy,
+      route: { verb: 'GET', path: 'usage-analytics/retention' },
+    });
+
+    this.addLambdaFunction(this, 'usage-analytics-admin-set-retention', {
+      addAuthorizer: true,
+      lambdaDirectory: 'node/usage-analytics-admin',
+      runtime: 'nodejs22.x',
+      handler: 'index.handler',
+      environment: usageAnalyticsAdminEnv,
+      additionalPolicyStatements: usageAnalyticsAdminPolicy,
+      route: { verb: 'PUT', path: 'usage-analytics/retention' },
+    });
+
+    this.addLambdaFunction(this, 'usage-analytics-admin-heatmap', {
+      addAuthorizer: true,
+      lambdaDirectory: 'node/usage-analytics-admin',
+      runtime: 'nodejs22.x',
+      handler: 'index.handler',
+      environment: usageAnalyticsAdminEnv,
+      additionalPolicyStatements: usageAnalyticsAdminPolicy,
+      route: { verb: 'GET', path: 'usage-analytics/heatmap' },
+    });
+
+    // Usage Analytics API - Contract endpoint (public, no auth)
+    this.addLambdaFunction(this, 'usage-analytics-contract', {
+      addAuthorizer: false,
+      lambdaDirectory: 'node/usage-analytics-contract',
+      runtime: 'nodejs22.x',
+      handler: 'index.handler',
+      route: { verb: 'GET', path: 'usage-analytics/contract' },
+      environment: {
+        API_BASE_URL: `https://${props.domainName}/api`,
+      },
+    });
   }
 
   /**
@@ -1348,8 +1352,18 @@ export interface AppAgnosticApiGatewayLambdaCollectionProps extends Omit<
   filesTableName?: string;
   /** Files table ARN for IAM policy. */
   filesTableArn?: string;
-  /** Company bucket ARN for proxy file cross-bucket access. */
-  companyBucketArn?: string;
-  /** Vault audit log table name. */
-  vaultAuditLogTableName: string;
+  /** Usage analytics events table name. */
+  usageAnalyticsEventsTableName: string;
+  /** Usage analytics events table ARN for IAM. */
+  usageAnalyticsEventsTableArn: string;
+  /** Usage analytics API keys table name. */
+  usageAnalyticsKeysTableName: string;
+  /** Usage analytics API keys table ARN for IAM. */
+  usageAnalyticsKeysTableArn: string;
+  /** Usage analytics counters table name. */
+  usageAnalyticsCountersTableName: string;
+  /** Usage analytics counters table ARN for IAM. */
+  usageAnalyticsCountersTableArn: string;
+  /** Domain name for API contract base URL. */
+  domainName: string;
 }
