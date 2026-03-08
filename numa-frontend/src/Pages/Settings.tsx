@@ -753,6 +753,10 @@ export default function SettingsPage() {
       { key: 'company-profile', label: t('tabs.companyProfile'), iconClassName: 'bi bi-building' },
       ...(agentsFeatureEnabled ? [{ key: 'agents', label: t('tabs.agents'), iconClassName: 'bi bi-robot' }] : []),
       { key: 'integrations', label: t('tabs.integrations'), iconClassName: 'bi bi-plug' },
+      ...(dataConnectorsEnabled
+        ? [{ key: 'data-connectors', label: t('tabs.dataConnectors'), iconClassName: 'bi bi-cloud-download' }]
+        : []),
+      { key: 'capabilities', label: t('capabilities.tabTitle'), iconClassName: 'bi bi-toggles' },
       { key: 'usage-analytics', label: t('tabs.developer'), iconClassName: 'bi bi-code-slash' },
       { key: 'audit', label: t('tabs.audit'), iconClassName: 'bi bi-clock-history' },
       { key: 'usage', label: t('tabs.usage'), iconClassName: 'bi bi-bar-chart-line' },
