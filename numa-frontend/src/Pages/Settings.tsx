@@ -768,7 +768,7 @@ export default function SettingsPage() {
         ? [{ key: 'trusted-devices', label: t('userProfile.trustedDevices.title'), iconClassName: 'bi bi-phone' }]
         : []),
     ],
-    // REBASE RESOLUTION: Kept HEAD — includes mfaEnabled in deps. Incoming (8e1a6ca9) omitted it,
+    // REBASE RESOLUTION: Kept HEAD — includes mfaEnabled in deps. Incoming (8e1a6ca9, 2f54184e) omitted it,
     // but mfaEnabled IS used in the useMemo body (line ~767), so omitting it was a bug.
     [workspaceChatEnabled, mfaEnabled, t]
   );
