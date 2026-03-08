@@ -691,8 +691,11 @@ export default function SettingsPage() {
             },
           ]
         : []),
+      ...(mfaEnabled
+        ? [{ key: 'trusted-devices', label: t('userProfile.trustedDevices.title'), iconClassName: 'bi bi-phone' }]
+        : []),
     ],
-    [workspaceChatEnabled, t],
+    [workspaceChatEnabled, mfaEnabled, t]
   );
 
   return (

@@ -610,7 +610,23 @@ export const AuthProvider = ({ children, initialTokens }) => {
               continue;
             }
 
-            // Permanent error or retries exhausted
+            // If retries exhausted but the error is still transient (e.g. browser
+            // waking from sleep, network not yet available), don't log the user out.
+            // Schedule another refresh attempt instead of destroying the session.
+            if (isLastAttempt && isTransientError(error)) {
+              console.warn(
+                '⚠️ Token refresh retries exhausted (transient error) — will retry in 30s:',
+                (error as Error).message
+              );
+              setTimeout(() => {
+                refreshInProgressRef.current = false;
+                refreshPromiseRef.current = null;
+                refreshTokens();
+              }, 30_000);
+              return false;
+            }
+
+            // Permanent error — Cognito explicitly rejected the token
             console.error('❌ Token refresh failed permanently:', error);
             showTokenRevocationNotification('expired');
             logout();
@@ -713,7 +729,7 @@ export const AuthProvider = ({ children, initialTokens }) => {
   }, [showTokenRevocationNotification, logout]);
 
   const getAccessToken = useCallback(async () => {
-    if (!user) return null;
+    if (!tokensRef.current.accessToken) return null;
 
     // Check if token is expired or about to expire
     if (isTokenExpired(decodedTokensRef.current.accessToken)) {
@@ -726,7 +742,7 @@ export const AuthProvider = ({ children, initialTokens }) => {
   }, [refreshTokens]);
 
   const getIdToken = useCallback(async () => {
-    if (!user) return null;
+    if (!tokensRef.current.idToken) return null;
 
     if (isTokenExpired(decodedTokensRef.current.idToken)) {
       const refreshed = await refreshTokens();
@@ -1695,8 +1711,16 @@ export const AuthProvider = ({ children, initialTokens }) => {
         }),
       );
 
+      // Always store device credentials after ConfirmDeviceCommand. Cognito
+      // binds the refresh token to the confirmed device, so DEVICE_KEY must
+      // be included in all subsequent REFRESH_TOKEN_AUTH requests — without
+      // it Cognito rejects with "Invalid Refresh Token". On next login, if
+      // the device was not "remembered", validateDevice() will fail
+      // server-side and clearDeviceTrust() will remove these credentials.
+      storeDeviceTrust(newDeviceMetadata.DeviceKey, newDeviceMetadata.DeviceGroupKey, DeviceRandomPassword);
+
       if (rememberDevice) {
-        // Tell Cognito to remember this device (suppresses future MFA)
+        // Tell Cognito to remember this device (suppresses future MFA on next login)
         await cognitoClient.send(
           new UpdateDeviceStatusCommand({
             AccessToken: accessToken,
@@ -1704,9 +1728,6 @@ export const AuthProvider = ({ children, initialTokens }) => {
             DeviceRememberedStatus: 'remembered',
           }),
         );
-        // Store device key, group key, and random password in localStorage.
-        // The random password is needed for DEVICE_PASSWORD_VERIFIER on next login.
-        storeDeviceTrust(newDeviceMetadata.DeviceKey, newDeviceMetadata.DeviceGroupKey, DeviceRandomPassword);
         // Record trust timestamp server-side (non-blocking). The server stores the
         // rememberedAt time so the client cannot tamper with expiry via DevTools.
         try {
