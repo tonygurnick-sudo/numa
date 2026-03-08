@@ -5,6 +5,7 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import '@testing-library/jest-dom';
+import { MemoryRouter } from 'react-router-dom';
 
 import SettingsPage from '../../Pages/Settings';
 
@@ -86,14 +87,22 @@ describe('SettingsPage', () => {
 
   it('shows the Branding tab for admin users when branding is enabled', async () => {
     sessionStorage.setItem('BRANDING_PROVIDER_ENABLED', 'true');
-    render(<SettingsPage />);
+    render(
+      <MemoryRouter>
+        <SettingsPage />
+      </MemoryRouter>
+    );
 
     expect(await screen.findByTestId('branding-panel')).toBeInTheDocument();
   });
 
   it('hides the Branding tab when branding feature is disabled', async () => {
     sessionStorage.setItem('BRANDING_PROVIDER_ENABLED', 'false');
-    render(<SettingsPage />);
+    render(
+      <MemoryRouter>
+        <SettingsPage />
+      </MemoryRouter>
+    );
 
     await waitFor(() => {
       expect(screen.queryByTestId('branding-panel')).not.toBeInTheDocument();

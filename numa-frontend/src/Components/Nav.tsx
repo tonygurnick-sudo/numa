@@ -216,7 +216,7 @@ const Nav = ({ isCollapsed = false, onToggleCollapse }: NavProps) => {
 
         // Add the nav item
         items.push({
-          to: r.path.replace(/\/\*$/, ''),
+          to: r.path.replace(/\/\*$/, '').replace(/\/:[^/]+\?/g, ''),
           label: r.nav.label,
           labelKey: r.nav.labelKey,
           icon: r.nav.icon,

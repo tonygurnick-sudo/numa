@@ -25,7 +25,7 @@ import BrandingAdminPanel from '../Components/Branding/BrandingAdminPanel';
 import UsageAnalyticsPanel from '../Components/UsageAnalytics/UsageAnalyticsPanel';
 import AuditPanel from '../Components/UsageAnalytics/AuditPanel';
 import LoginHeatmap from '../Components/UsageAnalytics/LoginHeatmap';
-import { UNSAFE_NavigationContext } from 'react-router-dom';
+import { UNSAFE_NavigationContext, useParams, useNavigate } from 'react-router-dom';
 import {
   AdminChatSettingsService,
   type GlobalChatSettings,
@@ -73,8 +73,12 @@ export default function SettingsPage() {
   const { t, i18n } = useTranslation('settings');
   const { user, getCredentials, lambdaClient } = useAuth();
   const { numaGet, numaPut } = useNumaRequest();
-  const [activeKey, setActiveKey] = useState<string>('users');
-  const [settingsScope, setSettingsScope] = useState<'user' | 'admin'>('user');
+  const { scope: urlScope, tab: urlTab } = useParams<{ scope?: string; tab?: string }>();
+  const navigate = useNavigate();
+  const [activeKey, setActiveKey] = useState<string>(urlTab || 'users');
+  const [settingsScope, setSettingsScope] = useState<'user' | 'admin'>(
+    urlScope === 'admin' || urlScope === 'user' ? urlScope : 'user'
+  );
   const brandingFlag =
     typeof window !== 'undefined' ? window.sessionStorage.getItem('BRANDING_PROVIDER_ENABLED') : null;
   const brandingApiEnabled = brandingFlag === 'true';
@@ -359,13 +363,20 @@ export default function SettingsPage() {
   const [_integrationsTabKey, _setIntegrationsTabKey] = useState<'connected-apps' | 'data-connectors'>(
     'connected-apps'
   );
-  const [userSettingsTabKey, setUserSettingsTabKey] = useState<string>('my-profile');
+  const [userSettingsTabKey, setUserSettingsTabKey] = useState<string>(urlTab || 'my-profile');
 
   useEffect(() => {
     if (!workspaceChatEnabled && userSettingsTabKey === 'approval-settings') {
       setUserSettingsTabKey('user-settings');
     }
   }, [workspaceChatEnabled, userSettingsTabKey]);
+
+  // Sync active tab + scope to URL path so refreshing preserves position
+  useEffect(() => {
+    const tab = currentScope === 'admin' ? activeKey : userSettingsTabKey;
+    navigate(`/settings/${currentScope}/${tab}`, { replace: true });
+  }, [currentScope, activeKey, userSettingsTabKey, navigate]);
+
   const [isBrandingDirty, setIsBrandingDirty] = useState<boolean>(false);
 
   useNavigationConfirm(isAdmin && activeKey === 'branding' && isBrandingDirty, t('navigation.unsavedBranding'));

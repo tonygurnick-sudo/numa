@@ -242,7 +242,7 @@ export const ROUTE_CONFIG = [
 
   // Admin Settings
   {
-    path: '/settings',
+    path: '/settings/:scope?/:tab?',
     element: () => <SettingsPage />,
     nav: {
       label: 'Settings',
