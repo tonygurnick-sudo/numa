@@ -2979,6 +2979,19 @@ export const FilesPage = () => {
           categories={vaultCategories}
           defaultType="bearer_token"
         />
+
+        <FileContextMenu
+          show={contextMenu.show}
+          position={contextMenu.position}
+          target={contextMenu.target}
+          sharingEnabled={sharingEnabled}
+          disabledActions={remoteDisabledActions}
+          disabledTooltip={t('actions.remoteNotAvailable')}
+          onClose={closeContextMenu}
+          onAction={handleContextAction}
+        />
+
+        <FileInfoPanel target={infoTarget} onClose={() => setInfoTarget(null)} />
       </div>
     );
   }
