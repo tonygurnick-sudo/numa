@@ -14,6 +14,8 @@ from prm import client as prm_client
 from ..auth import get_request_scoped_user_auth
 from ..dynamodb_utils import NumaChatDynamoUtils
 
+CHAT_SETTINGS_TABLE_NAME = os.environ.get("CHAT_SETTINGS_TABLE_NAME")
+
 logger = structlog.get_logger(__name__)
 
 _deserializer = TypeDeserializer()
@@ -309,6 +311,24 @@ def run_data_analysis(
         if isinstance(job_id, str) and job_id.strip()
         else str(uuid.uuid4())
     )
+
+    allowed_libraries = []
+    if CHAT_SETTINGS_TABLE_NAME:
+        try:
+            ddb = prm_client("dynamodb")
+            response = ddb.get_item(
+                TableName=CHAT_SETTINGS_TABLE_NAME, Key={"user_id": {"S": "__global__"}}
+            )
+            item = response.get("Item")
+            if item:
+                parsed = _deserialize_item(item)
+                allowed_libraries = parsed.get("allowedPythonLibraries", [])
+        except Exception as e:
+            logger.error(
+                "Failed to fetch global chat settings allowedPythonLibraries",
+                error=str(e),
+            )
+
     input_payload = {
         "app_id": "data-analysis",
         "job_id": job_id,
@@ -318,6 +338,7 @@ def run_data_analysis(
         or "Analyze the uploaded data and summarize key insights.",
         "uploaded_files": uploaded_files,
         "user_timezone": user_timezone,
+        "allowed_libraries": allowed_libraries,
     }
 
     step_function_arn = _get_step_function_arn()

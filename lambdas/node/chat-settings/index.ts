@@ -35,6 +35,7 @@ export type UserChatSettings = ChatSettings & {
 
 export type GlobalChatSettings = ChatSettings & {
   allowUserDefaults: boolean;
+  allowedPythonLibraries: { name: string; version: string }[];
 };
 
 type ChatSettingsUpdate = {
@@ -167,6 +168,12 @@ const DEFAULT_SETTINGS: ChatSettings = {
   chatScrollMode: 'auto',
 };
 
+const DEFAULT_GLOBAL_CHAT_SETTINGS: GlobalChatSettings = {
+  ...DEFAULT_SETTINGS,
+  allowUserDefaults: false,
+  allowedPythonLibraries: [],
+};
+
 const GLOBAL_SETTINGS_KEY = '__global__';
 const COMPANY_KB_ID = 'company';
 const NUMA_SUPPORT_KB_ID = 'numa-support';
@@ -252,6 +259,7 @@ async function loadGlobalSettings(): Promise<GlobalChatSettings> {
       emailSignatureText: DEFAULT_SETTINGS.emailSignatureText,
       chatScrollMode: DEFAULT_SETTINGS.chatScrollMode,
       allowUserDefaults: false,
+      allowedPythonLibraries: [],
     };
   }
 
@@ -296,6 +304,9 @@ async function loadGlobalSettings(): Promise<GlobalChatSettings> {
         ? (item!.chatScrollMode as ChatScrollMode)
         : DEFAULT_SETTINGS.chatScrollMode,
     allowUserDefaults,
+    allowedPythonLibraries: Array.isArray(item?.allowedPythonLibraries)
+      ? item!.allowedPythonLibraries
+      : DEFAULT_GLOBAL_CHAT_SETTINGS.allowedPythonLibraries,
   };
 }
 
@@ -471,6 +482,10 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
         emailSignatureText: currentGlobal.emailSignatureText,
         chatScrollMode: currentGlobal.chatScrollMode,
         allowUserDefaults,
+        allowedPythonLibraries:
+          'allowedPythonLibraries' in body && Array.isArray(body.allowedPythonLibraries)
+            ? body.allowedPythonLibraries
+            : currentGlobal.allowedPythonLibraries,
         updatedAt: new Date().toISOString(),
       };
 
@@ -497,6 +512,7 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
         emailSignatureText: updatedSettings.emailSignatureText,
         chatScrollMode: updatedSettings.chatScrollMode,
         allowUserDefaults: updatedSettings.allowUserDefaults,
+        allowedPythonLibraries: updatedSettings.allowedPythonLibraries,
       };
 
       return { statusCode: 200, headers: HEADERS, body: JSON.stringify(responseSettings) };

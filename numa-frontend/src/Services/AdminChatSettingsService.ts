@@ -10,11 +10,13 @@ import i18n from '../i18n';
 
 export type GlobalChatSettings = ChatSettings & {
   allowUserDefaults: boolean;
+  allowedPythonLibraries: { name: string; version: string }[];
 };
 
 export const DEFAULT_GLOBAL_CHAT_SETTINGS: GlobalChatSettings = {
   ...DEFAULT_CHAT_SETTINGS,
   allowUserDefaults: false,
+  allowedPythonLibraries: [],
 };
 
 type NumaGet = (url: string, params?: unknown, headers?: Record<string, string>) => Promise<unknown>;
@@ -144,6 +146,8 @@ function validateGlobal(data: unknown): GlobalChatSettings {
         ? obj.emailSignatureText
         : DEFAULT_GLOBAL_CHAT_SETTINGS.emailSignatureText,
     allowUserDefaults,
+    // REBASE RESOLUTION: Merged both sides — HEAD added chatScrollMode, incoming (e41a32ef) added allowedPythonLibraries.
+    // To rollback chatScrollMode: remove the chatScrollMode field below.
     chatScrollMode:
       typeof obj.chatScrollMode === 'string' && VALID_SCROLL_MODES.includes(obj.chatScrollMode as ChatScrollMode)
         ? (obj.chatScrollMode as ChatScrollMode)

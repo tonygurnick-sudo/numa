@@ -510,6 +510,7 @@ def run(event: Dict[str, Any], context: LambdaContext) -> Dict[str, Any]:
         workdir,
         event.get("user_timezone", "UTC"),
         simple_mode=simple_mode,
+        allowed_libraries=event.get("allowed_libraries", []),
     )
 
     # Run Claude CLI with streaming
@@ -566,7 +567,12 @@ def run(event: Dict[str, Any], context: LambdaContext) -> Dict[str, Any]:
     )
 
 
-def _build_runtime_system_prompt(workdir: Path, user_tz: str, simple_mode: bool) -> str:
+def _build_runtime_system_prompt(
+    workdir: Path,
+    user_tz: str,
+    simple_mode: bool,
+    allowed_libraries: Optional[List[Dict[str, str]]] = None,
+) -> str:
     """Build system prompt with current date and platform info."""
     tz: Union[ZoneInfo, timezone]
     try:
@@ -581,6 +587,7 @@ def _build_runtime_system_prompt(workdir: Path, user_tz: str, simple_mode: bool)
         platform_info=_get_platform_info(),
         today_date=today_date,
         simple_mode=simple_mode,
+        allowed_libraries=allowed_libraries,
     )
 
 
@@ -594,6 +601,7 @@ def build_system_prompt(
     platform_info: str,
     today_date: str,
     simple_mode: bool,
+    allowed_libraries: Optional[List[Dict[str, str]]] = None,
 ) -> str:
     """
     Build the complete system prompt with runtime context for data analysis.
@@ -606,10 +614,27 @@ def build_system_prompt(
     Returns:
         Formatted system prompt with context
     """
+    if not allowed_libraries:
+        # Default baseline if empty or not provided
+        formatted_libs = (
+            "  - pandas, numpy (via AWS Lambda pandas layer)\n"
+            "  - openpyxl, XlsxWriter, xlrd\n"
+            "  - PyPDF2, python-docx, python-pptx, extract-msg, beautifulsoup4, html5lib\n"
+            "  - plotly\n"
+        )
+    else:
+        formatted_libs = "\n".join(
+            [
+                f"  - {lib.get('name', '')}{lib.get('version', '')}"
+                for lib in allowed_libraries
+            ]
+        )
+
     return get_data_analysis_prompt(simple=simple_mode).format(
         working_directory=working_directory,
         platform=platform_info,
         today_date=today_date,
+        allowed_libraries=formatted_libs,
     )
 
 
