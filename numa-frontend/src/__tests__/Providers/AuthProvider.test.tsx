@@ -551,8 +551,12 @@ describe('AuthProvider', () => {
       expect(userInfo.tokens.idToken).toBe(TEST_TOKENS.valid.idToken);
       expect(userInfo.tokens.refreshToken).toBe(TEST_TOKENS.valid.refreshToken);
 
-      // Verify the refresh was not called
-      expect(global.fetch).not.toHaveBeenCalled();
+      // Verify no token refresh was triggered (the only fetch call should be
+      // the session policy settings fetch from AdminMfaSettingsService.get(),
+      // not an auth/token refresh call)
+      const fetchCalls = vi.mocked(global.fetch).mock.calls;
+      const authFetchCalls = fetchCalls.filter(([url]) => typeof url === 'string' && !url.includes('/settings/mfa'));
+      expect(authFetchCalls).toHaveLength(0);
       expect(mockCognitoIdentityProviderClient.CognitoIdentityProviderClient).not.toHaveBeenCalled();
     });
 

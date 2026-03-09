@@ -11,3 +11,5 @@ export { UserCard } from './UserCard';
 export { UserRoleSection } from './UserRoleSection';
 
 export { UserTableView } from './UserTableView';
+
+export { SecuritySettingsPanel } from './SecuritySettingsPanel';

@@ -114,6 +114,7 @@ export class CoreNumaInfra extends Construct {
 
     const at = new AdjustToken(this, 'token-adjuster', {
       nameSuffix: numaClient,
+      mfaSettingsTableName: `${numaClient}-mfa-settings`,
     });
     const cognitoDomain = numaClient;
 

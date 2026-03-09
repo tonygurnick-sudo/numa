@@ -126,6 +126,12 @@ export const AuthProvider = ({ children, initialTokens }) => {
   const mfaSessionRef = useRef<string | null>(null);
   const mfaUsernameRef = useRef<string | null>(null);
 
+  // Session policy refs (fetched from admin settings on login)
+  const sessionIdleTimeoutRef = useRef<number>(0); // minutes, 0 = disabled
+  const maxSessionDurationRef = useRef<number>(0); // hours, 0 = disabled
+  const lastActivityRef = useRef<number>(Date.now());
+  const sessionStartRef = useRef<number>(0); // epoch ms, set on login
+
   // MFA state exposed via context so the Login page can display setup/code forms
   const [mfaSetupData, setMfaSetupData] = useState<MfaSetupRequired | null>(null);
   const [mfaCodeData, setMfaCodeData] = useState<MfaCodeRequired | null>(null);
@@ -388,6 +394,8 @@ export const AuthProvider = ({ children, initialTokens }) => {
     localStorage.removeItem('refreshToken');
     localStorage.removeItem('idToken');
     localStorage.removeItem('lastTokenValidation');
+    sessionStorage.removeItem('numaSessionStart');
+    sessionStartRef.current = 0;
     clearAllSwrCaches();
     tokensRef.current = { accessToken: null, idToken: null, refreshToken: null };
     decodedTokensRef.current = { accessToken: null, idToken: null };
@@ -1222,6 +1230,34 @@ export const AuthProvider = ({ children, initialTokens }) => {
     try {
       const now = Date.now();
 
+      // Enforce idle timeout (client-side — only the browser knows about user activity)
+      if (sessionIdleTimeoutRef.current > 0) {
+        const idleMs = now - lastActivityRef.current;
+        const limitMs = sessionIdleTimeoutRef.current * 60 * 1000;
+        if (idleMs > limitMs) {
+          console.warn(
+            `Session idle timeout: ${Math.round(idleMs / 60000)}min idle > ${sessionIdleTimeoutRef.current}min limit`
+          );
+          showTokenRevocationNotification('idle');
+          logout();
+          return false;
+        }
+      }
+
+      // Enforce max session duration (client-side check — server-side also enforced in token-adjuster)
+      if (maxSessionDurationRef.current > 0 && sessionStartRef.current > 0) {
+        const sessionMs = now - sessionStartRef.current;
+        const limitMs = maxSessionDurationRef.current * 3600 * 1000;
+        if (sessionMs > limitMs) {
+          console.warn(
+            `Session duration exceeded: ${Math.round(sessionMs / 3600000)}h > ${maxSessionDurationRef.current}h limit`
+          );
+          showTokenRevocationNotification('expired');
+          logout();
+          return false;
+        }
+      }
+
       const isAccessTokenExpired = isTokenExpired(decodedTokensRef.current.accessToken);
       const isIdTokenExpired = isTokenExpired(decodedTokensRef.current.idToken);
 
@@ -1345,6 +1381,57 @@ export const AuthProvider = ({ children, initialTokens }) => {
       }
     };
   }, [checkAndRefreshTokens]);
+
+  // Track user activity for idle timeout enforcement
+  useEffect(() => {
+    if (!user) return;
+
+    const updateActivity = () => {
+      lastActivityRef.current = Date.now();
+    };
+
+    // Passive listeners — no performance impact
+    window.addEventListener('mousemove', updateActivity, { passive: true });
+    window.addEventListener('keydown', updateActivity, { passive: true });
+    window.addEventListener('click', updateActivity, { passive: true });
+    window.addEventListener('touchstart', updateActivity, { passive: true });
+    window.addEventListener('scroll', updateActivity, { passive: true });
+
+    return () => {
+      window.removeEventListener('mousemove', updateActivity);
+      window.removeEventListener('keydown', updateActivity);
+      window.removeEventListener('click', updateActivity);
+      window.removeEventListener('touchstart', updateActivity);
+      window.removeEventListener('scroll', updateActivity);
+    };
+  }, [user]);
+
+  // Fetch session policy from admin settings and set session start time
+  useEffect(() => {
+    if (!user) return;
+
+    // Set session start time if not already set (persisted in sessionStorage across refreshes)
+    const storedStart = sessionStorage.getItem('numaSessionStart');
+    if (storedStart) {
+      sessionStartRef.current = parseInt(storedStart);
+    } else {
+      const now = Date.now();
+      sessionStartRef.current = now;
+      sessionStorage.setItem('numaSessionStart', now.toString());
+    }
+
+    // Fetch admin session policy (unauthenticated endpoint, same as MFA settings)
+    const fetchSessionPolicy = async () => {
+      try {
+        const settings = await AdminMfaSettingsService.get();
+        sessionIdleTimeoutRef.current = settings.sessionIdleTimeoutMinutes;
+        maxSessionDurationRef.current = settings.maxSessionDurationHours;
+      } catch (err) {
+        console.warn('Failed to fetch session policy:', err);
+      }
+    };
+    fetchSessionPolicy();
+  }, [user]);
 
   useEffect(() => {
     return () => {
@@ -2188,9 +2275,19 @@ export const AuthProvider = ({ children, initialTokens }) => {
     const { t } = useTranslation('auth');
     if (!tokenRevocationState.show) return null;
 
-    const isRevocation = tokenRevocationState.reason === 'revocation';
-    const title = isRevocation ? t('session.endedTitle') : t('session.expiredTitle');
-    const message = isRevocation ? t('session.endedMessage') : t('session.expiredMessage');
+    const reason = tokenRevocationState.reason;
+    const title =
+      reason === 'idle'
+        ? t('session.idleTitle')
+        : reason === 'revocation'
+          ? t('session.endedTitle')
+          : t('session.expiredTitle');
+    const message =
+      reason === 'idle'
+        ? t('session.idleMessage')
+        : reason === 'revocation'
+          ? t('session.endedMessage')
+          : t('session.expiredMessage');
 
     return (
       <Notification

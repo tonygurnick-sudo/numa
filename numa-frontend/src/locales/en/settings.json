@@ -95,6 +95,22 @@
     },
     "footerNote": "Users will still see gentle hints where agents are disabled (e.g., \"Agents are disabled. Contact your admin\")."
   },
+  "securitySettings": {
+    "title": "Security & Session",
+    "description": "Configure session expiry policies and MFA device trust for all users.",
+    "saveSuccess": "Security settings saved successfully.",
+    "sessionExpiry": {
+      "title": "Session Expiry",
+      "idleTimeoutLabel": "Idle timeout",
+      "idleTimeoutHelp": "Log users out after this many minutes of inactivity. Set to 0 to disable.",
+      "idleDisabled": "Idle timeout is disabled. Sessions will not expire due to inactivity.",
+      "maxDurationLabel": "Maximum session duration",
+      "maxDurationHelp": "Force re-login after this many hours, regardless of activity. Set to 0 for no limit. This is enforced server-side.",
+      "maxDurationDisabled": "No maximum session duration. Sessions last until the user logs out.",
+      "minutes": "minutes",
+      "hours": "hours"
+    }
+  },
   "mfaSettings": {
     "title": "Device Trust Duration",
     "description": "Configure how long users can skip two-factor authentication on trusted devices. Set to 0 to require MFA on every login. Reducing the duration takes effect on the next login — existing device trust that exceeds the new window will require MFA again.",

@@ -24,6 +24,18 @@ Numa is built by Arcanum AI, a New Zealand-based company founded in 2016. Here's
 
 ---
 
+# Formatting
+
+Before committing, always run Prettier on changed files to ensure consistent formatting:
+
+```bash
+npx prettier --write <changed-files>
+```
+
+The repo uses pre-commit hooks that enforce Prettier. If you skip this step, the commit will fail.
+
+---
+
 # Guiding Primciples
 
 These 9 principles guide the high-performance, functional architecture:
