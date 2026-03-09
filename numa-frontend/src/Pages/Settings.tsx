@@ -868,12 +868,34 @@ export default function SettingsPage() {
                                 const nextChecked = e.target.checked;
                                 setGlobalChatSettings((prev) => ({
                                   ...prev,
-                                  defaultKBIds: nextChecked ? ['company'] : [],
+                                  defaultKBIds: nextChecked
+                                    ? Array.from(new Set([...prev.defaultKBIds, 'company']))
+                                    : prev.defaultKBIds.filter((id) => id !== 'company'),
                                 }));
                                 setChatDefaultsDirty(true);
                               }}
                             />
                             <div className="settings-secondary-label">{t('chatDefaults.companyKnowledgeBase')}</div>
+                          </div>
+
+                          <div className="d-flex align-items-center gap-2 mt-2">
+                            <Form.Check
+                              type="switch"
+                              id="chat-defaults-kb-support"
+                              label=""
+                              checked={globalChatSettings.defaultKBIds.includes('numa-support')}
+                              onChange={(e) => {
+                                const nextChecked = e.target.checked;
+                                setGlobalChatSettings((prev) => ({
+                                  ...prev,
+                                  defaultKBIds: nextChecked
+                                    ? Array.from(new Set([...prev.defaultKBIds, 'numa-support']))
+                                    : prev.defaultKBIds.filter((id) => id !== 'numa-support'),
+                                }));
+                                setChatDefaultsDirty(true);
+                              }}
+                            />
+                            <div className="settings-secondary-label">{t('chatDefaults.supportKnowledgeBase')}</div>
                           </div>
                           <div className="text-muted small ms-5">{t('chatDefaults.companyKnowledgeBaseHelp')}</div>
                         </Form.Group>

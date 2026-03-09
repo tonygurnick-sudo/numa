@@ -8,7 +8,7 @@ import { UserKB, KnowledgeBase } from '../Services/knowledgeBaseService';
 import i18n from '../i18n';
 import { useAuth } from './AuthProvider';
 import { useNumaRequest } from './NumaRequestContext';
-import { COMPANY_KB_ID, NUMA_SUPPORT_KB_ID, SYSTEM_KB_IDS } from '../constants/knowledgeBase';
+import { COMPANY_KB_ID, NUMA_SUPPORT_KB_ID, SYSTEM_KB_IDS, sortKnowledgeBases } from '../constants/knowledgeBase';
 import { getSwrCache, setSwrCache } from '../utils/swrCache';
 
 const KB_LIST_SWR_KEY = 'kbList';
@@ -187,7 +187,7 @@ export function KnowledgeBaseProvider({ children }: { children: React.ReactNode 
       if (!hasNumaSupportKb) {
         systemKbsToAdd.push(getDefaultNumaSupportKB());
       }
-      const augmentedKbs: UserKB[] = [...systemKbsToAdd, ...sanitizedKbs];
+      const augmentedKbs: UserKB[] = sortKnowledgeBases([...systemKbsToAdd, ...sanitizedKbs]);
 
       setAvailableKBs(augmentedKbs);
       // Persist to localStorage for instant load on next page refresh

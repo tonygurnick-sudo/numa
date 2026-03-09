@@ -15,6 +15,7 @@ import {
   FolderOpen,
   Globe,
   Info,
+  LifeBuoy,
   Lightbulb,
   Plug,
   RefreshCw,
@@ -253,7 +254,13 @@ export const WorkspaceChatSettingsPanel: React.FC<WorkspaceChatSettingsPanelProp
                       className="workspace-settings-list-item workspace-settings-kb-list-item"
                       label={
                         <span className="workspace-settings-kb-label">
-                          {kb.kb_id === 'company' ? <Building2 size={14} /> : <UserIcon size={14} />}
+                          {kb.kb_id === 'company' ? (
+                            <Building2 size={14} />
+                          ) : kb.kb_id === 'numa-support' ? (
+                            <LifeBuoy size={14} />
+                          ) : (
+                            <UserIcon size={14} />
+                          )}
                           <span className="workspace-settings-kb-name">{kb.kb_name}</span>
                         </span>
                       }

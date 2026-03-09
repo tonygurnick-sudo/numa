@@ -481,6 +481,9 @@ export default function UserProfilePage({
     if (kbId === 'company') {
       return t('chatDefaults.companyKnowledgeBase');
     }
+    if (kbId === 'numa-support') {
+      return t('chatDefaults.supportKnowledgeBase');
+    }
     return kbName || kbId;
   };
 
