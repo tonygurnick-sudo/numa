@@ -32,6 +32,9 @@ const MaxTooltip = ({ max, unit }: { max: number; unit: string }) => (
   </OverlayTrigger>
 );
 
+// REBASE RESOLUTION: Kept HEAD (validation + tooltips). Incoming (0139d1c5) used simpler numeric state.
+// To rollback: replace with separate mfaRememberHours/idleTimeoutMinutes/maxSessionHours numeric state pattern.
+
 /**
  * Admin panel for session expiry and MFA device trust settings.
  * Rendered inside the Users tab of admin settings.

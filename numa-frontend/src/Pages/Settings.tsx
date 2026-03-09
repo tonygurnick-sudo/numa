@@ -763,8 +763,7 @@ export default function SettingsPage() {
       { key: 'audit', label: t('tabs.audit'), iconClassName: 'bi bi-clock-history' },
       { key: 'usage', label: t('tabs.usage'), iconClassName: 'bi bi-bar-chart-line' },
     ],
-    // REBASE RESOLUTION: Kept HEAD dep order. Incoming (8e1a6ca9) had [allowBrandingTab, agentsFeatureEnabled, dataConnectorsEnabled, mfaEnabled, t].
-    // Functionally identical — order doesn't matter for useMemo deps. Kept HEAD for consistency with body order.
+    // REBASE RESOLUTION: Kept HEAD deps. Incoming (8e1a6ca9, 0139d1c5) omitted mfaEnabled.
     [allowBrandingTab, agentsFeatureEnabled, mfaEnabled, dataConnectorsEnabled, t]
   );
   const userTabs = useMemo(

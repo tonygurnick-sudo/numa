@@ -105,7 +105,7 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
       }
 
       // REBASE RESOLUTION: Kept HEAD (session settings support).
-      // Incoming (8e1a6ca9) had only the single device-remember PutCommand.
+      // Incoming (8e1a6ca9, 0139d1c5) converged on same logic. Trailing comma diffs resolved with HEAD formatting.
       // To rollback: remove session validation + writes below, keep only the device-remember PutCommand.
 
       // Session settings (optional — only written when provided)
