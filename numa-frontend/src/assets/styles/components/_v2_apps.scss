@@ -1,3 +1,4 @@
+@use 'sass:color';
 @use '../abstracts/mixins' as *;
 
 // ─── V2 Apps Design Tokens ─────────────────────────────────────────────────
@@ -169,7 +170,7 @@ $v2-bg-page: #faf8fb;
   // Status variants
   &--active {
     .v2-app-card__status {
-      color: darken($v2-status-active, 15%);
+      color: color.adjust($v2-status-active, $lightness: -15%);
     }
     .v2-app-card__status-dot {
       background: $v2-status-active;
@@ -1243,7 +1244,7 @@ $v2-bg-page: #faf8fb;
     font-weight: 500;
 
     &--active {
-      color: darken($v2-status-active, 15%);
+      color: color.adjust($v2-status-active, $lightness: -15%);
 
       .v2-agent-card__status-dot {
         background: $v2-status-active;
@@ -1550,7 +1551,7 @@ $v2-bg-page: #faf8fb;
     transition: all 0.15s ease;
 
     &:hover {
-      border-color: darken($v2-card-border, 10%);
+      border-color: color.adjust($v2-card-border, $lightness: -10%);
       background: #fafafa;
     }
 

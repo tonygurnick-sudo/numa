@@ -1,3 +1,6 @@
+# pylint: disable=broad-exception-caught,too-many-return-statements,too-many-branches
+# pylint: disable=too-many-arguments,too-many-positional-arguments,too-many-locals
+# pylint: disable=import-outside-toplevel
 """Lambda handlers for consolidated vault secrets endpoints with template support."""
 
 from __future__ import annotations
@@ -6,7 +9,7 @@ import base64
 import binascii
 import json
 import os
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional
 
 import structlog
 from aws_lambda_powertools.utilities.typing import LambdaContext
@@ -25,8 +28,6 @@ from consolidated_storage import (
     list_vault_secrets,
     remove_secret_from_vault,
     remove_template_from_company_vault,
-    update_consolidated_vault,
-    validate_against_template,
 )
 from storage import (  # Keep audit logging from old system
     list_audit_logs,
@@ -167,7 +168,7 @@ def _write_audit_log(
 
 
 def _validate_request_body(
-    body: Dict[str, Any], required_fields: List[str] = None
+    body: Dict[str, Any], required_fields: Optional[List[str]] = None
 ) -> Optional[str]:
     """Validate request body has required fields."""
     required_fields = required_fields or []
@@ -252,11 +253,13 @@ def _handle_create_secret(event: Dict[str, Any], user_id: str) -> Dict[str, Any]
 
         if template_name:
             # Template-based secret creation
-            validator = TemplateValidator(CLIENT_NAME)
+            tmpl_validator = TemplateValidator(CLIENT_NAME)
             template_manager = TemplateManager(CLIENT_NAME)
 
             # Validate against template
-            is_valid, errors = validator.validate_complete_secret(template_name, body)
+            is_valid, errors = tmpl_validator.validate_complete_secret(
+                template_name, body
+            )
             if not is_valid:
                 return _response(
                     400, {"error": "Template validation failed", "details": errors}
@@ -269,8 +272,8 @@ def _handle_create_secret(event: Dict[str, Any], user_id: str) -> Dict[str, Any]
             template_manager.track_template_usage(template_name, user_id)
         else:
             # Free-form secret creation
-            validator = FreeFormValidator()
-            is_valid, errors = validator.validate_complete_freeform(body)
+            ff_validator = FreeFormValidator()
+            is_valid, errors = ff_validator.validate_complete_freeform(body)
             if not is_valid:
                 return _response(
                     400, {"error": "Free-form validation failed", "details": errors}
@@ -328,8 +331,8 @@ def _handle_update_secret(
         # If template is specified, validate against it
         template_name = updated_data.get("template")
         if template_name:
-            validator = TemplateValidator(CLIENT_NAME)
-            is_valid, errors = validator.validate_complete_secret(
+            tmpl_validator = TemplateValidator(CLIENT_NAME)
+            is_valid, errors = tmpl_validator.validate_complete_secret(
                 template_name, updated_data
             )
             if not is_valid:
@@ -338,8 +341,8 @@ def _handle_update_secret(
                 )
         else:
             # Free-form validation
-            validator = FreeFormValidator()
-            is_valid, errors = validator.validate_complete_freeform(updated_data)
+            ff_validator = FreeFormValidator()
+            is_valid, errors = ff_validator.validate_complete_freeform(updated_data)
             if not is_valid:
                 return _response(
                     400, {"error": "Free-form validation failed", "details": errors}
@@ -924,7 +927,7 @@ def _route(
     return _response(404, {"error": "Endpoint not found"})
 
 
-def handler(event: Dict[str, Any], context: LambdaContext) -> Dict[str, Any]:
+def handler(event: Dict[str, Any], _context: LambdaContext) -> Dict[str, Any]:
     """Main Lambda handler for consolidated vault API."""
     try:
         method = event.get("requestContext", {}).get("http", {}).get("method")
@@ -947,7 +950,7 @@ def handler(event: Dict[str, Any], context: LambdaContext) -> Dict[str, Any]:
         # Route request
         return _route(method, path, event, user_id)
 
-    except Exception as e:
+    except Exception:
         logger.exception(
             "Unhandled error in vault handler",
             path=_get_path(event),

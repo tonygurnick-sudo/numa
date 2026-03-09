@@ -1,3 +1,4 @@
+# pylint: disable=too-many-arguments,too-many-positional-arguments
 """Persistence helpers for vault secrets."""
 
 from __future__ import annotations
@@ -23,14 +24,12 @@ def _convert_decimals(obj: Any) -> Any:
     if isinstance(obj, Decimal):
         if obj % 1 == 0:
             return int(obj)
-        else:
-            return float(obj)
-    elif isinstance(obj, dict):
+        return float(obj)
+    if isinstance(obj, dict):
         return {k: _convert_decimals(v) for k, v in obj.items()}
-    elif isinstance(obj, list):
+    if isinstance(obj, list):
         return [_convert_decimals(item) for item in obj]
-    else:
-        return obj
+    return obj
 
 
 # ---------------------------------------------------------------------------

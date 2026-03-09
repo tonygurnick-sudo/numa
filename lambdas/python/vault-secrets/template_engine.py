@@ -1,3 +1,5 @@
+# pylint: disable=broad-exception-caught,too-many-branches,too-many-statements
+# pylint: disable=import-outside-toplevel,duplicate-code
 """Template validation and management engine for vault secrets."""
 
 from __future__ import annotations
@@ -5,8 +7,7 @@ from __future__ import annotations
 import json
 import re
 from datetime import datetime
-from typing import Any, Dict, List, Optional, Set, Tuple, Union
-from uuid import uuid4
+from typing import Any, Dict, List, Optional, Tuple
 
 import structlog
 
@@ -16,7 +17,6 @@ from consolidated_storage import (
     get_available_templates,
     get_consolidated_vault,
     get_template,
-    remove_template_from_company_vault,
 )
 
 logger = structlog.get_logger()
@@ -25,7 +25,7 @@ logger = structlog.get_logger()
 class TemplateValidator:
     """Validates secrets against templates with unlimited flexibility."""
 
-    def __init__(self, client_name: str = None):
+    def __init__(self, client_name: Optional[str] = None):
         self.client_name = client_name
 
     def validate_required_fields(
@@ -407,13 +407,13 @@ class FreeFormValidator:
 class TemplateManager:
     """Manager for template CRUD operations."""
 
-    def __init__(self, client_name: str = None):
+    def __init__(self, client_name: Optional[str] = None):
         self.client_name = client_name
         self.validator = TemplateValidator(client_name)
 
     def create_initial_templates(self) -> Dict[str, Any]:
         """Create the initial 3 templates for common use cases."""
-        templates = {
+        templates: Dict[str, Dict[str, Any]] = {
             "googledrive-oauth": {
                 "id": "template-googledrive-oauth",
                 "name": "Google Drive OAuth",
@@ -521,7 +521,8 @@ class TemplateManager:
                         "name": "database_type",
                         "type": "string",
                         "description": "Database type",
-                        "validation": "required|in:mysql,postgresql,mongodb,redis,sqlite,mssql,oracle",
+                        "validation": "required|in:mysql,postgresql,"
+                        "mongodb,redis,sqlite,mssql,oracle",
                     },
                 ],
                 "optional_fields": [
@@ -596,7 +597,7 @@ class TemplateManager:
         """Get template usage statistics."""
         templates = get_available_templates(self.client_name)
 
-        stats = {
+        stats: Dict[str, Any] = {
             "total_templates": len(templates),
             "templates_by_category": {},
             "most_used_templates": [],

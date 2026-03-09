@@ -52,6 +52,7 @@ import { DataAwsSsmParameter } from '@cdktf/provider-aws/lib/data-aws-ssm-parame
 import { NumaLambda } from '../constructs/numa-lambda';
 import { OAuthIntegrationConstruct } from '../constructs/oauth-integration-construct';
 import { OpsConstruct } from '../constructs/ops-construct';
+import { VaultSecretsConstruct } from '../constructs/vault-secrets-construct';
 import { V2AppsConstruct } from '../constructs/v2-apps-construct';
 import { WorkspaceChatAgentConstruct } from '../constructs/workspace-chat-agent-construct';
 import { WorkspaceChatAgentProxy } from '../constructs/workspace-chat-agent-proxy-construct';
@@ -534,6 +535,23 @@ export class NumaClientStack extends TerraformStack {
         userPoolArn: `arn:aws:cognito-idp:${clientConfig.region}:${clientConfig.clientAccountId}:userpool/${core.userPoolId}`,
         chatSettingsTableName: core.chatSettingsTable.name,
         chatSettingsTableArn: core.chatSettingsTable.arn,
+        otelConfig: {
+          otelConfigPath: core.otelConfigPath,
+          honeycombIngestKey: honeycombBackendKey,
+          region: clientConfig.region,
+        },
+      });
+    }
+
+    // Vault Secrets (encrypted secrets management via AWS Secrets Manager)
+    if (clientConfig.secretsVaultEnabled) {
+      new VaultSecretsConstruct(this, safeConstructId + '-vault', {
+        apiGatewayAuthorizerId: fe.authorizer.id,
+        apiGatewayId: fe.apiGateway.id,
+        clientName: props.clientName,
+        region: clientConfig.region,
+        vaultAuditLogTableName: core.vaultAuditLogTable.name,
+        vaultAuditLogTableArn: core.vaultAuditLogTable.arn,
         otelConfig: {
           otelConfigPath: core.otelConfigPath,
           honeycombIngestKey: honeycombBackendKey,

@@ -153,6 +153,7 @@ deploy-dev-gate:
         - lambdas/python/structured-data-extraction
         - lambdas/python/structured-data-query
         - lambdas/python/tor-assessment
+        - lambdas/python/vault-secrets
         - lambdas/python/web-crawler-start
         - lambdas/python/web-search-proxy
         - lambdas/python/workspace-chat-agent-proxy

@@ -1,3 +1,5 @@
+# pylint: disable=broad-exception-caught,too-many-branches,import-outside-toplevel
+# pylint: disable=duplicate-code
 """Consolidated storage system for vault secrets with unlimited flexibility and template support."""
 
 from __future__ import annotations
@@ -5,7 +7,6 @@ from __future__ import annotations
 import base64
 import gzip
 import json
-import time
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 from uuid import uuid4
@@ -143,12 +144,12 @@ def _generate_secret_name(
     user_id: str,
     secret_type: str,
     naming_strategy: str = "user_provided",
-    base_name: str = None,
+    base_name: Optional[str] = None,
 ) -> str:
     """Generate appropriate secret name based on strategy."""
     if naming_strategy == "user_provided" and base_name:
         return base_name
-    elif naming_strategy == "auto_generated":
+    if naming_strategy == "auto_generated":
         # Find existing secrets of same type to generate sequential number
         vault = get_consolidated_vault(user_id)
         same_type_count = 0
@@ -156,11 +157,10 @@ def _generate_secret_name(
             if secret.get("type") == secret_type:
                 same_type_count += 1
         return f"{secret_type}-{same_type_count + 1}"
-    elif naming_strategy == "uuid_based":
+    if naming_strategy == "uuid_based":
         return _generate_uuid()
-    else:
-        # Fallback to UUID
-        return _generate_uuid()
+    # Fallback to UUID
+    return _generate_uuid()
 
 
 # ---------------------------------------------------------------------------
@@ -168,7 +168,9 @@ def _generate_secret_name(
 # ---------------------------------------------------------------------------
 
 
-def get_consolidated_vault(user_id: str, client_name: str = None) -> Dict[str, Any]:
+def get_consolidated_vault(
+    user_id: str, client_name: Optional[str] = None
+) -> Dict[str, Any]:
     """Get user's complete consolidated vault from Secrets Manager (unlimited size)."""
     if not client_name:
         # Try to get from environment
@@ -208,8 +210,7 @@ def get_consolidated_vault(user_id: str, client_name: str = None) -> Dict[str, A
         # Secret doesn't exist, return empty vault
         if user_id == COMPANY_USER_ID:
             return _create_empty_company_vault()
-        else:
-            return _create_empty_vault()
+        return _create_empty_vault()
     except Exception as e:
         logger.error(
             "Failed to retrieve consolidated vault",
@@ -220,12 +221,11 @@ def get_consolidated_vault(user_id: str, client_name: str = None) -> Dict[str, A
         # Return empty vault on error
         if user_id == COMPANY_USER_ID:
             return _create_empty_company_vault()
-        else:
-            return _create_empty_vault()
+        return _create_empty_vault()
 
 
 def update_consolidated_vault(
-    user_id: str, vault_data: Dict[str, Any], client_name: str = None
+    user_id: str, vault_data: Dict[str, Any], client_name: Optional[str] = None
 ) -> None:
     """Save user's complete consolidated vault (handles any size with compression)."""
     if not client_name:
@@ -259,7 +259,8 @@ def update_consolidated_vault(
         secrets_client.create_secret(
             Name=secret_name,
             SecretString=secret_string,
-            Description=f"Consolidated vault for {'company' if user_id == COMPANY_USER_ID else 'user'}",
+            Description=f"Consolidated vault for "
+            f"{'company' if user_id == COMPANY_USER_ID else 'user'}",
         )
     except Exception as e:
         logger.error(
@@ -271,7 +272,9 @@ def update_consolidated_vault(
         raise
 
 
-def list_vault_secrets(user_id: str, client_name: str = None) -> List[Dict[str, Any]]:
+def list_vault_secrets(
+    user_id: str, client_name: Optional[str] = None
+) -> List[Dict[str, Any]]:
     """List all secrets for user (metadata only, no field values)."""
     vault = get_consolidated_vault(user_id, client_name)
     secrets_list = []
@@ -303,7 +306,7 @@ def list_vault_secrets(user_id: str, client_name: str = None) -> List[Dict[str, 
 
 
 def get_vault_secret(
-    user_id: str, secret_name: str, client_name: str = None
+    user_id: str, secret_name: str, client_name: Optional[str] = None
 ) -> Optional[Dict[str, Any]]:
     """Get a single secret with full field values."""
     vault = get_consolidated_vault(user_id, client_name)
@@ -326,7 +329,7 @@ def add_secret_to_vault(
     secret_name: str,
     secret_data: Dict[str, Any],
     template: Optional[str] = None,
-    client_name: str = None,
+    client_name: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Add or update a single secret in user's consolidated vault."""
     vault = get_consolidated_vault(user_id, client_name)
@@ -374,7 +377,7 @@ def add_secret_to_vault(
 
 
 def remove_secret_from_vault(
-    user_id: str, secret_name: str, client_name: str = None
+    user_id: str, secret_name: str, client_name: Optional[str] = None
 ) -> bool:
     """Remove a secret from user's consolidated vault."""
     vault = get_consolidated_vault(user_id, client_name)
@@ -395,7 +398,7 @@ def bulk_import_secrets(
     user_id: str,
     secrets_data: List[Dict[str, Any]],
     conflict_resolution: str = "overwrite",
-    client_name: str = None,
+    client_name: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
     """Import unlimited number of secrets in batch operation."""
     vault = get_consolidated_vault(user_id, client_name)
@@ -422,7 +425,7 @@ def bulk_import_secrets(
                     }
                 )
                 continue
-            elif conflict_resolution == "error":
+            if conflict_resolution == "error":
                 results.append(
                     {"name": secret_name, "status": "error", "reason": "already_exists"}
                 )
@@ -475,14 +478,14 @@ def bulk_import_secrets(
 # ---------------------------------------------------------------------------
 
 
-def get_available_templates(client_name: str = None) -> Dict[str, Any]:
+def get_available_templates(client_name: Optional[str] = None) -> Dict[str, Any]:
     """Get all available templates from company vault."""
     company_vault = get_consolidated_vault(COMPANY_USER_ID, client_name)
     return company_vault.get("templates", {})
 
 
 def get_template(
-    template_name: str, client_name: str = None
+    template_name: str, client_name: Optional[str] = None
 ) -> Optional[Dict[str, Any]]:
     """Get specific template definition."""
     templates = get_available_templates(client_name)
@@ -490,7 +493,7 @@ def get_template(
 
 
 def validate_against_template(
-    template_name: str, secret_data: Dict[str, Any], client_name: str = None
+    template_name: str, secret_data: Dict[str, Any], client_name: Optional[str] = None
 ) -> Tuple[bool, List[str]]:
     """Validate secret data against template. Returns (is_valid, errors)."""
     template = get_template(template_name, client_name)
@@ -522,7 +525,7 @@ def validate_against_template(
         elif field_type == "datetime":
             # Basic datetime validation (ISO format)
             try:
-                datetime.fromisoformat(field_value.replace("Z", "+00:00"))
+                datetime.fromisoformat(str(field_value).replace("Z", "+00:00"))
             except (ValueError, AttributeError):
                 errors.append(f"Field '{field_name}' must be a valid ISO datetime")
 
@@ -592,7 +595,7 @@ def _validate_field_constraints(
 
 
 def create_secret_from_template(
-    template_name: str, user_values: Dict[str, Any], client_name: str = None
+    template_name: str, user_values: Dict[str, Any], client_name: Optional[str] = None
 ) -> Dict[str, Any]:
     """Create secret using template with user-provided values."""
     template = get_template(template_name, client_name)
@@ -626,7 +629,7 @@ def create_freeform_secret(secret_data: Dict[str, Any]) -> Dict[str, Any]:
     try:
         json.dumps(secret_data.get("fields", {}))
     except TypeError as e:
-        raise ValueError(f"Secret fields must be JSON serializable: {e}")
+        raise ValueError(f"Secret fields must be JSON serializable: {e}") from e
 
     # Set free-form indicators
     secret_data["template"] = None
@@ -642,7 +645,9 @@ def create_freeform_secret(secret_data: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def add_template_to_company_vault(
-    template_name: str, template_definition: Dict[str, Any], client_name: str = None
+    template_name: str,
+    template_definition: Dict[str, Any],
+    client_name: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Add new template to company vault (admin only)."""
     company_vault = get_consolidated_vault(COMPANY_USER_ID, client_name)
@@ -679,7 +684,7 @@ def add_template_to_company_vault(
 
 
 def remove_template_from_company_vault(
-    template_name: str, client_name: str = None
+    template_name: str, client_name: Optional[str] = None
 ) -> bool:
     """Remove template from company vault (admin only)."""
     company_vault = get_consolidated_vault(COMPANY_USER_ID, client_name)

@@ -1,3 +1,4 @@
+# pylint: disable=duplicate-code
 """Input validation for vault secret types."""
 
 from __future__ import annotations
@@ -27,7 +28,8 @@ TYPE_OPTIONAL_FIELDS: Dict[str, list[str]] = {
 def validate_secret_type(secret_type: str) -> Optional[str]:
     """Return an error message if the secret type is invalid."""
     if secret_type not in VALID_SECRET_TYPES:
-        return f"Invalid secret type: {secret_type}. Must be one of: {', '.join(sorted(VALID_SECRET_TYPES))}"
+        allowed = ", ".join(sorted(VALID_SECRET_TYPES))
+        return f"Invalid secret type: {secret_type}. Must be one of: {allowed}"
     return None
 
 
