@@ -1,5 +1,6 @@
-import { Form, Badge, Button } from 'react-bootstrap';
-import { X } from 'react-bootstrap-icons';
+import { useState } from 'react';
+import { Form, Badge, Button, InputGroup } from 'react-bootstrap';
+import { Search, X } from 'react-bootstrap-icons';
 import { groupClientsByType } from '@/services/clientService';
 import type { Client } from '@/types';
 
@@ -27,7 +28,17 @@ export function GroupedClientSelector({
   disabled = false,
   loading = false,
 }: GroupedClientSelectorProps) {
+  const [searchTerm, setSearchTerm] = useState('');
+
   const { devClients, productionClients } = groupClientsByType(clients);
+
+  const lowerSearch = searchTerm.toLowerCase();
+  const filteredDevClients = searchTerm
+    ? devClients.filter((c) => c.name.toLowerCase().includes(lowerSearch))
+    : devClients;
+  const filteredProductionClients = searchTerm
+    ? productionClients.filter((c) => c.name.toLowerCase().includes(lowerSearch))
+    : productionClients;
 
   const allInternalSelected = devClients.length > 0 && devClients.every((c) => selectedClientNames.includes(c.name));
   const someInternalSelected = devClients.some((c) => selectedClientNames.includes(c.name));
@@ -143,10 +154,29 @@ export function GroupedClientSelector({
         </div>
       </div>
 
+      {/* Search Filter */}
+      <InputGroup size="sm" className="mb-2">
+        <InputGroup.Text>
+          <Search size={14} />
+        </InputGroup.Text>
+        <Form.Control
+          type="text"
+          placeholder="Search clients..."
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          disabled={disabled || loading}
+        />
+        {searchTerm && (
+          <Button variant="outline-secondary" onClick={() => setSearchTerm('')} disabled={disabled || loading}>
+            <X size={14} />
+          </Button>
+        )}
+      </InputGroup>
+
       {/* Individual Client Selection - Always visible */}
       <div className="border rounded p-2" style={{ maxHeight: '250px', overflowY: 'auto' }}>
         {/* Internal/Dev Clients Section */}
-        {devClients.length > 0 && (
+        {filteredDevClients.length > 0 && (
           <div className="mb-3">
             <div className="text-muted small mb-1 d-flex align-items-center">
               <Badge bg="warning" text="dark" className="me-1">
@@ -154,7 +184,7 @@ export function GroupedClientSelector({
               </Badge>
               Dev / Test Accounts
             </div>
-            {devClients.map((client) => (
+            {filteredDevClients.map((client) => (
               <Form.Check
                 key={client.name}
                 type="checkbox"
@@ -170,7 +200,7 @@ export function GroupedClientSelector({
         )}
 
         {/* Production/Client Accounts Section */}
-        {productionClients.length > 0 && (
+        {filteredProductionClients.length > 0 && (
           <div>
             <div className="text-muted small mb-1 d-flex align-items-center">
               <Badge bg="success" className="me-1">
@@ -178,7 +208,7 @@ export function GroupedClientSelector({
               </Badge>
               Production Accounts
             </div>
-            {productionClients.map((client) => (
+            {filteredProductionClients.map((client) => (
               <Form.Check
                 key={client.name}
                 type="checkbox"
@@ -191,6 +221,11 @@ export function GroupedClientSelector({
               />
             ))}
           </div>
+        )}
+
+        {/* No results message */}
+        {searchTerm && filteredDevClients.length === 0 && filteredProductionClients.length === 0 && (
+          <div className="text-muted text-center py-2 small">No clients matching "{searchTerm}"</div>
         )}
       </div>
 
