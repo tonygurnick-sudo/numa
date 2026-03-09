@@ -92,7 +92,7 @@ export function VaultSecretsPage() {
   };
 
   const handleEdit = async (secret: VaultSecretMetadata) => {
-    const full = await getSecret(secret.secret_id);
+    const full = await getSecret(secret.name);
     setEditingSecret(full);
     setViewingSecret(null);
     setShowForm(true);
@@ -100,7 +100,7 @@ export function VaultSecretsPage() {
 
   const handleUpdate = async (payload: CreateSecretPayload | UpdateSecretPayload) => {
     if (!editingSecret) return;
-    const updated = await updateSecret(editingSecret.secret_id, payload as UpdateSecretPayload);
+    const updated = await updateSecret(editingSecret.name, payload as UpdateSecretPayload);
     setSuccessMsg(t('vault.success.updated', { name: updated.name }));
     setEditingSecret(null);
     await loadData();
@@ -109,7 +109,7 @@ export function VaultSecretsPage() {
   const handleDelete = async () => {
     if (!deletingSecret) return;
     try {
-      await deleteSecret(deletingSecret.secret_id);
+      await deleteSecret(deletingSecret.name);
       setSuccessMsg(t('vault.success.deleted'));
       setDeletingSecret(null);
       await loadData();
@@ -239,7 +239,7 @@ export function VaultSecretsPage() {
           ) : (
             <div className="list-group">
               {companySecrets.map((s) => (
-                <div key={s.secret_id} className="list-group-item d-flex justify-content-between align-items-center">
+                <div key={s.name} className="list-group-item d-flex justify-content-between align-items-center">
                   <div>
                     <h6 className="mb-0">{s.name}</h6>
                     <small className="text-muted">{s.description}</small>

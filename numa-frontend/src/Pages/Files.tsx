@@ -1453,7 +1453,7 @@ export const FilesPage = () => {
     async (payload: CreateSecretPayload) => {
       const created = await createSecret(payload);
       await loadVaultSecretsForConnect();
-      setSelectedSecretId(created.secret_id);
+      setSelectedSecretId(created.name);
     },
     [loadVaultSecretsForConnect]
   );
@@ -2929,7 +2929,7 @@ export const FilesPage = () => {
                             >
                               <option value="">{t('remote.credentialPlaceholder')}</option>
                               {vaultSecrets.map((secret) => (
-                                <option key={secret.secret_id} value={secret.secret_id}>
+                                <option key={secret.name} value={secret.name}>
                                   {secret.name}
                                   {secret.description ? ` \u2014 ${secret.description}` : ''}
                                 </option>

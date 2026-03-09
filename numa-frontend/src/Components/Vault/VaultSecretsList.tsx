@@ -45,7 +45,7 @@ export function VaultSecretsList({ secrets, onSelect, onEdit, onDelete }: Props)
         </thead>
         <tbody>
           {secrets.map((secret) => (
-            <tr key={secret.secret_id} style={{ cursor: 'pointer' }} onClick={() => onSelect(secret)}>
+            <tr key={secret.name} style={{ cursor: 'pointer' }} onClick={() => onSelect(secret)}>
               <td>
                 <div className="d-flex align-items-center gap-2">
                   {secret.favorite && <i className="bi bi-star-fill text-warning" />}

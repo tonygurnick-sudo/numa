@@ -5,10 +5,11 @@
  */
 
 export interface VaultSecretMetadata {
-  user_id: string;
-  secret_id: string;
+  id: string;
   name: string;
+  display_name: string;
   type: 'login' | 'api_key' | 'bearer_token' | 'secure_note' | 'custom';
+  template: string | null;
   category: string;
   description: string;
   danger_mode: boolean;
@@ -88,9 +89,9 @@ export async function listSecrets(): Promise<VaultSecretMetadata[]> {
   return data.secrets;
 }
 
-export async function getSecret(secretId: string): Promise<VaultSecretWithFields> {
+export async function getSecret(secretName: string): Promise<VaultSecretWithFields> {
   const endpoint = getApiEndpoint();
-  const response = await fetch(`${endpoint}/vault/secrets/${secretId}`, {
+  const response = await fetch(`${endpoint}/vault/secrets/${secretName}`, {
     method: 'GET',
     headers: getAuthHeaders(),
   });
@@ -109,9 +110,9 @@ export async function createSecret(payload: CreateSecretPayload): Promise<VaultS
   return data.secret;
 }
 
-export async function updateSecret(secretId: string, payload: UpdateSecretPayload): Promise<VaultSecretMetadata> {
+export async function updateSecret(secretName: string, payload: UpdateSecretPayload): Promise<VaultSecretMetadata> {
   const endpoint = getApiEndpoint();
-  const response = await fetch(`${endpoint}/vault/secrets/${secretId}`, {
+  const response = await fetch(`${endpoint}/vault/secrets/${secretName}`, {
     method: 'PUT',
     headers: getAuthHeaders(),
     body: JSON.stringify(payload),
@@ -120,9 +121,9 @@ export async function updateSecret(secretId: string, payload: UpdateSecretPayloa
   return data.secret;
 }
 
-export async function deleteSecret(secretId: string): Promise<void> {
+export async function deleteSecret(secretName: string): Promise<void> {
   const endpoint = getApiEndpoint();
-  const response = await fetch(`${endpoint}/vault/secrets/${secretId}`, {
+  const response = await fetch(`${endpoint}/vault/secrets/${secretName}`, {
     method: 'DELETE',
     headers: getAuthHeaders(),
   });

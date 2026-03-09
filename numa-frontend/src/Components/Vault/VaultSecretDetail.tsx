@@ -30,7 +30,7 @@ export function VaultSecretDetail({ show, onHide, secret, onEdit }: Props) {
     setError(null);
     setRevealedFields(new Set());
     try {
-      const data = await getSecret(secret.secret_id);
+      const data = await getSecret(secret.name);
       setFullSecret(data);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
