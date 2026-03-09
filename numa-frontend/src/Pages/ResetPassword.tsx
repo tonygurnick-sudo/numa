@@ -35,6 +35,7 @@ const ResetPassword = () => {
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [resending, setResending] = useState(false);
 
   const { requestPasswordReset, confirmPasswordReset } = useAuth();
 
@@ -53,6 +54,22 @@ const ResetPassword = () => {
       setError(err.message);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleResendCode = async () => {
+    setError(null);
+    setSuccess(null);
+    setResending(true);
+
+    try {
+      await requestPasswordReset(email, isCreateMode ? 'create' : 'reset');
+      setResetCode('');
+      setSuccess(isCreateMode ? t('reset.success.newCodeSentCreate') : t('reset.success.newCodeSentReset'));
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setResending(false);
     }
   };
 
@@ -120,7 +137,7 @@ const ResetPassword = () => {
     <LayoutForm
       FormName="numalogin"
       Content={
-        <>
+        <div className="mt-4">
           {error && <Alert variant="danger">{error}</Alert>}
           {success && <Alert variant="success">{success}</Alert>}
 
@@ -172,7 +189,7 @@ const ResetPassword = () => {
                   onChange={(e) => setResetCode(e.target.value)}
                   required
                   // Disable the code if it's in the url and populated
-                  disabled={location.search.includes('code') && resetCode}
+                  disabled={location.search.includes('code') && !!resetCode}
                   name="reset-code"
                   autoComplete="off"
                 />
@@ -223,16 +240,27 @@ const ResetPassword = () => {
                 />
               </Form.Group>
 
-              <Button variant="primary" type="submit" disabled={loading}>
+              <Button variant="primary" type="submit" disabled={loading || resending}>
                 {loading
                   ? isCreateMode
                     ? t('reset.submittingCreate')
                     : t('reset.submittingReset')
                   : getSubmitButtonText()}
               </Button>
+              <p className="mt-3 text-muted">
+                {t('reset.resendCode')}{' '}
+                <Button
+                  variant="link"
+                  className="p-0 align-baseline"
+                  onClick={handleResendCode}
+                  disabled={resending || loading}
+                >
+                  {resending ? t('reset.resendingCode') : t('reset.resendCodeLink')}
+                </Button>
+              </p>
             </Form>
           )}
-        </>
+        </div>
       }
     />
   );

@@ -99,9 +99,13 @@
     "description": "Create a new user account by entering their email address:",
     "bullets": {
       "emailSent": "An activation email will be sent automatically to the user",
+      "manualShare": "You will need to share setup instructions with the user manually",
       "passwordSetup": "The email contains a link to set up their password",
+      "passwordSetupManual": "The user will need to visit the create-password page to set up their account",
       "permissions": "Access to Numa will be based on their assigned permissions"
     },
+    "sendEmail": "Send activation email to the user",
+    "sendEmailHelp": "If unchecked, you will need to share login instructions manually",
     "emailLabel": "Email address",
     "emailPlaceholder": "Enter email",
     "emailHelp": "This email will be their username for logging in.",
@@ -119,6 +123,9 @@
       "emailFailed": {
         "title": "User created successfully",
         "warning": "The account was created but the activation email could not be sent. Please share the instructions below with the user manually."
+      },
+      "noEmail": {
+        "title": "User created successfully"
       },
       "instructions": {
         "title": "User Instructions",

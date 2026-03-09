@@ -6,7 +6,7 @@ import { Preloader } from '../Preloader';
 interface CreateUserModalProps {
   show: boolean;
   onHide: () => void;
-  onCreateUser: (email: string) => Promise<{ emailSent: boolean }>;
+  onCreateUser: (email: string, sendEmail: boolean) => Promise<{ emailSent: boolean }>;
 }
 
 export function CreateUserModal({ show, onHide, onCreateUser }: CreateUserModalProps): React.JSX.Element {
@@ -15,6 +15,7 @@ export function CreateUserModal({ show, onHide, onCreateUser }: CreateUserModalP
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+  const [sendEmail, setSendEmail] = useState(true);
   const [emailSent, setEmailSent] = useState(false);
   const [createdEmail, setCreatedEmail] = useState('');
   const [copiedEmail, setCopiedEmail] = useState(false);
@@ -25,6 +26,7 @@ export function CreateUserModal({ show, onHide, onCreateUser }: CreateUserModalP
     setEmail('');
     setError(null);
     setSuccess(false);
+    setSendEmail(true);
     setEmailSent(false);
     setCreatedEmail('');
     onHide();
@@ -62,7 +64,7 @@ export function CreateUserModal({ show, onHide, onCreateUser }: CreateUserModalP
     setError(null);
 
     try {
-      const result = await onCreateUser(email);
+      const result = await onCreateUser(email, sendEmail);
       setCreatedEmail(email);
       setEmailSent(result.emailSent);
       setSuccess(true);
@@ -94,8 +96,10 @@ export function CreateUserModal({ show, onHide, onCreateUser }: CreateUserModalP
             <>
               <p className="text-muted mb-3">{t('createModal.description')}</p>
               <ul className="text-muted mb-4">
-                <li>{t('createModal.bullets.emailSent')}</li>
-                <li>{t('createModal.bullets.passwordSetup')}</li>
+                <li>{sendEmail ? t('createModal.bullets.emailSent') : t('createModal.bullets.manualShare')}</li>
+                <li>
+                  {sendEmail ? t('createModal.bullets.passwordSetup') : t('createModal.bullets.passwordSetupManual')}
+                </li>
                 <li>{t('createModal.bullets.permissions')}</li>
               </ul>
 
@@ -114,10 +118,21 @@ export function CreateUserModal({ show, onHide, onCreateUser }: CreateUserModalP
                 />
                 <Form.Text className="text-muted">{t('createModal.emailHelp')}</Form.Text>
               </Form.Group>
+
+              <Form.Group className="mb-3" controlId="sendActivationEmail">
+                <Form.Check
+                  type="checkbox"
+                  label={t('createModal.sendEmail')}
+                  checked={sendEmail}
+                  onChange={(e) => setSendEmail(e.target.checked)}
+                  disabled={loading}
+                />
+                <Form.Text className="text-muted">{t('createModal.sendEmailHelp')}</Form.Text>
+              </Form.Group>
             </>
           ) : (
             <>
-              {emailSent ? (
+              {sendEmail && emailSent ? (
                 <Alert variant="success" className="mb-3">
                   <h5 className="alert-heading">{t('createModal.success.emailSent.title')}</h5>
                   <hr />
@@ -132,7 +147,7 @@ export function CreateUserModal({ show, onHide, onCreateUser }: CreateUserModalP
                   </div>
                   <p className="text-muted mt-3 mb-0">{t('createModal.success.emailSent.note')}</p>
                 </Alert>
-              ) : (
+              ) : sendEmail && !emailSent ? (
                 <>
                   <Alert variant="success" className="mb-3">
                     <h5 className="alert-heading">{t('createModal.success.emailFailed.title')}</h5>
@@ -141,6 +156,10 @@ export function CreateUserModal({ show, onHide, onCreateUser }: CreateUserModalP
                     {t('createModal.success.emailFailed.warning')}
                   </Alert>
                 </>
+              ) : (
+                <Alert variant="success" className="mb-3">
+                  <h5 className="alert-heading">{t('createModal.success.noEmail.title')}</h5>
+                </Alert>
               )}
 
               <div className="mb-0">
