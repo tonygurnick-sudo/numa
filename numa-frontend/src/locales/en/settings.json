@@ -52,7 +52,9 @@
     "allowUserOverridesHelp": "When this setting is inactive, users will only get the company defaults.",
     "defaultKnowledgeBases": "Default knowledge bases",
     "companyKnowledgeBase": "Company Knowledge Base",
-    "companyKnowledgeBaseHelp": "Only the company knowledge base can be set as a company default; user KB defaults can be set by the user only, and only if personal defaults are active.",
+    "companyKnowledgeBaseHelp": "Company and support knowledge bases can be set as company defaults. User KB defaults can be set by the user only, and only if personal defaults are active.",
+    "supportKnowledgeBase": "Support Knowledge Base",
+    "supportKnowledgeBaseHelp": "The Numa support knowledge base provides documentation and help resources.",
     "toolsTitle": "Tools",
     "allTools": "All Tools",
     "allToolsHelp": "When enabled, all tools are automatically available",
@@ -93,13 +95,34 @@
     },
     "footerNote": "Users will still see gentle hints where agents are disabled (e.g., \"Agents are disabled. Contact your admin\")."
   },
+  "securitySettings": {
+    "title": "Security & Session",
+    "description": "Configure session expiry policies and MFA device trust for all users.",
+    "saveSuccess": "Security settings saved successfully.",
+    "sessionExpiry": {
+      "title": "Session Expiry",
+      "idleTimeoutLabel": "Idle timeout",
+      "idleTimeoutHelp": "Log users out after this many minutes of inactivity (max {{max}}). Set to 0 to disable.",
+      "idleDisabled": "Idle timeout is disabled. Sessions will not expire due to inactivity.",
+      "maxDurationLabel": "Maximum session duration",
+      "maxDurationHelp": "Force re-login after this many hours, regardless of activity (max {{max}}). Set to 0 for no limit. This is enforced server-side.",
+      "maxDurationDisabled": "No maximum session duration. Sessions last until the user logs out.",
+      "minutes": "minutes",
+      "hours": "hours"
+    },
+    "validation": {
+      "idleTimeout": "Idle timeout must be between 0 and {{max}} minutes.",
+      "maxDuration": "Max session duration must be between 0 and {{max}} hours.",
+      "mfaDuration": "MFA remember duration must be between 0 and {{max}} {{unit}}."
+    }
+  },
   "mfaSettings": {
     "title": "Device Trust Duration",
     "description": "Configure how long users can skip two-factor authentication on trusted devices. Set to 0 to require MFA on every login. Reducing the duration takes effect on the next login — existing device trust that exceeds the new window will require MFA again.",
     "durationLabel": "Remember device duration",
     "unitHours": "hours",
     "unitDays": "days",
-    "durationHelp": "Users who check 'Remember this device' will skip MFA for the selected duration.",
+    "durationHelp": "Users who check 'Remember this device' will skip MFA for the selected duration (max {{maxHours}}h / {{maxDays}} days).",
     "zeroMeansAlways": "MFA will be required on every login. No 'Remember this device' option will be shown to users.",
     "saveSuccess": "MFA device trust settings saved successfully."
   },

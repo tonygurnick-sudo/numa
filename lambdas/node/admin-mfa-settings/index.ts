@@ -59,8 +59,12 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
     }
 
     if (method === 'GET' && /\/settings\/mfa\/?$/.test(path)) {
-      const res = await ddb.send(new GetCommand({ TableName: TABLE_NAME, Key: { setting: 'device-remember' } }));
-      const item = res.Item as { rememberDurationHours?: number; rememberDurationDays?: number } | undefined;
+      // Fetch device-remember and session-config in parallel
+      const [deviceRes, sessionRes] = await Promise.all([
+        ddb.send(new GetCommand({ TableName: TABLE_NAME, Key: { setting: 'device-remember' } })),
+        ddb.send(new GetCommand({ TableName: TABLE_NAME, Key: { setting: 'session-config' } })),
+      ]);
+      const item = deviceRes.Item as { rememberDurationHours?: number; rememberDurationDays?: number } | undefined;
       // Read rememberDurationHours first; fall back to legacy rememberDurationDays (converted to hours)
       let rememberDurationHours = 0;
       if (typeof item?.rememberDurationHours === 'number') {
@@ -68,7 +72,21 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
       } else if (typeof item?.rememberDurationDays === 'number') {
         rememberDurationHours = item.rememberDurationDays * 24;
       }
-      return { statusCode: 200, headers: HEADERS, body: JSON.stringify({ rememberDurationHours }) };
+      const sessionItem = sessionRes.Item as
+        | {
+            sessionIdleTimeoutMinutes?: number;
+            maxSessionDurationHours?: number;
+          }
+        | undefined;
+      return {
+        statusCode: 200,
+        headers: HEADERS,
+        body: JSON.stringify({
+          rememberDurationHours,
+          sessionIdleTimeoutMinutes: sessionItem?.sessionIdleTimeoutMinutes ?? 0,
+          maxSessionDurationHours: sessionItem?.maxSessionDurationHours ?? 0,
+        }),
+      };
     }
 
     if (method === 'PUT' && /\/settings\/mfa\/?$/.test(path)) {
@@ -77,19 +95,78 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
       }
       const body = JSON.parse(event.body || '{}');
       const rememberDurationHours = Number(body.rememberDurationHours);
-      if (!Number.isInteger(rememberDurationHours) || rememberDurationHours < 0 || rememberDurationHours > 8760) {
+      // Max 2160 hours = 90 days (or 24 hours when set in hours mode)
+      if (!Number.isInteger(rememberDurationHours) || rememberDurationHours < 0 || rememberDurationHours > 2160) {
         return {
           statusCode: 400,
           headers: HEADERS,
-          body: JSON.stringify({ error: 'rememberDurationHours must be an integer between 0 and 8760' }),
+          body: JSON.stringify({ error: 'rememberDurationHours must be an integer between 0 and 2160 (90 days)' }),
         };
       }
-      await ddb.send(
-        new PutCommand({
-          TableName: TABLE_NAME,
-          Item: { setting: 'device-remember', rememberDurationHours, updatedAt: new Date().toISOString() },
-        }),
-      );
+
+      // Session settings (optional — only written when provided)
+      const sessionIdleTimeoutMinutes =
+        body.sessionIdleTimeoutMinutes !== undefined ? Number(body.sessionIdleTimeoutMinutes) : undefined;
+      const maxSessionDurationHours =
+        body.maxSessionDurationHours !== undefined ? Number(body.maxSessionDurationHours) : undefined;
+
+      if (sessionIdleTimeoutMinutes !== undefined) {
+        if (
+          !Number.isInteger(sessionIdleTimeoutMinutes) ||
+          sessionIdleTimeoutMinutes < 0 ||
+          sessionIdleTimeoutMinutes > 480
+        ) {
+          return {
+            statusCode: 400,
+            headers: HEADERS,
+            body: JSON.stringify({ error: 'sessionIdleTimeoutMinutes must be an integer between 0 and 480' }),
+          };
+        }
+      }
+      if (maxSessionDurationHours !== undefined) {
+        if (
+          !Number.isInteger(maxSessionDurationHours) ||
+          maxSessionDurationHours < 0 ||
+          maxSessionDurationHours > 8760
+        ) {
+          return {
+            statusCode: 400,
+            headers: HEADERS,
+            body: JSON.stringify({ error: 'maxSessionDurationHours must be an integer between 0 and 8760' }),
+          };
+        }
+      }
+
+      const writes: Promise<unknown>[] = [
+        ddb.send(
+          new PutCommand({
+            TableName: TABLE_NAME,
+            Item: { setting: 'device-remember', rememberDurationHours, updatedAt: new Date().toISOString() },
+          }),
+        ),
+      ];
+
+      // Write session config as a separate DynamoDB item (also read by token-adjuster Lambda)
+      if (sessionIdleTimeoutMinutes !== undefined || maxSessionDurationHours !== undefined) {
+        // Read existing session config to preserve fields not being updated
+        const existing = await ddb.send(new GetCommand({ TableName: TABLE_NAME, Key: { setting: 'session-config' } }));
+        const prev = existing.Item ?? {};
+        writes.push(
+          ddb.send(
+            new PutCommand({
+              TableName: TABLE_NAME,
+              Item: {
+                setting: 'session-config',
+                sessionIdleTimeoutMinutes: sessionIdleTimeoutMinutes ?? prev.sessionIdleTimeoutMinutes ?? 0,
+                maxSessionDurationHours: maxSessionDurationHours ?? prev.maxSessionDurationHours ?? 0,
+                updatedAt: new Date().toISOString(),
+              },
+            }),
+          ),
+        );
+      }
+
+      await Promise.all(writes);
       return { statusCode: 200, headers: HEADERS, body: JSON.stringify({ ok: true }) };
     }
 

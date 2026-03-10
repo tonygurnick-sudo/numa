@@ -211,7 +211,7 @@ const UserManagement = ({ embedded = false }: UserManagementProps) => {
   };
 
   // Create user handler — returns whether the activation email was sent successfully
-  const handleCreateUser = async (email: string): Promise<{ emailSent: boolean }> => {
+  const handleCreateUser = async (email: string, sendEmail: boolean): Promise<{ emailSent: boolean }> => {
     const isValid = await forceTokenValidation();
     if (!isValid) {
       throw new Error(t('errors.sessionExpired'));
@@ -230,11 +230,13 @@ const UserManagement = ({ embedded = false }: UserManagementProps) => {
 
     // Send activation email (best-effort — user creation is the critical operation)
     let emailSent = false;
-    try {
-      await requestPasswordReset(email, 'create');
-      emailSent = true;
-    } catch (err) {
-      console.error('Failed to send activation email:', err);
+    if (sendEmail) {
+      try {
+        await requestPasswordReset(email, 'create');
+        emailSent = true;
+      } catch (err) {
+        console.error('Failed to send activation email:', err);
+      }
     }
 
     // Refresh user list after creation

@@ -80,7 +80,7 @@ export const DEFAULT_USER_PROFILE: UserProfile = {
 export const VALID_APPROVAL_MODES: ApprovalMode[] = ['always', 'non_destructive', 'never'];
 
 export const DEFAULT_CHAT_SETTINGS: ChatSettings = {
-  defaultKBIds: ['company'],
+  defaultKBIds: ['company', 'numa-support'],
   autoToolsEnabled: true,
   webSearchEnabled: true,
   createAgentEnabled: true, // Should be true when autoToolsEnabled is true
