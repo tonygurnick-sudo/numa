@@ -142,7 +142,7 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
           new PutCommand({
             TableName: TABLE_NAME,
             Item: { setting: 'device-remember', rememberDurationHours, updatedAt: new Date().toISOString() },
-          })
+          }),
         ),
       ];
 
@@ -161,8 +161,8 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
                 maxSessionDurationHours: maxSessionDurationHours ?? prev.maxSessionDurationHours ?? 0,
                 updatedAt: new Date().toISOString(),
               },
-            })
-          )
+            }),
+          ),
         );
       }
 
