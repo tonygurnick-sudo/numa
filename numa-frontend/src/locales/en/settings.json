@@ -102,13 +102,18 @@
     "sessionExpiry": {
       "title": "Session Expiry",
       "idleTimeoutLabel": "Idle timeout",
-      "idleTimeoutHelp": "Log users out after this many minutes of inactivity. Set to 0 to disable.",
+      "idleTimeoutHelp": "Log users out after this many minutes of inactivity (max {{max}}). Set to 0 to disable.",
       "idleDisabled": "Idle timeout is disabled. Sessions will not expire due to inactivity.",
       "maxDurationLabel": "Maximum session duration",
-      "maxDurationHelp": "Force re-login after this many hours, regardless of activity. Set to 0 for no limit. This is enforced server-side.",
+      "maxDurationHelp": "Force re-login after this many hours, regardless of activity (max {{max}}). Set to 0 for no limit. This is enforced server-side.",
       "maxDurationDisabled": "No maximum session duration. Sessions last until the user logs out.",
       "minutes": "minutes",
       "hours": "hours"
+    },
+    "validation": {
+      "idleTimeout": "Idle timeout must be between 0 and {{max}} minutes.",
+      "maxDuration": "Max session duration must be between 0 and {{max}} hours.",
+      "mfaDuration": "MFA remember duration must be between 0 and {{max}} {{unit}}."
     }
   },
   "mfaSettings": {
@@ -117,7 +122,7 @@
     "durationLabel": "Remember device duration",
     "unitHours": "hours",
     "unitDays": "days",
-    "durationHelp": "Users who check 'Remember this device' will skip MFA for the selected duration.",
+    "durationHelp": "Users who check 'Remember this device' will skip MFA for the selected duration (max {{maxHours}}h / {{maxDays}} days).",
     "zeroMeansAlways": "MFA will be required on every login. No 'Remember this device' option will be shown to users.",
     "saveSuccess": "MFA device trust settings saved successfully."
   },

@@ -95,11 +95,12 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
       }
       const body = JSON.parse(event.body || '{}');
       const rememberDurationHours = Number(body.rememberDurationHours);
-      if (!Number.isInteger(rememberDurationHours) || rememberDurationHours < 0 || rememberDurationHours > 8760) {
+      // Max 2160 hours = 90 days (or 24 hours when set in hours mode)
+      if (!Number.isInteger(rememberDurationHours) || rememberDurationHours < 0 || rememberDurationHours > 2160) {
         return {
           statusCode: 400,
           headers: HEADERS,
-          body: JSON.stringify({ error: 'rememberDurationHours must be an integer between 0 and 8760' }),
+          body: JSON.stringify({ error: 'rememberDurationHours must be an integer between 0 and 2160 (90 days)' }),
         };
       }
 

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Form, Button, Spinner, Alert } from 'react-bootstrap';
+import { Form, Button, Spinner, Alert, OverlayTrigger, Tooltip } from 'react-bootstrap';
 import { useTranslation } from 'react-i18next';
 import { AdminMfaSettingsService } from '../../Services/AdminMfaSettingsService';
 
@@ -12,6 +12,26 @@ type SecuritySettingsPanelProps = {
   numaPut?: NumaPut;
 };
 
+// Validation limits
+const IDLE_TIMEOUT_MAX = 480; // minutes (8 hours)
+const MAX_SESSION_DURATION_MAX = 8760; // hours (1 year)
+const MFA_MAX_HOURS = 24;
+const MFA_MAX_DAYS = 90;
+
+/** Returns true if the string represents a valid integer in [0, max]. */
+const isValidInt = (value: string, max: number): boolean => {
+  if (value === '' || value === '0') return true;
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed >= 0 && parsed <= max;
+};
+
+/** Tooltip icon shown next to input with the max allowed value. */
+const MaxTooltip = ({ max, unit }: { max: number; unit: string }) => (
+  <OverlayTrigger placement="top" overlay={<Tooltip>{`Max: ${max} ${unit}`}</Tooltip>}>
+    <i className="bi bi-info-circle text-muted" style={{ cursor: 'pointer' }}></i>
+  </OverlayTrigger>
+);
+
 /**
  * Admin panel for session expiry and MFA device trust settings.
  * Rendered inside the Users tab of admin settings.
@@ -19,15 +39,11 @@ type SecuritySettingsPanelProps = {
 export const SecuritySettingsPanel = ({ mfaEnabled, numaGet, numaPut }: SecuritySettingsPanelProps) => {
   const { t } = useTranslation('settings');
 
-  // MFA device trust state
-  const [mfaRememberHours, setMfaRememberHours] = useState<number>(0);
+  // All inputs stored as strings — the single source of truth for what the user typed.
+  // Parsed to numbers only at save time (after validation passes).
   const [mfaInputValue, setMfaInputValue] = useState<string>('0');
   const [mfaUnit, setMfaUnit] = useState<'hours' | 'days'>('days');
-
-  // Session expiry state
-  const [idleTimeoutMinutes, setIdleTimeoutMinutes] = useState<number>(0);
   const [idleTimeoutInput, setIdleTimeoutInput] = useState<string>('0');
-  const [maxSessionHours, setMaxSessionHours] = useState<number>(0);
   const [maxSessionInput, setMaxSessionInput] = useState<string>('0');
 
   // Loading/save state
@@ -35,19 +51,25 @@ export const SecuritySettingsPanel = ({ mfaEnabled, numaGet, numaPut }: Security
   const [saving, setSaving] = useState(false);
   const [saveStatus, setSaveStatus] = useState<{ variant: string; message: string } | null>(null);
 
+  const mfaMaxForUnit = mfaUnit === 'days' ? MFA_MAX_DAYS : MFA_MAX_HOURS;
+
+  // Single validation pass — drives red borders, error messages, and save button state
+  const idleValid = isValidInt(idleTimeoutInput, IDLE_TIMEOUT_MAX);
+  const maxSessionValid = isValidInt(maxSessionInput, MAX_SESSION_DURATION_MAX);
+  const mfaValid = !mfaEnabled || isValidInt(mfaInputValue, mfaMaxForUnit);
+
+  const hasErrors = !idleValid || !maxSessionValid || !mfaValid;
+
   const loadSettings = useCallback(async () => {
     setLoading(true);
     try {
       const settings = await AdminMfaSettingsService.get(numaGet);
       const hours = settings.rememberDurationHours;
-      setMfaRememberHours(hours);
       const unit = hours > 0 && hours % 24 === 0 ? 'days' : 'hours';
       setMfaUnit(unit);
       setMfaInputValue(String(unit === 'days' ? Math.floor(hours / 24) : hours));
 
-      setIdleTimeoutMinutes(settings.sessionIdleTimeoutMinutes);
       setIdleTimeoutInput(String(settings.sessionIdleTimeoutMinutes));
-      setMaxSessionHours(settings.maxSessionDurationHours);
       setMaxSessionInput(String(settings.maxSessionDurationHours));
     } catch {
       // Defaults are fine
@@ -61,14 +83,22 @@ export const SecuritySettingsPanel = ({ mfaEnabled, numaGet, numaPut }: Security
   }, [loadSettings]);
 
   const handleSave = async () => {
+    if (hasErrors) return;
+
+    // Parse values from input strings — safe because hasErrors is false
+    const idleTimeout = parseInt(idleTimeoutInput, 10) || 0;
+    const maxSession = parseInt(maxSessionInput, 10) || 0;
+    const mfaDisplay = parseInt(mfaInputValue, 10) || 0;
+    const rememberHours = mfaUnit === 'days' ? mfaDisplay * 24 : mfaDisplay;
+
     try {
       setSaving(true);
       setSaveStatus(null);
       await AdminMfaSettingsService.update(
         {
-          rememberDurationHours: mfaRememberHours,
-          sessionIdleTimeoutMinutes: idleTimeoutMinutes,
-          maxSessionDurationHours: maxSessionHours,
+          rememberDurationHours: rememberHours,
+          sessionIdleTimeoutMinutes: idleTimeout,
+          maxSessionDurationHours: maxSession,
         },
         numaPut
       );
@@ -90,6 +120,10 @@ export const SecuritySettingsPanel = ({ mfaEnabled, numaGet, numaPut }: Security
       </div>
     );
   }
+
+  const idleParsed = parseInt(idleTimeoutInput, 10);
+  const maxSessionParsed = parseInt(maxSessionInput, 10);
+  const mfaParsed = parseInt(mfaInputValue, 10);
 
   return (
     <div className="mt-4">
@@ -117,27 +151,29 @@ export const SecuritySettingsPanel = ({ mfaEnabled, numaGet, numaPut }: Security
               <Form.Control
                 type="number"
                 min={0}
-                max={480}
+                max={IDLE_TIMEOUT_MAX}
                 value={idleTimeoutInput}
-                onChange={(e) => {
-                  const str = e.target.value;
-                  setIdleTimeoutInput(str);
-                  const parsed = parseInt(str, 10);
-                  if (!isNaN(parsed) && parsed >= 0) {
-                    setIdleTimeoutMinutes(Math.min(parsed, 480));
-                  } else {
-                    setIdleTimeoutMinutes(0);
-                  }
-                }}
+                isInvalid={!idleValid}
+                onChange={(e) => setIdleTimeoutInput(e.target.value)}
                 onBlur={() => {
                   if (idleTimeoutInput === '') setIdleTimeoutInput('0');
                 }}
                 style={{ maxWidth: 100 }}
               />
               <span className="text-muted">{t('securitySettings.sessionExpiry.minutes')}</span>
+              <MaxTooltip max={IDLE_TIMEOUT_MAX} unit={t('securitySettings.sessionExpiry.minutes')} />
             </div>
-            <Form.Text className="text-muted">{t('securitySettings.sessionExpiry.idleTimeoutHelp')}</Form.Text>
-            {idleTimeoutMinutes === 0 && (
+            {!idleValid && (
+              <Form.Text className="text-danger">
+                {t('securitySettings.validation.idleTimeout', { max: IDLE_TIMEOUT_MAX })}
+              </Form.Text>
+            )}
+            {idleValid && (
+              <Form.Text className="text-muted">
+                {t('securitySettings.sessionExpiry.idleTimeoutHelp', { max: IDLE_TIMEOUT_MAX })}
+              </Form.Text>
+            )}
+            {idleValid && (isNaN(idleParsed) || idleParsed === 0) && (
               <div className="mt-2">
                 <Alert variant="info" className="mb-0 py-2 px-3">
                   <i className="bi bi-info-circle me-2"></i>
@@ -153,27 +189,29 @@ export const SecuritySettingsPanel = ({ mfaEnabled, numaGet, numaPut }: Security
               <Form.Control
                 type="number"
                 min={0}
-                max={8760}
+                max={MAX_SESSION_DURATION_MAX}
                 value={maxSessionInput}
-                onChange={(e) => {
-                  const str = e.target.value;
-                  setMaxSessionInput(str);
-                  const parsed = parseInt(str, 10);
-                  if (!isNaN(parsed) && parsed >= 0) {
-                    setMaxSessionHours(Math.min(parsed, 8760));
-                  } else {
-                    setMaxSessionHours(0);
-                  }
-                }}
+                isInvalid={!maxSessionValid}
+                onChange={(e) => setMaxSessionInput(e.target.value)}
                 onBlur={() => {
                   if (maxSessionInput === '') setMaxSessionInput('0');
                 }}
                 style={{ maxWidth: 100 }}
               />
               <span className="text-muted">{t('securitySettings.sessionExpiry.hours')}</span>
+              <MaxTooltip max={MAX_SESSION_DURATION_MAX} unit={t('securitySettings.sessionExpiry.hours')} />
             </div>
-            <Form.Text className="text-muted">{t('securitySettings.sessionExpiry.maxDurationHelp')}</Form.Text>
-            {maxSessionHours === 0 && (
+            {!maxSessionValid && (
+              <Form.Text className="text-danger">
+                {t('securitySettings.validation.maxDuration', { max: MAX_SESSION_DURATION_MAX })}
+              </Form.Text>
+            )}
+            {maxSessionValid && (
+              <Form.Text className="text-muted">
+                {t('securitySettings.sessionExpiry.maxDurationHelp', { max: MAX_SESSION_DURATION_MAX })}
+              </Form.Text>
+            )}
+            {maxSessionValid && (isNaN(maxSessionParsed) || maxSessionParsed === 0) && (
               <div className="mt-2">
                 <Alert variant="info" className="mb-0 py-2 px-3">
                   <i className="bi bi-info-circle me-2"></i>
@@ -199,20 +237,10 @@ export const SecuritySettingsPanel = ({ mfaEnabled, numaGet, numaPut }: Security
                 <Form.Control
                   type="number"
                   min={0}
-                  max={mfaUnit === 'days' ? 365 : 8760}
+                  max={mfaMaxForUnit}
                   value={mfaInputValue}
-                  onChange={(e) => {
-                    const str = e.target.value;
-                    setMfaInputValue(str);
-                    const parsed = parseInt(str, 10);
-                    if (!isNaN(parsed) && parsed >= 0) {
-                      const maxVal = mfaUnit === 'days' ? 365 : 8760;
-                      const clamped = Math.min(parsed, maxVal);
-                      setMfaRememberHours(mfaUnit === 'days' ? clamped * 24 : clamped);
-                    } else {
-                      setMfaRememberHours(0);
-                    }
-                  }}
+                  isInvalid={!mfaValid}
+                  onChange={(e) => setMfaInputValue(e.target.value)}
                   onBlur={() => {
                     if (mfaInputValue === '') setMfaInputValue('0');
                   }}
@@ -222,20 +250,40 @@ export const SecuritySettingsPanel = ({ mfaEnabled, numaGet, numaPut }: Security
                   value={mfaUnit}
                   onChange={(e) => {
                     const newUnit = e.target.value as 'hours' | 'days';
+                    const newMax = newUnit === 'days' ? MFA_MAX_DAYS : MFA_MAX_HOURS;
+                    const currentParsed = parseInt(mfaInputValue, 10) || 0;
+                    // Convert between units: hours→days divide by 24, days→hours multiply by 24
+                    const converted = newUnit === 'days' ? Math.floor(currentParsed / 24) : currentParsed * 24;
+                    const clamped = Math.min(converted, newMax);
                     setMfaUnit(newUnit);
-                    const display = newUnit === 'days' ? Math.floor(mfaRememberHours / 24) : mfaRememberHours;
-                    setMfaInputValue(String(display));
+                    setMfaInputValue(String(clamped));
                   }}
                   style={{ maxWidth: 100 }}
                 >
                   <option value="hours">{t('mfaSettings.unitHours')}</option>
                   <option value="days">{t('mfaSettings.unitDays')}</option>
                 </Form.Select>
+                <MaxTooltip
+                  max={mfaMaxForUnit}
+                  unit={mfaUnit === 'days' ? t('mfaSettings.unitDays') : t('mfaSettings.unitHours')}
+                />
               </div>
-              <Form.Text className="text-muted">{t('mfaSettings.durationHelp')}</Form.Text>
+              {!mfaValid && (
+                <Form.Text className="text-danger">
+                  {t('securitySettings.validation.mfaDuration', {
+                    max: mfaMaxForUnit,
+                    unit: mfaUnit === 'days' ? t('mfaSettings.unitDays') : t('mfaSettings.unitHours'),
+                  })}
+                </Form.Text>
+              )}
+              {mfaValid && (
+                <Form.Text className="text-muted">
+                  {t('mfaSettings.durationHelp', { maxHours: MFA_MAX_HOURS, maxDays: MFA_MAX_DAYS })}
+                </Form.Text>
+              )}
             </Form.Group>
 
-            {mfaRememberHours === 0 && (
+            {mfaValid && (isNaN(mfaParsed) || mfaParsed === 0) && (
               <Alert variant="info" className="mt-2 mb-0 py-2 px-3">
                 <i className="bi bi-info-circle me-2"></i>
                 {t('mfaSettings.zeroMeansAlways')}
@@ -250,7 +298,7 @@ export const SecuritySettingsPanel = ({ mfaEnabled, numaGet, numaPut }: Security
           </Alert>
         )}
 
-        <Button variant="primary" disabled={saving} onClick={handleSave}>
+        <Button variant="primary" disabled={saving || hasErrors} onClick={handleSave}>
           {saving ? (
             <>
               <Spinner as="span" animation="border" size="sm" className="me-2" />
