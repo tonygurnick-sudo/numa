@@ -101,7 +101,7 @@ export class V2AppsConstruct extends ApiGatewayLambdaCollection {
       runtime: 'nodejs22.x',
       handler: 'index.handler',
       memorySize: 512,
-      timeout: 30,
+      timeout: 120,
       systemLogLevel: 'WARN',
       environment: {
         V2_APP_RUNS_TABLE: this.runsTable.name,

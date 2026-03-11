@@ -99,7 +99,7 @@ RESEARCH_AGENT = AgentTypeConfig(
     # KBs allowed, integrations restricted
     restrict_kbs=False,
     restrict_integrations=True,  # No integrations
-    max_turns=50,
+    max_turns=200,
     max_thinking_tokens=10000,
 )
 

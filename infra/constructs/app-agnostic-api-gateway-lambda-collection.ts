@@ -191,7 +191,7 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
         DOCUMENT_CONVERTER_LAMBDA_NAME: documentConverterLambda.functionName,
       },
       timeout: 900,
-      memorySize: 1024,
+      memorySize: 3008,
       additionalPolicyStatements: [
         {
           effect: 'Allow',

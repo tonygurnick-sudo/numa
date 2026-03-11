@@ -319,7 +319,7 @@ QUOTING_V2 = AgentTypeConfig(
     restrict_integrations=False,
     # Result mode: use the agent's final text response
     pipeline_result_mode="last_step_text",
-    max_turns=50,
+    max_turns=200,
     max_thinking_tokens=10_000,
 )
 

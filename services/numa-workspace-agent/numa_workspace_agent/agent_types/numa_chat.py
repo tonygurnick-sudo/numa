@@ -107,7 +107,7 @@ NUMA_CHAT = AgentTypeConfig(
     # KBs and integrations: driven by request (no restrictions)
     restrict_kbs=False,
     restrict_integrations=False,
-    max_turns=50,
+    max_turns=200,
     max_thinking_tokens=10000,
 )
 

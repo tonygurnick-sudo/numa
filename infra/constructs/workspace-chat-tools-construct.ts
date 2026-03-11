@@ -283,7 +283,7 @@ export class WorkspaceChatToolsConstruct extends Construct {
       lambdaDirectory: 'python/workspace-chat-tools/',
       handler: 'lambda_function.handler',
       runtime: 'python3.13',
-      memorySize: 512,
+      memorySize: 1024,
       timeout: 300,
       logGroup: props.logGroup,
       resourceNameSuffix: '_workspace_chat_tools',

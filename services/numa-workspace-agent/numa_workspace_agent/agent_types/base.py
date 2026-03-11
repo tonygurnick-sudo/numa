@@ -155,7 +155,7 @@ class AgentTypeConfig:
     pipeline_result_mode: str = "last_step_text"
 
     # ── Limits ────────────────────────────────────────────────────────────
-    max_turns: int = 50
+    max_turns: int = 200
     max_thinking_tokens: int = 10_000
 
     # ── Model ─────────────────────────────────────────────────────────────

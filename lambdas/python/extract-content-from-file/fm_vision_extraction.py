@@ -57,7 +57,11 @@ MAX_BEDROCK_CONCURRENT = 10  # Concurrent Bedrock API calls (semaphore)
 CONNECTION_POOL_SIZE = 100  # boto3 connection pool
 MAX_RETRIES = 5  # Retry attempts for transient failures
 
-_CROSS_REGION_PREFIX = "apac" if AWS_REGION == "ap-southeast-2" else "us"
+_CROSS_REGION_PREFIX = (
+    "apac" if AWS_REGION == "ap-southeast-2"
+    else "global" if AWS_REGION == "ap-southeast-3"
+    else "us"
+)
 
 VISION_MODEL_MAP = {
     "haiku": f"{_CROSS_REGION_PREFIX}.anthropic.claude-3-haiku-20240307-v1:0",
