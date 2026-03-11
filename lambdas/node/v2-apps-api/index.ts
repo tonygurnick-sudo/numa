@@ -110,8 +110,15 @@ const errorResponse = (statusCode: number, message: string) => jsonResponse(stat
 const parseBody = (event: APIGatewayProxyEventV2): Record<string, unknown> => {
   if (!event.body) return {};
   try {
-    return JSON.parse(event.body);
-  } catch {
+    const raw = event.isBase64Encoded ? Buffer.from(event.body, 'base64').toString('utf8') : event.body;
+    return JSON.parse(raw);
+  } catch (err) {
+    console.warn('v2-apps-api parseBody failed', {
+      isBase64Encoded: event.isBase64Encoded,
+      bodyLength: event.body?.length,
+      bodyPreview: event.body?.slice(0, 100),
+      error: err instanceof Error ? err.message : String(err),
+    });
     return {};
   }
 };
@@ -243,14 +250,18 @@ const isKeyAccessible = (key: string, userSub: string): boolean => {
 const handleCreateRun = async (body: Record<string, unknown>, auth: AuthContext) => {
   const appId = body.appId as string;
   const actionId = (body.actionId as string) || 'default';
-  const prompt = body.prompt as string;
   const files = (body.files as string[]) || [];
   const options = (body.options as Record<string, unknown>) || {};
   const agentType = (body.agentType as string) || `${appId}-v2`;
 
+  // Prompt is optional when files are provided — default to a file-processing instruction
+  const prompt =
+    (body.prompt as string) || (files.length > 0 ? `Process the uploaded file(s): ${files.join(', ')}` : '');
+
   if (!appId || !prompt) {
+    const missing = [!appId && 'appId', !prompt && 'prompt'].filter(Boolean).join(', ');
     console.warn('v2-apps-api createRun missing required fields', { appId, hasPrompt: !!prompt });
-    return errorResponse(400, 'Missing required fields: appId, prompt');
+    return errorResponse(400, `Missing required fields: ${missing}`);
   }
 
   const runId = typeof body.runId === 'string' && body.runId.length > 0 ? body.runId : randomUUID();

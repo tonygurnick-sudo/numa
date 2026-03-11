@@ -136,11 +136,12 @@ export const V2AppDetail: React.FC = () => {
     if (hasPipedreamFeature && lambdaClient) loadConnections();
   }, [hasPipedreamFeature, lambdaClient, loadConnections]);
 
-  // After a run is submitted, switch to the Runs tab so the user can track progress
+  // After a run is submitted, switch to the Runs tab so the user can track progress.
+  // Only switch if the run was created successfully.
   const handleStartAnalysis = useCallback(
     async (prompt: string, files: File[], config: Parameters<typeof startAnalysis>[2], runName?: string) => {
-      await startAnalysis(prompt, files, config, runName);
-      setActiveTab('runs');
+      const success = await startAnalysis(prompt, files, config, runName);
+      if (success) setActiveTab('runs');
     },
     [startAnalysis]
   );

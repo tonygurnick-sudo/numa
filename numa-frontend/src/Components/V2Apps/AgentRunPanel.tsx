@@ -38,6 +38,7 @@ interface AgentRunPanelProps {
   availableConnections: ConnectionOption[];
   connectionsLoading: boolean;
   hasPipedreamFeature: boolean;
+  promptPlaceholderKey?: string;
 }
 
 const AVAILABLE_TOOLS = [{ id: 'web_search', labelKey: 'v2Apps.workspace.tools.webSearch' }];
@@ -58,6 +59,7 @@ export const AgentRunPanel: React.FC<AgentRunPanelProps> = ({
   availableConnections,
   connectionsLoading,
   hasPipedreamFeature,
+  promptPlaceholderKey,
 }) => {
   const { t } = useTranslation('apps');
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -102,7 +104,7 @@ export const AgentRunPanel: React.FC<AgentRunPanelProps> = ({
   const handleSubmit = useCallback(
     async (e: React.FormEvent) => {
       e.preventDefault();
-      if (!prompt.trim()) return;
+      if (!prompt.trim() && files.length === 0) return;
       // Resolve KB IDs to {id, name} objects for the workspace agent
       const resolvedKBs = enabledKBIds.map((id) => {
         const kb = availableKBs.find((k) => k.kb_id === id);
@@ -238,7 +240,7 @@ export const AgentRunPanel: React.FC<AgentRunPanelProps> = ({
                   rows={4}
                   value={prompt}
                   onChange={(e) => setPrompt(e.target.value)}
-                  placeholder={t('v2Apps.agentRunPanel.promptPlaceholder')}
+                  placeholder={t(promptPlaceholderKey ?? 'v2Apps.agentRunPanel.promptPlaceholder')}
                 />
                 {workspaceAccess && (
                   <p className="text-muted small mt-1 mb-0">
@@ -353,7 +355,12 @@ export const AgentRunPanel: React.FC<AgentRunPanelProps> = ({
               </div>
 
               {/* Submit */}
-              <Button type="submit" variant="primary" disabled={!prompt.trim()} className="mt-3 w-100">
+              <Button
+                type="submit"
+                variant="primary"
+                disabled={!prompt.trim() && files.length === 0}
+                className="mt-3 w-100"
+              >
                 <i className="bi bi-play-fill me-1" />
                 {t('v2Apps.agentRunPanel.run')}
               </Button>

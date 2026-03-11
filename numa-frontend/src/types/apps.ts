@@ -115,6 +115,8 @@ export interface V2AppConfig {
   category: string;
   tabs: V2AppTab[];
   agents: V2AppAgent[];
+  /** Optional per-app prompt placeholder i18n key. Falls back to v2Apps.agentRunPanel.promptPlaceholder. */
+  promptPlaceholderKey?: string;
   /** @deprecated — Use resultConfig on each V2AppAgent instead. */
   resultConfig?: V2AppResultConfig;
 }

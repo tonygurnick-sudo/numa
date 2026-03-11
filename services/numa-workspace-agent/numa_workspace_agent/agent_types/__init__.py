@@ -14,6 +14,7 @@ from . import numa_chat as _numa_chat  # noqa: F401
 from . import profile_creator as _profile_creator  # noqa: F401
 from . import profile_researcher as _profile_researcher  # noqa: F401
 from . import profile_validator as _profile_validator  # noqa: F401
+from . import quoting as _quoting  # noqa: F401
 from . import research_agent as _research_agent  # noqa: F401
 from . import tony_comedian as _tony_comedian  # noqa: F401
 from .base import ALWAYS_COPY, TOOL_FILE_MAP, AgentTypeConfig

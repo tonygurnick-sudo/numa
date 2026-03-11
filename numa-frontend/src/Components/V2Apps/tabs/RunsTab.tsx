@@ -23,7 +23,7 @@ interface RunsTabProps {
   /** App agents — used to resolve agent names and result config per run */
   agents: V2AppAgent[];
   /** Start a follow-up run on a completed run */
-  startFollowUp: (parentRunId: string, prompt: string, files?: File[]) => Promise<void>;
+  startFollowUp: (parentRunId: string, prompt: string, files?: File[]) => Promise<RunRecord | undefined>;
   /** numaGet for loading conversation thread */
   numaGet: NumaGet;
 }
@@ -93,13 +93,9 @@ export const RunsTab: React.FC<RunsTabProps> = ({
     [bucket, region, getCredentials]
   );
 
-  // Auto-refresh when any run is PROCESSING
-  const hasProcessingRun = runHistory.some((r) => r.status === 'PROCESSING');
-  useEffect(() => {
-    if (!hasProcessingRun) return;
-    const interval = setInterval(onRefresh, 5000);
-    return () => clearInterval(interval);
-  }, [hasProcessingRun, onRefresh]);
+  // Background polling is handled by the useV2AppRun hook — no need to
+  // duplicate it here. The hook refreshes runHistory automatically when
+  // any run is PROCESSING and merges updates into currentRun.
 
   // Auto-select latest run on first load
   useEffect(() => {
