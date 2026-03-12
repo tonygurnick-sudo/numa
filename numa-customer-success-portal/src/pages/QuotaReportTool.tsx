@@ -4,9 +4,11 @@ import { Card, Button, Form, Alert, Row, Col, ListGroup, Badge, Container } from
 import { ArrowLeft, Download, BarChart } from 'react-bootstrap-icons';
 import { useToolExecution } from '@/hooks/useToolExecution';
 import { ProgressTracker } from '@/components/tools/ProgressTracker';
+import { GroupedClientSelector } from '@/components/tools/GroupedClientSelector';
 import { clientService } from '@/services/clientService';
 import { FileExportService } from '@/utils/fileExport';
 import { QuotaReportService } from '@/services/quotaReportService';
+import type { Client } from '@/types';
 import type {
   QuotaReportParameters,
   ToolResult,
@@ -36,15 +38,15 @@ const METRIC_LABELS: Record<QuotaMetric, string> = {
 
 export default function QuotaReportTool() {
   const navigate = useNavigate();
-  const [clients, setClients] = useState<Array<{ name: string }>>([]);
+  const [clients, setClients] = useState<Client[]>([]);
   const [loadingClients, setLoadingClients] = useState(false);
+  const [selectedClientNames, setSelectedClientNames] = useState<string[]>([]);
+  const [useArcanumInternal, setUseArcanumInternal] = useState(false);
   const [resultFiles, setResultFiles] = useState<ToolResultFile[]>([]);
   const [resultQuotas, setResultQuotas] = useState<QuotaDescriptor[]>([]);
   const [resultRows, setResultRows] = useState<QuotaReportRow[]>([]);
 
-  const [parameters, setParameters] = useState<QuotaReportParameters>({
-    clientScope: 'all',
-    clients: [],
+  const [parameters, setParameters] = useState<Omit<QuotaReportParameters, 'clientScope' | 'clients'>>({
     regionMode: 'client-region',
     modelFamilies: DEFAULT_FAMILIES,
     quotaMetrics: DEFAULT_METRICS,
@@ -80,15 +82,36 @@ export default function QuotaReportTool() {
     }
   };
 
-  const handleParamChange = (patch: Partial<QuotaReportParameters>) => {
+  const handleParamChange = (patch: Partial<Omit<QuotaReportParameters, 'clientScope' | 'clients'>>) => {
     setParameters((prev) => ({ ...prev, ...patch }));
+  };
+
+  const handleClientToggle = (clientName: string) => {
+    setSelectedClientNames((prev) =>
+      prev.includes(clientName) ? prev.filter((n) => n !== clientName) : [...prev, clientName]
+    );
+  };
+
+  const handleSelectClients = (clientNames: string[]) => {
+    setSelectedClientNames(clientNames);
+  };
+
+  const buildExecutionParams = (): QuotaReportParameters => {
+    if (useArcanumInternal) {
+      return { ...parameters, clientScope: 'arcanum-internal', clients: [] };
+    }
+    if (selectedClientNames.length === clients.length && clients.length > 0) {
+      return { ...parameters, clientScope: 'all', clients: [] };
+    }
+    return { ...parameters, clientScope: 'selected', clients: selectedClientNames };
   };
 
   const handleExecute = async () => {
     setResultFiles([]);
     setResultQuotas([]);
     setResultRows([]);
-    await execute('quota-report', parameters, async (params, onProgress) => {
+    const execParams = buildExecutionParams();
+    await execute('quota-report', execParams, async (params, onProgress) => {
       const { result, files } = await QuotaReportService.generateReport(params as QuotaReportParameters, onProgress);
       return { type: 'file', files, data: result } as ToolResult;
     });
@@ -102,9 +125,9 @@ export default function QuotaReportTool() {
     setResultFiles([]);
     setResultQuotas([]);
     setResultRows([]);
+    setSelectedClientNames([]);
+    setUseArcanumInternal(false);
     setParameters({
-      clientScope: 'all',
-      clients: [],
       regionMode: 'client-region',
       modelFamilies: DEFAULT_FAMILIES,
       quotaMetrics: DEFAULT_METRICS,
@@ -115,8 +138,7 @@ export default function QuotaReportTool() {
   };
 
   const isFormValid = () => {
-    if (!parameters.clientScope) return false;
-    if (parameters.clientScope === 'selected' && (!parameters.clients || parameters.clients.length === 0)) return false;
+    if (!useArcanumInternal && selectedClientNames.length === 0) return false;
     if (!parameters.modelFamilies || parameters.modelFamilies.length === 0) return false;
     if (!parameters.quotaMetrics || parameters.quotaMetrics.length === 0) return false;
     if (!parameters.types || parameters.types.length === 0) return false;
@@ -165,50 +187,38 @@ export default function QuotaReportTool() {
                 <Form>
                   <Form.Group className="mb-3">
                     <Form.Label>
-                      Client Scope <span className="text-danger">*</span>
+                      Clients <span className="text-danger">*</span>
                     </Form.Label>
-                    <Form.Select
-                      value={parameters.clientScope}
-                      onChange={(e) =>
-                        handleParamChange({ clientScope: e.target.value as 'all' | 'selected' | 'arcanum-internal' })
-                      }
-                      disabled={isRunning}
-                    >
-                      <option value="all">All clients</option>
-                      <option value="selected">Selected clients</option>
-                      <option value="arcanum-internal">Arcanum Internal Accounts</option>
-                    </Form.Select>
-                    <Form.Text className="text-muted">
-                      {parameters.clientScope === 'arcanum-internal'
-                        ? 'Query all Arcanum dev/prod AWS accounts directly (both regions)'
-                        : 'Choose whether to run across all or selected clients'}
-                    </Form.Text>
+                    <GroupedClientSelector
+                      clients={clients}
+                      selectedClientNames={selectedClientNames}
+                      onClientToggle={handleClientToggle}
+                      onSelectClients={handleSelectClients}
+                      disabled={isRunning || useArcanumInternal}
+                      loading={loadingClients}
+                    />
                   </Form.Group>
 
-                  {parameters.clientScope === 'selected' && (
-                    <Form.Group className="mb-3">
-                      <Form.Label>
-                        Clients <span className="text-danger">*</span>
-                      </Form.Label>
-                      <Form.Select
-                        multiple
-                        value={parameters.clients || []}
-                        onChange={(e) => {
-                          const opts = Array.from(e.target.selectedOptions).map((o) => o.value);
-                          handleParamChange({ clients: opts });
-                        }}
-                        disabled={isRunning || loadingClients}
-                        style={{ minHeight: 140 }}
-                      >
-                        {clients.map((c) => (
-                          <option key={c.name} value={c.name}>
-                            {c.name}
-                          </option>
-                        ))}
-                      </Form.Select>
-                      <Form.Text className="text-muted">Hold Cmd/Ctrl to select multiple</Form.Text>
-                    </Form.Group>
-                  )}
+                  <Form.Group className="mb-3">
+                    <Form.Check
+                      type="checkbox"
+                      id="arcanum-internal-toggle"
+                      label={
+                        <span>
+                          Query Arcanum Internal AWS Accounts{' '}
+                          <Badge bg="info" className="ms-1">
+                            Direct
+                          </Badge>
+                        </span>
+                      }
+                      checked={useArcanumInternal}
+                      onChange={(e) => setUseArcanumInternal(e.target.checked)}
+                      disabled={isRunning}
+                    />
+                    <Form.Text className="text-muted">
+                      Query all Arcanum dev/prod AWS accounts directly (both regions)
+                    </Form.Text>
+                  </Form.Group>
 
                   <Form.Group className="mb-3">
                     <Form.Label>Region Mode</Form.Label>
@@ -356,17 +366,19 @@ export default function QuotaReportTool() {
                   <h6 className="mb-3">Current Parameters</h6>
                   <div className="mb-2">
                     <strong>Scope:</strong>{' '}
-                    {parameters.clientScope === 'arcanum-internal'
+                    {useArcanumInternal
                       ? 'Arcanum Internal Accounts'
-                      : parameters.clientScope === 'all'
-                        ? 'All clients'
-                        : 'Selected clients'}
+                      : selectedClientNames.length === clients.length && clients.length > 0
+                        ? `All clients (${clients.length})`
+                        : `${selectedClientNames.length} client${selectedClientNames.length !== 1 ? 's' : ''} selected`}
                   </div>
-                  {parameters.clientScope === 'selected' && (
-                    <div className="mb-2">
-                      <strong>Clients:</strong> {parameters.clients?.join(', ') || '—'}
-                    </div>
-                  )}
+                  {!useArcanumInternal &&
+                    selectedClientNames.length > 0 &&
+                    selectedClientNames.length < clients.length && (
+                      <div className="mb-2">
+                        <strong>Clients:</strong> {selectedClientNames.join(', ')}
+                      </div>
+                    )}
                   <div className="mb-2">
                     <strong>Region Mode:</strong>{' '}
                     {parameters.regionMode === 'client-region' ? "Client's region" : 'All regions'}
