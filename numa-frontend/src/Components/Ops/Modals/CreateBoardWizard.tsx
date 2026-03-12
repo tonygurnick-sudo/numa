@@ -34,7 +34,7 @@ const TOTAL_STEPS = 4;
 export function CreateBoardWizard({ show, onHide, onCreated }: CreateBoardWizardProps): React.JSX.Element {
   const { t } = useTranslation('ops');
   const { numaPost } = useNumaRequest();
-  const { config } = useOps();
+  const { config, refreshConfig } = useOps();
 
   // ── Step navigation ──────────────────────────────────────────────────────
   const [step, setStep] = useState(1);
@@ -146,6 +146,10 @@ export function CreateBoardWizard({ show, onHide, onCreated }: CreateBoardWizard
         accessControl: { mode: accessMode, users: accessMode === 'specific' ? selectedUserIds : [] },
       });
 
+      if (customTicketTypes.length > 0) {
+        await refreshConfig();
+      }
+
       onCreated(team);
     } catch (err) {
       setError(t('errors.saveFailed', { message: String(err) }));
@@ -167,6 +171,7 @@ export function CreateBoardWizard({ show, onHide, onCreated }: CreateBoardWizard
     selectedUserIds,
     numaPost,
     onCreated,
+    refreshConfig,
     t,
   ]);
 
@@ -313,12 +318,12 @@ export function CreateBoardWizard({ show, onHide, onCreated }: CreateBoardWizard
 
             <Form.Group className="mb-3">
               <Form.Label>{t('teams.preset')}</Form.Label>
-              <div className="d-flex gap-3">
+              <div className="d-flex flex-wrap gap-2">
                 {TEAM_PRESETS.map((p) => (
                   <div
                     key={p.id}
-                    className={`border rounded p-3 flex-fill cursor-pointer ${presetId === p.id ? 'border-primary bg-primary bg-opacity-10' : ''}`}
-                    style={{ cursor: 'pointer' }}
+                    className={`border rounded p-3 flex-grow-1 cursor-pointer ${presetId === p.id ? 'border-primary bg-primary bg-opacity-10' : ''}`}
+                    style={{ cursor: 'pointer', flexBasis: '48%', minWidth: '200px' }}
                     onClick={() => {
                       setPresetId(p.id);
                       setCustomStages(null);
@@ -328,8 +333,23 @@ export function CreateBoardWizard({ show, onHide, onCreated }: CreateBoardWizard
                         const autoSelectedIds = config.ticketTypes
                           .filter((tt) => p.allowedTicketTypePrefixes?.includes(tt.prefix))
                           .map((tt) => tt.id);
-                        setSelectedTicketTypes(autoSelectedIds);
+
+                        const missingSuggestions = (p.suggestedTicketTypes || []).filter(
+                          (st) => !config.ticketTypes.some((tt) => tt.prefix === st.prefix)
+                        );
+
+                        const newCustomTypes = missingSuggestions.map((st) => ({
+                          tempId: `custom-${st.prefix}-${Date.now()}`,
+                          name: st.name,
+                          prefix: st.prefix,
+                          icon: st.icon,
+                          color: st.color,
+                        }));
+
+                        setCustomTicketTypes(newCustomTypes);
+                        setSelectedTicketTypes([...autoSelectedIds, ...newCustomTypes.map((ct) => ct.tempId)]);
                       } else {
+                        setCustomTicketTypes([]);
                         setSelectedTicketTypes([...allTypeIds]);
                       }
 

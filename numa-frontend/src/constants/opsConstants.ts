@@ -53,6 +53,7 @@ export type TeamPresetConfig = {
   mode: TeamPreset;
   zones: PresetZone[];
   allowedTicketTypePrefixes?: string[];
+  suggestedTicketTypes?: { name: string; prefix: string; icon: string; color: string }[];
 };
 
 export const TEAM_PRESETS: TeamPresetConfig[] = [
@@ -82,6 +83,11 @@ export const TEAM_PRESETS: TeamPresetConfig[] = [
       },
     ],
     allowedTicketTypePrefixes: ['FEAT', 'BUG', 'TASK'],
+    suggestedTicketTypes: [
+      { name: 'Feature', prefix: 'FEAT', icon: 'sparkles', color: '#0d6efd' },
+      { name: 'Bug', prefix: 'BUG', icon: 'stop', color: '#dc3545' },
+      { name: 'Task', prefix: 'TASK', icon: 'clipboard', color: '#0dcaf0' },
+    ],
   },
   {
     id: 'support',
@@ -101,6 +107,10 @@ export const TEAM_PRESETS: TeamPresetConfig[] = [
       },
     ],
     allowedTicketTypePrefixes: ['SUPP', 'BUG'],
+    suggestedTicketTypes: [
+      { name: 'Support', prefix: 'SUPP', icon: 'ticket', color: '#ffc107' },
+      { name: 'Bug', prefix: 'BUG', icon: 'stop', color: '#dc3545' },
+    ],
   },
   {
     id: 'monthly',
@@ -162,6 +172,7 @@ export const TEAM_PRESETS: TeamPresetConfig[] = [
       },
     ],
     allowedTicketTypePrefixes: ['TASK'],
+    suggestedTicketTypes: [{ name: 'Task', prefix: 'TASK', icon: 'clipboard', color: '#0dcaf0' }],
   },
   {
     id: 'mining',
@@ -191,6 +202,11 @@ export const TEAM_PRESETS: TeamPresetConfig[] = [
       },
     ],
     allowedTicketTypePrefixes: ['REP', 'LOGI', 'EQUIP'],
+    suggestedTicketTypes: [
+      { name: 'Repair', prefix: 'REP', icon: 'wrench', color: '#fd7e14' },
+      { name: 'Logistics', prefix: 'LOGI', icon: 'truck', color: '#6610f2' },
+      { name: 'Equipment', prefix: 'EQUIP', icon: 'box', color: '#198754' },
+    ],
   },
   {
     id: 'enterprise',
@@ -219,6 +235,11 @@ export const TEAM_PRESETS: TeamPresetConfig[] = [
       },
     ],
     allowedTicketTypePrefixes: ['PROJ', 'EPIC', 'STRAT'],
+    suggestedTicketTypes: [
+      { name: 'Project', prefix: 'PROJ', icon: 'folder', color: '#0d6efd' },
+      { name: 'Epic', prefix: 'EPIC', icon: 'diagram-3', color: '#6f42c1' },
+      { name: 'Strategy', prefix: 'STRAT', icon: 'compass', color: '#d63384' },
+    ],
   },
   {
     id: 'work_mgmt',
@@ -238,6 +259,11 @@ export const TEAM_PRESETS: TeamPresetConfig[] = [
       },
     ],
     allowedTicketTypePrefixes: ['TASK', 'REQ', 'INFO'],
+    suggestedTicketTypes: [
+      { name: 'Task', prefix: 'TASK', icon: 'clipboard', color: '#0dcaf0' },
+      { name: 'Request', prefix: 'REQ', icon: 'inbox', color: '#fd7e14' },
+      { name: 'Information', prefix: 'INFO', icon: 'info-circle', color: '#0d6efd' },
+    ],
   },
   {
     id: 'supplier',
@@ -257,6 +283,91 @@ export const TEAM_PRESETS: TeamPresetConfig[] = [
       },
     ],
     allowedTicketTypePrefixes: ['SUPP', 'VEND'],
+    suggestedTicketTypes: [
+      { name: 'Supplier', prefix: 'SUPP', icon: 'building', color: '#20c997' },
+      { name: 'Vendor Task', prefix: 'VEND', icon: 'briefcase', color: '#6c757d' },
+    ],
+  },
+  {
+    id: 'software',
+    name: 'Software Engineering',
+    description: 'Sprint-based board for software development teams.',
+    mode: 'development',
+    zones: [
+      {
+        name: 'Backlog',
+        zoneType: 'backlog',
+        stages: [
+          { name: 'New', statusType: 'backlog' },
+          { name: 'Ready', statusType: 'scoped' },
+        ],
+      },
+      {
+        name: 'Sprint',
+        zoneType: 'board',
+        stages: [
+          { name: 'To Do', statusType: 'queued' },
+          { name: 'In Progress', statusType: 'active' },
+          { name: 'Code Review', statusType: 'active' },
+          { name: 'Done', statusType: 'completed' },
+        ],
+      },
+    ],
+    allowedTicketTypePrefixes: ['FEAT', 'BUG', 'CHORE'],
+    suggestedTicketTypes: [
+      { name: 'Feature', prefix: 'FEAT', icon: 'sparkles', color: '#0d6efd' },
+      { name: 'Bug', prefix: 'BUG', icon: 'stop', color: '#dc3545' },
+      { name: 'Chore', prefix: 'CHORE', icon: 'tools', color: '#6c757d' },
+    ],
+  },
+  {
+    id: 'sales',
+    name: 'Sales Pipeline',
+    description: 'Track deals and leads through lifecycle stages.',
+    mode: 'basic',
+    zones: [
+      {
+        name: 'Pipeline',
+        zoneType: 'board',
+        stages: [
+          { name: 'Prospect', statusType: 'queued' },
+          { name: 'Contacted', statusType: 'active' },
+          { name: 'Negotiation', statusType: 'active' },
+          { name: 'Closed Won', statusType: 'completed' },
+          { name: 'Closed Lost', statusType: 'ended' },
+        ],
+      },
+    ],
+    allowedTicketTypePrefixes: ['LEAD', 'DEAL', 'RENEW'],
+    suggestedTicketTypes: [
+      { name: 'Lead', prefix: 'LEAD', icon: 'person', color: '#198754' },
+      { name: 'Deal', prefix: 'DEAL', icon: 'currency-dollar', color: '#ffc107' },
+      { name: 'Renewal', prefix: 'RENEW', icon: 'arrow-repeat', color: '#0dcaf0' },
+    ],
+  },
+  {
+    id: 'legal',
+    name: 'Legal Case Management',
+    description: 'Organize legal briefs, matters, and compliance tasks.',
+    mode: 'basic',
+    zones: [
+      {
+        name: 'Cases',
+        zoneType: 'board',
+        stages: [
+          { name: 'Intake', statusType: 'queued' },
+          { name: 'Discovery', statusType: 'active' },
+          { name: 'Drafting', statusType: 'active' },
+          { name: 'Filed', statusType: 'completed' },
+        ],
+      },
+    ],
+    allowedTicketTypePrefixes: ['CASE', 'COMP', 'DOC'],
+    suggestedTicketTypes: [
+      { name: 'Case', prefix: 'CASE', icon: 'briefcase', color: '#6c757d' },
+      { name: 'Compliance', prefix: 'COMP', icon: 'shield-check', color: '#198754' },
+      { name: 'Document', prefix: 'DOC', icon: 'file-text', color: '#0dcaf0' },
+    ],
   },
 ];
 

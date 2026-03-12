@@ -58,9 +58,9 @@ CONNECTION_POOL_SIZE = 100  # boto3 connection pool
 MAX_RETRIES = 5  # Retry attempts for transient failures
 
 _CROSS_REGION_PREFIX = (
-    "apac" if AWS_REGION == "ap-southeast-2"
-    else "global" if AWS_REGION == "ap-southeast-3"
-    else "us"
+    "apac"
+    if AWS_REGION == "ap-southeast-2"
+    else "global" if AWS_REGION == "ap-southeast-3" else "us"
 )
 
 VISION_MODEL_MAP = {

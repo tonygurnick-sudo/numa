@@ -93,7 +93,18 @@ export function TicketsFieldsTab({
                     </small>
                   </div>
                 </div>
-                {fields.map((field) => {
+
+                {(!tt.defaultFields || tt.defaultFields.length === 0) && (
+                  <div className="text-muted small py-2 d-flex align-items-center gap-2">
+                    <i className="bi bi-info-circle" />
+                    <span>No custom fields configured for this ticket type. You can add them in Global Settings.</span>
+                  </div>
+                )}
+
+                {tt.defaultFields?.map((fieldId) => {
+                  const field = fields.find((f) => f.id === fieldId);
+                  if (!field) return null;
+
                   const override = fieldOverrides[field.id] ?? { visible: true, required: false };
                   return (
                     <div key={field.id} className="d-flex align-items-center mb-1 py-2 border-bottom border-light">
