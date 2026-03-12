@@ -146,7 +146,7 @@ function validateGlobal(data: unknown): GlobalChatSettings {
         ? obj.emailSignatureText
         : DEFAULT_GLOBAL_CHAT_SETTINGS.emailSignatureText,
     allowUserDefaults,
-    // REBASE RESOLUTION: Merged both sides — HEAD added chatScrollMode, incoming (e41a32ef) added allowedPythonLibraries.
+    // REBASE RESOLUTION: Merged both sides — HEAD added chatScrollMode (e41a32ef), incoming (28a7e5a4) converged.
     // To rollback chatScrollMode: remove the chatScrollMode field below.
     chatScrollMode:
       typeof obj.chatScrollMode === 'string' && VALID_SCROLL_MODES.includes(obj.chatScrollMode as ChatScrollMode)
