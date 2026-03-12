@@ -1,12 +1,12 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import Button from 'react-bootstrap/Button';
-import Form from 'react-bootstrap/Form';
 import Spinner from 'react-bootstrap/Spinner';
 import { useTranslation } from 'react-i18next';
 import { useNumaRequest } from '../../../Providers/NumaRequestContext';
 import { useAuth } from '../../../Providers/AuthProvider';
 import * as OpsService from '../../../Services/OpsService';
 import type { Comment } from '../../../types/ops';
+import { RichTextEditor } from './RichTextEditor';
 
 interface CommentSectionProps {
   ticketId: string;
@@ -191,13 +191,11 @@ export function CommentSection({ ticketId }: CommentSectionProps): React.JSX.Ele
           {getInitials(currentUserName)}
         </div>
         <div className="flex-grow-1">
-          <Form.Control
-            as="textarea"
-            rows={2}
-            placeholder={t('comments.placeholder')}
+          <RichTextEditor
             value={newContent}
-            onChange={(e) => setNewContent(e.target.value)}
-            style={{ fontSize: '0.875rem', border: '1px solid #e5e7eb', borderRadius: 8 }}
+            onSave={(html) => setNewContent(html)}
+            placeholder={t('comments.placeholder')}
+            minHeight={80}
           />
           <div className="d-flex justify-content-end mt-2">
             <Button
@@ -288,14 +286,9 @@ export function CommentSection({ ticketId }: CommentSectionProps): React.JSX.Ele
 
                   {isEditing ? (
                     <div>
-                      <Form.Control
-                        as="textarea"
-                        rows={2}
-                        value={editContent}
-                        onChange={(e) => setEditContent(e.target.value)}
-                        className="mb-2"
-                        style={{ fontSize: '0.875rem' }}
-                      />
+                      <div className="mb-2">
+                        <RichTextEditor value={editContent} onSave={(html) => setEditContent(html)} minHeight={80} />
+                      </div>
                       <div className="d-flex gap-2">
                         <Button
                           size="sm"
@@ -318,9 +311,11 @@ export function CommentSection({ ticketId }: CommentSectionProps): React.JSX.Ele
                       </div>
                     </div>
                   ) : (
-                    <p className="mb-0" style={{ fontSize: '0.875rem', whiteSpace: 'pre-wrap', color: '#374151' }}>
-                      {comment.content}
-                    </p>
+                    <div
+                      className="mb-0"
+                      style={{ fontSize: '0.875rem', color: '#374151' }}
+                      dangerouslySetInnerHTML={{ __html: comment.content }}
+                    />
                   )}
                 </div>
               </div>

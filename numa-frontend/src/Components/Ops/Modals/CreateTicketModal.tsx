@@ -526,13 +526,11 @@ export function CreateTicketModal({
                     {t('common.optional', '(optional)')}
                   </span>
                 </div>
-                <Form.Control
-                  as="textarea"
-                  rows={3}
+                <RichTextEditor
                   value={initialComment}
-                  onChange={(e) => setInitialComment(e.target.value)}
+                  onSave={(html) => setInitialComment(html)}
                   placeholder={t('tickets.commentPlaceholder', 'Add an initial comment or note…')}
-                  style={{ fontSize: '0.9rem', border: '1px solid #e5e7eb', borderRadius: 8 }}
+                  minHeight={100}
                 />
               </Form.Group>
             </Col>
