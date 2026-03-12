@@ -9,6 +9,10 @@ import { getSwrCache, setSwrCache } from '../utils/swrCache';
 
 export type ApprovalMode = 'always' | 'non_destructive' | 'never';
 
+export type ChatScrollMode = 'auto' | 'manual';
+
+export const VALID_SCROLL_MODES: ChatScrollMode[] = ['auto', 'manual'];
+
 export type ChatSettings = {
   defaultKBIds: string[];
   autoToolsEnabled: boolean;
@@ -21,6 +25,7 @@ export type ChatSettings = {
   approvalMode: ApprovalMode;
   emailSignatureEnabled: boolean;
   emailSignatureText: string;
+  chatScrollMode: ChatScrollMode;
 };
 
 export type ChatSettingsUpdate = {
@@ -91,6 +96,7 @@ export const DEFAULT_CHAT_SETTINGS: ChatSettings = {
   approvalMode: 'non_destructive',
   emailSignatureEnabled: true,
   emailSignatureText: 'Sent by my AI assistant, Numa (https://www.arcanum.ai)',
+  chatScrollMode: 'auto',
 };
 
 // Helper types for RequestProvider integration
@@ -306,6 +312,10 @@ function validateSettings(data: unknown): ChatSettings {
         : DEFAULT_CHAT_SETTINGS.emailSignatureEnabled,
     emailSignatureText:
       typeof obj.emailSignatureText === 'string' ? obj.emailSignatureText : DEFAULT_CHAT_SETTINGS.emailSignatureText,
+    chatScrollMode:
+      typeof obj.chatScrollMode === 'string' && VALID_SCROLL_MODES.includes(obj.chatScrollMode as ChatScrollMode)
+        ? (obj.chatScrollMode as ChatScrollMode)
+        : DEFAULT_CHAT_SETTINGS.chatScrollMode,
   };
 }
 

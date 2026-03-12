@@ -1,7 +1,9 @@
 import {
   DEFAULT_CHAT_SETTINGS,
   VALID_APPROVAL_MODES,
+  VALID_SCROLL_MODES,
   type ApprovalMode,
+  type ChatScrollMode,
   type ChatSettings,
 } from './ChatSettingsService';
 import i18n from '../i18n';
@@ -142,5 +144,15 @@ function validateGlobal(data: unknown): GlobalChatSettings {
         ? obj.emailSignatureText
         : DEFAULT_GLOBAL_CHAT_SETTINGS.emailSignatureText,
     allowUserDefaults,
+    chatScrollMode:
+      typeof obj.chatScrollMode === 'string' && VALID_SCROLL_MODES.includes(obj.chatScrollMode as ChatScrollMode)
+        ? (obj.chatScrollMode as ChatScrollMode)
+        : DEFAULT_GLOBAL_CHAT_SETTINGS.chatScrollMode,
+    allowedPythonLibraries: Array.isArray(obj.allowedPythonLibraries)
+      ? obj.allowedPythonLibraries.filter(
+          (lib): lib is { name: string; version: string } =>
+            typeof lib === 'object' && lib !== null && typeof (lib as Record<string, unknown>).name === 'string'
+        )
+      : DEFAULT_GLOBAL_CHAT_SETTINGS.allowedPythonLibraries,
   };
 }
