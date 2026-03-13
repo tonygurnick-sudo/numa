@@ -18,7 +18,6 @@ import { CustomerDetailModal } from './CustomerDetailModal';
 import { SupplierDetailModal } from './SupplierDetailModal';
 import { StaffAvatar } from '../Shared/StaffAvatar';
 import type {
-  OpsConfigResponse,
   TicketType,
   StatusType,
   FieldDefinition,
@@ -171,7 +170,7 @@ export function GlobalSettingsModal({
 }: GlobalSettingsModalProps): React.JSX.Element {
   const { t } = useTranslation('ops');
   const { numaGet, numaPost, numaPut, numaDelete } = useNumaRequest();
-  const { config, teams, refreshTeams, refreshStaff } = useOps();
+  const { config, teams, refreshTeams, refreshStaff, refreshConfig } = useOps();
 
   // ── Local state (edited copies of config) ──────────────────────────────────
   const [projects, setProjects] = useState<Project[]>([]);
@@ -433,26 +432,105 @@ export function GlobalSettingsModal({
     try {
       setSaving(true);
       setError(null);
-      // For now, log the updated config. The backend config update endpoint
-      // would be called here once available.
-      const updatedConfig: Omit<OpsConfigResponse, 'statuses'> = {
-        ticketTypes,
-        fields,
-        staff,
-        projects,
-        crmConfig,
-        supplierConfig,
-        linkConfig,
-      };
-      await OpsService.updateCrmConfig(numaPut, crmConfig);
-      console.info('[GlobalSettingsModal] Saving config:', updatedConfig);
+
+      const promises: Promise<unknown>[] = [];
+
+      // 1. CRM Config
+      promises.push(OpsService.updateCrmConfig(numaPut, crmConfig));
+
+      // 2. Ticket Types Diff
+      const originalTicketTypes = config?.ticketTypes ?? [];
+      const newTcIds = new Set(ticketTypes.map((t) => t.id));
+
+      // Deleted
+      for (const orig of originalTicketTypes) {
+        if (!newTcIds.has(orig.id)) {
+          promises.push(OpsService.deleteTicketType(numaDelete, orig.id));
+        }
+      }
+
+      // Added / Updated
+      for (const tt of ticketTypes) {
+        if (tt.id.startsWith('custom-')) {
+          // New
+          promises.push(
+            OpsService.createTicketType(numaPost, {
+              name: tt.name,
+              prefix: tt.prefix,
+              icon: tt.icon,
+              color: tt.color,
+              defaultFields: tt.defaultFields,
+            })
+          );
+        } else {
+          // Existing - Check if changed (simple JSON compare)
+          const orig = originalTicketTypes.find((o) => o.id === tt.id);
+          if (orig && JSON.stringify(orig) !== JSON.stringify(tt)) {
+            promises.push(
+              OpsService.updateTicketType(numaPut, tt.id, {
+                name: tt.name,
+                icon: tt.icon,
+                color: tt.color,
+                defaultFields: tt.defaultFields,
+              })
+            );
+          }
+        }
+      }
+
+      // 3. Fields Diff
+      const originalFields = config?.fields ?? [];
+      const newFieldIds = new Set(fields.map((f) => f.id));
+
+      // Deleted
+      for (const orig of originalFields) {
+        if (!newFieldIds.has(orig.id)) {
+          promises.push(OpsService.deleteField(numaDelete, orig.id));
+        }
+      }
+
+      // Added / Updated
+      for (const field of fields) {
+        if (field.id.startsWith('custom-')) {
+          promises.push(OpsService.createField(numaPost, field));
+        } else {
+          const orig = originalFields.find((f) => f.id === field.id);
+          if (orig && JSON.stringify(orig) !== JSON.stringify(field)) {
+            promises.push(OpsService.updateField(numaPut, field.id, field));
+          }
+        }
+      }
+
+      // Await all mutations
+      const results = await Promise.allSettled(promises);
+      const errors = results.filter((r) => r.status === 'rejected');
+      if (errors.length > 0) {
+        console.error('[GlobalSettingsModal] Some saves failed:', errors);
+      }
+
+      console.info('[GlobalSettingsModal] Saved config changes!');
+
+      // Force UI to pick up new ticket types and fields from the backend
+      refreshConfig();
       onSaved();
     } catch (err) {
       setError(t('errors.saveFailed', { message: String(err) }));
     } finally {
       setSaving(false);
     }
-  }, [ticketTypes, fields, staff, projects, crmConfig, supplierConfig, linkConfig, onSaved, t]);
+  }, [
+    ticketTypes,
+    fields,
+    crmConfig,
+    config?.ticketTypes,
+    config?.fields,
+    numaPut,
+    numaDelete,
+    numaPost,
+    onSaved,
+    t,
+    refreshConfig,
+  ]);
 
   // ── Customer delete handler ────────────────────────────────────────────────
   const handleDeleteCustomer = useCallback(

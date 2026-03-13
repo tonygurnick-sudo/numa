@@ -49,6 +49,7 @@ import type {
   TicketLinkType,
   CrmConfig,
   StaffSyncResponse,
+  FieldDefinition,
 } from '../types/ops';
 
 type NumaGet = (url: string, params?: Record<string, unknown>) => Promise<unknown>;
@@ -100,6 +101,55 @@ export const createTicketType = async (
   const response = (await numaPost(`${BASE_URL}/config/ticket-types`, payload)) as TicketType;
   console.info(`${LOG_PREFIX} createTicketType: success`, { id: response.id });
   return response;
+};
+
+export const updateTicketType = async (
+  numaPut: NumaPut,
+  ticketTypeId: string,
+  payload: Partial<{ name: string; icon: string; color: string; defaultFields: string[] }>
+): Promise<TicketType> => {
+  console.info(`${LOG_PREFIX} updateTicketType`, { ticketTypeId });
+  const response = (await numaPut(
+    `${BASE_URL}/config/ticket-types/${encodeURIComponent(ticketTypeId)}`,
+    payload
+  )) as TicketType;
+  console.info(`${LOG_PREFIX} updateTicketType: success`, { id: response.id });
+  return response;
+};
+
+export const deleteTicketType = async (numaDelete: NumaDelete, ticketTypeId: string): Promise<void> => {
+  console.info(`${LOG_PREFIX} deleteTicketType`, { ticketTypeId });
+  await numaDelete(`${BASE_URL}/config/ticket-types/${encodeURIComponent(ticketTypeId)}`);
+  console.info(`${LOG_PREFIX} deleteTicketType: success`, { ticketTypeId });
+};
+
+// ─── Fields ───────────────────────────────────────────────────────────────
+
+export const createField = async (numaPost: NumaPost, payload: Partial<FieldDefinition>): Promise<FieldDefinition> => {
+  console.info(`${LOG_PREFIX} createField`, { name: payload.name, category: payload.category });
+  const response = (await numaPost(`${BASE_URL}/config/fields`, payload)) as FieldDefinition;
+  console.info(`${LOG_PREFIX} createField: success`, { id: response.id });
+  return response;
+};
+
+export const updateField = async (
+  numaPut: NumaPut,
+  fieldId: string,
+  payload: Partial<FieldDefinition>
+): Promise<FieldDefinition> => {
+  console.info(`${LOG_PREFIX} updateField`, { fieldId });
+  const response = (await numaPut(
+    `${BASE_URL}/config/fields/${encodeURIComponent(fieldId)}`,
+    payload
+  )) as FieldDefinition;
+  console.info(`${LOG_PREFIX} updateField: success`, { id: response.id });
+  return response;
+};
+
+export const deleteField = async (numaDelete: NumaDelete, fieldId: string): Promise<void> => {
+  console.info(`${LOG_PREFIX} deleteField`, { fieldId });
+  await numaDelete(`${BASE_URL}/config/fields/${encodeURIComponent(fieldId)}`);
+  console.info(`${LOG_PREFIX} deleteField: success`, { fieldId });
 };
 
 // ─── Teams ────────────────────────────────────────────────────────────────
