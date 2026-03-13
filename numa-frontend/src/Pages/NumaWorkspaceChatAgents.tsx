@@ -273,6 +273,8 @@ const NumaWorkspaceChatAgents = () => {
 
     if (isHistoryPanelOpen) {
       setIsHistoryPanelOpen(false);
+      // Re-open settings panel so users always have a panel visible
+      settingsPanel.openPanel();
     } else {
       settingsPanel.closePanel();
       setIsAgentsPanelOpen(false);
@@ -283,12 +285,26 @@ const NumaWorkspaceChatAgents = () => {
   const handleToggleAgents = useCallback(() => {
     if (isAgentsPanelOpen) {
       setIsAgentsPanelOpen(false);
+      // Re-open settings panel so users always have a panel visible
+      settingsPanel.openPanel();
     } else {
       settingsPanel.closePanel();
       setIsHistoryPanelOpen(false);
       setIsAgentsPanelOpen(true);
     }
   }, [isAgentsPanelOpen, settingsPanel]);
+
+  // When a document or file preview is closed, re-open the settings panel
+  // so users always have a visible side panel for discoverability
+  const handleCloseDocument = useCallback(() => {
+    closeDocument();
+    settingsPanel.openPanel();
+  }, [closeDocument, settingsPanel]);
+
+  const handleCloseFilePreview = useCallback(() => {
+    closeFilePreview();
+    settingsPanel.openPanel();
+  }, [closeFilePreview, settingsPanel]);
 
   const markUserSettingsModified = useCallback(() => {
     setUserSettingsModified(true);
@@ -981,8 +997,20 @@ const NumaWorkspaceChatAgents = () => {
     // Cancel any in-flight conversation loads so they don't overwrite new chat state
     loadGenerationRef.current += 1;
 
+    // Reset userSettingsModified so the defaults-application useEffect can fire
+    // after connection status refreshes (matches behaviour of loading a conversation)
+    setUserSettingsModified(false);
+
     // Use the hook's new chat handler
     await handleNewChat();
+
+    // Refresh integration connection status so availableConnections is up-to-date.
+    // Once loadConnectionStatus resolves and updates availableConnections, the
+    // defaults-application useEffect will re-apply user defaults with the fresh
+    // connected set (since userSettingsModified is now false).
+    if (lambdaClient && hasPipedreamFeature && relayLambdaArn) {
+      loadConnectionStatus();
+    }
   }
 
   const handleHeaderNewChat = async () => {
@@ -2400,13 +2428,13 @@ const NumaWorkspaceChatAgents = () => {
                   showFilePreview && filePreview ? (
                     <FilePreviewPanel
                       preview={filePreview}
-                      onClose={closeFilePreview}
+                      onClose={handleCloseFilePreview}
                       bucket={OUTPUTS_BUCKET || ''}
                       region={REGION || ''}
                       getCredentials={getCredentials}
                     />
                   ) : showSplitView && inlineDocument ? (
-                    <DocumentPanel documentContent={inlineDocument} onClose={closeDocument} />
+                    <DocumentPanel documentContent={inlineDocument} onClose={handleCloseDocument} />
                   ) : null
                 }
                 showRight={(showFilePreview && !!filePreview) || (inlineDocument && showSplitView)}
