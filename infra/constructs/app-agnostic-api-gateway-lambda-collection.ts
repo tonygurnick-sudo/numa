@@ -210,6 +210,7 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
             `${props.dataBucketArn}/files/*`,
             `${props.dataBucketArn}/temp-pdf/*`,
             `${props.dataBucketArn}/shared/*`,
+            `${props.dataBucketArn}/transcriptions/*`,
           ],
         },
         {
@@ -580,6 +581,7 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
       DATA_CONNECTORS_SECRETS_PREFIX: `${props.clientName}/data-connectors`,
       DATA_CONNECTORS_SETTINGS_TABLE_NAME: props.dataConnectorsSettingsTableName,
       DATA_CONNECTORS_SYNC_CONFIGS_TABLE_NAME: props.dataConnectorsSyncConfigsTableName,
+      CONNECTOR_EVENT_CONFIGS_TABLE_NAME: props.connectorEventConfigsTableName,
     } as Record<string, string>;
 
     const dataConnectorsPolicy = [
@@ -613,6 +615,11 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
           'dynamodb:Query',
         ],
         resources: [`arn:aws:dynamodb:*:*:table/${props.dataConnectorsSyncConfigsTableName}`],
+      },
+      {
+        effect: 'Allow',
+        actions: ['dynamodb:GetItem', 'dynamodb:PutItem', 'dynamodb:Query'],
+        resources: [`arn:aws:dynamodb:*:*:table/${props.connectorEventConfigsTableName}`],
       },
     ];
 
@@ -695,6 +702,198 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
       environment: dataConnectorsEnv,
       additionalPolicyStatements: dataConnectorsPolicy,
       route: { verb: 'DELETE', path: 'data-connectors/sync-configs/{id}' },
+    });
+
+    // Gmail-specific data connector routes
+    this.addLambdaFunction(this, 'data-connectors-gmail-labels', {
+      addAuthorizer: true,
+      lambdaDirectory: 'python/data-connectors',
+      handler: 'lambda_function.handler',
+      environment: dataConnectorsEnv,
+      additionalPolicyStatements: dataConnectorsPolicy,
+      route: { verb: 'GET', path: 'data-connectors/gmail/labels' },
+    });
+
+    this.addLambdaFunction(this, 'data-connectors-gmail-messages', {
+      addAuthorizer: true,
+      lambdaDirectory: 'python/data-connectors',
+      handler: 'lambda_function.handler',
+      environment: dataConnectorsEnv,
+      additionalPolicyStatements: dataConnectorsPolicy,
+      route: { verb: 'GET', path: 'data-connectors/gmail/messages' },
+    });
+
+    this.addLambdaFunction(this, 'data-connectors-gmail-send', {
+      addAuthorizer: true,
+      lambdaDirectory: 'python/data-connectors',
+      handler: 'lambda_function.handler',
+      environment: dataConnectorsEnv,
+      additionalPolicyStatements: dataConnectorsPolicy,
+      route: { verb: 'POST', path: 'data-connectors/gmail/send' },
+    });
+
+    // Event config routes (per-connector event type toggles + tags)
+    this.addLambdaFunction(this, 'data-connectors-event-configs-list', {
+      addAuthorizer: true,
+      lambdaDirectory: 'python/data-connectors',
+      handler: 'lambda_function.handler',
+      environment: dataConnectorsEnv,
+      additionalPolicyStatements: dataConnectorsPolicy,
+      route: { verb: 'GET', path: 'data-connectors/{connector_id}/event-configs' },
+    });
+
+    this.addLambdaFunction(this, 'data-connectors-event-configs-update', {
+      addAuthorizer: true,
+      lambdaDirectory: 'python/data-connectors',
+      handler: 'lambda_function.handler',
+      environment: dataConnectorsEnv,
+      additionalPolicyStatements: dataConnectorsPolicy,
+      route: { verb: 'PUT', path: 'data-connectors/{connector_id}/event-configs/{event_type}' },
+    });
+
+    // Connector Event Receiver (webhook endpoint — unauthenticated, validated by shared secret)
+    const connectorEventReceiverEnv = {
+      CLIENT_NAME: props.clientName,
+      CONNECTOR_EVENTS_TABLE_NAME: props.connectorEventsTableName,
+      CONNECTOR_EVENT_CONFIGS_TABLE_NAME: props.connectorEventConfigsTableName,
+      OUTPUTS_BUCKET_NAME: props.outputsBucketName,
+      EVENT_BUS_NAME: props.connectorEventBusName,
+      WEBHOOK_SECRET: props.cloudfrontSharedSecret,
+    } as Record<string, string>;
+
+    const connectorEventReceiverPolicy = [
+      {
+        effect: 'Allow',
+        actions: ['dynamodb:GetItem', 'dynamodb:PutItem', 'dynamodb:Query'],
+        resources: [
+          `arn:aws:dynamodb:*:*:table/${props.connectorEventsTableName}`,
+          `arn:aws:dynamodb:*:*:table/${props.connectorEventConfigsTableName}`,
+        ],
+      },
+      {
+        effect: 'Allow',
+        actions: ['s3:PutObject'],
+        resources: [`${props.outputsBucketArn}/connector-events/*`],
+      },
+      {
+        effect: 'Allow',
+        actions: ['events:PutEvents'],
+        resources: [`arn:aws:events:*:*:event-bus/${props.connectorEventBusName}`],
+      },
+    ];
+
+    this.addLambdaFunction(this, 'connector-event-receiver', {
+      addAuthorizer: false,
+      lambdaDirectory: 'node/connector-event-receiver',
+      runtime: 'nodejs22.x',
+      handler: 'index.handler',
+      environment: connectorEventReceiverEnv,
+      additionalPolicyStatements: connectorEventReceiverPolicy,
+      route: { verb: 'POST', path: 'webhooks/connector-events/{secret}' },
+    });
+
+    // Gmail Watch Manager (renews Gmail push notification watches every 6 days)
+    const gmailWatchManagerEnv = {
+      CLIENT_NAME: props.clientName,
+      DATA_CONNECTORS_TABLE_NAME: props.dataConnectorsTableName,
+      PUBSUB_TOPIC: `projects/numa-${props.clientName}/topics/numa-connector-events`,
+    } as Record<string, string>;
+
+    const gmailWatchManagerPolicy = [
+      {
+        effect: 'Allow',
+        actions: ['dynamodb:Scan', 'dynamodb:GetItem', 'dynamodb:UpdateItem'],
+        resources: [`arn:aws:dynamodb:*:*:table/${props.dataConnectorsTableName}`],
+      },
+      {
+        effect: 'Allow',
+        actions: ['secretsmanager:GetSecretValue'],
+        resources: ['*'],
+      },
+    ];
+
+    this.addLambdaFunction(this, 'gmail-watch-manager', {
+      addAuthorizer: false,
+      lambdaDirectory: 'node/gmail-watch-manager',
+      runtime: 'nodejs22.x',
+      handler: 'index.handler',
+      environment: gmailWatchManagerEnv,
+      additionalPolicyStatements: gmailWatchManagerPolicy,
+    });
+
+    // Google Cloud Setup (admin-only, automates GCP project provisioning)
+    const googleCloudSetupEnv = {
+      CLIENT_NAME: props.clientName,
+      DATA_CONNECTORS_TABLE_NAME: props.dataConnectorsTableName,
+      WEBHOOK_URL: `https://${props.domainName}/api/webhooks/connector-events/${props.cloudfrontSharedSecret}`,
+    } as Record<string, string>;
+
+    const googleCloudSetupPolicy = [
+      {
+        effect: 'Allow',
+        actions: ['dynamodb:GetItem', 'dynamodb:PutItem'],
+        resources: [`arn:aws:dynamodb:*:*:table/${props.dataConnectorsTableName}`],
+      },
+      {
+        effect: 'Allow',
+        actions: [
+          'secretsmanager:CreateSecret',
+          'secretsmanager:PutSecretValue',
+          'secretsmanager:DescribeSecret',
+          'secretsmanager:GetSecretValue',
+        ],
+        resources: ['*'],
+      },
+    ];
+
+    this.addLambdaFunction(this, 'google-cloud-setup-validate', {
+      addAuthorizer: true,
+      lambdaDirectory: 'node/google-cloud-setup',
+      runtime: 'nodejs22.x',
+      handler: 'index.handler',
+      environment: googleCloudSetupEnv,
+      additionalPolicyStatements: googleCloudSetupPolicy,
+      route: { verb: 'POST', path: 'admin/google-cloud/validate-project' },
+    });
+
+    this.addLambdaFunction(this, 'google-cloud-setup-enable-apis', {
+      addAuthorizer: true,
+      lambdaDirectory: 'node/google-cloud-setup',
+      runtime: 'nodejs22.x',
+      handler: 'index.handler',
+      environment: googleCloudSetupEnv,
+      additionalPolicyStatements: googleCloudSetupPolicy,
+      route: { verb: 'POST', path: 'admin/google-cloud/enable-apis' },
+    });
+
+    this.addLambdaFunction(this, 'google-cloud-setup-create-oauth', {
+      addAuthorizer: true,
+      lambdaDirectory: 'node/google-cloud-setup',
+      runtime: 'nodejs22.x',
+      handler: 'index.handler',
+      environment: googleCloudSetupEnv,
+      additionalPolicyStatements: googleCloudSetupPolicy,
+      route: { verb: 'POST', path: 'admin/google-cloud/create-oauth-client' },
+    });
+
+    this.addLambdaFunction(this, 'google-cloud-setup-pubsub', {
+      addAuthorizer: true,
+      lambdaDirectory: 'node/google-cloud-setup',
+      runtime: 'nodejs22.x',
+      handler: 'index.handler',
+      environment: googleCloudSetupEnv,
+      additionalPolicyStatements: googleCloudSetupPolicy,
+      route: { verb: 'POST', path: 'admin/google-cloud/setup-pubsub' },
+    });
+
+    this.addLambdaFunction(this, 'google-cloud-setup-status', {
+      addAuthorizer: true,
+      lambdaDirectory: 'node/google-cloud-setup',
+      runtime: 'nodejs22.x',
+      handler: 'index.handler',
+      environment: googleCloudSetupEnv,
+      additionalPolicyStatements: googleCloudSetupPolicy,
+      route: { verb: 'GET', path: 'admin/google-cloud/status' },
     });
 
     // Agents API (list/create/update/delete/copy)
@@ -1245,6 +1444,45 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
         API_BASE_URL: `https://${props.domainName}/api`,
       },
     });
+
+    // Audit Logs API - Admin endpoint (Cognito + admin check)
+    const auditLogsEnv = {
+      REGION: props.region,
+      WEB_CRAWLER_TABLE: props.auditWebCrawlerTableName,
+      TRANSCRIPTS_TABLE: props.auditTranscriptsTableName,
+      AUTOMATION_TABLE: props.auditAutomationTableName,
+      SEARCH_INDEX_TABLE: props.auditSearchIndexTableName,
+      KB_INDEX_TABLE: props.auditKbIndexTableName,
+    } as Record<string, string>;
+
+    const auditLogsPolicy = [
+      {
+        effect: 'Allow',
+        actions: ['dynamodb:Scan', 'dynamodb:Query'],
+        resources: [
+          props.auditWebCrawlerTableArn,
+          `${props.auditWebCrawlerTableArn}/index/*`,
+          props.auditTranscriptsTableArn,
+          `${props.auditTranscriptsTableArn}/index/*`,
+          props.auditAutomationTableArn,
+          `${props.auditAutomationTableArn}/index/*`,
+          props.auditSearchIndexTableArn,
+          `${props.auditSearchIndexTableArn}/index/*`,
+          props.auditKbIndexTableArn,
+          `${props.auditKbIndexTableArn}/index/*`,
+        ],
+      },
+    ];
+
+    this.addLambdaFunction(this, 'audit-logs-admin', {
+      addAuthorizer: true,
+      lambdaDirectory: 'node/audit-logs-admin',
+      runtime: 'nodejs22.x',
+      handler: 'index.handler',
+      environment: auditLogsEnv,
+      additionalPolicyStatements: auditLogsPolicy,
+      route: { verb: 'GET', path: 'audit-logs/{logType}' },
+    });
   }
 
   /**
@@ -1336,6 +1574,12 @@ export interface AppAgnosticApiGatewayLambdaCollectionProps extends Omit<
   capabilitiesTableName: string;
   /** Data connector selection configs table name. */
   dataConnectorsSyncConfigsTableName: string;
+  /** Connector events table name (permanent event records). */
+  connectorEventsTableName: string;
+  /** Connector event configs table name (admin toggle/tags per event type). */
+  connectorEventConfigsTableName: string;
+  /** EventBridge custom bus name for connector events. */
+  connectorEventBusName: string;
   /** Chat agent function URL for internal invocations (V1 — retained for other callers). */
   chatAgentFunctionUrl: string;
   /** Workspace agent proxy function URL for scheduled agent runs (V2 sync mode). */
@@ -1366,4 +1610,24 @@ export interface AppAgnosticApiGatewayLambdaCollectionProps extends Omit<
   usageAnalyticsCountersTableArn: string;
   /** Domain name for API contract base URL. */
   domainName: string;
+  /** Audit log: web crawler table name. */
+  auditWebCrawlerTableName: string;
+  /** Audit log: web crawler table ARN. */
+  auditWebCrawlerTableArn: string;
+  /** Audit log: transcripts table name. */
+  auditTranscriptsTableName: string;
+  /** Audit log: transcripts table ARN. */
+  auditTranscriptsTableArn: string;
+  /** Audit log: automation table name. */
+  auditAutomationTableName: string;
+  /** Audit log: automation table ARN. */
+  auditAutomationTableArn: string;
+  /** Audit log: search index table name. */
+  auditSearchIndexTableName: string;
+  /** Audit log: search index table ARN. */
+  auditSearchIndexTableArn: string;
+  /** Audit log: KB index table name. */
+  auditKbIndexTableName: string;
+  /** Audit log: KB index table ARN. */
+  auditKbIndexTableArn: string;
 }

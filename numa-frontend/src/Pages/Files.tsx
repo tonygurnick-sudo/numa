@@ -51,6 +51,9 @@ import AddToKBModal from '../Components/Files/AddToKBModal';
 import FileInfoPanel from '../Components/Files/FileInfoPanel';
 import type { InfoTarget } from '../Components/Files/FileInfoPanel';
 import FileSummarizePanel from '../Components/Files/FileSummarizePanel';
+import TranscriptViewerPanel from '../Components/Files/TranscriptViewerPanel';
+import { TranscriptionService } from '../Services/TranscriptionService';
+import type { TranscriptionJob, TranscriptionOutput } from '../Services/TranscriptionService';
 import { useFileSelection } from '../hooks/useFileSelection';
 import { listObjectsInFolder } from '../utils/s3Utils';
 import { useFilesCache } from './useFilesCache';
@@ -73,7 +76,7 @@ import type { VaultSecretMetadata, CreateSecretPayload } from '../Services/Vault
 import { listSecrets, getSecret, createSecret, listCategories } from '../Services/VaultService';
 import './Files.scss';
 
-type TabType = 'projects' | 'company' | 'my' | 'shared' | 'remote';
+type TabType = 'projects' | 'company' | 'my' | 'shared' | 'remote' | 'transcripts';
 type ViewMode = 'list' | 'grid' | 'gallery';
 
 interface RemoteTransfer {
@@ -95,6 +98,8 @@ const getScope = (tab: TabType | null, projectId?: string): FileScope => {
       return { type: 'my' }; // Not used for shared tab, but satisfies type
     case 'remote':
       return { type: 'my' }; // Not used for remote tab, but satisfies type
+    case 'transcripts':
+      return { type: 'my' }; // Not used for transcripts tab, but satisfies type
     default:
       return { type: 'my' }; // Root level — not used for API calls
   }
@@ -210,7 +215,7 @@ export const FilesPage = () => {
   // ---------------------------------------------------------------------------
   // URL-derived navigation state
   // ---------------------------------------------------------------------------
-  const VALID_TABS: TabType[] = ['my', 'company', 'shared', 'projects', 'remote'];
+  const VALID_TABS: TabType[] = ['my', 'company', 'shared', 'projects', 'remote', 'transcripts'];
   const pathSegments = useMemo(
     () =>
       location.pathname
@@ -270,6 +275,11 @@ export const FilesPage = () => {
   const [renameValue, setRenameValue] = useState('');
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
   const [shares, setShares] = useState<ShareListItem[]>([]);
+  const [transcriptJobs, setTranscriptJobs] = useState<TranscriptionJob[]>([]);
+  const [transcriptNextToken, setTranscriptNextToken] = useState<string | undefined>();
+  const [selectedTranscript, setSelectedTranscript] = useState<TranscriptionJob | null>(null);
+  const [transcriptOutput, setTranscriptOutput] = useState<TranscriptionOutput | null>(null);
+  const [transcriptOutputLoading, setTranscriptOutputLoading] = useState(false);
   const [showShareModal, setShowShareModal] = useState(false);
   const [showDropZoneModal, setShowDropZoneModal] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<ShareListItem | null>(null);
@@ -311,6 +321,7 @@ export const FilesPage = () => {
   const [enabledOAuthProviders, setEnabledOAuthProviders] = useState<OAuthProviderInfo[]>([]);
   const dropZonesEnabled = getFlag('NUMA_DROP_ZONES');
   const sharingEnabled = getFlag('NUMA_SHARING');
+  const transcriptionEnabled = getFlag('TRANSCRIPTION_SERVICE');
 
   // Synergy state
   const [synergyStatus, setSynergyStatus] = useState<DataConnectorStatus | null>(null);
@@ -369,6 +380,21 @@ export const FilesPage = () => {
       try {
         const sharesResult = await listMyShares();
         setShares(sharesResult ?? []);
+      } catch {
+        setError(t('errors.loadFailed'));
+      } finally {
+        setLoading(false);
+      }
+      return;
+    }
+
+    if (activeTab === 'transcripts') {
+      setLoading(true);
+      setError(null);
+      try {
+        const result = await TranscriptionService.list({ status: 'COMPLETED', limit: 50 }, numaGet);
+        setTranscriptJobs(result.jobs ?? []);
+        setTranscriptNextToken(result.nextToken);
       } catch {
         setError(t('errors.loadFailed'));
       } finally {
@@ -483,10 +509,51 @@ export const FilesPage = () => {
         remoteSelection.clearSelection();
       }
 
+      // Reset transcripts state
+      setTranscriptJobs([]);
+      setSelectedTranscript(null);
+      setTranscriptOutput(null);
+
       navigate(`/files/${tab}`);
     },
     [navigate, t]
   );
+
+  const handleViewTranscript = useCallback(
+    async (job: TranscriptionJob) => {
+      setSelectedTranscript(job);
+      setTranscriptOutput(null);
+      if (job.outputKey) {
+        setTranscriptOutputLoading(true);
+        try {
+          const content = await TranscriptionService.getOutputContent(job.outputKey, getCredentials);
+          setTranscriptOutput(content);
+        } catch {
+          // error shown as empty state in panel
+        } finally {
+          setTranscriptOutputLoading(false);
+        }
+      }
+    },
+    [getCredentials]
+  );
+
+  const handleLoadMoreTranscripts = useCallback(async () => {
+    if (!transcriptNextToken) return;
+    setLoading(true);
+    try {
+      const result = await TranscriptionService.list(
+        { status: 'COMPLETED', limit: 50, nextToken: transcriptNextToken },
+        numaGet
+      );
+      setTranscriptJobs((prev) => [...prev, ...(result.jobs ?? [])]);
+      setTranscriptNextToken(result.nextToken);
+    } catch {
+      setError(t('errors.loadFailed'));
+    } finally {
+      setLoading(false);
+    }
+  }, [transcriptNextToken, numaGet, t]);
 
   const handleProjectSelect = useCallback(
     (projectId: string) => {
@@ -1209,7 +1276,8 @@ export const FilesPage = () => {
 
       setSelectedOauthProvider(provider);
       setOauthContentLoading(true);
-      setOauthBreadcrumbs([{ label: `${provider} Files`, type: 'root', provider }]);
+      const displayName = enabledOAuthProviders.find((p) => p.id === provider)?.display_name ?? provider;
+      setOauthBreadcrumbs([{ label: displayName, type: 'root', provider }]);
 
       try {
         const contents = await OAuthProvidersService.listContents(provider);
@@ -1224,7 +1292,7 @@ export const FilesPage = () => {
         setOauthContentLoading(false);
       }
     },
-    [oauthProviderStatuses, showToast]
+    [oauthProviderStatuses, showToast, enabledOAuthProviders]
   );
 
   const handleOAuthFolderClick = useCallback(
@@ -1645,6 +1713,9 @@ export const FilesPage = () => {
       ? [{ key: 'shared' as TabType, icon: 'bi bi-share', labelKey: 'tabs.shared' }]
       : []),
     ...(dataConnectorsEnabled ? [{ key: 'remote' as TabType, icon: 'bi bi-cloud', labelKey: 'tabs.remote' }] : []),
+    ...(transcriptionEnabled
+      ? [{ key: 'transcripts' as TabType, icon: 'bi bi-file-earmark-text', labelKey: 'tabs.transcripts' }]
+      : []),
   ];
 
   const viewToggle = (
@@ -2003,6 +2074,117 @@ export const FilesPage = () => {
     );
   }
 
+  // Transcripts tab view
+  if (activeTab === 'transcripts') {
+    return (
+      <div className="files-page">
+        <div className="files-toolbar">
+          <button
+            className="btn btn-sm btn-outline-secondary"
+            onClick={() => navigate('/files')}
+            title={t('toolbar.up')}
+          >
+            <i className="bi bi-arrow-up" /> {t('toolbar.up')}
+          </button>
+          <div className="breadcrumb-path">
+            <span className="breadcrumb-segment" onClick={() => navigate('/files')}>
+              {t('title')}
+            </span>
+            <span className="breadcrumb-separator">/</span>
+            <span className="breadcrumb-segment">{t('tabs.transcripts')}</span>
+          </div>
+          {viewToggle}
+        </div>
+
+        <div className="files-content">
+          {error && (
+            <div className="alert alert-danger m-3 mb-0" role="alert">
+              {error}
+              <button type="button" className="btn-close float-end" onClick={() => setError(null)} />
+            </div>
+          )}
+
+          {loading ? (
+            <div className="files-empty">
+              <div className="spinner-border text-secondary" />
+            </div>
+          ) : transcriptJobs.length === 0 ? (
+            <div className="files-empty">
+              <i className="bi bi-file-earmark-text" style={{ fontSize: '3rem', opacity: 0.3 }} />
+              <h5>{t('transcripts.empty')}</h5>
+              <p className="text-muted">{t('transcripts.emptyMessage')}</p>
+            </div>
+          ) : viewMode === 'grid' || viewMode === 'gallery' ? (
+            <div className="file-grid">
+              {transcriptJobs.map((job) => (
+                <div key={job.jobId} className="file-card" onClick={() => handleViewTranscript(job)}>
+                  <i className={`${getFileIcon(job.fileName)} file-card-icon`} />
+                  <div className="file-card-name" title={job.fileName}>
+                    {job.fileName}
+                  </div>
+                  <div className="file-card-meta text-muted small">{formatFileSize(job.fileSize)}</div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="file-list">
+              <div className="file-list-header">
+                <span>{t('headers.name')}</span>
+                <span>{t('headers.size')}</span>
+                <span>{t('transcripts.headers.format')}</span>
+                <span>{t('headers.modified')}</span>
+                <span />
+              </div>
+              {transcriptJobs.map((job) => (
+                <div key={job.jobId} className="file-row" onClick={() => handleViewTranscript(job)}>
+                  <div className="file-name">
+                    <i className={`${getFileIcon(job.fileName)} file-icon`} />
+                    <span>{job.fileName}</span>
+                  </div>
+                  <div className="file-size">{formatFileSize(job.fileSize)}</div>
+                  <div className="file-type">
+                    <code>{job.fileExtension}</code>
+                  </div>
+                  <div className="file-modified">{new Date(job.createdAt).toLocaleDateString()}</div>
+                  <div className="file-actions">
+                    <button
+                      className="btn-icon"
+                      title={t('transcripts.viewOutput')}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleViewTranscript(job);
+                      }}
+                    >
+                      <i className="bi bi-eye" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {transcriptNextToken && !loading && (
+            <div className="d-flex justify-content-center p-3">
+              <button className="btn btn-outline-primary btn-sm" onClick={handleLoadMoreTranscripts}>
+                {t('transcripts.loadMore')}
+              </button>
+            </div>
+          )}
+        </div>
+
+        <TranscriptViewerPanel
+          job={selectedTranscript}
+          output={transcriptOutput}
+          loading={transcriptOutputLoading}
+          onClose={() => {
+            setSelectedTranscript(null);
+            setTranscriptOutput(null);
+          }}
+        />
+      </div>
+    );
+  }
+
   // Remote tab view — Multiple providers (Synergy + OAuth)
   if (activeTab === 'remote') {
     const isAtRootLevel = !selectedOauthProvider && synergyBreadcrumbs.length === 1;
@@ -2016,14 +2198,21 @@ export const FilesPage = () => {
             className="btn btn-sm btn-outline-secondary"
             onClick={() => {
               if (isInOAuthProvider && oauthBreadcrumbs.length > 1) {
+                // Navigate up one folder in OAuth
                 handleOAuthBreadcrumbClick(oauthBreadcrumbs.length - 2);
-              } else if (synergyConnected && synergyBreadcrumbs.length > 2) {
-                handleSynergyBreadcrumbClick(synergyBreadcrumbs.length - 2);
-              } else if (isInOAuthProvider || (!isAtRootLevel && synergyConnected)) {
+              } else if (isInOAuthProvider && oauthBreadcrumbs.length <= 1) {
+                // At OAuth provider root → go to Remote root
                 setSelectedOauthProvider(null);
                 setSynergyBreadcrumbs([{ label: t('remote.rootLabel'), type: 'root' }]);
                 setOauthBreadcrumbs([]);
+              } else if (synergyConnected && synergyBreadcrumbs.length > 2) {
+                // Navigate up one level in Synergy
+                handleSynergyBreadcrumbClick(synergyBreadcrumbs.length - 2);
+              } else if (!isAtRootLevel && synergyConnected) {
+                // At Synergy jobs list → go to Remote root
+                setSynergyBreadcrumbs([{ label: t('remote.rootLabel'), type: 'root' }]);
               } else {
+                // At Remote root → go to /files
                 navigate('/files');
               }
             }}
@@ -2033,41 +2222,57 @@ export const FilesPage = () => {
           </button>
 
           <div className="breadcrumb-path">
+            {/* Always: Files */}
             <span className="breadcrumb-segment" onClick={() => navigate('/files')}>
               {t('title')}
             </span>
             <span className="breadcrumb-separator">/</span>
-            {isAtRootLevel ? (
-              <span className="breadcrumb-segment">{t('remote.rootLabel')}</span>
-            ) : isInOAuthProvider ? (
+
+            {/* Always: Remote — clickable when not at root */}
+            <span
+              className={`breadcrumb-segment${isAtRootLevel ? ' breadcrumb-segment--active' : ''}`}
+              onClick={
+                !isAtRootLevel
+                  ? () => {
+                      setSelectedOauthProvider(null);
+                      setSynergyBreadcrumbs([{ label: t('remote.rootLabel'), type: 'root' }]);
+                      setOauthBreadcrumbs([]);
+                    }
+                  : undefined
+              }
+            >
+              {t('remote.rootLabel')}
+            </span>
+
+            {/* OAuth provider-specific path */}
+            {isInOAuthProvider &&
               oauthBreadcrumbs.map((crumb, i) => (
                 <span key={i}>
-                  {i > 0 && <span className="breadcrumb-separator">/</span>}
+                  <span className="breadcrumb-separator">/</span>
                   <span
                     className={`breadcrumb-segment${i === oauthBreadcrumbs.length - 1 ? ' breadcrumb-segment--active' : ''}`}
                     onClick={i < oauthBreadcrumbs.length - 1 ? () => handleOAuthBreadcrumbClick(i) : undefined}
-                    style={i < oauthBreadcrumbs.length - 1 ? { cursor: 'pointer' } : undefined}
                   >
                     {crumb.label}
                   </span>
                 </span>
-              ))
-            ) : synergyConnected ? (
-              synergyBreadcrumbs.map((crumb, i) => (
+              ))}
+
+            {/* Synergy path (skip index 0 which is "Remote", already rendered above) */}
+            {!isInOAuthProvider &&
+              synergyConnected &&
+              synergyBreadcrumbs.length > 1 &&
+              synergyBreadcrumbs.slice(1).map((crumb, i) => (
                 <span key={i}>
-                  {i > 0 && <span className="breadcrumb-separator">/</span>}
+                  <span className="breadcrumb-separator">/</span>
                   <span
-                    className={`breadcrumb-segment${i === synergyBreadcrumbs.length - 1 ? ' breadcrumb-segment--active' : ''}`}
-                    onClick={i < synergyBreadcrumbs.length - 1 ? () => handleSynergyBreadcrumbClick(i) : undefined}
-                    style={i < synergyBreadcrumbs.length - 1 ? { cursor: 'pointer' } : undefined}
+                    className={`breadcrumb-segment${i === synergyBreadcrumbs.length - 2 ? ' breadcrumb-segment--active' : ''}`}
+                    onClick={i < synergyBreadcrumbs.length - 2 ? () => handleSynergyBreadcrumbClick(i + 1) : undefined}
                   >
                     {crumb.label}
                   </span>
                 </span>
-              ))
-            ) : (
-              <span className="breadcrumb-segment breadcrumb-segment--active">{t('remote.rootLabel')}</span>
-            )}
+              ))}
           </div>
           {viewToggle}
         </div>

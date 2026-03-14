@@ -304,7 +304,13 @@
     "successWithJobs": "Connected successfully. Found {{count}} jobs.",
     "errors": {
       "loadFailed": "Failed to load data connectors.",
-      "connectFailed": "Failed to connect to Synergy 12d."
+      "connectFailed": "Failed to connect to Synergy 12d.",
+      "disconnectFailed": "Failed to disconnect {{name}}."
+    },
+    "signup": {
+      "noAccount": "Don't have an account yet?",
+      "signUp": "Sign up at {{provider}}",
+      "setupGuide": "View setup guide"
     },
     "synergy": {
       "iconAlt": "Synergy 12d Icon"
@@ -336,12 +342,23 @@
       "settings": "Settings",
       "reconnect": "Reconnect",
       "connecting": "Connecting...",
-      "connect": "Connect"
+      "connect": "Connect",
+      "disconnect": "Disconnect",
+      "deleteCredentials": "Delete Credentials",
+      "disconnecting": "Disconnecting..."
+    },
+    "confirm": {
+      "disconnect": "Disconnect {{name}}? This will revoke access and delete stored credentials.",
+      "deleteCredentials": "Delete credentials for {{name}}? This cannot be undone."
     },
     "synergy": {
       "name": "Synergy 12d",
       "description": "Data connector for Synergy 12d job data.",
       "iconAlt": "Synergy 12d icon"
+    },
+    "gmail": {
+      "name": "Gmail",
+      "description": "Read, search, and send emails via Gmail."
     },
     "googledrive": {
       "name": "Google Drive",
@@ -435,6 +452,17 @@
       "stepAdvanced": "Docs & Advanced",
       "stepReview": "Review & Save",
       "stepTest": "Test Connection",
+      "stepSetup": "Setup",
+      "stepOverview": "Overview",
+      "stepGuide": "Setup Guide",
+      "stepCredentialsOnly": "Credentials",
+      "stepPermissions": "Permissions",
+      "setupGuideTitle": "Provider Setup Guide",
+      "genericStep1": "Go to your provider's developer console",
+      "genericStep2": "Create a new OAuth application",
+      "genericStep3": "Add the redirect URI shown below",
+      "genericStep4": "Copy the Client ID and Client Secret",
+      "genericStep5": "Paste them in the fields below",
       "scopesLabel": "Permissions",
       "scopesHint": "Select the access permissions this connector needs.",
       "scopesRawLabel": "Scopes (space-separated)",
@@ -477,6 +505,160 @@
       "secretNotConfigured": "Will be created on save",
       "enterCredentials": "Enter your OAuth client credentials below. They will be stored securely in the Secrets Vault.",
       "discoveryFailed": "Could not auto-discover settings. Using defaults."
+    },
+    "picker": {
+      "title": "Add Connector",
+      "addConnector": "Add Connector",
+      "search": "Search platforms...",
+      "categoryAll": "All",
+      "noResults": "No platforms match your search."
+    },
+    "fields": {
+      "apiToken": "API Token",
+      "apiTokenHint": "Found in your account settings or developer portal.",
+      "apiKey": "API Key",
+      "baseUrl": "Base URL",
+      "baseUrlHint": "The root URL of your instance (e.g. https://myhirehop.com).",
+      "instanceUrl": "Instance URL",
+      "serverUrl": "Server URL",
+      "username": "Username",
+      "password": "Password",
+      "database": "Database Name",
+      "databaseHint": "The name of the FileMaker database to connect to.",
+      "bearerToken": "Bearer Token",
+      "appName": "Application Name",
+      "appKey": "Application Key"
+    },
+    "apiKeyWizard": {
+      "title": "Configure {{connector}}",
+      "stepBasicInfo": "Overview",
+      "stepCredentials": "Credentials",
+      "stepAdvanced": "API Reference",
+      "stepReview": "Review & Save",
+      "stepDone": "Done",
+      "stepSetup": "Setup",
+      "stepReviewSave": "Review & Save",
+      "category": "Category",
+      "authType": "Auth Type",
+      "whatItDoes": "What it does",
+      "secretLabel": "Vault Secret",
+      "connectorId": "Connector ID",
+      "enterCredentials": "Enter your credentials below. They will be stored securely in the Secrets Vault.",
+      "credentialsExistHint": "Credentials are already stored. You can update them below or leave fields blank to keep existing values.",
+      "storedInVault": "(stored in vault)",
+      "saveSuccess": "Connector configured successfully.",
+      "saveError": "Failed to save connector configuration.",
+      "doneHint": "Your connector credentials are stored securely. The AI assistant can now use this connector when configured."
+    },
+    "apiReference": {
+      "title": "API Reference",
+      "autoConfigured": "Auto-configured",
+      "customize": "Customize",
+      "dataTypesLabel": "Data Types",
+      "capabilitiesLabel": "Capabilities",
+      "docsUrl": "API Documentation URL",
+      "docsUrlPlaceholder": "https://docs.provider.com/api/v1",
+      "openApiUrl": "OpenAPI / Swagger URL",
+      "openApiUrlPlaceholder": "https://api.provider.com/swagger.json",
+      "postmanUrl": "Postman Collection URL",
+      "postmanUrlPlaceholder": "https://www.postman.com/collection/...",
+      "mcpServerRef": "MCP Server Reference",
+      "mcpServerRefPlaceholder": "@modelcontextprotocol/server-name",
+      "purposeHint": "Purpose / Description",
+      "purposeHintPlaceholder": "What this platform does and what data it exposes...",
+      "purposeHintDesc": "Helps the AI assistant understand how to use this connector.",
+      "endpointCategories": "Endpoint Categories",
+      "exampleRequests": "Example API Requests"
+    },
+    "events": {
+      "title": "Events",
+      "description": "Configure which events this connector produces.",
+      "enabled": "Enabled",
+      "disabled": "Disabled",
+      "tags": "Tags",
+      "addTag": "Add tag...",
+      "close": "✕",
+      "noEventTypes": "This connector does not support events.",
+      "saveSuccess": "Event configuration saved.",
+      "saveError": "Failed to save event configuration.",
+      "newEmail": "New email received",
+      "newEmailDesc": "Triggered when a new email arrives in the inbox.",
+      "emailRead": "Email read",
+      "emailReadDesc": "Triggered when an email is marked as read.",
+      "labelChanged": "Label changed",
+      "labelChangedDesc": "Triggered when a label is added or removed from an email.",
+      "emailSent": "Email sent",
+      "emailSentDesc": "Triggered when an email is sent."
+    },
+    "googleCloudSetup": {
+      "title": "Set up Google Services",
+      "description": "Configure your Google Cloud project to enable Gmail, Google Drive, and other Google connectors.",
+      "setupButton": "Set up Google Services",
+      "welcome": {
+        "title": "Google Cloud Setup",
+        "description": "This wizard will help you configure a Google Cloud project with the APIs, OAuth credentials, and Pub/Sub infrastructure needed for Google connectors."
+      },
+      "signIn": {
+        "title": "Google Sign-In",
+        "description": "Sign in with your Google admin account to authorize the setup process.",
+        "button": "Sign in with Google",
+        "signedInAs": "Signed in as {{email}}"
+      },
+      "project": {
+        "title": "Project Selection",
+        "description": "Enter the Google Cloud project ID to configure.",
+        "label": "GCP Project ID",
+        "placeholder": "my-project-id",
+        "hint": "Find this at console.cloud.google.com",
+        "createNew": "Create a new project",
+        "validating": "Validating project access...",
+        "valid": "Project verified"
+      },
+      "apis": {
+        "title": "Enable APIs",
+        "description": "Enabling required Google APIs on your project.",
+        "gmailApi": "Gmail API",
+        "driveApi": "Google Drive API",
+        "pubsubApi": "Cloud Pub/Sub API",
+        "enabling": "Enabling...",
+        "enabled": "Enabled",
+        "failed": "Failed"
+      },
+      "oauth": {
+        "title": "Create OAuth Client",
+        "description": "Creating an OAuth consent screen and client credentials.",
+        "creating": "Creating OAuth client...",
+        "created": "OAuth client created",
+        "clientId": "Client ID",
+        "savedToVault": "Credentials saved to vault"
+      },
+      "pubsub": {
+        "title": "Pub/Sub Setup",
+        "description": "Creating a Pub/Sub topic and subscription for real-time event delivery.",
+        "topicName": "Topic",
+        "subscriptionName": "Subscription",
+        "creating": "Creating...",
+        "created": "Created"
+      },
+      "summary": {
+        "title": "Setup Complete",
+        "description": "Your Google Cloud project is configured and ready. You can now set up Gmail and Google Drive connectors.",
+        "apisEnabled": "APIs enabled",
+        "oauthConfigured": "OAuth client configured",
+        "pubsubConfigured": "Pub/Sub configured"
+      },
+      "errors": {
+        "signInFailed": "Google sign-in failed. Please try again.",
+        "projectValidationFailed": "Could not validate project: {{message}}",
+        "apiEnableFailed": "Failed to enable {{api}}: {{message}}",
+        "oauthCreateFailed": "Failed to create OAuth client: {{message}}",
+        "pubsubFailed": "Failed to set up Pub/Sub: {{message}}"
+      }
+    },
+    "contact": {
+      "badge": "Contact Required",
+      "email": "Email",
+      "visitWebsite": "Visit Website"
     }
   },
   "kbTargetSelector": {

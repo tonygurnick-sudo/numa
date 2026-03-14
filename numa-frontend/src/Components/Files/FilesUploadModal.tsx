@@ -16,9 +16,11 @@ import { useTranslation } from 'react-i18next';
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { useAuth } from '../../Providers/AuthProvider';
+import { useNumaRequest } from '../../Providers/NumaRequestContext';
 import { useToast } from '../../Providers/ToastContext';
 import { withPRM } from '../../utils/prmUtils';
 import { buildS3Key, formatFileSize, getFileIcon } from '../../Services/filesService';
+import { TranscriptionService } from '../../Services/TranscriptionService';
 import type { FileScope } from '../../Services/filesService';
 
 // ============================================================
@@ -71,6 +73,7 @@ export function FilesUploadModal({
   const { t } = useTranslation('files');
   const { showToast } = useToast();
   const { user, getCredentials } = useAuth();
+  const { numaPost } = useNumaRequest();
   const [files, setFiles] = useState<FileUploadItem[]>([]);
   const [overallStatus, setOverallStatus] = useState<OverallStatus>('idle');
   const [isDragging, setIsDragging] = useState(false);
@@ -269,6 +272,11 @@ export function FilesUploadModal({
         setFiles((prev) =>
           prev.map((f, idx) => (idx === index ? { ...f, status: 'success' as const, progress: 100 } : f))
         );
+
+        // Submit to transcription service (fire-and-forget)
+        TranscriptionService.submit(fileItem.file.name, s3Key, numaPost).catch((err) =>
+          console.warn('Files pre-transcription failed:', err)
+        );
       } catch (error) {
         const msg = (error as Error).message || 'Upload failed';
         if (msg === 'Upload cancelled' || cancelledRef.current) {
@@ -318,7 +326,7 @@ export function FilesUploadModal({
     });
 
     onUploadComplete();
-  }, [files, scope, currentPath, user, getCredentials, showToast, t, onUploadComplete]);
+  }, [files, scope, currentPath, user, getCredentials, showToast, t, onUploadComplete, numaPost]);
 
   const handleFileInputChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFiles = Array.from(event.target.files || []);

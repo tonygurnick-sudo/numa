@@ -1,7 +1,9 @@
 """Lambda to extract text from a file in S3"""
 
 import argparse
+import csv
 import dataclasses
+import email
 import io
 import json
 import math
@@ -12,6 +14,7 @@ import tempfile
 import time
 import urllib.request
 import uuid
+from email import policy as email_policy
 from html import unescape
 from typing import Any, Dict, Iterator, List, Sequence, TypeVar
 
@@ -70,11 +73,12 @@ def _try_append_event(
 
 # File extension constants
 TEXT_FILE_EXTENSIONS = [
+    ".adoc",
     ".bash",
+    ".bib",
     ".cfg",
     ".conf",
     ".css",
-    ".csv",
     ".html",
     ".ini",
     ".js",
@@ -83,17 +87,32 @@ TEXT_FILE_EXTENSIONS = [
     ".log",
     ".markdown",
     ".md",
+    ".org",
     ".py",
+    ".rst",
     ".scss",
     ".sh",
     ".sql",
     ".tex",
     ".ts",
     ".txt",
+    ".typ",
     ".xml",
     ".yaml",
     ".yml",
 ]
+
+# Structured text formats requiring special parsing
+STRUCTURED_TEXT_EXTENSIONS = [".csv", ".tsv"]
+
+# Notebook/document formats with structured content
+NOTEBOOK_EXTENSIONS = [".ipynb"]
+
+# Email/calendar/contact formats
+PIM_EXTENSIONS = [".eml", ".ics", ".vcf"]
+
+# JSON Lines format
+JSONL_EXTENSIONS = [".jsonl"]
 
 # Vision extraction supported file formats
 VISION_SUPPORTED_FORMATS = [
@@ -103,16 +122,47 @@ VISION_SUPPORTED_FORMATS = [
     ".jpeg",
 ]
 
+# Additional image formats convertible to JPEG via Pillow → vision pipeline
+PILLOW_IMAGE_FORMATS = [
+    ".bmp",
+    ".gif",
+    ".heic",
+    ".heif",
+    ".tif",
+    ".tiff",
+    ".webp",
+]
+
+# Formats convertible to PDF via document-converter (LibreOffice) → vision pipeline
+LIBREOFFICE_CONVERTIBLE_FORMATS = [
+    ".doc",
+    ".key",
+    ".numbers",
+    ".odp",
+    ".ods",
+    ".odt",
+    ".pages",
+    ".ppt",
+    ".pptx",
+    ".rtf",
+    ".xls",
+]
+
 # Audio/video formats for transcription
 AUDIO_VIDEO_FORMATS = [
+    ".aac",
+    ".amr",
+    ".avi",
+    ".flac",
+    ".m4a",
+    ".mkv",
+    ".mov",
     ".mp3",
     ".mp4",
-    ".wav",
-    ".flac",
     ".ogg",
-    ".amr",
+    ".wav",
     ".webm",
-    ".m4a",
+    ".wma",
 ]
 
 
@@ -333,6 +383,380 @@ def handler(event: dict, context) -> dict:
         raise
 
 
+@tracer.start_as_current_span("_extract_csv_structured")
+def _extract_csv_structured(
+    file_content: bytes, key: str, file_name: str | None, delimiter: str = ","
+) -> Document:
+    """Extract structured content from CSV/TSV files with headers and row counts."""
+    text_content = file_content.decode("utf-8", errors="replace")
+    reader = csv.reader(io.StringIO(text_content), delimiter=delimiter)
+    rows = list(reader)
+
+    if not rows:
+        return _text_to_document("(empty file)", key, file_name)
+
+    headers = rows[0] if rows else []
+    data_rows = rows[1:]
+
+    lines = []
+    lines.append(f"Columns ({len(headers)}): {delimiter.join(headers)}")
+    lines.append(f"Total rows: {len(data_rows)}")
+    lines.append("")
+
+    # Header row
+    lines.append(delimiter.join(headers))
+    # Data rows
+    for row in data_rows:
+        lines.append(delimiter.join(row))
+
+    return _text_to_document("\n".join(lines), key, file_name)
+
+
+@tracer.start_as_current_span("_extract_jsonl")
+def _extract_jsonl(file_content: bytes, key: str, file_name: str | None) -> Document:
+    """Extract content from JSON Lines files, one JSON object per line."""
+    text_content = file_content.decode("utf-8", errors="replace")
+    lines = text_content.strip().splitlines()
+    output_lines = [f"JSON Lines file ({len(lines)} records)", ""]
+
+    for i, line in enumerate(lines):
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            obj = json.loads(line)
+            output_lines.append(f"Record {i + 1}: {json.dumps(obj, indent=2)}")
+        except json.JSONDecodeError:
+            output_lines.append(f"Record {i + 1}: (invalid JSON) {line}")
+
+    return _text_to_document("\n".join(output_lines), key, file_name)
+
+
+@tracer.start_as_current_span("_extract_eml")
+def _extract_eml(file_content: bytes, key: str, file_name: str | None) -> Document:
+    """Extract content from .eml email files — metadata as page 1, body as page 2."""
+    msg = email.message_from_bytes(file_content, policy=email_policy.default)
+
+    # Page 1: metadata
+    metadata_lines = [
+        f"From: {msg.get('From', '(unknown)')}",
+        f"To: {msg.get('To', '(unknown)')}",
+        f"Subject: {msg.get('Subject', '(no subject)')}",
+        f"Date: {msg.get('Date', '(unknown)')}",
+    ]
+    cc = msg.get("Cc")
+    if cc:
+        metadata_lines.append(f"Cc: {cc}")
+
+    metadata_text = "\n".join(metadata_lines)
+
+    # Page 2: body
+    body_text = ""
+    if msg.is_multipart():
+        for part in msg.walk():
+            content_type = part.get_content_type()
+            if content_type == "text/plain":
+                payload = part.get_content()
+                if isinstance(payload, str):
+                    body_text = payload
+                    break
+        # Fallback to HTML if no plain text
+        if not body_text:
+            for part in msg.walk():
+                if part.get_content_type() == "text/html":
+                    payload = part.get_content()
+                    if isinstance(payload, str):
+                        body_text = _html_to_text(payload)
+                        break
+    else:
+        payload = msg.get_content()
+        if isinstance(payload, str):
+            content_type = msg.get_content_type()
+            if content_type == "text/html":
+                body_text = _html_to_text(payload)
+            else:
+                body_text = payload
+
+    pages = [
+        DocumentPage(
+            page_number=1, text=metadata_text, num_words=len(metadata_text.split())
+        ),
+        DocumentPage(
+            page_number=2,
+            text=body_text or "(empty body)",
+            num_words=len((body_text or "").split()),
+        ),
+    ]
+
+    return Document(
+        name=file_name or os.path.basename(key),
+        num_pages=2,
+        pages=pages,
+        total_num_words=sum(p.num_words for p in pages),
+    )
+
+
+@tracer.start_as_current_span("_extract_ics")
+def _extract_ics(file_content: bytes, key: str, file_name: str | None) -> Document:
+    """Extract VEVENT blocks from .ics calendar files."""
+    text_content = file_content.decode("utf-8", errors="replace")
+    events = []
+    current_event: list[str] | None = None
+
+    for line in text_content.splitlines():
+        stripped = line.strip()
+        if stripped == "BEGIN:VEVENT":
+            current_event = []
+        elif stripped == "END:VEVENT" and current_event is not None:
+            events.append(current_event)
+            current_event = None
+        elif current_event is not None:
+            current_event.append(stripped)
+
+    if not events:
+        return _text_to_document(text_content, key, file_name)
+
+    output_lines = [f"Calendar file ({len(events)} events)", ""]
+    for i, event_lines in enumerate(events):
+        output_lines.append(f"--- Event {i + 1} ---")
+        for prop_line in event_lines:
+            # Format common properties nicely
+            if ":" in prop_line:
+                prop_name, _, prop_value = prop_line.partition(":")
+                # Strip parameters (e.g., DTSTART;TZID=...)
+                prop_name = prop_name.split(";")[0]
+                output_lines.append(f"  {prop_name}: {prop_value}")
+            else:
+                output_lines.append(f"  {prop_line}")
+        output_lines.append("")
+
+    return _text_to_document("\n".join(output_lines), key, file_name)
+
+
+@tracer.start_as_current_span("_extract_vcf")
+def _extract_vcf(file_content: bytes, key: str, file_name: str | None) -> Document:
+    """Extract VCARD blocks from .vcf contact files."""
+    text_content = file_content.decode("utf-8", errors="replace")
+    contacts = []
+    current_card: list[str] | None = None
+
+    for line in text_content.splitlines():
+        stripped = line.strip()
+        if stripped == "BEGIN:VCARD":
+            current_card = []
+        elif stripped == "END:VCARD" and current_card is not None:
+            contacts.append(current_card)
+            current_card = None
+        elif current_card is not None:
+            current_card.append(stripped)
+
+    if not contacts:
+        return _text_to_document(text_content, key, file_name)
+
+    output_lines = [f"Contacts file ({len(contacts)} contacts)", ""]
+    for i, card_lines in enumerate(contacts):
+        output_lines.append(f"--- Contact {i + 1} ---")
+        for prop_line in card_lines:
+            if ":" in prop_line:
+                prop_name, _, prop_value = prop_line.partition(":")
+                prop_name = prop_name.split(";")[0]
+                output_lines.append(f"  {prop_name}: {prop_value}")
+            else:
+                output_lines.append(f"  {prop_line}")
+        output_lines.append("")
+
+    return _text_to_document("\n".join(output_lines), key, file_name)
+
+
+@tracer.start_as_current_span("_extract_ipynb")
+def _extract_ipynb(file_content: bytes, key: str, file_name: str | None) -> Document:
+    """Extract content from Jupyter notebooks — markdown as-is, code in backtick blocks."""
+    notebook = json.loads(file_content.decode("utf-8", errors="replace"))
+    cells = notebook.get("cells", [])
+
+    if not cells:
+        return _text_to_document("(empty notebook)", key, file_name)
+
+    output_lines = [
+        f"Jupyter Notebook ({len(cells)} cells)",
+        "",
+    ]
+
+    for cell in cells:
+        cell_type = cell.get("cell_type", "unknown")
+        source = "".join(cell.get("source", []))
+
+        if cell_type == "markdown":
+            output_lines.append(source)
+        elif cell_type == "code":
+            output_lines.append(f"```python\n{source}\n```")
+            # Include outputs if present
+            outputs = cell.get("outputs", [])
+            for out in outputs:
+                if "text" in out:
+                    text = "".join(out["text"])
+                    output_lines.append(f"Output: {text}")
+                elif "data" in out and "text/plain" in out["data"]:
+                    text = "".join(out["data"]["text/plain"])
+                    output_lines.append(f"Output: {text}")
+        elif cell_type == "raw":
+            output_lines.append(source)
+
+        output_lines.append("")
+
+    return _text_to_document("\n".join(output_lines), key, file_name)
+
+
+@tracer.start_as_current_span("_extract_image_via_pillow")
+def _extract_image_via_pillow(
+    input_bucket: str, input_key: str, file_name: str | None
+) -> Document:
+    """Convert image formats (TIFF, WebP, GIF, BMP, HEIC/HEIF) to JPEG via
+    Pillow, then extract content using the vision pipeline.
+
+    Multi-page TIFFs are processed frame-by-frame into separate pages.
+    GIFs use only the first frame.
+    """
+    from PIL import Image
+
+    # Register HEIC/HEIF support if available
+    try:
+        import pillow_heif  # type: ignore[import-untyped]
+
+        pillow_heif.register_heif_opener()
+    except ImportError:
+        logger.warning("pillow-heif not available, HEIC/HEIF support disabled")
+
+    s3_file_object = s3_client.get_object(Bucket=input_bucket, Key=input_key)
+    file_content = s3_file_object["Body"].read()
+    img = Image.open(io.BytesIO(file_content))
+
+    display_name = file_name or os.path.basename(input_key)
+    pages: list[DocumentPage] = []
+
+    # Determine number of frames (multi-page TIFF, animated GIF, etc.)
+    n_frames = getattr(img, "n_frames", 1)
+
+    for frame_idx in range(n_frames):
+        try:
+            img.seek(frame_idx)
+        except EOFError:
+            break
+
+        frame = img.copy()
+        if frame.mode not in ("RGB", "L"):
+            frame = frame.convert("RGB")
+
+        buf = io.BytesIO()
+        frame.save(buf, format="JPEG", quality=90)
+        jpeg_bytes = buf.getvalue()
+
+        text = fm_vision_extraction._process_image(jpeg_bytes, ".jpg")
+        pages.append(
+            DocumentPage(
+                page_number=frame_idx + 1,
+                num_words=len(text.split()),
+                text=text,
+            )
+        )
+
+    total_words = sum(p.num_words for p in pages)
+    return Document(
+        name=display_name,
+        num_pages=len(pages),
+        pages=pages,
+        total_num_words=total_words,
+    )
+
+
+@tracer.start_as_current_span("_extract_via_libreoffice")
+def _extract_via_libreoffice(
+    input_bucket: str, input_key: str, file_name: str | None
+) -> Document:
+    """Convert LibreOffice-compatible formats (DOC, PPT, PPTX, XLS, RTF, ODT,
+    ODS, ODP, PAGES, KEY, NUMBERS) to PDF via document-converter Lambda, then
+    extract content using the vision pipeline.
+
+    Falls back to a plain-text error message if the conversion fails.
+    """
+    converter_name = os.environ["DOCUMENT_CONVERTER_LAMBDA_NAME"]
+    lambda_client = prm_client("lambda")
+    temp_pdf_key = f"temp-libreoffice-conversion/{input_key}.pdf"
+
+    try:
+        logger.info(
+            "Converting file to PDF via document-converter",
+            input_key=input_key,
+            converter=converter_name,
+        )
+        converter_payload = json.dumps(
+            {
+                "body": json.dumps(
+                    {
+                        "action": "file",
+                        "format": "pdf",
+                        "sourceBucket": input_bucket,
+                        "sourceKey": input_key,
+                    }
+                )
+            }
+        ).encode("utf-8")
+
+        response = lambda_client.invoke(
+            FunctionName=converter_name,
+            InvocationType="RequestResponse",
+            Payload=converter_payload,
+        )
+
+        response_payload = json.loads(response["Payload"].read())
+        if "body" in response_payload:
+            body = json.loads(response_payload["body"])
+        else:
+            body = response_payload
+
+        if not body.get("success"):
+            raise RuntimeError(
+                f"Document converter failed: {body.get('error', 'unknown error')}"
+            )
+
+        download_url = body["downloadUrl"]
+
+        logger.info("Downloading converted PDF", url_length=len(download_url))
+        with urllib.request.urlopen(download_url) as resp:  # noqa: S310
+            pdf_bytes = resp.read()
+
+        s3_client.put_object(
+            Body=pdf_bytes,
+            Bucket=input_bucket,
+            Key=temp_pdf_key,
+            ContentType="application/pdf",
+        )
+
+        document = fm_vision_extraction.extract_content(
+            input_bucket, temp_pdf_key, file_name
+        )
+        logger.info(
+            "LibreOffice vision extraction complete",
+            pages=document.num_pages,
+            words=document.total_num_words,
+        )
+        return document
+
+    except Exception:
+        logger.warning(
+            "LibreOffice-to-PDF conversion failed",
+            input_key=input_key,
+            exc_info=True,
+        )
+        raise
+
+    finally:
+        try:
+            s3_client.delete_object(Bucket=input_bucket, Key=temp_pdf_key)
+        except Exception:
+            logger.warning("Failed to clean up temp PDF", key=temp_pdf_key)
+
+
 @tracer.start_as_current_span("_extract_docx_via_pdf")
 def _extract_docx_via_pdf(
     input_bucket: str, input_key: str, file_name: str | None
@@ -453,6 +877,32 @@ def _extract_content(
         extracted_text = s3_file_object["Body"].read().decode("utf-8")
         return _text_to_document(extracted_text, input_key, file_name)
 
+    elif suffix in STRUCTURED_TEXT_EXTENSIONS:
+        s3_file_object = s3_client.get_object(Bucket=input_bucket, Key=input_key)
+        file_content = s3_file_object["Body"].read()
+        delimiter = "\t" if suffix == ".tsv" else ","
+        return _extract_csv_structured(file_content, input_key, file_name, delimiter)
+
+    elif suffix in JSONL_EXTENSIONS:
+        s3_file_object = s3_client.get_object(Bucket=input_bucket, Key=input_key)
+        file_content = s3_file_object["Body"].read()
+        return _extract_jsonl(file_content, input_key, file_name)
+
+    elif suffix in PIM_EXTENSIONS:
+        s3_file_object = s3_client.get_object(Bucket=input_bucket, Key=input_key)
+        file_content = s3_file_object["Body"].read()
+        if suffix == ".eml":
+            return _extract_eml(file_content, input_key, file_name)
+        elif suffix == ".ics":
+            return _extract_ics(file_content, input_key, file_name)
+        else:  # .vcf
+            return _extract_vcf(file_content, input_key, file_name)
+
+    elif suffix in NOTEBOOK_EXTENSIONS:
+        s3_file_object = s3_client.get_object(Bucket=input_bucket, Key=input_key)
+        file_content = s3_file_object["Body"].read()
+        return _extract_ipynb(file_content, input_key, file_name)
+
     elif suffix in [
         ".docx",
     ]:
@@ -491,6 +941,18 @@ def _extract_content(
     # Vision extraction supported formats - direct processing
     elif suffix in VISION_SUPPORTED_FORMATS:
         return fm_vision_extraction.extract_content(input_bucket, input_key, file_name)
+
+    # Additional image formats via Pillow → JPEG → vision pipeline
+    elif suffix in PILLOW_IMAGE_FORMATS:
+        return _extract_image_via_pillow(input_bucket, input_key, file_name)
+
+    # LibreOffice-convertible formats → PDF → vision pipeline
+    elif suffix in LIBREOFFICE_CONVERTIBLE_FORMATS:
+        if not os.environ.get("DOCUMENT_CONVERTER_LAMBDA_NAME"):
+            raise UnsupportedFileFormat(
+                f"{suffix} requires the document-converter Lambda to be configured"
+            )
+        return _extract_via_libreoffice(input_bucket, input_key, file_name)
 
     # Audio/video files - transcription
     elif suffix in AUDIO_VIDEO_FORMATS:

@@ -36,6 +36,7 @@ CLIENT_NAME = os.environ.get("CLIENT_NAME")
 SECRETS_PREFIX = os.environ.get("DATA_CONNECTORS_SECRETS_PREFIX")
 SETTINGS_TABLE_NAME = os.environ.get("DATA_CONNECTORS_SETTINGS_TABLE_NAME")
 SYNC_CONFIGS_TABLE_NAME = os.environ.get("DATA_CONNECTORS_SYNC_CONFIGS_TABLE_NAME")
+EVENT_CONFIGS_TABLE_NAME = os.environ.get("CONNECTOR_EVENT_CONFIGS_TABLE_NAME")
 SYSTEM_KB_IDS = {"company", "numa-support"}
 
 
@@ -389,6 +390,191 @@ def _handle_sync_configs_delete(
     return _response(200, {"success": True})
 
 
+# ---------------------------------------------------------------------------
+# Gmail routes
+# ---------------------------------------------------------------------------
+
+
+def _get_gmail_credentials(table_name: str, user_id: str) -> tuple[str, str] | None:
+    """Return Gmail email and access token for the user."""
+    record = get_connector_record(table_name, user_id, "gmail")
+    if not record or record.get("status") != "connected":
+        return None
+    secret_arn = record.get("secret_arn")
+    if not secret_arn:
+        return None
+    secret = get_secret_payload(secret_arn)
+    token = secret.get("access_token")
+    if not token:
+        return None
+    email = secret.get("email") or (record.get("config") or {}).get("email", "")
+    return email, token
+
+
+def _handle_gmail_labels(user_id: str, table_name: str) -> Dict[str, Any]:
+    """List Gmail labels for the user."""
+    creds = _get_gmail_credentials(table_name, user_id)
+    if not creds:
+        return _response(400, {"error": "Gmail connector not configured."})
+    _email, token = creds
+    try:
+        resp = httpx.get(
+            "https://gmail.googleapis.com/gmail/v1/users/me/labels",
+            headers={"Authorization": f"Bearer {token}"},
+            timeout=30,
+        )
+        if resp.status_code >= 400:
+            return _response(resp.status_code, {"error": resp.text[:300]})
+        data = resp.json()
+        return _response(200, {"labels": data.get("labels", [])})
+    except httpx.HTTPError as exc:
+        logger.warning("Gmail labels request failed", error=str(exc))
+        return _response(400, {"error": str(exc)})
+
+
+def _handle_gmail_messages(
+    event: Dict[str, Any], user_id: str, table_name: str
+) -> Dict[str, Any]:
+    """List/search Gmail messages for the user."""
+    creds = _get_gmail_credentials(table_name, user_id)
+    if not creds:
+        return _response(400, {"error": "Gmail connector not configured."})
+    _email, token = creds
+    params = event.get("queryStringParameters") or {}
+    query = params.get("q", "")
+    max_results = params.get("maxResults", "20")
+    page_token = params.get("pageToken", "")
+    try:
+        api_params: Dict[str, str] = {"maxResults": max_results}
+        if query:
+            api_params["q"] = query
+        if page_token:
+            api_params["pageToken"] = page_token
+        resp = httpx.get(
+            "https://gmail.googleapis.com/gmail/v1/users/me/messages",
+            headers={"Authorization": f"Bearer {token}"},
+            params=api_params,
+            timeout=30,
+        )
+        if resp.status_code >= 400:
+            return _response(resp.status_code, {"error": resp.text[:300]})
+        data = resp.json()
+        return _response(200, data)
+    except httpx.HTTPError as exc:
+        logger.warning("Gmail messages request failed", error=str(exc))
+        return _response(400, {"error": str(exc)})
+
+
+def _handle_gmail_send(
+    event: Dict[str, Any], user_id: str, table_name: str
+) -> Dict[str, Any]:
+    """Send an email via Gmail."""
+    creds = _get_gmail_credentials(table_name, user_id)
+    if not creds:
+        return _response(400, {"error": "Gmail connector not configured."})
+    _email, token = creds
+    body = _parse_body(event)
+    raw_message = body.get("raw")
+    if not raw_message:
+        return _response(
+            400, {"error": "raw (base64url-encoded RFC 2822 message) is required"}
+        )
+    try:
+        resp = httpx.post(
+            "https://gmail.googleapis.com/gmail/v1/users/me/messages/send",
+            headers={
+                "Authorization": f"Bearer {token}",
+                "Content-Type": "application/json",
+            },
+            json={"raw": raw_message},
+            timeout=30,
+        )
+        if resp.status_code >= 400:
+            return _response(resp.status_code, {"error": resp.text[:300]})
+        return _response(200, resp.json())
+    except httpx.HTTPError as exc:
+        logger.warning("Gmail send failed", error=str(exc))
+        return _response(400, {"error": str(exc)})
+
+
+# ---------------------------------------------------------------------------
+# Event config routes
+# ---------------------------------------------------------------------------
+
+# Default event types per connector (matches frontend registry)
+_DEFAULT_EVENT_TYPES: Dict[str, list[Dict[str, Any]]] = {
+    "gmail": [
+        {"event_type": "new_email", "enabled": True, "tags": ["email", "incoming"]},
+        {"event_type": "email_read", "enabled": False, "tags": ["email", "status"]},
+        {
+            "event_type": "label_changed",
+            "enabled": False,
+            "tags": ["email", "organization"],
+        },
+        {"event_type": "email_sent", "enabled": True, "tags": ["email", "outgoing"]},
+    ],
+}
+
+
+def _handle_event_configs_list(
+    connector_id: str,
+) -> Dict[str, Any]:
+    """List event configs for a connector, merging DB overrides with defaults."""
+    if not EVENT_CONFIGS_TABLE_NAME:
+        defaults = _DEFAULT_EVENT_TYPES.get(connector_id, [])
+        return _response(200, {"items": defaults})
+
+    try:
+        table = prm_resource("dynamodb").Table(EVENT_CONFIGS_TABLE_NAME)
+        result = table.query(
+            KeyConditionExpression="connector_id = :cid",
+            ExpressionAttributeValues={":cid": connector_id},
+        )
+        db_items = {item["event_type"]: item for item in (result.get("Items") or [])}
+    except (BotoCoreError, ClientError) as exc:
+        logger.warning("Failed to read event configs", error=str(exc))
+        db_items = {}
+
+    defaults = _DEFAULT_EVENT_TYPES.get(connector_id, [])
+    merged = []
+    for d in defaults:
+        et = d["event_type"]
+        if et in db_items:
+            merged.append({**d, **db_items[et]})
+        else:
+            merged.append(d)
+    return _response(200, {"items": merged})
+
+
+def _handle_event_config_update(
+    event: Dict[str, Any], connector_id: str, event_type: str
+) -> Dict[str, Any]:
+    """Update enabled state and tags for a specific event type."""
+    if not EVENT_CONFIGS_TABLE_NAME:
+        return _response(500, {"error": "Event config table not configured"})
+
+    body = _parse_body(event)
+    enabled = body.get("enabled")
+    tags = body.get("tags")
+
+    try:
+        table = prm_resource("dynamodb").Table(EVENT_CONFIGS_TABLE_NAME)
+        item: Dict[str, Any] = {
+            "connector_id": connector_id,
+            "event_type": event_type,
+            "updated_at": _now_iso(),
+        }
+        if enabled is not None:
+            item["enabled"] = bool(enabled)
+        if tags is not None:
+            item["tags"] = tags
+        table.put_item(Item=item)
+        return _response(200, {"item": item})
+    except (BotoCoreError, ClientError) as exc:
+        logger.warning("Failed to update event config", error=str(exc))
+        return _response(500, {"error": str(exc)})
+
+
 def handler(event: Dict[str, Any], _: LambdaContext) -> Dict[str, Any]:
     """Handle data connector status and connection requests."""
     method = event.get("requestContext", {}).get("http", {}).get("method")
@@ -431,6 +617,34 @@ def handler(event: Dict[str, Any], _: LambdaContext) -> Dict[str, Any]:
     ):
         folder_id = path.strip("/").split("/")[-2]
         return _handle_synergy_folder_items(folder_id, user_id, table_name)
+
+    # Gmail routes
+    if method == "GET" and path.endswith("/data-connectors/gmail/labels"):
+        return _handle_gmail_labels(user_id, table_name)
+
+    if method == "GET" and path.endswith("/data-connectors/gmail/messages"):
+        return _handle_gmail_messages(event, user_id, table_name)
+
+    if method == "POST" and path.endswith("/data-connectors/gmail/send"):
+        return _handle_gmail_send(event, user_id, table_name)
+
+    # Event config routes
+    if (
+        method == "GET"
+        and "/data-connectors/" in path
+        and path.endswith("/event-configs")
+    ):
+        parts = path.strip("/").split("/")
+        connector_id_from_path = parts[-2]
+        return _handle_event_configs_list(connector_id_from_path)
+
+    if method == "PUT" and "/data-connectors/" in path and "/event-configs/" in path:
+        parts = path.strip("/").split("/")
+        event_type_from_path = parts[-1]
+        connector_id_from_path = parts[-3]
+        return _handle_event_config_update(
+            event, connector_id_from_path, event_type_from_path
+        )
 
     if not SYNC_CONFIGS_TABLE_NAME:
         return _response(500, {"error": "Server configuration error"})

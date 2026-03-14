@@ -15,19 +15,24 @@ export default function AuditPanel() {
 
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [deletedSoFar, setDeletedSoFar] = useState(0);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const handleDeleteTestData = async () => {
     setDeleting(true);
+    setDeletedSoFar(0);
     try {
-      const result = await AdminUsageAnalyticsService.deleteTestData(numaDelete);
+      const result = await AdminUsageAnalyticsService.deleteTestData(numaDelete, (count) => {
+        setDeletedSoFar(count);
+      });
       setSuccessMessage(t('usageAnalytics.deleteSuccess', { count: result.deletedCount }));
       setError(null);
       setShowDeleteModal(false);
     } catch (e) {
       console.error('Failed to delete test data:', e);
       setError(t('usageAnalytics.deleteError'));
+      setShowDeleteModal(false);
     } finally {
       setDeleting(false);
     }
@@ -69,6 +74,7 @@ export default function AuditPanel() {
         onHide={() => setShowDeleteModal(false)}
         onConfirm={handleDeleteTestData}
         loading={deleting}
+        deletedSoFar={deletedSoFar}
       />
     </Container>
   );

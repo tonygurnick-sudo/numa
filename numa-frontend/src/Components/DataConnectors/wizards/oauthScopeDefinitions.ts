@@ -7,6 +7,36 @@ export interface ScopeOption {
 }
 
 export const PROVIDER_SCOPES: Record<string, ScopeOption[]> = {
+  gmail: [
+    {
+      id: 'readonly',
+      label: 'Read emails',
+      scope: 'https://www.googleapis.com/auth/gmail.readonly',
+      description: 'View and search emails without making changes',
+      default: true,
+    },
+    {
+      id: 'send',
+      label: 'Send emails',
+      scope: 'https://www.googleapis.com/auth/gmail.send',
+      description: 'Send emails on your behalf',
+      default: false,
+    },
+    {
+      id: 'modify',
+      label: 'Modify emails',
+      scope: 'https://www.googleapis.com/auth/gmail.modify',
+      description: 'Read, send, delete, and manage labels on emails',
+      default: false,
+    },
+    {
+      id: 'labels',
+      label: 'Manage labels',
+      scope: 'https://www.googleapis.com/auth/gmail.labels',
+      description: 'Create, update, and delete labels',
+      default: false,
+    },
+  ],
   googledrive: [
     {
       id: 'read',
@@ -122,6 +152,146 @@ export const PROVIDER_SCOPES: Record<string, ScopeOption[]> = {
       label: 'Account info',
       scope: 'account_info.read',
       description: 'View name, email, quota',
+      default: true,
+    },
+  ],
+  workflowmax: [
+    {
+      id: 'openid',
+      label: 'OpenID',
+      scope: 'openid',
+      description: 'Required for authentication',
+      default: true,
+    },
+    {
+      id: 'profile',
+      label: 'Profile',
+      scope: 'profile',
+      description: 'Access user profile information',
+      default: true,
+    },
+    {
+      id: 'email',
+      label: 'Email',
+      scope: 'email',
+      description: 'Access user email address',
+      default: true,
+    },
+    {
+      id: 'workflowmax',
+      label: 'WorkflowMax',
+      scope: 'workflowmax',
+      description: 'Access WorkflowMax data (jobs, clients, timesheets)',
+      default: true,
+    },
+  ],
+  podio: [
+    {
+      id: 'global',
+      label: 'Global access',
+      scope: 'global:all',
+      description: 'Full access to Podio resources',
+      default: true,
+    },
+  ],
+  simpro: [
+    {
+      id: 'default',
+      label: 'Default access',
+      scope: 'default',
+      description: 'Standard API access to simPRO data',
+      default: true,
+    },
+  ],
+  getjobber: [
+    {
+      id: 'clients',
+      label: 'Read clients',
+      scope: 'read_clients',
+      description: 'View client information',
+      default: true,
+    },
+    {
+      id: 'jobs',
+      label: 'Read jobs',
+      scope: 'read_jobs',
+      description: 'View job information',
+      default: true,
+    },
+    {
+      id: 'invoices',
+      label: 'Read invoices',
+      scope: 'read_invoices',
+      description: 'View invoice information',
+      default: true,
+    },
+    {
+      id: 'quotes',
+      label: 'Read quotes',
+      scope: 'read_quotes',
+      description: 'View quote information',
+      default: false,
+    },
+    {
+      id: 'write_clients',
+      label: 'Write clients',
+      scope: 'write_clients',
+      description: 'Create and update clients',
+      default: false,
+    },
+    {
+      id: 'write_jobs',
+      label: 'Write jobs',
+      scope: 'write_jobs',
+      description: 'Create and update jobs',
+      default: false,
+    },
+  ],
+  wrike: [
+    {
+      id: 'readonly',
+      label: 'Read only',
+      scope: 'wsReadOnly',
+      description: 'View tasks, projects, and folders',
+      default: true,
+    },
+    {
+      id: 'readwrite',
+      label: 'Read & write',
+      scope: 'wsReadWrite',
+      description: 'Full CRUD on tasks, projects, and folders',
+      default: false,
+    },
+    {
+      id: 'amreadonly',
+      label: 'Account management (read)',
+      scope: 'amReadOnlyWorkflow',
+      description: 'View workflows and account info',
+      default: false,
+    },
+  ],
+  'connecteam-oauth': [
+    {
+      id: 'forms_read',
+      label: 'Read forms',
+      scope: 'forms.read',
+      description: 'View form submissions and templates',
+      default: true,
+    },
+    {
+      id: 'attachments_write',
+      label: 'Write attachments',
+      scope: 'attachments.write',
+      description: 'Upload and manage attachments',
+      default: false,
+    },
+  ],
+  'totalsynergy-oauth': [
+    {
+      id: 'default',
+      label: 'Default access',
+      scope: 'default',
+      description: 'Standard API access to Total Synergy',
       default: true,
     },
   ],

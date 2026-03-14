@@ -38,6 +38,7 @@ import { SetCallbackUrl } from './set-callback-url-construct';
 import { SystemUserCreator } from './system-user-creator-construct';
 import { CloudwatchLogGroup } from '@cdktf/provider-aws/lib/cloudwatch-log-group';
 import { NumaCorsEnabledBucket } from './cors-enabled-bucket';
+import { CloudwatchEventBus } from '@cdktf/provider-aws/lib/cloudwatch-event-bus';
 import { DynamodbTable } from '@cdktf/provider-aws/lib/dynamodb-table';
 import { ConfigBucket } from './config-bucket-construct';
 import { z } from 'zod';
@@ -86,11 +87,19 @@ export class CoreNumaInfra extends Construct {
   readonly webCrawler: WebCrawlerConstruct;
   readonly cognitoGroups!: CognitoGroupsConstruct;
   readonly pipedreamRelayLambdaArn?: string;
+  readonly connectorEventsTable!: DynamodbTable;
+  readonly connectorEventConfigsTable!: DynamodbTable;
+  readonly connectorEventBusName!: string;
   readonly mcpPolicyTable?: DynamodbTable;
   readonly integrationsApprovalTable?: DynamodbTable;
   readonly usageAnalyticsEventsTable!: DynamodbTable;
   readonly usageAnalyticsKeysTable!: DynamodbTable;
   readonly usageAnalyticsCountersTable!: DynamodbTable;
+  readonly auditWebCrawlerTable!: DynamodbTable;
+  readonly auditTranscriptsTable!: DynamodbTable;
+  readonly auditAutomationTable!: DynamodbTable;
+  readonly auditSearchIndexTable!: DynamodbTable;
+  readonly auditKbIndexTable!: DynamodbTable;
 
   constructor(scope: Construct, name: string, props: CoreNumaInfraProps) {
     super(scope, name);
@@ -708,6 +717,51 @@ export class CoreNumaInfra extends Construct {
         Purpose: 'data-connector-sync-configs',
       },
     });
+
+    // Connector events table (permanent record of connector-produced events)
+    this.connectorEventsTable = new DynamodbTable(this, 'connector-events-table', {
+      name: `${numaClient}-connector-events`,
+      billingMode: 'PAY_PER_REQUEST',
+      hashKey: 'pk',
+      rangeKey: 'sk',
+      attribute: [
+        { name: 'pk', type: 'S' },
+        { name: 'sk', type: 'S' },
+      ],
+      tags: {
+        Name: `${numaClient}-connector-events`,
+        Environment: props.environmentName,
+        Purpose: 'connector-events',
+      },
+    });
+
+    // Connector event configs table (admin toggle/tags per event type)
+    this.connectorEventConfigsTable = new DynamodbTable(this, 'connector-event-configs-table', {
+      name: `${numaClient}-connector-event-configs`,
+      billingMode: 'PAY_PER_REQUEST',
+      hashKey: 'connector_id',
+      rangeKey: 'event_type',
+      attribute: [
+        { name: 'connector_id', type: 'S' },
+        { name: 'event_type', type: 'S' },
+      ],
+      tags: {
+        Name: `${numaClient}-connector-event-configs`,
+        Environment: props.environmentName,
+        Purpose: 'connector-event-configs',
+      },
+    });
+
+    // EventBridge custom bus for connector events
+    const connectorEventBus = new CloudwatchEventBus(this, 'connector-event-bus', {
+      name: `numa-${numaClient}-connector-events`,
+      tags: {
+        Name: `numa-${numaClient}-connector-events`,
+        Environment: props.environmentName,
+        Purpose: 'connector-events',
+      },
+    });
+    this.connectorEventBusName = connectorEventBus.name;
 
     // Vault audit log table (tracks secret access by users and AI)
     // NOTE: Vault secrets are now stored directly in AWS Secrets Manager as consolidated JSON per user
@@ -1426,6 +1480,54 @@ export class CoreNumaInfra extends Construct {
           Purpose: 'usage-analytics-counters',
         },
       });
+
+      // Audit Log tables — 5 system log tables for different audit categories
+      const auditTableConfigs = [
+        { id: 'audit-web-crawler', purpose: 'audit-web-crawler', prop: 'auditWebCrawlerTable' as const },
+        { id: 'audit-transcripts', purpose: 'audit-transcripts', prop: 'auditTranscriptsTable' as const },
+        { id: 'audit-automation', purpose: 'audit-automation', prop: 'auditAutomationTable' as const },
+        { id: 'audit-search-index', purpose: 'audit-search-index', prop: 'auditSearchIndexTable' as const },
+        { id: 'audit-kb-index', purpose: 'audit-kb-index', prop: 'auditKbIndexTable' as const },
+      ];
+
+      for (const cfg of auditTableConfigs) {
+        (this as Record<string, unknown>)[cfg.prop] = new DynamodbTable(this, cfg.id, {
+          name: `${props.clientName}-${cfg.id}`,
+          billingMode: 'PAY_PER_REQUEST',
+          hashKey: 'logId',
+          rangeKey: 'timestamp',
+          attribute: [
+            { name: 'logId', type: 'S' },
+            { name: 'timestamp', type: 'N' },
+            { name: 'status', type: 'S' },
+            { name: 'action', type: 'S' },
+          ],
+          globalSecondaryIndex: [
+            {
+              name: 'StatusIndex',
+              hashKey: 'status',
+              rangeKey: 'timestamp',
+              projectionType: 'ALL',
+            },
+            {
+              name: 'ActionIndex',
+              hashKey: 'action',
+              rangeKey: 'timestamp',
+              projectionType: 'ALL',
+            },
+          ],
+          ttl: {
+            enabled: true,
+            attributeName: 'ttl',
+          },
+          pointInTimeRecovery: { enabled: true },
+          tags: {
+            Name: `${props.clientName}-${cfg.id}`,
+            Environment: props.environmentName,
+            Purpose: cfg.purpose,
+          },
+        });
+      }
 
       // Usage Analytics: Seed initial API key
       const seedApiKeyLambda = new NumaLambda(this, 'seed-api-key', {

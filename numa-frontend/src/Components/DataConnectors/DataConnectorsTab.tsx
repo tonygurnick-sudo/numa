@@ -8,58 +8,27 @@ import { OAuthProvidersService } from '../../Services/OAuthProvidersService';
 import type { DataConnectorStatus } from '../../types/dataConnectors';
 import type { OAuthProviderInfo } from '../../types/oauthProviders';
 import type { VaultSecretMetadata } from '../../Services/VaultService';
-import { listCompanySecrets } from '../../Services/VaultService';
+import { listCompanySecrets, deleteCompanySecret } from '../../Services/VaultService';
 import { useNumaRequest } from '../../Providers/NumaRequestContext';
 import { useAuth } from '../../Providers/AuthProvider';
 import { SynergyConnectorCard } from './SynergyConnectorCard';
 import { OAuthConnectorCard } from './OAuthConnectorCard';
+import { ContactRequiredCard } from './ContactRequiredCard';
 import { SynergyWizard } from './wizards/SynergyWizard';
 import { OAuthWizard } from './wizards/OAuthWizard';
-import type { ProviderTemplate } from './wizards/OAuthWizard';
+import { PlatformPickerModal } from './wizards/PlatformPickerModal';
+import { ApiKeyWizard } from './wizards/ApiKeyWizard';
+import { GoogleCloudSetupWizard } from './wizards/GoogleCloudSetupWizard';
+import EventConfigPanel from './EventConfigPanel';
 import type { GlobalDataConnectorSettingsMap } from '../../Services/AdminDataConnectorsService';
-
-// ---------------------------------------------------------------------------
-// Well-known provider templates for the configure wizard
-// ---------------------------------------------------------------------------
-
-const WELL_KNOWN_TEMPLATES: ProviderTemplate[] = [
-  {
-    id: 'googledrive',
-    displayName: 'Google Drive',
-    icon: 'bi-google',
-    description: 'Access and browse Google Drive files',
-    authUrl: 'https://accounts.google.com/o/oauth2/v2/auth',
-    tokenUrl: 'https://oauth2.googleapis.com/token',
-    scopes: 'https://www.googleapis.com/auth/drive.readonly',
-    extraAuthParams: '{"access_type":"offline","prompt":"consent"}',
-    helpUrl: 'https://console.cloud.google.com/apis/credentials',
-    discoveryUrl: 'https://accounts.google.com/.well-known/openid-configuration',
-  },
-  {
-    id: 'onedrive',
-    displayName: 'OneDrive',
-    icon: 'bi-microsoft',
-    description: 'Access and browse Microsoft OneDrive files',
-    authUrl: 'https://login.microsoftonline.com/common/oauth2/v2.0/authorize',
-    tokenUrl: 'https://login.microsoftonline.com/common/oauth2/v2.0/token',
-    scopes: 'https://graph.microsoft.com/Files.Read.All offline_access',
-    extraAuthParams: '{"response_mode":"query"}',
-    helpUrl: 'https://portal.azure.com/#blade/Microsoft_AAD_RegisteredApps',
-    discoveryUrl: 'https://login.microsoftonline.com/common/v2.0/.well-known/openid-configuration',
-  },
-  {
-    id: 'dropbox',
-    displayName: 'Dropbox',
-    icon: 'bi-dropbox',
-    description: 'Access and browse Dropbox files',
-    authUrl: 'https://www.dropbox.com/oauth2/authorize',
-    tokenUrl: 'https://api.dropboxapi.com/oauth2/token',
-    scopes: 'files.metadata.read files.content.read',
-    extraAuthParams: '{"token_access_type":"offline"}',
-    helpUrl: 'https://www.dropbox.com/developers/apps',
-    discoveryUrl: 'https://www.dropbox.com/.well-known/openid-configuration',
-  },
-];
+import {
+  getOAuthProviderTemplates,
+  getOAuthConnectors,
+  getNonOAuthConnectors,
+  getContactRequired,
+  getConnectorById,
+} from './connectorRegistry';
+import type { ConnectorTemplate } from './connectorRegistry';
 
 // ---------------------------------------------------------------------------
 // Component
@@ -98,6 +67,19 @@ export const DataConnectorsTab = ({ adminSettings }: DataConnectorsTabProps) => 
   const [oauthWizardProviderId, setOauthWizardProviderId] = useState<string | undefined>(undefined);
   const [oauthWizardIsNew, setOauthWizardIsNew] = useState(false);
 
+  const [platformPickerOpen, setPlatformPickerOpen] = useState(false);
+  const [apiKeyWizardOpen, setApiKeyWizardOpen] = useState(false);
+  const [apiKeyWizardConnector, setApiKeyWizardConnector] = useState<ConnectorTemplate | null>(null);
+  const [disconnectingId, setDisconnectingId] = useState<string | null>(null);
+  const [googleSetupWizardOpen, setGoogleSetupWizardOpen] = useState(false);
+  const [eventConfigConnectorId, setEventConfigConnectorId] = useState<string | null>(null);
+
+  // ---------------------------------------------------------------------------
+  // Registry-derived templates (for backward compat with OAuthWizard)
+  // ---------------------------------------------------------------------------
+
+  const oauthTemplates = useMemo(() => getOAuthProviderTemplates(), []);
+
   // ---------------------------------------------------------------------------
   // Data loading
   // ---------------------------------------------------------------------------
@@ -127,14 +109,14 @@ export const DataConnectorsTab = ({ adminSettings }: DataConnectorsTabProps) => 
   }, [oauthAvailable]);
 
   const loadCompanySecrets = useCallback(async () => {
-    if (!vaultEnabled || !oauthAvailable) return;
+    if (!vaultEnabled) return;
     try {
       const secrets = await listCompanySecrets();
-      setCompanySecrets(secrets.filter((s) => s.category === 'OAuth Clients'));
+      setCompanySecrets(secrets);
     } catch {
       setCompanySecrets([]);
     }
-  }, [vaultEnabled, oauthAvailable]);
+  }, [vaultEnabled]);
 
   useEffect(() => {
     loadStatus();
@@ -142,38 +124,65 @@ export const DataConnectorsTab = ({ adminSettings }: DataConnectorsTabProps) => 
     loadCompanySecrets();
   }, [loadStatus, loadOAuthProviders, loadCompanySecrets]);
 
-  // Helper: check if a provider has COMPANY credentials configured
+  // Helper: check if a provider has COMPANY credentials configured (OAuth or connector)
   const getProviderSecret = (providerId: string): VaultSecretMetadata | undefined =>
     companySecrets.find((s) => s.name === `oauth-client-${providerId}`);
 
+  const getConnectorSecret = (connectorId: string): VaultSecretMetadata | undefined =>
+    companySecrets.find((s) => s.name === `connector-${connectorId}`);
+
+  // Set of all configured connector IDs (for platform picker badge)
+  const configuredIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const s of companySecrets) {
+      if (s.name.startsWith('oauth-client-')) ids.add(s.name.replace('oauth-client-', ''));
+      if (s.name.startsWith('connector-')) ids.add(s.name.replace('connector-', ''));
+    }
+    return ids;
+  }, [companySecrets]);
+
+  // Filter secrets by category for each wizard
+  const oauthSecrets = useMemo(() => companySecrets.filter((s) => s.category === 'OAuth Clients'), [companySecrets]);
+  const connectorSecrets = useMemo(
+    () => companySecrets.filter((s) => s.category === 'Connector Credentials'),
+    [companySecrets]
+  );
+
   // ---------------------------------------------------------------------------
-  // Merged provider list (well-known always present + API data)
+  // Merged provider list (registry OAuth always present + API data)
   // ---------------------------------------------------------------------------
+
+  const oauthConnectorDefs = useMemo(() => getOAuthConnectors(), []);
 
   const mergedOAuthProviders = useMemo(() => {
-    const wellKnownIds = new Set(WELL_KNOWN_TEMPLATES.map((tpl) => tpl.id));
+    const registryIds = new Set(oauthConnectorDefs.map((c) => c.id));
 
-    const merged: OAuthProviderInfo[] = WELL_KNOWN_TEMPLATES.map((tpl) => {
-      const fromApi = oauthProviders.find((p) => p.id === tpl.id);
+    const merged: OAuthProviderInfo[] = oauthConnectorDefs.map((ct) => {
+      const fromApi = oauthProviders.find((p) => p.id === ct.id);
       return {
-        id: tpl.id,
-        display_name: fromApi?.display_name || tpl.displayName,
-        icon: fromApi?.icon || tpl.icon,
-        description: fromApi?.description || tpl.description,
+        id: ct.id,
+        display_name: fromApi?.display_name || ct.displayName,
+        icon: fromApi?.icon || ct.icon,
+        description: fromApi?.description || ct.description,
         configured: fromApi?.configured ?? false,
       };
     });
 
     for (const provider of oauthProviders) {
-      if (!wellKnownIds.has(provider.id)) {
+      if (!registryIds.has(provider.id)) {
         merged.push(provider);
       }
     }
 
     return merged;
-  }, [oauthProviders]);
+  }, [oauthProviders, oauthConnectorDefs]);
 
-  const totalConnectors = 1 + mergedOAuthProviders.length;
+  // Non-OAuth connectors from registry
+  const nonOAuthConnectors = useMemo(() => getNonOAuthConnectors(), []);
+  const contactRequiredConnectors = useMemo(() => getContactRequired(), []);
+
+  const totalConnectors =
+    1 + mergedOAuthProviders.length + nonOAuthConnectors.length + contactRequiredConnectors.length;
 
   // ---------------------------------------------------------------------------
   // Wizard open helpers
@@ -185,16 +194,27 @@ export const DataConnectorsTab = ({ adminSettings }: DataConnectorsTabProps) => 
 
   const openSynergyWizard = () => setSynergyWizardOpen(true);
 
-  const openOAuthWizardNew = () => {
-    setOauthWizardProviderId(undefined);
-    setOauthWizardIsNew(true);
-    setOauthWizardOpen(true);
-  };
-
   const openOAuthWizardExisting = (providerId: string) => {
     setOauthWizardProviderId(providerId);
     setOauthWizardIsNew(false);
     setOauthWizardOpen(true);
+  };
+
+  const handlePlatformSelected = (connector: ConnectorTemplate) => {
+    setPlatformPickerOpen(false);
+
+    if (connector.authType === 'oauth2') {
+      setOauthWizardProviderId(connector.id);
+      setOauthWizardIsNew(false);
+      setOauthWizardOpen(true);
+    } else if (connector.authType === 'contact-required') {
+      // No wizard for contact-required — they're just info cards
+      return;
+    } else {
+      // api-key, token, username-password
+      setApiKeyWizardConnector(connector);
+      setApiKeyWizardOpen(true);
+    }
   };
 
   const handleOAuthSaved = async () => {
@@ -206,8 +226,50 @@ export const DataConnectorsTab = ({ adminSettings }: DataConnectorsTabProps) => 
     await loadStatus();
   };
 
+  const handleApiKeySaved = async () => {
+    await loadCompanySecrets();
+  };
+
   const handleOAuthTest = async (providerId: string) => {
     await OAuthProvidersService.connect(providerId);
+  };
+
+  const handleOAuthDisconnect = async (providerId: string, displayName: string) => {
+    const confirmed = window.confirm(t('dataConnectors.confirm.disconnect', { name: displayName }));
+    if (!confirmed) return;
+    setDisconnectingId(providerId);
+    try {
+      try {
+        await OAuthProvidersService.disconnect(providerId);
+      } catch {
+        // May fail if no tokens exist — continue to delete vault secret
+      }
+      await deleteCompanySecret(`oauth-client-${providerId}`);
+    } catch (err) {
+      const msg =
+        err instanceof Error ? err.message : t('dataConnectors.errors.disconnectFailed', { name: displayName });
+      setLoadError(msg);
+    } finally {
+      OAuthProvidersService.clearProvidersCache();
+      await Promise.all([loadCompanySecrets(), loadOAuthProviders()]);
+      setDisconnectingId(null);
+    }
+  };
+
+  const handleConnectorDelete = async (connectorId: string, displayName: string) => {
+    const confirmed = window.confirm(t('dataConnectors.confirm.deleteCredentials', { name: displayName }));
+    if (!confirmed) return;
+    setDisconnectingId(connectorId);
+    try {
+      await deleteCompanySecret(`connector-${connectorId}`);
+    } catch (err) {
+      const msg =
+        err instanceof Error ? err.message : t('dataConnectors.errors.disconnectFailed', { name: displayName });
+      setLoadError(msg);
+    } finally {
+      await loadCompanySecrets();
+      setDisconnectingId(null);
+    }
   };
 
   // ---------------------------------------------------------------------------
@@ -242,14 +304,21 @@ export const DataConnectorsTab = ({ adminSettings }: DataConnectorsTabProps) => 
             {t('dataConnectors.available', { count: totalConnectors })}
           </h4>
         </div>
-        {isAdmin && oauthAvailable && (
-          <Button variant="outline-primary" size="sm" onClick={openOAuthWizardNew} className="ms-auto">
-            <Plus size={14} className="me-1" />
-            {t('dataConnectors.oauth.addProvider')}
-          </Button>
+        {isAdmin && (
+          <div className="d-flex gap-2 ms-auto">
+            <Button variant="outline-secondary" size="sm" onClick={() => setGoogleSetupWizardOpen(true)}>
+              <i className="bi bi-google me-1" />
+              {t('dataConnectors.googleCloudSetup.setupButton')}
+            </Button>
+            <Button variant="outline-primary" size="sm" onClick={() => setPlatformPickerOpen(true)}>
+              <Plus size={14} className="me-1" />
+              {t('dataConnectors.picker.addConnector')}
+            </Button>
+          </div>
         )}
       </div>
       <div className="mt-3">
+        {/* Synergy Card */}
         <SynergyConnectorCard
           status={synergyStatus}
           onConnect={openSynergyWizard}
@@ -274,10 +343,60 @@ export const DataConnectorsTab = ({ adminSettings }: DataConnectorsTabProps) => 
               onTest={() => handleOAuthTest(provider.id)}
               isLoading={false}
               adminDisabled={!isAdmin && !credentialConfigured}
+              onDisconnect={
+                isAdmin && credentialConfigured
+                  ? () => handleOAuthDisconnect(provider.id, provider.display_name)
+                  : undefined
+              }
+              isDisconnecting={disconnectingId === provider.id}
             />
           );
         })}
+
+        {/* Non-OAuth Connector Cards (API Key, Token, Username/Password) */}
+        {nonOAuthConnectors.map((connector) => {
+          const credentialConfigured = !!getConnectorSecret(connector.id);
+          return (
+            <OAuthConnectorCard
+              key={connector.id}
+              providerId={connector.id}
+              displayName={connector.displayName}
+              icon={connector.icon}
+              description={connector.description}
+              credentialConfigured={credentialConfigured}
+              onConfigure={() => {
+                setApiKeyWizardConnector(connector);
+                setApiKeyWizardOpen(true);
+              }}
+              onTest={() => {
+                setApiKeyWizardConnector(connector);
+                setApiKeyWizardOpen(true);
+              }}
+              isLoading={false}
+              adminDisabled={!isAdmin && !credentialConfigured}
+              onDisconnect={
+                isAdmin && credentialConfigured
+                  ? () => handleConnectorDelete(connector.id, connector.displayName)
+                  : undefined
+              }
+              isDisconnecting={disconnectingId === connector.id}
+            />
+          );
+        })}
+
+        {/* Contact Required Cards */}
+        {contactRequiredConnectors.map((connector) => (
+          <ContactRequiredCard key={connector.id} connector={connector} />
+        ))}
       </div>
+
+      {/* Platform Picker Modal */}
+      <PlatformPickerModal
+        show={platformPickerOpen}
+        onHide={() => setPlatformPickerOpen(false)}
+        onSelect={handlePlatformSelected}
+        configuredIds={configuredIds}
+      />
 
       {/* Synergy Configuration Wizard */}
       <SynergyWizard
@@ -295,10 +414,55 @@ export const DataConnectorsTab = ({ adminSettings }: DataConnectorsTabProps) => 
         onSaved={handleOAuthSaved}
         providerId={oauthWizardProviderId}
         isNew={oauthWizardIsNew}
-        templates={WELL_KNOWN_TEMPLATES}
-        existingSecrets={companySecrets}
+        templates={oauthTemplates}
+        existingSecrets={oauthSecrets}
         mergedProviders={mergedOAuthProviders}
       />
+
+      {/* API Key / Token / Username-Password Wizard */}
+      {apiKeyWizardConnector && (
+        <ApiKeyWizard
+          show={apiKeyWizardOpen}
+          onHide={() => {
+            setApiKeyWizardOpen(false);
+            setApiKeyWizardConnector(null);
+          }}
+          onSaved={handleApiKeySaved}
+          connector={apiKeyWizardConnector}
+          existingSecrets={connectorSecrets}
+        />
+      )}
+
+      {/* Google Cloud Setup Wizard */}
+      <GoogleCloudSetupWizard
+        show={googleSetupWizardOpen}
+        onHide={() => setGoogleSetupWizardOpen(false)}
+        onComplete={() => {
+          setGoogleSetupWizardOpen(false);
+          loadCompanySecrets();
+          loadOAuthProviders();
+        }}
+      />
+
+      {/* Event Config Panel (shown when a connector with eventTypes is selected) */}
+      {eventConfigConnectorId &&
+        (() => {
+          const connector = getConnectorById(eventConfigConnectorId);
+          if (!connector?.eventTypes) return null;
+          return (
+            <div className="mt-3">
+              <div className="d-flex justify-content-between align-items-center mb-2">
+                <h5 className="mb-0">
+                  {t('dataConnectors.events.title')} — {connector.displayName}
+                </h5>
+                <Button variant="link" size="sm" onClick={() => setEventConfigConnectorId(null)}>
+                  {t('dataConnectors.events.close')}
+                </Button>
+              </div>
+              <EventConfigPanel connectorId={connector.id} eventTypes={connector.eventTypes} />
+            </div>
+          );
+        })()}
     </div>
   );
 };

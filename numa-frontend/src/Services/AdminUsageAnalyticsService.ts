@@ -109,11 +109,28 @@ export const AdminUsageAnalyticsService = {
   },
 
   /**
-   * Bulk delete all test data (isTest=true events)
+   * Bulk delete all test data (isTest=true events).
+   * Calls the API in a loop since the backend processes in batches to avoid timeout.
+   * Calls onProgress after each batch so the UI can show a progress bar.
    */
-  async deleteTestData(numaDelete: NumaDelete): Promise<{ deletedCount: number }> {
-    const response = (await numaDelete('/api/usage-analytics/test-data')) as { deletedCount: number };
-    return response;
+  async deleteTestData(
+    numaDelete: NumaDelete,
+    onProgress?: (deletedSoFar: number) => void
+  ): Promise<{ deletedCount: number }> {
+    let totalDeleted = 0;
+    let hasMore = true;
+
+    while (hasMore) {
+      const response = (await numaDelete('/api/usage-analytics/test-data')) as {
+        deletedCount: number;
+        hasMore: boolean;
+      };
+      totalDeleted += response.deletedCount;
+      hasMore = response.hasMore;
+      onProgress?.(totalDeleted);
+    }
+
+    return { deletedCount: totalDeleted };
   },
 
   /**

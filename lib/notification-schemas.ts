@@ -4,7 +4,7 @@ export const EventNotificationSchema = z.object({
   user_id: z.string().min(1, 'User ID is required'),
   notification_id: z.string().uuid('Invalid notification ID format'),
   event_type: z.enum(['started', 'completed', 'partial', 'failed', 'cancelled']),
-  schedule_type: z.enum(['agent', 'application', 'data_sync']),
+  schedule_type: z.enum(['agent', 'application', 'data_sync', 'transcription']),
   schedule_id: z.string().uuid('Invalid schedule ID format'),
   title: z.string().min(1, 'Title is required'),
   message: z.string().min(1, 'Message is required'),
@@ -17,7 +17,7 @@ export const EventNotificationSchema = z.object({
 
 export const CreateNotificationPayloadSchema = z.object({
   event_type: z.enum(['started', 'completed', 'partial', 'failed', 'cancelled']),
-  schedule_type: z.enum(['agent', 'application', 'data_sync']),
+  schedule_type: z.enum(['agent', 'application', 'data_sync', 'transcription']),
   schedule_id: z.string().uuid('Invalid schedule ID format'),
   title: z.string().min(1, 'Title is required'),
   message: z.string().min(1, 'Message is required'),

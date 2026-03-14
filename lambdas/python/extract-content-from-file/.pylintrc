@@ -7,10 +7,12 @@ disable=
     duplicate-code,
     fixme,
     format,
+    import-outside-toplevel,
     logging-fstring-interpolation,
     missing-docstring,
     no-else-raise,
     no-else-return,
+    protected-access,
     wrong-import-order,
 
 [REPORTS]

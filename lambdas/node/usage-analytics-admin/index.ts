@@ -148,14 +148,18 @@ const listEvents = async (event: APIGatewayProxyEventV2) => {
 
 /**
  * DELETE /api/usage-analytics/test-data
- * Bulk delete all test events
+ * Bulk delete test events in batches. Returns { deletedCount, hasMore }
+ * so the frontend can call repeatedly until hasMore is false.
  */
 const deleteTestData = async () => {
+  const MAX_BATCHES = 80; // ~2000 items per call, well within API Gateway timeout
+
   try {
     let deletedCount = 0;
     let lastEvaluatedKey: Record<string, unknown> | undefined;
+    let batchCount = 0;
 
-    // Query TestDataIndex GSI for all isTest=true events
+    // Query TestDataIndex GSI for isTest=true events, up to MAX_BATCHES
     do {
       const result = await dynamo.send(
         new QueryCommand({
@@ -172,7 +176,6 @@ const deleteTestData = async () => {
 
       const items = result.Items || [];
       if (items.length > 0) {
-        // BatchWrite delete
         await dynamo.send(
           new BatchWriteCommand({
             RequestItems: {
@@ -192,35 +195,40 @@ const deleteTestData = async () => {
       }
 
       lastEvaluatedKey = result.LastEvaluatedKey;
-    } while (lastEvaluatedKey);
+      batchCount++;
+    } while (lastEvaluatedKey && batchCount < MAX_BATCHES);
 
-    // Zero out testCount on all counter records
-    let counterLastKey: Record<string, unknown> | undefined;
-    do {
-      const counterScan = await dynamo.send(
-        new ScanCommand({
-          TableName: COUNTERS_TABLE,
-          FilterExpression: 'testCount > :zero',
-          ExpressionAttributeValues: { ':zero': 0 },
-          ExclusiveStartKey: counterLastKey,
-        })
-      );
-      await Promise.all(
-        (counterScan.Items ?? []).map((item) =>
-          dynamo.send(
-            new UpdateCommand({
-              TableName: COUNTERS_TABLE,
-              Key: { PK: item.PK, SK: item.SK },
-              UpdateExpression: 'SET testCount = :zero',
-              ExpressionAttributeValues: { ':zero': 0 },
-            })
+    const hasMore = !!lastEvaluatedKey;
+
+    // Only zero out counters when all test data is deleted
+    if (!hasMore) {
+      let counterLastKey: Record<string, unknown> | undefined;
+      do {
+        const counterScan = await dynamo.send(
+          new ScanCommand({
+            TableName: COUNTERS_TABLE,
+            FilterExpression: 'testCount > :zero',
+            ExpressionAttributeValues: { ':zero': 0 },
+            ExclusiveStartKey: counterLastKey,
+          })
+        );
+        await Promise.all(
+          (counterScan.Items ?? []).map((item) =>
+            dynamo.send(
+              new UpdateCommand({
+                TableName: COUNTERS_TABLE,
+                Key: { PK: item.PK, SK: item.SK },
+                UpdateExpression: 'SET testCount = :zero',
+                ExpressionAttributeValues: { ':zero': 0 },
+              })
+            )
           )
-        )
-      );
-      counterLastKey = counterScan.LastEvaluatedKey;
-    } while (counterLastKey);
+        );
+        counterLastKey = counterScan.LastEvaluatedKey;
+      } while (counterLastKey);
+    }
 
-    return respond(200, { deletedCount });
+    return respond(200, { deletedCount, hasMore });
   } catch (error) {
     console.error('Delete test data error:', error);
     return respond(500, { error: 'Failed to delete test data' });

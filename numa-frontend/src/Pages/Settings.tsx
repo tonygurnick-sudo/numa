@@ -26,6 +26,9 @@ import UsageAnalyticsPanel from '../Components/UsageAnalytics/UsageAnalyticsPane
 import AuditPanel from '../Components/UsageAnalytics/AuditPanel';
 import LoginHeatmap from '../Components/UsageAnalytics/LoginHeatmap';
 import { NumaLibrariesPanel } from '../Components/Settings/NumaLibrariesPanel';
+import GenericAuditLogTab from '../Components/UsageAnalytics/GenericAuditLogTab';
+import TranscriptionJobsPanel from '../Components/UsageAnalytics/TranscriptionJobsPanel';
+import NotificationsAuditPanel from '../Components/UsageAnalytics/NotificationsAuditPanel';
 import { UNSAFE_NavigationContext, useParams, useNavigate } from 'react-router-dom';
 import {
   AdminChatSettingsService,
@@ -77,14 +80,17 @@ export default function SettingsPage() {
   const { scope: urlScope, tab: urlTab } = useParams<{ scope?: string; tab?: string }>();
   const navigate = useNavigate();
   const [activeKey, setActiveKey] = useState<string>(urlTab || 'users');
-  const [settingsScope, setSettingsScope] = useState<'user' | 'admin'>(
-    urlScope === 'admin' || urlScope === 'user' ? urlScope : 'user'
+  const validScopes = ['user', 'admin', 'developer', 'audit'] as const;
+  type SettingsScope = (typeof validScopes)[number];
+  const [settingsScope, setSettingsScope] = useState<SettingsScope>(
+    validScopes.includes(urlScope as SettingsScope) ? (urlScope as SettingsScope) : 'user'
   );
+  const [auditTabKey, setAuditTabKey] = useState<string>(urlScope === 'audit' && urlTab ? urlTab : 'user-activity');
   const brandingFlag =
     typeof window !== 'undefined' ? window.sessionStorage.getItem('BRANDING_PROVIDER_ENABLED') : null;
   const brandingApiEnabled = brandingFlag === 'true';
   const isAdmin = Boolean(user?.groups?.includes('admin'));
-  const currentScope: 'user' | 'admin' = isAdmin ? settingsScope : 'user';
+  const currentScope: SettingsScope = isAdmin ? settingsScope : 'user';
   const allowBrandingTab = brandingApiEnabled && isAdmin;
   const agentsFeatureEnabled = getFlag('AGENTS');
   const dataConnectorsEnabled = getFlag('DATA_CONNECTORS_ENABLED');
@@ -92,7 +98,7 @@ export default function SettingsPage() {
   const availableIntegrations = useMemo<IntegrationListItem[]>(() => getIntegrationsListFormat(), [i18n.language]);
 
   useEffect(() => {
-    if (!isAdmin) {
+    if (!isAdmin && settingsScope !== 'user') {
       setSettingsScope('user');
     }
   }, [isAdmin]);
@@ -374,9 +380,22 @@ export default function SettingsPage() {
 
   // Sync active tab + scope to URL path so refreshing preserves position
   useEffect(() => {
-    const tab = currentScope === 'admin' ? activeKey : userSettingsTabKey;
+    let tab: string;
+    switch (currentScope) {
+      case 'admin':
+        tab = activeKey;
+        break;
+      case 'developer':
+        tab = 'api-keys';
+        break;
+      case 'audit':
+        tab = auditTabKey;
+        break;
+      default:
+        tab = userSettingsTabKey;
+    }
     navigate(`/settings/${currentScope}/${tab}`, { replace: true });
-  }, [currentScope, activeKey, userSettingsTabKey, navigate]);
+  }, [currentScope, activeKey, userSettingsTabKey, auditTabKey, navigate]);
 
   const [isBrandingDirty, setIsBrandingDirty] = useState<boolean>(false);
 
@@ -759,8 +778,6 @@ export default function SettingsPage() {
         ? [{ key: 'data-connectors', label: t('tabs.dataConnectors'), iconClassName: 'bi bi-cloud-download' }]
         : []),
       { key: 'capabilities', label: t('capabilities.tabTitle'), iconClassName: 'bi bi-toggles' },
-      { key: 'usage-analytics', label: t('tabs.developer'), iconClassName: 'bi bi-code-slash' },
-      { key: 'audit', label: t('tabs.audit'), iconClassName: 'bi bi-clock-history' },
       { key: 'usage', label: t('tabs.usage'), iconClassName: 'bi bi-bar-chart-line' },
     ],
     // REBASE RESOLUTION: Kept HEAD deps. Incoming (8e1a6ca9, 0139d1c5) omitted mfaEnabled.
@@ -793,7 +810,15 @@ export default function SettingsPage() {
     <div className="dashboard settings-page">
       <PageHeader
         title={t('header.title')}
-        subtitle={currentScope === 'admin' ? t('header.adminSubtitle') : t('header.userSubtitle')}
+        subtitle={
+          currentScope === 'admin'
+            ? t('header.adminSubtitle')
+            : currentScope === 'developer'
+              ? t('header.developerSubtitle')
+              : currentScope === 'audit'
+                ? t('header.auditSubtitle')
+                : t('header.userSubtitle')
+        }
         actions={
           isAdmin ? (
             <div className="settings-scope-toggle" role="group" aria-label={t('scope.label')}>
@@ -812,6 +837,22 @@ export default function SettingsPage() {
               >
                 <i className="bi bi-shield-lock" aria-hidden="true"></i>
                 {t('scope.admin')}
+              </button>
+              <button
+                type="button"
+                className={`settings-scope-toggle__button ${currentScope === 'developer' ? 'active' : ''}`}
+                onClick={() => setSettingsScope('developer')}
+              >
+                <i className="bi bi-code-slash" aria-hidden="true"></i>
+                {t('scope.developer')}
+              </button>
+              <button
+                type="button"
+                className={`settings-scope-toggle__button ${currentScope === 'audit' ? 'active' : ''}`}
+                onClick={() => setSettingsScope('audit')}
+              >
+                <i className="bi bi-clock-history" aria-hidden="true"></i>
+                {t('scope.audit')}
               </button>
             </div>
           ) : undefined
@@ -836,6 +877,23 @@ export default function SettingsPage() {
           className="settings-user-tabs-bar"
         />
       )}
+      {isAdmin && currentScope === 'audit' && (
+        <SubHeaderTabBar
+          items={[
+            { key: 'user-activity', label: t('auditTabs.userActivity'), iconClassName: 'bi bi-people' },
+            { key: 'web-crawler', label: t('auditTabs.webCrawler'), iconClassName: 'bi bi-globe' },
+            { key: 'transcripts', label: t('auditTabs.transcripts'), iconClassName: 'bi bi-file-text' },
+            { key: 'automation', label: t('auditTabs.automation'), iconClassName: 'bi bi-gear' },
+            { key: 'search-index', label: t('auditTabs.searchIndex'), iconClassName: 'bi bi-search' },
+            { key: 'kb-index', label: t('auditTabs.kbIndex'), iconClassName: 'bi bi-database' },
+            { key: 'notifications', label: t('auditTabs.notifications'), iconClassName: 'bi bi-bell' },
+          ]}
+          activeKey={auditTabKey}
+          onSelect={setAuditTabKey}
+          ariaLabel={t('scope.audit')}
+          className="settings-admin-tabs-bar"
+        />
+      )}
 
       <div className="app-content settings-app-content">
         <div hidden={currentScope !== 'user'} aria-hidden={currentScope !== 'user'}>
@@ -843,7 +901,7 @@ export default function SettingsPage() {
             embedded
             activeTabKey={userSettingsTabKey}
             onActiveTabChange={setUserSettingsTabKey}
-            settingsScope={currentScope}
+            settingsScope={currentScope === 'user' || currentScope === 'admin' ? currentScope : 'user'}
           />
         </div>
 
@@ -1496,32 +1554,6 @@ export default function SettingsPage() {
               </Tab>
               {isAdmin && (
                 <Tab
-                  eventKey="usage-analytics"
-                  title={
-                    <span>
-                      <i className="bi bi-code-slash me-2"></i>
-                      {t('tabs.developer')}
-                    </span>
-                  }
-                >
-                  <UsageAnalyticsPanel />
-                </Tab>
-              )}
-              {isAdmin && (
-                <Tab
-                  eventKey="audit"
-                  title={
-                    <span>
-                      <i className="bi bi-clock-history me-2"></i>
-                      {t('tabs.audit')}
-                    </span>
-                  }
-                >
-                  <AuditPanel />
-                </Tab>
-              )}
-              {isAdmin && (
-                <Tab
                   eventKey="usage"
                   title={
                     <span>
@@ -1534,6 +1566,29 @@ export default function SettingsPage() {
                 </Tab>
               )}
             </StyledTabs>
+          </div>
+        )}
+
+        {isAdmin && (
+          <div hidden={currentScope !== 'developer'} aria-hidden={currentScope !== 'developer'}>
+            <UsageAnalyticsPanel />
+          </div>
+        )}
+
+        {isAdmin && (
+          <div hidden={currentScope !== 'audit'} aria-hidden={currentScope !== 'audit'}>
+            {auditTabKey === 'user-activity' && <AuditPanel />}
+            {auditTabKey === 'web-crawler' && <GenericAuditLogTab logType="web-crawler" />}
+            {auditTabKey === 'transcripts' &&
+              (getFlag('TRANSCRIPTION_SERVICE') ? (
+                <TranscriptionJobsPanel />
+              ) : (
+                <GenericAuditLogTab logType="transcripts" />
+              ))}
+            {auditTabKey === 'automation' && <GenericAuditLogTab logType="automation" />}
+            {auditTabKey === 'search-index' && <GenericAuditLogTab logType="search-index" />}
+            {auditTabKey === 'kb-index' && <GenericAuditLogTab logType="kb-index" />}
+            {auditTabKey === 'notifications' && <NotificationsAuditPanel />}
           </div>
         )}
       </div>

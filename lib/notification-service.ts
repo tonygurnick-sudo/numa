@@ -17,7 +17,7 @@ export class NotificationService {
   static async createNotification(
     userId: string,
     eventType: 'started' | 'completed' | 'partial' | 'failed' | 'cancelled',
-    scheduleType: 'agent' | 'application' | 'data_sync',
+    scheduleType: 'agent' | 'application' | 'data_sync' | 'transcription',
     scheduleId: string,
     title: string,
     message: string,
@@ -64,7 +64,7 @@ export class NotificationService {
   static async notifyScheduleStarted(
     userId: string,
     scheduleId: string,
-    scheduleType: 'agent' | 'application' | 'data_sync',
+    scheduleType: 'agent' | 'application' | 'data_sync' | 'transcription',
     scheduleName: string
   ): Promise<void> {
     await this.createNotification(
@@ -81,7 +81,7 @@ export class NotificationService {
   static async notifyScheduleCompleted(
     userId: string,
     scheduleId: string,
-    scheduleType: 'agent' | 'application' | 'data_sync',
+    scheduleType: 'agent' | 'application' | 'data_sync' | 'transcription',
     scheduleName: string,
     result?: string,
     extraMetadata?: Record<string, unknown>
@@ -100,7 +100,7 @@ export class NotificationService {
   static async notifySchedulePartial(
     userId: string,
     scheduleId: string,
-    scheduleType: 'agent' | 'application' | 'data_sync',
+    scheduleType: 'agent' | 'application' | 'data_sync' | 'transcription',
     scheduleName: string,
     result?: string,
     extraMetadata?: Record<string, unknown>
@@ -119,7 +119,7 @@ export class NotificationService {
   static async notifyScheduleFailed(
     userId: string,
     scheduleId: string,
-    scheduleType: 'agent' | 'application' | 'data_sync',
+    scheduleType: 'agent' | 'application' | 'data_sync' | 'transcription',
     scheduleName: string,
     error: string,
     extraMetadata?: Record<string, unknown>
@@ -138,7 +138,7 @@ export class NotificationService {
   static async notifyScheduleCancelled(
     userId: string,
     scheduleId: string,
-    scheduleType: 'agent' | 'application' | 'data_sync',
+    scheduleType: 'agent' | 'application' | 'data_sync' | 'transcription',
     scheduleName: string
   ): Promise<void> {
     await this.createNotification(

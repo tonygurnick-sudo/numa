@@ -71,6 +71,10 @@ export interface WorkspaceChatAgentConstructProps {
   dataBucketName?: string;
   /** Data bucket ARN (for IAM read permissions) */
   dataBucketArn?: string;
+  /** V2 app runs DynamoDB table name (for updating run status on completion) */
+  v2AppRunsTableName?: string;
+  /** V2 app runs DynamoDB table ARN (for IAM permissions) */
+  v2AppRunsTableArn?: string;
 }
 
 export class WorkspaceChatAgentConstruct extends Construct {
@@ -383,6 +387,17 @@ echo "Successfully pushed image to ${this.ecrRepository.repositoryUrl}:${imageTa
                 },
               ]
             : []),
+          // V2 app runs table - update run status on completion
+          ...(props.v2AppRunsTableArn
+            ? [
+                {
+                  sid: 'DynamoDBV2AppRunsUpdate',
+                  effect: 'Allow' as const,
+                  actions: ['dynamodb:UpdateItem'],
+                  resources: [props.v2AppRunsTableArn],
+                },
+              ]
+            : []),
           // Cross-account Bedrock access (for global inference profiles)
           ...(props.bedrockAccount
             ? [
@@ -581,6 +596,10 @@ echo "Successfully pushed image to ${this.ecrRepository.repositoryUrl}:${imageTa
         // OAuth workspace tools Lambda for connect tools (OAuth, Synergy, S3 data bucket)
         ...(props.oauthWorkspaceToolsLambdaName && {
           OAUTH_WORKSPACE_TOOLS_LAMBDA_NAME: props.oauthWorkspaceToolsLambdaName,
+        }),
+        // V2 app runs table (for updating run status on completion)
+        ...(props.v2AppRunsTableName && {
+          V2_APP_RUNS_TABLE: props.v2AppRunsTableName,
         }),
         // Cross-account Bedrock access (for global inference profiles)
         ...(props.bedrockAccount && {

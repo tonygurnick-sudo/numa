@@ -3,7 +3,7 @@ import { S3Client, PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { v4 as uuidv4 } from 'uuid';
 import * as process from 'node:process';
-import { convertMdToDocx, convertMdToPdf, convertDocxToPdf, convertPdfToDocx } from './lib/converter.js';
+import { convertMdToDocx, convertMdToPdf, convertPdfToDocx, convertGenericToPdf } from './lib/converter.js';
 
 // Initialize S3 client
 const s3Client = new S3Client({});
@@ -128,17 +128,37 @@ export async function handler(event: APIGatewayProxyEventV2): Promise<APIGateway
 
       // Detect input format from S3 key extension
       const keyLower = request.sourceKey.toLowerCase();
-      const inputFormat = keyLower.endsWith('.pdf') ? 'pdf' : keyLower.endsWith('.docx') ? 'docx' : null;
+      const LIBREOFFICE_EXTENSIONS = [
+        '.doc',
+        '.docx',
+        '.key',
+        '.numbers',
+        '.odp',
+        '.ods',
+        '.odt',
+        '.pages',
+        '.ppt',
+        '.pptx',
+        '.rtf',
+        '.xls',
+      ];
+      const inputFormat = keyLower.endsWith('.pdf')
+        ? 'pdf'
+        : LIBREOFFICE_EXTENSIONS.some((ext) => keyLower.endsWith(ext))
+          ? 'libreoffice'
+          : null;
 
       if (!inputFormat) {
-        return errorResponse(400, 'Source file must be .pdf or .docx');
+        return errorResponse(400, 'Source file must be .pdf or a LibreOffice-compatible format');
       }
 
       console.log(`Converting file (${inputBuffer.length} bytes, ${inputFormat}) to ${request.format}`);
 
       // Convert based on input/output format
-      if (inputFormat === 'docx' && request.format === 'pdf') {
-        outputBuffer = await convertDocxToPdf(inputBuffer);
+      if (inputFormat === 'libreoffice' && request.format === 'pdf') {
+        // Extract original extension for LibreOffice (e.g. "input.pptx")
+        const ext = keyLower.substring(keyLower.lastIndexOf('.'));
+        outputBuffer = await convertGenericToPdf(inputBuffer, ext);
       } else if (inputFormat === 'pdf' && request.format === 'docx') {
         outputBuffer = await convertPdfToDocx(inputBuffer);
       } else if (inputFormat === request.format) {

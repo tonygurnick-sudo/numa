@@ -1,6 +1,6 @@
-import { Button, Spinner } from 'react-bootstrap';
+import { Button, Dropdown, Spinner } from 'react-bootstrap';
 import { useTranslation } from 'react-i18next';
-import { Link2, Settings, Zap } from 'lucide-react';
+import { Link2, MoreVertical, Settings, Trash2, Zap } from 'lucide-react';
 
 type OAuthConnectorCardProps = {
   providerId: string;
@@ -12,6 +12,8 @@ type OAuthConnectorCardProps = {
   onTest: () => void;
   isLoading: boolean;
   adminDisabled?: boolean;
+  onDisconnect?: () => void;
+  isDisconnecting?: boolean;
 };
 
 export const OAuthConnectorCard = ({
@@ -24,6 +26,8 @@ export const OAuthConnectorCard = ({
   onTest,
   isLoading,
   adminDisabled = false,
+  onDisconnect,
+  isDisconnecting = false,
 }: OAuthConnectorCardProps) => {
   const { t } = useTranslation('integrations');
 
@@ -61,7 +65,7 @@ export const OAuthConnectorCard = ({
                   variant="light"
                   size="sm"
                   onClick={onTest}
-                  disabled={isLoading || adminDisabled}
+                  disabled={isLoading || adminDisabled || isDisconnecting}
                   className="integrations-row-btn integrations-row-btn--primary"
                 >
                   <Zap size={14} className="integrations-row-btn__icon" />
@@ -71,12 +75,30 @@ export const OAuthConnectorCard = ({
                   variant="light"
                   size="sm"
                   onClick={onConfigure}
-                  disabled={isLoading || adminDisabled}
+                  disabled={isLoading || adminDisabled || isDisconnecting}
                   className="integrations-row-btn integrations-row-btn--secondary"
                 >
                   <Settings size={14} className="integrations-row-btn__icon" />
                   <span className="integrations-row-btn__label">{t('dataConnectors.actions.settings')}</span>
                 </Button>
+                {onDisconnect && (
+                  <Dropdown align="end">
+                    <Dropdown.Toggle
+                      variant="light"
+                      size="sm"
+                      className="integrations-row-btn integrations-row-btn--secondary"
+                      disabled={isDisconnecting}
+                    >
+                      {isDisconnecting ? <Spinner size="sm" /> : <MoreVertical size={14} />}
+                    </Dropdown.Toggle>
+                    <Dropdown.Menu>
+                      <Dropdown.Item className="text-danger d-flex align-items-center gap-2" onClick={onDisconnect}>
+                        <Trash2 size={14} />
+                        {t('dataConnectors.actions.disconnect')}
+                      </Dropdown.Item>
+                    </Dropdown.Menu>
+                  </Dropdown>
+                )}
               </>
             ) : (
               <Button

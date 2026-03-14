@@ -33,6 +33,7 @@ python-docx = "^1.1.2"
 extract-msg = ">=0.48.7"
 PyMuPDF = "^1.24.0,<1.26.1"
 Pillow = "^10.0.0"
+pillow-heif = ">=0.16.0"
 opentelemetry-instrumentation-threading = "0.54b1"
 
 [tool.poetry.group.dev.dependencies]
@@ -41,5 +42,6 @@ mypy = "1.17.1"
 pylint = "3.3.8"
 pyright = "1.1.403"
 openpyxl-stubs = "^0.1.25"
+pytest = "^9.0.2"
 [tool.poetry.group.boto.dependencies]
 boto3 = "1.40.25"

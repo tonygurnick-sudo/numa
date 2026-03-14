@@ -52,6 +52,7 @@ import { DataAwsSsmParameter } from '@cdktf/provider-aws/lib/data-aws-ssm-parame
 import { NumaLambda } from '../constructs/numa-lambda';
 import { OAuthIntegrationConstruct } from '../constructs/oauth-integration-construct';
 import { OpsConstruct } from '../constructs/ops-construct';
+import { TranscriptionServiceConstruct } from '../constructs/transcription-service-construct';
 import { VaultSecretsConstruct } from '../constructs/vault-secrets-construct';
 import { V2AppsConstruct } from '../constructs/v2-apps-construct';
 import { WorkspaceChatAgentConstruct } from '../constructs/workspace-chat-agent-construct';
@@ -502,6 +503,9 @@ export class NumaClientStack extends TerraformStack {
       dataConnectorsSettingsTableName: core.dataConnectorsSettingsTable.name,
       capabilitiesTableName: core.capabilitiesTable.name,
       dataConnectorsSyncConfigsTableName: core.dataConnectorsSyncConfigsTable.name,
+      connectorEventsTableName: core.connectorEventsTable.name,
+      connectorEventConfigsTableName: core.connectorEventConfigsTable.name,
+      connectorEventBusName: core.connectorEventBusName,
       agentSchedulesTableName: core.agentSchedulesTable.name,
       notificationsTableName: core.notificationsTable.name,
       chatAgentFunctionUrl: chatAgent.functionUrl,
@@ -519,6 +523,16 @@ export class NumaClientStack extends TerraformStack {
       usageAnalyticsCountersTableName: core.usageAnalyticsCountersTable.name,
       usageAnalyticsCountersTableArn: core.usageAnalyticsCountersTable.arn,
       domainName,
+      auditWebCrawlerTableName: core.auditWebCrawlerTable.name,
+      auditWebCrawlerTableArn: core.auditWebCrawlerTable.arn,
+      auditTranscriptsTableName: core.auditTranscriptsTable.name,
+      auditTranscriptsTableArn: core.auditTranscriptsTable.arn,
+      auditAutomationTableName: core.auditAutomationTable.name,
+      auditAutomationTableArn: core.auditAutomationTable.arn,
+      auditSearchIndexTableName: core.auditSearchIndexTable.name,
+      auditSearchIndexTableArn: core.auditSearchIndexTable.arn,
+      auditKbIndexTableName: core.auditKbIndexTable.name,
+      auditKbIndexTableArn: core.auditKbIndexTable.arn,
     });
 
     // Numa Ops (work management, kanban boards, CRM, supplier management)
@@ -552,6 +566,31 @@ export class NumaClientStack extends TerraformStack {
         region: clientConfig.region,
         vaultAuditLogTableName: core.vaultAuditLogTable.name,
         vaultAuditLogTableArn: core.vaultAuditLogTable.arn,
+        otelConfig: {
+          otelConfigPath: core.otelConfigPath,
+          honeycombIngestKey: honeycombBackendKey,
+          region: clientConfig.region,
+        },
+      });
+    }
+
+    // Transcription Service (async job queue for document transcription)
+    if (clientConfig.transcriptionService) {
+      new TranscriptionServiceConstruct(this, safeConstructId + '-transcription', {
+        apiGatewayAuthorizerId: fe.authorizer.id,
+        apiGatewayId: fe.apiGateway.id,
+        clientName: props.clientName,
+        region: clientConfig.region,
+        dataBucketArn: core.dataBucket.bucket.arn,
+        dataBucketName: core.dataBucket.bucket.bucket,
+        outputsBucketArn: core.outputsBucket.bucket.arn,
+        extractContentLambdaArn: coreApis.extractContentLambda.arn,
+        extractContentLambdaName: coreApis.extractContentLambda.functionName,
+        notificationsTableName: core.notificationsTable.name,
+        notificationsTableArn: core.notificationsTable.arn,
+        usageAnalyticsEventsTableName: core.usageAnalyticsEventsTable.name,
+        usageAnalyticsEventsTableArn: core.usageAnalyticsEventsTable.arn,
+        deployerRoleArn: deployerRole,
         otelConfig: {
           otelConfigPath: core.otelConfigPath,
           honeycombIngestKey: honeycombBackendKey,
@@ -715,6 +754,7 @@ export class NumaClientStack extends TerraformStack {
         // Per-provider flags removed — providers are now configured dynamically via COMPANY vault secrets.
         // OAUTH_GOOGLE_DRIVE, OAUTH_ONEDRIVE, OAUTH_DROPBOX are no longer needed in config.json.
         V2_APPS: clientConfig.v2Apps ?? false,
+        TRANSCRIPTION_SERVICE: clientConfig.transcriptionService ?? false,
         // Direct Lambda Function URL for workspace chat agent (bypasses CloudFront buffering for streaming)
         WORKSPACE_CHAT_AGENT_FUNCTION_URL: workspaceChatAgentProxy?.functionUrl,
         NUMA_VERSION: siteVersion,
@@ -1099,6 +1139,13 @@ export const clientConfigSchema = coreNumaInfraPropsSchema
          * @default false
          */
         v2Apps: z.boolean().optional().default(false),
+
+        /**
+         * Whether to enable the Transcription Service (async job queue for document transcription).
+         *
+         * @default false
+         */
+        transcriptionService: z.boolean().optional().default(false),
       })
       .strict()
   );

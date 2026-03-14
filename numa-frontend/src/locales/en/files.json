@@ -6,7 +6,31 @@
     "company": "Company",
     "myFiles": "My Files",
     "shared": "Shared",
-    "remote": "Remote"
+    "remote": "Remote",
+    "transcripts": "Transcripts"
+  },
+  "transcripts": {
+    "empty": "No transcripts yet",
+    "emptyMessage": "Completed transcriptions will appear here",
+    "viewOutput": "View transcript",
+    "loadMore": "Load more",
+    "headers": {
+      "format": "Format"
+    },
+    "viewer": {
+      "title": "Transcript",
+      "page": "Page {{num}}",
+      "noContent": "No content available",
+      "metadata": {
+        "fileName": "Source file",
+        "fileSize": "File size",
+        "format": "Format",
+        "transcribed": "Transcribed"
+      }
+    },
+    "errors": {
+      "loadOutputFailed": "Failed to load transcript content"
+    }
   },
   "remote": {
     "rootLabel": "Remote",

@@ -59,6 +59,15 @@
             text-decoration: none;
           }
         }
+
+        &--active {
+          color: var(--bs-body-color);
+          cursor: default;
+
+          &:hover {
+            text-decoration: none;
+          }
+        }
       }
 
       .breadcrumb-separator {

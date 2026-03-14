@@ -104,6 +104,25 @@ export async function convertDocxToPdf(docxBuffer: Buffer): Promise<Buffer> {
 }
 
 /**
+ * Convert any LibreOffice-compatible format to PDF.
+ * Accepts the original file extension (e.g. ".pptx", ".doc", ".odt") so that
+ * LibreOffice can identify the input format correctly.
+ */
+export async function convertGenericToPdf(inputBuffer: Buffer, extension: string): Promise<Buffer> {
+  const inputFilename = `input${extension}`;
+  const inputPath = `/tmp/${inputFilename}`;
+
+  try {
+    writeFileSync(inputPath, inputBuffer);
+    const pdfPath = await convertTo(inputFilename, 'pdf');
+    const result = readFileSync(pdfPath);
+    return result;
+  } finally {
+    cleanup(inputPath);
+  }
+}
+
+/**
  * Convert PDF to DOCX using LibreOffice directly
  * Note: Quality may vary - PDF is a presentation format, not editable.
  * Complex layouts, images, and tables may not convert cleanly.

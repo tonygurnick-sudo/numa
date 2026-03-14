@@ -82,6 +82,8 @@ type UseWorkspaceChatStreamingOptions = {
   getCredentials?: () => Promise<AwsCredentialIdentity>;
   /** Callback to refresh the session files panel after saving inline docs */
   refreshSessionFiles?: () => void;
+  /** Authenticated POST helper for API calls (transcription submit, etc.) */
+  numaPost?: (url: string, data?: unknown, headers?: Record<string, string>) => Promise<unknown>;
 };
 
 const resolveErrorMessage = (error: unknown, fallback: string): string => {
@@ -109,6 +111,7 @@ export function useWorkspaceChatStreaming({
   onStreamComplete,
   getCredentials,
   refreshSessionFiles,
+  numaPost,
 }: UseWorkspaceChatStreamingOptions) {
   // Workspace chat-specific refs
   const workspaceChatEventContextRef = useRef<SDKEventContext>(createSDKEventContext());
@@ -652,9 +655,13 @@ export function useWorkspaceChatStreaming({
 
               // Auto-save inline document to S3 outputs (fire-and-forget)
               if (getCredentials && conversationId) {
-                saveInlineDocumentToS3(docBlock.docTitle, docBlock.docContent, conversationId, getCredentials).then(
-                  () => refreshSessionFiles?.()
-                );
+                saveInlineDocumentToS3(
+                  docBlock.docTitle,
+                  docBlock.docContent,
+                  conversationId,
+                  getCredentials,
+                  numaPost
+                ).then(() => refreshSessionFiles?.());
               }
             }
           }
@@ -739,6 +746,7 @@ export function useWorkspaceChatStreaming({
       onStreamComplete,
       getCredentials,
       refreshSessionFiles,
+      numaPost,
     ]
   );
 
