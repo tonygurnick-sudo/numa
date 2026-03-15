@@ -165,7 +165,7 @@ export const ROUTE_CONFIG = [
     element: () => <CompanyKnowledgeBase />,
     requiredFeature: 'useCompanyData',
     nav: {
-      label: 'Company Files',
+      label: 'Company KB',
       labelKey: 'nav.items.companyKnowledgeBase',
       icon: 'bi bi-file-earmark-text',
       section: 'knowledgeBases',
@@ -178,7 +178,7 @@ export const ROUTE_CONFIG = [
     element: () => <UserKnowledgeBases />,
     requiredFeature: 'useCompanyData',
     nav: {
-      label: 'User Files',
+      label: 'User KBs',
       labelKey: 'nav.items.userKnowledgeBase',
       icon: 'bi bi-person-lines-fill',
       section: 'knowledgeBases',
