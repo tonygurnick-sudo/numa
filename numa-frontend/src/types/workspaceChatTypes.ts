@@ -569,7 +569,7 @@ export interface WorkspaceChatCleanupResponse {
 export type OnWorkspaceChatEvent = (event: ClaudeCliEvent) => void;
 
 /** Callback for stream completion */
-export type OnWorkspaceChatComplete = () => void;
+export type OnWorkspaceChatComplete = (info: { receivedCompletion: boolean }) => void;
 
 /** Callback for stream errors */
 export type OnWorkspaceChatError = (error: Error) => void;

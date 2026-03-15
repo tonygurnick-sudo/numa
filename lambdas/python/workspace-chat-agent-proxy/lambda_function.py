@@ -9,6 +9,7 @@ This proxy forwards HTTP requests to the workspace chat agent running in AgentCo
 using the invoke_agent_runtime API.
 """
 
+import asyncio
 import base64
 import hashlib
 import hmac as hmac_mod
@@ -16,6 +17,7 @@ import json
 import logging
 import mimetypes
 import os
+import queue as queue_mod
 import time as time_mod
 from typing import Any, AsyncGenerator, Dict
 
@@ -919,8 +921,42 @@ def _stream_response(response) -> StreamingResponse:
                 return
 
             # --- EXPERIMENT: raw passthrough (no filtering) ---
-            for chunk in streaming_body.iter_chunks(chunk_size=128):
-                yield chunk
+            # iter_chunks is synchronous (boto3), so we push chunks into a
+            # thread-safe queue and read with a timeout.  When no chunk
+            # arrives within _keepalive_secs we yield an SSE comment to
+            # hold the CloudFront connection open (originReadTimeout=180s).
+            _keepalive_secs = 30
+            _keepalive = b": keepalive\n\n"
+            _sentinel = object()
+
+            chunk_q: queue_mod.Queue = queue_mod.Queue()
+
+            def _reader() -> None:
+                """Background thread: pushes chunks then sentinel."""
+                try:
+                    for chunk in streaming_body.iter_chunks(chunk_size=128):
+                        chunk_q.put(chunk)
+                except Exception as exc:
+                    chunk_q.put(exc)
+                chunk_q.put(_sentinel)
+
+            loop = asyncio.get_event_loop()
+            loop.run_in_executor(None, _reader)
+
+            while True:
+                try:
+                    item = await asyncio.to_thread(chunk_q.get, True, _keepalive_secs)
+                except queue_mod.Empty:
+                    # No data in _keepalive_secs — send SSE comment to
+                    # prevent CloudFront from timing out the connection.
+                    yield _keepalive
+                    continue
+
+                if item is _sentinel:
+                    break
+                if isinstance(item, BaseException):
+                    raise item
+                yield item
 
             # --- ORIGINAL FILTERING CODE (commented out for experiment) ---
             # buffer = b""

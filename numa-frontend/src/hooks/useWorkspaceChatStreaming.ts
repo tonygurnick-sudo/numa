@@ -1,4 +1,5 @@
 import { useRef, useCallback, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   stopWorkspaceChatAgent,
   streamWorkspaceChatAgent,
@@ -113,6 +114,8 @@ export function useWorkspaceChatStreaming({
   refreshSessionFiles,
   numaPost,
 }: UseWorkspaceChatStreamingOptions) {
+  const { t } = useTranslation('chat');
+
   // Workspace chat-specific refs
   const workspaceChatEventContextRef = useRef<SDKEventContext>(createSDKEventContext());
   const workspaceChatAbortRef = useRef<(() => void) | null>(null);
@@ -622,8 +625,25 @@ export function useWorkspaceChatStreaming({
           processSDKEvent(event, workspaceChatEventContextRef.current, workspaceChatHelpers);
         },
         // onComplete
-        () => {
+        ({ receivedCompletion }) => {
           handleSDKStreamComplete(workspaceChatEventContextRef.current, workspaceChatHelpers);
+
+          // If the stream closed without a proper completion marker
+          // (ResultMessage / completion / error from the agent), the
+          // connection was likely dropped mid-stream (e.g. timeout).
+          // Show a system message so the user knows the response may
+          // be incomplete and they can retry.
+          if (!receivedCompletion) {
+            console.warn('[WorkspaceChat] Stream closed without completion marker — possible timeout');
+            setMessages((prev) => [
+              ...prev,
+              {
+                role: 'system',
+                content: t('chat:systemMessages.streamDisconnected'),
+              },
+            ]);
+          }
+
           isProcessingRef.current = false;
           workspaceChatAbortRef.current = null;
           activeStreamingTasksRef.current.clear();
@@ -747,6 +767,7 @@ export function useWorkspaceChatStreaming({
       getCredentials,
       refreshSessionFiles,
       numaPost,
+      t,
     ]
   );
 

@@ -363,7 +363,7 @@ export class NumaFrontendInfra extends Construct {
           httpsPort: 443,
           originProtocolPolicy: 'https-only',
           originSslProtocols: ['TLSv1.2'],
-          originReadTimeout: 60, // Long timeout for streaming
+          originReadTimeout: 60, // Long timeout for streaming — keep-alive pings every 30s
         },
         domainName: workspaceChatProxyDomain,
         originId: 'workspace-chat-agent-proxy',

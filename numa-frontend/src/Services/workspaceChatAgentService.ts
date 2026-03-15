@@ -206,6 +206,9 @@ export async function streamWorkspaceChatAgent(
     const reader = res.body.getReader();
     const decoder = new TextDecoder();
     let buffer = '';
+    // Track whether the stream ended with a proper completion marker
+    // (ResultMessage, completion event, or error event from the agent).
+    let receivedCompletion = false;
 
     // Async streaming pump - parses SSE format (text/event-stream)
     // SSE format: lines starting with "data: " contain JSON, lines starting with ":" are comments (heartbeats)
@@ -240,6 +243,11 @@ export async function streamWorkspaceChatAgent(
                 try {
                   const event = JSON.parse(jsonStr);
 
+                  // Track completion markers from the agent
+                  if (event.type === 'result' || event.type === 'completion' || event.type === 'error') {
+                    receivedCompletion = true;
+                  }
+
                   // Check for AgentCore session events first (including assistant advice)
                   if (
                     event.type === 'session_init' ||
@@ -272,6 +280,11 @@ export async function streamWorkspaceChatAgent(
               const jsonStr = trimmedLine.slice(6);
               try {
                 const event = JSON.parse(jsonStr);
+
+                if (event.type === 'result' || event.type === 'completion' || event.type === 'error') {
+                  receivedCompletion = true;
+                }
+
                 if (
                   event.type === 'session_init' ||
                   event.type === 'conversation_switch' ||
@@ -288,7 +301,7 @@ export async function streamWorkspaceChatAgent(
           }
         }
 
-        onComplete();
+        onComplete({ receivedCompletion });
       } catch (err) {
         if ((err as Error).name !== 'AbortError') {
           onError(err as Error);
