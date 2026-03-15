@@ -1,3 +1,5 @@
+// MERGE: kept dev version — adds Collapse/Chevron imports, collapsible API
+//   reference section, setup step rendering, and enriched wizard steps.
 import { useCallback, useEffect, useState } from 'react';
 import { Alert, Col, Collapse, Form, Row } from 'react-bootstrap';
 import { useTranslation } from 'react-i18next';

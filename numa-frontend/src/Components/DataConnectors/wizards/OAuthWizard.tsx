@@ -1,3 +1,5 @@
+// MERGE: kept dev version — adds setup guide steps, collapsible advanced section,
+//   scope picker with PROVIDER_SCOPES integration, and enriched review step.
 import { useCallback, useEffect, useState } from 'react';
 import { Alert, Button, Col, Collapse, Form, Row, Spinner } from 'react-bootstrap';
 import { useTranslation } from 'react-i18next';

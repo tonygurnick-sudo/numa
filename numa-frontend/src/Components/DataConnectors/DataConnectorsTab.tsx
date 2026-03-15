@@ -18,6 +18,7 @@ import { SynergyWizard } from './wizards/SynergyWizard';
 import { OAuthWizard } from './wizards/OAuthWizard';
 import { PlatformPickerModal } from './wizards/PlatformPickerModal';
 import { ApiKeyWizard } from './wizards/ApiKeyWizard';
+// MERGE: kept dev — GoogleCloudSetupWizard + EventConfigPanel added in dev after initial wizard commit
 import { GoogleCloudSetupWizard } from './wizards/GoogleCloudSetupWizard';
 import EventConfigPanel from './EventConfigPanel';
 import type { GlobalDataConnectorSettingsMap } from '../../Services/AdminDataConnectorsService';
@@ -70,6 +71,7 @@ export const DataConnectorsTab = ({ adminSettings }: DataConnectorsTabProps) => 
   const [platformPickerOpen, setPlatformPickerOpen] = useState(false);
   const [apiKeyWizardOpen, setApiKeyWizardOpen] = useState(false);
   const [apiKeyWizardConnector, setApiKeyWizardConnector] = useState<ConnectorTemplate | null>(null);
+  // MERGE: kept dev — disconnect, google setup, and event config state added in dev
   const [disconnectingId, setDisconnectingId] = useState<string | null>(null);
   const [googleSetupWizardOpen, setGoogleSetupWizardOpen] = useState(false);
   const [eventConfigConnectorId, setEventConfigConnectorId] = useState<string | null>(null);
@@ -374,6 +376,7 @@ export const DataConnectorsTab = ({ adminSettings }: DataConnectorsTabProps) => 
               }}
               isLoading={false}
               adminDisabled={!isAdmin && !credentialConfigured}
+              // MERGE: kept dev — disconnect support for non-OAuth connectors added in dev
               onDisconnect={
                 isAdmin && credentialConfigured
                   ? () => handleConnectorDelete(connector.id, connector.displayName)
@@ -433,7 +436,7 @@ export const DataConnectorsTab = ({ adminSettings }: DataConnectorsTabProps) => 
         />
       )}
 
-      {/* Google Cloud Setup Wizard */}
+      {/* MERGE: kept dev — GoogleCloudSetupWizard and EventConfigPanel added in dev */}
       <GoogleCloudSetupWizard
         show={googleSetupWizardOpen}
         onHide={() => setGoogleSetupWizardOpen(false)}
@@ -444,7 +447,6 @@ export const DataConnectorsTab = ({ adminSettings }: DataConnectorsTabProps) => 
         }}
       />
 
-      {/* Event Config Panel (shown when a connector with eventTypes is selected) */}
       {eventConfigConnectorId &&
         (() => {
           const connector = getConnectorById(eventConfigConnectorId);
@@ -456,6 +458,7 @@ export const DataConnectorsTab = ({ adminSettings }: DataConnectorsTabProps) => 
                   {t('dataConnectors.events.title')} — {connector.displayName}
                 </h5>
                 <Button variant="link" size="sm" onClick={() => setEventConfigConnectorId(null)}>
+                  {/* MERGE: kept dev — uses i18n key instead of raw ✕ character */}
                   {t('dataConnectors.events.close')}
                 </Button>
               </div>

@@ -1,5 +1,7 @@
 // ---------------------------------------------------------------------------
 // Connector Registry — single source of truth for all 25+ platforms
+// MERGE: kept dev version — adds ConnectorEventType, eventTypes on Gmail,
+//   oauthSetupSteps, and enriched apiReference fields vs base wizard commit.
 // ---------------------------------------------------------------------------
 
 import type { ProviderTemplate } from './wizards/OAuthWizard';

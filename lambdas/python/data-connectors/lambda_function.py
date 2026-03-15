@@ -40,16 +40,21 @@ EVENT_CONFIGS_TABLE_NAME = os.environ.get("CONNECTOR_EVENT_CONFIGS_TABLE_NAME")
 SYSTEM_KB_IDS = {"company", "numa-support"}
 
 
-def _response(status: int, body: Dict[str, Any]) -> Dict[str, Any]:
+def _response(
+    status: int, body: Dict[str, Any], *, cache_control: Optional[str] = None
+) -> Dict[str, Any]:
     """Return a JSON API response with CORS headers."""
+    headers: Dict[str, str] = {
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods": "OPTIONS,GET,POST,PUT,DELETE",
+        "Access-Control-Allow-Headers": "Content-Type,Authorization",
+        "Content-Type": "application/json",
+    }
+    if cache_control:
+        headers["Cache-Control"] = cache_control
     return {
         "statusCode": status,
-        "headers": {
-            "Access-Control-Allow-Origin": "*",
-            "Access-Control-Allow-Methods": "OPTIONS,GET,POST,PUT,DELETE",
-            "Access-Control-Allow-Headers": "Content-Type,Authorization",
-            "Content-Type": "application/json",
-        },
+        "headers": headers,
         "body": json.dumps(body),
     }
 
@@ -276,7 +281,7 @@ def _handle_synergy_jobs(
     except (ValueError, httpx.HTTPError) as exc:
         logger.warning("Synergy job search failed", error=str(exc))
         return _response(400, {"error": str(exc)})
-    return _response(200, payload)
+    return _response(200, payload, cache_control="private, max-age=300")
 
 
 def _handle_synergy_job_folders(
@@ -292,7 +297,7 @@ def _handle_synergy_job_folders(
     except (ValueError, httpx.HTTPError) as exc:
         logger.warning("Synergy job folders failed", error=str(exc))
         return _response(400, {"error": str(exc)})
-    return _response(200, {"items": items})
+    return _response(200, {"items": items}, cache_control="private, max-age=300")
 
 
 def _handle_synergy_folder_items(
@@ -308,7 +313,7 @@ def _handle_synergy_folder_items(
     except (ValueError, httpx.HTTPError) as exc:
         logger.warning("Synergy folder items failed", error=str(exc))
         return _response(400, {"error": str(exc)})
-    return _response(200, payload)
+    return _response(200, payload, cache_control="private, max-age=300")
 
 
 def _handle_sync_configs_list(user_id: str, table_name: str) -> Dict[str, Any]:

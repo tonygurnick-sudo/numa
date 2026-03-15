@@ -411,6 +411,20 @@ def _build_resource_usage(processing_time_ms: int) -> dict:
     }
 
 
+def _build_resource_usage(processing_time_ms: int) -> dict:
+    """Build resource usage metadata for billing/cost calculation later."""
+    return {
+        "fargate": {
+            "vcpu": 2,
+            "memoryGb": 4,
+            "arch": "ARM64",
+            "durationMs": processing_time_ms,
+        },
+        "s3": {"reads": 1, "writes": 1},
+        "total": 0,
+    }
+
+
 def main() -> None:
     """Main entrypoint for the Fargate task."""
     logger.info(

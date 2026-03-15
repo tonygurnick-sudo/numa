@@ -61,7 +61,8 @@
     "connectionError": "Error",
     "loadingProviderFiles": "Loading {{provider}} files...",
     "noFilesFound": "No files found",
-    "folderEmpty": "This folder is empty."
+    "folderEmpty": "This folder is empty.",
+    "refreshing": "Refreshing..."
   },
   "toolbar": {
     "up": "Up",

@@ -1,3 +1,4 @@
+// MERGE: kept dev version — uses gap-2 spacing and maxHeight 520 vs base commit's gap-1/420.
 import { useMemo, useState } from 'react';
 import { Badge, Button, Form, Modal } from 'react-bootstrap';
 import { useTranslation } from 'react-i18next';

@@ -55,21 +55,13 @@ import TranscriptViewerPanel from '../Components/Files/TranscriptViewerPanel';
 import { TranscriptionService } from '../Services/TranscriptionService';
 import type { TranscriptionJob, TranscriptionOutput } from '../Services/TranscriptionService';
 import { useFileSelection } from '../hooks/useFileSelection';
+import { useRemoteBrowse } from '../hooks/useRemoteBrowse';
 import { listObjectsInFolder } from '../utils/s3Utils';
 import { useFilesCache } from './useFilesCache';
 import { DataConnectorsService } from '../Services/DataConnectorsService';
-import { SynergyDataConnectorService } from '../Services/SynergyDataConnectorService';
 import { OAuthProvidersService } from '../Services/OAuthProvidersService';
 import type { DataConnectorStatus } from '../types/dataConnectors';
-import type { SynergyJob, SynergyFolder, SynergyFile } from '../types/synergySync';
-import type {
-  OAuthProviderType,
-  OAuthProviderInfo,
-  OAuthFile,
-  OAuthFolder,
-  OAuthConnectionStatus,
-  OAuthBreadcrumb,
-} from '../types/oauthProviders';
+import type { OAuthProviderType, OAuthProviderInfo, OAuthConnectionStatus } from '../types/oauthProviders';
 import { SynergyIcon } from '../Components/DataConnectors/SynergyConnectorCard';
 import { VaultSecretForm } from '../Components/Vault/VaultSecretForm';
 import type { VaultSecretMetadata, CreateSecretPayload } from '../Services/VaultService';
@@ -323,30 +315,17 @@ export const FilesPage = () => {
   const sharingEnabled = getFlag('NUMA_SHARING');
   const transcriptionEnabled = getFlag('TRANSCRIPTION_SERVICE');
 
-  // Synergy state
+  // Synergy connection state (stays local — not part of browsing)
   const [synergyStatus, setSynergyStatus] = useState<DataConnectorStatus | null>(null);
   const [synergyStatusLoading, setSynergyStatusLoading] = useState(false);
-  const [synergyJobs, setSynergyJobs] = useState<SynergyJob[]>([]);
-  const [synergyJobsLoading, setSynergyJobsLoading] = useState(false);
-  const [synergyFolders, setSynergyFolders] = useState<SynergyFolder[]>([]);
-  const [synergyFiles, setSynergyFiles] = useState<SynergyFile[]>([]);
-  const [synergyFoldersLoading, setSynergyFoldersLoading] = useState(false);
-  type SynergyBreadcrumb = { label: string; type: 'root' | 'job' | 'folder'; id?: string };
-  const [synergyBreadcrumbs, setSynergyBreadcrumbs] = useState<SynergyBreadcrumb[]>([
-    { label: t('remote.rootLabel'), type: 'root' },
-  ]);
+  const synergyConnected = synergyStatus?.status === 'connected';
   // Connect modal state for Remote tab
   const [showConnectModal, setShowConnectModal] = useState(false);
   const [connectServer, setConnectServer] = useState('');
 
-  // OAuth providers state — dynamically keyed
+  // OAuth providers status/connection state (stays local — not part of browsing)
   const [oauthProviderStatuses, setOauthProviderStatuses] = useState<Record<string, OAuthConnectionStatus>>({});
   const [oauthStatusLoading, setOauthStatusLoading] = useState<Record<string, boolean>>({});
-  const [selectedOauthProvider, setSelectedOauthProvider] = useState<OAuthProviderType | null>(null);
-  const [oauthFiles, setOauthFiles] = useState<OAuthFile[]>([]);
-  const [oauthFolders, setOauthFolders] = useState<OAuthFolder[]>([]);
-  const [oauthContentLoading, setOauthContentLoading] = useState(false);
-  const [oauthBreadcrumbs, setOauthBreadcrumbs] = useState<OAuthBreadcrumb[]>([]);
   const [connectingOauthProvider, setConnectingOauthProvider] = useState<OAuthProviderType | null>(null);
   const [connecting, setConnecting] = useState(false);
   const [connectError, setConnectError] = useState<string | null>(null);
@@ -355,6 +334,45 @@ export const FilesPage = () => {
   const [loadingSecrets, setLoadingSecrets] = useState(false);
   const [showVaultForm, setShowVaultForm] = useState(false);
   const [vaultCategories, setVaultCategories] = useState<string[]>([]);
+
+  // ---------------------------------------------------------------------------
+  // Remote browsing — cache-first fetching + background prefetch
+  // ---------------------------------------------------------------------------
+  const remote = useRemoteBrowse({
+    numaGet,
+    showToast,
+    enabledOAuthProviders,
+    oauthProviderStatuses,
+    synergyConnected,
+    activeTab,
+  });
+
+  const {
+    oauthFolders,
+    oauthFiles,
+    oauthBreadcrumbs,
+    oauthContentLoading,
+    oauthRevalidating,
+    selectedOauthProvider,
+    synergyJobs,
+    synergyFolders,
+    synergyFiles,
+    synergyBreadcrumbs,
+    synergyFoldersLoading,
+    synergyJobsLoading,
+    synergyRevalidating: _synergyRevalidating,
+    handleOAuthProviderClick,
+    handleOAuthFolderClick,
+    handleOAuthBreadcrumbClick,
+    handleSynergyJobClick,
+    handleSynergyFolderClick,
+    handleSynergyBreadcrumbClick,
+    loadSynergyJobs: _loadSynergyJobs,
+    setSelectedOauthProvider: _setSelectedOauthProvider,
+    resetToRoot: resetRemoteToRoot,
+    navigateToSynergyJobs,
+    observeFolder,
+  } = remote;
 
   const dragCounter = useRef(0);
 
@@ -495,17 +513,7 @@ export const FilesPage = () => {
 
       // Reset remote tab state to always show top level
       if (tab === 'remote') {
-        setSelectedOauthProvider(null);
-        setSynergyBreadcrumbs([{ label: t('remote.rootLabel'), type: 'root' }]);
-        setOauthBreadcrumbs([]);
-        setSynergyFolders([]);
-        setSynergyFiles([]);
-        setOauthFolders([]);
-        setOauthFiles([]);
-        // Clear any loading states
-        setSynergyJobsLoading(false);
-        setSynergyFoldersLoading(false);
-        setOauthContentLoading(false);
+        resetRemoteToRoot();
         remoteSelection.clearSelection();
       }
 
@@ -1189,8 +1197,6 @@ export const FilesPage = () => {
     }
   }, [dataConnectorsEnabled, numaGet]);
 
-  const synergyConnected = synergyStatus?.status === 'connected';
-
   // Load dynamic OAuth providers list on mount (or when remote tab activates)
   const loadDynamicOAuthProviders = useCallback(async () => {
     if (!oauthEnabled) return;
@@ -1266,183 +1272,6 @@ export const FilesPage = () => {
       }
     },
     [loadOAuthProviderStatuses, showToast]
-  );
-
-  const handleOAuthProviderClick = useCallback(
-    async (provider: OAuthProviderType) => {
-      if (oauthProviderStatuses[provider]?.status !== 'connected') {
-        return;
-      }
-
-      setSelectedOauthProvider(provider);
-      setOauthContentLoading(true);
-      const displayName = enabledOAuthProviders.find((p) => p.id === provider)?.display_name ?? provider;
-      setOauthBreadcrumbs([{ label: displayName, type: 'root', provider }]);
-
-      try {
-        const contents = await OAuthProvidersService.listContents(provider);
-        setOauthFolders(contents.folders);
-        setOauthFiles(contents.files);
-      } catch (error) {
-        console.error(`Failed to load ${provider} contents:`, error);
-        showToast({ message: `Failed to load ${provider} files`, variant: 'error' });
-        setOauthFolders([]);
-        setOauthFiles([]);
-      } finally {
-        setOauthContentLoading(false);
-      }
-    },
-    [oauthProviderStatuses, showToast, enabledOAuthProviders]
-  );
-
-  const handleOAuthFolderClick = useCallback(
-    async (folder: OAuthFolder) => {
-      if (!selectedOauthProvider) return;
-
-      remoteSelection.clearSelection();
-      setOauthContentLoading(true);
-      setOauthBreadcrumbs((prev) => [
-        ...prev,
-        { label: folder.name, type: 'folder', id: folder.folder_id, provider: selectedOauthProvider },
-      ]);
-
-      try {
-        const contents = await OAuthProvidersService.listContents(selectedOauthProvider, folder.folder_id);
-        setOauthFolders(contents.folders);
-        setOauthFiles(contents.files);
-      } catch (error) {
-        console.error(`Failed to load folder contents:`, error);
-        showToast({ message: 'Failed to load folder contents', variant: 'error' });
-      } finally {
-        setOauthContentLoading(false);
-      }
-    },
-    [selectedOauthProvider, showToast]
-  );
-
-  const handleOAuthBreadcrumbClick = useCallback(
-    async (index: number) => {
-      if (!selectedOauthProvider) return;
-
-      const newBreadcrumbs = oauthBreadcrumbs.slice(0, index + 1);
-      setOauthBreadcrumbs(newBreadcrumbs);
-
-      const targetCrumb = newBreadcrumbs[index];
-      const folderId = targetCrumb.type === 'root' ? undefined : targetCrumb.id;
-
-      setOauthContentLoading(true);
-      try {
-        const contents = await OAuthProvidersService.listContents(selectedOauthProvider, folderId);
-        setOauthFolders(contents.folders);
-        setOauthFiles(contents.files);
-      } catch (error) {
-        console.error(`Failed to navigate to breadcrumb:`, error);
-        showToast({ message: 'Failed to navigate', variant: 'error' });
-      } finally {
-        setOauthContentLoading(false);
-      }
-    },
-    [selectedOauthProvider, oauthBreadcrumbs, showToast]
-  );
-
-  const loadSynergyJobs = useCallback(async () => {
-    setSynergyJobsLoading(true);
-    try {
-      const response = await SynergyDataConnectorService.listJobs(numaGet);
-      setSynergyJobs(response.items ?? []);
-    } catch {
-      setSynergyJobs([]);
-    } finally {
-      setSynergyJobsLoading(false);
-    }
-  }, [numaGet]);
-
-  useEffect(() => {
-    if (activeTab === 'remote' && synergyConnected) {
-      loadSynergyJobs();
-    }
-  }, [activeTab, synergyConnected, loadSynergyJobs]);
-
-  const handleSynergyJobClick = useCallback(
-    async (job: SynergyJob) => {
-      remoteSelection.clearSelection();
-      setSynergyFoldersLoading(true);
-      setSynergyFolders([]);
-      setSynergyFiles([]);
-      setSynergyBreadcrumbs((prev) => [
-        ...prev.filter((b) => b.type === 'root'),
-        { label: job.name, type: 'job', id: job.job_id },
-      ]);
-      try {
-        const folders = await SynergyDataConnectorService.listJobFolders(numaGet, job.job_id);
-        setSynergyFolders(folders);
-      } catch {
-        setSynergyFolders([]);
-      } finally {
-        setSynergyFoldersLoading(false);
-      }
-    },
-    [numaGet]
-  );
-
-  const handleSynergyFolderClick = useCallback(
-    async (folder: SynergyFolder) => {
-      remoteSelection.clearSelection();
-      setSynergyFoldersLoading(true);
-      setSynergyBreadcrumbs((prev) => [...prev, { label: folder.name, type: 'folder', id: folder.folder_id }]);
-      try {
-        const response = await SynergyDataConnectorService.listFolderItems(numaGet, folder.folder_id);
-        setSynergyFolders(response.subfolders ?? []);
-        setSynergyFiles(response.files ?? []);
-      } catch {
-        setSynergyFolders([]);
-        setSynergyFiles([]);
-      } finally {
-        setSynergyFoldersLoading(false);
-      }
-    },
-    [numaGet]
-  );
-
-  const handleSynergyBreadcrumbClick = useCallback(
-    async (index: number) => {
-      const crumb = synergyBreadcrumbs[index];
-      if (!crumb) return;
-
-      // Trim breadcrumbs to the clicked level
-      setSynergyBreadcrumbs((prev) => prev.slice(0, index + 1));
-
-      if (crumb.type === 'root') {
-        // Back to jobs list
-        setSynergyFolders([]);
-        setSynergyFiles([]);
-        loadSynergyJobs();
-      } else if (crumb.type === 'job' && crumb.id) {
-        setSynergyFoldersLoading(true);
-        setSynergyFiles([]);
-        try {
-          const folders = await SynergyDataConnectorService.listJobFolders(numaGet, crumb.id);
-          setSynergyFolders(folders);
-        } catch {
-          setSynergyFolders([]);
-        } finally {
-          setSynergyFoldersLoading(false);
-        }
-      } else if (crumb.type === 'folder' && crumb.id) {
-        setSynergyFoldersLoading(true);
-        try {
-          const response = await SynergyDataConnectorService.listFolderItems(numaGet, crumb.id);
-          setSynergyFolders(response.subfolders ?? []);
-          setSynergyFiles(response.files ?? []);
-        } catch {
-          setSynergyFolders([]);
-          setSynergyFiles([]);
-        } finally {
-          setSynergyFoldersLoading(false);
-        }
-      }
-    },
-    [synergyBreadcrumbs, numaGet, loadSynergyJobs]
   );
 
   // Remote tab connect modal helpers
@@ -2202,15 +2031,13 @@ export const FilesPage = () => {
                 handleOAuthBreadcrumbClick(oauthBreadcrumbs.length - 2);
               } else if (isInOAuthProvider && oauthBreadcrumbs.length <= 1) {
                 // At OAuth provider root → go to Remote root
-                setSelectedOauthProvider(null);
-                setSynergyBreadcrumbs([{ label: t('remote.rootLabel'), type: 'root' }]);
-                setOauthBreadcrumbs([]);
+                resetRemoteToRoot();
               } else if (synergyConnected && synergyBreadcrumbs.length > 2) {
                 // Navigate up one level in Synergy
                 handleSynergyBreadcrumbClick(synergyBreadcrumbs.length - 2);
               } else if (!isAtRootLevel && synergyConnected) {
                 // At Synergy jobs list → go to Remote root
-                setSynergyBreadcrumbs([{ label: t('remote.rootLabel'), type: 'root' }]);
+                resetRemoteToRoot();
               } else {
                 // At Remote root → go to /files
                 navigate('/files');
@@ -2231,15 +2058,7 @@ export const FilesPage = () => {
             {/* Always: Remote — clickable when not at root */}
             <span
               className={`breadcrumb-segment${isAtRootLevel ? ' breadcrumb-segment--active' : ''}`}
-              onClick={
-                !isAtRootLevel
-                  ? () => {
-                      setSelectedOauthProvider(null);
-                      setSynergyBreadcrumbs([{ label: t('remote.rootLabel'), type: 'root' }]);
-                      setOauthBreadcrumbs([]);
-                    }
-                  : undefined
-              }
+              onClick={!isAtRootLevel ? () => resetRemoteToRoot() : undefined}
             >
               {t('remote.rootLabel')}
             </span>
@@ -2287,18 +2106,7 @@ export const FilesPage = () => {
                 <div
                   className="file-card"
                   style={{ cursor: synergyConnected ? 'pointer' : 'default' }}
-                  onClick={
-                    synergyConnected
-                      ? () => {
-                          setSelectedOauthProvider(null);
-                          setSynergyBreadcrumbs([
-                            { label: t('remote.rootLabel'), type: 'root' },
-                            { label: 'Synergy Jobs', type: 'job' },
-                          ]);
-                          loadSynergyJobs();
-                        }
-                      : undefined
-                  }
+                  onClick={synergyConnected ? () => navigateToSynergyJobs() : undefined}
                 >
                   <SynergyIcon />
                   <div className="file-card-name" title={t('remote.synergyName')}>
@@ -2395,18 +2203,7 @@ export const FilesPage = () => {
                 <div
                   className="file-row"
                   style={{ cursor: synergyConnected ? 'pointer' : 'default' }}
-                  onClick={
-                    synergyConnected
-                      ? () => {
-                          setSelectedOauthProvider(null);
-                          setSynergyBreadcrumbs([
-                            { label: t('remote.rootLabel'), type: 'root' },
-                            { label: 'Synergy Jobs', type: 'job' },
-                          ]);
-                          loadSynergyJobs();
-                        }
-                      : undefined
-                  }
+                  onClick={synergyConnected ? () => navigateToSynergyJobs() : undefined}
                 >
                   <div className="file-name d-flex align-items-center gap-2">
                     <SynergyIcon />
@@ -2512,7 +2309,7 @@ export const FilesPage = () => {
                   {t('remote.loadingProviderFiles', { provider: selectedOauthProvider })}
                 </p>
               </div>
-            ) : oauthFolders.length === 0 && oauthFiles.length === 0 ? (
+            ) : oauthFolders.length === 0 && oauthFiles.length === 0 && !oauthRevalidating ? (
               <div className="files-empty">
                 <i className="bi bi-folder2-open" />
                 <h5>{t('remote.noFilesFound')}</h5>
@@ -2575,6 +2372,7 @@ export const FilesPage = () => {
                   return (
                     <div
                       key={folder.folder_id}
+                      ref={(el) => observeFolder(folder.folder_id, el)}
                       className="file-row"
                       onClick={() => handleOAuthFolderClick(folder)}
                       onContextMenu={(e) => openContextMenu(e, { kind: 'remoteFile', item: remoteFolderItem })}
@@ -2650,7 +2448,12 @@ export const FilesPage = () => {
             ) : viewMode === 'grid' ? (
               <div className="file-grid">
                 {oauthFolders.map((folder) => (
-                  <div key={folder.folder_id} className="file-card" onClick={() => handleOAuthFolderClick(folder)}>
+                  <div
+                    key={folder.folder_id}
+                    ref={(el) => observeFolder(folder.folder_id, el)}
+                    className="file-card"
+                    onClick={() => handleOAuthFolderClick(folder)}
+                  >
                     <i className="bi bi-folder file-card-icon folder-icon" />
                     <div className="file-card-name" title={folder.name}>
                       {folder.name}
@@ -2688,6 +2491,7 @@ export const FilesPage = () => {
                 {oauthFolders.map((folder) => (
                   <div
                     key={folder.folder_id}
+                    ref={(el) => observeFolder(folder.folder_id, el)}
                     className="file-card"
                     onClick={() => handleOAuthFolderClick(folder)}
                     style={{ cursor: 'pointer' }}
@@ -2911,6 +2715,7 @@ export const FilesPage = () => {
                     return (
                       <div
                         key={folder.folder_id}
+                        ref={(el) => observeFolder(folder.folder_id, el)}
                         className="file-row"
                         onClick={() => handleSynergyFolderClick(folder)}
                         onContextMenu={(e) => openContextMenu(e, { kind: 'remoteFile', item: remoteFolderItem })}
@@ -2990,7 +2795,12 @@ export const FilesPage = () => {
               ) : viewMode === 'grid' ? (
                 <div className="file-grid">
                   {synergyFolders.map((folder) => (
-                    <div key={folder.folder_id} className="file-card" onClick={() => handleSynergyFolderClick(folder)}>
+                    <div
+                      key={folder.folder_id}
+                      ref={(el) => observeFolder(folder.folder_id, el)}
+                      className="file-card"
+                      onClick={() => handleSynergyFolderClick(folder)}
+                    >
                       <i className="bi bi-folder file-card-icon folder-icon" />
                       <div className="file-card-name" title={folder.name}>
                         {folder.name}
@@ -3034,6 +2844,7 @@ export const FilesPage = () => {
                   {synergyFolders.map((folder) => (
                     <div
                       key={folder.folder_id}
+                      ref={(el) => observeFolder(folder.folder_id, el)}
                       className="file-card"
                       onClick={() => handleSynergyFolderClick(folder)}
                       style={{ cursor: 'pointer' }}
