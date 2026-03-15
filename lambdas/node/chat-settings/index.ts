@@ -164,6 +164,8 @@ const DEFAULT_SETTINGS: ChatSettings = {
 
 const GLOBAL_SETTINGS_KEY = '__global__';
 const COMPANY_KB_ID = 'company';
+const NUMA_SUPPORT_KB_ID = 'numa-support';
+const SYSTEM_KB_IDS = new Set([COMPANY_KB_ID, NUMA_SUPPORT_KB_ID]);
 
 const HEADERS = {
   'Access-Control-Allow-Origin': '*',
@@ -248,7 +250,7 @@ async function loadGlobalSettings(): Promise<GlobalChatSettings> {
   }
 
   const defaultKBIds = Array.isArray(item?.defaultKBIds)
-    ? item!.defaultKBIds.filter((id) => id === COMPANY_KB_ID)
+    ? item!.defaultKBIds.filter((id) => SYSTEM_KB_IDS.has(id))
     : DEFAULT_SETTINGS.defaultKBIds;
   const itemRecord = item as Record<string, unknown>;
   const allowUserDefaults =
@@ -413,7 +415,7 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
         defaultKBIds:
           'defaultKBIds' in body
             ? Array.isArray(body.defaultKBIds)
-              ? body.defaultKBIds.filter((id): id is string => typeof id === 'string' && id === COMPANY_KB_ID)
+              ? body.defaultKBIds.filter((id): id is string => typeof id === 'string' && SYSTEM_KB_IDS.has(id))
               : currentGlobal.defaultKBIds
             : currentGlobal.defaultKBIds,
         autoToolsEnabled:

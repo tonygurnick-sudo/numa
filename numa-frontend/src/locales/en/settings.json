@@ -53,7 +53,7 @@
     "defaultKnowledgeBases": "Default knowledge bases",
     "companyKnowledgeBase": "Company Knowledge Base",
     "companyKnowledgeBaseHelp": "Company and support knowledge bases can be set as company defaults. User KB defaults can be set by the user only, and only if personal defaults are active.",
-    "supportKnowledgeBase": "Support Knowledge Base",
+    "supportKnowledgeBase": "NUMA Support",
     "supportKnowledgeBaseHelp": "The Numa support knowledge base provides documentation and help resources.",
     "toolsTitle": "Tools",
     "allTools": "All Tools",
