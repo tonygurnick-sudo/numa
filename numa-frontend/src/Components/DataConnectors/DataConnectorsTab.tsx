@@ -18,16 +18,15 @@ import { SynergyWizard } from './wizards/SynergyWizard';
 import { OAuthWizard } from './wizards/OAuthWizard';
 import { PlatformPickerModal } from './wizards/PlatformPickerModal';
 import { ApiKeyWizard } from './wizards/ApiKeyWizard';
-// MERGE: kept dev — GoogleCloudSetupWizard + EventConfigPanel added in dev after initial wizard commit
-import { GoogleCloudSetupWizard } from './wizards/GoogleCloudSetupWizard';
-import EventConfigPanel from './EventConfigPanel';
+// MERGE: chose dev — dropped GoogleCloudSetupWizard + EventConfigPanel imports.
+// To restore: import { GoogleCloudSetupWizard } from './wizards/GoogleCloudSetupWizard';
+// To restore: import EventConfigPanel from './EventConfigPanel';
 import type { GlobalDataConnectorSettingsMap } from '../../Services/AdminDataConnectorsService';
 import {
   getOAuthProviderTemplates,
   getOAuthConnectors,
   getNonOAuthConnectors,
   getContactRequired,
-  getConnectorById,
 } from './connectorRegistry';
 import type { ConnectorTemplate } from './connectorRegistry';
 
@@ -71,10 +70,11 @@ export const DataConnectorsTab = ({ adminSettings }: DataConnectorsTabProps) => 
   const [platformPickerOpen, setPlatformPickerOpen] = useState(false);
   const [apiKeyWizardOpen, setApiKeyWizardOpen] = useState(false);
   const [apiKeyWizardConnector, setApiKeyWizardConnector] = useState<ConnectorTemplate | null>(null);
-  // MERGE: kept dev — disconnect, google setup, and event config state added in dev
+  // MERGE: kept disconnectingId — used by handleOAuthDisconnect and handleConnectorDelete.
   const [disconnectingId, setDisconnectingId] = useState<string | null>(null);
-  const [googleSetupWizardOpen, setGoogleSetupWizardOpen] = useState(false);
-  const [eventConfigConnectorId, setEventConfigConnectorId] = useState<string | null>(null);
+  // MERGE: chose dev — dropped googleSetupWizardOpen + eventConfigConnectorId state.
+  // To restore: const [googleSetupWizardOpen, setGoogleSetupWizardOpen] = useState(false);
+  // To restore: const [eventConfigConnectorId, setEventConfigConnectorId] = useState<string | null>(null);
 
   // ---------------------------------------------------------------------------
   // Registry-derived templates (for backward compat with OAuthWizard)
@@ -306,17 +306,13 @@ export const DataConnectorsTab = ({ adminSettings }: DataConnectorsTabProps) => 
             {t('dataConnectors.available', { count: totalConnectors })}
           </h4>
         </div>
+        {/* MERGE: chose dev — single Add Connector button; dropped Google Cloud setup button.
+            To restore: wrap in div.d-flex.gap-2.ms-auto and add Google setup button. */}
         {isAdmin && (
-          <div className="d-flex gap-2 ms-auto">
-            <Button variant="outline-secondary" size="sm" onClick={() => setGoogleSetupWizardOpen(true)}>
-              <i className="bi bi-google me-1" />
-              {t('dataConnectors.googleCloudSetup.setupButton')}
-            </Button>
-            <Button variant="outline-primary" size="sm" onClick={() => setPlatformPickerOpen(true)}>
-              <Plus size={14} className="me-1" />
-              {t('dataConnectors.picker.addConnector')}
-            </Button>
-          </div>
+          <Button variant="outline-primary" size="sm" onClick={() => setPlatformPickerOpen(true)} className="ms-auto">
+            <Plus size={14} className="me-1" />
+            {t('dataConnectors.picker.addConnector')}
+          </Button>
         )}
       </div>
       <div className="mt-3">
@@ -376,7 +372,7 @@ export const DataConnectorsTab = ({ adminSettings }: DataConnectorsTabProps) => 
               }}
               isLoading={false}
               adminDisabled={!isAdmin && !credentialConfigured}
-              // MERGE: kept dev — disconnect support for non-OAuth connectors added in dev
+              // MERGE: kept — disconnect/isDisconnecting props needed by handleConnectorDelete
               onDisconnect={
                 isAdmin && credentialConfigured
                   ? () => handleConnectorDelete(connector.id, connector.displayName)
@@ -435,37 +431,8 @@ export const DataConnectorsTab = ({ adminSettings }: DataConnectorsTabProps) => 
           existingSecrets={connectorSecrets}
         />
       )}
-
-      {/* MERGE: kept dev — GoogleCloudSetupWizard and EventConfigPanel added in dev */}
-      <GoogleCloudSetupWizard
-        show={googleSetupWizardOpen}
-        onHide={() => setGoogleSetupWizardOpen(false)}
-        onComplete={() => {
-          setGoogleSetupWizardOpen(false);
-          loadCompanySecrets();
-          loadOAuthProviders();
-        }}
-      />
-
-      {eventConfigConnectorId &&
-        (() => {
-          const connector = getConnectorById(eventConfigConnectorId);
-          if (!connector?.eventTypes) return null;
-          return (
-            <div className="mt-3">
-              <div className="d-flex justify-content-between align-items-center mb-2">
-                <h5 className="mb-0">
-                  {t('dataConnectors.events.title')} — {connector.displayName}
-                </h5>
-                <Button variant="link" size="sm" onClick={() => setEventConfigConnectorId(null)}>
-                  {/* MERGE: kept dev — uses i18n key instead of raw ✕ character */}
-                  {t('dataConnectors.events.close')}
-                </Button>
-              </div>
-              <EventConfigPanel connectorId={connector.id} eventTypes={connector.eventTypes} />
-            </div>
-          );
-        })()}
+      {/* MERGE: chose dev — dropped GoogleCloudSetupWizard and EventConfigPanel.
+          To restore: add state + imports + JSX. Files: wizards/GoogleCloudSetupWizard.tsx, EventConfigPanel.tsx */}
     </div>
   );
 };

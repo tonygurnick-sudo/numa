@@ -27,9 +27,9 @@ import AuditPanel from '../Components/UsageAnalytics/AuditPanel';
 import LoginHeatmap from '../Components/UsageAnalytics/LoginHeatmap';
 import { NumaLibrariesPanel } from '../Components/Settings/NumaLibrariesPanel';
 import GenericAuditLogTab from '../Components/UsageAnalytics/GenericAuditLogTab';
-// MERGE: kept dev — TranscriptionJobsPanel and NotificationsAuditPanel added in dev
-import TranscriptionJobsPanel from '../Components/UsageAnalytics/TranscriptionJobsPanel';
-import NotificationsAuditPanel from '../Components/UsageAnalytics/NotificationsAuditPanel';
+// MERGE: chose dev — dropped TranscriptionJobsPanel + NotificationsAuditPanel imports.
+// To restore: import TranscriptionJobsPanel from '../Components/UsageAnalytics/TranscriptionJobsPanel';
+// To restore: import NotificationsAuditPanel from '../Components/UsageAnalytics/NotificationsAuditPanel';
 import { UNSAFE_NavigationContext, useParams, useNavigate } from 'react-router-dom';
 import {
   AdminChatSettingsService,
@@ -887,8 +887,8 @@ export default function SettingsPage() {
             { key: 'automation', label: t('auditTabs.automation'), iconClassName: 'bi bi-gear' },
             { key: 'search-index', label: t('auditTabs.searchIndex'), iconClassName: 'bi bi-search' },
             { key: 'kb-index', label: t('auditTabs.kbIndex'), iconClassName: 'bi bi-database' },
-            // MERGE: kept dev — notifications audit tab added in dev
-            { key: 'notifications', label: t('auditTabs.notifications'), iconClassName: 'bi bi-bell' },
+            // MERGE: chose dev — dropped notifications audit tab.
+            // To restore: { key: 'notifications', label: t('auditTabs.notifications'), iconClassName: 'bi bi-bell' },
           ]}
           activeKey={auditTabKey}
           onSelect={setAuditTabKey}
@@ -1581,17 +1581,12 @@ export default function SettingsPage() {
           <div hidden={currentScope !== 'audit'} aria-hidden={currentScope !== 'audit'}>
             {auditTabKey === 'user-activity' && <AuditPanel />}
             {auditTabKey === 'web-crawler' && <GenericAuditLogTab logType="web-crawler" />}
-            {/* MERGE: kept dev — TranscriptionJobsPanel with flag gate + NotificationsAuditPanel */}
-            {auditTabKey === 'transcripts' &&
-              (getFlag('TRANSCRIPTION_SERVICE') ? (
-                <TranscriptionJobsPanel />
-              ) : (
-                <GenericAuditLogTab logType="transcripts" />
-              ))}
+            {/* MERGE: chose dev — simple GenericAuditLogTab for transcripts.
+                To restore: gate with getFlag('TRANSCRIPTION_SERVICE') ? <TranscriptionJobsPanel /> : <GenericAuditLogTab /> */}
+            {auditTabKey === 'transcripts' && <GenericAuditLogTab logType="transcripts" />}
             {auditTabKey === 'automation' && <GenericAuditLogTab logType="automation" />}
             {auditTabKey === 'search-index' && <GenericAuditLogTab logType="search-index" />}
             {auditTabKey === 'kb-index' && <GenericAuditLogTab logType="kb-index" />}
-            {auditTabKey === 'notifications' && <NotificationsAuditPanel />}
           </div>
         )}
       </div>
