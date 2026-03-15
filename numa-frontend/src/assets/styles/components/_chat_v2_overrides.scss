@@ -242,6 +242,47 @@
   max-height: none;
 }
 
+// Jump to latest — wrapper is a zero-height relative element between
+// chat-messages and chat-input-wrapper. The button floats above it.
+.workspace-chat-v2 .jump-to-latest-wrapper {
+  position: relative;
+  height: 0;
+  z-index: 20;
+  pointer-events: none;
+}
+
+.workspace-chat-v2 .jump-to-latest-btn {
+  position: absolute;
+  bottom: 0.5rem;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.375rem 0.875rem;
+  border: 1px solid var(--bs-border-color, #dee2e6);
+  border-radius: 999px;
+  background: var(--bs-body-bg, #fff);
+  color: var(--bs-body-color, #212529);
+  font-size: 0.8125rem;
+  white-space: nowrap;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+  transition:
+    background 0.15s,
+    box-shadow 0.15s;
+  pointer-events: auto;
+
+  &:hover {
+    background: var(--bs-tertiary-bg, #f8f9fa);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18);
+  }
+
+  svg {
+    flex-shrink: 0;
+  }
+}
+
 .workspace-chat-v2 .workspace-chat-legacy-migration-overlay {
   position: absolute;
   top: 0.75rem;

@@ -535,6 +535,14 @@
         "help": "When enabled, a signature line is appended to emails sent by Numa on your behalf (via Gmail or Outlook).",
         "enableTitle": "Append signature to outgoing emails",
         "textLabel": "Signature text"
+      },
+      "chatScrollMode": {
+        "label": "Chat scroll control",
+        "help": "Controls how chat auto-scrolls when new messages arrive during response generation.",
+        "auto": "Auto-scroll",
+        "autoHelp": "Chat automatically scrolls to the latest message as it streams in.",
+        "manual": "Manual scroll",
+        "manualHelp": "Scroll position stays where you left it while a response generates. Use the \"Jump to latest\" button to catch up."
       }
     },
     "approval": {

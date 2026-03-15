@@ -85,7 +85,7 @@
       "publicHelp": "Visible to everyone in your workspace.",
       "disabledNote": "Company agents are disabled for your account.",
       "publicScopeNote": "This agent is managed at the workspace level and cannot be changed.",
-      "publicConfirm": "You are about to make this agent public. Make sure it does not contain sensitive information. Continue?"
+      "publicConfirm": "You are about to make this a company agent. Make sure it does not contain sensitive information. Continue?"
     },
     "errors": {
       "save": "Unable to save agent.",
@@ -322,7 +322,7 @@
     "disabled": "Agents are disabled by your administrator.",
     "empty": "No agents yet. Create one from the Agents page.",
     "visibility": {
-      "public": "Public Agent",
+      "public": "Company Agent",
       "personal": "Personal Agent"
     },
     "use": "Use",

@@ -37,7 +37,13 @@ import { getConnectionConfig } from '../config/integrationsConfig';
 import type { QuickActionConfig } from '../config/quickActionsConfig';
 import { sortAgentsByPriority } from '../utils/agentSortingUtils';
 import { AdminAgentsService, type AgentsMode } from '../Services/AdminAgentsService';
-import { ChatSettingsService, type ChatSettings, DEFAULT_CHAT_SETTINGS } from '../Services/ChatSettingsService';
+import {
+  ChatSettingsService,
+  type ChatSettings,
+  type ChatScrollMode,
+  DEFAULT_CHAT_SETTINGS,
+} from '../Services/ChatSettingsService';
+import { JumpToLatestButton } from '../Components/WorkspaceChat/JumpToLatestButton';
 // Workspace chat mode imports
 import { getWorkspaceChatRawTrace } from '../Services/workspaceChatAgentService';
 import { parseRawTraceToMessages } from '../utils/workspaceChatEventHandlers';
@@ -157,7 +163,10 @@ const NumaWorkspaceChatAgents = () => {
   const dragDepthRef = useRef(0);
 
   // Refs
-  const messageEndRef = useRef(null);
+  const messageEndRef = useRef<HTMLDivElement | null>(null);
+  const initialScrollMode = ChatSettingsService.getCached()?.chatScrollMode ?? DEFAULT_CHAT_SETTINGS.chatScrollMode;
+  const shouldAutoScrollRef = useRef(initialScrollMode === 'auto');
+  const [showJumpButton, setShowJumpButton] = useState(false);
   const chatHistoryRef = useRef<ChatHistorySidebarRef | null>(null);
   const historyPanelRef = useRef<WorkspaceChatHistoryPanelRef | null>(null);
   const preselectHandledRef = useRef(false);
@@ -953,23 +962,86 @@ const NumaWorkspaceChatAgents = () => {
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
   const isProcessingRef = useRef(false);
 
-  // Auto-scroll to bottom on new messages (streaming) or after conversation finishes loading.
-  // We skip scrolling while isConversationLoading is true because ChatMessages renders a
-  // loading spinner during that phase — messageEndRef is inside the spinner, not after messages.
-  // Adding isConversationLoading to deps ensures we scroll once it flips to false and messages render.
+  // Scroll mode: read from user settings, with localStorage as fallback
+  // (localStorage ensures the setting works even before the backend Lambda is redeployed)
+  const scrollMode: ChatScrollMode =
+    userChatSettings.chatScrollMode ?? ((localStorage.getItem('numa-chat-scroll-mode') as ChatScrollMode) || 'auto');
+
+  // When scroll mode changes, reset auto-scroll accordingly
   useEffect(() => {
-    if (!isConversationLoading) {
+    shouldAutoScrollRef.current = scrollMode === 'auto';
+    if (scrollMode === 'auto') setShowJumpButton(false);
+  }, [scrollMode]);
+
+  // Find the scrollable ancestor of messageEndRef and attach a scroll listener.
+  // This detects when the user manually scrolls up (to pause auto-scroll and show the button).
+  useEffect(() => {
+    const sentinel = messageEndRef.current;
+    if (!sentinel) return;
+
+    // Walk up the DOM to find the first ancestor that actually scrolls
+    let scrollContainer: HTMLElement | null = sentinel.parentElement;
+    while (scrollContainer) {
+      const { overflowY } = getComputedStyle(scrollContainer);
+      if (overflowY === 'auto' || overflowY === 'scroll') {
+        if (scrollContainer.scrollHeight > scrollContainer.clientHeight) break;
+      }
+      scrollContainer = scrollContainer.parentElement;
+    }
+    if (!scrollContainer) return;
+
+    const onScroll = () => {
+      const threshold = 80;
+      const distanceFromBottom =
+        scrollContainer!.scrollHeight - scrollContainer!.scrollTop - scrollContainer!.clientHeight;
+      const atBottom = distanceFromBottom <= threshold;
+
+      setShowJumpButton(!atBottom);
+
+      if (scrollMode === 'auto') {
+        // In auto mode: pause auto-scroll when user scrolls up, re-enable near bottom
+        shouldAutoScrollRef.current = atBottom;
+      }
+      // In manual mode: shouldAutoScrollRef stays false (only Jump button re-enables it)
+    };
+
+    scrollContainer.addEventListener('scroll', onScroll, { passive: true });
+    return () => scrollContainer!.removeEventListener('scroll', onScroll);
+  }, [scrollMode, messages, isConversationLoading]);
+
+  // Jump to bottom handler (used by JumpToLatestButton)
+  const handleJumpToLatest = useCallback(() => {
+    messageEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    // In auto mode, re-enable auto-scroll. In manual mode, just do the one-time jump.
+    if (scrollMode === 'auto') {
+      shouldAutoScrollRef.current = true;
+    }
+    setShowJumpButton(false);
+  }, [scrollMode]);
+
+  // Auto-scroll to bottom on new messages (streaming) or after conversation finishes loading.
+  // In manual mode, never auto-scroll — the direct scrollMode check is the final guard
+  // regardless of shouldAutoScrollRef state, which can have race conditions during init.
+  useEffect(() => {
+    if (scrollMode === 'manual') return;
+    if (!isConversationLoading && shouldAutoScrollRef.current) {
       messageEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }
-  }, [messages, isConversationLoading]);
+  }, [messages, isConversationLoading, scrollMode]);
 
   // Inactivity: when expired, start a new chat and show suggestions (hook will fetch suggestions)
   async function handleNewChatOnExpired() {
     // Stop any ongoing streaming response
+    abortStream();
+    isProcessingRef.current = false;
     setButtonStatus('idle');
     resetStreamingState();
     resetAgentState();
     setPendingConversationChatConfig(null);
+
+    // Reset scroll state
+    shouldAutoScrollRef.current = scrollMode === 'auto';
+    setShowJumpButton(false);
 
     // Clear all UI states
     setMessages([]);
@@ -1154,7 +1226,7 @@ const NumaWorkspaceChatAgents = () => {
   );
 
   // Workspace chat streaming hook - handles SDK events, tool tracking, document extraction
-  const { streamChat, stopStream, isStopping } = useWorkspaceChatStreaming({
+  const { streamChat, abortStream, stopStream, isStopping } = useWorkspaceChatStreaming({
     setMessages,
     setButtonStatus,
     documentProcessor,
@@ -1783,6 +1855,12 @@ const NumaWorkspaceChatAgents = () => {
   const handleLoadConversation = async (selectedConversationId: string, isWorkspaceConversation = true) => {
     if (!numaChatDynamoUtils) return;
 
+    // Abort any ongoing stream before switching conversations
+    abortStream();
+    isProcessingRef.current = false;
+    resetStreamingState();
+    setButtonStatus('idle');
+
     // Capture generation so we can detect if new chat was clicked during this load
     const generation = loadGenerationRef.current;
     const isCancelled = () => loadGenerationRef.current !== generation;
@@ -2355,6 +2433,8 @@ const NumaWorkspaceChatAgents = () => {
                         </>
                       )}
                     </div>
+
+                    {showJumpButton && !shouldShowNewChatView && <JumpToLatestButton onClick={handleJumpToLatest} />}
 
                     {!shouldShowNewChatView && (
                       <div className="chat-input-wrapper">

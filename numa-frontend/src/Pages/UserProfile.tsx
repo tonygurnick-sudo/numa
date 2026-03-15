@@ -492,13 +492,7 @@ export default function UserProfilePage({
   const resetToCompanyDefaults = () => {
     setUserDefaultsEnabled(true);
     setUserDefaults({
-      defaultKBIds: companyDefaults.defaultKBIds,
-      autoToolsEnabled: companyDefaults.autoToolsEnabled,
-      webSearchEnabled: companyDefaults.webSearchEnabled,
-      createAgentEnabled: companyDefaults.createAgentEnabled,
-      memoriesEnabled: companyDefaults.memoriesEnabled,
-      dataAnalysisEnabled: companyDefaults.dataAnalysisEnabled,
-      defaultConnectionIds: companyDefaults.defaultConnectionIds,
+      ...companyDefaults,
       language: LANGUAGE_BROWSER_DEFAULT,
     });
     setDirty(true);
@@ -510,6 +504,7 @@ export default function UserProfilePage({
       language: LANGUAGE_BROWSER_DEFAULT,
       emailSignatureEnabled: DEFAULT_CHAT_SETTINGS.emailSignatureEnabled,
       emailSignatureText: DEFAULT_CHAT_SETTINGS.emailSignatureText,
+      chatScrollMode: DEFAULT_CHAT_SETTINGS.chatScrollMode,
     }));
     setDirty(true);
   };
@@ -541,9 +536,14 @@ export default function UserProfilePage({
           language: userDefaults.language,
           emailSignatureEnabled: userDefaults.emailSignatureEnabled,
           emailSignatureText: userDefaults.emailSignatureText,
+          chatScrollMode: userDefaults.chatScrollMode,
         },
         numaPut,
       );
+      // Persist scroll mode to localStorage as a reliable local fallback
+      if (userDefaults.chatScrollMode) {
+        localStorage.setItem('numa-chat-scroll-mode', userDefaults.chatScrollMode);
+      }
       const refreshed = await ChatSettingsService.getForProfile(numaGet);
       setUserDefaults(refreshed.settings);
       setUserDefaultsEnabled(refreshed.userDefaultsEnabled);
@@ -1290,6 +1290,46 @@ export default function UserProfilePage({
                   />
                 </>
               )}
+            </div>
+
+            <div className="profile-section">
+              <div className="profile-section__title">{t('userProfile.defaults.chatScrollMode.label')}</div>
+              <p className="profile-section__description">{t('userProfile.defaults.chatScrollMode.help')}</p>
+              <div className="profile-radio-group">
+                {(['auto', 'manual'] as const).map((mode) => (
+                  <div
+                    key={mode}
+                    className={`profile-radio-option ${userDefaults.chatScrollMode === mode ? 'is-selected' : ''}`}
+                    onClick={() => {
+                      if (disableProfileForm) return;
+                      setUserDefaults((prev) => ({ ...prev, chatScrollMode: mode }));
+                      setDirty(true);
+                    }}
+                  >
+                    <div className="profile-radio-option__inner">
+                      <Form.Check
+                        type="radio"
+                        id={`chat-scroll-mode-${mode}`}
+                        name="chatScrollMode"
+                        checked={userDefaults.chatScrollMode === mode}
+                        disabled={disableProfileForm}
+                        onChange={() => {
+                          setUserDefaults((prev) => ({ ...prev, chatScrollMode: mode }));
+                          setDirty(true);
+                        }}
+                      />
+                      <div className="profile-radio-option__text">
+                        <div className="profile-radio-option__label">
+                          {t(`userProfile.defaults.chatScrollMode.${mode}`)}
+                        </div>
+                        <div className="profile-radio-option__help">
+                          {t(`userProfile.defaults.chatScrollMode.${mode}Help`)}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
 
             {renderSaveActions(

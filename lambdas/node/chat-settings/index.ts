@@ -10,6 +10,9 @@ const ddb = DynamoDBDocumentClient.from(withPRM(DynamoDBClient, {}));
 
 // Type definitions for chat settings
 export type ApprovalMode = 'always' | 'non_destructive' | 'never';
+export type ChatScrollMode = 'auto' | 'manual';
+
+const VALID_SCROLL_MODES: ChatScrollMode[] = ['auto', 'manual'];
 
 export type ChatSettings = {
   defaultKBIds: string[];
@@ -23,6 +26,7 @@ export type ChatSettings = {
   approvalMode: ApprovalMode;
   emailSignatureEnabled: boolean;
   emailSignatureText: string;
+  chatScrollMode: ChatScrollMode;
 };
 
 export type UserChatSettings = ChatSettings & {
@@ -160,6 +164,7 @@ const DEFAULT_SETTINGS: ChatSettings = {
   approvalMode: 'non_destructive',
   emailSignatureEnabled: true,
   emailSignatureText: 'Sent by my AI assistant, Numa (https://www.arcanum.ai)',
+  chatScrollMode: 'auto',
 };
 
 const GLOBAL_SETTINGS_KEY = '__global__';
@@ -245,6 +250,7 @@ async function loadGlobalSettings(): Promise<GlobalChatSettings> {
       approvalMode: DEFAULT_SETTINGS.approvalMode,
       emailSignatureEnabled: DEFAULT_SETTINGS.emailSignatureEnabled,
       emailSignatureText: DEFAULT_SETTINGS.emailSignatureText,
+      chatScrollMode: DEFAULT_SETTINGS.chatScrollMode,
       allowUserDefaults: false,
     };
   }
@@ -285,6 +291,10 @@ async function loadGlobalSettings(): Promise<GlobalChatSettings> {
         : DEFAULT_SETTINGS.emailSignatureEnabled,
     emailSignatureText:
       typeof item?.emailSignatureText === 'string' ? item!.emailSignatureText : DEFAULT_SETTINGS.emailSignatureText,
+    chatScrollMode:
+      typeof item?.chatScrollMode === 'string' && VALID_SCROLL_MODES.includes(item!.chatScrollMode as ChatScrollMode)
+        ? (item!.chatScrollMode as ChatScrollMode)
+        : DEFAULT_SETTINGS.chatScrollMode,
     allowUserDefaults,
   };
 }
@@ -344,6 +354,11 @@ function mergeUserSettings(globalSettings: ChatSettings, userItem: Record<string
     typeof userItem?.emailSignatureText === 'string'
       ? (userItem!.emailSignatureText as string)
       : globalSettings.emailSignatureText;
+  const chatScrollMode =
+    typeof userItem?.chatScrollMode === 'string' &&
+    VALID_SCROLL_MODES.includes(userItem.chatScrollMode as ChatScrollMode)
+      ? (userItem.chatScrollMode as ChatScrollMode)
+      : globalSettings.chatScrollMode;
   const userDefaultsEnabled =
     parseBoolean(userItem?.userDefaultsEnabled) ?? parseBoolean(userItem?.user_defaults_enabled) ?? true;
 
@@ -359,6 +374,7 @@ function mergeUserSettings(globalSettings: ChatSettings, userItem: Record<string
     approvalMode,
     emailSignatureEnabled,
     emailSignatureText,
+    chatScrollMode,
     userDefaultsEnabled,
   };
 }
@@ -453,6 +469,7 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
             : currentGlobal.approvalMode,
         emailSignatureEnabled: currentGlobal.emailSignatureEnabled,
         emailSignatureText: currentGlobal.emailSignatureText,
+        chatScrollMode: currentGlobal.chatScrollMode,
         allowUserDefaults,
         updatedAt: new Date().toISOString(),
       };
@@ -478,6 +495,7 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
         approvalMode: updatedSettings.approvalMode,
         emailSignatureEnabled: updatedSettings.emailSignatureEnabled,
         emailSignatureText: updatedSettings.emailSignatureText,
+        chatScrollMode: updatedSettings.chatScrollMode,
         allowUserDefaults: updatedSettings.allowUserDefaults,
       };
 
@@ -527,6 +545,7 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
         approvalMode: merged.approvalMode,
         emailSignatureEnabled: merged.emailSignatureEnabled,
         emailSignatureText: merged.emailSignatureText,
+        chatScrollMode: merged.chatScrollMode,
       };
 
       if (profileView) {
@@ -552,6 +571,7 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
         approvalMode: merged.approvalMode,
         emailSignatureEnabled: merged.emailSignatureEnabled,
         emailSignatureText: merged.emailSignatureText,
+        chatScrollMode: merged.chatScrollMode,
       };
 
       return {
@@ -725,6 +745,23 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
         next.emailSignatureText = current.emailSignatureText;
       }
 
+      // chatScrollMode
+      if ('chatScrollMode' in body) {
+        if (body.chatScrollMode === null) {
+          // clear override
+        } else if (
+          typeof body.chatScrollMode === 'string' &&
+          VALID_SCROLL_MODES.includes(body.chatScrollMode as ChatScrollMode)
+        ) {
+          next.chatScrollMode = body.chatScrollMode as ChatScrollMode;
+        }
+      } else if (
+        typeof current.chatScrollMode === 'string' &&
+        VALID_SCROLL_MODES.includes(current.chatScrollMode as ChatScrollMode)
+      ) {
+        next.chatScrollMode = current.chatScrollMode as ChatScrollMode;
+      }
+
       // userDefaultsEnabled
       if ('userDefaultsEnabled' in body) {
         if (body.userDefaultsEnabled === null) {
@@ -756,6 +793,7 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
         'approvalMode' in next ||
         'emailSignatureEnabled' in next ||
         'emailSignatureText' in next ||
+        'chatScrollMode' in next ||
         'userDefaultsEnabled' in next;
 
       const itemToStore = hasOverrides ? next : { user_id: userId, updatedAt: next.updatedAt };
