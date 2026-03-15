@@ -2,8 +2,6 @@ import { useState, useCallback, useEffect, useRef } from 'react';
 import type { WorkspaceChatFileInfo } from '../types/workspaceChatTypes';
 import { listConversationFiles } from '../Services/workspaceChatAgentService';
 
-const SETTINGS_PANEL_KEY = 'numa-workspace-settings-panel-open';
-
 export interface UseWorkspaceChatSettingsPanelReturn {
   /** Whether the panel is currently open */
   isPanelOpen: boolean;
@@ -38,12 +36,8 @@ export interface UseWorkspaceChatSettingsPanelReturn {
  * @param conversationId - Current conversation ID (null for new chat)
  */
 export function useWorkspaceChatSettingsPanel(conversationId: string | null): UseWorkspaceChatSettingsPanelReturn {
-  // Panel state — restore from localStorage, default to open
-  const [isPanelOpen, setIsPanelOpen] = useState(() => {
-    const stored = localStorage.getItem(SETTINGS_PANEL_KEY);
-    if (stored !== null) return stored === 'true';
-    return true;
-  });
+  // Panel always starts open — users can close it, but it re-opens on navigation events
+  const [isPanelOpen, setIsPanelOpen] = useState(true);
 
   // File state
   const [uploadsFiles, setUploadsFiles] = useState<WorkspaceChatFileInfo[]>([]);
@@ -54,10 +48,11 @@ export function useWorkspaceChatSettingsPanel(conversationId: string | null): Us
   // Track last loaded conversation to avoid redundant fetches
   const lastLoadedConversationRef = useRef<string | null>(null);
 
-  // Persist panel state to localStorage
+  // Re-open the panel whenever the conversation changes (new chat, history nav, agent nav)
+  // This ensures users always see the settings panel on navigation events.
   useEffect(() => {
-    localStorage.setItem(SETTINGS_PANEL_KEY, String(isPanelOpen));
-  }, [isPanelOpen]);
+    setIsPanelOpen(true);
+  }, [conversationId]);
 
   // Panel controls
   const openPanel = useCallback(() => setIsPanelOpen(true), []);
@@ -120,9 +115,6 @@ export function useWorkspaceChatSettingsPanel(conversationId: string | null): Us
       setFilesLoading(false);
     }
   }, [conversationId]);
-
-  // On new chat, respect stored preference (localStorage already handles this).
-  // No longer force-opening the panel — the user's last choice is preserved.
 
   // Load files when panel opens or conversation changes
   useEffect(() => {
