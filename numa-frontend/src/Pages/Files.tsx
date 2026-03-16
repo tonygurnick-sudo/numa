@@ -269,8 +269,6 @@ export const FilesPage = () => {
   const [selectedTranscript, setSelectedTranscript] = useState<TranscriptionJob | null>(null);
   const [transcriptOutput, setTranscriptOutput] = useState<TranscriptionOutput | null>(null);
   const [transcriptOutputLoading, setTranscriptOutputLoading] = useState(false);
-  const [rebuilding, setRebuilding] = useState(false);
-  const [rebuildResult, setRebuildResult] = useState<{ created: number; skipped: number; failed: number } | null>(null);
   const [showShareModal, setShowShareModal] = useState(false);
   const [showDropZoneModal, setShowDropZoneModal] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<ShareListItem | null>(null);
@@ -1988,15 +1986,15 @@ export const FilesPage = () => {
   if (activeTab === 'transcripts') {
     return (
       <div className="files-page">
+        {/* CHOSE HEAD: keep the richer files-toolbar-container structure.
+            392dea79 replaced this with a simpler breadcrumb toolbar; HEAD's ribbon is consistent
+            with the rest of Files.tsx. To revert: use the breadcrumb version from 392dea79. */}
         <div className="files-toolbar-container">
           <div className="files-ribbon">
             {toolbarActions}
             <div style={{ flex: 1 }} />
             {viewToggle}
           </div>
-          {/* CHOSE HEAD: rebuild button lives in Settings > Services > Files > Transcripts, not here.
-              f9106bfc would have added it to this toolbar; 392dea79 moves it back to Settings.
-              To revert (add button here): restore the block from ec7ae674/f9106bfc between the ribbon and viewToggle. */}
         </div>
 
         <div className="files-content">

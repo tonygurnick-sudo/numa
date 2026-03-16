@@ -27,8 +27,8 @@ import AuditPanel from '../Components/UsageAnalytics/AuditPanel';
 import LoginHeatmap from '../Components/UsageAnalytics/LoginHeatmap';
 import { NumaLibrariesPanel } from '../Components/Settings/NumaLibrariesPanel';
 import GenericAuditLogTab from '../Components/UsageAnalytics/GenericAuditLogTab';
-// CHOSE HEAD (kept across f9106bfc): rebuild button stays in Settings, not Files.
-// f9106bfc moved it to Files.tsx; 392dea79 moved it back. HEAD already has the final placement.
+// CHOSE HEAD (final — matches 392dea79's intent): rebuild button in Settings, not Files.
+// All three commits (ec7ae674 → f9106bfc → 392dea79) ended here; HEAD is already aligned.
 import TranscriptionJobsPanel from '../Components/UsageAnalytics/TranscriptionJobsPanel';
 import { TranscriptionService, type TranscriptionJob as TxJob } from '../Services/TranscriptionService';
 import NotificationsAuditPanel from '../Components/UsageAnalytics/NotificationsAuditPanel';
@@ -85,7 +85,7 @@ const AUDIT_SUB_DEFAULTS: Record<string, string> = {
 export default function SettingsPage() {
   const { t, i18n } = useTranslation('settings');
   const { user, getCredentials, lambdaClient } = useAuth();
-  const { numaGet, numaPut } = useNumaRequest();
+  const { numaGet, numaPut, numaPost } = useNumaRequest();
   const { scope: urlScope, tab: urlTab } = useParams<{ scope?: string; tab?: string }>();
   const navigate = useNavigate();
   const [activeKey, setActiveKey] = useState<string>(urlTab || 'users');
@@ -94,8 +94,12 @@ export default function SettingsPage() {
   const [settingsScope, setSettingsScope] = useState<SettingsScope>(
     validScopes.includes(urlScope as SettingsScope) ? (urlScope as SettingsScope) : 'user'
   );
-  // CHOSE HEAD (kept across f9106bfc): f9106bfc would have stripped state to a simple auditTabKey.
-  // Keeping HEAD's richer state — services scope with nested sub-keys + rebuild state in Settings.
+  // CHOSE HEAD (final): richer services-scope tab state + rebuild state in Settings.
+  // 392dea79 would have simplified to a single auditTabKey; HEAD's structure is more complete.
+  // To revert to 392dea79: replace with:
+  //   const [auditTabKey] = useState<string>(urlScope === 'audit' && urlTab ? urlTab : 'user-activity');
+  //   const [rebuilding, setRebuilding] = useState(false);
+  //   const [rebuildResult, setRebuildResult] = useState<{...}|null>(null);
   const [auditTabKey, setAuditTabKey] = useState<string>(() => {
     if ((urlScope === 'services' || urlScope === 'audit') && urlTab && urlTab in AUDIT_SUB_DEFAULTS) return urlTab;
     return 'activity';
@@ -106,7 +110,6 @@ export default function SettingsPage() {
     setAuditSubKey(AUDIT_SUB_DEFAULTS[key] ?? 'user-activity');
   }, []);
 
-  // Rebuild state kept in Settings (not moved to Files with f9106bfc).
   const [rebuilding, setRebuilding] = useState(false);
   const [rebuildResult, setRebuildResult] = useState<{ created: number; skipped: number; failed: number } | null>(null);
 
@@ -1948,6 +1951,10 @@ export default function SettingsPage() {
                     <TranscriptionJobsPanel />
                   </>
                 )}
+                {/* CHOSE HEAD (final): services panel already contains the rebuild button.
+                    392dea79 would have used 'audit' scope + GenericAuditLogTab for transcripts.
+                    To revert: swap scope to 'audit' and replace TranscriptionJobsPanel with
+                    GenericAuditLogTab + actionButton rebuild button (see 392dea79 diff). */}
                 {auditSubKey === 'sync' && <GenericAuditLogTab logType="sync" />}
                 {auditSubKey === 'recovery' && <GenericAuditLogTab logType="recovery" />}
               </>
