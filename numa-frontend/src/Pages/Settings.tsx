@@ -27,6 +27,10 @@ import AuditPanel from '../Components/UsageAnalytics/AuditPanel';
 import LoginHeatmap from '../Components/UsageAnalytics/LoginHeatmap';
 import { NumaLibrariesPanel } from '../Components/Settings/NumaLibrariesPanel';
 import GenericAuditLogTab from '../Components/UsageAnalytics/GenericAuditLogTab';
+// CHOSE HEAD: richer import set — TranscriptionJobsPanel, TxJob, and NotificationsAuditPanel
+// are required by the services scope UI. ec7ae674 only imported TranscriptionService.
+// To revert to ec7ae674: replace with `import { TranscriptionService } from '../Services/TranscriptionService';`
+// and remove uses of TranscriptionJobsPanel, NotificationsAuditPanel, and TxJob below.
 import TranscriptionJobsPanel from '../Components/UsageAnalytics/TranscriptionJobsPanel';
 import { TranscriptionService, type TranscriptionJob as TxJob } from '../Services/TranscriptionService';
 import NotificationsAuditPanel from '../Components/UsageAnalytics/NotificationsAuditPanel';
@@ -83,7 +87,7 @@ const AUDIT_SUB_DEFAULTS: Record<string, string> = {
 export default function SettingsPage() {
   const { t, i18n } = useTranslation('settings');
   const { user, getCredentials, lambdaClient } = useAuth();
-  const { numaGet, numaPut } = useNumaRequest();
+  const { numaGet, numaPut, numaPost } = useNumaRequest();
   const { scope: urlScope, tab: urlTab } = useParams<{ scope?: string; tab?: string }>();
   const navigate = useNavigate();
   const [activeKey, setActiveKey] = useState<string>(urlTab || 'users');
@@ -92,6 +96,12 @@ export default function SettingsPage() {
   const [settingsScope, setSettingsScope] = useState<SettingsScope>(
     validScopes.includes(urlScope as SettingsScope) ? (urlScope as SettingsScope) : 'user'
   );
+  // CHOSE HEAD: richer tab state supporting the services scope with nested sub-keys.
+  // Also kept ec7ae674's rebuilding/rebuildResult state for the rebuild button in the transcribe sub-tab.
+  // To revert to ec7ae674: replace with:
+  //   const [auditTabKey, setAuditTabKey] = useState<string>(urlScope === 'audit' && urlTab ? urlTab : 'user-activity');
+  //   const [rebuilding, setRebuilding] = useState(false);
+  //   const [rebuildResult, setRebuildResult] = useState<{created:number;skipped:number;failed:number}|null>(null);
   const [auditTabKey, setAuditTabKey] = useState<string>(() => {
     if ((urlScope === 'services' || urlScope === 'audit') && urlTab && urlTab in AUDIT_SUB_DEFAULTS) return urlTab;
     return 'activity';
@@ -101,6 +111,10 @@ export default function SettingsPage() {
     setAuditTabKey(key);
     setAuditSubKey(AUDIT_SUB_DEFAULTS[key] ?? 'user-activity');
   }, []);
+
+  // Rebuild state from ec7ae674 — kept alongside HEAD's tab state.
+  const [rebuilding, setRebuilding] = useState(false);
+  const [rebuildResult, setRebuildResult] = useState<{ created: number; skipped: number; failed: number } | null>(null);
 
   // Upload/Scan table state (shared data source)
   const [filesTableJobs, setFilesTableJobs] = useState<TxJob[]>([]);
@@ -1630,6 +1644,10 @@ export default function SettingsPage() {
           </div>
         )}
 
+        {/* CHOSE HEAD: services scope panel with nested activity/index/files sub-tabs.
+            ec7ae674 had a simpler audit scope with: user-activity, web-crawler, transcripts (+ rebuild button),
+            automation, search-index, kb-index. The rebuild button is now in the transcribe sub-tab below.
+            To revert to ec7ae674 panel: replace this div's scope with 'audit' and simplify tab structure. */}
         {isAdmin && (
           <div hidden={currentScope !== 'services'} aria-hidden={currentScope !== 'services'}>
             {auditTabKey === 'activity' && (
@@ -1881,7 +1899,60 @@ export default function SettingsPage() {
                     )}
                   </>
                 )}
-                {auditSubKey === 'transcribe' && <TranscriptionJobsPanel />}
+                {/* CHOSE HEAD: TranscriptionJobsPanel used here instead of ec7ae674's GenericAuditLogTab.
+                    The rebuild button from ec7ae674 is placed above the panel.
+                    To revert to ec7ae674: replace this block with:
+                      <GenericAuditLogTab logType="transcripts" actionButton={...rebuild button...} /> */}
+                {auditSubKey === 'transcribe' && (
+                  <>
+                    {/* Rebuild button from ec7ae674 — integrated into HEAD's services/files/transcribe sub-tab */}
+                    <div className="d-flex align-items-center mb-3 gap-2">
+                      {rebuildResult && (
+                        <Alert
+                          variant="info"
+                          className="d-inline-block me-3 mb-0 py-1 px-3"
+                          style={{ fontSize: '0.875rem' }}
+                        >
+                          {t('rebuildResult', {
+                            created: rebuildResult.created,
+                            skipped: rebuildResult.skipped,
+                            failed: rebuildResult.failed,
+                          })}
+                        </Alert>
+                      )}
+                      <Button
+                        variant="outline-warning"
+                        size="sm"
+                        disabled={rebuilding}
+                        onClick={async () => {
+                          setRebuilding(true);
+                          setRebuildResult(null);
+                          try {
+                            const result = await TranscriptionService.rebuild(numaPost);
+                            setRebuildResult(result);
+                          } catch (e) {
+                            console.error('Rebuild failed', e);
+                          } finally {
+                            setRebuilding(false);
+                          }
+                        }}
+                      >
+                        {rebuilding ? (
+                          <>
+                            <Spinner animation="border" size="sm" className="me-1" />
+                            {t('rebuilding')}
+                          </>
+                        ) : (
+                          <>
+                            <i className="bi bi-arrow-repeat me-1"></i>
+                            {t('rebuildTranscripts')}
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                    <TranscriptionJobsPanel />
+                  </>
+                )}
                 {auditSubKey === 'sync' && <GenericAuditLogTab logType="sync" />}
                 {auditSubKey === 'recovery' && <GenericAuditLogTab logType="recovery" />}
               </>

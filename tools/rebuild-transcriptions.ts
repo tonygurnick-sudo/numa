@@ -13,6 +13,8 @@
  */
 import { Command } from 'commander';
 import { S3Client, ListObjectsV2Command, GetObjectCommand, HeadObjectCommand } from '@aws-sdk/client-s3';
+// CHOSE HEAD: AttributeValue and marshall needed to store costs map correctly in DynamoDB.
+// To revert to ec7ae674: drop AttributeValue and marshall; use a looser item type below.
 import { DynamoDBClient, PutItemCommand, ScanCommand, type AttributeValue } from '@aws-sdk/client-dynamodb';
 import { marshall } from '@aws-sdk/util-dynamodb';
 import { withPRM } from '../lib/prm-node/prm';
@@ -86,6 +88,8 @@ interface StatusFile {
   updated_at: number;
   duration_ms: number;
   request_id?: string;
+  // CHOSE HEAD: enriched fields written by the worker — allow richer recovery.
+  // To revert to ec7ae674: remove all optional fields below.
   file_size?: number;
   file_extension?: string;
   file_hash?: string;
@@ -132,6 +136,8 @@ async function getUploadFileSize(fileKey: string): Promise<number | null> {
   }
 }
 
+// CHOSE HEAD: explicit Promise<void> return type for stricter TypeScript.
+// To revert: `async function main() {`
 async function main(): Promise<void> {
   console.log(`Rebuilding transcriptions for client: ${clientName}`);
   console.log(`  Data bucket: ${dataBucket}`);
@@ -165,6 +171,8 @@ async function main(): Promise<void> {
       continue;
     }
 
+    // CHOSE HEAD: double-cast avoids TS error (getJson returns Record<string,unknown>).
+    // To revert: single cast `as StatusFile | null`.
     const status = (await getJson(dataBucket, statusKey)) as unknown as StatusFile | null;
     if (!status) {
       console.log(`  FAIL (cannot read): ${statusKey}`);
@@ -172,6 +180,9 @@ async function main(): Promise<void> {
       continue;
     }
 
+    // CHOSE HEAD: prefer enriched status fields, drop unnecessary output.json read.
+    // To revert to ec7ae674: also fetch output.json, always derive extension from path,
+    // and always HeadObject for size: `const output = await getJson(dataBucket, outputKey);`
     const outputKey = statusKey.replace('/output.status.json', '/output.json');
 
     // Derive file extension — prefer enriched value, fallback to path.extname
@@ -187,7 +198,8 @@ async function main(): Promise<void> {
     // Map S3 status to DynamoDB status
     const dbStatus = status.status === 'SUCCEEDED' ? 'COMPLETED' : status.status === 'FAILED' ? 'FAILED' : 'COMPLETED';
 
-    // Build DynamoDB item — use enriched fields when available, fallback for v1 status files
+    // CHOSE HEAD: AttributeValue type + enriched clientName/dataBucket fallback.
+    // To revert to ec7ae674: use `Record<string, Record<string,string|number|boolean>>` and hardcode clientName/dataBucket.
     const item: Record<string, AttributeValue> = {
       userSub: { S: parsed.userSub },
       jobId: { S: parsed.jobId },
@@ -197,7 +209,7 @@ async function main(): Promise<void> {
       status: { S: dbStatus },
       outputKey: { S: outputKey },
       fileKey: { S: status.input_key || '' },
-      dataBucket: { S: status.data_bucket || dataBucket },
+      dataBucket: { S: status.data_bucket || dataBucket }, // CHOSE HEAD: fallback to enriched value
       createdAt: { N: String(status.started_at * 1000) },
       updatedAt: { N: String(status.updated_at * 1000) },
       progress: { N: '100' },
@@ -207,14 +219,19 @@ async function main(): Promise<void> {
       item.fileSize = { N: String(fileSize) };
     }
 
+    // CHOSE HEAD: persist fileHash for dedup; ec7ae674 omitted this.
+    // To revert: remove this block.
     if (status.file_hash) {
       item.fileHash = { S: status.file_hash };
     }
+
 
     if (status.duration_ms) {
       item.processingTimeMs = { N: String(status.duration_ms) };
     }
 
+    // CHOSE HEAD: persist errorMessage and costs; ec7ae674 omitted both.
+    // To revert: remove both blocks below.
     if (status.error_message) {
       item.errorMessage = { S: status.error_message };
     }
@@ -223,6 +240,7 @@ async function main(): Promise<void> {
       const marshalledCosts = marshall(status.costs, { removeUndefinedValues: true });
       item.costs = { M: marshalledCosts };
     }
+
 
     // Set expiresAt to 90 days from now (matching default TTL)
     const expiresAt = Math.floor(Date.now() / 1000) + 90 * 24 * 60 * 60;

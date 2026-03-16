@@ -222,11 +222,14 @@ export const TranscriptionService = {
     return (await numaGet(url)) as TranscriptionListResponse;
   },
 
+  // CHOSE HEAD: lookupByPath added after original rebuild commit for dedup / link-resolution.
+  // To revert: remove this method and the corresponding route in infra + lambda.
   /** Look up transcription jobs by S3 file key (path). */
   async lookupByPath(fileKey: string, numaGet: NumaGet): Promise<TranscriptionListResponse> {
     const url = `/api/transcriptions/lookup/path?fileKey=${encodeURIComponent(fileKey)}`;
     return (await numaGet(url)) as TranscriptionListResponse;
   },
+
 
   async rebuild(numaPost: NumaPost): Promise<{ created: number; skipped: number; failed: number; total: number }> {
     return (await numaPost('/api/transcriptions/admin/rebuild')) as {

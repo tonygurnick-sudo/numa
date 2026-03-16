@@ -406,6 +406,8 @@ echo "Successfully pushed image to ${this.ecrRepository.repositoryUrl}:${imageTa
         { verb: 'POST', path: 'transcriptions/{jobId}/retry' },
         { verb: 'GET', path: 'transcriptions/admin/all' },
         { verb: 'POST', path: 'transcriptions/admin/rebuild' },
+        // CHOSE HEAD: lookup routes added after the original rebuild commit.
+        // To revert: remove the two lines below.
         { verb: 'GET', path: 'transcriptions/lookup/hash/{hash}' },
         { verb: 'GET', path: 'transcriptions/lookup/path' },
       ],

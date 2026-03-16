@@ -1008,5 +1008,8 @@
       "title": "Notification Details"
     }
   },
-  "numaLibraries": "Numa Libraries"
+  "numaLibraries": "Numa Libraries",
+  "rebuildTranscripts": "Rebuild from S3",
+  "rebuilding": "Rebuilding...",
+  "rebuildResult": "Created: {{created}}, Skipped: {{skipped}}, Failed: {{failed}}"
 }

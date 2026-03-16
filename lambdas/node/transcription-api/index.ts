@@ -588,7 +588,8 @@ const listAllJobs = async (auth: AuthContext, event: APIGatewayProxyEventV2): Pr
   return respond(200, { jobs: result.Items || [], nextToken, count: result.Items?.length || 0 });
 };
 
-// ─── Lookup handlers ───
+// ─── Lookup handlers ─── CHOSE HEAD: new feature added after original rebuild commit.
+// To revert: remove lookupByHash and lookupByPath functions and their route entries in the handler below.
 
 const lookupByHash = async (_auth: AuthContext, hash: string): Promise<ReturnType<typeof respond>> => {
   const result = await dynamo.send(
@@ -616,6 +617,7 @@ const lookupByPath = async (_auth: AuthContext, fileKey: string): Promise<Return
   return respond(200, { jobs: result.Items || [], count: result.Items?.length || 0 });
 };
 
+
 // ─── Rebuild from S3 ───
 
 interface StatusFile {
@@ -627,6 +629,9 @@ interface StatusFile {
   started_at: number;
   updated_at: number;
   duration_ms: number;
+  // CHOSE HEAD: enriched fields written by the transcription worker after the original commit.
+  // These allow better data recovery when rebuilding from S3.
+  // To revert to ec7ae674: remove all optional fields below.
   file_size?: number;
   file_extension?: string;
   file_hash?: string;
@@ -703,6 +708,8 @@ const rebuildFromS3 = async (auth: AuthContext): Promise<ReturnType<typeof respo
         continue;
       }
 
+      // CHOSE HEAD: double-cast avoids TS error when getS3Json returns Record<string,unknown>.
+      // To revert: use single cast `as StatusFile | null`.
       const statusData = (await getS3Json(obj.Key)) as unknown as StatusFile | null;
       if (!statusData) {
         failed++;
@@ -710,12 +717,15 @@ const rebuildFromS3 = async (auth: AuthContext): Promise<ReturnType<typeof respo
       }
 
       const fileName = statusData.file_name || 'unknown';
+      // CHOSE HEAD: prefer enriched file_extension from status file, fall back to path.extname.
+      // To revert: use `getExtension(fileName)` only.
       const ext = statusData.file_extension || getExtension(fileName);
       const outputKey = obj.Key.replace('/output.status.json', '/output.json');
       const dbStatus =
         statusData.status === 'SUCCEEDED' ? 'COMPLETED' : statusData.status === 'FAILED' ? 'FAILED' : 'COMPLETED';
 
-      // Try to get upload file size — prefer enriched value, fallback to HeadObject
+      // CHOSE HEAD: prefer enriched file_size from status file, only HeadObject if missing.
+      // To revert: initialise fileSize = 0 and always attempt HeadObject when input_key present.
       let fileSize = statusData.file_size ?? 0;
       if (!fileSize && statusData.input_key) {
         try {
@@ -737,6 +747,8 @@ const rebuildFromS3 = async (auth: AuthContext): Promise<ReturnType<typeof respo
         fileSize,
         fileExtension: ext,
         status: dbStatus as JobStatus,
+        // CHOSE HEAD: honour enriched client_name/data_bucket so cross-client data is recovered correctly.
+        // To revert: use CLIENT_NAME and DATA_BUCKET constants directly.
         clientName: statusData.client_name || CLIENT_NAME,
         dataBucket: statusData.data_bucket || DATA_BUCKET,
         createdAt: (statusData.started_at || 0) * 1000,
@@ -744,6 +756,8 @@ const rebuildFromS3 = async (auth: AuthContext): Promise<ReturnType<typeof respo
         expiresAt,
         outputKey,
         progress: 100,
+        // CHOSE HEAD: preserve fileHash (dedup key) and pipelineId for traceability.
+        // To revert: remove these two fields.
         fileHash: statusData.file_hash || undefined,
         pipelineId: statusData.pipeline_id || undefined,
       };
@@ -752,6 +766,8 @@ const rebuildFromS3 = async (auth: AuthContext): Promise<ReturnType<typeof respo
         await dynamo.send(
           new PutCommand({
             TableName: TABLE_NAME,
+            // CHOSE HEAD: include costs and errorMessage when present for complete data preservation.
+            // To revert: use `Item: { ...job, processingTimeMs: statusData.duration_ms || 0 }`.
             Item: {
               ...job,
               processingTimeMs: statusData.duration_ms || 0,
