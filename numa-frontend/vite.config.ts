@@ -98,6 +98,12 @@ export default defineConfig({
   },
   assetsInclude: ['**/*.md'],
   define: { 'process.env': {} },
+  esbuild: {
+    // Strip debug logging from production builds.
+    // console.error and console.warn are preserved for client-facing diagnostics.
+    // Note: If upgrading to Vite 7+ (Oxc minifier), migrate to build.rolldownOptions.output.minify.compress.pure_funcs
+    pure: ['console.log', 'console.debug', 'console.info'],
+  },
   test: {
     environment: 'jsdom',
     globals: true,

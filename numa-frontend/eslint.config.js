@@ -91,6 +91,7 @@ export default [
       'import/named': 'error',
       'import/default': 'error',
       'import/namespace': 'error',
+      'no-console': ['warn', { allow: ['warn', 'error'] }],
     },
   },
 
@@ -118,6 +119,7 @@ export default [
         'error',
         { argsIgnorePattern: '^_', varsIgnorePattern: '^_', ignoreRestSiblings: true },
       ],
+      'no-console': ['warn', { allow: ['warn', 'error'] }],
       // i18n: detect hardcoded strings that should use t()
       'i18next/no-literal-string': [
         'error',
