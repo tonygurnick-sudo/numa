@@ -269,6 +269,8 @@ export const FilesPage = () => {
   const [selectedTranscript, setSelectedTranscript] = useState<TranscriptionJob | null>(null);
   const [transcriptOutput, setTranscriptOutput] = useState<TranscriptionOutput | null>(null);
   const [transcriptOutputLoading, setTranscriptOutputLoading] = useState(false);
+  const [rebuilding, setRebuilding] = useState(false);
+  const [rebuildResult, setRebuildResult] = useState<{ created: number; skipped: number; failed: number } | null>(null);
   const [showShareModal, setShowShareModal] = useState(false);
   const [showDropZoneModal, setShowDropZoneModal] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<ShareListItem | null>(null);
@@ -1992,6 +1994,9 @@ export const FilesPage = () => {
             <div style={{ flex: 1 }} />
             {viewToggle}
           </div>
+          {/* CHOSE HEAD: rebuild button lives in Settings > Services > Files > Transcripts, not here.
+              f9106bfc would have added it to this toolbar; 392dea79 moves it back to Settings.
+              To revert (add button here): restore the block from ec7ae674/f9106bfc between the ribbon and viewToggle. */}
         </div>
 
         <div className="files-content">
