@@ -84,13 +84,16 @@ export function useWorkspaceChatSettingsPanel(conversationId: string | null): Us
 
       for (const file of files) {
         // File path format: "uploads/filename.pdf" or "outputs/output.txt"
+        // Also ignore intermediate files under "outputs/tmp"
         if (file.path.startsWith('uploads/') || file.path.startsWith('uploads\\')) {
           uploads.push(file);
         } else if (
-          file.path.startsWith('outputs/') ||
-          file.path.startsWith('outputs\\') ||
-          file.path.startsWith('session/') ||
-          file.path.startsWith('session\\')
+          (file.path.startsWith('outputs/') ||
+            file.path.startsWith('outputs\\') ||
+            file.path.startsWith('session/') ||
+            file.path.startsWith('session\\')) &&
+          !file.path.startsWith('outputs/tmp/') &&
+          !file.path.startsWith('outputs\\tmp\\')
         ) {
           output.push(file);
         }
