@@ -146,9 +146,10 @@ export function CreateBoardWizard({ show, onHide, onCreated }: CreateBoardWizard
         accessControl: { mode: accessMode, users: accessMode === 'specific' ? selectedUserIds : [] },
       });
 
-      if (customTicketTypes.length > 0) {
-        await refreshConfig();
-      }
+      // Always refresh global config so newly created ticket types
+      // (and the board's allowedTicketTypes) are immediately available
+      // when the user opens the Create Ticket modal.
+      await refreshConfig();
 
       onCreated(team);
     } catch (err) {

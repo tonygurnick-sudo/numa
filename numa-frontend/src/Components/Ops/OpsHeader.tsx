@@ -246,8 +246,9 @@ const OpsHeader = () => {
       <CreateBoardWizard
         show={showCreateTeam}
         onHide={() => setShowCreateTeam(false)}
-        onCreated={(team) => {
+        onCreated={async (team) => {
           setShowCreateTeam(false);
+          await refreshConfig();
           refreshTeams();
           selectTeam(team.id);
         }}
