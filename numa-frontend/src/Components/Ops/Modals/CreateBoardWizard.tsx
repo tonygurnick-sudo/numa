@@ -11,6 +11,7 @@ import {
   ZONE_TYPE_BADGE_COLORS,
   getPreset,
   getTicketTypeIconClass,
+  getDefaultFieldsForPrefix,
 } from '../../../constants/opsConstants';
 import type { PresetZone } from '../../../constants/opsConstants';
 import { UserPicker } from '../../Inputs/UserPicker';
@@ -127,7 +128,7 @@ export function CreateBoardWizard({ show, onHide, onCreated }: CreateBoardWizard
           prefix: ct.prefix,
           icon: ct.icon,
           color: ct.color,
-          defaultFields: [],
+          defaultFields: getDefaultFieldsForPrefix(ct.prefix),
         });
         typeIdMap[ct.tempId] = created.id;
       }

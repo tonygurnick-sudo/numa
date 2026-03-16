@@ -941,7 +941,13 @@ export function TicketDetailModal({
 
           {/* Linked Tickets — rendered directly (component has its own heading + Add Link button) */}
           <div className="mt-3">
-            <LinkedTicketsSection ticketId={ticket.id} links={links} onRefresh={reloadTicket} />
+            <LinkedTicketsSection
+              ticketId={ticket.id}
+              ticketDisplayId={ticket.displayId}
+              ticketTitle={ticket.title}
+              links={links}
+              onRefresh={reloadTicket}
+            />
           </div>
         </div>
       </div>

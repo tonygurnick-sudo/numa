@@ -10,6 +10,10 @@ import type { TicketLink, TicketLinkType } from '../../../types/ops';
 
 interface LinkedTicketsSectionProps {
   ticketId: string;
+  /** Display ID of the current ticket (e.g. "FEAT-001"), needed for reciprocal links. */
+  ticketDisplayId: string;
+  /** Title of the current ticket, attached to the reciprocal link for display. */
+  ticketTitle: string;
   links: TicketLink[];
   onRefresh: () => void;
 }
@@ -17,11 +21,33 @@ interface LinkedTicketsSectionProps {
 const LINK_TYPES: TicketLinkType[] = ['blocks', 'depends_on', 'related_to'];
 
 /**
+ * Returns the inverse link type so reciprocal links stay consistent.
+ * blocks ↔ depends_on, related_to ↔ related_to.
+ */
+const getInverseLinkType = (linkType: TicketLinkType): TicketLinkType => {
+  switch (linkType) {
+    case 'blocks':
+      return 'depends_on';
+    case 'depends_on':
+      return 'blocks';
+    case 'related_to':
+    default:
+      return 'related_to';
+  }
+};
+
+/**
  * Displays grouped ticket links (blocks, depends on, related to) with the ability
  * to add new links by display ID and remove existing links.
  * Links are grouped by type with translated section headers.
  */
-export function LinkedTicketsSection({ ticketId, links, onRefresh }: LinkedTicketsSectionProps): React.JSX.Element {
+export function LinkedTicketsSection({
+  ticketId,
+  ticketDisplayId,
+  ticketTitle,
+  links,
+  onRefresh,
+}: LinkedTicketsSectionProps): React.JSX.Element {
   const { t } = useTranslation('ops');
   const { numaGet, numaPost, numaDelete } = useNumaRequest();
 
@@ -59,11 +85,20 @@ export function LinkedTicketsSection({ ticketId, links, onRefresh }: LinkedTicke
         return;
       }
 
+      // Forward link: A → B
       await OpsService.createLink(numaPost, ticketId, {
         linkedTicketId: ticketResponse.ticket.id,
         linkedTicketDisplayId: ticketResponse.ticket.displayId,
         linkedTicketTitle: ticketResponse.ticket.title,
         linkType: addLinkType,
+      });
+
+      // Reciprocal link: B → A (inverse type)
+      await OpsService.createLink(numaPost, ticketResponse.ticket.id, {
+        linkedTicketId: ticketId,
+        linkedTicketDisplayId: ticketDisplayId,
+        linkedTicketTitle: ticketTitle,
+        linkType: getInverseLinkType(addLinkType),
       });
 
       setAddDisplayId('');
@@ -80,7 +115,12 @@ export function LinkedTicketsSection({ ticketId, links, onRefresh }: LinkedTicke
 
   const handleRemove = async (linkType: TicketLinkType, linkedTicketId: string) => {
     try {
+      // Delete forward link: A → B
       await OpsService.deleteLink(numaDelete, ticketId, linkType, linkedTicketId);
+      // Delete reciprocal link: B → A (inverse type, best-effort)
+      await OpsService.deleteLink(numaDelete, linkedTicketId, getInverseLinkType(linkType), ticketId).catch(() => {
+        // Non-fatal: reciprocal may not exist if created before this feature
+      });
       onRefresh();
     } catch (err) {
       console.error('[LinkedTicketsSection] Failed to remove link', err);

@@ -29,6 +29,28 @@ export const DEFAULT_ZONES: { name: string; zoneType: ZoneType; order: number }[
   { name: 'Board', zoneType: 'board', order: 2000 },
 ];
 
+// ─── Default Fields per Ticket Type Prefix ─────────────────────────────────
+//
+// When the board wizard creates a new ticket type, it uses this map to assign
+// sensible defaultFields rather than an empty array.  Matches the seed data
+// in seed-ops-config/seed-data.ts so dynamically created types are consistent
+// with pre-seeded ones.
+
+const BASE_FIELDS = ['field-name', 'field-description', 'field-priority', 'field-assignee', 'field-due-date'];
+
+export const DEFAULT_FIELDS_BY_PREFIX: Record<string, string[]> = {
+  FEAT: [...BASE_FIELDS, 'field-effort-points', 'field-work-unit-id', 'field-client'],
+  BUG: [...BASE_FIELDS, 'field-severity', 'field-work-unit-id', 'field-client'],
+  TASK: [...BASE_FIELDS, 'field-effort-points', 'field-work-unit-id'],
+  SRQ: [...BASE_FIELDS, 'field-client', 'field-work-unit-id'],
+  SUPP: [...BASE_FIELDS, 'field-client'],
+  LEAD: [...BASE_FIELDS, 'field-client', 'field-deal-value'],
+  DEAL: [...BASE_FIELDS, 'field-client', 'field-deal-value', 'field-probability'],
+};
+
+/** Returns the default fields for a given ticket type prefix, or fallback base fields. */
+export const getDefaultFieldsForPrefix = (prefix: string): string[] => DEFAULT_FIELDS_BY_PREFIX[prefix] ?? BASE_FIELDS;
+
 // ─── Team Presets ───────────────────────────────────────────────────────────
 //
 // Presets define the default zones and stages when creating a new team.
@@ -106,10 +128,11 @@ export const TEAM_PRESETS: TeamPresetConfig[] = [
         ],
       },
     ],
-    allowedTicketTypePrefixes: ['SUPP', 'BUG'],
+    allowedTicketTypePrefixes: ['SUPP', 'BUG', 'SRQ'],
     suggestedTicketTypes: [
       { name: 'Support', prefix: 'SUPP', icon: 'ticket', color: '#ffc107' },
       { name: 'Bug', prefix: 'BUG', icon: 'stop', color: '#dc3545' },
+      { name: 'Service Request', prefix: 'SRQ', icon: 'inbox', color: '#198754' },
     ],
   },
   {
@@ -136,6 +159,12 @@ export const TEAM_PRESETS: TeamPresetConfig[] = [
         ],
       },
     ],
+    allowedTicketTypePrefixes: ['TASK', 'REQ', 'MILE'],
+    suggestedTicketTypes: [
+      { name: 'Task', prefix: 'TASK', icon: 'clipboard', color: '#0dcaf0' },
+      { name: 'Request', prefix: 'REQ', icon: 'inbox', color: '#fd7e14' },
+      { name: 'Milestone', prefix: 'MILE', icon: 'flag', color: '#6f42c1' },
+    ],
   },
   {
     id: 'solo',
@@ -153,6 +182,11 @@ export const TEAM_PRESETS: TeamPresetConfig[] = [
           { name: 'Done', statusType: 'completed' },
         ],
       },
+    ],
+    allowedTicketTypePrefixes: ['TASK', 'NOTE'],
+    suggestedTicketTypes: [
+      { name: 'Task', prefix: 'TASK', icon: 'clipboard', color: '#0dcaf0' },
+      { name: 'Note', prefix: 'NOTE', icon: 'journal-text', color: '#6c757d' },
     ],
   },
   {
@@ -327,14 +361,19 @@ export const TEAM_PRESETS: TeamPresetConfig[] = [
     mode: 'basic',
     zones: [
       {
-        name: 'Pipeline',
+        name: 'Sales Playbook',
         zoneType: 'board',
         stages: [
-          { name: 'Prospect', statusType: 'queued' },
-          { name: 'Contacted', statusType: 'active' },
-          { name: 'Negotiation', statusType: 'active' },
-          { name: 'Closed Won', statusType: 'completed' },
-          { name: 'Closed Lost', statusType: 'ended' },
+          { name: 'Cold Call', statusType: 'queued' },
+          { name: 'Workshop #1', statusType: 'active' },
+          { name: 'Email #1', statusType: 'active' },
+          { name: 'Implementation Plan', statusType: 'active' },
+          { name: 'Champions', statusType: 'active' },
+          { name: 'Email #2', statusType: 'active' },
+          { name: 'Workshop #2', statusType: 'active' },
+          { name: 'Proposal', statusType: 'active' },
+          { name: 'Commercials', statusType: 'active' },
+          { name: 'Contract Sent', statusType: 'completed' },
         ],
       },
     ],
@@ -448,3 +487,32 @@ export const getDefaultZoneForStatusType = (statusType: StatusType): ZoneType =>
 
 export const getPreset = (presetId?: string): TeamPresetConfig =>
   TEAM_PRESETS.find((p) => p.id === presetId) ?? TEAM_PRESETS[0];
+
+// ─── Default Industries (from Ian's core data v185a) ────────────────────────
+//
+// Seeded as sensible defaults for the CRM config industries dropdown.
+// Admins can customise these in Global Settings.
+
+export const DEFAULT_INDUSTRIES: string[] = [
+  'Agriculture',
+  'Aviation',
+  'Construction',
+  'Education',
+  'Environmental',
+  'Finance',
+  'Food & Beverage',
+  'Government',
+  'Healthcare',
+  'Logistics',
+  'Manufacturing',
+  'Media',
+  'Non-profit',
+  'Professional Services',
+  'Real Estate',
+  'Retail',
+  'Security',
+  'Sports & Recreation',
+  'Technology',
+  'Tourism',
+  'Other',
+];
