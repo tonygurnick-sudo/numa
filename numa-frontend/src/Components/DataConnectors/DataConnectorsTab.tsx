@@ -22,6 +22,9 @@ import { OAuthConnectorCard } from './OAuthConnectorCard';
 import { OAuthWizard } from './wizards/OAuthWizard';
 import { PlatformPickerModal } from './wizards/PlatformPickerModal';
 import { ApiKeyWizard } from './wizards/ApiKeyWizard';
+// ACCEPT 3af3ef8e: GoogleCloudSetupWizard is a new feature added in the incoming commit.
+// To revert: remove this import and the wizard state/JSX below.
+import { GoogleCloudSetupWizard } from './wizards/GoogleCloudSetupWizard';
 import EventConfigPanel from './EventConfigPanel';
 import type { GlobalDataConnectorSettingsMap } from '../../Services/AdminDataConnectorsService';
 import {
@@ -30,7 +33,9 @@ import {
   getNonOAuthConnectors,
   getContactRequired,
   getConnectorById,
+  // CHOSE HEAD: getOAuthSecretId needed for platform-connector disconnect logic.
   getOAuthSecretId,
+  // CHOSE HEAD: getConnectorsByPlatform needed for mergedOAuthProviders filtering.
   getConnectorsByPlatform,
 } from './connectorRegistry';
 import type { ConnectorTemplate } from './connectorRegistry';
@@ -76,7 +81,10 @@ export const DataConnectorsTab = ({ adminSettings }: DataConnectorsTabProps) => 
   const [apiKeyWizardOpen, setApiKeyWizardOpen] = useState(false);
   const [apiKeyWizardConnector, setApiKeyWizardConnector] = useState<ConnectorTemplate | null>(null);
   const [disconnectingId, setDisconnectingId] = useState<string | null>(null);
+  // CHOSE HEAD: recentlySavedIds used in configuredIds to show newly-saved connectors before cache refresh.
   const [recentlySavedIds, setRecentlySavedIds] = useState<Set<string>>(new Set());
+  // ACCEPT 3af3ef8e: googleSetupWizardOpen is a new feature from the incoming commit.
+  const [googleSetupWizardOpen, setGoogleSetupWizardOpen] = useState(false);
   const [eventConfigConnectorId, setEventConfigConnectorId] = useState<string | null>(null);
 
   // ---------------------------------------------------------------------------
@@ -339,10 +347,16 @@ export const DataConnectorsTab = ({ adminSettings }: DataConnectorsTabProps) => 
           </h4>
         </div>
         {isAdmin && (
-          <Button variant="outline-primary" size="sm" onClick={() => setPlatformPickerOpen(true)} className="ms-auto">
-            <Plus size={14} className="me-1" />
-            {t('dataConnectors.picker.addConnector')}
-          </Button>
+          <div className="d-flex gap-2 ms-auto">
+            <Button variant="outline-secondary" size="sm" onClick={() => setGoogleSetupWizardOpen(true)}>
+              <i className="bi bi-google me-1" />
+              {t('dataConnectors.googleCloudSetup.setupButton')}
+            </Button>
+            <Button variant="outline-primary" size="sm" onClick={() => setPlatformPickerOpen(true)}>
+              <Plus size={14} className="me-1" />
+              {t('dataConnectors.picker.addConnector')}
+            </Button>
+          </div>
         )}
       </div>
       <div className="mt-3">
@@ -428,6 +442,19 @@ export const DataConnectorsTab = ({ adminSettings }: DataConnectorsTabProps) => 
           existingSecrets={connectorSecrets}
         />
       )}
+
+      {/* ACCEPT 3af3ef8e: Google Cloud Setup Wizard added in incoming commit.
+          To revert: remove this JSX block. */}
+      <GoogleCloudSetupWizard
+        show={googleSetupWizardOpen}
+        onHide={() => setGoogleSetupWizardOpen(false)}
+        onComplete={() => {
+          setGoogleSetupWizardOpen(false);
+          loadCompanySecrets();
+          loadOAuthProviders();
+        }}
+      />
+
       {/* Event Config Panel (shown when a connector with eventTypes is selected) */}
       {eventConfigConnectorId &&
         (() => {

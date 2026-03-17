@@ -1505,6 +1505,8 @@ export class CoreNumaInfra extends Construct {
         { id: 'audit-automation', purpose: 'audit-automation', prop: 'auditAutomationTable' as const },
         { id: 'audit-search-index', purpose: 'audit-search-index', prop: 'auditSearchIndexTable' as const },
         { id: 'audit-kb-index', purpose: 'audit-kb-index', prop: 'auditKbIndexTable' as const },
+        // CHOSE HEAD: additional audit tables added after the original rebuild commit.
+        // To revert: remove the three entries below.
         { id: 'audit-schedule', purpose: 'audit-schedule', prop: 'auditScheduleTable' as const },
         { id: 'audit-sync', purpose: 'audit-sync', prop: 'auditSyncTable' as const },
         { id: 'audit-recovery', purpose: 'audit-recovery', prop: 'auditRecoveryTable' as const },

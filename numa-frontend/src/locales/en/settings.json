@@ -1003,9 +1003,6 @@
       "actions": "Actions",
       "noNotifications": "No notifications found",
       "showing": "Showing {{count}} notifications"
-    },
-    "detailModal": {
-      "title": "Notification Details"
     }
   },
   "numaLibraries": "Numa Libraries",

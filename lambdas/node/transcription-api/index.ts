@@ -368,7 +368,7 @@ const submitJob = async (auth: AuthContext, event: APIGatewayProxyEventV2): Prom
         dataBucket: bucket,
         clientName: CLIENT_NAME,
         fileHash,
-        pipelineId,
+        pipelineId, // CHOSE HEAD: pipelineId preserved for traceability; 3af3ef8e removed it.
       }),
     })
   );
@@ -533,7 +533,7 @@ const retryJob = async (auth: AuthContext, jobId: string): Promise<ReturnType<ty
         dataBucket: job.dataBucket || DATA_BUCKET,
         clientName: CLIENT_NAME,
         fileHash: job.fileHash,
-        pipelineId: job.pipelineId,
+        pipelineId: job.pipelineId, // CHOSE HEAD: pipelineId preserved for traceability.
       }),
     })
   );
@@ -637,7 +637,7 @@ interface StatusFile {
   file_hash?: string;
   client_name?: string;
   data_bucket?: string;
-  pipeline_id?: string;
+  pipeline_id?: string; // CHOSE HEAD: kept for traceability; 3af3ef8e removed it.
   costs?: Record<string, unknown>;
   error_message?: string;
 }
@@ -708,9 +708,8 @@ const rebuildFromS3 = async (auth: AuthContext): Promise<ReturnType<typeof respo
         continue;
       }
 
-      // CHOSE HEAD: double-cast avoids TS error when getS3Json returns Record<string,unknown>.
-      // To revert: use single cast `as StatusFile | null`.
       const statusData = (await getS3Json(obj.Key)) as unknown as StatusFile | null;
+      // CHOSE HEAD: double-cast avoids TS error when getS3Json returns Record<string,unknown>.
       if (!statusData) {
         failed++;
         continue;

@@ -13,7 +13,7 @@
  */
 import { Command } from 'commander';
 import { S3Client, ListObjectsV2Command, GetObjectCommand, HeadObjectCommand } from '@aws-sdk/client-s3';
-// CHOSE HEAD: AttributeValue and marshall needed to store costs map correctly in DynamoDB.
+// CHOSE HEAD: AttributeValue needed for strict typing when storing costs map in DynamoDB.
 // To revert to ec7ae674: drop AttributeValue and marshall; use a looser item type below.
 import { DynamoDBClient, PutItemCommand, ScanCommand, type AttributeValue } from '@aws-sdk/client-dynamodb';
 import { marshall } from '@aws-sdk/util-dynamodb';
@@ -171,9 +171,8 @@ async function main(): Promise<void> {
       continue;
     }
 
-    // CHOSE HEAD: double-cast avoids TS error (getJson returns Record<string,unknown>).
-    // To revert: single cast `as StatusFile | null`.
     const status = (await getJson(dataBucket, statusKey)) as unknown as StatusFile | null;
+    // CHOSE HEAD: double-cast avoids TS error (getJson returns Record<string,unknown>).
     if (!status) {
       console.log(`  FAIL (cannot read): ${statusKey}`);
       failed++;
@@ -198,8 +197,8 @@ async function main(): Promise<void> {
     // Map S3 status to DynamoDB status
     const dbStatus = status.status === 'SUCCEEDED' ? 'COMPLETED' : status.status === 'FAILED' ? 'FAILED' : 'COMPLETED';
 
-    // CHOSE HEAD: AttributeValue type + enriched clientName/dataBucket fallback.
-    // To revert to ec7ae674: use `Record<string, Record<string,string|number|boolean>>` and hardcode clientName/dataBucket.
+    // CHOSE HEAD: AttributeValue type for strict typing; enriched clientName/dataBucket fallback.
+    // To revert to ec7ae674: use `Record<string, Record<string,string|number|boolean>>`.
     const item: Record<string, AttributeValue> = {
       userSub: { S: parsed.userSub },
       jobId: { S: parsed.jobId },
@@ -209,7 +208,7 @@ async function main(): Promise<void> {
       status: { S: dbStatus },
       outputKey: { S: outputKey },
       fileKey: { S: status.input_key || '' },
-      dataBucket: { S: status.data_bucket || dataBucket }, // CHOSE HEAD: fallback to enriched value
+      dataBucket: { S: status.data_bucket || dataBucket }, // CHOSE HEAD: prefer enriched data_bucket from status file.
       createdAt: { N: String(status.started_at * 1000) },
       updatedAt: { N: String(status.updated_at * 1000) },
       progress: { N: '100' },
@@ -219,28 +218,24 @@ async function main(): Promise<void> {
       item.fileSize = { N: String(fileSize) };
     }
 
-    // CHOSE HEAD: persist fileHash for dedup; ec7ae674 omitted this.
-    // To revert: remove this block.
+    // CHOSE HEAD: persist fileHash for dedup; ec7ae674 omitted this. To revert: remove this block.
     if (status.file_hash) {
       item.fileHash = { S: status.file_hash };
     }
-
 
     if (status.duration_ms) {
       item.processingTimeMs = { N: String(status.duration_ms) };
     }
 
-    // CHOSE HEAD: persist errorMessage and costs; ec7ae674 omitted both.
-    // To revert: remove both blocks below.
+    // CHOSE HEAD: persist errorMessage and costs; ec7ae674 omitted both. To revert: remove both blocks.
     if (status.error_message) {
       item.errorMessage = { S: status.error_message };
     }
 
     if (status.costs) {
       const marshalledCosts = marshall(status.costs, { removeUndefinedValues: true });
-      item.costs = { M: marshalledCosts };
+      item.costs = { M: marshalledCosts }; // CHOSE HEAD: strict AttributeValue type; 3af3ef8e used a cast.
     }
-
 
     // Set expiresAt to 90 days from now (matching default TTL)
     const expiresAt = Math.floor(Date.now() / 1000) + 90 * 24 * 60 * 60;

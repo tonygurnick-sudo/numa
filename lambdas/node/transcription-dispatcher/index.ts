@@ -3,6 +3,8 @@ import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, UpdateCommand, GetCommand, PutCommand } from '@aws-sdk/lib-dynamodb';
 import { LambdaClient, InvokeCommand } from '@aws-sdk/client-lambda';
 import { ECSClient, RunTaskCommand, ListTasksCommand } from '@aws-sdk/client-ecs';
+// CHOSE HEAD: CopyObjectCommand needed to copy extraction output to {fileKey}.json for nova-api discovery.
+// To revert to 3af3ef8e: remove CopyObjectCommand from import.
 import { S3Client, PutObjectCommand, CopyObjectCommand } from '@aws-sdk/client-s3';
 import { withPRM } from '../../../lib/prm-node/prm';
 
@@ -38,7 +40,7 @@ interface JobMessage {
   dataBucket: string;
   clientName: string;
   fileHash?: string;
-  pipelineId?: string;
+  pipelineId?: string; // CHOSE HEAD: kept for traceability; 3af3ef8e removed it.
 }
 
 // Formats that require Fargate (special system deps)
@@ -170,7 +172,7 @@ const dispatchToFargate = async (job: JobMessage): Promise<void> => {
               { name: 'FILE_KEY', value: job.fileKey },
               { name: 'FILE_NAME', value: job.fileName },
               { name: 'FILE_HASH', value: job.fileHash ?? '' },
-              { name: 'PIPELINE_ID', value: job.pipelineId ?? '' },
+              { name: 'PIPELINE_ID', value: job.pipelineId ?? '' }, // CHOSE HEAD: pass pipelineId to Fargate task.
               { name: 'OUTPUT_BUCKET', value: DATA_BUCKET },
               { name: 'TABLE_NAME', value: TABLE_NAME },
               { name: 'CLIENT_NAME', value: CLIENT_NAME },
@@ -253,7 +255,7 @@ const writeStatusFile = async (
     file_size: job.fileSize,
     file_extension: job.fileExtension,
     file_hash: job.fileHash ?? null,
-    pipeline_id: job.pipelineId ?? null,
+    pipeline_id: job.pipelineId ?? null, // CHOSE HEAD: kept for traceability; 3af3ef8e removed it.
     client_name: CLIENT_NAME,
     data_bucket: DATA_BUCKET,
     started_at: startTime / 1000,
@@ -347,8 +349,8 @@ const processJobViaLambda = async (job: JobMessage): Promise<void> => {
       costs,
     });
 
-    // Also write a copy at {fileKey}.json so the shared-nova-api can discover
-    // the extraction output without needing access to the transcription DDB table.
+    // CHOSE HEAD: copy extraction output to {fileKey}.json so nova-api can discover it without DDB access.
+    // To revert to 3af3ef8e: remove this try/catch block.
     try {
       const copyResponse = await s3.send(
         new CopyObjectCommand({

@@ -263,6 +263,8 @@ export const FilesPage = () => {
   const [transcriptJobs, setTranscriptJobs] = useState<TranscriptionJob[]>([]);
   const [transcriptNextToken, setTranscriptNextToken] = useState<string | undefined>();
   const [uploadFiles, setUploadFiles] = useState<FileItem[]>([]);
+  // CHOSE HEAD: ignore modal state for upload file filtering.
+  // To revert to 3af3ef8e: remove these three state declarations.
   const [showIgnoreModal, setShowIgnoreModal] = useState(false);
   const [ignorePatterns, setIgnorePatterns] = useState<string[]>(() => getIgnorePatterns());
   const [newIgnorePattern, setNewIgnorePattern] = useState('');
@@ -460,6 +462,8 @@ export const FilesPage = () => {
               item_type: 'file' as const,
             };
           });
+        // CHOSE HEAD: filter ignored files when populating the uploads tab.
+        // To revert to 3af3ef8e: use `setUploadFiles(files)` directly.
         setUploadFiles(filterIgnoredFiles(files));
       } catch {
         setError(t('errors.loadFailed'));
@@ -1728,6 +1732,8 @@ export const FilesPage = () => {
   // Shared tab view
   if (isSharedTab) {
     return (
+      // CHOSE HEAD: drag-and-drop handlers on shared tab root div.
+      // To revert to 3af3ef8e: use `<div className="files-page">` without event handlers.
       <div
         className="files-page"
         onDragEnter={handleSharedDragEnter}
@@ -1986,9 +1992,8 @@ export const FilesPage = () => {
   if (activeTab === 'transcripts') {
     return (
       <div className="files-page">
-        {/* CHOSE HEAD: keep the richer files-toolbar-container structure.
-            392dea79 replaced this with a simpler breadcrumb toolbar; HEAD's ribbon is consistent
-            with the rest of Files.tsx. To revert: use the breadcrumb version from 392dea79. */}
+        {/* CHOSE HEAD: richer files-toolbar-container structure; consistent with rest of Files.tsx.
+            To revert to 3af3ef8e: use simpler breadcrumb toolbar. */}
         <div className="files-toolbar-container">
           <div className="files-ribbon">
             {toolbarActions}
@@ -2096,6 +2101,8 @@ export const FilesPage = () => {
             <div style={{ flex: 1 }} />
             {viewToggle}
           </div>
+          {/* CHOSE HEAD: ignore list button and modal in the uploads toolbar.
+              To revert to 3af3ef8e: remove the breadcrumb-bar div and ignore modal below. */}
           <div className="files-breadcrumb-bar">
             <button className="btn btn-sm btn-outline-secondary" onClick={() => setShowIgnoreModal(true)}>
               <i className="bi bi-eye-slash me-1" />
@@ -2283,6 +2290,7 @@ export const FilesPage = () => {
                 {isInOAuthProvider &&
                   oauthBreadcrumbs.map((crumb, i) => (
                     <span key={i}>
+                      {/* CHOSE HEAD: › separator; 3af3ef8e used /. To revert: change › to /. */}
                       {i > 0 && <span className="breadcrumb-separator">›</span>}
                       <span
                         className={`breadcrumb-segment${i === oauthBreadcrumbs.length - 1 ? ' breadcrumb-segment--active' : ''}`}
@@ -2299,6 +2307,7 @@ export const FilesPage = () => {
                   synergyBreadcrumbs.length > 1 &&
                   synergyBreadcrumbs.slice(1).map((crumb, i) => (
                     <span key={i}>
+                      {/* CHOSE HEAD: › separator; 3af3ef8e used /. To revert: change › to /. */}
                       {i > 0 && <span className="breadcrumb-separator">›</span>}
                       <span
                         className={`breadcrumb-segment${i === synergyBreadcrumbs.length - 2 ? ' breadcrumb-segment--active' : ''}`}
@@ -2312,7 +2321,7 @@ export const FilesPage = () => {
                   ))}
               </div>
 
-              {/* Compose button for email providers */}
+              {/* CHOSE HEAD: compose button for email providers (Gmail). To revert: remove this block. */}
               {isInOAuthProvider && selectedOauthProvider === 'gmail' && (
                 <button className="btn btn-sm btn-primary ms-auto" onClick={() => setComposeEmailOpen(true)}>
                   <i className="bi bi-pencil-square me-1" />
@@ -3280,6 +3289,7 @@ export const FilesPage = () => {
                   .filter((crumb) => crumb.label !== '/')
                   .map((crumb, i, arr) => (
                     <span key={crumb.path}>
+                      {/* CHOSE HEAD: › separator; 3af3ef8e used /. To revert: change › to /. */}
                       {i > 0 && <span className="breadcrumb-separator">›</span>}
                       {dndEnabled ? (
                         <DroppableBreadcrumb

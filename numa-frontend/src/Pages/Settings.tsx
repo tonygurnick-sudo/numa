@@ -27,8 +27,8 @@ import AuditPanel from '../Components/UsageAnalytics/AuditPanel';
 import LoginHeatmap from '../Components/UsageAnalytics/LoginHeatmap';
 import { NumaLibrariesPanel } from '../Components/Settings/NumaLibrariesPanel';
 import GenericAuditLogTab from '../Components/UsageAnalytics/GenericAuditLogTab';
-// CHOSE HEAD (final — matches 392dea79's intent): rebuild button in Settings, not Files.
-// All three commits (ec7ae674 → f9106bfc → 392dea79) ended here; HEAD is already aligned.
+// CHOSE HEAD: TranscriptionService import needed for rebuild button and filesTable loading.
+// 3af3ef8e only imported TranscriptionJobsPanel (no service). To revert: remove TranscriptionService import.
 import TranscriptionJobsPanel from '../Components/UsageAnalytics/TranscriptionJobsPanel';
 import { TranscriptionService, type TranscriptionJob as TxJob } from '../Services/TranscriptionService';
 import NotificationsAuditPanel from '../Components/UsageAnalytics/NotificationsAuditPanel';
@@ -94,12 +94,9 @@ export default function SettingsPage() {
   const [settingsScope, setSettingsScope] = useState<SettingsScope>(
     validScopes.includes(urlScope as SettingsScope) ? (urlScope as SettingsScope) : 'user'
   );
-  // CHOSE HEAD (final): richer services-scope tab state + rebuild state in Settings.
-  // 392dea79 would have simplified to a single auditTabKey; HEAD's structure is more complete.
-  // To revert to 392dea79: replace with:
-  //   const [auditTabKey] = useState<string>(urlScope === 'audit' && urlTab ? urlTab : 'user-activity');
-  //   const [rebuilding, setRebuilding] = useState(false);
-  //   const [rebuildResult, setRebuildResult] = useState<{...}|null>(null);
+  // CHOSE HEAD: richer services-scope tab state + rebuild state. 3af3ef8e used a simpler audit scope.
+  // To revert to 3af3ef8e: replace with:
+  //   const [auditTabKey, setAuditTabKey] = useState<string>(urlScope === 'audit' && urlTab ? urlTab : 'user-activity');
   const [auditTabKey, setAuditTabKey] = useState<string>(() => {
     if ((urlScope === 'services' || urlScope === 'audit') && urlTab && urlTab in AUDIT_SUB_DEFAULTS) return urlTab;
     return 'activity';
@@ -118,7 +115,6 @@ export default function SettingsPage() {
   const [filesTableLoading, setFilesTableLoading] = useState(false);
   const [filesTableNextToken, setFilesTableNextToken] = useState<string | undefined>();
   const filesTableLoaded = useRef(false);
-
   const brandingFlag =
     typeof window !== 'undefined' ? window.sessionStorage.getItem('BRANDING_PROVIDER_ENABLED') : null;
   const brandingApiEnabled = brandingFlag === 'true';
@@ -949,6 +945,8 @@ export default function SettingsPage() {
       )}
       {isAdmin && currentScope === 'services' && (
         <SubHeaderTabBar
+          // CHOSE HEAD: grouped sub-tabs (activity/index/files) match the nested services panel below.
+          // 3af3ef8e used flat top-level tabs. To revert: replace with the 3af3ef8e flat list.
           items={[
             { key: 'activity', label: t('auditTabs.activity'), iconClassName: 'bi bi-people' },
             { key: 'index', label: t('auditTabs.index'), iconClassName: 'bi bi-search' },
@@ -1642,9 +1640,8 @@ export default function SettingsPage() {
         )}
 
         {/* CHOSE HEAD: services scope panel with nested activity/index/files sub-tabs.
-            ec7ae674 had a simpler audit scope with: user-activity, web-crawler, transcripts (+ rebuild button),
-            automation, search-index, kb-index. The rebuild button is now in the transcribe sub-tab below.
-            To revert to ec7ae674 panel: replace this div's scope with 'audit' and simplify tab structure. */}
+            3af3ef8e had a simpler 'audit' scope with flat top-level tabs.
+            To revert to 3af3ef8e panel: replace this div's scope with 'audit' and simplify tab structure. */}
         {isAdmin && (
           <div hidden={currentScope !== 'services'} aria-hidden={currentScope !== 'services'}>
             {auditTabKey === 'activity' && (
