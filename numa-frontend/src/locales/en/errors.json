@@ -42,6 +42,7 @@
     "updateFailed": "Failed to update knowledge base",
     "deleteFailed": "Failed to delete knowledge base",
     "listFilesFailed": "Failed to list knowledge base files",
+    "deleteFilesFailed": "Failed to delete files",
     "stateFailed": "Failed to get knowledge base state"
   },
   "branding": {

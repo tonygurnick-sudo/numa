@@ -339,7 +339,8 @@
       "prepareDelete": "Failed to prepare deletion. Please try again.",
       "noItems": "No items found to delete. Please try again.",
       "partialDelete": "Partially successful: {{deleted}} files deleted, {{failed}} failed.",
-      "deleteItems": "Failed to delete items. Please try again."
+      "deleteItems": "Failed to delete items. Please try again.",
+      "deletePermission": "You do not have permission to delete files in this knowledge base."
     }
   },
   "userKnowledgeBases": {

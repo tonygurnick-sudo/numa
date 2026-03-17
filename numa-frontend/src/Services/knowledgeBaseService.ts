@@ -341,6 +341,32 @@ class KnowledgeBaseService {
   }
 
   /**
+   * Delete files from a KB via the server-side API.
+   * This allows non-admin users with EDITOR/OWNER role to delete files
+   * without needing direct S3 permissions.
+   */
+  async deleteKBFiles(
+    kbId: string,
+    keys: string[]
+  ): Promise<{ successful: string[]; failed: { key: string; error: string }[] }> {
+    try {
+      const response = await fetch(this.buildUrl(`${this.baseUrl}/${kbId}/files/delete`), {
+        method: 'POST',
+        headers: this.getHeaders(),
+        body: JSON.stringify({ keys }),
+      });
+
+      return this.parseJsonResponse<{ successful: string[]; failed: { key: string; error: string }[] }>(
+        response,
+        i18n.t('errors:knowledgeBase.deleteFilesFailed', { defaultValue: 'Failed to delete files' })
+      );
+    } catch (error) {
+      console.error('Error deleting KB files:', error);
+      throw error;
+    }
+  }
+
+  /**
    * Get KB state including documents, sync status, and ingestion jobs
    * This replaces the frontend AWS SDK calls for KB state
    */

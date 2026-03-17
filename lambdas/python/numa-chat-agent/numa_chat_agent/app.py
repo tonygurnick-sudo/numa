@@ -2235,6 +2235,123 @@ async def list_kb_files(request: Request, kb_id: str) -> Response:
         return JSONResponse({"error": "Internal server error"}, status_code=500)
 
 
+@app.post("/api/kb/{kb_id}/files/delete")
+async def delete_kb_files(request: Request, kb_id: str) -> Response:
+    """Delete files from a KB's S3 prefix (server-side, so non-admin users can delete)."""
+    try:
+        headers = {k.lower(): v for k, v in request.headers.items()}
+
+        cf_header = headers.get("x-arcanum-cloudfront-secret")
+        if CF_SHARED_SECRET and cf_header != CF_SHARED_SECRET:
+            return JSONResponse({"error": "Forbidden"}, status_code=403)
+
+        auth = headers.get("authorization")
+        if not auth:
+            return JSONResponse(
+                {"error": "Missing Authorization header"}, status_code=401
+            )
+
+        user = _verify_jwt_token(auth)
+        user_id = user.get("sub")
+        if not isinstance(user_id, str) or not user_id:
+            return JSONResponse({"error": "Invalid user ID"}, status_code=401)
+
+        kb_manager = KnowledgeBaseManager()
+
+        # Check EDITOR permission
+        if not kb_manager.check_permission(kb_id, user_id, "EDITOR"):
+            logger.warning(
+                "Access denied - user lacks EDITOR permission for file deletion",
+                kb_id=kb_id,
+                user_id=user_id,
+            )
+            return JSONResponse({"error": "Access denied"}, status_code=403)
+
+        kb = kb_manager.get_kb(kb_id)
+        if not kb:
+            return JSONResponse({"error": "KB not found"}, status_code=404)
+
+        s3_prefix = kb.get("s3_prefix", "")
+        if not s3_prefix:
+            return JSONResponse(
+                {"error": "KB configuration incomplete"}, status_code=500
+            )
+
+        # Parse request body
+        body = await request.json()
+        keys = body.get("keys", [])
+        if not keys or not isinstance(keys, list):
+            return JSONResponse(
+                {"error": "Request body must contain a 'keys' array"}, status_code=400
+            )
+
+        # Security: validate every key starts with the KB's s3_prefix
+        for key in keys:
+            if not isinstance(key, str) or not key.startswith(s3_prefix):
+                logger.warning(
+                    "Rejected cross-KB deletion attempt",
+                    kb_id=kb_id,
+                    user_id=user_id,
+                    invalid_key=key,
+                    expected_prefix=s3_prefix,
+                )
+                return JSONResponse(
+                    {"error": f"Key '{key}' is outside this KB's prefix"},
+                    status_code=400,
+                )
+
+        data_bucket = f"numa-{CLIENT_NAME}-data"
+        s3 = prm_client("s3")
+
+        successful = []
+        failed = []
+
+        # Batch delete (max 1000 per call)
+        for i in range(0, len(keys), 1000):
+            batch = keys[i : i + 1000]
+            objects = [{"Key": k} for k in batch]
+            try:
+                response = s3.delete_objects(
+                    Bucket=data_bucket,
+                    Delete={"Objects": objects, "Quiet": False},
+                )
+                successful.extend([d["Key"] for d in response.get("Deleted", [])])
+                for err in response.get("Errors", []):
+                    failed.append(
+                        {"key": err.get("Key", ""), "error": err.get("Message", "")}
+                    )
+            except Exception as batch_err:
+                logger.error(
+                    "S3 batch delete failed",
+                    bucket=data_bucket,
+                    batch_size=len(batch),
+                    error=str(batch_err),
+                )
+                for k in batch:
+                    failed.append({"key": k, "error": str(batch_err)})
+
+        # Update document count after deletion
+        _, _, doc_count = _list_kb_files(data_bucket, s3_prefix, "")
+        kb_manager.update_document_count(kb_id, doc_count)
+
+        logger.info(
+            "KB files deleted",
+            kb_id=kb_id,
+            user_id=user_id,
+            successful_count=len(successful),
+            failed_count=len(failed),
+        )
+
+        return JSONResponse(
+            {"successful": successful, "failed": failed},
+            status_code=200,
+        )
+
+    except Exception as exc:
+        logger.error("KB file deletion failed", error=str(exc), exc_info=True)
+        return JSONResponse({"error": "Internal server error"}, status_code=500)
+
+
 @app.get("/api/kb/{kb_id}/state")
 async def get_kb_state(request: Request, kb_id: str) -> Response:
     """Get KB state including documents, sync status, and ingestion jobs.

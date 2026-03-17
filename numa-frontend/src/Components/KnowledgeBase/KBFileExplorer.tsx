@@ -4,7 +4,7 @@ import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../../Providers/AuthProvider';
 import { useKBState } from '../../Providers/KBStateProvider';
-import { listObjectsInFolder, deleteMultipleObjectsFromS3 } from '../../utils/s3Utils';
+import { listObjectsInFolder } from '../../utils/s3Utils';
 import { knowledgeBaseService, S3FileInfo, KBDocument } from '../../Services/knowledgeBaseService';
 import '../../assets/styles/components/_knowledge_base_management.scss';
 import { withPRM } from '../../utils/prmUtils';
@@ -1145,21 +1145,15 @@ export const KBFileExplorer = forwardRef<KBFileExplorerHandle, KBFileExplorerPro
           setDeleteError(t('fileExplorer.errors.noItems'));
           return;
         }
-        const deleteKeyTotal = deleteKeys.length;
         setBulkDeleteProgress({ processed: 0, total: visibleCount, successful: 0, failed: 0 });
-        const bucketName = `numa-${CLIENT_NAME}-data`;
 
-        const result = await deleteMultipleObjectsFromS3(deleteKeys, bucketName, region, getCredentials, (progress) => {
-          const visibleProcessed =
-            deleteKeyTotal === 0
-              ? 0
-              : Math.min(visibleCount, Math.ceil((progress.processed / deleteKeyTotal) * visibleCount));
-          setBulkDeleteProgress({
-            processed: visibleProcessed,
-            total: visibleCount,
-            successful: progress.successful,
-            failed: progress.failed,
-          });
+        const result = await knowledgeBaseService.deleteKBFiles(kbId, deleteKeys);
+
+        setBulkDeleteProgress({
+          processed: visibleCount,
+          total: visibleCount,
+          successful: result.successful.length,
+          failed: result.failed.length,
         });
 
         if (result.failed.length > 0) {

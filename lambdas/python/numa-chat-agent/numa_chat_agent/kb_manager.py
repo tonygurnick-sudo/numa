@@ -341,6 +341,10 @@ class KnowledgeBaseManager:
         if not kb:
             return False
 
+        # Owner (creator) has all permissions
+        if kb.get("created_by") == user_id:
+            return True
+
         # Check viewers
         viewers = kb.get("viewers", [])
         if "*" in viewers or user_id in viewers:

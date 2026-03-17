@@ -168,6 +168,11 @@ export class NumaChatAgent extends Construct {
         },
         {
           effect: 'Allow',
+          actions: ['s3:DeleteObject'],
+          resources: [`${props.dataBucketArn}/documents/*`],
+        },
+        {
+          effect: 'Allow',
           actions: ['s3:ListBucket'],
           resources: [props.outputsBucketArn, props.dataBucketArn],
         },
