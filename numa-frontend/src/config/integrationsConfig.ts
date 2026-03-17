@@ -43,6 +43,8 @@ import odooIcon from '../assets/icons/odoo.svg';
 import zohoBooksIcon from '../assets/icons/zoho_books.svg';
 import jobberIcon from '../assets/icons/jobber.svg';
 import canvaIcon from '../assets/icons/canva.svg';
+import googleTagManagerIcon from '../assets/icons/google_tag_manager.svg';
+import webflowIcon from '../assets/icons/webflow.svg';
 import i18n from '../i18n';
 
 export type BootstrapColor =
@@ -65,6 +67,7 @@ export interface ConnectionConfigEntry {
   fallback_icon: string;
   fallback_color: BootstrapColor;
   example_query: string;
+  hq_only?: boolean;
 }
 
 const connectionText = (id: string, field: 'name' | 'description' | 'example_query') =>
@@ -441,6 +444,28 @@ const getConnectionsConfig = (): Record<string, ConnectionConfigEntry> => ({
     fallback_color: 'info',
     example_query: connectionText('canva', 'example_query'),
   },
+  google_tag_manager: {
+    id: 'google_tag_manager',
+    name: connectionText('google_tag_manager', 'name'),
+    description: connectionText('google_tag_manager', 'description'),
+    auth_type: 'oauth',
+    img_src: googleTagManagerIcon,
+    fallback_icon: 'bi bi-tags',
+    fallback_color: 'primary',
+    example_query: connectionText('google_tag_manager', 'example_query'),
+    hq_only: true,
+  },
+  webflow: {
+    id: 'webflow',
+    name: connectionText('webflow', 'name'),
+    description: connectionText('webflow', 'description'),
+    auth_type: 'oauth',
+    img_src: webflowIcon,
+    fallback_icon: 'bi bi-globe',
+    fallback_color: 'info',
+    example_query: connectionText('webflow', 'example_query'),
+    hq_only: true,
+  },
 });
 
 // Helper functions for easy access across components
@@ -473,6 +498,7 @@ export const getIntegrationsListFormat = () => {
     img_src: config.img_src,
     fallback_icon: config.fallback_icon,
     fallback_color: config.fallback_color,
+    hq_only: config.hq_only,
   }));
 };
 

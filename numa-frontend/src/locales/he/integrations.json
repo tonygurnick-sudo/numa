@@ -7,6 +7,16 @@
     "defaults": {
       "exampleQuery": "טהסט מי כוננהכטיונ טו טחיס סהרביכה"
     },
+    "google_tag_manager": {
+      "name": "Google Tag Manager",
+      "description": "Manage tags and tracking codes on your website without editing code.",
+      "example_query": "List all GTM containers for my account."
+    },
+    "webflow": {
+      "name": "Webflow",
+      "description": "Design, build, and launch responsive websites visually.",
+      "example_query": "Get a list of collections for my Webflow site."
+    },
     "gmail": {
       "name": "גמאיל",
       "description": "סהנד המאילס, מאנאגה ינבוש, אנד אוטומאטה המאיל וורקפלווס",

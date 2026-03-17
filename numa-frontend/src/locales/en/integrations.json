@@ -203,8 +203,18 @@
     },
     "canva": {
       "name": "Canva",
-      "description": "Design and publish custom graphics, presentations, and social media content.",
-      "example_query": "List all my recent designs."
+      "description": "Design everything from presentations to social media posts.",
+      "example_query": "Start a new project design in Canva."
+    },
+    "google_tag_manager": {
+      "name": "Google Tag Manager",
+      "description": "Manage tags and tracking codes on your website without editing code.",
+      "example_query": "List all GTM containers for my account."
+    },
+    "webflow": {
+      "name": "Webflow",
+      "description": "Design, build, and launch responsive websites visually.",
+      "example_query": "Get a list of collections for my Webflow site."
     }
   },
   "tabs": {
@@ -350,15 +360,6 @@
     "confirm": {
       "disconnect": "Disconnect {{name}}? This will revoke access and delete stored credentials.",
       "deleteCredentials": "Delete credentials for {{name}}? This cannot be undone."
-    },
-    "synergy": {
-      "name": "Synergy 12d",
-      "description": "Data connector for Synergy 12d job data.",
-      "iconAlt": "Synergy 12d icon"
-    },
-    "gmail": {
-      "name": "Gmail",
-      "description": "Read, search, and send emails via Gmail."
     },
     "googledrive": {
       "name": "Google Drive",

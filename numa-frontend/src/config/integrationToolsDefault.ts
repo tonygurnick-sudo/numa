@@ -156,6 +156,12 @@ export const DEFAULT_DENY_TOOLS: DefaultToolDenyList = {
 
   // Canva
   canva: [],
+
+  // Google Tag Manager
+  google_tag_manager: [],
+
+  // Webflow
+  webflow: [],
 };
 
 export const getDefaultDenyTools = (appName: string): string[] => {

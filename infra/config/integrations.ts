@@ -39,6 +39,8 @@ export const SUPPORTED_INTEGRATIONS = [
   'odoo',
   'jobber',
   'canva',
+  'google_tag_manager',
+  'webflow',
 ] as const;
 
 export type SupportedIntegration = (typeof SUPPORTED_INTEGRATIONS)[number];

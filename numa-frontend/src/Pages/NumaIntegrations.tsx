@@ -27,7 +27,11 @@ export const NumaIntegrations = () => {
   const { user, lambdaClient } = useAuth();
   const { numaGet } = useNumaRequest();
   const [connections, setConnections] = useState<PipedreamConnection[]>([]);
-  const availableApps = useMemo<IntegrationListItem[]>(() => getIntegrationsListFormat(), [i18n.language]);
+  const availableApps = useMemo<IntegrationListItem[]>(() => {
+    const isAdmin = Boolean(user?.groups?.includes('admin'));
+    const allApps = getIntegrationsListFormat();
+    return isAdmin ? allApps : allApps.filter((app) => !app.hq_only);
+  }, [i18n.language, user]);
   const [loading, setLoading] = useState(true);
   const [loadingStatus, setLoadingStatus] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -109,7 +113,7 @@ export const NumaIntegrations = () => {
           dead: conn.dead,
           connection_name: conn.connection_name,
           connected_at: conn.connected_at,
-        }));
+        })) as PipedreamConnection[];
         setConnections(connectionObjects);
         console.log('Integration status loaded successfully:', {
           connectionsCount: response.connections?.length || 0,
