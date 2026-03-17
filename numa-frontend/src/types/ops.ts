@@ -176,6 +176,7 @@ export type Team = {
   accessControl: AccessControl;
   defaultZoneId: string;
   defaultStageId?: string;
+  preset?: string;
   createdBy?: string;
   createdAt: string;
   updatedAt: string;

@@ -69,7 +69,7 @@ export function BoardSettingsModal({ show, onHide, onSaved, onDeleted }: BoardSe
       setWorkUnitSeries(team.workUnitSeries ?? null);
       setDefaultZoneId(team.defaultZoneId ?? '');
       setDefaultStageId(team.defaultStageId ?? '');
-      setAllowedTicketTypes([...(team.allowedTicketTypes ?? [])]);
+      setAllowedTicketTypes([...(team.allowedTicketTypes ?? config.ticketTypes.map((t) => t.id))]);
       setFieldOverrides({ ...(team.fieldOverrides ?? {}) });
       setAccessMode(team.accessControl?.mode ?? 'all');
       setAccessUserIds([...(team.accessControl?.users ?? [])]);
@@ -112,11 +112,13 @@ export function BoardSettingsModal({ show, onHide, onSaved, onDeleted }: BoardSe
       setSaving(true);
       setError(null);
 
+      const isAllSelected = allowedTicketTypes.length === config.ticketTypes.length;
+
       // Save team settings
       await OpsService.updateTeam(numaPut, team.id, {
         name,
         color,
-        allowedTicketTypes,
+        allowedTicketTypes: isAllSelected ? undefined : allowedTicketTypes,
         fieldOverrides,
         workUnitSeries,
         accessControl: { mode: accessMode, users: accessMode === 'specific' ? accessUserIds : [] },

@@ -15,7 +15,7 @@ import type {
   Customer,
   Supplier,
 } from '../../../types/ops';
-import { getTicketTypeIconClass } from '../../../constants/opsConstants';
+import { getTicketTypeIconClass, getPreset } from '../../../constants/opsConstants';
 import { StaffAvatar } from '../Shared/StaffAvatar';
 
 // ─── Props ──────────────────────────────────────────────────────────────────
@@ -157,6 +157,30 @@ export function CreateTicketModal({
     const allowed = new Set(restricted);
     return config.ticketTypes.filter((tt) => allowed.has(tt.id)).sort((a, b) => a.order - b.order);
   }, [config, teamData]);
+
+  // Separate into Core vs Additional types based on the Board's preset
+  const { coreTypes, additionalTypes } = useMemo(() => {
+    const preset = getPreset(teamData?.team?.preset);
+    const suggestedPrefixes = new Set(preset.suggestedTicketTypes?.map((st) => st.prefix) || []);
+
+    const core: TicketType[] = [];
+    const additional: TicketType[] = [];
+
+    allowedTypes.forEach((tt) => {
+      if (suggestedPrefixes.has(tt.prefix)) {
+        core.push(tt);
+      } else {
+        additional.push(tt);
+      }
+    });
+
+    // Fallback: If no core types matched the preset (e.g. all suggested were deleted), just dump all into core.
+    if (core.length === 0) {
+      return { coreTypes: additional, additionalTypes: [] };
+    }
+
+    return { coreTypes: core, additionalTypes: additional };
+  }, [allowedTypes, teamData?.team?.preset]);
 
   const selectedType: TicketType | undefined = useMemo(
     () => allowedTypes.find((tt) => tt.id === selectedTypeId),
@@ -355,7 +379,7 @@ export function CreateTicketModal({
 
         <Modal.Body className="py-4">
           <div className="d-flex flex-wrap gap-3 justify-content-center px-2">
-            {allowedTypes.map((tt) => (
+            {coreTypes.map((tt) => (
               <button
                 key={tt.id}
                 type="button"
@@ -391,6 +415,53 @@ export function CreateTicketModal({
               </button>
             ))}
           </div>
+
+          {additionalTypes.length > 0 && (
+            <>
+              <div
+                className="d-flex align-items-center justify-content-center my-4"
+                style={{ color: '#9ca3af', fontSize: '0.85rem' }}
+              >
+                <div style={{ flex: 1, height: 1, backgroundColor: '#eaebed', maxWidth: 100 }} />
+                <span className="mx-3">{t('tickets.moreOptions', 'More options')}</span>
+                <div style={{ flex: 1, height: 1, backgroundColor: '#eaebed', maxWidth: 100 }} />
+              </div>
+
+              <div className="d-flex flex-wrap gap-2 justify-content-center px-2">
+                {additionalTypes.map((tt) => (
+                  <button
+                    key={tt.id}
+                    type="button"
+                    onClick={() => setSelectedTypeId(tt.id)}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 6,
+                      padding: '8px 14px',
+                      border: `1px solid ${tt.color}40`,
+                      borderRadius: 20,
+                      background: '#fff',
+                      color: tt.color,
+                      cursor: 'pointer',
+                      transition: 'all 0.15s',
+                      fontFamily: 'inherit',
+                      fontSize: '0.85rem',
+                      fontWeight: 600,
+                    }}
+                    onMouseEnter={(e) => {
+                      (e.currentTarget as HTMLButtonElement).style.backgroundColor = `${tt.color}12`;
+                    }}
+                    onMouseLeave={(e) => {
+                      (e.currentTarget as HTMLButtonElement).style.backgroundColor = '#fff';
+                    }}
+                  >
+                    <i className={getTicketTypeIconClass(tt.icon)} style={{ fontSize: '1rem' }} />
+                    <span>{tt.name}</span>
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
         </Modal.Body>
 
         <Modal.Footer className="border-top-0">

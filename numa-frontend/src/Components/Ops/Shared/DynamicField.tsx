@@ -65,7 +65,18 @@ export function DynamicField({
 }: DynamicFieldProps): React.JSX.Element | null {
   const { t } = useTranslation('ops');
 
-  // If the field override says not visible, render nothing
+  const [localValue, setLocalValue] = React.useState(value);
+
+  React.useEffect(() => {
+    setLocalValue(value);
+  }, [value]);
+
+  const handleBlur = () => {
+    if (localValue !== value) {
+      onChange(localValue);
+    }
+  };
+
   if (fieldOverride?.visible === false) {
     return null;
   }
@@ -80,7 +91,6 @@ export function DynamicField({
     </Form.Label>
   );
 
-  // ─── Read-only mode ───────────────────────────────────────────────────────
   if (readOnly) {
     const displayValue = renderReadOnlyValue(field, value, staff, t);
     return (
@@ -91,14 +101,16 @@ export function DynamicField({
     );
   }
 
-  // ─── Edit mode ────────────────────────────────────────────────────────────
   return (
     <Form.Group className="mb-2">
       {label}
       {renderEditControl(
         field,
         value,
+        localValue,
         onChange,
+        setLocalValue,
+        handleBlur,
         isRequired,
         compactStyle,
         staff,
@@ -112,9 +124,6 @@ export function DynamicField({
   );
 }
 
-/**
- * Renders the read-only display for a field value based on its type.
- */
 function renderReadOnlyValue(
   field: FieldDefinition,
   value: unknown,
@@ -168,13 +177,13 @@ function renderReadOnlyValue(
   }
 }
 
-/**
- * Renders the appropriate react-bootstrap form control for editing a field.
- */
 function renderEditControl(
   field: FieldDefinition,
   value: unknown,
+  localValue: unknown,
   onChange: (value: unknown) => void,
+  setLocalValue: (value: unknown) => void,
+  onBlur: () => void,
   isRequired: boolean,
   style: React.CSSProperties,
   staff: StaffProfile[] | undefined,
@@ -190,8 +199,9 @@ function renderEditControl(
       return (
         <Form.Control
           type={field.fieldType === 'phone' ? 'tel' : 'text'}
-          value={String(value ?? '')}
-          onChange={(e) => onChange(e.target.value)}
+          value={String(localValue ?? '')}
+          onChange={(e) => setLocalValue(e.target.value)}
+          onBlur={onBlur}
           required={isRequired}
           style={style}
         />
@@ -201,8 +211,9 @@ function renderEditControl(
       return (
         <Form.Control
           type="url"
-          value={String(value ?? '')}
-          onChange={(e) => onChange(e.target.value)}
+          value={String(localValue ?? '')}
+          onChange={(e) => setLocalValue(e.target.value)}
+          onBlur={onBlur}
           required={isRequired}
           style={style}
         />
@@ -212,8 +223,9 @@ function renderEditControl(
       return (
         <Form.Control
           type="email"
-          value={String(value ?? '')}
-          onChange={(e) => onChange(e.target.value)}
+          value={String(localValue ?? '')}
+          onChange={(e) => setLocalValue(e.target.value)}
+          onBlur={onBlur}
           required={isRequired}
           style={style}
         />
@@ -225,8 +237,9 @@ function renderEditControl(
         <Form.Control
           as="textarea"
           rows={3}
-          value={String(value ?? '')}
-          onChange={(e) => onChange(e.target.value)}
+          value={String(localValue ?? '')}
+          onChange={(e) => setLocalValue(e.target.value)}
+          onBlur={onBlur}
           required={isRequired}
           style={style}
         />
@@ -236,8 +249,9 @@ function renderEditControl(
       return (
         <Form.Control
           type="number"
-          value={value !== null && value !== undefined ? String(value) : ''}
-          onChange={(e) => onChange(e.target.value === '' ? null : Number(e.target.value))}
+          value={localValue !== null && localValue !== undefined ? String(localValue) : ''}
+          onChange={(e) => setLocalValue(e.target.value === '' ? null : Number(e.target.value))}
+          onBlur={onBlur}
           required={isRequired}
           style={style}
         />
@@ -247,8 +261,9 @@ function renderEditControl(
       return (
         <Form.Control
           type="number"
-          value={value !== null && value !== undefined ? String(value) : ''}
-          onChange={(e) => onChange(e.target.value === '' ? null : Number(e.target.value))}
+          value={localValue !== null && localValue !== undefined ? String(localValue) : ''}
+          onChange={(e) => setLocalValue(e.target.value === '' ? null : Number(e.target.value))}
+          onBlur={onBlur}
           required={isRequired}
           step="0.01"
           min="0"
@@ -260,13 +275,31 @@ function renderEditControl(
       return (
         <Form.Control
           type="date"
-          value={String(value ?? '')}
-          onChange={(e) => onChange(e.target.value || null)}
+          value={String(localValue ?? '')}
+          onChange={(e) => setLocalValue(e.target.value || null)}
+          onBlur={onBlur}
           required={isRequired}
           style={style}
         />
       );
 
+    case 'percentage':
+      return (
+        <Form.Control
+          type="number"
+          value={localValue !== null && localValue !== undefined ? String(localValue) : ''}
+          onChange={(e) =>
+            setLocalValue(e.target.value === '' ? null : Math.min(100, Math.max(0, Number(e.target.value))))
+          }
+          onBlur={onBlur}
+          required={isRequired}
+          min="0"
+          max="100"
+          style={style}
+        />
+      );
+
+    // Instant/Selection fields below: use onChange directly
     case 'select':
       return (
         <Form.Select
@@ -330,19 +363,6 @@ function renderEditControl(
     case 'boolean':
       return (
         <Form.Check type="switch" checked={Boolean(value)} onChange={(e) => onChange(e.target.checked)} style={style} />
-      );
-
-    case 'percentage':
-      return (
-        <Form.Control
-          type="number"
-          value={value !== null && value !== undefined ? String(value) : ''}
-          onChange={(e) => onChange(e.target.value === '' ? null : Math.min(100, Math.max(0, Number(e.target.value))))}
-          required={isRequired}
-          min="0"
-          max="100"
-          style={style}
-        />
       );
 
     case 'customer':
@@ -419,8 +439,9 @@ function renderEditControl(
       return (
         <Form.Control
           type="text"
-          value={String(value ?? '')}
-          onChange={(e) => onChange(e.target.value)}
+          value={String(localValue ?? '')}
+          onChange={(e) => setLocalValue(e.target.value)}
+          onBlur={onBlur}
           required={isRequired}
           style={style}
         />

@@ -136,6 +136,8 @@ export function CreateBoardWizard({ show, onHide, onCreated }: CreateBoardWizard
       // Remap selected ticket types: replace temp IDs with real IDs
       const resolvedTicketTypes = selectedTicketTypes.map((id) => typeIdMap[id] ?? id);
 
+      const isAllSelected = selectedTicketTypes.length === config.ticketTypes.length + customTicketTypes.length;
+
       // Create the team
       const team = await OpsService.createTeam(numaPost, {
         name: teamName.trim(),
@@ -143,7 +145,11 @@ export function CreateBoardWizard({ show, onHide, onCreated }: CreateBoardWizard
         preset: presetId,
         customStages: customStages ?? undefined,
         workUnitSeries,
-        allowedTicketTypes: resolvedTicketTypes.length > 0 ? resolvedTicketTypes : allTypeIds,
+        allowedTicketTypes: isAllSelected
+          ? undefined
+          : resolvedTicketTypes.length > 0
+            ? resolvedTicketTypes
+            : undefined,
         accessControl: { mode: accessMode, users: accessMode === 'specific' ? selectedUserIds : [] },
       });
 
@@ -263,7 +269,7 @@ export function CreateBoardWizard({ show, onHide, onCreated }: CreateBoardWizard
   if (!config) return <></>;
 
   return (
-    <Modal show={show} onHide={onHide} size="lg" fullscreen="lg-down" centered>
+    <Modal show={show} onHide={onHide} size="lg" fullscreen="lg-down" centered scrollable>
       <Modal.Header closeButton>
         <Modal.Title>{t('teams.create')}</Modal.Title>
       </Modal.Header>

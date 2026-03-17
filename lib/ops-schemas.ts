@@ -229,6 +229,7 @@ export const teamSchema = z.object({
   workUnitSeries: workUnitSeriesSchema.nullable().optional(),
   accessControl: accessControlSchema,
   defaultZoneId: z.string().optional(),
+  preset: z.string().optional(),
   createdAt: z.string(),
   updatedAt: z.string(),
   order: z.number(),

@@ -1,11 +1,15 @@
 import { useState, useMemo } from 'react';
 import { Nav } from 'react-bootstrap';
 import { useTranslation } from 'react-i18next';
+import { useAuth } from '../../../Providers/AuthProvider';
+import { useNumaRequest } from '../../../Providers/NumaRequestContext';
 import { useOps } from '../OpsContext';
 import { CreateBoardWizard } from '../Modals/CreateBoardWizard';
+import { ConfirmModal } from '../Modals/ConfirmModal';
 import ActiveSprintStrip from '../ActiveSprintStrip';
 import BoardView from '../BoardView/BoardView';
 import BacklogView from '../BacklogView/BacklogView';
+import * as OpsService from '../../../Services/OpsService';
 import type { TeamSummary } from '../../../types/ops';
 
 /**
@@ -20,6 +24,8 @@ import type { TeamSummary } from '../../../types/ops';
  */
 const AllTeamsView = () => {
   const { t } = useTranslation('ops');
+  const { user } = useAuth();
+  const { numaDelete } = useNumaRequest();
   const {
     teams,
     selectedTeamId,
@@ -35,6 +41,7 @@ const AllTeamsView = () => {
   } = useOps();
 
   const [showCreateTeam, setShowCreateTeam] = useState(false);
+  const [teamToDelete, setTeamToDelete] = useState<TeamSummary | null>(null);
 
   const zones = teamData?.zones ?? [];
   const activeZone = useMemo(() => zones.find((z) => z.id === activeZoneId) ?? null, [zones, activeZoneId]);
@@ -53,6 +60,25 @@ const AllTeamsView = () => {
     () => (hasWorkUnits ? (workUnits.find((wu) => wu.status === 'active') ?? null) : null),
     [hasWorkUnits, workUnits]
   );
+
+  const handleDeleteTeam = async () => {
+    if (!teamToDelete) return;
+    try {
+      await OpsService.deleteTeam(numaDelete, teamToDelete.id);
+      setTeamToDelete(null);
+      refreshTeams();
+      if (selectedTeamId === teamToDelete.id) {
+        selectTeam('');
+      }
+    } catch (err: unknown) {
+      const msg = String(err);
+      if (msg.includes('409')) {
+        alert(t('teams.deleteTeamHasTickets'));
+      } else {
+        alert(t('errors.saveFailed', { message: msg }));
+      }
+    }
+  };
 
   if (teams.length === 0) {
     return (
@@ -118,7 +144,7 @@ const AllTeamsView = () => {
   return (
     <div className="d-flex flex-column h-100">
       {/* ── Team Cards Row ─────────────────────────────────────── */}
-      <div className="d-flex gap-3 px-3 py-3" style={{ overflowX: 'auto' }}>
+      <div className="d-flex flex-wrap gap-3 px-3 py-3">
         {teams.map((team) => (
           <TeamCard
             key={team.id}
@@ -127,6 +153,8 @@ const AllTeamsView = () => {
             ticketCount={team.id === selectedTeamId ? selectedTeamTicketCount : null}
             activeWorkUnitName={team.id === selectedTeamId ? (activeWorkUnit?.name ?? null) : null}
             onSelect={() => selectTeam(team.id)}
+            isOwner={Boolean(team.createdBy && user?.username && team.createdBy === user.username)}
+            onDelete={() => setTeamToDelete(team)}
           />
         ))}
       </div>
@@ -170,6 +198,16 @@ const AllTeamsView = () => {
           <BacklogView />
         ) : null}
       </div>
+
+      <ConfirmModal
+        show={teamToDelete !== null}
+        title={t('teams.deleteTeam')}
+        message={t('teams.deleteTeamConfirm', { name: teamToDelete?.name ?? '' })}
+        confirmLabel={t('teams.deleteTeam')}
+        variant="danger"
+        onConfirm={handleDeleteTeam}
+        onHide={() => setTeamToDelete(null)}
+      />
     </div>
   );
 };
@@ -182,9 +220,19 @@ interface TeamCardProps {
   ticketCount: number | null;
   activeWorkUnitName: string | null;
   onSelect: () => void;
+  isOwner: boolean;
+  onDelete: () => void;
 }
 
-const TeamCard = ({ team, isSelected, ticketCount, activeWorkUnitName, onSelect }: TeamCardProps) => {
+const TeamCard = ({
+  team,
+  isSelected,
+  ticketCount,
+  activeWorkUnitName,
+  onSelect,
+  isOwner,
+  onDelete,
+}: TeamCardProps) => {
   const { t } = useTranslation('ops');
 
   return (
@@ -210,9 +258,24 @@ const TeamCard = ({ team, isSelected, ticketCount, activeWorkUnitName, onSelect 
             backgroundColor: team.color || '#6c757d',
           }}
         />
-        <span className="fw-semibold text-truncate" style={{ fontSize: '0.85rem' }}>
+        <span className="fw-semibold text-truncate" style={{ fontSize: '0.85rem', flexGrow: 1 }}>
           {team.name}
         </span>
+        {isOwner && (
+          <button
+            type="button"
+            className="btn btn-link text-danger p-0 ms-auto delete-team-btn"
+            style={{ fontSize: '0.8rem', opacity: 0.6 }}
+            onClick={(e) => {
+              e.stopPropagation();
+              onDelete();
+            }}
+            onMouseEnter={(e) => (e.currentTarget.style.opacity = '1')}
+            onMouseLeave={(e) => (e.currentTarget.style.opacity = '0.6')}
+          >
+            <i className="bi bi-trash" />
+          </button>
+        )}
       </div>
 
       <div className="d-flex align-items-center gap-2">
