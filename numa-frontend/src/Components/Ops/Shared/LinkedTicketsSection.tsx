@@ -16,9 +16,18 @@ interface LinkedTicketsSectionProps {
   ticketTitle: string;
   links: TicketLink[];
   onRefresh: () => void;
+  /** Called when the user clicks a linked ticket badge to navigate to it. */
+  onTicketClick?: (linkedTicketId: string) => void;
 }
 
 const LINK_TYPES: TicketLinkType[] = ['blocks', 'depends_on', 'related_to'];
+
+/** Icons from Ian's linkConfig — matches seed-data DEFAULT_LINK_CONFIG. */
+const LINK_TYPE_ICONS: Record<TicketLinkType, string> = {
+  blocks: 'bi-ban',
+  depends_on: 'bi-clock',
+  related_to: 'bi-link-45deg',
+};
 
 /**
  * Returns the inverse link type so reciprocal links stay consistent.
@@ -47,6 +56,7 @@ export function LinkedTicketsSection({
   ticketTitle,
   links,
   onRefresh,
+  onTicketClick,
 }: LinkedTicketsSectionProps): React.JSX.Element {
   const { t } = useTranslation('ops');
   const { numaGet, numaPost, numaDelete } = useNumaRequest();
@@ -196,13 +206,27 @@ export function LinkedTicketsSection({
 
             return (
               <div key={linkType} className="mb-2">
-                <div className="text-muted small fw-semibold mb-1">{t(`linkTypes.${linkType}`)}</div>
+                <div className="text-muted small fw-semibold mb-1">
+                  <i className={`bi ${LINK_TYPE_ICONS[linkType]} me-1`} />
+                  {t(`linkTypes.${linkType}`)}
+                </div>
                 {typeLinks.map((link) => (
                   <div
                     key={`${link.linkType}-${link.linkedTicketId}`}
                     className="d-flex align-items-center gap-2 mb-1 ps-2"
                   >
-                    <Badge bg="light" text="dark" className="border" style={{ fontFamily: 'monospace', flexShrink: 0 }}>
+                    <Badge
+                      bg="light"
+                      text="dark"
+                      className="border"
+                      style={{
+                        fontFamily: 'monospace',
+                        flexShrink: 0,
+                        cursor: onTicketClick ? 'pointer' : 'default',
+                      }}
+                      onClick={() => onTicketClick?.(link.linkedTicketId)}
+                      role={onTicketClick ? 'button' : undefined}
+                    >
                       {link.linkedTicketDisplayId}
                     </Badge>
                     {link.linkedTicketTitle && (

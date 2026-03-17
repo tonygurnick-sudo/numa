@@ -100,6 +100,23 @@ function relativeTimeShort(dateStr: string): string {
   return 'just now';
 }
 
+/**
+ * Computes a human-readable cycle-time string between two ISO dates.
+ * Returns null if either date is missing.
+ */
+function formatCycleTime(startStr: string | null | undefined, endStr: string | null | undefined): string | null {
+  if (!startStr || !endStr) return null;
+  const ms = Date.parse(endStr) - Date.parse(startStr);
+  if (ms < 0 || isNaN(ms)) return null;
+  const hours = Math.floor(ms / 3_600_000);
+  const days = Math.floor(hours / 24);
+  const remainingHours = hours % 24;
+  if (days > 0) return `${String(days)}d ${String(remainingHours)}h`;
+  if (hours > 0) return `${String(hours)}h`;
+  const minutes = Math.floor(ms / 60_000);
+  return `${String(minutes)}m`;
+}
+
 // ─── Component ──────────────────────────────────────────────────────────────
 
 /**
@@ -465,6 +482,13 @@ export function TicketDetailModal({
             <span>{formatDateShort(date)}</span>
           </div>
         ))}
+        {/* Cycle time: startedAt → completedAt */}
+        {formatCycleTime(ticket.startedAt, ticket.completedAt) && (
+          <div className="d-flex align-items-center gap-1">
+            <span style={{ fontWeight: 600 }}>{t('tickets.cycleTime')}:</span>
+            <span>{formatCycleTime(ticket.startedAt, ticket.completedAt)}</span>
+          </div>
+        )}
         {ticket.createdByName && (
           <div className="d-flex align-items-center gap-1 ms-auto">
             <i className="bi bi-person" />
@@ -947,6 +971,16 @@ export function TicketDetailModal({
               ticketTitle={ticket.title}
               links={links}
               onRefresh={reloadTicket}
+              onTicketClick={(linkedId) => {
+                // Close current modal, re-open with the linked ticket
+                onHide();
+                // Small delay so the modal unmounts before re-opening
+                setTimeout(() => {
+                  // Re-use the same detail flow by updating the parent's selected ticket
+                  const event = new CustomEvent('ops:open-ticket', { detail: { ticketId: linkedId } });
+                  window.dispatchEvent(event);
+                }, 150);
+              }}
             />
           </div>
         </div>

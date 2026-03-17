@@ -283,6 +283,17 @@ const BoardView = () => {
     setShowDetail(true);
   }, []);
 
+  // Listen for linked-ticket navigation events dispatched by TicketDetailModal
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const ticketId = (e as CustomEvent<{ ticketId: string }>).detail.ticketId;
+      setDetailTicketId(ticketId);
+      setShowDetail(true);
+    };
+    window.addEventListener('ops:open-ticket', handler);
+    return () => window.removeEventListener('ops:open-ticket', handler);
+  }, []);
+
   const handleTicketContextMenu = useCallback((e: React.MouseEvent, ticket: Ticket) => {
     e.preventDefault();
     setCtxMenu({ show: true, position: { x: e.clientX, y: e.clientY }, ticket });
