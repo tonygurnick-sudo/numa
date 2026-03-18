@@ -56,7 +56,7 @@ export interface MfaCodeRequired {
 }
 
 export type LoginResult =
-  | { success: true }
+  | { success: true; features: string[] }
   | { requiresNewPassword: true; session: unknown }
   | MfaSetupRequired
   | MfaCodeRequired;
@@ -1724,8 +1724,8 @@ export const AuthProvider = ({ children, initialTokens }) => {
         return mfaCodeResult;
       }
 
-      await handleLoginSuccess(response.AuthenticationResult);
-      return { success: true };
+      const { features } = await handleLoginSuccess(response.AuthenticationResult);
+      return { success: true, features };
     } catch (error) {
       console.error('Error during authentication:', error);
       throw error;
@@ -1877,7 +1877,7 @@ export const AuthProvider = ({ children, initialTokens }) => {
     setMfaCodeData(null);
 
     if (authResponse.AuthenticationResult) {
-      await handleLoginSuccess(authResponse.AuthenticationResult);
+      const { features } = await handleLoginSuccess(authResponse.AuthenticationResult);
       // Confirm and optionally remember device after successful auth
       await confirmAndRememberDevice(
         authResponse.AuthenticationResult,
@@ -1885,7 +1885,7 @@ export const AuthProvider = ({ children, initialTokens }) => {
         authResponse.AuthenticationResult.AccessToken,
         rememberDevice ?? false
       );
-      return { success: true };
+      return { success: true, features };
     }
 
     throw new Error('MFA setup completed but authentication failed');
@@ -1927,7 +1927,7 @@ export const AuthProvider = ({ children, initialTokens }) => {
     setMfaCodeData(null);
 
     if (authResponse.AuthenticationResult) {
-      await handleLoginSuccess(authResponse.AuthenticationResult);
+      const { features } = await handleLoginSuccess(authResponse.AuthenticationResult);
       // Confirm and optionally remember device after successful auth
       await confirmAndRememberDevice(
         authResponse.AuthenticationResult,
@@ -1935,7 +1935,7 @@ export const AuthProvider = ({ children, initialTokens }) => {
         authResponse.AuthenticationResult.AccessToken,
         rememberDevice ?? false
       );
-      return { success: true };
+      return { success: true, features };
     }
 
     throw new Error('MFA verification failed');
@@ -2022,6 +2022,8 @@ export const AuthProvider = ({ children, initialTokens }) => {
     const now = Date.now().toString();
     localStorage.setItem('lastTokenValidation', now);
     localStorage.setItem('lastGroupCheck', now);
+
+    return { features: features || [] };
   };
 
   // Initialize user state from testConfig if available

@@ -106,7 +106,7 @@ const NumaLogin = () => {
       } else {
         setSuccess(t('login.messages.loginSuccess'));
         clearInputs();
-        navigate('/dash');
+        navigate(result.features?.includes('chat') ? '/chat' : '/dash');
       }
     } catch (error) {
       console.error('Error during authentication:', error);
@@ -156,7 +156,7 @@ const NumaLogin = () => {
         setSuccess(t('login.messages.passwordUpdated'));
         setIsSettingNewPassword(false);
         clearInputs();
-        navigate('/dash');
+        navigate(result.features?.includes('chat') ? '/chat' : '/dash');
         return;
       }
 
@@ -188,7 +188,7 @@ const NumaLogin = () => {
       if ('success' in result && result.success) {
         setSuccess(t('login.messages.loginSuccess'));
         setMfaSetupRequired(null);
-        navigate('/dash');
+        navigate(result.features?.includes('chat') ? '/chat' : '/dash');
       }
     } catch (error) {
       console.error('Error completing MFA setup:', error);
@@ -217,7 +217,7 @@ const NumaLogin = () => {
       if ('success' in result && result.success) {
         setSuccess(t('login.messages.loginSuccess'));
         setMfaCodeRequired(null);
-        navigate('/dash');
+        navigate(result.features?.includes('chat') ? '/chat' : '/dash');
       }
     } catch (error) {
       console.error('Error submitting MFA code:', error);

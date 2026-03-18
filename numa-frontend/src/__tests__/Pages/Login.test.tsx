@@ -53,8 +53,8 @@ describe('NumaLogin Component', () => {
     expect(getByText('Forgot password')).toBeInTheDocument();
   });
 
-  it('handles successful login', async () => {
-    mockLogin.mockResolvedValueOnce({ success: true });
+  it('handles successful login and navigates to /dash when no chat feature', async () => {
+    mockLogin.mockResolvedValueOnce({ success: true, features: [] });
 
     const { getByLabelText, getByRole } = render(<NumaLogin />);
 
@@ -69,6 +69,20 @@ describe('NumaLogin Component', () => {
     await waitFor(() => {
       expect(mockLogin).toHaveBeenCalledWith('testuser', 'password123');
       expect(mockNavigate).toHaveBeenCalledWith('/dash');
+    });
+  });
+
+  it('handles successful login and navigates to /chat when chat feature is enabled', async () => {
+    mockLogin.mockResolvedValueOnce({ success: true, features: ['chat'] });
+
+    const { getByLabelText, getByRole } = render(<NumaLogin />);
+
+    fireEvent.change(getByLabelText('Username'), { target: { value: 'testuser' } });
+    fireEvent.change(getByLabelText('Password'), { target: { value: 'password123' } });
+    fireEvent.click(getByRole('button', { name: 'Login' }));
+
+    await waitFor(() => {
+      expect(mockNavigate).toHaveBeenCalledWith('/chat');
     });
   });
 
@@ -94,7 +108,7 @@ describe('NumaLogin Component', () => {
 
   it('handles new password submission', async () => {
     mockLogin.mockResolvedValueOnce({ requiresNewPassword: true });
-    mockSetNewPassword.mockResolvedValueOnce({ success: true });
+    mockSetNewPassword.mockResolvedValueOnce({ success: true, features: [] });
 
     const { getByLabelText, getByText, getByRole, findByLabelText } = render(<NumaLogin />);
 
@@ -218,7 +232,7 @@ describe('NumaLogin Component', () => {
     expect(getByTestId('mfa-setup-button')).toBeInTheDocument();
   });
 
-  it('completes MFA setup and navigates to /dash', async () => {
+  it('completes MFA setup and navigates to /dash when no chat feature', async () => {
     mockLogin.mockResolvedValueOnce({
       requiresMfaSetup: true,
       session: 'mock-session',
@@ -226,7 +240,7 @@ describe('NumaLogin Component', () => {
       secretCode: 'ABCDEFGHIJKLMNOP',
       otpauthUrl: 'otpauth://totp/Numa:testuser?secret=ABCDEFGHIJKLMNOP&issuer=Numa',
     });
-    mockCompleteMfaSetup.mockResolvedValueOnce({ success: true });
+    mockCompleteMfaSetup.mockResolvedValueOnce({ success: true, features: [] });
 
     const { getByLabelText, getByRole, getByTestId } = render(<NumaLogin />);
 
@@ -333,13 +347,13 @@ describe('NumaLogin Component', () => {
     expect(await findByText(/Contact your administrator/)).toBeInTheDocument();
   });
 
-  it('submits MFA code and navigates to /dash', async () => {
+  it('submits MFA code and navigates to /dash when no chat feature', async () => {
     mockLogin.mockResolvedValueOnce({
       requiresMfaCode: true,
       session: 'mock-session',
       username: 'testuser',
     });
-    mockSubmitMfaCode.mockResolvedValueOnce({ success: true });
+    mockSubmitMfaCode.mockResolvedValueOnce({ success: true, features: [] });
 
     const { getByLabelText, getByRole, getByTestId } = render(<NumaLogin />);
 
