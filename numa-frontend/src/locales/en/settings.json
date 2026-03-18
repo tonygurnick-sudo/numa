@@ -634,6 +634,14 @@
         "help": "When enabled, a signature line is appended to emails sent by Numa on your behalf (via Gmail or Outlook).",
         "enableTitle": "Append signature to outgoing emails",
         "textLabel": "Signature text"
+      },
+      "chatScrollMode": {
+        "label": "Chat scroll control",
+        "help": "Controls how chat auto-scrolls when new messages arrive during response generation.",
+        "auto": "Auto-scroll",
+        "autoHelp": "Chat automatically scrolls to the latest message as it streams in.",
+        "manual": "Manual scroll",
+        "manualHelp": "Scroll position stays where you left it while a response generates. Use the \"Jump to latest\" button to catch up."
       }
     },
     "approval": {
@@ -780,7 +788,10 @@
       "authentication": "Authentication",
       "authDescription": "All requests require an API key in the X-Analytics-API-Key header.",
       "fullSpec": "Full Specification"
-    }
+    },
+    "cancel": "Cancel",
+    "deleting": "Deleting...",
+    "deletedProgress": "Deleted {{count}} events so far..."
   },
   "auditTabs": {
     "userActivity": "User Activity",
@@ -817,6 +828,135 @@
     "detailModal": {
       "title": "Log Entry Details",
       "action": "Action"
+    }
+  },
+  "transcriptions": {
+    "dropZone": {
+      "dragFiles": "Drag and drop files here to transcribe, or click to browse",
+      "dropHere": "Drop files to start transcription"
+    },
+    "filters": {
+      "statusFilter": "Filter by status",
+      "allStatuses": "All Statuses",
+      "showAllUsers": "Show all users"
+    },
+    "statuses": {
+      "QUEUED": "Queued",
+      "PROCESSING": "Processing",
+      "COMPLETED": "Completed",
+      "FAILED": "Failed",
+      "CANCEL_REQUESTED": "Cancelling",
+      "CANCELLED": "Cancelled"
+    },
+    "table": {
+      "fileName": "File Name",
+      "format": "Format",
+      "size": "Size",
+      "status": "Status",
+      "processingTime": "Time",
+      "submitted": "Submitted",
+      "actions": "Actions",
+      "showing": "Showing {{count}} jobs",
+      "loadMore": "Load More",
+      "noJobs": "No transcription jobs found"
+    },
+    "actions": {
+      "refresh": "Refresh",
+      "cancel": "Cancel",
+      "retry": "Retry",
+      "viewDetails": "View Details",
+      "download": "Download",
+      "delete": "Delete",
+      "deleteConfirm": "Delete \"{{fileName}}\"? This will remove the job and its files permanently."
+    },
+    "upload": {
+      "title": "Upload Files",
+      "dropzone": "Drag and drop files here, or click to browse",
+      "clickToBrowse": "Supported formats: PDF, DOCX, images, audio, video, and more",
+      "uploadFiles": "Upload Files",
+      "filesSelected": "{{count}} file(s) selected",
+      "clear": "Clear",
+      "uploadCount": "Upload {{count}} files",
+      "cancelUpload": "Cancel Upload",
+      "done": "Done",
+      "remove": "Remove",
+      "cancelled": "Cancelled",
+      "successCount": "{{count}} submitted",
+      "errorCount": "{{count}} failed",
+      "cancelledCount": "{{count}} cancelled"
+    },
+    "autoRefresh": "Auto-refreshing...",
+    "detailModal": {
+      "title": "Transcription Job Details",
+      "error": "Error",
+      "infoTab": "Info",
+      "outputTab": "Output",
+      "costsTab": "Accounting",
+      "format": "Format"
+    },
+    "output": {
+      "page": "Page {{num}}"
+    },
+    "costs": {
+      "service": "Service",
+      "detail": "Detail",
+      "cost": "Est. Cost",
+      "lambda": "Lambda",
+      "fargate": "Fargate",
+      "fargateDetail": "{{vcpu}} vCPU, {{memory}} GB",
+      "s3": "S3",
+      "bedrock": "Bedrock",
+      "transcribe": "Transcribe",
+      "reads": "reads",
+      "writes": "writes",
+      "tokensIn": "in",
+      "tokensOut": "out",
+      "total": "Total"
+    },
+    "errors": {
+      "unsupportedFormat": "Unsupported file format: {{ext}}",
+      "submitFailed": "Failed to submit transcription job",
+      "outputFetchFailed": "Failed to load transcription output"
+    }
+  },
+  "notificationAudit": {
+    "filters": {
+      "typeFilter": "Filter by type",
+      "allTypes": "All Types",
+      "statusFilter": "Filter by status",
+      "allStatuses": "All Statuses"
+    },
+    "types": {
+      "agent": "Agent",
+      "application": "Application",
+      "data_sync": "Data Sync",
+      "transcription": "Transcription"
+    },
+    "statuses": {
+      "unread": "Unread",
+      "read": "Read",
+      "dismissed": "Dismissed"
+    },
+    "eventTypes": {
+      "started": "Started",
+      "completed": "Completed",
+      "partial": "Partial",
+      "failed": "Failed",
+      "cancelled": "Cancelled"
+    },
+    "table": {
+      "timestamp": "Timestamp",
+      "title": "Title",
+      "message": "Message",
+      "type": "Type",
+      "eventType": "Event",
+      "readStatus": "Status",
+      "actions": "Actions",
+      "showing": "Showing {{count}} notifications",
+      "noNotifications": "No notifications found"
+    },
+    "detailModal": {
+      "title": "Notification Details"
     }
   }
 }
