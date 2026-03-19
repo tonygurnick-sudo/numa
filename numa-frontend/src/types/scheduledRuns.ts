@@ -27,4 +27,5 @@ export type RunHistoryItem = {
   log?: ScheduledRunLog;
   loading?: boolean;
   error?: string;
+  inProgress?: boolean;
 };

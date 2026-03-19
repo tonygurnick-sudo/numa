@@ -326,7 +326,12 @@ export const ScheduleDetailPage: React.FC = () => {
           };
         });
 
-      setRunHistory(runs);
+      setRunHistory((prev) => {
+        // Keep inProgress runs that aren't yet in the fetched run logs
+        const inProgressRuns = prev.filter((r) => r.inProgress && !runs.some((newRun) => newRun.runId === r.runId));
+        // We know sortRunHistory gets the newest items to the top
+        return [...inProgressRuns, ...runs].sort((a, b) => getRunSortTime(b) - getRunSortTime(a));
+      });
       void loadRunLogsForRuns(runs);
     } catch (err) {
       console.error('Failed to load run history:', err);
@@ -342,6 +347,7 @@ export const ScheduleDetailPage: React.FC = () => {
     extractUserIdFromS3Key,
     getUserIdFromToken,
     loadRunLogsForRuns,
+    sortRunHistory,
   ]);
 
   useEffect(() => {
@@ -440,14 +446,62 @@ export const ScheduleDetailPage: React.FC = () => {
     }
   }, [schedule, numaDelete, navigate]);
 
+  // Ref to track the polling interval so we can clean it up on unmount
+  const pollIntervalRef = React.useRef<number | null>(null);
+  const pollAttemptsRef = React.useRef(0);
+
+  // Clean up polling interval on unmount to prevent memory leaks
+  useEffect(() => {
+    return () => {
+      if (pollIntervalRef.current !== null) {
+        window.clearInterval(pollIntervalRef.current);
+        pollIntervalRef.current = null;
+      }
+    };
+  }, []);
+
   const handleRunNow = useCallback(async () => {
     if (!schedule) return;
     setActionLoading('run');
     try {
-      await ScheduleService.run(numaPost, schedule.scheduleId);
-      // Reload run history after a short delay to allow the run to complete
-      setTimeout(() => {
-        loadRunHistory();
+      const response = await ScheduleService.run(numaPost, schedule.scheduleId);
+
+      // Immediately inject placeholder run history item so the user sees feedback
+      if (response.runId) {
+        setRunHistory((prev) => {
+          if (prev.some((r) => r.runId === response.runId)) return prev;
+
+          const newRun: RunHistoryItem = {
+            runId: response.runId,
+            s3Key: response.runLogS3Key || '',
+            timestamp: new Date(),
+            inProgress: true,
+          };
+
+          return [newRun, ...prev].sort((a, b) => getRunSortTime(b) - getRunSortTime(a));
+        });
+      }
+
+      // Clear any existing poll before starting a new one
+      if (pollIntervalRef.current !== null) {
+        window.clearInterval(pollIntervalRef.current);
+      }
+
+      // Poll run history every 3 seconds (up to ~30 seconds) to pick up the
+      // completed S3 log. loadRunHistory will merge the fetched entries with the
+      // in-progress placeholder; once the real log file appears the placeholder
+      // is replaced automatically because its runId matches the S3 key.
+      pollAttemptsRef.current = 0;
+      pollIntervalRef.current = window.setInterval(() => {
+        pollAttemptsRef.current++;
+        if (pollAttemptsRef.current >= 10) {
+          if (pollIntervalRef.current !== null) {
+            window.clearInterval(pollIntervalRef.current);
+            pollIntervalRef.current = null;
+          }
+          return;
+        }
+        void loadRunHistory();
       }, 3000);
     } catch (err) {
       console.error('Failed to run schedule:', err);
@@ -821,6 +875,8 @@ export const ScheduleDetailPage: React.FC = () => {
                                   <Spinner animation="border" size="sm" />
                                 ) : run.error ? (
                                   <Badge bg="danger">{t('scheduling.details.runHistory.status.error')}</Badge>
+                                ) : run.inProgress ? (
+                                  <Badge bg="primary">{t('scheduling.details.runHistory.status.inProgress')}</Badge>
                                 ) : run.log?.error ? (
                                   <Badge bg="danger">{t('scheduling.details.runHistory.status.failed')}</Badge>
                                 ) : run.log?.agentStatus ? (

@@ -741,7 +741,8 @@
           "failed": "Failed",
           "completed": "Completed",
           "partial": "Partial",
-          "success": "Success"
+          "success": "Success",
+          "inProgress": "In Progress"
         },
         "loadingDetails": "Loading run details...",
         "noContent": "No content",
