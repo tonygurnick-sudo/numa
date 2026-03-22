@@ -56,6 +56,7 @@ export const V2AppDetail: React.FC = () => {
     runHistory,
     error,
     uploadProgress,
+    progressEvents,
     startAnalysis,
     startFollowUp,
     viewRun,
@@ -174,6 +175,7 @@ export const V2AppDetail: React.FC = () => {
             currentRun={currentRun}
             error={error}
             uploadProgress={uploadProgress}
+            progressEvents={progressEvents}
             startAnalysis={handleStartAnalysis}
             reset={reset}
             workspaceSettings={workspaceSettings.settings}

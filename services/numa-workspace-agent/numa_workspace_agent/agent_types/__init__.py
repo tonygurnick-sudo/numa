@@ -10,6 +10,7 @@ Importing this module registers all built-in agent types via side-effect imports
 # Import type modules to trigger registration (side-effect imports)
 from . import data_analysis as _data_analysis  # noqa: F401
 from . import document_summariser as _document_summariser  # noqa: F401
+from . import nolia as _nolia  # noqa: F401
 from . import numa_chat as _numa_chat  # noqa: F401
 from . import profile_creator as _profile_creator  # noqa: F401
 from . import profile_researcher as _profile_researcher  # noqa: F401

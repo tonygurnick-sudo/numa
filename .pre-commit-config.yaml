@@ -11,7 +11,7 @@ repos:
     rev: v4.0.0-alpha.8
     hooks:
       - id: prettier
-        entry: prettier --check --ignore-unknown
+        entry: prettier --write --ignore-unknown
         files: \.(ts|tsx|js|jsx|json|css|scss|md)$
         exclude: ^(.*\.d\.ts|dist/|build/|coverage/|node_modules/|\.next/).*$
   - repo: https://github.com/psf/black

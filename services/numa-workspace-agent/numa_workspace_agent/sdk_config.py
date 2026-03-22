@@ -18,9 +18,8 @@ from claude_agent_sdk import ClaudeAgentOptions, HookMatcher, create_sdk_mcp_ser
 from numa_workspace_agent.agent_types import AgentTypeConfig, get_agent_type_config
 from numa_workspace_agent.hooks import (
     audit_hook,
+    compaction_hook,
     security_hook,
-    subagent_cleanup_hook,
-    subagent_limit_hook,
 )
 from numa_workspace_agent.mcp_tools import (
     configure_props,
@@ -107,7 +106,7 @@ ALLOWED_MODELS = set(
 BEDROCK_ACCOUNT = os.environ.get("BEDROCK_ACCOUNT")
 
 
-def validate_model_id(model_id: Optional[str]) -> str:
+def validate_model_id(model_id: Optional[str]) -> Optional[str]:
     """
     Validate and return a region-appropriate model ID for use with Bedrock.
 
@@ -115,17 +114,22 @@ def validate_model_id(model_id: Optional[str]) -> str:
     Strips the prefix, re-adds the correct one for the current AWS_REGION,
     and validates against the allowed set.
 
+    Returns None when model_id is None so that downstream callers
+    (e.g. build_claude_options) can fall back to the agent type's
+    default_model before using the global DEFAULT_MODEL.
+
     Args:
         model_id: Optional model ID from frontend request (may have any prefix or none)
 
     Returns:
-        Validated model ID string with correct regional prefix
+        Validated model ID string with correct regional prefix, or None
     """
     if model_id:
         regionalized = _regionalize(_strip_prefix(model_id))
         if regionalized in ALLOWED_MODELS:
             return regionalized
-    return DEFAULT_MODEL
+        return DEFAULT_MODEL
+    return None
 
 
 def _get_local_credentials() -> dict[str, str]:
@@ -344,6 +348,7 @@ def create_agent_options(
     user_profile: Optional[dict] = None,
     company_profile: Optional[str] = None,
     feature_flags: Optional[dict[str, bool]] = None,
+    home_dir: Optional[Path] = None,
 ) -> ClaudeAgentOptions:
     """
     Create ClaudeAgentOptions for the Numa Workspace Agent.
@@ -411,9 +416,9 @@ def create_agent_options(
         "OTEL_SDK_DISABLED": "true",
         # Thinking tokens (from agent type config)
         "MAX_THINKING_TOKENS": str(type_config.max_thinking_tokens),
-        # Set HOME so SDK stores sessions in /workdir/.system/.claude
-        # This ensures session persistence matches our archive/restore location
-        "HOME": str(LOCAL_ROOT / ".system"),
+        # Set HOME so SDK stores sessions in .claude/ under this directory.
+        # Pipeline steps can override via home_dir for per-step isolation.
+        "HOME": str(home_dir) if home_dir else str(LOCAL_ROOT / ".system"),
         # Workspace tools Lambda for custom tools (KB queries, etc.)
         "WORKSPACE_TOOLS_LAMBDA_NAME": workspace_tools_lambda,
         # OAuth workspace tools Lambda for OAuth cloud storage tools
@@ -564,49 +569,83 @@ def create_agent_options(
     )
 
     # Resolve effective model: request override > type config default > global default
-    effective_model = model or type_config.default_model or DEFAULT_MODEL
+    # Regionalize type_config.default_model since it may use bare IDs (e.g. without us. prefix)
+    raw_model = model or type_config.default_model or DEFAULT_MODEL
+    effective_model = (
+        _regionalize(_strip_prefix(raw_model)) if raw_model else DEFAULT_MODEL
+    )
 
-    return ClaudeAgentOptions(
+    # Build options dict, conditionally including agents if defined
+    options_kwargs: dict[str, Any] = {
         # Core settings
-        system_prompt=system_prompt,
-        model=effective_model,
-        max_turns=type_config.max_turns,
+        "system_prompt": system_prompt,
+        "model": effective_model,
+        "max_turns": type_config.max_turns,
         # Buffer size for multimodal content (images, PDFs)
-        max_buffer_size=10 * 1024 * 1024,  # 10MB
+        "max_buffer_size": 10 * 1024 * 1024,  # 10MB
         # Working directory
-        cwd=str(LOCAL_ROOT),
-        # Tools - explicitly set which tools are available (reduces token overhead)
-        tools=TOOLS,
+        "cwd": str(LOCAL_ROOT),
+        # Tools - use agent type config if specified, otherwise default set
+        "tools": type_config.tools if type_config.tools else TOOLS,
         # MCP servers — conditionally built above based on feature flags
-        mcp_servers=mcp_servers,
+        "mcp_servers": mcp_servers,
         # Permissions - use acceptEdits mode with Python hooks for security
         # acceptEdits auto-approves file operations; hooks handle deny logic
-        permission_mode="acceptEdits",
-        allowed_tools=type_config.allowed_tools,
-        disallowed_tools=type_config.disallowed_tools,
+        "permission_mode": "acceptEdits",
+        "allowed_tools": type_config.allowed_tools,
+        "disallowed_tools": type_config.disallowed_tools,
         # Session management
-        resume=session_id,
+        "resume": session_id,
         # Plugin for skills and agents (from type config)
-        plugins=[{"type": "local", "path": type_config.plugins_path}],
-        setting_sources=["project"],
-        # Python hooks for security
-        hooks={
-            "PreToolUse": [
-                HookMatcher(hooks=[security_hook, subagent_limit_hook, audit_hook]),
-            ],
-            "PostToolUse": [
-                HookMatcher(hooks=[subagent_cleanup_hook, audit_hook]),
-            ],
-        },
+        "plugins": [{"type": "local", "path": type_config.plugins_path}],
+        "setting_sources": ["project"],
+        # Python hooks for security (can be disabled for closed pipelines)
+        "hooks": (
+            {
+                "PreToolUse": [
+                    HookMatcher(hooks=[security_hook, audit_hook]),
+                ],
+                "PostToolUse": [
+                    HookMatcher(hooks=[audit_hook]),
+                ],
+                "PreCompact": [
+                    HookMatcher(hooks=[compaction_hook]),
+                ],
+            }
+            if type_config.enable_security_hooks
+            else {
+                "PreToolUse": [
+                    HookMatcher(hooks=[audit_hook]),
+                ],
+                "PostToolUse": [
+                    HookMatcher(hooks=[audit_hook]),
+                ],
+                "PreCompact": [
+                    HookMatcher(hooks=[compaction_hook]),
+                ],
+            }
+        ),
         # Environment variables for custom tools
-        env=env,
+        "env": env,
         # Include partial messages for streaming
-        include_partial_messages=True,
-        # Note: fine-grained-tool-streaming beta is not supported with Bedrock
-        # Bedrock may stream tool inputs natively, but we can't force it via beta flag
+        "include_partial_messages": True,
         # Capture stderr from CLI subprocess for debugging
-        stderr=log_stderr,
-    )
+        "stderr": log_stderr,
+    }
+
+    # Pre-defined sub-agents for Task tool (cost optimisation — e.g. Haiku)
+    if type_config.agents:
+        options_kwargs["agents"] = type_config.agents
+
+    # Thinking configuration — type_config.thinking overrides env-var approach
+    if type_config.thinking:
+        options_kwargs["thinking"] = type_config.thinking
+
+    # Effort level — controls reasoning depth ("low", "medium", "high", "max")
+    if type_config.effort:
+        options_kwargs["effort"] = type_config.effort
+
+    return ClaudeAgentOptions(**options_kwargs)
 
 
 def get_allowed_tools() -> list[str]:

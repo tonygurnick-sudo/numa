@@ -67,6 +67,31 @@ export interface V2AppTab {
 
 export type V2AppStatus = 'active' | 'beta' | 'coming-soon';
 
+/** A custom form field rendered in the agent run form. */
+export interface V2AppCustomField {
+  /** Unique identifier used as the key in metadata. */
+  id: string;
+  /** Field type: dropdown renders a select, text renders an input, toggle renders a switch. */
+  type: 'dropdown' | 'text' | 'toggle';
+  /** i18n translation key for the field label. */
+  labelKey: string;
+  /** Whether the field must have a value before submission. */
+  required: boolean;
+  /** Static options for dropdown fields. Ignored when dynamicOptionsSource is set. */
+  options?: Array<{ value: string; labelKey: string }>;
+  /** Default value (used to initialise the form state). */
+  defaultValue?: string;
+  /** i18n key for optional help text shown below the field. */
+  helpTextKey?: string;
+  /**
+   * Populate dropdown options dynamically from available knowledge bases.
+   * The value is a KB name prefix (e.g., 'Global', 'Procurement', 'Project')
+   * used to filter KBs whose name starts with that prefix.
+   * Option value = 'kb-{kb_id}' (S3 folder name), label = KB display name.
+   */
+  dynamicKBSource?: string;
+}
+
 export interface V2AppAgent {
   id: string;
   nameKey: string;
@@ -77,6 +102,12 @@ export interface V2AppAgent {
   capabilities?: string[];
   /** How to display results for this agent's runs. Defaults to agent-response. */
   resultConfig?: V2AppResultConfig;
+  /** Maps to a workspace agent type_id. When set, used instead of the default {appId}-v2. */
+  agentType?: string;
+  /** Custom form fields rendered in the run form for this agent. */
+  customFields?: V2AppCustomField[];
+  /** i18n key for the prompt textarea placeholder. Falls back to shared default. */
+  promptPlaceholderKey?: string;
 }
 
 export interface V2AppWorkspaceSettings {
@@ -95,6 +126,10 @@ export interface RunConfiguration {
   enabledConnections: string[];
   workspaceAccess: boolean;
   contextInstructions: string;
+  /** Custom metadata fields from agent customFields (e.g., assessment_type, output_language). */
+  metadata?: Record<string, string>;
+  /** Explicit workspace agent type_id override (from V2AppAgent.agentType). */
+  agentType?: string;
 }
 
 /**
@@ -102,8 +137,12 @@ export interface RunConfiguration {
  *
  * - 'agent-response': Show the agent's text response as markdown.
  * - 'file': Download/display a specific file from the run's S3 path (e.g. report.pdf).
+ * - 'first-artifact': Render the first artifact file from the result as the primary content.
  */
-export type V2AppResultConfig = { type: 'agent-response' } | { type: 'file'; fileName: string; contentType: string };
+export type V2AppResultConfig =
+  | { type: 'agent-response' }
+  | { type: 'file'; fileName: string; contentType: string }
+  | { type: 'first-artifact' };
 
 export interface V2AppConfig {
   id: string;

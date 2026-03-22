@@ -19,6 +19,7 @@ Two result modes (configured via ``pipeline_result_mode`` on the parent type):
 
 import inspect
 import json
+import shutil
 import uuid
 from pathlib import Path
 from typing import Any, Optional
@@ -27,6 +28,7 @@ import structlog
 
 from .agent_types import ALWAYS_COPY, TOOL_FILE_MAP, get_agent_type_config
 from .agent_types.base import AgentTypeConfig
+from .sdk_config import LOCAL_ROOT
 from .sdk_runner import run_claude_sdk
 from .workspace import setup_agent_tools
 
@@ -230,6 +232,10 @@ async def run_pipeline(
         step_conversation_id = f"{conversation_id}-step-{i}"
         step_request_id = request_id or str(uuid.uuid4())
 
+        # Isolate Claude SDK session state per step
+        step_system_dir = LOCAL_ROOT / ".system" / f"step-{i}"
+        step_system_dir.mkdir(parents=True, exist_ok=True)
+
         logger.info(
             "Running pipeline step",
             _name="PIPELINE_STEP_START",
@@ -294,6 +300,7 @@ async def run_pipeline(
                 external_user_id=step_external_user_id,
                 enabled_integrations=step_integrations,
                 agent_type_config=step_config,
+                system_dir=step_system_dir,
             )
         except Exception as e:
             logger.error(
@@ -326,6 +333,9 @@ async def run_pipeline(
                 ),
                 "steps": step_results,
             }
+        finally:
+            # Clean up step-specific system dir (session already archived to S3)
+            shutil.rmtree(step_system_dir, ignore_errors=True)
 
         # Collect step result
         step_status = result.get("status", "completed")

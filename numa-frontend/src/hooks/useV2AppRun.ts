@@ -64,6 +64,7 @@ export function useV2AppRun({ appId, numaGet, numaPost, numaDelete, pollInterval
   const [runHistory, setRunHistory] = useState<RunRecord[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [uploadProgress, setUploadProgress] = useState<number>(0);
+  const [progressEvents, setProgressEvents] = useState<RunRecord['progressEvents']>(undefined);
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const historyPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const mountedRef = useRef(true);
@@ -161,14 +162,21 @@ export function useV2AppRun({ appId, numaGet, numaPost, numaDelete, pollInterval
 
           setCurrentRun(run);
 
+          // Update progress events if present (only during PROCESSING)
+          if (run.progressEvents) {
+            setProgressEvents(run.progressEvents);
+          }
+
           if (run.status === 'COMPLETED') {
             cancelPolling();
             setState('completed');
+            setProgressEvents(undefined);
             loadHistory();
           } else if (run.status === 'FAILED') {
             cancelPolling();
             setState('error');
             setError(run.error || 'Run failed');
+            setProgressEvents(undefined);
             loadHistory();
           }
         } catch (err) {
@@ -242,8 +250,11 @@ export function useV2AppRun({ appId, numaGet, numaPost, numaDelete, pollInterval
                 enabledConnections: config.enabledConnections,
                 workspaceAccess: config.workspaceAccess,
                 contextInstructions: config.contextInstructions,
+                ...(config.metadata ? { metadata: config.metadata } : {}),
               }
             : undefined,
+          // Pass explicit agent type if set (e.g., 'nolia-compliance')
+          ...(config?.agentType ? { agentType: config.agentType } : {}),
         });
 
         if (!mountedRef.current) return false;
@@ -388,6 +399,7 @@ export function useV2AppRun({ appId, numaGet, numaPost, numaDelete, pollInterval
     setState('idle');
     setError(null);
     setUploadProgress(0);
+    setProgressEvents(undefined);
   }, [cancelPolling]);
 
   return {
@@ -396,6 +408,7 @@ export function useV2AppRun({ appId, numaGet, numaPost, numaDelete, pollInterval
     runHistory,
     error,
     uploadProgress,
+    progressEvents,
     startAnalysis,
     startFollowUp,
     viewRun,

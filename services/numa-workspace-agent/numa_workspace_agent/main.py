@@ -61,6 +61,7 @@ from .s3_workspace import (
     is_cold_start,
     list_conversation_files_from_s3,
     list_workspace_files_from_s3,
+    read_progress_from_s3,
     read_result_from_s3,
     sync_agent_reference_files,
     sync_from_s3,
@@ -845,12 +846,15 @@ async def _handle_run_status(
     result = read_result_from_s3(user_sub, run_id, s3_prefix=s3_prefix)
 
     if result is None:
-        return JSONResponse(
-            content={
-                "status": "running",
-                "run_id": run_id,
-            }
-        )
+        # No result yet — check for progress events
+        progress = read_progress_from_s3(user_sub, run_id, s3_prefix=s3_prefix)
+        response: dict[str, Any] = {
+            "status": "running",
+            "run_id": run_id,
+        }
+        if progress and progress.get("events"):
+            response["events"] = progress["events"]
+        return JSONResponse(content=response)
 
     return JSONResponse(
         content={
@@ -1066,24 +1070,21 @@ async def invocations(request: Request):
             if request_mode:
                 effective_mode = request_mode
             elif type_default != "stream":
-                # Agent type wants non-stream, but caller didn't specify.
-                # Default to stream to match the proxy. Log so devs notice.
-                logger.warning(
-                    "Agent type defaults to non-stream response mode but "
-                    "request did not include responseMode — defaulting to "
-                    "stream to match proxy. Add responseMode to the request "
-                    "body to use the agent type's preferred mode.",
-                    agent_type=agent_type_config.type_id,
-                    type_default=type_default,
-                )
-                effective_mode = "stream"
+                # Agent type wants non-stream — use the type's default.
+                # In production the proxy always sends responseMode, but
+                # for local testing / direct calls honour the type config.
+                effective_mode = type_default
             else:
                 effective_mode = "stream"
 
-            # Pipeline types cannot stream — streaming a multi-step pipeline
-            # is confusing (which step's tokens are you seeing?). Fall back to
-            # sync so the pipeline runs to completion and returns a single result.
-            if effective_mode == "stream" and agent_type_config.pipeline_steps:
+            # Pipeline/orchestrator types cannot stream — streaming a multi-step
+            # pipeline is confusing (which step's tokens are you seeing?). Fall
+            # back to sync so the pipeline runs to completion and returns a
+            # single result.
+            if effective_mode == "stream" and (
+                agent_type_config.pipeline_steps
+                or agent_type_config.pipeline_orchestrator
+            ):
                 logger.info(
                     "Pipeline type cannot stream — falling back to sync",
                     _name="PIPELINE_STREAM_FALLBACK",
@@ -1955,8 +1956,30 @@ async def _handle_sync(
             force_refresh=is_cold_start,
         )
 
-    # Run SDK — either as a pipeline (sequential steps) or single agent
-    if agent_type_config.pipeline_steps:
+    # Run SDK — custom orchestrator, sequential pipeline, or single agent
+    request_metadata = body.get("metadata", {})
+
+    if agent_type_config.pipeline_orchestrator:
+        result = await agent_type_config.pipeline_orchestrator(
+            prompt=prompt,
+            user_sub=user_sub,
+            conversation_id=conversation_id,
+            parent_config=agent_type_config,
+            timezone=timezone,
+            user_email=user_email,
+            today_string=today_string,
+            available_kbs=available_kbs,
+            enabled_tools=enabled_tools,
+            model_id=model_id,
+            request_id=request_id,
+            attached_files=attached_files,
+            attached_folders=attached_folders,
+            kb_listings=kb_listings,
+            external_user_id=external_user_id,
+            enabled_integrations=enabled_integrations,
+            request_metadata=request_metadata,
+        )
+    elif agent_type_config.pipeline_steps:
         result = await run_pipeline(
             pipeline_steps=agent_type_config.pipeline_steps,
             prompt=prompt,
@@ -2006,10 +2029,12 @@ async def _handle_sync(
     # and use it as the response text instead of the raw SDK output. This is the
     # same convention used by pipelines, but here for single-step agent types
     # (e.g. document-summariser) that write structured output to a known file.
+    # Pipelines and custom orchestrators handle result extraction themselves.
     if (
         agent_type_config
         and agent_type_config.pipeline_result_mode == "result_file"
-        and not agent_type_config.pipeline_steps  # Pipelines handle this themselves
+        and not agent_type_config.pipeline_steps
+        and not agent_type_config.pipeline_orchestrator
     ):
         result_path = Path("/workdir/outputs/result.json")
         if result_path.exists():
@@ -2225,10 +2250,33 @@ async def _handle_fire_and_forget(
     s3_prefix = agent_type_config.s3_prefix_template if agent_type_config else None
     resolved_prefix = _resolve_s3_prefix(agent_type_config, user_sub, conversation_id)
 
+    # Extract metadata for custom orchestrators
+    request_metadata = body.get("metadata", {})
+
     async def _background_run() -> None:
-        """Run the SDK (or pipeline) and write the result to S3 when done."""
+        """Run the SDK (or pipeline/orchestrator) and write the result to S3."""
         try:
-            if agent_type_config.pipeline_steps:
+            if agent_type_config.pipeline_orchestrator:
+                result = await agent_type_config.pipeline_orchestrator(
+                    prompt=prompt,
+                    user_sub=user_sub,
+                    conversation_id=conversation_id,
+                    parent_config=agent_type_config,
+                    timezone=timezone,
+                    user_email=user_email,
+                    today_string=today_string,
+                    available_kbs=available_kbs,
+                    enabled_tools=enabled_tools,
+                    model_id=model_id,
+                    request_id=request_id,
+                    attached_files=attached_files,
+                    attached_folders=attached_folders,
+                    kb_listings=kb_listings,
+                    external_user_id=external_user_id,
+                    enabled_integrations=enabled_integrations,
+                    request_metadata=request_metadata,
+                )
+            elif agent_type_config.pipeline_steps:
                 result = await run_pipeline(
                     pipeline_steps=agent_type_config.pipeline_steps,
                     prompt=prompt,
@@ -2275,10 +2323,12 @@ async def _handle_fire_and_forget(
                 )
 
             # If the agent type uses result_file mode, read result.json
+            # Pipelines and custom orchestrators handle this themselves.
             if (
                 agent_type_config
                 and agent_type_config.pipeline_result_mode == "result_file"
                 and not agent_type_config.pipeline_steps
+                and not agent_type_config.pipeline_orchestrator
             ):
                 result_path = Path("/workdir/outputs/result.json")
                 if result_path.exists():

@@ -2,14 +2,16 @@ import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { Button, Form, Spinner, ProgressBar } from 'react-bootstrap';
 import { useTranslation } from 'react-i18next';
 import { MarkdownContent } from '../Renderers/MarkdownContent';
+import { FilePreviewPanel } from '../FilePreviewPanel';
 import {
   getConnectionIcon,
   getConnectionDisplayName,
   getConnectionFallbackIcon,
 } from '../../config/integrationsConfig';
+import { useAuth } from '../../Providers/AuthProvider';
 import type { V2AppAgent, V2AppWorkspaceSettings, RunConfiguration } from '../../types/apps';
 import type { V2AppRunState } from '../../hooks/useV2AppRun';
-import type { RunRecord } from '../../Services/v2AppsService';
+import type { RunRecord, ProgressEvent } from '../../Services/v2AppsService';
 
 type KnowledgeBase = {
   kb_id: string;
@@ -39,9 +41,48 @@ interface AgentRunPanelProps {
   connectionsLoading: boolean;
   hasPipedreamFeature: boolean;
   promptPlaceholderKey?: string;
+  progressEvents?: ProgressEvent[];
 }
 
 const AVAILABLE_TOOLS = [{ id: 'web_search', labelKey: 'v2Apps.workspace.tools.webSearch' }];
+
+/**
+ * Renders the first artifact file if resultConfig is 'first-artifact',
+ * otherwise falls back to rendering result.text as markdown.
+ */
+const ArtifactOrTextResult: React.FC<{ run: RunRecord; agent: V2AppAgent }> = ({ run, agent }) => {
+  const { getCredentials } = useAuth();
+  const resultConfig = agent.resultConfig ?? { type: 'agent-response' as const };
+  const bucket = sessionStorage.getItem('OUTPUTS_BUCKET_NAME') || '';
+  const region = sessionStorage.getItem('REGION') || '';
+
+  if (resultConfig.type === 'first-artifact' && run.result?.artifacts?.[0]) {
+    const artifact = run.result.artifacts[0];
+    const artifactFileName = artifact.path.split('/').pop() || artifact.path;
+    const artifactPath = artifact.path.startsWith('outputs/') ? artifact.path.slice('outputs/'.length) : artifact.path;
+    const convId = run.conversationId || run.runId;
+    const s3OutputsPrefix = `v2-apps/${run.appId}/${run.userId}/${convId}/outputs`;
+
+    return (
+      <FilePreviewPanel
+        preview={{
+          type: 'file',
+          filename: artifactFileName,
+          fullPath: `${s3OutputsPrefix}/${artifactPath}`,
+          relativePath: artifactPath,
+          extension: artifactFileName.split('.').pop()?.toLowerCase() || '',
+        }}
+        onClose={() => {}}
+        bucket={bucket}
+        region={region}
+        getCredentials={getCredentials}
+        embedded
+      />
+    );
+  }
+
+  return run.result?.text ? <MarkdownContent content={run.result.text} /> : null;
+};
 
 export const AgentRunPanel: React.FC<AgentRunPanelProps> = ({
   agent,
@@ -60,6 +101,7 @@ export const AgentRunPanel: React.FC<AgentRunPanelProps> = ({
   connectionsLoading,
   hasPipedreamFeature,
   promptPlaceholderKey,
+  progressEvents,
 }) => {
   const { t } = useTranslation('apps');
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -380,7 +422,35 @@ export const AgentRunPanel: React.FC<AgentRunPanelProps> = ({
           {runState === 'processing' && (
             <div className="v2-agent-run-panel__processing">
               <Spinner animation="border" className="mb-3" />
-              <p>{t('v2DataAnalysis.status.processing')}</p>
+              {progressEvents && progressEvents.length > 0 ? (
+                <div className="v2-agent-run-panel__progress-events">
+                  {progressEvents.map((event, i) => {
+                    const isLatest = i === progressEvents.length - 1;
+                    const elapsed = !isLatest
+                      ? Math.round(
+                          (new Date(progressEvents[i + 1].timestamp).getTime() - new Date(event.timestamp).getTime()) /
+                            1000
+                        )
+                      : 0;
+                    return (
+                      <div
+                        key={`${event.phase}-${i}`}
+                        className={`v2-agent-run-panel__progress-event ${isLatest ? 'v2-agent-run-panel__progress-event--active' : ''}`}
+                      >
+                        <i className={`bi ${isLatest ? 'bi-arrow-right-circle-fill' : 'bi-check-circle-fill'} me-2`} />
+                        <span>{event.message}</span>
+                        {!isLatest && elapsed > 0 && (
+                          <span className="text-muted ms-auto small">
+                            {elapsed >= 60 ? `${Math.floor(elapsed / 60)}m ${elapsed % 60}s` : `${elapsed}s`}
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <p>{t('v2DataAnalysis.status.processing')}</p>
+              )}
             </div>
           )}
 
@@ -408,7 +478,7 @@ export const AgentRunPanel: React.FC<AgentRunPanelProps> = ({
                 </Button>
               </div>
               <div className="v2-agent-run-panel__results-content">
-                <MarkdownContent content={currentRun.result.text} />
+                <ArtifactOrTextResult run={currentRun} agent={agent} />
               </div>
             </div>
           )}

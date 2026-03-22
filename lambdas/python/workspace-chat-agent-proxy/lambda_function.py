@@ -53,6 +53,10 @@ AWS_REGION = os.environ.get("AWS_REGION", "us-east-1")
 AGENTCORE_REGION = os.environ.get("AGENTCORE_REGION", AWS_REGION)
 COGNITO_USER_POOL_ID = os.environ.get("COGNITO_USER_POOL_ID", "")
 COGNITO_CLIENT_ID = os.environ.get("COGNITO_CLIENT_ID", "")
+_additional_ids = os.environ.get("ADDITIONAL_COGNITO_CLIENT_IDS", "")
+ALLOWED_CLIENT_IDS = {COGNITO_CLIENT_ID} | {
+    s.strip() for s in _additional_ids.split(",") if s.strip()
+}
 FILE_REDIRECT_SECRET = os.environ.get("FILE_REDIRECT_SECRET", "")
 OUTPUTS_BUCKET_NAME = os.environ.get("OUTPUTS_BUCKET_NAME", "")
 SCHEDULE_RUNNER_SECRET = os.environ.get("SCHEDULE_RUNNER_SECRET", "")
@@ -231,12 +235,12 @@ def _verify_jwt_token(token: str) -> Dict[str, Any]:
             token,
             rsa_key,  # type: ignore[arg-type]
             algorithms=["RS256"],
-            audience=COGNITO_CLIENT_ID,
+            audience=list(ALLOWED_CLIENT_IDS),
             issuer=f"https://cognito-idp.{AWS_REGION}.amazonaws.com/{COGNITO_USER_POOL_ID}",
             options={"verify_exp": True},
         )
     elif token_use == "access":
-        if payload_check.get("client_id") != COGNITO_CLIENT_ID:
+        if payload_check.get("client_id") not in ALLOWED_CLIENT_IDS:
             raise ValueError("Invalid client_id")
         payload = payload_check
     else:

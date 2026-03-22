@@ -330,6 +330,16 @@ Browser → CloudFront → workspace-chat-agent-proxy (Lambda) → AgentCore Mic
 - Components: `src/Components/WorkspaceChat/`
 - Streaming hook: `src/hooks/useWorkspaceChatStreaming.ts`
 
+### CloudWatch Log Groups
+
+Per-client log group patterns (e.g., for client `nd-labs`):
+
+- **Container (richest data):** `/numa/{clientName}/workspace-chat-agent`
+- **Vendedlogs:** `/aws/vendedlogs/bedrock-agentcore/numa-{clientName}-workspace-chat` — not useful, ignore this one
+- **Proxy:** `/aws/lambda/{clientName}-workspace-chat-agent-proxy`
+
+Structured logs use the `_name` field as primary filter (e.g., `COST`, `STREAM_COMPLETE`, `CHAT_REQUEST`). Log phases: init, auth, request, sdk, assistant, migration, integrations, upload.
+
 For the full reference (module structure, API contract, tools, skills, debugging, CloudWatch queries), see `services/numa-workspace-agent/README.md`.
 
 ---
@@ -374,6 +384,27 @@ Numa’s “Apps” are standard input/output flows defined in infra constructs 
 - Step Functions have retry/catch policies and write intermediate/final statuses (S3 or DynamoDB) consumed by the frontend.
 
 This pattern powers apps like Document Summariser, Policy Builder, Candidate Screening, Financial Analysis, and others under `/infra/constructs/apps` and `/lambdas/python/*`.
+
+---
+
+## V2 Apps (Pre-release / Experimental)
+
+> **Note:** V2 Apps are pre-release and experimental. The architecture is not set in stone — expect changes.
+
+V2 Apps run on the workspace agent (AgentCore MicroVMs) instead of Step Functions. They use a fire-and-forget pattern: the API triggers the agent, the agent writes results to S3 on both success and failure.
+
+### Key infrastructure
+
+- **API Lambda:** `v2-apps-api` — log group `/numa/{clientName}-v2-apps` (`systemLogLevel: 'WARN'` to suppress platform noise)
+- **DynamoDB:** `{clientName}-v2-app-runs` table for run tracking
+- **S3 results:** `v2-apps/{appId}/{user_sub}/{runId}/_result.json` in outputs bucket
+- **App workspace S3 paths:** company `v2-apps/{appId}/data/`, user `v2-apps/{appId}/user/{userSub}/data/`
+
+### Key details
+
+- Proxy uses Lambda Web Adapter (LWA) — async invocations must use **API Gateway V2 payload format** or LWA falls back to `POST /events` (404)
+- Frontend generates `runId` and passes it to API so upload S3 paths match the run record
+- `sync_workspace_prefixes()` in `s3_workspace.py` downloads files from multiple S3 prefixes into `/workdir/{target_dir}/`. V2 apps use this to sync company + user workspace files into `/workdir/app-workspace/` before the agent runs. Log name: `WORKSPACE_PREFIX_SYNC`
 
 ---
 
@@ -553,6 +584,16 @@ Ian (PM) built a reference implementation called "The actual Work Ops App" — i
 - Ian's POC is the gold standard — when in doubt, match his design.
 - The structure (lambdas, infra, routing) is largely in place — most work is filling in missing fields, functionality, and UI/UX polish.
 - Tickets are the most complex entity — they have many fields, link to other entities (projects, customers, suppliers, other tickets), and appear in multiple views (kanban card, backlog row, ticket detail modal).
+
+---
+
+## Nolia
+
+Nolia is an AI-powered procurement compliance platform for government agencies working with Multilateral Development Banks (World Bank, ADB, etc.). It validates procurement documents (TER/CER) against MDB policy rules using a multi-phase AI pipeline running on AgentCore MicroVMs. Nolia has its own custom frontend (`numa-whitelabel-investigation/`) but uses the Numa backend for all AI processing. The production client name is `nolia-id-gov-moh`, deployed to Jakarta (ap-southeast-3) with cross-region AgentCore in Sydney.
+
+- **Skill:** Use the `nolia-developer-guide` skill (`.claude/skills/nolia-developer-guide/`) for full development context
+- **Documentation:** `documentation/nolia/` — architecture, pipeline details, rules generation, project notes
+- **Backend code:** `services/numa-workspace-agent/numa_workspace_agent/agent_types/nolia/`
 
 ---
 

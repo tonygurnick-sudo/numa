@@ -56,7 +56,7 @@ DANGEROUS_COMMANDS = [
     "rm -rf /workdir/.system",
     "rm -rf /workdir/tools",
     "dd if=",
-    "> /dev/",
+    "> /dev/sd",  # Block writing to raw block devices, but not /dev/null etc.
     "mkfs",
     ":(){ :|:& };:",
     "chmod 777 /",
@@ -290,7 +290,7 @@ DANGEROUS_PYTHON_PATTERNS = [
     # Exec/eval (can hide anything)
     r"exec\s*\(",
     r"eval\s*\(",
-    r"compile\s*\(",
+    r"(?<!\.)compile\s*\(",
     # Unsafe deserialization (pickle-based RCE vectors)
     r"^\s*import\s+pickle\b",
     r"^\s*from\s+pickle\s+import",
@@ -513,6 +513,56 @@ def check_node_command(command: str) -> tuple[bool, str | None]:
     return False, None
 
 
+def strip_data_content(command: str) -> str:
+    """
+    Strip data content from a command, leaving only the command structure.
+
+    Removes:
+    1. Heredoc bodies (content between << DELIM and DELIM)
+    2. Inline code after python/python3 -c (already checked by check_python_command)
+    3. Inline code after node -e (already checked by check_node_command)
+
+    This prevents false positives where content strings like "loan/credit"
+    are mistaken for file paths by the path-detection regex.
+    """
+    result = command
+
+    # Strip heredoc bodies: << 'DELIM' ... DELIM or << DELIM ... DELIM
+    # Handles quoted and unquoted delimiters, with optional - for tab stripping
+    heredoc_pattern = r"<<-?\s*['\"]?(\w+)['\"]?\s*\n(.*?)\n\s*\1"
+    result = re.sub(heredoc_pattern, "<<HEREDOC_STRIPPED", result, flags=re.DOTALL)
+
+    # Strip python -c inline code (already validated by check_python_command)
+    # Match: python3 -c "code" or python3 -c 'code'
+    result = re.sub(
+        r"""(python3?\s+-c\s+)(["'])(.*?)\2""",
+        r"\1\2STRIPPED\2",
+        result,
+        flags=re.DOTALL,
+    )
+    # Also handle unquoted -c with multiline content (less common)
+    result = re.sub(
+        r"(python3?\s+-c\s+)([^\s|;&]+)",
+        r"\1STRIPPED",
+        result,
+    )
+
+    # Strip node -e inline code (already validated by check_node_command)
+    result = re.sub(
+        r"""(node\s+-e\s+)(["'])(.*?)\2""",
+        r"\1\2STRIPPED\2",
+        result,
+        flags=re.DOTALL,
+    )
+
+    # Strip shell redirections to /dev/ device paths (e.g. 2>/dev/null).
+    # These are shell syntax, not file access. Only targets /dev/* to avoid
+    # stripping legitimate file redirections like > /workdir/tmp/out.json.
+    result = re.sub(r"[0-2&]?>{1,2}\s*\/dev\/[a-zA-Z0-9_\-\.]+", "", result)
+
+    return result
+
+
 def check_bash_command(
     command: str, cwd: str = WORKSPACE_ROOT
 ) -> tuple[bool, str | None]:
@@ -577,10 +627,15 @@ def check_bash_command(
         if blocked:
             return True, reason
 
+    # Strip data content (heredocs, -c/-e inline code) before path scanning.
+    # This prevents false positives where content strings like "loan/credit"
+    # in JSON are mistaken for file paths like "/credit".
+    command_structure = strip_data_content(command)
+
     # Block any command referencing paths outside /workdir
-    # Use regex to find path-like strings in the command
+    # Use regex to find path-like strings in the command structure (not data content)
     path_pattern = r'["\']?(\/[a-zA-Z0-9_\-\.\/]+)'
-    for match in re.finditer(path_pattern, command):
+    for match in re.finditer(path_pattern, command_structure):
         path = match.group(1)
         # Skip if it's a workdir path
         if path.startswith(WORKSPACE_ROOT):
@@ -744,82 +799,31 @@ async def audit_hook(
     return {}  # Always allow (this is just for logging)
 
 
-# ── Subagent Concurrency Limiter ───────────────────────────────────────────────
-
-# Track active subagents (module-level state)
-_active_subagents: set[str] = set()
-MAX_CONCURRENT_SUBAGENTS = 2
+# ── Compaction Hook ───────────────────────────────────────────────────────────
 
 
-async def subagent_limit_hook(
+async def compaction_hook(
     input_data: dict[str, Any],
     tool_use_id: str | None,
     context: HookContext,
 ) -> dict[str, Any]:
     """
-    Limit concurrent subagent spawning to prevent Bedrock rate limiting.
+    PreCompact hook that logs when context compaction is about to occur.
 
-    Blocks Task tool if MAX_CONCURRENT_SUBAGENTS are already running.
+    This fires for ALL agents in the tree (including sub-agents spawned via
+    the Task tool), so it catches compaction events that the parent's message
+    stream would never see.
     """
-    tool_name = input_data.get("tool_name", "")
+    trigger = input_data.get("trigger", "unknown")
 
-    if tool_name != "Task":
-        return {}
+    logger.warning(
+        "Context compaction triggered",
+        extra={
+            "_name": "SDK_COMPACTION_HOOK",
+            "phase": "sdk",
+            "trigger": trigger,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        },
+    )
 
-    if len(_active_subagents) >= MAX_CONCURRENT_SUBAGENTS:
-        logger.warning(
-            f"[SUBAGENT_LIMIT] Blocked Task - {len(_active_subagents)} subagents active",
-            extra={
-                "tool_use_id": tool_use_id,
-                "active_count": len(_active_subagents),
-                "max_allowed": MAX_CONCURRENT_SUBAGENTS,
-            },
-        )
-        return {
-            "hookSpecificOutput": {
-                "hookEventName": "PreToolUse",
-                "permissionDecision": "deny",
-                "permissionDecisionReason": (
-                    f"Maximum concurrent subagents ({MAX_CONCURRENT_SUBAGENTS}) reached. "
-                    "Wait for existing subagents to complete before launching more."
-                ),
-            }
-        }
-
-    # Track this subagent
-    if tool_use_id:
-        _active_subagents.add(tool_use_id)
-        logger.debug(
-            f"[SUBAGENT_LIMIT] Started subagent {len(_active_subagents)}/{MAX_CONCURRENT_SUBAGENTS}",
-            extra={
-                "tool_use_id": tool_use_id,
-                "active_count": len(_active_subagents),
-            },
-        )
-
-    return {}
-
-
-async def subagent_cleanup_hook(
-    input_data: dict[str, Any],
-    tool_use_id: str | None,
-    context: HookContext,
-) -> dict[str, Any]:
-    """
-    Clean up completed subagents from tracking set.
-
-    Runs on PostToolUse to remove completed Task tool_use_ids.
-    """
-    tool_name = input_data.get("tool_name", "")
-
-    if tool_name == "Task" and tool_use_id and tool_use_id in _active_subagents:
-        _active_subagents.discard(tool_use_id)
-        logger.debug(
-            f"[SUBAGENT_LIMIT] Completed subagent, {len(_active_subagents)} remaining",
-            extra={
-                "tool_use_id": tool_use_id,
-                "active_count": len(_active_subagents),
-            },
-        )
-
-    return {}
+    return {}  # Always allow — observability only

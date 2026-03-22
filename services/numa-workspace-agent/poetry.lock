@@ -575,17 +575,17 @@ files = [
 
 [[package]]
 name = "claude-agent-sdk"
-version = "0.1.20"
+version = "0.1.47"
 description = "Python SDK for Claude Code"
 optional = false
 python-versions = ">=3.10"
 groups = ["main"]
 files = [
-    {file = "claude_agent_sdk-0.1.20-py3-none-macosx_11_0_arm64.whl", hash = "sha256:3ff7ab0930fd34fd533fa6216af698df71e7c3a4fcbd2f29eb9d0cd7b51fdfa5"},
-    {file = "claude_agent_sdk-0.1.20-py3-none-manylinux_2_17_aarch64.whl", hash = "sha256:7756d35e6b5774270e880403513a347a9a4a504bfa28fd6a51cb0ed724a7851e"},
-    {file = "claude_agent_sdk-0.1.20-py3-none-manylinux_2_17_x86_64.whl", hash = "sha256:82dfb7d4f6494c9a977b5593773b91c507bcdd76437f289e2b8f8a91ae5f95c1"},
-    {file = "claude_agent_sdk-0.1.20-py3-none-win_amd64.whl", hash = "sha256:7a5675b1c0bf489a5c82c79f6ad47c3915a50da66e1329dcb0d08332a04889d3"},
-    {file = "claude_agent_sdk-0.1.20.tar.gz", hash = "sha256:bc3cb24f2dc8c7dc7362f52764051b20dbfcc16ec3e3d39787c4946d7ced3848"},
+    {file = "claude_agent_sdk-0.1.47-py3-none-macosx_11_0_arm64.whl", hash = "sha256:8c738a025b27201ba96a0c70e058a4de9420ead6123bf70e55dffa98c5dae089"},
+    {file = "claude_agent_sdk-0.1.47-py3-none-manylinux_2_17_aarch64.whl", hash = "sha256:25c38d13f378f06079c6c8bb09d60c751215b9c70a7509eaf6b0915410ee2abb"},
+    {file = "claude_agent_sdk-0.1.47-py3-none-manylinux_2_17_x86_64.whl", hash = "sha256:d2dc2c0b5b4a2266a69ace5ada21fcf90e3f284a1e0968f94218d041cfc72ea9"},
+    {file = "claude_agent_sdk-0.1.47-py3-none-win_amd64.whl", hash = "sha256:75a85c9e566cb89e7ecd17b430246f47f225f91a52a7f44cfdb301231d5eba4e"},
+    {file = "claude_agent_sdk-0.1.47.tar.gz", hash = "sha256:b154a49602f0bc10087bd85668aedf2bd731426fed51f9ea2b7780926ea1933d"},
 ]
 
 [package.dependencies]
@@ -5313,4 +5313,4 @@ test = ["pytest"]
 [metadata]
 lock-version = "2.1"
 python-versions = "^3.13"
-content-hash = "e73dc23546b6fe83490ec2c190fc1e7684e74064f8a0f3831caa3e2a1e65c2c4"
+content-hash = "4db0c573be56f1c629ad0a90847b2c0676b0b4c385d1e6d2b2d413d822777521"

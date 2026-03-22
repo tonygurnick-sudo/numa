@@ -71,5 +71,42 @@
     "workspaceChatModelSelection": true,
     "scheduling": true,
     "v2Apps": true
+  },
+  "nolia-id-gov-moh": {
+    "additionalCognitoClientIds": "415r270afvm16t6fd4veli03tt",
+    "agentCoreRegion": "ap-southeast-2",
+    "agents": false,
+    "allowBedrockQuotaSharing": true,
+    "apps": {
+      "meeting-analyser": {}
+    },
+    "additionalCognitoClientIds": "415r270afvm16t6fd4veli03tt",
+    "additionalOrigins": ["https://kemenkes-ihss.getnolia.io"],
+    "bedrockAccount": "905418183804",
+    "brandingProviderEnabled": true,
+    "clientAccountId": "543453960073",
+    "emailDomain": "kemenkes-ihss.getnolia.io",
+    "contentSearchEnabled": false,
+    "dataConnectorsEnabled": false,
+    "developerMode": false,
+    "knowledgeBases": true,
+    "numaDropZones": false,
+    "numaFiles": false,
+    "numaOps": false,
+    "numaSharing": false,
+    "numaWorkspaceChat": true,
+    "oauthIntegrationsEnabled": false,
+    "pipedreamIntegrations": false,
+    "preferredKnowledgeBase": "none",
+    "provisionQResources": false,
+    "recordsKBEnabled": false,
+    "region": "ap-southeast-3",
+    "scheduling": false,
+    "visionModelType": "nova-pro",
+    "secretsVaultEnabled": false,
+    "v2Apps": false,
+    "vectorStorageType": "s3vectors",
+    "visionModelType": "nova-pro",
+    "workspaceChatModelSelection": false
   }
 }

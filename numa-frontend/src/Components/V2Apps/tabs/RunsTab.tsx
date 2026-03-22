@@ -423,7 +423,41 @@ export const RunsTab: React.FC<RunsTabProps> = ({
                             {threadRun.status === 'PROCESSING' && (
                               <div className="text-center py-4">
                                 <Spinner animation="border" className="mb-2" />
-                                <p className="text-muted">{t('v2DataAnalysis.status.processing')}</p>
+                                {threadRun.progressEvents && threadRun.progressEvents.length > 0 ? (
+                                  <div className="v2-agents-tab__progress-events">
+                                    {threadRun.progressEvents.map((event, i) => {
+                                      const events = threadRun.progressEvents!;
+                                      const isLatest = i === events.length - 1;
+                                      const elapsed = !isLatest
+                                        ? Math.round(
+                                            (new Date(events[i + 1].timestamp).getTime() -
+                                              new Date(event.timestamp).getTime()) /
+                                              1000
+                                          )
+                                        : 0;
+                                      return (
+                                        <div
+                                          key={`${event.phase}-${i}`}
+                                          className={`v2-agents-tab__progress-event ${isLatest ? 'v2-agents-tab__progress-event--active' : ''}`}
+                                        >
+                                          <i
+                                            className={`bi ${isLatest ? 'bi-arrow-right-circle-fill' : 'bi-check-circle-fill'} me-2`}
+                                          />
+                                          <span>{event.message}</span>
+                                          {!isLatest && elapsed > 0 && (
+                                            <span className="text-muted ms-auto small">
+                                              {elapsed >= 60
+                                                ? `${Math.floor(elapsed / 60)}m ${elapsed % 60}s`
+                                                : `${elapsed}s`}
+                                            </span>
+                                          )}
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                ) : (
+                                  <p className="text-muted">{t('v2DataAnalysis.status.processing')}</p>
+                                )}
                               </div>
                             )}
 
@@ -483,6 +517,48 @@ export const RunsTab: React.FC<RunsTabProps> = ({
                                             />
                                           </div>
                                         )}
+
+                                        {resultConfig.type === 'first-artifact' &&
+                                          (() => {
+                                            const firstArtifact = threadRun.result?.artifacts?.[0];
+                                            if (!firstArtifact) {
+                                              return threadRun.result.text ? (
+                                                <div className="v2-runs-tab__detail-markdown mt-2">
+                                                  <V2RunResultContent
+                                                    content={threadRun.result.text}
+                                                    s3OutputsPrefix={runOutputsPrefix}
+                                                    bucket={bucket}
+                                                    region={region}
+                                                    onOpenFilePreview={(ref) => handleOpenInNewTab(ref.fullPath)}
+                                                    onOpenFolderPreview={(ref) => handleOpenInNewTab(ref.fullPath)}
+                                                  />
+                                                </div>
+                                              ) : null;
+                                            }
+                                            const artifactFileName =
+                                              firstArtifact.path.split('/').pop() || firstArtifact.path;
+                                            const artifactPath = firstArtifact.path.startsWith('outputs/')
+                                              ? firstArtifact.path.slice('outputs/'.length)
+                                              : firstArtifact.path;
+                                            return (
+                                              <div className="v2-runs-tab__detail-file mt-2">
+                                                <FilePreviewPanel
+                                                  preview={{
+                                                    type: 'file',
+                                                    filename: artifactFileName,
+                                                    fullPath: `${runOutputsPrefix}/${artifactPath}`,
+                                                    relativePath: artifactPath,
+                                                    extension: artifactFileName.split('.').pop()?.toLowerCase() || '',
+                                                  }}
+                                                  onClose={() => {}}
+                                                  bucket={bucket}
+                                                  region={region}
+                                                  getCredentials={getCredentials}
+                                                  embedded
+                                                />
+                                              </div>
+                                            );
+                                          })()}
                                       </div>
                                     </Collapse>
                                   </>

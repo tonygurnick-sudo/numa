@@ -5,11 +5,16 @@ const CLOUDFRONT_SECRET = process.env.CLOUDFRONT_SECRET ?? '';
 
 const USER_POOL_CLIENT_ID = process.env.COGNITO_USER_POOL_CLIENT_ID ?? '';
 const USER_POOL_ID = process.env.COGNITO_USER_POOL_ID ?? '';
+const ADDITIONAL_IDS = (process.env.ADDITIONAL_COGNITO_CLIENT_IDS ?? '')
+  .split(',')
+  .map((s) => s.trim())
+  .filter(Boolean);
+const ALL_CLIENT_IDS = ADDITIONAL_IDS.length > 0 ? [USER_POOL_CLIENT_ID, ...ADDITIONAL_IDS] : USER_POOL_CLIENT_ID;
 
 const verifier = CognitoJwtVerifier.create({
   userPoolId: USER_POOL_ID,
   tokenUse: 'access',
-  clientId: USER_POOL_CLIENT_ID,
+  clientId: ALL_CLIENT_IDS,
   includeRawJwtInErrors: true,
 });
 

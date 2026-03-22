@@ -98,6 +98,14 @@ class AgentTypeConfig:
             - "last_step_text": Return the last step's text response (default).
             - "result_file": Read /workdir/outputs/result.json and return it.
               The pipeline's prompts instruct the agent to write this file.
+        pipeline_orchestrator: Optional async callable that replaces the
+            default sequential pipeline loop. When set, the engine calls
+            this instead of ``run_pipeline()``. Receives the same kwargs
+            as ``run_pipeline()`` plus ``request_metadata`` (a dict of
+            custom fields from the request body). Used for complex
+            pipelines that need parallel execution, conditional steps,
+            or custom orchestration logic. When ``None`` (default), the
+            engine uses ``pipeline_steps`` for sequential execution.
         max_turns: Maximum number of agentic turns (tool-use loops) per
             request. Safety limit to prevent runaway agents.
         max_thinking_tokens: Maximum tokens allocated for extended thinking.
@@ -153,13 +161,36 @@ class AgentTypeConfig:
     # ── Pipeline ──────────────────────────────────────────────────────────
     pipeline_steps: Optional[list[str]] = None
     pipeline_result_mode: str = "last_step_text"
+    pipeline_orchestrator: Optional[Callable[..., Any]] = None
 
     # ── Limits ────────────────────────────────────────────────────────────
     max_turns: int = 200
     max_thinking_tokens: int = 10_000
 
+    # ── Thinking ───────────────────────────────────────────────────────────
+    # Passed as the ``thinking`` option to ClaudeAgentOptions.
+    # Overrides the deprecated ``max_thinking_tokens`` env var.
+    # Accepted values:
+    #   {"type": "adaptive"}              – model decides when/how much
+    #   {"type": "enabled", "budget_tokens": N}  – fixed budget
+    #   {"type": "disabled"}              – no extended thinking
+    thinking: Optional[dict] = field(default_factory=lambda: {"type": "adaptive"})
+    # Effort level for the model. Controls reasoning depth.
+    # "low", "medium", "high", "max". None = SDK default.
+    effort: Optional[str] = "medium"
+
+    # ── Security ──────────────────────────────────────────────────────────
+    enable_security_hooks: bool = True
+
     # ── Model ─────────────────────────────────────────────────────────────
     default_model: Optional[str] = None
+
+    # ── Sub-agents ─────────────────────────────────────────────────────────
+    # Pre-defined sub-agents (AgentDefinition) for the Task tool.
+    # When set, the SDK routes Task calls to these named agents with their
+    # own model, prompt, and tools. Use for cost optimisation (e.g. Haiku
+    # sub-agents for bulk work).
+    agents: Optional[dict[str, Any]] = None
 
 
 # ---------------------------------------------------------------------------

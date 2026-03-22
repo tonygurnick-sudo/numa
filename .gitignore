@@ -166,3 +166,6 @@ infra/assets/artifacts/transcription-service/
 # Personal scripts
 claude-bedrock.sh
 claude-bedrock-standard.sh
+
+# Personal dev notes (not tracked)
+dev-notes/

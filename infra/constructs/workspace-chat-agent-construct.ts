@@ -75,6 +75,10 @@ export interface WorkspaceChatAgentConstructProps {
   v2AppRunsTableName?: string;
   /** V2 app runs DynamoDB table ARN (for IAM permissions) */
   v2AppRunsTableArn?: string;
+  /** Extract content Lambda ARN (for Nolia PDF vision extraction) */
+  extractContentLambdaArn?: string;
+  /** Document converter Lambda ARN (for DOCX/Office → PDF conversion) */
+  documentConverterLambdaArn?: string;
 }
 
 export class WorkspaceChatAgentConstruct extends Construct {
@@ -365,7 +369,30 @@ echo "Successfully pushed image to ${this.ecrRepository.repositoryUrl}:${imageTa
                 },
               ]
             : []),
-          // Data bucket read-only access (for downloading attached files from My Files / Company Files)
+          // Extract content Lambda invoke permission (for Nolia PDF vision extraction)
+          ...(props.extractContentLambdaArn
+            ? [
+                {
+                  sid: 'LambdaInvokeExtractContent',
+                  effect: 'Allow',
+                  actions: ['lambda:InvokeFunction'],
+                  resources: [props.extractContentLambdaArn],
+                },
+              ]
+            : []),
+          // Document converter Lambda invoke permission (for DOCX/Office → PDF conversion)
+          ...(props.documentConverterLambdaArn
+            ? [
+                {
+                  sid: 'LambdaInvokeDocumentConverter',
+                  effect: 'Allow',
+                  actions: ['lambda:InvokeFunction'],
+                  resources: [props.documentConverterLambdaArn],
+                },
+              ]
+            : []),
+          // Data bucket read access (for downloading attached files from My Files / Company Files)
+          // and write access to KB prefixes (for rules generation upload)
           ...(props.dataBucketArn
             ? [
                 {
@@ -373,6 +400,12 @@ echo "Successfully pushed image to ${this.ecrRepository.repositoryUrl}:${imageTa
                   effect: 'Allow' as const,
                   actions: ['s3:GetObject', 's3:ListBucket'],
                   resources: [props.dataBucketArn, `${props.dataBucketArn}/*`],
+                },
+                {
+                  sid: 'S3DataBucketKBWrite',
+                  effect: 'Allow' as const,
+                  actions: ['s3:PutObject'],
+                  resources: [`${props.dataBucketArn}/documents/kb-*`],
                 },
               ]
             : []),
@@ -552,13 +585,18 @@ echo "Successfully pushed image to ${this.ecrRepository.repositoryUrl}:${imageTa
         },
       ],
 
-      // Session lifecycle - 1 hour idle timeout (per-conversation sessions), 8 hour max lifetime
-      // Lower idle timeout offsets the increased concurrent MicroVM count from per-conversation scoping
+      // Session lifecycle - 2 hour idle timeout, 8 hour max lifetime
+      // In fire-and-forget mode, AgentCore considers the session idle once the
+      // 202 response is returned — even though the pipeline continues running as
+      // a background asyncio task. AgentCore defers the kill while subprocesses
+      // are active, but SIGKILLs immediately once the last subprocess exits if
+      // the idle timeout has already expired. Nolia pipelines take ~75 min, so
+      // 1 hour was insufficient. 2 hours gives comfortable headroom.
       // Defaults: idleRuntimeSessionTimeout=900s (15 min), maxLifetime=28800s (8 hrs)
       // https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/runtime-lifecycle-settings.html
       lifecycleConfiguration: [
         {
-          idleRuntimeSessionTimeout: 3600, // 1 hour in seconds
+          idleRuntimeSessionTimeout: 7200, // 2 hours in seconds
           maxLifetime: 28800, // 8 hours in seconds
         },
       ],
@@ -567,6 +605,8 @@ echo "Successfully pushed image to ${this.ecrRepository.repositoryUrl}:${imageTa
       environmentVariables: {
         // Ensure immediate stdout/stderr flushing for logging visibility
         PYTHONUNBUFFERED: '1',
+        // Temporary: DEBUG logging for Nolia pipeline testing
+        LOG_LEVEL: 'DEBUG',
         // Disable OpenTelemetry SDK (X-Ray OTLP not configured for AgentCore)
         OTEL_SDK_DISABLED: 'true',
         CLIENT_NAME: props.clientName,
@@ -626,6 +666,14 @@ echo "Successfully pushed image to ${this.ecrRepository.repositoryUrl}:${imageTa
         // Data bucket for downloading attached files (My Files / Company Files)
         ...(props.dataBucketName && {
           DATA_BUCKET_NAME: props.dataBucketName,
+        }),
+        // Extract content Lambda for Nolia PDF vision extraction
+        ...(props.extractContentLambdaArn && {
+          EXTRACT_CONTENT_LAMBDA_ARN: props.extractContentLambdaArn,
+        }),
+        // Document converter Lambda for DOCX/Office → PDF conversion
+        ...(props.documentConverterLambdaArn && {
+          DOCUMENT_CONVERTER_LAMBDA_NAME: props.documentConverterLambdaArn.split(':').pop() ?? '',
         }),
       },
     });

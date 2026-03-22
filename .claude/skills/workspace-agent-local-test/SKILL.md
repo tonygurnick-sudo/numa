@@ -36,6 +36,8 @@ The `.env` file at the project root (`/Users/nathandouglas/arcanum/numa/.env`) s
 | `OUTPUTS_BUCKET_NAME` | `numa-{clientName}-outputs` | `numa-nd-labs-outputs` |
 | `DATA_BUCKET`         | `numa-{clientName}-data`    | `numa-nd-labs-data`    |
 
+**GOTCHA:** The `.env` uses `DATA_BUCKET`, but `workspace_setup.py` reads `DATA_BUCKET_NAME` (matching the infra construct). When running the container, map it: `-e DATA_BUCKET_NAME="$DATA_BUCKET"`. If wrong, you'll see `NOLIA_NO_DATA_BUCKET: "DATA_BUCKET_NAME not set — skipping KB download"` in logs.
+
 ### DynamoDB (for conversation history, agents, settings)
 
 | Variable                           | Naming Pattern                            | Example                              |
@@ -52,6 +54,7 @@ The `.env` file at the project root (`/Users/nathandouglas/arcanum/numa/.env`) s
 | ----------------------------- | ---------------------------------------- | ----------------------------------------------------------------------------- |
 | `WORKSPACE_TOOLS_LAMBDA_NAME` | `numa-{clientName}_workspace-chat-tools` | `numa-nd-labs_workspace-chat-tools`                                           |
 | `PIPEDREAM_RELAY_LAMBDA_ARN`  | Full ARN                                 | `arn:aws:lambda:us-east-1:905418183804:function:numa-nd-labs_pipedream-relay` |
+| `EXTRACT_CONTENT_LAMBDA_ARN`  | Full ARN                                 | Set in `.env` — required for Nolia PDF extraction                             |
 
 ### What works WITHOUT optional variables
 
@@ -116,7 +119,7 @@ docker run -d --rm --name workspace-test \
   -e CLIENT_NAME="$CLIENT_NAME" \
   -e CLAUDE_CODE_USE_BEDROCK="$CLAUDE_CODE_USE_BEDROCK" \
   -e OUTPUTS_BUCKET_NAME="$OUTPUTS_BUCKET_NAME" \
-  -e DATA_BUCKET="$DATA_BUCKET" \
+  -e DATA_BUCKET_NAME="$DATA_BUCKET" \
   -e DYNAMODB_TABLE_NAME="$DYNAMODB_TABLE_NAME" \
   -e WORKSPACE_AGENTS_TABLE="$WORKSPACE_AGENTS_TABLE" \
   -e USER_AGENTS_TABLE="$USER_AGENTS_TABLE" \
@@ -124,6 +127,7 @@ docker run -d --rm --name workspace-test \
   -e INTEGRATIONS_APPROVAL_TABLE_NAME="$INTEGRATIONS_APPROVAL_TABLE_NAME" \
   -e WORKSPACE_TOOLS_LAMBDA_NAME="$WORKSPACE_TOOLS_LAMBDA_NAME" \
   -e PIPEDREAM_RELAY_LAMBDA_ARN="$PIPEDREAM_RELAY_LAMBDA_ARN" \
+  -e EXTRACT_CONTENT_LAMBDA_ARN="$EXTRACT_CONTENT_LAMBDA_ARN" \
   numa-workspace-agent:latest
 ```
 
@@ -383,6 +387,194 @@ The test UI provides:
 Press `Ctrl+C` to stop everything and clean up.
 
 **Prerequisites:** Same as manual testing (Docker running, image built, `.env` configured).
+
+---
+
+## Debug Logging
+
+Add `-e LOG_LEVEL=DEBUG` to the docker run command to see live LLM messages. Shows assistant text, thinking, and tool calls in real time. Only for local dev — production runs at INFO.
+
+```bash
+# Watch live LLM activity:
+docker logs -f workspace-test 2>&1 | grep "SDK_LIVE"
+
+# With step context (useful for Nolia multi-phase pipelines):
+docker logs -f workspace-test 2>&1 | grep "SDK_LIVE" | python3 -c "
+import sys, json
+for line in sys.stdin:
+    try:
+        d = json.loads(line)
+        step = d.get('conversation_id','').split('step-')[-1] if 'step-' in d.get('conversation_id','') else '?'
+        name = d.get('_name','')
+        if name == 'SDK_LIVE_TOOL':
+            print(f'[{step}] TOOL: {d.get(\"tool_name\",\"\")}')
+        elif name == 'SDK_LIVE_TEXT':
+            print(f'[{step}] TEXT: {d.get(\"text\",\"\")[:120]}')
+        elif name == 'SDK_LIVE_THINKING':
+            print(f'[{step}] THINK: {d.get(\"thinking\",\"\")[:120]}')
+    except: pass
+"
+```
+
+---
+
+## Testing Nolia (nolia-compliance)
+
+Nolia uses **fire-and-forget** response mode — the request returns immediately with a `run_id`, and the pipeline runs as a background task. Poll `/runs/{run_id}/status` or check S3 for `_result.json`.
+
+### Extra Required Env Vars
+
+Beyond the standard vars, Nolia needs:
+
+- `-e DATA_BUCKET_NAME="$DATA_BUCKET"` (NOT `DATA_BUCKET` — see gotcha above)
+- `-e EXTRACT_CONTENT_LAMBDA_ARN="$EXTRACT_CONTENT_LAMBDA_ARN"` (for PDF extraction)
+
+Without `EXTRACT_CONTENT_LAMBDA_ARN`, you'll see: `NOLIA_EXTRACT_NO_LAMBDA: "EXTRACT_CONTENT_LAMBDA_ARN not set — cannot extract PDF"`
+
+### nd-labs Test Knowledge Bases
+
+| Name                 | KB ID                                  | S3 Prefix                                            |
+| -------------------- | -------------------------------------- | ---------------------------------------------------- |
+| `global-test-1`      | `9df246a7-925f-4cfc-a964-a6da9788ce68` | `documents/kb-9df246a7-925f-4cfc-a964-a6da9788ce68/` |
+| `procurement-test-1` | `d3788c3d-7e85-4de3-805a-b8c73f6ddaf3` | `documents/kb-d3788c3d-7e85-4de3-805a-b8c73f6ddaf3/` |
+| `project-test-1`     | `5a8fc87f-6c8d-45d3-896e-82ffd2ba367b` | `documents/kb-5a8fc87f-6c8d-45d3-896e-82ffd2ba367b/` |
+
+Look up KBs: `AWS_PROFILE=q-demo aws dynamodb scan --table-name numa-nd-labs-knowledge-bases --region us-east-1`
+
+KBs use `documents/kb-{kb_id}/` prefix in S3, NOT `documents/{kb_name}/`. The frontend passes KB IDs (UUIDs).
+
+### STS Token Expiry Warning
+
+STS session tokens expire after ~15 minutes, but Nolia pipelines take 30-60 minutes. Expired tokens cause `ExpiredToken` errors mid-pipeline. Always get fresh credentials immediately before starting.
+
+### Test: No Document (KB + Rules + Template Verification)
+
+Verifies workspace setup downloads KBs, rules files, and output template from S3. No document uploaded so phases will complain about missing file — that's expected.
+
+```bash
+curl -s -X POST http://localhost:8080/invocations \
+  -H "Content-Type: application/json" \
+  -H "x-user-sub: nathan-local-test" \
+  -d '{
+    "action": "chat",
+    "prompt": "Review this evaluation report for compliance with World Bank procurement rules.",
+    "conversationId": "nathan-local-test-nolia-001",
+    "type": "nolia-compliance",
+    "metadata": {
+      "assessment_type": "evaluation-report",
+      "global_kb": "9df246a7-925f-4cfc-a964-a6da9788ce68",
+      "procurement_kb": "d3788c3d-7e85-4de3-805a-b8c73f6ddaf3",
+      "project_kb": "",
+      "output_language": "english"
+    }
+  }'
+```
+
+### Test: With PDF Document
+
+```bash
+# 1. Upload test PDF (once per conversation ID)
+AWS_PROFILE=q-demo aws s3 cp \
+  "docs/tasks/numa-apps-v2/Nolia Test Document.pdf" \
+  "s3://numa-nd-labs-outputs/v2-apps/nolia/nathan-local-test/nathan-local-test-nolia-002/uploads/Nolia Test Document.pdf" \
+  --region us-east-1
+
+# 2. Start container with debug logging
+eval "$(AWS_PROFILE=q-demo aws configure export-credentials --format env)" && \
+source /Users/nathandouglas/arcanum/numa/.env 2>/dev/null; \
+docker rm -f workspace-test 2>/dev/null; \
+docker run -d --rm --name workspace-test -p 8080:8080 \
+  -e AWS_ACCESS_KEY_ID="$AWS_ACCESS_KEY_ID" \
+  -e AWS_SECRET_ACCESS_KEY="$AWS_SECRET_ACCESS_KEY" \
+  -e AWS_SESSION_TOKEN="$AWS_SESSION_TOKEN" \
+  -e AWS_REGION="$AWS_REGION_WORKSPACE" \
+  -e CLIENT_NAME="$CLIENT_NAME" \
+  -e CLAUDE_CODE_USE_BEDROCK="$CLAUDE_CODE_USE_BEDROCK" \
+  -e OUTPUTS_BUCKET_NAME="$OUTPUTS_BUCKET_NAME" \
+  -e DATA_BUCKET_NAME="$DATA_BUCKET" \
+  -e DYNAMODB_TABLE_NAME="$DYNAMODB_TABLE_NAME" \
+  -e WORKSPACE_AGENTS_TABLE="$WORKSPACE_AGENTS_TABLE" \
+  -e USER_AGENTS_TABLE="$USER_AGENTS_TABLE" \
+  -e CHAT_SETTINGS_TABLE_NAME="$CHAT_SETTINGS_TABLE_NAME" \
+  -e INTEGRATIONS_APPROVAL_TABLE_NAME="$INTEGRATIONS_APPROVAL_TABLE_NAME" \
+  -e WORKSPACE_TOOLS_LAMBDA_NAME="$WORKSPACE_TOOLS_LAMBDA_NAME" \
+  -e PIPEDREAM_RELAY_LAMBDA_ARN="$PIPEDREAM_RELAY_LAMBDA_ARN" \
+  -e EXTRACT_CONTENT_LAMBDA_ARN="$EXTRACT_CONTENT_LAMBDA_ARN" \
+  -e LOG_LEVEL=DEBUG \
+  numa-workspace-agent:latest
+
+# 3. Wait for startup, then fire
+sleep 10 && curl -s http://localhost:8080/ping | jq . && \
+curl -s -X POST http://localhost:8080/invocations \
+  -H "Content-Type: application/json" \
+  -H "x-user-sub: nathan-local-test" \
+  -d '{
+    "action": "chat",
+    "prompt": "Review this evaluation report for compliance with World Bank procurement rules.",
+    "conversationId": "nathan-local-test-nolia-002",
+    "uploadPrefixes": ["v2-apps/nolia/nathan-local-test/nathan-local-test-nolia-002/uploads/"],
+    "metadata": {
+      "assessment_type": "evaluation-report",
+      "global_kb": "9df246a7-925f-4cfc-a964-a6da9788ce68",
+      "procurement_kb": "d3788c3d-7e85-4de3-805a-b8c73f6ddaf3",
+      "project_kb": "",
+      "output_language": "english"
+    }
+  }'
+```
+
+### Nolia Log Queries
+
+```bash
+# Clean filtered log (LLM thinking/text/tools + NOLIA events only — save to file)
+docker logs workspace-test 2>&1 | grep -E "NOLIA_|SDK_LIVE|STREAM_COMPLETE" | python3 -c "
+import sys, json
+for line in sys.stdin:
+    try:
+        d = json.loads(line)
+        name = d.get('_name','')
+        step = d.get('conversation_id','').split('step-')[-1] if 'step-' in d.get('conversation_id','') else ''
+        if name == 'SDK_LIVE_THINKING':
+            print(f'[{step}] THINK: {d.get(\"thinking\",\"\")}')
+        elif name == 'SDK_LIVE_TEXT':
+            print(f'[{step}] TEXT: {d.get(\"text\",\"\")}')
+        elif name == 'SDK_LIVE_TOOL':
+            print(f'[{step}] TOOL: {d.get(\"tool_name\",\"\")}')
+        elif name.startswith('NOLIA_'):
+            print(f'--- {name}: {d.get(\"event\",\"\")} {\" | \".join(f\"{k}={v}\" for k,v in d.items() if k not in (\"_name\",\"event\",\"level\",\"timestamp\",\"phase\"))}')
+    except: pass
+" > nolia-test-clean.txt
+
+# All Nolia events
+docker logs workspace-test 2>&1 | grep "NOLIA_"
+
+# Pipeline progress + memory tracking
+docker logs workspace-test 2>&1 | grep -E "NOLIA_STEP|NOLIA_PHASE|NOLIA_PIPELINE|NOLIA_SEQUENTIAL|NOLIA_MEMORY"
+
+# Workspace setup (KB downloads, template, extraction)
+docker logs workspace-test 2>&1 | grep -E "NOLIA_KB|NOLIA_RULES|NOLIA_TEMPLATE|NOLIA_CUSTOM|NOLIA_WORKSPACE_SETUP|NOLIA_EXTRACT"
+
+# Cost per step
+docker logs workspace-test 2>&1 | grep '"_name": "COST"'
+
+# Full results summary
+docker logs workspace-test 2>&1 | grep "STREAM_COMPLETE" | python3 -c "
+import sys, json
+for line in sys.stdin:
+    try:
+        data = json.loads(line)
+        conv = data.get('conversation_id', '')
+        label = conv.split('step-')[-1] if 'step-' in conv else conv
+        cost = data.get('total_cost_usd', 0)
+        out_tok = data.get('output_tokens', '')
+        turns = data.get('num_turns', '')
+        dur = data.get('total_duration_ms', 0)
+        print(f'{label:20s} | \${cost:.2f} | out={out_tok:>6} | turns={turns:>3} | {dur/1000:.0f}s')
+    except: pass
+"
+```
+
+**Result location:** `s3://numa-nd-labs-outputs/v2-apps/nolia/nathan-local-test/{conversationId}/_result.json`
 
 ---
 

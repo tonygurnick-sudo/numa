@@ -21,6 +21,8 @@ export interface WorkspaceChatAgentProxyProps {
   cognitoUserPoolId: string;
   /** Cognito User Pool Client ID for JWT verification */
   cognitoClientId: string;
+  /** Comma-separated additional Cognito client IDs to accept (e.g. whitelabel frontends) */
+  additionalCognitoClientIds?: string;
   /** Optional integrations approval table name (for handling approve actions directly) */
   integrationsApprovalTableName?: string;
   /** Optional integrations approval table ARN (for IAM permissions) */
@@ -86,6 +88,9 @@ export class WorkspaceChatAgentProxy extends Construct {
         // Cognito config for JWT verification (prevents token forgery)
         COGNITO_USER_POOL_ID: props.cognitoUserPoolId,
         COGNITO_CLIENT_ID: props.cognitoClientId,
+        ...(props.additionalCognitoClientIds && {
+          ADDITIONAL_COGNITO_CLIENT_IDS: props.additionalCognitoClientIds,
+        }),
         // LWA configuration for response streaming
         AWS_LAMBDA_EXEC_WRAPPER: '/opt/bootstrap',
         AWS_LWA_INVOKE_MODE: 'response_stream',

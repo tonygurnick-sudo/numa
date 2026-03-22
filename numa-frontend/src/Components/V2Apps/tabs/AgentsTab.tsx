@@ -7,9 +7,16 @@ import {
   getConnectionDisplayName,
   getConnectionFallbackIcon,
 } from '../../../config/integrationsConfig';
-import type { V2AppConfig, V2AppAgent, V2AppWorkspaceSettings, RunConfiguration } from '../../../types/apps';
+import CustomFieldRenderer from '../CustomFieldRenderer';
+import type {
+  V2AppConfig,
+  V2AppAgent,
+  V2AppWorkspaceSettings,
+  RunConfiguration,
+  V2AppCustomField,
+} from '../../../types/apps';
 import type { V2AppRunState } from '../../../hooks/useV2AppRun';
-import type { RunRecord } from '../../../Services/v2AppsService';
+import type { RunRecord, ProgressEvent } from '../../../Services/v2AppsService';
 
 type KnowledgeBase = {
   kb_id: string;
@@ -42,6 +49,7 @@ interface AgentsTabProps {
   availableConnections: ConnectionOption[];
   connectionsLoading: boolean;
   hasPipedreamFeature: boolean;
+  progressEvents?: ProgressEvent[];
 }
 
 const AVAILABLE_TOOLS = [{ id: 'web_search', labelKey: 'v2Apps.workspace.tools.webSearch' }];
@@ -59,6 +67,7 @@ export const AgentsTab: React.FC<AgentsTabProps> = ({
   availableConnections,
   connectionsLoading,
   hasPipedreamFeature,
+  progressEvents,
 }) => {
   const { t } = useTranslation('apps');
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -75,6 +84,32 @@ export const AgentsTab: React.FC<AgentsTabProps> = ({
   const [files, setFiles] = useState<File[]>([]);
   const [isDragOver, setIsDragOver] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+
+  // Custom field values (initialized from field defaults when agent changes)
+  const [customFieldValues, setCustomFieldValues] = useState<Record<string, string>>(() => {
+    const defaults: Record<string, string> = {};
+    selectedAgent?.customFields?.forEach((field: V2AppCustomField) => {
+      if (field.defaultValue) defaults[field.id] = field.defaultValue;
+      else if (field.options?.length) defaults[field.id] = field.required ? field.options[0].value : '';
+      else defaults[field.id] = '';
+    });
+    return defaults;
+  });
+
+  // Re-initialize custom fields when agent changes
+  useEffect(() => {
+    const defaults: Record<string, string> = {};
+    selectedAgent?.customFields?.forEach((field: V2AppCustomField) => {
+      if (field.defaultValue) defaults[field.id] = field.defaultValue;
+      else if (field.options?.length) defaults[field.id] = field.required ? field.options[0].value : '';
+      else defaults[field.id] = '';
+    });
+    setCustomFieldValues(defaults);
+  }, [selectedAgent]);
+
+  const handleCustomFieldChange = useCallback((fieldId: string, value: string) => {
+    setCustomFieldValues((prev) => ({ ...prev, [fieldId]: value }));
+  }, []);
 
   // Local overrides initialized from workspace defaults
   const [enabledKBIds, setEnabledKBIds] = useState<string[]>(workspaceSettings.enabledKBIds);
@@ -130,6 +165,10 @@ export const AgentsTab: React.FC<AgentsTabProps> = ({
         enabledConnections,
         workspaceAccess,
         contextInstructions: workspaceSettings.contextInstructions,
+        // Custom metadata from agent-specific fields (e.g., assessment_type, output_language)
+        ...(selectedAgent.customFields?.length ? { metadata: customFieldValues } : {}),
+        // Explicit agent type override (maps to workspace agent type_id)
+        ...(selectedAgent.agentType ? { agentType: selectedAgent.agentType } : {}),
       };
       await startAnalysis(prompt.trim(), files, config, runName.trim() || undefined);
     },
@@ -144,6 +183,7 @@ export const AgentsTab: React.FC<AgentsTabProps> = ({
       enabledConnections,
       workspaceAccess,
       workspaceSettings.contextInstructions,
+      customFieldValues,
       startAnalysis,
     ]
   );
@@ -168,8 +208,9 @@ export const AgentsTab: React.FC<AgentsTabProps> = ({
   }, []);
 
   const isUploading = state === 'uploading';
+  const isProcessing = state === 'processing';
   const showError = state === 'error' && error;
-  const showForm = !isUploading && !showError;
+  const showForm = !isUploading && !isProcessing && !showError;
 
   const renderFormPanel = (agent: V2AppAgent) => (
     <>
@@ -223,6 +264,21 @@ export const AgentsTab: React.FC<AgentsTabProps> = ({
               </ul>
             )}
 
+            {/* Custom fields (agent-specific, e.g., KB selection, assessment type) */}
+            {selectedAgent?.customFields && selectedAgent.customFields.length > 0 && (
+              <div className="mt-3">
+                {selectedAgent.customFields.map((field) => (
+                  <CustomFieldRenderer
+                    key={field.id}
+                    field={field}
+                    value={customFieldValues[field.id] ?? ''}
+                    onChange={handleCustomFieldChange}
+                    availableKBs={availableKBs}
+                  />
+                ))}
+              </div>
+            )}
+
             {/* Run name (optional) */}
             <div className="mt-3">
               <Form.Control
@@ -241,7 +297,11 @@ export const AgentsTab: React.FC<AgentsTabProps> = ({
                 rows={4}
                 value={prompt}
                 onChange={(e) => setPrompt(e.target.value)}
-                placeholder={t(app.promptPlaceholderKey ?? 'v2Apps.agentRunPanel.promptPlaceholder')}
+                placeholder={t(
+                  selectedAgent?.promptPlaceholderKey ||
+                    app.promptPlaceholderKey ||
+                    'v2Apps.agentRunPanel.promptPlaceholder'
+                )}
               />
               {workspaceAccess && (
                 <p className="text-muted small mt-1 mb-0">
@@ -372,6 +432,42 @@ export const AgentsTab: React.FC<AgentsTabProps> = ({
             <Spinner animation="border" size="sm" className="me-2" />
             <p>{t('v2DataAnalysis.status.uploading')}</p>
             <ProgressBar now={uploadProgress} label={`${uploadProgress}%`} animated />
+          </div>
+        )}
+
+        {/* Processing with progress events */}
+        {isProcessing && (
+          <div className="v2-agents-tab__processing">
+            <Spinner animation="border" className="mb-3" />
+            {progressEvents && progressEvents.length > 0 ? (
+              <div className="v2-agents-tab__progress-events">
+                {progressEvents.map((event, i) => {
+                  const isLatest = i === progressEvents.length - 1;
+                  const elapsed = !isLatest
+                    ? Math.round(
+                        (new Date(progressEvents[i + 1].timestamp).getTime() - new Date(event.timestamp).getTime()) /
+                          1000
+                      )
+                    : 0;
+                  return (
+                    <div
+                      key={`${event.phase}-${i}`}
+                      className={`v2-agents-tab__progress-event ${isLatest ? 'v2-agents-tab__progress-event--active' : ''}`}
+                    >
+                      <i className={`bi ${isLatest ? 'bi-arrow-right-circle-fill' : 'bi-check-circle-fill'} me-2`} />
+                      <span>{event.message}</span>
+                      {!isLatest && elapsed > 0 && (
+                        <span className="text-muted ms-auto small">
+                          {elapsed >= 60 ? `${Math.floor(elapsed / 60)}m ${elapsed % 60}s` : `${elapsed}s`}
+                        </span>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <p>{t('v2DataAnalysis.status.processing')}</p>
+            )}
           </div>
         )}
 

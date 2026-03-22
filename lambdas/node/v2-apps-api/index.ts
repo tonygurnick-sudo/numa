@@ -206,6 +206,36 @@ const checkS3Result = async (
   }
 };
 
+/** Check S3 for pipeline progress events (_progress.json). */
+const checkS3Progress = async (
+  s3Prefix: string,
+  userId: string,
+  conversationId: string
+): Promise<Array<{ timestamp: string; phase: string; message: string }> | null> => {
+  if (!OUTPUTS_BUCKET || !s3Prefix) return null;
+
+  const formattedPrefix = s3Prefix.replace('{user_sub}', userId).replace('{conversation_id}', conversationId);
+  const progressKey = `${formattedPrefix}/_progress.json`;
+
+  try {
+    const response = await s3.send(
+      new GetObjectCommand({
+        Bucket: OUTPUTS_BUCKET,
+        Key: progressKey,
+      })
+    );
+    const bodyStr = await response.Body?.transformToString('utf-8');
+    if (!bodyStr) return null;
+    const parsed = JSON.parse(bodyStr);
+    return parsed.events || null;
+  } catch (err: unknown) {
+    if (err && typeof err === 'object' && 'name' in err && err.name === 'NoSuchKey') {
+      return null;
+    }
+    return null;
+  }
+};
+
 // ---------------------------------------------------------------------------
 // Authorization helpers
 // ---------------------------------------------------------------------------
@@ -416,6 +446,12 @@ const handleGetRun = async (runId: string, auth: AuthContext) => {
         run.result = s3Result;
         run.updatedAt = now;
         run.completedAt = now;
+      } else {
+        // No result yet — check for progress events
+        const progressEvents = await checkS3Progress(run.s3Prefix, run.userId, run.conversationId || run.runId);
+        if (progressEvents) {
+          return jsonResponse(200, { ...run, progressEvents });
+        }
       }
     }
   }
@@ -541,6 +577,7 @@ const handleStartRun = async (runId: string, auth: AuthContext, event: APIGatewa
   const enabledTools = (options.enabledTools as string[]) || [];
   const enabledConnections = (options.enabledConnections as string[]) || [];
   const contextInstructions = (options.contextInstructions as string) || '';
+  const metadata = (options.metadata as Record<string, string>) || {};
 
   // Build availableKBs in {id, name} format expected by workspace agent
   const availableKBs = enabledKBs.length > 0 ? enabledKBs : enabledKBIds.map((id: string) => ({ id, name: id }));
@@ -572,6 +609,8 @@ const handleStartRun = async (runId: string, auth: AuthContext, event: APIGatewa
     enabledTools: finalTools,
     enabledConnections,
     userEmail: run.userEmail || auth.email || '',
+    // Custom metadata for orchestrators (e.g., Nolia assessment_type, output_language, KB names)
+    ...(Object.keys(metadata).length > 0 ? { metadata } : {}),
     // App workspace file prefixes for the agent to download into /workdir/app-workspace/
     workspacePrefixes: [`v2-apps/${run.appId}/data/`, `v2-apps/${run.appId}/user/${auth.sub}/data/`],
     // Upload file prefixes for the agent to download into /workdir/uploads/
@@ -606,13 +645,39 @@ const handleStartRun = async (runId: string, auth: AuthContext, event: APIGatewa
   };
 
   try {
-    await lambda.send(
+    // Synchronous invoke — the proxy returns quickly for fire-and-forget mode
+    // (~2-5s: either {"status":"started"} or a 500 error from AgentCore).
+    // This lets us catch startup failures immediately instead of polling for 2 hours.
+    const invokeResult = await lambda.send(
       new InvokeCommand({
         FunctionName: WORKSPACE_PROXY_FUNCTION,
-        InvocationType: 'Event', // Async — don't wait for result
+        InvocationType: 'RequestResponse',
         Payload: Buffer.from(JSON.stringify(proxyPayload)),
       })
     );
+
+    // Check if the proxy Lambda itself returned an error
+    if (invokeResult.FunctionError) {
+      const errorPayload = invokeResult.Payload ? Buffer.from(invokeResult.Payload).toString() : 'Unknown error';
+      console.error('Workspace proxy returned error', invokeResult.FunctionError, errorPayload);
+      throw new Error(`Workspace agent startup failed: ${errorPayload}`);
+    }
+
+    // Check HTTP status from the proxy response body (LWA wraps FastAPI responses)
+    if (invokeResult.Payload) {
+      try {
+        const proxyResponse = JSON.parse(Buffer.from(invokeResult.Payload).toString());
+        const statusCode = proxyResponse.statusCode || 200;
+        if (statusCode >= 400) {
+          const body = typeof proxyResponse.body === 'string' ? proxyResponse.body : JSON.stringify(proxyResponse.body);
+          console.error('Workspace proxy returned HTTP error', statusCode, body);
+          throw new Error(`Workspace agent returned ${statusCode}: ${body}`);
+        }
+      } catch (parseErr) {
+        // If we can't parse the response, the invoke succeeded — continue
+        if ((parseErr as Error).message?.includes('Workspace agent')) throw parseErr;
+      }
+    }
   } catch (err) {
     console.error('Failed to invoke workspace proxy', err);
     // Revert status
@@ -694,6 +759,7 @@ const handleFollowUp = async (
   const enabledTools = (options.enabledTools as string[]) || [];
   const enabledConnections = (options.enabledConnections as string[]) || [];
   const contextInstructions = (options.contextInstructions as string) || '';
+  const metadata = (options.metadata as Record<string, string>) || {};
 
   const availableKBs = enabledKBs.length > 0 ? enabledKBs : enabledKBIds.map((id: string) => ({ id, name: id }));
 
@@ -717,6 +783,8 @@ const handleFollowUp = async (
     enabledTools: finalTools,
     enabledConnections,
     userEmail: record.userEmail || auth.email || '',
+    // Forward custom metadata for orchestrators (inherited from parent run)
+    ...(Object.keys(metadata).length > 0 ? { metadata } : {}),
     workspacePrefixes: [`v2-apps/${parent.appId}/data/`, `v2-apps/${parent.appId}/user/${auth.sub}/data/`],
     // Upload file prefixes for the agent to download into /workdir/uploads/
     uploadPrefixes: [`v2-apps/${parent.appId}/${auth.sub}/${conversationId}/uploads/`],
@@ -762,13 +830,33 @@ const handleFollowUp = async (
   }
 
   try {
-    await lambda.send(
+    const invokeResult = await lambda.send(
       new InvokeCommand({
         FunctionName: WORKSPACE_PROXY_FUNCTION,
-        InvocationType: 'Event',
+        InvocationType: 'RequestResponse',
         Payload: Buffer.from(JSON.stringify(proxyPayload)),
       })
     );
+
+    if (invokeResult.FunctionError) {
+      const errorPayload = invokeResult.Payload ? Buffer.from(invokeResult.Payload).toString() : 'Unknown error';
+      console.error('Workspace proxy returned error (follow-up)', invokeResult.FunctionError, errorPayload);
+      throw new Error(`Workspace agent startup failed: ${errorPayload}`);
+    }
+
+    if (invokeResult.Payload) {
+      try {
+        const proxyResponse = JSON.parse(Buffer.from(invokeResult.Payload).toString());
+        const statusCode = proxyResponse.statusCode || 200;
+        if (statusCode >= 400) {
+          const body = typeof proxyResponse.body === 'string' ? proxyResponse.body : JSON.stringify(proxyResponse.body);
+          console.error('Workspace proxy returned HTTP error (follow-up)', statusCode, body);
+          throw new Error(`Workspace agent returned ${statusCode}: ${body}`);
+        }
+      } catch (parseErr) {
+        if ((parseErr as Error).message?.includes('Workspace agent')) throw parseErr;
+      }
+    }
   } catch (err) {
     console.error('Failed to invoke workspace proxy for follow-up', err);
     await dynamo.send(

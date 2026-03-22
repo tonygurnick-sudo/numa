@@ -865,5 +865,47 @@
       "runFailed": "Analysis Failed",
       "uploadFailed": "Upload failed: {{message}}"
     }
+  },
+  "v2Nolia": {
+    "title": "Nolia",
+    "description": "Upload a procurement evaluation report or Terms of Reference document. The AI agent will conduct a compliance review against World Bank procurement rules.",
+    "promptPlaceholder": "Provide any additional context or instructions for the compliance review (optional)...",
+    "agents": {
+      "complianceReview": {
+        "name": "Compliance Review",
+        "description": "Analyses procurement documents against World Bank rules and generates compliance reports"
+      },
+      "rulesGenerator": {
+        "name": "Rules Generator",
+        "description": "Reads knowledge base documents and generates a comprehensive compliance rules file with citations"
+      }
+    },
+    "fields": {
+      "assessmentType": "Assessment Type",
+      "globalKb": "Global Knowledge Base",
+      "procurementKb": "Procurement Knowledge Base",
+      "projectKb": "Project Knowledge Base",
+      "outputLanguage": "Output Language"
+    },
+    "assessmentTypes": {
+      "evaluationReport": "Evaluation Report",
+      "termsOfReference": "Terms of Reference"
+    },
+    "languages": {
+      "english": "English",
+      "bahasaIndonesia": "Bahasa Indonesia"
+    },
+    "rulesGenerator": {
+      "promptPlaceholder": "Provide any additional context for rules generation (optional)...",
+      "fields": {
+        "kbId": "Knowledge Base",
+        "kbCategory": "KB Category"
+      },
+      "categories": {
+        "global": "Global",
+        "procurement": "Procurement",
+        "project": "Project"
+      }
+    }
   }
 }

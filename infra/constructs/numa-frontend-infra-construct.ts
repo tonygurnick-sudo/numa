@@ -163,6 +163,9 @@ export class NumaFrontendInfra extends Construct {
           CLOUDFRONT_SECRET: cloudfrontSecretParameter.value,
           COGNITO_USER_POOL_CLIENT_ID: props.userPoolClientId,
           COGNITO_USER_POOL_ID: props.userPoolId,
+          ...(props.additionalCognitoClientIds && {
+            ADDITIONAL_COGNITO_CLIENT_IDS: props.additionalCognitoClientIds,
+          }),
         },
       },
       lifecycle: { createBeforeDestroy: true },
@@ -644,6 +647,8 @@ export interface NumaFrontendInfraProps {
   hostedZoneProvider: AwsProvider;
   userPoolClientId: string;
   userPoolId: string;
+  /** Comma-separated additional Cognito client IDs to accept (e.g. whitelabel frontends) */
+  additionalCognitoClientIds?: string;
   webExUrl: string;
   zoneId: string;
   outputsBucket: NumaCorsEnabledBucket;

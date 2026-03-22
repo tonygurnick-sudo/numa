@@ -18,7 +18,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from numa_workspace_agent.mcp_tools.numa_tool import (
-    _OPERATION_TO_ENABLED_TOOL_KEY,
+    _OPERATION_TO_ENABLED_TOOL_KEYS,
     MAX_UPLOAD_SIZE,
     TOOL_HANDLERS,
     TOOL_NAMES,
@@ -236,6 +236,7 @@ class TestCheckOperationAllowed:
                     "query_knowledge_base",
                     "create_agent_tool",
                     "memories_tool",
+                    "files_tool",
                 ]
             ),
         )
@@ -282,7 +283,7 @@ class TestCheckOperationAllowed:
         assert "Knowledge base" in result
 
     def test_unmapped_ops_bypass_frontend_toggle(self, monkeypatch):
-        """Operations not in _OPERATION_TO_ENABLED_TOOL_KEY bypass frontend checks."""
+        """Operations not in _OPERATION_TO_ENABLED_TOOL_KEYS bypass frontend checks."""
         monkeypatch.delenv("NUMA_ALLOWED_OPERATIONS", raising=False)
         monkeypatch.setenv("NUMA_ENABLED_TOOLS", json.dumps([]))
 
@@ -431,29 +432,31 @@ class TestDispatcherOperationFiltering:
         mock_handler.assert_not_called()
 
 
-class TestOperationToEnabledToolKeyMapping:
-    """Tests for the _OPERATION_TO_ENABLED_TOOL_KEY mapping."""
+class TestOperationToEnabledToolKeysMapping:
+    """Tests for the _OPERATION_TO_ENABLED_TOOL_KEYS mapping."""
 
     def test_mapped_operations_have_correct_keys(self):
         """Verify the mapping matches what the frontend sends."""
         assert (
-            _OPERATION_TO_ENABLED_TOOL_KEY["knowledge_base"] == "query_knowledge_base"
+            "query_knowledge_base" in _OPERATION_TO_ENABLED_TOOL_KEYS["knowledge_base"]
         )
-        assert _OPERATION_TO_ENABLED_TOOL_KEY["web_search"] == "web_search"
-        assert _OPERATION_TO_ENABLED_TOOL_KEY["agents"] == "create_agent_tool"
-        assert _OPERATION_TO_ENABLED_TOOL_KEY["memories"] == "memories_tool"
+        assert "knowledge_base" in _OPERATION_TO_ENABLED_TOOL_KEYS["knowledge_base"]
+        assert "web_search" in _OPERATION_TO_ENABLED_TOOL_KEYS["web_search"]
+        assert "create_agent_tool" in _OPERATION_TO_ENABLED_TOOL_KEYS["agents"]
+        assert "memories_tool" in _OPERATION_TO_ENABLED_TOOL_KEYS["memories"]
 
-    def test_kb_toggle_maps_to_query_knowledge_base(self):
-        """The knowledge_base tool maps to the query_knowledge_base frontend toggle."""
-        assert (
-            _OPERATION_TO_ENABLED_TOOL_KEY["knowledge_base"] == "query_knowledge_base"
-        ), "knowledge_base should map to query_knowledge_base toggle"
+    def test_kb_toggle_accepts_legacy_keys(self):
+        """The knowledge_base operation accepts both canonical and legacy toggle keys."""
+        kb_keys = _OPERATION_TO_ENABLED_TOOL_KEYS["knowledge_base"]
+        assert "knowledge_base" in kb_keys
+        assert "query_knowledge_base" in kb_keys
+        assert "knowledge_search" in kb_keys
 
     def test_utility_operations_are_not_mapped(self):
         """Pure utility operations should not have frontend toggles."""
         for op in ["extract_content", "convert_document"]:
             assert (
-                op not in _OPERATION_TO_ENABLED_TOOL_KEY
+                op not in _OPERATION_TO_ENABLED_TOOL_KEYS
             ), f"{op} should not be in the mapping (no frontend toggle)"
 
 

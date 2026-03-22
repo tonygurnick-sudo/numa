@@ -77,6 +77,7 @@ export class NumaClientStack extends TerraformStack {
       provisionQResources: false,
     };
     const domainName = props.clientConfig.customDomain ?? `${props.clientName}.${defaults.domainSuffix}`;
+    const emailDomain = props.clientConfig.emailDomain ?? domainName;
     const preferredKnowledgeBase =
       (props.clientConfig.provisionQResources ?? defaults.provisionQResources) ? 'q' : 'bedrock';
     const clientConfig = {
@@ -215,6 +216,7 @@ export class NumaClientStack extends TerraformStack {
 
     const core = new CoreNumaInfra(this, 'numa', {
       ...clientConfig,
+      emailDomain,
       secretsVaultEnabled: clientConfig.secretsVaultEnabled ?? false,
       numaDropZones: clientConfig.numaDropZones ?? false,
       oauthIntegrationsEnabled: clientConfig.oauthIntegrationsEnabled ?? false,
@@ -407,6 +409,8 @@ export class NumaClientStack extends TerraformStack {
         // Data bucket for downloading attached files (My Files / Company Files)
         dataBucketName: core.dataBucket.bucket.bucket,
         dataBucketArn: core.dataBucket.bucket.arn,
+        // Extract content Lambda for Nolia PDF vision extraction
+        extractContentLambdaArn: extractContentLambdaArn,
       });
 
       // Create the proxy Lambda that bridges CloudFront to AgentCore SDK
@@ -419,6 +423,7 @@ export class NumaClientStack extends TerraformStack {
         // Cognito config for JWT verification (prevents token forgery via direct Lambda URL calls)
         cognitoUserPoolId: core.userPoolId,
         cognitoClientId: core.userPoolClient.id,
+        additionalCognitoClientIds: clientConfig.additionalCognitoClientIds,
         // Integrations approval table (proxy handles approve actions directly to avoid container deadlock)
         integrationsApprovalTableName: core.integrationsApprovalTable?.name,
         integrationsApprovalTableArn: core.integrationsApprovalTable?.arn,
@@ -921,6 +926,11 @@ export const clientConfigSchema = coreNumaInfraPropsSchema
         region: z.string(),
         customDomain: z.string().optional(),
         /**
+         * Override domain used in Cognito emails (welcome, password reset links).
+         * Defaults to the computed domainName if not set.
+         */
+        emailDomain: z.string().optional(),
+        /**
          * Whether this is a development instance that should include dev-only apps
          *
          * @default false
@@ -1146,6 +1156,12 @@ export const clientConfigSchema = coreNumaInfraPropsSchema
          * @default false
          */
         transcriptionService: z.boolean().optional().default(false),
+
+        /**
+         * Comma-separated additional Cognito User Pool Client IDs to accept.
+         * Used when a whitelabel frontend shares the same User Pool but has its own app client.
+         */
+        additionalCognitoClientIds: z.string().optional(),
       })
       .strict()
   );

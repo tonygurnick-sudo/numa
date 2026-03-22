@@ -68,7 +68,7 @@ DANGEROUS_PYTHON_PATTERNS: list[tuple[str, str]] = [
     # Code execution
     (r"\bexec\s*\(", "exec() is blocked"),
     (r"\beval\s*\(", "eval() is blocked"),
-    (r"\bcompile\s*\(", "compile() is blocked"),
+    (r"(?<!\.)compile\s*\(", "compile() is blocked"),
     (r"\b__import__\s*\(", "__import__() is blocked"),
     # Unsafe deserialization (pickle-based RCE vectors)
     (r"^\s*import\s+pickle\b", "pickle import is blocked"),

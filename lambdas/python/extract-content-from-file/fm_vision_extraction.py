@@ -65,7 +65,7 @@ _CROSS_REGION_PREFIX = (
 
 VISION_MODEL_MAP = {
     "haiku": f"{_CROSS_REGION_PREFIX}.anthropic.claude-3-haiku-20240307-v1:0",
-    "nova-pro": "amazon.nova-pro-v1:0",
+    "nova-pro": f"{_CROSS_REGION_PREFIX}.amazon.nova-2-lite-v1:0",
 }
 
 # Get vision model type from config (environment variable set by infrastructure)
@@ -151,11 +151,51 @@ VISION_EXTRACTION_PROMPT_TRANSLATE_SINGLE = (
 
 logger = structlog.get_logger(__name__)
 s3_client = prm_client("s3", config=Config(max_pool_connections=CONNECTION_POOL_SIZE))
-bedrock_client = prm_client(
-    "bedrock-runtime",
-    region=AWS_REGION,
-    config=Config(max_pool_connections=CONNECTION_POOL_SIZE),
-)
+
+# Cross-account Bedrock support: if BEDROCK_ACCOUNT is set, assume the
+# bedrock-quota-sharing role in the shared account and create the Bedrock
+# client with those credentials.  This is needed for client accounts (e.g.
+# Nolia in Jakarta) that don't have direct Bedrock model access.
+_BEDROCK_ACCOUNT = os.environ.get("BEDROCK_ACCOUNT")
+
+
+def _create_bedrock_client():
+    """Create a Bedrock runtime client, optionally using cross-account credentials."""
+    bedrock_config = Config(max_pool_connections=CONNECTION_POOL_SIZE)
+
+    if _BEDROCK_ACCOUNT:
+        try:
+            sts = prm_client("sts", region=AWS_REGION)
+            response = sts.assume_role(
+                RoleArn=f"arn:aws:iam::{_BEDROCK_ACCOUNT}:role/bedrock-quota-sharing",
+                RoleSessionName="extract-content-lambda",
+            )
+            creds = response["Credentials"]
+            logger.info(
+                "Using cross-account Bedrock credentials",
+                bedrock_account=_BEDROCK_ACCOUNT,
+            )
+            import boto3
+
+            return boto3.client(
+                "bedrock-runtime",
+                region_name=AWS_REGION,
+                aws_access_key_id=creds["AccessKeyId"],
+                aws_secret_access_key=creds["SecretAccessKey"],
+                aws_session_token=creds["SessionToken"],
+                config=bedrock_config,
+            )
+        except Exception as e:
+            logger.error(
+                "Failed to assume cross-account role, falling back to default credentials",
+                bedrock_account=_BEDROCK_ACCOUNT,
+                error=str(e),
+            )
+
+    return prm_client("bedrock-runtime", region=AWS_REGION, config=bedrock_config)
+
+
+bedrock_client = _create_bedrock_client()
 
 # Semaphore to limit concurrent Bedrock API calls across all threads
 _bedrock_semaphore = Semaphore(MAX_BEDROCK_CONCURRENT)
@@ -283,7 +323,7 @@ def _process_image_batch(
 
     # Build content based on model type
     content: List[Dict[str, Any]] = []
-    if current_model_id.startswith("amazon.nova"):
+    if "amazon.nova" in current_model_id:
         # Nova format - images with format and source structure
         for file_content, file_extension in zip(file_contents, file_extensions):
             # Map file extension to Nova format
@@ -324,7 +364,7 @@ def _process_image_batch(
 
     request: Dict[str, Any]
     # Build request based on model type
-    if current_model_id.startswith("amazon.nova"):
+    if "amazon.nova" in current_model_id:
         request = {
             "schemaVersion": "messages-v1",
             "messages": [
@@ -357,7 +397,7 @@ def _process_image_batch(
     result = json.loads(response["body"].read())
 
     # Extract response based on model type
-    if current_model_id.startswith("amazon.nova"):
+    if "amazon.nova" in current_model_id:
         response_text = result["output"]["message"]["content"][0]["text"]
     else:
         # Anthropic format (default)

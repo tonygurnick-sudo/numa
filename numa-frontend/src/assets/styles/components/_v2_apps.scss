@@ -1134,6 +1134,33 @@ $v2-bg-page: #faf8fb;
     color: $v2-text-secondary;
   }
 
+  &__progress-events {
+    text-align: left;
+    max-width: 400px;
+    margin: 0 auto;
+  }
+
+  &__progress-event {
+    display: flex;
+    align-items: center;
+    padding: 0.5rem 0;
+    color: $v2-text-secondary;
+    font-size: 0.875rem;
+
+    .bi-check-circle-fill {
+      color: $v2-status-active;
+    }
+
+    .bi-arrow-right-circle-fill {
+      color: #3b82f6;
+    }
+
+    &--active {
+      color: $v2-text-primary;
+      font-weight: 500;
+    }
+  }
+
   // Legacy grid (keep for potential future use)
   &__header {
     margin-bottom: 1.25rem;

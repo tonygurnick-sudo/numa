@@ -526,7 +526,7 @@ async def stream_claude_sdk(
         conversation_id=conversation_id,
         user_sub=user_sub,
         session_id=session_id,
-        model_id=validated_model,
+        model_id=options.model,
         has_uploads=len(uploaded_files) > 0,
         has_attachments=bool(attached_files),
         has_folders=bool(attached_folders),
@@ -685,6 +685,17 @@ async def stream_claude_sdk(
                             phase="sdk",
                             session_id=captured_session_id,
                         )
+
+                if (
+                    isinstance(message, SystemMessage)
+                    and message.subtype == "compact_boundary"
+                ):
+                    logger.warning(
+                        "Context compaction occurred",
+                        _name="SDK_COMPACTION",
+                        phase="sdk",
+                        conversation_id=conversation_id,
+                    )
 
                 # Write to trace file (NDJSON format for storage)
                 trace_line = json.dumps(serialized) + "\n"
@@ -999,6 +1010,7 @@ async def run_claude_sdk(
     user_profile: Optional[dict] = None,
     company_profile: Optional[str] = None,
     feature_flags: Optional[dict[str, bool]] = None,
+    system_dir: Optional[Path] = None,
 ) -> dict[str, Any]:
     """Run Claude SDK to completion and return the collected result.
 
@@ -1009,6 +1021,13 @@ async def run_claude_sdk(
 
     Used by the ``sync`` and ``fire-and-forget`` response modes where the
     caller does not need incremental SSE events — just the final answer.
+
+    Args:
+        system_dir: Optional isolated system directory for this invocation.
+            When provided, the SDK session database (.claude/), trace file,
+            and HOME env var are scoped to this directory instead of the
+            shared /workdir/.system/. Used by pipeline orchestrators to
+            prevent session cross-contamination between steps.
 
     Returns:
         {
@@ -1021,7 +1040,14 @@ async def run_claude_sdk(
         }
     """
     paths = get_workspace_paths()
-    trace_path = paths["trace_file"]
+    # Allow pipeline orchestrators to isolate SDK session state per step
+    effective_system_dir = system_dir or paths["system_dir"]
+    if system_dir:
+        effective_system_dir.mkdir(parents=True, exist_ok=True)
+        (effective_system_dir / ".claude").mkdir(parents=True, exist_ok=True)
+    trace_path = (
+        effective_system_dir / "trace.jsonl" if system_dir else paths["trace_file"]
+    )
     session_id: Optional[str] = None
     captured_session_id: Optional[str] = None
 
@@ -1035,16 +1061,18 @@ async def run_claude_sdk(
     # 1. Restore session on cold start (same as streaming)
     if is_cold_start:
         restore_result = restore_claude_session(
-            user_sub, conversation_id, paths["system_dir"]
+            user_sub, conversation_id, effective_system_dir
         )
         if restore_result and restore_result.get("session_id"):
             session_id = restore_result["session_id"]
-        restore_trace_from_s3(user_sub, conversation_id)
+        # Skip trace restore for isolated pipeline steps (cold-start only, no prior trace)
+        if not system_dir:
+            restore_trace_from_s3(user_sub, conversation_id)
     else:
         session_id = get_active_session_id()
         if not session_id:
             restore_result = restore_claude_session(
-                user_sub, conversation_id, paths["system_dir"]
+                user_sub, conversation_id, effective_system_dir
             )
             if restore_result and restore_result.get("session_id"):
                 session_id = restore_result["session_id"]
@@ -1091,6 +1119,7 @@ async def run_claude_sdk(
         user_profile=user_profile,
         company_profile=company_profile,
         feature_flags=feature_flags,
+        home_dir=system_dir,
     )
 
     logger.info(
@@ -1100,7 +1129,7 @@ async def run_claude_sdk(
         conversation_id=conversation_id,
         user_sub=user_sub,
         session_id=session_id,
-        model_id=validated_model,
+        model_id=options.model,
         request_id=request_id,
     )
 
@@ -1137,13 +1166,34 @@ async def run_claude_sdk(
                         if isinstance(block, TextBlock):
                             stream_log.record_text(block.text)
                             collected_text.append(block.text)
+                            logger.debug(
+                                "Assistant text",
+                                _name="SDK_LIVE_TEXT",
+                                phase="sdk",
+                                conversation_id=conversation_id,
+                                text=block.text[:300],
+                            )
                         elif isinstance(block, ThinkingBlock):
                             stream_log.record_thinking(block.thinking)
+                            logger.debug(
+                                "Assistant thinking",
+                                _name="SDK_LIVE_THINKING",
+                                phase="sdk",
+                                conversation_id=conversation_id,
+                                thinking=block.thinking[:200],
+                            )
                         elif isinstance(block, ToolUseBlock):
                             stream_log.record_tool_start(
                                 block.id,
                                 block.name,
                                 block.input if isinstance(block.input, dict) else None,
+                            )
+                            logger.debug(
+                                "Tool call",
+                                _name="SDK_LIVE_TOOL",
+                                phase="sdk",
+                                conversation_id=conversation_id,
+                                tool_name=block.name,
                             )
                 elif isinstance(message, UserMessage):
                     content = message.content
@@ -1292,6 +1342,17 @@ async def run_claude_sdk(
                     if "session_id" in message.data:
                         captured_session_id = message.data["session_id"]
 
+                if (
+                    isinstance(message, SystemMessage)
+                    and message.subtype == "compact_boundary"
+                ):
+                    logger.warning(
+                        "Context compaction occurred",
+                        _name="SDK_COMPACTION",
+                        phase="sdk",
+                        conversation_id=conversation_id,
+                    )
+
                 with trace_path.open("a", encoding="utf-8") as f:
                     f.write(json.dumps(serialized) + "\n")
 
@@ -1331,13 +1392,14 @@ async def run_claude_sdk(
         }
 
     finally:
-        if captured_session_id:
+        # Pipeline steps with isolated system_dir should not mutate shared conv state
+        if captured_session_id and not system_dir:
             set_active_conversation(conversation_id, session_id=captured_session_id)
 
         archive_claude_session(
             user_sub,
             conversation_id,
-            paths["system_dir"],
+            effective_system_dir,
             session_id=captured_session_id,
         )
 

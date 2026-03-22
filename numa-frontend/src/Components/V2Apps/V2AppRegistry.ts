@@ -1,4 +1,4 @@
-import { BarChart3, FileText } from 'lucide-react';
+import { BarChart3, FileSearch, FileText } from 'lucide-react';
 import type { V2AppConfig } from '../../types/apps';
 
 /**
@@ -61,6 +61,112 @@ export const V2_APPS: Record<string, V2AppConfig> = {
         status: 'active',
         capabilities: ['quoting', 'pricing', 'templates'],
         resultConfig: { type: 'agent-response' },
+      },
+    ],
+  },
+  nolia: {
+    id: 'nolia',
+    nameKey: 'v2Nolia.title',
+    descriptionKey: 'v2Nolia.description',
+    icon: FileSearch,
+    color: '#059669',
+    status: 'active',
+    category: 'compliance',
+    tabs: [
+      { id: 'agents', labelKey: 'v2Apps.tabs.agents', icon: 'bi bi-robot' },
+      { id: 'runs', labelKey: 'v2Apps.tabs.runs', icon: 'bi bi-clock-history' },
+      { id: 'workspace', labelKey: 'v2Apps.tabs.workspace', icon: 'bi bi-briefcase' },
+    ],
+    agents: [
+      {
+        id: 'compliance-review',
+        nameKey: 'v2Nolia.agents.complianceReview.name',
+        descriptionKey: 'v2Nolia.agents.complianceReview.description',
+        icon: 'bi bi-shield-check',
+        color: '#059669',
+        status: 'active',
+        capabilities: ['document-analysis', 'compliance-check', 'report-generation'],
+        resultConfig: { type: 'first-artifact' },
+        agentType: 'nolia-compliance',
+        promptPlaceholderKey: 'v2Nolia.promptPlaceholder',
+        customFields: [
+          {
+            id: 'assessment_type',
+            type: 'dropdown',
+            labelKey: 'v2Nolia.fields.assessmentType',
+            required: true,
+            options: [
+              { value: 'evaluation-report', labelKey: 'v2Nolia.assessmentTypes.evaluationReport' },
+              { value: 'terms-of-reference', labelKey: 'v2Nolia.assessmentTypes.termsOfReference' },
+            ],
+            defaultValue: 'evaluation-report',
+          },
+          {
+            id: 'global_kb',
+            type: 'dropdown',
+            labelKey: 'v2Nolia.fields.globalKb',
+            required: true,
+            dynamicKBSource: 'all',
+          },
+          {
+            id: 'procurement_kb',
+            type: 'dropdown',
+            labelKey: 'v2Nolia.fields.procurementKb',
+            required: false,
+            dynamicKBSource: 'all',
+          },
+          {
+            id: 'project_kb',
+            type: 'dropdown',
+            labelKey: 'v2Nolia.fields.projectKb',
+            required: false,
+            dynamicKBSource: 'all',
+          },
+          {
+            id: 'output_language',
+            type: 'dropdown',
+            labelKey: 'v2Nolia.fields.outputLanguage',
+            required: false,
+            options: [
+              { value: 'english', labelKey: 'v2Nolia.languages.english' },
+              { value: 'bahasa-indonesia', labelKey: 'v2Nolia.languages.bahasaIndonesia' },
+            ],
+            defaultValue: 'english',
+          },
+        ],
+      },
+      {
+        id: 'rules-generator',
+        nameKey: 'v2Nolia.agents.rulesGenerator.name',
+        descriptionKey: 'v2Nolia.agents.rulesGenerator.description',
+        icon: 'bi bi-journal-check',
+        color: '#7c3aed',
+        status: 'active',
+        capabilities: ['rules-extraction', 'document-analysis', 'citations'],
+        resultConfig: { type: 'first-artifact' },
+        agentType: 'nolia-rules-generator',
+        promptPlaceholderKey: 'v2Nolia.rulesGenerator.promptPlaceholder',
+        customFields: [
+          {
+            id: 'kb_id',
+            type: 'dropdown',
+            labelKey: 'v2Nolia.rulesGenerator.fields.kbId',
+            required: true,
+            dynamicKBSource: 'all',
+          },
+          {
+            id: 'kb_category',
+            type: 'dropdown',
+            labelKey: 'v2Nolia.rulesGenerator.fields.kbCategory',
+            required: true,
+            options: [
+              { value: 'global', labelKey: 'v2Nolia.rulesGenerator.categories.global' },
+              { value: 'procurement', labelKey: 'v2Nolia.rulesGenerator.categories.procurement' },
+              { value: 'project', labelKey: 'v2Nolia.rulesGenerator.categories.project' },
+            ],
+            defaultValue: 'global',
+          },
+        ],
       },
     ],
   },

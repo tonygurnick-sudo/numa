@@ -23,12 +23,20 @@ export interface RunInputs {
   options?: Record<string, unknown>;
   name?: string;
   userEmail?: string;
+  /** Explicit workspace agent type_id override (e.g., 'nolia-compliance'). */
+  agentType?: string;
 }
 
 export interface RunResult {
   text: string;
   artifacts: Array<{ type: string; path: string }>;
   usage: Record<string, unknown>;
+}
+
+export interface ProgressEvent {
+  timestamp: string;
+  phase: string;
+  message: string;
 }
 
 export interface RunRecord {
@@ -51,6 +59,8 @@ export interface RunRecord {
   conversationId?: string;
   /** If this is a follow-up, the parent run's ID. */
   parentRunId?: string;
+  /** Pipeline progress events (only present while PROCESSING, from _progress.json). */
+  progressEvents?: ProgressEvent[];
 }
 
 interface ListRunsResponse {

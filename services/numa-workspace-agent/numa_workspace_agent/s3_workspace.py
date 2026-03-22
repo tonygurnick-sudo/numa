@@ -1021,6 +1021,17 @@ def restore_claude_session(
         session_id = metadata.get("session-id")
     except ClientError as e:
         if e.response["Error"]["Code"] == "NoSuchKey":
+            # Clean up any stale .claude directory to prevent session leakage
+            # from a previous step or conversation
+            claude_dir = home / ".claude"
+            if claude_dir.exists():
+                import shutil
+
+                shutil.rmtree(claude_dir, ignore_errors=True)
+                logger.debug(
+                    "Cleaned up stale .claude directory (no S3 archive)",
+                    conversation_id=conversation_id,
+                )
             logger.debug(
                 "No Claude session archive in S3 (new conversation)",
                 conversation_id=conversation_id,
@@ -1274,6 +1285,75 @@ def write_result_to_s3(
         status=result.get("status"),
     )
     return s3_key
+
+
+def write_progress_to_s3(
+    user_sub: str,
+    conversation_id: str,
+    events: list[dict],
+    s3_prefix: str | None = None,
+) -> None:
+    """Write pipeline progress events to S3 as _progress.json.
+
+    Called by pipeline orchestrators at each milestone so the frontend
+    can show real-time progress while the agent is still running.
+    Backwards compatible — apps that don't call this simply won't have
+    a ``_progress.json`` and the status endpoint returns ``{"status": "running"}``
+    as before.
+
+    Args:
+        user_sub: Cognito user sub.
+        conversation_id: Conversation / run ID.
+        events: List of progress event dicts, each with ``timestamp``,
+            ``phase``, and ``message`` keys.
+        s3_prefix: Optional S3 prefix template (same as write_result_to_s3).
+    """
+    import json as _json
+
+    if not OUTPUTS_BUCKET:
+        return
+
+    result_key = _build_result_key(user_sub, conversation_id, s3_prefix)
+    progress_key = result_key.replace("_result.json", "_progress.json")
+
+    s3 = _get_s3_client()
+    s3.put_object(
+        Bucket=OUTPUTS_BUCKET,
+        Key=progress_key,
+        Body=_json.dumps(
+            {"status": "running", "events": events},
+            default=str,
+        ).encode("utf-8"),
+        ContentType="application/json",
+    )
+
+
+def read_progress_from_s3(
+    user_sub: str,
+    conversation_id: str,
+    s3_prefix: str | None = None,
+) -> dict | None:
+    """Read pipeline progress events from S3.
+
+    Returns the parsed progress dict if ``_progress.json`` exists,
+    or ``None`` if it hasn't been written yet.
+    """
+    import json as _json
+
+    if not OUTPUTS_BUCKET:
+        return None
+
+    result_key = _build_result_key(user_sub, conversation_id, s3_prefix)
+    progress_key = result_key.replace("_result.json", "_progress.json")
+
+    s3 = _get_s3_client()
+    try:
+        obj = s3.get_object(Bucket=OUTPUTS_BUCKET, Key=progress_key)
+        return _json.loads(obj["Body"].read().decode("utf-8"))
+    except ClientError as e:
+        if e.response["Error"]["Code"] == "NoSuchKey":
+            return None
+        return None
 
 
 def read_result_from_s3(

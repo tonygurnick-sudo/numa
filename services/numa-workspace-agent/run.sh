@@ -3,9 +3,10 @@
 
 set -e
 
-# Disable OTLP trace export to X-Ray - requires CloudWatch Logs as trace destination
-# which isn't configured. We keep metrics/logs but disable trace export.
+# Disable OTLP trace and metrics export - no collector runs in the container.
+# We keep OTel auto-instrumentation for logs/session correlation only.
 export OTEL_TRACES_EXPORTER="none"
+export OTEL_METRICS_EXPORTER="none"
 
 # Start uvicorn with OpenTelemetry auto-instrumentation
 # This enables AgentCore observability (metrics, logs, session correlation)
