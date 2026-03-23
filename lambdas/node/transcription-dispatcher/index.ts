@@ -3,7 +3,6 @@ import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, UpdateCommand, GetCommand } from '@aws-sdk/lib-dynamodb';
 import { LambdaClient, InvokeCommand } from '@aws-sdk/client-lambda';
 import { ECSClient, RunTaskCommand, ListTasksCommand } from '@aws-sdk/client-ecs';
-import { S3Client } from '@aws-sdk/client-s3';
 import { withPRM } from '../../../lib/prm-node/prm';
 
 const REGION = process.env.REGION ?? 'us-east-1';
@@ -24,7 +23,6 @@ const dynamo = DynamoDBDocumentClient.from(ddbClient, {
   marshallOptions: { removeUndefinedValues: true },
 });
 const lambda = withPRM(LambdaClient, { region: REGION });
-const s3 = withPRM(S3Client, { region: REGION });
 const ecs = withPRM(ECSClient, { region: REGION });
 
 interface JobMessage {

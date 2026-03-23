@@ -2,7 +2,6 @@
 import React, { useMemo } from 'react';
 import { Form, Row, Col } from 'react-bootstrap';
 import { useTranslation } from 'react-i18next';
-import { BOARD_COLORS } from '../../Shared/colorUtils';
 import { StaffAvatar } from '../../Shared/StaffAvatar';
 import type { WorkZone, WorkStage, WorkUnitSeriesConfig, StaffProfile } from '../../../../types/ops';
 
@@ -107,26 +106,22 @@ export function GeneralTab({
 
         <Form.Group>
           <Form.Label className="small fw-medium text-muted">{t('teams.color')}</Form.Label>
-          <div className="d-flex flex-wrap gap-2">
-            {BOARD_COLORS.map((c) => (
-              <button
-                key={c}
-                type="button"
-                onClick={() => setColor(c)}
-                className="border-0 p-0 d-flex align-items-center justify-content-center"
-                style={{
-                  width: 32,
-                  height: 32,
-                  borderRadius: '50%',
-                  backgroundColor: c,
-                  cursor: 'pointer',
-                  outline: color === c ? '3px solid #333' : 'none',
-                  outlineOffset: 2,
-                }}
-              >
-                {color === c && <i className="bi bi-check-lg" style={{ color: '#fff', fontSize: 16 }} />}
-              </button>
-            ))}
+          <div className="d-flex align-items-center gap-3">
+            <Form.Control
+              type="color"
+              value={color}
+              onChange={(e) => setColor(e.target.value)}
+              title={t('common.chooseColor', 'Choose your color')}
+              className="p-1"
+              style={{ width: '48px', height: '36px', cursor: 'pointer', borderRadius: '4px' }}
+            />
+            <Form.Control
+              type="text"
+              value={color}
+              onChange={(e) => setColor(e.target.value)}
+              placeholder="#000000"
+              style={{ maxWidth: '120px' }}
+            />
           </div>
         </Form.Group>
       </div>

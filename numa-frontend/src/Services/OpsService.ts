@@ -380,7 +380,16 @@ export const listComments = async (
     `${BASE_URL}/tickets/${encodeURIComponent(ticketId)}/comments`,
     params
   )) as CommentListResponse;
-  return { comments: response?.comments ?? [], cursor: response?.cursor ?? null };
+
+  const comments = (response?.comments ?? []).map(
+    (c: { id?: string; commentId?: string; [key: string]: unknown }) =>
+      ({
+        ...c,
+        id: c.id || c.commentId,
+      }) as Comment
+  );
+
+  return { comments, cursor: response?.cursor ?? null };
 };
 
 export const createComment = async (
@@ -393,8 +402,12 @@ export const createComment = async (
     `${BASE_URL}/tickets/${encodeURIComponent(ticketId)}/comments`,
     payload
   )) as CommentResponse;
-  console.info(`${LOG_PREFIX} createComment: success`, { id: response.comment.id });
-  return response.comment;
+  const comment = {
+    ...response.comment,
+    id: response.comment.id || (response.comment as { commentId?: string }).commentId,
+  };
+  console.info(`${LOG_PREFIX} createComment: success`, { id: comment.id });
+  return comment;
 };
 
 export const updateComment = async (
@@ -408,8 +421,12 @@ export const updateComment = async (
     `${BASE_URL}/tickets/${encodeURIComponent(ticketId)}/comments/${encodeURIComponent(commentId)}`,
     payload
   )) as CommentResponse;
-  console.info(`${LOG_PREFIX} updateComment: success`, { id: response.comment.id });
-  return response.comment;
+  const comment = {
+    ...response.comment,
+    id: response.comment.id || (response.comment as { commentId?: string }).commentId,
+  };
+  console.info(`${LOG_PREFIX} updateComment: success`, { id: comment.id });
+  return comment;
 };
 
 export const deleteComment = async (numaDelete: NumaDelete, ticketId: string, commentId: string): Promise<void> => {

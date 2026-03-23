@@ -27,7 +27,6 @@ interface CreateBoardWizardProps {
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
-const WIZARD_COLORS = BOARD_COLORS.slice(0, 8);
 const TOTAL_STEPS = 4;
 
 // ─── Component ───────────────────────────────────────────────────────────────
@@ -88,7 +87,7 @@ export function CreateBoardWizard({ show, onHide, onCreated }: CreateBoardWizard
       setWuLabel('Sprint');
       setWuPatternStart(1);
       setWuPatternType('sequential');
-      setSelectedTicketTypes([...allTypeIds]);
+      setSelectedTicketTypes([]);
       setCustomTicketTypes([]);
       setShowAddType(false);
       setNewTypeName('');
@@ -301,26 +300,22 @@ export function CreateBoardWizard({ show, onHide, onCreated }: CreateBoardWizard
 
             <Form.Group className="mb-3">
               <Form.Label>{t('teams.color')}</Form.Label>
-              <div className="d-flex flex-wrap gap-2">
-                {WIZARD_COLORS.map((c) => (
-                  <button
-                    key={c}
-                    type="button"
-                    onClick={() => setTeamColor(c)}
-                    className="border-0 p-0"
-                    style={{
-                      width: 32,
-                      height: 32,
-                      borderRadius: '50%',
-                      backgroundColor: c,
-                      cursor: 'pointer',
-                      outline: teamColor === c ? '3px solid #333' : 'none',
-                      outlineOffset: 2,
-                    }}
-                  >
-                    {teamColor === c && <i className="bi bi-check-lg" style={{ color: '#fff', fontSize: 14 }} />}
-                  </button>
-                ))}
+              <div className="d-flex align-items-center gap-3">
+                <Form.Control
+                  type="color"
+                  value={teamColor}
+                  onChange={(e) => setTeamColor(e.target.value)}
+                  title={t('common.chooseColor', 'Choose your color')}
+                  className="p-1"
+                  style={{ width: '48px', height: '36px', cursor: 'pointer', borderRadius: '4px' }}
+                />
+                <Form.Control
+                  type="text"
+                  value={teamColor}
+                  onChange={(e) => setTeamColor(e.target.value)}
+                  placeholder="#000000"
+                  style={{ maxWidth: '120px' }}
+                />
               </div>
             </Form.Group>
 
@@ -449,8 +444,9 @@ export function CreateBoardWizard({ show, onHide, onCreated }: CreateBoardWizard
         {/* ── Step 2: Ticket Types ── */}
         {step === 2 && (
           <>
-            <p className="text-muted small mb-3">{t('teams.ticketTypesHelp')}</p>
-            <p className="text-muted small mb-3">{t('teams.ticketTypesAllSelected')}</p>
+            <p className="text-muted small mb-3">
+              {t('teams.ticketTypesHelp', 'Please select the ticket types you want for this board.')}
+            </p>
 
             {config.ticketTypes.map((tt) => (
               <Form.Check

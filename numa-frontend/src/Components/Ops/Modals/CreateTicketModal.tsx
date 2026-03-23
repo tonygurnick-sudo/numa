@@ -564,6 +564,7 @@ export function CreateTicketModal({
                 <div className="ticket-section-heading">{t('tickets.description')}</div>
                 <RichTextEditor
                   value={description}
+                  onChange={(html) => setDescription(html)}
                   onSave={(html) => setDescription(html)}
                   placeholder={t('common.description') + '\u2026'}
                   minHeight={140}
@@ -592,13 +593,14 @@ export function CreateTicketModal({
               {/* Initial comment */}
               <Form.Group className="mb-2">
                 <div className="ticket-section-heading">
-                  {t('tickets.addComment', 'Add a comment')}
+                  {t('tickets.initialComment', 'Initial comment')}
                   <span className="ms-2 fw-normal text-muted" style={{ fontSize: '0.78rem' }}>
                     {t('common.optional', '(optional)')}
                   </span>
                 </div>
                 <RichTextEditor
                   value={initialComment}
+                  onChange={(html) => setInitialComment(html)}
                   onSave={(html) => setInitialComment(html)}
                   placeholder={t('tickets.commentPlaceholder', 'Add an initial comment or note…')}
                   minHeight={100}

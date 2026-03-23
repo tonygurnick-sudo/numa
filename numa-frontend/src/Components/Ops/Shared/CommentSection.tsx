@@ -8,6 +8,17 @@ import * as OpsService from '../../../Services/OpsService';
 import type { Comment } from '../../../types/ops';
 import { RichTextEditor } from './RichTextEditor';
 
+/**
+ * Checks whether an HTML string has no visible text content.
+ * Strips all tags and checks if any non-whitespace characters remain.
+ * Handles common contentEditable artefacts like <div></div>, <p><br></p>, etc.
+ */
+function isHtmlEmpty(html: string): boolean {
+  if (!html) return true;
+  const stripped = html.replace(/<[^>]*>/g, '').trim();
+  return stripped.length === 0;
+}
+
 interface CommentSectionProps {
   ticketId: string;
 }
@@ -120,11 +131,10 @@ export function CommentSection({ ticketId }: CommentSectionProps): React.JSX.Ele
   }, [loadComments]);
 
   const handleAdd = async () => {
-    const trimmed = newContent.trim();
-    if (!trimmed) return;
+    if (isHtmlEmpty(newContent)) return;
     setSubmitting(true);
     try {
-      await OpsService.createComment(numaPost, ticketId, { content: trimmed });
+      await OpsService.createComment(numaPost, ticketId, { content: newContent.trim() });
       setNewContent('');
       await loadComments();
     } catch (err) {
@@ -135,10 +145,9 @@ export function CommentSection({ ticketId }: CommentSectionProps): React.JSX.Ele
   };
 
   const handleEditSave = async (commentId: string) => {
-    const trimmed = editContent.trim();
-    if (!trimmed) return;
+    if (isHtmlEmpty(editContent)) return;
     try {
-      await OpsService.updateComment(numaPut, ticketId, commentId, { content: trimmed });
+      await OpsService.updateComment(numaPut, ticketId, commentId, { content: editContent.trim() });
       setEditingId(null);
       setEditContent('');
       await loadComments();
@@ -193,6 +202,7 @@ export function CommentSection({ ticketId }: CommentSectionProps): React.JSX.Ele
         <div className="flex-grow-1">
           <RichTextEditor
             value={newContent}
+            onChange={(html) => setNewContent(html)}
             onSave={(html) => setNewContent(html)}
             placeholder={t('comments.placeholder')}
             minHeight={80}
@@ -201,7 +211,7 @@ export function CommentSection({ ticketId }: CommentSectionProps): React.JSX.Ele
             <Button
               variant="primary"
               size="sm"
-              disabled={!newContent.trim() || submitting}
+              disabled={isHtmlEmpty(newContent) || submitting}
               onClick={() => void handleAdd()}
               style={{ minWidth: 80 }}
             >
@@ -287,7 +297,12 @@ export function CommentSection({ ticketId }: CommentSectionProps): React.JSX.Ele
                   {isEditing ? (
                     <div>
                       <div className="mb-2">
-                        <RichTextEditor value={editContent} onSave={(html) => setEditContent(html)} minHeight={80} />
+                        <RichTextEditor
+                          value={editContent}
+                          onChange={(html) => setEditContent(html)}
+                          onSave={(html) => setEditContent(html)}
+                          minHeight={80}
+                        />
                       </div>
                       <div className="d-flex gap-2">
                         <Button

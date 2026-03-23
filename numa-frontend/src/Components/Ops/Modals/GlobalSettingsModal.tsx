@@ -1,6 +1,6 @@
 /* eslint-disable i18next/no-literal-string */
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { Modal, Button, Form, Nav, Tab, Table, Badge } from 'react-bootstrap';
+import { Modal, Button, Form, Nav, Tab, Table, Badge, Accordion } from 'react-bootstrap';
 import { useTranslation } from 'react-i18next';
 import { useNumaRequest } from '../../../Providers/NumaRequestContext';
 import { useOps } from '../OpsContext';
@@ -66,37 +66,6 @@ const FIELD_TYPES: FieldType[] = [
   'currency',
   'boolean',
 ];
-
-// ─── Color Swatch Sub-Component ──────────────────────────────────────────────
-
-function ColorSwatch({
-  color,
-  selected,
-  onSelect,
-}: {
-  color: string;
-  selected: boolean;
-  onSelect: (c: string) => void;
-}): React.JSX.Element {
-  return (
-    <button
-      type="button"
-      onClick={() => onSelect(color)}
-      className="border-0 p-0 d-flex align-items-center justify-content-center"
-      style={{
-        width: 28,
-        height: 28,
-        borderRadius: '50%',
-        backgroundColor: color,
-        cursor: 'pointer',
-        outline: selected ? '3px solid #333' : 'none',
-        outlineOffset: 2,
-      }}
-    >
-      {selected && <i className="bi bi-check-lg" style={{ color: '#fff', fontSize: 14 }} />}
-    </button>
-  );
-}
 
 // ─── Tag List Sub-Component ──────────────────────────────────────────────────
 
@@ -265,7 +234,6 @@ export function GlobalSettingsModal({
   // ── UI state ───────────────────────────────────────────────────────────────
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [fieldCategoryFilter, setFieldCategoryFilter] = useState<FieldCategory>('common');
   const [fieldSearch, setFieldSearch] = useState('');
   const [showingNewField, setShowingNewField] = useState(false);
   const [editingFieldId, setEditingFieldId] = useState<string | null>(null);
@@ -420,13 +388,6 @@ export function GlobalSettingsModal({
     }
   }, [show, loadCustomers, loadSuppliers]);
 
-  // ── Filtered fields ────────────────────────────────────────────────────────
-  const filteredFields = useMemo(() => {
-    return fields
-      .filter((f) => f.category === fieldCategoryFilter)
-      .filter((f) => !fieldSearch || f.name.toLowerCase().includes(fieldSearch.toLowerCase()));
-  }, [fields, fieldCategoryFilter, fieldSearch]);
-
   // ── Save handler ───────────────────────────────────────────────────────────
   const handleSave = useCallback(async () => {
     try {
@@ -511,7 +472,7 @@ export function GlobalSettingsModal({
       console.info('[GlobalSettingsModal] Saved config changes!');
 
       // Force UI to pick up new ticket types and fields from the backend
-      refreshConfig();
+      await refreshConfig();
       onSaved();
     } catch (err) {
       setError(t('errors.saveFailed', { message: String(err) }));
@@ -706,19 +667,31 @@ export function GlobalSettingsModal({
                 />
               </td>
               <td>
-                <div className="d-flex flex-wrap gap-1">
-                  {BOARD_COLORS.slice(0, 6).map((c) => (
-                    <ColorSwatch
-                      key={c}
-                      color={c}
-                      selected={project.color === c}
-                      onSelect={(color) => {
-                        const updated = [...projects];
-                        updated[idx] = { ...updated[idx], color };
-                        setProjects(updated);
-                      }}
-                    />
-                  ))}
+                <div className="d-flex align-items-center gap-2">
+                  <Form.Control
+                    type="color"
+                    value={project.color}
+                    onChange={(e) => {
+                      const updated = [...projects];
+                      updated[idx] = { ...updated[idx], color: e.target.value };
+                      setProjects(updated);
+                    }}
+                    title={t('common.chooseColor', 'Choose your color')}
+                    className="p-1"
+                    style={{ width: '32px', height: '32px', cursor: 'pointer', borderRadius: '4px' }}
+                  />
+                  <Form.Control
+                    type="text"
+                    size="sm"
+                    value={project.color}
+                    onChange={(e) => {
+                      const updated = [...projects];
+                      updated[idx] = { ...updated[idx], color: e.target.value };
+                      setProjects(updated);
+                    }}
+                    placeholder="#000000"
+                    style={{ maxWidth: '85px' }}
+                  />
                 </div>
               </td>
               <td>
@@ -855,7 +828,11 @@ export function GlobalSettingsModal({
                       className="text-muted border-0 hover-primary"
                       onClick={() => {
                         setEditingTicketType(tt);
-                        setTicketTypeForm(structuredClone(tt));
+                        const validFieldIds = new Set(fields.map((f) => f.id));
+                        setTicketTypeForm({
+                          ...structuredClone(tt),
+                          defaultFields: (tt.defaultFields || []).filter((id) => validFieldIds.has(id)),
+                        });
                         setShowTicketTypeModal(true);
                       }}
                     >
@@ -960,13 +937,16 @@ export function GlobalSettingsModal({
 
     return (
       <div className="d-flex flex-column h-100">
-        <div className="bg-light border rounded p-3 mb-3">
+        <div className="bg-light border rounded p-3 mb-3 flex-shrink-0">
           <div className="d-flex flex-column flex-md-row gap-3 align-items-md-center justify-content-between">
             <div className="d-flex flex-column">
               <span className="fw-bold d-flex align-items-center gap-2">
                 <i className="bi bi-collection text-primary"></i> Field Library
               </span>
-              <span className="text-muted small">Manage available data fields for your boards.</span>
+              <span className="text-muted small">
+                Manage available data fields. Newly created fields must be added to a Ticket Type before they appear on
+                tickets.
+              </span>
             </div>
             <div className="d-flex gap-2">
               <div className="input-group input-group-sm" style={{ width: '240px' }}>
@@ -982,185 +962,119 @@ export function GlobalSettingsModal({
                 />
               </div>
               <Button
-                variant={showingNewField ? 'secondary' : 'primary'}
+                variant="primary"
                 size="sm"
+                className="d-flex align-items-center gap-2 px-3"
                 onClick={() => {
-                  if (showingNewField) {
-                    setEditingFieldId(null);
-                    setNewFieldName('');
-                    setNewFieldType('text');
-                    setNewFieldCategory('common');
-                    setNewFieldOptions('');
-                  }
-                  setShowingNewField(!showingNewField);
+                  setEditingFieldId(null);
+                  setNewFieldName('');
+                  setNewFieldType('text');
+                  setNewFieldCategory('common');
+                  setNewFieldOptions('');
+                  setShowingNewField(true);
                 }}
               >
-                <i className={`bi bi-${showingNewField ? 'x-lg' : 'plus-lg'}`}></i>
+                <i className="bi bi-plus-lg"></i>
+                {t('globalSettings.addField')}
               </Button>
             </div>
           </div>
-
-          {showingNewField && (
-            <div className="mt-3 pt-3 border-top position-relative">
-              {editingFieldId && (
-                <Badge bg="warning" text="dark" className="position-absolute top-0 end-0 mt-2 me-2">
-                  Editing Custom Field
-                </Badge>
-              )}
-              <div className="row g-3">
-                <div className="col-md-4">
-                  <Form.Label className="small fw-medium mb-1">{t('common.name')} *</Form.Label>
-                  <Form.Control
-                    size="sm"
-                    type="text"
-                    placeholder="e.g., Asset Number"
-                    value={newFieldName}
-                    onChange={(e) => setNewFieldName(e.target.value)}
-                  />
-                </div>
-                <div className="col-md-3">
-                  <Form.Label className="small fw-medium mb-1">{t('globalSettings.fieldType')}</Form.Label>
-                  <Form.Select
-                    size="sm"
-                    value={newFieldType}
-                    onChange={(e) => setNewFieldType(e.target.value as FieldType)}
-                  >
-                    {FIELD_TYPES.map((ft) => (
-                      <option key={ft} value={ft}>
-                        {ft}
-                      </option>
-                    ))}
-                  </Form.Select>
-                </div>
-                <div className="col-md-3">
-                  <Form.Label className="small fw-medium mb-1">{t('globalSettings.category')}</Form.Label>
-                  <Form.Control
-                    size="sm"
-                    as="input"
-                    list="field-category-list"
-                    placeholder="Select or type..."
-                    value={newFieldCategory}
-                    onChange={(e) => setNewFieldCategory(e.target.value as FieldCategory)}
-                  />
-                  <datalist id="field-category-list">
-                    {allFieldCategories.map((c) => (
-                      <option key={c} value={c}>
-                        {c}
-                      </option>
-                    ))}
-                  </datalist>
-                </div>
-                <div className="col-md-2 d-flex align-items-end">
-                  <Button
-                    variant="primary"
-                    size="sm"
-                    className="w-100"
-                    onClick={handleAddCustomField}
-                    disabled={!newFieldName.trim()}
-                  >
-                    {editingFieldId ? t('common.save') : t('common.add')}
-                  </Button>
-                </div>
-                {['select', 'multi_select'].includes(newFieldType) && (
-                  <div className="col-12 mt-2">
-                    <Form.Label className="small fw-medium mb-1">
-                      {t('globalSettings.options')} (comma separated)
-                    </Form.Label>
-                    <Form.Control
-                      size="sm"
-                      type="text"
-                      placeholder="e.g. Red, Blue, Green"
-                      value={newFieldOptions}
-                      onChange={(e) => setNewFieldOptions(e.target.value)}
-                    />
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
         </div>
 
-        <div className="d-flex gap-1 mb-3 overflow-auto pb-1 flex-wrap">
-          {allFieldCategories.map((cat) => (
-            <Badge
-              key={cat}
-              role="button"
-              bg={fieldCategoryFilter === cat ? 'primary' : 'light'}
-              className={`py-2 px-3 fw-medium ${fieldCategoryFilter === cat ? 'text-white' : 'text-dark border'}`}
-              style={{ cursor: 'pointer', fontSize: '0.8rem' }}
-              onClick={() => setFieldCategoryFilter(cat as FieldCategory)}
-            >
-              {cat.charAt(0).toUpperCase() + cat.slice(1)}
-              <span className="ms-2 opacity-50 px-1 rounded bg-black bg-opacity-10">
-                {fields.filter((f) => f.category === cat).length}
-              </span>
-            </Badge>
-          ))}
-        </div>
-
-        <div className="mb-4 flex-grow-1 overflow-auto pe-2">
-          {filteredFields.length === 0 ? (
+        <div className="flex-grow-1 overflow-auto pe-2">
+          {fields.length === 0 ? (
             <div className="text-center py-5 bg-light rounded border border-dashed text-muted">
               <i className="bi bi-search d-block fs-3 mb-2 opacity-25"></i>
-              No fields found in this category.
+              No fields defined.
             </div>
           ) : (
-            <div className="row g-2">
-              {filteredFields.map((field) => (
-                <div key={field.id} className="col-12 col-lg-6">
-                  <div
-                    className={`p-2 border rounded bg-white shadow-sm d-flex align-items-center gap-2 h-100 ${!field.isSystem ? 'border-info-subtle bg-info bg-opacity-10' : ''}`}
-                  >
-                    <div className="flex-grow-1 overflow-hidden">
-                      <div className="d-flex align-items-center gap-2">
-                        <span className="fw-bold small text-dark text-truncate" title={field.name}>
-                          {field.name}
-                        </span>
-                        {field.isSystem ? (
-                          <Badge bg="secondary" text="white" style={{ fontSize: '0.6rem' }} className="py-1">
-                            CORE
-                          </Badge>
-                        ) : (
-                          <Badge bg="info" text="dark" style={{ fontSize: '0.6rem' }} className="py-1">
-                            CUSTOM
-                          </Badge>
-                        )}
+            <Accordion defaultActiveKey={allFieldCategories[0]}>
+              {allFieldCategories.map((cat) => {
+                const catFields = fields.filter(
+                  (f) =>
+                    f.category === cat && (!fieldSearch || f.name.toLowerCase().includes(fieldSearch.toLowerCase()))
+                );
+                if (catFields.length === 0) return null;
+                return (
+                  <Accordion.Item key={cat} eventKey={cat} className="mb-2 border rounded shadow-sm">
+                    <Accordion.Header>
+                      <div className="d-flex align-items-center gap-2 w-100">
+                        <span className="fw-bold text-dark">{cat.charAt(0).toUpperCase() + cat.slice(1)}</span>
+                        <Badge bg="secondary" className="rounded-pill opacity-75">
+                          {catFields.length}
+                        </Badge>
                       </div>
-                      <div className="text-muted d-flex align-items-center gap-1" style={{ fontSize: '0.7rem' }}>
-                        <i className="bi bi-tag small"></i> {field.fieldType}
+                    </Accordion.Header>
+                    <Accordion.Body className="bg-light bg-opacity-50 p-3 p-xl-4 border-top">
+                      <div className="row g-2">
+                        {catFields.map((field) => (
+                          <div key={field.id} className="col-12 col-lg-6">
+                            <div
+                              className={`p-2 border rounded bg-white shadow-sm d-flex align-items-center gap-2 h-100 ${!field.isSystem ? 'border-info-subtle border-opacity-50' : ''}`}
+                            >
+                              <div className="flex-grow-1 overflow-hidden">
+                                <div className="d-flex align-items-center gap-2">
+                                  <span className="fw-bold small text-dark text-truncate" title={field.name}>
+                                    {field.name}
+                                  </span>
+                                  {field.isSystem ? (
+                                    <Badge bg="secondary" text="white" style={{ fontSize: '0.6rem' }} className="py-1">
+                                      CORE
+                                    </Badge>
+                                  ) : (
+                                    <Badge
+                                      bg="info"
+                                      text="dark"
+                                      style={{ fontSize: '0.6rem' }}
+                                      className="py-1 bg-opacity-25 text-info"
+                                    >
+                                      CUSTOM
+                                    </Badge>
+                                  )}
+                                </div>
+                                <div
+                                  className="text-muted d-flex align-items-center gap-1"
+                                  style={{ fontSize: '0.7rem' }}
+                                >
+                                  <i className="bi bi-tag small"></i> {field.fieldType}
+                                </div>
+                              </div>
+                              {!field.isSystem && (
+                                <div className="d-flex ms-2">
+                                  <Button
+                                    variant="link"
+                                    size="sm"
+                                    className="text-primary p-0 border-0 me-2"
+                                    onClick={() => {
+                                      setEditingFieldId(field.id);
+                                      setNewFieldName(field.name);
+                                      setNewFieldType(field.fieldType);
+                                      setNewFieldCategory(field.category);
+                                      setNewFieldOptions(field.options?.join(', ') || '');
+                                      setShowingNewField(true);
+                                    }}
+                                  >
+                                    <i className="bi bi-pencil"></i>
+                                  </Button>
+                                  <Button
+                                    variant="link"
+                                    size="sm"
+                                    className="text-danger p-0 border-0"
+                                    onClick={() => setFields((prev) => prev.filter((f) => f.id !== field.id))}
+                                  >
+                                    <i className="bi bi-trash"></i>
+                                  </Button>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        ))}
                       </div>
-                    </div>
-                    {!field.isSystem && (
-                      <div className="d-flex ms-2">
-                        <Button
-                          variant="link"
-                          size="sm"
-                          className="text-primary p-0 border-0 me-2"
-                          onClick={() => {
-                            setEditingFieldId(field.id);
-                            setNewFieldName(field.name);
-                            setNewFieldType(field.fieldType);
-                            setNewFieldCategory(field.category);
-                            setNewFieldOptions(field.options?.join(', ') || '');
-                            setShowingNewField(true);
-                          }}
-                        >
-                          <i className="bi bi-pencil"></i>
-                        </Button>
-                        <Button
-                          variant="link"
-                          size="sm"
-                          className="text-danger p-0 border-0"
-                          onClick={() => setFields((prev) => prev.filter((f) => f.id !== field.id))}
-                        >
-                          <i className="bi bi-trash"></i>
-                        </Button>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
+                    </Accordion.Body>
+                  </Accordion.Item>
+                );
+              })}
+            </Accordion>
           )}
         </div>
       </div>
@@ -2181,15 +2095,22 @@ export function GlobalSettingsModal({
           </Form.Group>
           <Form.Group>
             <Form.Label className="fw-medium small">Override Explicit Color</Form.Label>
-            <div className="d-flex flex-wrap gap-1">
-              {BOARD_COLORS.map((c) => (
-                <ColorSwatch
-                  key={c}
-                  color={c}
-                  selected={lifecycleStageForm.color === c}
-                  onSelect={(color) => setLifecycleStageForm({ ...lifecycleStageForm, color })}
-                />
-              ))}
+            <div className="d-flex gap-2 align-items-center">
+              <Form.Control
+                type="color"
+                value={lifecycleStageForm.color ?? '#6c757d'}
+                onChange={(e) => setLifecycleStageForm({ ...lifecycleStageForm, color: e.target.value })}
+                title={t('common.chooseColor', 'Choose your color')}
+                className="p-1"
+                style={{ width: '48px', height: '36px', flexShrink: 0, cursor: 'pointer', borderRadius: '4px' }}
+              />
+              <Form.Control
+                type="text"
+                value={lifecycleStageForm.color ?? ''}
+                onChange={(e) => setLifecycleStageForm({ ...lifecycleStageForm, color: e.target.value })}
+                placeholder="#000000"
+                style={{ maxWidth: '120px' }}
+              />
               <div
                 className="d-flex flex-column justify-content-center ms-2"
                 style={{ cursor: 'pointer' }}
@@ -2222,6 +2143,7 @@ export function GlobalSettingsModal({
                   id: generateId(),
                   name: lifecycleStageForm.name.trim(),
                   colorPosition: lifecycleStageForm.colorPosition,
+                  color: lifecycleStageForm.color,
                 });
               }
               setCrmConfig(updated);
@@ -2266,32 +2188,22 @@ export function GlobalSettingsModal({
           </Form.Group>
           <Form.Group>
             <Form.Label className="fw-medium small">Color</Form.Label>
-            <div className="d-flex flex-wrap gap-2">
-              {[
-                { hex: '#F59E0B', name: 'Amber' },
-                { hex: '#8B5CF6', name: 'Purple' },
-                { hex: '#EF4444', name: 'Red' },
-                { hex: '#10B981', name: 'Green' },
-                { hex: '#3B82F6', name: 'Blue' },
-                { hex: '#EC4899', name: 'Pink' },
-                { hex: '#6366F1', name: 'Indigo' },
-                { hex: '#14B8A6', name: 'Teal' },
-              ].map((color) => (
-                <button
-                  key={color.hex}
-                  type="button"
-                  onClick={() => setFlagForm({ ...flagForm, color: color.hex })}
-                  className="rounded border"
-                  title={color.name}
-                  style={{
-                    width: 44,
-                    height: 44,
-                    backgroundColor: color.hex,
-                    outline: flagForm.color === color.hex ? '3px solid #333' : 'none',
-                    outlineOffset: 2,
-                  }}
-                />
-              ))}
+            <div className="d-flex gap-3 align-items-center">
+              <Form.Control
+                type="color"
+                value={flagForm.color}
+                onChange={(e) => setFlagForm({ ...flagForm, color: e.target.value })}
+                title={t('common.chooseColor', 'Choose your color')}
+                className="p-1"
+                style={{ width: '48px', height: '36px', cursor: 'pointer', borderRadius: '4px' }}
+              />
+              <Form.Control
+                type="text"
+                value={flagForm.color}
+                onChange={(e) => setFlagForm({ ...flagForm, color: e.target.value })}
+                placeholder="#000000"
+                style={{ maxWidth: '120px' }}
+              />
             </div>
           </Form.Group>
         </Modal.Body>
@@ -2425,15 +2337,26 @@ export function GlobalSettingsModal({
           </Form.Group>
           <Form.Group>
             <Form.Label className="fw-medium small">Override Explicit Color</Form.Label>
-            <div className="d-flex flex-wrap gap-1">
-              {BOARD_COLORS.map((c) => (
-                <ColorSwatch
-                  key={c}
-                  color={c}
-                  selected={supplierLifecycleStageForm.color === c}
-                  onSelect={(color) => setSupplierLifecycleStageForm({ ...supplierLifecycleStageForm, color })}
-                />
-              ))}
+            <div className="d-flex gap-2 align-items-center">
+              <Form.Control
+                type="color"
+                value={supplierLifecycleStageForm.color ?? '#6c757d'}
+                onChange={(e) =>
+                  setSupplierLifecycleStageForm({ ...supplierLifecycleStageForm, color: e.target.value })
+                }
+                title={t('common.chooseColor', 'Choose your color')}
+                className="p-1"
+                style={{ width: '48px', height: '36px', flexShrink: 0, cursor: 'pointer', borderRadius: '4px' }}
+              />
+              <Form.Control
+                type="text"
+                value={supplierLifecycleStageForm.color ?? ''}
+                onChange={(e) =>
+                  setSupplierLifecycleStageForm({ ...supplierLifecycleStageForm, color: e.target.value })
+                }
+                placeholder="#000000"
+                style={{ maxWidth: '120px' }}
+              />
               <div
                 className="d-flex flex-column justify-content-center ms-2"
                 style={{ cursor: 'pointer' }}
@@ -2464,12 +2387,14 @@ export function GlobalSettingsModal({
                   if (updated.useAutoColors === false) {
                     stage.colorPosition = supplierLifecycleStageForm.colorPosition;
                   }
+                  stage.color = supplierLifecycleStageForm.color;
                 }
               } else {
                 updated.lifecycleStages.push({
                   id: generateId(),
                   name: supplierLifecycleStageForm.name.trim(),
                   colorPosition: supplierLifecycleStageForm.colorPosition,
+                  color: supplierLifecycleStageForm.color,
                 });
               }
               setSupplierConfig(updated);
@@ -2527,15 +2452,22 @@ export function GlobalSettingsModal({
 
           <Form.Group>
             <Form.Label className="fw-medium small">{t('common.color')}</Form.Label>
-            <div className="d-flex flex-wrap gap-1">
-              {BOARD_COLORS.map((c) => (
-                <ColorSwatch
-                  key={c}
-                  color={c}
-                  selected={ticketTypeForm.color === c}
-                  onSelect={(color) => setTicketTypeForm({ ...ticketTypeForm, color })}
-                />
-              ))}
+            <div className="d-flex align-items-center gap-3">
+              <Form.Control
+                type="color"
+                value={ticketTypeForm.color || '#6c757d'}
+                onChange={(e) => setTicketTypeForm({ ...ticketTypeForm, color: e.target.value })}
+                title={t('common.chooseColor', 'Choose your color')}
+                className="p-1"
+                style={{ width: '48px', height: '36px', cursor: 'pointer', borderRadius: '4px' }}
+              />
+              <Form.Control
+                type="text"
+                value={ticketTypeForm.color || ''}
+                onChange={(e) => setTicketTypeForm({ ...ticketTypeForm, color: e.target.value })}
+                placeholder="#000000"
+                style={{ maxWidth: '120px' }}
+              />
             </div>
           </Form.Group>
 
@@ -2754,15 +2686,26 @@ export function GlobalSettingsModal({
           </Form.Group>
           <Form.Group>
             <Form.Label className="fw-medium small">Explicit Color Override</Form.Label>
-            <div className="d-flex flex-wrap gap-1">
-              {BOARD_COLORS.map((c) => (
-                <ColorSwatch
-                  key={c}
-                  color={c}
-                  selected={supplierLifecycleStageForm.color === c}
-                  onSelect={(color) => setSupplierLifecycleStageForm({ ...supplierLifecycleStageForm, color })}
-                />
-              ))}
+            <div className="d-flex gap-2 align-items-center">
+              <Form.Control
+                type="color"
+                value={supplierLifecycleStageForm.color ?? '#6c757d'}
+                onChange={(e) =>
+                  setSupplierLifecycleStageForm({ ...supplierLifecycleStageForm, color: e.target.value })
+                }
+                title={t('common.chooseColor', 'Choose your color')}
+                className="p-1"
+                style={{ width: '48px', height: '36px', flexShrink: 0, cursor: 'pointer', borderRadius: '4px' }}
+              />
+              <Form.Control
+                type="text"
+                value={supplierLifecycleStageForm.color ?? ''}
+                onChange={(e) =>
+                  setSupplierLifecycleStageForm({ ...supplierLifecycleStageForm, color: e.target.value })
+                }
+                placeholder="#000000"
+                style={{ maxWidth: '120px' }}
+              />
               <div
                 className="d-flex flex-column justify-content-center ms-2"
                 style={{ cursor: 'pointer' }}
@@ -2848,32 +2791,22 @@ export function GlobalSettingsModal({
           </Form.Group>
           <Form.Group>
             <Form.Label className="fw-medium small">Color</Form.Label>
-            <div className="d-flex flex-wrap gap-2">
-              {[
-                { hex: '#14B8A6', name: 'Teal' },
-                { hex: '#F59E0B', name: 'Amber' },
-                { hex: '#10B981', name: 'Green' },
-                { hex: '#8B5CF6', name: 'Purple' },
-                { hex: '#3B82F6', name: 'Blue' },
-                { hex: '#EF4444', name: 'Red' },
-                { hex: '#EC4899', name: 'Pink' },
-                { hex: '#6366F1', name: 'Indigo' },
-              ].map((color) => (
-                <button
-                  key={color.hex}
-                  type="button"
-                  onClick={() => setSupplierFlagForm({ ...supplierFlagForm, color: color.hex })}
-                  className="rounded border"
-                  title={color.name}
-                  style={{
-                    width: 44,
-                    height: 44,
-                    backgroundColor: color.hex,
-                    outline: supplierFlagForm.color === color.hex ? '3px solid #333' : 'none',
-                    outlineOffset: 2,
-                  }}
-                />
-              ))}
+            <div className="d-flex align-items-center gap-3">
+              <Form.Control
+                type="color"
+                value={supplierFlagForm.color}
+                onChange={(e) => setSupplierFlagForm({ ...supplierFlagForm, color: e.target.value })}
+                title={t('common.chooseColor', 'Choose your color')}
+                className="p-1"
+                style={{ width: '48px', height: '36px', cursor: 'pointer', borderRadius: '4px' }}
+              />
+              <Form.Control
+                type="text"
+                value={supplierFlagForm.color}
+                onChange={(e) => setSupplierFlagForm({ ...supplierFlagForm, color: e.target.value })}
+                placeholder="#000000"
+                style={{ maxWidth: '120px' }}
+              />
             </div>
           </Form.Group>
         </Modal.Body>
@@ -2951,6 +2884,79 @@ export function GlobalSettingsModal({
             }}
           >
             {editingSupplierDocType ? 'Save' : 'Add'}
+          </Button>
+        </Modal.Footer>
+      </Modal>
+
+      {/* ── Field Config Modal ──────────────────────────────────────────── */}
+      <Modal show={showingNewField} onHide={() => setShowingNewField(false)} centered>
+        <Modal.Header closeButton>
+          <Modal.Title>{editingFieldId ? t('globalSettings.editField') : t('globalSettings.addField')}</Modal.Title>
+        </Modal.Header>
+        <Modal.Body className="d-flex flex-column gap-3">
+          <Form.Group>
+            <Form.Label className="fw-medium small">{t('common.name')} *</Form.Label>
+            <Form.Control
+              type="text"
+              autoFocus
+              placeholder="e.g., Asset Number"
+              value={newFieldName}
+              onChange={(e) => setNewFieldName(e.target.value)}
+            />
+          </Form.Group>
+          <div className="row g-3">
+            <div className="col-12 col-md-6">
+              <Form.Group>
+                <Form.Label className="fw-medium small">{t('globalSettings.fieldType')}</Form.Label>
+                <Form.Select value={newFieldType} onChange={(e) => setNewFieldType(e.target.value as FieldType)}>
+                  {FIELD_TYPES.map((ft) => (
+                    <option key={ft} value={ft}>
+                      {ft}
+                    </option>
+                  ))}
+                </Form.Select>
+              </Form.Group>
+            </div>
+            <div className="col-12 col-md-6">
+              <Form.Group>
+                <Form.Label className="fw-medium small">{t('globalSettings.category')}</Form.Label>
+                <Form.Control
+                  as="input"
+                  list="field-category-list-modal"
+                  placeholder="Select or type..."
+                  value={newFieldCategory}
+                  onChange={(e) => setNewFieldCategory(e.target.value as FieldCategory)}
+                />
+                <datalist id="field-category-list-modal">
+                  {Array.from(new Set([...FIELD_CATEGORIES, ...fields.map((f) => f.category)]))
+                    .sort()
+                    .map((c) => (
+                      <option key={c} value={c}>
+                        {c}
+                      </option>
+                    ))}
+                </datalist>
+              </Form.Group>
+            </div>
+          </div>
+          {['select', 'multi_select'].includes(newFieldType) && (
+            <Form.Group>
+              <Form.Label className="fw-medium small">{t('globalSettings.options')} (comma separated)</Form.Label>
+              <Form.Control
+                type="text"
+                placeholder="e.g. Red, Blue, Green"
+                value={newFieldOptions}
+                onChange={(e) => setNewFieldOptions(e.target.value)}
+              />
+            </Form.Group>
+          )}
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="secondary" onClick={() => setShowingNewField(false)}>
+            {t('common.cancel')}
+          </Button>
+          <Button variant="primary" onClick={handleAddCustomField} disabled={!newFieldName.trim()}>
+            {editingFieldId ? t('common.save') : t('common.add')}
           </Button>
         </Modal.Footer>
       </Modal>

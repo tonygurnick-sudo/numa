@@ -36,17 +36,9 @@ export const DEFAULT_ZONES: { name: string; zoneType: ZoneType; order: number }[
 // in seed-ops-config/seed-data.ts so dynamically created types are consistent
 // with pre-seeded ones.
 
-const BASE_FIELDS = ['field-name', 'field-description', 'field-priority', 'field-assignee', 'field-due-date'];
+const BASE_FIELDS = ['field-name', 'field-description', 'field-priority', 'field-assignee'];
 
-export const DEFAULT_FIELDS_BY_PREFIX: Record<string, string[]> = {
-  FEAT: [...BASE_FIELDS, 'field-effort-points', 'field-work-unit-id', 'field-client'],
-  BUG: [...BASE_FIELDS, 'field-severity', 'field-work-unit-id', 'field-client'],
-  TASK: [...BASE_FIELDS, 'field-effort-points', 'field-work-unit-id'],
-  SRQ: [...BASE_FIELDS, 'field-client', 'field-work-unit-id'],
-  SUPP: [...BASE_FIELDS, 'field-client'],
-  LEAD: [...BASE_FIELDS, 'field-client', 'field-deal-value'],
-  DEAL: [...BASE_FIELDS, 'field-client', 'field-deal-value', 'field-probability'],
-};
+export const DEFAULT_FIELDS_BY_PREFIX: Record<string, string[]> = {};
 
 /** Returns the default fields for a given ticket type prefix, or fallback base fields. */
 export const getDefaultFieldsForPrefix = (prefix: string): string[] => DEFAULT_FIELDS_BY_PREFIX[prefix] ?? BASE_FIELDS;
@@ -79,6 +71,31 @@ export type TeamPresetConfig = {
 };
 
 export const TEAM_PRESETS: TeamPresetConfig[] = [
+  {
+    id: 'standard',
+    name: 'Blank Board',
+    description: 'Empty template to build your board from scratch.',
+    mode: 'normal' as TeamPreset,
+    zones: [
+      {
+        name: 'Backlog',
+        zoneType: 'backlog',
+        stages: [
+          { name: 'New', statusType: 'backlog' },
+          { name: 'Ready', statusType: 'scoped' },
+        ],
+      },
+      {
+        name: 'Board',
+        zoneType: 'board',
+        stages: [
+          { name: 'To Do', statusType: 'queued' },
+          { name: 'In Progress', statusType: 'active' },
+          { name: 'Done', statusType: 'completed' },
+        ],
+      },
+    ],
+  },
   {
     id: 'development',
     name: 'Product Development',
@@ -429,6 +446,13 @@ export type TeamPresetInfo = {
 
 export const TEAM_PRESETS_INFO: TeamPresetInfo[] = [
   {
+    mode: 'normal' as TeamPreset,
+    name: 'Empty Template',
+    nameKey: 'teams.modeStandard',
+    descriptionKey: 'teams.modeStandardDesc',
+    defaultPreset: 'standard',
+  },
+  {
     mode: 'development',
     name: 'Product Development',
     nameKey: 'teams.modeDevelopment',
@@ -468,13 +492,39 @@ export const TEAM_PRESETS_INFO: TeamPresetInfo[] = [
 // ─── Ticket Type Icon Mapping ────────────────────────────────────────────────
 
 const TICKET_TYPE_ICON_MAP: Record<string, string> = {
+  // Core types
   sparkles: 'bi-stars',
   stop: 'bi-bug',
   clipboard: 'bi-clipboard',
   ticket: 'bi-ticket-perforated',
+  // Mining / Logistics
+  wrench: 'bi-wrench-adjustable',
+  truck: 'bi-truck',
+  logistics: 'bi-truck',
+  box: 'bi-box-seam',
+  // Support / Work Management
+  inbox: 'bi-inbox',
+  'info-circle': 'bi-info-circle',
+  // Monthly / Enterprise
+  flag: 'bi-flag',
+  folder: 'bi-folder',
+  'diagram-3': 'bi-diagram-3',
+  compass: 'bi-compass',
+  // Sales
+  person: 'bi-person',
+  'currency-dollar': 'bi-currency-dollar',
+  'arrow-repeat': 'bi-arrow-repeat',
+  // Legal / Supplier
+  briefcase: 'bi-briefcase',
+  'shield-check': 'bi-shield-check',
+  'file-text': 'bi-file-text',
+  building: 'bi-building',
+  'journal-text': 'bi-journal-text',
+  tools: 'bi-tools',
 };
 
 export const getTicketTypeIconClass = (icon: string): string => {
+  if (icon.startsWith('bi-')) return `bi ${icon}`;
   return `bi ${TICKET_TYPE_ICON_MAP[icon] ?? `bi-${icon}`}`;
 };
 

@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 interface RichTextEditorProps {
   value: string;
   onSave: (html: string) => void;
+  onChange?: (html: string) => void;
   placeholder?: string;
   minHeight?: number;
   disabled?: boolean;
@@ -33,7 +34,7 @@ type FormatCmd =
  * Content is stored as HTML.
  */
 export const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(function RichTextEditor(
-  { value, onSave, placeholder = 'Add a description…', minHeight = 120, disabled = false },
+  { value, onSave, onChange, placeholder = 'Add a description…', minHeight = 120, disabled = false },
   ref
 ) {
   const { t } = useTranslation('ops');
@@ -50,15 +51,32 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorPro
   useEffect(() => {
     const el = editorRef.current;
     if (!el) return;
+
+    const incoming = value || '';
+
     if (!initializedRef.current) {
       // First mount — always set content
-      el.innerHTML = value;
-      lastSavedRef.current = value;
+      el.innerHTML = incoming;
+      lastSavedRef.current = incoming;
       initializedRef.current = true;
-    } else if (value !== lastSavedRef.current) {
-      // External value change (e.g. ticket reloaded) — update content
-      el.innerHTML = value;
-      lastSavedRef.current = value;
+      return;
+    }
+
+    const currentHtml = el.innerHTML;
+    const cleanCurrent =
+      currentHtml === '<br>' || currentHtml === '<div><br></div>' || currentHtml === '<p><br></p>' ? '' : currentHtml;
+
+    // If incoming exactly matches what we just sent out via onChange, do nothing
+    // so we preserve the cursor position safely.
+    if (incoming === currentHtml || incoming === cleanCurrent) {
+      lastSavedRef.current = incoming;
+      return;
+    }
+
+    // External value change (e.g. ticket reloaded with new remote text) — update content
+    if (incoming !== lastSavedRef.current) {
+      el.innerHTML = incoming;
+      lastSavedRef.current = incoming;
     }
   }, [value]);
 
@@ -107,6 +125,13 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorPro
       onSave(clean);
     }
   }, [readClean, onSave]);
+
+  const handleInput = useCallback(() => {
+    const clean = readClean();
+    if (clean !== null && onChange) {
+      onChange(clean);
+    }
+  }, [readClean, onChange]);
 
   // Expose flush() to the parent via ref
   useImperativeHandle(ref, () => ({ flush }), [flush]);
@@ -221,6 +246,8 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorPro
         contentEditable={!disabled}
         suppressContentEditableWarning
         data-placeholder={placeholder}
+        onInput={handleInput}
+        onBlur={flush}
         style={{
           minHeight,
           padding: '10px 14px',
