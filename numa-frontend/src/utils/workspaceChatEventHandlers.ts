@@ -76,7 +76,6 @@ const INLINE_TOOLS = new Set([
   'Skill',
   'mcp__scripts__execute_script',
   'mcp__numa__numa_tool',
-  'mcp__numa__numa_ops_tool',
   'TaskOutput',
 ]);
 
@@ -431,6 +430,17 @@ export function getInlineToolDisplay(toolName: string, input: unknown): { text: 
         return { text: numaInput.name.replace(/_/g, ' ') };
       }
       return { text: 'Running Numa tool...' };
+    }
+    case 'mcp__numa__numa_ops_tool': {
+      // Use description field (human-friendly), fall back to operation name
+      const opsInput = inputObj as { operation?: string; description?: string };
+      if (opsInput.description && typeof opsInput.description === 'string') {
+        return { text: opsInput.description };
+      }
+      if (opsInput.operation && typeof opsInput.operation === 'string') {
+        return { text: `Ops: ${opsInput.operation.replace(/_/g, ' ')}` };
+      }
+      return { text: 'Running Numa Ops...' };
     }
     default:
       return { text: `Using ${toolName}` };

@@ -6,14 +6,18 @@
  * kanban board (priority dots, status pills, monospace IDs, glassmorphism
  * cards).
  */
+import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { ToolResultLike } from './helpers';
+import { useAuth } from '../Providers/AuthProvider';
 import {
   getOpsPayload,
   getOpsCategory,
   isListOperation,
   isGetOperation,
   isWriteOperation,
+  unwrapOpsResult,
+  workdirPathToRelative,
   getPriorityColor,
   getStatusColor,
   getContrastText,
@@ -24,6 +28,7 @@ import {
   type OpsSupplier,
   type OpsProject,
   type OpsConfig,
+  type OpsTeamDetail,
   type OpsComment,
 } from './opsHelpers';
 
@@ -73,49 +78,84 @@ const EmptyState = ({ message }: { message: string }) => <div className="ops-ren
 
 // ── Ticket views ───────────────────────────────────────────────────────
 
-const TicketRow = ({ ticket }: { ticket: OpsTicket }) => (
-  <div className="ops-renderer-ticket-row">
-    <div className="ops-renderer-ticket-row-top">
-      <PriorityDot priority={ticket.priority} />
-      <TicketId id={ticket.displayId} />
-      <span className="ops-renderer-ticket-title">{ticket.title}</span>
+/** Resolve statusType from flat field or nested status object */
+function resolveStatusType(ticket: OpsTicket): string {
+  return ticket.statusType || ticket.status?.type || '';
+}
+
+/** Resolve customer name from flat or nested field */
+function resolveCustomerName(ticket: OpsTicket): string | undefined {
+  return ticket.customerName || ticket.customer?.companyName;
+}
+
+const StatusTypeBadge = ({ statusType }: { statusType: string }) => {
+  if (!statusType) return null;
+  const bg = getStatusColor(statusType);
+  const text = getContrastText(bg);
+  const label = statusType.charAt(0).toUpperCase() + statusType.slice(1);
+  return (
+    <span className="ops-renderer-status-pill" style={{ backgroundColor: bg, color: text }}>
+      {label}
+    </span>
+  );
+};
+
+const TicketRow = ({ ticket }: { ticket: OpsTicket }) => {
+  const statusType = resolveStatusType(ticket);
+  const customerName = resolveCustomerName(ticket);
+  const isOverdue = ticket.dueDate && !ticket.completedAt && new Date(ticket.dueDate) < new Date();
+  const isCompleted = statusType === 'completed';
+
+  return (
+    <div className={`ops-renderer-ticket-row ${isCompleted ? 'completed' : ''}`}>
+      <div className="ops-renderer-ticket-row-top">
+        <PriorityDot priority={ticket.priority} />
+        <TicketId id={ticket.displayId} />
+        <span className="ops-renderer-ticket-title">{ticket.title}</span>
+        <StatusTypeBadge statusType={statusType} />
+      </div>
+      <div className="ops-renderer-ticket-row-meta">
+        {ticket.ticketType && <TypeBadge type={ticket.ticketType} />}
+        {customerName && (
+          <span className="ops-renderer-meta-chip">
+            <i className="bi bi-building" />
+            {customerName}
+          </span>
+        )}
+        {ticket.dueDate && (
+          <span className={`ops-renderer-meta-chip ${isOverdue ? 'overdue' : ''}`}>
+            <i className={`bi ${isOverdue ? 'bi-exclamation-circle' : 'bi-calendar3'}`} />
+            {new Date(ticket.dueDate).toLocaleDateString()}
+          </span>
+        )}
+        {ticket.effortPoints != null && (
+          <span className="ops-renderer-meta-chip">
+            <i className="bi bi-lightning" />
+            {ticket.effortPoints}
+          </span>
+        )}
+        {ticket.commentCount != null && ticket.commentCount > 0 && (
+          <span className="ops-renderer-meta-chip">
+            <i className="bi bi-chat-dots" />
+            {ticket.commentCount}
+          </span>
+        )}
+        {ticket.supplier?.companyName && (
+          <span className="ops-renderer-meta-chip">
+            <i className="bi bi-truck" />
+            {ticket.supplier.companyName}
+          </span>
+        )}
+      </div>
     </div>
-    <div className="ops-renderer-ticket-row-meta">
-      <StatusPill status={ticket.status} />
-      <TypeBadge type={ticket.ticketType} />
-      {ticket.assignee?.name && (
-        <span className="ops-renderer-meta-chip">
-          <i className="bi bi-person" />
-          {ticket.assignee.name}
-        </span>
-      )}
-      {ticket.dueDate && (
-        <span className="ops-renderer-meta-chip">
-          <i className="bi bi-calendar3" />
-          {new Date(ticket.dueDate).toLocaleDateString()}
-        </span>
-      )}
-      {ticket.customer?.companyName && (
-        <span className="ops-renderer-context-badge ops-renderer-badge-customer">
-          <i className="bi bi-building" />
-          {ticket.customer.companyName}
-        </span>
-      )}
-      {ticket.supplier?.companyName && (
-        <span className="ops-renderer-context-badge ops-renderer-badge-supplier">
-          <i className="bi bi-truck" />
-          {ticket.supplier.companyName}
-        </span>
-      )}
-    </div>
-  </div>
-);
+  );
+};
 
 const TicketList = ({ tickets }: { tickets: OpsTicket[] }) => {
   const { t } = useTranslation('common');
   if (!tickets.length) return <EmptyState message={t('toolRenderers.numaOps.noTickets')} />;
   return (
-    <div className="ops-renderer-list">
+    <div className="ops-renderer-ticket-list">
       {tickets.map((ticket, idx) => (
         <TicketRow key={ticket.id || idx} ticket={ticket} />
       ))}
@@ -125,13 +165,15 @@ const TicketList = ({ tickets }: { tickets: OpsTicket[] }) => {
 
 const TicketDetail = ({ ticket }: { ticket: OpsTicket }) => {
   const { t } = useTranslation('common');
+  const statusType = resolveStatusType(ticket);
+  const customerName = resolveCustomerName(ticket);
   return (
     <div className="ops-renderer-detail-card">
       <div className="ops-renderer-detail-header">
         <PriorityDot priority={ticket.priority} />
         <TicketId id={ticket.displayId} />
-        <StatusPill status={ticket.status} />
-        <TypeBadge type={ticket.ticketType} />
+        <StatusTypeBadge statusType={statusType} />
+        {ticket.ticketType && <TypeBadge type={ticket.ticketType} />}
       </div>
       <div className="ops-renderer-detail-title">{ticket.title}</div>
       {ticket.description && <div className="ops-renderer-detail-desc">{ticket.description}</div>}
@@ -154,10 +196,10 @@ const TicketDetail = ({ ticket }: { ticket: OpsTicket }) => {
             <span>{ticket.project.name}</span>
           </div>
         )}
-        {ticket.customer?.companyName && (
+        {customerName && (
           <div className="ops-renderer-field">
             <span className="ops-renderer-field-label">{t('toolRenderers.numaOps.fields.customer')}</span>
-            <span>{ticket.customer.companyName}</span>
+            <span>{customerName}</span>
           </div>
         )}
         {ticket.supplier?.companyName && (
@@ -173,40 +215,137 @@ const TicketDetail = ({ ticket }: { ticket: OpsTicket }) => {
 
 // ── Team views ─────────────────────────────────────────────────────────
 
-const TeamRow = ({ team }: { team: OpsTeam }) => (
-  <div className="ops-renderer-entity-row">
-    <div className="ops-renderer-entity-icon">
-      <i className="bi bi-people" />
-    </div>
-    <div className="ops-renderer-entity-body">
-      <span className="ops-renderer-entity-name">{team.name}</span>
-      {team.description && <span className="ops-renderer-entity-desc">{team.description}</span>}
-    </div>
-    {(team.memberCount != null || team.ticketCount != null) && (
-      <div className="ops-renderer-entity-stats">
-        {team.memberCount != null && (
-          <span className="ops-renderer-meta-chip">
-            <i className="bi bi-person" /> {team.memberCount}
+const TeamRow = ({ team }: { team: OpsTeam }) => {
+  const { t } = useTranslation('common');
+  const color = team.color || '#6c757d';
+  const isRestricted = team.accessControl?.mode === 'specific';
+  const sprintLabel = team.workUnitSeries?.enabled ? team.workUnitSeries.label : null;
+  const typeCount = team.allowedTicketTypes?.length;
+
+  return (
+    <div className="ops-renderer-team-row" style={{ borderLeftColor: color }}>
+      <div className="ops-renderer-team-header">
+        <span className="ops-renderer-team-color-dot" style={{ backgroundColor: color }} />
+        <span className="ops-renderer-team-name">{team.name}</span>
+        {isRestricted && (
+          <span className="ops-renderer-team-badge restricted">
+            <i className="bi bi-lock" />
+          </span>
+        )}
+      </div>
+      {team.description && <div className="ops-renderer-team-desc">{team.description}</div>}
+      <div className="ops-renderer-team-meta">
+        {sprintLabel && (
+          <span className="ops-renderer-team-chip">
+            <i className="bi bi-arrow-repeat" /> {sprintLabel}
+          </span>
+        )}
+        {typeCount != null && typeCount > 0 && (
+          <span className="ops-renderer-team-chip">
+            <i className="bi bi-tag" /> {t('toolRenderers.numaOps.ticketTypes', { count: typeCount })}
           </span>
         )}
         {team.ticketCount != null && (
-          <span className="ops-renderer-meta-chip">
+          <span className="ops-renderer-team-chip">
             <i className="bi bi-ticket-perforated" /> {team.ticketCount}
           </span>
         )}
       </div>
-    )}
-  </div>
-);
+    </div>
+  );
+};
 
 const TeamList = ({ teams }: { teams: OpsTeam[] }) => {
   const { t } = useTranslation('common');
   if (!teams.length) return <EmptyState message={t('toolRenderers.numaOps.noTeams')} />;
   return (
-    <div className="ops-renderer-list">
+    <div className="ops-renderer-team-list">
       {teams.map((team, idx) => (
         <TeamRow key={team.id || idx} team={team} />
       ))}
+    </div>
+  );
+};
+
+// ── Team detail view (get_team with zones + stages) ───────────────────
+
+/** Check if a result object is a rich team detail (has team/zones/stages). */
+function isTeamDetail(data: unknown): data is OpsTeamDetail {
+  if (!data || typeof data !== 'object') return false;
+  const d = data as Record<string, unknown>;
+  return d.team != null && typeof d.team === 'object';
+}
+
+const TeamDetailView = ({ detail }: { detail: OpsTeamDetail }) => {
+  const { t } = useTranslation('common');
+  const { team, zones = [], stages = [] } = detail;
+  const color = team.color || '#6c757d';
+  const isRestricted = team.accessControl?.mode === 'specific';
+  const sprintLabel = team.workUnitSeries?.enabled ? team.workUnitSeries.label : null;
+
+  // Group stages by zone
+  const stagesByZone = zones
+    .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+    .map((zone) => ({
+      zone,
+      stages: stages.filter((s) => s.zoneId === zone.id).sort((a, b) => (a.order ?? 0) - (b.order ?? 0)),
+    }));
+
+  return (
+    <div className="ops-renderer-team-detail">
+      <div className="ops-renderer-team-detail-header" style={{ borderLeftColor: color }}>
+        <div className="ops-renderer-team-header">
+          <span className="ops-renderer-team-color-dot" style={{ backgroundColor: color }} />
+          <span className="ops-renderer-team-name">{team.name}</span>
+          {isRestricted && (
+            <span className="ops-renderer-team-badge restricted">
+              <i className="bi bi-lock" />
+            </span>
+          )}
+          {sprintLabel && (
+            <span className="ops-renderer-team-chip">
+              <i className="bi bi-arrow-repeat" /> {sprintLabel}
+            </span>
+          )}
+        </div>
+        {team.description && <div className="ops-renderer-team-desc">{team.description}</div>}
+      </div>
+
+      {stagesByZone.length > 0 && (
+        <div className="ops-renderer-board-layout">
+          {stagesByZone.map(({ zone, stages: zoneStages }) => (
+            <div key={zone.id} className="ops-renderer-board-zone">
+              <div className="ops-renderer-board-zone-label">
+                <i className={`bi ${zone.zoneType === 'backlog' ? 'bi-inbox' : 'bi-kanban'}`} />
+                {zone.name}
+              </div>
+              <div className="ops-renderer-board-stages">
+                {zoneStages.map((stage, idx) => {
+                  const bg = getStatusColor(stage.statusType || '');
+                  const fg = getContrastText(bg);
+                  return (
+                    <span key={stage.id || idx}>
+                      {idx > 0 && <span className="ops-renderer-board-arrow">{'\u2192'}</span>}
+                      <span className="ops-renderer-board-stage" style={{ backgroundColor: bg, color: fg }}>
+                        {stage.name}
+                      </span>
+                    </span>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {team.allowedTicketTypes && team.allowedTicketTypes.length > 0 && (
+        <div className="ops-renderer-team-meta" style={{ paddingLeft: 0, marginTop: 6 }}>
+          <span className="ops-renderer-team-chip">
+            <i className="bi bi-tag" />{' '}
+            {t('toolRenderers.numaOps.ticketTypes', { count: team.allowedTicketTypes.length })}
+          </span>
+        </div>
+      )}
     </div>
   );
 };
@@ -382,13 +521,72 @@ const ErrorView = ({ payload }: { payload: OpsPayload }) => (
   </div>
 );
 
+// ── File-based result helpers ──────────────────────────────────────────
+
+/** Fetch full ops result from S3 when the backend saved it to a file. */
+function useOpsFileResult(payload: OpsPayload | null, conversationId?: string, sub?: string) {
+  const [fileData, setFileData] = useState<unknown>(null);
+  const [loading, setLoading] = useState(false);
+  const { getCredentials } = useAuth();
+
+  useEffect(() => {
+    if (!payload?.filePath || !conversationId || !sub) return;
+    const relativePath = workdirPathToRelative(payload.filePath);
+    const bucket = window.sessionStorage.getItem('OUTPUTS_BUCKET_NAME');
+    const region = window.sessionStorage.getItem('REGION');
+    if (!bucket || !region) return;
+
+    const s3Key = `numa-chat/workspace/${sub}/conversations/${conversationId}/${relativePath}`;
+    setLoading(true);
+
+    (async () => {
+      try {
+        const { S3Client, GetObjectCommand } = await import('@aws-sdk/client-s3');
+        const credentials = await getCredentials();
+        const client = new S3Client({ region, credentials });
+        const resp = await client.send(new GetObjectCommand({ Bucket: bucket, Key: s3Key }));
+        const text = await resp.Body?.transformToString();
+        if (text) setFileData(JSON.parse(text));
+      } catch (e) {
+        console.warn('Failed to load ops result file:', e);
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, [payload?.filePath, conversationId, sub, getCredentials]);
+
+  return { fileData, loading };
+}
+
+const LoadingView = () => (
+  <div className="ops-renderer-loading">
+    <div className="spinner-border spinner-border-sm" role="status" />
+  </div>
+);
+
+const FileSavedView = ({ payload }: { payload: OpsPayload }) => {
+  const { t } = useTranslation('common');
+  const category = getOpsCategory(payload.operation);
+  return (
+    <div className="ops-renderer-file-saved">
+      <i className="bi bi-file-earmark-text" />
+      <span>
+        {payload.itemCount != null
+          ? t('toolRenderers.numaOps.fileSaved', { count: payload.itemCount, category })
+          : t('toolRenderers.numaOps.fileSavedGeneric')}
+      </span>
+    </div>
+  );
+};
+
 // ── Main body component (used by UnifiedToolCard) ──────────────────────
 
-const OpsBody = ({ payload }: { payload: OpsPayload }) => {
+const OpsBody = ({ payload, conversationId, sub }: { payload: OpsPayload; conversationId?: string; sub?: string }) => {
+  const { fileData, loading } = useOpsFileResult(payload, conversationId, sub);
+
   if (payload.isError) return <ErrorView payload={payload} />;
 
   const { operation, result } = payload;
-
   // Write confirmations
   if (isWriteOperation(operation)) {
     return <WriteConfirmation payload={payload} />;
@@ -399,9 +597,20 @@ const OpsBody = ({ payload }: { payload: OpsPayload }) => {
     return <ConfigView config={(result as OpsConfig) || {}} />;
   }
 
+  // File-based result — fetch and render, or show loading/summary
+  if (payload.filePath) {
+    if (loading) return <LoadingView />;
+    if (fileData) {
+      const loaded = { ...payload, result: fileData, filePath: undefined };
+      return <OpsBody payload={loaded} conversationId={conversationId} sub={sub} />;
+    }
+    return <FileSavedView payload={payload} />;
+  }
+
   const category = getOpsCategory(operation);
-  const items = Array.isArray(result) ? result : [];
-  const single = !Array.isArray(result) && typeof result === 'object' && result !== null ? result : null;
+  const items = unwrapOpsResult(result);
+  const single =
+    !Array.isArray(result) && items.length === 0 && typeof result === 'object' && result !== null ? result : null;
 
   // List operations
   if (isListOperation(operation)) {
@@ -424,18 +633,24 @@ const OpsBody = ({ payload }: { payload: OpsPayload }) => {
   }
 
   // Get operations (single entity)
-  if (isGetOperation(operation) && single) {
-    switch (category) {
-      case 'tickets':
-        return <TicketDetail ticket={single as OpsTicket} />;
-      case 'teams':
-        return <TeamRow team={single as OpsTeam} />;
-      case 'customers':
-        return <CrmRow entity={single as OpsCustomer} type="customer" />;
-      case 'suppliers':
-        return <CrmRow entity={single as OpsSupplier} type="supplier" />;
-      default:
-        break;
+  if (isGetOperation(operation)) {
+    // Rich team detail (get_team returns {team, zones, stages})
+    if (category === 'teams' && isTeamDetail(result)) {
+      return <TeamDetailView detail={result} />;
+    }
+    if (single) {
+      switch (category) {
+        case 'tickets':
+          return <TicketDetail ticket={single as OpsTicket} />;
+        case 'teams':
+          return <TeamRow team={single as OpsTeam} />;
+        case 'customers':
+          return <CrmRow entity={single as OpsCustomer} type="customer" />;
+        case 'suppliers':
+          return <CrmRow entity={single as OpsSupplier} type="supplier" />;
+        default:
+          break;
+      }
     }
   }
 
@@ -451,12 +666,22 @@ const OpsBody = ({ payload }: { payload: OpsPayload }) => {
 
 // ── Exported renderer ──────────────────────────────────────────────────
 
-export const OpsToolRenderer = ({ result, bare: _bare = false }: { result: ToolResultLike; bare?: boolean }) => {
+export const OpsToolRenderer = ({
+  result,
+  bare: _bare = false,
+  conversationId,
+  sub,
+}: {
+  result: ToolResultLike;
+  bare?: boolean;
+  conversationId?: string;
+  sub?: string;
+}) => {
   const payload = getOpsPayload(result);
   if (!payload) return null;
   return (
     <div className="ops-renderer">
-      <OpsBody payload={payload} />
+      <OpsBody payload={payload} conversationId={conversationId} sub={sub} />
     </div>
   );
 };

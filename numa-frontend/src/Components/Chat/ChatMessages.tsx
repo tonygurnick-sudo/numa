@@ -8,6 +8,8 @@ import { ChatReferencesDropdown } from './ChatReferencesDropdown';
 import { useAuth } from '../../Providers/AuthProvider';
 // Tool rendering is handled via unified tool cards; direct TOOL_CONFIG use removed
 import { UnifiedToolCard } from '../UnifiedToolCard';
+import { OpsToolRenderer } from '../../toolRenderers/OpsToolRenderer';
+import type { ToolResultLike } from '../../toolRenderers/helpers';
 import { FileMessage } from '../FileMessage';
 import AgentAvatar from '../Agents/AgentAvatar';
 import type { AgentSummary } from '../../types/agents';
@@ -585,6 +587,36 @@ const ChatMessages = ({
                     );
                   } else if (seg.kind === 'tool_card') {
                     const sc = seg as ToolCardSegment;
+                    // Ops tool renders inline-style (no card box)
+                    if (sc.toolName === 'mcp__numa__numa_ops_tool') {
+                      const opsInput = sc.input as { description?: string; operation?: string } | undefined;
+                      const displayText =
+                        opsInput?.description || opsInput?.operation?.replace(/_/g, ' ') || 'Numa Ops';
+                      return (
+                        <div key={`ops-${idx}-${!!sc.result}`}>
+                          <div className="workspace-chat-inline-tool-group">
+                            <div className={`workspace-chat-inline-tool ${sc.isLoading ? '' : 'complete'}`}>
+                              <span className={`inline-tool-icon ${sc.isLoading ? 'running' : 'complete'}`}>
+                                <i className="bi bi-kanban" />
+                              </span>
+                              <div className="inline-tool-content">
+                                <span className="inline-tool-text">{displayText}</span>
+                                {sc.isLoading && (
+                                  <span className="spinner-border spinner-border-sm inline-tool-trailing-spinner" />
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                          {sc.result && (
+                            <OpsToolRenderer
+                              result={sc.result as ToolResultLike}
+                              conversationId={conversationId}
+                              sub={sub}
+                            />
+                          )}
+                        </div>
+                      );
+                    }
                     return (
                       <UnifiedToolCard
                         key={idx}

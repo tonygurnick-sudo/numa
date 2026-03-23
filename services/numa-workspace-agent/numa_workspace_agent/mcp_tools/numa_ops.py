@@ -17,6 +17,8 @@ Approval model:
 import json
 import logging
 import os
+from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
 from claude_agent_sdk import tool
@@ -78,6 +80,33 @@ def _err(text: str) -> dict[str, Any]:
 def is_safe_operation(operation: str) -> bool:
     """Check whether an ops operation is read-only (safe for auto-approval)."""
     return operation in SAFE_OPERATIONS
+
+
+# Maximum inline result size (compact JSON chars). Results exceeding this are
+# saved to a file so the LLM context stays lightweight.
+MAX_INLINE = 2000
+
+
+def _count_items(result: Any) -> int | None:
+    """Count items in an ops API response (find first list value)."""
+    if isinstance(result, list):
+        return len(result)
+    if isinstance(result, dict):
+        for v in result.values():
+            if isinstance(v, list):
+                return len(v)
+    return None
+
+
+def _save_ops_result(result: Any, operation: str) -> str:
+    """Save full ops result to /workdir/outputs/ops/, return file path."""
+    results_dir = Path("/workdir/outputs/ops")
+    results_dir.mkdir(parents=True, exist_ok=True)
+
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+    file_path = results_dir / f"{operation}-{timestamp}.json"
+    file_path.write_text(json.dumps(result, indent=2, default=str))
+    return str(file_path)
 
 
 @tool(
@@ -166,18 +195,24 @@ async def numa_ops_tool(args: dict[str, Any]) -> dict[str, Any]:
             },
         )
 
-        # Format result for display
-        result_text = json.dumps(result, indent=2, default=str)
+        # Compact JSON — no indent (saves tokens)
+        result_text = json.dumps(result, default=str, separators=(",", ":"))
 
-        # Truncate large results
-        max_preview = 2000
-        if len(result_text) > max_preview:
-            line_count = result_text.count("\n") + 1
-            preview_lines = result_text[:max_preview].count("\n") + 1
-            result_text = (
-                result_text[:max_preview]
-                + f"\n... (truncated, showing ~{preview_lines}/{line_count} lines)"
+        # Large results → save to file, return lightweight summary
+        if len(result_text) > MAX_INLINE:
+            file_path = _save_ops_result(result, operation)
+            count = _count_items(result)
+            parts = [
+                f"Ops operation completed: {operation}",
+                f"Description: {description}",
+            ]
+            if count is not None:
+                parts.append(f"Items found: {count}")
+            parts.append(f"\nFull results saved to: {file_path}")
+            parts.append(
+                "Read the file with execute_script if you need specific details."
             )
+            return _ok("\n".join(parts))
 
         return _ok(
             f"Ops operation completed: {operation}\n"

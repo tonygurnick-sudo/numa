@@ -19,6 +19,8 @@ import { WorkspaceChatInlineThinking } from './WorkspaceChatInlineThinking';
 import { WorkspaceChatCompactionBlock } from './WorkspaceChatCompactionBlock';
 import { WorkspaceChatToolApproval } from './WorkspaceChatToolApproval';
 import { UnifiedToolCard } from '../UnifiedToolCard';
+import { OpsToolRenderer } from '../../toolRenderers/OpsToolRenderer';
+import type { ToolResultLike } from '../../toolRenderers/helpers';
 import WorkspaceChatMarkdown, { type FileReference, type FolderReference } from '../Renderers/WorkspaceChatMarkdown';
 import { useAuth } from '../../Providers/AuthProvider';
 
@@ -123,7 +125,36 @@ export function WorkspaceChatSegmentRenderer({
               />
             );
 
-          case 'tool_card':
+          case 'tool_card': {
+            // Ops tool renders inline-style: description line + rendered content (no card box)
+            if (segment.toolName === 'mcp__numa__numa_ops_tool') {
+              const opsInput = segment.input as { description?: string; operation?: string } | undefined;
+              const displayText = opsInput?.description || opsInput?.operation?.replace(/_/g, ' ') || 'Numa Ops';
+              return (
+                <div key={`ops-${segment.toolUseId}-${!!segment.result}`}>
+                  <div className="workspace-chat-inline-tool-group">
+                    <div className={`workspace-chat-inline-tool ${segment.isLoading ? '' : 'complete'}`}>
+                      <span className={`inline-tool-icon ${segment.isLoading ? 'running' : 'complete'}`}>
+                        <i className="bi bi-kanban" />
+                      </span>
+                      <div className="inline-tool-content">
+                        <span className="inline-tool-text">{displayText}</span>
+                        {segment.isLoading && (
+                          <span className="spinner-border spinner-border-sm inline-tool-trailing-spinner" />
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                  {segment.result && (
+                    <OpsToolRenderer
+                      result={segment.result as ToolResultLike}
+                      conversationId={conversationId}
+                      sub={userSub}
+                    />
+                  )}
+                </div>
+              );
+            }
             return (
               <UnifiedToolCard
                 key={`tool-${segment.toolUseId}`}
@@ -137,6 +168,7 @@ export function WorkspaceChatSegmentRenderer({
                 sub={userSub}
               />
             );
+          }
 
           case 'file_upload':
             return (

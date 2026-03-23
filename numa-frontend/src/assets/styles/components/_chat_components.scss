@@ -2779,6 +2779,14 @@ $border-radius-pill: 1rem;
   font-size: 0.82rem;
   line-height: 1.5;
   color: var(--ops-text-default, #3f3f46);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 10px;
+  padding: 12px 14px;
+  background: rgba(249, 250, 251, 0.5);
+  margin-top: 8px;
+  margin-bottom: 4px;
+  max-height: 320px;
+  overflow-y: auto;
 
   // ── List container ─────────────────────────────────────────────────
   .ops-renderer-list {
@@ -2787,19 +2795,180 @@ $border-radius-pill: 1rem;
     gap: 2px;
   }
 
-  // ── Ticket row ─────────────────────────────────────────────────────
-  .ops-renderer-ticket-row {
+  // ── Team list ─────────────────────────────────────────────────────
+  .ops-renderer-team-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+  }
+
+  .ops-renderer-team-row {
     padding: 10px 12px;
-    background: rgba(255, 255, 255, 0.95);
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
-    border: 1px solid rgba(229, 231, 235, 0.8);
-    border-radius: 10px;
-    transition: all 0.15s ease;
+    border-left: 3px solid #6c757d;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+    transition: background-color 0.15s ease;
+
+    &:last-child {
+      border-bottom: none;
+    }
 
     &:hover {
-      border-color: #d1d5db;
-      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+      background-color: rgba(0, 0, 0, 0.02);
+    }
+  }
+
+  .ops-renderer-team-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .ops-renderer-team-color-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .ops-renderer-team-name {
+    font-weight: 600;
+    font-size: 0.84rem;
+    color: var(--ops-text-default, #18181b);
+  }
+
+  .ops-renderer-team-badge {
+    display: inline-flex;
+    align-items: center;
+    margin-left: 2px;
+
+    &.restricted {
+      color: #9ca3af;
+      font-size: 0.72rem;
+    }
+  }
+
+  .ops-renderer-team-desc {
+    color: var(--ops-text-secondary, #71717a);
+    font-size: 0.78rem;
+    margin-top: 2px;
+    padding-left: 14px;
+  }
+
+  .ops-renderer-team-meta {
+    display: flex;
+    gap: 8px;
+    margin-top: 4px;
+    padding-left: 14px;
+    flex-wrap: wrap;
+
+    &:empty {
+      display: none;
+    }
+  }
+
+  .ops-renderer-team-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    font-size: 0.72rem;
+    color: var(--ops-text-secondary, #9ca3af);
+
+    i {
+      font-size: 0.68rem;
+    }
+  }
+
+  // ── Team detail / board layout ────────────────────────────────────
+  .ops-renderer-team-detail {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .ops-renderer-team-detail-header {
+    padding: 8px 10px;
+    border-left: 3px solid #6c757d;
+  }
+
+  .ops-renderer-board-layout {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-top: 4px;
+  }
+
+  .ops-renderer-board-zone {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+  }
+
+  .ops-renderer-board-zone-label {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: var(--ops-text-secondary, #71717a);
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+
+    i {
+      font-size: 0.68rem;
+    }
+  }
+
+  .ops-renderer-board-stages {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    flex-wrap: wrap;
+    padding-left: 2px;
+  }
+
+  .ops-renderer-board-stage {
+    display: inline-flex;
+    align-items: center;
+    font-size: 0.67rem;
+    font-weight: 500;
+    padding: 2px 8px;
+    border-radius: 100px;
+    white-space: nowrap;
+  }
+
+  .ops-renderer-board-arrow {
+    color: var(--ops-text-secondary, #d1d5db);
+    font-size: 0.68rem;
+    margin: 0 4px;
+  }
+
+  // ── Ticket list ────────────────────────────────────────────────────
+  .ops-renderer-ticket-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+  }
+
+  .ops-renderer-ticket-row {
+    padding: 10px 12px;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+    transition: background-color 0.15s ease;
+
+    &:last-child {
+      border-bottom: none;
+    }
+
+    &:hover {
+      background-color: rgba(0, 0, 0, 0.02);
+    }
+
+    &.completed {
+      opacity: 0.6;
+
+      .ops-renderer-ticket-title {
+        text-decoration: line-through;
+        color: #9ca3af;
+      }
     }
   }
 
@@ -2807,13 +2976,11 @@ $border-radius-pill: 1rem;
     display: flex;
     align-items: center;
     gap: 8px;
-    margin-bottom: 6px;
   }
 
   .ops-renderer-ticket-title {
-    font-family: 'Metropolis Semi Bold';
-    font-size: 0.84rem;
     font-weight: 500;
+    font-size: 0.84rem;
     color: #111827;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -2825,8 +2992,14 @@ $border-radius-pill: 1rem;
   .ops-renderer-ticket-row-meta {
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 8px;
     flex-wrap: wrap;
+    margin-top: 3px;
+    padding-left: 18px;
+
+    &:empty {
+      display: none;
+    }
   }
 
   // ── Shared components ──────────────────────────────────────────────
@@ -2885,6 +3058,11 @@ $border-radius-pill: 1rem;
 
     i {
       font-size: 0.62rem;
+    }
+
+    &.overdue {
+      color: #dc3545;
+      font-weight: 500;
     }
   }
 
@@ -3207,6 +3385,26 @@ $border-radius-pill: 1rem;
     white-space: pre-wrap;
     word-break: break-word;
     margin: 0;
+  }
+
+  // ── File-based result views ────────────────────────────────────────
+  .ops-renderer-file-saved {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 0.75rem;
+    color: var(--bs-secondary);
+    font-size: 0.85rem;
+
+    i {
+      font-size: 1rem;
+    }
+  }
+
+  .ops-renderer-loading {
+    display: flex;
+    justify-content: center;
+    padding: 0.75rem;
   }
 }
 // ── End Numa Ops Tool Renderer ─────────────────────────────────────────

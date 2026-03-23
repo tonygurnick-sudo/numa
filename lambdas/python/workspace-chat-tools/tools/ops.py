@@ -404,21 +404,22 @@ def _resolve_lambda_and_request(
 def handle_ops_operation(event: Dict[str, Any]) -> Dict[str, Any]:
     """Handle a generic ops operation.
 
-    Expected event format (from workspace-chat-tools dispatch):
+    Called with params dict (not full event) from lambda_function.py dispatch.
+    The dispatcher injects user_sub/user_email/user_groups into params.
+
+    Expected params format:
     {
-        "tool": "ops_<operation>",
+        "operation": "list_tickets",
+        "params": { ... },
+        "description": "...",
+        "auto_approved": true/false,
         "user_sub": "...",
-        "params": {
-            "operation": "list_tickets",
-            "params": { ... },
-            "description": "...",
-            "auto_approved": true/false
-        }
+        "user_email": "...",
+        "user_groups": [...]
     }
     """
-    params = event.get("params", {})
-    operation = params.get("operation", "")
-    op_params = params.get("params", {})
+    operation = event.get("operation", "")
+    op_params = event.get("params", {})
     user_sub = event.get("user_sub", "")
     user_email = event.get("user_email", "")
     user_groups = event.get("user_groups", [])

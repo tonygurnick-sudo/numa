@@ -17,7 +17,6 @@ import {
   type ToolResultLike,
 } from '../toolRenderers/helpers';
 import { getAgentCreationSummary } from '../toolRenderers/agentCreationHelpers';
-import { OpsToolRenderer } from '../toolRenderers/OpsToolRenderer';
 import { getOpsSummary } from '../toolRenderers/opsHelpers';
 
 type Props = {
@@ -170,11 +169,7 @@ export const UnifiedToolCard = ({
     return <DataAnalysisRenderer result={result as ToolResultLike} bare />;
   }, [effectiveToolName, result, hasResult]);
 
-  // Numa Ops tool renders inline (tickets, teams, config, write confirmations)
-  const inlineOpsContent = useMemo(() => {
-    if (!hasResult || effectiveToolName !== 'mcp__numa__numa_ops_tool') return null;
-    return <OpsToolRenderer result={result as ToolResultLike} bare />;
-  }, [effectiveToolName, result, hasResult]);
+  // Numa Ops — rendered inline in WorkspaceChatSegmentRenderer, not here
 
   const toggle = () => setExpanded((e) => !e);
 
@@ -249,7 +244,7 @@ export const UnifiedToolCard = ({
       {inlineIntegrationContent && <div className="tool-card-indent mt-2">{inlineIntegrationContent}</div>}
       {inlineAgentCreationContent && <div className="tool-card-indent mt-2">{inlineAgentCreationContent}</div>}
       {inlineDataAnalysisContent && <div className="tool-card-indent mt-2">{inlineDataAnalysisContent}</div>}
-      {inlineOpsContent && <div className="tool-card-indent mt-2">{inlineOpsContent}</div>}
+      {/* Numa Ops tool is rendered inline in WorkspaceChatSegmentRenderer */}
       {/* Toggle details for tools with collapsible details (web search, KB).
           Show the toggle as soon as the card exists; render body once results arrive. */}
       {hasDetails && (

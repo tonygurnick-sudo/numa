@@ -655,13 +655,17 @@
         "staff": "Staff",
         "projects": "Projects"
       },
+      "ticketTypes_one": "{{count}} type",
+      "ticketTypes_other": "{{count}} types",
       "openTickets": "{{count}} open",
       "write": {
         "created": "Created",
         "updated": "Updated",
         "deleted": "Deleted",
         "completed": "Completed"
-      }
+      },
+      "fileSaved": "{{count}} {{category}} — full results saved to file",
+      "fileSavedGeneric": "Results saved to file"
     }
   },
   "traceViewer": {

@@ -169,3 +169,7 @@ claude-bedrock-standard.sh
 
 # Personal dev notes (not tracked)
 dev-notes/
+
+# Playwright CLI test artifacts
+playwright-runs/
+.playwright-cli/

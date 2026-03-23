@@ -540,9 +540,9 @@ CloudFront routing: The frontend distribution forwards `/api/*` to API Gateway a
 
 - Lambdas (Python)
   - Use Poetry for deps, lint, and tests.
-  - Package a single Lambda (preferred): `bash package-python-lambda.sh lambdas/python/<lambda_name>`
-  - Package all (slow): `bash package-all.sh`
-  - Package a single Node Lambda: `bash package-node-lambda.sh lambdas/node/<lambda_name>`
+  - Package a single Lambda (preferred): `cd lambdas && bash package-python-lambda.sh python/<lambda_name>`
+  - Package all (slow): `cd lambdas && bash package-all.sh`
+  - Package a single Node Lambda: `cd lambdas && bash package-node-lambda.sh node/<lambda_name>`
   - Or manually: `yarn bundle` in the lambda directory
 
 - Services (Docker/AgentCore)

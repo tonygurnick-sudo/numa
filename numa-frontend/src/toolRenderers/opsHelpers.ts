@@ -19,37 +19,54 @@ export interface OpsPayload {
   result: unknown;
   isError: boolean;
   errorMessage?: string;
+  filePath?: string;
+  itemCount?: number;
 }
 
-/** Minimal ticket shape returned by the ops API */
+/** Ticket shape returned by the ops API (flat fields from DynamoDB). */
 export interface OpsTicket {
   id?: string;
   displayId?: string;
   title?: string;
   description?: string;
   priority?: string;
-  statusId?: string;
-  status?: { id?: string; name?: string; type?: string };
+  statusType?: string;
+  stageId?: string;
+  zoneId?: string;
   assigneeId?: string;
   assignee?: { name?: string; email?: string };
   dueDate?: string;
+  completedAt?: string;
+  startedAt?: string;
+  ticketTypeId?: string;
   ticketType?: { id?: string; name?: string; icon?: string; color?: string };
   customerId?: string;
+  customerName?: string;
   customer?: { companyName?: string };
   supplierId?: string;
   supplier?: { companyName?: string };
   projectId?: string;
   project?: { name?: string };
+  effortPoints?: number;
+  commentCount?: number;
+  linkCount?: number;
+  tags?: string[];
   createdAt?: string;
   updatedAt?: string;
+  // Nested status (may be present from enriched responses)
+  status?: { id?: string; name?: string; type?: string };
 }
 
 export interface OpsTeam {
   id?: string;
   name?: string;
   description?: string;
+  color?: string;
   memberCount?: number;
   ticketCount?: number;
+  accessControl?: { mode?: string; users?: string[] };
+  workUnitSeries?: { enabled?: boolean; label?: string };
+  allowedTicketTypes?: string[];
 }
 
 export interface OpsCustomer {
@@ -79,6 +96,29 @@ export interface OpsProject {
   ticketCount?: number;
 }
 
+export interface OpsZone {
+  id?: string;
+  name?: string;
+  zoneType?: string;
+  color?: string;
+  order?: number;
+}
+
+export interface OpsStage {
+  id?: string;
+  name?: string;
+  statusType?: string;
+  zoneId?: string;
+  order?: number;
+}
+
+/** Rich team detail returned by get_team (includes board structure) */
+export interface OpsTeamDetail {
+  team: OpsTeam;
+  zones?: OpsZone[];
+  stages?: OpsStage[];
+}
+
 export interface OpsConfig {
   ticketTypes?: Array<{ id?: string; name?: string; icon?: string; color?: string }>;
   statuses?: Array<{ id?: string; name?: string; type?: string; icon?: string }>;
@@ -96,6 +136,25 @@ export interface OpsComment {
 }
 
 // ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+/** Unwrap an ops API response — find the first array value in {teams:[...]} etc. */
+export function unwrapOpsResult(data: unknown): unknown[] {
+  if (Array.isArray(data)) return data;
+  if (data && typeof data === 'object') {
+    const arr = Object.values(data as Record<string, unknown>).find((v) => Array.isArray(v));
+    if (arr) return arr as unknown[];
+  }
+  return [];
+}
+
+/** Convert a /workdir/ absolute path to a relative path for S3 key construction. */
+export function workdirPathToRelative(workdirPath: string): string {
+  return workdirPath.replace(/^\/workdir\//, '');
+}
+
+// ---------------------------------------------------------------------------
 // Extraction
 // ---------------------------------------------------------------------------
 
@@ -104,16 +163,22 @@ const DESCRIPTION_RE = /^Description:\s*(.+)$/m;
 const RESULT_RE = /\nResult:\n([\s\S]+)$/;
 const ERROR_RE = /^Ops operation failed \(([^)]+)\):\s*(.+)$/m;
 const TRUNCATED_RE = /\n\.\.\. \(truncated,.*\)$/;
+const FILE_PATH_RE = /^Full results saved to:\s*(.+)$/m;
+const ITEMS_FOUND_RE = /^Items found:\s*(\d+)$/m;
 
 /**
  * Extract the raw text content from a ToolResult.
  * The ops tool always returns text blocks (never JSON blocks).
  */
 function extractText(result: ToolResultLike): string {
-  const blocks = Array.isArray(result?.content) ? (result.content as Array<{ text?: string }>) : undefined;
+  // Result may be the content array directly (from tool_card segments)
+  // or an object with a .content property (ToolResultLike wrapper)
+  const contentOrResult = Array.isArray(result) ? result : result?.content;
+  const blocks = Array.isArray(contentOrResult) ? (contentOrResult as Array<{ text?: string }>) : undefined;
   if (Array.isArray(blocks)) {
     return blocks.map((b) => b?.text ?? '').join('');
   }
+  if (typeof contentOrResult === 'string') return contentOrResult;
   if (typeof result?.content === 'string') return result.content;
   return '';
 }
@@ -141,6 +206,20 @@ export function getOpsPayload(result: ToolResultLike): OpsPayload | null {
   const operation = opMatch[1].trim();
   const descMatch = text.match(DESCRIPTION_RE);
   const description = descMatch ? descMatch[1].trim() : '';
+
+  // Check for file-based result (large data saved to workspace file)
+  const fileMatch = text.match(FILE_PATH_RE);
+  if (fileMatch) {
+    const itemsMatch = text.match(ITEMS_FOUND_RE);
+    return {
+      operation,
+      description,
+      result: null,
+      isError: false,
+      filePath: fileMatch[1].trim(),
+      itemCount: itemsMatch ? parseInt(itemsMatch[1], 10) : undefined,
+    };
+  }
 
   const resultMatch = text.match(RESULT_RE);
   let parsed: unknown = null;
@@ -220,9 +299,18 @@ export function getOpsSummary(result: ToolResultLike): string {
 
   const { operation, result: data } = payload;
 
+  // File-based result — use itemCount directly
+  if (payload.filePath) {
+    const category = getOpsCategory(operation);
+    return i18n.t('common:toolSummaries.numaOps.listResult', {
+      count: payload.itemCount ?? 0,
+      category,
+    });
+  }
+
   // List operations — show count
   if (isListOperation(operation)) {
-    const items = Array.isArray(data) ? data : [];
+    const items = unwrapOpsResult(data);
     const category = getOpsCategory(operation);
     return i18n.t('common:toolSummaries.numaOps.listResult', {
       count: items.length,
