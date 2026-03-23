@@ -30,7 +30,7 @@ Phases 1 and 2 must be complete. You should have:
 
 ## Using Subagents for Parallel Analysis
 
-You MUST use subagents to parallelize your analysis. Use a **MAXIMUM of 5 subagents**. Divide ALL work across these 5 — do not run some, wait, then run more. Launch all 5 (or fewer) in a single turn.
+You MUST use subagents to parallelize your analysis. Use a **MAXIMUM of 7 subagents**. Launch ALL subagents in a single turn — do not run some, wait, then run more.
 
 ### CRITICAL: Context Management
 - **Read only the manifest, summary, and rules file yourself.** Do NOT read the extracted document — let subagents do that.
@@ -40,17 +40,26 @@ You MUST use subagents to parallelize your analysis. Use a **MAXIMUM of 5 subage
 - **Keep your synthesis scripts short.** Read subagent temp files from disk in Python, don't try to hold all findings in your context window.
 
 ### Subagent Strategy
-Divide work by rule category or analysis type:
-- Subagent 1: Technical evaluation deep dive (Forms 12, 13, 14 — scoring matrix, spot-checks)
-- Subagent 2: Qualification criteria deep dive (Form 11 — criteria checks, anomalous rejections)
-- Subagent 3: Recurring issue detection + lot-specific compliance
-- Subagent 4: Remaining rule-by-rule compliance check
-- **Subagent 5 (CER only):** If `document_manifest.json` → `metadata.evaluation_type` \
-is "CER", launch an additional subagent for: Financial evaluation deep dive — price \
-comparison methodology, financial scoring consistency, combined technical+financial \
-ranking accuracy, and stage 1 to stage 2 transition compliance (were technical \
-results correctly carried forward?)
-- (Adjust based on the specific procurement — use the manifest to plan)
+Plan your subagent groupings after reading the manifest — the number of \
+lots and procurement complexity should drive how you divide the work.
+
+**Technical scoring verification must be split across multiple subagents**, \
+divided by lot. For example, a 5-lot procurement might use 2-3 subagents \
+for scoring (e.g., Lots 1-2, Lots 3-4, Lot 5), each checking ALL scoring \
+decisions in their assigned lots. This is the most time-intensive analysis \
+and must be parallelised.
+
+Remaining subagents should cover:
+- Qualification criteria deep dive (Form 11 — criteria checks, anomalous rejections, cross-lot consistency)
+- Recurring issue detection + lot-specific compliance
+- Rule-by-rule compliance check
+- **Financial evaluation (CER only):** If `document_manifest.json` → \
+`metadata.evaluation_type` is "CER", dedicate a subagent to: price \
+comparison methodology, financial scoring consistency, combined \
+technical+financial ranking accuracy, and stage 1 to stage 2 transition \
+compliance (were technical results correctly carried forward?)
+
+Adjust the split based on the specific procurement structure.
 
 ### CRITICAL: What to give subagents
 Each subagent prompt MUST include:
@@ -80,7 +89,7 @@ Each subagent should handle a specific analysis area. They should:
 4. Return a brief summary
 
 Analysis areas to cover across subagents:
-- **Technical Evaluation**: Extract criteria, build scoring matrix, spot-check ~20 decisions, flag inconsistencies
+- **Technical Evaluation**: Extract criteria, build scoring matrix, check ALL scoring decisions systematically, flag any inconsistencies
 - **Qualification Criteria**: Check each criterion, flag anomalous rejections, check cross-lot consistency
 - **Recurring Issues**: Same bidder rejected across lots, same deficiency in multiple Forms, phrases like "as raised previously"
 - **Lot-Specific Compliance**: Per-lot requirements, special attention to lots with zero responsive bidders
@@ -89,6 +98,11 @@ price comparison methodology, financial scoring consistency, combined ranking ac
 stage 1 to stage 2 transition, and whether the recommended vendor selection is supported \
 by both technical and financial evidence
 - **Rule-by-Rule Check**: COMPLIANT / NON-COMPLIANT / PARTIAL / UNABLE TO VERIFY with severity
+
+**Do not dismiss borderline findings** — subagents should include them \
+as PARTIAL with a note on the uncertainty rather than rounding up to \
+COMPLIANT. The report generation phase will determine final priority \
+and framing.
 
 #### Step 3: Merge Results
 Use execute_script to merge all subagent temp files into the final \
@@ -130,7 +144,10 @@ As your final response, summarize your key findings and the files you generated.
 
 ## Notes
 - This phase produces the most detailed findings
-- Procurement-specific rules take precedence over global rules
+- Procurement-specific rules take precedence over global rules — if your \
+rules address the same topic as a global rule, apply yours fully regardless \
+of what Phase 2 found. Do not skip or soften a finding because the global \
+phase already covered the area.
 - Don't duplicate global rules findings - reference Phase 2
 - Do NOT read the extracted document yourself — delegate all document reading to subagents
 """

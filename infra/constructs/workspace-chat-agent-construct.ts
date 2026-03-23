@@ -585,18 +585,18 @@ echo "Successfully pushed image to ${this.ecrRepository.repositoryUrl}:${imageTa
         },
       ],
 
-      // Session lifecycle - 2 hour idle timeout, 8 hour max lifetime
+      // Session lifecycle - 2.5 hour idle timeout, 8 hour max lifetime
       // In fire-and-forget mode, AgentCore considers the session idle once the
       // 202 response is returned — even though the pipeline continues running as
       // a background asyncio task. AgentCore defers the kill while subprocesses
       // are active, but SIGKILLs immediately once the last subprocess exits if
-      // the idle timeout has already expired. Nolia pipelines take ~75 min, so
-      // 1 hour was insufficient. 2 hours gives comfortable headroom.
+      // the idle timeout has already expired. Nolia pipelines with Bahasa
+      // translation take ~2h10m, so 2.5 hours gives comfortable headroom.
       // Defaults: idleRuntimeSessionTimeout=900s (15 min), maxLifetime=28800s (8 hrs)
       // https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/runtime-lifecycle-settings.html
       lifecycleConfiguration: [
         {
-          idleRuntimeSessionTimeout: 7200, // 2 hours in seconds
+          idleRuntimeSessionTimeout: 9000, // 2.5 hours in seconds
           maxLifetime: 28800, // 8 hours in seconds
         },
       ],

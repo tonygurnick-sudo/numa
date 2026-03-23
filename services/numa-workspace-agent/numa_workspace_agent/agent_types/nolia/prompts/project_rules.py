@@ -30,7 +30,7 @@ Phases 1 and 2 must be complete. You should have:
 
 ## Using Subagents for Parallel Analysis
 
-You MUST use subagents to parallelize your analysis. Use a **MAXIMUM of 5 subagents**. Divide ALL work across these 5 — do not run some, wait, then run more. Launch all 5 (or fewer) in a single turn.
+You MUST use subagents to parallelize your analysis. Use a **MAXIMUM of 6 subagents**. Launch ALL subagents in a single turn — do not run some, wait, then run more.
 
 ### CRITICAL: Context Management
 - **Read only the manifest, summary, and rules file yourself.** Do NOT read the extracted document — let subagents do that.
@@ -38,13 +38,18 @@ You MUST use subagents to parallelize your analysis. Use a **MAXIMUM of 5 subage
 - **After subagents complete, trust their results.** Do NOT re-read the document or rules to verify. Use execute_script to merge their outputs into final files directly from disk.
 - **Have each subagent write its findings to a temp file** (e.g., `/workdir/tmp/project_chunk_1.json`) AND return a brief summary. Then merge from disk, not from context.
 
+### Subagent Strategy
+Plan your subagent groupings after reading the manifest and rules file — \
+the document structure and number of rules should drive how you allocate \
+subagents across the analysis areas below.
+
 ## Your Task
 Systematically check the Terms of Reference document against EVERY rule in the project rules file, with analysis on project requirements and scope definition.
 
 ### Approach
 
 #### Step 1: Load Prerequisites
-Read the manifest and rules file. Plan your subagent groupings.
+Read the manifest and rules file. Plan your subagent groupings based on the document structure.
 
 #### Step 2: Launch Subagents
 Each subagent should handle a specific analysis area:
@@ -106,7 +111,10 @@ As your final response, summarize your key findings and the files you generated.
 
 ## Notes
 - This phase produces detailed project-specific findings
-- Project-specific rules take precedence over global rules
+- Project-specific rules take precedence over global rules — if your \
+rules address the same topic as a global rule, apply yours fully regardless \
+of what Phase 2 found. Do not skip or soften a finding because the global \
+phase already covered the area.
 - Don't duplicate global rules findings - reference Phase 2
 - Do NOT read the extracted document yourself — delegate all document reading to subagents
 """

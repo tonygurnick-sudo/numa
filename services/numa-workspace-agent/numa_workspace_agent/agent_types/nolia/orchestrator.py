@@ -220,7 +220,7 @@ async def run_nolia_pipeline(
         f"{user_context}\n\n"
         "You are running Phase 5 (Translation). "
         "The final reviewed report exists in `/workdir/outputs/`. "
-        "Translate it in-place to the target language."
+        f"Translate it in-place to **{output_language}**."
     )
 
     # Shared kwargs for _run_step (prompt is overridden per step)
@@ -425,6 +425,28 @@ async def run_nolia_pipeline(
         if _check_error(translate_result, "nolia-translate"):
             return _build_error_result(
                 all_steps, all_artifacts, total_usage, "Phase 5 (Translation) failed"
+            )
+
+        # Sync immediately after translation — the container can be killed
+        # at any point after the last SDK subprocess exits. Getting the
+        # translated report into S3 here prevents a repeat of the race
+        # condition where the pipeline completes but the final sync never
+        # runs (see c5535e8a-4fcb-485b-9a71-ee8b5973e972).
+        from ...s3_workspace import sync_to_s3
+
+        try:
+            sync_to_s3(user_sub, conversation_id, s3_prefix=s3_prefix_fmt)
+            logger.info(
+                "Post-translation S3 sync complete",
+                _name="NOLIA_TRANSLATE_SYNC",
+                phase="pipeline",
+            )
+        except Exception as e:
+            logger.warning(
+                "Post-translation S3 sync failed",
+                _name="NOLIA_TRANSLATE_SYNC_ERROR",
+                phase="pipeline",
+                error=str(e),
             )
 
     # ── Done ──────────────────────────────────────────────────────────────

@@ -30,7 +30,7 @@ Phase 1 must be complete. You should have:
 
 ## Using Subagents for Parallel Analysis
 
-You MUST use subagents to check rules in parallel. Use a **MAXIMUM of 5 subagents**. Divide ALL work across these 5 — do not run some, wait, then run more. Launch all 5 (or fewer) in a single turn.
+You MUST use subagents to check rules in parallel. Use a **MAXIMUM of 6 subagents**. Launch ALL subagents in a single turn — do not run some, wait, then run more.
 
 ### CRITICAL: Context Management
 - **Read only the manifest, summary, and rules file yourself.** Do NOT read the extracted document — let subagents do that.
@@ -83,6 +83,10 @@ specific pages if needed, rather than broadly re-reading the document.
 - **NON-COMPLIANT**: Clear evidence the rule is violated
 - **PARTIAL**: Some aspects met, others not
 - **UNABLE TO VERIFY**: Requires external verification (e.g., STEP system)
+
+**Do not dismiss borderline findings** — include them as PARTIAL with \
+a note on the uncertainty rather than rounding up to COMPLIANT. The \
+report generation phase will determine final priority and framing.
 
 ### Severity Levels
 - **CRITICAL**: Would result in misprocurement or contract cancellation

@@ -29,6 +29,26 @@ never as accusations.
 - Your job is to critically assess evaluation methodology and correctness, \
 not merely restate findings.
 
+## CRITICAL: Knowledge Base Priority — Conflict Resolution
+
+When Phase 2 (Global) and Phase 3 (Procurement/Project) findings address \
+the same topic or rule area, the **Procurement Activity / Project rules \
+ALWAYS take priority** over Global rules. This is a firm requirement from \
+the client.
+
+In practice:
+- If both CSVs contain findings on the same subject (e.g., bid evaluation \
+methodology, qualification criteria, documentation requirements), use the \
+Phase 3 (procurement/project) finding as the authoritative source for the \
+report — its compliance status, severity, evidence, and recommendation.
+- Global findings should only appear in the report for areas that are NOT \
+covered by the domain-specific (procurement/project) rules.
+- When writing the report, do NOT blend or average conflicting assessments \
+from the two phases. The domain-specific assessment wins outright.
+- If a global rule says COMPLIANT but the procurement-specific rule says \
+NON-COMPLIANT on the same aspect, the report must reflect NON-COMPLIANT \
+with the procurement-specific evidence and recommendation.
+
 ## TER vs CER — Key Differences
 
 - **TER (Technical Evaluation Report)**: Covers stage 1 only — technical \
@@ -140,7 +160,10 @@ where evidence was found.]
 ## Quality Requirements
 
 - Map ALL findings from Phase 2/3 CSV files — every row must appear \
-in the report as an issue or be referenced in a compliant-areas section.
+in the report as an issue or be referenced in a compliant-areas section. \
+Do not silently drop findings. Related CSV rows may be consolidated \
+into a single issue when they describe the same deficiency, but cite \
+ALL affected lots and page references when consolidating.
 - Include STEP verification limitations: clearly flag any findings \
 from `global_step_verification_needed.csv` as requiring manual \
 verification by the review team.
@@ -219,10 +242,10 @@ existing report file.
 
 ## Review Tasks
 
-Complete ALL eight review tasks. Tasks 1-6 may be parallelized using \
-sub-agents. Task 7 (general sense-check) and Task 8 (consistency \
-verification) MUST run sequentially after Tasks 1-6 are complete, \
-with Task 8 as the very last step:
+Complete ALL nine review tasks. Tasks 1-6 may be parallelized using \
+sub-agents. Task 7 (KB priority check), Task 8 (general sense-check), \
+and Task 9 (consistency verification) MUST run sequentially after \
+Tasks 1-6 are complete, with Task 9 as the very last step:
 
 ### 1. Internal Reference Leak Detection (CRITICAL)
 
@@ -301,7 +324,20 @@ or any specific institutional body.
 - Required Actions must reference specific policies that mandate \
 the corrective step.
 
-### 7. General Sense-Check
+### 7. Knowledge Base Priority Check (CRITICAL)
+
+Procurement Activity / Project rules ALWAYS take priority over Global \
+rules when they address the same topic. Check the report for any places \
+where a global rule finding has been used when a procurement/project \
+rule covers the same area. Cross-reference the Phase 2 CSV \
+(`global_rules_compliance.csv`) against the Phase 3 CSV \
+(`procurement_rules_compliance.csv` or `project_rules_compliance.csv`) \
+— if both have findings on the same subject, the report must reflect \
+the Phase 3 finding (compliance status, severity, evidence, and \
+recommendation), not the Phase 2 one. Correct any occurrences where \
+the global assessment was used instead.
+
+### 8. General Sense-Check
 
 Read the complete report as a World Bank Senior Procurement Specialist \
 would — someone who reviews dozens of these reports per year. Flag \
@@ -320,7 +356,7 @@ would signal the report was not written by a domain expert.
 Apply fixes directly. If a fix requires significant restructuring, \
 note what should change and make a best-effort correction.
 
-### 8. Internal Consistency Verification (FINAL — run AFTER all other edits)
+### 9. Internal Consistency Verification (FINAL — run AFTER all other edits)
 
 This task MUST be the last thing you do, after all other review edits \
 have been applied. Re-read the complete report and verify that all \
@@ -370,10 +406,12 @@ phase notes for completeness and semantic consistency (Task 4)
 
 Then merge their findings and apply all necessary edits to the report.
 
-After Tasks 1-6 edits are applied, run Task 7 (general sense-check) \
-as a single sequential pass over the full report. Finally, run Task 8 \
-(internal consistency verification) as the absolute last step to \
-ensure all counts and cross-references are correct after all edits.
+After Tasks 1-6 edits are applied, run Task 7 (KB priority check) to \
+verify procurement/project rules took precedence over global rules \
+where they overlap. Then run Task 8 (general sense-check) as a single \
+sequential pass over the full report. Finally, run Task 9 (internal \
+consistency verification) as the absolute last step to ensure all \
+counts and cross-references are correct after all edits.
 
 ## Output
 

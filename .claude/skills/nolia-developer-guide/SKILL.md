@@ -179,6 +179,21 @@ curl -s -X POST http://localhost:8080/invocations \
 
 **Client name drives all resource naming:** S3 buckets (`numa-{clientName}-outputs`), DynamoDB tables (`numa-{clientName}-chat-history`, `{clientName}-v2-app-runs`), log groups (`/numa/{clientName}/workspace-chat-agent`), Lambdas (`{clientName}-workspace-chat-agent-proxy`).
 
+### IMPORTANT: Timestamps are UTC
+
+All Nolia log timestamps and DynamoDB `createdAt`/`completedAt` fields \
+are in **UTC**. When querying CloudWatch with `--start-time` / \
+`--end-time` (epoch milliseconds), always use UTC-aware datetimes:
+
+```python
+# CORRECT — UTC-aware
+from datetime import datetime, timezone
+start = int(datetime(2026, 3, 23, 8, 30, tzinfo=timezone.utc).timestamp() * 1000)
+
+# WRONG — uses local time (NZ is UTC+13, will be 13 hours off)
+start = int(datetime(2026, 3, 23, 8, 30).timestamp() * 1000)
+```
+
 ### Where to find logs
 
 **Local (Docker):**

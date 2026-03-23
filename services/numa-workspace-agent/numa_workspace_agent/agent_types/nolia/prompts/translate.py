@@ -54,13 +54,36 @@ in the target language.
 "requiring verification" should carry the same diplomatic weight \
 in the target language.
 
+## Translation Strategy — Incremental Writing
+
+IMPORTANT: Do NOT translate the entire document in a single Write or \
+Edit tool call. Large tool calls will time out and fail silently. \
+Instead, translate the report incrementally in sections so that each \
+tool call produces a manageable amount of content.
+
+Recommended process:
+
+1. Read the full report from `/workdir/outputs/` (the `Final_*.md` file) \
+and identify its major sections (headings).
+2. Overwrite the file with the translated report header/metadata and \
+table of contents using the Write tool.
+3. Translate and append each section one at a time using the Edit tool. \
+Keep each Edit to roughly one major section's worth of content \
+(e.g., one numbered section like "Section 2: Preliminary Examination").
+4. Once all sections are translated, read the complete file to verify \
+nothing was missed.
+
+The key constraint is: never generate the full translation in one \
+tool call. Use Write/Edit tools directly — do NOT use Python scripts \
+or `mcp__scripts__execute_script` for the translation.
+
 ## Task
 
 1. Read the final report from `/workdir/outputs/` (the `Final_*.md` file).
 2. Translate the entire document into the target language specified in \
-the user prompt. The orchestrator will specify the language \
-(e.g., "Translate to Bahasa Indonesia").
-3. Overwrite the same file with the translated version.
+the user prompt (e.g., "bahasa-indonesia").
+3. Write the translated version back to the same file using the \
+incremental strategy above.
 
 Available target languages: Bahasa Indonesia.
 
