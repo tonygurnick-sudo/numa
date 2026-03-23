@@ -25,7 +25,8 @@
       "timeSaved": "TIME SAVED",
       "files": "FILES",
       "createdBy": "CREATED BY",
-      "updated": "UPDATED"
+      "updated": "UPDATED",
+      "tags": "TAGS"
     },
     "tools": {
       "webSearch": "Web search",
@@ -125,7 +126,11 @@
       "descriptionHelp": "Shown on the agent card.",
       "welcomeLabel": "Welcome message",
       "welcomePlaceholder": "Message shown when a chat starts.",
-      "welcomeHelp": "Shown to users when they open the chat."
+      "welcomeHelp": "Shown to users when they open the chat.",
+      "tagsLabel": "Tags",
+      "tagsPlaceholder": "e.g., Sales, Support, Analytics",
+      "tagsHelp": "Add tags to categorise this agent. Press Enter or comma to add.",
+      "tagsSuggestions": "Suggested tags"
     },
     "appearance": {
       "selectedAvatarAlt": "Selected agent avatar",
@@ -344,6 +349,10 @@
       "personal": "Personal",
       "company": "Company"
     },
+    "filters": {
+      "tags": "Filter by tag:",
+      "clearTags": "Clear"
+    },
     "upcomingSchedules": {
       "title": "Upcoming Schedules",
       "subtitle": "Active scheduled agent runs",
@@ -376,7 +385,8 @@
       "title": "No agents found",
       "modeOff": "Agents are disabled. Contact your admin to enable Agents.",
       "all": "Get started by creating your first AI agent",
-      "personal": "You have not created any personal agents yet"
+      "personal": "You have not created any personal agents yet",
+      "noTagMatch": "No agents match all of the selected tags."
     },
     "errors": {
       "load": "Failed to load agents",

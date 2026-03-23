@@ -16,6 +16,7 @@ export type AgentExportV1 = {
     icon?: string;
     requiredIntegrations?: string[];
     toolsConfig?: AgentToolsConfig;
+    tags?: string[];
   };
   attachments?: {
     // Metadata only; ignored on import
@@ -45,6 +46,7 @@ export function serializeAgentSummaryToExport(agent: AgentSummary): AgentExportV
       icon: agent.icon,
       requiredIntegrations: agent.requiredIntegrations || [],
       toolsConfig: agent.toolsConfig || {},
+      tags: agent.tags ?? [],
     },
     attachments: {
       iconImage: agent.iconImage ?? null,
@@ -67,6 +69,7 @@ export function serializeAgentPayloadToExport(payload: AgentPayload): AgentExpor
       icon: payload.icon,
       requiredIntegrations: payload.requiredIntegrations || [],
       toolsConfig: payload.toolsConfig || {},
+      tags: payload.tags ?? [],
     },
     attachments: {
       iconImage: payload.iconImage ?? null,
@@ -139,6 +142,9 @@ export function parseAgentImport(raw: string): { payload: AgentPayload; warnings
     toolsConfig: sanitizeToolsConfig(source.toolsConfig),
     referenceFiles: [], // not imported; must be re-uploaded
     createdByName: undefined,
+    tags: Array.isArray(source.tags)
+      ? (source.tags as unknown[]).filter((x): x is string => typeof x === 'string')
+      : [],
   };
 
   return { payload, warnings };

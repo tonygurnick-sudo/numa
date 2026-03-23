@@ -7,6 +7,7 @@ import { useAuth } from '../../Providers/AuthProvider';
 import { useNumaRequest } from '../../Providers/NumaRequestContext';
 import { useBranding } from '../../Providers/BrandingContext';
 import { useKnowledgeBase } from '../../Providers/KnowledgeBaseProvider';
+import { ChipsInput } from '../Inputs/ChipsInput';
 import { AgentFileUpload } from './AgentFileUpload';
 import { AgentAvatarSelector } from './AgentAvatarSelector';
 import AgentAvatar from './AgentAvatar';
@@ -28,6 +29,8 @@ type AgentCreateModalProps = {
   onScheduleCreated?: () => void;
   initialAccordionKey?: string;
   onScheduleChange?: () => void;
+  /** All tags used across agents, shown as typeahead suggestions */
+  existingTags?: string[];
 };
 
 type ConnectionInfo = {
@@ -60,6 +63,7 @@ const DEFAULT_PAYLOAD: AgentPayload = {
   referenceFiles: [],
   requiredIntegrations: [],
   createdByName: '',
+  tags: [],
 };
 
 // KB access mode type for the UI
@@ -73,6 +77,7 @@ export const AgentCreateModal = ({
   onScheduleCreated,
   initialAccordionKey,
   onScheduleChange: _onScheduleChange,
+  existingTags = [],
 }: AgentCreateModalProps) => {
   const { t } = useTranslation('agents');
   const { user, lambdaClient } = useAuth();
@@ -315,6 +320,7 @@ export const AgentCreateModal = ({
         referenceFiles: editingAgent.referenceFiles ?? [],
         requiredIntegrations: editingAgent.requiredIntegrations ?? [],
         createdByName: normalisedCreatorName,
+        tags: editingAgent.tags ?? [],
       });
       setReferenceFiles(editingAgent.referenceFiles ?? []);
       setError(null);
@@ -918,6 +924,23 @@ export const AgentCreateModal = ({
                       />
                       <Form.Text muted>{t('createModal.setup.welcomeHelp')}</Form.Text>
                     </Form.Group>
+                  </Col>
+                </Row>
+
+                {/* Tags */}
+                <Row className="mt-3">
+                  <Col>
+                    <ChipsInput
+                      id="agent-tags"
+                      label={t('createModal.setup.tagsLabel')}
+                      placeholder={t('createModal.setup.tagsPlaceholder')}
+                      helperText={t('createModal.setup.tagsHelp')}
+                      chips={formState.tags ?? []}
+                      onChange={(tags) => handleChange('tags', tags)}
+                      disabled={saving}
+                      suggestions={existingTags}
+                      suggestionsLabel={t('createModal.setup.tagsSuggestions')}
+                    />
                   </Col>
                 </Row>
               </Accordion.Body>

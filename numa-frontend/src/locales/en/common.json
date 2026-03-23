@@ -305,7 +305,12 @@
   },
   "chipsInput": {
     "add": "Add",
-    "remove": "Remove {{value}}"
+    "remove": "Remove {{value}}",
+    "selected": "Selected"
+  },
+  "collapsibleTagRow": {
+    "more": "more",
+    "less": "show less"
   },
   "userPicker": {
     "placeholder": "Search users...",

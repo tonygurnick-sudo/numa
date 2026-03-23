@@ -25,6 +25,7 @@ import type { AgentSummary } from '../../types/agents';
 import { getConnectionConfig } from '../../config/integrationsConfig';
 import { useKnowledgeBase } from '../../Providers/KnowledgeBaseProvider';
 import AgentAvatar from './AgentAvatar';
+import { CollapsibleTagRow } from '../Inputs/CollapsibleTagRow';
 import { downloadAgentExport, serializeAgentSummaryToExport } from '../../utils/agentExport';
 
 type AgentCardProps = {
@@ -258,6 +259,37 @@ export const AgentCard = ({
                 )}
               </div>
 
+              {/* Tags (collapsed) */}
+              {agent.tags?.length > 0 && (
+                <div
+                  className="d-flex align-items-center gap-1 mb-1"
+                  style={{ flexWrap: 'nowrap', overflow: 'hidden' }}
+                >
+                  {agent.tags.slice(0, 3).map((tag) => (
+                    <Badge
+                      key={tag}
+                      bg=""
+                      className="fw-normal text-truncate"
+                      style={{
+                        backgroundColor: 'var(--brand-primary-light, #e8f0fe)',
+                        color: 'var(--brand-primary, var(--bs-primary))',
+                        fontSize: '0.65rem',
+                        padding: '0.15em 0.5em',
+                        maxWidth: '7rem',
+                        minWidth: 0,
+                      }}
+                    >
+                      {tag}
+                    </Badge>
+                  ))}
+                  {agent.tags.length > 3 && (
+                    <span className="text-muted" style={{ fontSize: '0.65rem', flexShrink: 0, whiteSpace: 'nowrap' }}>
+                      +{agent.tags.length - 3}
+                    </span>
+                  )}
+                </div>
+              )}
+
               {/* Second Row: Integrations, Files, Tools Icons */}
               {hasMetadata && (
                 <div className="d-flex align-items-center gap-2" style={{ flexWrap: 'nowrap', overflow: 'hidden' }}>
@@ -479,6 +511,30 @@ export const AgentCard = ({
             {agent.description || t('card.noDescription')}
           </p>
         </div>
+
+        {/* Tags */}
+        {agent.tags?.length > 0 && (
+          <div className="mb-3">
+            <CollapsibleTagRow
+              tags={agent.tags}
+              gap="0.25rem"
+              renderTag={(tag) => (
+                <Badge
+                  bg=""
+                  className="fw-normal"
+                  style={{
+                    backgroundColor: 'var(--brand-primary-light, #e8f0fe)',
+                    color: 'var(--brand-primary, var(--bs-primary))',
+                    fontSize: '0.7rem',
+                    padding: '0.25em 0.6em',
+                  }}
+                >
+                  {tag}
+                </Badge>
+              )}
+            />
+          </div>
+        )}
 
         {/* Metadata section */}
         <div className="border-top pt-3 mb-3">

@@ -60,6 +60,7 @@ export type AgentSummary = {
   version: number;
   sourceAgentId?: string;
   isFavorite?: boolean;
+  tags: string[];
 };
 
 export type AgentListResponse = {
@@ -88,6 +89,7 @@ export type AgentPayload = {
   toolsConfig?: AgentToolsConfig;
   referenceFiles?: AgentReferenceFile[];
   createdByName?: string;
+  tags?: string[];
 };
 
 export type AgentUpdatePayload = AgentPayload & {

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { getFlag } from '../utils/featureFlags';
-import { Button, Col, Container, Row, Spinner, Alert, Modal } from 'react-bootstrap';
+import { Badge, Button, Col, Container, Row, Spinner, Alert, Modal } from 'react-bootstrap';
 import { useNavigate } from 'react-router-dom';
 import { useNumaRequest } from '../Providers/NumaRequestContext';
 import { useAuth } from '../Providers/AuthProvider';
@@ -20,7 +20,8 @@ import { getConnectionConfig } from '../config/integrationsConfig';
 import { useBranding } from '../Providers/BrandingContext';
 import { isScheduleCompleted, calculateNextRun } from '../utils/cronUtils';
 import { useTranslation } from 'react-i18next';
-import { ArrowLeft, Bot, Clock, ExternalLink, Link2, PlusCircle, RefreshCw, Store, User } from 'lucide-react';
+import { ArrowLeft, Bot, Clock, ExternalLink, Link2, PlusCircle, RefreshCw, Store, User, X } from 'lucide-react';
+import { CollapsibleTagRow } from '../Components/Inputs/CollapsibleTagRow';
 
 type FilterOption = 'all' | 'personal' | 'public';
 
@@ -49,6 +50,7 @@ export const AgentsManagement = () => {
   const [myAgents, setMyAgents] = useState<AgentSummary[]>(() => getCachedAgents('owned') ?? []);
   const [workspaceAgents, setWorkspaceAgents] = useState<AgentSummary[]>(() => getCachedAgents('public') ?? []);
   const [filter, setFilter] = useState<FilterOption>('all');
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [agentsMode, setAgentsMode] = useState<AgentsMode>('full');
   const [missingModal, setMissingModal] = useState<{
     show: boolean;
@@ -125,8 +127,15 @@ export const AgentsManagement = () => {
         setMyAgents([...personal].sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0)));
         setWorkspaceAgents([]);
       } else {
-        setMyAgents([...personal, ...createdPublic].sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0)));
-        setWorkspaceAgents(companyAgents.sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0)));
+        const myAgentsList = [...personal, ...createdPublic].sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0));
+        // Exclude agents already shown in "My Agents" to avoid duplicate cards
+        const myAgentIds = new Set(myAgentsList.map((a) => a.agentId));
+        setMyAgents(myAgentsList);
+        setWorkspaceAgents(
+          companyAgents
+            .filter((agent) => !myAgentIds.has(agent.agentId))
+            .sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0))
+        );
       }
 
       // Load schedules after agents are loaded
@@ -165,18 +174,59 @@ export const AgentsManagement = () => {
     };
   }, [agentsFeatureEnabled]);
 
-  const filteredMyAgents = useMemo(() => {
+  // All tags sorted by popularity (most used first)
+  const allTagsByPopularity = useMemo(() => {
+    const counts = new Map<string, number>();
+    [...myAgents, ...workspaceAgents].forEach((agent) => {
+      agent.tags?.forEach((tag) => {
+        counts.set(tag, (counts.get(tag) ?? 0) + 1);
+      });
+    });
+    return Array.from(counts.entries())
+      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+      .map(([tag]) => tag);
+  }, [myAgents, workspaceAgents]);
+
+  const toggleTag = (tag: string) => {
+    setSelectedTags((prev) => (prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag]));
+  };
+
+  // Base agents visible given the scope filter (before tag filtering)
+  const baseMyAgents = useMemo(() => {
     if (filter === 'public') return [];
-    if (filter === 'personal') {
-      return myAgents.filter((agent) => agent.visibility === 'personal');
-    }
-    return myAgents;
+    return filter === 'personal' ? myAgents.filter((agent) => agent.visibility === 'personal') : myAgents;
   }, [filter, myAgents]);
 
-  const filteredWorkspaceAgents = useMemo(() => {
+  const baseWorkspaceAgents = useMemo(() => {
     if (filter === 'personal') return [];
     return workspaceAgents;
   }, [filter, workspaceAgents]);
+
+  const filteredMyAgents = useMemo(() => {
+    if (selectedTags.length === 0) return baseMyAgents;
+    return baseMyAgents.filter((agent) => selectedTags.every((tag) => agent.tags?.includes(tag)));
+  }, [baseMyAgents, selectedTags]);
+
+  const filteredWorkspaceAgents = useMemo(() => {
+    if (selectedTags.length === 0) return baseWorkspaceAgents;
+    return baseWorkspaceAgents.filter((agent) => selectedTags.every((tag) => agent.tags?.includes(tag)));
+  }, [baseWorkspaceAgents, selectedTags]);
+
+  // Faceted tags: only show tags that still appear on at least one matching agent
+  // (agents that already match ALL currently selected tags)
+  const availableFilterTags = useMemo(() => {
+    const matchingAgents = [...filteredMyAgents, ...filteredWorkspaceAgents];
+    const counts = new Map<string, number>();
+    matchingAgents.forEach((agent) => {
+      agent.tags?.forEach((tag) => {
+        if (!selectedTags.includes(tag)) {
+          counts.set(tag, (counts.get(tag) ?? 0) + 1);
+        }
+      });
+    });
+    // Keep popularity order from allTagsByPopularity, but only include available tags + selected tags
+    return allTagsByPopularity.filter((tag) => selectedTags.includes(tag) || counts.has(tag));
+  }, [allTagsByPopularity, filteredMyAgents, filteredWorkspaceAgents, selectedTags]);
 
   const handleCreate = () => {
     setEditingAgent(null);
@@ -545,6 +595,40 @@ export const AgentsManagement = () => {
           </Container>
         )}
 
+        {/* Tag filter bar */}
+        {availableFilterTags.length > 0 && (
+          <Container fluid className="px-0 mb-3">
+            <CollapsibleTagRow
+              tags={availableFilterTags}
+              gap="0.35rem"
+              prefix={<span className="text-muted small fw-semibold me-1">{t('management.filters.tags')}</span>}
+              renderTag={(tag) => (
+                <Badge
+                  bg=""
+                  role="button"
+                  onClick={() => toggleTag(tag)}
+                  style={{
+                    backgroundColor: selectedTags.includes(tag) ? brandPrimaryColor : '#f0f0f0',
+                    color: selectedTags.includes(tag) ? brandPrimaryContrast : '#333',
+                    cursor: 'pointer',
+                    fontSize: '0.8rem',
+                    padding: '0.35em 0.7em',
+                    transition: 'all 0.15s ease',
+                  }}
+                >
+                  {tag}
+                </Badge>
+              )}
+            />
+            {selectedTags.length > 0 && (
+              <Button variant="link" size="sm" className="p-0 text-muted mt-1" onClick={() => setSelectedTags([])}>
+                <X size={14} className="me-1" />
+                {t('management.filters.clearTags')}
+              </Button>
+            )}
+          </Container>
+        )}
+
         {/* Upcoming Schedules Banner */}
         {schedulingEnabled && activeSchedules.length > 0 && (
           <Container fluid className="px-0 mb-4">
@@ -733,13 +817,15 @@ export const AgentsManagement = () => {
                     </div>
                     <h3 className="h5 mb-2">{t('management.empty.title')}</h3>
                     <p className="text-muted mb-4">
-                      {agentsMode === 'off'
-                        ? t('management.empty.modeOff')
-                        : filter === 'all'
-                          ? t('management.empty.all')
-                          : filter === 'personal'
-                            ? t('management.empty.personal')
-                            : t('management.empty.company')}
+                      {selectedTags.length > 0
+                        ? t('management.empty.noTagMatch')
+                        : agentsMode === 'off'
+                          ? t('management.empty.modeOff')
+                          : filter === 'all'
+                            ? t('management.empty.all')
+                            : filter === 'personal'
+                              ? t('management.empty.personal')
+                              : t('management.empty.company')}
                     </p>
                     {agentsMode !== 'off' && (
                       <Button variant="primary" onClick={handleCreate}>
@@ -763,6 +849,7 @@ export const AgentsManagement = () => {
             onScheduleCreated={loadSchedules}
             initialAccordionKey={editModalAccordionKey}
             onScheduleChange={loadSchedules}
+            existingTags={allTagsByPopularity}
           />
 
           <AgentScheduleModal

@@ -71,6 +71,7 @@ type WorkspaceAgentItem = {
   required_integrations?: string[];
   tools_config?: AgentToolsConfig;
   reference_files?: ReferenceFile[];
+  tags?: string[];
   created_by_user_id: string;
   created_by_name?: string;
   created_at: number;
@@ -94,6 +95,7 @@ type UserAgentItem = {
   required_integrations?: string[];
   tools_config?: AgentToolsConfig;
   reference_files?: ReferenceFile[];
+  tags?: string[];
   created_by_user_id: string;
   created_by_name?: string;
   created_at: number;
@@ -129,6 +131,7 @@ type AgentResponse = {
   version: number;
   sourceAgentId?: string;
   isFavorite?: boolean;
+  tags: string[];
 };
 
 type AuthContext = {
@@ -154,6 +157,7 @@ type CreateAgentPayload = {
   referenceFiles?: ReferenceFile[];
   createdByName?: string;
   sourceAgentId?: string;
+  tags?: string[];
 };
 
 type UpdateAgentPayload = CreateAgentPayload & {
@@ -267,6 +271,25 @@ const normaliseReferenceFiles = (files?: ReferenceFile[] | null): ReferenceFile[
     }));
 };
 
+const MAX_TAGS = 20;
+
+const normaliseTags = (tags?: string[] | null): string[] => {
+  if (!tags || !Array.isArray(tags)) return [];
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const tag of tags) {
+    if (typeof tag !== 'string') continue;
+    const trimmed = tag.trim();
+    if (!trimmed) continue;
+    const lower = trimmed.toLowerCase();
+    if (seen.has(lower)) continue;
+    seen.add(lower);
+    result.push(trimmed);
+    if (result.length >= MAX_TAGS) break;
+  }
+  return result;
+};
+
 const resolveSourceAgentId = (agent: WorkspaceAgentItem | UserAgentItem): string => {
   if ('source_agent_id' in agent && agent.source_agent_id) {
     return agent.source_agent_id;
@@ -300,6 +323,7 @@ const buildPersonalDuplicatePayload = (
     toolsConfig: agent.tools_config ?? {},
     referenceFiles: processedReferenceFiles,
     sourceAgentId: resolveSourceAgentId(agent),
+    tags: agent.tags ?? [],
   };
 };
 
@@ -344,6 +368,7 @@ const mapWorkspaceAgent = (item: WorkspaceAgentItem): AgentResponse => {
     createdAt: item.created_at,
     updatedAt: item.updated_at,
     version: item.version,
+    tags: item.tags ?? [],
   };
 };
 
@@ -373,6 +398,7 @@ const mapUserAgent = (item: UserAgentItem): AgentResponse => {
     version: item.version,
     sourceAgentId: item.source_agent_id,
     isFavorite: item.is_favorite,
+    tags: item.tags ?? [],
   };
 };
 
@@ -402,6 +428,7 @@ const buildWorkspaceItem = (
     required_integrations: Array.isArray(payload.requiredIntegrations) ? payload.requiredIntegrations : [],
     tools_config: normaliseToolsConfig(payload.toolsConfig),
     reference_files: normaliseReferenceFiles(payload.referenceFiles),
+    tags: normaliseTags(payload.tags),
     created_by_user_id: auth.sub,
     created_by_name: payload.createdByName?.trim() || auth.email || auth.name || auth.sub,
     created_at: timestamp,
@@ -451,6 +478,7 @@ const buildUserItem = (
       : (existing?.required_integrations ?? []),
     tools_config: normaliseToolsConfig(payload.toolsConfig ?? existing?.tools_config),
     reference_files: normaliseReferenceFiles(payload.referenceFiles ?? existing?.reference_files),
+    tags: normaliseTags(payload.tags ?? existing?.tags),
     created_by_user_id: existing?.created_by_user_id ?? auth.sub,
     created_by_name: payload.createdByName?.trim() ?? existing?.created_by_name ?? auth.email ?? auth.name ?? auth.sub,
     created_at: existing?.created_at ?? timestamp,
@@ -740,6 +768,7 @@ const handleUpdateAgent = async (
         required_integrations: merged.required_integrations ?? [],
         tools_config: merged.tools_config,
         reference_files: merged.reference_files,
+        tags: merged.tags ?? [],
         created_by_user_id: workspaceAgent?.created_by_user_id ?? merged.created_by_user_id,
         created_by_name: workspaceAgent?.created_by_name ?? merged.created_by_name,
         created_at: workspaceAgent?.created_at ?? merged.created_at ?? now,
@@ -830,6 +859,7 @@ const handleUpdateAgent = async (
         : (workspaceAgent.required_integrations ?? []),
       tools_config: normaliseToolsConfig(payload.toolsConfig ?? workspaceAgent.tools_config),
       reference_files: normaliseReferenceFiles(payload.referenceFiles ?? workspaceAgent.reference_files),
+      tags: normaliseTags(payload.tags ?? workspaceAgent.tags),
       updated_at: now,
       version: now,
     };
