@@ -523,7 +523,9 @@ const ErrorView = ({ payload }: { payload: OpsPayload }) => (
 
 // ── File-based result helpers ──────────────────────────────────────────
 
-/** Fetch full ops result from S3 when the backend saved it to a file. */
+/** Fetch full ops result from S3 when the backend saved it to a file.
+ *  Retries up to 3 times with 1s backoff — the backend uploads immediately
+ *  but there can be a brief delay before the object is readable. */
 function useOpsFileResult(payload: OpsPayload | null, conversationId?: string, sub?: string) {
   const [fileData, setFileData] = useState<unknown>(null);
   const [loading, setLoading] = useState(false);
@@ -537,22 +539,41 @@ function useOpsFileResult(payload: OpsPayload | null, conversationId?: string, s
     if (!bucket || !region) return;
 
     const s3Key = `numa-chat/workspace/${sub}/conversations/${conversationId}/${relativePath}`;
+    let cancelled = false;
     setLoading(true);
 
     (async () => {
-      try {
-        const { S3Client, GetObjectCommand } = await import('@aws-sdk/client-s3');
-        const credentials = await getCredentials();
-        const client = new S3Client({ region, credentials });
-        const resp = await client.send(new GetObjectCommand({ Bucket: bucket, Key: s3Key }));
-        const text = await resp.Body?.transformToString();
-        if (text) setFileData(JSON.parse(text));
-      } catch (e) {
-        console.warn('Failed to load ops result file:', e);
-      } finally {
-        setLoading(false);
+      const { S3Client, GetObjectCommand } = await import('@aws-sdk/client-s3');
+      const credentials = await getCredentials();
+      const client = new S3Client({ region, credentials });
+
+      const MAX_RETRIES = 3;
+      const RETRY_DELAY_MS = 1000;
+
+      for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+        if (cancelled) return;
+        try {
+          const resp = await client.send(new GetObjectCommand({ Bucket: bucket, Key: s3Key }));
+          const text = await resp.Body?.transformToString();
+          if (text && !cancelled) {
+            setFileData(JSON.parse(text));
+            setLoading(false);
+            return;
+          }
+        } catch {
+          // Wait before retrying (file may still be uploading to S3)
+          if (attempt < MAX_RETRIES - 1) {
+            await new Promise((r) => setTimeout(r, RETRY_DELAY_MS));
+          }
+        }
       }
+
+      if (!cancelled) setLoading(false);
     })();
+
+    return () => {
+      cancelled = true;
+    };
   }, [payload?.filePath, conversationId, sub, getCredentials]);
 
   return { fileData, loading };
@@ -609,8 +630,6 @@ const OpsBody = ({ payload, conversationId, sub }: { payload: OpsPayload; conver
 
   const category = getOpsCategory(operation);
   const items = unwrapOpsResult(result);
-  const single =
-    !Array.isArray(result) && items.length === 0 && typeof result === 'object' && result !== null ? result : null;
 
   // List operations
   if (isListOperation(operation)) {
@@ -633,34 +652,41 @@ const OpsBody = ({ payload, conversationId, sub }: { payload: OpsPayload; conver
   }
 
   // Get operations (single entity)
-  if (isGetOperation(operation)) {
-    // Rich team detail (get_team returns {team, zones, stages})
-    if (category === 'teams' && isTeamDetail(result)) {
-      return <TeamDetailView detail={result} />;
-    }
-    if (single) {
-      switch (category) {
-        case 'tickets':
-          return <TicketDetail ticket={single as OpsTicket} />;
-        case 'teams':
-          return <TeamRow team={single as OpsTeam} />;
-        case 'customers':
-          return <CrmRow entity={single as OpsCustomer} type="customer" />;
-        case 'suppliers':
-          return <CrmRow entity={single as OpsSupplier} type="supplier" />;
-        default:
-          break;
-      }
+  // APIs return wrapped objects: { ticket, links, comments }, { customer, activities, ... }, etc.
+  // Extract the entity from the known wrapper pattern for each category.
+  if (isGetOperation(operation) && result && typeof result === 'object' && !Array.isArray(result)) {
+    const wrapper = result as Record<string, unknown>;
+    switch (category) {
+      case 'tickets':
+        if (wrapper.ticket && typeof wrapper.ticket === 'object') {
+          return (
+            <>
+              <TicketDetail ticket={wrapper.ticket as OpsTicket} />
+              {Array.isArray(wrapper.comments) && wrapper.comments.length > 0 && (
+                <CommentList comments={wrapper.comments as OpsComment[]} />
+              )}
+            </>
+          );
+        }
+        break;
+      case 'teams':
+        if (isTeamDetail(result)) return <TeamDetailView detail={result} />;
+        if (wrapper.team && typeof wrapper.team === 'object') return <TeamRow team={wrapper.team as OpsTeam} />;
+        break;
+      case 'customers':
+        if (wrapper.customer && typeof wrapper.customer === 'object')
+          return <CrmRow entity={wrapper.customer as OpsCustomer} type="customer" />;
+        break;
+      case 'suppliers':
+        if (wrapper.supplier && typeof wrapper.supplier === 'object')
+          return <CrmRow entity={wrapper.supplier as OpsSupplier} type="supplier" />;
+        break;
+      default:
+        break;
     }
   }
 
-  // Metrics / unknown — show as formatted JSON
-  if (result) {
-    return (
-      <pre className="ops-renderer-raw">{typeof result === 'string' ? result : JSON.stringify(result, null, 2)}</pre>
-    );
-  }
-
+  // No dedicated renderer — show nothing (tool call line is sufficient)
   return null;
 };
 

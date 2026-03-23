@@ -532,8 +532,10 @@ export function useWorkspaceChatStreaming({
                   activeStreamingTasksRef.current.delete(toolUseId);
                 }
 
-                // Mark inline tool as complete
+                // Mark tool as complete (inline_tool or tool_card)
                 if (toolUseId) {
+                  const resultContent = (block as { content?: unknown }).content;
+
                   setMessages((prev) => {
                     const updated = [...prev];
                     const lastIdx = updated.length - 1;
@@ -547,28 +549,47 @@ export function useWorkspaceChatStreaming({
                       (seg) => seg.kind === 'inline_tool' && seg.toolUseId === toolUseId && !seg.isComplete
                     );
 
-                    if (toolIdx < 0) return prev;
+                    if (toolIdx >= 0) {
+                      const tool = segments[toolIdx];
 
-                    const tool = segments[toolIdx];
-
-                    // If transient tool, remove it entirely; otherwise mark complete
-                    if (tool.category === 'transient') {
-                      // Finalize the preceding text segment so that subsequent
-                      // text starts a new segment instead of concatenating directly
-                      if (toolIdx > 0) {
-                        const prevSeg = segments[toolIdx - 1];
-                        if (prevSeg.kind === 'text') {
-                          segments[toolIdx - 1] = { ...prevSeg, finalized: true };
+                      // If transient tool, remove it entirely; otherwise mark complete
+                      if (tool.category === 'transient') {
+                        // Finalize the preceding text segment so that subsequent
+                        // text starts a new segment instead of concatenating directly
+                        if (toolIdx > 0) {
+                          const prevSeg = segments[toolIdx - 1];
+                          if (prevSeg.kind === 'text') {
+                            segments[toolIdx - 1] = { ...prevSeg, finalized: true };
+                          }
                         }
+                        segments = segments.filter((_, idx) => idx !== toolIdx);
+                      } else {
+                        segments[toolIdx] = { ...tool, isComplete: true, isError };
                       }
-                      segments = segments.filter((_, idx) => idx !== toolIdx);
-                    } else {
-                      segments[toolIdx] = { ...tool, isComplete: true, isError };
+
+                      lastMsg.segments = segments;
+                      updated[lastIdx] = lastMsg;
+                      return updated;
                     }
 
-                    lastMsg.segments = segments;
-                    updated[lastIdx] = lastMsg;
-                    return updated;
+                    // Find tool_card with matching toolUseId (e.g. Numa Ops)
+                    const cardIdx = segments.findIndex(
+                      (seg) => seg.kind === 'tool_card' && seg.toolUseId === toolUseId && seg.isLoading
+                    );
+
+                    if (cardIdx >= 0) {
+                      segments[cardIdx] = {
+                        ...segments[cardIdx],
+                        result: resultContent,
+                        isLoading: false,
+                        isError,
+                      };
+                      lastMsg.segments = segments;
+                      updated[lastIdx] = lastMsg;
+                      return updated;
+                    }
+
+                    return prev;
                   });
                 }
               }
