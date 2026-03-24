@@ -237,7 +237,7 @@ export const removeProjectMember = async (projectId: string, userId: string): Pr
 /**
  * Build the virtual path for a file from its parent_path + name.
  */
-export const filePath = (file: FileItem): string => `${file.parent_path}${file.name}`;
+export const filePath = (file: FileItem): string => `${file.parent_path ?? '/'}${file.name}`;
 
 /**
  * Build the S3 key for a file upload based on scope and path.
