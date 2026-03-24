@@ -29,6 +29,8 @@ export interface CapabilityMetadata {
   dev_only: boolean;
   /** Parent flags that must be enabled for this capability to function */
   dependencies: string[];
+  /** Default enabled state — used when config.json doesn't explicitly set this flag */
+  enabled: boolean;
 }
 
 export const CAPABILITIES_METADATA: CapabilityMetadata[] = [
@@ -40,6 +42,7 @@ export const CAPABILITIES_METADATA: CapabilityMetadata[] = [
     icon: 'bi-chat-dots',
     system_only: false,
     dev_only: false,
+    enabled: true,
     dependencies: [],
   },
   {
@@ -49,6 +52,7 @@ export const CAPABILITIES_METADATA: CapabilityMetadata[] = [
     icon: 'bi-folder-fill',
     system_only: false,
     dev_only: false,
+    enabled: true,
     dependencies: [],
   },
   {
@@ -58,6 +62,7 @@ export const CAPABILITIES_METADATA: CapabilityMetadata[] = [
     icon: 'bi-robot',
     system_only: false,
     dev_only: false,
+    enabled: true,
     dependencies: [],
   },
   {
@@ -67,6 +72,7 @@ export const CAPABILITIES_METADATA: CapabilityMetadata[] = [
     icon: 'bi-calendar-check',
     system_only: false,
     dev_only: false,
+    enabled: true,
     dependencies: [],
   },
   {
@@ -76,6 +82,7 @@ export const CAPABILITIES_METADATA: CapabilityMetadata[] = [
     icon: 'bi-kanban',
     system_only: false,
     dev_only: false,
+    enabled: true,
     dependencies: [],
   },
   {
@@ -85,6 +92,7 @@ export const CAPABILITIES_METADATA: CapabilityMetadata[] = [
     icon: 'bi-book',
     system_only: false,
     dev_only: false,
+    enabled: true,
     dependencies: [],
   },
   {
@@ -94,6 +102,7 @@ export const CAPABILITIES_METADATA: CapabilityMetadata[] = [
     icon: 'bi-plug',
     system_only: false,
     dev_only: false,
+    enabled: true,
     dependencies: [],
   },
   {
@@ -103,6 +112,7 @@ export const CAPABILITIES_METADATA: CapabilityMetadata[] = [
     icon: 'bi-cloud-download',
     system_only: false,
     dev_only: false,
+    enabled: false,
     dependencies: [],
   },
   {
@@ -112,6 +122,7 @@ export const CAPABILITIES_METADATA: CapabilityMetadata[] = [
     icon: 'bi-code-slash',
     system_only: false,
     dev_only: false,
+    enabled: false,
     dependencies: [],
   },
   {
@@ -121,6 +132,7 @@ export const CAPABILITIES_METADATA: CapabilityMetadata[] = [
     icon: 'bi-shield-lock',
     system_only: false,
     dev_only: false,
+    enabled: false,
     dependencies: [],
   },
   {
@@ -130,6 +142,7 @@ export const CAPABILITIES_METADATA: CapabilityMetadata[] = [
     icon: 'bi-key',
     system_only: false,
     dev_only: false,
+    enabled: true,
     dependencies: [],
   },
   {
@@ -139,7 +152,28 @@ export const CAPABILITIES_METADATA: CapabilityMetadata[] = [
     icon: 'bi-link-45deg',
     system_only: false,
     dev_only: false,
+    enabled: true,
     dependencies: [],
+  },
+  {
+    flag: 'NUMA_APPS',
+    title: 'Numa Apps',
+    description: 'Step Functions-based AI applications for document analysis, policy generation, and more.',
+    icon: 'bi-grid-3x3-gap',
+    system_only: false,
+    dev_only: false,
+    enabled: true,
+    dependencies: [],
+  },
+  {
+    flag: 'JOB_HISTORY',
+    title: 'Job History',
+    description: 'View and manage historical app run results and artifacts.',
+    icon: 'bi-clock-history',
+    system_only: false,
+    dev_only: false,
+    enabled: true,
+    dependencies: ['NUMA_APPS'],
   },
   {
     flag: 'TRANSCRIPTION_SERVICE',
@@ -148,7 +182,8 @@ export const CAPABILITIES_METADATA: CapabilityMetadata[] = [
     icon: 'bi-mic',
     system_only: false,
     dev_only: false,
-    dependencies: [],
+    enabled: true,
+    dependencies: ['NUMA_FILES'],
   },
   {
     flag: 'USAGE_REPORTING',
@@ -157,6 +192,7 @@ export const CAPABILITIES_METADATA: CapabilityMetadata[] = [
     icon: 'bi-bar-chart-line',
     system_only: false,
     dev_only: false,
+    enabled: false,
     dependencies: [],
   },
   {
@@ -166,6 +202,7 @@ export const CAPABILITIES_METADATA: CapabilityMetadata[] = [
     icon: 'bi-lightning',
     system_only: false,
     dev_only: false,
+    enabled: false,
     dependencies: [],
   },
 
@@ -177,6 +214,7 @@ export const CAPABILITIES_METADATA: CapabilityMetadata[] = [
     icon: 'bi-cloud-upload',
     system_only: false,
     dev_only: false,
+    enabled: true,
     dependencies: ['NUMA_FILES'],
   },
   {
@@ -186,6 +224,7 @@ export const CAPABILITIES_METADATA: CapabilityMetadata[] = [
     icon: 'bi-share',
     system_only: false,
     dev_only: false,
+    enabled: true,
     dependencies: ['NUMA_FILES'],
   },
   {
@@ -195,6 +234,7 @@ export const CAPABILITIES_METADATA: CapabilityMetadata[] = [
     icon: 'bi-sliders',
     system_only: false,
     dev_only: false,
+    enabled: true,
     dependencies: ['NUMA_WORKSPACE_CHAT'],
   },
 ];

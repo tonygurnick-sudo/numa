@@ -783,7 +783,9 @@ export class NumaClientStack extends TerraformStack {
         // Per-provider flags removed — providers are now configured dynamically via COMPANY vault secrets.
         // OAUTH_GOOGLE_DRIVE, OAUTH_ONEDRIVE, OAUTH_DROPBOX are no longer needed in config.json.
         V2_APPS: clientConfig.v2Apps ?? false,
-        TRANSCRIPTION_SERVICE: clientConfig.transcriptionService ?? false,
+        NUMA_APPS: clientConfig.allApps ?? false,
+        JOB_HISTORY: (clientConfig.allApps ?? false) ? (clientConfig.jobHistory ?? true) : false,
+        TRANSCRIPTION_SERVICE: (clientConfig.numaFiles ?? false) ? (clientConfig.transcriptionService ?? false) : false,
         // Direct Lambda Function URL for workspace chat agent (bypasses CloudFront buffering for streaming)
         WORKSPACE_CHAT_AGENT_FUNCTION_URL: workspaceChatAgentProxy?.functionUrl,
         NUMA_VERSION: siteVersion,
