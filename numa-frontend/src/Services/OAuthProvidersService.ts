@@ -15,6 +15,7 @@ import type {
   OAuthFile,
   OAuthFolderContents,
 } from '../types/oauthProviders';
+import { getConnectorById } from '../Components/DataConnectors/connectorRegistry';
 
 // Cache for connection statuses to avoid repeated vault calls
 const statusCache: Record<string, { status: OAuthConnectionStatus; lastChecked: number }> = {};
@@ -52,15 +53,16 @@ export class OAuthProvidersService {
    * List all configured OAuth providers from the backend.
    * Returns provider info (id, display_name, icon, description, configured).
    */
-  static async listProviders(): Promise<OAuthProviderInfo[]> {
-    // Check cache
-    if (providersCache && Date.now() - providersCache.lastChecked < PROVIDERS_CACHE_TTL) {
+  static async listProviders(refresh = false): Promise<OAuthProviderInfo[]> {
+    // Check cache (skip if refresh requested)
+    if (!refresh && providersCache && Date.now() - providersCache.lastChecked < PROVIDERS_CACHE_TTL) {
       return providersCache.providers;
     }
 
     try {
       const endpoint = getApiEndpoint();
-      const response = await fetch(`${endpoint}/oauth/providers`, {
+      const qs = refresh ? '?refresh=1' : '';
+      const response = await fetch(`${endpoint}/oauth/providers${qs}`, {
         method: 'GET',
         headers: getAuthHeaders(),
       });
@@ -131,7 +133,18 @@ export class OAuthProvidersService {
   static async connect(provider: OAuthProviderType): Promise<{ success: boolean; authUrl?: string; error?: string }> {
     try {
       const endpoint = getApiEndpoint();
-      const response = await fetch(`${endpoint}/oauth/${provider}/authorize`, {
+
+      // Platform connectors share a single OAuth client — route via platform ID
+      const connector = getConnectorById(provider);
+      const platform = connector?.oauthPlatform ?? provider;
+      const params = new URLSearchParams();
+      if (connector?.oauthPlatform) {
+        params.set('connector', provider);
+        // Don't pass scopes — backend uses admin-configured vault scopes
+      }
+      const qs = params.toString() ? `?${params.toString()}` : '';
+
+      const response = await fetch(`${endpoint}/oauth/${platform}/authorize${qs}`, {
         method: 'GET',
         headers: getAuthHeaders(),
       });
@@ -261,6 +274,25 @@ export class OAuthProvidersService {
   }
 
   /**
+   * Send an email via an email provider (Gmail, Outlook, etc.)
+   */
+  static async sendEmail(
+    provider: OAuthProviderType,
+    to: string,
+    subject: string,
+    body: string,
+    html = false
+  ): Promise<{ success: boolean; message_id?: string }> {
+    const endpoint = getApiEndpoint();
+    const response = await fetch(`${endpoint}/oauth-files/${provider}/send`, {
+      method: 'POST',
+      headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ to, subject, body, html }),
+    });
+    return handleResponse<{ success: boolean; message_id?: string }>(response);
+  }
+
+  /**
    * Download file from OAuth provider (for transfer functionality)
    * Uses automatic token refresh to ensure valid authentication
    */
@@ -285,6 +317,22 @@ export class OAuthProvidersService {
       console.error(`[OAuth] Failed to download file from ${provider}:`, error);
       throw new Error(`Failed to download file: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
+  }
+
+  /**
+   * Get email/message content as safe plain text.
+   */
+  static async getEmailContent(
+    provider: OAuthProviderType,
+    fileId: string
+  ): Promise<{ subject: string; from: string; date: string; body_text: string; size: number }> {
+    const endpoint = getApiEndpoint();
+    const encodedFileId = encodeURIComponent(fileId);
+    const response = await fetch(`${endpoint}/oauth-files/${provider}/message/${encodedFileId}`, {
+      method: 'GET',
+      headers: getAuthHeaders(),
+    });
+    return handleResponse(response);
   }
 
   /**

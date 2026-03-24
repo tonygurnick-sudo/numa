@@ -7,10 +7,12 @@ const REGION = process.env.REGION ?? 'us-east-1';
 /** Map logType path param → env var holding the DynamoDB table name. */
 const TABLE_MAP: Record<string, string> = {
   'web-crawler': process.env.WEB_CRAWLER_TABLE ?? '',
-  transcripts: process.env.TRANSCRIPTS_TABLE ?? '',
   automation: process.env.AUTOMATION_TABLE ?? '',
   'search-index': process.env.SEARCH_INDEX_TABLE ?? '',
   'kb-index': process.env.KB_INDEX_TABLE ?? '',
+  schedule: process.env.SCHEDULE_TABLE ?? '',
+  sync: process.env.SYNC_TABLE ?? '',
+  recovery: process.env.RECOVERY_TABLE ?? '',
 };
 
 const ddbClient = new DynamoDBClient({ region: REGION });

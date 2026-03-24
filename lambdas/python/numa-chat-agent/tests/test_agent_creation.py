@@ -98,7 +98,7 @@ class TestAgentCreationTool(unittest.TestCase):
 
         self.assertEqual(result["status"], "success")
         self.assertIn("agent", result)
-        self.assertEqual(result["agent"]["visibility"], "personal")
+        self.assertEqual(result["agent"]["visibility"], "personal")  # type: ignore[index]
         mock_put_user.assert_called_once()
         mock_put_workspace.assert_not_called()
 

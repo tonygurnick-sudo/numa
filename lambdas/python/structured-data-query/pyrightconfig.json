@@ -1,5 +1,4 @@
 {
-  "typeCheckingMode": "basic",
-  "reportMissingTypeStubs": "none",
-  "exclude": ["**/sdk/tests", "**/tests", "**/.venv", "**/.poetry"]
+  "exclude": [".venv", "**/.venv", "dist", "build", "*.egg-info"],
+  "reportArgumentType": false
 }

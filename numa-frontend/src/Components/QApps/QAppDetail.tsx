@@ -93,12 +93,10 @@ const QAppDetail = () => {
 
     try {
       const input = { instanceId: Q_APPLICATION_ID, appId: qAppId };
-      console.log('Q App input:', input);
 
       const command = new GetQAppCommand(input);
 
       const response = await qAppsClient.send(command);
-      console.log('Q App fetched:', response);
 
       setqAppData(response);
     } catch (error) {

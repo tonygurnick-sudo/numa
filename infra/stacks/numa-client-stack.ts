@@ -530,14 +530,18 @@ export class NumaClientStack extends TerraformStack {
       domainName,
       auditWebCrawlerTableName: core.auditWebCrawlerTable.name,
       auditWebCrawlerTableArn: core.auditWebCrawlerTable.arn,
-      auditTranscriptsTableName: core.auditTranscriptsTable.name,
-      auditTranscriptsTableArn: core.auditTranscriptsTable.arn,
       auditAutomationTableName: core.auditAutomationTable.name,
       auditAutomationTableArn: core.auditAutomationTable.arn,
       auditSearchIndexTableName: core.auditSearchIndexTable.name,
       auditSearchIndexTableArn: core.auditSearchIndexTable.arn,
       auditKbIndexTableName: core.auditKbIndexTable.name,
       auditKbIndexTableArn: core.auditKbIndexTable.arn,
+      auditScheduleTableName: core.auditScheduleTable.name,
+      auditScheduleTableArn: core.auditScheduleTable.arn,
+      auditSyncTableName: core.auditSyncTable.name,
+      auditSyncTableArn: core.auditSyncTable.arn,
+      auditRecoveryTableName: core.auditRecoveryTable.name,
+      auditRecoveryTableArn: core.auditRecoveryTable.arn,
     });
 
     // Numa Ops (work management, kanban boards, CRM, supplier management)
@@ -595,6 +599,8 @@ export class NumaClientStack extends TerraformStack {
         notificationsTableArn: core.notificationsTable.arn,
         usageAnalyticsEventsTableName: core.usageAnalyticsEventsTable.name,
         usageAnalyticsEventsTableArn: core.usageAnalyticsEventsTable.arn,
+        auditAutomationTableName: core.auditAutomationTable.name,
+        auditAutomationTableArn: core.auditAutomationTable.arn,
         deployerRoleArn: deployerRole,
         otelConfig: {
           otelConfigPath: core.otelConfigPath,

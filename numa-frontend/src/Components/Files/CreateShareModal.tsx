@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Modal, Form, Button, Spinner, Alert, InputGroup, ProgressBar } from 'react-bootstrap';
+import { Modal, Form, Button, Spinner, Alert, InputGroup } from 'react-bootstrap';
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { useAuth } from '../../Providers/AuthProvider';
@@ -13,21 +13,16 @@ import {
   formatFileSize,
   filePath as buildFilePath,
 } from '../../Services/filesService';
-import {
-  createShare,
-  createDropZone,
-  getShareInfo,
-  getDetailedShareError,
-  DocumentProcessingError,
-} from '../../Services/sharedChatService';
+import { createShare, createDropZone, getShareInfo as _getShareInfo } from '../../Services/sharedChatService';
 import type { CreateShareResponse, CreateDropZoneResponse } from '../../Services/sharedChatService';
-import type { FileItem, FileScope } from '../../Services/filesService';
-import { FolderTreeSelector } from '../FolderTreeSelector';
+import type { FileItem, FileScope, FolderItem } from '../../Services/filesService';
 import { knowledgeBaseService } from '../../Services/knowledgeBaseService';
 import type { UserKB } from '../../Services/knowledgeBaseService';
 import { streamWorkspaceChatAgent } from '../../Services/workspaceChatAgentService';
 import type { SDKEvent } from '../../types/workspaceChatTypes';
 import { getEffectiveLanguage } from '../../utils/languagePreference';
+import { useNumaRequest } from '../../Providers/NumaRequestContext';
+import { TranscriptionService } from '../../Services/TranscriptionService';
 
 /**
  * ARCHITECTURE NOTE: Files system uses DATA bucket as primary storage
@@ -46,28 +41,25 @@ interface CreateShareModalProps {
   currentPath?: string;
 }
 
-const DROPZONE_WIZARD_STEPS = [
-  'folder', // 1. Folder selector
-  'instructions', // 2. Freetext instructions
-  'description', // 3. Freetext description
-  'auth', // 4. Auth mode + passcode
-  'expiry', // 5. Link expiry
-  'limits', // 6. Max file size, total quota, file types
-  'api', // 7. Allow API upload toggle
-  'chat', // 8. Enable chat + max calls + KB attachment
-  'review', // 9. Review all settings
+/** Steps shown in the dropzone customize step indicator (steps 3+ internally) */
+const DROPZONE_CUSTOMIZE_STEPS = [
+  'instructions',
+  'description',
+  'auth',
+  'expiry',
+  'limits',
+  'api',
+  'chat',
+  'review',
 ] as const;
 
 const DEFAULT_SYSTEM_PROMPT =
   'You are a helpful assistant that answers questions about the shared document. Be concise and accurate. If the answer is not in the document, say so.';
 
-const POLL_INTERVAL_MS = 4000;
-const MAX_POLL_ATTEMPTS = 15; // ~60 seconds
-
 const WIZARD_STEPS = [
   'file',
+  'quickShare',
   'preview',
-  'extract',
   'description',
   'kb',
   'expiry',
@@ -75,6 +67,9 @@ const WIZARD_STEPS = [
   'download',
   'review',
 ] as const;
+
+/** Steps shown in the step indicator when in customize mode (skips quickShare) */
+const CUSTOMIZE_WIZARD_STEPS = ['preview', 'description', 'kb', 'expiry', 'chat', 'download', 'review'] as const;
 
 /** Text file extensions that can be processed synchronously (no extraction needed) */
 const TEXT_FILE_EXTENSIONS = [
@@ -216,6 +211,7 @@ export const CreateShareModal = ({
 }: CreateShareModalProps) => {
   const { t } = useTranslation('files');
   const { getCredentials, user } = useAuth();
+  const { numaGet, numaPost } = useNumaRequest();
 
   const isDropzone = mode === 'dropzone';
   const effectiveScope = propScope ?? { type: 'my' as const };
@@ -245,14 +241,10 @@ export const CreateShareModal = ({
   const [enableChat, setEnableChat] = useState(true);
   const [allowDownload, setAllowDownload] = useState(true);
 
-  // ─── Phase 1: Content extraction state ─────────────────────────────
-  const [extractedContent, setExtractedContent] = useState('');
-  const [extractionStatus, setExtractionStatus] = useState<'idle' | 'streaming' | 'success' | 'error'>('idle');
-  const extractionAbortRef = useRef<(() => void) | null>(null);
-
-  // ─── Phase 2: Description generation state ────────────────────────
+  // ─── Description generation state ──────────────────────────────────
   const [descGenStatus, setDescGenStatus] = useState<'idle' | 'streaming' | 'success' | 'error'>('idle');
   const descGenAbortRef = useRef<(() => void) | null>(null);
+  const [_descriptionManuallyEdited, setDescriptionManuallyEdited] = useState(false);
 
   // ─── Knowledge Base selection state ────────────────────────────────
   const [selectedKbId, setSelectedKbId] = useState<string | null>(null);
@@ -261,7 +253,7 @@ export const CreateShareModal = ({
 
   // ─── Dropzone-specific state ───────────────────────────────────────
   const [selectedFolder, setSelectedFolder] = useState('/');
-  const [dropzoneScope, setDropzoneScope] = useState<FileScope>({ type: 'my' });
+  const [dropzoneScope] = useState<FileScope>({ type: 'my' });
   const [instructions, setInstructions] = useState('');
   const [authMode, setAuthMode] = useState<'none' | 'passcode' | 'email'>('passcode');
   const [passcode, setPasscode] = useState('');
@@ -271,30 +263,30 @@ export const CreateShareModal = ({
   const [enableApi, setEnableApi] = useState(true);
   const [dropzoneMaxQuestions, setDropzoneMaxQuestions] = useState('');
 
+  // ─── Quick Share vs Customize mode ────────────────────────────────
+  const [isCustomizing, setIsCustomizing] = useState(false);
+
+  // ─── Dropzone Quick Create vs Customize mode ────────────────────
+  const [isDropzoneCustomizing, setIsDropzoneCustomizing] = useState(false);
+
+  // ─── Dropzone folder browser state ──────────────────────────────
+  const [dzBrowsePath, setDzBrowsePath] = useState('/');
+  const [dzFolders, setDzFolders] = useState<FolderItem[]>([]);
+  const [dzLoadingFolders, setDzLoadingFolders] = useState(false);
+  const [dzCreatingFolder, setDzCreatingFolder] = useState(false);
+  const [dzNewFolderName, setDzNewFolderName] = useState('');
+  const [dzShowNewFolder, setDzShowNewFolder] = useState(false);
+
   // ─── Submit state ──────────────────────────────────────────────────
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  // ─── Extraction polling ────────────────────────────────────────────
-  const [extractionTimedOut, setExtractionTimedOut] = useState(false);
-  const [specificError, setSpecificError] = useState<string | null>(null);
 
   // ─── Success state ─────────────────────────────────────────────────
   const [shareResult, setShareResult] = useState<CreateShareResponse | CreateDropZoneResponse | null>(null);
   const [copied, setCopied] = useState(false);
   const [passcodeCopied, setPasscodeCopied] = useState(false);
 
-  // Derived
-  const isExtracting = !isDropzone && wizardStep === 10; // virtual step for extraction polling
-
   // ─── Cleanup helpers (must be before effects that reference them) ──
-  const cleanupExtraction = useCallback(() => {
-    if (extractionAbortRef.current) {
-      extractionAbortRef.current();
-      extractionAbortRef.current = null;
-    }
-  }, []);
-
   const cleanupDescGen = useCallback(() => {
     if (descGenAbortRef.current) {
       descGenAbortRef.current();
@@ -306,16 +298,21 @@ export const CreateShareModal = ({
   useEffect(() => {
     if (show) {
       setWizardStep(preSelectedFile ? 2 : 1); // skip file selection if pre-selected
+      setIsCustomizing(false);
+      setIsDropzoneCustomizing(false);
       setDropzoneWizardStep(1);
+      setDzBrowsePath('/');
+      setDzFolders([]);
+      setDzShowNewFolder(false);
+      setDzNewFolderName('');
       setSelectedFile(preSelectedFile ?? null);
       setDescription('');
       setExpiryHours(null);
       setMaxQuestions(12);
       setEnableChat(true);
       setAllowDownload(true);
-      setExtractedContent('');
-      setExtractionStatus('idle');
       setDescGenStatus('idle');
+      setDescriptionManuallyEdited(false);
       setSelectedKbId(null);
       setAvailableKbs([]);
       setKbsLoading(false);
@@ -324,8 +321,6 @@ export const CreateShareModal = ({
       setShareResult(null);
       setCopied(false);
       setPasscodeCopied(false);
-      setExtractionTimedOut(false);
-      setSpecificError(null);
       setSelectedFolder('/');
       setInstructions(isDropzone ? t('dropzoneWizard.instructionsDefault') : '');
       setAuthMode('passcode');
@@ -335,7 +330,6 @@ export const CreateShareModal = ({
       setAllowedExtensions('');
       setEnableApi(true);
       setDropzoneMaxQuestions(isDropzone ? '12' : '');
-      cleanupExtraction();
       cleanupDescGen();
     }
   }, [show, preSelectedFile, isDropzone]);
@@ -347,159 +341,8 @@ export const CreateShareModal = ({
     }
   }, [show, wizardStep, isDropzone]);
 
-  // ─── Extraction polling ────────────────────────────────────────────
-  useEffect(() => {
-    if (!isExtracting || !shareResult) return;
-
-    let attempts = 0;
-    let cancelled = false;
-
-    const poll = async () => {
-      if (cancelled) return;
-      attempts++;
-
-      try {
-        const info = await getShareInfo(shareResult.uuid);
-        if (cancelled) return;
-
-        if (info.status === 'ready') {
-          setWizardStep(11); // success
-          return;
-        }
-        if (info.status === 'error') {
-          let errorDetails = await getDetailedShareError(shareResult.uuid);
-
-          if (!errorDetails && selectedFile?.name) {
-            const ext = selectedFile.name.slice(selectedFile.name.lastIndexOf('.')).toLowerCase();
-            if (['.pdf'].includes(ext)) {
-              errorDetails =
-                'PDF extraction failed. The file may be password-protected, corrupted, or temporarily unavailable.';
-            } else if (['.docx', '.doc'].includes(ext)) {
-              errorDetails =
-                'Word document extraction failed. The file may be corrupted or contain unsupported formatting.';
-            } else if (['.xlsx', '.xls', '.csv'].includes(ext)) {
-              errorDetails =
-                'Spreadsheet extraction failed. The file may be corrupted, too large, or temporarily unavailable.';
-            } else if (['.mp3', '.mp4', '.wav', '.flac', '.ogg', '.amr', '.webm', '.m4a'].includes(ext)) {
-              errorDetails =
-                'Audio/video transcription failed. The file may be corrupted, too large, or temporarily unavailable.';
-            } else if (['.png', '.jpg', '.jpeg'].includes(ext)) {
-              errorDetails =
-                'Image text extraction failed. The image may not contain readable text or may be temporarily unavailable.';
-            } else {
-              errorDetails = 'Document extraction failed. The file may be temporarily unavailable.';
-            }
-          }
-
-          setSpecificError(errorDetails || 'Document processing failed. Please try again or choose a different file.');
-          setExtractionTimedOut(true);
-          return;
-        }
-      } catch (err) {
-        if (cancelled) return;
-        if (!(err instanceof DocumentProcessingError)) {
-          if (attempts >= MAX_POLL_ATTEMPTS) {
-            setExtractionTimedOut(true);
-            return;
-          }
-        }
-      }
-
-      if (attempts >= MAX_POLL_ATTEMPTS) {
-        if (!cancelled) {
-          try {
-            const errorDetails = await getDetailedShareError(shareResult.uuid);
-            if (errorDetails && errorDetails !== 'Document is still being processed') {
-              setSpecificError(errorDetails);
-            }
-          } catch {
-            // Ignore
-          }
-          setExtractionTimedOut(true);
-        }
-        return;
-      }
-
-      timer = window.setTimeout(poll, POLL_INTERVAL_MS);
-    };
-
-    let timer = window.setTimeout(poll, POLL_INTERVAL_MS);
-
-    return () => {
-      cancelled = true;
-      clearTimeout(timer);
-    };
-  }, [wizardStep, shareResult]);
-
   // ---------------------------------------------------------------------------
-  // Phase 1: Content Extraction (workspace agent with file attachment)
-  // ---------------------------------------------------------------------------
-
-  const startExtraction = useCallback(
-    async (file: FileItem) => {
-      const userSub = (user?.decoded_tokens?.idToken?.sub as string) || '';
-      if (!userSub) return;
-
-      cleanupExtraction();
-      setExtractionStatus('streaming');
-      setExtractedContent('');
-
-      const s3Key = buildS3Key(effectiveScope, file.name, effectiveCurrentPath, userSub);
-
-      const prompt = `Extract and return the complete text content of the attached file. Return only the extracted text, no commentary or formatting.\n\nFile: ${file.name}\nS3 Key: ${s3Key}`;
-
-      try {
-        const { abort } = await streamWorkspaceChatAgent(
-          {
-            prompt,
-            conversationId: `extract-${crypto.randomUUID()}`,
-            attachments: {
-              files: [
-                {
-                  path: s3Key,
-                  filename: file.name,
-                  size: file.size_bytes || 0,
-                },
-              ],
-            },
-            hasUploads: false,
-            enabledTools: [],
-            enabledConnections: [],
-            responseMode: 'stream',
-          },
-          (event: SDKEvent) => {
-            if (event.type === 'StreamEvent') {
-              const streamEvent = (event as { event?: { type?: string; delta?: { type?: string; text?: string } } })
-                .event;
-              if (
-                streamEvent?.type === 'content_block_delta' &&
-                streamEvent.delta?.type === 'text_delta' &&
-                streamEvent.delta.text
-              ) {
-                setExtractedContent((prev) => prev + streamEvent.delta!.text!);
-              }
-            }
-          },
-          () => {
-            setExtractionStatus('success');
-            extractionAbortRef.current = null;
-          },
-          (err: Error) => {
-            console.error('Extraction failed:', err);
-            setExtractionStatus('error');
-            extractionAbortRef.current = null;
-          }
-        );
-        extractionAbortRef.current = abort;
-      } catch {
-        setExtractionStatus('error');
-      }
-    },
-    [user, effectiveScope, effectiveCurrentPath, cleanupExtraction]
-  );
-
-  // ---------------------------------------------------------------------------
-  // Phase 2: Description Generation (workspace agent with extracted text)
+  // Description Generation (workspace agent with extracted text)
   // ---------------------------------------------------------------------------
 
   const startDescriptionGen = useCallback(
@@ -551,23 +394,11 @@ export const CreateShareModal = ({
     [cleanupDescGen]
   );
 
-  // ─── Auto-run content extraction when arriving at step 3 ───────────
-  useEffect(() => {
-    if (!isDropzone && wizardStep === 3 && selectedFile && extractionStatus === 'idle') {
-      startExtraction(selectedFile);
-    }
-  }, [wizardStep, selectedFile, extractionStatus, isDropzone, startExtraction]);
+  // Description generation is now button-driven, not auto-triggered
 
-  // ─── Auto-run description generation when arriving at step 4 ──────
+  // ─── Load KBs when arriving at step 2 (Quick Share) or step 6 (KB) ─
   useEffect(() => {
-    if (!isDropzone && wizardStep === 4 && extractedContent && !description && descGenStatus === 'idle') {
-      startDescriptionGen(extractedContent);
-    }
-  }, [wizardStep, extractedContent, description, descGenStatus, isDropzone, startDescriptionGen]);
-
-  // ─── Load KBs when arriving at step 5 ─────────────────────────────
-  useEffect(() => {
-    if (!isDropzone && wizardStep === 5 && availableKbs.length === 0 && !kbsLoading) {
+    if (!isDropzone && (wizardStep === 2 || wizardStep === 5) && availableKbs.length === 0 && !kbsLoading) {
       (async () => {
         setKbsLoading(true);
         try {
@@ -587,9 +418,9 @@ export const CreateShareModal = ({
     }
   }, [wizardStep, isDropzone, availableKbs.length, kbsLoading]);
 
-  // ─── Load KBs for dropzone when arriving at step 8 (chat) ────────
+  // ─── Load KBs for dropzone when arriving at chat step (step 9 in customize) ─
   useEffect(() => {
-    if (isDropzone && dropzoneWizardStep === 8 && enableChat && availableKbs.length === 0 && !kbsLoading) {
+    if (isDropzone && dropzoneWizardStep === 9 && enableChat && availableKbs.length === 0 && !kbsLoading) {
       (async () => {
         setKbsLoading(true);
         try {
@@ -608,6 +439,46 @@ export const CreateShareModal = ({
       })();
     }
   }, [dropzoneWizardStep, isDropzone, enableChat, availableKbs.length, kbsLoading]);
+
+  // ─── Load folders for dropzone folder browser (step 1) ──────────
+  const loadDzFolders = useCallback(
+    async (path: string) => {
+      setDzLoadingFolders(true);
+      try {
+        const result = await listFolder(dropzoneScope, path);
+        setDzFolders(result.folders);
+      } catch {
+        setDzFolders([]);
+      } finally {
+        setDzLoadingFolders(false);
+      }
+    },
+    [dropzoneScope]
+  );
+
+  useEffect(() => {
+    if (show && isDropzone && dropzoneWizardStep === 1) {
+      loadDzFolders(dzBrowsePath);
+    }
+  }, [show, isDropzone, dropzoneWizardStep, dzBrowsePath, loadDzFolders]);
+
+  const handleDzCreateFolder = useCallback(async () => {
+    if (!dzNewFolderName.trim()) return;
+    setDzCreatingFolder(true);
+    try {
+      const { createFolder } = await import('../../Services/filesService');
+      await createFolder(dropzoneScope, dzBrowsePath, dzNewFolderName.trim());
+      setDzNewFolderName('');
+      setDzShowNewFolder(false);
+      await loadDzFolders(dzBrowsePath);
+    } catch {
+      // Folder creation failed silently
+    } finally {
+      setDzCreatingFolder(false);
+    }
+  }, [dzNewFolderName, dropzoneScope, dzBrowsePath, loadDzFolders]);
+
+  const dzBreadcrumbs = dzBrowsePath === '/' ? ['/'] : ['/', ...dzBrowsePath.split('/').filter(Boolean)];
 
   // ---------------------------------------------------------------------------
   // File handlers
@@ -711,11 +582,27 @@ export const CreateShareModal = ({
 
     setSubmitting(true);
     setError(null);
-    setExtractionTimedOut(false);
 
     try {
+      const userSub = (user?.decoded_tokens?.idToken?.sub as string) || '';
       const fileScopePath = buildFilePath(selectedFile);
       const { url } = await getDownloadUrl(effectiveScope, fileScopePath);
+
+      // Submit file for transcription if not already transcribed (fire-and-forget)
+      if (enableChat && userSub) {
+        const s3Key = buildS3Key(effectiveScope, selectedFile.name, effectiveCurrentPath, userSub);
+        try {
+          const lookupResult = await TranscriptionService.lookupByPath(s3Key, numaGet);
+          const jobs = lookupResult.jobs || [];
+          const completed = jobs.find((j: { status: string }) => j.status === 'COMPLETED');
+          if (!completed) {
+            TranscriptionService.submit(selectedFile.name, s3Key, numaPost).catch(() => {});
+          }
+        } catch {
+          // No existing transcription — submit new one
+          TranscriptionService.submit(selectedFile.name, s3Key, numaPost).catch(() => {});
+        }
+      }
 
       const result = await createShare({
         s3_signed_url: url,
@@ -729,13 +616,7 @@ export const CreateShareModal = ({
       });
 
       setShareResult(result);
-
-      if (result.status === 'ready') {
-        setWizardStep(11); // success
-      } else {
-        setWizardStep(10); // extracting
-      }
-
+      setWizardStep(10); // always go straight to success
       onCreated();
     } catch (err) {
       setError(t('errors.shareFailed', { error: err instanceof Error ? err.message : 'Unknown' }));
@@ -744,7 +625,9 @@ export const CreateShareModal = ({
     }
   }, [
     selectedFile,
+    user,
     effectiveScope,
+    effectiveCurrentPath,
     expiryHours,
     maxQuestions,
     description,
@@ -752,16 +635,67 @@ export const CreateShareModal = ({
     allowDownload,
     selectedKbId,
     onCreated,
+    numaGet,
+    numaPost,
     t,
   ]);
 
-  const handleRetry = useCallback(() => {
+  const _handleRetry = useCallback(() => {
     setError(null);
-    setSpecificError(null);
-    setExtractionTimedOut(false);
     setShareResult(null);
     setWizardStep(9); // back to review
   }, []);
+
+  // ---------------------------------------------------------------------------
+  // Quick Share submission (defaults: no expiry, chat enabled 12 questions, download enabled)
+  // ---------------------------------------------------------------------------
+
+  const handleQuickShare = useCallback(async () => {
+    if (!selectedFile) return;
+
+    setSubmitting(true);
+    setError(null);
+
+    try {
+      const userSub = (user?.decoded_tokens?.idToken?.sub as string) || '';
+      const fileScopePath = buildFilePath(selectedFile);
+      const { url } = await getDownloadUrl(effectiveScope, fileScopePath);
+
+      // Submit file for transcription if not already transcribed (fire-and-forget)
+      if (userSub) {
+        const s3Key = buildS3Key(effectiveScope, selectedFile.name, effectiveCurrentPath, userSub);
+        try {
+          const lookupResult = await TranscriptionService.lookupByPath(s3Key, numaGet);
+          const jobs = lookupResult.jobs || [];
+          const completed = jobs.find((j: { status: string }) => j.status === 'COMPLETED');
+          if (!completed) {
+            TranscriptionService.submit(selectedFile.name, s3Key, numaPost).catch(() => {});
+          }
+        } catch {
+          TranscriptionService.submit(selectedFile.name, s3Key, numaPost).catch(() => {});
+        }
+      }
+
+      const result = await createShare({
+        s3_signed_url: url,
+        system_prompt: DEFAULT_SYSTEM_PROMPT,
+        expiry_hours: undefined, // never
+        max_calls: 12,
+        description: undefined,
+        enable_chat: true,
+        allow_download: true,
+        kb_id: selectedKbId ?? undefined,
+      });
+
+      setShareResult(result);
+      setWizardStep(10); // always go straight to success
+      onCreated();
+    } catch (err) {
+      setError(t('errors.shareFailed', { error: err instanceof Error ? err.message : 'Unknown' }));
+    } finally {
+      setSubmitting(false);
+    }
+  }, [selectedFile, user, effectiveScope, effectiveCurrentPath, selectedKbId, onCreated, numaGet, numaPost, t]);
 
   // ---------------------------------------------------------------------------
   // Dropzone submission (unchanged)
@@ -806,7 +740,7 @@ export const CreateShareModal = ({
       });
 
       setShareResult(result);
-      setDropzoneWizardStep(10); // success
+      setDropzoneWizardStep(11); // success
       onCreated();
     } catch (err) {
       setError(t('errors.dropzoneFailed', { error: err instanceof Error ? err.message : 'Unknown' }));
@@ -848,8 +782,7 @@ export const CreateShareModal = ({
   }, [shareUrl]);
 
   const handleClose = () => {
-    if (!submitting && !isExtracting) {
-      cleanupExtraction();
+    if (!submitting) {
       cleanupDescGen();
       onHide();
     }
@@ -858,22 +791,32 @@ export const CreateShareModal = ({
   const goNext = () => {
     if (wizardStep === 9) {
       handleSubmit();
+    } else if (wizardStep === 2) {
+      // From Quick Share, "Next" enters customize mode at step 3 (Preview)
+      setIsCustomizing(true);
+      setWizardStep(3);
     } else {
       setWizardStep((s) => Math.min(s + 1, 9));
     }
   };
 
   const goBack = () => {
-    if (wizardStep === 3) cleanupExtraction();
     if (wizardStep === 4) cleanupDescGen();
+    if (wizardStep === 3 && isCustomizing) {
+      // Going back from Preview returns to Quick Share
+      setIsCustomizing(false);
+      setWizardStep(2);
+      return;
+    }
     setWizardStep((s) => Math.max(s - 1, 1));
   };
 
-  const jumpToStep = (step: number) => {
-    if (step < wizardStep) {
-      if (wizardStep === 3 && step !== 3) cleanupExtraction();
-      if (wizardStep === 4 && step !== 4) cleanupDescGen();
-      setWizardStep(step);
+  /** Jump-to-step for the customize step indicator (maps 1-7 index to actual steps 3-9) */
+  const jumpToCustomizeStep = (indicatorStep: number) => {
+    const actualStep = indicatorStep + 2; // customize steps start at actual step 3
+    if (actualStep < wizardStep) {
+      if (wizardStep === 4 && actualStep !== 4) cleanupDescGen();
+      setWizardStep(actualStep);
     }
   };
 
@@ -886,33 +829,91 @@ export const CreateShareModal = ({
     }
   };
 
-  // ─── Dropzone wizard navigation ──────────────────────────────────
+  // ─── Dropzone wizard navigation (2-step quick + customize) ──────
   const dzGoNext = () => {
-    if (dropzoneWizardStep === DROPZONE_WIZARD_STEPS.length) {
-      handleDropzoneSubmit();
-    } else {
-      setDropzoneWizardStep((s) => Math.min(s + 1, DROPZONE_WIZARD_STEPS.length));
+    if (dropzoneWizardStep === 1) {
+      setDropzoneWizardStep(2); // folder -> quick create
+    } else if (dropzoneWizardStep === 10) {
+      handleDropzoneSubmit(); // review -> submit
+    } else if (isDropzoneCustomizing) {
+      setDropzoneWizardStep((s) => Math.min(s + 1, 10));
     }
   };
 
   const dzGoBack = () => {
+    if (dropzoneWizardStep === 3 && isDropzoneCustomizing) {
+      // Going back from first customize step returns to quick create
+      setIsDropzoneCustomizing(false);
+      setDropzoneWizardStep(2);
+      return;
+    }
+    if (dropzoneWizardStep === 2) {
+      setDropzoneWizardStep(1);
+      return;
+    }
     setDropzoneWizardStep((s) => Math.max(s - 1, 1));
   };
 
-  const dzJumpToStep = (step: number) => {
-    if (step < dropzoneWizardStep) {
-      setDropzoneWizardStep(step);
+  /** Jump-to-step for the dropzone customize step indicator (maps 1-8 index to actual steps 3-10) */
+  const dzJumpToStep = (indicatorStep: number) => {
+    const actualStep = indicatorStep + 2; // customize steps start at actual step 3
+    if (actualStep < dropzoneWizardStep) {
+      setDropzoneWizardStep(actualStep);
     }
   };
 
   const dzCanGoNext = (): boolean => {
     switch (dropzoneWizardStep) {
-      case 4: // auth step: passcode required if passcode mode
+      case 5: // auth step in customize: passcode required if passcode mode
         return authMode !== 'passcode' || passcode.trim().length > 0;
       default:
         return true;
     }
   };
+
+  // ─── Quick Create Dropzone (with defaults) ──────────────────────
+  const handleQuickCreateDropzone = useCallback(async () => {
+    setSubmitting(true);
+    setError(null);
+
+    try {
+      const userSub = user?.decoded_tokens?.idToken?.sub as string | undefined;
+      if (!userSub) throw new Error('User not authenticated');
+
+      const pathSegment = selectedFolder.replace(/^\//, '');
+      let s3FolderPrefix: string;
+      if (dropzoneScope.type === 'company') {
+        s3FolderPrefix = `files/company/${pathSegment}`;
+      } else {
+        s3FolderPrefix = `files/user/${userSub}/${pathSegment}`;
+      }
+
+      const result = await createDropZone({
+        folder_path: selectedFolder,
+        s3_folder_prefix: s3FolderPrefix,
+        instructions: t('dropzoneWizard.instructionsDefault'),
+        auth_mode: 'none',
+        passcode: undefined,
+        expiry_hours: undefined,
+        max_file_size_mb: 200,
+        total_quota_mb: 1024,
+        allowed_extensions: undefined,
+        enable_api: false,
+        enable_chat: true,
+        description: undefined,
+        max_calls: 12,
+        kb_id: undefined,
+      });
+
+      setShareResult(result);
+      setDropzoneWizardStep(11); // success
+      onCreated();
+    } catch (err) {
+      setError(t('errors.dropzoneFailed', { error: err instanceof Error ? err.message : 'Unknown' }));
+    } finally {
+      setSubmitting(false);
+    }
+  }, [user, selectedFolder, dropzoneScope, onCreated, t]);
 
   const dzExpiryLabel = (hours: number | null): string => {
     if (hours === null) return t('dropzoneWizard.reviewNever');
@@ -973,52 +974,184 @@ export const CreateShareModal = ({
   };
 
   // ===================================================================
-  // DROPZONE MODE — 9-step wizard
+  // DROPZONE MODE — 2-step quick create + optional customize wizard
   // ===================================================================
   if (isDropzone) {
-    const showDzStepIndicator = dropzoneWizardStep >= 1 && dropzoneWizardStep <= 9;
-    const showDzFooterNav = dropzoneWizardStep >= 1 && dropzoneWizardStep <= 9;
+    // Step indicator only shown during customize flow (steps 3-10, displayed as 1-8)
+    const showDzStepIndicator = isDropzoneCustomizing && dropzoneWizardStep >= 3 && dropzoneWizardStep <= 10;
+    const showDzFooterNav = dropzoneWizardStep >= 1 && dropzoneWizardStep <= 10;
 
     const renderDropzoneStep = () => {
       switch (dropzoneWizardStep) {
-        // ─── Step 1: Select Folder ──────────────────────────────
+        // ─── Step 1: Folder Browser (flat list) ─────────────────
         case 1:
           return (
             <div>
               <h6 className="mb-2">{t('dropzoneWizard.folderTitle')}</h6>
               <p className="text-muted small mb-3">{t('dropzoneWizard.folderHelp')}</p>
-              <div className="btn-group mb-3 w-100" role="group">
-                <button
-                  type="button"
-                  className={`btn btn-sm ${dropzoneScope.type === 'my' ? 'btn-primary' : 'btn-outline-primary'}`}
-                  onClick={() => {
-                    setDropzoneScope({ type: 'my' });
-                    setSelectedFolder('/');
-                  }}
-                >
-                  {t('tabs.myFiles')}
-                </button>
-                <button
-                  type="button"
-                  className={`btn btn-sm ${dropzoneScope.type === 'company' ? 'btn-primary' : 'btn-outline-primary'}`}
-                  onClick={() => {
-                    setDropzoneScope({ type: 'company' });
-                    setSelectedFolder('/');
-                  }}
-                >
-                  {t('tabs.company')}
-                </button>
+
+              {/* Breadcrumb */}
+              <nav className="mb-3">
+                <ol className="breadcrumb mb-0 small">
+                  {dzBreadcrumbs.map((seg, idx) => {
+                    const isLast = idx === dzBreadcrumbs.length - 1;
+                    const pathUpTo = idx === 0 ? '/' : '/' + dzBreadcrumbs.slice(1, idx + 1).join('/') + '/';
+                    return (
+                      <li
+                        key={idx}
+                        className={`breadcrumb-item ${isLast ? 'active' : ''}`}
+                        style={isLast ? undefined : { cursor: 'pointer' }}
+                        onClick={
+                          isLast
+                            ? undefined
+                            : () => {
+                                setDzBrowsePath(pathUpTo);
+                                setSelectedFolder(pathUpTo);
+                              }
+                        }
+                      >
+                        {idx === 0 ? <i className="bi bi-folder2" /> : seg}
+                      </li>
+                    );
+                  })}
+                </ol>
+              </nav>
+
+              {/* Folder list */}
+              <div className="border rounded" style={{ height: 280, overflowY: 'auto', backgroundColor: '#f8f9fa' }}>
+                {dzLoadingFolders ? (
+                  <div className="text-center py-4">
+                    <Spinner size="sm" className="me-2" />
+                    <span className="text-muted">{t('dropzoneWizard.folderBrowser.loading')}</span>
+                  </div>
+                ) : dzFolders.length === 0 && !dzShowNewFolder ? (
+                  <div className="text-center text-muted py-4">
+                    <i className="bi bi-folder2-open d-block mb-2" style={{ fontSize: '2rem' }} />
+                    <p className="mb-0">{t('dropzoneWizard.folderBrowser.empty')}</p>
+                  </div>
+                ) : (
+                  <div className="list-group list-group-flush">
+                    {dzFolders.map((folder) => (
+                      <button
+                        key={folder.name}
+                        type="button"
+                        className="list-group-item list-group-item-action d-flex align-items-center gap-2"
+                        onClick={() => {
+                          const newPath = dzBrowsePath === '/' ? `/${folder.name}/` : `${dzBrowsePath}${folder.name}/`;
+                          setDzBrowsePath(newPath);
+                          setSelectedFolder(newPath);
+                        }}
+                      >
+                        <i className="bi bi-folder-fill text-warning" />
+                        <span className="flex-grow-1">{folder.name}</span>
+                        <i className="bi bi-chevron-right text-muted" style={{ fontSize: 12 }} />
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
-              <FolderTreeSelector
-                selectedPath={selectedFolder}
-                onPathChange={setSelectedFolder}
-                scope={dropzoneScope}
-              />
+
+              {/* Create folder inline */}
+              <div className="mt-3">
+                {dzShowNewFolder ? (
+                  <div className="d-flex gap-2">
+                    <Form.Control
+                      size="sm"
+                      placeholder={t('dropzoneWizard.folderBrowser.createFolderPlaceholder')}
+                      value={dzNewFolderName}
+                      onChange={(e) => setDzNewFolderName(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') handleDzCreateFolder();
+                        if (e.key === 'Escape') {
+                          setDzShowNewFolder(false);
+                          setDzNewFolderName('');
+                        }
+                      }}
+                      autoFocus
+                    />
+                    <Button
+                      size="sm"
+                      variant="primary"
+                      onClick={handleDzCreateFolder}
+                      disabled={dzCreatingFolder || !dzNewFolderName.trim()}
+                    >
+                      {dzCreatingFolder ? <Spinner size="sm" /> : <i className="bi bi-check" />}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline-secondary"
+                      onClick={() => {
+                        setDzShowNewFolder(false);
+                        setDzNewFolderName('');
+                      }}
+                    >
+                      <i className="bi bi-x" />
+                    </Button>
+                  </div>
+                ) : (
+                  <Button size="sm" variant="outline-primary" onClick={() => setDzShowNewFolder(true)}>
+                    <i className="bi bi-folder-plus me-1" />
+                    {t('dropzoneWizard.folderBrowser.createFolder')}
+                  </Button>
+                )}
+              </div>
+
+              {/* Selected path display */}
+              <div className="mt-2 small text-muted">
+                <i className="bi bi-check-circle text-success me-1" />
+                {t('dropzoneWizard.quickCreate.folder')}: <strong>{selectedFolder || '/'}</strong>
+              </div>
             </div>
           );
 
-        // ─── Step 2: Instructions ───────────────────────────────
+        // ─── Step 2: Quick Create ───────────────────────────────
         case 2:
+          return (
+            <div>
+              <h6 className="mb-3">{t('dropzoneWizard.quickCreate.title')}</h6>
+
+              {/* Selected folder summary */}
+              <div className="d-flex align-items-center gap-2 p-3 border rounded bg-light mb-3">
+                <i className="bi bi-folder-fill text-warning" style={{ fontSize: '1.5rem' }} />
+                <div className="flex-grow-1">
+                  <div className="small fw-semibold text-muted">{t('dropzoneWizard.quickCreate.folder')}</div>
+                  <div className="fw-semibold">{selectedFolder || '/'}</div>
+                </div>
+              </div>
+
+              {/* Defaults summary */}
+              <div className="mb-3">
+                <div className="small fw-semibold text-muted mb-2">{t('dropzoneWizard.quickCreate.defaults')}</div>
+                <div className="border rounded overflow-hidden">
+                  <div className="d-flex align-items-center gap-2 p-2 px-3 border-bottom bg-light">
+                    <i className="bi bi-shield text-muted" />
+                    <span className="small">{t('dropzoneWizard.quickCreate.security')}</span>
+                  </div>
+                  <div className="d-flex align-items-center gap-2 p-2 px-3 border-bottom">
+                    <i className="bi bi-clock text-muted" />
+                    <span className="small">{t('dropzoneWizard.quickCreate.expiry')}</span>
+                  </div>
+                  <div className="d-flex align-items-center gap-2 p-2 px-3 border-bottom bg-light">
+                    <i className="bi bi-file-earmark-arrow-up text-muted" />
+                    <span className="small">{t('dropzoneWizard.quickCreate.limits')}</span>
+                  </div>
+                  <div className="d-flex align-items-center gap-2 p-2 px-3">
+                    <i className="bi bi-chat-dots text-success" />
+                    <span className="small">{t('dropzoneWizard.quickCreate.chat')}</span>
+                  </div>
+                </div>
+              </div>
+
+              {error && (
+                <Alert variant="danger" className="mt-3" dismissible onClose={() => setError(null)}>
+                  {error}
+                </Alert>
+              )}
+            </div>
+          );
+
+        // ─── Step 3: Instructions (customize) ───────────────────
+        case 3:
           return (
             <div>
               <h6 className="mb-2">{t('dropzoneWizard.instructionsTitle')}</h6>
@@ -1032,8 +1165,8 @@ export const CreateShareModal = ({
             </div>
           );
 
-        // ─── Step 3: Description ────────────────────────────────
-        case 3:
+        // ─── Step 4: Description (customize) ────────────────────
+        case 4:
           return (
             <div>
               <h6 className="mb-2">{t('dropzoneWizard.descriptionTitle')}</h6>
@@ -1048,8 +1181,8 @@ export const CreateShareModal = ({
             </div>
           );
 
-        // ─── Step 4: Authentication ─────────────────────────────
-        case 4:
+        // ─── Step 5: Authentication (customize) ─────────────────
+        case 5:
           return (
             <div>
               <h6 className="mb-2">{t('dropzoneWizard.authTitle')}</h6>
@@ -1085,8 +1218,8 @@ export const CreateShareModal = ({
             </div>
           );
 
-        // ─── Step 5: Expiry ─────────────────────────────────────
-        case 5:
+        // ─── Step 6: Expiry (customize) ─────────────────────────
+        case 6:
           return (
             <div>
               <h6 className="mb-2">{t('dropzoneWizard.expiryTitle')}</h6>
@@ -1104,8 +1237,8 @@ export const CreateShareModal = ({
             </div>
           );
 
-        // ─── Step 6: Upload Limits ──────────────────────────────
-        case 6:
+        // ─── Step 7: Upload Limits (customize) ──────────────────
+        case 7:
           return (
             <div>
               <h6 className="mb-2">{t('dropzoneWizard.limitsTitle')}</h6>
@@ -1144,8 +1277,8 @@ export const CreateShareModal = ({
             </div>
           );
 
-        // ─── Step 7: API ────────────────────────────────────────
-        case 7:
+        // ─── Step 8: API (customize) ────────────────────────────
+        case 8:
           return (
             <div>
               <h6 className="mb-2">{t('dropzoneWizard.apiTitle')}</h6>
@@ -1161,8 +1294,8 @@ export const CreateShareModal = ({
             </div>
           );
 
-        // ─── Step 8: Chat + KB ──────────────────────────────────
-        case 8: {
+        // ─── Step 9: Chat + KB (customize) ──────────────────────
+        case 9: {
           const companyKbs = availableKbs.filter((kb) => kb.kb_id === 'company');
           const personalKbs = availableKbs.filter((kb) => kb.role === 'OWNER' && kb.kb_id !== 'company');
           const sharedKbs = availableKbs.filter(
@@ -1260,8 +1393,8 @@ export const CreateShareModal = ({
           );
         }
 
-        // ─── Step 9: Review ─────────────────────────────────────
-        case 9: {
+        // ─── Step 10: Review (customize) ────────────────────────
+        case 10: {
           const kbName = selectedKbId
             ? availableKbs.find((kb) => kb.kb_id === selectedKbId)?.kb_name || selectedKbId
             : t('dropzoneWizard.reviewNone');
@@ -1426,30 +1559,39 @@ export const CreateShareModal = ({
           <Modal.Title>{t('dropzones.editTitle')}</Modal.Title>
         </Modal.Header>
 
-        <Modal.Body style={{ minHeight: showDzStepIndicator ? 420 : undefined }}>
+        <Modal.Body style={{ minHeight: showDzFooterNav ? 420 : undefined }}>
+          {/* Step indicator only shown during customize flow (steps 3-10, displayed as 1-8) */}
           {showDzStepIndicator && (
             <StepIndicator
-              currentStep={dropzoneWizardStep}
+              currentStep={dropzoneWizardStep - 2}
               onStepClick={dzJumpToStep}
               t={t}
-              steps={DROPZONE_WIZARD_STEPS}
+              steps={DROPZONE_CUSTOMIZE_STEPS}
               translationPrefix="dropzoneWizard.steps"
             />
           )}
 
-          {error && dropzoneWizardStep !== 9 && (
+          {error && dropzoneWizardStep !== 2 && dropzoneWizardStep !== 10 && (
             <Alert variant="danger" dismissible onClose={() => setError(null)}>
               {error}
             </Alert>
           )}
 
-          {dropzoneWizardStep >= 1 && dropzoneWizardStep <= 9 && renderDropzoneStep()}
-          {dropzoneWizardStep === 10 && renderDropzoneSuccess()}
+          {dropzoneWizardStep >= 1 && dropzoneWizardStep <= 10 && renderDropzoneStep()}
+          {dropzoneWizardStep === 11 && renderDropzoneSuccess()}
         </Modal.Body>
 
         {showDzFooterNav && (
           <Modal.Footer>
-            {dropzoneWizardStep > 1 && (
+            {/* Back button */}
+            {dropzoneWizardStep > 1 && dropzoneWizardStep !== 2 && (
+              <Button variant="secondary" onClick={dzGoBack}>
+                <i className="bi bi-arrow-left me-1" />
+                {t('dropzoneWizard.back')}
+              </Button>
+            )}
+            {/* Quick Create step: back to folder */}
+            {dropzoneWizardStep === 2 && (
               <Button variant="secondary" onClick={dzGoBack}>
                 <i className="bi bi-arrow-left me-1" />
                 {t('dropzoneWizard.back')}
@@ -1461,13 +1603,53 @@ export const CreateShareModal = ({
               </Button>
             )}
             <div className="flex-grow-1" />
-            {dropzoneWizardStep < 9 && (
+
+            {/* Step 1: Next to Quick Create */}
+            {dropzoneWizardStep === 1 && (
+              <Button variant="primary" onClick={dzGoNext}>
+                {t('dropzoneWizard.next')}
+                <i className="bi bi-arrow-right ms-1" />
+              </Button>
+            )}
+
+            {/* Step 2: Quick Create — two buttons */}
+            {dropzoneWizardStep === 2 && (
+              <>
+                <Button
+                  variant="outline-secondary"
+                  onClick={() => {
+                    setIsDropzoneCustomizing(true);
+                    setDropzoneWizardStep(3);
+                  }}
+                >
+                  {t('dropzoneWizard.quickCreate.customize')}
+                  <i className="bi bi-arrow-right ms-1" />
+                </Button>
+                <Button variant="primary" onClick={handleQuickCreateDropzone} disabled={submitting}>
+                  {submitting ? (
+                    <>
+                      <Spinner size="sm" className="me-1" /> {t('dropzoneWizard.quickCreate.creating')}
+                    </>
+                  ) : (
+                    <>
+                      <i className="bi bi-cloud-upload me-1" />
+                      {t('dropzoneWizard.quickCreate.createButton')}
+                    </>
+                  )}
+                </Button>
+              </>
+            )}
+
+            {/* Customize steps 3-9: normal next button */}
+            {isDropzoneCustomizing && dropzoneWizardStep >= 3 && dropzoneWizardStep < 10 && (
               <Button variant="primary" onClick={dzGoNext} disabled={!dzCanGoNext()}>
                 {t('dropzoneWizard.next')}
                 <i className="bi bi-arrow-right ms-1" />
               </Button>
             )}
-            {dropzoneWizardStep === 9 && (
+
+            {/* Step 10: Review — create button */}
+            {dropzoneWizardStep === 10 && (
               <Button variant="primary" onClick={dzGoNext} disabled={submitting}>
                 {submitting ? (
                   <>
@@ -1484,7 +1666,7 @@ export const CreateShareModal = ({
           </Modal.Footer>
         )}
 
-        {dropzoneWizardStep === 10 && (
+        {dropzoneWizardStep === 11 && (
           <Modal.Footer>
             <Button variant="primary" onClick={handleClose}>
               {t('upload.done')}
@@ -1496,7 +1678,7 @@ export const CreateShareModal = ({
   }
 
   // ===================================================================
-  // DOCUMENT MODE — 9-step wizard
+  // DOCUMENT MODE — 2-step (Quick Share) or 10-step (Customize) wizard
   // ===================================================================
 
   const renderWizardStep = () => {
@@ -1602,8 +1784,92 @@ export const CreateShareModal = ({
           </div>
         );
 
-      // ─── Step 2: Preview ─────────────────────────────────────────
-      case 2:
+      // ─── Step 2: Quick Share ─────────────────────────────────────
+      case 2: {
+        const companyKbs = availableKbs.filter((kb) => kb.kb_id === 'company');
+        const personalKbs = availableKbs.filter((kb) => kb.role === 'OWNER' && kb.kb_id !== 'company');
+        const sharedKbs = availableKbs.filter(
+          (kb) => (kb.role === 'VIEWER' || kb.role === 'EDITOR') && kb.kb_id !== 'company'
+        );
+
+        return (
+          <div>
+            <h6 className="mb-3">{t('createShare.quickShare.title')}</h6>
+
+            {/* Selected file summary */}
+            {selectedFile && (
+              <div className="d-flex align-items-center gap-2 p-3 border rounded bg-light mb-3">
+                <i className={`${getFileIcon(selectedFile.name)}`} style={{ fontSize: '1.5rem' }} />
+                <div className="flex-grow-1">
+                  <div className="fw-semibold">{selectedFile.name}</div>
+                  <div className="text-muted small">{formatFileSize(selectedFile.size_bytes)}</div>
+                </div>
+              </div>
+            )}
+
+            {/* KB selector */}
+            <Form.Group className="mb-3">
+              <Form.Label className="small fw-semibold">{t('createShare.quickShare.selectKB')}</Form.Label>
+              {kbsLoading ? (
+                <div className="text-center py-3">
+                  <Spinner size="sm" className="me-2" />
+                  <span className="text-muted">{t('createShare.wizard.kbLoading')}</span>
+                </div>
+              ) : (
+                <Form.Select
+                  value={selectedKbId ?? ''}
+                  onChange={(e) => setSelectedKbId(e.target.value === '' ? null : e.target.value)}
+                >
+                  <option value="">{t('createShare.wizard.kbNone')}</option>
+                  {companyKbs.map((kb) => (
+                    <option key={kb.kb_id} value={kb.kb_id}>
+                      {kb.kb_name || 'Company'}
+                    </option>
+                  ))}
+                  {personalKbs.map((kb) => (
+                    <option key={kb.kb_id} value={kb.kb_id}>
+                      {kb.kb_name}
+                    </option>
+                  ))}
+                  {sharedKbs.map((kb) => (
+                    <option key={kb.kb_id} value={kb.kb_id}>
+                      {kb.kb_name}
+                    </option>
+                  ))}
+                </Form.Select>
+              )}
+            </Form.Group>
+
+            {/* Default settings summary */}
+            <div className="mb-3">
+              <div className="small fw-semibold text-muted mb-2">{t('createShare.quickShare.defaults')}</div>
+              <div className="border rounded overflow-hidden">
+                <div className="d-flex align-items-center gap-2 p-2 px-3 border-bottom bg-light">
+                  <i className="bi bi-clock text-muted" />
+                  <span className="small">{t('createShare.quickShare.expiry')}</span>
+                </div>
+                <div className="d-flex align-items-center gap-2 p-2 px-3 border-bottom">
+                  <i className="bi bi-chat-dots text-success" />
+                  <span className="small">{t('createShare.quickShare.chat')}</span>
+                </div>
+                <div className="d-flex align-items-center gap-2 p-2 px-3">
+                  <i className="bi bi-download text-success" />
+                  <span className="small">{t('createShare.quickShare.download')}</span>
+                </div>
+              </div>
+            </div>
+
+            {error && (
+              <Alert variant="danger" className="mt-3" dismissible onClose={() => setError(null)}>
+                {error}
+              </Alert>
+            )}
+          </div>
+        );
+      }
+
+      // ─── Step 3: Preview ──────────────────────────────────────────
+      case 3:
         return (
           <div>
             <h6 className="mb-3">{t('createShare.wizard.previewTitle')}</h6>
@@ -1654,79 +1920,7 @@ export const CreateShareModal = ({
           </div>
         );
 
-      // ─── Step 3: Content Extraction ─────────────────────────────
-      case 3:
-        return (
-          <div>
-            <h6 className="mb-2">{t('createShare.wizard.extractionTitle')}</h6>
-            <p className="text-muted small mb-3">{t('createShare.wizard.extractionExplain')}</p>
-
-            {/* Loading state: scanning document animation */}
-            {extractionStatus === 'streaming' && !extractedContent && (
-              <div className="text-center py-4">
-                <div className="extraction-icon mb-3" style={{ fontSize: '2.5rem', color: 'var(--bs-primary)' }}>
-                  <i className="bi bi-file-text" />
-                </div>
-                <p className="text-muted mb-1">{t('createShare.wizard.extractionGenerating')}</p>
-                <p className="text-muted small">{t('createShare.wizard.extractionGeneratingDetail')}</p>
-              </div>
-            )}
-
-            {/* Extracted content in scrollable box */}
-            {extractedContent && (
-              <div
-                className="p-3 border rounded bg-light"
-                style={{ fontSize: 13, lineHeight: 1.6, whiteSpace: 'pre-wrap', maxHeight: 250, overflowY: 'auto' }}
-              >
-                {extractedContent}
-                {extractionStatus === 'streaming' && <span className="text-muted">|</span>}
-              </div>
-            )}
-
-            {/* Error state */}
-            {extractionStatus === 'error' && (
-              <div className="text-center py-4">
-                <i className="bi bi-exclamation-triangle text-warning d-block mb-2" style={{ fontSize: '2rem' }} />
-                <p className="text-muted">{t('createShare.wizard.extractionError')}</p>
-                <div className="d-flex gap-2 justify-content-center mt-2">
-                  <Button
-                    variant="outline-primary"
-                    size="sm"
-                    onClick={() => {
-                      setExtractionStatus('idle');
-                    }}
-                  >
-                    {t('createShare.wizard.extractionRetry')}
-                  </Button>
-                  <Button variant="outline-secondary" size="sm" onClick={goNext}>
-                    {t('createShare.wizard.extractionSkip')}
-                  </Button>
-                </div>
-              </div>
-            )}
-
-            {/* Idle fallback */}
-            {extractionStatus === 'idle' && !extractedContent && (
-              <div className="text-center py-4 text-muted">
-                <div className="extraction-icon mb-2" style={{ fontSize: '2.5rem' }}>
-                  <i className="bi bi-file-text" />
-                </div>
-                <p>{t('createShare.wizard.extractionGenerating')}</p>
-              </div>
-            )}
-
-            {/* Skip link */}
-            {(extractionStatus === 'streaming' || extractionStatus === 'idle') && (
-              <div className="text-center mt-3">
-                <button className="btn btn-link btn-sm text-muted" onClick={goNext}>
-                  {t('createShare.wizard.extractionSkip')} <i className="bi bi-arrow-right ms-1" />
-                </button>
-              </div>
-            )}
-          </div>
-        );
-
-      // ─── Step 4: AI Description Generation ─────────────────────
+      // ─── Step 4: Description (optional, button-driven) ─────────
       case 4:
         return (
           <div>
@@ -1744,26 +1938,46 @@ export const CreateShareModal = ({
               </div>
             )}
 
-            {/* Editable description textarea (shows once content starts streaming or user types) */}
-            {(description || descGenStatus === 'success' || descGenStatus === 'error' || descGenStatus === 'idle') && (
-              <>
-                <Form.Control
-                  as="textarea"
-                  rows={4}
-                  placeholder={t('createShare.descriptionPlaceholder')}
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  disabled={descGenStatus === 'streaming'}
-                />
-                {descGenStatus === 'streaming' && (
-                  <div className="d-flex align-items-center gap-2 mt-2">
-                    <div className="sparkle-animation" style={{ fontSize: '1rem', color: 'var(--bs-primary)' }}>
-                      <i className="bi bi-stars" />
-                    </div>
-                    <small className="text-muted">{t('createShare.wizard.descriptionGenerating')}</small>
-                  </div>
-                )}
-              </>
+            {/* Editable description textarea */}
+            <Form.Control
+              as="textarea"
+              rows={4}
+              placeholder={t('createShare.descriptionPlaceholder')}
+              value={description}
+              onChange={(e) => {
+                setDescriptionManuallyEdited(true);
+                if (descGenStatus === 'streaming') {
+                  cleanupDescGen();
+                  setDescGenStatus('idle');
+                }
+                setDescription(e.target.value);
+              }}
+            />
+            {descGenStatus === 'streaming' && (
+              <div className="d-flex align-items-center gap-2 mt-2">
+                <div className="sparkle-animation" style={{ fontSize: '1rem', color: 'var(--bs-primary)' }}>
+                  <i className="bi bi-stars" />
+                </div>
+                <small className="text-muted">{t('createShare.description.generating')}</small>
+              </div>
+            )}
+
+            {/* Generate Description button */}
+            {descGenStatus !== 'streaming' && (
+              <div className="mt-3">
+                <Button
+                  variant="outline-primary"
+                  size="sm"
+                  onClick={() => {
+                    setDescription('');
+                    setDescriptionManuallyEdited(false);
+                    startDescriptionGen(selectedFile?.name || 'document');
+                  }}
+                >
+                  <i className="bi bi-stars me-1" />
+                  {t('createShare.wizard.generateDescription', { defaultValue: 'Generate Description' })}
+                </Button>
+              </div>
             )}
 
             {/* Error state */}
@@ -1771,7 +1985,7 @@ export const CreateShareModal = ({
               <div className="text-center mt-3">
                 <small className="text-warning">
                   <i className="bi bi-exclamation-triangle me-1" />
-                  {t('createShare.wizard.extractionError')}
+                  {t('createShare.wizard.descriptionError', { defaultValue: 'Failed to generate description' })}
                 </small>
               </div>
             )}
@@ -2052,166 +2266,94 @@ export const CreateShareModal = ({
     }
   };
 
-  // ─── Extraction step (virtual step 9) ────────────────────────────
-  const renderExtracting = () => (
-    <div className="text-center py-4">
-      {selectedFile && (
-        <div className="d-flex align-items-center gap-2 p-2 border rounded bg-light mb-3 justify-content-center">
-          <i className={`${getFileIcon(selectedFile.name)} fs-5`} />
-          <span className="fw-semibold text-truncate">{selectedFile.name}</span>
-        </div>
-      )}
-
-      {!extractionTimedOut ? (
-        <>
-          <ProgressBar animated striped now={100} className="mb-3" style={{ height: '8px' }} />
-          <h6 className="mb-1">{t('createShare.extracting')}</h6>
-          <small className="text-muted">{t('createShare.extractingDetail')}</small>
-        </>
-      ) : (
-        <>
-          {specificError ? (
-            <Alert variant="danger" className="text-start mb-3">
-              <div className="d-flex align-items-start gap-2">
-                <i className="bi bi-exclamation-triangle text-danger mt-1 flex-shrink-0" />
-                <div>
-                  <div className="fw-semibold mb-1">{t('createShare.processingFailed')}</div>
-                  <div className="mb-2" style={{ fontSize: '0.9rem' }}>
-                    {specificError}
-                  </div>
-                  <div className="small text-muted">
-                    <strong>{t('createShare.troubleshootingTitle')}</strong>
-                    <ul className="mb-1 mt-1">
-                      <li>{t('createShare.troubleshootingTips.simpleFormat')}</li>
-                      <li>{t('createShare.troubleshootingTips.notProtected')}</li>
-                      <li>{t('createShare.troubleshootingTips.fileSize')}</li>
-                      <li>{t('createShare.troubleshootingTips.pdfText')}</li>
-                      <li>{t('createShare.troubleshootingTips.officeDocs')}</li>
-                    </ul>
-                  </div>
-                </div>
-              </div>
-            </Alert>
-          ) : (
-            <Alert variant="info" className="text-start mb-3">
-              <div className="d-flex align-items-start gap-2">
-                <i className="bi bi-clock-history text-info mt-1" />
-                <div>
-                  <div className="fw-semibold">{t('createShare.extractionTimeout')}</div>
-                  <div className="small text-muted mt-1">{t('createShare.processingLong')}</div>
-                </div>
-              </div>
-            </Alert>
-          )}
-          <div className="d-flex gap-2 justify-content-center">
-            <Button variant="primary" onClick={handleRetry}>
-              <i className="bi bi-arrow-clockwise me-1" />
-              {t('createShare.tryAgain')}
-            </Button>
-            {!specificError && (
-              <Button variant="outline-secondary" onClick={() => setWizardStep(11)}>
-                <i className="bi bi-link-45deg me-1" />
-                {t('createShare.viewAnyway')}
-              </Button>
-            )}
-          </div>
-        </>
-      )}
-    </div>
-  );
-
   // ─── Success step (virtual step 10) ──────────────────────────────
-  const renderSuccess = () => (
-    <div className="text-center py-3">
-      {specificError ? (
-        <>
-          <i className="bi bi-exclamation-triangle text-warning" style={{ fontSize: '3rem' }} />
-          <h5 className="mt-2 text-warning">{t('createShare.shareLinkCreatedNoAI')}</h5>
-          <Alert variant="warning" className="text-start mt-3 mb-3">
-            <div className="d-flex align-items-start gap-2">
-              <i className="bi bi-exclamation-circle text-warning mt-1 flex-shrink-0" />
-              <div>
-                <div className="fw-semibold mb-1">{t('createShare.processingFailed')}</div>
-                <div className="mb-2" style={{ fontSize: '0.9rem' }}>
-                  {specificError}
-                </div>
-                <div className="fw-semibold mb-1">{t('createShare.whatThisMeans')}</div>
-                <ul className="mb-2 small">
-                  <li>
-                    <i className="bi bi-check-circle text-success me-1"></i>
-                    {t('createShare.shareWorksForViewing')}
-                  </li>
-                  <li>
-                    <i className="bi bi-x-circle text-danger me-1"></i>
-                    {t('createShare.aiChatNotWork')}
-                  </li>
-                  <li>
-                    <i className="bi bi-arrow-repeat text-primary me-1"></i>
-                    {t('createShare.tryDifferentFormat')}
-                  </li>
-                </ul>
-                <div className="small text-muted">
-                  <strong>{t('createShare.tip')}</strong> {t('createShare.textFilesWorkBest')}
-                </div>
-              </div>
-            </div>
+  const renderSuccess = () => {
+    const chatPending =
+      enableChat &&
+      shareResult &&
+      'chat_status' in shareResult &&
+      (shareResult as { chat_status?: string }).chat_status === 'pending';
+
+    return (
+      <div className="text-center py-3">
+        <i className="bi bi-check-circle text-success" style={{ fontSize: '3rem' }} />
+        <h5 className="mt-2 text-success">{t('createShare.shareLinkReady')}</h5>
+        <p className="text-muted mb-3">{t('createShare.shareLinkReadyMessage')}</p>
+
+        {chatPending && (
+          <Alert variant="info" className="text-start mb-3">
+            <i className="bi bi-hourglass-split me-1" />
+            {t('createShare.chatPendingNote', {
+              defaultValue:
+                'Chat will be available once document processing completes. The document is viewable immediately.',
+            })}
           </Alert>
-        </>
-      ) : (
-        <>
-          <i className="bi bi-check-circle text-success" style={{ fontSize: '3rem' }} />
-          <h5 className="mt-2 text-success">{t('createShare.shareLinkReady')}</h5>
-          <p className="text-muted mb-3">{t('createShare.shareLinkReadyMessage')}</p>
-        </>
-      )}
+        )}
 
-      <InputGroup className="mt-3">
-        <Form.Control readOnly value={shareUrl} onClick={(e) => (e.target as HTMLInputElement).select()} />
-        <Button variant={copied ? 'success' : 'outline-primary'} onClick={handleCopy}>
-          <i className={`bi ${copied ? 'bi-check' : 'bi-clipboard'} me-1`} />
-          {copied ? t('createShare.copied') : t('createShare.copyLink')}
-        </Button>
-      </InputGroup>
+        <InputGroup className="mt-3">
+          <Form.Control readOnly value={shareUrl} onClick={(e) => (e.target as HTMLInputElement).select()} />
+          <Button variant={copied ? 'success' : 'outline-primary'} onClick={handleCopy}>
+            <i className={`bi ${copied ? 'bi-check' : 'bi-clipboard'} me-1`} />
+            {copied ? t('createShare.copied') : t('createShare.copyLink')}
+          </Button>
+        </InputGroup>
 
-      <div className="mt-3">
-        <Button variant="outline-secondary" size="sm" onClick={() => window.open(shareUrl, '_blank')}>
-          <i className="bi bi-box-arrow-up-right me-1" />
-          {t('createShare.openShare')}
-        </Button>
+        <div className="mt-3">
+          <Button variant="outline-secondary" size="sm" onClick={() => window.open(shareUrl, '_blank')}>
+            <i className="bi bi-box-arrow-up-right me-1" />
+            {t('createShare.openShare')}
+          </Button>
+        </div>
       </div>
-    </div>
-  );
+    );
+  };
 
   // ===================================================================
   // Render
   // ===================================================================
 
-  const showStepIndicator = wizardStep >= 1 && wizardStep <= 9;
+  // Show step indicator: step 1 (file), step 2 (quick share), or steps 3-10 (customize wizard)
+  const showStepIndicator = isCustomizing && wizardStep >= 3 && wizardStep <= 9;
   const showFooterNav = wizardStep >= 1 && wizardStep <= 9;
 
   return (
-    <Modal show={show} onHide={handleClose} backdrop={submitting || isExtracting ? 'static' : true} size="lg">
-      <Modal.Header closeButton={!submitting && !isExtracting}>
+    <Modal show={show} onHide={handleClose} backdrop={submitting ? 'static' : true} size="lg">
+      <Modal.Header closeButton={!submitting}>
         <Modal.Title>{t('createShare.title')}</Modal.Title>
       </Modal.Header>
 
       <Modal.Body style={{ minHeight: wizardStep >= 1 && wizardStep <= 9 ? 420 : undefined }}>
-        {showStepIndicator && <StepIndicator currentStep={wizardStep} onStepClick={jumpToStep} t={t} />}
+        {/* Step indicator only shown during customize flow (steps 3-10, displayed as 1-8) */}
+        {showStepIndicator && (
+          <StepIndicator
+            currentStep={wizardStep - 2}
+            onStepClick={jumpToCustomizeStep}
+            t={t}
+            steps={CUSTOMIZE_WIZARD_STEPS}
+          />
+        )}
 
-        {error && wizardStep !== 9 && (
+        {error && wizardStep !== 2 && wizardStep !== 10 && (
           <Alert variant="danger" dismissible onClose={() => setError(null)}>
             {error}
           </Alert>
         )}
 
         {wizardStep >= 1 && wizardStep <= 9 && renderWizardStep()}
-        {wizardStep === 10 && renderExtracting()}
-        {wizardStep === 11 && renderSuccess()}
+        {wizardStep === 10 && renderSuccess()}
       </Modal.Body>
 
       {showFooterNav && (
         <Modal.Footer>
-          {wizardStep > 1 && (
+          {/* Back button */}
+          {wizardStep > 1 && wizardStep !== 2 && (
+            <Button variant="secondary" onClick={goBack}>
+              <i className="bi bi-arrow-left me-1" />
+              {t('createShare.wizard.back')}
+            </Button>
+          )}
+          {/* Quick Share step: back to file selection (only if no preSelectedFile) */}
+          {wizardStep === 2 && !preSelectedFile && (
             <Button variant="secondary" onClick={goBack}>
               <i className="bi bi-arrow-left me-1" />
               {t('createShare.wizard.back')}
@@ -2223,12 +2365,44 @@ export const CreateShareModal = ({
             </Button>
           )}
           <div className="flex-grow-1" />
-          {wizardStep < 9 && (
+
+          {/* Quick Share step: two buttons */}
+          {wizardStep === 2 && (
+            <>
+              <Button
+                variant="outline-secondary"
+                onClick={() => {
+                  setIsCustomizing(true);
+                  setWizardStep(3);
+                }}
+              >
+                {t('createShare.quickShare.customize')}
+                <i className="bi bi-arrow-right ms-1" />
+              </Button>
+              <Button variant="primary" onClick={handleQuickShare} disabled={submitting || !selectedFile}>
+                {submitting ? (
+                  <>
+                    <Spinner size="sm" className="me-1" /> {t('createShare.quickShare.creating')}
+                  </>
+                ) : (
+                  <>
+                    <i className="bi bi-link-45deg me-1" />
+                    {t('createShare.quickShare.createLink')}
+                  </>
+                )}
+              </Button>
+            </>
+          )}
+
+          {/* Normal next button (steps 3-9 in customize mode, step 1 for file selection) */}
+          {wizardStep !== 2 && wizardStep < 10 && (
             <Button variant="primary" onClick={goNext} disabled={!canGoNext()}>
               {t('createShare.wizard.next')}
               <i className="bi bi-arrow-right ms-1" />
             </Button>
           )}
+
+          {/* Review step: create share button */}
           {wizardStep === 9 && (
             <Button variant="primary" onClick={goNext} disabled={submitting || !selectedFile}>
               {submitting ? (
@@ -2246,13 +2420,11 @@ export const CreateShareModal = ({
         </Modal.Footer>
       )}
 
-      {(wizardStep === 10 || wizardStep === 11) && (
+      {wizardStep === 10 && (
         <Modal.Footer>
-          {wizardStep === 11 && (
-            <Button variant="primary" onClick={handleClose}>
-              {t('upload.done')}
-            </Button>
-          )}
+          <Button variant="primary" onClick={handleClose}>
+            {t('upload.done')}
+          </Button>
         </Modal.Footer>
       )}
     </Modal>

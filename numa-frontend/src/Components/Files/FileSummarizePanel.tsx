@@ -4,8 +4,10 @@ import { useTranslation } from 'react-i18next';
 import type { FileItem, FileScope } from '../../Services/filesService';
 import { buildS3Key, getFileIcon } from '../../Services/filesService';
 import { useAuth } from '../../Providers/AuthProvider';
+import { useNumaRequest } from '../../Providers/NumaRequestContext';
 import { getEffectiveLanguage } from '../../utils/languagePreference';
 import { streamWorkspaceChatAgent } from '../../Services/workspaceChatAgentService';
+import { TranscriptionService } from '../../Services/TranscriptionService';
 import type { SDKEvent } from '../../types/workspaceChatTypes';
 
 interface FileSummarizePanelProps {
@@ -19,7 +21,8 @@ type SummarizeStatus = 'idle' | 'streaming' | 'success' | 'error';
 
 const FileSummarizePanel = ({ file, scope, currentPath, onClose }: FileSummarizePanelProps) => {
   const { t } = useTranslation('files');
-  const { user } = useAuth();
+  const { user, getCredentials } = useAuth();
+  const { numaGet, numaPost } = useNumaRequest();
   const [status, setStatus] = useState<SummarizeStatus>('idle');
   const [summary, setSummary] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
@@ -41,6 +44,57 @@ const FileSummarizePanel = ({ file, scope, currentPath, onClose }: FileSummarize
     return () => cleanup();
   }, [file]);
 
+  /** Stream a summary via the workspace chat agent. */
+  const streamSummary = async (prompt: string, s3Key: string, targetFile: FileItem, attachFile: boolean) => {
+    const { abort } = await streamWorkspaceChatAgent(
+      {
+        prompt,
+        conversationId: `summarize-${crypto.randomUUID()}`,
+        attachments: attachFile
+          ? {
+              files: [
+                {
+                  path: s3Key,
+                  filename: targetFile.name,
+                  size: targetFile.size_bytes,
+                },
+              ],
+            }
+          : undefined,
+        hasUploads: false,
+        enabledTools: [],
+        enabledConnections: [],
+        responseMode: 'stream',
+      },
+      // onEvent — accumulate text deltas
+      (event: SDKEvent) => {
+        if (event.type === 'StreamEvent') {
+          const streamEvent = (event as { event?: { type?: string; delta?: { type?: string; text?: string } } }).event;
+          if (
+            streamEvent?.type === 'content_block_delta' &&
+            streamEvent.delta?.type === 'text_delta' &&
+            streamEvent.delta.text
+          ) {
+            setSummary((prev) => prev + streamEvent.delta!.text!);
+          }
+        }
+      },
+      // onComplete
+      () => {
+        setStatus('success');
+        abortRef.current = null;
+      },
+      // onError
+      (err: Error) => {
+        setStatus('error');
+        setErrorMsg(err.message);
+        abortRef.current = null;
+      }
+    );
+
+    abortRef.current = abort;
+  };
+
   const startSummarization = async (targetFile: FileItem) => {
     setStatus('streaming');
     setSummary('');
@@ -49,57 +103,37 @@ const FileSummarizePanel = ({ file, scope, currentPath, onClose }: FileSummarize
 
     const userSub = (user?.decoded_tokens?.idToken?.sub as string) || '';
     const s3Key = buildS3Key(scope, targetFile.name, currentPath, userSub);
-    const language = getEffectiveLanguage();
-
-    const prompt = `Summarize the following file concisely. Respond in ${language === 'browser' ? 'English' : language}.\n\nFile: ${targetFile.name}\nS3 Key: ${s3Key}`;
+    const { language: langLabel } = getEffectiveLanguage();
 
     try {
-      const { abort } = await streamWorkspaceChatAgent(
-        {
-          prompt,
-          conversationId: `summarize-${crypto.randomUUID()}`,
-          attachments: {
-            files: [
-              {
-                path: s3Key,
-                filename: targetFile.name,
-                size: targetFile.size_bytes,
-              },
-            ],
-          },
-          hasUploads: false,
-          enabledTools: [],
-          enabledConnections: [],
-          responseMode: 'stream',
-        },
-        // onEvent — accumulate text deltas
-        (event: SDKEvent) => {
-          if (event.type === 'StreamEvent') {
-            const streamEvent = (event as { event?: { type?: string; delta?: { type?: string; text?: string } } })
-              .event;
-            if (
-              streamEvent?.type === 'content_block_delta' &&
-              streamEvent.delta?.type === 'text_delta' &&
-              streamEvent.delta.text
-            ) {
-              setSummary((prev) => prev + streamEvent.delta!.text!);
-            }
+      // Check for an existing transcription via hash-based dedup (submit returns duplicate if already transcribed)
+      let transcriptionText: string | null = null;
+      try {
+        const submitResult = await TranscriptionService.submit(targetFile.name, s3Key, numaPost);
+        if (submitResult.duplicate && submitResult.jobId) {
+          // Existing transcription found — fetch its output
+          const jobResult = (await numaGet(`/api/transcriptions/${encodeURIComponent(submitResult.jobId)}`)) as {
+            outputKey?: string;
+            status?: string;
+          };
+          if (jobResult.outputKey && jobResult.status === 'COMPLETED') {
+            const content = await TranscriptionService.getOutputContent(jobResult.outputKey, getCredentials);
+            transcriptionText = TranscriptionService.outputToText(content);
           }
-        },
-        // onComplete
-        () => {
-          setStatus('success');
-          abortRef.current = null;
-        },
-        // onError
-        (err: Error) => {
-          setStatus('error');
-          setErrorMsg(err.message);
-          abortRef.current = null;
         }
-      );
+      } catch {
+        // Silent fallback — proceed without cached transcription
+      }
 
-      abortRef.current = abort;
+      if (transcriptionText) {
+        // Use the cached transcription text directly — no file attachment needed
+        const prompt = `Summarize the following file content concisely. Respond in ${langLabel}.\n\nFile: ${targetFile.name}\n\n---\n${transcriptionText}`;
+        await streamSummary(prompt, s3Key, targetFile, false);
+      } else {
+        // No transcription available — attach the file for extraction and summarize
+        const prompt = `Summarize the following file concisely. Respond in ${langLabel}.\n\nFile: ${targetFile.name}\nS3 Key: ${s3Key}`;
+        await streamSummary(prompt, s3Key, targetFile, true);
+      }
     } catch (err) {
       setStatus('error');
       setErrorMsg(err instanceof Error ? err.message : String(err));

@@ -46,6 +46,17 @@
     "limitReachedMessage": "You've used all available questions for this document.",
     "error": "An error occurred: {{error}}"
   },
+  "chatLocked": {
+    "title": "Chat Preparing",
+    "message": "Document content is being processed. You can view the document while you wait.",
+    "timeout": "Processing is taking longer than expected. Please refresh the page later.",
+    "failed": "Chat is not available for this document.",
+    "failedTitle": "Chat Unavailable"
+  },
+  "generateDescription": {
+    "button": "Generate Description",
+    "generating": "Generating..."
+  },
   "analytics": {
     "title": "Share Analytics",
     "loading": "Loading analytics...",

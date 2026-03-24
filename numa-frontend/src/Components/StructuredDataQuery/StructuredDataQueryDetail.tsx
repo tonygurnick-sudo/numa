@@ -659,22 +659,12 @@ export const StructuredDataQueryDetail = () => {
       const debug = isDebugEnabled();
 
       // Call the API
-      console.log('🚀 SENDING REQUEST:', {
-        endpoint: '/api/structured-data-query/investigate',
-        question,
-        s3Path,
-        jobId,
-        debug,
-      });
-
       const raw = (await numaPost('/api/structured-data-query/investigate', {
         question,
         s3_path: s3Path,
         jobId,
         debug, // opt-in only
       })) as AskResponse;
-
-      console.log('🔍 RAW RESPONSE:', JSON.stringify(raw, null, 2));
 
       const normalized = normalizeAskResponse(raw);
 

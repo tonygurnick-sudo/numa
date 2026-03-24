@@ -7,7 +7,8 @@
     "myFiles": "My Files",
     "shared": "Shared",
     "remote": "Remote",
-    "transcripts": "Transcripts"
+    "transcripts": "Transcripts",
+    "uploads": "Uploads"
   },
   "transcripts": {
     "empty": "No transcripts yet",
@@ -30,7 +31,10 @@
     },
     "errors": {
       "loadOutputFailed": "Failed to load transcript content"
-    }
+    },
+    "rebuild": "Rebuild from S3",
+    "rebuilding": "Rebuilding...",
+    "rebuildResult": "Created: {{created}}, Skipped: {{skipped}}, Failed: {{failed}}"
   },
   "remote": {
     "rootLabel": "Remote",
@@ -71,6 +75,16 @@
     "listView": "List view",
     "gridView": "Folder view",
     "galleryView": "Gallery view"
+  },
+  "uploads": {
+    "ignoreList": "Ignore List",
+    "ignoreModal": {
+      "title": "Ignored File Patterns",
+      "description": "Files matching these patterns are hidden everywhere and skipped during upload.",
+      "placeholder": "e.g. *.log or .env",
+      "add": "Add",
+      "remove": "Remove"
+    }
   },
   "dropZone": {
     "message": "Drop files to upload"
@@ -189,6 +203,7 @@
     "viewAnalytics": "Analytics",
     "viewShare": "View Share",
     "rootLabel": "Shared",
+    "dropToShare": "Drop files here to upload and share",
     "description": "Description",
     "created": "Created",
     "createShare": "Create Share",
@@ -211,6 +226,11 @@
     "uploadNew": "Or upload a new file",
     "descriptionLabel": "Description",
     "descriptionPlaceholder": "Brief description shown to visitors",
+    "description": {
+      "cancelAutoGenMessage": "Typing your own description will cancel AI generation.",
+      "manualMode": "Using your custom description.",
+      "generating": "Generating description..."
+    },
     "expiryLabel": "Link Expiry",
     "expiryOptions": {
       "never": "Never (permanent)",
@@ -266,10 +286,12 @@
     "tip": "Tip:",
     "textFilesWorkBest": "Text files (.txt, .md) and simple PDFs usually work best for AI chat.",
     "shareLinkReady": "Share link ready!",
-    "shareLinkReadyMessage": "Document processed successfully. Visitors can view, download, and ask AI questions about this file.",
+    "shareLinkReadyMessage": "Your share link is ready. Visitors can view and download this file.",
+    "chatPendingNote": "Chat will be available once document processing completes. The document is viewable immediately.",
     "wizard": {
       "steps": {
         "file": "File",
+        "quickShare": "Share",
         "preview": "Preview",
         "extract": "Extract",
         "description": "Description",
@@ -292,10 +314,12 @@
       "extractionRetry": "Retry",
       "extractionSkip": "Skip extraction",
       "descriptionTitle": "Description",
-      "descriptionExplain": "This description is shown to visitors and used as context when they ask AI questions about the document.",
+      "descriptionExplain": "Optionally add a description shown to visitors. You can type one or generate it with AI.",
       "descriptionGenerating": "Generating description...",
-      "descriptionGeneratingDetail": "AI is writing a sharing description from the extracted content.",
-      "descriptionHelp": "Edit or replace the AI-generated description. This text is shown to visitors.",
+      "descriptionGeneratingDetail": "AI is writing a sharing description.",
+      "descriptionHelp": "This text is shown to visitors in the header bar.",
+      "descriptionError": "Failed to generate description",
+      "generateDescription": "Generate Description",
       "kbTitle": "Knowledge Base",
       "kbExplain": "Optionally attach a knowledge base. Visitors' AI questions will draw on both the document and knowledge base content.",
       "kbNone": "None (document only)",
@@ -326,6 +350,17 @@
       "reviewUnlimited": "Unlimited",
       "reviewNoDescription": "No description",
       "createShareButton": "Create Share Link"
+    },
+    "quickShare": {
+      "title": "Share Document",
+      "selectKB": "Knowledge Base",
+      "defaults": "Default Settings",
+      "expiry": "Expiry: Never",
+      "chat": "AI Chat: Enabled (12 questions)",
+      "download": "Download: Enabled",
+      "createLink": "Create Share Link",
+      "customize": "Customize",
+      "creating": "Creating..."
     }
   },
   "activity": {
@@ -489,7 +524,26 @@
     "reviewNever": "Never (permanent)",
     "reviewDays": "{{days}} days",
     "reviewNoDescription": "No description",
-    "reviewNoInstructions": "No instructions"
+    "reviewNoInstructions": "No instructions",
+    "quickCreate": {
+      "title": "Create Drop Zone",
+      "folder": "Destination Folder",
+      "defaults": "Default Settings",
+      "security": "Security: No passcode",
+      "expiry": "Expiry: Never",
+      "limits": "Max file: 200 MB, Total: 1 GB",
+      "chat": "AI Chat: Enabled (12 questions)",
+      "createButton": "Create Drop Zone",
+      "customize": "Customize",
+      "creating": "Creating..."
+    },
+    "folderBrowser": {
+      "empty": "No folders here",
+      "loading": "Loading folders...",
+      "createFolder": "New Folder",
+      "createFolderPlaceholder": "Folder name",
+      "creating": "Creating..."
+    }
   },
   "errors": {
     "loadFailed": "Failed to load files",

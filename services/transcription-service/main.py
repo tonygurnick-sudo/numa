@@ -479,6 +479,22 @@ def main() -> None:
             ContentType="application/json",
         )
 
+        # Also write a copy at {FILE_KEY}.json so the shared-nova-api can
+        # discover the extraction output without querying the transcription DDB.
+        try:
+            discoverable_key = f"{FILE_KEY}.json"
+            s3.copy_object(
+                Bucket=OUTPUT_BUCKET,
+                Key=discoverable_key,
+                CopySource=f"{OUTPUT_BUCKET}/{OUTPUT_KEY}",
+            )
+            logger.info("Copied output to discoverable path", key=discoverable_key)
+        except Exception as copy_err:
+            logger.warning(
+                "Failed to copy output to discoverable path",
+                error=str(copy_err),
+            )
+
         processing_time_ms = int((time.time() - start_time) * 1000)
         costs = _build_resource_usage(processing_time_ms)
 

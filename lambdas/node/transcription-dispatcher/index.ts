@@ -1,8 +1,9 @@
 import type { SQSHandler } from 'aws-lambda';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
-import { DynamoDBDocumentClient, UpdateCommand, GetCommand } from '@aws-sdk/lib-dynamodb';
+import { DynamoDBDocumentClient, UpdateCommand, GetCommand, PutCommand } from '@aws-sdk/lib-dynamodb';
 import { LambdaClient, InvokeCommand } from '@aws-sdk/client-lambda';
 import { ECSClient, RunTaskCommand, ListTasksCommand } from '@aws-sdk/client-ecs';
+import { S3Client, PutObjectCommand, CopyObjectCommand } from '@aws-sdk/client-s3';
 import { withPRM } from '../../../lib/prm-node/prm';
 
 const REGION = process.env.REGION ?? 'us-east-1';
@@ -10,6 +11,7 @@ const TABLE_NAME = process.env.TRANSCRIPTIONS_TABLE_NAME as string;
 const DATA_BUCKET = process.env.DATA_BUCKET_NAME as string;
 const EXTRACT_CONTENT_LAMBDA = process.env.EXTRACT_CONTENT_LAMBDA_NAME as string;
 const CLIENT_NAME = process.env.CLIENT_NAME as string;
+const AUDIT_AUTOMATION_TABLE = process.env.AUDIT_AUTOMATION_TABLE_NAME;
 
 // Fargate routing configuration
 const ECS_CLUSTER_ARN = process.env.ECS_CLUSTER_ARN;
@@ -24,6 +26,7 @@ const dynamo = DynamoDBDocumentClient.from(ddbClient, {
 });
 const lambda = withPRM(LambdaClient, { region: REGION });
 const ecs = withPRM(ECSClient, { region: REGION });
+const s3 = withPRM(S3Client, { region: REGION });
 
 interface JobMessage {
   jobId: string;
@@ -34,6 +37,8 @@ interface JobMessage {
   fileSize: number;
   dataBucket: string;
   clientName: string;
+  fileHash?: string;
+  pipelineId?: string;
 }
 
 // Formats that require Fargate (special system deps)
@@ -53,6 +58,19 @@ const FARGATE_ONLY_FORMATS = new Set([
 // File size thresholds for Fargate routing (bytes)
 const FARGATE_SIZE_THRESHOLDS: Record<string, number> = {
   default: 5 * 1024 * 1024, // All files over 5 MB → Fargate
+};
+
+/** Write an audit log entry to the automation table (non-fatal). */
+const writeAuditLog = async (item: Record<string, unknown>): Promise<void> => {
+  if (!AUDIT_AUTOMATION_TABLE) return;
+  try {
+    await dynamo.send(new PutCommand({ TableName: AUDIT_AUTOMATION_TABLE, Item: item }));
+    console.log('Audit log written', { logId: item.logId, action: item.action });
+  } catch (err) {
+    console.error('Failed to write audit log', {
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
 };
 
 const shouldUseFargate = (job: JobMessage): boolean => {
@@ -151,6 +169,8 @@ const dispatchToFargate = async (job: JobMessage): Promise<void> => {
               { name: 'FILE_BUCKET', value: job.dataBucket },
               { name: 'FILE_KEY', value: job.fileKey },
               { name: 'FILE_NAME', value: job.fileName },
+              { name: 'FILE_HASH', value: job.fileHash ?? '' },
+              { name: 'PIPELINE_ID', value: job.pipelineId ?? '' },
               { name: 'OUTPUT_BUCKET', value: DATA_BUCKET },
               { name: 'TABLE_NAME', value: TABLE_NAME },
               { name: 'CLIENT_NAME', value: CLIENT_NAME },
@@ -210,6 +230,61 @@ const buildResourceUsage = (
   return costs;
 };
 
+const writeStatusFile = async (
+  job: JobMessage,
+  outputKey: string,
+  startTime: number,
+  result: {
+    status: 'SUCCEEDED' | 'FAILED';
+    processingTimeMs: number;
+    costs?: CostBreakdown;
+    errorMessage?: string;
+  }
+): Promise<void> => {
+  const statusKey = `transcriptions/${job.userSub}/${job.jobId}/output.status.json`;
+  const statusData: Record<string, unknown> = {
+    version: 2,
+    status: result.status,
+    input_bucket: job.dataBucket,
+    input_key: job.fileKey,
+    output_bucket: DATA_BUCKET,
+    output_key: outputKey,
+    file_name: job.fileName,
+    file_size: job.fileSize,
+    file_extension: job.fileExtension,
+    file_hash: job.fileHash ?? null,
+    pipeline_id: job.pipelineId ?? null,
+    client_name: CLIENT_NAME,
+    data_bucket: DATA_BUCKET,
+    started_at: startTime / 1000,
+    updated_at: Date.now() / 1000,
+    duration_ms: result.processingTimeMs,
+  };
+
+  if (result.costs) {
+    statusData.costs = result.costs;
+  }
+  if (result.errorMessage) {
+    statusData.error_message = result.errorMessage;
+  }
+
+  try {
+    await s3.send(
+      new PutObjectCommand({
+        Bucket: DATA_BUCKET,
+        Key: statusKey,
+        Body: JSON.stringify(statusData, null, 2),
+        ContentType: 'application/json',
+      })
+    );
+    console.log(`Wrote enriched status file: ${statusKey}`);
+  } catch (err) {
+    console.error(`Failed to write status file ${statusKey}`, {
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
+};
+
 const processJobViaLambda = async (job: JobMessage): Promise<void> => {
   const { jobId, userSub, fileName, fileKey, fileExtension, dataBucket } = job;
   const outputKey = `transcriptions/${userSub}/${jobId}/output.json`;
@@ -266,6 +341,29 @@ const processJobViaLambda = async (job: JobMessage): Promise<void> => {
       costs,
     });
 
+    await writeStatusFile(job, outputKey, startTime, {
+      status: 'SUCCEEDED',
+      processingTimeMs,
+      costs,
+    });
+
+    // Also write a copy at {fileKey}.json so the shared-nova-api can discover
+    // the extraction output without needing access to the transcription DDB table.
+    try {
+      const copyResponse = await s3.send(
+        new CopyObjectCommand({
+          Bucket: DATA_BUCKET,
+          Key: `${fileKey}.json`,
+          CopySource: `${DATA_BUCKET}/${outputKey}`,
+        })
+      );
+      console.log(`Copied extraction output to ${fileKey}.json`, { copyResponse });
+    } catch (copyErr) {
+      console.error(`Failed to copy extraction output to ${fileKey}.json`, {
+        error: copyErr instanceof Error ? copyErr.message : String(copyErr),
+      });
+    }
+
     console.log(`Job ${jobId} completed successfully`, { outputKey, processingTimeMs, totalCost: costs.total });
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
@@ -275,6 +373,12 @@ const processJobViaLambda = async (job: JobMessage): Promise<void> => {
     await updateJobStatus(userSub, jobId, 'FAILED', {
       errorMessage,
       processingTimeMs,
+    });
+
+    await writeStatusFile(job, outputKey, startTime, {
+      status: 'FAILED',
+      processingTimeMs,
+      errorMessage,
     });
   }
 };
@@ -301,12 +405,53 @@ export const handler: SQSHandler = async (event) => {
   for (const record of event.Records) {
     try {
       const job: JobMessage = JSON.parse(record.body);
+      const sqsMessageId = record.messageId;
+      const sqsReceiveCount = Number(record.attributes?.ApproximateReceiveCount ?? 1);
+
       console.log(`Processing job ${job.jobId}`, {
         fileName: job.fileName,
         fileSize: job.fileSize,
         fileExtension: job.fileExtension,
         useFargate: shouldUseFargate(job),
+        sqsMessageId,
+        sqsReceiveCount,
       });
+
+      // Store SQS metadata + audit timestamp on the job record so stream handler can read them
+      const auditLogTimestamp = Date.now();
+      await dynamo.send(
+        new UpdateCommand({
+          TableName: TABLE_NAME,
+          Key: { userSub: job.userSub, jobId: job.jobId },
+          UpdateExpression: 'SET sqsMessageId = :mid, sqsReceiveCount = :rc, auditLogTimestamp = :alt',
+          ExpressionAttributeValues: {
+            ':mid': sqsMessageId,
+            ':rc': sqsReceiveCount,
+            ':alt': auditLogTimestamp,
+          },
+        })
+      );
+
+      // Write audit log: transcription started (deterministic logId so stream handler can update it)
+      await writeAuditLog({
+        logId: `txn-${job.jobId}`,
+        timestamp: auditLogTimestamp,
+        action: 'TRANSCRIPTION_STARTED',
+        status: 'in_progress',
+        userId: job.userSub,
+        details: {
+          jobId: job.jobId,
+          fileName: job.fileName,
+          fileKey: job.fileKey,
+          fileSize: job.fileSize,
+          fileExtension: job.fileExtension,
+          routedTo: shouldUseFargate(job) ? 'fargate' : 'lambda',
+          sqsMessageId,
+          sqsReceiveCount,
+        },
+        ttl: Math.floor(auditLogTimestamp / 1000) + 90 * 24 * 60 * 60,
+      });
+
       await processJob(job);
     } catch (error) {
       console.error('Failed to process SQS record', {

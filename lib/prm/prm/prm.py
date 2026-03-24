@@ -60,7 +60,7 @@ def client(service_name: str, region: str | None = None, **kwargs) -> Any:
     else:
         kwargs["config"] = _prm_config
 
-    return boto3.client(service_name, region_name=region, **kwargs)
+    return boto3.client(service_name, region_name=region, **kwargs)  # type: ignore[call-overload]
 
 
 def resource(service_name: str, region: str | None = None, **kwargs) -> Any:
@@ -89,4 +89,4 @@ def resource(service_name: str, region: str | None = None, **kwargs) -> Any:
     else:
         kwargs["config"] = _prm_config
 
-    return boto3.resource(service_name, region_name=region, **kwargs)
+    return boto3.resource(service_name, region_name=region, **kwargs)  # type: ignore[call-overload]

@@ -61,7 +61,6 @@ export const getPolicyBuilderBucketInfo = async (
       // Check if we have a final_policy_pdf_key in the results
       if (resultsObj.final_policy_pdf_key) {
         key = resultsObj.final_policy_pdf_key;
-        console.log('Using S3 key from job results:', key);
         return { bucketName, key };
       }
     } catch (error) {
@@ -71,7 +70,6 @@ export const getPolicyBuilderBucketInfo = async (
 
   // Fall back to constructing the key if we couldn't extract it from results
   key = `policy-builder/${userId}/${stepFunctionJobId}/final_policy${fileExtension}`;
-  console.log('Using fallback S3 key:', key);
 
   return {
     bucketName,

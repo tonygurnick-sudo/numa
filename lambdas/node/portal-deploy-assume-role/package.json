@@ -16,7 +16,8 @@
     "clean": "rm -rf dist lambda_function.zip",
     "build": "esbuild --bundle --format=esm --platform=node --outdir=dist --out-extension:.js=.mjs --banner:js=\"import { createRequire } from 'module'; const require = createRequire(import.meta.url);\" index.ts",
     "bundle": "yarn build && touch -d $(git log -1 --format=%cd --date=format:\"%FT%T\" .) dist/* && zip -X -j lambda_function.zip dist/*",
-    "lint": "eslint && tsc --noEmit"
+    "lint": "eslint && tsc --noEmit",
+    "test": "echo 'no tests'"
   },
   "dependencies": {
     "@aws-sdk/client-sts": "^3.880.0"

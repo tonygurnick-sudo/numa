@@ -25,7 +25,7 @@ export default function installOpenTelemetry(apiKey) {
 
     sdk.start();
   } catch (e) {
-    console.log(`An error occurred wiring up Honeycomb...`);
+    console.error(`An error occurred wiring up Honeycomb...`);
     console.error(e);
   }
 }

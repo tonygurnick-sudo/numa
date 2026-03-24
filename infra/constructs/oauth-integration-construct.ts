@@ -120,7 +120,10 @@ export class OAuthIntegrationConstruct extends ApiGatewayLambdaCollection {
       timeout: 29,
       environment: sharedEnv,
       additionalPolicyStatements: oauthPolicy,
-      route: [{ verb: 'GET', path: 'oauth-files/{proxy+}' }],
+      route: [
+        { verb: 'GET', path: 'oauth-files/{proxy+}' },
+        { verb: 'POST', path: 'oauth-files/{proxy+}' },
+      ],
     });
 
     // ── Workspace Tools Lambda (standalone, not API Gateway) ──────────────

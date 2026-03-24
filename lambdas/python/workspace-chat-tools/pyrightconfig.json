@@ -1,0 +1,5 @@
+{
+  "exclude": [".venv", "**/.venv", "dist", "build", "*.egg-info"],
+  "reportPossiblyUnboundVariable": false,
+  "reportMissingImports": false
+}

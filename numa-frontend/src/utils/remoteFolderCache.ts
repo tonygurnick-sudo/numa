@@ -94,9 +94,9 @@ const removeFromStorage = (key: string): void => {
 // Internal helpers
 // ---------------------------------------------------------------------------
 
-const isExpired = (entry: CacheEntry): boolean => Date.now() - entry.timestamp > CACHE_TTL;
+const isExpired = (entry: CacheEntry, ttlMs = CACHE_TTL): boolean => Date.now() - entry.timestamp > ttlMs;
 
-const isStale = (entry: CacheEntry): boolean => Date.now() - entry.timestamp > CACHE_TTL * STALE_RATIO;
+const isStale = (entry: CacheEntry, ttlMs = CACHE_TTL): boolean => Date.now() - entry.timestamp > ttlMs * STALE_RATIO;
 
 /** Evict the least-recently-accessed entry from both tiers. */
 const evictLRU = (): void => {
@@ -125,7 +125,10 @@ const evictLRU = (): void => {
  * Checks memory first, then falls back to sessionStorage.
  * Bumps `lastAccessed` for LRU tracking.
  */
-export const getRemoteFolder = <T extends CachePayload = RemoteFolderData>(key: string): CacheResult<T> | null => {
+export const getRemoteFolder = <T extends CachePayload = RemoteFolderData>(
+  key: string,
+  ttlMs?: number
+): CacheResult<T> | null => {
   let entry = memStore.get(key) ?? null;
 
   // Memory miss — try sessionStorage
@@ -143,7 +146,7 @@ export const getRemoteFolder = <T extends CachePayload = RemoteFolderData>(key: 
   }
 
   // Hard-expired entries are evicted from both tiers
-  if (isExpired(entry)) {
+  if (isExpired(entry, ttlMs)) {
     memStore.delete(key);
     removeFromStorage(key);
     misses++;
@@ -156,7 +159,7 @@ export const getRemoteFolder = <T extends CachePayload = RemoteFolderData>(key: 
 
   return {
     data: entry.data as T,
-    stale: isStale(entry),
+    stale: isStale(entry, ttlMs),
   };
 };
 

@@ -2027,9 +2027,9 @@ def _list_kb_files(
             - folders – subfolder *names* at this level
             - doc_count – number of files (excludes folder markers)
     """
+    full_prefix = prefix + subpath
     try:
         s3_client = prm_client("s3", region=REGION)
-        full_prefix = prefix + subpath
         paginator = s3_client.get_paginator("list_objects_v2")
 
         files: List[Dict[str, Any]] = []

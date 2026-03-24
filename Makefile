@@ -29,8 +29,80 @@ STACK := numa-arcanum-demo-tony
 SYSTEM_USER_FUNCTION_RESOURCE := aws_lambda_function.numa_system-user_function_38BDAEEC
 SYSTEM_USER_FUNCTION_NAME := system-user-creator---TfToken-TOKEN-81--
 
-.PHONY: init get plan import deploy clean pipelinefix cli
+.PHONY: init get plan import deploy clean pipelinefix cli lint format
 .DEFAULT_GOAL := deploy
+
+# ---- Lint entire repo (matches CI) ----
+lint:
+	@echo "=== Frontend ==="
+	yarn workspace @arcanumai/numa-frontend run lint
+	@echo ""
+	@echo "=== Infra ==="
+	yarn workspace @arcanumai/q-apps-deployer-infra run lint
+	@echo ""
+	@echo "=== Node shared ==="
+	yarn workspaces foreach --all --parallel \
+		--include '@arcanumai/style' \
+		--include '@arcanumai/q-apps-deployer-tools' \
+		--include '@arcanumai/client-config' \
+		--include '@arcanumai/numa-customer-success-portal' \
+		run lint
+	@echo ""
+	@echo "=== Node lambdas ==="
+	@for dir in lambdas/node/*/; do \
+		name=$$(basename "$$dir"); \
+		if [ -f "$$dir/package.json" ] && grep -q '"lint"' "$$dir/package.json"; then \
+			echo "  $$name" && (cd "$$dir" && yarn lint) || exit 1; \
+		fi; \
+	done
+	@echo ""
+	@echo "=== Python lambdas ==="
+	@for dir in lambdas/python/*/; do \
+		name=$$(basename "$$dir"); \
+		if [ -f "$$dir/pyproject.toml" ]; then \
+			echo "  $$name" && (cd "$$dir" && poetry install -q 2>/dev/null && \
+				poetry run pyright . && \
+				poetry run mypy . && \
+				poetry run pylint . --recursive yes --ignore .venv,.poetry) || exit 1; \
+		fi; \
+	done
+	@echo ""
+	@echo "=== Python libraries ==="
+	@for dir in lib/*/; do \
+		name=$$(basename "$$dir"); \
+		if [ -f "$$dir/pyproject.toml" ]; then \
+			echo "  $$name" && (cd "$$dir" && poetry install -q 2>/dev/null && \
+				poetry run pyright . && \
+				poetry run mypy . && \
+				poetry run pylint . --recursive yes --ignore .venv,.poetry) || exit 1; \
+		fi; \
+	done
+	@echo ""
+	@echo "✅ All lint checks passed"
+
+# ---- Format entire repo ----
+format:
+	@echo "=== Prettier (TS/JS/JSON) ==="
+	npx prettier --write .
+	@echo ""
+	@echo "=== Black (Python) ==="
+	@for dir in lambdas/python/*/ lib/*/; do \
+		if [ -f "$$dir/pyproject.toml" ]; then \
+			(cd "$$dir" && poetry run black . 2>/dev/null || python3 -m black . 2>/dev/null) || true; \
+		fi; \
+	done
+	@echo ""
+	@echo "=== isort (Python imports) ==="
+	@for dir in lambdas/python/*/ lib/*/; do \
+		if [ -f "$$dir/pyproject.toml" ]; then \
+			(cd "$$dir" && poetry run isort . 2>/dev/null || python3 -m isort . 2>/dev/null) || true; \
+		fi; \
+	done
+	@echo ""
+	@echo "=== Frontend lint --fix ==="
+	yarn workspace @arcanumai/numa-frontend run lint --fix || true
+	@echo ""
+	@echo "✅ Formatting complete"
 
 init:
 	mkdir -p "$(TF_PLUGIN_CACHE_DIR)"

@@ -148,7 +148,7 @@ export default function TranscriptionJobsPanel(): ReactElement {
   const [loading, setLoading] = useState(true);
   const [jobs, setJobs] = useState<TranscriptionJob[]>([]);
   const [nextToken, setNextToken] = useState<string | undefined>();
-  const [statusFilter, setStatusFilter] = useState<string>('');
+  const [statusFilter, setStatusFilter] = useState<string>('COMPLETED');
   const [showAdmin, setShowAdmin] = useState(false);
 
   // Detail / output modal
@@ -357,7 +357,8 @@ export default function TranscriptionJobsPanel(): ReactElement {
               prev.map((f) => (f.id === id ? { ...f, status: 'submitting' as const, progress: 100 } : f))
             );
 
-            await TranscriptionService.submit(fileItem.file.name, fileKey, numaPost);
+            const pipelineId = crypto.randomUUID();
+            await TranscriptionService.submit(fileItem.file.name, fileKey, numaPost, undefined, pipelineId);
 
             setUploadFiles((prev) =>
               prev.map((f) => (f.id === id ? { ...f, status: 'success' as const, progress: 100 } : f))

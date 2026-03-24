@@ -354,11 +354,13 @@
       "connecting": "Connecting...",
       "connect": "Connect",
       "disconnect": "Disconnect",
+      "remove": "Remove",
       "deleteCredentials": "Delete Credentials",
       "disconnecting": "Disconnecting..."
     },
     "confirm": {
-      "disconnect": "Disconnect {{name}}? This will revoke access and delete stored credentials.",
+      "disconnect": "Disconnect {{name}}? This will revoke access.",
+      "remove": "Remove {{name}}? This will delete all stored credentials and cannot be undone.",
       "deleteCredentials": "Delete credentials for {{name}}? This cannot be undone."
     },
     "googledrive": {
@@ -505,7 +507,9 @@
       "viewInVault": "View in Vault",
       "secretNotConfigured": "Will be created on save",
       "enterCredentials": "Enter your OAuth client credentials below. They will be stored securely in the Secrets Vault.",
-      "discoveryFailed": "Could not auto-discover settings. Using defaults."
+      "discoveryFailed": "Could not auto-discover settings. Using defaults.",
+      "relatedCredentials": "Existing {{provider}} OAuth client detected — reusing credentials. Just add the required scopes.",
+      "useOther": "Use different credentials"
     },
     "picker": {
       "title": "Add Connector",

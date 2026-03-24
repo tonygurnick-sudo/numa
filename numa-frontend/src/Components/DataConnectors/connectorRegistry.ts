@@ -52,6 +52,43 @@ export interface ConnectorEventType {
   defaultEnabled: boolean;
 }
 
+export interface CachingPolicy {
+  ttl: number; // seconds — how long cached data is considered fresh
+  staleWhileRevalidate: number; // seconds — serve stale while fetching fresh
+  prefetch: boolean; // auto-prefetch subfolders on navigate
+  invalidateOn: string[]; // events that bust cache (e.g. 'write', 'delete', 'send')
+  maxEntries: number; // max cached folder/listing entries
+  backgroundRefresh: number; // seconds — background poll interval (0 = off)
+}
+
+// Sensible defaults by data-change frequency
+export const CACHING_PRESETS: Record<string, CachingPolicy> = {
+  email: {
+    ttl: 60,
+    staleWhileRevalidate: 120,
+    prefetch: false,
+    invalidateOn: ['send'],
+    maxEntries: 50,
+    backgroundRefresh: 0,
+  },
+  cloudStorage: {
+    ttl: 300,
+    staleWhileRevalidate: 600,
+    prefetch: true,
+    invalidateOn: ['write', 'delete'],
+    maxEntries: 100,
+    backgroundRefresh: 0,
+  },
+  projectManagement: {
+    ttl: 1800,
+    staleWhileRevalidate: 3600,
+    prefetch: true,
+    invalidateOn: ['write'],
+    maxEntries: 200,
+    backgroundRefresh: 300,
+  },
+};
+
 export interface ConnectorTemplate {
   id: string;
   displayName: string;
@@ -90,6 +127,12 @@ export interface ConnectorTemplate {
   // Event types this connector can produce
   eventTypes?: ConnectorEventType[];
 
+  // OAuth platform family — connectors sharing the same OAuth client ('google' | 'microsoft')
+  oauthPlatform?: string;
+
+  // Caching policy — sensible defaults per connector, admin can override in wizard
+  cachingPolicy?: CachingPolicy;
+
   // Tier 3 only
   contactInfo?: { email?: string; website?: string; notes?: string };
 }
@@ -99,6 +142,35 @@ export interface ConnectorTemplate {
 // ---------------------------------------------------------------------------
 
 export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
+  // ─── Tier 1: Token-based ────────────────────────────────────────────────
+  {
+    id: 'synergy',
+    displayName: 'Synergy 12d',
+    icon: 'bi-building',
+    description: 'Data connector for Synergy 12d job data',
+    category: 'Project Management',
+    authType: 'token',
+    tier: 1,
+    cachingPolicy: CACHING_PRESETS.projectManagement,
+    credentialFields: [
+      {
+        key: 'instance_url',
+        label: 'dataConnectors.fields.instanceUrl',
+        type: 'url',
+        placeholder: 'https://synergy.yourcompany.co.nz',
+        required: true,
+        helpText: 'dataConnectors.fields.synergyUrlHint',
+      },
+    ],
+    helpUrl: 'https://www.12d.com/products/synergy/',
+    apiReference: {
+      docsUrl: 'https://www.12d.com/products/synergy/',
+      purpose: 'Project management and job tracking for civil engineering and surveying',
+      dataTypes: ['jobs', 'folders', 'files', 'documents'],
+      capabilities: ['read', 'search'],
+    },
+  },
+
   // ─── Tier 1: OAuth2 (existing) ───────────────────────────────────────────
   {
     id: 'googledrive',
@@ -108,6 +180,8 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
     category: 'Cloud Storage',
     authType: 'oauth2',
     tier: 1,
+    oauthPlatform: 'google',
+    cachingPolicy: CACHING_PRESETS.cloudStorage,
     oauth: {
       authUrl: 'https://accounts.google.com/o/oauth2/v2/auth',
       tokenUrl: 'https://oauth2.googleapis.com/token',
@@ -138,6 +212,8 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
     category: 'Email & Communication',
     authType: 'oauth2',
     tier: 1,
+    oauthPlatform: 'google',
+    cachingPolicy: CACHING_PRESETS.email,
     oauth: {
       authUrl: 'https://accounts.google.com/o/oauth2/v2/auth',
       tokenUrl: 'https://oauth2.googleapis.com/token',
@@ -198,6 +274,8 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
     category: 'Cloud Storage',
     authType: 'oauth2',
     tier: 1,
+    oauthPlatform: 'microsoft',
+    cachingPolicy: CACHING_PRESETS.cloudStorage,
     oauth: {
       authUrl: 'https://login.microsoftonline.com/common/oauth2/v2.0/authorize',
       tokenUrl: 'https://login.microsoftonline.com/common/oauth2/v2.0/token',
@@ -226,6 +304,7 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
     icon: 'bi-dropbox',
     description: 'Access and browse Dropbox files',
     category: 'Cloud Storage',
+    cachingPolicy: CACHING_PRESETS.cloudStorage,
     authType: 'oauth2',
     tier: 1,
     oauth: {
@@ -1107,6 +1186,16 @@ export const getConnectorCategories = (): string[] => {
   const cats = new Set(CONNECTOR_REGISTRY.map((c) => c.category));
   return Array.from(cats).sort();
 };
+
+/** Returns the vault secret key for a connector — platform name for siblings, connector ID otherwise */
+export const getOAuthSecretId = (connectorId: string): string => {
+  const connector = getConnectorById(connectorId);
+  return connector?.oauthPlatform ?? connectorId;
+};
+
+/** Get all connectors that share the same OAuth platform (e.g. 'google' → googledrive, gmail) */
+export const getConnectorsByPlatform = (platform: string): ConnectorTemplate[] =>
+  CONNECTOR_REGISTRY.filter((c) => c.oauthPlatform === platform);
 
 /** Convert an oauth2 ConnectorTemplate to ProviderTemplate for backward compat with OAuthWizard */
 export const toProviderTemplate = (ct: ConnectorTemplate): ProviderTemplate | null => {

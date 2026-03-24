@@ -31,6 +31,7 @@ export interface TranscriptionJob {
   progress?: number;
   processingTimeMs?: number;
   costs?: CostBreakdown;
+  pipelineId?: string;
 }
 
 export interface TranscriptionListResponse {
@@ -75,12 +76,14 @@ export const TranscriptionService = {
     fileName: string,
     fileKey: string,
     numaPost: NumaPost,
-    sourceBucket?: string
+    sourceBucket?: string,
+    pipelineId?: string
   ): Promise<TranscriptionSubmitResponse> {
     const response = (await numaPost('/api/transcriptions', {
       fileName,
       fileKey,
       ...(sourceBucket && { sourceBucket }),
+      ...(pipelineId && { pipelineId }),
     })) as TranscriptionSubmitResponse;
     return response;
   },
@@ -211,11 +214,27 @@ export const TranscriptionService = {
 
   async listAll(filters: TranscriptionFilters, numaGet: NumaGet): Promise<TranscriptionListResponse> {
     const params = new URLSearchParams();
+    if (filters.status) params.set('status', filters.status);
     if (filters.limit) params.set('limit', String(filters.limit));
     if (filters.nextToken) params.set('nextToken', filters.nextToken);
     const qs = params.toString();
     const url = `/api/transcriptions/admin/all${qs ? `?${qs}` : ''}`;
     return (await numaGet(url)) as TranscriptionListResponse;
+  },
+
+  /** Look up transcription jobs by S3 file key (path). */
+  async lookupByPath(fileKey: string, numaGet: NumaGet): Promise<TranscriptionListResponse> {
+    const url = `/api/transcriptions/lookup/path?fileKey=${encodeURIComponent(fileKey)}`;
+    return (await numaGet(url)) as TranscriptionListResponse;
+  },
+
+  async rebuild(numaPost: NumaPost): Promise<{ created: number; skipped: number; failed: number; total: number }> {
+    return (await numaPost('/api/transcriptions/admin/rebuild')) as {
+      created: number;
+      skipped: number;
+      failed: number;
+      total: number;
+    };
   },
 
   /** Convert transcription output pages to a single text string. */

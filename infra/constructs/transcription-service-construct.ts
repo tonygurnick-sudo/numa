@@ -32,6 +32,8 @@ export interface TranscriptionServiceConstructProps extends ApiGatewayLambdaColl
   notificationsTableArn: string;
   usageAnalyticsEventsTableName: string;
   usageAnalyticsEventsTableArn: string;
+  auditAutomationTableName: string;
+  auditAutomationTableArn: string;
   /** Deployer role ARN for chain assume (required for ECR push from local-exec) */
   deployerRoleArn: string;
   otelConfig?: OTelConfig;
@@ -68,6 +70,8 @@ export class TranscriptionServiceConstruct extends ApiGatewayLambdaCollection {
         { name: 'updatedAt', type: 'N' },
         { name: 'clientName', type: 'S' },
         { name: 'createdAt', type: 'N' },
+        { name: 'fileHash', type: 'S' },
+        { name: 'fileKey', type: 'S' },
       ],
       globalSecondaryIndex: [
         {
@@ -82,11 +86,25 @@ export class TranscriptionServiceConstruct extends ApiGatewayLambdaCollection {
           rangeKey: 'createdAt',
           projectionType: 'ALL',
         },
+        {
+          name: 'HashIndex',
+          hashKey: 'fileHash',
+          rangeKey: 'createdAt',
+          projectionType: 'ALL',
+        },
+        {
+          name: 'FileKeyIndex',
+          hashKey: 'fileKey',
+          rangeKey: 'createdAt',
+          projectionType: 'ALL',
+        },
       ],
       ttl: { enabled: true, attributeName: 'expiresAt' },
       pointInTimeRecovery: { enabled: true },
       streamEnabled: true,
       streamViewType: 'NEW_AND_OLD_IMAGES',
+      deletionProtectionEnabled: true,
+      lifecycle: { preventDestroy: true },
     });
 
     // ─── SQS queues ───
@@ -387,6 +405,9 @@ echo "Successfully pushed image to ${this.ecrRepository.repositoryUrl}:${imageTa
         { verb: 'DELETE', path: 'transcriptions/{jobId}' },
         { verb: 'POST', path: 'transcriptions/{jobId}/retry' },
         { verb: 'GET', path: 'transcriptions/admin/all' },
+        { verb: 'POST', path: 'transcriptions/admin/rebuild' },
+        { verb: 'GET', path: 'transcriptions/lookup/hash/{hash}' },
+        { verb: 'GET', path: 'transcriptions/lookup/path' },
       ],
     });
 
@@ -404,6 +425,7 @@ echo "Successfully pushed image to ${this.ecrRepository.repositoryUrl}:${imageTa
         EXTRACT_CONTENT_LAMBDA_NAME: props.extractContentLambdaName,
         CLIENT_NAME: clientName,
         REGION: props.region,
+        AUDIT_AUTOMATION_TABLE_NAME: props.auditAutomationTableName,
         // Fargate routing config
         ECS_CLUSTER_ARN: this.ecsCluster.arn,
         ECS_TASK_DEFINITION_ARN: this.taskDefinition.arn,
@@ -417,6 +439,11 @@ echo "Successfully pushed image to ${this.ecrRepository.repositoryUrl}:${imageTa
           effect: 'Allow',
           actions: [...dynamoReadActions, 'dynamodb:UpdateItem'],
           resources: [this.transcriptionsTable.arn],
+        },
+        {
+          effect: 'Allow',
+          actions: ['dynamodb:PutItem'],
+          resources: [props.auditAutomationTableArn],
         },
         {
           effect: 'Allow',
@@ -465,13 +492,14 @@ echo "Successfully pushed image to ${this.ecrRepository.repositoryUrl}:${imageTa
       environment: {
         NOTIFICATIONS_TABLE_NAME: props.notificationsTableName,
         USAGE_EVENTS_TABLE_NAME: props.usageAnalyticsEventsTableName,
+        AUDIT_AUTOMATION_TABLE_NAME: props.auditAutomationTableName,
         REGION: props.region,
       },
       additionalPolicyStatements: [
         {
           effect: 'Allow',
-          actions: ['dynamodb:PutItem'],
-          resources: [props.notificationsTableArn, props.usageAnalyticsEventsTableArn],
+          actions: ['dynamodb:PutItem', 'dynamodb:UpdateItem'],
+          resources: [props.notificationsTableArn, props.usageAnalyticsEventsTableArn, props.auditAutomationTableArn],
         },
         {
           effect: 'Allow',

@@ -27,6 +27,10 @@ interface ApiKeyFormState {
   rateLimitRpm: string;
   rateLimitDaily: string;
   purposeHint: string;
+  cacheTtl: string;
+  cacheStaleWhileRevalidate: boolean;
+  cachePrefetch: boolean;
+  cacheBackgroundRefresh: string;
 }
 
 interface ApiKeyWizardProps {
@@ -68,6 +72,10 @@ export const ApiKeyWizard = ({ show, onHide, onSaved, connector, existingSecrets
       rateLimitRpm: connector.rateLimitRpm?.toString() || '',
       rateLimitDaily: connector.rateLimitDaily?.toString() || '',
       purposeHint: connector.apiReference?.purpose || '',
+      cacheTtl: String(connector.cachingPolicy?.ttl ?? 300),
+      cacheStaleWhileRevalidate: (connector.cachingPolicy?.staleWhileRevalidate ?? 600) > 0,
+      cachePrefetch: connector.cachingPolicy?.prefetch ?? true,
+      cacheBackgroundRefresh: String(connector.cachingPolicy?.backgroundRefresh ?? 0),
     }),
     [connector]
   );
@@ -187,6 +195,12 @@ export const ApiKeyWizard = ({ show, onHide, onSaved, connector, existingSecrets
       if (form.rateLimitDaily.trim()) fields.rate_limit_daily = form.rateLimitDaily.trim();
       if (form.purposeHint.trim()) fields.purpose_hint = form.purposeHint.trim();
 
+      // Caching policy
+      fields.cache_ttl = form.cacheTtl;
+      fields.cache_stale_while_revalidate = form.cacheStaleWhileRevalidate ? 'true' : 'false';
+      fields.cache_prefetch = form.cachePrefetch ? 'true' : 'false';
+      fields.cache_background_refresh = form.cacheBackgroundRefresh;
+
       // Build API reference JSON blob
       const apiRef = connector.apiReference;
       if (apiRef) {
@@ -244,7 +258,7 @@ export const ApiKeyWizard = ({ show, onHide, onSaved, connector, existingSecrets
     }
     if (step === 4) {
       onSaved();
-      resetState();
+      onHide();
       return;
     }
     setError(null);
@@ -382,6 +396,9 @@ export const ApiKeyWizard = ({ show, onHide, onSaved, connector, existingSecrets
       isLoading={loading}
       error={error}
       success={success}
+      nextLabel={
+        step === 4 ? t('dataConnectors.wizard.done') : step === 3 ? t('dataConnectors.wizard.save') : undefined
+      }
     >
       {/* ── Step 1: Overview (identity, metadata, signup, help) ── */}
       {step === 1 && (
@@ -680,6 +697,60 @@ export const ApiKeyWizard = ({ show, onHide, onSaved, connector, existingSecrets
                     />
                     <Form.Text className="text-muted">{t('dataConnectors.apiReference.purposeHintDesc')}</Form.Text>
                   </Form.Group>
+                </Col>
+
+                {/* Caching Settings */}
+                <Col md={12} className="mt-3">
+                  <h6 className="fw-semibold small text-muted mb-2">
+                    {t('dataConnectors.oauth.cachingSettings', 'Caching Settings')}
+                  </h6>
+                </Col>
+                <Col md={6}>
+                  <Form.Group>
+                    <Form.Label className="small fw-semibold">
+                      {t('dataConnectors.oauth.cacheTtl', 'Cache Duration')}
+                    </Form.Label>
+                    <Form.Select value={form.cacheTtl} onChange={(e) => updateForm({ cacheTtl: e.target.value })}>
+                      <option value="60">{t('dataConnectors.cache.1min', '1 minute (email)')}</option>
+                      <option value="300">{t('dataConnectors.cache.5min', '5 minutes (files)')}</option>
+                      <option value="1800">{t('dataConnectors.cache.30min', '30 minutes (projects)')}</option>
+                      <option value="3600">{t('dataConnectors.cache.1hr', '1 hour')}</option>
+                    </Form.Select>
+                  </Form.Group>
+                </Col>
+                <Col md={6}>
+                  <Form.Group>
+                    <Form.Label className="small fw-semibold">
+                      {t('dataConnectors.oauth.backgroundRefresh', 'Background Refresh')}
+                    </Form.Label>
+                    <Form.Select
+                      value={form.cacheBackgroundRefresh}
+                      onChange={(e) => updateForm({ cacheBackgroundRefresh: e.target.value })}
+                    >
+                      <option value="0">{t('dataConnectors.cache.off', 'Off')}</option>
+                      <option value="60">{t('dataConnectors.cache.every1min', 'Every 1 minute')}</option>
+                      <option value="300">{t('dataConnectors.cache.every5min', 'Every 5 minutes')}</option>
+                      <option value="1800">{t('dataConnectors.cache.every30min', 'Every 30 minutes')}</option>
+                    </Form.Select>
+                  </Form.Group>
+                </Col>
+                <Col md={6}>
+                  <Form.Check
+                    type="checkbox"
+                    label={t('dataConnectors.oauth.staleWhileRevalidate', 'Serve stale while refreshing')}
+                    checked={form.cacheStaleWhileRevalidate}
+                    onChange={(e) => updateForm({ cacheStaleWhileRevalidate: e.target.checked })}
+                    className="mt-2"
+                  />
+                </Col>
+                <Col md={6}>
+                  <Form.Check
+                    type="checkbox"
+                    label={t('dataConnectors.oauth.prefetch', 'Auto-prefetch subfolders')}
+                    checked={form.cachePrefetch}
+                    onChange={(e) => updateForm({ cachePrefetch: e.target.checked })}
+                    className="mt-2"
+                  />
                 </Col>
               </Row>
             </div>

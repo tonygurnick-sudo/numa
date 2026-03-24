@@ -7,6 +7,7 @@ No changes needed to this file.
 
 import importlib
 import pkgutil
+from typing import Any
 
 from .base_provider import (
     OAuthAuthenticationError,
@@ -78,7 +79,7 @@ PROVIDERS: dict[str, type] = _discover_providers()
 
 
 def create_provider(
-    provider_name: str, client_id: str, client_secret: str = None
+    provider_name: str, client_id: str, client_secret: str | None = None, **kwargs: Any
 ) -> OAuthProvider:
     """Create a provider instance by name.
 
@@ -100,4 +101,4 @@ def create_provider(
         )
 
     provider_class = PROVIDERS[provider_name]
-    return provider_class(client_id=client_id, client_secret=client_secret)
+    return provider_class(client_id=client_id, client_secret=client_secret, **kwargs)

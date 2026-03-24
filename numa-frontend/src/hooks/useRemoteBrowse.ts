@@ -29,6 +29,14 @@ import {
   type RemoteJobsData,
 } from '../utils/remoteFolderCache';
 import { useRemotePrefetch } from './useRemotePrefetch';
+import { getConnectorById, type CachingPolicy, CACHING_PRESETS } from '../Components/DataConnectors/connectorRegistry';
+
+/** Resolve the caching TTL (in ms) for a provider. Falls back to 10 min. */
+const getProviderTtlMs = (provider: string): number => {
+  const connector = getConnectorById(provider);
+  const policy: CachingPolicy = connector?.cachingPolicy ?? CACHING_PRESETS.cloudStorage;
+  return policy.ttl * 1000;
+};
 
 // ---------------------------------------------------------------------------
 // Types
@@ -136,7 +144,7 @@ export function useRemoteBrowse({
 
   const synergyPrefetch = useRemotePrefetch({
     provider: { type: 'synergy', numaGet },
-    enabled: activeTab === 'remote' && synergyConnected,
+    enabled: false, // Synergy now uses generic OAuth provider path
   });
 
   // --- Cancel all prefetches on tab change --------------------------------
@@ -154,33 +162,17 @@ export function useRemoteBrowse({
   useEffect(() => {
     if (activeTab !== 'remote') return;
 
-    // Preload Synergy jobs (also set state so navigating is instant)
-    if (synergyConnected) {
-      const key = synergyCacheKey.jobs();
-      const cached = getRemoteFolder<RemoteJobsData>(key);
-      if (cached) {
-        setSynergyJobs(cached.data.jobs);
-      } else {
-        SynergyDataConnectorService.listJobs(numaGet)
-          .then((response) => {
-            const jobs = response.items ?? [];
-            setRemoteFolder(key, { jobs });
-            setSynergyJobs(jobs);
-          })
-          .catch(() => {
-            /* silent — user hasn't navigated here yet */
-          });
-      }
-    }
+    // Synergy preload disabled — Synergy now goes through the generic OAuth provider path
+    // via SynergyProvider in oauth-files-api. The preload below handles all providers.
 
-    // Preload OAuth provider root listings
+    // Preload all provider root listings (OAuth + token connectors)
     for (const provider of enabledOAuthProviders) {
       if (oauthProviderStatuses[provider.id]?.status !== 'connected') continue;
       const key = oauthCacheKey(provider.id);
       if (!getRemoteFolder(key)) {
         OAuthProvidersService.listContents(provider.id)
           .then((contents) => {
-            setRemoteFolder(key, { folders: contents.folders, files: contents.files });
+            setRemoteFolder(key, { folders: contents.folders ?? [], files: contents.files ?? [] });
           })
           .catch(() => {
             /* silent */
@@ -216,9 +208,10 @@ export function useRemoteBrowse({
       const displayName = enabledOAuthProviders.find((p) => p.id === provider)?.display_name ?? provider;
       setOauthBreadcrumbs([{ label: displayName, type: 'root', provider }]);
 
-      // Cache-first: check for cached root listing
+      // Cache-first: check for cached root listing (TTL from connector's caching policy)
       const cacheKey = oauthCacheKey(provider);
-      const cached = getRemoteFolder<RemoteFolderData>(cacheKey);
+      const ttlMs = getProviderTtlMs(provider);
+      const cached = getRemoteFolder<RemoteFolderData>(cacheKey, ttlMs);
 
       if (cached) {
         // Instant render from cache
@@ -232,10 +225,10 @@ export function useRemoteBrowse({
           try {
             const contents = await OAuthProvidersService.listContents(provider);
             if (generationRef.current === gen) {
-              setRemoteFolder(cacheKey, { folders: contents.folders, files: contents.files });
-              if (dataChanged(oauthFolders, contents.folders)) setOauthFolders(contents.folders);
-              if (dataChanged(oauthFiles, contents.files)) setOauthFiles(contents.files);
-              oauthPrefetch.triggerPrefetch(contents.folders, cacheKey);
+              setRemoteFolder(cacheKey, { folders: contents.folders ?? [], files: contents.files ?? [] });
+              if (dataChanged(oauthFolders, contents.folders ?? [])) setOauthFolders(contents.folders ?? []);
+              if (dataChanged(oauthFiles, contents.files ?? [])) setOauthFiles(contents.files ?? []);
+              oauthPrefetch.triggerPrefetch(contents.folders ?? [], cacheKey);
             }
           } catch {
             // Stale data is still better than nothing
@@ -251,10 +244,10 @@ export function useRemoteBrowse({
         try {
           const contents = await OAuthProvidersService.listContents(provider);
           if (generationRef.current === gen) {
-            setRemoteFolder(cacheKey, { folders: contents.folders, files: contents.files });
-            setOauthFolders(contents.folders);
-            setOauthFiles(contents.files);
-            oauthPrefetch.triggerPrefetch(contents.folders, cacheKey);
+            setRemoteFolder(cacheKey, { folders: contents.folders ?? [], files: contents.files ?? [] });
+            setOauthFolders(contents.folders ?? []);
+            setOauthFiles(contents.files ?? []);
+            oauthPrefetch.triggerPrefetch(contents.folders ?? [], cacheKey);
           }
         } catch (error) {
           console.error(`Failed to load ${provider} contents:`, error);
@@ -284,7 +277,8 @@ export function useRemoteBrowse({
       ]);
 
       const cacheKey = oauthCacheKey(selectedOauthProvider, folder.folder_id);
-      const cached = getRemoteFolder<RemoteFolderData>(cacheKey);
+      const ttlMs = getProviderTtlMs(selectedOauthProvider);
+      const cached = getRemoteFolder<RemoteFolderData>(cacheKey, ttlMs);
 
       if (cached) {
         setOauthFolders(cached.data.folders as OAuthFolder[]);
@@ -296,10 +290,10 @@ export function useRemoteBrowse({
           try {
             const contents = await OAuthProvidersService.listContents(selectedOauthProvider, folder.folder_id);
             if (generationRef.current === gen) {
-              setRemoteFolder(cacheKey, { folders: contents.folders, files: contents.files });
-              if (dataChanged(oauthFolders, contents.folders)) setOauthFolders(contents.folders);
-              if (dataChanged(oauthFiles, contents.files)) setOauthFiles(contents.files);
-              oauthPrefetch.triggerPrefetch(contents.folders, cacheKey);
+              setRemoteFolder(cacheKey, { folders: contents.folders ?? [], files: contents.files ?? [] });
+              if (dataChanged(oauthFolders, contents.folders ?? [])) setOauthFolders(contents.folders ?? []);
+              if (dataChanged(oauthFiles, contents.files ?? [])) setOauthFiles(contents.files ?? []);
+              oauthPrefetch.triggerPrefetch(contents.folders ?? [], cacheKey);
             }
           } catch {
             // Keep stale data
@@ -314,10 +308,10 @@ export function useRemoteBrowse({
         try {
           const contents = await OAuthProvidersService.listContents(selectedOauthProvider, folder.folder_id);
           if (generationRef.current === gen) {
-            setRemoteFolder(cacheKey, { folders: contents.folders, files: contents.files });
-            setOauthFolders(contents.folders);
-            setOauthFiles(contents.files);
-            oauthPrefetch.triggerPrefetch(contents.folders, cacheKey);
+            setRemoteFolder(cacheKey, { folders: contents.folders ?? [], files: contents.files ?? [] });
+            setOauthFolders(contents.folders ?? []);
+            setOauthFiles(contents.files ?? []);
+            oauthPrefetch.triggerPrefetch(contents.folders ?? [], cacheKey);
           }
         } catch (error) {
           console.error('Failed to load folder contents:', error);
@@ -346,7 +340,8 @@ export function useRemoteBrowse({
       const folderId = targetCrumb.type === 'root' ? undefined : targetCrumb.id;
 
       const cacheKey = oauthCacheKey(selectedOauthProvider, folderId);
-      const cached = getRemoteFolder<RemoteFolderData>(cacheKey);
+      const ttlMs = getProviderTtlMs(selectedOauthProvider);
+      const cached = getRemoteFolder<RemoteFolderData>(cacheKey, ttlMs);
 
       if (cached) {
         setOauthFolders(cached.data.folders as OAuthFolder[]);
@@ -358,9 +353,9 @@ export function useRemoteBrowse({
           try {
             const contents = await OAuthProvidersService.listContents(selectedOauthProvider, folderId);
             if (generationRef.current === gen) {
-              setRemoteFolder(cacheKey, { folders: contents.folders, files: contents.files });
-              if (dataChanged(oauthFolders, contents.folders)) setOauthFolders(contents.folders);
-              if (dataChanged(oauthFiles, contents.files)) setOauthFiles(contents.files);
+              setRemoteFolder(cacheKey, { folders: contents.folders ?? [], files: contents.files ?? [] });
+              if (dataChanged(oauthFolders, contents.folders ?? [])) setOauthFolders(contents.folders ?? []);
+              if (dataChanged(oauthFiles, contents.files ?? [])) setOauthFiles(contents.files ?? []);
             }
           } catch {
             // Keep stale data
@@ -373,9 +368,9 @@ export function useRemoteBrowse({
         try {
           const contents = await OAuthProvidersService.listContents(selectedOauthProvider, folderId);
           if (generationRef.current === gen) {
-            setRemoteFolder(cacheKey, { folders: contents.folders, files: contents.files });
-            setOauthFolders(contents.folders);
-            setOauthFiles(contents.files);
+            setRemoteFolder(cacheKey, { folders: contents.folders ?? [], files: contents.files ?? [] });
+            setOauthFolders(contents.folders ?? []);
+            setOauthFiles(contents.files ?? []);
           }
         } catch (error) {
           console.error('Failed to navigate to breadcrumb:', error);
@@ -683,7 +678,7 @@ export function useRemoteBrowse({
     setSelectedOauthProvider(null);
     setSynergyBreadcrumbs([
       { label: t('remote.rootLabel'), type: 'root' },
-      { label: 'Synergy Jobs', type: 'job' },
+      { label: t('remote.synergyName'), type: 'job' },
     ]);
     loadSynergyJobs();
   }, [t, loadSynergyJobs]);

@@ -174,6 +174,7 @@ class CreateShareResponse(BaseModel):
     uuid: str
     expires_at: str | None = None  # None = permanent share
     status: str = "ready"
+    chat_status: str = "ready"  # "ready" | "pending" | "error"
 
 
 class ShareInfoResponse(BaseModel):
@@ -184,6 +185,7 @@ class ShareInfoResponse(BaseModel):
     expires_at: str | None = None  # None = permanent share
     client_name: str | None = None  # For branding lookup
     status: str = "ready"
+    chat_status: str = "ready"  # "ready" | "pending" | "error"
     description: str | None = None
     enable_chat: bool = True
     allow_download: bool = True
@@ -896,13 +898,16 @@ async def create_share(
     if body.kb_id:
         item["kb_id"] = body.kb_id
 
+    # Determine chat_status: content readiness for AI chat
+    chat_status = "ready"
+
     if needs_extraction:
         # Check if the Files system already extracted this document.
         # The extraction Lambda stores output at {input_key}.json in the same bucket.
         existing_text = _try_read_existing_extraction(s3_bucket, s3_key, share_uuid)
 
         if existing_text:
-            # Reuse existing extraction — store text in S3 and mark ready immediately
+            # Reuse existing extraction — store text in S3 and mark chat ready
             text_key = f"shared/{share_uuid}/document_text.txt"
             s3 = get_s3_client()
             s3.put_object(
@@ -911,56 +916,42 @@ async def create_share(
                 Body=existing_text.encode("utf-8"),
                 ContentType="text/plain; charset=utf-8",
             )
-            item["status"] = "ready"
             item["document_text_key"] = text_key
-
-            table = get_dynamodb_table()
-            table.put_item(Item=item)
-
-            status = "ready"
+            chat_status = "ready"
             logger.info(
                 "Share created (reused existing extraction)",
                 uuid=share_uuid,
                 text_length=len(existing_text),
             )
         else:
-            # No existing extraction — async path: fire off extraction in background
-            extraction_output_key = f"shared/{share_uuid}/extracted.json"
-            item["status"] = "processing"
-            item["extraction_output_key"] = extraction_output_key
-
-            table = get_dynamodb_table()
-            table.put_item(Item=item)
-
-            _start_async_extraction(
-                share_uuid=share_uuid,
-                s3_bucket=s3_bucket,
-                s3_key=s3_key,
-                extraction_output_key=extraction_output_key,
-            )
-
-            status = "processing"
+            # No existing extraction — transcription service handles this async.
+            # Frontend will submit the file to transcription service.
+            # Store the file key so get_share_info can check for transcription output.
+            item["transcription_file_key"] = s3_key
+            chat_status = "pending"
             logger.info(
-                "Share created (extraction in progress)",
+                "Share created (chat pending transcription)",
                 uuid=share_uuid,
-                extraction_output_key=extraction_output_key,
+                transcription_file_key=s3_key,
             )
     else:
         # Sync path: text files are fast to fetch directly
         logger.info("Fetching text document at share creation", uuid=share_uuid)
         document_text = fetch_document(body.s3_signed_url)
         item["document_text"] = document_text
-        item["status"] = "ready"
-
-        table = get_dynamodb_table()
-        table.put_item(Item=item)
-
-        status = "ready"
+        chat_status = "ready"
         logger.info(
             "Share created (text extracted)",
             uuid=share_uuid,
             text_length=len(document_text),
         )
+
+    # Share is always viewable immediately
+    item["status"] = "ready"
+    item["chat_status"] = chat_status
+
+    table = get_dynamodb_table()
+    table.put_item(Item=item)
 
     expires_at = (
         datetime.fromtimestamp(expiry, tz=timezone.utc).isoformat()
@@ -974,10 +965,15 @@ async def create_share(
         expires_at=expires_at or "permanent",
         created_by=user_id,
         max_calls=body.max_calls,
-        status=status,
+        chat_status=chat_status,
     )
 
-    return CreateShareResponse(uuid=share_uuid, expires_at=expires_at, status=status)
+    return CreateShareResponse(
+        uuid=share_uuid,
+        expires_at=expires_at,
+        status="ready",
+        chat_status=chat_status,
+    )
 
 
 def get_client_name() -> str:
@@ -1359,11 +1355,49 @@ async def get_share_info(uuid: str, request: Request):
 
     # ── Document share logic (extraction check + URL generation) ──
 
-    # If still processing, check if extraction has completed in S3
+    # Determine chat_status (default "ready" for backward compat)
+    chat_status = share.get("chat_status", "ready")
+
+    # Legacy shares: if status is "processing" (old extraction path), check completion
     if status == "processing":
         result = _check_and_complete_extraction(share)
         if result:
             status = "ready"
+            chat_status = "ready"
+
+    # New shares: if chat_status is "pending", check if transcription output exists
+    if chat_status == "pending":
+        transcription_file_key = share.get("transcription_file_key") or share.get(
+            "s3_key"
+        )
+        if transcription_file_key:
+            s3_bucket_name = str(share.get("s3_bucket", ""))
+            existing_text = _try_read_existing_extraction(
+                s3_bucket_name, transcription_file_key, uuid
+            )
+            if existing_text:
+                text_key = f"shared/{uuid}/document_text.txt"
+                s3_client = get_s3_client()
+                s3_client.put_object(
+                    Bucket=s3_bucket_name,
+                    Key=text_key,
+                    Body=existing_text.encode("utf-8"),
+                    ContentType="text/plain; charset=utf-8",
+                )
+                table = get_dynamodb_table()
+                table.update_item(
+                    Key={"uuid": uuid},
+                    UpdateExpression="SET chat_status = :cs, document_text_key = :tk",
+                    ExpressionAttributeValues={
+                        ":cs": "ready",
+                        ":tk": text_key,
+                    },
+                )
+                chat_status = "ready"
+                logger.info(
+                    "Chat status updated to ready (transcription found)",
+                    uuid=uuid,
+                )
 
     # Regenerate a fresh pre-signed URL if we have bucket/key stored
     s3_bucket = share.get("s3_bucket")
@@ -1404,6 +1438,7 @@ async def get_share_info(uuid: str, request: Request):
         expires_at=expires_at,
         client_name=client_name,
         status=status,
+        chat_status=chat_status,
         description=share.get("description"),
         enable_chat=enable_chat,
         allow_download=allow_download,
@@ -1460,6 +1495,90 @@ def query_knowledge_base(query: str, kb_id: str, max_results: int = 5) -> str:
         return ""
 
 
+@app.post("/api/shared/{uuid}/generate-description")
+async def generate_description(uuid: str):
+    """Generate an AI description for a shared document (public endpoint).
+
+    Requires chat_status="ready" so that document text is available.
+    Uses Bedrock Nova Lite to produce a brief 1-2 sentence description.
+    """
+    share = get_share(uuid)
+    if not share:
+        raise HTTPException(status_code=404, detail="Share not found")
+
+    # Check expiry
+    raw_expiry = share.get("expiry")
+    expiry = int(raw_expiry) if raw_expiry is not None else None
+    if expiry is not None and time.time() > expiry:
+        raise HTTPException(status_code=410, detail="Share expired")
+
+    # Document text must be available
+    chat_status = share.get("chat_status", "ready")
+    status = share.get("status", "ready")
+    if chat_status == "pending" or status == "processing":
+        raise HTTPException(
+            status_code=202,
+            detail="Document is still being processed. Description cannot be generated yet.",
+        )
+
+    # Load document text
+    try:
+        document_text = _load_document_text(share)
+    except Exception as e:
+        logger.error(
+            "Failed to load document text for description", uuid=uuid, error=str(e)
+        )
+        raise HTTPException(
+            status_code=500, detail="Could not load document text"
+        ) from e
+
+    if not document_text:
+        raise HTTPException(status_code=400, detail="No document text available")
+
+    # Generate description via Bedrock
+    prompt = (
+        "Write a brief 1-2 sentence description of the following document content, "
+        "suitable for sharing with someone. Be concise and descriptive. "
+        "Only output the description text, nothing else.\n\n"
+        f"Document content:\n{document_text[:8000]}"
+    )
+
+    try:
+        bedrock = get_bedrock_client()
+        response = bedrock.converse(
+            modelId=MODEL_ID,
+            messages=[{"role": "user", "content": [{"text": prompt}]}],
+            inferenceConfig={"maxTokens": 200, "temperature": 0.3},
+        )
+
+        output = response.get("output", {})
+        message = output.get("message", {})
+        content = message.get("content", [])
+        description = content[0].get("text", "").strip() if content else ""
+
+        if not description:
+            raise HTTPException(status_code=500, detail="Empty description generated")
+
+        # Update the share record with the generated description
+        table = get_dynamodb_table()
+        table.update_item(
+            Key={"uuid": uuid},
+            UpdateExpression="SET description = :d",
+            ExpressionAttributeValues={":d": description},
+        )
+
+        logger.info("Description generated", uuid=uuid, length=len(description))
+        return {"description": description}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Description generation failed", uuid=uuid, error=str(e))
+        raise HTTPException(
+            status_code=500, detail="Failed to generate description"
+        ) from e
+
+
 @app.post("/api/shared/{uuid}/chat")
 async def chat(uuid: str, body: ChatRequest, request: Request):
     """Stream chat response for a share (public endpoint)."""
@@ -1467,6 +1586,7 @@ async def chat(uuid: str, body: ChatRequest, request: Request):
         SharedChatHistory,
     )
 
+    document_text = ""
     share = get_share(uuid)
 
     if not share:
@@ -1516,22 +1636,62 @@ async def chat(uuid: str, body: ChatRequest, request: Request):
             "You are a helpful assistant that answers questions about the shared document.",
         )
 
-    # Check extraction status before allowing chat (document shares only)
+    # Check extraction/chat status before allowing chat (document shares only)
     if not is_dropzone:
         status = share.get("status", "ready")
+        chat_status = share.get("chat_status", "ready")
+
+        # Legacy shares: check old extraction path
         if status == "processing":
-            # Check if extraction just completed
             result = _check_and_complete_extraction(share)
             if not result:
                 raise HTTPException(
                     status_code=202, detail="Document is still being processed"
                 )
-            # Extraction just completed — use the returned text
             document_text = result
         elif status == "error":
             raise HTTPException(
                 status_code=502,
                 detail=share.get("error_message", "Document extraction failed"),
+            )
+        # New shares: check chat_status for transcription readiness
+        elif chat_status == "pending":
+            # Check if transcription output exists now
+            transcription_file_key = share.get("transcription_file_key") or share.get(
+                "s3_key"
+            )
+            s3_bucket = str(share.get("s3_bucket", ""))
+            existing_text = (
+                _try_read_existing_extraction(s3_bucket, transcription_file_key, uuid)
+                if transcription_file_key and s3_bucket
+                else None
+            )
+            if existing_text:
+                # Transcription completed — store and update
+                text_key = f"shared/{uuid}/document_text.txt"
+                s3_client = get_s3_client()
+                s3_client.put_object(
+                    Bucket=s3_bucket,
+                    Key=text_key,
+                    Body=existing_text.encode("utf-8"),
+                    ContentType="text/plain; charset=utf-8",
+                )
+                table = get_dynamodb_table()
+                table.update_item(
+                    Key={"uuid": uuid},
+                    UpdateExpression="SET chat_status = :cs, document_text_key = :tk",
+                    ExpressionAttributeValues={":cs": "ready", ":tk": text_key},
+                )
+                document_text = existing_text
+            else:
+                raise HTTPException(
+                    status_code=202,
+                    detail="Document is still being processed for chat",
+                )
+        elif chat_status == "error":
+            raise HTTPException(
+                status_code=502,
+                detail=share.get("error_message", "Document processing failed"),
             )
         else:
             # Ready state — load document text (from S3 for large docs, DynamoDB for small)
@@ -1550,8 +1710,8 @@ async def chat(uuid: str, body: ChatRequest, request: Request):
             uuid=uuid,
         )
         # For shares with bucket/key, regenerate URL before extraction
-        s3_bucket = share.get("s3_bucket")
-        s3_key = share.get("s3_key")
+        s3_bucket = str(share.get("s3_bucket", ""))
+        s3_key = str(share.get("s3_key", ""))
         if s3_bucket and s3_key:
             fresh_url = generate_fresh_signed_url(s3_bucket, s3_key, expires_in=300)
             share["s3_signed_url"] = fresh_url

@@ -9,7 +9,13 @@ import {
   DeleteCommand,
 } from '@aws-sdk/lib-dynamodb';
 import { SQSClient, SendMessageCommand } from '@aws-sdk/client-sqs';
-import { S3Client, HeadObjectCommand, DeleteObjectCommand, ListObjectsV2Command } from '@aws-sdk/client-s3';
+import {
+  S3Client,
+  HeadObjectCommand,
+  DeleteObjectCommand,
+  ListObjectsV2Command,
+  GetObjectCommand,
+} from '@aws-sdk/client-s3';
 import { createHash } from 'crypto';
 import { withPRM } from '../../../lib/prm-node/prm';
 
@@ -159,6 +165,7 @@ interface TranscriptionJob {
   outputKey?: string;
   progress?: number;
   fileHash?: string;
+  pipelineId?: string;
 }
 
 // ─── Helpers ───
@@ -255,7 +262,12 @@ const generateJobId = (): string => {
 
 const submitJob = async (auth: AuthContext, event: APIGatewayProxyEventV2): Promise<ReturnType<typeof respond>> => {
   const body = JSON.parse(event.body || '{}');
-  const { fileName, fileKey, sourceBucket } = body as { fileName?: string; fileKey?: string; sourceBucket?: string };
+  const { fileName, fileKey, sourceBucket, pipelineId } = body as {
+    fileName?: string;
+    fileKey?: string;
+    sourceBucket?: string;
+    pipelineId?: string;
+  };
 
   if (!fileName || !fileKey) {
     return respond(400, { error: 'fileName and fileKey are required' });
@@ -336,6 +348,7 @@ const submitJob = async (auth: AuthContext, event: APIGatewayProxyEventV2): Prom
     updatedAt: now,
     expiresAt,
     fileHash,
+    pipelineId,
   };
 
   // Write DynamoDB record
@@ -354,6 +367,8 @@ const submitJob = async (auth: AuthContext, event: APIGatewayProxyEventV2): Prom
         fileSize,
         dataBucket: bucket,
         clientName: CLIENT_NAME,
+        fileHash,
+        pipelineId,
       }),
     })
   );
@@ -433,7 +448,11 @@ const cleanupS3Artifacts = async (job: TranscriptionJob): Promise<void> => {
   }
 };
 
-const deleteJob = async (auth: AuthContext, jobId: string): Promise<ReturnType<typeof respond>> => {
+const deleteJob = async (
+  auth: AuthContext,
+  jobId: string,
+  event: APIGatewayProxyEventV2
+): Promise<ReturnType<typeof respond>> => {
   const result = await dynamo.send(new GetCommand({ TableName: TABLE_NAME, Key: { userSub: auth.sub, jobId } }));
 
   if (!result.Item) {
@@ -456,12 +475,25 @@ const deleteJob = async (auth: AuthContext, jobId: string): Promise<ReturnType<t
     return respond(200, { jobId, status: 'CANCEL_REQUESTED' });
   }
 
-  // Clean up S3 artifacts before deleting the record
-  await cleanupS3Artifacts(job);
+  // Admin purge: delete S3 content + DynamoDB record (requires ?purge=true)
+  const purge = (event.queryStringParameters || {}).purge === 'true';
+  if (purge && isAdmin(auth)) {
+    await cleanupS3Artifacts(job);
+    await dynamo.send(new DeleteCommand({ TableName: TABLE_NAME, Key: { userSub: auth.sub, jobId } }));
+    return respond(200, { jobId, deleted: true, purged: true });
+  }
 
-  // Delete DynamoDB record
-  await dynamo.send(new DeleteCommand({ TableName: TABLE_NAME, Key: { userSub: auth.sub, jobId } }));
-  return respond(200, { jobId, deleted: true });
+  // Soft delete: mark as DELETED in DynamoDB, preserve S3 content
+  await dynamo.send(
+    new UpdateCommand({
+      TableName: TABLE_NAME,
+      Key: { userSub: auth.sub, jobId },
+      UpdateExpression: 'SET #s = :status, updatedAt = :now',
+      ExpressionAttributeNames: { '#s': 'status' },
+      ExpressionAttributeValues: { ':status': 'DELETED', ':now': Date.now() },
+    })
+  );
+  return respond(200, { jobId, status: 'DELETED' });
 };
 
 const retryJob = async (auth: AuthContext, jobId: string): Promise<ReturnType<typeof respond>> => {
@@ -500,6 +532,8 @@ const retryJob = async (auth: AuthContext, jobId: string): Promise<ReturnType<ty
         fileSize: job.fileSize,
         dataBucket: job.dataBucket || DATA_BUCKET,
         clientName: CLIENT_NAME,
+        fileHash: job.fileHash,
+        pipelineId: job.pipelineId,
       }),
     })
   );
@@ -514,27 +548,233 @@ const listAllJobs = async (auth: AuthContext, event: APIGatewayProxyEventV2): Pr
 
   const params = event.queryStringParameters || {};
   const limit = Math.min(parseInt(params.limit || '50'), 100);
+  const statusFilter = params.status;
   const exclusiveStartKey = params.nextToken
     ? JSON.parse(Buffer.from(params.nextToken, 'base64').toString())
     : undefined;
 
-  const result = await dynamo.send(
-    new QueryCommand({
-      TableName: TABLE_NAME,
-      IndexName: 'AdminIndex',
-      KeyConditionExpression: 'clientName = :clientName',
-      ExpressionAttributeValues: { ':clientName': CLIENT_NAME },
-      ScanIndexForward: false,
-      Limit: limit,
-      ExclusiveStartKey: exclusiveStartKey,
-    })
-  );
+  let result;
+  if (statusFilter) {
+    result = await dynamo.send(
+      new QueryCommand({
+        TableName: TABLE_NAME,
+        IndexName: 'StatusIndex',
+        KeyConditionExpression: '#s = :status',
+        ExpressionAttributeNames: { '#s': 'status' },
+        ExpressionAttributeValues: { ':status': statusFilter },
+        ScanIndexForward: false,
+        Limit: limit,
+        ExclusiveStartKey: exclusiveStartKey,
+      })
+    );
+  } else {
+    result = await dynamo.send(
+      new QueryCommand({
+        TableName: TABLE_NAME,
+        IndexName: 'AdminIndex',
+        KeyConditionExpression: 'clientName = :clientName',
+        ExpressionAttributeValues: { ':clientName': CLIENT_NAME },
+        ScanIndexForward: false,
+        Limit: limit,
+        ExclusiveStartKey: exclusiveStartKey,
+      })
+    );
+  }
 
   const nextToken = result.LastEvaluatedKey
     ? Buffer.from(JSON.stringify(result.LastEvaluatedKey)).toString('base64')
     : undefined;
 
   return respond(200, { jobs: result.Items || [], nextToken, count: result.Items?.length || 0 });
+};
+
+// ─── Lookup handlers ───
+
+const lookupByHash = async (_auth: AuthContext, hash: string): Promise<ReturnType<typeof respond>> => {
+  const result = await dynamo.send(
+    new QueryCommand({
+      TableName: TABLE_NAME,
+      IndexName: 'HashIndex',
+      KeyConditionExpression: 'fileHash = :hash',
+      ExpressionAttributeValues: { ':hash': hash },
+      ScanIndexForward: false,
+    })
+  );
+  return respond(200, { jobs: result.Items || [], count: result.Items?.length || 0 });
+};
+
+const lookupByPath = async (_auth: AuthContext, fileKey: string): Promise<ReturnType<typeof respond>> => {
+  const result = await dynamo.send(
+    new QueryCommand({
+      TableName: TABLE_NAME,
+      IndexName: 'FileKeyIndex',
+      KeyConditionExpression: 'fileKey = :fileKey',
+      ExpressionAttributeValues: { ':fileKey': fileKey },
+      ScanIndexForward: false,
+    })
+  );
+  return respond(200, { jobs: result.Items || [], count: result.Items?.length || 0 });
+};
+
+// ─── Rebuild from S3 ───
+
+interface StatusFile {
+  version: number;
+  status: string;
+  input_key: string;
+  output_key: string;
+  file_name: string;
+  started_at: number;
+  updated_at: number;
+  duration_ms: number;
+  file_size?: number;
+  file_extension?: string;
+  file_hash?: string;
+  client_name?: string;
+  data_bucket?: string;
+  pipeline_id?: string;
+  costs?: Record<string, unknown>;
+  error_message?: string;
+}
+
+const getS3Json = async (key: string): Promise<Record<string, unknown> | null> => {
+  try {
+    const resp = await s3.send(new GetObjectCommand({ Bucket: DATA_BUCKET, Key: key }));
+    const body = await resp.Body?.transformToString('utf-8');
+    return body ? JSON.parse(body) : null;
+  } catch {
+    return null;
+  }
+};
+
+const rebuildFromS3 = async (auth: AuthContext): Promise<ReturnType<typeof respond>> => {
+  if (!isAdmin(auth)) {
+    return respond(403, { error: 'Forbidden: Admin access required' });
+  }
+
+  // Collect all existing jobIds to skip
+  const existingIds = new Set<string>();
+  let lastKey: Record<string, unknown> | undefined;
+  do {
+    const scan = await dynamo.send(
+      new QueryCommand({
+        TableName: TABLE_NAME,
+        IndexName: 'AdminIndex',
+        KeyConditionExpression: 'clientName = :c',
+        ExpressionAttributeValues: { ':c': CLIENT_NAME },
+        ProjectionExpression: 'jobId',
+        ExclusiveStartKey: lastKey,
+      })
+    );
+    for (const item of scan.Items ?? []) {
+      existingIds.add(item.jobId as string);
+    }
+    lastKey = scan.LastEvaluatedKey;
+  } while (lastKey);
+
+  // Scan S3 for output.status.json files
+  let continuationToken: string | undefined;
+  let created = 0;
+  let skipped = 0;
+  let failed = 0;
+
+  do {
+    const listResult = await s3.send(
+      new ListObjectsV2Command({
+        Bucket: DATA_BUCKET,
+        Prefix: 'transcriptions/',
+        ContinuationToken: continuationToken,
+      })
+    );
+
+    for (const obj of listResult.Contents ?? []) {
+      if (!obj.Key?.endsWith('/output.status.json')) continue;
+
+      // Parse: transcriptions/{userSub}/{jobId}/output.status.json
+      const parts = obj.Key.split('/');
+      if (parts.length < 4) continue;
+      const userSub = parts[1];
+      const jobId = parts[2];
+
+      // Skip "uploads" folder and already-existing records
+      if (userSub === 'uploads') continue;
+      if (existingIds.has(jobId)) {
+        skipped++;
+        continue;
+      }
+
+      const statusData = (await getS3Json(obj.Key)) as unknown as StatusFile | null;
+      if (!statusData) {
+        failed++;
+        continue;
+      }
+
+      const fileName = statusData.file_name || 'unknown';
+      const ext = statusData.file_extension || getExtension(fileName);
+      const outputKey = obj.Key.replace('/output.status.json', '/output.json');
+      const dbStatus =
+        statusData.status === 'SUCCEEDED' ? 'COMPLETED' : statusData.status === 'FAILED' ? 'FAILED' : 'COMPLETED';
+
+      // Try to get upload file size — prefer enriched value, fallback to HeadObject
+      let fileSize = statusData.file_size ?? 0;
+      if (!fileSize && statusData.input_key) {
+        try {
+          const head = await s3.send(new HeadObjectCommand({ Bucket: DATA_BUCKET, Key: statusData.input_key }));
+          fileSize = head.ContentLength ?? 0;
+        } catch {
+          // Upload may have been cleaned up
+        }
+      }
+
+      const now = Date.now();
+      const expiresAt = Math.floor(now / 1000) + 90 * 24 * 60 * 60;
+
+      const job: TranscriptionJob = {
+        userSub,
+        jobId,
+        fileName,
+        fileKey: statusData.input_key || '',
+        fileSize,
+        fileExtension: ext,
+        status: dbStatus as JobStatus,
+        clientName: statusData.client_name || CLIENT_NAME,
+        dataBucket: statusData.data_bucket || DATA_BUCKET,
+        createdAt: (statusData.started_at || 0) * 1000,
+        updatedAt: (statusData.updated_at || 0) * 1000,
+        expiresAt,
+        outputKey,
+        progress: 100,
+        fileHash: statusData.file_hash || undefined,
+        pipelineId: statusData.pipeline_id || undefined,
+      };
+
+      try {
+        await dynamo.send(
+          new PutCommand({
+            TableName: TABLE_NAME,
+            Item: {
+              ...job,
+              processingTimeMs: statusData.duration_ms || 0,
+              ...(statusData.costs ? { costs: statusData.costs } : {}),
+              ...(statusData.error_message ? { errorMessage: statusData.error_message } : {}),
+            },
+            ConditionExpression: 'attribute_not_exists(userSub)',
+          })
+        );
+        created++;
+      } catch (err: unknown) {
+        if ((err as { name?: string }).name === 'ConditionalCheckFailedException') {
+          skipped++;
+        } else {
+          failed++;
+        }
+      }
+    }
+
+    continuationToken = listResult.NextContinuationToken;
+  } while (continuationToken);
+
+  return respond(200, { created, skipped, failed, total: created + skipped + failed });
 };
 
 // ─── Main handler ───
@@ -558,9 +798,29 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
       return await submitJob(auth, event);
     }
 
+    // POST /api/transcriptions/admin/rebuild — rebuild DynamoDB from S3
+    if (method === 'POST' && /\/transcriptions\/admin\/rebuild\/?$/.test(path)) {
+      return await rebuildFromS3(auth);
+    }
+
     // GET /api/transcriptions/admin/all — admin list all
     if (method === 'GET' && /\/transcriptions\/admin\/all\/?$/.test(path)) {
       return await listAllJobs(auth, event);
+    }
+
+    // GET /api/transcriptions/lookup/hash/{hash} — lookup by file hash
+    const hashLookupMatch = path.match(/\/transcriptions\/lookup\/hash\/([^/]+)\/?$/);
+    if (method === 'GET' && hashLookupMatch) {
+      return await lookupByHash(auth, decodeURIComponent(hashLookupMatch[1]));
+    }
+
+    // GET /api/transcriptions/lookup/path?fileKey=... — lookup by file path
+    if (method === 'GET' && /\/transcriptions\/lookup\/path\/?$/.test(path)) {
+      const fileKey = (event.queryStringParameters || {}).fileKey;
+      if (!fileKey) {
+        return respond(400, { error: 'fileKey query parameter is required' });
+      }
+      return await lookupByPath(auth, fileKey);
     }
 
     // POST /api/transcriptions/{jobId}/retry — retry failed job
@@ -571,13 +831,13 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
 
     // GET /api/transcriptions/{jobId} — single job
     const jobMatch = path.match(/\/transcriptions\/([^/]+)\/?$/);
-    if (method === 'GET' && jobMatch && jobMatch[1] !== 'admin') {
+    if (method === 'GET' && jobMatch && jobMatch[1] !== 'admin' && jobMatch[1] !== 'lookup') {
       return await getJob(auth, decodeURIComponent(jobMatch[1]));
     }
 
-    // DELETE /api/transcriptions/{jobId} — cancel or delete
+    // DELETE /api/transcriptions/{jobId} — cancel or soft-delete (admin ?purge=true for hard delete)
     if (method === 'DELETE' && jobMatch) {
-      return await deleteJob(auth, decodeURIComponent(jobMatch[1]));
+      return await deleteJob(auth, decodeURIComponent(jobMatch[1]), event);
     }
 
     // GET /api/transcriptions — list user's jobs

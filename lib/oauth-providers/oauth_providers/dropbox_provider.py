@@ -6,7 +6,6 @@ import json
 from typing import Any, Dict, List, Optional
 
 from .base_provider import (
-    OAuthError,
     OAuthFile,
     OAuthFileMetadata,
     OAuthFolder,
@@ -123,7 +122,9 @@ class DropboxProvider(OAuthProvider):
             next_page_token=next_page_token,
         )
 
-    async def download_file(self, access_token: str, file_id: str) -> bytes:
+    async def download_file(
+        self, access_token: str, file_id: str, max_download_size: int | None = None
+    ) -> bytes:
         """Download file content from Dropbox."""
         # Dropbox uses a different URL and header format for downloads
         url = f"{self.CONTENT_URL}/files/download"

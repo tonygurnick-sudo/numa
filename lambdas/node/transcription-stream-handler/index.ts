@@ -12,13 +12,14 @@
 
 import type { DynamoDBStreamHandler } from 'aws-lambda';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
-import { DynamoDBDocumentClient, PutCommand } from '@aws-sdk/lib-dynamodb';
+import { DynamoDBDocumentClient, PutCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
 import { v4 as uuidv4 } from 'uuid';
 import { withPRM } from '../../../lib/prm-node/prm';
 
 const REGION = process.env.REGION ?? 'us-east-1';
 const NOTIFICATIONS_TABLE = process.env.NOTIFICATIONS_TABLE_NAME as string;
 const USAGE_EVENTS_TABLE = process.env.USAGE_EVENTS_TABLE_NAME;
+const AUDIT_AUTOMATION_TABLE = process.env.AUDIT_AUTOMATION_TABLE_NAME;
 
 const ddbClient = withPRM(DynamoDBClient, { region: REGION });
 const dynamo = DynamoDBDocumentClient.from(ddbClient, {
@@ -199,6 +200,57 @@ export const handler: DynamoDBStreamHandler = async (event) => {
           console.error('Failed to write usage record', {
             error: usageError instanceof Error ? usageError.message : String(usageError),
           });
+        }
+      }
+
+      // Update the STARTED audit entry in-place for terminal status changes
+      if (AUDIT_AUTOMATION_TABLE && eventName === 'MODIFY') {
+        const auditAction =
+          status === 'COMPLETED'
+            ? 'TRANSCRIPTION_COMPLETED'
+            : status === 'FAILED'
+              ? 'TRANSCRIPTION_FAILED'
+              : status === 'CANCELLED'
+                ? 'TRANSCRIPTION_CANCELLED'
+                : null;
+
+        const auditStatus =
+          status === 'COMPLETED' ? 'success' : status === 'FAILED' || status === 'CANCELLED' ? 'failure' : null;
+
+        const auditLogTimestamp = image.auditLogTimestamp as number | undefined;
+
+        if (auditAction && auditStatus && auditLogTimestamp) {
+          try {
+            // Update the existing STARTED entry using deterministic logId + stored timestamp
+            await dynamo.send(
+              new UpdateCommand({
+                TableName: AUDIT_AUTOMATION_TABLE,
+                Key: {
+                  logId: `txn-${jobId}`,
+                  timestamp: auditLogTimestamp,
+                },
+                UpdateExpression:
+                  'SET #a = :action, #s = :status, details.processingTimeMs = :pms, details.outputKey = :ok, details.errorMessage = :err, details.completedAt = :ca',
+                ExpressionAttributeNames: {
+                  '#a': 'action',
+                  '#s': 'status',
+                },
+                ExpressionAttributeValues: {
+                  ':action': auditAction,
+                  ':status': auditStatus,
+                  ':pms': image.processingTimeMs ?? null,
+                  ':ok': image.outputKey ?? null,
+                  ':err': image.errorMessage ?? null,
+                  ':ca': now,
+                },
+              })
+            );
+            console.log('Audit log updated', { action: auditAction, jobId });
+          } catch (auditError) {
+            console.error('Failed to update audit log', {
+              error: auditError instanceof Error ? auditError.message : String(auditError),
+            });
+          }
         }
       }
     } catch (error) {

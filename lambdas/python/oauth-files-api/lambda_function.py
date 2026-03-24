@@ -5,8 +5,11 @@ from __future__ import annotations
 import asyncio
 import base64
 import binascii
+import html
 import json
 import os
+import re
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Optional
 
 import structlog
@@ -23,6 +26,7 @@ from oauth_providers import (
 from vault_integration import (
     get_company_provider_config,
     get_oauth_token,
+    put_user_oauth_secret,
     refresh_access_token,
 )
 
@@ -124,17 +128,24 @@ async def _get_provider_with_token(
     company_config = get_company_provider_config(provider_name)
 
     if company_config:
-        client_id = company_config["client_id"]
+        client_id = company_config.get("client_id", "")
         client_secret = company_config.get("client_secret")
     else:
-        client_id = os.environ.get(f"{provider_name.upper()}_CLIENT_ID")
+        client_id = os.environ.get(f"{provider_name.upper()}_CLIENT_ID", "")
         client_secret = os.environ.get(f"{provider_name.upper()}_CLIENT_SECRET")
 
-    if not client_id:
-        raise ValueError(f"OAuth not configured for {provider_name}")
+    # Token-based connectors may not have client_id but need instance_url
+    instance_url = company_config.get("instance_url", "") if company_config else ""
+    if not client_id and not instance_url:
+        raise ValueError(f"Connector not configured for {provider_name}")
 
-    # Create provider instance
-    provider = create_provider(provider_name, client_id, client_secret)
+    # Create provider instance with extra config
+    extra_kwargs = {}
+    if instance_url:
+        extra_kwargs["instance_url"] = instance_url
+    provider = create_provider(
+        provider_name, client_id, client_secret or "", **extra_kwargs
+    )
 
     # Get valid access token (handles refresh automatically)
     access_token = await get_oauth_token(provider_name, user_id)
@@ -405,6 +416,193 @@ async def _handle_search_files(
         return _response(500, {"error": "Internal server error"})
 
 
+async def _handle_send_email(
+    provider_name: str, user_id: str, event: Dict[str, Any]
+) -> Dict[str, Any]:
+    """Send an email via the provider (Gmail, Outlook, etc.)."""
+    try:
+        provider, access_token = await _get_provider_with_token(provider_name, user_id)
+
+        if not hasattr(provider, "send_email"):
+            return _response(
+                400,
+                {"error": f"Provider {provider_name} does not support sending emails"},
+            )
+
+        # Parse request body
+        body_raw = event.get("body", "{}")
+        if event.get("isBase64Encoded"):
+            import base64
+
+            body_raw = base64.b64decode(body_raw).decode("utf-8")
+        body = json.loads(body_raw)
+
+        to = body.get("to", "").strip()
+        subject = body.get("subject", "").strip()
+        email_body = body.get("body", "").strip()
+        html = body.get("html", False)
+
+        if not to:
+            return _response(400, {"error": "Recipient (to) is required"})
+        if not subject:
+            return _response(400, {"error": "Subject is required"})
+
+        message_id = await provider.send_email(  # type: ignore[attr-defined]
+            access_token=access_token,
+            to=to,
+            subject=subject,
+            body=email_body,
+            html=html,
+        )
+
+        await provider.close()
+        return _response(200, {"success": True, "message_id": message_id})
+
+    except OAuthAuthenticationError as e:
+        return _response(401, {"error": str(e)})
+    except OAuthError as e:
+        logger.error(f"OAuth error sending email: {e}")
+        return _response(500, {"error": str(e)})
+    except Exception as e:
+        logger.error(f"Unexpected error sending email: {e}")
+        return _response(500, {"error": "Failed to send email"})
+
+
+async def _handle_refresh_token(
+    provider_name: str, user_id: str, event: Dict[str, Any]
+) -> Dict[str, Any]:
+    """Refresh a token using the provider's refresh API (if supported)."""
+    try:
+        provider, access_token = await _get_provider_with_token(provider_name, user_id)
+
+        if (
+            not hasattr(provider, "refresh_token")
+            or provider.refresh_token.__func__ is OAuthProvider.refresh_token
+        ):
+            await provider.close()
+            return _response(
+                200,
+                {
+                    "supported": False,
+                    "reason": f"{provider_name} does not support automatic token refresh. "
+                    "Disconnect and reconnect with a new token.",
+                },
+            )
+
+        new_token = await provider.refresh_token(access_token)
+        await provider.close()
+
+        if not new_token:
+            return _response(
+                200,
+                {
+                    "supported": True,
+                    "success": False,
+                    "reason": "Provider returned no token. Enter a new token manually.",
+                },
+            )
+
+        # Store the new token in the user's vault
+        now = datetime.now(timezone.utc)
+        stored = put_user_oauth_secret(
+            user_id,
+            provider_name,
+            {
+                "access_token": new_token,
+                "expires_at": (now + timedelta(days=180)).isoformat(),
+                "scope": "",
+                "connected_at": now.isoformat(),
+            },
+        )
+
+        if not stored:
+            return _response(500, {"error": "Failed to store refreshed token"})
+
+        return _response(
+            200, {"supported": True, "success": True, "message": "Token refreshed"}
+        )
+
+    except OAuthAuthenticationError as e:
+        return _response(401, {"error": str(e)})
+    except OAuthError as e:
+        logger.error(f"OAuth error refreshing token: {e}")
+        return _response(200, {"supported": True, "success": False, "reason": str(e)})
+    except Exception as e:
+        logger.error(f"Unexpected error refreshing token: {e}")
+        return _response(500, {"error": "Failed to refresh token"})
+
+
+def _strip_html(text: str) -> str:
+    """Strip HTML tags and decode entities to produce safe plain text."""
+    # Remove style/script blocks entirely
+    text = re.sub(
+        r"<(style|script)[^>]*>.*?</\1>", "", text, flags=re.DOTALL | re.IGNORECASE
+    )
+    # Replace <br> and block-level tags with newlines
+    text = re.sub(r"<br\s*/?>", "\n", text, flags=re.IGNORECASE)
+    text = re.sub(r"</(p|div|tr|li|h[1-6])>", "\n", text, flags=re.IGNORECASE)
+    # Strip remaining tags
+    text = re.sub(r"<[^>]+>", "", text)
+    # Decode HTML entities
+    text = html.unescape(text)
+    # Collapse multiple blank lines
+    text = re.sub(r"\n{3,}", "\n\n", text)
+    return text.strip()
+
+
+async def _handle_get_message(
+    provider_name: str, user_id: str, event: Dict[str, Any]
+) -> Dict[str, Any]:
+    """Get email/message content as safe plain text JSON."""
+    try:
+        raw_path = event.get("requestContext", {}).get("http", {}).get("path", "")
+        path_parts = raw_path.strip("/").split("/")
+        try:
+            idx = path_parts.index("message")
+            file_id = path_parts[idx + 1] if len(path_parts) > idx + 1 else None
+        except ValueError:
+            file_id = None
+        if not file_id:
+            return _response(400, {"error": "Message ID required"})
+
+        provider, access_token = await _get_provider_with_token(provider_name, user_id)
+
+        # Get metadata for subject/from/date
+        metadata = await provider.get_file_metadata(access_token, file_id)
+
+        # Download the message body
+        file_content = await provider.download_file(access_token, file_id)
+        await provider.close()
+
+        # Decode bytes to text
+        raw_text = file_content.decode("utf-8", errors="replace")
+
+        # Strip HTML to produce safe plain text
+        body_text = _strip_html(raw_text)
+
+        return _response(
+            200,
+            {
+                "subject": metadata.name or "",
+                "from": metadata.path or "",
+                "date": metadata.modified_at or metadata.created_at or "",
+                "body_text": body_text,
+                "size": metadata.size,
+            },
+        )
+
+    except OAuthAuthenticationError as e:
+        return _response(401, {"error": str(e)})
+    except OAuthRateLimitError as e:
+        return _response(429, {"error": str(e), "retry_after": e.retry_after})
+    except OAuthError as e:
+        logger.error(f"OAuth error getting message: {e}")
+        return _response(500, {"error": str(e)})
+    except Exception as e:
+        logger.error(f"Unexpected error getting message: {e}")
+        return _response(500, {"error": "Internal server error"})
+
+
 # ---------------------------------------------------------------------------
 # Main Handler
 # ---------------------------------------------------------------------------
@@ -463,6 +661,15 @@ def lambda_handler(event: Dict[str, Any], context: LambdaContext) -> Dict[str, A
                 return asyncio.run(_handle_get_metadata(provider, user_id, event))
             elif action == "search":
                 return asyncio.run(_handle_search_files(provider, user_id, event))
+            elif action.startswith("message"):
+                return asyncio.run(_handle_get_message(provider, user_id, event))
+            else:
+                return _response(404, {"error": "Action not found"})
+        elif method == "POST":
+            if action == "send":
+                return asyncio.run(_handle_send_email(provider, user_id, event))
+            elif action == "refresh-token":
+                return asyncio.run(_handle_refresh_token(provider, user_id, event))
             else:
                 return _response(404, {"error": "Action not found"})
         else:

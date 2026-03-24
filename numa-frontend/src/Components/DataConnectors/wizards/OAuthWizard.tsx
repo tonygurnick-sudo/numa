@@ -11,7 +11,7 @@ import { createCompanySecret, updateCompanySecret, getCompanySecret } from '../.
 import { OAuthProvidersService } from '../../../Services/OAuthProvidersService';
 import type { VaultSecretMetadata, VaultSecretWithFields } from '../../../Services/VaultService';
 import type { OAuthProviderInfo } from '../../../types/oauthProviders';
-import { getConnectorById } from '../connectorRegistry';
+import { getConnectorById, getConnectorsByPlatform, getOAuthSecretId, CACHING_PRESETS } from '../connectorRegistry';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -57,12 +57,16 @@ interface OAuthFormState {
   rateLimitRpm: string;
   rateLimitDaily: string;
   customHeaders: CustomHeader[];
+  cacheTtl: string;
+  cacheStaleWhileRevalidate: boolean;
+  cachePrefetch: boolean;
+  cacheBackgroundRefresh: string;
 }
 
 interface OAuthWizardProps {
   show: boolean;
   onHide: () => void;
-  onSaved: () => void;
+  onSaved: (connectorId?: string) => void;
   providerId?: string;
   isNew: boolean;
   templates: ProviderTemplate[];
@@ -126,6 +130,7 @@ export const OAuthWizard = ({
   const [testResult, setTestResult] = useState<'idle' | 'running' | 'success' | 'failed'>('idle');
   const [testError, setTestError] = useState<string | null>(null);
   const [secretExists, setSecretExists] = useState(false);
+  const [relatedProviderName, setRelatedProviderName] = useState<string | null>(null);
 
   const emptyForm: OAuthFormState = {
     template: 'custom',
@@ -149,6 +154,10 @@ export const OAuthWizard = ({
     rateLimitRpm: '',
     rateLimitDaily: '',
     customHeaders: [],
+    cacheTtl: '300',
+    cacheStaleWhileRevalidate: true,
+    cachePrefetch: true,
+    cacheBackgroundRefresh: '0',
   };
 
   const [form, setForm] = useState<OAuthFormState>(emptyForm);
@@ -157,7 +166,8 @@ export const OAuthWizard = ({
 
   // Helper: find matching company secret
   const getProviderSecret = useCallback(
-    (pid: string): VaultSecretMetadata | undefined => existingSecrets.find((s) => s.name === `oauth-client-${pid}`),
+    (pid: string): VaultSecretMetadata | undefined =>
+      existingSecrets.find((s) => s.name === `oauth-client-${getOAuthSecretId(pid)}`),
     [existingSecrets]
   );
 
@@ -179,6 +189,7 @@ export const OAuthWizard = ({
     setTestError(null);
     setAdvancedExpanded(false);
     setCustomizeExpanded(false);
+    setRelatedProviderName(null);
 
     if (isNew) {
       setForm(emptyForm);
@@ -193,6 +204,10 @@ export const OAuthWizard = ({
     const tpl = templates.find((t) => t.id === editingProviderId);
     const info = mergedProviders.find((p) => p.id === editingProviderId);
 
+    // Load caching defaults from connector registry
+    const connectorEntry = getConnectorById(editingProviderId);
+    const cachingDefaults = connectorEntry?.cachingPolicy ?? CACHING_PRESETS.cloudStorage;
+
     const baseForm: Partial<OAuthFormState> = {
       template: tpl ? tpl.id : 'custom',
       providerId: editingProviderId,
@@ -200,6 +215,10 @@ export const OAuthWizard = ({
       icon: info?.icon || tpl?.icon || 'bi-cloud',
       description: info?.description || tpl?.description || '',
       authUrl: tpl?.authUrl || '',
+      cacheTtl: String(cachingDefaults.ttl),
+      cacheStaleWhileRevalidate: cachingDefaults.staleWhileRevalidate > 0,
+      cachePrefetch: cachingDefaults.prefetch,
+      cacheBackgroundRefresh: String(cachingDefaults.backgroundRefresh),
       tokenUrl: tpl?.tokenUrl || '',
       scopes: tpl?.scopes || '',
       extraAuthParams: tpl?.extraAuthParams || '',
@@ -247,8 +266,8 @@ export const OAuthWizard = ({
         })
         .finally(() => setLoading(false));
 
-      // Run auto-discovery in parallel to confirm/update endpoints
-      if (tpl?.discoveryUrl) {
+      // Run auto-discovery only if template is missing auth/token URLs
+      if (tpl?.discoveryUrl && (!tpl.authUrl || !tpl.tokenUrl)) {
         discoverOAuthConfig(tpl.discoveryUrl).then((discovered) => {
           if (discovered.authUrl || discovered.tokenUrl) {
             updateForm({
@@ -260,7 +279,34 @@ export const OAuthWizard = ({
       }
     } else {
       setSecretExists(false);
+      setRelatedProviderName(null);
       setForm({ ...emptyForm, ...baseForm });
+
+      // Check platform siblings for reusable OAuth credentials
+      const connector = getConnectorById(editingProviderId);
+      if (connector?.oauthPlatform) {
+        const siblings = getConnectorsByPlatform(connector.oauthPlatform);
+        for (const sibling of siblings) {
+          if (sibling.id === editingProviderId) continue;
+          const relatedSecret = existingSecrets.find((s) => s.name === `oauth-client-${sibling.id}`);
+          if (relatedSecret) {
+            getCompanySecret(relatedSecret.name)
+              .then((full: VaultSecretWithFields) => {
+                if (full?.fields?.client_id) {
+                  updateForm({
+                    clientId: full.fields.client_id,
+                    clientSecret: full.fields.client_secret || '',
+                  });
+                  setRelatedProviderName(sibling.displayName);
+                }
+              })
+              .catch(() => {
+                // Silently ignore — user can enter credentials manually
+              });
+            break;
+          }
+        }
+      }
 
       // Run auto-discovery for new providers with a template
       if (tpl?.discoveryUrl) {
@@ -283,7 +329,8 @@ export const OAuthWizard = ({
   const effectiveProviderId = editingProviderId || form.providerId;
   const frontendBaseUrl = window.location.origin;
   const scopeDefs = PROVIDER_SCOPES[effectiveProviderId];
-  const secretName = effectiveProviderId ? `oauth-client-${effectiveProviderId}` : '';
+  const oauthSecretId = effectiveProviderId ? getOAuthSecretId(effectiveProviderId) : '';
+  const secretName = oauthSecretId ? `oauth-client-${oauthSecretId}` : '';
   const registryEntry = getConnectorById(effectiveProviderId);
   const apiRef = registryEntry?.apiReference;
 
@@ -462,42 +509,82 @@ export const OAuthWizard = ({
 
     try {
       const pid = form.providerId.trim();
-      const sName = `oauth-client-${pid}`;
+      const secretId = getOAuthSecretId(pid);
+      const sName = `oauth-client-${secretId}`;
       const existing = getProviderSecret(pid);
 
       // Build scopes string from checkboxes or raw input
       const scopeString = scopeDefs ? buildScopeString(pid, form.selectedScopeIds) : form.scopes.trim();
 
-      // Non-credential config fields
+      // Shared config fields (auth endpoints, extra params)
       const fields: Record<string, string> = {
         auth_url: form.authUrl.trim(),
         token_url: form.tokenUrl.trim(),
-        scopes: scopeString,
-        display_name: form.displayName.trim(),
-        icon: form.icon.trim(),
-        description: form.description.trim(),
       };
 
       if (form.extraAuthParams.trim()) fields.extra_auth_params = form.extraAuthParams.trim();
-      if (form.apiDocsUrl.trim()) fields.api_docs_url = form.apiDocsUrl.trim();
-      if (form.openApiUrl.trim()) fields.open_api_url = form.openApiUrl.trim();
-      if (form.postmanUrl.trim()) fields.postman_url = form.postmanUrl.trim();
-      if (form.mcpServerRef.trim()) fields.mcp_server_ref = form.mcpServerRef.trim();
-      if (form.purposeHint.trim()) fields.purpose_hint = form.purposeHint.trim();
-      if (form.rateLimitRpm.trim()) fields.rate_limit_rpm = form.rateLimitRpm.trim();
-      if (form.rateLimitDaily.trim()) fields.rate_limit_daily = form.rateLimitDaily.trim();
 
-      // Build API reference blob from registry + form overrides
-      if (apiRef) {
-        const refBlob = {
-          ...apiRef,
-          docsUrl: form.apiDocsUrl.trim() || apiRef.docsUrl,
-          openApiUrl: form.openApiUrl.trim() || apiRef.openApiUrl,
-          postmanUrl: form.postmanUrl.trim() || apiRef.postmanUrl,
-          mcpServerRef: form.mcpServerRef.trim() || apiRef.mcpServerRef,
-          purpose: form.purposeHint.trim() || apiRef.purpose,
-        };
-        fields.api_reference = JSON.stringify(refBlob);
+      // Caching policy
+      fields.cache_ttl = form.cacheTtl;
+      fields.cache_stale_while_revalidate = form.cacheStaleWhileRevalidate ? 'true' : 'false';
+      fields.cache_prefetch = form.cachePrefetch ? 'true' : 'false';
+      fields.cache_background_refresh = form.cacheBackgroundRefresh;
+
+      const connector = getConnectorById(pid);
+      if (connector?.oauthPlatform) {
+        // Platform connector: scopes at top level, fall back to registry if empty
+        const effectiveScopes = scopeString || connector.oauth?.scopes || '';
+        fields.scopes = effectiveScopes;
+        fields[`connector_${pid}`] = JSON.stringify({
+          display_name: form.displayName.trim(),
+          icon: form.icon.trim(),
+          description: form.description.trim(),
+          scopes: effectiveScopes,
+          api_reference: apiRef
+            ? JSON.stringify({
+                ...apiRef,
+                docsUrl: form.apiDocsUrl.trim() || apiRef.docsUrl,
+                purpose: form.purposeHint.trim() || apiRef.purpose,
+              })
+            : undefined,
+        });
+
+        if (existing) {
+          // Add this connector to enabled list (idempotent — Set prevents duplicates)
+          const full = await getCompanySecret(existing.name);
+          const enabledStr = full?.fields?.enabled_connectors || '';
+          const enabled = new Set(enabledStr.split(',').filter(Boolean));
+          enabled.add(pid);
+          fields.enabled_connectors = Array.from(enabled).join(',');
+        } else {
+          fields.enabled_connectors = pid;
+        }
+      } else {
+        // Non-platform connector: store metadata at top level
+        fields.scopes = scopeString;
+        fields.display_name = form.displayName.trim();
+        fields.icon = form.icon.trim();
+        fields.description = form.description.trim();
+
+        if (form.apiDocsUrl.trim()) fields.api_docs_url = form.apiDocsUrl.trim();
+        if (form.openApiUrl.trim()) fields.open_api_url = form.openApiUrl.trim();
+        if (form.postmanUrl.trim()) fields.postman_url = form.postmanUrl.trim();
+        if (form.mcpServerRef.trim()) fields.mcp_server_ref = form.mcpServerRef.trim();
+        if (form.purposeHint.trim()) fields.purpose_hint = form.purposeHint.trim();
+        if (form.rateLimitRpm.trim()) fields.rate_limit_rpm = form.rateLimitRpm.trim();
+        if (form.rateLimitDaily.trim()) fields.rate_limit_daily = form.rateLimitDaily.trim();
+
+        if (apiRef) {
+          const refBlob = {
+            ...apiRef,
+            docsUrl: form.apiDocsUrl.trim() || apiRef.docsUrl,
+            openApiUrl: form.openApiUrl.trim() || apiRef.openApiUrl,
+            postmanUrl: form.postmanUrl.trim() || apiRef.postmanUrl,
+            mcpServerRef: form.mcpServerRef.trim() || apiRef.mcpServerRef,
+            purpose: form.purposeHint.trim() || apiRef.purpose,
+          };
+          fields.api_reference = JSON.stringify(refBlob);
+        }
       }
 
       const validHeaders = form.customHeaders.filter((h) => h.name.trim() && h.value.trim());
@@ -516,7 +603,9 @@ export const OAuthWizard = ({
         fields.client_secret = form.clientSecret.trim();
         await createCompanySecret({
           name: sName,
-          description: `OAuth client credentials for ${form.displayName.trim() || pid}`,
+          description: registryEntry?.oauthPlatform
+            ? `OAuth client for ${registryEntry.oauthPlatform} platform`
+            : `OAuth client credentials for ${form.displayName.trim() || pid}`,
           category: 'OAuth Clients',
           type: 'custom',
           fields,
@@ -585,8 +674,8 @@ export const OAuthWizard = ({
     }
 
     if (stepContent === 'test') {
-      onSaved();
-      resetState();
+      onSaved(effectiveProviderId);
+      onHide();
       return;
     }
 
@@ -612,6 +701,7 @@ export const OAuthWizard = ({
     setTestResult('idle');
     setTestError(null);
     setSecretExists(false);
+    setRelatedProviderName(null);
   };
 
   const handleHide = () => {
@@ -752,10 +842,29 @@ export const OAuthWizard = ({
           </div>
         ) : (
           <>
-            <Alert variant="info" className="py-2 small">
-              <i className="bi bi-info-circle me-2"></i>
-              {t('dataConnectors.oauthWizard.enterCredentials')}
-            </Alert>
+            {relatedProviderName ? (
+              <Alert variant="info" className="py-2 small mb-3">
+                <i className="bi bi-info-circle me-2"></i>
+                {t('dataConnectors.oauthWizard.relatedCredentials', { provider: relatedProviderName })}
+                <br />
+                <a
+                  href="#"
+                  className="small"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    setRelatedProviderName(null);
+                    updateForm({ clientId: '', clientSecret: '' });
+                  }}
+                >
+                  {t('dataConnectors.oauthWizard.useOther')}
+                </a>
+              </Alert>
+            ) : (
+              <Alert variant="info" className="py-2 small">
+                <i className="bi bi-info-circle me-2"></i>
+                {t('dataConnectors.oauthWizard.enterCredentials')}
+              </Alert>
+            )}
             <Form.Group className="mb-3">
               <Form.Label className="small fw-semibold">{t('dataConnectors.oauth.clientId')}</Form.Label>
               <Form.Control
@@ -827,7 +936,7 @@ export const OAuthWizard = ({
           <Form.Control
             type="text"
             readOnly
-            value={effectiveProviderId ? `${frontendBaseUrl}/oauth/callback/${effectiveProviderId}` : ''}
+            value={oauthSecretId ? `${frontendBaseUrl}/oauth/callback/${oauthSecretId}` : ''}
             onClick={(e) => {
               (e.target as HTMLInputElement).select();
               navigator.clipboard.writeText((e.target as HTMLInputElement).value).catch(() => {});
@@ -838,7 +947,7 @@ export const OAuthWizard = ({
             variant="outline-secondary"
             size="sm"
             onClick={() => {
-              const uri = effectiveProviderId ? `${frontendBaseUrl}/oauth/callback/${effectiveProviderId}` : '';
+              const uri = oauthSecretId ? `${frontendBaseUrl}/oauth/callback/${oauthSecretId}` : '';
               navigator.clipboard.writeText(uri).catch(() => {});
             }}
             title="Copy"
@@ -903,6 +1012,60 @@ export const OAuthWizard = ({
                 <Form.Text className="text-muted">{t('dataConnectors.oauth.extraAuthParamsHint')}</Form.Text>
               </Form.Group>
             </Col>
+
+            {/* Caching Settings */}
+            <Col md={12} className="mt-3">
+              <h6 className="fw-semibold small text-muted mb-2">
+                {t('dataConnectors.oauth.cachingSettings', 'Caching Settings')}
+              </h6>
+            </Col>
+            <Col md={6}>
+              <Form.Group>
+                <Form.Label className="small fw-semibold">
+                  {t('dataConnectors.oauth.cacheTtl', 'Cache Duration')}
+                </Form.Label>
+                <Form.Select value={form.cacheTtl} onChange={(e) => updateForm({ cacheTtl: e.target.value })}>
+                  <option value="60">{t('dataConnectors.cache.1min', '1 minute (email)')}</option>
+                  <option value="300">{t('dataConnectors.cache.5min', '5 minutes (files)')}</option>
+                  <option value="1800">{t('dataConnectors.cache.30min', '30 minutes (projects)')}</option>
+                  <option value="3600">{t('dataConnectors.cache.1hr', '1 hour')}</option>
+                </Form.Select>
+              </Form.Group>
+            </Col>
+            <Col md={6}>
+              <Form.Group>
+                <Form.Label className="small fw-semibold">
+                  {t('dataConnectors.oauth.backgroundRefresh', 'Background Refresh')}
+                </Form.Label>
+                <Form.Select
+                  value={form.cacheBackgroundRefresh}
+                  onChange={(e) => updateForm({ cacheBackgroundRefresh: e.target.value })}
+                >
+                  <option value="0">{t('dataConnectors.cache.off', 'Off')}</option>
+                  <option value="60">{t('dataConnectors.cache.every1min', 'Every 1 minute')}</option>
+                  <option value="300">{t('dataConnectors.cache.every5min', 'Every 5 minutes')}</option>
+                  <option value="1800">{t('dataConnectors.cache.every30min', 'Every 30 minutes')}</option>
+                </Form.Select>
+              </Form.Group>
+            </Col>
+            <Col md={6}>
+              <Form.Check
+                type="checkbox"
+                label={t('dataConnectors.oauth.staleWhileRevalidate', 'Serve stale while refreshing')}
+                checked={form.cacheStaleWhileRevalidate}
+                onChange={(e) => updateForm({ cacheStaleWhileRevalidate: e.target.checked })}
+                className="mt-2"
+              />
+            </Col>
+            <Col md={6}>
+              <Form.Check
+                type="checkbox"
+                label={t('dataConnectors.oauth.prefetch', 'Auto-prefetch subfolders')}
+                checked={form.cachePrefetch}
+                onChange={(e) => updateForm({ cachePrefetch: e.target.checked })}
+                className="mt-2"
+              />
+            </Col>
           </Row>
         </div>
       </Collapse>
@@ -931,6 +1094,13 @@ export const OAuthWizard = ({
       isLoading={loading}
       error={error}
       success={success}
+      nextLabel={
+        stepContent === 'test'
+          ? t('dataConnectors.wizard.done')
+          : stepContent === 'review'
+            ? t('dataConnectors.wizard.save')
+            : undefined
+      }
     >
       {/* ── Overview (known template: step 1) ── */}
       {stepContent === 'overview' && (

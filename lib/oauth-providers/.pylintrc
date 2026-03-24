@@ -1,0 +1,33 @@
+[MESSAGES CONTROL]
+# See https://pylint.pycqa.org/en/latest/user_guide/checkers/features.html
+disable=
+    broad-exception-caught,
+    broad-exception-raised,
+    consider-iterating-dictionary,
+    consider-using-dict-items,
+    design,
+    duplicate-code,
+    fixme,
+    format,
+    global-statement,
+    import-error,
+    import-outside-toplevel,
+    logging-fstring-interpolation,
+    missing-docstring,
+    no-else-continue,
+    no-else-raise,
+    no-else-return,
+    unnecessary-pass,
+    redefined-outer-name,
+    reimported,
+    too-many-nested-blocks,
+    unused-argument,
+    unused-import,
+    used-before-assignment,
+    wrong-import-order,
+
+[REPORTS]
+msg-template={path}:{line}:{column} [{symbol}] {msg}
+
+[TYPECHECK]
+signature-mutators=aws_lambda_powertools.middleware_factory.factory.lambda_handler_decorator

@@ -189,7 +189,7 @@ export function VaultSecretForm({ show, onHide, onSubmit, existingSecret, catego
           : type === 'bearer_token'
             ? 'bearerTokenFields'
             : 'secureNoteFields';
-    const fieldKeys = Object.keys(DEFAULT_FIELDS[type]);
+    const fieldKeys = Object.keys(DEFAULT_FIELDS[type] || {});
 
     return (
       <>

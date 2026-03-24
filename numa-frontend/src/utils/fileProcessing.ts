@@ -78,10 +78,10 @@ const callExtractContentLambda = async (bucket, key, fileName, authContext, getC
         };
       }
     } catch (initialError) {
-      console.log('Error during initial request:', initialError);
+      console.error('Error during initial request:', initialError);
       // If we got a timeout or other error, the Lambda might still be processing
       // so we'll start polling the expected output location
-      console.log('Initial request failed. Starting S3 polling...');
+      console.error('Initial request failed. Starting S3 polling...');
     }
 
     // Start polling the S3 location directly

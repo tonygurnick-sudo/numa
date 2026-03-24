@@ -17,6 +17,7 @@ export interface ShareInfo {
   client_name?: string;
   name?: string;
   status?: 'processing' | 'ready' | 'error';
+  chat_status?: 'ready' | 'pending' | 'error';
   description?: string;
   enable_chat: boolean;
   allow_download: boolean;
@@ -544,6 +545,28 @@ export const createShare = async (req: CreateShareRequest): Promise<CreateShareR
   }
 
   return response.json();
+};
+
+/**
+ * Generate an AI description for a shared document (public endpoint).
+ * Requires chat_status="ready" — document text must be available.
+ */
+export const generateDescription = async (uuid: string): Promise<string> => {
+  const response = await fetch(`/api/shared/${uuid}/generate-description`, {
+    method: 'POST',
+    headers: { Accept: 'application/json' },
+  });
+
+  if (response.status === 202) {
+    throw new DocumentProcessingError();
+  }
+
+  if (!response.ok) {
+    throw new Error(`${response.status}: ${response.statusText}`);
+  }
+
+  const data = await response.json();
+  return data.description;
 };
 
 /**

@@ -88,6 +88,7 @@ const FileContextMenu = ({
   if (!show || !target) return null;
 
   const isFile = target.kind === 'file' || target.kind === 'remoteFile';
+  const isEmail = target.kind === 'remoteFile' && target.item.content_type === 'message/rfc822';
 
   // Adjust position to stay within viewport
   let x = position.x;
@@ -127,26 +128,28 @@ const FileContextMenu = ({
         fontSize: 14,
       }}
     >
-      {/* Download */}
+      {/* Download / View */}
       <MenuItem
-        icon="bi-download"
-        label={t('actions.download')}
+        icon={isEmail ? 'bi-envelope-open' : 'bi-download'}
+        label={isEmail ? t('actions.viewEmail', 'View email') : t('actions.download')}
         disabled={isDisabled('download')}
         tooltip={tooltipFor('download')}
         onClick={() => handleAction('download')}
       />
 
-      {/* Rename */}
-      <MenuItem
-        icon="bi-pencil"
-        label={t('actions.rename')}
-        disabled={isDisabled('rename')}
-        tooltip={tooltipFor('rename')}
-        onClick={() => handleAction('rename')}
-      />
+      {/* Rename — not for emails */}
+      {!isEmail && (
+        <MenuItem
+          icon="bi-pencil"
+          label={t('actions.rename')}
+          disabled={isDisabled('rename')}
+          tooltip={tooltipFor('rename')}
+          onClick={() => handleAction('rename')}
+        />
+      )}
 
-      {/* Make a copy — files only */}
-      {isFile && (
+      {/* Make a copy — files only, not emails */}
+      {isFile && !isEmail && (
         <MenuItem
           icon="bi-copy"
           label={t('actions.makeCopy')}
@@ -158,19 +161,19 @@ const FileContextMenu = ({
 
       <MenuDivider />
 
-      {/* Summarize — files only */}
+      {/* Summarize */}
       {isFile && (
         <MenuItem
           icon="bi-stars"
-          label={t('actions.summarize')}
+          label={isEmail ? t('actions.summarizeEmail', 'Summarize email') : t('actions.summarize')}
           disabled={isDisabled('summarize')}
           tooltip={tooltipFor('summarize')}
           onClick={() => handleAction('summarize')}
         />
       )}
 
-      {/* Share — files only, when sharing is enabled */}
-      {isFile && sharingEnabled && (
+      {/* Share — files only, not emails */}
+      {isFile && sharingEnabled && !isEmail && (
         <MenuItem
           icon="bi-share"
           label={t('actions.share')}
@@ -180,14 +183,16 @@ const FileContextMenu = ({
         />
       )}
 
-      {/* Move to */}
-      <MenuItem
-        icon="bi-folder-symlink"
-        label={t('actions.moveTo')}
-        disabled={isDisabled('moveTo')}
-        tooltip={tooltipFor('moveTo')}
-        onClick={() => handleAction('moveTo')}
-      />
+      {/* Move to — not for emails */}
+      {!isEmail && (
+        <MenuItem
+          icon="bi-folder-symlink"
+          label={t('actions.moveTo')}
+          disabled={isDisabled('moveTo')}
+          tooltip={tooltipFor('moveTo')}
+          onClick={() => handleAction('moveTo')}
+        />
+      )}
 
       {/* Add to Knowledge Base */}
       <MenuItem
@@ -198,7 +203,7 @@ const FileContextMenu = ({
         onClick={() => handleAction('addToKB')}
       />
 
-      {/* File information */}
+      {/* File / Email information */}
       <MenuItem
         icon="bi-info-circle"
         label={t('actions.fileInfo')}
@@ -207,17 +212,20 @@ const FileContextMenu = ({
         onClick={() => handleAction('fileInfo')}
       />
 
-      <MenuDivider />
-
-      {/* Delete */}
-      <MenuItem
-        icon="bi-trash"
-        label={t('actions.delete')}
-        danger={!isDisabled('delete')}
-        disabled={isDisabled('delete')}
-        tooltip={tooltipFor('delete')}
-        onClick={() => handleAction('delete')}
-      />
+      {/* Delete — not for emails */}
+      {!isEmail && (
+        <>
+          <MenuDivider />
+          <MenuItem
+            icon="bi-trash"
+            label={t('actions.delete')}
+            danger={!isDisabled('delete')}
+            disabled={isDisabled('delete')}
+            tooltip={tooltipFor('delete')}
+            onClick={() => handleAction('delete')}
+          />
+        </>
+      )}
     </div>
   );
 

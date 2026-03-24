@@ -8,6 +8,7 @@ import { DocumentViewer } from '../Components/Shared/DocumentViewer';
 import { ExpiryCountdown } from '../Components/Shared/ExpiryCountdown';
 import {
   getShareInfo,
+  generateDescription,
   ShareInfo,
   getPersistentCallCount,
   incrementPersistentCallCount,
@@ -35,6 +36,8 @@ export const SharedDocumentChat = () => {
   const [isNavCollapsed, setIsNavCollapsed] = useState(false);
   const [liveCallCount, setLiveCallCount] = useState(0);
   const [isDocumentProcessing, setIsDocumentProcessing] = useState(false);
+  const [chatStatus, setChatStatus] = useState<'ready' | 'pending' | 'error'>('ready');
+  const [generatingDesc, setGeneratingDesc] = useState(false);
 
   const handleCallCountIncrement = useCallback(() => {
     if (!uuid) return;
@@ -58,6 +61,9 @@ export const SharedDocumentChat = () => {
         setShareInfo(info);
         setIsDocumentProcessing(false);
 
+        // Set chat status from response (default "ready" for backward compat)
+        setChatStatus(info.chat_status ?? 'ready');
+
         // Use the persistent call count that survives page refreshes
         const persistentCount = getPersistentCallCount(uuid, info.call_count ?? 0);
         setLiveCallCount(persistentCount);
@@ -67,18 +73,16 @@ export const SharedDocumentChat = () => {
         }
       } catch (err) {
         if (err instanceof DocumentProcessingError) {
-          // Document is still being processed - show processing state and retry
+          // Legacy share still processing — retry
           setIsDocumentProcessing(true);
           setError(null);
 
-          // Retry after 5 seconds, max 10 retries (50 seconds total)
           if (retryCount < 10) {
-            shouldStopLoading = false; // Keep loading during retries
+            shouldStopLoading = false;
             setTimeout(() => {
               loadShareInfo(retryCount + 1);
             }, 5000);
           } else {
-            // Max retries reached - show processing message
             setError(t('processing.message'));
             setIsDocumentProcessing(false);
           }
@@ -105,6 +109,44 @@ export const SharedDocumentChat = () => {
     loadShareInfo();
   }, [uuid, t]);
 
+  // Poll for chat readiness when chat_status is "pending"
+  useEffect(() => {
+    if (!uuid || chatStatus !== 'pending') return;
+
+    let attempts = 0;
+    let cancelled = false;
+
+    const poll = async () => {
+      if (cancelled) return;
+      attempts++;
+      try {
+        const info = await getShareInfo(uuid);
+        if (cancelled) return;
+        const newChatStatus = info.chat_status ?? 'ready';
+        if (newChatStatus === 'ready') {
+          setChatStatus('ready');
+          setShareInfo(info);
+          return;
+        }
+        if (newChatStatus === 'error') {
+          setChatStatus('error');
+          return;
+        }
+      } catch {
+        // Ignore polling errors
+      }
+      if (attempts < 24 && !cancelled) {
+        timer = window.setTimeout(poll, 5000);
+      }
+    };
+
+    let timer = window.setTimeout(poll, 5000);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [uuid, chatStatus]);
+
   if (isLoading) {
     return (
       <div className="shared-loading">
@@ -114,8 +156,8 @@ export const SharedDocumentChat = () => {
     );
   }
 
-  // Show processing state while document is being processed
-  if (isDocumentProcessing) {
+  // Show processing state while document is being processed and no share info yet
+  if (isDocumentProcessing && !shareInfo) {
     return (
       <div className="shared-processing">
         <div className="processing-icon">
@@ -155,6 +197,35 @@ export const SharedDocumentChat = () => {
           <i className="bi bi-file-earmark-text" style={{ fontSize: '1.25rem', color: 'var(--bs-primary)' }} />
           <h5 className="mb-0">{documentName}</h5>
           {shareInfo.description && <span className="text-muted">&mdash; {shareInfo.description}</span>}
+          {!shareInfo.description && chatStatus === 'ready' && (
+            <button
+              className="btn btn-sm btn-outline-primary ms-2"
+              disabled={generatingDesc}
+              onClick={async () => {
+                setGeneratingDesc(true);
+                try {
+                  const desc = await generateDescription(uuid!);
+                  setShareInfo((prev) => (prev ? { ...prev, description: desc } : prev));
+                } catch {
+                  // Ignore — user can try again
+                } finally {
+                  setGeneratingDesc(false);
+                }
+              }}
+            >
+              {generatingDesc ? (
+                <>
+                  <span className="spinner-border spinner-border-sm me-1" />
+                  {t('generateDescription.generating', { defaultValue: 'Generating...' })}
+                </>
+              ) : (
+                <>
+                  <i className="bi bi-stars me-1" />
+                  {t('generateDescription.button', { defaultValue: 'Generate Description' })}
+                </>
+              )}
+            </button>
+          )}
         </div>
         <div className="d-flex align-items-center gap-3">
           <ExpiryCountdown expiresAt={shareInfo.expires_at} />
@@ -203,9 +274,31 @@ export const SharedDocumentChat = () => {
             defaultSize={shareInfo.enable_chat ? (isNavCollapsed ? 55 : 50) : isNavCollapsed ? 85 : 75}
             minSize={30}
           >
-            {shareInfo.s3_signed_url && (
-              <DocumentViewer url={shareInfo.s3_signed_url} allowDownload={shareInfo.allow_download} />
-            )}
+            <div style={{ position: 'relative', height: '100%' }}>
+              {shareInfo.s3_signed_url && (
+                <DocumentViewer url={shareInfo.s3_signed_url} allowDownload={shareInfo.allow_download} />
+              )}
+              {/* Legacy overlay: only for old shares with status="processing" */}
+              {(isDocumentProcessing || (shareInfo.status === 'processing' && !shareInfo.chat_status)) && (
+                <div
+                  style={{
+                    position: 'absolute',
+                    inset: 0,
+                    zIndex: 10,
+                    backgroundColor: 'rgba(255, 255, 255, 0.5)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flexDirection: 'column',
+                    borderRadius: '0.5rem',
+                  }}
+                >
+                  <div className="spinner-border text-primary mb-3" />
+                  <h5>{t('processing.title')}</h5>
+                  <p className="text-muted">{t('processing.message')}</p>
+                </div>
+              )}
+            </div>
           </Panel>
 
           {/* Chat panel (if enabled) */}
@@ -218,6 +311,7 @@ export const SharedDocumentChat = () => {
                   maxCalls={shareInfo.max_calls}
                   callCount={liveCallCount}
                   onCallComplete={handleCallCountIncrement}
+                  chatStatus={chatStatus}
                 />
               </Panel>
             </>

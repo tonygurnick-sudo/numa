@@ -1,6 +1,6 @@
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { getFlag } from '../utils/featureFlags';
-import { Tab, Button, Spinner, Modal, Alert, OverlayTrigger, Tooltip, Form } from 'react-bootstrap';
+import { Tab, Button, Spinner, Modal, Alert, OverlayTrigger, Tooltip, Form, Table, Badge } from 'react-bootstrap';
 import { useTranslation } from 'react-i18next';
 import { Bot } from 'lucide-react';
 import UserManagement from './UserManagement';
@@ -27,9 +27,9 @@ import AuditPanel from '../Components/UsageAnalytics/AuditPanel';
 import LoginHeatmap from '../Components/UsageAnalytics/LoginHeatmap';
 import { NumaLibrariesPanel } from '../Components/Settings/NumaLibrariesPanel';
 import GenericAuditLogTab from '../Components/UsageAnalytics/GenericAuditLogTab';
-// MERGE: chose dev — dropped TranscriptionJobsPanel + NotificationsAuditPanel imports.
-// To restore: import TranscriptionJobsPanel from '../Components/UsageAnalytics/TranscriptionJobsPanel';
-// To restore: import NotificationsAuditPanel from '../Components/UsageAnalytics/NotificationsAuditPanel';
+import TranscriptionJobsPanel from '../Components/UsageAnalytics/TranscriptionJobsPanel';
+import { TranscriptionService, type TranscriptionJob as TxJob } from '../Services/TranscriptionService';
+import NotificationsAuditPanel from '../Components/UsageAnalytics/NotificationsAuditPanel';
 import { UNSAFE_NavigationContext, useParams, useNavigate } from 'react-router-dom';
 import {
   AdminChatSettingsService,
@@ -74,6 +74,12 @@ const useNavigationConfirm = (when: boolean, message: string) => {
   }, [navigationContext, when, message]);
 };
 
+const AUDIT_SUB_DEFAULTS: Record<string, string> = {
+  activity: 'user-activity',
+  index: 'web-crawler',
+  files: 'transcribe',
+};
+
 export default function SettingsPage() {
   const { t, i18n } = useTranslation('settings');
   const { user, getCredentials, lambdaClient } = useAuth();
@@ -81,12 +87,27 @@ export default function SettingsPage() {
   const { scope: urlScope, tab: urlTab } = useParams<{ scope?: string; tab?: string }>();
   const navigate = useNavigate();
   const [activeKey, setActiveKey] = useState<string>(urlTab || 'users');
-  const validScopes = ['user', 'admin', 'developer', 'audit'] as const;
+  const validScopes = ['user', 'admin', 'developer', 'services'] as const;
   type SettingsScope = (typeof validScopes)[number];
   const [settingsScope, setSettingsScope] = useState<SettingsScope>(
     validScopes.includes(urlScope as SettingsScope) ? (urlScope as SettingsScope) : 'user'
   );
-  const [auditTabKey, setAuditTabKey] = useState<string>(urlScope === 'audit' && urlTab ? urlTab : 'user-activity');
+  const [auditTabKey, setAuditTabKey] = useState<string>(() => {
+    if ((urlScope === 'services' || urlScope === 'audit') && urlTab && urlTab in AUDIT_SUB_DEFAULTS) return urlTab;
+    return 'activity';
+  });
+  const [auditSubKey, setAuditSubKey] = useState<string>(() => AUDIT_SUB_DEFAULTS[auditTabKey] ?? 'user-activity');
+  const handleAuditTabChange = useCallback((key: string) => {
+    setAuditTabKey(key);
+    setAuditSubKey(AUDIT_SUB_DEFAULTS[key] ?? 'user-activity');
+  }, []);
+
+  // Upload/Scan table state (shared data source)
+  const [filesTableJobs, setFilesTableJobs] = useState<TxJob[]>([]);
+  const [filesTableLoading, setFilesTableLoading] = useState(false);
+  const [filesTableNextToken, setFilesTableNextToken] = useState<string | undefined>();
+  const filesTableLoaded = useRef(false);
+
   const brandingFlag =
     typeof window !== 'undefined' ? window.sessionStorage.getItem('BRANDING_PROVIDER_ENABLED') : null;
   const brandingApiEnabled = brandingFlag === 'true';
@@ -277,6 +298,43 @@ export default function SettingsPage() {
       .catch(() => setDataConnectorSettings({ synergy: { status: 'disabled' } }));
   }, [isAdmin, dataConnectorsEnabled, user, numaGet]);
 
+  // Load files table data when the files sub-tab is active (Upload / Scan tabs)
+  const loadFilesTable = useCallback(
+    async (token?: string) => {
+      setFilesTableLoading(true);
+      try {
+        const response = await TranscriptionService.listAll({ limit: 50, nextToken: token }, numaGet);
+        setFilesTableJobs((prev) => (token ? [...prev, ...(response.jobs ?? [])] : (response.jobs ?? [])));
+        setFilesTableNextToken(response.nextToken);
+      } catch (e) {
+        console.error('Failed to load files table data', e);
+      } finally {
+        setFilesTableLoading(false);
+      }
+    },
+    [numaGet]
+  );
+
+  useEffect(() => {
+    if (
+      isAdmin &&
+      currentScope === 'services' &&
+      auditTabKey === 'files' &&
+      (auditSubKey === 'upload' || auditSubKey === 'scan') &&
+      !filesTableLoaded.current
+    ) {
+      filesTableLoaded.current = true;
+      loadFilesTable();
+    }
+  }, [isAdmin, currentScope, auditTabKey, auditSubKey, loadFilesTable]);
+
+  const formatFileSizeSettings = (bytes: number): string => {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+    return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`;
+  };
+
   // Load Agents settings
   useEffect(() => {
     let cancelled = false;
@@ -389,7 +447,7 @@ export default function SettingsPage() {
       case 'developer':
         tab = 'api-keys';
         break;
-      case 'audit':
+      case 'services':
         tab = auditTabKey;
         break;
       default:
@@ -816,8 +874,8 @@ export default function SettingsPage() {
             ? t('header.adminSubtitle')
             : currentScope === 'developer'
               ? t('header.developerSubtitle')
-              : currentScope === 'audit'
-                ? t('header.auditSubtitle')
+              : currentScope === 'services'
+                ? t('header.servicesSubtitle')
                 : t('header.userSubtitle')
         }
         actions={
@@ -849,11 +907,11 @@ export default function SettingsPage() {
               </button>
               <button
                 type="button"
-                className={`settings-scope-toggle__button ${currentScope === 'audit' ? 'active' : ''}`}
-                onClick={() => setSettingsScope('audit')}
+                className={`settings-scope-toggle__button ${currentScope === 'services' ? 'active' : ''}`}
+                onClick={() => setSettingsScope('services')}
               >
                 <i className="bi bi-clock-history" aria-hidden="true"></i>
-                {t('scope.audit')}
+                {t('scope.services')}
               </button>
             </div>
           ) : undefined
@@ -878,21 +936,16 @@ export default function SettingsPage() {
           className="settings-user-tabs-bar"
         />
       )}
-      {isAdmin && currentScope === 'audit' && (
+      {isAdmin && currentScope === 'services' && (
         <SubHeaderTabBar
           items={[
-            { key: 'user-activity', label: t('auditTabs.userActivity'), iconClassName: 'bi bi-people' },
-            { key: 'web-crawler', label: t('auditTabs.webCrawler'), iconClassName: 'bi bi-globe' },
-            { key: 'transcripts', label: t('auditTabs.transcripts'), iconClassName: 'bi bi-file-text' },
-            { key: 'automation', label: t('auditTabs.automation'), iconClassName: 'bi bi-gear' },
-            { key: 'search-index', label: t('auditTabs.searchIndex'), iconClassName: 'bi bi-search' },
-            { key: 'kb-index', label: t('auditTabs.kbIndex'), iconClassName: 'bi bi-database' },
-            // MERGE: chose dev — dropped notifications audit tab.
-            // To restore: { key: 'notifications', label: t('auditTabs.notifications'), iconClassName: 'bi bi-bell' },
+            { key: 'activity', label: t('auditTabs.activity'), iconClassName: 'bi bi-people' },
+            { key: 'index', label: t('auditTabs.index'), iconClassName: 'bi bi-search' },
+            { key: 'files', label: t('auditTabs.files'), iconClassName: 'bi bi-file-text' },
           ]}
           activeKey={auditTabKey}
-          onSelect={setAuditTabKey}
-          ariaLabel={t('scope.audit')}
+          onSelect={handleAuditTabChange}
+          ariaLabel={t('scope.services')}
           className="settings-admin-tabs-bar"
         />
       )}
@@ -1578,15 +1631,261 @@ export default function SettingsPage() {
         )}
 
         {isAdmin && (
-          <div hidden={currentScope !== 'audit'} aria-hidden={currentScope !== 'audit'}>
-            {auditTabKey === 'user-activity' && <AuditPanel />}
-            {auditTabKey === 'web-crawler' && <GenericAuditLogTab logType="web-crawler" />}
-            {/* MERGE: chose dev — simple GenericAuditLogTab for transcripts.
-                To restore: gate with getFlag('TRANSCRIPTION_SERVICE') ? <TranscriptionJobsPanel /> : <GenericAuditLogTab /> */}
-            {auditTabKey === 'transcripts' && <GenericAuditLogTab logType="transcripts" />}
-            {auditTabKey === 'automation' && <GenericAuditLogTab logType="automation" />}
-            {auditTabKey === 'search-index' && <GenericAuditLogTab logType="search-index" />}
-            {auditTabKey === 'kb-index' && <GenericAuditLogTab logType="kb-index" />}
+          <div hidden={currentScope !== 'services'} aria-hidden={currentScope !== 'services'}>
+            {auditTabKey === 'activity' && (
+              <>
+                <div className="d-flex gap-2 mb-3">
+                  <button
+                    className={`btn btn-sm ${auditSubKey === 'user-activity' ? 'btn-primary' : 'btn-outline-secondary'}`}
+                    onClick={() => setAuditSubKey('user-activity')}
+                  >
+                    <i className="bi bi-people me-1" />
+                    {t('auditTabs.userActivity')}
+                  </button>
+                  <button
+                    className={`btn btn-sm ${auditSubKey === 'automation' ? 'btn-primary' : 'btn-outline-secondary'}`}
+                    onClick={() => setAuditSubKey('automation')}
+                  >
+                    <i className="bi bi-gear me-1" />
+                    {t('auditTabs.automation')}
+                  </button>
+                  <button
+                    className={`btn btn-sm ${auditSubKey === 'notifications' ? 'btn-primary' : 'btn-outline-secondary'}`}
+                    onClick={() => setAuditSubKey('notifications')}
+                  >
+                    <i className="bi bi-bell me-1" />
+                    {t('auditTabs.notifications')}
+                  </button>
+                  <button
+                    className={`btn btn-sm ${auditSubKey === 'schedule' ? 'btn-primary' : 'btn-outline-secondary'}`}
+                    onClick={() => setAuditSubKey('schedule')}
+                  >
+                    <i className="bi bi-calendar-event me-1" />
+                    {t('auditTabs.schedule')}
+                  </button>
+                </div>
+                {auditSubKey === 'user-activity' && <AuditPanel />}
+                {auditSubKey === 'automation' && <GenericAuditLogTab logType="automation" />}
+                {auditSubKey === 'notifications' && <NotificationsAuditPanel />}
+                {auditSubKey === 'schedule' && <GenericAuditLogTab logType="schedule" />}
+              </>
+            )}
+
+            {auditTabKey === 'index' && (
+              <>
+                <div className="d-flex gap-2 mb-3">
+                  <button
+                    className={`btn btn-sm ${auditSubKey === 'web-crawler' ? 'btn-primary' : 'btn-outline-secondary'}`}
+                    onClick={() => setAuditSubKey('web-crawler')}
+                  >
+                    <i className="bi bi-globe me-1" />
+                    {t('auditTabs.webCrawler')}
+                  </button>
+                  <button
+                    className={`btn btn-sm ${auditSubKey === 'search-index' ? 'btn-primary' : 'btn-outline-secondary'}`}
+                    onClick={() => setAuditSubKey('search-index')}
+                  >
+                    <i className="bi bi-search me-1" />
+                    {t('auditTabs.searchIndex')}
+                  </button>
+                  <button
+                    className={`btn btn-sm ${auditSubKey === 'kb-index' ? 'btn-primary' : 'btn-outline-secondary'}`}
+                    onClick={() => setAuditSubKey('kb-index')}
+                  >
+                    <i className="bi bi-database me-1" />
+                    {t('auditTabs.kbIndex')}
+                  </button>
+                </div>
+                {auditSubKey === 'web-crawler' && <GenericAuditLogTab logType="web-crawler" />}
+                {auditSubKey === 'search-index' && <GenericAuditLogTab logType="search-index" />}
+                {auditSubKey === 'kb-index' && <GenericAuditLogTab logType="kb-index" />}
+              </>
+            )}
+
+            {auditTabKey === 'files' && (
+              <>
+                <div className="d-flex gap-2 mb-3">
+                  <button
+                    className={`btn btn-sm ${auditSubKey === 'upload' ? 'btn-primary' : 'btn-outline-secondary'}`}
+                    onClick={() => setAuditSubKey('upload')}
+                  >
+                    <i className="bi bi-cloud-arrow-up me-1" />
+                    {t('auditTabs.upload')}
+                  </button>
+                  <button
+                    className={`btn btn-sm ${auditSubKey === 'scan' ? 'btn-primary' : 'btn-outline-secondary'}`}
+                    onClick={() => setAuditSubKey('scan')}
+                  >
+                    <i className="bi bi-shield-check me-1" />
+                    {t('auditTabs.scan')}
+                  </button>
+                  <button
+                    className={`btn btn-sm ${auditSubKey === 'transcribe' ? 'btn-primary' : 'btn-outline-secondary'}`}
+                    onClick={() => setAuditSubKey('transcribe')}
+                  >
+                    <i className="bi bi-file-earmark-text me-1" />
+                    {t('auditTabs.transcribe')}
+                  </button>
+                  <button
+                    className={`btn btn-sm ${auditSubKey === 'sync' ? 'btn-primary' : 'btn-outline-secondary'}`}
+                    onClick={() => setAuditSubKey('sync')}
+                  >
+                    <i className="bi bi-arrow-repeat me-1" />
+                    {t('auditTabs.sync')}
+                  </button>
+                  <button
+                    className={`btn btn-sm ${auditSubKey === 'recovery' ? 'btn-primary' : 'btn-outline-secondary'}`}
+                    onClick={() => setAuditSubKey('recovery')}
+                  >
+                    <i className="bi bi-arrow-counterclockwise me-1" />
+                    {t('auditTabs.recovery')}
+                  </button>
+                </div>
+                {auditSubKey === 'upload' && (
+                  <>
+                    {filesTableLoading && filesTableJobs.length === 0 ? (
+                      <div className="text-center py-5">
+                        <Spinner animation="border" />
+                      </div>
+                    ) : (
+                      <>
+                        <div className="table-responsive">
+                          <Table striped bordered hover>
+                            <thead>
+                              <tr>
+                                <th>{t('auditTabs.uploadTable.fileName')}</th>
+                                <th>{t('auditTabs.uploadTable.fileSize')}</th>
+                                <th>{t('auditTabs.uploadTable.uploadedAt')}</th>
+                                <th>{t('auditTabs.uploadTable.status')}</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {filesTableJobs.length === 0 ? (
+                                <tr>
+                                  <td colSpan={4} className="text-center text-muted py-4">
+                                    {t('auditTabs.uploadTable.noUploads')}
+                                  </td>
+                                </tr>
+                              ) : (
+                                filesTableJobs.map((job) => (
+                                  <tr key={job.jobId}>
+                                    <td className="text-truncate" style={{ maxWidth: '300px' }} title={job.fileName}>
+                                      {job.fileName}
+                                    </td>
+                                    <td>{formatFileSizeSettings(job.fileSize)}</td>
+                                    <td>
+                                      {new Date(job.createdAt).toLocaleString(undefined, {
+                                        dateStyle: 'short',
+                                        timeStyle: 'medium',
+                                      })}
+                                    </td>
+                                    <td>
+                                      <Badge bg="success">{t('auditTabs.uploadTable.uploaded')}</Badge>
+                                    </td>
+                                  </tr>
+                                ))
+                              )}
+                            </tbody>
+                          </Table>
+                        </div>
+                        <div className="d-flex justify-content-between align-items-center">
+                          <span className="text-muted small">
+                            {t('auditTabs.uploadTable.showing', { count: filesTableJobs.length })}
+                          </span>
+                          {filesTableNextToken && (
+                            <Button
+                              variant="outline-primary"
+                              size="sm"
+                              disabled={filesTableLoading}
+                              onClick={() => loadFilesTable(filesTableNextToken)}
+                            >
+                              {filesTableLoading ? (
+                                <Spinner as="span" animation="border" size="sm" />
+                              ) : (
+                                t('auditTabs.uploadTable.loadMore')
+                              )}
+                            </Button>
+                          )}
+                        </div>
+                      </>
+                    )}
+                  </>
+                )}
+                {auditSubKey === 'scan' && (
+                  <>
+                    {filesTableLoading && filesTableJobs.length === 0 ? (
+                      <div className="text-center py-5">
+                        <Spinner animation="border" />
+                      </div>
+                    ) : (
+                      <>
+                        <div className="table-responsive">
+                          <Table striped bordered hover>
+                            <thead>
+                              <tr>
+                                <th>{t('auditTabs.scanTable.fileName')}</th>
+                                <th>{t('auditTabs.scanTable.scannedAt')}</th>
+                                <th>{t('auditTabs.scanTable.scanResult')}</th>
+                                <th>{t('auditTabs.scanTable.duration')}</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {filesTableJobs.length === 0 ? (
+                                <tr>
+                                  <td colSpan={4} className="text-center text-muted py-4">
+                                    {t('auditTabs.scanTable.noScans')}
+                                  </td>
+                                </tr>
+                              ) : (
+                                filesTableJobs.map((job) => (
+                                  <tr key={job.jobId}>
+                                    <td className="text-truncate" style={{ maxWidth: '300px' }} title={job.fileName}>
+                                      {job.fileName}
+                                    </td>
+                                    <td>
+                                      {new Date(job.createdAt).toLocaleString(undefined, {
+                                        dateStyle: 'short',
+                                        timeStyle: 'medium',
+                                      })}
+                                    </td>
+                                    <td>
+                                      <Badge bg="secondary">{t('auditTabs.scanTable.skipped')}</Badge>
+                                    </td>
+                                    <td>{'-'}</td>
+                                  </tr>
+                                ))
+                              )}
+                            </tbody>
+                          </Table>
+                        </div>
+                        <div className="d-flex justify-content-between align-items-center">
+                          <span className="text-muted small">
+                            {t('auditTabs.scanTable.showing', { count: filesTableJobs.length })}
+                          </span>
+                          {filesTableNextToken && (
+                            <Button
+                              variant="outline-primary"
+                              size="sm"
+                              disabled={filesTableLoading}
+                              onClick={() => loadFilesTable(filesTableNextToken)}
+                            >
+                              {filesTableLoading ? (
+                                <Spinner as="span" animation="border" size="sm" />
+                              ) : (
+                                t('auditTabs.scanTable.loadMore')
+                              )}
+                            </Button>
+                          )}
+                        </div>
+                      </>
+                    )}
+                  </>
+                )}
+                {auditSubKey === 'transcribe' && <TranscriptionJobsPanel />}
+                {auditSubKey === 'sync' && <GenericAuditLogTab logType="sync" />}
+                {auditSubKey === 'recovery' && <GenericAuditLogTab logType="recovery" />}
+              </>
+            )}
           </div>
         )}
       </div>

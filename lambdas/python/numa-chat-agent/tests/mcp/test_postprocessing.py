@@ -140,7 +140,7 @@ def test_postprocess_filestash_download(monkeypatch):
     object_key = write_mock.call_args[0][0]
     assert object_key.startswith("downloads/user123/")
     assert read_mock.call_count == 1
-    assert pp.requests.get.call_count == 1  # pylint: disable=no-member
+    assert pp.requests.get.call_count == 1  # type: ignore[union-attr]  # pylint: disable=no-member
     assert result["content"][0]["json"]["type"] == "integrations-file-download"
     files = result["content"][0]["json"]["files"]
     assert files[0]["filename"] == "report.pdf"
@@ -215,7 +215,7 @@ def test_postprocess_filestash_download_from_string(monkeypatch):
     object_key = write_mock.call_args[0][0]
     assert object_key.startswith("downloads/user123/")
     assert read_mock.call_count == 1
-    assert pp.requests.get.call_count == 1  # pylint: disable=no-member
+    assert pp.requests.get.call_count == 1  # type: ignore[union-attr]  # pylint: disable=no-member
     files = result["content"][0]["json"]["files"]
     assert files[0]["filename"] == "report.pdf"
     assert files[0]["filetype"] == "application/octet-stream"

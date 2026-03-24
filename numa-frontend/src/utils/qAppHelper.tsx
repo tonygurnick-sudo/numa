@@ -24,12 +24,10 @@ export const startQappGetSession = async ({ qAppsClient, qAppId, appVersion, ini
       appVersion: Number(appVersion),
       initialValues: Array.isArray(initialValues) ? initialValues : [],
     };
-    console.log('start payload:', payload);
     const command = new StartQAppSessionCommand(payload);
     const response = await qAppsClient.send(command);
 
     if (response) {
-      console.log('Q App session started successfully:', response);
       return response.sessionId;
     }
   } catch (error) {
@@ -48,14 +46,9 @@ export const updateQSessionData = async ({ qAppsClient, sessionId, values }) => 
       sessionId: sessionId,
       values: values,
     };
-    console.log('update payload:', payload);
     const command = new UpdateQAppSessionCommand(payload);
     const response = await qAppsClient.send(command);
 
-    // Simulating an API response.
-    // const response = { sessionId: sessionId }; // Simulated response
-
-    console.log('update response:', response);
     if (response) {
       return response.sessionId;
     }
@@ -115,7 +108,7 @@ export const fetchAndEncodeFile = async (fileUrl) => {
     // Additional validation
     const isValidBase64 = /^[A-Za-z0-9+/]+={0,3}$/.test(paddedBase64);
     if (!isValidBase64) {
-      console.log('Invalid characters:', paddedBase64.match(/[^A-Za-z0-9+/=]/g));
+      console.error('Invalid characters:', paddedBase64.match(/[^A-Za-z0-9+/=]/g));
     }
 
     // Validate base64 string (including proper padding)
@@ -183,17 +176,10 @@ export const importFileToQApp = async ({ qAppsClient, sessionId, qAppId, cardId,
       sessionId: sessionId,
     };
 
-    // Log full payload structure (without actual base64 content)
-    console.log('Import file payload structure:', {
-      ...payload,
-      fileContentsBase64: `<data URL length: ${dataUrl.length}>`,
-    });
-
     const command = new ImportDocumentCommand(payload);
     const response = await qAppsClient.send(command);
 
     if (response) {
-      console.log('File imported successfully:', response);
       return response.fileId;
     } else {
       throw new Error('No response received from import command');
@@ -254,11 +240,8 @@ export const createQApp = async ({ qAppsClient, setLoading, setError, setRespons
     setError(null);
     setResponse(null);
 
-    console.log('Creating Q App with configuration:', exampleItem);
-
     const command = new CreateQAppCommand(exampleItem);
     const response = await qAppsClient.send(command);
-    console.log('Q App created successfully:', response);
 
     if (response) {
       setResponse({

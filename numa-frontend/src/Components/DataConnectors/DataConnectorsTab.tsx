@@ -8,25 +8,30 @@ import { OAuthProvidersService } from '../../Services/OAuthProvidersService';
 import type { DataConnectorStatus } from '../../types/dataConnectors';
 import type { OAuthProviderInfo } from '../../types/oauthProviders';
 import type { VaultSecretMetadata } from '../../Services/VaultService';
-import { listCompanySecrets, deleteCompanySecret } from '../../Services/VaultService';
+import {
+  listCompanySecrets,
+  deleteCompanySecret,
+  getCompanySecret,
+  updateCompanySecret,
+} from '../../Services/VaultService';
 import { useNumaRequest } from '../../Providers/NumaRequestContext';
 import { useAuth } from '../../Providers/AuthProvider';
-import { SynergyConnectorCard } from './SynergyConnectorCard';
+// SynergyConnectorCard removed — Synergy now uses standard connector flow
 import { OAuthConnectorCard } from './OAuthConnectorCard';
-import { ContactRequiredCard } from './ContactRequiredCard';
-import { SynergyWizard } from './wizards/SynergyWizard';
+// SynergyWizard removed — Synergy now uses ApiKeyWizard via standard flow
 import { OAuthWizard } from './wizards/OAuthWizard';
 import { PlatformPickerModal } from './wizards/PlatformPickerModal';
 import { ApiKeyWizard } from './wizards/ApiKeyWizard';
-// MERGE: chose dev — dropped GoogleCloudSetupWizard + EventConfigPanel imports.
-// To restore: import { GoogleCloudSetupWizard } from './wizards/GoogleCloudSetupWizard';
-// To restore: import EventConfigPanel from './EventConfigPanel';
+import EventConfigPanel from './EventConfigPanel';
 import type { GlobalDataConnectorSettingsMap } from '../../Services/AdminDataConnectorsService';
 import {
   getOAuthProviderTemplates,
   getOAuthConnectors,
   getNonOAuthConnectors,
   getContactRequired,
+  getConnectorById,
+  getOAuthSecretId,
+  getConnectorsByPlatform,
 } from './connectorRegistry';
 import type { ConnectorTemplate } from './connectorRegistry';
 
@@ -40,11 +45,11 @@ type DataConnectorsTabProps = {
 
 export const DataConnectorsTab = ({ adminSettings }: DataConnectorsTabProps) => {
   const { t } = useTranslation('integrations');
-  const { numaGet, numaPost } = useNumaRequest();
+  const { numaGet } = useNumaRequest();
   const { user } = useAuth();
   const isAdmin = Boolean(user?.groups?.includes('admin'));
 
-  const [statusItems, setStatusItems] = useState<DataConnectorStatus[]>([]);
+  const [_statusItems, setStatusItems] = useState<DataConnectorStatus[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
 
@@ -62,7 +67,7 @@ export const DataConnectorsTab = ({ adminSettings }: DataConnectorsTabProps) => 
   // Wizard state
   // ---------------------------------------------------------------------------
 
-  const [synergyWizardOpen, setSynergyWizardOpen] = useState(false);
+  // synergyWizardOpen removed — Synergy now uses standard connector flow
   const [oauthWizardOpen, setOauthWizardOpen] = useState(false);
   const [oauthWizardProviderId, setOauthWizardProviderId] = useState<string | undefined>(undefined);
   const [oauthWizardIsNew, setOauthWizardIsNew] = useState(false);
@@ -70,11 +75,9 @@ export const DataConnectorsTab = ({ adminSettings }: DataConnectorsTabProps) => 
   const [platformPickerOpen, setPlatformPickerOpen] = useState(false);
   const [apiKeyWizardOpen, setApiKeyWizardOpen] = useState(false);
   const [apiKeyWizardConnector, setApiKeyWizardConnector] = useState<ConnectorTemplate | null>(null);
-  // MERGE: kept disconnectingId — used by handleOAuthDisconnect and handleConnectorDelete.
   const [disconnectingId, setDisconnectingId] = useState<string | null>(null);
-  // MERGE: chose dev — dropped googleSetupWizardOpen + eventConfigConnectorId state.
-  // To restore: const [googleSetupWizardOpen, setGoogleSetupWizardOpen] = useState(false);
-  // To restore: const [eventConfigConnectorId, setEventConfigConnectorId] = useState<string | null>(null);
+  const [recentlySavedIds, setRecentlySavedIds] = useState<Set<string>>(new Set());
+  const [eventConfigConnectorId, setEventConfigConnectorId] = useState<string | null>(null);
 
   // ---------------------------------------------------------------------------
   // Registry-derived templates (for backward compat with OAuthWizard)
@@ -100,15 +103,18 @@ export const DataConnectorsTab = ({ adminSettings }: DataConnectorsTabProps) => 
     }
   }, [numaGet]);
 
-  const loadOAuthProviders = useCallback(async () => {
-    if (!oauthAvailable) return;
-    try {
-      const providers = await OAuthProvidersService.listProviders();
-      setOauthProviders(providers);
-    } catch {
-      setOauthProviders([]);
-    }
-  }, [oauthAvailable]);
+  const loadOAuthProviders = useCallback(
+    async (refresh = false) => {
+      if (!oauthAvailable) return;
+      try {
+        const providers = await OAuthProvidersService.listProviders(refresh);
+        setOauthProviders(providers);
+      } catch {
+        setOauthProviders([]);
+      }
+    },
+    [oauthAvailable]
+  );
 
   const loadCompanySecrets = useCallback(async () => {
     if (!vaultEnabled) return;
@@ -126,22 +132,26 @@ export const DataConnectorsTab = ({ adminSettings }: DataConnectorsTabProps) => 
     loadCompanySecrets();
   }, [loadStatus, loadOAuthProviders, loadCompanySecrets]);
 
-  // Helper: check if a provider has COMPANY credentials configured (OAuth or connector)
-  const getProviderSecret = (providerId: string): VaultSecretMetadata | undefined =>
-    companySecrets.find((s) => s.name === `oauth-client-${providerId}`);
-
   const getConnectorSecret = (connectorId: string): VaultSecretMetadata | undefined =>
     companySecrets.find((s) => s.name === `connector-${connectorId}`);
 
   // Set of all configured connector IDs (for platform picker badge)
   const configuredIds = useMemo(() => {
     const ids = new Set<string>();
+    // Non-OAuth connectors: direct vault match
     for (const s of companySecrets) {
-      if (s.name.startsWith('oauth-client-')) ids.add(s.name.replace('oauth-client-', ''));
       if (s.name.startsWith('connector-')) ids.add(s.name.replace('connector-', ''));
     }
+    // OAuth connectors: backend provider list (per-connector entries)
+    for (const p of oauthProviders) {
+      ids.add(p.id);
+    }
+    // Include recently saved connectors that may not be in backend cache yet
+    for (const id of recentlySavedIds) {
+      ids.add(id);
+    }
     return ids;
-  }, [companySecrets]);
+  }, [companySecrets, oauthProviders, recentlySavedIds]);
 
   // Filter secrets by category for each wizard
   const oauthSecrets = useMemo(() => companySecrets.filter((s) => s.category === 'OAuth Clients'), [companySecrets]);
@@ -171,7 +181,8 @@ export const DataConnectorsTab = ({ adminSettings }: DataConnectorsTabProps) => 
     });
 
     for (const provider of oauthProviders) {
-      if (!registryIds.has(provider.id)) {
+      // Skip platform-name entries (e.g. 'google') — only show individual connectors
+      if (!registryIds.has(provider.id) && getConnectorsByPlatform(provider.id).length === 0) {
         merged.push(provider);
       }
     }
@@ -190,11 +201,7 @@ export const DataConnectorsTab = ({ adminSettings }: DataConnectorsTabProps) => 
   // Wizard open helpers
   // ---------------------------------------------------------------------------
 
-  const synergyStatus = statusItems.find((item) => item.connector_id === 'synergy');
-  const isConnected = synergyStatus?.status === 'connected';
   const adminDisabled = adminSettings?.synergy?.status === 'disabled';
-
-  const openSynergyWizard = () => setSynergyWizardOpen(true);
 
   const openOAuthWizardExisting = (providerId: string) => {
     setOauthWizardProviderId(providerId);
@@ -219,13 +226,12 @@ export const DataConnectorsTab = ({ adminSettings }: DataConnectorsTabProps) => 
     }
   };
 
-  const handleOAuthSaved = async () => {
+  const handleOAuthSaved = async (connectorId?: string) => {
+    if (connectorId) {
+      setRecentlySavedIds((prev) => new Set([...prev, connectorId]));
+    }
     OAuthProvidersService.clearProvidersCache();
-    await Promise.all([loadCompanySecrets(), loadOAuthProviders()]);
-  };
-
-  const handleSynergySaved = async () => {
-    await loadStatus();
+    await Promise.all([loadCompanySecrets(), loadOAuthProviders(true)]);
   };
 
   const handleApiKeySaved = async () => {
@@ -241,12 +247,38 @@ export const DataConnectorsTab = ({ adminSettings }: DataConnectorsTabProps) => 
     if (!confirmed) return;
     setDisconnectingId(providerId);
     try {
-      try {
-        await OAuthProvidersService.disconnect(providerId);
-      } catch {
-        // May fail if no tokens exist — continue to delete vault secret
+      const connector = getConnectorById(providerId);
+      const isOAuth = connector?.authType === 'oauth2';
+
+      // Only try OAuth revoke for OAuth connectors
+      if (isOAuth) {
+        try {
+          await OAuthProvidersService.disconnect(providerId);
+        } catch {
+          // May fail if no tokens exist — continue to delete vault secret
+        }
       }
-      await deleteCompanySecret(`oauth-client-${providerId}`);
+
+      if (connector?.oauthPlatform) {
+        // Platform connector: remove from enabled_connectors, only delete secret if none remain
+        const secretName = `oauth-client-${getOAuthSecretId(providerId)}`;
+        const full = await getCompanySecret(secretName);
+        const enabledStr = full?.fields?.enabled_connectors || '';
+        const enabled = new Set(enabledStr.split(',').filter(Boolean));
+        enabled.delete(providerId);
+        if (enabled.size === 0) {
+          await deleteCompanySecret(secretName);
+        } else {
+          await updateCompanySecret(secretName, {
+            fields: { enabled_connectors: Array.from(enabled).join(',') },
+          });
+        }
+      } else if (isOAuth) {
+        await deleteCompanySecret(`oauth-client-${providerId}`);
+      } else {
+        // Token/API-key connector: secret is connector-{id}
+        await deleteCompanySecret(`connector-${providerId}`);
+      }
     } catch (err) {
       const msg =
         err instanceof Error ? err.message : t('dataConnectors.errors.disconnectFailed', { name: displayName });
@@ -306,8 +338,6 @@ export const DataConnectorsTab = ({ adminSettings }: DataConnectorsTabProps) => 
             {t('dataConnectors.available', { count: totalConnectors })}
           </h4>
         </div>
-        {/* MERGE: chose dev — single Add Connector button; dropped Google Cloud setup button.
-            To restore: wrap in div.d-flex.gap-2.ms-auto and add Google setup button. */}
         {isAdmin && (
           <Button variant="outline-primary" size="sm" onClick={() => setPlatformPickerOpen(true)} className="ms-auto">
             <Plus size={14} className="me-1" />
@@ -316,52 +346,39 @@ export const DataConnectorsTab = ({ adminSettings }: DataConnectorsTabProps) => 
         )}
       </div>
       <div className="mt-3">
-        {/* Synergy Card */}
-        <SynergyConnectorCard
-          status={synergyStatus}
-          onConnect={openSynergyWizard}
-          onTest={openSynergyWizard}
-          onSettings={openSynergyWizard}
-          isConnecting={false}
-          adminDisabled={adminDisabled}
-        />
-
-        {/* OAuth Provider Cards */}
-        {mergedOAuthProviders.map((provider) => {
-          const credentialConfigured = !!getProviderSecret(provider.id);
-          return (
+        {/* OAuth Provider Cards — only show configured ones */}
+        {mergedOAuthProviders
+          .filter((provider) => configuredIds.has(provider.id))
+          .map((provider) => (
             <OAuthConnectorCard
               key={provider.id}
               providerId={provider.id}
               displayName={provider.display_name}
               icon={provider.icon}
               description={provider.description}
-              credentialConfigured={credentialConfigured}
+              credentialConfigured
               onConfigure={() => openOAuthWizardExisting(provider.id)}
               onTest={() => handleOAuthTest(provider.id)}
               isLoading={false}
-              adminDisabled={!isAdmin && !credentialConfigured}
-              onDisconnect={
-                isAdmin && credentialConfigured
-                  ? () => handleOAuthDisconnect(provider.id, provider.display_name)
-                  : undefined
-              }
+              adminDisabled={false}
+              onDisconnect={isAdmin ? () => handleOAuthDisconnect(provider.id, provider.display_name) : undefined}
               isDisconnecting={disconnectingId === provider.id}
             />
-          );
-        })}
+          ))}
 
-        {/* Non-OAuth Connector Cards (API Key, Token, Username/Password) */}
-        {nonOAuthConnectors.map((connector) => {
-          const credentialConfigured = !!getConnectorSecret(connector.id);
-          return (
+        {/* Non-OAuth Connector Cards — only show configured ones, exclude those already in backend provider list */}
+        {nonOAuthConnectors
+          .filter(
+            (connector) => !!getConnectorSecret(connector.id) && !oauthProviders.some((p) => p.id === connector.id)
+          )
+          .map((connector) => (
             <OAuthConnectorCard
               key={connector.id}
               providerId={connector.id}
               displayName={connector.displayName}
               icon={connector.icon}
               description={connector.description}
-              credentialConfigured={credentialConfigured}
+              credentialConfigured
               onConfigure={() => {
                 setApiKeyWizardConnector(connector);
                 setApiKeyWizardOpen(true);
@@ -371,22 +388,11 @@ export const DataConnectorsTab = ({ adminSettings }: DataConnectorsTabProps) => 
                 setApiKeyWizardOpen(true);
               }}
               isLoading={false}
-              adminDisabled={!isAdmin && !credentialConfigured}
-              // MERGE: kept — disconnect/isDisconnecting props needed by handleConnectorDelete
-              onDisconnect={
-                isAdmin && credentialConfigured
-                  ? () => handleConnectorDelete(connector.id, connector.displayName)
-                  : undefined
-              }
+              adminDisabled={false}
+              onDisconnect={isAdmin ? () => handleConnectorDelete(connector.id, connector.displayName) : undefined}
               isDisconnecting={disconnectingId === connector.id}
             />
-          );
-        })}
-
-        {/* Contact Required Cards */}
-        {contactRequiredConnectors.map((connector) => (
-          <ContactRequiredCard key={connector.id} connector={connector} />
-        ))}
+          ))}
       </div>
 
       {/* Platform Picker Modal */}
@@ -395,15 +401,6 @@ export const DataConnectorsTab = ({ adminSettings }: DataConnectorsTabProps) => 
         onHide={() => setPlatformPickerOpen(false)}
         onSelect={handlePlatformSelected}
         configuredIds={configuredIds}
-      />
-
-      {/* Synergy Configuration Wizard */}
-      <SynergyWizard
-        show={synergyWizardOpen}
-        onHide={() => setSynergyWizardOpen(false)}
-        onSaved={handleSynergySaved}
-        existingServer={isConnected ? synergyStatus?.config?.server : undefined}
-        numaPost={numaPost}
       />
 
       {/* OAuth Configuration Wizard */}
@@ -431,8 +428,25 @@ export const DataConnectorsTab = ({ adminSettings }: DataConnectorsTabProps) => 
           existingSecrets={connectorSecrets}
         />
       )}
-      {/* MERGE: chose dev — dropped GoogleCloudSetupWizard and EventConfigPanel.
-          To restore: add state + imports + JSX. Files: wizards/GoogleCloudSetupWizard.tsx, EventConfigPanel.tsx */}
+      {/* Event Config Panel (shown when a connector with eventTypes is selected) */}
+      {eventConfigConnectorId &&
+        (() => {
+          const connector = getConnectorById(eventConfigConnectorId);
+          if (!connector?.eventTypes) return null;
+          return (
+            <div className="mt-3">
+              <div className="d-flex justify-content-between align-items-center mb-2">
+                <h5 className="mb-0">
+                  {t('dataConnectors.events.title')} — {connector.displayName}
+                </h5>
+                <Button variant="link" size="sm" onClick={() => setEventConfigConnectorId(null)}>
+                  {t('dataConnectors.events.close')}
+                </Button>
+              </div>
+              <EventConfigPanel connectorId={connector.id} eventTypes={connector.eventTypes} />
+            </div>
+          );
+        })()}
     </div>
   );
 };

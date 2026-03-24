@@ -7,13 +7,14 @@ import type { AuditLogEntry } from '../../Services/AdminAuditLogService';
 
 interface GenericAuditLogTabProps {
   logType: string;
+  actionButton?: React.ReactNode;
 }
 
 /**
  * Reusable audit log table component for system log types.
  * Displays entries with status filter, pagination, and detail modal.
  */
-export default function GenericAuditLogTab({ logType }: GenericAuditLogTabProps) {
+export default function GenericAuditLogTab({ logType, actionButton }: GenericAuditLogTabProps) {
   const { t } = useTranslation('settings');
   const { numaGet } = useNumaRequest();
 
@@ -70,6 +71,24 @@ export default function GenericAuditLogTab({ logType }: GenericAuditLogTabProps)
     );
   };
 
+  const formatDuration = (ms: number): string => {
+    if (ms < 1000) return `${ms}ms`;
+    const seconds = Math.floor(ms / 1000);
+    if (seconds < 60) return `${seconds}s`;
+    const minutes = Math.floor(seconds / 60);
+    return `${minutes}m ${seconds % 60}s`;
+  };
+
+  const formatDetails = (log: AuditLogEntry): string => {
+    const d = log.details as Record<string, unknown> | undefined;
+    if (d?.fileName) {
+      let text = d.fileName as string;
+      if (d.processingTimeMs) text += ` — ${formatDuration(d.processingTimeMs as number)}`;
+      return text;
+    }
+    return log.userName || log.userId || '-';
+  };
+
   const copyToClipboard = () => {
     if (selectedLog) {
       navigator.clipboard.writeText(JSON.stringify(selectedLog, null, 2));
@@ -78,7 +97,7 @@ export default function GenericAuditLogTab({ logType }: GenericAuditLogTabProps)
 
   return (
     <>
-      <Row className="mb-3">
+      <Row className="mb-3 align-items-center">
         <Col md={4}>
           <Form.Select
             value={statusFilter}
@@ -92,6 +111,7 @@ export default function GenericAuditLogTab({ logType }: GenericAuditLogTabProps)
             <option value="pending">{t('auditLogs.statuses.pending')}</option>
           </Form.Select>
         </Col>
+        {actionButton && <Col className="text-end">{actionButton}</Col>}
       </Row>
 
       {loading ? (
@@ -132,7 +152,7 @@ export default function GenericAuditLogTab({ logType }: GenericAuditLogTabProps)
                       </td>
                       <td>{statusBadge(log.status)}</td>
                       <td className="text-truncate" style={{ maxWidth: '300px' }}>
-                        {log.userName || log.userId || '-'}
+                        {formatDetails(log)}
                       </td>
                       <td>
                         <Button size="sm" variant="outline-primary" onClick={() => setSelectedLog(log)}>

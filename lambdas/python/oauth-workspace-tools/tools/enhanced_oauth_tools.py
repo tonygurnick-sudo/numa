@@ -57,14 +57,14 @@ except ImportError as e:
 
     COMPANY_USER_ID = "COMPANY"
 
-    class TemplateValidator:
+    class TemplateValidator:  # type: ignore[no-redef]
         def __init__(self, *args):
             pass
 
         def validate_complete_secret(self, *args):
             return True, []
 
-    class TemplateManager:
+    class TemplateManager:  # type: ignore[no-redef]
         def __init__(self, *args):
             pass
 
@@ -185,7 +185,7 @@ def _get_provider_credentials(provider: str) -> Optional[Dict[str, str]]:
     return None
 
 
-def _get_friendly_secret_name(provider: str, connector_name: str = None) -> str:
+def _get_friendly_secret_name(provider: str, connector_name: str | None = None) -> str:
     """Generate user-friendly secret name for OAuth connector."""
     friendly_provider = FRIENDLY_NAMES.get(provider, provider.capitalize())
 
@@ -268,7 +268,7 @@ def get_all_user_oauth_connectors(user_sub: str) -> Dict[str, List[Dict[str, Any
     """
     try:
         user_vault = get_consolidated_vault(user_sub, CLIENT_NAME)
-        connectors_by_provider = {}
+        connectors_by_provider: dict[str, list[dict[str, str]]] = {}
 
         for secret_name, secret_data in user_vault.get("secrets", {}).items():
             secret_type = secret_data.get("type", "")
@@ -346,7 +346,7 @@ def _is_token_valid(fields: Dict[str, Any]) -> bool:
 
 
 async def get_oauth_token(
-    provider: str, user_sub: str, connector_name: str = None
+    provider: str, user_sub: str, connector_name: str | None = None
 ) -> Optional[str]:
     """Get valid OAuth access token for user and provider from consolidated vault.
 
@@ -434,7 +434,10 @@ async def _refresh_oauth_token(
 
 
 def create_oauth_connector_from_template(
-    provider: str, user_sub: str, oauth_data: Dict[str, Any], connector_name: str = None
+    provider: str,
+    user_sub: str,
+    oauth_data: Dict[str, Any],
+    connector_name: str | None = None,
 ) -> Dict[str, Any]:
     """Create OAuth connection using template.
 
@@ -528,7 +531,7 @@ def create_oauth_connector_from_template(
 
 
 def create_custom_oauth_connector(
-    user_sub: str, oauth_data: Dict[str, Any], connector_name: str = None
+    user_sub: str, oauth_data: Dict[str, Any], connector_name: str | None = None
 ) -> Dict[str, Any]:
     """Create custom OAuth connection without template (free-form).
 

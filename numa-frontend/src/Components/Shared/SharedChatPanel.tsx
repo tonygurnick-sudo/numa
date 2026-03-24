@@ -15,13 +15,20 @@ interface SharedChatPanelProps {
   maxCalls?: number | null; // null/undefined = unlimited
   callCount?: number;
   onCallComplete?: () => void;
+  chatStatus?: 'ready' | 'pending' | 'error';
 }
 
 /**
  * Chat panel for shared document Q&A with streaming responses.
  * Displays messages and handles real-time token streaming from Nova.
  */
-export const SharedChatPanel = ({ uuid, maxCalls, callCount = 0, onCallComplete }: SharedChatPanelProps) => {
+export const SharedChatPanel = ({
+  uuid,
+  maxCalls,
+  callCount = 0,
+  onCallComplete,
+  chatStatus = 'ready',
+}: SharedChatPanelProps) => {
   const { t } = useTranslation('shared');
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
@@ -171,7 +178,16 @@ export const SharedChatPanel = ({ uuid, maxCalls, callCount = 0, onCallComplete 
       </div>
 
       <div className="messages-container">
-        {messages.length === 0 ? (
+        {chatStatus === 'pending' ? (
+          <div className="empty-state">
+            <i className="bi bi-lock" />
+            <p>
+              {t('chatLocked.message', {
+                defaultValue: 'Document content is being processed. You can view the document while you wait.',
+              })}
+            </p>
+          </div>
+        ) : messages.length === 0 ? (
           <div className="empty-state">
             <i className="bi bi-chat-dots" />
             <p>{t('chat.emptyState')}</p>
@@ -195,7 +211,29 @@ export const SharedChatPanel = ({ uuid, maxCalls, callCount = 0, onCallComplete 
         <div ref={messagesEndRef} />
       </div>
 
-      {isLimitReached ? (
+      {chatStatus === 'pending' ? (
+        <div className="processing-banner">
+          <div className="d-flex align-items-center">
+            <div className="spinner-border spinner-border-sm me-3 text-primary" role="status" aria-hidden="true" />
+            <div>
+              <strong>{t('chatLocked.title', { defaultValue: 'Chat Preparing' })}</strong>
+              <p className="mb-0">
+                {t('chatLocked.message', {
+                  defaultValue: 'Document content is being processed. You can view the document while you wait.',
+                })}
+              </p>
+            </div>
+          </div>
+        </div>
+      ) : chatStatus === 'error' ? (
+        <div className="limit-reached-banner">
+          <i className="bi bi-exclamation-triangle" />
+          <div>
+            <strong>{t('chatLocked.failedTitle', { defaultValue: 'Chat Unavailable' })}</strong>
+            <p>{t('chatLocked.failed', { defaultValue: 'Chat is not available for this document.' })}</p>
+          </div>
+        </div>
+      ) : isLimitReached ? (
         <div className="limit-reached-banner">
           <i className="bi bi-x-circle" />
           <div>

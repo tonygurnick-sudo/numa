@@ -34,6 +34,13 @@ FALLBACK_TOKEN_URLS = {
     "dropbox": "https://api.dropboxapi.com/oauth2/token",
 }
 
+# Platform connectors sharing a single OAuth client
+_OAUTH_PLATFORM_MAP: dict[str, str] = {
+    "gmail": "google",
+    "googledrive": "google",
+    "onedrive": "microsoft",
+}
+
 # In-memory caches with TTL
 _company_config_cache: dict[str, tuple[dict, float]] = {}
 _company_vault_cache: tuple[dict | None, float] = (None, 0.0)
@@ -180,6 +187,41 @@ def _put_user_consolidated_vault(user_id: str, vault_data: dict) -> bool:
         return False
 
 
+def put_user_oauth_secret(user_id: str, provider: str, secret_data: dict) -> bool:
+    """Store/update an OAuth secret in the user's consolidated vault."""
+    vault_data = _get_user_consolidated_vault(user_id) or {
+        "secrets": {},
+        "metadata": {},
+    }
+    secrets = vault_data.get("secrets") or {}
+    secret_key = f"oauth-{provider}"
+    now = (
+        __import__("datetime")
+        .datetime.now(__import__("datetime").timezone.utc)
+        .isoformat()
+    )
+
+    existing = secrets.get(secret_key, {})
+    secrets[secret_key] = {
+        "id": existing.get("id") or __import__("secrets").token_hex(16),
+        "name": f"OAuth tokens for {provider}",
+        "description": f"OAuth tokens for {provider}",
+        "category": "OAuth Tokens",
+        "type": "oauth",
+        "fields": secret_data,
+        "created_at": existing.get("created_at") or now,
+        "updated_at": now,
+    }
+
+    vault_data["secrets"] = secrets
+    vault_data["metadata"] = {
+        **(vault_data.get("metadata") or {}),
+        "updated_at": now,
+        "secret_count": len(secrets),
+    }
+    return _put_user_consolidated_vault(user_id, vault_data)
+
+
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
@@ -204,36 +246,57 @@ def get_company_provider_config(provider: str) -> Optional[dict]:
         if not secrets:
             return None
 
-        secret_name = f"oauth-client-{provider}"
+        # Try oauth-client-{platform} first, then connector-{provider}
+        platform = _OAUTH_PLATFORM_MAP.get(provider, provider)
+        secret_name = f"oauth-client-{platform}"
         secret_entry = secrets.get(secret_name)
+        if not secret_entry:
+            secret_name = f"connector-{provider}"
+            secret_entry = secrets.get(secret_name)
+
+        # Cache miss — bust and retry (secret may have just been created)
+        global _company_vault_cache
+        if not secret_entry and _company_vault_cache[0] is not None:
+            _company_vault_cache = (None, 0.0)
+            secrets = _get_consolidated_company_vault()
+            secret_entry = (
+                (
+                    secrets.get(f"oauth-client-{platform}")
+                    or secrets.get(f"connector-{provider}")
+                )
+                if secrets
+                else None
+            )
+
         if not secret_entry:
             logger.warning(
                 f"No COMPANY vault secret found for {provider} "
-                f'(looked for "{secret_name}" in consolidated vault)'
+                f'(looked for "oauth-client-{platform}" and "connector-{provider}")'
             )
             return None
 
         # Extract credentials from the secret entry's fields
         fields = secret_entry.get("fields") or secret_entry
-        client_id = fields.get("client_id")
+        client_id = fields.get("client_id", "")
         client_secret = fields.get("client_secret")
 
-        if not client_id or not client_secret:
+        instance_url = fields.get("instance_url", "")
+
+        # OAuth connectors need client_id; token connectors need instance_url
+        if not client_id and not instance_url:
             logger.warning(
-                f"COMPANY vault secret for {provider} missing client_id or client_secret"
+                f"COMPANY vault secret for {provider} missing both client_id and instance_url"
             )
             return None
 
         # Build config: prefer vault fields, fall back for backward compat
-        token_url = fields.get("token_url") or FALLBACK_TOKEN_URLS.get(provider)
-        if not token_url:
-            logger.warning(f"No token_url for {provider} in vault or fallback")
-            return None
+        token_url = fields.get("token_url") or FALLBACK_TOKEN_URLS.get(provider) or ""
 
         config = {
             "client_id": client_id,
             "client_secret": client_secret,
             "token_url": token_url,
+            "instance_url": instance_url,
         }
 
         _company_config_cache[provider] = (config, time.time())

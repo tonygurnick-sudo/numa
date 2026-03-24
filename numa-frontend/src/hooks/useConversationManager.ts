@@ -136,15 +136,7 @@ export const useConversationManager = (options: UseConversationManagerOptions = 
             metaPayload.isAgentConversation = true;
           }
 
-          console.log('[DEBUG] Creating conversation meta record:', {
-            conversationId: targetId,
-            isWorkspaceMode,
-            userId: sub,
-          });
-
           await numaChatDynamoUtils.addMessage(metaPayload as never);
-
-          console.log('[DEBUG] Meta record created successfully for conversation:', targetId);
 
           if (!agentInfo) {
             await numaChatDynamoUtils.addMessage({

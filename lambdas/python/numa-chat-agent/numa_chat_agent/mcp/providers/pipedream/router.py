@@ -1706,9 +1706,8 @@ class ToolsOnlyIntegrationRouter:
             client_id=id(self._mcp_client),
             has_backup_client=bool(self._backup_client),
         )
+        tool_use_id = str(uuid.uuid4())
         try:
-            tool_use_id = str(uuid.uuid4())
-
             logger.critical(
                 (
                     "RELIABILITY_CRITICAL: MCP tool execution proceeding WITHOUT connection "

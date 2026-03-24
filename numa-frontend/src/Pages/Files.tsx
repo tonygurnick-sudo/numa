@@ -32,17 +32,20 @@ import {
   getFileIcon,
   formatFileSize,
   filePath as buildFilePath,
-  listProjects,
 } from '../Services/filesService';
 import type { FileItem } from '../Services/filesService';
 import { listMyShares, deleteShare } from '../Services/sharedChatService';
 import type { ShareListItem } from '../Services/sharedChatService';
 import { useShareAnalytics } from '../hooks/useShareAnalytics';
 import { calculateShareMetrics, exportShareAnalyticsAsCSV } from '../utils/messageAnalyticsUtils';
-import type { FileScope, FolderContents, ProjectSummary } from '../Services/filesService';
+import type { FileScope, FolderContents } from '../Services/filesService';
 import { CreateShareModal } from '../Components/Files/CreateShareModal';
 import { FilesUploadModal } from '../Components/Files/FilesUploadModal';
 import FileContextMenu from '../Components/Files/FileContextMenu';
+import { ComposeEmailModal } from '../Components/Files/ComposeEmailModal';
+import { ConnectTokenModal } from '../Components/Files/ConnectTokenModal';
+import { EmailViewerModal } from '../Components/Files/EmailViewerModal';
+import { getConnectorById } from '../Components/DataConnectors/connectorRegistry';
 import type { FileContextAction, FileOrFolder, RemoteFileItem } from '../Components/Files/FileContextMenu';
 import FileSelectionToolbar from '../Components/Files/FileSelectionToolbar';
 import FileRowActions from '../Components/Files/FileRowActions';
@@ -57,18 +60,20 @@ import type { TranscriptionJob, TranscriptionOutput } from '../Services/Transcri
 import { useFileSelection } from '../hooks/useFileSelection';
 import { useRemoteBrowse } from '../hooks/useRemoteBrowse';
 import { listObjectsInFolder } from '../utils/s3Utils';
+import { filterIgnoredFiles, getIgnorePatterns, loadIgnoreFromS3, saveIgnoreToS3 } from '../utils/fileIgnoreList';
 import { useFilesCache } from './useFilesCache';
 import { DataConnectorsService } from '../Services/DataConnectorsService';
 import { OAuthProvidersService } from '../Services/OAuthProvidersService';
 import type { DataConnectorStatus } from '../types/dataConnectors';
 import type { OAuthProviderType, OAuthProviderInfo, OAuthConnectionStatus } from '../types/oauthProviders';
-import { SynergyIcon } from '../Components/DataConnectors/SynergyConnectorCard';
+// SynergyIcon removed — Synergy now uses generic provider cards
+// import { SynergyIcon } from '../Components/DataConnectors/SynergyConnectorCard';
 import { VaultSecretForm } from '../Components/Vault/VaultSecretForm';
 import type { VaultSecretMetadata, CreateSecretPayload } from '../Services/VaultService';
 import { listSecrets, getSecret, createSecret, listCategories } from '../Services/VaultService';
 import './Files.scss';
 
-type TabType = 'projects' | 'company' | 'my' | 'shared' | 'remote' | 'transcripts';
+type TabType = 'shared' | 'remote' | 'transcripts' | 'uploads';
 type ViewMode = 'list' | 'grid' | 'gallery';
 
 interface RemoteTransfer {
@@ -78,22 +83,18 @@ interface RemoteTransfer {
   status: 'uploading' | 'done' | 'error';
 }
 
-const getScope = (tab: TabType | null, projectId?: string): FileScope => {
+const getScope = (tab: TabType | null): FileScope => {
   switch (tab) {
-    case 'my':
-      return { type: 'my' };
-    case 'company':
-      return { type: 'company' };
-    case 'projects':
-      return projectId ? { type: 'project', projectId } : { type: 'my' };
     case 'shared':
       return { type: 'my' }; // Not used for shared tab, but satisfies type
     case 'remote':
       return { type: 'my' }; // Not used for remote tab, but satisfies type
     case 'transcripts':
       return { type: 'my' }; // Not used for transcripts tab, but satisfies type
+    case 'uploads':
+      return { type: 'my' }; // Not used for uploads tab, but satisfies type
     default:
-      return { type: 'my' }; // Root level — not used for API calls
+      return { type: 'my' }; // Root level — user's own filesystem
   }
 };
 
@@ -207,7 +208,7 @@ export const FilesPage = () => {
   // ---------------------------------------------------------------------------
   // URL-derived navigation state
   // ---------------------------------------------------------------------------
-  const VALID_TABS: TabType[] = ['my', 'company', 'shared', 'projects', 'remote', 'transcripts'];
+  const VALID_TABS: TabType[] = ['shared', 'remote', 'transcripts', 'uploads'];
   const pathSegments = useMemo(
     () =>
       location.pathname
@@ -219,27 +220,20 @@ export const FilesPage = () => {
 
   const activeTab: TabType | null = VALID_TABS.includes(pathSegments[0] as TabType)
     ? (pathSegments[0] as TabType)
-    : null;
+    : VALID_TABS.includes(searchParams.get('tab') as TabType)
+      ? (searchParams.get('tab') as TabType)
+      : null;
 
   const viewMode: ViewMode = (searchParams.get('view') as ViewMode) || 'list';
 
-  const { currentPath, selectedProjectId } = useMemo(() => {
-    let _currentPath = '/';
-    let _selectedProjectId: string | null = null;
-
-    if (activeTab === 'projects') {
-      _selectedProjectId = pathSegments[1] || null;
-      const folderSegments = pathSegments.slice(2);
-      if (folderSegments.length > 0) {
-        _currentPath = '/' + folderSegments.join('/') + '/';
-      }
-    } else {
-      const folderSegments = pathSegments.slice(1);
-      if (folderSegments.length > 0) {
-        _currentPath = '/' + folderSegments.join('/') + '/';
-      }
+  const currentPath = useMemo(() => {
+    // When at root (activeTab === null), folder segments come from position 0+
+    // When in a tab (shared/remote/transcripts), folder segments start at position 1
+    const folderSegments = activeTab === null ? pathSegments : pathSegments.slice(1);
+    if (folderSegments.length > 0) {
+      return '/' + folderSegments.join('/') + '/';
     }
-    return { currentPath: _currentPath, selectedProjectId: _selectedProjectId };
+    return '/';
   }, [activeTab, pathSegments]);
 
   // No redirect — bare /files shows root scope folders
@@ -265,10 +259,13 @@ export const FilesPage = () => {
   const [newFolderName, setNewFolderName] = useState<string | null>(null);
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
-  const [projects, setProjects] = useState<ProjectSummary[]>([]);
   const [shares, setShares] = useState<ShareListItem[]>([]);
   const [transcriptJobs, setTranscriptJobs] = useState<TranscriptionJob[]>([]);
   const [transcriptNextToken, setTranscriptNextToken] = useState<string | undefined>();
+  const [uploadFiles, setUploadFiles] = useState<FileItem[]>([]);
+  const [showIgnoreModal, setShowIgnoreModal] = useState(false);
+  const [ignorePatterns, setIgnorePatterns] = useState<string[]>(() => getIgnorePatterns());
+  const [newIgnorePattern, setNewIgnorePattern] = useState('');
   const [selectedTranscript, setSelectedTranscript] = useState<TranscriptionJob | null>(null);
   const [transcriptOutput, setTranscriptOutput] = useState<TranscriptionOutput | null>(null);
   const [transcriptOutputLoading, setTranscriptOutputLoading] = useState(false);
@@ -280,6 +277,9 @@ export const FilesPage = () => {
   const [droppedFiles, setDroppedFiles] = useState<File[]>([]);
   const [_remoteTransfers, setRemoteTransfers] = useState<RemoteTransfer[]>([]);
   const [shareModalFile, setShareModalFile] = useState<FileItem | undefined>(undefined);
+  const [isSharedDragging, setIsSharedDragging] = useState(false);
+  const [sharedDropUploading, setSharedDropUploading] = useState(false);
+  const sharedDragCounter = useRef(0);
 
   // Context menu state
   const [contextMenu, setContextMenu] = useState<{
@@ -317,7 +317,7 @@ export const FilesPage = () => {
 
   // Synergy connection state (stays local — not part of browsing)
   const [synergyStatus, setSynergyStatus] = useState<DataConnectorStatus | null>(null);
-  const [synergyStatusLoading, setSynergyStatusLoading] = useState(false);
+  const [_synergyStatusLoading, setSynergyStatusLoading] = useState(false);
   const synergyConnected = synergyStatus?.status === 'connected';
   // Connect modal state for Remote tab
   const [showConnectModal, setShowConnectModal] = useState(false);
@@ -333,7 +333,17 @@ export const FilesPage = () => {
   const [selectedSecretId, setSelectedSecretId] = useState('');
   const [loadingSecrets, setLoadingSecrets] = useState(false);
   const [showVaultForm, setShowVaultForm] = useState(false);
+  const [composeEmailOpen, setComposeEmailOpen] = useState(false);
+  const [tokenConnectProvider, setTokenConnectProvider] = useState<{
+    id: string;
+    name: string;
+  } | null>(null);
   const [vaultCategories, setVaultCategories] = useState<string[]>([]);
+  const [emailViewer, setEmailViewer] = useState<{
+    provider: string;
+    fileId: string;
+    fileName: string;
+  } | null>(null);
 
   // ---------------------------------------------------------------------------
   // Remote browsing — cache-first fetching + background prefetch
@@ -370,14 +380,14 @@ export const FilesPage = () => {
     loadSynergyJobs: _loadSynergyJobs,
     setSelectedOauthProvider: _setSelectedOauthProvider,
     resetToRoot: resetRemoteToRoot,
-    navigateToSynergyJobs,
+    navigateToSynergyJobs: _navigateToSynergyJobs,
     observeFolder,
   } = remote;
 
   const dragCounter = useRef(0);
 
   const isSharedTab = activeTab === 'shared';
-  const scope = useMemo(() => getScope(activeTab, selectedProjectId ?? undefined), [activeTab, selectedProjectId]);
+  const scope = useMemo(() => getScope(activeTab), [activeTab]);
   const filesCache = useFilesCache();
 
   // Build a cache key for the current folder view
@@ -387,8 +397,6 @@ export const FilesPage = () => {
   }, [scope, currentPath]);
 
   const loadContents = useCallback(async () => {
-    // Root level shows scope folders — no API call needed
-    if (activeTab === null) return;
     // Remote tab has its own loading logic
     if (activeTab === 'remote') return;
 
@@ -421,34 +429,69 @@ export const FilesPage = () => {
       return;
     }
 
-    if (activeTab === 'projects' && !selectedProjectId) {
+    if (activeTab === 'uploads') {
+      setLoading(true);
+      setError(null);
       try {
-        const result = await listProjects();
-        setProjects(result.projects);
+        const region = sessionStorage.getItem('REGION') || 'us-east-1';
+        const dataBucket = sessionStorage.getItem('DATA_BUCKET');
+        const userSub = user?.decoded_tokens?.idToken?.sub as string | undefined;
+        if (!dataBucket || !userSub) {
+          setUploadFiles([]);
+          setLoading(false);
+          return;
+        }
+        const keys = await listObjectsInFolder(
+          `transcriptions/uploads/${userSub}/`,
+          dataBucket,
+          region,
+          getCredentials
+        );
+        const files: FileItem[] = keys
+          .filter((k: string) => !k.endsWith('/'))
+          .map((k: string) => {
+            const parts = k.split('/');
+            const name = parts[parts.length - 1];
+            return {
+              name,
+              parent_path: '/',
+              size_bytes: 0,
+              last_modified: new Date().toISOString(),
+              item_type: 'file' as const,
+            };
+          });
+        setUploadFiles(filterIgnoredFiles(files));
       } catch {
         setError(t('errors.loadFailed'));
+      } finally {
+        setLoading(false);
       }
       return;
     }
 
+    // Root level (activeTab === null) loads the user's own filesystem
     // Stale-while-revalidate: show cached data instantly, refresh in background
     const cached = filesCache.get<FolderContents>(cacheKey);
     if (cached) {
-      setContents(cached);
+      const filtered = { ...cached, files: filterIgnoredFiles(cached.files) };
+      setContents(filtered);
       // Background refresh — no loading spinner
       setError(null);
       try {
         const result = await listFolder(scope, currentPath);
+        const filteredResult = { ...result, files: filterIgnoredFiles(result.files) };
         filesCache.set(cacheKey, result);
         // Only update state if data actually changed to avoid flicker
         const same =
-          result.folders.length === cached.folders.length &&
-          result.files.length === cached.files.length &&
-          result.files.every(
-            (f, i) => f.name === cached.files[i]?.name && f.size_bytes === cached.files[i]?.size_bytes
+          filteredResult.folders.length === filtered.folders.length &&
+          filteredResult.files.length === filtered.files.length &&
+          filteredResult.files.every(
+            (f, i) => f.name === filtered.files[i]?.name && f.size_bytes === filtered.files[i]?.size_bytes
           ) &&
-          result.folders.every((f, i) => f.path === cached.folders[i]?.path && f.name === cached.folders[i]?.name);
-        if (!same) setContents(result);
+          filteredResult.folders.every(
+            (f, i) => f.path === filtered.folders[i]?.path && f.name === filtered.folders[i]?.name
+          );
+        if (!same) setContents(filteredResult);
       } catch {
         // Silently keep cached data on background refresh failure
       }
@@ -459,29 +502,41 @@ export const FilesPage = () => {
     setError(null);
     try {
       const result = await listFolder(scope, currentPath);
-      setContents(result);
+      const filteredResult = { ...result, files: filterIgnoredFiles(result.files) };
+      setContents(filteredResult);
       filesCache.set(cacheKey, result);
     } catch {
       setError(t('errors.loadFailed'));
     } finally {
       setLoading(false);
     }
-  }, [scope, currentPath, activeTab, selectedProjectId, t, filesCache, cacheKey]);
+  }, [scope, currentPath, activeTab, t, filesCache, cacheKey, numaGet, getCredentials, user]);
 
   useEffect(() => {
     loadContents();
   }, [loadContents]);
 
+  // Load persisted ignore patterns from S3 on mount
+  useEffect(() => {
+    loadIgnoreFromS3(getCredentials).then((patterns) => {
+      if (patterns.length > 0) {
+        setIgnorePatterns(getIgnorePatterns());
+      }
+    });
+  }, [getCredentials]);
+
   // Build a URL path for the current scope and given folder path
   const buildFileUrl = useCallback(
     (path: string) => {
-      if (activeTab === null) return '/files';
       const cleanPath = path.replace(/^\/|\/$/g, '');
-      const base =
-        activeTab === 'projects' && selectedProjectId ? `/files/projects/${selectedProjectId}` : `/files/${activeTab}`;
+      if (activeTab === null) {
+        // Root level — folders are under /files/<folderName>
+        return cleanPath ? `/files/${cleanPath}` : '/files';
+      }
+      const base = `/files/${activeTab}`;
       return cleanPath ? `${base}/${cleanPath}` : base;
     },
-    [activeTab, selectedProjectId]
+    [activeTab]
   );
 
   const navigateToFolder = useCallback(
@@ -492,40 +547,19 @@ export const FilesPage = () => {
   );
 
   const navigateUp = useCallback(() => {
-    // At root of a scope — go back to root scope view
+    // At root of a tab scope — go back to /files
     if (currentPath === '/' && activeTab !== null) {
       setContents(null);
       navigate('/files');
       return;
     }
+    // At root of filesystem — nowhere to go
     if (currentPath === '/') return;
     const parts = currentPath.split('/').filter(Boolean);
     parts.pop();
     const parentPath = parts.length === 0 ? '/' : `/${parts.join('/')}/`;
     navigate(buildFileUrl(parentPath));
   }, [currentPath, activeTab, navigate, buildFileUrl]);
-
-  const handleTabChange = useCallback(
-    (tab: TabType) => {
-      setContents(null);
-      setError(null);
-      setShares([]);
-
-      // Reset remote tab state to always show top level
-      if (tab === 'remote') {
-        resetRemoteToRoot();
-        remoteSelection.clearSelection();
-      }
-
-      // Reset transcripts state
-      setTranscriptJobs([]);
-      setSelectedTranscript(null);
-      setTranscriptOutput(null);
-
-      navigate(`/files/${tab}`);
-    },
-    [navigate, t]
-  );
 
   const handleViewTranscript = useCallback(
     async (job: TranscriptionJob) => {
@@ -562,13 +596,6 @@ export const FilesPage = () => {
       setLoading(false);
     }
   }, [transcriptNextToken, numaGet, t]);
-
-  const handleProjectSelect = useCallback(
-    (projectId: string) => {
-      navigate(`/files/projects/${projectId}`);
-    },
-    [navigate]
-  );
 
   const handleCreateFolder = useCallback(async () => {
     if (!newFolderName?.trim()) {
@@ -777,7 +804,7 @@ export const FilesPage = () => {
         }
 
         // Step 9: Refresh destination folder contents if currently viewing
-        if ((destination === 'my' && activeTab === 'my') || (destination === 'company' && activeTab === 'company')) {
+        if (destination === 'my' && activeTab === null) {
           loadContents();
         }
 
@@ -841,6 +868,97 @@ export const FilesPage = () => {
     setShareModalFile(file ?? undefined);
     setShowShareModal(true);
   }, []);
+
+  // ---------------------------------------------------------------------------
+  // Shared tab drag-and-drop: upload then open share wizard
+  // ---------------------------------------------------------------------------
+
+  const handleSharedDragEnter = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    sharedDragCounter.current++;
+    if (e.dataTransfer.types.includes('Files')) setIsSharedDragging(true);
+  }, []);
+
+  const handleSharedDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    sharedDragCounter.current--;
+    if (sharedDragCounter.current === 0) setIsSharedDragging(false);
+  }, []);
+
+  const handleSharedDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+  }, []);
+
+  const handleSharedDrop = useCallback(
+    async (e: React.DragEvent) => {
+      e.preventDefault();
+      sharedDragCounter.current = 0;
+      setIsSharedDragging(false);
+
+      const file = e.dataTransfer.files[0];
+      if (!file) return;
+
+      const credentials = await getCredentials();
+      const region = sessionStorage.getItem('REGION') || 'us-east-1';
+      const bucket = sessionStorage.getItem('DATA_BUCKET');
+      const userSub = user?.decoded_tokens?.idToken?.sub as string | undefined;
+
+      if (!credentials || !region || !bucket || !userSub) {
+        showToast({ message: t('upload.credentialsError'), variant: 'error' });
+        return;
+      }
+
+      setSharedDropUploading(true);
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const s3Client = withPRM(S3Client as any, { region, credentials });
+        const s3Key = buildS3Key({ type: 'my' }, file.name, '/', userSub);
+        const command = new PutObjectCommand({
+          Bucket: bucket,
+          Key: s3Key,
+          ContentType: file.type || 'application/octet-stream',
+        });
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const presignedUrl = await getSignedUrl(s3Client as any, command, { expiresIn: 3600 });
+
+        await new Promise<void>((resolve, reject) => {
+          const xhr = new XMLHttpRequest();
+          xhr.addEventListener('load', () => {
+            if (xhr.status >= 200 && xhr.status < 300) resolve();
+            else reject(new Error(`Upload failed: ${xhr.status}`));
+          });
+          xhr.addEventListener('error', () => reject(new Error('Upload failed')));
+          xhr.open('PUT', presignedUrl);
+          xhr.setRequestHeader('Content-Type', file.type || 'application/octet-stream');
+          xhr.send(file);
+        });
+
+        // Build a FileItem from the uploaded file and open the share wizard
+        const uploadedFileItem: FileItem = {
+          name: file.name,
+          parent_path: '/',
+          size_bytes: file.size,
+          last_modified: new Date().toISOString(),
+          item_type: 'file',
+        };
+
+        // Submit to transcription pipeline (fire-and-forget)
+        TranscriptionService.submit(file.name, s3Key, numaPost).catch(() => {
+          /* transcription is optional */
+        });
+
+        openShareModal(uploadedFileItem);
+      } catch (err) {
+        showToast({
+          message: t('errors.uploadFailed', { error: err instanceof Error ? err.message : String(err) }),
+          variant: 'error',
+        });
+      } finally {
+        setSharedDropUploading(false);
+      }
+    },
+    [getCredentials, user, showToast, t, openShareModal, numaPost]
+  );
 
   // ---------------------------------------------------------------------------
   // Context menu & new action handlers
@@ -1251,9 +1369,20 @@ export const FilesPage = () => {
     }
   }, [enabledOAuthProviders, loadOAuthProviderStatuses]);
 
-  // OAuth connection handlers
+  // Connection handlers — OAuth redirect or token entry modal
   const handleOAuthConnect = useCallback(
     async (provider: OAuthProviderType) => {
+      // Token connectors: show PAT entry modal instead of OAuth redirect
+      const connector = getConnectorById(provider);
+      if (connector && connector.authType !== 'oauth2') {
+        const providerInfo = enabledOAuthProviders.find((p) => p.id === provider);
+        setTokenConnectProvider({
+          id: provider,
+          name: providerInfo?.display_name || connector.displayName,
+        });
+        return;
+      }
+
       setConnectingOauthProvider(provider);
       try {
         const result = await OAuthProvidersService.connect(provider);
@@ -1289,7 +1418,7 @@ export const FilesPage = () => {
     }
   }, [vaultEnabled]);
 
-  const openConnectModal = useCallback(() => {
+  const _openConnectModal = useCallback(() => {
     setConnectError(null);
     setShowConnectModal(true);
     loadVaultSecretsForConnect();
@@ -1454,10 +1583,7 @@ export const FilesPage = () => {
   );
 
   // Whether DnD should be enabled (not in shared or project-list views)
-  const dndEnabled = useMemo(
-    () => !isSharedTab && !(activeTab === 'projects' && !selectedProjectId),
-    [isSharedTab, activeTab, selectedProjectId]
-  );
+  const dndEnabled = useMemo(() => !isSharedTab && activeTab === null, [isSharedTab, activeTab]);
 
   // Drag-and-drop handlers for file UPLOAD (disabled for shared tab)
   const handleDragEnter = useCallback(
@@ -1516,36 +1642,62 @@ export const FilesPage = () => {
             })),
         ];
 
-  const getScopeLabel = (tab: TabType | null) => {
+  const _getScopeLabel = (tab: TabType | null) => {
     switch (tab) {
-      case 'projects':
-        return t('tabs.projects');
-      case 'company':
-        return t('tabs.company');
       case 'shared':
         return t('shared.rootLabel');
       case 'remote':
         return t('remote.rootLabel');
-      case 'my':
-        return t('tabs.myFiles');
       default:
         return t('title');
     }
   };
 
-  // Root-level scope folders shown when no scope is selected (/files)
-  const ROOT_SCOPES: { key: TabType; icon: string; labelKey: string }[] = [
-    { key: 'projects', icon: 'bi bi-layers', labelKey: 'tabs.projects' },
-    { key: 'company', icon: 'bi bi-building', labelKey: 'tabs.company' },
-    { key: 'my', icon: 'bi bi-person', labelKey: 'tabs.myFiles' },
-    ...(sharingEnabled || dropZonesEnabled
-      ? [{ key: 'shared' as TabType, icon: 'bi bi-share', labelKey: 'tabs.shared' }]
-      : []),
-    ...(dataConnectorsEnabled ? [{ key: 'remote' as TabType, icon: 'bi bi-cloud', labelKey: 'tabs.remote' }] : []),
-    ...(transcriptionEnabled
-      ? [{ key: 'transcripts' as TabType, icon: 'bi bi-file-earmark-text', labelKey: 'tabs.transcripts' }]
-      : []),
-  ];
+  const toolbarActions = (
+    <div className="toolbar-actions">
+      <button className={`toolbar-action-btn${activeTab === null ? ' active' : ''}`} onClick={() => navigate('/files')}>
+        <i className="bi bi-folder" />
+        <span>{t('title')}</span>
+      </button>
+      {(sharingEnabled || dropZonesEnabled) && (
+        <button
+          className={`toolbar-action-btn${activeTab === 'shared' ? ' active' : ''}`}
+          onClick={() => navigate('/files/shared')}
+        >
+          <i className="bi bi-share" />
+          <span>{t('tabs.shared')}</span>
+        </button>
+      )}
+      {dataConnectorsEnabled && (
+        <button
+          className={`toolbar-action-btn${activeTab === 'remote' ? ' active' : ''}`}
+          onClick={() => {
+            resetRemoteToRoot();
+            navigate('/files/remote');
+          }}
+        >
+          <i className="bi bi-cloud" />
+          <span>{t('tabs.remote')}</span>
+        </button>
+      )}
+      {transcriptionEnabled && (
+        <button
+          className={`toolbar-action-btn${activeTab === 'transcripts' ? ' active' : ''}`}
+          onClick={() => navigate('/files/transcripts')}
+        >
+          <i className="bi bi-file-earmark-text" />
+          <span>{t('tabs.transcripts')}</span>
+        </button>
+      )}
+      <button
+        className={`toolbar-action-btn${activeTab === 'uploads' ? ' active' : ''}`}
+        onClick={() => navigate('/files/uploads')}
+      >
+        <i className="bi bi-cloud-arrow-up" />
+        <span>{t('tabs.uploads')}</span>
+      </button>
+    </div>
+  );
 
   const viewToggle = (
     <div className="btn-group btn-group-sm view-toggle">
@@ -1573,140 +1725,67 @@ export const FilesPage = () => {
     </div>
   );
 
-  // Root scope view — show scope folders
-  if (activeTab === null) {
-    return (
-      <div className="files-page">
-        <div className="files-toolbar">
-          <div className="breadcrumb-path">
-            <span className="breadcrumb-segment">{t('title')}</span>
-          </div>
-          {viewToggle}
-        </div>
-        <div className="files-content">
-          {viewMode === 'grid' ? (
-            <div className="file-grid">
-              {ROOT_SCOPES.map((s) => (
-                <div key={s.key} className="file-card" onClick={() => handleTabChange(s.key)}>
-                  <i className={`${s.icon} file-card-icon folder-icon`} />
-                  <div className="file-card-name">{t(s.labelKey)}</div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="file-list">
-              <div className="file-list-header">
-                <span>{t('headers.name')}</span>
-                <span />
-                <span />
-                <span />
-              </div>
-              {ROOT_SCOPES.map((s) => (
-                <div key={s.key} className="file-row" onClick={() => handleTabChange(s.key)}>
-                  <div className="file-name">
-                    <i className={`${s.icon} file-icon folder-icon`} />
-                    <span>{t(s.labelKey)}</span>
-                  </div>
-                  <div className="file-size" />
-                  <div className="file-status" />
-                  <div className="file-actions" />
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
-    );
-  }
-
-  // Project list view
-  if (activeTab === 'projects' && !selectedProjectId) {
-    return (
-      <div className="files-page">
-        <div className="files-toolbar">
-          <button
-            className="btn btn-sm btn-outline-secondary"
-            onClick={() => navigate('/files')}
-            title={t('toolbar.up')}
-          >
-            <i className="bi bi-arrow-up" /> {t('toolbar.up')}
-          </button>
-          <div className="breadcrumb-path">
-            <span className="breadcrumb-segment" onClick={() => navigate('/files')}>
-              {t('title')}
-            </span>
-            <span className="breadcrumb-separator">/</span>
-            <span className="breadcrumb-segment">{t('tabs.projects')}</span>
-          </div>
-        </div>
-        <div className="files-content p-4">
-          {projects.length === 0 ? (
-            <div className="files-empty">
-              <i className="bi bi-layers" />
-              <h5>{t('projects.empty')}</h5>
-              <p>{t('projects.createFirst')}</p>
-            </div>
-          ) : (
-            <div className="file-list">
-              {projects.map((project) => (
-                <div
-                  key={project.project_id}
-                  className="file-row"
-                  onClick={() => handleProjectSelect(project.project_id)}
-                >
-                  <div className="file-name">
-                    <i className="bi bi-layers file-icon folder-icon" />
-                    <span>{project.project_name}</span>
-                  </div>
-                  <div className="file-size" />
-                  <div className="file-status">
-                    <span className="badge bg-secondary-subtle text-secondary">{project.role}</span>
-                  </div>
-                  <div className="file-actions" />
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
-    );
-  }
-
   // Shared tab view
   if (isSharedTab) {
     return (
-      <div className="files-page">
-        <div className="files-toolbar">
-          <button
-            className="btn btn-sm btn-outline-secondary"
-            onClick={() => navigate('/files')}
-            title={t('toolbar.up')}
-          >
-            <i className="bi bi-arrow-up" /> {t('toolbar.up')}
-          </button>
-          <div className="breadcrumb-path">
-            <span className="breadcrumb-segment" onClick={() => navigate('/files')}>
-              {t('title')}
-            </span>
-            <span className="breadcrumb-separator">/</span>
-            <span className="breadcrumb-segment">{t('shared.rootLabel')}</span>
-          </div>
-          {viewToggle}
-          <div className="d-flex gap-2">
-            {sharingEnabled && (
-              <button className="btn btn-sm btn-outline-primary" onClick={() => openShareModal()}>
-                <i className="bi bi-plus-lg" /> {t('shared.createShare')}
-              </button>
-            )}
-            {dropZonesEnabled && (
-              <button className="btn btn-sm btn-outline-success" onClick={() => setShowDropZoneModal(true)}>
-                <i className="bi bi-cloud-upload" /> {t('dropzones.create')}
-              </button>
-            )}
+      <div
+        className="files-page"
+        onDragEnter={handleSharedDragEnter}
+        onDragLeave={handleSharedDragLeave}
+        onDragOver={handleSharedDragOver}
+        onDrop={handleSharedDrop}
+      >
+        <div className="files-toolbar-container">
+          <div className="files-ribbon">
+            {toolbarActions}
+            <div style={{ flex: 1 }} />
+            {viewToggle}
+            <div className="d-flex gap-2">
+              {sharingEnabled && (
+                <button className="btn btn-sm btn-outline-primary" onClick={() => openShareModal()}>
+                  <i className="bi bi-plus-lg" /> {t('shared.createShare')}
+                </button>
+              )}
+              {dropZonesEnabled && (
+                <button className="btn btn-sm btn-outline-success" onClick={() => setShowDropZoneModal(true)}>
+                  <i className="bi bi-cloud-upload" /> {t('dropzones.create')}
+                </button>
+              )}
+            </div>
           </div>
         </div>
 
-        <div className="files-content">
+        <div className="files-content" style={{ position: 'relative' }}>
+          {(isSharedDragging || sharedDropUploading) && (
+            <div
+              style={{
+                position: 'absolute',
+                inset: 0,
+                zIndex: 10,
+                backgroundColor: 'rgba(var(--bs-primary-rgb), 0.05)',
+                border: '2px dashed var(--bs-primary)',
+                borderRadius: '0.5rem',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                pointerEvents: 'none',
+              }}
+            >
+              <div className="text-primary fw-bold fs-5">
+                {sharedDropUploading ? (
+                  <>
+                    <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true" />
+                    {t('upload.uploading')}
+                  </>
+                ) : (
+                  <>
+                    <i className="bi bi-share me-2" />
+                    {t('shared.dropToShare')}
+                  </>
+                )}
+              </div>
+            </div>
+          )}
           {error && (
             <div className="alert alert-danger m-3 mb-0" role="alert">
               {error}
@@ -1907,22 +1986,12 @@ export const FilesPage = () => {
   if (activeTab === 'transcripts') {
     return (
       <div className="files-page">
-        <div className="files-toolbar">
-          <button
-            className="btn btn-sm btn-outline-secondary"
-            onClick={() => navigate('/files')}
-            title={t('toolbar.up')}
-          >
-            <i className="bi bi-arrow-up" /> {t('toolbar.up')}
-          </button>
-          <div className="breadcrumb-path">
-            <span className="breadcrumb-segment" onClick={() => navigate('/files')}>
-              {t('title')}
-            </span>
-            <span className="breadcrumb-separator">/</span>
-            <span className="breadcrumb-segment">{t('tabs.transcripts')}</span>
+        <div className="files-toolbar-container">
+          <div className="files-ribbon">
+            {toolbarActions}
+            <div style={{ flex: 1 }} />
+            {viewToggle}
           </div>
-          {viewToggle}
         </div>
 
         <div className="files-content">
@@ -2014,86 +2083,241 @@ export const FilesPage = () => {
     );
   }
 
+  // Uploads tab view
+  if (activeTab === 'uploads') {
+    return (
+      <div className="files-page">
+        <div className="files-toolbar-container">
+          <div className="files-ribbon">
+            {toolbarActions}
+            <div style={{ flex: 1 }} />
+            {viewToggle}
+          </div>
+          <div className="files-breadcrumb-bar">
+            <button className="btn btn-sm btn-outline-secondary" onClick={() => setShowIgnoreModal(true)}>
+              <i className="bi bi-eye-slash me-1" />
+              {t('uploads.ignoreList')}
+            </button>
+          </div>
+        </div>
+
+        {/* Ignore List Modal */}
+        {showIgnoreModal && (
+          <div className="modal d-block" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
+            <div className="modal-dialog modal-dialog-centered">
+              <div className="modal-content">
+                <div className="modal-header">
+                  <h5 className="modal-title">{t('uploads.ignoreModal.title')}</h5>
+                  <button
+                    type="button"
+                    className="btn-close"
+                    onClick={async () => {
+                      setShowIgnoreModal(false);
+                      await saveIgnoreToS3(ignorePatterns, getCredentials);
+                    }}
+                  />
+                </div>
+                <div className="modal-body">
+                  <p className="text-muted small">{t('uploads.ignoreModal.description')}</p>
+                  <div className="d-flex gap-2 mb-3">
+                    <input
+                      type="text"
+                      className="form-control form-control-sm"
+                      placeholder={t('uploads.ignoreModal.placeholder')}
+                      value={newIgnorePattern}
+                      onChange={(e) => setNewIgnorePattern(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && newIgnorePattern.trim()) {
+                          setIgnorePatterns((prev) => [...prev, newIgnorePattern.trim()]);
+                          setNewIgnorePattern('');
+                        }
+                      }}
+                    />
+                    <button
+                      className="btn btn-sm btn-primary"
+                      disabled={!newIgnorePattern.trim()}
+                      onClick={() => {
+                        setIgnorePatterns((prev) => [...prev, newIgnorePattern.trim()]);
+                        setNewIgnorePattern('');
+                      }}
+                    >
+                      {t('uploads.ignoreModal.add')}
+                    </button>
+                  </div>
+                  <ul className="list-group list-group-flush" style={{ maxHeight: '300px', overflowY: 'auto' }}>
+                    {ignorePatterns.map((pattern, idx) => (
+                      <li
+                        key={`${pattern}-${idx}`}
+                        className="list-group-item d-flex justify-content-between align-items-center py-1 px-2"
+                      >
+                        <code className="small">{pattern}</code>
+                        <button
+                          className="btn btn-sm btn-link text-danger p-0"
+                          onClick={() => setIgnorePatterns((prev) => prev.filter((_, i) => i !== idx))}
+                          title={t('uploads.ignoreModal.remove')}
+                        >
+                          <i className="bi bi-x-lg" />
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+                <div className="modal-footer">
+                  <button
+                    className="btn btn-secondary btn-sm"
+                    onClick={async () => {
+                      setShowIgnoreModal(false);
+                      await saveIgnoreToS3(ignorePatterns, getCredentials);
+                    }}
+                  >
+                    {t('common:close', { defaultValue: 'Close' })}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        <div className="files-content">
+          {error && (
+            <div className="alert alert-danger m-3 mb-0" role="alert">
+              {error}
+              <button type="button" className="btn-close float-end" onClick={() => setError(null)} />
+            </div>
+          )}
+
+          {loading ? (
+            <div className="files-empty">
+              <div className="spinner-border text-secondary" />
+            </div>
+          ) : uploadFiles.length === 0 ? (
+            <div className="files-empty">
+              <i className="bi bi-cloud-arrow-up" style={{ fontSize: '3rem', opacity: 0.3 }} />
+              <h5>{t('empty.title')}</h5>
+              <p className="text-muted">{t('empty.message')}</p>
+            </div>
+          ) : viewMode === 'grid' || viewMode === 'gallery' ? (
+            <div className="file-grid">
+              {uploadFiles.map((file) => (
+                <div key={file.name} className="file-card">
+                  <i className={`${getFileIcon(file.name)} file-card-icon`} />
+                  <div className="file-card-name" title={file.name}>
+                    {file.name}
+                  </div>
+                  {file.size_bytes > 0 && <div className="file-card-meta">{formatFileSize(file.size_bytes)}</div>}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="file-list">
+              <div className="file-list-header">
+                <span>{t('headers.name')}</span>
+                <span>{t('headers.size')}</span>
+                <span>{t('headers.modified')}</span>
+                <span />
+              </div>
+              {uploadFiles.map((file) => (
+                <div key={file.name} className="file-row">
+                  <div className="file-name">
+                    <i className={`${getFileIcon(file.name)} file-icon`} />
+                    <span>{file.name}</span>
+                  </div>
+                  <div className="file-size">{file.size_bytes > 0 ? formatFileSize(file.size_bytes) : ''}</div>
+                  <div className="file-modified">
+                    {file.last_modified ? new Date(file.last_modified).toLocaleDateString() : ''}
+                  </div>
+                  <div className="file-actions" />
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   // Remote tab view — Multiple providers (Synergy + OAuth)
   if (activeTab === 'remote') {
     const isAtRootLevel = !selectedOauthProvider && synergyBreadcrumbs.length === 1;
     const isAtJobsLevel = synergyBreadcrumbs.length === 2 && synergyBreadcrumbs[1]?.type === 'job';
     const isInOAuthProvider = selectedOauthProvider !== null;
+
+    // Determine if the breadcrumb bar should show (only when navigated into a sub-path)
+    const hasRemoteBreadcrumb =
+      isInOAuthProvider || (!isInOAuthProvider && synergyConnected && synergyBreadcrumbs.length > 1);
+
     return (
       <div className="files-page">
-        <div className="files-toolbar">
-          {/* Up button */}
-          <button
-            className="btn btn-sm btn-outline-secondary"
-            onClick={() => {
-              if (isInOAuthProvider && oauthBreadcrumbs.length > 1) {
-                // Navigate up one folder in OAuth
-                handleOAuthBreadcrumbClick(oauthBreadcrumbs.length - 2);
-              } else if (isInOAuthProvider && oauthBreadcrumbs.length <= 1) {
-                // At OAuth provider root → go to Remote root
-                resetRemoteToRoot();
-              } else if (synergyConnected && synergyBreadcrumbs.length > 2) {
-                // Navigate up one level in Synergy
-                handleSynergyBreadcrumbClick(synergyBreadcrumbs.length - 2);
-              } else if (!isAtRootLevel && synergyConnected) {
-                // At Synergy jobs list → go to Remote root
-                resetRemoteToRoot();
-              } else {
-                // At Remote root → go to /files
-                navigate('/files');
-              }
-            }}
-            title={t('toolbar.up')}
-          >
-            <i className="bi bi-arrow-up" /> {t('toolbar.up')}
-          </button>
-
-          <div className="breadcrumb-path">
-            {/* Always: Files */}
-            <span className="breadcrumb-segment" onClick={() => navigate('/files')}>
-              {t('title')}
-            </span>
-            <span className="breadcrumb-separator">/</span>
-
-            {/* Always: Remote — clickable when not at root */}
-            <span
-              className={`breadcrumb-segment${isAtRootLevel ? ' breadcrumb-segment--active' : ''}`}
-              onClick={!isAtRootLevel ? () => resetRemoteToRoot() : undefined}
-            >
-              {t('remote.rootLabel')}
-            </span>
-
-            {/* OAuth provider-specific path */}
-            {isInOAuthProvider &&
-              oauthBreadcrumbs.map((crumb, i) => (
-                <span key={i}>
-                  <span className="breadcrumb-separator">/</span>
-                  <span
-                    className={`breadcrumb-segment${i === oauthBreadcrumbs.length - 1 ? ' breadcrumb-segment--active' : ''}`}
-                    onClick={i < oauthBreadcrumbs.length - 1 ? () => handleOAuthBreadcrumbClick(i) : undefined}
-                  >
-                    {crumb.label}
-                  </span>
-                </span>
-              ))}
-
-            {/* Synergy path (skip index 0 which is "Remote", already rendered above) */}
-            {!isInOAuthProvider &&
-              synergyConnected &&
-              synergyBreadcrumbs.length > 1 &&
-              synergyBreadcrumbs.slice(1).map((crumb, i) => (
-                <span key={i}>
-                  <span className="breadcrumb-separator">/</span>
-                  <span
-                    className={`breadcrumb-segment${i === synergyBreadcrumbs.length - 2 ? ' breadcrumb-segment--active' : ''}`}
-                    onClick={i < synergyBreadcrumbs.length - 2 ? () => handleSynergyBreadcrumbClick(i + 1) : undefined}
-                  >
-                    {crumb.label}
-                  </span>
-                </span>
-              ))}
+        <div className="files-toolbar-container">
+          <div className="files-ribbon">
+            {toolbarActions}
+            <div style={{ flex: 1 }} />
+            {viewToggle}
           </div>
-          {viewToggle}
+          {hasRemoteBreadcrumb && (
+            <div className="files-breadcrumb-bar">
+              {/* Up button */}
+              <button
+                className="btn btn-sm btn-outline-secondary"
+                onClick={() => {
+                  if (isInOAuthProvider && oauthBreadcrumbs.length > 1) {
+                    handleOAuthBreadcrumbClick(oauthBreadcrumbs.length - 2);
+                  } else if (isInOAuthProvider && oauthBreadcrumbs.length <= 1) {
+                    resetRemoteToRoot();
+                  } else if (synergyConnected && synergyBreadcrumbs.length > 2) {
+                    handleSynergyBreadcrumbClick(synergyBreadcrumbs.length - 2);
+                  } else if (!isAtRootLevel && synergyConnected) {
+                    resetRemoteToRoot();
+                  }
+                }}
+                title={t('toolbar.up')}
+              >
+                <i className="bi bi-arrow-up" />
+              </button>
+
+              <div className="breadcrumb-path">
+                {/* OAuth provider-specific path — show provider name + folders */}
+                {isInOAuthProvider &&
+                  oauthBreadcrumbs.map((crumb, i) => (
+                    <span key={i}>
+                      {i > 0 && <span className="breadcrumb-separator">›</span>}
+                      <span
+                        className={`breadcrumb-segment${i === oauthBreadcrumbs.length - 1 ? ' breadcrumb-segment--active' : ''}`}
+                        onClick={i < oauthBreadcrumbs.length - 1 ? () => handleOAuthBreadcrumbClick(i) : undefined}
+                      >
+                        {crumb.label}
+                      </span>
+                    </span>
+                  ))}
+
+                {/* Synergy path — skip index 0 (root "Remote") and show "Synergy" instead of "Synergy Jobs" */}
+                {!isInOAuthProvider &&
+                  synergyConnected &&
+                  synergyBreadcrumbs.length > 1 &&
+                  synergyBreadcrumbs.slice(1).map((crumb, i) => (
+                    <span key={i}>
+                      {i > 0 && <span className="breadcrumb-separator">›</span>}
+                      <span
+                        className={`breadcrumb-segment${i === synergyBreadcrumbs.length - 2 ? ' breadcrumb-segment--active' : ''}`}
+                        onClick={
+                          i < synergyBreadcrumbs.length - 2 ? () => handleSynergyBreadcrumbClick(i + 1) : undefined
+                        }
+                      >
+                        {crumb.type === 'job' && !crumb.id ? t('remote.synergyName') : crumb.label}
+                      </span>
+                    </span>
+                  ))}
+              </div>
+
+              {/* Compose button for email providers */}
+              {isInOAuthProvider && selectedOauthProvider === 'gmail' && (
+                <button className="btn btn-sm btn-primary ms-auto" onClick={() => setComposeEmailOpen(true)}>
+                  <i className="bi bi-pencil-square me-1" />
+                  {t('compose.title', 'Compose')}
+                </button>
+              )}
+            </div>
+          )}
         </div>
 
         <div className="files-content p-4">
@@ -2102,40 +2326,7 @@ export const FilesPage = () => {
             viewMode === 'grid' || viewMode === 'gallery' ? (
               /* Grid/Gallery: Show providers as cards */
               <div className="file-grid">
-                {/* Synergy Provider Card */}
-                <div
-                  className="file-card"
-                  style={{ cursor: synergyConnected ? 'pointer' : 'default' }}
-                  onClick={synergyConnected ? () => navigateToSynergyJobs() : undefined}
-                >
-                  <SynergyIcon />
-                  <div className="file-card-name" title={t('remote.synergyName')}>
-                    {t('remote.synergyName')}
-                  </div>
-                  <div className="file-card-meta">
-                    {synergyStatusLoading ? (
-                      <span className="spinner-border spinner-border-sm text-secondary" />
-                    ) : synergyConnected ? (
-                      <span className="text-success small">
-                        <i className="bi bi-check-circle me-1" />
-                        {t('remote.connected')}
-                      </span>
-                    ) : (
-                      <button
-                        className="btn btn-sm btn-primary text-nowrap"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          openConnectModal();
-                        }}
-                      >
-                        <i className="bi bi-plug me-1" />
-                        {t('remote.connectSynergy')}
-                      </button>
-                    )}
-                  </div>
-                </div>
-
-                {/* OAuth Provider Cards */}
+                {/* Provider Cards (OAuth + token connectors — all from backend) */}
                 {oauthEnabled &&
                   enabledOAuthProviders.map((provider) => {
                     const status = oauthProviderStatuses[provider.id] ?? { status: 'disconnected' as const };
@@ -2158,10 +2349,24 @@ export const FilesPage = () => {
                           {loading ? (
                             <span className="spinner-border spinner-border-sm text-secondary" />
                           ) : connected ? (
-                            <span className="text-success small">
-                              <i className="bi bi-check-circle me-1" />
-                              {t('remote.connected')}
-                            </span>
+                            <div className="d-flex align-items-center gap-2">
+                              <span className="text-success small">
+                                <i className="bi bi-check-circle me-1" />
+                                {t('remote.connected')}
+                              </span>
+                              <button
+                                className="btn btn-sm btn-outline-secondary text-nowrap"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  OAuthProvidersService.disconnect(provider.id)
+                                    .catch(() => {})
+                                    .finally(() => loadOAuthProviderStatuses());
+                                }}
+                                title={t('remote.disconnect', 'Disconnect')}
+                              >
+                                <i className="bi bi-x-circle" />
+                              </button>
+                            </div>
                           ) : (
                             <button
                               className="btn btn-sm btn-primary text-nowrap"
@@ -2199,43 +2404,7 @@ export const FilesPage = () => {
                   <span />
                 </div>
 
-                {/* Synergy Provider */}
-                <div
-                  className="file-row"
-                  style={{ cursor: synergyConnected ? 'pointer' : 'default' }}
-                  onClick={synergyConnected ? () => navigateToSynergyJobs() : undefined}
-                >
-                  <div className="file-name d-flex align-items-center gap-2">
-                    <SynergyIcon />
-                    <span className="fw-semibold">{t('remote.synergyName')}</span>
-                    {synergyStatusLoading ? (
-                      <span className="spinner-border spinner-border-sm text-secondary ms-2" />
-                    ) : !synergyConnected ? (
-                      <button
-                        className="btn btn-sm btn-primary ms-2 text-nowrap"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          openConnectModal();
-                        }}
-                      >
-                        <i className="bi bi-plug me-1" />
-                        {t('remote.connectSynergy')}
-                      </button>
-                    ) : null}
-                  </div>
-                  <div className="file-status">
-                    {synergyConnected && (
-                      <span className="text-success small">
-                        <i className="bi bi-check-circle me-1" />
-                        {t('remote.connected')}
-                      </span>
-                    )}
-                  </div>
-                  <div className="file-size" />
-                  <div className="file-actions" />
-                </div>
-
-                {/* OAuth Providers */}
+                {/* All Providers (OAuth + token — from backend) */}
                 {oauthEnabled &&
                   enabledOAuthProviders.map((provider) => {
                     const status = oauthProviderStatuses[provider.id] ?? { status: 'disconnected' as const };
@@ -2294,7 +2463,22 @@ export const FilesPage = () => {
                           )}
                         </div>
                         <div className="file-size" />
-                        <div className="file-actions" />
+                        <div className="file-actions">
+                          {connected && (
+                            <button
+                              className="btn btn-sm btn-outline-secondary"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                OAuthProvidersService.disconnect(provider.id)
+                                  .catch(() => {})
+                                  .finally(() => loadOAuthProviderStatuses());
+                              }}
+                              title={t('remote.disconnect', 'Disconnect')}
+                            >
+                              <i className="bi bi-x-circle" />
+                            </button>
+                          )}
+                        </div>
                       </div>
                     );
                   })}
@@ -2406,11 +2590,22 @@ export const FilesPage = () => {
                     provider: 'oauth',
                     oauthProvider: selectedOauthProvider ?? undefined,
                   };
+                  const isEmail = file.content_type === 'message/rfc822';
                   return (
                     <div
                       key={file.file_id}
                       className={`file-row${isSelected ? ' file-row--selected' : ''}`}
-                      style={{ cursor: 'default' }}
+                      style={{ cursor: isEmail ? 'pointer' : 'default' }}
+                      onClick={
+                        isEmail
+                          ? () =>
+                              setEmailViewer({
+                                provider: selectedOauthProvider ?? '',
+                                fileId: file.file_id,
+                                fileName: file.name,
+                              })
+                          : undefined
+                      }
                       onContextMenu={(e) => openContextMenu(e, { kind: 'remoteFile', item: remoteItem })}
                     >
                       <div className="file-name">
@@ -3008,6 +3203,31 @@ export const FilesPage = () => {
         />
 
         <FileInfoPanel target={infoTarget} onClose={() => setInfoTarget(null)} />
+
+        <ComposeEmailModal
+          show={composeEmailOpen}
+          onHide={() => setComposeEmailOpen(false)}
+          provider={selectedOauthProvider || 'gmail'}
+        />
+
+        <ConnectTokenModal
+          show={tokenConnectProvider !== null}
+          onHide={() => setTokenConnectProvider(null)}
+          providerId={tokenConnectProvider?.id || ''}
+          providerName={tokenConnectProvider?.name || ''}
+          onConnected={async () => {
+            await loadOAuthProviderStatuses();
+            showToast({ message: `Connected to ${tokenConnectProvider?.name}`, variant: 'success' });
+          }}
+        />
+
+        <EmailViewerModal
+          show={emailViewer !== null}
+          onHide={() => setEmailViewer(null)}
+          provider={(emailViewer?.provider || '') as OAuthProviderType}
+          fileId={emailViewer?.fileId || ''}
+          fileName={emailViewer?.fileName || ''}
+        />
       </div>
     );
   }
@@ -3025,64 +3245,60 @@ export const FilesPage = () => {
         onDragStart={handleDndDragStart}
         onDragEnd={handleDndDragEnd}
       >
-        <div className="files-toolbar">
-          <button
-            className="btn btn-sm btn-outline-secondary"
-            onClick={
-              activeTab === 'projects' && selectedProjectId && currentPath === '/'
-                ? () => {
-                    setContents(null);
-                    navigate('/files/projects');
-                  }
-                : navigateUp
-            }
-            title={t('toolbar.up')}
-          >
-            <i className="bi bi-arrow-up" /> {t('toolbar.up')}
-          </button>
+        <div className="files-toolbar-container">
+          <div className="files-ribbon">
+            {toolbarActions}
+            <div style={{ flex: 1 }} />
+            {viewToggle}
 
-          <div className="breadcrumb-path">
-            <span className="breadcrumb-segment" onClick={() => navigate('/files')}>
-              {t('title')}
-            </span>
-            <span className="breadcrumb-separator">/</span>
-            {breadcrumbs.map((crumb, i) => (
-              <span key={crumb.path}>
-                {i > 0 && <span className="breadcrumb-separator">/</span>}
-                {dndEnabled ? (
-                  <DroppableBreadcrumb
-                    path={crumb.path}
-                    className="breadcrumb-segment"
-                    onClick={() => navigateToFolder(crumb.path)}
-                  >
-                    {crumb.label === '/' ? getScopeLabel(activeTab) : crumb.label}
-                  </DroppableBreadcrumb>
-                ) : (
-                  <span className="breadcrumb-segment" onClick={() => navigateToFolder(crumb.path)}>
-                    {crumb.label === '/' ? getScopeLabel(activeTab) : crumb.label}
-                  </span>
-                )}
-              </span>
-            ))}
+            <button
+              className="btn btn-sm btn-outline-secondary"
+              onClick={() => setNewFolderName('')}
+              title={t('toolbar.newFolder')}
+            >
+              <i className="bi bi-folder-plus" /> {t('toolbar.newFolder')}
+            </button>
+
+            <button
+              className="btn btn-sm btn-outline-primary"
+              onClick={() => setShowUploadModal(true)}
+              title={t('toolbar.upload')}
+            >
+              <i className="bi bi-cloud-upload" /> {t('toolbar.upload')}
+            </button>
           </div>
-
-          {viewToggle}
-
-          <button
-            className="btn btn-sm btn-outline-secondary"
-            onClick={() => setNewFolderName('')}
-            title={t('toolbar.newFolder')}
-          >
-            <i className="bi bi-folder-plus" /> {t('toolbar.newFolder')}
-          </button>
-
-          <button
-            className="btn btn-sm btn-outline-primary"
-            onClick={() => setShowUploadModal(true)}
-            title={t('toolbar.upload')}
-          >
-            <i className="bi bi-cloud-upload" /> {t('toolbar.upload')}
-          </button>
+          {currentPath !== '/' && (
+            <div className="files-breadcrumb-bar">
+              <button className="btn btn-sm btn-outline-secondary" onClick={navigateUp} title={t('toolbar.up')}>
+                <i className="bi bi-arrow-up" />
+              </button>
+              <div className="breadcrumb-path">
+                {breadcrumbs
+                  .filter((crumb) => crumb.label !== '/')
+                  .map((crumb, i, arr) => (
+                    <span key={crumb.path}>
+                      {i > 0 && <span className="breadcrumb-separator">›</span>}
+                      {dndEnabled ? (
+                        <DroppableBreadcrumb
+                          path={crumb.path}
+                          className={`breadcrumb-segment${i === arr.length - 1 ? ' breadcrumb-segment--active' : ''}`}
+                          onClick={i < arr.length - 1 ? () => navigateToFolder(crumb.path) : undefined}
+                        >
+                          {crumb.label}
+                        </DroppableBreadcrumb>
+                      ) : (
+                        <span
+                          className={`breadcrumb-segment${i === arr.length - 1 ? ' breadcrumb-segment--active' : ''}`}
+                          onClick={i < arr.length - 1 ? () => navigateToFolder(crumb.path) : undefined}
+                        >
+                          {crumb.label}
+                        </span>
+                      )}
+                    </span>
+                  ))}
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="files-content">

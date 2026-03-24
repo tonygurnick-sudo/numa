@@ -1,4 +1,4 @@
-import { Button, Spinner } from 'react-bootstrap';
+import { Button, Dropdown, Spinner } from 'react-bootstrap';
 import { useTranslation } from 'react-i18next';
 import { Link2, RotateCw, Settings, Zap } from 'lucide-react';
 import synergyIconUrl from '../../assets/icons/12d_Synergy-cube.svg';
@@ -10,7 +10,10 @@ type SynergyConnectorCardProps = {
   onConnect: () => void;
   onTest: () => void;
   onSettings: () => void;
+  onDisconnect?: () => void;
+  onRemove?: () => void;
   isConnecting: boolean;
+  isDisconnecting?: boolean;
   adminDisabled?: boolean;
 };
 
@@ -32,7 +35,10 @@ export const SynergyConnectorCard = ({
   onConnect,
   onTest,
   onSettings,
+  onDisconnect,
+  onRemove,
   isConnecting,
+  isDisconnecting = false,
   adminDisabled = false,
 }: SynergyConnectorCardProps) => {
   const { t } = useTranslation('integrations');
@@ -107,6 +113,32 @@ export const SynergyConnectorCard = ({
                     </>
                   )}
                 </Button>
+                {(onDisconnect || onRemove) && (
+                  <Dropdown align="end">
+                    <Dropdown.Toggle
+                      variant="light"
+                      size="sm"
+                      className="integrations-row-btn integrations-row-btn--neutral"
+                      disabled={isDisconnecting}
+                    >
+                      {isDisconnecting ? <Spinner size="sm" /> : <i className="bi bi-three-dots-vertical" />}
+                    </Dropdown.Toggle>
+                    <Dropdown.Menu>
+                      {onDisconnect && (
+                        <Dropdown.Item onClick={onDisconnect}>
+                          <i className="bi bi-plug me-2" />
+                          {t('dataConnectors.actions.disconnect')}
+                        </Dropdown.Item>
+                      )}
+                      {onRemove && (
+                        <Dropdown.Item onClick={onRemove} className="text-danger">
+                          <i className="bi bi-trash me-2" />
+                          {t('dataConnectors.actions.remove')}
+                        </Dropdown.Item>
+                      )}
+                    </Dropdown.Menu>
+                  </Dropdown>
+                )}
               </>
             ) : (
               <Button

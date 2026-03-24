@@ -30,7 +30,6 @@ import { withPRM } from '../../../lib/prm-node/prm';
 
 type OAuthProvider = string;
 type AuthContext = { sub: string; email?: string; name?: string; groups: string[] };
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 type VaultEntry = Record<string, any>;
 type VaultSecrets = Record<string, VaultEntry>;
 interface VaultData {
@@ -50,6 +49,7 @@ interface FullProviderConfig {
   displayName?: string;
   icon?: string;
   description?: string;
+  rawFields?: Record<string, unknown>;
 }
 
 interface OAuthTokens {
@@ -75,6 +75,7 @@ interface PKCESession {
   code_challenge: string;
   state: string;
   provider: OAuthProvider;
+  connector?: string; // Original connector ID for per-connector token storage
   user_sub: string;
   created_at: string;
 }
@@ -91,6 +92,16 @@ const secretsManager = withPRM(SecretsManagerClient, {});
 const CLIENT_NAME = process.env.CLIENT_NAME || 'demo';
 const VAULT_SECRETS_PREFIX = process.env.VAULT_SECRETS_PREFIX || `${CLIENT_NAME}/vault`;
 const FRONTEND_BASE_URL = process.env.FRONTEND_BASE_URL || 'https://localhost:3000';
+
+// ---------------------------------------------------------------------------
+// OAuth platform mapping — connectors sharing a single OAuth client
+// ---------------------------------------------------------------------------
+
+const OAUTH_PLATFORM_MAP: Record<string, string> = {
+  gmail: 'google',
+  googledrive: 'google',
+  onedrive: 'microsoft',
+};
 
 // ---------------------------------------------------------------------------
 // Hardcoded fallbacks for backward compatibility during migration
@@ -211,20 +222,34 @@ const getProviderConfig = async (provider: OAuthProvider): Promise<FullProviderC
       return null;
     }
 
-    const secretName = `oauth-client-${provider}`;
-    const secretEntry = secrets[secretName];
+    const platform = OAUTH_PLATFORM_MAP[provider] ?? provider;
+    const oauthSecretName = `oauth-client-${platform}`;
+    const connectorSecretName = `connector-${provider}`;
+    let secretEntry: VaultEntry | undefined = secrets[oauthSecretName] || secrets[connectorSecretName];
+
+    // If not found in cached vault, bust cache and retry (secret may have just been created)
+    if (!secretEntry && consolidatedVaultCache) {
+      consolidatedVaultCache = null;
+      const freshSecrets = await getConsolidatedVault();
+      secretEntry = freshSecrets?.[oauthSecretName] || freshSecrets?.[connectorSecretName];
+    }
+
     if (!secretEntry) {
-      console.warn(`No COMPANY vault secret found for ${provider} (looked for "${secretName}" in consolidated vault)`);
+      console.warn(
+        `No COMPANY vault secret found for ${provider} (looked for "${oauthSecretName}" and "${connectorSecretName}")`
+      );
       return null;
     }
 
     // 3. Extract credentials from the secret entry's fields
     const fields = secretEntry.fields || secretEntry;
-    const clientId = fields.client_id;
-    const clientSecret = fields.client_secret;
+    const clientId = fields.client_id || '';
+    const clientSecret = fields.client_secret || '';
+    const instanceUrl = fields.instance_url || '';
 
-    if (!clientId || !clientSecret) {
-      console.warn(`COMPANY vault secret for ${provider} missing client_id or client_secret fields`);
+    // OAuth connectors need client_id; token connectors need instance_url
+    if (!clientId && !instanceUrl) {
+      console.warn(`COMPANY vault secret for ${provider} missing both client_id and instance_url`);
       return null;
     }
 
@@ -232,12 +257,11 @@ const getProviderConfig = async (provider: OAuthProvider): Promise<FullProviderC
     const fallback = FALLBACK_OAUTH_CONFIGS[provider];
     const authUrl = fields.auth_url || fallback?.authUrl;
     const tokenUrl = fields.token_url || fallback?.tokenUrl;
-    const scopes = fields.scopes || fallback?.scopes;
+    const scopes = fields.scopes || fallback?.scopes || '';
 
-    if (!authUrl || !tokenUrl || !scopes) {
-      console.warn(
-        `COMPANY vault secret for ${provider} missing auth_url, token_url, or scopes and no fallback available`
-      );
+    // OAuth connectors need auth_url + token_url; token connectors (with instance_url) don't
+    if (!instanceUrl && (!authUrl || !tokenUrl)) {
+      console.warn(`COMPANY vault secret for ${provider} missing auth_url or token_url and no fallback available`);
       return null;
     }
 
@@ -265,6 +289,7 @@ const getProviderConfig = async (provider: OAuthProvider): Promise<FullProviderC
       displayName: fields.display_name || fallback?.displayName,
       icon: fields.icon || fallback?.icon,
       description: fields.description || fallback?.description,
+      rawFields: fields,
     };
 
     providerConfigCache.set(provider, { config, fetchedAt: Date.now() });
@@ -695,13 +720,18 @@ interface ProvidersListCache {
 
 let providersListCache: ProvidersListCache | null = null;
 
-const handleListProviders = async () => {
-  // Check cache
-  if (providersListCache && Date.now() - providersListCache.fetchedAt < CACHE_TTL_MS) {
+const handleListProviders = async (bustCache = false) => {
+  // Check cache (skip if bust requested)
+  if (!bustCache && providersListCache && Date.now() - providersListCache.fetchedAt < CACHE_TTL_MS) {
     return jsonResponse(200, { providers: providersListCache.providers });
   }
 
   try {
+    // Bust vault cache too when refreshing providers
+    if (bustCache) {
+      consolidatedVaultCache = null;
+      providersListCache = null;
+    }
     // Read all secrets from consolidated vault and filter for oauth-client-* entries
     const secrets = await getConsolidatedVault();
     if (!secrets) {
@@ -717,22 +747,46 @@ const handleListProviders = async () => {
     }> = [];
 
     for (const [secretName, secretEntry] of Object.entries(secrets)) {
-      if (!secretName.startsWith('oauth-client-')) continue;
+      if (!secretName.startsWith('oauth-client-') && !secretName.startsWith('connector-')) continue;
 
-      const providerId = secretName.replace('oauth-client-', '');
+      const isOAuth = secretName.startsWith('oauth-client-');
+      const providerId = isOAuth ? secretName.replace('oauth-client-', '') : secretName.replace('connector-', '');
       const fields = secretEntry.fields || secretEntry;
       const fallback = FALLBACK_OAUTH_CONFIGS[providerId];
 
-      // Only list providers that have credentials configured
-      if (!fields.client_id || !fields.client_secret) continue;
+      // OAuth connectors need client_id + client_secret; token connectors need instance_url
+      if (isOAuth && (!fields.client_id || !fields.client_secret)) continue;
+      if (!isOAuth && !fields.instance_url) continue;
 
-      providers.push({
-        id: providerId,
-        display_name: fields.display_name || fallback?.displayName || providerId,
-        icon: fields.icon || fallback?.icon || 'bi-cloud',
-        description: fields.description || fallback?.description || '',
-        configured: true,
-      });
+      if (fields.enabled_connectors) {
+        // Platform secret with per-connector tracking — expand into individual providers
+        const connectorIds = (fields.enabled_connectors as string).split(',').filter(Boolean);
+        for (const cid of connectorIds) {
+          let meta = { display_name: cid, icon: 'bi-cloud', description: '' };
+          try {
+            const raw = fields[`connector_${cid}`];
+            if (raw) meta = { ...meta, ...(JSON.parse(raw as string) as Record<string, string>) };
+          } catch {
+            /* use defaults */
+          }
+          providers.push({
+            id: cid,
+            display_name: meta.display_name,
+            icon: meta.icon,
+            description: meta.description,
+            configured: true,
+          });
+        }
+      } else {
+        // Regular single-connector secret
+        providers.push({
+          id: providerId,
+          display_name: fields.display_name || fallback?.displayName || providerId,
+          icon: fields.icon || fallback?.icon || 'bi-cloud',
+          description: fields.description || fallback?.description || '',
+          configured: true,
+        });
+      }
     }
 
     // Cache the result
@@ -749,12 +803,16 @@ const handleListProviders = async () => {
 // Route Handlers
 // ---------------------------------------------------------------------------
 
-const handleAuthorize = async (provider: OAuthProvider, auth: AuthContext) => {
+const handleAuthorize = async (provider: OAuthProvider, auth: AuthContext, queryParams?: Record<string, string>) => {
   const config = await getProviderConfig(provider);
 
   if (!config) {
     return errorResponse(500, `OAuth not configured for ${provider}`);
   }
+
+  // Platform connectors pass the original connector ID and connector-specific scopes
+  const connector = queryParams?.connector;
+  const scopeOverride = queryParams?.scopes;
 
   // Generate PKCE parameters and state
   const { codeVerifier, codeChallenge } = generatePKCE();
@@ -770,6 +828,7 @@ const handleAuthorize = async (provider: OAuthProvider, auth: AuthContext) => {
     code_challenge: codeChallenge,
     state,
     provider,
+    connector,
     user_sub: safeSub,
     created_at: new Date().toISOString(),
   };
@@ -786,7 +845,20 @@ const handleAuthorize = async (provider: OAuthProvider, auth: AuthContext) => {
   authUrl.searchParams.set('response_type', 'code');
   authUrl.searchParams.set('client_id', config.clientId);
   authUrl.searchParams.set('redirect_uri', redirectUri);
-  authUrl.searchParams.set('scope', config.scopes);
+  // Use per-connector scopes from vault if available, fall back to top-level
+  let effectiveScopes = config.scopes;
+  if (connector && config.rawFields) {
+    const connectorField = config.rawFields[`connector_${connector}`];
+    if (typeof connectorField === 'string') {
+      try {
+        const connectorMeta = JSON.parse(connectorField);
+        if (connectorMeta.scopes) effectiveScopes = connectorMeta.scopes;
+      } catch {
+        /* use top-level */
+      }
+    }
+  }
+  authUrl.searchParams.set('scope', scopeOverride || effectiveScopes);
   authUrl.searchParams.set('state', `${state}:${sessionId}`);
   authUrl.searchParams.set('code_challenge', codeChallenge);
   authUrl.searchParams.set('code_challenge_method', 'S256');
@@ -857,10 +929,11 @@ const handleCallback = async (provider: OAuthProvider, code: string, state: stri
   // Get scopes from config for fallback
   const config = await getProviderConfig(provider);
 
-  // Store tokens in user's vault with friendly name
+  // Store tokens under the original connector ID (e.g. 'gmail') not the platform ('google')
+  const tokenProvider = session.connector || provider;
   const safeSub = session.user_sub.replace(/[^a-zA-Z0-9_-]/g, '');
   const vaultSecret: VaultOAuthSecret = {
-    provider,
+    provider: tokenProvider,
     access_token: tokens.access_token,
     refresh_token: tokens.refresh_token,
     expires_at: new Date(Date.now() + tokens.expires_in * 1000).toISOString(),
@@ -868,7 +941,7 @@ const handleCallback = async (provider: OAuthProvider, code: string, state: stri
     connected_at: new Date().toISOString(),
   };
 
-  const stored = await putUserOAuthSecret(safeSub, provider, vaultSecret);
+  const stored = await putUserOAuthSecret(safeSub, tokenProvider, vaultSecret);
 
   if (!stored) {
     return errorResponse(500, 'Failed to store OAuth tokens');
@@ -1005,7 +1078,8 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
 
     // Handle /oauth/providers — list all configured providers
     if (pathParts[1] === 'providers' && event.requestContext.http.method === 'GET') {
-      return await handleListProviders();
+      const bustCache = event.queryStringParameters?.refresh === '1';
+      return await handleListProviders(bustCache);
     }
 
     if (pathParts.length < 3) {
@@ -1052,7 +1126,11 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
         if (event.requestContext.http.method !== 'GET') {
           return errorResponse(405, 'Method not allowed');
         }
-        return await handleAuthorize(provider, auth);
+        return await handleAuthorize(
+          provider,
+          auth,
+          (event.queryStringParameters ?? undefined) as Record<string, string> | undefined
+        );
 
       case 'status': {
         if (event.requestContext.http.method !== 'GET') {
@@ -1085,6 +1163,32 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
           return errorResponse(405, 'Method not allowed');
         }
         return await handleRevoke(provider, auth);
+
+      case 'connect-token': {
+        if (event.requestContext.http.method !== 'POST') {
+          return errorResponse(405, 'Method not allowed');
+        }
+        // Store a PAT/token directly in the user's consolidated vault
+        const raw = event.isBase64Encoded ? Buffer.from(event.body || '', 'base64').toString() : event.body || '{}';
+        const body = JSON.parse(raw) as Record<string, string>;
+        const token = body.token || body.access_token || '';
+        if (!token) {
+          return errorResponse(400, 'Token is required');
+        }
+        const safeSub = auth.sub.replace(/[^a-zA-Z0-9_-]/g, '');
+        const vaultSecret: VaultOAuthSecret = {
+          provider,
+          access_token: token,
+          expires_at: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(), // PATs don't expire via OAuth
+          scope: '',
+          connected_at: new Date().toISOString(),
+        };
+        const stored = await putUserOAuthSecret(safeSub, provider, vaultSecret);
+        if (!stored) {
+          return errorResponse(500, 'Failed to store token');
+        }
+        return jsonResponse(200, { success: true, message: `Connected to ${provider}` });
+      }
 
       default:
         return errorResponse(404, 'OAuth action not found');

@@ -67,8 +67,6 @@ class NumaBedrockUtils {
     const decodedBody = new TextDecoder().decode(response.body);
     const responseJson = JSON.parse(decodedBody);
 
-    console.log('Bedrock response JSON:', responseJson);
-
     // Extract the final text from responseJson
     let finalText = '';
     const firstBlock = responseJson?.content?.[0];

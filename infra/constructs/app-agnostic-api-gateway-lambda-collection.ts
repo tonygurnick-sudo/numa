@@ -1449,10 +1449,12 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
     const auditLogsEnv = {
       REGION: props.region,
       WEB_CRAWLER_TABLE: props.auditWebCrawlerTableName,
-      TRANSCRIPTS_TABLE: props.auditTranscriptsTableName,
       AUTOMATION_TABLE: props.auditAutomationTableName,
       SEARCH_INDEX_TABLE: props.auditSearchIndexTableName,
       KB_INDEX_TABLE: props.auditKbIndexTableName,
+      SCHEDULE_TABLE: props.auditScheduleTableName,
+      SYNC_TABLE: props.auditSyncTableName,
+      RECOVERY_TABLE: props.auditRecoveryTableName,
     } as Record<string, string>;
 
     const auditLogsPolicy = [
@@ -1462,14 +1464,18 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
         resources: [
           props.auditWebCrawlerTableArn,
           `${props.auditWebCrawlerTableArn}/index/*`,
-          props.auditTranscriptsTableArn,
-          `${props.auditTranscriptsTableArn}/index/*`,
           props.auditAutomationTableArn,
           `${props.auditAutomationTableArn}/index/*`,
           props.auditSearchIndexTableArn,
           `${props.auditSearchIndexTableArn}/index/*`,
           props.auditKbIndexTableArn,
           `${props.auditKbIndexTableArn}/index/*`,
+          props.auditScheduleTableArn,
+          `${props.auditScheduleTableArn}/index/*`,
+          props.auditSyncTableArn,
+          `${props.auditSyncTableArn}/index/*`,
+          props.auditRecoveryTableArn,
+          `${props.auditRecoveryTableArn}/index/*`,
         ],
       },
     ];
@@ -1614,10 +1620,6 @@ export interface AppAgnosticApiGatewayLambdaCollectionProps extends Omit<
   auditWebCrawlerTableName: string;
   /** Audit log: web crawler table ARN. */
   auditWebCrawlerTableArn: string;
-  /** Audit log: transcripts table name. */
-  auditTranscriptsTableName: string;
-  /** Audit log: transcripts table ARN. */
-  auditTranscriptsTableArn: string;
   /** Audit log: automation table name. */
   auditAutomationTableName: string;
   /** Audit log: automation table ARN. */
@@ -1630,4 +1632,16 @@ export interface AppAgnosticApiGatewayLambdaCollectionProps extends Omit<
   auditKbIndexTableName: string;
   /** Audit log: KB index table ARN. */
   auditKbIndexTableArn: string;
+  /** Audit log: schedule table name. */
+  auditScheduleTableName: string;
+  /** Audit log: schedule table ARN. */
+  auditScheduleTableArn: string;
+  /** Audit log: sync table name. */
+  auditSyncTableName: string;
+  /** Audit log: sync table ARN. */
+  auditSyncTableArn: string;
+  /** Audit log: recovery table name. */
+  auditRecoveryTableName: string;
+  /** Audit log: recovery table ARN. */
+  auditRecoveryTableArn: string;
 }

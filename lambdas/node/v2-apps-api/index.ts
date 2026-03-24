@@ -926,7 +926,6 @@ const handleGetUploadUrl = async (body: Record<string, unknown>, auth: AuthConte
     Key: key,
     ContentType: contentType,
   });
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const url = await getSignedUrl(s3 as any, command, { expiresIn: 3600 });
 
   return jsonResponse(200, { url, key });
@@ -998,7 +997,9 @@ const handleGetSettings = async (event: APIGatewayProxyEventV2, auth: AuthContex
     return jsonResponse(200, { settings: null });
   }
 
-  const { appId: _a, userId: _u, updatedAt, ...settings } = result.Item;
+  const { appId: _appId, userId: _userId, updatedAt, ...settings } = result.Item;
+  void _appId;
+  void _userId;
   return jsonResponse(200, { settings, updatedAt });
 };
 

@@ -925,7 +925,6 @@ const BrandingAdminPanel: React.FC<BrandingAdminPanelProps> = ({ onDirtyChange }
               ) : (
                 <ListGroup variant="flush">
                   {history.map((item) => {
-                    console.log('Version history item:', item);
                     const formattedTimestamp = item.updatedAt
                       ? new Date(item.updatedAt).toLocaleString(i18n.language, {
                           dateStyle: 'medium',

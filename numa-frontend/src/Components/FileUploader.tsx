@@ -71,7 +71,6 @@ const FileUploader: React.FC<FileUploaderProps> = ({
   // Clear files when clearFiles prop changes
   useEffect(() => {
     if (clearFiles) {
-      console.log('Clearing files due to clearFiles prop');
       setFiles([]);
       setFileStructure({
         files: [],
@@ -94,15 +93,6 @@ const FileUploader: React.FC<FileUploaderProps> = ({
 
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>): void => {
     const fileList = Array.from(event.target.files || []) as ExtendedFile[];
-    console.log(
-      'Files to be uploaded:',
-      fileList.map((file) => ({
-        name: file.name,
-        relativePath: file.webkitRelativePath || file.name,
-        size: formatKB(file.size),
-        type: file.type || 'application/octet-stream',
-      }))
-    );
 
     // Always call onFileSelect first to allow parent to handle validation and warnings
     if (onFileSelect) {
@@ -190,17 +180,7 @@ const FileUploader: React.FC<FileUploaderProps> = ({
         const relativePath = file.customRelativePath || file.webkitRelativePath || file.name;
         setCurrentFileName(relativePath);
 
-        console.log('File details:', {
-          name: file.name,
-          relativePath,
-          type: file.type || 'application/octet-stream',
-          size: formatKB(file.size),
-          kb_id: resolvedKbId,
-        });
-
         try {
-          console.log('Requesting presigned URL for:', relativePath);
-
           // Build S3 key with KB prefix and optional folder prefix
           const sanitizedRelativePath = sanitizeS3Path((relativePath || file.name).replace(/^\/+/, ''));
           const folderPrefix = selectedFolder ? `${selectedFolder}/` : '';
@@ -233,14 +213,6 @@ const FileUploader: React.FC<FileUploaderProps> = ({
             expiresIn: 3600, // URL expiration time in seconds
           });
 
-          console.log('Presigned URL:', presignedUrl);
-
-          console.log('S3 Upload Details:', {
-            destinationPath: s3Key,
-            uploadUrl: presignedUrl.split('?')[0], // Show URL without query parameters
-            metadata,
-          });
-
           await axios.put(presignedUrl, file, {
             headers: {
               'Content-Type': file.type || 'application/octet-stream',
@@ -249,11 +221,8 @@ const FileUploader: React.FC<FileUploaderProps> = ({
               const fileProgress = Math.round((progressEvent.loaded * 100) / progressEvent.total);
               const overallProgress = Math.round((i * 100 + fileProgress) / files.length);
               setUploadProgress(overallProgress);
-              console.log(`File progress: ${fileProgress}%, Overall: ${overallProgress}%`);
             },
           });
-
-          console.log(`✅ Successfully uploaded to: ${s3Key}`);
 
           // Skip metadata sidecar for Q Business company KB (Q doesn't use sidecars)
           const preferredKb = window.sessionStorage.getItem('PREFERRED_KNOWLEDGE_BASE') || 'bedrock';
@@ -305,7 +274,6 @@ const FileUploader: React.FC<FileUploaderProps> = ({
         }
       }
 
-      console.log('All files uploaded successfully');
       setSuccess(true);
 
       // Clear all file-related state after successful upload
@@ -358,15 +326,6 @@ const FileUploader: React.FC<FileUploaderProps> = ({
     e.stopPropagation();
   };
 
-  const logItemStructure = (entry: FileSystemEntry, depth: number = 0): void => {
-    const indent = '  '.repeat(depth);
-    if (entry.isDirectory) {
-      console.log(`${indent}📁 ${entry.fullPath}`);
-    } else {
-      console.log(`${indent}📄 ${entry.fullPath}`);
-    }
-  };
-
   const handleDrop = async (e: React.DragEvent<HTMLDivElement>): Promise<void> => {
     e.preventDefault();
     e.stopPropagation();
@@ -375,17 +334,12 @@ const FileUploader: React.FC<FileUploaderProps> = ({
     const items = Array.from(e.dataTransfer.items);
     const files: ExtendedFile[] = [];
 
-    console.log('Analyzing dropped items:');
-
     for (const item of items) {
       if (item.kind === 'file') {
         const entry = item.webkitGetAsEntry();
         if (entry?.isDirectory) {
-          console.log(`\n📁 Found directory: ${entry.fullPath}`);
-          console.log('Scanning contents...');
           await readDirectory(entry as FileSystemDirectoryEntry, files);
         } else if (entry?.isFile) {
-          console.log(`📄 Found file: ${entry.fullPath}`);
           const file = item.getAsFile();
           if (file) {
             files.push(file as ExtendedFile);
@@ -444,8 +398,6 @@ const FileUploader: React.FC<FileUploaderProps> = ({
     });
 
     for (const entry of entries) {
-      logItemStructure(entry, 1);
-
       if (entry.isFile) {
         const file = await new Promise<File>((resolve) => {
           (entry as FileSystemFileEntry).file((file) => resolve(file));

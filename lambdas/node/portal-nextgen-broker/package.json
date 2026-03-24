@@ -16,7 +16,8 @@
     "clean": "rm -rf dist lambda_function.zip",
     "build": "rm -rf dist && esbuild --bundle --format=esm --platform=node --target=node22 --outdir=dist --out-extension:.js=.mjs --banner:js=\"import { createRequire } from 'module'; const require = createRequire(import.meta.url);\" index.ts",
     "bundle": "yarn build && rm -f lambda_function.zip && touch -d $(git log -1 --format=%cd --date=format:\"%FT%T\" .) dist/index.mjs && (cd dist && zip -X -j ../lambda_function.zip index.mjs)",
-    "lint": "eslint && tsc --noEmit"
+    "lint": "eslint && tsc --noEmit",
+    "test": "echo 'no tests'"
   },
   "dependencies": {
     "@aws-crypto/sha256-js": "^5.2.0",

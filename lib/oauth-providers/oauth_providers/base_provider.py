@@ -229,6 +229,14 @@ class OAuthProvider(ABC):
         """
         pass
 
+    async def refresh_token(self, access_token: str) -> Optional[str]:
+        """Refresh or regenerate an access token. Override for providers that support it.
+
+        Returns:
+            New access token string, or None if not supported.
+        """
+        return None
+
     async def _handle_http_error(self, response: httpx.Response) -> None:
         """Handle HTTP errors and raise appropriate exceptions.
 
@@ -325,7 +333,7 @@ class OAuthProvider(ABC):
                 else:
                     raise OAuthError(
                         f"Network error after {max_retries} retries: {str(e)}"
-                    )
+                    ) from e
 
         # Should never reach here due to the exception handling above
         raise OAuthError("Unexpected error in request retry logic")

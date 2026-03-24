@@ -59,11 +59,13 @@ deploy-dev-gate:
 .node-matrix:
   matrix:
     - BUILD_DIR:
+        - lambdas/node/admin-capabilities
         - lambdas/node/admin-data-connector-settings
         - lambdas/node/admin-agents-settings
         - lambdas/node/admin-mfa-settings
         - lambdas/node/admin-integration-settings
         - lambdas/node/agent-schedule-runner
+        - lambdas/node/audit-logs-admin
         - lambdas/node/agent-schedules
         - lambdas/node/agents
         - lambdas/node/api-gateway-authorizer
@@ -74,13 +76,21 @@ deploy-dev-gate:
         - lambdas/node/callback-renamer
         - lambdas/node/chat-settings
         - lambdas/node/cloudfront-invalidator
+        - lambdas/node/connector-event-receiver
         - lambdas/node/data-sync-scheduler
         - lambdas/node/document-converter
+        - lambdas/node/files-index-sync
+        - lambdas/node/gmail-watch-manager
+        - lambdas/node/google-cloud-setup
         - lambdas/node/notifications-api
         - lambdas/node/notifications-stream
+        - lambdas/node/oauth-auth-handler
         - lambdas/node/numa-ops-api
         - lambdas/node/numa-ops-config-api
         - lambdas/node/numa-ops-crm-api
+        - lambdas/node/openapi-docs-server
+        - lambdas/node/portal-deploy-assume-role
+        - lambdas/node/portal-nextgen-broker
         - lambdas/node/q-business-chat-control-configurer
         - lambdas/node/s3-kb-file-migrator
         - lambdas/node/s3-vectors-manager
@@ -90,10 +100,14 @@ deploy-dev-gate:
         - lambdas/node/step-function-shim
         - lambdas/node/system-user-creator
         - lambdas/node/token-adjuster
+        - lambdas/node/transcription-api
+        - lambdas/node/transcription-dispatcher
+        - lambdas/node/transcription-stream-handler
         - lambdas/node/usage-analytics-admin
         - lambdas/node/usage-analytics-contract
         - lambdas/node/usage-analytics-ingest
         - lambdas/node/user-files
+        - lambdas/node/v2-apps-api
         - lambdas/node/vector-db-init
         - lib/client-config-node
         - lib/usage-analytics-schemas
@@ -130,6 +144,8 @@ deploy-dev-gate:
         - lambdas/python/meeting-analyser
         - lambdas/python/numa-chat-agent
         - lambdas/python/numa-recent-jobs
+        - lambdas/python/oauth-files-api
+        - lambdas/python/oauth-workspace-tools
         - lambdas/python/pipedream-account-sync
         - lambdas/python/pipedream-proxy
         - lambdas/python/pipedream-relay

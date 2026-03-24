@@ -62,23 +62,9 @@ export const CalendarTimelineView: React.FC<CalendarTimelineViewProps> = ({
 
   // Transform schedules to calendar events for all visible months
   const calendarEvents = useMemo((): CalendarEvent[] => {
-    console.log('CALENDAR_TIMELINE_VIEW DEBUG: === STARTING EVENT GENERATION ===');
-    console.log('CALENDAR_TIMELINE_VIEW DEBUG: Input schedules:', {
-      totalSchedules: schedules.length,
-      visibleMonths: visibleMonths.length,
-      scheduleDetails: schedules.map((s) => ({
-        id: s.scheduleId,
-        status: s.status,
-        cronExpression: s.cronExpression,
-        agentTitle: s.agentTitle,
-        label: s.label,
-      })),
-    });
-
     const events: CalendarEvent[] = [];
 
     if (!visibleMonths.length) {
-      console.log('CALENDAR_TIMELINE_VIEW DEBUG: No visible months, returning empty events');
       return events;
     }
 
@@ -87,38 +73,17 @@ export const CalendarTimelineView: React.FC<CalendarTimelineViewProps> = ({
       .endOf('month')
       .toDate();
 
-    console.log('CALENDAR_TIMELINE_VIEW DEBUG: Date range for event generation:', {
-      startDate,
-      endDate,
-      monthsSpan: moment(endDate).diff(moment(startDate), 'months'),
-    });
-
-    schedules.forEach((schedule, index) => {
-      console.log(`CALENDAR_TIMELINE_VIEW DEBUG: --- Processing schedule ${index + 1}/${schedules.length} ---`);
-      console.log('CALENDAR_TIMELINE_VIEW DEBUG: Schedule details:', {
-        scheduleId: schedule.scheduleId,
-        agentTitle: schedule.agentTitle,
-        label: schedule.label,
-        status: schedule.status,
-        cronExpression: schedule.cronExpression,
-        timezone: schedule.timezone,
-        eventType: schedule.eventType,
-      });
-
+    schedules.forEach((schedule) => {
       try {
         // Skip deleted schedules
         if (schedule.status === 'deleted') {
-          console.log('CALENDAR_TIMELINE_VIEW DEBUG: Skipping deleted schedule');
           return;
         }
 
         // Skip schedules without cron expressions
         if (!schedule.cronExpression) {
-          console.log('CALENDAR_TIMELINE_VIEW DEBUG: Skipping schedule - missing cronExpression');
           return;
         }
-
-        console.log('CALENDAR_TIMELINE_VIEW DEBUG: Calling getNextRunTimes for schedule', schedule.scheduleId);
 
         // Generate events for the visible time range
         const futureRuns = getNextRunTimes(
@@ -127,26 +92,11 @@ export const CalendarTimelineView: React.FC<CalendarTimelineViewProps> = ({
           200 // Generate enough events to cover the visible range
         );
 
-        console.log('CALENDAR_TIMELINE_VIEW DEBUG: getNextRunTimes returned:', {
-          scheduleId: schedule.scheduleId,
-          futureRunsCount: futureRuns.length,
-          firstRun: futureRuns.length > 0 ? futureRuns[0] : null,
-          lastRun: futureRuns.length > 0 ? futureRuns[futureRuns.length - 1] : null,
-        });
-
         // Filter events to only include those in our visible range
         const filteredRuns = futureRuns.filter((runTime) => {
-          const inRange = runTime >= startDate && runTime <= endDate;
-          return inRange;
+          return runTime >= startDate && runTime <= endDate;
         });
 
-        console.log('CALENDAR_TIMELINE_VIEW DEBUG: After date filtering:', {
-          scheduleId: schedule.scheduleId,
-          filteredCount: filteredRuns.length,
-          totalGenerated: futureRuns.length,
-        });
-
-        let eventsCreatedForSchedule = 0;
         filteredRuns.forEach((runTime) => {
           const event = {
             id: `${schedule.scheduleId}-${runTime.getTime()}`,
@@ -158,22 +108,7 @@ export const CalendarTimelineView: React.FC<CalendarTimelineViewProps> = ({
           };
 
           events.push(event);
-          eventsCreatedForSchedule++;
-
-          if (eventsCreatedForSchedule <= 2) {
-            // Log first 2 events per schedule
-            console.log(`CALENDAR_TIMELINE_VIEW DEBUG: Created event ${eventsCreatedForSchedule}:`, {
-              id: event.id,
-              title: event.title,
-              start: event.start,
-              eventType: event.eventType,
-            });
-          }
         });
-
-        console.log(
-          `CALENDAR_TIMELINE_VIEW DEBUG: Created ${eventsCreatedForSchedule} events for schedule ${schedule.scheduleId}`
-        );
       } catch (error) {
         console.error('CALENDAR_TIMELINE_VIEW ERROR: Failed to process schedule:', {
           scheduleId: schedule.scheduleId,
@@ -183,20 +118,6 @@ export const CalendarTimelineView: React.FC<CalendarTimelineViewProps> = ({
           errorStack: error instanceof Error ? error.stack : undefined,
         });
       }
-    });
-
-    console.log('CALENDAR_TIMELINE_VIEW DEBUG: === EVENT GENERATION COMPLETE ===');
-    console.log('CALENDAR_TIMELINE_VIEW DEBUG: Final results:', {
-      totalEventsGenerated: events.length,
-      eventsByMonth: visibleMonths.map((month) => {
-        const monthStart = moment(month.date).startOf('month').toDate();
-        const monthEnd = moment(month.date).endOf('month').toDate();
-        const monthEvents = events.filter((event) => event.start >= monthStart && event.start <= monthEnd);
-        return {
-          month: moment(month.date).format('MMMM YYYY'),
-          eventCount: monthEvents.length,
-        };
-      }),
     });
 
     return events;

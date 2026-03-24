@@ -20,6 +20,7 @@ interface ConnectorWizardModalProps {
   isLoading?: boolean;
   error?: string | null;
   success?: string | null;
+  nextLabel?: string;
   children: ReactNode;
 }
 
@@ -36,6 +37,7 @@ export const ConnectorWizardModal = ({
   isLoading,
   error,
   success,
+  nextLabel,
   children,
 }: ConnectorWizardModalProps) => {
   const { t } = useTranslation('integrations');
@@ -99,6 +101,8 @@ export const ConnectorWizardModal = ({
               <Spinner size="sm" className="me-2" />
               {t('dataConnectors.wizard.saving')}
             </>
+          ) : nextLabel ? (
+            nextLabel
           ) : isLastStep ? (
             t('dataConnectors.wizard.save')
           ) : (
