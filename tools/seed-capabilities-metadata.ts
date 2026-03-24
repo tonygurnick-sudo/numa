@@ -18,7 +18,7 @@ const REGION = 'us-east-1';
 
 const ddbDoc = DynamoDBDocumentClient.from(withPRM(DynamoDBClient, { region: REGION }));
 
-async function seed() {
+async function seed(): Promise<void> {
   console.log(`Seeding ${CAPABILITIES_METADATA.length} capabilities into ${TABLE_NAME}...`);
 
   // BatchWriteItem supports max 25 items per request
