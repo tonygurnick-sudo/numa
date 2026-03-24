@@ -29,25 +29,34 @@ STACK := numa-arcanum-demo-tony
 SYSTEM_USER_FUNCTION_RESOURCE := aws_lambda_function.numa_system-user_function_38BDAEEC
 SYSTEM_USER_FUNCTION_NAME := system-user-creator---TfToken-TOKEN-81--
 
-.PHONY: init get plan import deploy clean pipelinefix cli lint format
+.PHONY: init get plan import deploy clean pipelinefix cli lint format \
+	lint-frontend lint-infra lint-node-shared lint-node-lambdas lint-python-lambdas lint-python-libs
 .DEFAULT_GOAL := deploy
 
 # ---- Lint entire repo (matches CI) ----
-lint:
+# Run `make lint -j` for maximum parallelism
+lint: lint-frontend lint-infra lint-node-shared lint-node-lambdas lint-python-lambdas lint-python-libs
+	@echo ""
+	@echo "✅ All lint checks passed"
+
+lint-frontend:
 	@echo "=== Frontend ==="
-	yarn workspace @arcanumai/numa-frontend run lint
-	@echo ""
+	@yarn workspace @arcanumai/numa-frontend run lint
+
+lint-infra:
 	@echo "=== Infra ==="
-	yarn workspace @arcanumai/q-apps-deployer-infra run lint
-	@echo ""
+	@yarn workspace @arcanumai/q-apps-deployer-infra run lint
+
+lint-node-shared:
 	@echo "=== Node shared ==="
-	yarn workspaces foreach --all --parallel \
+	@yarn workspaces foreach --all --parallel \
 		--include '@arcanumai/style' \
 		--include '@arcanumai/q-apps-deployer-tools' \
 		--include '@arcanumai/client-config' \
 		--include '@arcanumai/numa-customer-success-portal' \
 		run lint
-	@echo ""
+
+lint-node-lambdas:
 	@echo "=== Node lambdas ==="
 	@for dir in lambdas/node/*/; do \
 		name=$$(basename "$$dir"); \
@@ -55,7 +64,8 @@ lint:
 			echo "  $$name" && (cd "$$dir" && yarn lint) || exit 1; \
 		fi; \
 	done
-	@echo ""
+
+lint-python-lambdas:
 	@echo "=== Python lambdas ==="
 	@for dir in lambdas/python/*/; do \
 		name=$$(basename "$$dir"); \
@@ -66,7 +76,8 @@ lint:
 				poetry run pylint . --recursive yes --ignore .venv,.poetry) || exit 1; \
 		fi; \
 	done
-	@echo ""
+
+lint-python-libs:
 	@echo "=== Python libraries ==="
 	@for dir in lib/*/; do \
 		name=$$(basename "$$dir"); \
@@ -77,8 +88,6 @@ lint:
 				poetry run pylint . --recursive yes --ignore .venv,.poetry) || exit 1; \
 		fi; \
 	done
-	@echo ""
-	@echo "✅ All lint checks passed"
 
 # ---- Format entire repo ----
 format:
