@@ -197,15 +197,34 @@ def _resolve_lambda_and_request(
         return (OPS_CONFIG_API_LAMBDA, "GET", "ops/config/projects", None, None)
 
     if operation == "create_project":
-        return (OPS_CONFIG_API_LAMBDA, "POST", "ops/config/projects", params, None)
+        body = {}
+        mapping = {
+            "name": "name",
+            "description": "description",
+            "color": "color",
+        }
+        for snake, camel in mapping.items():
+            if params.get(snake) is not None:
+                body[camel] = params[snake]
+        return (OPS_CONFIG_API_LAMBDA, "POST", "ops/config/projects", body, None)
 
     if operation == "update_project":
         project_id = params.pop("project_id", "")
+        body = {}
+        mapping = {
+            "name": "name",
+            "description": "description",
+            "color": "color",
+            "is_active": "isActive",
+        }
+        for snake, camel in mapping.items():
+            if params.get(snake) is not None:
+                body[camel] = params[snake]
         return (
             OPS_CONFIG_API_LAMBDA,
             "PUT",
             f"ops/config/projects/{project_id}",
-            params,
+            body,
             None,
         )
 
@@ -590,6 +609,7 @@ def handle_ops_operation(event: Dict[str, Any]) -> Dict[str, Any]:
         "params": { ... },
         "description": "...",
         "auto_approved": true/false,
+        "request_id": "uuid",
         "user_sub": "...",
         "user_email": "...",
         "user_groups": [...]
@@ -600,9 +620,57 @@ def handle_ops_operation(event: Dict[str, Any]) -> Dict[str, Any]:
     user_sub = event.get("user_sub", "")
     user_email = event.get("user_email", "")
     user_groups = event.get("user_groups", [])
+    auto_approved = event.get("auto_approved", True)
+    request_id = event.get("request_id", "")
+    description = event.get("description", "")
 
     # Make a copy of params to avoid mutating the original
     op_params = dict(op_params)
+
+    # Approval gate: for write operations that are not auto-approved,
+    # create a DynamoDB approval record and poll until the user approves,
+    # denies, or the 90-second timeout expires.
+    if not auto_approved and request_id:
+        try:
+            from tools.pipedream_integration import (
+                _create_approval_request,
+                _poll_approval,
+            )
+
+            action_key = f"ops-{operation.replace('_', '-')}"
+            approval_id = _create_approval_request(
+                user_sub=user_sub,
+                action_key=action_key,
+                description=description,
+                props_preview=op_params,
+                approval_id=request_id,
+            )
+            decision = _poll_approval(approval_id)
+
+            if decision == "denied":
+                return {
+                    "status": "denied",
+                    "message": "User denied this operation",
+                    "approval_id": approval_id,
+                }
+            if decision == "timeout":
+                return {
+                    "status": "timeout",
+                    "message": "Approval timed out (90 seconds)",
+                    "approval_id": approval_id,
+                }
+
+            logger.info(
+                "Ops operation approved",
+                operation=operation,
+                approval_id=approval_id,
+            )
+        except ValueError as e:
+            # INTEGRATIONS_APPROVAL_TABLE not configured — execute without approval
+            logger.warning(
+                "Approval table not configured, executing without approval",
+                error=str(e),
+            )
 
     try:
         lambda_name, method, path, body, query_params = _resolve_lambda_and_request(

@@ -498,17 +498,6 @@ async def stream_claude_sdk(
     # 4. Create SDK options with validated model
     validated_model = validate_model_id(model_id)
 
-    # Map integrations approval mode to ops approval mode for the ops MCP tool.
-    # integrations: always/non_destructive/never → ops: manual/non_destructive/auto
-    _ops_mode_map = {
-        "always": "manual",
-        "non_destructive": "non_destructive",
-        "never": "auto",
-    }
-    os.environ["NUMA_OPS_APPROVAL_MODE"] = _ops_mode_map.get(
-        approval_mode, "non_destructive"
-    )
-
     options = create_agent_options(
         session_id=session_id,
         conversation_id=conversation_id,
@@ -726,7 +715,11 @@ async def stream_claude_sdk(
                 # - 'non_destructive': auto-approve read-only actions and draft actions,
                 #   require approval for writes/deletes or unknown actions (fail-closed)
                 # - 'never': auto-approve all integration tool calls
-                APPROVAL_REQUIRED_TOOLS = ("run_action", "proxy_request")
+                APPROVAL_REQUIRED_TOOLS = (
+                    "run_action",
+                    "proxy_request",
+                    "numa_ops_tool",
+                )
                 if isinstance(message, AssistantMessage):
                     for block in message.content:
                         if isinstance(block, ToolUseBlock):
@@ -753,90 +746,125 @@ async def stream_claude_sdk(
                             tool_input = (
                                 block.input if isinstance(block.input, dict) else {}
                             )
-                            # Only show approval if the integration is actually enabled.
-                            # run_action has action_key like "google_drive-get-current-user";
-                            # proxy_request has integration_slug directly.
-                            action_key = tool_input.get("action_key", "")
-                            integration_slug = tool_input.get("integration_slug") or (
-                                action_key.split("-")[0] if action_key else ""
-                            )
-                            if (
-                                enabled_integrations
-                                and integration_slug
-                                and integration_slug not in enabled_integrations
-                            ):
-                                continue
 
-                            # Compute the approval key early — needed for both
-                            # schema lookup and the request ID map.
-                            _approval_key = (
-                                action_key
-                                or f"{integration_slug}-{tool_input.get('method', 'request')}"
-                            )
-
-                            # Determine if this tool call should be auto-approved
-                            # based on the resolved approval_mode.
+                            # ── Branch: Ops tool vs Integration tool ──
+                            # Both compute _approval_key and auto_approved,
+                            # then share the common approval event emission below.
                             auto_approved = False
-                            schema_found = False
-                            if approval_mode == "never":
-                                auto_approved = True
-                            elif approval_mode == "non_destructive":
-                                # Read annotations from the action schema file on
-                                # disk (not from tool input — Claude doesn't send
-                                # annotations).  Schema path:
-                                #   /workdir/tools/integrations/{slug}/{action_key}.json
-                                schema_annotations = {}
-                                try:
-                                    schema_path = (
-                                        Path("/workdir/tools/integrations")
-                                        / integration_slug
-                                        / f"{_approval_key}.json"
-                                    )
-                                    schema_found = schema_path.exists()
-                                    if schema_found:
-                                        schema_data = json.loads(
-                                            schema_path.read_text(encoding="utf-8")
-                                        )
-                                        schema_annotations = schema_data.get(
-                                            "annotations", {}
-                                        )
-                                except Exception as exc:
-                                    logger.debug(
-                                        "Could not read action schema for approval check",
-                                        action_key=_approval_key,
-                                        error=str(exc),
-                                    )
-                                # Auto-approve read-only actions and draft
-                                # actions that are explicitly non-destructive.
-                                # Drafts are saved locally and must be sent
-                                # separately by the user, so they're safe.
-                                # Missing annotations default to requiring
-                                # approval (fail-closed).
-                                if isinstance(schema_annotations, dict):
-                                    read_only = schema_annotations.get(
-                                        "readOnlyHint", False
-                                    )
-                                    is_draft = "draft" in _approval_key.lower()
-                                    non_destructive = not schema_annotations.get(
-                                        "destructiveHint", True
-                                    )
-                                    auto_approved = bool(
-                                        read_only or (is_draft and non_destructive)
-                                    )
-                                else:
-                                    auto_approved = False
 
-                            logger.info(
-                                "Integration tool approval decision",
-                                _name="APPROVAL_DECISION",
-                                phase="integrations",
-                                tool_name=block.name,
-                                action_key=_approval_key,
-                                integration_slug=integration_slug,
-                                approval_mode=approval_mode,
-                                auto_approved=auto_approved,
-                                schema_found=schema_found,
-                            )
+                            if "numa_ops_tool" in block.name:
+                                # ── Ops tool approval ──
+                                operation = tool_input.get("operation", "")
+                                _approval_key = f"ops-{operation.replace('_', '-')}"
+
+                                # Safe ops: list_*, get_*, search_*
+                                _ops_safe = operation.startswith(
+                                    ("list_", "get_", "search_")
+                                )
+
+                                if approval_mode == "never":
+                                    auto_approved = True
+                                elif approval_mode == "non_destructive":
+                                    auto_approved = _ops_safe
+                                # else "always" → auto_approved stays False
+
+                                logger.info(
+                                    "Ops tool approval decision",
+                                    _name="APPROVAL_DECISION",
+                                    phase="ops",
+                                    tool_name=block.name,
+                                    operation=operation,
+                                    action_key=_approval_key,
+                                    approval_mode=approval_mode,
+                                    auto_approved=auto_approved,
+                                )
+                            else:
+                                # ── Integration tool approval ──
+                                # Only show approval if the integration is actually enabled.
+                                # run_action has action_key like "google_drive-get-current-user";
+                                # proxy_request has integration_slug directly.
+                                action_key = tool_input.get("action_key", "")
+                                integration_slug = tool_input.get(
+                                    "integration_slug"
+                                ) or (action_key.split("-")[0] if action_key else "")
+                                if (
+                                    enabled_integrations
+                                    and integration_slug
+                                    and integration_slug not in enabled_integrations
+                                ):
+                                    continue
+
+                                # Compute the approval key early — needed for both
+                                # schema lookup and the request ID map.
+                                _approval_key = (
+                                    action_key
+                                    or f"{integration_slug}-{tool_input.get('method', 'request')}"
+                                )
+
+                                # Determine if this tool call should be auto-approved
+                                # based on the resolved approval_mode.
+                                schema_found = False
+                                if approval_mode == "never":
+                                    auto_approved = True
+                                elif approval_mode == "non_destructive":
+                                    # Read annotations from the action schema file on
+                                    # disk (not from tool input — Claude doesn't send
+                                    # annotations).  Schema path:
+                                    #   /workdir/tools/integrations/{slug}/{action_key}.json
+                                    schema_annotations = {}
+                                    try:
+                                        schema_path = (
+                                            Path("/workdir/tools/integrations")
+                                            / integration_slug
+                                            / f"{_approval_key}.json"
+                                        )
+                                        schema_found = schema_path.exists()
+                                        if schema_found:
+                                            schema_data = json.loads(
+                                                schema_path.read_text(encoding="utf-8")
+                                            )
+                                            schema_annotations = schema_data.get(
+                                                "annotations", {}
+                                            )
+                                    except Exception as exc:
+                                        logger.debug(
+                                            "Could not read action schema for approval check",
+                                            action_key=_approval_key,
+                                            error=str(exc),
+                                        )
+                                    # Auto-approve read-only actions and draft
+                                    # actions that are explicitly non-destructive.
+                                    # Drafts are saved locally and must be sent
+                                    # separately by the user, so they're safe.
+                                    # Missing annotations default to requiring
+                                    # approval (fail-closed).
+                                    if isinstance(schema_annotations, dict):
+                                        read_only = schema_annotations.get(
+                                            "readOnlyHint", False
+                                        )
+                                        is_draft = "draft" in _approval_key.lower()
+                                        non_destructive = not schema_annotations.get(
+                                            "destructiveHint", True
+                                        )
+                                        auto_approved = bool(
+                                            read_only or (is_draft and non_destructive)
+                                        )
+                                    else:
+                                        auto_approved = False
+
+                                logger.info(
+                                    "Integration tool approval decision",
+                                    _name="APPROVAL_DECISION",
+                                    phase="integrations",
+                                    tool_name=block.name,
+                                    action_key=_approval_key,
+                                    integration_slug=integration_slug,
+                                    approval_mode=approval_mode,
+                                    auto_approved=auto_approved,
+                                    schema_found=schema_found,
+                                )
+
+                            # ── Common: emit approval event (ops + integrations) ──
 
                             # Set NUMA_APPROVAL_MODE env var so the tools Lambda
                             # knows whether to skip DynamoDB polling.
@@ -863,8 +891,7 @@ async def stream_claude_sdk(
                                 "created_at": int(time.time()),
                                 "tool_use_id": block.id,
                                 "tool_name": block.name,
-                                "action_key": action_key
-                                or f"{integration_slug}-{tool_input.get('method', 'request')}",
+                                "action_key": _approval_key,
                                 "description": tool_input.get("description", ""),
                                 "props_preview": tool_input.get(
                                     "props", tool_input.get("upstream_url", "")
@@ -1109,16 +1136,6 @@ async def run_claude_sdk(
     # message loop below (same as the streaming path in stream_claude_sdk).
     os.environ["NUMA_APPROVAL_MODE"] = "manual"
 
-    # Map integrations approval mode to ops approval mode for the ops MCP tool.
-    _ops_mode_map = {
-        "always": "manual",
-        "non_destructive": "non_destructive",
-        "never": "auto",
-    }
-    os.environ["NUMA_OPS_APPROVAL_MODE"] = _ops_mode_map.get(
-        approval_mode, "non_destructive"
-    )
-
     # 4. Create SDK options
     validated_model = validate_model_id(model_id)
     options = create_agent_options(
@@ -1228,11 +1245,15 @@ async def run_claude_sdk(
                                     block.is_error,
                                 )
 
-                # Per-tool-call approval mode for integration tools.
-                # Identical to stream_claude_sdk: checks approval_mode and
-                # schema annotations, sets NUMA_APPROVAL_MODE env var, and
-                # generates NUMA_REQUEST_ID_MAP entries.
-                APPROVAL_REQUIRED_TOOLS = ("run_action", "proxy_request")
+                # Per-tool-call approval mode for integration and ops tools.
+                # Identical to stream_claude_sdk: checks approval_mode,
+                # sets NUMA_APPROVAL_MODE env var, and generates
+                # NUMA_REQUEST_ID_MAP entries. No SSE events in non-streaming mode.
+                APPROVAL_REQUIRED_TOOLS = (
+                    "run_action",
+                    "proxy_request",
+                    "numa_ops_tool",
+                )
                 if isinstance(message, AssistantMessage):
                     for block in message.content:
                         if isinstance(block, ToolUseBlock) and any(
@@ -1241,72 +1262,82 @@ async def run_claude_sdk(
                             tool_input = (
                                 block.input if isinstance(block.input, dict) else {}
                             )
-                            action_key = tool_input.get("action_key", "")
-                            integration_slug = tool_input.get("integration_slug") or (
-                                action_key.split("-")[0] if action_key else ""
-                            )
-                            if (
-                                enabled_integrations
-                                and integration_slug
-                                and integration_slug not in enabled_integrations
-                            ):
-                                continue
 
-                            _approval_key = (
-                                action_key
-                                or f"{integration_slug}-{tool_input.get('method', 'request')}"
-                            )
-
-                            # Determine if this tool call should be auto-approved
-                            # based on the resolved approval_mode.
+                            # ── Branch: Ops tool vs Integration tool ──
                             auto_approved = False
-                            if approval_mode == "never":
-                                auto_approved = True
-                            elif approval_mode == "non_destructive":
-                                schema_annotations = {}
-                                try:
-                                    schema_path = (
-                                        Path("/workdir/tools/integrations")
-                                        / integration_slug
-                                        / f"{_approval_key}.json"
-                                    )
-                                    if schema_path.exists():
-                                        schema_data = json.loads(
-                                            schema_path.read_text(encoding="utf-8")
-                                        )
-                                        schema_annotations = schema_data.get(
-                                            "annotations", {}
-                                        )
-                                except Exception as exc:
-                                    logger.debug(
-                                        "Could not read action schema for approval check",
-                                        action_key=_approval_key,
-                                        error=str(exc),
-                                    )
-                                if isinstance(schema_annotations, dict):
-                                    read_only = schema_annotations.get(
-                                        "readOnlyHint", False
-                                    )
-                                    is_draft = "draft" in _approval_key.lower()
-                                    non_destructive = not schema_annotations.get(
-                                        "destructiveHint", True
-                                    )
-                                    auto_approved = bool(
-                                        read_only or (is_draft and non_destructive)
-                                    )
-                                else:
-                                    auto_approved = False
 
-                            # Set NUMA_APPROVAL_MODE env var so the tools Lambda
-                            # knows whether to skip DynamoDB polling.
+                            if "numa_ops_tool" in block.name:
+                                # ── Ops tool approval ──
+                                operation = tool_input.get("operation", "")
+                                _approval_key = f"ops-{operation.replace('_', '-')}"
+                                _ops_safe = operation.startswith(
+                                    ("list_", "get_", "search_")
+                                )
+
+                                if approval_mode == "never":
+                                    auto_approved = True
+                                elif approval_mode == "non_destructive":
+                                    auto_approved = _ops_safe
+                            else:
+                                # ── Integration tool approval ──
+                                action_key = tool_input.get("action_key", "")
+                                integration_slug = tool_input.get(
+                                    "integration_slug"
+                                ) or (action_key.split("-")[0] if action_key else "")
+                                if (
+                                    enabled_integrations
+                                    and integration_slug
+                                    and integration_slug not in enabled_integrations
+                                ):
+                                    continue
+
+                                _approval_key = (
+                                    action_key
+                                    or f"{integration_slug}-{tool_input.get('method', 'request')}"
+                                )
+
+                                if approval_mode == "never":
+                                    auto_approved = True
+                                elif approval_mode == "non_destructive":
+                                    schema_annotations = {}
+                                    try:
+                                        schema_path = (
+                                            Path("/workdir/tools/integrations")
+                                            / integration_slug
+                                            / f"{_approval_key}.json"
+                                        )
+                                        if schema_path.exists():
+                                            schema_data = json.loads(
+                                                schema_path.read_text(encoding="utf-8")
+                                            )
+                                            schema_annotations = schema_data.get(
+                                                "annotations", {}
+                                            )
+                                    except Exception as exc:
+                                        logger.debug(
+                                            "Could not read action schema for approval check",
+                                            action_key=_approval_key,
+                                            error=str(exc),
+                                        )
+                                    if isinstance(schema_annotations, dict):
+                                        read_only = schema_annotations.get(
+                                            "readOnlyHint", False
+                                        )
+                                        is_draft = "draft" in _approval_key.lower()
+                                        non_destructive = not schema_annotations.get(
+                                            "destructiveHint", True
+                                        )
+                                        auto_approved = bool(
+                                            read_only or (is_draft and non_destructive)
+                                        )
+                                    else:
+                                        auto_approved = False
+
+                            # ── Common: set env vars and approval ID ──
                             os.environ["NUMA_APPROVAL_MODE"] = (
                                 "auto" if auto_approved else "manual"
                             )
 
-                            # Generate a per-tool-call approval ID and store in
-                            # NUMA_REQUEST_ID_MAP (JSON dict of action_key → list
-                            # of IDs). Each parallel tool pops its ID from the
-                            # list in FIFO order.
                             approval_id = str(uuid_mod.uuid4())
                             try:
                                 _id_map = json.loads(

@@ -62,6 +62,16 @@ mcp__numa__numa_ops_tool(
 | `description` | string | No       | Project description |
 | `color`       | string | No       | Hex color code      |
 
+#### update_project
+
+| Parameter     | Type    | Required | Description                              |
+| ------------- | ------- | -------- | ---------------------------------------- |
+| `project_id`  | string  | Yes      | Project ID                               |
+| `name`        | string  | No       | New project name                         |
+| `description` | string  | No       | New description                          |
+| `color`       | string  | No       | New color                                |
+| `is_active`   | boolean | No       | Set false to deactivate, true to restore |
+
 ---
 
 ### Teams (Boards)
@@ -251,26 +261,26 @@ Returns the board with its zones and stages. Use this to get valid `stage_id` va
 
 #### create_customer
 
-| Parameter             | Type   | Required | Description               |
-| --------------------- | ------ | -------- | ------------------------- |
-| `company_name`        | string | Yes      | Company name              |
-| `industry`            | string | No       | Industry sector           |
-| `lifecycle_stage`     | string | No       | Lifecycle stage ID        |
-| `owner_id`            | string | No       | Owner user sub            |
-| `owner_name`          | string | No       | Owner display name        |
-| `company_size`        | string | No       | Company size              |
-| `website`             | string | No       | Company website           |
-| `territory`           | string | No       | Territory                 |
-| `flags`               | array  | No       | Flag IDs                  |
-| `source`              | string | No       | Lead source               |
-| `contract_start_date` | string | No       | Contract start (ISO 8601) |
-| `contract_term`       | string | No       | Contract term             |
-| `renewal_date`        | string | No       | Renewal date (ISO 8601)   |
-| `contract_value`      | number | No       | Contract value            |
-| `products`            | array  | No       | Product list              |
-| `product_notes`       | string | No       | Product notes             |
-| `notes`               | string | No       | General notes             |
-| `contacts`            | array  | No       | Contact objects           |
+| Parameter             | Type   | Required | Description                                                 |
+| --------------------- | ------ | -------- | ----------------------------------------------------------- |
+| `company_name`        | string | Yes      | Company name                                                |
+| `industry`            | string | No       | Industry sector                                             |
+| `lifecycle_stage`     | string | No       | Lifecycle stage ID (e.g., "stage-prospect") from CRM config |
+| `owner_id`            | string | No       | Owner user sub                                              |
+| `owner_name`          | string | No       | Owner display name                                          |
+| `company_size`        | string | No       | Company size                                                |
+| `website`             | string | No       | Company website                                             |
+| `territory`           | string | No       | Territory                                                   |
+| `flags`               | array  | No       | Flag IDs                                                    |
+| `source`              | string | No       | Lead source                                                 |
+| `contract_start_date` | string | No       | Contract start (ISO 8601)                                   |
+| `contract_term`       | string | No       | Contract term                                               |
+| `renewal_date`        | string | No       | Renewal date (ISO 8601)                                     |
+| `contract_value`      | number | No       | Contract value                                              |
+| `products`            | array  | No       | Product list                                                |
+| `product_notes`       | string | No       | Product notes                                               |
+| `notes`               | string | No       | General notes                                               |
+| `contacts`            | array  | No       | Contact objects                                             |
 
 #### update_customer
 

@@ -22,6 +22,12 @@ playwright-cli --version
 
 If the global install isn't available, you can use `npx playwright-cli` as a fallback for all commands below.
 
+**ffmpeg is required** for video generation (see Video Recording section below). Install Playwright's bundled ffmpeg once:
+
+```bash
+npx playwright install ffmpeg
+```
+
 ## Working directory
 
 All Playwright test artifacts (screenshots, snapshots, PDFs, traces, videos) go in `playwright-runs/` at the repo root. This directory is gitignored.
@@ -183,8 +189,6 @@ playwright-cli network
 playwright-cli run-code "async page => await page.context().grantPermissions(['geolocation'])"
 playwright-cli tracing-start
 playwright-cli tracing-stop
-playwright-cli video-start
-playwright-cli video-stop video.webm
 ```
 
 ## Open parameters
@@ -276,4 +280,93 @@ playwright-cli fill e7 "test"
 playwright-cli console
 playwright-cli network
 playwright-cli close
+```
+
+## Auth State Persistence
+
+Save browser auth state (cookies, localStorage, Cognito tokens) after login so future sessions skip login entirely:
+
+```bash
+# After logging in, save the state
+playwright-cli state-save playwright-runs/numa-auth-state.json
+
+# In a new session, load it instead of logging in again
+playwright-cli open http://localhost:5173 --persistent
+playwright-cli state-load playwright-runs/numa-auth-state.json
+playwright-cli goto http://localhost:5173/chat
+# You're now authenticated — no login required
+```
+
+The saved state file is gitignored under `playwright-runs/`. It expires when Cognito tokens expire — just re-login and re-save when that happens.
+
+## Video Recording
+
+**Do NOT use the built-in `video-start` / `video-stop` commands.** They use Playwright's native screencast which only captures frames when the DOM changes — CSS animations, spinners, and idle waits produce frozen/duplicate frames. The result is unwatchable.
+
+**Instead, use rapid screenshots stitched with ffmpeg.** This captures every frame reliably at real-time speed.
+
+### How it works
+
+Use `playwright-cli run-code` to execute a script that takes `page.screenshot()` in a loop at 15fps (67ms per frame), then stitch the PNGs into an mp4 with ffmpeg. Each screenshot forces a full render, so every frame captures the actual DOM state.
+
+### Recording pattern
+
+```javascript
+// Inside playwright-cli run-code '...'
+const outDir = 'playwright-runs/<run-name>/video-frames';
+let frameNum = 0;
+const wait = 34; // ~67ms total per frame (33ms screenshot + 34ms wait) = 15fps
+
+async function capture() {
+  await page.screenshot({
+    type: 'png',
+    path: outDir + '/frame_' + String(frameNum++).padStart(5, '0') + '.png',
+  });
+  await page.waitForTimeout(wait);
+}
+
+// Capture continuously for a duration
+async function captureFor(ms) {
+  const end = Date.now() + ms;
+  while (Date.now() < end) {
+    await capture();
+  }
+}
+
+// Use between interactions:
+await captureFor(2000); // hold on current state for 2s
+await page.click('#some-button'); // interact
+await captureFor(3000); // capture the result for 3s
+```
+
+### Stitching with ffmpeg
+
+```bash
+ffmpeg -y -framerate 15 \
+  -i playwright-runs/<run-name>/video-frames/frame_%05d.png \
+  -c:v libx264 -preset slow -crf 18 -pix_fmt yuv420p \
+  playwright-runs/<run-name>/demo.mp4
+```
+
+### Why 15fps?
+
+- Screenshot latency is ~33ms, so 15fps (67ms/frame) is the sweet spot for real-time playback
+- 10fps works but feels slightly choppy
+- 30fps can't actually achieve 30fps due to screenshot overhead — the video plays back at ~2x speed
+- 15fps produces smooth, real-time video at ~2MB for 30s of footage
+
+### Folder structure
+
+Keep video frames in a subfolder to avoid mixing with screenshots:
+
+```
+playwright-runs/
+  my-test-run/
+    01-feature-before.png      # key screenshots for MR
+    02-feature-after.png
+    demo.mp4                   # stitched video
+    video-frames/              # raw frames (can delete after stitching)
+      frame_00000.png
+      frame_00001.png
+      ...
 ```

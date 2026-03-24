@@ -82,6 +82,33 @@ def is_safe_operation(operation: str) -> bool:
     return operation in SAFE_OPERATIONS
 
 
+def _pop_approval_id(action_key: str) -> str:
+    """Pop the next approval ID for this action_key from NUMA_REQUEST_ID_MAP.
+
+    The SDK runner stores a JSON dict of action_key → [approval_id, ...] in
+    the env var. Each tool call pops the first entry (FIFO) so parallel calls
+    to the same action each get their own unique ID.
+
+    Falls back to the legacy single-value NUMA_REQUEST_ID env var.
+    """
+    raw = os.environ.get("NUMA_REQUEST_ID_MAP", "")
+    if raw:
+        try:
+            id_map = json.loads(raw)
+            ids = id_map.get(action_key, [])
+            if ids:
+                approval_id = ids.pop(0)
+                if not ids:
+                    id_map.pop(action_key, None)
+                else:
+                    id_map[action_key] = ids
+                os.environ["NUMA_REQUEST_ID_MAP"] = json.dumps(id_map)
+                return approval_id
+        except (json.JSONDecodeError, TypeError):
+            pass
+    return os.environ.get("NUMA_REQUEST_ID", "")
+
+
 # Maximum inline result size (compact JSON chars). Results exceeding this are
 # saved to a file so the LLM context stays lightweight.
 MAX_INLINE = 2000
@@ -212,19 +239,10 @@ async def numa_ops_tool(args: dict[str, Any]) -> dict[str, Any]:
     except json.JSONDecodeError as e:
         return _err(f"Invalid params JSON: {e}")
 
-    # Determine approval mode for this operation
-    ops_approval_mode = os.environ.get("NUMA_OPS_APPROVAL_MODE", "non_destructive")
-    is_safe = is_safe_operation(operation)
-
-    if ops_approval_mode == "auto":
-        auto_approved = True
-    elif ops_approval_mode == "non_destructive":
-        auto_approved = is_safe
-    else:  # "manual"
-        auto_approved = False
-
-    # Set approval mode env var for the tools Lambda
-    os.environ["NUMA_APPROVAL_MODE"] = "auto" if auto_approved else "manual"
+    # Pop approval ID assigned by sdk_runner (must match its key format)
+    approval_key = f"ops-{operation.replace('_', '-')}"
+    request_id = _pop_approval_id(approval_key)
+    auto_approved = os.environ.get("NUMA_APPROVAL_MODE") == "auto"
 
     try:
         result = invoke_workspace_tool(
@@ -234,8 +252,21 @@ async def numa_ops_tool(args: dict[str, Any]) -> dict[str, Any]:
                 "params": params,
                 "description": description,
                 "auto_approved": auto_approved,
+                "request_id": request_id,
             },
         )
+
+        # Handle approval decisions from the tools Lambda
+        if isinstance(result, dict):
+            status = result.get("status")
+            if status == "denied":
+                return _ok(f"Operation denied by user: {operation}. {description}")
+            if status == "timeout":
+                return _ok(
+                    f"Approval timed out for: {operation}. "
+                    "The user did not respond within 90 seconds. "
+                    "You can offer to try again if the user is ready."
+                )
 
         # Compact JSON — no indent (saves tokens)
         result_text = json.dumps(result, default=str, separators=(",", ":"))

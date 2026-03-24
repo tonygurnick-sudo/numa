@@ -1374,6 +1374,23 @@ export class CoreNumaInfra extends Construct {
       new TerraformOutput(this, 'company-bucket', { value: this.companyBucket.bucket.bucket });
     }
 
+    // Create approval table if either integrations or ops is enabled.
+    // Used for human-in-the-loop approval of integration actions and ops write operations.
+    if (props.pipedreamIntegrations || props.numaOps) {
+      this.integrationsApprovalTable = new DynamodbTable(this, 'integrations-approval', {
+        name: `${props.clientName}-integrations-approval`,
+        billingMode: 'PAY_PER_REQUEST',
+        hashKey: 'approval_id',
+        attribute: [{ name: 'approval_id', type: 'S' }],
+        ttl: { attributeName: 'ttl', enabled: true },
+        tags: {
+          Name: `${props.clientName}-integrations-approval`,
+          Environment: props.environmentName,
+          Purpose: 'tool-approval-workflow',
+        },
+      });
+    }
+
     // Create Pipedream relay lambda if Pipedream integrations are enabled
     let pipedreamRelayLambda: NumaLambda | undefined;
     if (props.pipedreamIntegrations) {
@@ -1391,20 +1408,6 @@ export class CoreNumaInfra extends Construct {
           Name: `${props.clientName}-mcp-tool-policies`,
           Environment: props.environmentName,
           Purpose: 'per-user-mcp-tool-policy',
-        },
-      });
-
-      // Create integrations approval table for human-in-the-loop approval flow
-      this.integrationsApprovalTable = new DynamodbTable(this, 'integrations-approval', {
-        name: `${props.clientName}-integrations-approval`,
-        billingMode: 'PAY_PER_REQUEST',
-        hashKey: 'approval_id',
-        attribute: [{ name: 'approval_id', type: 'S' }],
-        ttl: { attributeName: 'ttl', enabled: true },
-        tags: {
-          Name: `${props.clientName}-integrations-approval`,
-          Environment: props.environmentName,
-          Purpose: 'integration-approval-workflow',
         },
       });
 
@@ -2017,6 +2020,14 @@ const _coreNumaInfraPropsSchema = z
      * @default false
      */
     secretsVaultEnabled: z.boolean().optional().default(false),
+    /**
+     * Whether to enable Numa Ops (work management, kanban boards, CRM).
+     * When true, the integrations-approval DynamoDB table is created even without
+     * Pipedream integrations (used for ops tool approval flow).
+     *
+     * @default false
+     */
+    numaOps: z.boolean().optional().default(false),
     /**
      * Whether to enable the Numa Files feature (file management page and backend).
      *
