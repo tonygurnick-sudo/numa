@@ -13,6 +13,9 @@ interface SharedNavPanelProps {
   documentUrl?: string;
   documentName?: string;
   onCollapse: () => void;
+  onGenerateDescription?: () => void;
+  generatingDescription?: boolean;
+  chatStatus?: string;
 }
 
 /**
@@ -29,6 +32,9 @@ export const SharedNavPanel = ({
   documentUrl,
   documentName,
   onCollapse,
+  onGenerateDescription,
+  generatingDescription,
+  chatStatus,
 }: SharedNavPanelProps) => {
   const { t } = useTranslation('shared');
   const { logoUrl, brandName } = usePublicBranding(clientName);
@@ -57,6 +63,25 @@ export const SharedNavPanel = ({
           </div>
         )}
         {description && <p className="description">{description}</p>}
+        {!description && chatStatus === 'ready' && onGenerateDescription && (
+          <button
+            className="btn btn-sm btn-outline-primary w-100 mt-2"
+            disabled={generatingDescription}
+            onClick={onGenerateDescription}
+          >
+            {generatingDescription ? (
+              <>
+                <span className="spinner-border spinner-border-sm me-1" />
+                {t('generateDescription.generating', { defaultValue: 'Generating...' })}
+              </>
+            ) : (
+              <>
+                <i className="bi bi-stars me-1" />
+                {t('generateDescription.button', { defaultValue: 'Generate Description' })}
+              </>
+            )}
+          </button>
+        )}
         {allowDownload && documentUrl && (
           <a href={documentUrl} target="_blank" rel="noopener noreferrer" className="download-link">
             <i className="bi bi-download" />

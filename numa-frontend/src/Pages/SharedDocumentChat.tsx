@@ -5,7 +5,6 @@ import { useTranslation } from 'react-i18next';
 import { SharedChatPanel } from '../Components/Shared/SharedChatPanel';
 import { SharedNavPanel } from '../Components/Shared/SharedNavPanel';
 import { DocumentViewer } from '../Components/Shared/DocumentViewer';
-import { ExpiryCountdown } from '../Components/Shared/ExpiryCountdown';
 import {
   getShareInfo,
   generateDescription,
@@ -191,51 +190,8 @@ export const SharedDocumentChat = () => {
 
   return (
     <div className="shared-document-chat">
-      {/* Header bar */}
-      <div className="shared-header">
-        <div className="d-flex align-items-center gap-2">
-          <i className="bi bi-file-earmark-text" style={{ fontSize: '1.25rem', color: 'var(--bs-primary)' }} />
-          <h5 className="mb-0">{documentName}</h5>
-          {shareInfo.description && <span className="text-muted">&mdash; {shareInfo.description}</span>}
-          {!shareInfo.description && chatStatus === 'ready' && (
-            <button
-              className="btn btn-sm btn-outline-primary ms-2"
-              disabled={generatingDesc}
-              onClick={async () => {
-                setGeneratingDesc(true);
-                try {
-                  const desc = await generateDescription(uuid!);
-                  setShareInfo((prev) => (prev ? { ...prev, description: desc } : prev));
-                } catch {
-                  // Ignore — user can try again
-                } finally {
-                  setGeneratingDesc(false);
-                }
-              }}
-            >
-              {generatingDesc ? (
-                <>
-                  <span className="spinner-border spinner-border-sm me-1" />
-                  {t('generateDescription.generating', { defaultValue: 'Generating...' })}
-                </>
-              ) : (
-                <>
-                  <i className="bi bi-stars me-1" />
-                  {t('generateDescription.button', { defaultValue: 'Generate Description' })}
-                </>
-              )}
-            </button>
-          )}
-        </div>
-        <div className="d-flex align-items-center gap-3">
-          <ExpiryCountdown expiresAt={shareInfo.expires_at} />
-          {shareInfo.max_calls != null && (
-            <span className="badge bg-primary-subtle text-primary">
-              {liveCallCount} / {shareInfo.max_calls} {t('chat.title')}
-            </span>
-          )}
-        </div>
-      </div>
+      {/* Header bar — intentionally blank */}
+      <div className="shared-header" />
 
       <div className="shared-body">
         {/* Collapsed nav: fixed width button, not resizable */}
@@ -262,6 +218,19 @@ export const SharedDocumentChat = () => {
                   documentUrl={shareInfo.s3_signed_url}
                   documentName={documentName}
                   onCollapse={() => setIsNavCollapsed(true)}
+                  chatStatus={chatStatus}
+                  generatingDescription={generatingDesc}
+                  onGenerateDescription={async () => {
+                    setGeneratingDesc(true);
+                    try {
+                      const desc = await generateDescription(uuid!);
+                      setShareInfo((prev) => (prev ? { ...prev, description: desc } : prev));
+                    } catch {
+                      // Ignore — user can try again
+                    } finally {
+                      setGeneratingDesc(false);
+                    }
+                  }}
                 />
               </Panel>
               <Separator className="resize-handle" />
