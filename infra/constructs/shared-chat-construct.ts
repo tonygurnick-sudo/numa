@@ -122,6 +122,11 @@ export class SharedChatConstruct extends Construct {
         // S3 access for reading shared documents and writing extracted text
         {
           effect: 'Allow',
+          actions: ['s3:ListBucket'],
+          resources: [props.outputsBucketArn],
+        },
+        {
+          effect: 'Allow',
           actions: ['s3:GetObject', 's3:PutObject'],
           resources: [`${props.outputsBucketArn}/*`],
         },
@@ -129,6 +134,11 @@ export class SharedChatConstruct extends Construct {
         // and read/write extraction output and document text for shares
         ...(props.dataBucketArn
           ? [
+              {
+                effect: 'Allow' as const,
+                actions: ['s3:ListBucket'],
+                resources: [props.dataBucketArn],
+              },
               {
                 effect: 'Allow' as const,
                 actions: ['s3:GetObject', 's3:PutObject'],
