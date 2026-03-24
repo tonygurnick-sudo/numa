@@ -133,7 +133,15 @@
     "renameAria": "Rename conversation",
     "deleteConfirm": "Are you sure you want to delete this conversation?",
     "deleteFailed": "Failed to delete conversation",
-    "deleteAria": "Delete conversation"
+    "deleteAria": "Delete conversation",
+    "loadingMore": "Loading more...",
+    "dateGroups": {
+      "today": "Today",
+      "yesterday": "Yesterday",
+      "thisWeek": "This Week",
+      "thisMonth": "This Month",
+      "older": "Older"
+    }
   },
   "agentsPanel": {
     "title": "Your Agents",

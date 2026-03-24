@@ -312,6 +312,78 @@ class NumaChatDynamoUtils {
   }
 
   /**
+   * Return paginated "meta" items for this user's conversations.
+   * Returns a page of conversations plus a cursor for the next page.
+   */
+  async getUserConversationsMetaPaginated(
+    userId: string,
+    pageSize = 50,
+    cursor: Record<string, AttributeValue> | null = null
+  ): Promise<{
+    conversations: Array<Record<string, unknown>>;
+    lastEvaluatedKey: Record<string, AttributeValue> | null;
+    hasMore: boolean;
+  }> {
+    try {
+      const allMetaItems: Array<Record<string, unknown>> = [];
+      let lastEvaluatedKey: Record<string, AttributeValue> | undefined | null = cursor;
+
+      do {
+        const command = new QueryCommand({
+          TableName: this.tableName,
+          KeyConditionExpression: 'user_id = :u',
+          FilterExpression: 'message_type = :mtype AND NOT begins_with(conversation_id, :schedPrefix)',
+          ExpressionAttributeValues: marshall({
+            ':u': userId,
+            ':mtype': 'meta',
+            ':schedPrefix': 'schedule-',
+          }),
+          ProjectionExpression:
+            'sk, conversation_id, user_id, conversationName, latestTimestamp, content, agentId, agentTitle, agentIcon, agentType, agentVisibility, agentVersion, isAgentConversation, isWorkspaceConversation',
+          ScanIndexForward: false,
+          ExclusiveStartKey: lastEvaluatedKey || undefined,
+        });
+
+        const response = await this.dynamoDBClient.send(command);
+        const items = (response.Items || []).map((it) => unmarshall(it as Record<string, AttributeValue>));
+        allMetaItems.push(...items);
+        lastEvaluatedKey = response.LastEvaluatedKey as Record<string, AttributeValue> | undefined;
+
+        if (allMetaItems.length >= pageSize) {
+          break;
+        }
+      } while (lastEvaluatedKey);
+
+      const conversations = allMetaItems.map((it) => ({
+        conversation_id: it.conversation_id,
+        conversationName: it.conversationName || null,
+        latestTimestamp: it.latestTimestamp || it.timestamp || 0,
+        timestamp: it.timestamp || 0,
+        content: it.content || '',
+        agentId: it.agentId || null,
+        agentTitle: it.agentTitle || null,
+        agentIcon: it.agentIcon || null,
+        agentType: it.agentType || null,
+        agentVisibility: it.agentVisibility || null,
+        agentVersion: it.agentVersion || null,
+        isAgentConversation: Boolean(it.isAgentConversation),
+        isWorkspaceConversation: Boolean(it.isWorkspaceConversation),
+      }));
+
+      conversations.sort((a, b) => (b.latestTimestamp as number) - (a.latestTimestamp as number));
+
+      return {
+        conversations,
+        lastEvaluatedKey: lastEvaluatedKey ? (lastEvaluatedKey as Record<string, AttributeValue>) : null,
+        hasMore: Boolean(lastEvaluatedKey),
+      };
+    } catch (err) {
+      console.error('Error fetching paginated user conversation meta:', err);
+      return { conversations: [], lastEvaluatedKey: null, hasMore: false };
+    }
+  }
+
+  /**
    * Return "meta" items for this user's conversations.
    * Returns the 25 most recently updated conversations (newest first by latestTimestamp).
    */
