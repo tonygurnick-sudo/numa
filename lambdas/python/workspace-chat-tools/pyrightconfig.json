@@ -1,5 +1,5 @@
 {
-  "exclude": [".venv", "**/.venv", "dist", "build", "*.egg-info"],
+  "exclude": [".venv", "**/.venv", "build_venv", "**/build_venv", "dist", "build", "*.egg-info", "wheels"],
   "reportPossiblyUnboundVariable": false,
   "reportMissingImports": false
 }
