@@ -268,7 +268,6 @@ export default function SettingsPage() {
         setCapabilities(items);
       } else {
         // Fallback: no capabilities.json (old deployment) — existing behavior with raw flag names
-        const metaByFlag = new Map<string, CapabilityItem>();
         const items: CapabilityItem[] = [];
 
         for (let i = 0; i < sessionStorage.length; i++) {
