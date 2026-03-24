@@ -188,10 +188,10 @@
     "webSearchResults": "Web Search Results ({{summary}})",
     "loading": "loading",
     "dataAnalysisWait": "This may take up to 5 minutes.",
-    "showProgress": "\u25bc Show progress",
-    "hideProgress": "\u25b2 Hide progress",
-    "showDetails": "\u25bc Show details",
-    "hideDetails": "\u25b2 Hide details",
+    "showProgress": "▼ Show progress",
+    "hideProgress": "▲ Hide progress",
+    "showDetails": "▼ Show details",
+    "hideDetails": "▲ Hide details",
     "retrying": "Retrying ({{attempt}}/{{maxAttempts}})",
     "retryReason": "Reason: {{reason}}"
   },
@@ -811,5 +811,14 @@
     "title": "Initialisation of Additional Niceties",
     "available": "Available Niceties:",
     "empty": "No niceties available."
+  },
+  "filePreview": {
+    "actions": {
+      "openFullScreen": "Full Screen",
+      "openInNewTab": "Open in New Tab",
+      "download": "Download",
+      "save": "Save",
+      "share": "Share"
+    }
   }
 }
