@@ -246,7 +246,7 @@ export const filePath = (file: FileItem): string => `${file.parent_path}${file.n
 export const buildS3Key = (scope: Scope, fileName: string, currentPath: string, userSub: string): string => {
   const safeName = sanitizeS3Filename(fileName);
   // Strip leading slash so the key doesn't start with double slashes
-  const pathSegment = currentPath.replace(/^\//, '');
+  const pathSegment = (currentPath || '/').replace(/^\//, '');
   switch (scope.type) {
     case 'my':
       return `files/user/${userSub}/${pathSegment}${safeName}`;
