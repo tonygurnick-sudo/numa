@@ -1,5 +1,6 @@
 import React, { useCallback, useMemo, useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
+import { OverlayTrigger, Tooltip } from 'react-bootstrap';
 import { useTranslation } from 'react-i18next';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
@@ -134,14 +135,24 @@ export function TicketCard({ ticket, onClick, onContextMenu, onAssign }: TicketC
         {(ticket.linkCount > 0 || ticket.commentCount > 0) && (
           <div className="d-flex align-items-center gap-2 ms-auto">
             {ticket.linkCount > 0 && (
-              <span className="ticket-meta-chip" title={`${ticket.linkCount} link${ticket.linkCount !== 1 ? 's' : ''}`}>
-                <i className="bi bi-link-45deg" /> {ticket.linkCount}
-              </span>
+              <OverlayTrigger
+                placement="top"
+                overlay={<Tooltip>{`${ticket.linkCount} link${ticket.linkCount !== 1 ? 's' : ''}`}</Tooltip>}
+              >
+                <span className="ticket-meta-chip">
+                  <i className="bi bi-link-45deg" /> {ticket.linkCount}
+                </span>
+              </OverlayTrigger>
             )}
             {ticket.commentCount > 0 && (
-              <span className="ticket-meta-chip">
-                <i className="bi bi-chat" /> {ticket.commentCount}
-              </span>
+              <OverlayTrigger
+                placement="top"
+                overlay={<Tooltip>{`${ticket.commentCount} comment${ticket.commentCount !== 1 ? 's' : ''}`}</Tooltip>}
+              >
+                <span className="ticket-meta-chip">
+                  <i className="bi bi-chat" /> {ticket.commentCount}
+                </span>
+              </OverlayTrigger>
             )}
           </div>
         )}
@@ -208,7 +219,18 @@ export function TicketCard({ ticket, onClick, onContextMenu, onAssign }: TicketC
         </div>
 
         <div className="d-flex align-items-center gap-1">
-          <PriorityIndicator priority={ticket.priority} />
+          <OverlayTrigger
+            placement="top"
+            overlay={
+              <Tooltip>
+                {ticket.priority ? ticket.priority.charAt(0).toUpperCase() + ticket.priority.slice(1) : 'Priority'}
+              </Tooltip>
+            }
+          >
+            <div style={{ display: 'inline-block' }}>
+              <PriorityIndicator priority={ticket.priority} />
+            </div>
+          </OverlayTrigger>
 
           <span
             ref={avatarRef}

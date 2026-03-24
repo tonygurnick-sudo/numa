@@ -383,9 +383,7 @@ export function SupplierMirrorView(): React.JSX.Element {
   const [activeSupplier, setActiveSupplier] = useState<Supplier | null>(null);
 
   // New supplier creation
-  const [showNewInput, setShowNewInput] = useState(false);
-  const [newName, setNewName] = useState('');
-  const [creating, setCreating] = useState(false);
+  const [creatingSupplier, setCreatingSupplier] = useState(false);
 
   // Detail modal
   const [selectedSupplierId, setSelectedSupplierId] = useState<string | null>(null);
@@ -439,27 +437,30 @@ export function SupplierMirrorView(): React.JSX.Element {
 
   // ── Create Supplier ────────────────────────────────────────────────────
 
-  const handleCreate = useCallback(async () => {
-    const trimmed = newName.trim();
-    if (!trimmed) return;
-
-    setCreating(true);
+  const handleCreateSupplier = useCallback(async () => {
     try {
+      setCreatingSupplier(true);
+
       const defaultStageId = stages.length > 0 ? stages[0].id : undefined;
 
-      await OpsService.createSupplier(numaPost, {
-        companyName: trimmed,
+      const newSupplier = await OpsService.createSupplier(numaPost, {
+        companyName: t('suppliers.newSupplierDefaultName', 'New Supplier'),
         lifecycleStage: defaultStageId,
       });
-      setNewName('');
-      setShowNewInput(false);
-      await loadSuppliers();
+
+      if (defaultStageId && !newSupplier.lifecycleStage) {
+        newSupplier.lifecycleStage = defaultStageId;
+      }
+
+      setSuppliers((prev) => [newSupplier, ...prev]);
+      setSelectedSupplierId(newSupplier.id);
+      setShowDetail(true);
     } catch (err) {
-      console.error('[SupplierMirrorView] Failed to create supplier', err);
+      console.error('[SupplierMirrorView] Create supplier failed', err);
     } finally {
-      setCreating(false);
+      setCreatingSupplier(false);
     }
-  }, [newName, numaPost, loadSuppliers, stages]);
+  }, [numaPost, t, stages]);
 
   // ── Handlers ───────────────────────────────────────────────────────────
 
@@ -654,98 +655,58 @@ export function SupplierMirrorView(): React.JSX.Element {
           style={{ maxWidth: 220 }}
         />
 
-        {/* Spacer */}
         <div className="flex-grow-1" />
 
-        {/* Board / List toggle */}
-        <div
-          style={{ display: 'flex', border: '1px solid #e5e7eb', borderRadius: 8, overflow: 'hidden', flexShrink: 0 }}
-        >
-          <button
-            type="button"
-            title={t('common.boardView')}
-            onClick={() => handleSetViewMode('board')}
-            style={{
-              padding: '5px 10px',
-              border: 'none',
-              background: viewMode === 'board' ? TEAL_ACCENT : '#fff',
-              color: viewMode === 'board' ? '#fff' : '#6b7280',
-              cursor: 'pointer',
-              fontSize: '0.85rem',
-              transition: 'all 0.12s',
-            }}
-          >
-            <i className="bi bi-kanban" />
-          </button>
-          <button
-            type="button"
-            title={t('common.listView')}
-            onClick={() => handleSetViewMode('list')}
-            style={{
-              padding: '5px 10px',
-              border: 'none',
-              borderLeft: '1px solid #e5e7eb',
-              background: viewMode === 'list' ? TEAL_ACCENT : '#fff',
-              color: viewMode === 'list' ? '#fff' : '#6b7280',
-              cursor: 'pointer',
-              fontSize: '0.85rem',
-              transition: 'all 0.12s',
-            }}
-          >
-            <i className="bi bi-list-ul" />
-          </button>
-        </div>
-        <div className="flex-grow-1" />
-        {/* New supplier */}
-        {showNewInput ? (
-          <div className="d-flex gap-1 align-items-center">
-            <Form.Control
-              size="sm"
-              type="text"
-              value={newName}
-              onChange={(e) => setNewName(e.target.value)}
-              placeholder={t('common.name')}
-              autoFocus
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') handleCreate();
-                if (e.key === 'Escape') {
-                  setShowNewInput(false);
-                  setNewName('');
-                }
-              }}
-              style={{ width: 200 }}
-              disabled={creating}
-            />
-            <Button
-              size="sm"
-              style={{ backgroundColor: TEAL_ACCENT, borderColor: TEAL_ACCENT, color: '#fff' }}
-              onClick={handleCreate}
-              disabled={creating || !newName.trim()}
-            >
-              {creating ? t('common.loading') : t('common.save')}
-            </Button>
-            <Button
-              size="sm"
-              variant="outline-secondary"
-              onClick={() => {
-                setShowNewInput(false);
-                setNewName('');
-              }}
-              disabled={creating}
-            >
-              {t('common.cancel')}
-            </Button>
-          </div>
-        ) : (
-          <Button
-            size="sm"
-            style={{ backgroundColor: TEAL_ACCENT, borderColor: TEAL_ACCENT, color: '#fff' }}
-            onClick={() => setShowNewInput(true)}
-          >
-            <i className="bi bi-plus me-1" />
+        {/* Header controls (View toggles, Create button) */}
+        <div className="d-flex align-items-center gap-2">
+          <Button variant="primary" size="sm" onClick={handleCreateSupplier} disabled={creatingSupplier}>
+            {creatingSupplier ? (
+              <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true" />
+            ) : (
+              <i className="bi bi-plus me-1" />
+            )}
             {t('suppliers.newSupplier')}
           </Button>
-        )}
+
+          {/* Board / List toggle */}
+          <div
+            style={{ display: 'flex', border: '1px solid #e5e7eb', borderRadius: 8, overflow: 'hidden', flexShrink: 0 }}
+          >
+            <button
+              type="button"
+              title={t('common.boardView')}
+              onClick={() => handleSetViewMode('board')}
+              style={{
+                padding: '5px 10px',
+                border: 'none',
+                background: viewMode === 'board' ? TEAL_ACCENT : '#fff',
+                color: viewMode === 'board' ? '#fff' : '#6b7280',
+                cursor: 'pointer',
+                fontSize: '0.85rem',
+                transition: 'all 0.12s',
+              }}
+            >
+              <i className="bi bi-kanban" />
+            </button>
+            <button
+              type="button"
+              title={t('common.listView')}
+              onClick={() => handleSetViewMode('list')}
+              style={{
+                padding: '5px 10px',
+                border: 'none',
+                borderLeft: '1px solid #e5e7eb',
+                background: viewMode === 'list' ? TEAL_ACCENT : '#fff',
+                color: viewMode === 'list' ? '#fff' : '#6b7280',
+                cursor: 'pointer',
+                fontSize: '0.85rem',
+                transition: 'all 0.12s',
+              }}
+            >
+              <i className="bi bi-list-ul" />
+            </button>
+          </div>
+        </div>
       </div>
 
       {/* ── Filtered count ─────────────────────────────────────────────────── */}

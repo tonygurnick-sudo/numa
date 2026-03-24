@@ -1956,7 +1956,7 @@ export function GlobalSettingsModal({
 
   return (
     <>
-      <Modal show={show} onHide={onHide} size="xl" fullscreen="lg-down" centered>
+      <Modal show={show} onHide={onHide} size="lg" fullscreen="lg-down" centered>
         <Modal.Header closeButton>
           <Modal.Title>{t('settings.title')}</Modal.Title>
         </Modal.Header>
@@ -2685,7 +2685,9 @@ export function GlobalSettingsModal({
             </div>
           </Form.Group>
           <Form.Group>
-            <Form.Label className="fw-medium small">Explicit Color Override</Form.Label>
+            <Form.Label className="fw-medium small">
+              {t('settings.explicitColorOverride', 'Explicit Color Override')}
+            </Form.Label>
             <div className="d-flex gap-2 align-items-center">
               <Form.Control
                 type="color"
@@ -2712,7 +2714,9 @@ export function GlobalSettingsModal({
                 onClick={() => setSupplierLifecycleStageForm({ ...supplierLifecycleStageForm, color: undefined })}
               >
                 {supplierLifecycleStageForm.color && (
-                  <span className="small text-danger hover-underline">Clear Override</span>
+                  <span className="small text-danger hover-underline">
+                    {t('common.clearOverride', 'Clear Override')}
+                  </span>
                 )}
               </div>
             </div>
@@ -2720,7 +2724,7 @@ export function GlobalSettingsModal({
         </Modal.Body>
         <Modal.Footer>
           <Button variant="secondary" onClick={() => setShowSupplierLifecycleStageModal(false)}>
-            Cancel
+            {t('common.cancel')}
           </Button>
           <Button
             style={{ backgroundColor: '#14b8a6', borderColor: '#14b8a6' }}
@@ -2747,7 +2751,7 @@ export function GlobalSettingsModal({
               setShowSupplierLifecycleStageModal(false);
             }}
           >
-            {editingSupplierLifecycleStage ? 'Save' : 'Add Stage'}
+            {editingSupplierLifecycleStage ? t('common.save') : t('common.addStage', 'Add Stage')}
           </Button>
         </Modal.Footer>
       </Modal>
@@ -2755,7 +2759,9 @@ export function GlobalSettingsModal({
       <Modal show={showSupplierFlagModal} onHide={() => setShowSupplierFlagModal(false)} centered>
         <Modal.Header closeButton>
           <Modal.Title style={{ color: '#14b8a6' }}>
-            {editingSupplierFlag ? 'Edit Supplier Flag' : 'Add Supplier Flag'}
+            {editingSupplierFlag
+              ? t('settings.editSupplierFlag', 'Edit Supplier Flag')
+              : t('settings.addSupplierFlag', 'Add Supplier Flag')}
           </Modal.Title>
         </Modal.Header>
         <Modal.Body className="d-flex flex-column gap-3">
@@ -2812,7 +2818,7 @@ export function GlobalSettingsModal({
         </Modal.Body>
         <Modal.Footer>
           <Button variant="secondary" onClick={() => setShowSupplierFlagModal(false)}>
-            Cancel
+            {t('common.cancel')}
           </Button>
           <Button
             className="border-0 text-white"
@@ -2839,7 +2845,7 @@ export function GlobalSettingsModal({
               setShowSupplierFlagModal(false);
             }}
           >
-            {editingSupplierFlag ? 'Save' : 'Add Flag'}
+            {editingSupplierFlag ? t('common.save') : t('settings.addFlag', 'Add Flag')}
           </Button>
         </Modal.Footer>
       </Modal>
@@ -2847,7 +2853,9 @@ export function GlobalSettingsModal({
       <Modal show={showSupplierDocTypeModal} onHide={() => setShowSupplierDocTypeModal(false)} centered size="sm">
         <Modal.Header closeButton>
           <Modal.Title className="fs-6" style={{ color: '#14b8a6' }}>
-            {editingSupplierDocType ? 'Edit Document Type' : 'Add Document Type'}
+            {editingSupplierDocType
+              ? t('settings.editDocType', 'Edit Document Type')
+              : t('settings.addDocType', 'Add Document Type')}
           </Modal.Title>
         </Modal.Header>
         <Modal.Body>

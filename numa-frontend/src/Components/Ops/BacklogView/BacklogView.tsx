@@ -388,8 +388,9 @@ function BacklogKanbanView({ tickets, stages, filter, groups, onTicketClick }: B
                   <DraggableKanbanCard key={ticket.id} ticket={ticket} onClick={() => onTicketClick(ticket.id)} />
                 ))}
               {group.tickets.length === 0 && (
-                <div className="text-center py-3">
-                  <span style={{ fontSize: '0.78rem', color: '#9ca3af' }}>{t('board.emptyColumn')}</span>
+                <div className="kanban-empty-dropzone">
+                  <i className="bi bi-inbox mb-1" style={{ fontSize: '1.4rem' }} />
+                  <span>{t('board.emptyDropzone', 'Drop tickets here')}</span>
                 </div>
               )}
             </div>
@@ -416,8 +417,9 @@ function BacklogKanbanView({ tickets, stages, filter, groups, onTicketClick }: B
                 <DraggableKanbanCard key={ticket.id} ticket={ticket} onClick={() => onTicketClick(ticket.id)} />
               ))}
               {stageTickets.length === 0 && (
-                <div className="text-center py-3">
-                  <span style={{ fontSize: '0.78rem', color: '#9ca3af' }}>{t('board.emptyColumn')}</span>
+                <div className="kanban-empty-dropzone">
+                  <i className="bi bi-inbox mb-1" style={{ fontSize: '1.4rem' }} />
+                  <span>{t('board.emptyDropzone', 'Drop tickets here')}</span>
                 </div>
               )}
             </div>
@@ -1155,7 +1157,10 @@ const BacklogView = () => {
                       <>
                         <DroppableGroupBody groupId={group.id}>
                           {group.tickets.length === 0 ? (
-                            <div className="text-muted small py-3 px-4">{t('backlogView.noTickets')}</div>
+                            <div className="kanban-empty-dropzone my-2 mx-3 text-center" style={{ minHeight: '80px' }}>
+                              <i className="bi bi-inbox mb-1" style={{ fontSize: '1.4rem', color: '#9ca3af' }} />
+                              <span>{t('backlogView.noTickets')}</span>
+                            </div>
                           ) : (
                             group.tickets
                               .sort((a, b) => a.order - b.order)

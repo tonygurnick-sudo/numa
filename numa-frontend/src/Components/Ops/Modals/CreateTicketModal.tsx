@@ -365,7 +365,7 @@ export function CreateTicketModal({
 
   if (!selectedTypeId) {
     return (
-      <Modal show={show} onHide={onHide} size="xl" centered>
+      <Modal show={show} onHide={onHide} size="lg" centered>
         <Modal.Header closeButton className="border-bottom-0 pb-2">
           <div>
             <h5 className="mb-0 fw-bold" style={{ fontSize: '1.15rem' }}>
@@ -478,7 +478,7 @@ export function CreateTicketModal({
   const typeColor = selectedType?.color ?? '#6c757d';
 
   return (
-    <Modal show={show} onHide={onHide} size="xl" centered>
+    <Modal show={show} onHide={onHide} size="lg" centered>
       <Form noValidate validated={validated} onSubmit={handleSubmit}>
         {/* ── Header: back + type badge + title input ─────────────────── */}
         <Modal.Header closeButton className="flex-column align-items-start pb-1">

@@ -179,6 +179,12 @@ const KanbanColumn: React.FC<KanbanColumnProps> = ({
               onAssign={onTicketAssign}
             />
           ))}
+          {tickets.length === 0 && (
+            <div className="kanban-empty-dropzone">
+              <i className="bi bi-inbox mb-1" style={{ fontSize: '1.4rem' }} />
+              <span>{t('board.emptyDropzone', 'Drop tickets here')}</span>
+            </div>
+          )}
         </SortableContext>
       </div>
     </div>
