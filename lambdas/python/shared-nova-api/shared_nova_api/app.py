@@ -935,15 +935,15 @@ async def create_share(
                 transcription_file_key=s3_key,
             )
     else:
-        # Sync path: text files are fast to fetch directly
-        logger.info("Fetching text document at share creation", uuid=share_uuid)
-        document_text = fetch_document(body.s3_signed_url)
-        item["document_text"] = document_text
-        chat_status = "ready"
+        # All non-binary files: let transcription service handle async.
+        # No sync fetch needed — the share is viewable immediately,
+        # chat becomes available once transcription completes.
+        item["transcription_file_key"] = s3_key
+        chat_status = "pending"
         logger.info(
-            "Share created (text extracted)",
+            "Share created (chat pending transcription)",
             uuid=share_uuid,
-            text_length=len(document_text),
+            transcription_file_key=s3_key,
         )
 
     # Share is always viewable immediately
