@@ -73,7 +73,7 @@ lint-python-lambdas:
 			echo "  $$name" && (cd "$$dir" && poetry install -q 2>/dev/null && \
 				poetry run pyright . && \
 				poetry run mypy . && \
-				poetry run pylint . --recursive yes --ignore .venv,.poetry,build_venv,wheels) || exit 1; \
+				poetry run pylint . --recursive yes --ignore .venv,.poetry,build_venv,wheels --ignore-paths '.*/(\.venv|build_venv|wheels|dist)/.*') || exit 1; \
 		fi; \
 	done
 
@@ -85,7 +85,7 @@ lint-python-libs:
 			echo "  $$name" && (cd "$$dir" && poetry install -q 2>/dev/null && \
 				poetry run pyright . && \
 				poetry run mypy . && \
-				poetry run pylint . --recursive yes --ignore .venv,.poetry,build_venv,wheels) || exit 1; \
+				poetry run pylint . --recursive yes --ignore .venv,.poetry,build_venv,wheels --ignore-paths '.*/(\.venv|build_venv|wheels|dist)/.*') || exit 1; \
 		fi; \
 	done
 
