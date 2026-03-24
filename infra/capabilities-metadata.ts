@@ -1,0 +1,200 @@
+/**
+ * Global capabilities metadata — single source of truth.
+ *
+ * This file defines the display metadata for every feature flag that can
+ * appear in the admin Capabilities tab.  It is imported by:
+ *   1. numa-client-stack.ts  → generates capabilities.json on the frontend S3 bucket
+ *   2. tools/seed-capabilities-metadata.ts → populates the deployer DynamoDB table
+ *
+ * To add a new capability:
+ *   1. Add an entry here
+ *   2. Add the camelCase config key in numa-client-stack.ts config.json generation
+ *   3. Use getFlag('MY_FLAG') in frontend code
+ *   4. Run the seed script to sync DynamoDB
+ *   5. Deploy
+ */
+
+export interface CapabilityMetadata {
+  /** UPPER_SNAKE_CASE flag name matching sessionStorage / config.json keys */
+  flag: string;
+  /** Human-readable display name */
+  title: string;
+  /** One-line description of what this capability does */
+  description: string;
+  /** Bootstrap Icons class e.g. "bi-code-slash" */
+  icon: string;
+  /** If true, the admin cannot toggle this — it is always on when deployed */
+  system_only: boolean;
+  /** If true, only visible when DEVELOPER_MODE is enabled */
+  dev_only: boolean;
+  /** Parent flags that must be enabled for this capability to function */
+  dependencies: string[];
+}
+
+export const CAPABILITIES_METADATA: CapabilityMetadata[] = [
+  // ── Parent capabilities (no dependencies) ──────────────────────────
+  {
+    flag: 'NUMA_WORKSPACE_CHAT',
+    title: 'Workspace Chat',
+    description: 'Next-gen AI chat with sandboxed code execution and persistent workspaces.',
+    icon: 'bi-chat-dots',
+    system_only: false,
+    dev_only: false,
+    dependencies: [],
+  },
+  {
+    flag: 'NUMA_FILES',
+    title: 'Numa Files',
+    description: 'Virtual file system with folder workflows, file extraction, and database ingestion.',
+    icon: 'bi-folder-fill',
+    system_only: false,
+    dev_only: false,
+    dependencies: [],
+  },
+  {
+    flag: 'AGENTS',
+    title: 'Agents',
+    description: 'Custom AI agent creation, management, and marketplace.',
+    icon: 'bi-robot',
+    system_only: false,
+    dev_only: false,
+    dependencies: [],
+  },
+  {
+    flag: 'SCHEDULING',
+    title: 'Scheduling',
+    description: 'Agent scheduling, recurring runs, and notification system.',
+    icon: 'bi-calendar-check',
+    system_only: false,
+    dev_only: false,
+    dependencies: [],
+  },
+  {
+    flag: 'NUMA_OPS',
+    title: 'Numa Ops',
+    description: 'Work management and operational task tracking.',
+    icon: 'bi-kanban',
+    system_only: false,
+    dev_only: false,
+    dependencies: [],
+  },
+  {
+    flag: 'KNOWLEDGE_BASES',
+    title: 'Knowledge Bases',
+    description: 'Enterprise search and retrieval from uploaded documents.',
+    icon: 'bi-book',
+    system_only: false,
+    dev_only: false,
+    dependencies: [],
+  },
+  {
+    flag: 'PIPEDREAM_INTEGRATIONS',
+    title: 'Pipedream Integrations',
+    description: 'SaaS tool integrations via Pipedream (Gmail, Slack, Jira, etc.).',
+    icon: 'bi-plug',
+    system_only: false,
+    dev_only: false,
+    dependencies: [],
+  },
+  {
+    flag: 'DATA_CONNECTORS_ENABLED',
+    title: 'Data Connectors',
+    description: 'Connect external data sources for knowledge base sync.',
+    icon: 'bi-cloud-download',
+    system_only: false,
+    dev_only: false,
+    dependencies: [],
+  },
+  {
+    flag: 'DEVELOPER_MODE',
+    title: 'Developer Mode',
+    description: 'Enables developer tools, file drill-down, metadata inspection, and debug views.',
+    icon: 'bi-code-slash',
+    system_only: false,
+    dev_only: false,
+    dependencies: [],
+  },
+  {
+    flag: 'MFA_ENABLED',
+    title: 'Multi-Factor Authentication',
+    description: 'Require TOTP-based multi-factor authentication for all users.',
+    icon: 'bi-shield-lock',
+    system_only: false,
+    dev_only: false,
+    dependencies: [],
+  },
+  {
+    flag: 'SECRETS_VAULT_ENABLED',
+    title: 'Secrets Vault',
+    description: 'Secure credential storage for integrations and connections.',
+    icon: 'bi-key',
+    system_only: false,
+    dev_only: false,
+    dependencies: [],
+  },
+  {
+    flag: 'OAUTH_INTEGRATIONS_ENABLED',
+    title: 'OAuth Integrations',
+    description: 'OAuth-based connectors for external services.',
+    icon: 'bi-link-45deg',
+    system_only: false,
+    dev_only: false,
+    dependencies: [],
+  },
+  {
+    flag: 'TRANSCRIPTION_SERVICE',
+    title: 'Transcription Service',
+    description: 'Document transcription and content extraction pipeline.',
+    icon: 'bi-mic',
+    system_only: false,
+    dev_only: false,
+    dependencies: [],
+  },
+  {
+    flag: 'USAGE_REPORTING',
+    title: 'Usage Reporting',
+    description: 'Login activity heatmaps and usage analytics for admins.',
+    icon: 'bi-bar-chart-line',
+    system_only: false,
+    dev_only: false,
+    dependencies: [],
+  },
+  {
+    flag: 'V2_APPS',
+    title: 'V2 Apps',
+    description: 'Next-generation apps running on workspace agent.',
+    icon: 'bi-lightning',
+    system_only: false,
+    dev_only: false,
+    dependencies: [],
+  },
+
+  // ── Child capabilities (have dependencies) ─────────────────────────
+  {
+    flag: 'NUMA_DROP_ZONES',
+    title: 'Drop Zones',
+    description: 'Shared upload folders for receiving files from external users.',
+    icon: 'bi-cloud-upload',
+    system_only: false,
+    dev_only: false,
+    dependencies: ['NUMA_FILES'],
+  },
+  {
+    flag: 'NUMA_SHARING',
+    title: 'Sharing',
+    description: 'Share documents with external users for public Q&A conversations.',
+    icon: 'bi-share',
+    system_only: false,
+    dev_only: false,
+    dependencies: ['NUMA_FILES'],
+  },
+  {
+    flag: 'WORKSPACE_CHAT_MODEL_SELECTION',
+    title: 'Model Selection',
+    description: 'Allow users to choose between AI models in Workspace Chat.',
+    icon: 'bi-sliders',
+    system_only: false,
+    dev_only: false,
+    dependencies: ['NUMA_WORKSPACE_CHAT'],
+  },
+];

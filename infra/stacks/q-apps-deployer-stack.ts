@@ -103,6 +103,28 @@ export class QAppsDeployerStack extends ArcanumStack {
       policy: clientConfigResourcePolicyDoc.json,
     });
 
+    // Global capabilities metadata table — shared across all clients.
+    // Stores display metadata (title, description, icon, system_only) for feature flags.
+    // Populated via tools/seed-capabilities-metadata.ts.
+    const capabilitiesMetadataTable = new DynamodbTable(this, 'capabilities-metadata-table', {
+      name: 'numa-capabilities-metadata',
+      billingMode: 'PAY_PER_REQUEST',
+      hashKey: 'flag',
+      attribute: [
+        {
+          name: 'flag',
+          type: 'S',
+        },
+      ],
+      pointInTimeRecovery: {
+        enabled: true,
+      },
+    });
+
+    new TerraformOutput(this, 'capabilities-metadata-table-arn', {
+      value: capabilitiesMetadataTable.arn,
+    });
+
     const honeycomb = new Honeycomb(this, 'honeycomb', {
       name: 'numa-' + props.environmentName,
     });

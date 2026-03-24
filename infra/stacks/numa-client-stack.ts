@@ -60,6 +60,7 @@ import { WorkspaceChatAgentProxy } from '../constructs/workspace-chat-agent-prox
 import { WorkspaceChatToolsConstruct } from '../constructs/workspace-chat-tools-construct';
 import { NullProvider } from '@cdktf/provider-null/lib/provider';
 import { awsNameWithHashedPrefix } from '../constructs/aws-name-utils';
+import { CAPABILITIES_METADATA } from '../capabilities-metadata';
 
 const arcanumOrgId = 'o-g8veu85jva';
 const nextGenOrgId = 'o-apdsu3c1a7';
@@ -695,7 +696,7 @@ export class NumaClientStack extends TerraformStack {
       });
     });
     const folderPath = path.join(import.meta.dirname, '..', 'build', 'numa-frontend');
-    const excludedFiles = ['config.json', 'manifest.json'];
+    const excludedFiles = ['config.json', 'manifest.json', 'capabilities.json'];
     let objects: S3Object[] = [];
     try {
       objects = fs
@@ -787,6 +788,17 @@ export class NumaClientStack extends TerraformStack {
         WORKSPACE_CHAT_AGENT_FUNCTION_URL: workspaceChatAgentProxy?.functionUrl,
         NUMA_VERSION: siteVersion,
       }),
+      contentType: 'application/json',
+      cacheControl: 'no-cache, no-store, must-revalidate',
+    });
+
+    // Capabilities metadata — display info for the admin Capabilities tab.
+    // Generated from the shared constant so the frontend gets nice names,
+    // descriptions, and icons instead of raw flag names.
+    new S3Object(this, 'capabilities-item', {
+      bucket: fe.frontendBucket.bucket,
+      key: 'capabilities.json',
+      content: JSON.stringify(CAPABILITIES_METADATA),
       contentType: 'application/json',
       cacheControl: 'no-cache, no-store, must-revalidate',
     });

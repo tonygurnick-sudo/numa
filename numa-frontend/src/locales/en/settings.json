@@ -165,7 +165,7 @@
   "capabilities": {
     "tabTitle": "Capabilities",
     "companySettingsTitle": "Feature Capabilities",
-    "companySettingsDescription": "Control which features are available to users. Greyed-out items require a deployment change to enable.",
+    "companySettingsDescription": "Control which features are available to users. System managed features cannot be toggled.",
     "numaFiles": {
       "name": "Numa Files",
       "description": "Virtual file system with folder workflows, file extraction, and database ingestion."
@@ -243,7 +243,9 @@
     "devOnlyBadge": "Dev only",
     "toggleEnabled": "Enabled",
     "toggleDisabled": "Disabled",
-    "disableConfirm": "Disabling {{name}} will prevent users from accessing it. Continue?"
+    "disableConfirm": "Disabling {{name}} will prevent users from accessing it. Continue?",
+    "systemManaged": "System Managed",
+    "systemManagedTooltip": "This capability is managed by the system and cannot be toggled by an admin."
   },
   "brandingAdmin": {
     "title": "Branding Controls",

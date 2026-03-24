@@ -33,6 +33,8 @@ export interface CapabilityItem {
   devOnly: boolean;
   /** Flags that must be enabled for this capability to function */
   dependencies: string[];
+  /** If true, admin cannot toggle — always on when deployed */
+  systemOnly: boolean;
 }
 
 export interface CapabilityGroup {
@@ -52,13 +54,21 @@ export async function loadCapabilities(): Promise<CapabilityItem[]> {
   try {
     const response = await fetch('/capabilities.json', { cache: 'no-store' });
     if (!response.ok) throw new Error(response.statusText);
-    const raw = (await response.json()) as CapabilityItem[];
-    // Normalize flag names from camelCase (DynamoDB source) to UPPER_SNAKE_CASE
-    // (matching sessionStorage convention used throughout the frontend).
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const raw = (await response.json()) as any[];
+    // Normalize: camelCase → UPPER_SNAKE_CASE flag names, title → name,
+    // system_only → systemOnly, with safe defaults for backward compat.
     cachedCapabilities = raw.map((item) => ({
-      ...item,
-      flag: camelToUpperSnake(item.flag),
-      dependencies: item.dependencies.map(camelToUpperSnake),
+      flag: camelToUpperSnake(item.flag ?? ''),
+      name: item.title ?? item.name ?? item.flag ?? '',
+      description: item.description ?? '',
+      icon: item.icon,
+      labelKey: item.labelKey,
+      descriptionKey: item.descriptionKey,
+      deployRequired: item.deployRequired ?? item.deploy_required ?? false,
+      devOnly: item.devOnly ?? item.dev_only ?? false,
+      dependencies: (item.dependencies ?? []).map(camelToUpperSnake),
+      systemOnly: item.systemOnly ?? item.system_only ?? false,
     }));
     return cachedCapabilities;
   } catch {

@@ -124,13 +124,19 @@ export default function SettingsPage() {
   const agentsFeatureEnabled = getFlag('AGENTS');
   const dataConnectorsEnabled = getFlag('DATA_CONNECTORS_ENABLED');
   const mfaEnabled = getFlag('MFA_ENABLED');
+  // Hidden by default — only shown when explicitly set to true in numa-client-config
+  const usageReportingEnabled = window.sessionStorage.getItem('DEPLOY_USAGE_REPORTING') === 'true';
+  const developerModeEnabled = window.sessionStorage.getItem('DEPLOY_DEVELOPER_MODE') === 'true';
   const availableIntegrations = useMemo<IntegrationListItem[]>(() => getIntegrationsListFormat(), [i18n.language]);
 
   useEffect(() => {
     if (!isAdmin && settingsScope !== 'user') {
       setSettingsScope('user');
     }
-  }, [isAdmin]);
+    if (!developerModeEnabled && (settingsScope === 'developer' || settingsScope === 'services')) {
+      setSettingsScope('admin');
+    }
+  }, [isAdmin, developerModeEnabled, settingsScope]);
 
   // Global (admin) settings — SWR: initialize from cache for instant render
   const [globalSettings, setGlobalSettings] = useState<GlobalIntegrationSettingsMap>(
@@ -249,51 +255,60 @@ export default function SettingsPage() {
     if (!isAdmin) return;
     loadCapabilitySettings();
 
-    // Build capability list from config.json flags (DEPLOY_* keys in sessionStorage),
-    // enriched with metadata from capabilities.json where available.
     loadCapabilities().then((meta) => {
-      const metaByFlag = new Map(meta.map((c) => [c.flag, c]));
-      const items: CapabilityItem[] = [];
+      if (meta.length > 0) {
+        // New path: capabilities.json exists (post-deploy with metadata).
+        // Only show capabilities in BOTH the metadata AND deployed as true.
+        const items = meta.filter((cap) => {
+          const deployValue = sessionStorage.getItem(`DEPLOY_${cap.flag}`);
+          // Also check raw flag for backward compat (older deployments without DEPLOY_ prefix)
+          const rawValue = sessionStorage.getItem(cap.flag);
+          return deployValue === 'true' || (deployValue === null && rawValue === 'true');
+        });
+        setCapabilities(items);
+      } else {
+        // Fallback: no capabilities.json (old deployment) — existing behavior with raw flag names
+        const metaByFlag = new Map<string, CapabilityItem>();
+        const items: CapabilityItem[] = [];
 
-      // 1. Flags from config.json — show all except hard-denied (DEPLOY_FLAG=false)
-      for (let i = 0; i < sessionStorage.length; i++) {
-        const key = sessionStorage.key(i);
-        if (!key?.startsWith('DEPLOY_')) continue;
-        const flag = key.slice(7);
-        const deployValue = sessionStorage.getItem(key);
-        if (deployValue === 'false') continue; // Hard deny — do not show
-        const existing = metaByFlag.get(flag);
-        items.push(
-          existing ?? { flag, name: flag, description: '', deployRequired: false, devOnly: false, dependencies: [] }
-        );
-        metaByFlag.delete(flag); // Mark as handled
-      }
-
-      // 2. Collect all known flags: from route config featureFlags + code registry.
-      //    This ensures flags like NUMA_FILES and KNOWLEDGE_BASES always appear
-      //    even if they're not in config.json and Nav hasn't rendered them yet.
-      const allKnownFlags = new Set(getFlagRegistry());
-      for (const r of ROUTE_CONFIG) {
-        if (r.featureFlag) allKnownFlags.add(r.featureFlag);
-      }
-
-      for (const flag of allKnownFlags) {
-        if (items.some((c) => c.flag === flag)) continue; // Already in list
-        if (sessionStorage.getItem(`DEPLOY_${flag}`) === 'false') continue; // Hard denied
-        const existing = metaByFlag.get(flag);
-        items.push(
-          existing ?? {
+        for (let i = 0; i < sessionStorage.length; i++) {
+          const key = sessionStorage.key(i);
+          if (!key?.startsWith('DEPLOY_')) continue;
+          const flag = key.slice(7);
+          const deployValue = sessionStorage.getItem(key);
+          if (deployValue === 'false') continue;
+          items.push({
             flag,
             name: flag,
             description: '',
             deployRequired: false,
             devOnly: false,
             dependencies: [],
-          }
-        );
-      }
+            systemOnly: false,
+          });
+        }
 
-      setCapabilities(items);
+        const allKnownFlags = new Set(getFlagRegistry());
+        for (const r of ROUTE_CONFIG) {
+          if (r.featureFlag) allKnownFlags.add(r.featureFlag);
+        }
+
+        for (const flag of allKnownFlags) {
+          if (items.some((c) => c.flag === flag)) continue;
+          if (sessionStorage.getItem(`DEPLOY_${flag}`) === 'false') continue;
+          items.push({
+            flag,
+            name: flag,
+            description: '',
+            deployRequired: false,
+            devOnly: false,
+            dependencies: [],
+            systemOnly: false,
+          });
+        }
+
+        setCapabilities(items);
+      }
     });
   }, [isAdmin, user, numaGet]);
 
@@ -738,17 +753,22 @@ export default function SettingsPage() {
   const capabilityGroups = groupByDependencies(visibleCapabilities);
 
   const renderCapabilityRow = (cap: CapabilityItem, isChild = false) => {
-    const deployValue = typeof window !== 'undefined' ? window.sessionStorage.getItem(`DEPLOY_${cap.flag}`) : null;
-    // isDeployed: true if explicitly in config, or unknown (not yet wired up — dev flag)
-    const isDeployed = deployValue !== null ? deployValue === 'true' : true;
     const capSetting = capabilitySettings[cap.flag];
-    // Default to enabled if no admin setting exists (user requirement: enabled by default)
     const adminEnabled = capSetting ? capSetting.status === 'enabled' : true;
-    const meta = resolveCapMeta(cap);
+    const isSystemOnly = cap.systemOnly ?? false;
     const displayName = cap.labelKey ? t(cap.labelKey, { defaultValue: cap.name }) : cap.name;
     const displayDescription = cap.descriptionKey
       ? t(cap.descriptionKey, { defaultValue: cap.description })
       : cap.description;
+
+    // Visual states:
+    // 1. systemOnly = true → always on, no toggle, info styling
+    // 2. systemOnly = false + adminEnabled → normal with toggle on
+    // 3. systemOnly = false + !adminEnabled → greyed out with toggle off
+    const isGreyed = !isSystemOnly && !adminEnabled;
+
+    // Icon color: system-managed = teal, enabled = blue, disabled = grey
+    const iconColor = isSystemOnly ? '#0d9488' : isGreyed ? '#6c757d' : '#0d6efd';
 
     return (
       <div
@@ -757,9 +777,9 @@ export default function SettingsPage() {
         style={{
           boxShadow: '0 2px 8px rgba(0,0,0,0.06)',
           transition: 'all 0.2s ease',
-          opacity: isDeployed ? 1 : 0.5,
+          opacity: isGreyed ? 0.55 : 1,
           cursor: 'default',
-          filter: !isDeployed ? 'grayscale(50%)' : 'none',
+          filter: isGreyed ? 'grayscale(40%)' : 'none',
           ...(isChild ? { marginLeft: '2rem', borderLeft: '3px solid #dee2e6' } : {}),
         }}
         onMouseEnter={(e) => {
@@ -773,12 +793,14 @@ export default function SettingsPage() {
           <div className="col-md-7 d-flex align-items-center">
             <div
               className="rounded-2 d-flex align-items-center justify-content-center me-3 flex-shrink-0"
-              style={{ width: '48px', height: '48px', backgroundColor: '#f8f9fa', border: '1px solid #dee2e6' }}
+              style={{
+                width: '48px',
+                height: '48px',
+                backgroundColor: isSystemOnly ? '#f0fdfa' : '#f8f9fa',
+                border: `1px solid ${isSystemOnly ? '#99f6e4' : '#dee2e6'}`,
+              }}
             >
-              <i
-                className={`bi ${cap.icon ?? 'bi-gear'}`}
-                style={{ fontSize: '24px', color: isDeployed ? '#0d6efd' : '#6c757d' }}
-              />
+              <i className={`bi ${cap.icon ?? 'bi-gear'}`} style={{ fontSize: '24px', color: iconColor }} />
             </div>
             <div>
               <div
@@ -786,9 +808,21 @@ export default function SettingsPage() {
                 style={{ fontSize: '0.95rem' }}
               >
                 {displayName}
-                {!isDeployed && <span className="badge bg-secondary small">{t('capabilities.notDeployed')}</span>}
-                {meta.deployRequired && (
-                  <span className="text-muted small">{t('capabilities.requiresDeployBadge')}</span>
+                {isSystemOnly && (
+                  <OverlayTrigger placement="top" overlay={<Tooltip>{t('capabilities.systemManagedTooltip')}</Tooltip>}>
+                    <span
+                      className="badge d-inline-flex align-items-center gap-1"
+                      style={{
+                        backgroundColor: '#f0fdfa',
+                        color: '#0d9488',
+                        border: '1px solid #99f6e4',
+                        fontSize: '0.7rem',
+                      }}
+                    >
+                      <i className="bi bi-lock-fill" />
+                      {t('capabilities.systemManaged')}
+                    </span>
+                  </OverlayTrigger>
                 )}
               </div>
               <div
@@ -800,18 +834,10 @@ export default function SettingsPage() {
             </div>
           </div>
           <div className="col-md-5 d-flex justify-content-end gap-2 align-items-center">
-            {!isDeployed ? (
-              <OverlayTrigger placement="top" overlay={<Tooltip>{t('capabilities.notDeployed')}</Tooltip>}>
-                <div>
-                  <Form.Check
-                    type="switch"
-                    id={`toggle-cap-${cap.flag}`}
-                    checked={false}
-                    disabled
-                    label={<span className="small text-muted">{t('capabilities.notDeployed')}</span>}
-                  />
-                </div>
-              </OverlayTrigger>
+            {isSystemOnly ? (
+              <span className="small" style={{ color: '#0d9488' }}>
+                {t('capabilities.toggleEnabled')}
+              </span>
             ) : (
               <Form.Check
                 type="switch"
@@ -844,10 +870,12 @@ export default function SettingsPage() {
         ? [{ key: 'data-connectors', label: t('tabs.dataConnectors'), iconClassName: 'bi bi-cloud-download' }]
         : []),
       { key: 'capabilities', label: t('capabilities.tabTitle'), iconClassName: 'bi bi-toggles' },
-      { key: 'usage', label: t('tabs.usage'), iconClassName: 'bi bi-bar-chart-line' },
+      ...(usageReportingEnabled
+        ? [{ key: 'usage', label: t('tabs.usage'), iconClassName: 'bi bi-bar-chart-line' }]
+        : []),
     ],
-    // REBASE RESOLUTION: Kept HEAD deps. Incoming (8e1a6ca9, 0139d1c5) omitted mfaEnabled.
-    [allowBrandingTab, agentsFeatureEnabled, mfaEnabled, dataConnectorsEnabled, t]
+    // REBASE RESOLUTION: Merged HEAD (mfaEnabled) + incoming (0df47f9a added usageReportingEnabled). Both needed.
+    [allowBrandingTab, agentsFeatureEnabled, mfaEnabled, dataConnectorsEnabled, usageReportingEnabled, t]
   );
   const userTabs = useMemo(
     () => [
@@ -904,22 +932,26 @@ export default function SettingsPage() {
                 <i className="bi bi-shield-lock" aria-hidden="true"></i>
                 {t('scope.admin')}
               </button>
-              <button
-                type="button"
-                className={`settings-scope-toggle__button ${currentScope === 'developer' ? 'active' : ''}`}
-                onClick={() => setSettingsScope('developer')}
-              >
-                <i className="bi bi-code-slash" aria-hidden="true"></i>
-                {t('scope.developer')}
-              </button>
-              <button
-                type="button"
-                className={`settings-scope-toggle__button ${currentScope === 'services' ? 'active' : ''}`}
-                onClick={() => setSettingsScope('services')}
-              >
-                <i className="bi bi-clock-history" aria-hidden="true"></i>
-                {t('scope.services')}
-              </button>
+              {developerModeEnabled && (
+                <button
+                  type="button"
+                  className={`settings-scope-toggle__button ${currentScope === 'developer' ? 'active' : ''}`}
+                  onClick={() => setSettingsScope('developer')}
+                >
+                  <i className="bi bi-code-slash" aria-hidden="true"></i>
+                  {t('scope.developer')}
+                </button>
+              )}
+              {developerModeEnabled && (
+                <button
+                  type="button"
+                  className={`settings-scope-toggle__button ${currentScope === 'services' ? 'active' : ''}`}
+                  onClick={() => setSettingsScope('services')}
+                >
+                  <i className="bi bi-clock-history" aria-hidden="true"></i>
+                  {t('scope.services')}
+                </button>
+              )}
             </div>
           ) : undefined
         }
@@ -1616,7 +1648,7 @@ export default function SettingsPage() {
                   ))}
                 </div>
               </Tab>
-              {isAdmin && (
+              {isAdmin && usageReportingEnabled && (
                 <Tab
                   eventKey="usage"
                   title={

@@ -316,6 +316,7 @@ export const FilesPage = () => {
   const dropZonesEnabled = getFlag('NUMA_DROP_ZONES');
   const sharingEnabled = getFlag('NUMA_SHARING');
   const transcriptionEnabled = getFlag('TRANSCRIPTION_SERVICE');
+  const developerModeEnabled = window.sessionStorage.getItem('DEPLOY_DEVELOPER_MODE') === 'true';
 
   // Synergy connection state (stays local — not part of browsing)
   const [synergyStatus, setSynergyStatus] = useState<DataConnectorStatus | null>(null);
@@ -1684,7 +1685,7 @@ export const FilesPage = () => {
           <span>{t('tabs.remote')}</span>
         </button>
       )}
-      {transcriptionEnabled && (
+      {transcriptionEnabled && developerModeEnabled && (
         <button
           className={`toolbar-action-btn${activeTab === 'transcripts' ? ' active' : ''}`}
           onClick={() => navigate('/files/transcripts')}
@@ -1693,13 +1694,15 @@ export const FilesPage = () => {
           <span>{t('tabs.transcripts')}</span>
         </button>
       )}
-      <button
-        className={`toolbar-action-btn${activeTab === 'uploads' ? ' active' : ''}`}
-        onClick={() => navigate('/files/uploads')}
-      >
-        <i className="bi bi-cloud-arrow-up" />
-        <span>{t('tabs.uploads')}</span>
-      </button>
+      {developerModeEnabled && (
+        <button
+          className={`toolbar-action-btn${activeTab === 'uploads' ? ' active' : ''}`}
+          onClick={() => navigate('/files/uploads')}
+        >
+          <i className="bi bi-cloud-arrow-up" />
+          <span>{t('tabs.uploads')}</span>
+        </button>
+      )}
     </div>
   );
 
