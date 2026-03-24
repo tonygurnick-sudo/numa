@@ -1195,6 +1195,13 @@ export const clientConfigSchema = coreNumaInfraPropsSchema
         transcriptionService: z.boolean().optional().default(false),
 
         /**
+         * Enable job history viewer.
+         *
+         * @default true (when allApps is enabled)
+         */
+        jobHistory: z.boolean().optional().default(true),
+
+        /**
          * Comma-separated additional Cognito User Pool Client IDs to accept.
          * Used when a whitelabel frontend shares the same User Pool but has its own app client.
          */
