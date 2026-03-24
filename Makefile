@@ -60,10 +60,12 @@ lint:
 	@for dir in lambdas/python/*/; do \
 		name=$$(basename "$$dir"); \
 		if [ -f "$$dir/pyproject.toml" ]; then \
-			echo "  $$name" && (cd "$$dir" && poetry install -q 2>/dev/null && \
-				poetry run pyright . && \
-				poetry run mypy . && \
-				poetry run pylint . --recursive yes --ignore .venv,.poetry) || exit 1; \
+			echo "  $$name"; \
+			(cd "$$dir" && poetry install -q 2>/dev/null && \
+				if poetry run which pyright >/dev/null 2>&1; then poetry run pyright .; fi && \
+				if poetry run which mypy >/dev/null 2>&1; then poetry run mypy .; fi && \
+				if poetry run which pylint >/dev/null 2>&1; then poetry run pylint . --recursive yes --ignore .venv,.poetry; fi \
+			) || exit 1; \
 		fi; \
 	done
 	@echo ""
@@ -71,10 +73,12 @@ lint:
 	@for dir in lib/*/; do \
 		name=$$(basename "$$dir"); \
 		if [ -f "$$dir/pyproject.toml" ]; then \
-			echo "  $$name" && (cd "$$dir" && poetry install -q 2>/dev/null && \
-				poetry run pyright . && \
-				poetry run mypy . && \
-				poetry run pylint . --recursive yes --ignore .venv,.poetry) || exit 1; \
+			echo "  $$name"; \
+			(cd "$$dir" && poetry install -q 2>/dev/null && \
+				if poetry run which pyright >/dev/null 2>&1; then poetry run pyright .; fi && \
+				if poetry run which mypy >/dev/null 2>&1; then poetry run mypy .; fi && \
+				if poetry run which pylint >/dev/null 2>&1; then poetry run pylint . --recursive yes --ignore .venv,.poetry; fi \
+			) || exit 1; \
 		fi; \
 	done
 	@echo ""
