@@ -139,7 +139,8 @@
       "today": "Today",
       "yesterday": "Yesterday",
       "thisWeek": "This Week",
-      "thisMonth": "This Month"
+      "thisMonth": "This Month",
+      "older": "Older"
     }
   },
   "agentsPanel": {

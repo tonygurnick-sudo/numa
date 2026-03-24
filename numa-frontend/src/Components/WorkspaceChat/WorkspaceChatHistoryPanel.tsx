@@ -32,6 +32,8 @@ const formatRelativeTime = (
   timestamp: number,
   t: (key: string, options?: Record<string, unknown>) => string,
 ): string => {
+  if (!timestamp || timestamp < 86400000) return '';
+
   const now = Date.now();
   const diff = now - timestamp;
   const seconds = Math.floor(diff / 1000);
@@ -63,6 +65,8 @@ const formatRelativeTime = (
 type DateGroupKey = 'today' | 'yesterday' | 'thisWeek' | 'thisMonth' | string;
 
 const getDateGroupKey = (timestamp: number): DateGroupKey => {
+  if (!timestamp || timestamp < 86400000) return 'older';
+
   const now = new Date();
   const date = new Date(timestamp);
   const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -229,6 +233,7 @@ export const WorkspaceChatHistoryPanel = forwardRef<WorkspaceChatHistoryPanelRef
         yesterday: t('history.dateGroups.yesterday'),
         thisWeek: t('history.dateGroups.thisWeek'),
         thisMonth: t('history.dateGroups.thisMonth'),
+        older: t('history.dateGroups.older'),
       };
 
       for (const convo of conversations) {
