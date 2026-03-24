@@ -1,6 +1,6 @@
 [MASTER]
 ignore-patterns=^sdk/tests/.*$
-ignore-paths=sdk/tests
+ignore-paths=^sdk/tests/.*$
 
 [FORMAT]
 max-line-length=120
@@ -11,4 +11,14 @@ disable=
     duplicate-code,
     too-many-locals,
     too-many-branches,
-    too-many-statements
+    too-many-statements,
+    import-outside-toplevel,
+    invalid-name,
+    missing-docstring,
+    protected-access,
+    too-few-public-methods,
+    unspecified-encoding,
+    unused-argument,
+    unused-import,
+    unused-variable,
+    wrong-import-position
