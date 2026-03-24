@@ -13,10 +13,10 @@ into the same directory.
 """
 
 import json
-import logging
 import os
 from typing import Any
 
+import structlog
 from claude_agent_sdk import tool
 from numa_workspace_agent.mcp_tools.lambda_client import (
     extract_status,
@@ -24,7 +24,7 @@ from numa_workspace_agent.mcp_tools.lambda_client import (
     save_result,
 )
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger()
 
 
 def _pop_approval_id(action_key: str) -> str:
@@ -144,7 +144,7 @@ async def run_action(args: dict[str, Any]) -> dict[str, Any]:
         if user_sub and conversation_id:
             logger.info(
                 "Syncing workspace files to S3 before integration tool call",
-                extra={"action_key": action_key},
+                action_key=action_key,
             )
             from numa_workspace_agent.s3_workspace import sync_to_s3
 

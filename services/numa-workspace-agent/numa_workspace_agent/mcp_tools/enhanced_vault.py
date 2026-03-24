@@ -12,13 +12,13 @@ SECURITY:
 """
 
 import json
-import logging
 import os
 from typing import Any, Dict, List
 
+import structlog
 from claude_agent_sdk import tool
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger()
 
 
 def _invoke_workspace_tool(tool_name: str, params: Dict[str, Any]) -> Dict[str, Any]:

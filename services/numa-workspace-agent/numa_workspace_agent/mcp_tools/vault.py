@@ -15,13 +15,13 @@ SECURITY:
 """
 
 import json
-import logging
 import os
 from typing import Any
 
+import structlog
 from claude_agent_sdk import tool
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger()
 
 
 def _invoke_workspace_tool(tool_name: str, params: dict[str, Any]) -> dict[str, Any]:
@@ -292,7 +292,7 @@ async def vault(args: dict[str, Any]) -> dict[str, Any]:
     try:
         return await handler(params)
     except Exception as e:
-        logger.exception("vault handler failed", extra={"operation": name})
+        logger.exception("vault handler failed", operation=name)
         return {
             "content": [{"type": "text", "text": f"Error in vault.{name}: {e}"}],
             "isError": True,

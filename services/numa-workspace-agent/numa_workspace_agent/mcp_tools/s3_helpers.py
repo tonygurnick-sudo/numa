@@ -5,14 +5,15 @@ Extracted from extract_content.py and convert_document.py so the unified
 numa_tool MCP tool can reuse the same S3 upload/download logic.
 """
 
-import logging
 import os
 import shutil
 import urllib.error
 import urllib.request
 from pathlib import Path
 
-logger = logging.getLogger(__name__)
+import structlog
+
+logger = structlog.get_logger()
 
 # S3 path configuration (must match Lambda's expectations)
 S3_PREFIX = "numa-chat/workspace"

@@ -15,17 +15,16 @@ Approval model:
 """
 
 import json
-import logging
 import os
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-import boto3
+import structlog
 from claude_agent_sdk import tool
 from numa_workspace_agent.mcp_tools.lambda_client import invoke_workspace_tool
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger()
 
 # Operations that are read-only and can be auto-approved
 SAFE_OPERATIONS = frozenset(
@@ -136,6 +135,8 @@ def _sync_ops_file_to_s3(file_path: Path, content: str) -> None:
             f"numa-chat/workspace/{user_sub}"
             f"/conversations/{conversation_id}/{rel_path}"
         )
+
+        import boto3
 
         s3 = boto3.client("s3")
         s3.put_object(

@@ -6,14 +6,15 @@ the unified numa_tool can share the same invocation logic.
 """
 
 import json
-import logging
 import os
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-logger = logging.getLogger(__name__)
+import structlog
+
+logger = structlog.get_logger()
 
 # Results directory for tool outputs
 RESULTS_DIR = "/workdir/outputs/integrations-results"
@@ -79,11 +80,8 @@ def invoke_workspace_tool(
     )
 
     # Diagnostic: log what env vars the MCP tool actually sees
-    import structlog as _structlog
-
-    _diag_logger = _structlog.get_logger()
     _enabled_tools_raw = os.environ.get("NUMA_ENABLED_TOOLS", "[]")
-    _diag_logger.info(
+    logger.info(
         "Workspace tool invoking Lambda",
         _name="WORKSPACE_TOOL_INVOKE",
         tool_name=tool_name,
@@ -226,9 +224,7 @@ def save_result(
                 urllib.request.urlretrieve(get_url, str(dest))
                 downloaded_files.append(str(dest))
             except Exception as dl_err:
-                import structlog
-
-                structlog.get_logger().warning(
+                logger.warning(
                     "Failed to download file stash file",
                     filename=filename,
                     error=str(dl_err),
@@ -264,9 +260,7 @@ def save_result(
                     urllib.request.urlretrieve(authenticated_url, str(dest))
                     downloaded_files.append(str(dest))
                 except Exception as dl_err:
-                    import structlog
-
-                    structlog.get_logger().warning(
+                    logger.warning(
                         "Failed to download Zoom transcript",
                         meeting_id=str(meeting_id),
                         error=str(dl_err),

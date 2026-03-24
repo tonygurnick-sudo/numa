@@ -18,12 +18,12 @@ tool expects.
 
 import base64
 import json
-import logging
 import os
 import re
 from pathlib import Path
 from typing import Any
 
+import structlog
 from claude_agent_sdk import tool
 
 # _invoke_connect_tool is imported from connect module because the files/data-bucket
@@ -36,7 +36,7 @@ from numa_workspace_agent.mcp_tools.s3_helpers import (
     ensure_file_in_s3,
 )
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger()
 
 # Upload size limit for KB uploads (matches knowledge_base.py)
 MAX_UPLOAD_SIZE = 4 * 1024 * 1024
@@ -954,5 +954,5 @@ async def numa_tool(args: dict[str, Any]) -> dict[str, Any]:
     try:
         return await handler(params)
     except Exception as e:
-        logger.exception("numa_tool handler failed", extra={"tool_name": name})
+        logger.exception("numa_tool handler failed", tool_name=name)
         return _err(f"Error executing {name}: {e}")
