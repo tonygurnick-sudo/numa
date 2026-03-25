@@ -20048,6 +20048,25 @@ __metadata:
   languageName: unknown
   linkType: soft
 
+"audit-user-management-writer@workspace:lambdas/node/audit-user-management-writer":
+  version: 0.0.0-use.local
+  resolution: "audit-user-management-writer@workspace:lambdas/node/audit-user-management-writer"
+  dependencies:
+    "@arcanumai/style": "workspace:*"
+    "@aws-sdk/client-dynamodb": "npm:^3.699.0"
+    "@aws-sdk/lib-dynamodb": "npm:^3.699.0"
+    "@types/aws-lambda": "npm:^8.10.146"
+    "@types/node": "npm:^22.10.1"
+    "@typescript-eslint/eslint-plugin": "npm:^8.17.0"
+    "@typescript-eslint/parser": "npm:^8.17.0"
+    esbuild: "npm:^0.25.0"
+    eslint: "npm:^9.16.0"
+    rimraf: "npm:^6.0.1"
+    tsx: "npm:^4.19.2"
+    typescript: "npm:^5.7.2"
+  languageName: unknown
+  linkType: soft
+
 "auto-bind@npm:4.0.0":
   version: 4.0.0
   resolution: "auto-bind@npm:4.0.0"

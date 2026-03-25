@@ -4,6 +4,7 @@ import { PersonPlus } from 'react-bootstrap-icons';
 import { useTranslation } from 'react-i18next';
 import { Preloader } from '../Components/Preloader';
 import { useAuth } from '../Providers/AuthProvider';
+import { useNumaRequest } from '../Providers/NumaRequestContext';
 import { UserManagementUtils } from '../utils/userManagementUtils';
 import { LayoutDashboard } from '../Layouts/LayoutDashboard';
 import { PageHeader } from '../Components/PageHeader';
@@ -28,7 +29,9 @@ const UserManagement = ({ embedded = false }: UserManagementProps) => {
   const { t } = useTranslation('userManagement');
   // Auth and API state
   const { getCredentials, user, qBusinessClient, forceTokenValidation, requestPasswordReset } = useAuth();
+  const { numaPost } = useNumaRequest();
   const currentUserSub = user?.decoded_tokens?.idToken?.sub;
+  const currentUserEmail = user?.decoded_tokens?.idToken?.email as string | undefined;
 
   // Users data state
   const [users, setUsers] = useState<User[]>([]);
@@ -228,6 +231,17 @@ const UserManagement = ({ embedded = false }: UserManagementProps) => {
     const userManagementUtils = new UserManagementUtils(REGION, credentials);
     await userManagementUtils.createUser(email, USER_POOL_ID);
 
+    // Best-effort audit log for user creation
+    try {
+      await numaPost('/api/audit-user-management', {
+        action: 'user_create',
+        adminEmail: currentUserEmail,
+        createdUserEmail: email.toLowerCase(),
+      });
+    } catch (err) {
+      console.error('Failed to write user creation audit log:', err);
+    }
+
     // Send activation email (best-effort — user creation is the critical operation)
     let emailSent = false;
     if (sendEmail) {
@@ -269,6 +283,18 @@ const UserManagement = ({ embedded = false }: UserManagementProps) => {
       const userManagementUtils = new UserManagementUtils(REGION, credentials);
       await userManagementUtils.addUserToGroup(userToPromote.username, 'admin', USER_POOL_ID);
 
+      // Audit log: record who promoted this user (best-effort)
+      try {
+        await numaPost('/api/audit-user-management', {
+          action: 'user_promote_admin',
+          adminEmail: currentUserEmail,
+          createdUserEmail: userToPromote.email,
+          details: { targetUsername: userToPromote.username },
+        });
+      } catch (err) {
+        console.error('Failed to write user promotion audit log:', err);
+      }
+
       await fetchUsers(1);
     } catch (err) {
       console.error('Error promoting user to admin:', err);
@@ -304,6 +330,19 @@ const UserManagement = ({ embedded = false }: UserManagementProps) => {
         setUsersError(t('errors.demoteSession', { name: username }));
       }
 
+      // Audit log: record who demoted this user (best-effort)
+      try {
+        const demotedUser = users.find((u) => u.username === username);
+        await numaPost('/api/audit-user-management', {
+          action: 'user_demote_admin',
+          adminEmail: currentUserEmail,
+          createdUserEmail: demotedUser?.email ?? username,
+          details: { targetUsername: username },
+        });
+      } catch (err) {
+        console.error('Failed to write user demotion audit log:', err);
+      }
+
       await fetchUsers(1);
     } catch (err) {
       console.error('Error demoting user from admin:', err);
@@ -336,6 +375,18 @@ const UserManagement = ({ embedded = false }: UserManagementProps) => {
         setDeletingUser,
         qBusinessClient
       );
+
+      // Audit log: record who deleted this user (best-effort)
+      try {
+        await numaPost('/api/audit-user-management', {
+          action: 'user_delete',
+          adminEmail: currentUserEmail,
+          createdUserEmail: userToDelete.email,
+          details: { targetUsername: userToDelete.username },
+        });
+      } catch (err) {
+        console.error('Failed to write user deletion audit log:', err);
+      }
     } catch (err) {
       console.error('Error deleting user:', err);
       setUsersError(err instanceof Error ? err.message : t('errors.delete'));

@@ -32,6 +32,7 @@ import GenericAuditLogTab from '../Components/UsageAnalytics/GenericAuditLogTab'
 import TranscriptionJobsPanel from '../Components/UsageAnalytics/TranscriptionJobsPanel';
 import { TranscriptionService, type TranscriptionJob as TxJob } from '../Services/TranscriptionService';
 import NotificationsAuditPanel from '../Components/UsageAnalytics/NotificationsAuditPanel';
+import UserManagementAuditTab from '../Components/UsageAnalytics/UserManagementAuditTab';
 import { UNSAFE_NavigationContext, useParams, useNavigate } from 'react-router-dom';
 import {
   AdminChatSettingsService,
@@ -80,6 +81,7 @@ const AUDIT_SUB_DEFAULTS: Record<string, string> = {
   activity: 'user-activity',
   index: 'web-crawler',
   files: 'transcribe',
+  users: 'user-management',
 };
 
 export default function SettingsPage() {
@@ -982,6 +984,7 @@ export default function SettingsPage() {
             { key: 'activity', label: t('auditTabs.activity'), iconClassName: 'bi bi-people' },
             { key: 'index', label: t('auditTabs.index'), iconClassName: 'bi bi-search' },
             { key: 'files', label: t('auditTabs.files'), iconClassName: 'bi bi-file-text' },
+            { key: 'users', label: t('auditTabs.users'), iconClassName: 'bi bi-person-plus' },
           ]}
           activeKey={auditTabKey}
           onSelect={handleAuditTabChange}
@@ -1987,6 +1990,8 @@ export default function SettingsPage() {
                 {auditSubKey === 'recovery' && <GenericAuditLogTab logType="recovery" />}
               </>
             )}
+
+            {auditTabKey === 'users' && <UserManagementAuditTab />}
           </div>
         )}
       </div>

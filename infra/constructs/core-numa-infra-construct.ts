@@ -103,6 +103,7 @@ export class CoreNumaInfra extends Construct {
   readonly auditScheduleTable!: DynamodbTable;
   readonly auditSyncTable!: DynamodbTable;
   readonly auditRecoveryTable!: DynamodbTable;
+  readonly auditUserManagementTable!: DynamodbTable;
 
   constructor(scope: Construct, name: string, props: CoreNumaInfraProps) {
     super(scope, name);
@@ -1510,6 +1511,7 @@ export class CoreNumaInfra extends Construct {
         { id: 'audit-schedule', purpose: 'audit-schedule', prop: 'auditScheduleTable' as const },
         { id: 'audit-sync', purpose: 'audit-sync', prop: 'auditSyncTable' as const },
         { id: 'audit-recovery', purpose: 'audit-recovery', prop: 'auditRecoveryTable' as const },
+        { id: 'audit-user-management', purpose: 'audit-user-management', prop: 'auditUserManagementTable' as const },
       ];
 
       for (const cfg of auditTableConfigs) {

@@ -560,6 +560,8 @@ export class NumaClientStack extends TerraformStack {
       auditSyncTableArn: core.auditSyncTable.arn,
       auditRecoveryTableName: core.auditRecoveryTable.name,
       auditRecoveryTableArn: core.auditRecoveryTable.arn,
+      auditUserManagementTableName: core.auditUserManagementTable.name,
+      auditUserManagementTableArn: core.auditUserManagementTable.arn,
     });
 
     // Numa Ops (work management, kanban boards, CRM, supplier management)

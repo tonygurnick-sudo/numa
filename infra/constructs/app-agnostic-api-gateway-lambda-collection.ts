@@ -1455,6 +1455,7 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
       SCHEDULE_TABLE: props.auditScheduleTableName,
       SYNC_TABLE: props.auditSyncTableName,
       RECOVERY_TABLE: props.auditRecoveryTableName,
+      USER_MANAGEMENT_TABLE: props.auditUserManagementTableName,
     } as Record<string, string>;
 
     const auditLogsPolicy = [
@@ -1476,6 +1477,8 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
           `${props.auditSyncTableArn}/index/*`,
           props.auditRecoveryTableArn,
           `${props.auditRecoveryTableArn}/index/*`,
+          props.auditUserManagementTableArn,
+          `${props.auditUserManagementTableArn}/index/*`,
         ],
       },
     ];
@@ -1488,6 +1491,25 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
       environment: auditLogsEnv,
       additionalPolicyStatements: auditLogsPolicy,
       route: { verb: 'GET', path: 'audit-logs/{logType}' },
+    });
+
+    this.addLambdaFunction(this, 'audit-user-management-writer', {
+      addAuthorizer: true,
+      lambdaDirectory: 'node/audit-user-management-writer',
+      runtime: 'nodejs22.x',
+      handler: 'index.handler',
+      environment: {
+        REGION: props.region,
+        USER_MANAGEMENT_TABLE: props.auditUserManagementTableName,
+      },
+      additionalPolicyStatements: [
+        {
+          effect: 'Allow',
+          actions: ['dynamodb:PutItem'],
+          resources: [props.auditUserManagementTableArn],
+        },
+      ],
+      route: { verb: 'POST', path: 'audit-user-management' },
     });
   }
 
@@ -1644,4 +1666,8 @@ export interface AppAgnosticApiGatewayLambdaCollectionProps extends Omit<
   auditRecoveryTableName: string;
   /** Audit log: recovery table ARN. */
   auditRecoveryTableArn: string;
+  /** Audit log: user management table name. */
+  auditUserManagementTableName: string;
+  /** Audit log: user management table ARN. */
+  auditUserManagementTableArn: string;
 }

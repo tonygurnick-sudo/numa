@@ -824,6 +824,11 @@
       "noScans": "No scans found",
       "showing": "Showing {{count}} entries",
       "loadMore": "Load more"
+    },
+    "users": "Users",
+    "userManagement": {
+      "performedBy": "Performed By",
+      "targetUser": "Target User"
     }
   },
   "developerTabs": {
