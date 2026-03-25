@@ -29,6 +29,7 @@ import { FilePreviewPanel } from '../Components/FilePreviewPanel';
 import { autoNameConversation } from '../utils/autoChatTitle';
 import { useChatInactivity } from '../hooks/useChatInactivity';
 import { useWorkspaceChatStreaming } from '../hooks/useWorkspaceChatStreaming';
+import { useNetworkStatus } from '../hooks/useNetworkStatus';
 import { useDrawerBackClose } from '../hooks/useDrawerBackClose';
 import { useNumaRequest } from '../Providers/NumaRequestContext';
 import { useKnowledgeBase } from '../Providers/KnowledgeBaseProvider';
@@ -630,6 +631,9 @@ const NumaWorkspaceChatAgents = () => {
     enabled: isMobile,
     stateKey: 'document-modal',
   });
+
+  // Network status detection for offline banner
+  const { isOnline } = useNetworkStatus();
 
   // Load global Agents policy once (only when feature enabled)
   useEffect(() => {
@@ -1247,7 +1251,17 @@ const NumaWorkspaceChatAgents = () => {
   );
 
   // Workspace chat streaming hook - handles SDK events, tool tracking, document extraction
-  const { streamChat, abortStream, stopStream, isStopping } = useWorkspaceChatStreaming({
+  const {
+    streamChat,
+    abortStream,
+    stopStream,
+    retryLastMessage,
+    isStopping,
+    isReconnecting,
+    retryAttempt,
+    maxRetryAttempts,
+    canRetry,
+  } = useWorkspaceChatStreaming({
     setMessages,
     setButtonStatus,
     documentProcessor,
@@ -2402,6 +2416,48 @@ const NumaWorkspaceChatAgents = () => {
                           </span>
                         </div>
                         <span>{t('page.initializingWorkspace')}</span>
+                      </div>
+                    )}
+
+                    {!isOnline && (
+                      <div
+                        className="workspace-chat-network-banner workspace-chat-network-banner--offline"
+                        role="alert"
+                      >
+                        <i className="bi bi-wifi-off" />
+                        <span>{t('chat:connection.offline')}</span>
+                      </div>
+                    )}
+
+                    {isReconnecting && (
+                      <div
+                        className="workspace-chat-network-banner workspace-chat-network-banner--reconnecting"
+                        role="status"
+                      >
+                        <div className="spinner-border spinner-border-sm" role="status">
+                          <span className="visually-hidden">{t('chat:connection.reconnecting')}</span>
+                        </div>
+                        <span>
+                          {t('chat:connection.reconnectingAttempt', {
+                            attempt: retryAttempt + 1,
+                            maxAttempts: maxRetryAttempts,
+                          })}
+                        </span>
+                      </div>
+                    )}
+
+                    {canRetry && !isReconnecting && (
+                      <div className="workspace-chat-network-banner workspace-chat-network-banner--retry" role="alert">
+                        <i className="bi bi-exclamation-triangle" />
+                        <span>{t('chat:connection.retryFailed', { maxAttempts: maxRetryAttempts })}</span>
+                        <button
+                          type="button"
+                          className="btn btn-sm btn-outline-primary ms-2"
+                          onClick={retryLastMessage}
+                          disabled={!isOnline}
+                        >
+                          {t('chat:connection.retry')}
+                        </button>
                       </div>
                     )}
 

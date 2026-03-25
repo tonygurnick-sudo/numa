@@ -113,6 +113,13 @@
     "loadTraceFailed": "Unable to load conversation history. This may happen after stopping a response. Please send a new message to continue.",
     "streamDisconnected": "Connection lost during a long operation. Your response may be incomplete — please send a follow-up message to continue."
   },
+  "connection": {
+    "reconnecting": "Reconnecting...",
+    "reconnectingAttempt": "Reconnecting (attempt {{attempt}}/{{maxAttempts}})...",
+    "offline": "You're offline. Check your internet connection.",
+    "retryFailed": "Unable to connect after {{maxAttempts}} attempts.",
+    "retry": "Try again"
+  },
   "errors": {
     "activateAgentFailed": "Unable to activate agent",
     "activateSelectedAgentFailed": "Unable to activate selected agent",

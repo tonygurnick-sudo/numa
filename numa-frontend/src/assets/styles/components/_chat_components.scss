@@ -4865,6 +4865,71 @@ $border-radius-pill: 1rem;
   }
 }
 
+// Network status banners (offline, reconnecting, retry)
+.workspace-chat-network-banner {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  border-radius: 4px;
+  margin-bottom: 0.5rem;
+  font-size: 0.875rem;
+  animation: fadeIn 0.2s ease-in;
+
+  .spinner-border {
+    width: 14px;
+    height: 14px;
+    border-width: 2px;
+  }
+
+  .btn-sm {
+    font-size: 0.8125rem;
+    padding: 0.2rem 0.6rem;
+    white-space: nowrap;
+  }
+
+  &--offline {
+    background-color: #fef2f2;
+    color: #991b1b;
+    border: 1px solid #fecaca;
+
+    i {
+      font-size: 1rem;
+    }
+  }
+
+  &--reconnecting {
+    background-color: #fffbeb;
+    color: #92400e;
+    border: 1px solid #fde68a;
+
+    .spinner-border {
+      color: #d97706;
+    }
+  }
+
+  &--retry {
+    background-color: #fef2f2;
+    color: #991b1b;
+    border: 1px solid #fecaca;
+
+    i {
+      font-size: 1rem;
+    }
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 // Write Tool Streaming Preview
 .write-tool-preview {
   // Force preview onto new line in flex container

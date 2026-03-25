@@ -28,6 +28,75 @@ import { withPRM } from '../utils/prmUtils';
 /** Callback for receiving SDK events during streaming */
 export type OnWorkspaceChatEvent = (event: SDKEvent) => void;
 
+/** Callback for retry attempts during streaming */
+export type OnRetryAttempt = (attempt: number, maxAttempts: number, error: Error) => void;
+
+/** Configuration for retry behavior */
+export interface StreamRetryConfig {
+  /** Maximum number of retry attempts (default: 3) */
+  maxAttempts?: number;
+  /** Base delay in ms for exponential backoff (default: 1000) */
+  baseDelayMs?: number;
+  /** Callback invoked before each retry attempt */
+  onRetry?: OnRetryAttempt;
+}
+
+const DEFAULT_RETRY_CONFIG: Required<Omit<StreamRetryConfig, 'onRetry'>> = {
+  maxAttempts: 3,
+  baseDelayMs: 1000,
+};
+
+/**
+ * Determine if an error is retryable (network-level failure vs application error).
+ *
+ * Retryable: network failures (TypeError from fetch), 5xx server errors, connection resets.
+ * Not retryable: 4xx client errors, AbortError (user cancelled), auth failures.
+ */
+export function isRetryableError(error: unknown, statusCode?: number): boolean {
+  if (error instanceof Error && error.name === 'AbortError') return false;
+
+  // 4xx = client error, don't retry (includes 401/403 auth)
+  if (statusCode !== undefined && statusCode >= 400 && statusCode < 500) return false;
+
+  // 5xx = server error, retry
+  if (statusCode !== undefined && statusCode >= 500) return true;
+
+  // Network-level failures (no response received)
+  if (error instanceof TypeError) return true;
+
+  // Check error message for network indicators
+  if (error instanceof Error) {
+    const msg = error.message.toLowerCase();
+    if (
+      msg.includes('failed to fetch') ||
+      msg.includes('network') ||
+      msg.includes('err_connection') ||
+      msg.includes('err_internet') ||
+      msg.includes('econnreset') ||
+      msg.includes('econnrefused') ||
+      msg.includes('timeout')
+    ) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+/**
+ * Extract HTTP status code from an error message if present.
+ * Matches patterns like "error (500):" or "failed (503):"
+ */
+function extractStatusCode(error: Error): number | undefined {
+  const match = error.message.match(/\((\d{3})\)/);
+  return match ? parseInt(match[1], 10) : undefined;
+}
+
+/** Sleep for the given number of milliseconds */
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 const API_BASE = '/api/workspace-chat-agent';
 
 /**
@@ -122,28 +191,18 @@ function generateTodayString(): string {
 export type OnSessionEvent = (event: SessionInitEvent | ConversationSwitchEvent | AssistantAdviceEvent) => void;
 
 /**
- * Stream a chat message to the workspace chat agent.
- *
- * Uses the AgentCore /invocations endpoint with action='chat'.
- *
- * @param request - Chat request with prompt and optional conversationId
- * @param onEvent - Callback for each NDJSON event from Claude Agent SDK
- * @param onComplete - Callback when stream completes
- * @param onError - Callback for errors
- * @param onSessionEvent - Optional callback for AgentCore session events (cold start, conversation switch)
- * @returns Abort function to cancel the stream
+ * Execute a single streaming attempt (no retry logic).
+ * This is the core fetch + SSE parsing extracted for use by the retry wrapper.
  */
-export async function streamWorkspaceChatAgent(
+async function streamWorkspaceChatAttempt(
   request: WorkspaceChatRequest,
+  requestId: string,
   onEvent: OnWorkspaceChatEvent,
   onComplete: OnWorkspaceChatComplete,
   onError: OnWorkspaceChatError,
   onSessionEvent?: OnSessionEvent
-): Promise<{ abort: () => void; requestId: string }> {
+): Promise<{ abort: () => void }> {
   const abortController = new AbortController();
-  const requestId =
-    request.requestId ||
-    (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `req-${Date.now()}-${Math.random()}`);
 
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
@@ -314,7 +373,110 @@ export async function streamWorkspaceChatAgent(
     }
   }
 
-  return { abort: () => abortController.abort(), requestId };
+  return { abort: () => abortController.abort() };
+}
+
+/**
+ * Stream a chat message to the workspace chat agent with automatic retry.
+ *
+ * Uses the AgentCore /invocations endpoint with action='chat'.
+ * On retryable errors (network failures, 5xx), retries with exponential backoff.
+ * Non-retryable errors (4xx, abort) are passed to onError immediately.
+ *
+ * @param request - Chat request with prompt and optional conversationId
+ * @param onEvent - Callback for each NDJSON event from Claude Agent SDK
+ * @param onComplete - Callback when stream completes
+ * @param onError - Callback for errors (after all retries exhausted)
+ * @param onSessionEvent - Optional callback for AgentCore session events
+ * @param retryConfig - Optional retry configuration
+ * @returns Abort function to cancel the stream
+ */
+export async function streamWorkspaceChatAgent(
+  request: WorkspaceChatRequest,
+  onEvent: OnWorkspaceChatEvent,
+  onComplete: OnWorkspaceChatComplete,
+  onError: OnWorkspaceChatError,
+  onSessionEvent?: OnSessionEvent,
+  retryConfig?: StreamRetryConfig
+): Promise<{ abort: () => void; requestId: string }> {
+  const maxAttempts = retryConfig?.maxAttempts ?? DEFAULT_RETRY_CONFIG.maxAttempts;
+  const baseDelayMs = retryConfig?.baseDelayMs ?? DEFAULT_RETRY_CONFIG.baseDelayMs;
+
+  const requestId =
+    request.requestId ||
+    (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `req-${Date.now()}-${Math.random()}`);
+
+  let currentAbort: (() => void) | null = null;
+  let cancelled = false;
+
+  const abort = () => {
+    cancelled = true;
+    currentAbort?.();
+  };
+
+  // Attempt loop — try up to maxAttempts times with exponential backoff
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    if (cancelled) break;
+
+    try {
+      const result = await new Promise<{ abort: () => void; success: boolean }>((resolve, reject) => {
+        streamWorkspaceChatAttempt(
+          request,
+          requestId,
+          onEvent,
+          // Wrap onComplete to resolve the promise
+          (info) => {
+            resolve({ abort: () => {}, success: true });
+            onComplete(info);
+          },
+          // Wrap onError to decide retry vs reject
+          (err) => {
+            reject(err);
+          },
+          onSessionEvent
+        ).then(({ abort: attemptAbort }) => {
+          currentAbort = attemptAbort;
+        });
+      });
+
+      // Stream completed successfully — no need to retry
+      return { abort, requestId };
+    } catch (err) {
+      const error = err as Error;
+
+      // Don't retry if user cancelled
+      if (error.name === 'AbortError' || cancelled) {
+        return { abort, requestId };
+      }
+
+      const statusCode = extractStatusCode(error);
+
+      // Don't retry non-retryable errors
+      if (!isRetryableError(error, statusCode)) {
+        onError(error);
+        return { abort, requestId };
+      }
+
+      // Last attempt — give up
+      if (attempt >= maxAttempts) {
+        onError(error);
+        return { abort, requestId };
+      }
+
+      // Notify caller about retry attempt
+      const delayMs = baseDelayMs * Math.pow(2, attempt - 1); // 1s, 2s, 4s
+      console.warn(
+        `[WorkspaceChat] Retryable error on attempt ${attempt}/${maxAttempts}, retrying in ${delayMs}ms:`,
+        error.message
+      );
+      retryConfig?.onRetry?.(attempt, maxAttempts, error);
+
+      // Wait with exponential backoff before retrying
+      await sleep(delayMs);
+    }
+  }
+
+  return { abort, requestId };
 }
 
 /**

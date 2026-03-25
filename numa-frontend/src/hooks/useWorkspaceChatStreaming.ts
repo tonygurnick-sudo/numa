@@ -4,7 +4,9 @@ import {
   stopWorkspaceChatAgent,
   streamWorkspaceChatAgent,
   saveInlineDocumentToS3,
+  isRetryableError,
 } from '../Services/workspaceChatAgentService';
+import type { StreamRetryConfig } from '../Services/workspaceChatAgentService';
 import {
   createSDKEventContext,
   resetSDKEventContext,
@@ -128,12 +130,22 @@ export function useWorkspaceChatStreaming({
   const workspaceChatRawTextRef = useRef<string>('');
   const [isStopping, setIsStopping] = useState(false);
 
+  // Network resilience state
+  const [isReconnecting, setIsReconnecting] = useState(false);
+  const [retryAttempt, setRetryAttempt] = useState(0);
+  const [maxRetryAttempts] = useState(3);
+  const [canRetry, setCanRetry] = useState(false);
+  const lastStreamConfigRef = useRef<StreamConfig | null>(null);
+
   const abortStream = useCallback(() => {
     if (workspaceChatAbortRef.current) {
       workspaceChatAbortRef.current();
       workspaceChatAbortRef.current = null;
     }
     setIsStopping(false);
+    setIsReconnecting(false);
+    setRetryAttempt(0);
+    setCanRetry(false);
     currentRequestIdRef.current = null;
   }, []);
 
@@ -169,6 +181,9 @@ export function useWorkspaceChatStreaming({
         agentId,
       } = config;
 
+      // Store config for retry capability
+      lastStreamConfigRef.current = config;
+
       // Reset workspace chat event context for new turn
       resetSDKEventContext(workspaceChatEventContextRef.current);
       workspaceChatRawTextRef.current = '';
@@ -176,6 +191,9 @@ export function useWorkspaceChatStreaming({
       activeStreamingTasksRef.current.clear();
       currentConversationIdRef.current = conversationId;
       setIsStopping(false);
+      setIsReconnecting(false);
+      setRetryAttempt(0);
+      setCanRetry(false);
 
       // Generate requestId immediately so stop can use it during streaming
       const requestId = crypto.randomUUID();
@@ -668,6 +686,9 @@ export function useWorkspaceChatStreaming({
           isProcessingRef.current = false;
           workspaceChatAbortRef.current = null;
           activeStreamingTasksRef.current.clear();
+          setIsReconnecting(false);
+          setRetryAttempt(0);
+          setCanRetry(false);
 
           // Extract document from accumulated raw text
           const rawText = workspaceChatRawTextRef.current;
@@ -722,11 +743,17 @@ export function useWorkspaceChatStreaming({
           }
           setTimeout(() => inputRef.current?.focus(), 0);
         },
-        // onError
+        // onError — called after all automatic retries are exhausted
         (err: Error) => {
           console.error('[WorkspaceChat SDK] Stream error:', err);
           handleSDKStreamError(err, workspaceChatEventContextRef.current, workspaceChatHelpers);
-          const message = resolveErrorMessage(err, 'Unknown error');
+
+          // Determine if this was a network error (retries were attempted)
+          const wasNetworkError = isRetryableError(err);
+          const message = wasNetworkError
+            ? t('chat:connection.retryFailed', { maxAttempts: 3 })
+            : resolveErrorMessage(err, 'Unknown error');
+
           setMessages((prev) => {
             const updated = [...prev];
             // Remove any processing/thinking status messages
@@ -734,7 +761,13 @@ export function useWorkspaceChatStreaming({
             if (statusIndex >= 0) {
               updated.splice(statusIndex, 1);
             }
-            return [...updated, { role: 'system', content: `Workspace chat agent error: ${message}` }];
+            return [
+              ...updated,
+              {
+                role: 'system',
+                content: wasNetworkError ? message : `Workspace chat agent error: ${message}`,
+              },
+            ];
           });
           isProcessingRef.current = false;
           workspaceChatAbortRef.current = null;
@@ -742,6 +775,12 @@ export function useWorkspaceChatStreaming({
           setButtonStatus('idle');
           setUploadedFiles([]);
           setIsStopping(false);
+          setIsReconnecting(false);
+          setRetryAttempt(0);
+          // Allow manual retry for network errors
+          if (wasNetworkError) {
+            setCanRetry(true);
+          }
           currentRequestIdRef.current = null;
           // Clear initialization state on error
           if (setIsInitializing) {
@@ -766,7 +805,17 @@ export function useWorkspaceChatStreaming({
               setIsInitializing(switchEvent.status === 'switching');
             }
           }
-        }
+        },
+        // retryConfig — automatic retry with exponential backoff for network errors
+        {
+          maxAttempts: 3,
+          baseDelayMs: 1000,
+          onRetry: (attempt, maxAttempts) => {
+            setIsReconnecting(true);
+            setRetryAttempt(attempt);
+            console.log(`[WorkspaceChat] Retry attempt ${attempt}/${maxAttempts}`);
+          },
+        } satisfies StreamRetryConfig
       );
 
       workspaceChatAbortRef.current = abortWorkspaceChat;
@@ -792,11 +841,52 @@ export function useWorkspaceChatStreaming({
     ]
   );
 
+  /**
+   * Retry the last failed message.
+   * Removes the error system message and replays the last streamChat() call.
+   */
+  const retryLastMessage = useCallback(() => {
+    const lastConfig = lastStreamConfigRef.current;
+    if (!lastConfig || isProcessingRef.current) return;
+
+    // Remove the last system error message before retrying
+    setMessages((prev) => {
+      const updated = [...prev];
+      const lastIdx = updated.length - 1;
+      if (lastIdx >= 0 && updated[lastIdx].role === 'system') {
+        updated.pop();
+      }
+      return updated;
+    });
+
+    setCanRetry(false);
+    setIsReconnecting(false);
+    setRetryAttempt(0);
+
+    // Set processing state before calling streamChat
+    isProcessingRef.current = true;
+    setButtonStatus('processing');
+
+    // Re-add the processing status to the last user message
+    setMessages((prev) => {
+      const updated = [...prev];
+      updated.push({ role: 'assistant', content: '', segments: [], status: 'processing' });
+      return updated;
+    });
+
+    streamChat(lastConfig);
+  }, [streamChat, isProcessingRef, setMessages, setButtonStatus]);
+
   return {
     streamChat,
     abortStream,
     stopStream,
+    retryLastMessage,
     isStopping,
+    isReconnecting,
+    retryAttempt,
+    maxRetryAttempts,
+    canRetry,
     workspaceChatRawText: workspaceChatRawTextRef.current,
   };
 }
