@@ -5,12 +5,130 @@ Two-phase pipeline based on Matt's manual process:
 - Phase 2 (Review): Verify completeness, add citations, deduplicate
 """
 
+# ── Shared constants ─────────────────────────────────────────────────────────
+
+_WHAT_IS_A_RULE = """\
+## What Constitutes a Rule
+
+A rule is any requirement, obligation, threshold, deadline, criterion, or \
+condition that a bidder/borrower must meet or that an evaluator must check. \
+This includes:
+- Eligibility and qualification criteria
+- Mandatory technical specifications — each individual pass/fail line item \
+is its own rule (do NOT collapse multiple specs into one generic rule)
+- Submission format and procedural requirements
+- Financial thresholds, turnover requirements, experience minimums
+- Evaluation scoring methodology and weightings
+- Notification timelines and standstill periods
+- Contractual obligations (delivery, warranty, performance security)
+- Environmental, social, health and safety requirements
+
+Background information, definitions, and general descriptions are NOT rules.
+"""
+
+_RULE_DETAIL_GUIDANCE = """\
+## Rule Detail — Include Specific Values
+
+Each rule description must include the actual thresholds, quantities, dates, \
+percentages, and other specific values stated in the source documents. This \
+enables compliance checking without needing to re-read the originals.
+
+Good: "The Bidder must meet minimum AATO of USD 1,500,000 for Lot 1 and \
+USD 6,900,000 for Lot 4, demonstrated by audited financial statements for \
+the last 3 years (2021, 2022, 2023)."
+
+Bad: "The Bidder must meet the minimum average annual turnover requirement."
+
+Include: dollar amounts, percentages, unit counts, day/hour limits, dates, \
+lot-specific values, scoring weights, and formula details where stated. \
+Keep it to 1-3 sentences — precise but concise.
+
+### Formulas and Definitions — Quote Verbatim
+
+Mathematical formulas, scoring formulas, and variable definitions MUST be \
+copied EXACTLY as they appear in the source document. Do NOT paraphrase, \
+reword, or substitute your own variable names. If the document says \
+"Tmax = the maximum Technical Score that can be achieved", write exactly \
+that — do not reinterpret it as "Thigh = highest score among bids" or \
+any other rewording, even if you believe it means the same thing. The \
+distinction between document-defined terms often matters for compliance.
+
+Good: "B = (Clow/C) × X × 100 + (T/Tmax) × (1-X) × 100, where Tmax is \
+the maximum Technical Score that can be achieved by any given Bid (sum of \
+scores for each of the rated criteria)."
+
+Bad: "B = (Clow/C) × X × 100 + (T/Thigh) × (1-X) × 100, where Thigh is \
+the highest Technical Score among responsive bids."
+
+The second example changes the variable name AND its definition — this \
+produces a different formula that yields different results when multiple \
+bidders compete. Always quote, never interpret.
+"""
+
+_AMENDMENT_GUIDANCE = """\
+## Amendment and Addenda Handling
+
+Amendments/addenda can ADD new rules, MODIFY existing thresholds or dates, \
+or REMOVE requirements. When amendments exist:
+
+1. The rule must reflect the FINAL amended state (not the original).
+2. Cite both the original clause AND the amendment that changed it \
+(e.g., "**Source**: RFB, BDS ITB 18.1; Addendum 2, Item 1 (revised to \
+March 18, 2025)").
+3. Where an amendment changes a specific value, state what it was changed \
+TO — the amended value is what matters for compliance.
+4. Later amendments supersede earlier ones. If Addendum 2 changes something \
+that Addendum 1 already changed, cite Addendum 2 as the final authority.
+"""
+
+_COMPLETENESS_CHECK = """\
+## Completeness Self-Check
+
+After extraction, review your rule count relative to the volume of source \
+material. A single-document policy KB might yield 30-60 rules; a \
+multi-document procurement activity with addenda, technical specification \
+spreadsheets, and evaluation forms will typically yield significantly more. \
+If your count feels low relative to the document volume, go back and check \
+for missed content — especially spreadsheet tabs, appendices, and annexes.
+
+### Tabular Data — Complete Coverage Required
+
+If a rule involves values that vary by lot, bidder, item, or category \
+(e.g., AATO thresholds, experience requirements, scoring weights), you \
+MUST extract the value for EVERY lot/item — not just the first few. \
+Partial extraction is a critical failure. If you can only find values \
+for some lots (e.g., Lots 1 and 4 but not 2, 3, 5, 6, 7, 8), that is \
+a red flag — the data is almost certainly in a spreadsheet tab, a \
+different page of the PDF, or a supporting document you haven't read yet.
+
+Do NOT write "partially redacted" or "values for other lots are not \
+available" unless you have exhaustively checked:
+1. All tabs/sheets in related XLSX files
+2. All pages of the PDF version of the same form
+3. All amendment documents that might have updated the values
+
+If both XLSX and PDF versions of the same form exist, prefer the XLSX \
+for data extraction (structured, reliable) and use the PDF for context.
+"""
+
 # ── Shared rules format example (generic, no domain-specific content) ────────
 
 _RULES_FORMAT_EXAMPLE = """\
 ## Rules Format
 
-Structure the rules file as follows:
+### CRITICAL: Use the Documents' Own Priority Labels
+
+If the source documents define their own priority or categorisation scheme \
+(e.g., "Mandatory / Rated / Administrative", "Pass/Fail / Weighted / \
+Informational", or any other scheme), you MUST use those exact labels as \
+your section headings — do NOT substitute CRITICAL / HIGH / MEDIUM / LOW. \
+The documents' own terminology is what evaluators know and use; replacing \
+it with generic labels loses precision and can misrepresent the scheme.
+
+Only fall back to CRITICAL / HIGH / MEDIUM / LOW if the source documents \
+define no prioritisation scheme at all.
+
+### Structure
 
 ```markdown
 # [Knowledge Base Name] — Compliance Rules
@@ -20,22 +138,23 @@ Structure the rules file as follows:
 2. **[Short Name]**: [Full document title]
 
 **Total Rules:** [count]
-**Priority Breakdown:** CRITICAL: X | HIGH: Y | MEDIUM: Z | LOW: W
-**Prioritisation Methodology:** [One sentence describing how priorities were \
-determined — e.g., from the documents' own scheme, or CRITICAL/HIGH/MEDIUM/LOW]
+**Priority Breakdown:** [Label A]: X | [Label B]: Y | [Label C]: Z | ...
+**Prioritisation Methodology:** [Describe the scheme and where it comes \
+from — quote the documents' own terms. If the documents define no scheme, \
+state that you are using CRITICAL / HIGH / MEDIUM / LOW as a default.]
 
 ---
 
-## CRITICAL MANDATORY REQUIREMENTS
+## [PRIORITY LEVEL A — use the document's own label]
 
 ### [Category Name]
 
 **Rule 1: [Concise Rule Title]**
-- [1-3 sentence description of the rule and what it requires]
+- [1-3 sentence description with specific values, thresholds, and dates]
 - **Source**: [Document short name, Section X.Y, Para Z, Page N]
 
 **Rule 2: [Concise Rule Title]**
-- [Description]
+- [Description with specifics]
 - **Source**: [Document short name, Section/Page reference]
 
 ---
@@ -48,7 +167,7 @@ determined — e.g., from the documents' own scheme, or CRITICAL/HIGH/MEDIUM/LOW
 
 ---
 
-## HIGH PRIORITY REQUIREMENTS
+## [PRIORITY LEVEL B — use the document's own label]
 
 ### [Category Name]
 
@@ -58,7 +177,7 @@ determined — e.g., from the documents' own scheme, or CRITICAL/HIGH/MEDIUM/LOW
 
 ---
 
-## MEDIUM PRIORITY REQUIREMENTS
+## [PRIORITY LEVEL C — use the document's own label]
 ...
 ```
 
@@ -67,7 +186,10 @@ Key requirements:
 and page/paragraph reference
 - Group rules by category within each priority level
 - Use sequential numbering (1, 2, 3...) across the entire document
-- Keep descriptions concise but complete — 1-3 sentences each
+- Keep descriptions concise but complete — 1-3 sentences with specific values
+- Section headings MUST use the documents' own priority labels verbatim; \
+only use CRITICAL / HIGH / MEDIUM / LOW as a fallback when the source \
+documents define no scheme
 """
 
 _INCREMENTAL_WRITING = """\
@@ -95,6 +217,14 @@ These preserved text files will be reused by Phase 2 to avoid redundant \
 re-extraction — this is important for pipeline efficiency.
 """
 
+_TEMPLATE_GUIDANCE = """\
+If a `templates/` subfolder exists in the knowledge base, read any output \
+template files it contains. These templates define the expected structure of \
+the final compliance report and can reveal additional requirements about \
+what must be assessed. Treat any assessable criteria implied by the template \
+as rules.
+"""
+
 # ── Phase 1: Extract Rules ────────────────────────────────────────────────────
 
 RULES_EXTRACT_GLOBAL_ADDENDUM = (
@@ -111,6 +241,14 @@ compliance review purposes.
 You have been given procurement-related documents uploaded to \
 `/workdir/knowledge-bases/`. Your task is to read ALL of them and \
 determine the definitive set of compliance rules they establish.
+
+"""
+    + _WHAT_IS_A_RULE
+    + """
+
+"""
+    + _RULE_DETAIL_GUIDANCE
+    + """
 
 ## Workspace
 
@@ -133,25 +271,24 @@ names may vary.
 
 ## Approach
 
-<thinking>
 1. Read every document in `/workdir/knowledge-bases/` fully from end \
 to end. Pay special attention to spreadsheets — examine EVERY sheet/tab, not \
 just the first one.
 """
     + _TEXT_SAVING_GUIDANCE
+    + _TEMPLATE_GUIDANCE
     + """\
-2. Determine a concise but conclusive set of rules that a procurement specialist \
-would need to abide by, ensuring there are no duplicates.
+2. Determine the definitive set of compliance rules, ensuring there are no \
+duplicates. Each individual requirement or criterion is its own rule.
 3. Order this list based on level of importance. Look for prioritisation schemes \
-in the documents themselves (e.g., "must have" vs "nice to have", or \
-Critical/High/Medium/Low). If the documents specify a scheme, use it. If not, \
-use: CRITICAL, HIGH, MEDIUM, LOW.
-</thinking>
+in the documents themselves (e.g., "Mandatory / Rated / Administrative", \
+"must have" vs "nice to have", or pass/fail vs scored vs informational). \
+If the documents specify a scheme, you MUST use their exact labels. Only \
+fall back to CRITICAL / HIGH / MEDIUM / LOW if no scheme is defined.
 
-<answer>
-Write every single rule in an ordered list with clear prioritisation. Use \
-concise, consistent language that is easy to understand.
-</answer>
+"""
+    + _COMPLETENESS_CHECK
+    + """
 
 ## Output
 
@@ -191,6 +328,18 @@ and business case materials. These are uploaded to subdirectories under \
 Your task is to determine the rules set out by these documents that someone \
 evaluating a response to this procurement activity would be evaluated against.
 
+"""
+    + _WHAT_IS_A_RULE
+    + """
+
+"""
+    + _RULE_DETAIL_GUIDANCE
+    + """
+
+"""
+    + _AMENDMENT_GUIDANCE
+    + """
+
 ## Workspace
 
 - `/workdir/knowledge-bases/` — All uploaded KB documents, organised \
@@ -217,27 +366,28 @@ names, and number of subfolders may vary.
 
 ## Approach
 
-<thinking>
 1. Identify the main RFx document (likely in the `rfx/` subfolder). Read it \
 fully from end to end.
 2. Read ALL supporting documents, amendments, and pre-RFx context documents. \
-Pay special attention to spreadsheets — examine EVERY sheet/tab.
+Pay special attention to spreadsheets — examine EVERY sheet/tab. For technical \
+specification spreadsheets, extract EACH mandatory (pass/fail) line item as \
+its own rule with the specific requirement described.
 """
     + _TEXT_SAVING_GUIDANCE
+    + _TEMPLATE_GUIDANCE
     + """\
-3. If amendments exist, understand how they modify the original RFx. Later \
-amendments supersede earlier ones.
-4. Determine a concise but conclusive set of evaluation rules. Look for \
+3. If amendments/addenda exist, read each one and track what they add, modify, \
+or remove. Rules must reflect the final amended state.
+4. Determine the definitive set of evaluation rules. Look for \
 prioritisation/categorisation schemes specified IN the documents (e.g., \
-pass/fail criteria, weighted scoring, mandatory requirements). Create a one \
-sentence description of how you've determined these categorisations.
+"Mandatory / Rated / Administrative", pass/fail criteria, weighted scoring). \
+You MUST use the documents' own labels as your priority headings. Create a \
+one sentence description of how you've determined these categorisations.
 5. Order by level of importance.
-</thinking>
 
-<answer>
-Write every single rule in an ordered list with clear prioritisation. Use \
-concise, consistent language.
-</answer>
+"""
+    + _COMPLETENESS_CHECK
+    + """
 
 ## Output
 
@@ -269,6 +419,14 @@ development project funded by a Multilateral Development Bank. Your task is to \
 extract all project-specific compliance rules that would apply when evaluating \
 procurement activities under this project.
 
+"""
+    + _WHAT_IS_A_RULE
+    + """
+
+"""
+    + _RULE_DETAIL_GUIDANCE
+    + """
+
 ## Workspace
 
 - `/workdir/knowledge-bases/` — Project documents (appraisal, \
@@ -291,22 +449,22 @@ names may vary.
 
 ## Approach
 
-<thinking>
 1. Read every document in `/workdir/knowledge-bases/` fully. Pay \
 special attention to spreadsheets — examine EVERY sheet/tab.
 """
     + _TEXT_SAVING_GUIDANCE
+    + _TEMPLATE_GUIDANCE
     + """\
 2. Extract rules specific to this project: procurement thresholds, review \
 requirements, environmental/social safeguards, reporting requirements, etc.
-3. Determine prioritisation from the documents. If not specified, use: \
-CRITICAL, HIGH, MEDIUM, LOW.
+3. Determine prioritisation from the documents. Use the documents' own \
+labels if they define a scheme. Only fall back to CRITICAL / HIGH / \
+MEDIUM / LOW if no scheme is defined.
 4. Order by importance.
-</thinking>
 
-<answer>
-Write every single rule in an ordered list with clear prioritisation.
-</answer>
+"""
+    + _COMPLETENESS_CHECK
+    + """
 
 ## Output
 
@@ -335,8 +493,22 @@ RULES_REVIEW_ADDENDUM = (
 
 ## Your Role
 
-You are reviewing the rules extracted in Phase 1 to ensure they are \
-definitive and complete.
+You are a senior reviewer verifying and completing the rules extracted in \
+Phase 1. Your goal is to produce the most complete and accurate rules file \
+possible. If Phase 1 missed rules, you MUST add them. If rules lack specific \
+values, add them. If citations are wrong, fix them.
+
+"""
+    + _WHAT_IS_A_RULE
+    + """
+
+"""
+    + _RULE_DETAIL_GUIDANCE
+    + """
+
+"""
+    + _AMENDMENT_GUIDANCE
+    + """
 
 ## Workspace
 
@@ -377,19 +549,47 @@ Recommended approach:
 (NOT the original PDFs)
 3. Write an initial version to `/workdir/outputs/{rules_filename}` \
 IMMEDIATELY — copy from extracted_rules.md as a starting point
-4. Then Edit the file to add/fix citations, remove duplicates, and refine
+4. Then Edit the file to add/fix citations, remove duplicates, add \
+missing rules, and refine
 
 ## Approach
 
 1. Read `/workdir/tmp/extracted_rules.md` (the Phase 1 output)
 2. List text files in `/workdir/tmp/` and read them for verification
-3. Verify that:
-   - Every rule from every document has been captured
-   - Every sheet/tab in spreadsheets has been checked (not just text documents)
+3. **Document-by-document verification**: For each source document in the \
+knowledge base, confirm that rules originating from it have been captured. \
+If a document contributed zero rules, re-read it — it likely contains \
+requirements that were missed.
+4. **Spreadsheet verification**: Re-examine spreadsheet tabs (especially \
+technical specification sheets). Verify that each individual mandatory \
+(pass/fail) line item has its own rule, not collapsed into a single \
+generic "must meet all specs" rule.
+5. **Tabular data completeness**: For any rule that references values \
+varying by lot, bidder, item, or category (AATO thresholds, experience \
+requirements, scoring weights, technical specs per lot), verify that \
+ALL values are present — not just a subset. If Phase 1 has values for \
+some lots but not others, check the XLSX tabs and extracted text files \
+to fill in the gaps. "Partially redacted" is almost never the real \
+situation — it usually means extraction missed the data.
+6. **Formula and definition accuracy**: For every formula or scoring \
+methodology rule, compare the exact wording against the extracted text. \
+Variable names, definitions, and mathematical expressions must match \
+the source document verbatim. Flag and correct any paraphrasing.
+7. **Priority scheme accuracy**: Verify that the priority labels used in \
+the rules file match the source documents' own terminology. If the \
+documents define a scheme (e.g., "Mandatory / Rated / Administrative"), \
+those exact terms must be the section headings — not generic \
+CRITICAL / HIGH / MEDIUM / LOW substitutions.
+8. **General completeness check**: Verify that:
    - No duplicate rules exist
-   - Prioritisation is correct and consistent
-4. For EACH rule, verify the citation: which document it comes from and which \
-part of that document (section, page number, sheet/tab name)
+   - Every rule includes specific values (thresholds, dates, amounts) \
+where the source provides them
+   - If amendments/addenda exist, rules reflect the final amended state
+9. **Add missing rules**: If you find requirements that Phase 1 missed, \
+ADD them to the output. Your job is to produce the most complete set \
+possible, not just validate what Phase 1 found.
+10. For EACH rule, verify the citation: which document it comes from and \
+which part of that document (section, page number, sheet/tab name)
 
 ## Output
 

@@ -30,17 +30,33 @@ Phase 1 must be complete. You should have:
 
 ## Using Subagents for Parallel Analysis
 
-You MUST use subagents to check rules in parallel. Use a **MAXIMUM of 6 subagents**. Launch ALL subagents in a single turn — do not run some, wait, then run more.
+You MUST use subagents to check rules in parallel. Split ALL rules across \
+8-10 subagents — divide the rules roughly evenly so each subagent \
+handles approximately the same number. Include ALL Agent tool calls in \
+a SINGLE response message — this is what makes them run in parallel. \
+Multiple Agent calls in one response = parallel execution. Do NOT launch \
+them across separate responses.
+
+### Speed Guidance
+- **CRITICAL and HIGH priority rules**: Full compliance analysis with \
+evidence, severity, and detailed findings.
+- **MEDIUM and LOW/STANDARD priority rules**: Faster checks — determine \
+applicability and compliance status (COMPLIANT / NON-COMPLIANT) with brief \
+evidence. Don't spend excessive turns verifying low-impact rules.
 
 ### CRITICAL: Context Management
 - **Read only the manifest, summary, and rules file yourself.** Do NOT read the extracted document — let subagents do that.
-- **Launch all subagents in a SINGLE assistant turn** so they run in parallel.
+- **Include all Agent calls in ONE response** so they run concurrently.
 - **After subagents complete, trust their results.** Do NOT re-read the document or rules file to verify. Use execute_script to merge their outputs into final files directly from disk.
 - **Have each subagent write its findings to a temp file** (e.g., `/workdir/tmp/global_chunk_1.json`) AND return a brief summary. Then merge from disk, not from context.
 - **Keep your synthesis scripts short.** Read subagent temp files from disk in Python, don't try to hold all findings in your context window.
 
 ### Subagent Strategy
-- Group rules by category (e.g., procedural/timeline, documentation/forms, evaluation methodology)
+- Count the total rules in the rules file, then divide them across \
+8-10 subagents (e.g., 93 rules ÷ 10 = ~9-10 rules per subagent)
+- Group by category where possible (e.g., procedural/timeline, \
+documentation/forms, evaluation methodology) but prioritise even \
+distribution over perfect grouping
 - Each subagent writes full findings to `/workdir/tmp/global_chunk_N.json`
 
 ### CRITICAL: What to give subagents
@@ -83,6 +99,17 @@ specific pages if needed, rather than broadly re-reading the document.
 - **NON-COMPLIANT**: Clear evidence the rule is violated
 - **PARTIAL**: Some aspects met, others not
 - **UNABLE TO VERIFY**: Requires external verification (e.g., STEP system)
+
+### Rule Coverage
+
+Every rule in the rules file MUST receive a thorough check. The most \
+common source of inconsistency is subagents skimming rules or checking \
+them superficially. Each subagent must:
+- Read the actual document evidence for each of its assigned rules — \
+do not infer compliance from the manifest or summary alone
+- Where a rule references specific forms, thresholds, or methodology, \
+verify against the actual data in the document, not just whether the \
+form exists
 
 **Do not dismiss borderline findings** — include them as PARTIAL with \
 a note on the uncertainty rather than rounding up to COMPLIANT. The \
