@@ -10,41 +10,45 @@ Think of agents as **presets** that combine:
 - Tool permissions (what the agent can do)
 - Reference materials (documents the agent knows about)
 - Integration access (external services it can use)
+- Approval mode (controls integration tool call approval behavior)
+- Tags (categorization labels, up to 20 per agent)
 
 ## How Agents Work
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                    User's Chat Message                       │
-└──────────────────────────┬──────────────────────────────────┘
-                           │
-                           ▼
-┌─────────────────────────────────────────────────────────────┐
-│                     Agent Selected?                          │
-│  ┌─────────────┐              ┌─────────────────────────┐   │
-│  │ No Agent    │              │ Agent Active            │   │
-│  │             │              │                         │   │
-│  │ Default     │              │ agent.systemPrompt      │   │
-│  │ Numa Chat   │              │ + agent.toolsConfig     │   │
-│  │ behavior    │              │ + agent.referenceFiles  │   │
-│  └─────────────┘              └─────────────────────────┘   │
-└──────────────────────────┬──────────────────────────────────┘
-                           │
-                           ▼
-┌─────────────────────────────────────────────────────────────┐
-│                  numa-chat-agent Lambda                      │
-│                                                              │
-│  System Prompt = base_prompt + agent.systemPrompt           │
-│  Tools Enabled = based on agent.toolsConfig                 │
-│  KB Access = agent.allowedKnowledgeBases                    │
-│  Integrations = agent.enabledConnections                    │
-└──────────────────────────┬──────────────────────────────────┘
-                           │
-                           ▼
-┌─────────────────────────────────────────────────────────────┐
-│                   Claude Response                            │
-│           (reflects agent's personality & capabilities)      │
-└─────────────────────────────────────────────────────────────┘
++-------------------------------------------------------------+
+|                    User's Chat Message                       |
++----------------------------+--------------------------------+
+                             |
+                             v
++-------------------------------------------------------------+
+|                     Agent Selected?                          |
+|  +--------------+              +--------------------------+  |
+|  | No Agent     |              | Agent Active             |  |
+|  |              |              |                          |  |
+|  | Default      |              | agent.systemPrompt       |  |
+|  | Numa Chat    |              | + agent.toolsConfig      |  |
+|  | behavior     |              | + agent.referenceFiles   |  |
+|  +--------------+              +--------------------------+  |
++----------------------------+--------------------------------+
+                             |
+                             v
++-------------------------------------------------------------+
+|              numa-workspace-agent (AgentCore MicroVM)        |
+|                                                              |
+|  agent_config.py fetches agent from DynamoDB                 |
+|  System Prompt = base_prompt + agent.systemPrompt            |
+|  Tools Enabled = based on agent.toolsConfig                  |
+|  KB Access = agent.allowedKnowledgeBases                     |
+|  Integrations = agent.enabledConnections                     |
+|  Approval Mode = agent.approvalMode (or user default)        |
++----------------------------+--------------------------------+
+                             |
+                             v
++-------------------------------------------------------------+
+|                   Claude Response                            |
+|           (reflects agent's personality & capabilities)      |
++-------------------------------------------------------------+
 ```
 
 ## Agent Configuration Options
@@ -66,7 +70,10 @@ Think of agents as **presets** that combine:
 | **Knowledge Base**    | Access to company documents (all, none, or specific KBs) |
 | **Web Search**        | Can search the internet                                  |
 | **Create Agents**     | Can create new agents from conversation                  |
+| **Memories**          | Can use user memories                                    |
+| **Numa Ops**          | Can use Numa Ops tools (tickets, projects, etc.)         |
 | **Integrations**      | External services (Slack, Notion, etc.)                  |
+| **Approval Mode**     | Controls integration tool call approval behavior         |
 
 ### 3. Reference Files
 
@@ -87,6 +94,10 @@ These files are processed and made available to the agent during chat.
 | **Icon Image**          | Custom uploaded image |
 | **Time Saved Estimate** | Productivity metric   |
 
+### 5. Tags
+
+Agents support up to 20 tags for categorization. Tags are normalized (trimmed, lowercased, deduplicated) on save.
+
 ## Agent Types
 
 ### By Visibility
@@ -102,7 +113,7 @@ The `agentType` field is flexible:
 
 - `task` - General task-focused agent
 - `knowledge` - Knowledge base focused
-- `scheduled` - Runs on schedule (future)
+- `scheduled` - Runs on schedule
 - Custom strings allowed
 
 ## User Flows
@@ -113,15 +124,22 @@ The `agentType` field is flexible:
 2. Click "Create Agent"
 3. Fill in title + system prompt (required)
 4. Configure tools, add files, set visibility
-5. Save → Agent appears in list
+5. Save - Agent appears in list
 
 ### Using an Agent in Chat
 
-1. Go to `/chat`
-2. Click "Agents" sidebar button
+1. Go to `/chat` (`NumaWorkspaceChatAgents`)
+2. Open agents panel or select from conversation sidebar
 3. Select an agent
 4. (Check for missing integrations if any)
-5. Start chatting → Agent context applied
+5. Start chatting - Agent context applied via `agent_config.py` in the workspace agent
+
+### Creating an Agent from Chat
+
+1. Ask the workspace agent to create an agent
+2. The `numa_tool.py` MCP tool handles the `agents` operation
+3. Intent verification checks user explicitly confirmed creation
+4. Agent is stored in DynamoDB via the workspace-chat-tools Lambda
 
 ### Sharing an Agent
 
@@ -136,6 +154,13 @@ The `agentType` field is flexible:
 2. Click "Duplicate"
 3. Creates personal copy
 4. Edit your copy as needed
+
+### Scheduling an Agent
+
+1. From the agents page or scheduling page, create a schedule
+2. Configure cron expression, timezone, prompt text
+3. Schedule runs via EventBridge Scheduler -> `agent-schedule-runner` Lambda
+4. Results tracked in `{client}-agent-schedules` DynamoDB table
 
 ## Feature Administration
 
@@ -154,8 +179,8 @@ Admins can control agent availability via `/api/settings/agents`:
 Agents don't run independently - they modify how the standard chat works:
 
 - Same underlying Claude model
-- Same numa-chat-agent Lambda
-- Just different configuration applied
+- Same `numa-workspace-agent` service (AgentCore MicroVM)
+- Just different configuration applied via `agent_config.py`
 
 ### System Prompt Composition
 
@@ -172,9 +197,12 @@ Final Prompt = Base Numa Prompt
 
 Agent tools config enables/disables features:
 
-- `autoToolsEnabled: true` → Agent picks tools automatically
-- `queryDataSources: true` → Can access knowledge base
-- `webSearchEnabled: true` → Can search web
+- `autoToolsEnabled: true` - Agent picks tools automatically
+- `queryDataSources: true` - Can access knowledge base
+- `webSearchEnabled: true` - Can search web
+- `memoriesEnabled: true` - Can use user memories
+- `numaOpsEnabled: true` - Can use Numa Ops tools
+- `approvalMode` - Controls integration approval (`always`, `non_destructive`, `never`)
 - Each integration must be explicitly enabled
 
 ### Reference Files Are Indexed

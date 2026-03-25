@@ -110,7 +110,7 @@ Each card displays:
 
 ## Chat Integration
 
-**Location:** `/numa-frontend/src/Pages/NumaChatAgents.tsx`
+**Location:** `/numa-frontend/src/Pages/NumaWorkspaceChatAgents.tsx`
 
 ### Agent Selection (AgentsSidebar)
 
@@ -125,7 +125,7 @@ Each card displays:
 AgentsManagement.proceedToChat()
     → Store in sessionStorage: numa_preselected_agent + token
     → Navigate to /chat
-    → NumaChatAgents detects preselection
+    → NumaWorkspaceChatAgents detects preselection
     → startAgentSession()
     → Creates welcome message with agent info
     → Sets current agent state
@@ -198,7 +198,7 @@ AdminAgentsService.update(mode, numaPut?)
     → PUT /api/settings/agents
 ```
 
-### chatAgentService.ts Integration
+### workspaceChatAgentService.ts Integration
 
 When sending chat with agent:
 
@@ -334,11 +334,11 @@ parseAgentImport(jsonString)             // Parse and validate import
 │   └── AgentsSidebar.tsx          # Chat sidebar selector
 ├── Pages/
 │   ├── AgentsManagement.tsx       # Agents list/dashboard
-│   └── NumaChatAgents.tsx         # Chat with agent integration
+│   └── NumaWorkspaceChatAgents.tsx         # Chat with agent integration
 ├── Services/
 │   ├── AgentsService.ts           # CRUD API calls
 │   ├── AdminAgentsService.ts      # Admin settings
-│   └── chatAgentService.ts        # Streaming + agent context
+│   └── workspaceChatAgentService.ts        # Streaming + agent context
 ├── types/
 │   └── agents.ts                  # TypeScript definitions
 └── utils/
