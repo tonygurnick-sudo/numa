@@ -4,6 +4,9 @@ Extract content from workspace files using the extract-content-from-file Lambda.
 This tool enables the workspace agent to extract text content from files
 (PDFs, images, DOCX, Excel, audio/video, etc.) using advanced OCR and vision AI.
 
+For vision-extracted formats (PDF, DOCX, images), large files are automatically
+split into 100-page chunks and processed in parallel for reliability and speed.
+
 Security:
 - Validates file_path is within allowed workspace directories
 - User isolation via user_sub in S3 paths
@@ -13,10 +16,13 @@ Security:
 import json
 import os
 import re
+import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any, Dict
 
 import structlog
+from botocore.config import Config
 
 from prm import client as prm_client
 
@@ -41,6 +47,24 @@ BLOCKED_PATH_PATTERNS = [
     "secrets",
     ".env",
 ]
+
+# Chunked extraction settings
+CHUNK_SIZE = 100  # Pages per chunk — matches extract-content-from-file default
+MAX_PARALLEL_CHUNKS = 10  # Max concurrent extract_chunk Lambda invocations
+
+# File extensions that use vision AI extraction (and benefit from chunking)
+VISION_EXTENSIONS = {
+    ".pdf",
+    ".docx",
+    ".doc",
+    ".pptx",
+    ".png",
+    ".jpg",
+    ".jpeg",
+    ".tiff",
+    ".bmp",
+    ".gif",
+}
 
 
 def _validate_workspace_path(file_path: str) -> tuple[bool, str | None]:
@@ -135,12 +159,185 @@ def _get_output_s3_key(input_rel_path: str, user_sub: str, conversation_id: str)
     return f"{S3_PREFIX}/{user_sub}/conversations/{conversation_id}/{output_rel_path}"
 
 
+# ── Lambda invocation helpers ────────────────────────────────────────────────
+
+
+def _invoke_extract_lambda(lambda_client, payload: dict) -> dict:
+    """Invoke extract-content-from-file Lambda synchronously.
+
+    This is a blocking call — use ThreadPoolExecutor for parallel invocations.
+    """
+    response = lambda_client.invoke(
+        FunctionName=EXTRACT_CONTENT_LAMBDA_NAME,
+        InvocationType="RequestResponse",
+        Payload=json.dumps(payload).encode("utf-8"),
+    )
+
+    if "FunctionError" in response:
+        error_payload = response["Payload"].read().decode("utf-8")
+        raise RuntimeError(f"Extract Lambda execution error: {error_payload}")
+
+    result_bytes = response["Payload"].read()
+    result = json.loads(result_bytes)
+
+    if isinstance(result, dict) and "errorMessage" in result:
+        raise RuntimeError(
+            f"Extraction Lambda error (action={payload.get('action')}): "
+            f"{result['errorMessage']}"
+        )
+
+    return result
+
+
+def _handle_chunked_extraction(
+    lambda_client,
+    input_bucket: str,
+    input_s3_key: str,
+    output_bucket: str,
+    extract_output_key: str,
+    filename: str,
+) -> None:
+    """Orchestrate chunked parallel extraction for vision-extracted files.
+
+    Calls the extract-content-from-file Lambda with 3 actions:
+    1. prepare_chunks — convert pages to images, define chunks
+    2. extract_chunk — extract text from each chunk (parallel)
+    3. merge_chunks — combine into final document JSON
+    """
+    extract_start = time.monotonic()
+
+    # Step 1: Prepare chunks
+    step1_start = time.monotonic()
+    logger.info(
+        "Chunked extraction step 1/3: preparing chunks",
+        filename=filename,
+        input_key=input_s3_key,
+    )
+
+    prepare_result = _invoke_extract_lambda(
+        lambda_client,
+        {
+            "action": "prepare_chunks",
+            "input_bucket": input_bucket,
+            "input_key": input_s3_key,
+            "chunk_size": CHUNK_SIZE,
+        },
+    )
+
+    chunks = prepare_result["chunks"]
+    temp_prefix = prepare_result["temp_prefix"]
+    total_pages = prepare_result.get("total_pages", 0)
+    step1_dur = time.monotonic() - step1_start
+
+    logger.info(
+        "Chunked extraction step 1/3 complete",
+        total_pages=total_pages,
+        num_chunks=len(chunks),
+        duration_s=round(step1_dur, 1),
+    )
+
+    # Step 2: Extract chunks in parallel
+    step2_start = time.monotonic()
+    logger.info(
+        f"Chunked extraction step 2/3: extracting {len(chunks)} chunks "
+        f"(max {MAX_PARALLEL_CHUNKS} concurrent)",
+    )
+
+    chunk_results = []
+    with ThreadPoolExecutor(max_workers=MAX_PARALLEL_CHUNKS) as executor:
+        futures = {}
+        for chunk in chunks:
+            future = executor.submit(
+                _invoke_extract_lambda,
+                lambda_client,
+                {
+                    "action": "extract_chunk",
+                    "chunk_id": chunk["chunk_id"],
+                    "start_page": chunk["start_page"],
+                    "end_page": chunk["end_page"],
+                    "temp_prefix": temp_prefix,
+                    "input_bucket": input_bucket,
+                },
+            )
+            futures[future] = chunk
+
+        errors = []
+        for future in as_completed(futures):
+            chunk = futures[future]
+            try:
+                result = future.result()
+                chunk_results.append(result)
+                logger.debug(
+                    f"Chunk {chunk['chunk_id']} extracted "
+                    f"(pages {chunk['start_page']}-{chunk['end_page']})",
+                    chunk_id=chunk["chunk_id"],
+                )
+            except Exception as e:
+                errors.append((chunk["chunk_id"], e))
+                logger.error(
+                    f"Chunk {chunk['chunk_id']} failed",
+                    chunk_id=chunk["chunk_id"],
+                    error=str(e),
+                )
+
+    if errors:
+        raise RuntimeError(
+            f"Extraction failed: {len(errors)} of {len(chunks)} chunks failed. "
+            f"First error (chunk {errors[0][0]}): {errors[0][1]}"
+        )
+
+    step2_dur = time.monotonic() - step2_start
+    logger.info(
+        "Chunked extraction step 2/3 complete",
+        chunks_extracted=len(chunk_results),
+        duration_s=round(step2_dur, 1),
+    )
+
+    # Step 3: Merge chunks
+    step3_start = time.monotonic()
+    logger.info("Chunked extraction step 3/3: merging chunks")
+
+    _invoke_extract_lambda(
+        lambda_client,
+        {
+            "action": "merge_chunks",
+            "chunks": chunk_results,
+            "output_bucket": output_bucket,
+            "output_key": extract_output_key,
+            "temp_prefix": temp_prefix,
+            "input_bucket": input_bucket,
+        },
+    )
+
+    step3_dur = time.monotonic() - step3_start
+    total_dur = time.monotonic() - extract_start
+
+    logger.info(
+        "Chunked extraction complete",
+        filename=filename,
+        total_pages=total_pages,
+        num_chunks=len(chunks),
+        step1_prepare_s=round(step1_dur, 1),
+        step2_extract_s=round(step2_dur, 1),
+        step3_merge_s=round(step3_dur, 1),
+        total_s=round(total_dur, 1),
+        pages_per_second=round(total_pages / total_dur, 1) if total_dur > 0 else 0,
+    )
+
+
+# ── Main handler ─────────────────────────────────────────────────────────────
+
+
 def handle_extract_content(params: Dict[str, Any]) -> Dict[str, Any]:
     """
     Handle extract_content tool invocation.
 
     Extracts text content from a file in the workspace using the
     extract-content-from-file Lambda.
+
+    For vision-extracted formats (PDF, DOCX, images), uses chunked parallel
+    extraction for reliability with large files. Other formats (XLSX, CSV, etc.)
+    use the direct single-invocation path.
 
     Parameters:
         file_path (str, required): Workspace path to the file
@@ -199,50 +396,47 @@ def handle_extract_content(params: Dict[str, Any]) -> Dict[str, Any]:
 
     # Get filename for the extract lambda
     filename = Path(file_path).name
+    file_ext = Path(file_path).suffix.lower()
 
-    # Invoke extract-content-from-file Lambda
-    lambda_client = prm_client("lambda", region=REGION)
-
-    payload = {
-        "input_bucket": OUTPUTS_BUCKET_NAME,
-        "input_key": input_s3_key,
-        "output_bucket": OUTPUTS_BUCKET_NAME,
-        "output_key": extract_output_key,
-        "file_name": filename,
-        "return_content": False,  # Write to S3
-    }
+    # Create Lambda client with long timeout for large file extraction
+    lambda_client = prm_client(
+        "lambda",
+        region=REGION,
+        config=Config(read_timeout=900, connect_timeout=10),
+    )
 
     try:
-        response = lambda_client.invoke(
-            FunctionName=EXTRACT_CONTENT_LAMBDA_NAME,
-            InvocationType="RequestResponse",
-            Payload=json.dumps(payload).encode("utf-8"),
-        )
-
-        # Check for Lambda-level errors
-        if "FunctionError" in response:
-            error_payload = response["Payload"].read().decode("utf-8")
-            logger.error(
-                "Extract Lambda execution error",
-                error=error_payload,
+        if file_ext in VISION_EXTENSIONS:
+            # Chunked parallel extraction for vision-extracted formats
+            _handle_chunked_extraction(
+                lambda_client,
+                OUTPUTS_BUCKET_NAME,
+                input_s3_key,
+                OUTPUTS_BUCKET_NAME,
+                extract_output_key,
+                filename,
             )
-            raise ValueError(f"Extract Lambda failed: {error_payload}")
+        else:
+            # Direct single-invocation path for non-vision formats
+            payload = {
+                "input_bucket": OUTPUTS_BUCKET_NAME,
+                "input_key": input_s3_key,
+                "output_bucket": OUTPUTS_BUCKET_NAME,
+                "output_key": extract_output_key,
+                "file_name": filename,
+                "return_content": False,
+            }
+            _invoke_extract_lambda(lambda_client, payload)
 
-        # Parse response
-        response_payload = json.loads(response["Payload"].read().decode("utf-8"))
-
-        logger.info(
-            "Extract Lambda completed",
-            response_keys=list(response_payload.keys()),
-        )
+        logger.info("Extract Lambda completed", extract_output_key=extract_output_key)
 
     except Exception as e:
         logger.error(
-            "Failed to invoke extract Lambda",
+            "Failed to extract content",
             error=str(e),
             exc_info=True,
         )
-        raise ValueError(f"Failed to invoke extract Lambda: {str(e)}") from e
+        raise ValueError(f"Failed to extract content: {str(e)}") from e
 
     # Read the extracted JSON from S3 and convert to text
     s3_client = prm_client("s3", region=REGION)

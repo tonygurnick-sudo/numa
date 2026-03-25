@@ -30,18 +30,31 @@ Phases 1 and 2 must be complete. You should have:
 
 ## Using Subagents for Parallel Analysis
 
-You MUST use subagents to parallelize your analysis. Use a **MAXIMUM of 6 subagents**. Launch ALL subagents in a single turn — do not run some, wait, then run more.
+You MUST use subagents to parallelize your analysis. Use **8-10 \
+subagents** — split ALL rules and analysis tasks across them for maximum \
+parallelism. Include ALL Agent tool calls in a SINGLE response message — \
+this is what makes them run in parallel. Multiple Agent calls in one \
+response = parallel execution. Do NOT launch them across separate responses.
+
+### Speed Guidance
+- **CRITICAL and HIGH priority rules**: Full compliance analysis with \
+evidence, severity, and detailed findings.
+- **MEDIUM and LOW priority rules**: Faster checks — determine \
+applicability and compliance status (COMPLIANT / NON-COMPLIANT) with brief \
+evidence. Don't spend excessive turns verifying low-impact rules.
 
 ### CRITICAL: Context Management
 - **Read only the manifest, summary, and rules file yourself.** Do NOT read the extracted document — let subagents do that.
-- **Launch all subagents in a SINGLE assistant turn** so they run in parallel.
+- **Include all Agent calls in ONE response** so they run concurrently.
 - **After subagents complete, trust their results.** Do NOT re-read the document or rules to verify. Use execute_script to merge their outputs into final files directly from disk.
 - **Have each subagent write its findings to a temp file** (e.g., `/workdir/tmp/project_chunk_1.json`) AND return a brief summary. Then merge from disk, not from context.
 
 ### Subagent Strategy
 Plan your subagent groupings after reading the manifest and rules file — \
 the document structure and number of rules should drive how you allocate \
-subagents across the analysis areas below.
+subagents. Aim for roughly even workload across all subagents. \
+Rule-by-rule compliance checks should be split across multiple subagents \
+rather than given to a single one.
 
 ## Your Task
 Systematically check the Terms of Reference document against EVERY rule in the project rules file, with analysis on project requirements and scope definition.
@@ -70,6 +83,21 @@ and page index to navigate to specific pages, NOT to read the entire file. \
 They should use execute_script to extract only the pages they need.
 
 Each subagent writes findings to `/workdir/tmp/project_chunk_N.json`.
+
+### Rule Coverage
+
+Every rule in the rules file MUST receive a thorough check. The most \
+common source of inconsistency is subagents skimming rules or checking \
+them superficially. Each subagent must:
+- Read the actual document evidence for each of its assigned rules — \
+do not infer compliance from the manifest or summary alone
+- Where a rule references specific sections, requirements, or standards, \
+verify against the actual content in the document, not just whether the \
+section exists
+
+**Do not dismiss borderline findings** — include them as PARTIAL with \
+a note on the uncertainty rather than rounding up to COMPLIANT. The \
+report generation phase will determine final priority and framing.
 
 #### Step 3: Merge Results
 Use execute_script to merge all subagent temp files into the final \

@@ -39,12 +39,32 @@ the client.
 In practice:
 - If both CSVs contain findings on the same subject (e.g., bid evaluation \
 methodology, qualification criteria, documentation requirements), use the \
-Phase 3 (procurement/project) finding as the authoritative source for the \
-report — its compliance status, severity, evidence, and recommendation.
-- Global findings should only appear in the report for areas that are NOT \
-covered by the domain-specific (procurement/project) rules.
+Phase 3 (procurement/project) finding as the **sole authoritative source** \
+for the report — its compliance status, severity, evidence, \
+recommendation, AND analytical reasoning.
+- **Use the domain rule's thresholds and benchmarks, not the global \
+rule's.** When a procurement-specific rule defines a threshold or \
+benchmark for a given area, that is the value the evaluation must be \
+measured against. Do NOT substitute a different threshold from a global \
+rule — doing so can point the analysis in the wrong direction and \
+produce recommendations that would increase non-compliance rather \
+than correct it.
+- **The direction of the finding must come from the domain rule.** \
+Determine what the procurement/project-specific documents require, \
+compare the evaluation against that, and frame the finding accordingly. \
+A global rule may define a different standard for the same area — \
+ignore it for the finding. If the global rule raises a broader policy \
+question not addressed by the domain rule, it may be noted separately \
+as a STEP verification item for the Bank's team, but never framed as \
+a finding against the Borrower.
+- Global findings should still be included in the report. They provide \
+valuable coverage for areas that the domain-specific rules do not \
+address. The priority rule only applies when global and domain rules \
+**conflict on the same aspect** — in that case, the domain-specific \
+assessment wins outright (its compliance status, thresholds, reasoning, \
+and recommendation).
 - When writing the report, do NOT blend or average conflicting assessments \
-from the two phases. The domain-specific assessment wins outright.
+from the two phases.
 - If a global rule says COMPLIANT but the procurement-specific rule says \
 NON-COMPLIANT on the same aspect, the report must reflect NON-COMPLIANT \
 with the procurement-specific evidence and recommendation.
@@ -242,10 +262,10 @@ existing report file.
 
 ## Review Tasks
 
-Complete ALL nine review tasks. Tasks 1-6 may be parallelized using \
-sub-agents. Task 7 (KB priority check), Task 8 (general sense-check), \
-and Task 9 (consistency verification) MUST run sequentially after \
-Tasks 1-6 are complete, with Task 9 as the very last step:
+Complete ALL nine review tasks using the three-wave strategy described \
+in the Strategy section below. The task descriptions here define WHAT \
+to check — the Strategy section defines HOW to execute them (which \
+wave, parallel vs sequential, analysis-only vs editing).
 
 ### 1. Internal Reference Leak Detection (CRITICAL)
 
@@ -328,14 +348,27 @@ the corrective step.
 
 Procurement Activity / Project rules ALWAYS take priority over Global \
 rules when they address the same topic. Check the report for any places \
-where a global rule finding has been used when a procurement/project \
-rule covers the same area. Cross-reference the Phase 2 CSV \
-(`global_rules_compliance.csv`) against the Phase 3 CSV \
-(`procurement_rules_compliance.csv` or `project_rules_compliance.csv`) \
-— if both have findings on the same subject, the report must reflect \
-the Phase 3 finding (compliance status, severity, evidence, and \
-recommendation), not the Phase 2 one. Correct any occurrences where \
-the global assessment was used instead.
+where a global rule's analysis has influenced a finding when a \
+procurement/project rule covers the same area.
+
+Cross-reference the Phase 2 CSV (`global_rules_compliance.csv`) against \
+the Phase 3 CSV (`procurement_rules_compliance.csv` or \
+`project_rules_compliance.csv`) — if both have findings on the same \
+subject, the report must reflect the Phase 3 finding entirely: its \
+compliance status, severity, evidence, recommendation, AND its \
+analytical reasoning and thresholds.
+
+Watch specifically for cases where:
+- A global rule's threshold or benchmark has been used instead of the \
+domain-specific one (this can point the finding in the wrong direction)
+- The finding's framing or recommendation follows the global rule's \
+logic rather than the domain rule's
+- A global rule concern has been presented as a finding against the \
+Borrower when it should be a STEP verification item for the Bank's team
+
+These are not just labelling errors — using the wrong rule's analytical \
+framework can produce recommendations that would increase non-compliance \
+rather than correct it. Correct any occurrences found.
 
 ### 8. General Sense-Check
 
@@ -400,18 +433,25 @@ Consider using sub-agents (Task tool) to parallelize Tasks 1-6:
 (Task 1), updating the report with proper policy citations
 - One agent to verify report structure against the template and check \
 section ordering (Task 2)
+- One agent to check annexes contain specific data, not placeholders \
+(Task 3)
 - One agent to cross-reference the report against Phase 2/3 CSVs and \
 phase notes for completeness and semantic consistency (Task 4)
 - One agent to review tone, attribution, and policy detail (Tasks 5-6)
 
 Then merge their findings and apply all necessary edits to the report.
 
-After Tasks 1-6 edits are applied, run Task 7 (KB priority check) to \
-verify procurement/project rules took precedence over global rules \
-where they overlap. Then run Task 8 (general sense-check) as a single \
-sequential pass over the full report. Finally, run Task 9 (internal \
-consistency verification) as the absolute last step to ensure all \
-counts and cross-references are correct after all edits.
+After Tasks 1-6 edits are applied, spin up a **dedicated sub-agent** \
+for Task 7 (KB priority check). This is the most critical review task \
+— it must read both Phase 2 and Phase 3 CSVs in full and cross-reference \
+every finding in the report to verify that procurement/project rules \
+took precedence over global rules where they address the same aspect. \
+Give it focused attention as a standalone sub-agent, not an inline check.
+
+Then run Task 8 (general sense-check) as a single sequential pass over \
+the full report. Finally, run Task 9 (internal consistency verification) \
+as the absolute last step to ensure all counts and cross-references are \
+correct after all edits.
 
 ## Output
 
