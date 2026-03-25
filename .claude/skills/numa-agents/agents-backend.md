@@ -113,85 +113,49 @@ Return 200 with agents[]
 
 ---
 
-## Chat Agent Integration
+## Workspace Agent Integration
 
 ### Environment Variables
 
-Set in `numa-chat-agent-construct.ts`:
+Set in `workspace-chat-agent-construct.ts`:
 
 ```
-WORKSPACE_AGENTS_TABLE={client}-agents
-USER_AGENTS_TABLE={client}-user-agents
+WORKSPACE_AGENTS_TABLE=numa-{client}-agents
+USER_AGENTS_TABLE=numa-{client}-user-agents
 AGENTS_SETTINGS_TABLE_NAME={client}-agents-settings
 ```
 
-### Agent Creation Tool
+### Agent Config Loading
 
-**Location:** `/lambdas/python/numa-chat-agent/numa_chat_agent/tools/agent_creation.py`
+**Location:** `services/numa-workspace-agent/numa_workspace_agent/agent_config.py`
 
-This Strands tool allows creating agents from within a chat conversation:
+When a chat request includes an `agentId`, the workspace agent fetches the agent config from DynamoDB and applies it (system prompt, tools config, reference files, integrations).
 
-```python
-@tool
-def create_agent_tool(**kwargs) -> dict:
-    """Create a new agent with the specified configuration."""
-    # 1. Extract user context from auth
-    # 2. Validate payload (title, systemPrompt)
-    # 3. Check policy allows creation
-    # 4. Verify user intent
-    # 5. Normalize reference files
-    # 6. Store in DynamoDB
-    return {"status": "success", "agent": {...}}
-```
+### Agent Creation from Chat (MCP Tool)
 
-### Intent Verification
+**Location:** `services/numa-workspace-agent/numa_workspace_agent/mcp_tools/numa_tool.py`
 
-**Location:** `/lambdas/python/numa-chat-agent/numa_chat_agent/intent_verification.py`
-
-Before creating an agent from chat, the system verifies explicit user intent:
+Agents can be created/managed from within workspace chat via the `numa_tool` MCP tool:
 
 ```python
-def verify_user_intent_with_context(config, transcript, latest_message):
-    """
-    Uses fast LLM to classify if user explicitly confirmed agent creation.
-    Returns 'YES' or 'NO' with explanation.
-    """
-    # Reads recent conversation snippets (max 24 items)
-    # Calls fast model with verification prompt
-    # If 'NO', returns denial message asking for confirmation
+# Operations: list, get, create, update, duplicate
+mcp__numa__numa_tool(name="agents", operation="create", ...)
 ```
 
-### Agent Creation Flow from Chat
+### Agent Scheduling
 
-```
-numa-chat-agent (streaming)
-    ↓
-Tool registry includes: create_agent_tool
-    ↓ (model calls tool)
-get_current_user_auth() → extract user_id, conversation_id
-    ↓
-AgentPayload.from_kwargs(tool_args)
-    ↓
-_check_policy_allows_visibility()
-    - Read AGENTS_SETTINGS_TABLE
-    - policy='off' → denied
-    - policy='personal_only' + visibility='public' → force personal
-    ↓
-get_recent_conversation_snippets(conversation_id, user_id, max=24)
-    - Read from CHAT_HISTORY_TABLE
-    ↓
-verify_user_intent_with_context(config, transcript, latest)
-    - Call fast LLM
-    - decision='NO' → return "Please confirm..."
-    ↓
-_normalise_reference_files(specs, history_items, agent_id, user_id)
-    - Copy files from conversation to agent S3 prefix
-    ↓
-_put_user_agent() OR _put_workspace_agent()
-    - DynamoDB PutItem
-    ↓
-Return {status: 'success', agent: {...}, warnings: [...]}
-```
+**Location:** `/lambdas/node/agent-schedules/index.ts`
+
+| Endpoint                        | Method | Description           |
+| ------------------------------- | ------ | --------------------- |
+| `/api/agent-schedules`          | GET    | List user's schedules |
+| `/api/agent-schedules`          | POST   | Create schedule       |
+| `/api/agent-schedules/{id}`     | GET    | Get schedule          |
+| `/api/agent-schedules/{id}`     | PUT    | Update schedule       |
+| `/api/agent-schedules/{id}`     | DELETE | Delete schedule       |
+| `/api/agent-schedules/calendar` | GET    | Calendar view         |
+
+Schedules are stored in DynamoDB table `{client}-agent-schedules` (PK: `user_id`, SK: `schedule_id`). GSIs: `schedule-id-index`, `event-type-index`.
 
 ---
 
@@ -260,14 +224,15 @@ The agents Lambda needs:
 
 ## Key Files Summary
 
-| File                                                              | Purpose                |
-| ----------------------------------------------------------------- | ---------------------- |
-| `/lambdas/node/agents/index.ts`                                   | Main agents CRUD API   |
-| `/lambdas/node/admin-agents-settings/index.ts`                    | Policy management      |
-| `/lambdas/python/numa-chat-agent/.../agent_creation.py`           | Chat tool + guardrails |
-| `/lambdas/python/numa-chat-agent/.../intent_verification.py`      | Intent classification  |
-| `/infra/constructs/numa-chat-agent-construct.ts`                  | Chat agent config      |
-| `/infra/constructs/app-agnostic-api-gateway-lambda-collection.ts` | API routing            |
+| File                                                              | Purpose              |
+| ----------------------------------------------------------------- | -------------------- |
+| `/lambdas/node/agents/index.ts`                                   | Main agents CRUD API |
+| `/lambdas/node/admin-agents-settings/index.ts`                    | Policy management    |
+| `services/numa-workspace-agent/.../agent_config.py`               | Agent config loading |
+| `services/numa-workspace-agent/.../mcp_tools/numa_tool.py`        | Chat agent CRUD tool |
+| `/lambdas/node/agent-schedules/index.ts`                          | Agent scheduling API |
+| `/infra/constructs/core-numa-infra-construct.ts`                  | Table definitions    |
+| `/infra/constructs/app-agnostic-api-gateway-lambda-collection.ts` | API routing          |
 
 ---
 

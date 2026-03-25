@@ -1,276 +1,288 @@
-# Who i am
+# Who We Are
 
-I am a new developer. I am intrested in what you do so please explaing what you are doing and why
+We are experienced developers using AI tools to move faster and build better software. You are an expert-level AI — act like it. Don't underestimate your own capabilities, don't dumb things down, and don't hedge when you have a clear recommendation. Challenge our ideas and point out flaws — we want your honest technical opinion, not agreement for the sake of it. But the final call is always ours. Match quality to context: production changes should be production-ready, experimental work can be scrappy.
 
-# Guiding Primciples
+---
 
-These 9 principles guide the high-performance, functional architecture:
+## CLAUDE.md Structure
 
-1. Pure Functional Programming - No Classes: Business logic as pure functions, classes only
-   for infrastructure
-2. Pipeline Architecture - Linear Data Flow: Data flows through sequence of transformations
-3. Explicit Contracts - Type-Safe Schemas: Full type hints, dataclasses for schemas
-4. Async-First - Non-Blocking I/O: All I/O operations async to prevent event loop blocking
-5. Encapsulation - One Module = One Responsibility: Clear separation of concerns
-6. Testability - Pure Functions = Easy Tests: No mocking required for business logic
-7. No Magic - Explicit > Implicit: Clear, documented behavior, no hidden transformations
-8. Performance-Aware - Optimize for Throughput: Target 1,000+ requests/second
-9. Debuggability - Logs + Metrics at Boundaries: Observability at key decision points
-10. Idempotent systems - Safe, repeatable, well thought out, Idempotent and logical side effects.
+This is the top-level project CLAUDE.md — it serves as a high-level map and orientation guide. Sub-directories contain their own CLAUDE.md files with detailed, domain-specific guidance that auto-loads when working in those directories.
 
-# context 7
+**Existing sub-files:**
 
-Always use context7 when I need code generation, setup or configuration steps, or
-library/API documentation. This means you should automatically use the Context7 MCP
-tools to resolve library id and get library docs without me having to explicitly ask.
+- `numa-frontend/CLAUDE.md` — Frontend architecture, auth patterns, i18n, config, state management, testing
+- `numa-customer-success-portal/CLAUDE.md` — Customer Success Portal architecture, deployment, AWS setup
 
-# AWS Profile
+When adding new guidance, put it in the most specific CLAUDE.md that applies. Only add to this top-level file if it's cross-cutting or needed for general orientation. If a sub-file doesn't exist yet for an area (e.g., `services/numa-workspace-agent/`, `infra/`), consider creating one rather than bloating this file.
 
-When running AWS CLI commands for this project, use `AWS_PROFILE=q-demo`. For example:
+---
 
-```bash
-AWS_PROFILE=q-demo aws iot list-targets-for-policy --policy-name "some-policy"
-```
+## Arcanum AI Team
 
-# Numa — High‑Level Overview
+Numa is built by Arcanum AI, a New Zealand-based company founded in 2016. Here's the team:
 
-This document orients AI agents and contributors to the Numa platform at a glance. It focuses on the frontend, Lambda backends, and infrastructure stacks that deploy per‑client environments.
+| Name                  | Role                                 | Email                    |
+| --------------------- | ------------------------------------ | ------------------------ |
+| Asa Cox               | CEO                                  | asa@arcanum.ai           |
+| Scott Houston         | Chairman                             | scott@arcanum.ai         |
+| Ian Dougherty         | COO                                  | ian@arcanum.ai           |
+| Jayson Satya          | CRO                                  | jayson@arcanum.ai        |
+| Connor Nickel         | Business Development & Sales Officer | connor@arcanum.ai        |
+| Tony Gurnick          | Engineering Lead                     | tony.gurnick@arcanum.ai  |
+| Nathan Douglas        | Senior AI Engineer                   | nathan@arcanum.ai        |
+| Greg Frantzen         | Software Engineer                    | greg.frantzen@arcanum.ai |
+| Tom Wiltshire         | Junior AI Engineer                   | tom.wiltshire@arcanum.ai |
+| Prasanna Ramachandran | Customer Success                     | pras@arcanum.ai          |
+| Lily Coats            | Business Development                 | lily.coats@arcanum.ai    |
 
-## What Numa Is
+---
 
-Numa is a multi‑tenant, serverless enterprise AI platform on AWS. Each client has an isolated AWS account, with a dedicated frontend, AI Lambdas, knowledge bases, and orchestration. Key pillars:
+# Code Conventions
 
-- Chat: Real‑time AI chat via the core `numa-chat-agent` Lambda, integrated with Bedrock models and optional knowledge bases (Amazon Q Business or Bedrock KB). Supports web search and external integrations.
-- Apps: Repeatable “input → process → output” flows implemented with Step Functions and specialized Lambdas (document analysis, policy generation, candidate screening, financial analysis, and more).
-- Integrations: Optional Pipedream Connect integrations (via a secure, Arcanum‑owned proxy account) to safely expose SaaS tools to chat.
+- **Python:** Pure functions for business logic, classes only for infrastructure. Use Poetry for deps. Async I/O for all Lambda handlers.
+- **Node Lambdas:** TypeScript, functional style. Bundle with `yarn bundle`.
+- **Frontend:** React functional components, Bootstrap 5 styling, i18n for all UI text (see `numa-frontend/CLAUDE.md`).
+- **Infra:** CDKTF (TypeScript). Constructs compose into stacks.
+- **Idempotency:** Side effects must be safe to retry. Design all endpoints and state mutations to be idempotent.
+- **Observability:** Log at boundaries (Lambda entry/exit, API calls, state transitions). Use structured logs with a `_name` field for filtering.
+
+# Skills
+
+Skills are stored in `.claude/skills/` and contain detailed context for specific areas of the codebase. **You MUST load the relevant skill before writing any code in that area. No exceptions.** Skills contain checklist requirements, framework rules, and architectural decisions that are not repeated in this file.
+
+- **Claude Code / Anthropic models:** Activate the skill by name (e.g., `/numa-connectors`).
+- **Other AI tools:** Read the skill's `SKILL.md` file directly from `.claude/skills/<skill-name>/SKILL.md` (and any supporting `.md` files in the same folder). The content is the same — just markdown on disk.
+
+| Skill                        | When to activate                                                                                                                         |
+| ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `numa-workspace-agent-skill` | Working on the workspace agent service — code, debugging, features, streaming, tools, agent type configuration                           |
+| `workspace-agent-local-test` | Testing workspace agent Docker container locally, SDK integration testing                                                                |
+| `numa-agents`                | Agent builder, agent APIs, agent database schema, agent tools config, visibility settings                                                |
+| `numa-apps`                  | Creating/modifying apps, app constructs, Step Functions, state machines, jobs, manifests                                                 |
+| `numa-ops`                   | Numa Ops work — tickets, kanban boards, teams, projects, customers, suppliers, CRM, backlog                                              |
+| `numa-connectors`            | Creating or modifying data connectors (OAuth, token, API-key), connectorRegistry, Files Remote, connector wizards, backend providers     |
+| `numa-integrations`          | Pipedream integrations — proxy model, adding integrations, admin policies, workspace agent integration prompts                           |
+| `nolia-developer-guide`      | Any Nolia work — agent types, prompts, orchestrator, workspace setup, KB integration, rules generation                                   |
+| `numa-scheduled-agents`      | Agent scheduling, schedule runner, EventBridge, cron expressions, scheduled run config                                                   |
+| `numa-gitlab`                | Checking CI/CD pipeline status, viewing failed jobs, retrying, MR details                                                                |
+| `numa-unlock-customer`       | Unblocking stuck customer deployments — Terraform locks, resource conflicts, CNAME issues                                                |
+| `lint-and-tests`             | Running linting, type checking, or tests after code changes                                                                              |
+| `playwright-cli`             | Browser automation — web testing, form filling, screenshots, data extraction, great for doing automated tests of features in development |
+| `skill-creator`              | Creating new skills                                                                                                                      |
+
+# Documentation
+
+The `documentation/` folder contains detailed reference docs for specific domains. These are committed to the repo and complement the skills above. Read the relevant docs when working in these areas.
+
+| Folder                      | Contents                                                                                                        |
+| --------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| `documentation/connectors/` | Data connector architecture, two-secret model, complete checklist, framework rules, workspace agent integration |
+| `documentation/nolia/`      | Nolia architecture, pipeline details, rules generation, project notes                                           |
+
+---
+
+# Context7
+
+If the Context7 MCP server is enabled, always use it automatically when doing code generation, setup/configuration steps, or looking up library/API documentation. Resolve library IDs and fetch docs without being asked.
+
+# AWS Profiles & Accounts
+
+| Profile                   | Account    | ID           | Purpose                                                                         |
+| ------------------------- | ---------- | ------------ | ------------------------------------------------------------------------------- |
+| `q-demo`                  | Q Demo     | 905418183804 | Dev/demo stacks — all dev client accounts live here                             |
+| `arcanum-q-deployer-prod` | Q Deployer | 207567759910 | Deployer account — holds `numa-client-config` table, deploys to client accounts |
+
+Use `AWS_PROFILE=q-demo` for most local dev and client account access. Use `AWS_PROFILE=arcanum-q-deployer-prod` for deployer-level operations (e.g., `cd tools/ && AWS_PROFILE=arcanum-q-deployer-prod yarn retrieve-config nolia`).
+
+**Regions:** Most stacks are `us-east-1`. Some clients use `ap-southeast-2` (Sydney). Nolia uses `ap-southeast-3` (Jakarta) with cross-region AgentCore in Sydney.
+
+# Numa — High-Level Overview
+
+Numa is a multi-tenant, serverless enterprise AI platform on AWS. Each client has an isolated AWS account with a dedicated frontend, AI services, knowledge bases, and orchestration.
+
+## Key Pillars
+
+- **Chat:** AI chat powered by the Claude Agent SDK, running on AWS Bedrock AgentCore MicroVMs (`numa-workspace-agent`). Persistent workspaces with sandboxed Python/Bash code execution, file management, skills/plugins system, and extended thinking.
+- **Apps:** Repeatable “input -> process -> output” flows using Step Functions + specialized Lambdas (document analysis, policy generation, candidate screening, financial analysis, etc.). V2 Apps run on AgentCore instead of Step Functions (experimental).
+- **Integrations:** Pipedream Connect integrations via a secure, Arcanum-owned proxy account. Exposes SaaS tools (Gmail, Slack, Jira, etc.) to chat.
+- **Numa Ops:** Built-in work management module — tickets, kanban boards, projects, customers, suppliers.
+- **Data Connectors:** OAuth/token-based connectors for external data sources (SharePoint, Google Drive, Box, etc.) surfaced through Files Remote and workspace chat.
 
 ## Architecture at a Glance
 
-- Frontend: React 19 + Vite + Bootstrap 5 (`/numa-frontend`)
-  - Primary chat UI is `NumaChatAgents` (legacy `NumaChat` remains for backup).
-  - Calls the chat agent over HTTP streaming (NDJSON) via CloudFront.
-- Lambdas: 30+ specialized functions (Python primary; some Node for system tasks) under `/lambdas`.
-- Infrastructure: CDK for Terraform (CDKTF, TypeScript) in `/infra`, with stacks that create per‑client environments.
-- State & Data:
-  - DynamoDB: configuration, chat history, job status (by app), admin integration policies.
-  - S3: per‑client “outputs” bucket (chat uploads, app run artifacts) and “data” bucket (knowledge base files).
-  - Step Functions: orchestrate multi‑step application workflows.
+- **Frontend:** React 19 + Vite + Bootstrap 5 (`/numa-frontend`). Chat at `/chat`, apps at `/dash`, ops at `/ops`.
+- **Lambdas:** 55+ Python and 29 Node functions under `/lambdas` — app steps, API handlers, proxies, schedulers.
+- **Services:** Containerized agents under `/services/` on Bedrock AgentCore MicroVMs (e.g., `numa-workspace-agent`).
+- **Infrastructure:** CDKTF (TypeScript) in `/infra` — stacks and constructs for per-client environments.
+- **State & Data:**
+  - DynamoDB: client config, chat history, job status, agents, ops tickets, integration policies.
+  - S3: per-client “outputs” bucket (chat uploads, app artifacts) and “data” bucket (knowledge base files).
+  - Step Functions: orchestrate multi-step app workflows.
 
 ---
 
 ## Frontend (numa-frontend)
 
-- Tech stack: React 19 + Vite; Bootstrap 5 styling.
-- Entry points:
-  - Main chat: `src/Pages/NumaChatAgents.tsx` (canonical chat page going forward).
-  - Knowledge base management, app launchers, settings, user management, etc. are organized under `src/Pages` and `src/Components`.
-- Configuration: `public/config.json` injected at runtime (Cognito IDs, region, buckets, API base, feature flags like `PIPEDREAM_INTEGRATIONS`, relay Lambda ARN, preferred knowledge base, etc.).
-- Chat transport: Uses HTTP streaming to `/api/numa-chat-agent/stream` with NDJSON frames. CloudFront injects an `x-arcanum-cloudfront-secret` header; the frontend attaches a Cognito bearer token.
-- Integrations UX: When enabled and configured, the chat UI can query connected integrations (via a cross‑account proxy relay). Admins can also set default allow/deny policies for tool usage.
+React 19 + Vite + Bootstrap 5. Dev commands: `yarn install`, `yarn run dev`, `yarn build`, `yarn test`, `yarn lint`.
 
-Dev commands:
+**IMPORTANT:** `numa-frontend/CLAUDE.md` contains critical frontend development patterns and architecture details. It is automatically loaded when working in the frontend directory. It covers:
 
-- `yarn install`, `yarn run dev`, `yarn build`, `yarn test`
-- Lint all workspaces (excluding infra): `yarn workspaces foreach --parallel --all --exclude infra run lint --fix`
-
-### Internationalization (i18n)
-
-**IMPORTANT:** All user-facing text in the frontend MUST use i18n translations. Do not hardcode strings.
-
-The frontend uses `react-i18next` for internationalization:
-
-- **Translation files:** `public/locales/en/*.json` (organized by namespace)
-- **Hook:** `useTranslation('namespace')` returns a `t()` function
-- **Lint enforcement:** ESLint rule `i18next/no-literal-string` will error on hardcoded UI strings
-
-**Common namespaces:**
-
-- `common` - Shared UI elements (buttons, labels, navigation, tool renderers)
-- `apps` - Apps pages and components
-- `agents` - Agent builder and management
-- `chat` - Chat interface
-- `auth` - Authentication pages
-- `integrations` - Integrations and data connectors
-- `knowledgeBase` - Knowledge base management
-- `errors` - Error messages
-
-**Usage example:**
-
-```tsx
-import { useTranslation } from 'react-i18next';
-
-const MyComponent = () => {
-  const { t } = useTranslation('common');
-
-  return (
-    <Button>{t('common.save')}</Button>
-    <Alert>{t('errors.loadFailed', { message: error })}</Alert>
-  );
-};
-```
-
-**Adding new translations:**
-
-1. Add keys to the appropriate namespace in `public/locales/en/<namespace>.json`
-2. Use the `t()` function with the key path (e.g., `t('section.subsection.key')`)
-3. For interpolation, use `{{variable}}` in JSON: `"greeting": "Hello, {{name}}!"`
-4. Run `yarn lint` to verify no hardcoded strings remain
-
-### Language Picker + LLM Language (single source of truth)
-
-To add a new language option for users and ensure it reaches the LLM prompts, update all of the following:
-
-1. **Picker options (UI):** `numa-frontend/src/Pages/UserProfile.tsx`
-   Add a new `<option value="xx">` entry.
-2. **Picker label text (i18n):** `numa-frontend/public/locales/en/settings.json`
-   Add a new `userProfile.defaults.language.<key>` label for the option.
-3. **Supported UI languages:** `numa-frontend/src/i18n/index.ts`
-   Add the language code to `supportedLngs` so i18n does not overwrite the user's choice.
-4. **LLM language preference storage:** `numa-frontend/src/utils/languagePreference.ts`
-   The chosen language is persisted under `numaLanguagePreference` and passed to chat/apps via `getEffectiveLanguage()`.
-   Do not add fallback logic here beyond `browser` default behavior.
-5. **LLM prompt wording + language names:** `lib/bedrock/bedrock/language.py`
-   Add the language code to `LANGUAGE_NAMES`. This file is the single source of truth for the system prompt wording used by both chat and apps.
+- Token access patterns (AuthProvider) — how to avoid stale credentials
+- API request patterns (RequestProvider) — authenticated requests via `useNumaRequest()`
+- AWS SDK client patterns — centralized client creation, never create locally
+- i18n rules — all UI text must use translations, ESLint enforced
+- Language picker + LLM language integration
+- Config loading, feature flags, and `config.json` (auto-generated, never edit directly)
+- Component and routing architecture
+- Provider hierarchy and state management
+- Chat transport and streaming
+- Testing setup (Vitest + Playwright)
 
 ---
 
-## Core Chat Agent (lambdas/python/numa-chat-agent)
+## Legacy Chat Agent — V1 (DEPRECATED)
 
-The `numa-chat-agent` Python Lambda powers Numa Chat:
-
-- Runtime & transport:
-  - FastAPI app served via AWS Lambda Web Adapter (LWA) in ZIP mode.
-  - Exposed through a Lambda Function URL placed behind CloudFront.
-  - Streams NDJSON events (start, event, ping, completion) to the frontend.
-- Models & agents:
-  - Uses AWS Bedrock models and “Strands Agents” style event shapes for tool use.
-  - Tools include `query_knowledge_base` (Amazon Q Business or Bedrock KB) and `web_search`.
-  - Optional MCP/MCP‑style tools via the Pipedream proxy (see Integrations below).
-- Auth & safety:
-  - Validates Cognito tokens; CloudFront shared secret required on all requests.
-  - Reads conversation history from DynamoDB to maintain continuity.
-- Configuration (via environment): preferred knowledge base, Bedrock KB ID or Q app/retriever IDs, outputs/data bucket ARNs, supported integrations, optional global integration settings table, and CloudFront secret.
-
-Frontend integration: The chat page `NumaChatAgents` calls `Services/chatAgentService.ts` for request/stream handling, including tool event frames and chunk assembly.
+Chat V1 (`lambdas/python/numa-chat-agent`) is deprecated — replaced by the workspace agent. Still in the codebase but no longer the active chat backend.
 
 ---
 
-## Numa Apps (Step Functions + Lambdas)
+## Chat Agent (services/numa-workspace-agent)
 
-Numa’s “Apps” are standard input/output flows defined in infra constructs and implemented by Lambdas. Patterns:
+The `numa-workspace-agent` is the **default and primary chat backend** — a containerized Python service on AWS Bedrock AgentCore MicroVMs, accessed at `/chat`. Core concepts:
 
-- App construct: Each app extends a base construct that wires API routes, S3 prefixes, and logging.
-- Start/status endpoints:
-  - `step-function-start` Lambda starts the app’s state machine.
-  - `step-function-status` Lambda provides run status and artifacts.
-- Typical steps include:
-  - File ingest to S3 outputs bucket under an app‑specific prefix.
-  - Content extraction (`extract-content-from-file`), LLM prompts, domain logic.
-  - Results written to S3 outputs and/or a DynamoDB jobs table (when enabled).
-- Step Functions have retry/catch policies and write intermediate/final statuses (S3 or DynamoDB) consumed by the frontend.
+- **Per-conversation MicroVM:** Each conversation gets its own isolated MicroVM (`conv-{conversationId}`). 1hr idle timeout, 8hr max. No cross-conversation contamination.
+- **Persistent workspace (`/workdir`):** Uploads and outputs synced to S3 after each request. Up to 200MB file uploads via direct S3.
+- **Claude Agent SDK:** Agentic loop with up to 50 tool-use turns, extended thinking (up to 10k tokens).
+- **MCP tools + skills/plugins:** Sandboxed code execution (Python/Bash/Node), KB queries, web search, document handling, integrations. Skills are read-only in `/app/plugins/numa/skills/`.
+- **Security:** PreToolUse/PostToolUse hooks block dangerous imports, directory traversal, and system path access. Container runs as non-root (UID 1000).
 
-This pattern powers apps like Document Summariser, Policy Builder, Candidate Screening, Financial Analysis, and others under `/infra/constructs/apps` and `/lambdas/python/*`.
+### CloudWatch Log Groups
+
+Per-client patterns (e.g., for client `nd-labs`):
+
+- **Container (richest data):** `/numa/{clientName}/workspace-chat-agent`
+- **Proxy:** `/aws/lambda/{clientName}-workspace-chat-agent-proxy`
+- **Vendedlogs:** `/aws/vendedlogs/bedrock-agentcore/numa-{clientName}-workspace-chat` — not useful, ignore
+
+Filter by `_name` field (e.g., `COST`, `STREAM_COMPLETE`, `CHAT_REQUEST`).
+
+For full details (module structure, API contract, tools, debugging, CloudWatch queries), see `services/numa-workspace-agent/README.md`. Activate the `numa-workspace-agent-skill` before doing any work here.
+
+---
+
+## Services (Containerized Agents)
+
+`/services/` contains containerized agents deployed on Bedrock AgentCore (ARM64 Docker images on Graviton). Currently: `numa-workspace-agent/`.
+
+**Packaging:** Requires Docker Desktop. Run `cd services && ./package-service.sh numa-workspace-agent`. Output: `infra/assets/artifacts/numa-workspace-agent/image.tar` (pushed to ECR via `skopeo` during deploy).
+
+---
+
+## Numa Apps
+
+**V1 Apps:** Step Functions + Lambdas. Each app extends a base construct (`/infra/constructs/apps`) that wires API routes, S3 prefixes, and logging. `step-function-start` kicks off the state machine, `step-function-status` provides run status. Results land in S3 outputs and/or DynamoDB jobs table.
+
+**V2 Apps (experimental):** Run on AgentCore MicroVMs instead of Step Functions. Fire-and-forget pattern — API triggers the agent, results written to S3 at `v2-apps/{appId}/{user_sub}/{runId}/_result.json`.
+
+Activate the `numa-apps` skill before doing any apps work.
 
 ---
 
 ## Integrations (Pipedream Connect)
 
-Numa integrates with external SaaS tools through a secure proxy model:
-
-- Dedicated proxy account: A separate Arcanum‑owned AWS account hosts the Pipedream proxy so OAuth credentials are centralized and never deployed into client accounts.
-- Cross‑account access: Client accounts call a relay Lambda that forwards to the proxy Lambda (which validates caller account against an allowlist). User‑to‑integration mapping is maintained in DynamoDB.
-- Frontend flow:
-  - If `PIPEDREAM_INTEGRATIONS` is enabled in `config.json`, the chat page initializes a cross‑account `LambdaClient` (via Web Identity) and uses `PipedreamProxyService` to list connected apps, generate connect tokens, and call MCP‑style tools.
-  - Admins can set global allow/deny tool policies per integration; chat enforces these.
-- Infra stacks involved: see “Infrastructure Stacks” below (`pipedream-proxy-stack`, relay packaging, account sync of allowed accounts).
+SaaS integrations use a cross-account proxy model. A dedicated Arcanum-owned account hosts the Pipedream proxy — OAuth credentials are centralized, never in client accounts. Client accounts call a relay Lambda that forwards to the proxy (validated against an allowlist). Enabled via `PIPEDREAM_INTEGRATIONS` feature flag. Admins can set allow/deny tool policies per integration.
 
 ---
 
 ## Infrastructure Stacks (CDKTF /infra)
 
-Numa uses multiple stacks to support multi‑tenant deployment and secure integrations:
+| Stack                      | Purpose                                                                                                                                      |
+| -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| `numa-client-stack.ts`     | Core per-client stack — Cognito, API Gateway, CloudFront, S3, DynamoDB, Step Functions, Lambdas, workspace agent constructs, knowledge bases |
+| `nextgen-root-stack.ts`    | AWS account bootstrap — creates/organizes client accounts, roles, SSO access                                                                 |
+| `pipedream-proxy-stack.ts` | Integrations proxy account — cross-account Lambda, OAuth secrets, user mapping                                                               |
+| `q-apps-deployer-stack.ts` | Deployer account — `numa-client-config` table, Honeycomb keys, Route53, Customer Success Portal                                              |
 
-- numa-client-stack.ts — core per‑client stack
-  - Provisions the client’s Cognito, API Gateway + authorizer, CloudFront, S3 buckets (outputs, data, frontend), chat DynamoDB tables, Step Functions, Lambdas for apps, the `numa-chat-agent` function URL, and knowledge base(s).
-  - Configurable preferred knowledge base: Amazon Q Business or Bedrock KB.
-  - Can enable Pipedream integrations by wiring the cross‑account relay Lambda ARN.
-
-- nextgen-root-stack.ts — NextGen org/account bootstrap
-  - Used to create and organize AWS accounts (Nextgen) that will host client deployments.
-  - Creates roles and Step Functions to automate account creation, SSO access, and initial config.
-
-- pipedream-proxy-stack.ts — integrations in a dedicated Arcanum account
-  - Hosts the cross‑account proxy Lambda, user‑mapping and allowed‑accounts tables, secrets for OAuth, and an hourly account‑sync Lambda that reads the deployer’s client config table.
-
-- q-apps-deployer-stack.ts — deployer account resources
-  - Deploys shared resources to the deployer account, including the `numa-client-config` DynamoDB table and Honeycomb keys in SSM, domain/Route53 scaffolding, and optional Customer Success Portal infra.
-
-CloudFront routing: The frontend distribution forwards `/api/*` to API Gateway and `/api/numa-chat-agent/*` directly to the chat agent Function URL, adding the CloudFront shared secret header.
+CloudFront routes `/api/*` to API Gateway and `/api/numa-chat-agent/*` directly to the chat agent Function URL with the shared secret header.
 
 ---
 
 ## Data, Storage, and Knowledge Bases
 
-- Buckets per client:
-  - `outputs` bucket: app artifacts, chat uploads, and run status files.
-  - `data` bucket: knowledge base documents (also a separate `company` bucket for company data where relevant).
-- Knowledge bases:
-  - Amazon Q Business: enterprise search with web experience integration and optional index units; WebExperience callback is wired to Cognito.
-  - Bedrock Knowledge Base: S3‑backed vector store with periodic indexing (typically ~30‑minute cadence) and retrieval via `bedrock:Retrieve` during chat.
-- Chat history: DynamoDB `numa-<client>-chat-history` tracks conversation turns, tool use, and results frames for accurate message reconstruction.
+- **S3 buckets per client:** `outputs` (app artifacts, chat uploads, run status) and `data` (knowledge base documents).
+- **Knowledge bases:** Amazon Q Business (enterprise search) or Bedrock KB (S3-backed vector store, ~30min indexing cadence). Configurable per client.
+- **Chat history:** DynamoDB `numa-<client>-chat-history` — conversation turns, tool use, results frames.
 
 ---
 
-## Configuration and Multi‑Tenant Model
+## Configuration and Multi-Tenant Model
 
-- Client config: A per‑client JSON record (in DynamoDB for prod; dev examples in `clientConfigProd.json`) determines region, preferred knowledge base, Q vs Bedrock enablement, whether to deploy all apps, Pipedream integration flag, budgets, etc.
-- Per‑client isolation: Each client deploys into its own AWS account. The deployer account assumes into the client account to deploy infra. Integrations use a separate proxy account.
-- Feature flags & FE config: `public/config.json` and session storage carry resolved values (client name, region, bucket names, Pipedream relay ARN, `PIPEDREAM_INTEGRATIONS`, preferred KB, etc.).
+Each client deploys into its own isolated AWS account. The deployer account (Q Deployer, `arcanum-q-deployer-prod`) assumes an `ArcanumAIAccess` role into client accounts to provision infrastructure. Integrations use a separate proxy account.
+
+**Single source of truth:** The `numa-client-config` DynamoDB table in the deployer account holds all client configuration — region, feature flags, preferred knowledge base, budget, etc. The frontend `public/config.json` is gitignored and local-only — developers edit it for localhost. In deployed environments, it’s auto-generated from the DynamoDB table.
+
+### clientConfigProd.json — Local Dev Override
+
+`clientConfigProd.json` is a local-only convenience file for quick testing. It is **not persistent** — it’s gitignored and only affects local deploys. During `make deploy`, the config loader (`lib/client-config-node/index.ts`) checks this file first. If a client exists in it, that config is used **entirely** and DynamoDB is skipped — meaning any flags missing from the file will default to `false`. Keep entries minimal or remove clients you’re not actively overriding.
 
 ---
 
 ## Security Model
 
-- Authentication: Amazon Cognito User Pool + User Pool Client; frontend obtains JWTs for API calls.
-- API protection: API Gateway custom authorizer verifies Cognito tokens and CloudFront secret. Chat Function URL sits behind CloudFront; all requests must include the shared secret header.
-- Cross‑account access: Deployer assumes roles into client accounts; client chat agent can assume web identity roles as needed; integrations validate caller account identity.
-- Secrets: OAuth credentials for integrations are stored in Secrets Manager in the dedicated proxy account.
-- Partner Revenue Measurement: All AWS SDK calls should carry our AWS Marketplace product code (cl23v3vsno0k35czlg7e3ld9p). Use the shared helpers to append the PRM user agent: Python Lambdas `from prm import client, resource`, Node Lambdas/tools `withPRM` from `lib/prm-node/prm`, and frontend `withPRM` from `src/utils/prmUtils`. This keeps AWS attribution enabled across infra, Lambdas, frontend, and tools.
+- **Auth:** Cognito User Pool + JWTs. API Gateway custom authorizer verifies tokens + CloudFront secret.
+- **Cross-account:** Deployer assumes roles into client accounts. Integrations validate caller account identity.
+- **Secrets:** Integration OAuth credentials in Secrets Manager (proxy account).
+- **Workspace isolation:** Each conversation in its own AgentCore MicroVM. Security hooks block dangerous imports, directory traversal, system path access. Non-root container (UID 1000). Plugins outside workspace (read-only).
+- **PRM:** All AWS SDK calls must carry Marketplace product code `cl23v3vsno0k35czlg7e3ld9p`. Use: Python `from prm import client, resource`, Node `withPRM` from `lib/prm-node/prm`, frontend `withPRM` from `src/utils/prmUtils`.
 
 ---
 
 ## Development & Deployment
 
-- Frontend
-  - Dev: `yarn install`, `yarn run dev`
-  - Build before infra deploy: `yarn build`
-  - Tests: `yarn test`
+**Frontend:** `yarn install`, `yarn dev`, `yarn build`, `yarn test`, `yarn lint --fix`
 
-- Lambdas (Python)
-  - Use Poetry for deps, lint, and tests.
-  - Package a single Lambda (preferred): `bash package-python-lambda.sh lambdas/python/<lambda_name>`
-  - Package all (slow): `bash package-all.sh`
+**Lambdas (Python):** Poetry for deps. Package one: `cd lambdas && bash package-python-lambda.sh python/<name>`. Package all: `bash package-all.sh`.
 
-- Infrastructure (CDKTF)
-  - Ensure frontend is built and Lambdas are packaged before `cdktf deploy`.
-  - Deploy to a target client (example env vars + stack name) using `yarn cdktf deploy --auto-approve <stack>`.
+**Lambdas (Node):** Package one: `cd lambdas && bash package-node-lambda.sh node/<name>`. Or `yarn bundle` in the lambda directory.
+
+**Services:** See Services section above for Docker packaging.
+
+**Infra (CDKTF):** Build frontend + package lambdas first, then `yarn cdktf deploy --auto-approve <stack>`.
+
+## Branching Strategy
+
+Feature branches -> `dev` (default MR target) -> `main` (release). No pipeline on `dev` push. Full pipeline on `main` push. Hotfixes can target `main` directly — merge back into `dev` afterwards.
 
 ---
 
 ## Folder Guide
 
-- `/numa-frontend/` – React app (Pages, Components, Services), including `NumaChatAgents` and integrations UI.
-- `/lambdas/python/` – Python Lambdas (e.g., `numa-chat-agent`, `extract-content-from-file`, app‑specific steps, Pipedream proxy/relay, web search proxy, etc.).
-- `/lambdas/node/` – Node Lambdas for infrastructure/system tasks (authorizers, cleanup, shims, vector init, etc.).
-- `/infra/` – CDKTF stacks and constructs for client, deployer, NextGen (account creation), Pipedream proxy, knowledge bases, and frontend infra.
-- `/lib/` – Shared libraries and helpers (Bedrock, S3, utilities).
-- `/tools/` – Operational tools (create users, write/retrieve config, check index progress, reports, etc.).
+- `/numa-frontend/` — React app (see `numa-frontend/CLAUDE.md` for details)
+- `/services/` — Containerized agents for Bedrock AgentCore (e.g., `numa-workspace-agent`)
+- `/lambdas/python/` — 55+ Python Lambdas (workspace agent proxy/tools, app steps, content extraction, Pipedream proxy/relay, etc.)
+- `/lambdas/node/` — 29 Node Lambdas (authorizers, agents API, scheduling, notifications, numa-ops, branding, etc.)
+- `/infra/` — CDKTF stacks and constructs (client, deployer, NextGen, Pipedream proxy, workspace agent, KBs)
+- `/lib/` — Shared libraries (Bedrock, S3, PRM, OAuth providers, utilities)
+- `/tools/` — Operational tools (create users, retrieve config, check index progress, reports)
+- `/documentation/` — Domain-specific docs (connectors, nolia)
+- `/deployer/` — Streamlit-based Q Apps deployer tool
+- `/numa-customer-success-portal/` — Customer Success Portal frontend (see its own `CLAUDE.md`)
+- `/initial-account-setup/` — CloudFormation templates for AWS account bootstrapping
+- `/docs/` — Architecture documentation and task specs
+- `/style/` — Shared ESLint configuration base
 
 ---
 
-## Mental Model for Agents
+## Numa Ops
 
-1. If deploying to clients, it runs out of the numa-client-stack where we assume an ArcanumAIAccess role from the deployer accounts creds to be able to create all the resources in the client account. This is also useful for local dev to access/see resources in the client account.
-2. For chat tasks, the `numa-chat-agent` Lambda is the hub: it streams tokens, invokes Bedrock, queries the selected knowledge base, and optionally calls MCP tools through the Pipedream proxy.
-3. For app tasks, follow the app construct → Step Function → Lambda chain, with S3 prefixes in the outputs bucket and optional job status in DynamoDB.
-4. For integrations, treat Pipedream access as cross‑account and centrally secured; rely on the relay/proxy pattern.
+Lightweight work management module (tickets, kanban boards, projects, customers, suppliers) built into Numa. Designed by Ian (COO/PM) — his POC at `docs/tasks/numa-ops-feature/The actual Work Ops App/` is the gold standard for feature parity. Backend: Node Lambdas prefixed `numa-ops-*`. Frontend: `OpsPage` at `/ops`, components in `Components/Ops/`.
+
+Activate the `numa-ops` skill before doing any Ops work.
+
+---
+
+## Nolia
+
+AI-powered procurement compliance platform for government agencies (World Bank, ADB). Validates procurement documents against MDB policy rules via a multi-phase AI pipeline on AgentCore. Custom frontend (`numa-whitelabel-investigation/`), Numa backend. Production: `nolia-id-gov-moh` in `ap-southeast-3` (Jakarta).
+
+Activate the `nolia-developer-guide` skill before doing any Nolia work. See also `documentation/nolia/`.
