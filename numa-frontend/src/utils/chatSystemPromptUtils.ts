@@ -47,7 +47,7 @@ export const enhanceSystemPromptWithCompanyInfo = (basePrompt, companyProfile, m
  */
 export const loadCompanyProfile = async (companyBucket, region, getCredentials) => {
   if (!region || !companyBucket || !getCredentials) {
-    console.log('Missing required parameters for loading company profile');
+    console.warn('Missing required parameters for loading company profile');
     return '';
   }
 

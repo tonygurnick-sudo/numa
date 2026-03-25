@@ -218,8 +218,6 @@ export const WorkspaceChatMarkdown: React.FC<WorkspaceChatMarkdownProps> = React
       (ref: FileReference) => {
         if (onOpenFilePreview) {
           onOpenFilePreview(ref);
-        } else {
-          console.log('File preview not available:', ref.filename);
         }
       },
       [onOpenFilePreview]
@@ -229,8 +227,6 @@ export const WorkspaceChatMarkdown: React.FC<WorkspaceChatMarkdownProps> = React
       (ref: FolderReference) => {
         if (onOpenFolderPreview) {
           onOpenFolderPreview(ref);
-        } else {
-          console.log('Folder preview not available:', ref.name);
         }
       },
       [onOpenFolderPreview]

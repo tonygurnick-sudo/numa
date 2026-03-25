@@ -65,12 +65,6 @@ export const useDocumentProcessor = () => {
   const saveDocumentMetadata = useCallback(async (docBlock, numaChatDynamoUtils, conversationId, sub) => {
     if (!docBlock || !numaChatDynamoUtils || !conversationId || !sub) return;
 
-    console.log('[DocumentProcessor] Saving document metadata to DynamoDB');
-    console.log('[DocumentProcessor] Document metadata:', {
-      docTitle: docBlock.docTitle,
-      docContent: docBlock.docContent,
-    });
-
     try {
       await numaChatDynamoUtils.addMessage({
         conversationId,

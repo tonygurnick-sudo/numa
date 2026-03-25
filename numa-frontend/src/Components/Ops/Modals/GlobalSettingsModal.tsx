@@ -469,8 +469,6 @@ export function GlobalSettingsModal({
         console.error('[GlobalSettingsModal] Some saves failed:', errors);
       }
 
-      console.info('[GlobalSettingsModal] Saved config changes!');
-
       // Force UI to pick up new ticket types and fields from the backend
       await refreshConfig();
       onSaved();

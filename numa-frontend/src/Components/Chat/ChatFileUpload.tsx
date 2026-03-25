@@ -148,7 +148,6 @@ export const ChatFileUpload = ({
 
   const handleUploadComplete = async (fileArray: FileResult[]) => {
     if (!Array.isArray(fileArray) || fileArray.length === 0) {
-      console.log(t('fileUpload.noFilesSelected'));
       return;
     }
 

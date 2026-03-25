@@ -160,8 +160,6 @@ export class OAuthProvidersService {
         // Clear status cache to force refresh after connection
         delete statusCache[provider];
 
-        console.log(`[OAuth] Initiating ${provider} OAuth flow`);
-
         // Redirect to OAuth provider — CSRF state is validated server-side via PKCE session
         window.location.href = data.auth_url;
 
@@ -205,7 +203,6 @@ export class OAuthProvidersService {
         // Clear status cache
         delete statusCache[provider];
 
-        console.log(`[OAuth] Successfully disconnected ${provider}`);
         return { success: true };
       }
 

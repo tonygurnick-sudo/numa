@@ -1,5 +1,4 @@
-import { useEffect, useState } from 'react';
-import { resolveToolDescriptor } from '../utils/ToolConfig';
+import { useState } from 'react';
 import { useAuth } from '../Providers/AuthProvider';
 import { downloadFileFromS3 } from '../utils/s3Utils';
 import { getFileIconClass } from '../utils/fileUtils';
@@ -210,30 +209,10 @@ export const IntegrationsRenderer = ({
     fn: (prev: Array<{ role: string; segments?: unknown[] }>) => Array<{ role: string; segments?: unknown[] }>
   ) => void;
 }) => {
-  const rawName = (result && (result.name || result.toolName)) || 'tool';
-  const status = (result && result.status) || 'completed';
-  const toolUseId = (result && result.toolUseId) || null;
-  const friendlyLabel = resolveToolDescriptor(rawName).label || rawName;
   const { t } = useTranslation('common');
 
   // Extract payload from content structure
   const payload = getIntegrationsPayload(result) as IntegrationsFileDownloadPayload | null;
-
-  // Developer visibility without exposing payload in UI
-  useEffect(() => {
-    try {
-      console.log('[ToolRenderer] Integration tool result', {
-        name: rawName,
-        label: friendlyLabel,
-        status,
-        toolUseId,
-        result,
-        payload,
-      });
-    } catch {
-      // no-op
-    }
-  }, [rawName, friendlyLabel, status, toolUseId, result, payload]);
 
   // Special handling for file downloads
   if (payload?.type === 'integrations-file-download') {

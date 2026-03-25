@@ -492,7 +492,7 @@ const NumaWorkspaceChatAgents = () => {
 
       numaChatDynamoUtils
         .updateMetaItem(conversationId, sub, { chatConfig: payload })
-        .catch((err) => console.debug('[NumaChat] Unable to persist chat config to conversation meta', err));
+        .catch((err) => console.warn('[NumaChat] Unable to persist chat config to conversation meta', err));
     }, 600);
 
     return () => {
@@ -829,13 +829,7 @@ const NumaWorkspaceChatAgents = () => {
   };
 
   const startAgentSession = async (agent: AgentSummary) => {
-    console.log('[NumaDebug] startAgentSession', {
-      agentId: agent.agentId,
-      title: agent.title,
-      requires: agent.requiredIntegrations || [],
-    });
     const missing = getMissingIntegrations(agent);
-    console.log('[NumaDebug] startAgentSession.missingIntegrations', missing);
     // Only suppress the modal when arriving from Agents page (payload present at navigation time)
     const isPreselected = Boolean(sessionStorage.getItem('numa_preselected_agent'));
     if (missing.length > 0 && !isPreselected) {
@@ -882,7 +876,6 @@ const NumaWorkspaceChatAgents = () => {
     if (!queuedPreselectedAgent) return;
     // If Pipedream feature is disabled, connectionsLoading should already be false
     if (connectionsLoading) {
-      console.log('[NumaDebug] preselect:waiting for connections');
       return;
     }
     if (preselectActivatedRef.current) return;
@@ -891,10 +884,6 @@ const NumaWorkspaceChatAgents = () => {
       clearTimeout(preselectTimerRef.current);
       preselectTimerRef.current = null;
     }
-    console.log('[NumaDebug] preselect:activate', {
-      agentId: queuedPreselectedAgent.agentId,
-      title: queuedPreselectedAgent.title,
-    });
     Promise.resolve(startAgentSession(queuedPreselectedAgent))
       .catch((err) => {
         console.error('Failed to activate queued preselected agent', err);

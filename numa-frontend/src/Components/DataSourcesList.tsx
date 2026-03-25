@@ -57,7 +57,6 @@ export const DataSourcesList = () => {
 
       const command = new ListDataSourcesCommand(input);
       const response = await qBusinessClient.send(command);
-      console.log('List data sources response', response);
 
       setDataSources(response.dataSources || []);
     } catch (err) {

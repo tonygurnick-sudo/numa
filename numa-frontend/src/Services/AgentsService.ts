@@ -8,7 +8,6 @@ type NumaPut = (url: string, data?: unknown, headers?: Record<string, string>) =
 type NumaDelete = (url: string, headers?: Record<string, string>) => Promise<unknown>;
 
 const BASE_URL = '/api/agents';
-const LOG_PREFIX = '[AgentsService]';
 
 const cleanParams = (params: Record<string, unknown>): Record<string, unknown> => {
   const cleaned: Record<string, unknown> = {};
@@ -50,15 +49,10 @@ export const getAgent = async (numaGet: NumaGet, agentId: string): Promise<Agent
 };
 
 export const createAgent = async (numaPost: NumaPost, payload: AgentPayload): Promise<AgentSummary> => {
-  console.info(`${LOG_PREFIX} create`, { visibility: payload.visibility ?? 'personal' });
   const response = (await numaPost(`${BASE_URL}`, payload)) as AgentResponse;
   if (!response?.agent) {
     throw new Error(i18n.t('errors:agents.createFailed'));
   }
-  console.info(`${LOG_PREFIX} create: success`, {
-    agentId: response.agent.agentId,
-    visibility: response.agent.visibility,
-  });
   return response.agent;
 };
 
@@ -67,30 +61,21 @@ export const updateAgent = async (
   agentId: string,
   payload: AgentUpdatePayload
 ): Promise<AgentSummary> => {
-  console.info(`${LOG_PREFIX} update`, { agentId, visibility: payload.visibility ?? 'unchanged' });
   const response = (await numaPut(`${BASE_URL}/${encodeURIComponent(agentId)}`, payload)) as AgentResponse;
   if (!response?.agent) {
     throw new Error(i18n.t('errors:agents.updateFailed'));
   }
-  console.info(`${LOG_PREFIX} update: success`, {
-    agentId: response.agent.agentId,
-    visibility: response.agent.visibility,
-  });
   return response.agent;
 };
 
 export const deleteAgent = async (numaDelete: NumaDelete, agentId: string): Promise<void> => {
-  console.info(`${LOG_PREFIX} delete`, { agentId });
   await numaDelete(`${BASE_URL}/${encodeURIComponent(agentId)}`);
-  console.info(`${LOG_PREFIX} delete: success`, { agentId });
 };
 
 export const duplicateAgent = async (numaPost: NumaPost, agentId: string): Promise<AgentSummary> => {
-  console.info(`${LOG_PREFIX} duplicate`, { agentId });
   const response = (await numaPost(`${BASE_URL}/${encodeURIComponent(agentId)}/duplicate`)) as AgentResponse;
   if (!response?.agent) {
     throw new Error(i18n.t('errors:agents.duplicateFailed'));
   }
-  console.info(`${LOG_PREFIX} duplicate: success`, { sourceAgentId: agentId, newAgentId: response.agent.agentId });
   return response.agent;
 };

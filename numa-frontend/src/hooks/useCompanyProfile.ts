@@ -25,7 +25,7 @@ export const useCompanyProfile = () => {
    */
   const fetchCompanyProfile = async () => {
     if (!config.REGION || !companyBucket || !getCredentials) {
-      console.log('Missing required parameters for loading company profile');
+      console.warn('Missing required parameters for loading company profile');
       setIsCompanyProfileLoaded(true); // Mark as loaded even if failed to prevent repeated attempts
       return;
     }

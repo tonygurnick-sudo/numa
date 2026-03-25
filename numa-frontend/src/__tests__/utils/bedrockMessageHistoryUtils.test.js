@@ -21,7 +21,6 @@ describe('bedrockMessageHistoryUtils', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     // Mock console methods to suppress logs during testing
-    vi.spyOn(console, 'log').mockImplementation(() => {});
     vi.spyOn(console, 'warn').mockImplementation(() => {});
     vi.spyOn(console, 'error').mockImplementation(() => {});
 
@@ -43,7 +42,6 @@ describe('bedrockMessageHistoryUtils', () => {
 
   afterEach(() => {
     // Restore console methods
-    console.log.mockRestore();
     console.warn.mockRestore();
     console.error.mockRestore();
   });

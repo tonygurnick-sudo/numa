@@ -208,21 +208,17 @@ export const getDetailedShareError = async (uuid: string): Promise<string | null
   ];
 
   // Try each method in sequence until we get a meaningful error
-  for (const [index, method] of methods.entries()) {
+  for (const [, method] of methods.entries()) {
     try {
       const error = await method();
-      console.debug(`Error detection method ${index + 1} result:`, error);
       if (error && error.trim() && error !== 'Document processing failed') {
-        console.info('Found detailed error:', error);
         return error;
       }
-    } catch (methodError) {
-      console.debug(`Error detection method ${index + 1} failed:`, methodError);
+    } catch {
       continue;
     }
   }
 
-  console.debug('No detailed error information found through any method');
   return null;
 };
 

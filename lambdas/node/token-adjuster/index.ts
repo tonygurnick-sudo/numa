@@ -26,7 +26,7 @@ const enforceMaxSessionDuration = async (authTime: number | undefined): Promise<
       new GetCommand({
         TableName: MFA_SETTINGS_TABLE_NAME,
         Key: { setting: 'session-config' },
-      }),
+      })
     );
 
     const maxHours = res.Item?.maxSessionDurationHours as number | undefined;
@@ -39,7 +39,7 @@ const enforceMaxSessionDuration = async (authTime: number | undefined): Promise<
     if (sessionAgeSec > maxSec) {
       console.warn(
         `Session exceeded max duration: ${Math.round(sessionAgeSec / 60)}min > ${maxHours}h limit. ` +
-          `auth_time=${authTime}, now=${nowSec}`,
+          `auth_time=${authTime}, now=${nowSec}`
       );
       throw new Error('Session duration exceeded');
     }

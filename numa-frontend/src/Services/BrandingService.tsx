@@ -221,14 +221,12 @@ class BrandingService {
 
   private _saveCache(config: BrandingConfig): void {
     if (typeof window === 'undefined') {
-      console.debug('Branding: skip cache persist (no window)');
       return;
     }
 
     try {
       window.localStorage.setItem(BRANDING_CACHE_KEY, JSON.stringify(config));
       this._saveCacheTimestamp(Date.now());
-      console.debug('Branding: cached config persisted to localStorage');
     } catch (error) {
       console.warn('Branding: failed to persist cache', error);
     }
@@ -236,7 +234,6 @@ class BrandingService {
 
   private _hydrateFromCache(): boolean {
     if (typeof window === 'undefined') {
-      console.debug('Branding: hydrate skipped (no window)');
       return false;
     }
 
@@ -260,12 +257,6 @@ class BrandingService {
         { persist: false, tenantEnabled: parsed.tenantEnabled }
       );
 
-      const tsValue = window.localStorage.getItem(BRANDING_CACHE_TS_KEY);
-      const timestamp = tsValue ? Number.parseInt(tsValue, 10) : 0;
-      console.debug('Branding: hydrated config from localStorage', {
-        name: parsed.branding.name,
-        cachedAt: timestamp ? new Date(timestamp).toISOString() : 'unknown',
-      });
       return true;
     } catch (error) {
       console.warn('Branding: failed to hydrate cache', error);
@@ -294,7 +285,6 @@ class BrandingService {
     const apiEndpoint = window.sessionStorage?.getItem('API_ENDPOINT');
 
     if (!clientName) {
-      console.debug('Branding: missing client name for remote fetch');
       return null;
     }
 
@@ -317,8 +307,6 @@ class BrandingService {
         headers: authHeaders,
         label: 'authenticated branding endpoint',
       });
-    } else {
-      console.debug('Branding: no access token available; skipping authenticated branding fetch');
     }
 
     attempts.push({
@@ -448,8 +436,6 @@ class BrandingService {
         return false;
       }
 
-      console.debug('Branding: Applying preview mode branding');
-
       // Apply preview branding without persisting to cache
       this._applyConfig(
         {
@@ -577,7 +563,6 @@ class BrandingService {
             };
         this._applyConfig(configToApply, { persist: tenantEnabled, tenantEnabled });
         this.hasLoadedRemote = true;
-        console.debug('Branding: revalidated from API');
       })
       .catch((error) => {
         console.warn('Branding: background revalidation failed', error);

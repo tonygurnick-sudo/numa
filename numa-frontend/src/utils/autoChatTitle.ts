@@ -143,18 +143,8 @@ export async function autoNameConversation({
     const currentName: string | null = metaItem?.conversationName || null;
     const nameSource: string | null = metaItem?.nameSource ?? null;
 
-    // Diagnostic logging to understand auto-naming behavior
-    console.log('[AutoName] Checking conversation:', {
-      conversationId,
-      currentName,
-      nameSource,
-      hasMetaItem: !!metaItem,
-      itemCount: items.length,
-    });
-
     // If a nameSource exists ('manual' or 'auto'), do not rename again
     if (nameSource) {
-      console.log('[AutoName] Skipping - nameSource already set:', nameSource);
       return false;
     }
 
@@ -198,15 +188,9 @@ export async function autoNameConversation({
       if (!finalTitle) return false;
 
       if (finalTitle !== currentName) {
-        console.log('[AutoName] Renaming conversation:', {
-          conversationId,
-          oldName: currentName,
-          newName: finalTitle,
-        });
         await numaChatDynamoUtils.updateConversationName(conversationId, userId, finalTitle, 'auto');
         return true;
       }
-      console.log('[AutoName] Skipping - name unchanged:', finalTitle);
       return false;
     } catch (e) {
       console.error('Auto-naming via Bedrock failed:', e);

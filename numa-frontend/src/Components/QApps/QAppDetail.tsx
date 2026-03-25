@@ -116,7 +116,6 @@ const QAppDetail = () => {
         };
         const command = new GetQAppSessionCommand(input);
         const response = await qAppsClient.send(command);
-        console.log('Session details fetched:', response);
         setQSessionDetails(response);
       } catch (err) {
         setError(err);

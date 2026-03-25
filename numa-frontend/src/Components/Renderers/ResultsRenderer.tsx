@@ -670,8 +670,6 @@ const FileDownloadButtons = ({ output, getCredentials, loadingActions, setLoadin
       });
 
       setShowSaveModal(false);
-      // TODO: Show success toast
-      console.log('Successfully saved file to Files system:', selectedFolder, filename);
     } catch (error) {
       console.error('Failed to save file:', error);
       // TODO: Show error toast
@@ -896,7 +894,6 @@ export const ResultsRenderer = ({ results }) => {
     }
 
     if (!actualResults || !Array.isArray(actualResults)) {
-      console.log('No results or results is not an array:', parsedResults);
       return;
     }
 
@@ -971,7 +968,7 @@ export const ResultsRenderer = ({ results }) => {
               delete pendingRequests.current[key];
             }
           } else {
-            console.log('Invalid output location or missing S3 data:', output);
+            console.warn('Invalid output location or missing S3 data:', output);
           }
         }
       }

@@ -66,7 +66,7 @@ export const usePublicBranding = (clientName?: string): PublicBranding => {
           }
         }
       } catch {
-        console.debug('Failed to load client branding, using defaults');
+        console.warn('Failed to load client branding, using defaults');
       }
     };
 

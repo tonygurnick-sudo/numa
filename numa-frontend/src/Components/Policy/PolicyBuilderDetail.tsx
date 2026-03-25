@@ -334,8 +334,6 @@ export const PolicyBuilderDetail = () => {
       // Use postRequest instead of fetch
       const job = await numaPost(`${config.API_ENDPOINT}/policy-builder/jobs`, jobData);
 
-      console.log('Job created:', job);
-
       // Start the step function using postRequest
       const stepFunction = await numaPost(`${config.API_ENDPOINT}/policy-builder/main`, {
         original_job_id: job.jobId,
@@ -343,15 +341,11 @@ export const PolicyBuilderDetail = () => {
         organisation_context: policyInputs.schoolContext,
       });
 
-      console.log('Step Function started:', stepFunction);
-
       // Update the job with the step function details
       const updatedJob = await numaPut(`${config.API_ENDPOINT}/policy-builder/jobs/${job.jobId}`, {
         status: 'PROCESSING',
         stepFunctionJobId: stepFunction.job_id,
       });
-
-      console.log('Job updated:', updatedJob);
 
       // Start polling in a separate function
       startPollingForJob(updatedJob);
@@ -384,11 +378,8 @@ export const PolicyBuilderDetail = () => {
 
   const pollProcessingPolicy = async (job) => {
     const { jobId } = job;
-    console.log(`Polling status for job ${jobId}`);
-
     // Check if there's already a polling request in progress for this job
     if (inFlightRequestsRef.current[jobId]) {
-      console.log(`Polling request already in progress for job ${jobId}, skipping`);
       return false;
     }
 
@@ -398,7 +389,6 @@ export const PolicyBuilderDetail = () => {
     try {
       // Use the jobs API to get the current job status from DynamoDB
       const response = await numaGet(`${config.API_ENDPOINT}/policy-builder/jobs/${jobId}`);
-      console.log('Job status response:', response);
 
       if (!response || response.error) {
         console.error(`Error fetching job ${jobId} status:`, response?.error || 'Unknown error');
@@ -426,14 +416,12 @@ export const PolicyBuilderDetail = () => {
 
       // Stop polling if the status is not PROCESSING
       if (normalizeStatus(currentStatus) !== 'PROCESSING') {
-        console.log(`Job ${jobId} status changed from PROCESSING to ${currentStatus}`);
         clearPollingForJob(jobId);
         fetchPolicies(); // Refresh the policies list
         return true;
       }
     } catch (error) {
       if (error.name === 'AbortError') {
-        console.log('Fetch aborted');
         return false;
       }
       console.error(`Error polling job ${jobId}:`, error);
@@ -452,11 +440,8 @@ export const PolicyBuilderDetail = () => {
 
     // Check if we're already polling this job
     if (pollingPolicies.has(jobId)) {
-      console.log(`Already polling job ${jobId}, skipping`);
       return;
     }
-
-    console.log(`Starting polling for job ${jobId}`);
 
     // Add this job to the set of polling jobs
     setPollingPolicies((prev) => new Set(prev).add(jobId));
@@ -503,8 +488,6 @@ export const PolicyBuilderDetail = () => {
       // Use jobsApi to get jobs instead of direct numaGet
       const response = await jobsApi.getJobsByAppId(appData.id);
 
-      console.log('Response:', response);
-
       if (response.error) {
         throw new Error(`HTTP error! status: ${response.error}`);
       }
@@ -524,15 +507,12 @@ export const PolicyBuilderDetail = () => {
       // Sort by date
       transformedPolicies.sort((a, b) => new Date(b.lastModified) - new Date(a.lastModified));
 
-      console.log('Transformed policies:', transformedPolicies);
-
       setPolicies(transformedPolicies);
 
       // Start polling for any processing policies immediately after setting the policies
       transformedPolicies.forEach((policy) => {
         // Check for both 'PROCESSING' and 'running' status to be consistent with the removed useEffect
         if ((policy.status === 'PROCESSING' || policy.status === 'running') && !pollingPolicies.has(policy.id)) {
-          console.log('Starting polling for processing policy:', policy);
           startPollingForJob(policy.jobDetails);
         }
       });

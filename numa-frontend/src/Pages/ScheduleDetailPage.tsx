@@ -276,13 +276,6 @@ export const ScheduleDetailPage: React.FC = () => {
 
   const loadRunHistory = useCallback(async () => {
     if (!schedule || !scheduleId || !outputsBucket || !region || !getCredentials) {
-      console.log('loadRunHistory: missing required params', {
-        hasSchedule: !!schedule,
-        scheduleId,
-        outputsBucket,
-        region,
-        hasGetCredentials: !!getCredentials,
-      });
       return;
     }
 
@@ -291,15 +284,10 @@ export const ScheduleDetailPage: React.FC = () => {
 
       // Try to get userId from the lastRunS3Key first (most reliable)
       let userId = extractUserIdFromS3Key(schedule.lastRunS3Key);
-      console.log('loadRunHistory: extracted userId from lastRunS3Key', {
-        lastRunS3Key: schedule.lastRunS3Key,
-        extractedUserId: userId,
-      });
 
       // Fall back to getting from JWT token
       if (!userId) {
         userId = await getUserIdFromToken();
-        console.log('loadRunHistory: got userId from token', { userId });
       }
 
       if (!userId) {
@@ -309,10 +297,8 @@ export const ScheduleDetailPage: React.FC = () => {
       }
 
       const prefix = `numa-chat/scheduled-runs/${userId}/${scheduleId}/`;
-      console.log('loadRunHistory: listing objects with prefix', { prefix, bucket: outputsBucket });
 
       const keys = await listObjectsInFolder(prefix, outputsBucket, region, getCredentials);
-      console.log('loadRunHistory: found keys', { count: keys.length, keys });
 
       // Parse run IDs from keys and sort by timestamp (newest first)
       const runs: RunHistoryItem[] = keys

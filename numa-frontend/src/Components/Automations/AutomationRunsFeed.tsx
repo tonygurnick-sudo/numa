@@ -116,13 +116,6 @@ export const AutomationRunsFeed = ({ automations, agentMap }: AutomationRunsFeed
   getAccessTokenRef.current = getAccessToken;
 
   const loadAllRuns = useCallback(async () => {
-    console.log('[RunsFeed] loadAllRuns called', {
-      outputsBucket: !!outputsBucket,
-      region: !!region,
-      hasCreds: !!credentialsRef.current,
-      automationsCount: automations.length,
-      alreadyLoading: loadingRef.current,
-    });
     if (!outputsBucket || !region || !credentialsRef.current || automations.length === 0) {
       setLoading(false);
       return;
@@ -150,7 +143,6 @@ export const AutomationRunsFeed = ({ automations, agentMap }: AutomationRunsFeed
           /* ignore */
         }
       }
-      console.log('[RunsFeed] userId resolved:', userId);
       if (!userId) return; // finally will set loading=false
 
       const creds = credentialsRef.current;
@@ -191,7 +183,6 @@ export const AutomationRunsFeed = ({ automations, agentMap }: AutomationRunsFeed
         }
       }
 
-      console.log('[RunsFeed] Phase 1 done — total run keys:', allRuns.length);
       // Show the run list immediately (phase 2 loads logs in background)
       setRuns(sortRuns(allRuns));
       setLoading(false);
@@ -223,7 +214,6 @@ export const AutomationRunsFeed = ({ automations, agentMap }: AutomationRunsFeed
     } catch (err) {
       console.error('[RunsFeed] Failed to load runs:', err);
     } finally {
-      console.log('[RunsFeed] finally block — setting loading=false');
       loadingRef.current = false;
       setLoading(false);
     }

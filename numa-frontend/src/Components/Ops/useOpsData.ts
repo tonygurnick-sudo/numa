@@ -203,10 +203,6 @@ export const useOpsData = (): OpsDataState => {
     try {
       setTeamsLoading(true);
       const data = await OpsService.listTeams(numaGet);
-      console.log('[useOpsData] listTeams returned', {
-        count: data.length,
-        teams: data.map((t) => ({ id: t.id, name: t.name })),
-      });
       setTeams(data);
       setCache('teams', data);
       return data;

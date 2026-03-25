@@ -202,7 +202,6 @@ export const FilePreviewActions: React.FC<FilePreviewActionsProps> = ({
       });
 
       setShowSaveModal(false);
-      console.log('Successfully saved file to Files system:', selectedFolder, preview.filename);
     } catch (error) {
       console.error('Failed to save file:', error);
     } finally {

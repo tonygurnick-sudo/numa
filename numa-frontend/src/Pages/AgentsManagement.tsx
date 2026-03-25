@@ -389,9 +389,6 @@ export const AgentsManagement = () => {
 
       // Close modal
       setScheduleModal({ show: false, agent: null, editingSchedule: null });
-
-      // Optional: Show success notification
-      console.log(scheduleModal.editingSchedule ? 'Schedule updated successfully' : 'Schedule created successfully');
     } catch (err) {
       console.error('Failed to save schedule:', err);
       // Error will be handled by the modal component

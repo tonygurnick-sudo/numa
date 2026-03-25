@@ -140,7 +140,7 @@ export const fetchCompanyInfo = async (s3Bucket, region, getCredentials) => {
         fetchError.message &&
         (fetchError.message.includes('Not Found') || fetchError.message.includes('Forbidden'))
       ) {
-        console.debug('Company information file does not exist yet. Will create on first save.');
+        console.warn('Company information file does not exist yet. Will create on first save.');
         const emptyProfile = { profile: '', lastUpdated: null };
         setCachedCompanyProfile(emptyProfile);
         return emptyProfile;
@@ -150,7 +150,7 @@ export const fetchCompanyInfo = async (s3Bucket, region, getCredentials) => {
     }
   } catch (error) {
     // Handle any other errors (silently for expected missing file scenarios)
-    console.debug('Company profile not available:', error.message || error);
+    console.warn('Company profile not available:', error.message || error);
     const emptyProfile = { profile: '', lastUpdated: null };
     setCachedCompanyProfile(emptyProfile);
     return emptyProfile;

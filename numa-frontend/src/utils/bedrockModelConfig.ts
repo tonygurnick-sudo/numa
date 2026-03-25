@@ -68,7 +68,7 @@ function setFallbackMode(clientName, durationMs = 60 * 60 * 1000) {
   const fallbackKey = `${clientName}_model_fallback`;
   const fallbackExpiry = Date.now() + durationMs;
   localStorage.setItem(fallbackKey, fallbackExpiry.toString());
-  console.log(`Set fallback mode for client ${clientName} until ${new Date(fallbackExpiry).toISOString()}`);
+  console.warn(`Set fallback mode for client ${clientName} until ${new Date(fallbackExpiry).toISOString()}`);
 }
 
 /**

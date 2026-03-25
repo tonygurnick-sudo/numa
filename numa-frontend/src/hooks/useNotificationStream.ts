@@ -46,7 +46,6 @@ export const useNotificationStream = () => {
 
   const connect = useCallback(() => {
     // Disable streaming for now - Lambda doesn't support SSE without Lambda Web Adapter
-    console.log('Notification streaming disabled - using polling fallback');
     setIsConnected(false);
   }, []);
 

@@ -574,7 +574,6 @@ export const deleteMultipleObjectsFromS3 = async (objectKeys, s3Bucket, region, 
       }
     }
 
-    console.log(`Bulk delete completed: ${successful.length} successful, ${failed.length} failed`);
     return { successful, failed };
   } catch (error) {
     console.error('Error in bulk delete operation:', error);
@@ -709,8 +708,6 @@ export const downloadFolderAsZip = async (
 
     // Clean up
     setTimeout(() => URL.revokeObjectURL(url), 100);
-
-    console.log(`Successfully downloaded folder ${folderPrefix} as ${finalZipName}`);
   } catch (error) {
     console.error('Error downloading folder as zip:', error);
     throw error;
@@ -803,8 +800,6 @@ export const downloadMultipleFilesAsZip = async (
     document.body.removeChild(a);
 
     setTimeout(() => URL.revokeObjectURL(url), 100);
-
-    console.log(`Successfully downloaded ${s3Keys.length} files as ${zipFilename}`);
   } catch (error) {
     console.error('Error downloading files as zip:', error);
     throw error;

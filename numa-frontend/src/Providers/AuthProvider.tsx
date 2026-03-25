@@ -141,7 +141,6 @@ export const AuthProvider = ({ children, initialTokens }) => {
   const ensureConfigLoaded = async (): Promise<boolean> => {
     if (hasConfigInSession()) return true;
 
-    console.debug('⏳ Config not in session, waiting for config to load...');
     try {
       await Promise.race([
         fetchConfigAddtoSession(true),
@@ -388,8 +387,6 @@ export const AuthProvider = ({ children, initialTokens }) => {
   };
 
   const logout = useCallback(() => {
-    console.log('🚪 logout: Starting logout process');
-
     localStorage.removeItem('accessToken');
     localStorage.removeItem('refreshToken');
     localStorage.removeItem('idToken');
@@ -531,20 +528,8 @@ export const AuthProvider = ({ children, initialTokens }) => {
                   return false;
                 } else if (hasAdmin && !hadAdmin) {
                   // Promoted - refresh tokens to get new permissions immediately
-                  console.log('🔄 User promoted to admin, refreshing tokens for new permissions');
-                  console.log('Previous groups:', oldGroups);
-                  console.log('Current groups from token:', groups);
+                  console.warn('User promoted to admin, refreshing tokens for new permissions');
                   await refreshTokens();
-
-                  // Log the user state after refresh to verify the promotion took effect
-                  setTimeout(() => {
-                    console.log('📊 User state after promotion refresh:', {
-                      userGroups: user?.groups,
-                      userFeatures: user?.features,
-                      hasAdminGroup: user?.groups?.includes('admin'),
-                      totalFeatures: user?.features?.length,
-                    });
-                  }, 100);
                 }
               }
             }
@@ -1223,7 +1208,6 @@ export const AuthProvider = ({ children, initialTokens }) => {
   const checkAndRefreshTokens = useCallback(async () => {
     const { accessToken, idToken, refreshToken } = tokensRef.current;
     if (!accessToken || !idToken || !refreshToken) {
-      console.debug('No access token, ID token, or refresh token available');
       return false;
     }
 
@@ -1263,7 +1247,6 @@ export const AuthProvider = ({ children, initialTokens }) => {
 
       // Always refresh first if tokens are expired/near expiry
       if (isAccessTokenExpired || isIdTokenExpired) {
-        console.debug('🔄 Token refresh: Tokens expired or near expiry');
         const refreshed = await refreshTokens();
         if (refreshed) {
           lastRefreshTimeRef.current = now;
@@ -1471,7 +1454,7 @@ export const AuthProvider = ({ children, initialTokens }) => {
         isTokenExpired(decodedTokensRef.current.accessToken) ||
         isTokenExpired(decodedTokensRef.current.idToken)
       ) {
-        console.debug('⚠️ Tokens expired, attempting refresh...');
+        console.warn('Tokens expired, attempting refresh...');
         const refreshed = await refreshTokens();
         if (!refreshed) {
           console.error('❌ Token refresh failed, logging out');
@@ -1641,14 +1624,6 @@ export const AuthProvider = ({ children, initialTokens }) => {
               })
             )
           );
-
-          // DEBUG: Log what Cognito returned — if ChallengeName is not DEVICE_PASSWORD_VERIFIER,
-          // the wrapAuthChallenge SRP_A may be mismatched (user SRP vs device SRP).
-          console.debug('DEVICE_SRP_AUTH response:', {
-            challengeName: deviceSrpResponse.ChallengeName,
-            hasSession: !!deviceSrpResponse.Session,
-            hasAuthResult: !!deviceSrpResponse.AuthenticationResult,
-          });
 
           // Step 2: Sign the device SRP session using the stored random password
           const signedDeviceSession = signSrpSessionWithDevice(
@@ -2097,7 +2072,6 @@ export const AuthProvider = ({ children, initialTokens }) => {
     const REGION = window.sessionStorage.getItem('REGION');
 
     if (!user) {
-      console.debug('No user found');
       return null;
     }
 
@@ -2108,7 +2082,6 @@ export const AuthProvider = ({ children, initialTokens }) => {
     // Check if user has the features and proper cognito groups
     // If there are no features or groups, block the request since we need to wait until the user has features
     if (user.features.length === 0 || !cognitoGroups || cognitoGroups.length === 0) {
-      console.debug('No features or cognito groups found:', { features: user.features, cognitoGroups });
       return null;
     }
 
@@ -2116,7 +2089,6 @@ export const AuthProvider = ({ children, initialTokens }) => {
     const roleArn = groups[userGroup]?.roleArn;
 
     if (!roleArn) {
-      console.debug('No role ARN found for user group:', { userGroup, availableGroups: Object.keys(groups) });
       return null;
     }
 
@@ -2132,7 +2104,6 @@ export const AuthProvider = ({ children, initialTokens }) => {
       const willExpireSoon = decodedIdToken?.exp && decodedIdToken.exp <= currentTime + 20;
 
       if (!decodedIdToken || willExpireSoon) {
-        console.debug('Refreshing tokens before getting credentials');
         const refreshed = await refreshTokens();
         if (!refreshed) {
           console.error('Failed to refresh tokens for identity pool credentials');
@@ -2158,7 +2129,7 @@ export const AuthProvider = ({ children, initialTokens }) => {
         return await makeCredentials(idToken);
       } catch (stsError) {
         // STS rejected the token — refresh and retry once before giving up
-        console.debug('STS rejected token, refreshing and retrying…', stsError);
+        console.warn('STS rejected token, refreshing and retrying…', stsError);
         const retryRefreshed = await refreshTokens();
         if (retryRefreshed && tokensRef.current.idToken) {
           return await makeCredentials(tokensRef.current.idToken);

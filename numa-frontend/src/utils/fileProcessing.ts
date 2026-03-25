@@ -107,14 +107,8 @@ const pollS3ForFile = async (bucket, key, getCredentials) => {
   // Derive status file key from output key
   const statusKey = key.endsWith('.json') ? key.replace(/\.json$/, '.status.json') : `${key}.status.json`;
 
-  console.log(
-    `Starting polling for ${key} (status: ${statusKey}) with ${POLL_INTERVAL / 1000}s intervals (max ${MAX_POLL_TIME / 60000}m)`
-  );
-
   while (Date.now() < maxEndTime) {
     attempt++;
-    const remaining = Math.round((maxEndTime - Date.now()) / 1000);
-    console.log(`Polling attempt ${attempt} for ${key} (${remaining}s remaining)`);
 
     try {
       // Quietly check for status file existence first (HEAD)
@@ -130,7 +124,6 @@ const pollS3ForFile = async (bucket, key, getCredentials) => {
           if (state === 'SUCCEEDED') {
             const outKey = status?.output_key || key;
             const outBucket = status?.output_bucket || bucket;
-            console.log(`Processing succeeded per status file: ${outBucket}/${outKey}`);
             return { output_key: outKey, output_bucket: outBucket };
           }
           if (state === 'FAILED') {
@@ -140,23 +133,22 @@ const pollS3ForFile = async (bucket, key, getCredentials) => {
           // IN_PROGRESS or unknown -> keep waiting
         } catch (parseErr) {
           // If status is malformed, log and continue polling
-          console.debug('Unable to parse status JSON; continuing to poll.', parseErr);
+          console.warn('Unable to parse status JSON; continuing to poll.', parseErr);
         }
       } else {
         // If no status file yet, check if output exists directly
         try {
           const outputExists = await doesObjectExist(key, bucket, region, getCredentials);
           if (outputExists) {
-            console.log(`Found output in S3 (no status): ${bucket}/${key}`);
             return { output_key: key, output_bucket: bucket };
           }
         } catch (headErr) {
-          console.debug('HEAD check encountered an error; will retry.', headErr);
+          console.warn('HEAD check encountered an error; will retry.', headErr);
         }
       }
     } catch (error) {
       // Avoid noisy console errors during normal polling
-      console.debug(`S3 check encountered an error on attempt ${attempt}:`, error);
+      console.warn(`S3 check encountered an error on attempt ${attempt}:`, error);
     }
 
     // Wait for fixed interval before next check

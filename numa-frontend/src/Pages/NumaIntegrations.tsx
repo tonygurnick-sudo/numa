@@ -89,7 +89,6 @@ export const NumaIntegrations = () => {
   const loadConnectionStatus = useCallback(
     async (forceRefresh = false) => {
       if (!lambdaClient || !user || loadingStatus) {
-        console.log('Lambda client or user not ready yet, or already loading');
         return;
       }
       try {
@@ -115,10 +114,6 @@ export const NumaIntegrations = () => {
           connected_at: conn.connected_at,
         })) as PipedreamConnection[];
         setConnections(connectionObjects);
-        console.log('Integration status loaded successfully:', {
-          connectionsCount: response.connections?.length || 0,
-          connectedApps: response.connected_apps?.length || 0,
-        });
       } catch (err: unknown) {
         const error = err as Error;
         console.error('Failed to load integration status:', error);
@@ -139,11 +134,9 @@ export const NumaIntegrations = () => {
     try {
       setConnectingApp(appName);
       setError(null);
-      console.log(`Starting connection process for ${appName}`);
       const externalUserId = PipedreamProxyService.deriveExternalUserId(user);
       const tokenResponse = await PipedreamProxyService.generateConnectToken(lambdaClient, externalUserId);
       const { connectToken } = tokenResponse;
-      console.log(`Generated connect token for ${appName}, external user ID: ${externalUserId}`);
       const pd = createFrontendClient({
         tokenCallback: async () => ({
           token: connectToken,
@@ -157,7 +150,6 @@ export const NumaIntegrations = () => {
         app: appName,
         token: connectToken,
         onSuccess: async (account: { id: string; [key: string]: unknown }) => {
-          console.log(`Successfully connected ${appName}:`, account);
           setConnections((prev) =>
             prev.map((conn) =>
               conn.app_name === appName
@@ -202,9 +194,6 @@ export const NumaIntegrations = () => {
                   mode: 'deny',
                   denyTools: Array.from(existingDeny),
                 });
-                console.log(`Applied default deny tools for ${appName}`, { denyTools: Array.from(existingDeny) });
-              } else {
-                console.log(`No default deny tools to apply for ${appName}`);
               }
             }
           } catch (e) {
@@ -215,7 +204,6 @@ export const NumaIntegrations = () => {
           // Show post-connection guidance
           setRecentlyConnectedApp(appName);
           setTimeout(() => setRecentlyConnectedApp(null), 8000); // Auto-dismiss after 8 seconds
-          console.log(`${appName} connected successfully`);
         },
         onError: (error: Error | { message?: string }) => {
           console.error(`Connection error for ${appName}:`, error);

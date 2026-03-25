@@ -188,7 +188,6 @@ class NumaChatDynamoUtils {
       });
 
       await this.dynamoDBClient.send(command);
-      console.log(`File message added to conversation ${conversationId}`);
     } catch (error) {
       console.error(`Error adding file message to conversation ${conversationId}:`, error);
     }
@@ -247,7 +246,6 @@ class NumaChatDynamoUtils {
       });
 
       await this.dynamoDBClient.send(updateCommand);
-      console.log(`Conversation name updated to "${newName}" for ${conversationId}`);
     } catch (error) {
       console.error('Error updating conversation name:', error);
       throw error;
@@ -304,7 +302,6 @@ class NumaChatDynamoUtils {
       });
 
       await this.dynamoDBClient.send(updateCommand);
-      console.log(`Meta item updated for conversation ${conversationId} with`, updates);
     } catch (error) {
       console.error('Error updating meta item:', error);
       throw error;
@@ -484,7 +481,6 @@ class NumaChatDynamoUtils {
         });
         await this.dynamoDBClient.send(deleteCommand);
       }
-      console.log(`Conversation ${conversationId} deleted.`);
     } catch (error) {
       console.error(`Error deleting conversation ${conversationId}:`, error);
       throw error;
@@ -538,7 +534,6 @@ class NumaChatDynamoUtils {
       });
 
       await this.dynamoDBClient.send(command);
-      console.log(`Tool message (${messageType}) added to conversation ${conversationId}`);
     } catch (error) {
       console.error(`Error adding tool message to conversation ${conversationId}:`, error);
     }

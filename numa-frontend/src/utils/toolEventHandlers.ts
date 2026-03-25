@@ -522,7 +522,6 @@ export function processToolEvent(
           processedEventIds.add(inputKey);
           // Debug log of final tool input
           const tName = typeof tu['name'] === 'string' ? (tu['name'] as string) : toolUseMap.get(tId) || 'unknown';
-          console.log('[ToolEventHandlers] Final tool call input:', { toolUseId: tId, name: tName, input: payload });
           // Persist tool call now that input is finalized
           if (saveToolCall) {
             // Compose a normalized payload including parsed input

@@ -51,7 +51,6 @@ const _CONFIG_PROPERTIES = [...CONFIG_REQUIRED_PROPERTIES, ..._CONFIG_OPTIONAL_P
 export const fetchConfigAddtoSession = async (forceRefresh = false) => {
   // Check if we need to refresh the config
   if (!forceRefresh && !shouldRefreshConfig()) {
-    console.debug('Config is still fresh, skipping fetch');
     return;
   }
 
@@ -172,7 +171,6 @@ const shouldRefreshConfig = () => {
   }
 
   if (!timestamp) {
-    console.debug('No config timestamp found, needs refresh');
     return true;
   }
 
@@ -181,7 +179,6 @@ const shouldRefreshConfig = () => {
   const timeDifference = currentTime - lastFetchTime;
 
   if (timeDifference > CONFIG_CACHE_DURATION) {
-    console.debug(`Config is ${Math.round(timeDifference / (60 * 1000))} minutes old, needs refresh`);
     return true;
   }
 
@@ -204,7 +201,6 @@ export const forceRefreshConfig = () => {
 // Helper function to clear config cache (useful for logout or debugging)
 export const clearConfigCache = () => {
   sessionStorage.removeItem(CONFIG_TIMESTAMP_KEY);
-  console.debug('Config cache cleared');
 };
 
 const handleVersionChange = async (incomingVersion?: string) => {

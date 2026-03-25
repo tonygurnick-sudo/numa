@@ -49,10 +49,6 @@ const AppCard = ({ card, dependencies, appsCards, onInputChange, inputValue, ses
   // Update local state when inputValue prop changes or when session results arrive
   useEffect(() => {
     if (inputValue !== undefined && inputValue !== localInputValue) {
-      console.log('Updating input value:', {
-        cardId: this_card.id,
-        inputValue,
-      });
       setLocalInputValue(inputValue);
     } else if (sessionResults?.cardStatus?.[this_card.id]?.currentValue !== undefined) {
       // console.log('Updating from session results:', {

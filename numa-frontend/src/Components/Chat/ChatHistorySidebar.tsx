@@ -285,12 +285,6 @@ export const ChatHistorySidebar = forwardRef<ChatHistorySidebarRef, ChatHistoryS
                     key={convo.conversation_id}
                     className={`conversation-item mb-2 p-2 rounded ${convo.conversation_id === currentConversationId ? 'active' : ''}`}
                     onClick={() => {
-                      console.log('[ChatHistory] Selected conversation metadata:', {
-                        conversation_id: convo.conversation_id,
-                        isWorkspaceConversation: convo.isWorkspaceConversation,
-                        typeofIsWorkspace: typeof convo.isWorkspaceConversation,
-                        fullMeta: convo,
-                      });
                       onSelectConversation(convo.conversation_id, convo.isWorkspaceConversation);
                     }}
                     role="button"

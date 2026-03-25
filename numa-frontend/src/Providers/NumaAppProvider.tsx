@@ -384,7 +384,6 @@ export const NumaAppProvider = ({ children }) => {
       // Poll for results using standardized function
       const { result } = await pollJobForCompletion(response.job_id);
 
-      console.log('Task completed - result:', result);
       currentResults[task.id] = result;
       return currentResults;
     } catch (error) {
@@ -405,7 +404,6 @@ export const NumaAppProvider = ({ children }) => {
       });
 
       if (status === 'completed' && result) {
-        console.log('Job completed - result:', result);
         return { success: true, result };
       }
 
@@ -536,7 +534,7 @@ export const NumaAppProvider = ({ children }) => {
         // Always check default polling time as a safety net
         const elapsedTime = Date.now() - startTime;
         if (elapsedTime > maxPollingTime) {
-          console.log('Stopping poll: Max time reached');
+          console.warn('Stopping poll: Max time reached');
           break;
         }
 

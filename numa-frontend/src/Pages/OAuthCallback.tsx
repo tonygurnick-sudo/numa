@@ -74,8 +74,6 @@ const OAuthCallback: React.FC = () => {
 
         // CSRF state is validated server-side via PKCE session lookup — no client-side check needed
 
-        console.log(`Processing OAuth callback for ${provider}`);
-
         // Get API endpoint and auth headers
         const endpoint = sessionStorage.getItem('API_ENDPOINT') || '/api';
         const token = localStorage.getItem('accessToken') || '';
@@ -110,7 +108,6 @@ const OAuthCallback: React.FC = () => {
         const data = await response.json();
 
         if (data.success) {
-          console.log(`OAuth connection successful for ${provider}`);
           setState({
             status: 'success',
             message: t('oauthCallback.connectionSuccessful', { provider }),

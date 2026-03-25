@@ -130,7 +130,6 @@ class ChatAgentHttpStream {
     this.responseCallbacks.set('current', (msg) => {
       switch (msg.type) {
         case 'start':
-          console.debug('agent started');
           break;
         case 'chunk':
           onChunk(msg.data);

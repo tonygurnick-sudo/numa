@@ -210,7 +210,6 @@ export class UserManagementUtils {
         });
         await this.cognitoClient.send(globalSignOutCommand);
         signOutSuccess = true;
-        console.log(`Successfully signed out user ${username} globally`);
       } catch (error) {
         signOutError = error;
         console.error(`Failed to globally sign out user ${username}:`, error);
@@ -299,7 +298,7 @@ export class UserManagementUtils {
           }
         }
       } else {
-        console.log('Q Business resources not provisioned or client unavailable, skipping Q user deletion');
+        console.warn('Q Business resources not provisioned or client unavailable, skipping Q user deletion');
       }
 
       // Get and delete Cognito user, skipping if not found

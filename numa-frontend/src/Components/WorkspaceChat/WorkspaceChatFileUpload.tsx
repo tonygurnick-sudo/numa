@@ -152,7 +152,6 @@ export function WorkspaceChatFileUpload({
       for (let i = 0; i < newFiles.length; i++) {
         const file = newFiles[i];
         if (isFolderEntry(file)) {
-          console.log(`[WorkspaceChatFileUpload] Skipping folder entry: ${file.name} (${file.size} bytes)`);
           continue;
         }
         filteredFiles.push({ file, relativePath: relativePaths?.[i] });

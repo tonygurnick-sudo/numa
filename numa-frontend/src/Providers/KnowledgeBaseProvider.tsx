@@ -224,7 +224,6 @@ export function KnowledgeBaseProvider({ children }: { children: React.ReactNode 
       let errorMessage = i18n.t('errors:knowledgeBase.listFailed');
       if (!token) {
         errorMessage = i18n.t('errors:knowledgeBase.authNotReady');
-        console.debug('KB loading failed due to missing auth tokens', { hasToken: !!token });
       } else if (error instanceof Error) {
         errorMessage = error.message;
       }
@@ -295,9 +294,8 @@ export function KnowledgeBaseProvider({ children }: { children: React.ReactNode 
             return kb;
           })
         );
-      } catch (error) {
+      } catch {
         // Silently fail - this is a background refresh, not critical
-        console.debug('Failed to fetch KB details for count update:', error);
       }
     },
     [numaGet, setAvailableKBs]
