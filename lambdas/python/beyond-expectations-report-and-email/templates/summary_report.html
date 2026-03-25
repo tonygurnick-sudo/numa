@@ -1,101 +1,144 @@
-<!DOCTYPE html>
+<!doctype html>
 <html>
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Error Log Analysis Summary Report</title>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Error Log Analysis Summary Report</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
 
-  <style>
-    {{ css_content | safe }}
-  </style>
+    <style>
+      {{ css_content | safe }}
+    </style>
 
-  <script>
-    const clientLabels        = {{ client_labels | safe }};
-    const totalErrorsData    = {{ total_errors_data | safe }};
-    const uniqueErrorsData   = {{ unique_errors_data | safe }};
-    const highSeverityData   = {{ high_severity_data | safe }};
-    const mediumSeverityData = {{ medium_severity_data | safe }};
-    const lowSeverityData    = {{ low_severity_data | safe }};
+    <script>
+      const clientLabels        = {{ client_labels | safe }};
+      const totalErrorsData    = {{ total_errors_data | safe }};
+      const uniqueErrorsData   = {{ unique_errors_data | safe }};
+      const highSeverityData   = {{ high_severity_data | safe }};
+      const mediumSeverityData = {{ medium_severity_data | safe }};
+      const lowSeverityData    = {{ low_severity_data | safe }};
 
-    {{ js_content | safe }}
-  </script>
-</head>
-<body>
-  <div class="header">
-    <h1>Error Log Analysis Summary Report</h1>
-    <p>Period: {{ start_time_str }} to {{ end_time_str }}</p>
-  </div>
+      {{ js_content | safe }}
+    </script>
+  </head>
+  <body>
+    <div class="header">
+      <h1>Error Log Analysis Summary Report</h1>
+      <p>Period: {{ start_time_str }} to {{ end_time_str }}</p>
+    </div>
 
-  <h2 class="section-title">Analysis Summary (New Errors)</h2>
-  <div class="summary-tabs">
-    <div class="summary-tab-labels">
-      <button id="summary-tab1-label" class="summary-tab-label active" onclick="showSummaryTab('summary-tab1')">Overview</button>
-      <button id="summary-tab2-label" class="summary-tab-label" onclick="showSummaryTab('summary-tab2')">Trends & Patterns</button>
-      <button id="summary-tab3-label" class="summary-tab-label" onclick="showSummaryTab('summary-tab3')">Critical Issues</button>
-      <button id="summary-tab4-label" class="summary-tab-label" onclick="showSummaryTab('summary-tab4')">Business Impact</button>
-      <button id="summary-tab5-label" class="summary-tab-label" onclick="showSummaryTab('summary-tab5')">Recommendations</button>
-    </div>
-    <div id="summary-tab1" class="summary-tab-content" style="display:block;">
-      <div class="summary-content">{{ summary_overview | safe }}</div>
-    </div>
-    <div id="summary-tab2" class="summary-tab-content">
-      <div class="summary-content">{{ summary_trends | safe }}</div>
-    </div>
-    <div id="summary-tab3" class="summary-tab-content">
-      <div class="summary-content">{{ summary_critical | safe }}</div>
-    </div>
-    <div id="summary-tab4" class="summary-tab-content">
-      <div class="summary-content">{{ summary_impact | safe }}</div>
-    </div>
-    <div id="summary-tab5" class="summary-tab-content">
-      <div class="summary-content">{{ summary_recommendations | safe }}</div>
-    </div>
-  </div>
-
-  <div class="stats-container">
-    <div class="stats-card">
-      <h3>Error Categories</h3>
-      <div class="categories-list">
-        <ul>
-          {% for category, count in error_categories.items() %}
-          <li><strong>{{ count }}</strong> {{ category }}</li>
-          {% endfor %}
-        </ul>
+    <h2 class="section-title">Analysis Summary (New Errors)</h2>
+    <div class="summary-tabs">
+      <div class="summary-tab-labels">
+        <button id="summary-tab1-label" class="summary-tab-label active" onclick="showSummaryTab('summary-tab1')">
+          Overview
+        </button>
+        <button id="summary-tab2-label" class="summary-tab-label" onclick="showSummaryTab('summary-tab2')">
+          Trends & Patterns
+        </button>
+        <button id="summary-tab3-label" class="summary-tab-label" onclick="showSummaryTab('summary-tab3')">
+          Critical Issues
+        </button>
+        <button id="summary-tab4-label" class="summary-tab-label" onclick="showSummaryTab('summary-tab4')">
+          Business Impact
+        </button>
+        <button id="summary-tab5-label" class="summary-tab-label" onclick="showSummaryTab('summary-tab5')">
+          Recommendations
+        </button>
+      </div>
+      <div id="summary-tab1" class="summary-tab-content" style="display: block">
+        <div class="summary-content">{{ summary_overview | safe }}</div>
+      </div>
+      <div id="summary-tab2" class="summary-tab-content">
+        <div class="summary-content">{{ summary_trends | safe }}</div>
+      </div>
+      <div id="summary-tab3" class="summary-tab-content">
+        <div class="summary-content">{{ summary_critical | safe }}</div>
+      </div>
+      <div id="summary-tab4" class="summary-tab-content">
+        <div class="summary-content">{{ summary_impact | safe }}</div>
+      </div>
+      <div id="summary-tab5" class="summary-tab-content">
+        <div class="summary-content">{{ summary_recommendations | safe }}</div>
       </div>
     </div>
-    <div class="stats-card">
-      <h3>Notification Statistics</h3>
-      {{ stats_content | safe }}
-    </div>
-  </div>
 
-  <!-- Charts -->
-  <div class="chart-container">
-    <div class="chart-header">
-      <div class="chart-title">Total Error Occurrences by Client</div>
-      <div class="chart-controls">
-        <button id="total-all-filter" class="filter-button total-filter-button active" onclick="updateTotalErrorsChart('all')">All Errors</button>
-        <button id="total-severity-filter" class="filter-button total-filter-button" onclick="updateTotalErrorsChart('severity')">By Severity</button>
+    <div class="stats-container">
+      <div class="stats-card">
+        <h3>Error Categories</h3>
+        <div class="categories-list">
+          <ul>
+            {% for category, count in error_categories.items() %}
+            <li><strong>{{ count }}</strong> {{ category }}</li>
+            {% endfor %}
+          </ul>
+        </div>
+      </div>
+      <div class="stats-card">
+        <h3>Notification Statistics</h3>
+        {{ stats_content | safe }}
       </div>
     </div>
-    <div class="chart-body"><canvas id="totalErrorsChart"></canvas></div>
-  </div>
-  <div class="chart-container">
-    <div class="chart-header">
-      <div class="chart-title">Unique Errors by Client</div>
-      <div class="chart-controls">
-        <button id="unique-all-filter" class="filter-button unique-filter-button active" onclick="updateUniqueErrorsChart('all')">All Errors</button>
-        <button id="unique-severity-filter" class="filter-button unique-filter-button" onclick="updateUniqueErrorsChart('severity')">By Severity</button>
-      </div>
-    </div>
-    <div class="chart-body"><canvas id="uniqueErrorsChart"></canvas></div>
-  </div>
 
-  <div style="margin-top:40px;padding-top:20px;border-top:1px solid #E5E7EB;font-size:0.9em;color:#6B7280;text-align:center;">
-    <p>Generated by Beyond Expectations Error Monitoring System on {{ generation_time }}</p>
-    <p>© {{ current_year }} Arcanum AI. All rights reserved.</p>
-  </div>
-</body>
+    <!-- Charts -->
+    <div class="chart-container">
+      <div class="chart-header">
+        <div class="chart-title">Total Error Occurrences by Client</div>
+        <div class="chart-controls">
+          <button
+            id="total-all-filter"
+            class="filter-button total-filter-button active"
+            onclick="updateTotalErrorsChart('all')"
+          >
+            All Errors
+          </button>
+          <button
+            id="total-severity-filter"
+            class="filter-button total-filter-button"
+            onclick="updateTotalErrorsChart('severity')"
+          >
+            By Severity
+          </button>
+        </div>
+      </div>
+      <div class="chart-body"><canvas id="totalErrorsChart"></canvas></div>
+    </div>
+    <div class="chart-container">
+      <div class="chart-header">
+        <div class="chart-title">Unique Errors by Client</div>
+        <div class="chart-controls">
+          <button
+            id="unique-all-filter"
+            class="filter-button unique-filter-button active"
+            onclick="updateUniqueErrorsChart('all')"
+          >
+            All Errors
+          </button>
+          <button
+            id="unique-severity-filter"
+            class="filter-button unique-filter-button"
+            onclick="updateUniqueErrorsChart('severity')"
+          >
+            By Severity
+          </button>
+        </div>
+      </div>
+      <div class="chart-body"><canvas id="uniqueErrorsChart"></canvas></div>
+    </div>
+
+    <div
+      style="
+        margin-top: 40px;
+        padding-top: 20px;
+        border-top: 1px solid #e5e7eb;
+        font-size: 0.9em;
+        color: #6b7280;
+        text-align: center;
+      "
+    >
+      <p>Generated by Beyond Expectations Error Monitoring System on {{ generation_time }}</p>
+      <p>© {{ current_year }} Arcanum AI. All rights reserved.</p>
+    </div>
+  </body>
 </html>

@@ -143,7 +143,7 @@ paths:
                 query:
                   type: string
                   description: Search query
-                  example: "latest AI developments 2024"
+                  example: 'latest AI developments 2024'
                 max_results:
                   type: integer
                   description: Maximum number of results
@@ -207,7 +207,7 @@ paths:
                   type: string
                   format: uri
                   description: URL to scrape
-                  example: "https://example.com/article"
+                  example: 'https://example.com/article'
                 extract_text:
                   type: boolean
                   description: Extract only text content
@@ -366,7 +366,7 @@ paths:
                     type: string
                     format: uri
                   description: URLs to crawl
-                  example: ["https://docs.example.com"]
+                  example: ['https://docs.example.com']
                 kb_id:
                   type: string
                   description: Target knowledge base

@@ -218,11 +218,11 @@ paths:
                 name:
                   type: string
                   description: Integration name
-                  example: "Salesforce CRM"
+                  example: 'Salesforce CRM'
                 provider:
                   type: string
                   description: Integration provider
-                  example: "pipedream"
+                  example: 'pipedream'
                 config:
                   type: object
                   description: Provider-specific configuration
@@ -231,7 +231,7 @@ paths:
                   items:
                     type: string
                   description: Required permissions
-                  example: ["read:contacts", "write:opportunities"]
+                  example: ['read:contacts', 'write:opportunities']
               required: [name, provider, config]
       responses:
         '201':
@@ -381,16 +381,16 @@ paths:
               properties:
                 name:
                   type: string
-                  example: "Customer Support Agent"
+                  example: 'Customer Support Agent'
                 description:
                   type: string
-                  example: "Specialized agent for customer support inquiries"
+                  example: 'Specialized agent for customer support inquiries'
                 model:
                   type: string
-                  example: "claude-3-sonnet"
+                  example: 'claude-3-sonnet'
                 system_prompt:
                   type: string
-                  example: "You are a helpful customer support agent..."
+                  example: 'You are a helpful customer support agent...'
                 temperature:
                   type: number
                   default: 0.7
@@ -401,7 +401,7 @@ paths:
                   type: array
                   items:
                     type: string
-                  example: ["web_search", "query_knowledge_base"]
+                  example: ['web_search', 'query_knowledge_base']
               required: [name, model, system_prompt]
       responses:
         '201':

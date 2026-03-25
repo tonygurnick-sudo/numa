@@ -22,7 +22,7 @@ output:
 datasources:
   production:
     type: postgres
-    description: "Production database"
+    description: 'Production database'
     connection:
       host_env: DB_HOST
       port_env: DB_PORT
@@ -52,19 +52,19 @@ engines:
   # Local CSV via SQLite
   # ──────────────────────────────────────────────────────────────────────────
   csv-sqlite:
-    description: "Query local CSV files using SQLite"
+    description: 'Query local CSV files using SQLite'
     # Runtime parameters this engine accepts
     parameters:
       - name: CSV_FILE
-        description: "Path to CSV file"
+        description: 'Path to CSV file'
         required: true
         cli_flag: --csv
-        example: "./sales.csv"
+        example: './sales.csv'
       - name: TABLE_NAME
-        description: "Table name in SQLite (default: data)"
+        description: 'Table name in SQLite (default: data)'
         required: false
         cli_flag: --table
-        default: "data"
+        default: 'data'
     # Placeholders available in commands:
     # {{CSV_FILE}}    - from --csv flag
     # {{TABLE_NAME}}  - from --table flag or default "data"
@@ -88,23 +88,23 @@ engines:
   # S3 CSV via SQLite (download then query)
   # ──────────────────────────────────────────────────────────────────────────
   s3-csv-sqlite:
-    description: "Download CSV from S3 and query via SQLite"
+    description: 'Download CSV from S3 and query via SQLite'
     parameters:
       - name: S3_PATH
-        description: "S3 path (s3://bucket/path/file.csv)"
+        description: 'S3 path (s3://bucket/path/file.csv)'
         required: true
         cli_flag: --s3
-        example: "s3://my-bucket/data/sales.csv"
+        example: 's3://my-bucket/data/sales.csv'
       - name: TABLE_NAME
-        description: "Table name in SQLite (default: data)"
+        description: 'Table name in SQLite (default: data)'
         required: false
         cli_flag: --table
-        default: "data"
+        default: 'data'
       - name: AWS_REGION
-        description: "AWS region (default: us-east-1)"
+        description: 'AWS region (default: us-east-1)'
         required: false
         cli_flag: --region
-        default: "us-east-1"
+        default: 'us-east-1'
     # Placeholders: {{S3_PATH}}, {{TABLE_NAME}}, {{AWS_REGION}}, {{TEMP_CSV}}, {{TEMP_DB}}, {{QUERY}}
     download_command: |
       TEMP_CSV="/tmp/db_cli_$$.csv"
@@ -125,13 +125,13 @@ engines:
   # S3 CSV via DuckDB (no download, direct query)
   # ──────────────────────────────────────────────────────────────────────────
   s3-csv-duckdb:
-    description: "Query S3 CSV directly using DuckDB (no download)"
+    description: 'Query S3 CSV directly using DuckDB (no download)'
     parameters:
       - name: S3_PATH
-        description: "S3 path (s3://bucket/path/file.csv)"
+        description: 'S3 path (s3://bucket/path/file.csv)'
         required: true
         cli_flag: --s3
-        example: "s3://my-bucket/data/sales.csv"
+        example: 's3://my-bucket/data/sales.csv'
     # DuckDB can read S3 directly with credentials from environment
     # Requires: AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_REGION
     query_command: |
@@ -153,13 +153,13 @@ engines:
   # Local CSV via DuckDB (fast analytical queries)
   # ──────────────────────────────────────────────────────────────────────────
   csv-duckdb:
-    description: "Query local CSV files using DuckDB (fast)"
+    description: 'Query local CSV files using DuckDB (fast)'
     parameters:
       - name: CSV_FILE
-        description: "Path to CSV file"
+        description: 'Path to CSV file'
         required: true
         cli_flag: --csv
-        example: "./sales.csv"
+        example: './sales.csv'
     # DuckDB can query CSV directly without import
     query_command: |
       duckdb -csv << 'DUCKDB_EOF'
@@ -175,13 +175,13 @@ engines:
   # Parquet files via DuckDB
   # ──────────────────────────────────────────────────────────────────────────
   parquet-duckdb:
-    description: "Query Parquet files using DuckDB"
+    description: 'Query Parquet files using DuckDB'
     parameters:
       - name: PARQUET_FILE
-        description: "Path or S3 path to Parquet file"
+        description: 'Path or S3 path to Parquet file'
         required: true
         cli_flag: --parquet
-        example: "./data.parquet or s3://bucket/data.parquet"
+        example: './data.parquet or s3://bucket/data.parquet'
     query_command: |
       duckdb -csv << 'DUCKDB_EOF'
       INSTALL httpfs;
@@ -199,13 +199,13 @@ engines:
   # Multiple CSV files (wildcard pattern)
   # ──────────────────────────────────────────────────────────────────────────
   csv-pattern-duckdb:
-    description: "Query multiple CSV files with wildcard pattern"
+    description: 'Query multiple CSV files with wildcard pattern'
     parameters:
       - name: CSV_PATTERN
-        description: "Wildcard pattern for CSV files"
+        description: 'Wildcard pattern for CSV files'
         required: true
         cli_flag: --pattern
-        example: "./data/*.csv or s3://bucket/data/202401*.csv"
+        example: './data/*.csv or s3://bucket/data/202401*.csv'
     query_command: |
       duckdb -csv << 'DUCKDB_EOF'
       INSTALL httpfs;
@@ -223,23 +223,23 @@ engines:
   # Google Sheets via CSV export
   # ──────────────────────────────────────────────────────────────────────────
   gsheet-sqlite:
-    description: "Query Google Sheets by exporting to CSV"
+    description: 'Query Google Sheets by exporting to CSV'
     parameters:
       - name: SHEET_ID
-        description: "Google Sheets ID from URL"
+        description: 'Google Sheets ID from URL'
         required: true
         cli_flag: --sheet-id
-        example: "1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms"
+        example: '1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms'
       - name: GID
-        description: "Sheet GID (default: 0 for first sheet)"
+        description: 'Sheet GID (default: 0 for first sheet)'
         required: false
         cli_flag: --gid
-        default: "0"
+        default: '0'
       - name: TABLE_NAME
-        description: "Table name (default: data)"
+        description: 'Table name (default: data)'
         required: false
         cli_flag: --table
-        default: "data"
+        default: 'data'
     download_command: |
       TEMP_CSV="/tmp/db_cli_$$.csv"
       TEMP_DB="/tmp/db_cli_$$.sqlite"
@@ -260,18 +260,18 @@ engines:
   # JSON file via jq + SQLite
   # ──────────────────────────────────────────────────────────────────────────
   json-sqlite:
-    description: "Query JSON files by converting to CSV then SQLite"
+    description: 'Query JSON files by converting to CSV then SQLite'
     parameters:
       - name: JSON_FILE
-        description: "Path to JSON file (array of objects)"
+        description: 'Path to JSON file (array of objects)'
         required: true
         cli_flag: --json
-        example: "./data.json"
+        example: './data.json'
       - name: TABLE_NAME
-        description: "Table name (default: data)"
+        description: 'Table name (default: data)'
         required: false
         cli_flag: --table
-        default: "data"
+        default: 'data'
     import_command: |
       TEMP_CSV="/tmp/db_cli_$$.csv"
       TEMP_DB="/tmp/db_cli_$$.sqlite"
@@ -287,6 +287,7 @@ engines:
       sqlite3 "$TEMP_DB" ".schema {{TABLE_NAME}}"
     cleanup_command: |
       rm -f "$TEMP_CSV" "$TEMP_DB"
+
 # ============================================================================
 # USAGE EXAMPLES
 # ============================================================================

@@ -14,9 +14,9 @@ processors:
 
 exporters:
   otlp:
-    endpoint: "api.honeycomb.io:443"
+    endpoint: 'api.honeycomb.io:443'
     headers:
-      "x-honeycomb-team": "${env:HONEYCOMB_INGEST_KEY}"
+      'x-honeycomb-team': '${env:HONEYCOMB_INGEST_KEY}'
 
 service:
   pipelines:

@@ -26,7 +26,7 @@ const USERS = [
     userName: 'Alice Johnson',
     name: 'Alice (power user)',
     // Logs in 2-4 times most days
-    dailyPattern: () => Math.random() < 0.9 ? Math.floor(Math.random() * 3) + 2 : 0,
+    dailyPattern: () => (Math.random() < 0.9 ? Math.floor(Math.random() * 3) + 2 : 0),
   },
   {
     userId: 'user-bob-00002-0001-000000000002',

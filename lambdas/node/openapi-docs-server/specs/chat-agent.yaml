@@ -83,11 +83,11 @@ components:
         kb_id:
           type: string
           description: Knowledge base identifier
-          example: "company"
+          example: 'company'
         kb_name:
           type: string
           description: Knowledge base display name
-          example: "Company Knowledge Base"
+          example: 'Company Knowledge Base'
         role:
           type: string
           enum: [OWNER, EDITOR, VIEWER]
@@ -151,13 +151,13 @@ paths:
                 properties:
                   status:
                     type: string
-                    example: "ok"
+                    example: 'ok'
                   service:
                     type: string
-                    example: "numa-chat-agent"
+                    example: 'numa-chat-agent'
                   version:
                     type: string
-                    example: "1.0.0"
+                    example: '1.0.0'
                   timestamp:
                     type: string
                     format: date-time
@@ -194,11 +194,11 @@ paths:
                 conversation_id:
                   type: string
                   description: Optional conversation ID for message continuity
-                  example: "conv_123456789"
+                  example: 'conv_123456789'
                 kb_id:
                   type: string
                   description: Knowledge base to use for context retrieval
-                  example: "company"
+                  example: 'company'
                 stream:
                   type: boolean
                   description: Whether to stream the response (always true for this endpoint)
@@ -220,14 +220,14 @@ paths:
               simple_question:
                 summary: Simple question
                 value:
-                  message: "What are our office hours?"
-                  kb_id: "company"
+                  message: 'What are our office hours?'
+                  kb_id: 'company'
               continue_conversation:
                 summary: Continue existing conversation
                 value:
-                  message: "Can you elaborate on that policy?"
-                  conversation_id: "conv_123456789"
-                  kb_id: "company"
+                  message: 'Can you elaborate on that policy?'
+                  conversation_id: 'conv_123456789'
+                  kb_id: 'company'
       responses:
         '200':
           description: Streaming response with NDJSON events
@@ -263,8 +263,8 @@ paths:
                 missing_message:
                   summary: Missing message
                   value:
-                    error: "Message is required"
-                    code: "MISSING_MESSAGE"
+                    error: 'Message is required'
+                    code: 'MISSING_MESSAGE'
         '401':
           description: Unauthorized - invalid or missing authentication
           content:
@@ -311,14 +311,14 @@ paths:
                 message:
                   type: string
                   description: The user's message
-                  example: "Summarize our Q3 results"
+                  example: 'Summarize our Q3 results'
                 conversation_id:
                   type: string
                   description: Optional conversation ID
                 kb_id:
                   type: string
                   description: Knowledge base to use
-                  example: "company"
+                  example: 'company'
                 max_tokens:
                   type: integer
                   description: Maximum tokens in response
@@ -362,8 +362,8 @@ paths:
                 simple_response:
                   summary: Simple response
                   value:
-                    response: "Our Q3 results show strong growth across all sectors..."
-                    conversation_id: "conv_123456789"
+                    response: 'Our Q3 results show strong growth across all sectors...'
+                    conversation_id: 'conv_123456789'
                     usage:
                       input_tokens: 12
                       output_tokens: 45
@@ -410,14 +410,14 @@ paths:
                 knowledge_bases:
                   summary: Example knowledge bases
                   value:
-                    - kb_id: "company"
-                      kb_name: "Company Knowledge Base"
-                      role: "VIEWER"
+                    - kb_id: 'company'
+                      kb_name: 'Company Knowledge Base'
+                      role: 'VIEWER'
                       is_shared: true
                       document_count: 156
-                    - kb_id: "personal_kb_abc123"
-                      kb_name: "My Personal KB"
-                      role: "OWNER"
+                    - kb_id: 'personal_kb_abc123'
+                      kb_name: 'My Personal KB'
+                      role: 'OWNER'
                       is_shared: false
                       document_count: 23
         '401':
@@ -446,13 +446,13 @@ paths:
                 kb_name:
                   type: string
                   description: Display name for the knowledge base
-                  example: "Project Documentation"
+                  example: 'Project Documentation'
                   minLength: 1
                   maxLength: 100
                 description:
                   type: string
                   description: Optional description of the knowledge base purpose
-                  example: "Documentation and specs for the new project"
+                  example: 'Documentation and specs for the new project'
                   maxLength: 500
                 is_shared:
                   type: boolean
@@ -470,9 +470,9 @@ paths:
                 created_kb:
                   summary: Newly created knowledge base
                   value:
-                    kb_id: "personal_kb_xyz789"
-                    kb_name: "Project Documentation"
-                    role: "OWNER"
+                    kb_id: 'personal_kb_xyz789'
+                    kb_name: 'Project Documentation'
+                    role: 'OWNER'
                     is_shared: false
                     document_count: 0
         '400':
@@ -502,7 +502,7 @@ paths:
         description: Knowledge base identifier
         schema:
           type: string
-          example: "company"
+          example: 'company'
 
     get:
       tags: [Knowledge Base]

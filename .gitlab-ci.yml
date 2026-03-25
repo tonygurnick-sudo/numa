@@ -230,7 +230,6 @@ install-common-dependencies:
   rules:
     - !reference [.rules, if-deployable]
 
-
 .node-job-cdktf-get-before-script: &node-job-cdktf-get-before-script
   before_script:
     # Install curl, jq, skopeo, and AWS CLI for Terraform local-exec provisioners (e.g., workspace-agent ECR push)
@@ -472,7 +471,7 @@ frontend-test:
     matrix:
       - BUILD_DIR: [numa-frontend]
   before_script:
-    - !reference [.yarn, setup-private-auth]   # required for @arcanumai/* packages
+    - !reference [.yarn, setup-private-auth] # required for @arcanumai/* packages
     - corepack enable
     - yarn install --immutable
     - cd "$BUILD_DIR"
@@ -491,7 +490,6 @@ frontend-test:
         - numa-frontend/**/*
         - style/**/*
         - .gitlab-ci.yml
-
 
 frontend-build:
   extends: node-build
@@ -529,7 +527,6 @@ python-lambdas-package:
   rules:
     - !reference [.rules, if-deployable]
 
-
 node-package:
   extends: .node_job
   stage: package
@@ -562,7 +559,7 @@ claude-cli-artifact-build:
     - if: $CI_COMMIT_BRANCH == "main"
     - if: $CI_COMMIT_BRANCH == "dev"
   variables:
-    CLAUDE_CLI_VERSION: "2.0.37"
+    CLAUDE_CLI_VERSION: '2.0.37'
   before_script:
     - dnf -y install tar gzip zip which jq
   script:
@@ -599,20 +596,20 @@ claude-cli-artifact-build:
 # that only change application code take ~5-8min.
 workspace-agent-package:
   stage: package
-  timeout: 45 minutes  # ARM64 cross-compile via QEMU — P90 is ~27min
+  timeout: 45 minutes # ARM64 cross-compile via QEMU — P90 is ~27min
   image: docker:24
   services:
     - docker:24-dind
   tags:
-    - aws  # Runs on AWS workers with Docker
+    - aws # Runs on AWS workers with Docker
   rules:
     - !reference [.rules, if-deployable]
   variables:
-    DOCKER_TLS_CERTDIR: "/certs"
+    DOCKER_TLS_CERTDIR: '/certs'
     # BuildKit cache: reuse system packages, Node.js, Pandoc, Python deps between builds.
     # mode=max exports all layers (not just final image), maximising cache hits.
     # --cache-from silently ignores missing cache on first run.
-    DOCKER_BUILD_OPTS: "--cache-from type=local,src=$CI_PROJECT_DIR/.docker-cache --cache-to type=local,dest=$CI_PROJECT_DIR/.docker-cache,mode=max"
+    DOCKER_BUILD_OPTS: '--cache-from type=local,src=$CI_PROJECT_DIR/.docker-cache --cache-to type=local,dest=$CI_PROJECT_DIR/.docker-cache,mode=max'
   cache:
     - key: workspace-agent-docker-${CI_DEFAULT_BRANCH}
       paths:
@@ -635,12 +632,12 @@ workspace-agent-package:
 claude-cli-artifact-publish:
   stage: package
   image: registry.gitlab.com/arcanumai/ci/all-inclusive
-  needs: ["claude-cli-artifact-build"]
+  needs: ['claude-cli-artifact-build']
   rules:
     - !reference [.rules, if-main]
   variables:
-    CLAUDE_CLI_VERSION: "2.0.37"
-    CLAUDE_ARTIFACT_S3_PREFIX: "claude-artifacts"
+    CLAUDE_CLI_VERSION: '2.0.37'
+    CLAUDE_ARTIFACT_S3_PREFIX: 'claude-artifacts'
     AWS_REGION: us-east-1
   before_script:
     - export AWS_ROLE=${AWS_DEPLOYER_ROLE_ARN:-$AWS_CLIENT_ROLE_ARN}
@@ -656,7 +653,7 @@ claude-cli-artifact-publish:
 
 build-deployment-container:
   stage: image-build
-  timeout: 30 minutes  # Docker build + ECR push — P90 is ~12min
+  timeout: 30 minutes # Docker build + ECR push — P90 is ~12min
   image: registry.gitlab.com/arcanumai/ci/all-inclusive # don't need a lot of this, but it gets us started
   tags:
     - aws # need to use our AWS workers as TLS docker doesn't seem to work on hosted runners
@@ -704,7 +701,7 @@ build-deployment-container:
 .deploy-infra:
   extends: .node-job-infra-overrides
   stage: deploy
-  timeout: 35 minutes  # CDKTF deploy — P90 is ~23min
+  timeout: 35 minutes # CDKTF deploy — P90 is ~23min
   variables:
     TF_ENVIRONMENT: prod
     AWS_REGION: us-east-1
@@ -731,7 +728,6 @@ deploy-to-arcanum-demo:
     - if: $CI_COMMIT_BRANCH == "main"
       when: on_success
 
-
 deploy-to-median:
   extends: .deploy-infra
   artifacts:
@@ -742,7 +738,7 @@ deploy-to-median:
     CLIENT_NAME: median
   environment:
     deployment_tier: testing
-  needs: ["deploy-to-arcanum-demo"]  # optional dependency on demo
+  needs: ['deploy-to-arcanum-demo'] # optional dependency on demo
   before_script:
     - !reference [.yarn, setup-private-auth]
     - corepack enable
@@ -752,9 +748,6 @@ deploy-to-median:
   rules:
     - if: $CI_COMMIT_BRANCH == "main"
       when: manual
-
-
-
 
 deploy-to-client:
   extends: .deploy-infra
@@ -767,8 +760,8 @@ deploy-to-client:
     - if: $CI_COMMIT_BRANCH == "main"
       when: manual
   release:
-    name: "Customer deploy [$CLIENT_NAME] ${CI_COMMIT_SHORT_SHA}"
-    tag_name: "customer-deploy/${CLIENT_NAME}/${CI_COMMIT_SHORT_SHA}"
+    name: 'Customer deploy [$CLIENT_NAME] ${CI_COMMIT_SHORT_SHA}'
+    tag_name: 'customer-deploy/${CLIENT_NAME}/${CI_COMMIT_SHORT_SHA}'
     ref: $CI_COMMIT_SHA
     description: |
       Full customer deploy for ${CLIENT_NAME}
@@ -787,8 +780,8 @@ deploy-to-client-custom:
     - if: $CI_COMMIT_BRANCH == "main"
       when: manual
   release:
-    name: "Customer deploy [custom:${CLIENT_NAME}] ${CI_COMMIT_SHORT_SHA}"
-    tag_name: "customer-deploy/${CLIENT_NAME}/${CI_COMMIT_SHORT_SHA}"
+    name: 'Customer deploy [custom:${CLIENT_NAME}] ${CI_COMMIT_SHORT_SHA}'
+    tag_name: 'customer-deploy/${CLIENT_NAME}/${CI_COMMIT_SHORT_SHA}'
     ref: $CI_COMMIT_SHA
     description: |
       Custom customer deploy for ${CLIENT_NAME}

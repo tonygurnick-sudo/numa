@@ -213,16 +213,16 @@ paths:
                           items:
                             type: string
                           description: Specific areas to focus on
-                          example: ["key findings", "recommendations", "risks"]
+                          example: ['key findings', 'recommendations', 'risks']
                       required: [s3_key]
             examples:
               pdf_summary:
                 summary: Summarize a PDF report
                 value:
                   input_data:
-                    s3_key: "documents/quarterly-report.pdf"
-                    summary_length: "detailed"
-                    focus_areas: ["key findings", "financial performance"]
+                    s3_key: 'documents/quarterly-report.pdf'
+                    summary_length: 'detailed'
+                    focus_areas: ['key findings', 'financial performance']
       responses:
         '200':
           description: Summarization started
@@ -233,13 +233,13 @@ paths:
               examples:
                 started_execution:
                   value:
-                    execution_id: "exec_12345"
-                    status: "RUNNING"
-                    app_id: "document-summariser"
-                    started_at: "2024-12-10T13:30:00Z"
-                    updated_at: "2024-12-10T13:30:00Z"
+                    execution_id: 'exec_12345'
+                    status: 'RUNNING'
+                    app_id: 'document-summariser'
+                    started_at: '2024-12-10T13:30:00Z'
+                    updated_at: '2024-12-10T13:30:00Z'
                     progress:
-                      current_step: "extracting_content"
+                      current_step: 'extracting_content'
                       completed_steps: 1
                       total_steps: 4
                       percentage: 25
@@ -258,7 +258,7 @@ paths:
           description: Execution ID returned from the start request
           schema:
             type: string
-            example: "exec_12345"
+            example: 'exec_12345'
       responses:
         '200':
           description: Execution status and results
@@ -269,16 +269,16 @@ paths:
               examples:
                 completed_execution:
                   value:
-                    execution_id: "exec_12345"
-                    status: "SUCCEEDED"
-                    app_id: "document-summariser"
-                    started_at: "2024-12-10T13:30:00Z"
-                    updated_at: "2024-12-10T13:32:15Z"
+                    execution_id: 'exec_12345'
+                    status: 'SUCCEEDED'
+                    app_id: 'document-summariser'
+                    started_at: '2024-12-10T13:30:00Z'
+                    updated_at: '2024-12-10T13:32:15Z'
                     results:
-                      summary: "This quarterly report shows strong performance..."
+                      summary: 'This quarterly report shows strong performance...'
                       key_points:
-                        - "Revenue increased by 15%"
-                        - "New market expansion successful"
+                        - 'Revenue increased by 15%'
+                        - 'New market expansion successful'
                       word_count: 245
                       original_pages: 12
 
@@ -327,11 +327,11 @@ paths:
                 summary: Generate remote work policy
                 value:
                   input_data:
-                    policy_type: "remote_work"
-                    company_size: "medium"
-                    industry: "Technology"
-                    requirements: ["flexible hours", "equipment provision", "security protocols"]
-                    jurisdiction: "US"
+                    policy_type: 'remote_work'
+                    company_size: 'medium'
+                    industry: 'Technology'
+                    requirements: ['flexible hours', 'equipment provision', 'security protocols']
+                    jurisdiction: 'US'
       responses:
         '200':
           description: Policy generation started
