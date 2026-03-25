@@ -230,7 +230,6 @@ export const TranscriptionService = {
     return (await numaGet(url)) as TranscriptionListResponse;
   },
 
-
   async rebuild(numaPost: NumaPost): Promise<{ created: number; skipped: number; failed: number; total: number }> {
     return (await numaPost('/api/transcriptions/admin/rebuild')) as {
       created: number;
