@@ -617,7 +617,6 @@ const lookupByPath = async (_auth: AuthContext, fileKey: string): Promise<Return
   return respond(200, { jobs: result.Items || [], count: result.Items?.length || 0 });
 };
 
-
 // ─── Rebuild from S3 ───
 
 interface StatusFile {
