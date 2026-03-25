@@ -13,16 +13,28 @@ import {
   validateCreatePayload,
   validateUpdatePayload,
   validateScheduleRecord,
+  estimateCronIntervalMinutes,
   type ScheduleRecord,
   type CreateSchedulePayload,
   type UpdateSchedulePayload,
 } from '../../../lib/scheduling-schemas';
+import { GetCommand } from '@aws-sdk/lib-dynamodb';
 
 const REGION = process.env.REGION ?? 'us-east-1';
 const CLIENT_NAME = process.env.CLIENT_NAME ?? 'numa-client';
 const TABLE_NAME = process.env.AGENT_SCHEDULES_TABLE_NAME ?? '';
 const EXECUTION_ROLE_ARN = process.env.AGENT_SCHEDULE_EXECUTION_ROLE_ARN ?? '';
 const RUNNER_ARN = process.env.AGENT_SCHEDULE_RUNNER_ARN ?? '';
+
+const SCHEDULING_SETTINGS_TABLE = process.env.SCHEDULING_SETTINGS_TABLE_NAME ?? '';
+const PER_CLIENT_MIN = process.env.SCHEDULING_MIN_INTERVAL_MINUTES
+  ? parseInt(process.env.SCHEDULING_MIN_INTERVAL_MINUTES, 10)
+  : undefined;
+const GLOBAL_MIN = process.env.GLOBAL_SCHEDULING_MIN_INTERVAL_MINUTES
+  ? parseInt(process.env.GLOBAL_SCHEDULING_MIN_INTERVAL_MINUTES, 10)
+  : undefined;
+const PLATFORM_DEFAULT = 5;
+const ARCANUM_FLOOR = PER_CLIENT_MIN ?? GLOBAL_MIN ?? PLATFORM_DEFAULT;
 
 if (!TABLE_NAME || !EXECUTION_ROLE_ARN || !RUNNER_ARN) {
   console.warn('Agent schedules lambda missing required environment variables');
@@ -143,14 +155,64 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
   } catch (error) {
     console.error('agent-schedules error', error);
     const message = error instanceof Error ? error.message : 'Internal Server Error';
-    return respond(message.startsWith('Invalid') ? 400 : 500, { error: message });
+    const statusCode = (error as { statusCode?: number }).statusCode ?? (message.startsWith('Invalid') ? 400 : 500);
+    return respond(statusCode, { error: message });
+  }
+};
+
+/**
+ * Resolves the effective minimum scheduling interval by reading the client-admin
+ * override from DynamoDB (Level 3) and combining with the Arcanum floor (Levels 1+2).
+ */
+const resolveEffectiveMinimum = async (): Promise<number> => {
+  if (!SCHEDULING_SETTINGS_TABLE) return ARCANUM_FLOOR;
+  try {
+    const res = await dynamo.send(
+      new GetCommand({ TableName: SCHEDULING_SETTINGS_TABLE, Key: { setting: 'scheduling' } })
+    );
+    const clientAdminMin = (res.Item as { minIntervalMinutes?: number } | undefined)?.minIntervalMinutes;
+    if (clientAdminMin != null) {
+      return Math.max(clientAdminMin, ARCANUM_FLOOR);
+    }
+  } catch (err) {
+    console.warn('Failed to read scheduling settings, using Arcanum floor', err);
+  }
+  return ARCANUM_FLOOR;
+};
+
+/**
+ * Validates that a cron expression does not schedule runs more frequently
+ * than the effective minimum interval. Throws if too frequent.
+ */
+const validateCronInterval = async (cronExpression: string): Promise<void> => {
+  const effectiveMin = await resolveEffectiveMinimum();
+
+  const estimated = estimateCronIntervalMinutes(cronExpression);
+  // null means we can't reliably estimate — deny when an override is active,
+  // but allow when only the platform default applies (backwards-compatible)
+  if (estimated === null) {
+    if (effectiveMin > PLATFORM_DEFAULT) {
+      throw Object.assign(
+        new Error(
+          `Cannot verify schedule interval against the minimum of ${effectiveMin} minutes. Use a simpler cron pattern or contact support.`
+        ),
+        { statusCode: 400 }
+      );
+    }
+    return;
+  }
+
+  if (estimated < effectiveMin) {
+    throw Object.assign(
+      new Error(
+        `Schedule interval too frequent. Minimum allowed is ${effectiveMin} minutes, but this schedule would run approximately every ${estimated} minutes.`
+      ),
+      { statusCode: 400 }
+    );
   }
 };
 
 const listSchedules = async (userId: string): Promise<ScheduleRecord[]> => {
-  console.log('AGENT_SCHEDULES DEBUG: Querying with userId:', userId);
-  console.log('AGENT_SCHEDULES DEBUG: Table name:', TABLE_NAME);
-
   const result = await dynamo.send(
     new QueryCommand({
       TableName: TABLE_NAME,
@@ -160,18 +222,6 @@ const listSchedules = async (userId: string): Promise<ScheduleRecord[]> => {
       },
     })
   );
-
-  console.log('AGENT_SCHEDULES DEBUG: DynamoDB query result:', {
-    Count: result.Count,
-    Items: result.Items?.length || 0,
-    FirstItem: result.Items?.[0]
-      ? {
-          user_id: result.Items[0].user_id,
-          schedule_id: result.Items[0].schedule_id,
-          agent_title: result.Items[0].agent_title,
-        }
-      : null,
-  });
 
   const items = (result.Items || []) as ScheduleRecord[];
   return items.sort((a, b) => (b.updated_at ?? 0) - (a.updated_at ?? 0));
@@ -183,9 +233,6 @@ const getCalendarEvents = async (
   endDate?: string,
   eventTypes: string[] = ['agent', 'application', 'data_sync']
 ): Promise<ScheduleRecord[]> => {
-  console.log('CALENDAR_EVENTS DEBUG: Querying with userId:', userId);
-  console.log('CALENDAR_EVENTS DEBUG: Table name:', TABLE_NAME);
-
   // First get all schedules for the user
   const result = await dynamo.send(
     new QueryCommand({
@@ -201,18 +248,6 @@ const getCalendarEvents = async (
       },
     })
   );
-
-  console.log('CALENDAR_EVENTS DEBUG: DynamoDB query result:', {
-    Count: result.Count,
-    Items: result.Items?.length || 0,
-    FirstItem: result.Items?.[0]
-      ? {
-          user_id: result.Items[0].user_id,
-          schedule_id: result.Items[0].schedule_id,
-          agent_title: result.Items[0].agent_title,
-        }
-      : null,
-  });
 
   let items = (result.Items || []) as ScheduleRecord[];
 
@@ -235,6 +270,9 @@ const createSchedule = async (
 ): Promise<{ scheduleId: string } & ScheduleRecord> => {
   // Validate payload with Zod
   const validatedPayload = validateCreatePayload(payload);
+
+  // Enforce minimum scheduling interval
+  await validateCronInterval(validatedPayload.cronExpression);
 
   const scheduleId = uuidv4();
   const now = Date.now();
@@ -336,6 +374,14 @@ const updateSchedule = async (
   const record = (existing.Items || [])[0] as ScheduleRecord | undefined;
   if (!record || record.status === 'deleted') {
     throw new Error('Schedule not found');
+  }
+
+  // Enforce minimum scheduling interval when cron expression changes or schedule is reactivated
+  const cronToValidate =
+    validatedPayload.cronExpression ??
+    (validatedPayload.status === 'active' && record.status === 'paused' ? record.cron_expression : undefined);
+  if (cronToValidate) {
+    await validateCronInterval(cronToValidate);
   }
 
   const expressionNames: Record<string, string> = {};

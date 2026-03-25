@@ -34,7 +34,10 @@ export const listAgents = async (
     agentType: options?.agentType,
   });
   const response = (await numaGet(`${BASE_URL}`, params)) as AgentListResponse;
-  const agents = response?.agents ?? [];
+  const raw = response?.agents ?? [];
+  // Deduplicate by agentId (API may return duplicates for shared/public agents)
+  const seen = new Set<string>();
+  const agents = raw.filter((a) => (seen.has(a.agentId) ? false : (seen.add(a.agentId), true)));
   // Persist to localStorage for instant load on next page refresh
   setSwrCache(agentsCacheKey(options?.scope ?? 'owned'), agents);
   return agents;

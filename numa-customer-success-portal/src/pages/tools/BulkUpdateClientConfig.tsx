@@ -154,6 +154,13 @@ const BULK_UPDATABLE_FIELDS: FieldConfig[] = [
     description: 'Require TOTP-based two-factor authentication for all users',
   },
   {
+    key: 'schedulingMinIntervalMinutes',
+    label: 'Scheduling Min Interval (minutes)',
+    type: 'number',
+    allowUnset: true,
+    description: 'Minimum scheduling interval for this client (minutes, min 5). Unset to inherit global default.',
+  },
+  {
     key: 'groups',
     label: 'Groups (Advanced)',
     type: 'json',

@@ -109,6 +109,11 @@ const buildCronExpression = (
       const day = parseInt(dayStr, 10) || new Date().getDate();
       return `cron(${minute} ${hour} ${day} ${month} ? ${year})`;
     }
+    case 'five_minute': {
+      const minuteInterval = config.minuteInterval ?? 5;
+      const interval = Math.max(minuteInterval, Math.round(minuteInterval / 5) * 5);
+      return `cron(${minute}/${interval} * * * ? *)`;
+    }
     case 'hourly': {
       const interval = Math.max(1, hourInterval);
       return `cron(${minute} ${hour}/${interval} * * ? *)`;

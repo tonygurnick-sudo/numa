@@ -137,8 +137,7 @@
   },
   "schedule": {
     "title": "Set the schedule",
-    "subtitle": "Choose when and how often your automation should run.",
-    "minIntervalWarning": "For recurring schedules, the minimum interval is 30 minutes."
+    "subtitle": "Choose when and how often your automation should run."
   },
   "agent": {
     "title": "Choose an agent",

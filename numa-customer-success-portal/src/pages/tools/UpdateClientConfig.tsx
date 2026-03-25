@@ -108,6 +108,7 @@ export default function UpdateClientConfig() {
   const [brandingProviderEnabled, setBrandingProviderEnabled] = useState<boolean>(false);
   const [numaWorkspaceChat, setNumaWorkspaceChat] = useState<boolean>(false);
   const [scheduling, setScheduling] = useState<boolean>(false);
+  const [schedulingMinIntervalMinutes, setSchedulingMinIntervalMinutes] = useState<string>('');
   const [workspaceChatModelSelection, setWorkspaceChatModelSelection] = useState<boolean>(false);
   const [numaOps, setNumaOps] = useState<boolean>(false);
   const [v2Apps, setV2Apps] = useState<boolean>(false);
@@ -179,6 +180,9 @@ export default function UpdateClientConfig() {
     setBrandingProviderEnabled(Boolean((cfg as any).brandingProviderEnabled));
     setNumaWorkspaceChat((cfg as any).numaWorkspaceChat ?? defaults.numaWorkspaceChat);
     setScheduling(Boolean((cfg as any).scheduling));
+    setSchedulingMinIntervalMinutes(
+      (cfg as any).schedulingMinIntervalMinutes != null ? String((cfg as any).schedulingMinIntervalMinutes) : ''
+    );
     setWorkspaceChatModelSelection(Boolean((cfg as any).workspaceChatModelSelection));
     setNumaOps(Boolean((cfg as any).numaOps));
     setV2Apps(Boolean((cfg as any)?.v2Apps));
@@ -223,6 +227,7 @@ export default function UpdateClientConfig() {
       brandingProviderEnabled: (current as any)?.brandingProviderEnabled ?? defaults.brandingProviderEnabled,
       numaWorkspaceChat: (current as any)?.numaWorkspaceChat ?? defaults.numaWorkspaceChat,
       scheduling: (current as any)?.scheduling ?? defaults.scheduling,
+      schedulingMinIntervalMinutes: (current as any)?.schedulingMinIntervalMinutes ?? undefined,
       workspaceChatModelSelection:
         (current as any)?.workspaceChatModelSelection ?? defaults.workspaceChatModelSelection,
       numaOps: (current as any)?.numaOps ?? defaults.numaOps,
@@ -281,6 +286,10 @@ export default function UpdateClientConfig() {
       updates.brandingProviderEnabled = brandingProviderEnabled;
     if (eff.numaWorkspaceChat !== numaWorkspaceChat) updates.numaWorkspaceChat = numaWorkspaceChat;
     if (eff.scheduling !== scheduling) updates.scheduling = scheduling;
+    const rawMinInterval = schedulingMinIntervalMinutes ? parseInt(schedulingMinIntervalMinutes, 10) : undefined;
+    const parsedMinInterval = rawMinInterval != null && !Number.isNaN(rawMinInterval) ? rawMinInterval : undefined;
+    if (eff.schedulingMinIntervalMinutes !== parsedMinInterval)
+      updates.schedulingMinIntervalMinutes = parsedMinInterval;
     if (eff.workspaceChatModelSelection !== workspaceChatModelSelection)
       updates.workspaceChatModelSelection = workspaceChatModelSelection;
     if (eff.numaOps !== numaOps) updates.numaOps = numaOps;
@@ -332,6 +341,15 @@ export default function UpdateClientConfig() {
       setError('Select a client');
       return;
     }
+    // Validate scheduling min interval
+    if (schedulingMinIntervalMinutes) {
+      const val = parseInt(schedulingMinIntervalMinutes, 10);
+      if (isNaN(val) || val < 5 || val > 1440) {
+        setError('Scheduling Min Interval must be a whole number between 5 and 1440 minutes');
+        return;
+      }
+    }
+
     const current = clients.find((c) => c.name === selectedClientName)?.config;
     const updates: Partial<ClientConfig> = buildUpdates(current);
     const merged = { ...(current || {}), ...updates };
@@ -555,6 +573,15 @@ export default function UpdateClientConfig() {
                           onChange={setScheduling}
                           type="switch"
                           helpText="Enable agent scheduling and notifications features"
+                        />
+                        <ConfigField
+                          label="Scheduling Min Interval (minutes)"
+                          value={schedulingMinIntervalMinutes}
+                          defaultValue=""
+                          onChange={setSchedulingMinIntervalMinutes}
+                          type="text"
+                          placeholder="Leave empty to use global default"
+                          helpText="Override minimum scheduling interval for this client (minutes, min 5). Leave empty to inherit global default."
                         />
                         <ConfigField
                           label="Workspace Chat Model Selection"

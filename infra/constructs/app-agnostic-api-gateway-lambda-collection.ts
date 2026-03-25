@@ -477,6 +477,43 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
       route: { verb: 'PUT', path: 'settings/agents' },
     });
 
+    // Admin Scheduling Settings API (GET/PUT minimum interval)
+    const adminSchedulingEnv = {
+      CLIENT_NAME: props.clientName,
+      SCHEDULING_SETTINGS_TABLE_NAME: props.schedulingSettingsTableName,
+      ...(props.perClientSchedulingMinIntervalMinutes != null && {
+        SCHEDULING_MIN_INTERVAL_MINUTES: String(props.perClientSchedulingMinIntervalMinutes),
+      }),
+      ...(props.globalSchedulingMinIntervalMinutes != null && {
+        GLOBAL_SCHEDULING_MIN_INTERVAL_MINUTES: String(props.globalSchedulingMinIntervalMinutes),
+      }),
+    } as Record<string, string>;
+    const adminSchedulingPolicy = [
+      {
+        effect: 'Allow',
+        actions: ['dynamodb:GetItem', 'dynamodb:PutItem'],
+        resources: [`arn:aws:dynamodb:*:*:table/${props.schedulingSettingsTableName}`],
+      },
+    ];
+    this.addLambdaFunction(this, 'admin-scheduling-settings-get', {
+      addAuthorizer: true,
+      lambdaDirectory: 'node/admin-scheduling-settings',
+      runtime: 'nodejs22.x',
+      handler: 'index.handler',
+      environment: adminSchedulingEnv,
+      additionalPolicyStatements: adminSchedulingPolicy,
+      route: { verb: 'GET', path: 'settings/scheduling' },
+    });
+    this.addLambdaFunction(this, 'admin-scheduling-settings-put', {
+      addAuthorizer: true,
+      lambdaDirectory: 'node/admin-scheduling-settings',
+      runtime: 'nodejs22.x',
+      handler: 'index.handler',
+      environment: adminSchedulingEnv,
+      additionalPolicyStatements: adminSchedulingPolicy,
+      route: { verb: 'PUT', path: 'settings/scheduling' },
+    });
+
     // Admin MFA Settings API (GET/PUT device remember duration)
     const adminMfaEnv = {
       CLIENT_NAME: props.clientName,
@@ -1132,6 +1169,13 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
       AGENT_SCHEDULES_TABLE_NAME: props.agentSchedulesTableName,
       AGENT_SCHEDULE_EXECUTION_ROLE_ARN: agentScheduleExecutionRole.arn,
       AGENT_SCHEDULE_RUNNER_ARN: this.agentScheduleRunnerLambda.arn,
+      SCHEDULING_SETTINGS_TABLE_NAME: props.schedulingSettingsTableName,
+      ...(props.perClientSchedulingMinIntervalMinutes != null && {
+        SCHEDULING_MIN_INTERVAL_MINUTES: String(props.perClientSchedulingMinIntervalMinutes),
+      }),
+      ...(props.globalSchedulingMinIntervalMinutes != null && {
+        GLOBAL_SCHEDULING_MIN_INTERVAL_MINUTES: String(props.globalSchedulingMinIntervalMinutes),
+      }),
     } as Record<string, string>;
 
     const agentSchedulesPolicy = [
@@ -1163,6 +1207,11 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
         effect: 'Allow',
         actions: ['iam:PassRole'],
         resources: [agentScheduleExecutionRole.arn],
+      },
+      {
+        effect: 'Allow',
+        actions: ['dynamodb:GetItem'],
+        resources: [`arn:aws:dynamodb:*:*:table/${props.schedulingSettingsTableName}`],
       },
     ];
 
@@ -1590,6 +1639,12 @@ export interface AppAgnosticApiGatewayLambdaCollectionProps extends Omit<
   userAgentsTableName: string;
   /** Exact agents settings table name, passed from Core to avoid name drift. */
   agentsSettingsTableName: string;
+  /** Scheduling settings table name for client-admin minimum interval override. */
+  schedulingSettingsTableName: string;
+  /** Per-client scheduling minimum interval (minutes), from client config. */
+  perClientSchedulingMinIntervalMinutes?: number;
+  /** Global scheduling minimum interval (minutes), from platform-settings. */
+  globalSchedulingMinIntervalMinutes?: number;
   /** MFA settings table name for device remember duration. */
   mfaSettingsTableName: string;
   /** User chat settings table name for per-user defaults (tools, KBs, integrations). */

@@ -26,6 +26,7 @@
     "capabilities": "Capabilities",
     "companyProfile": "Company Profile",
     "mfa": "MFA & Devices",
+    "scheduling": "Scheduling",
     "usageAnalytics": "Usage Analytics",
     "developer": "Developer",
     "audit": "Audit",
@@ -126,6 +127,24 @@
       "maxDuration": "Max session duration must be between 0 and {{max}} hours.",
       "mfaDuration": "MFA remember duration must be between 0 and {{max}} {{unit}}."
     }
+  },
+  "schedulingSettings": {
+    "title": "Scheduling Minimum Interval",
+    "description": "Set the minimum interval between scheduled agent runs for your organisation. This prevents agents from being scheduled too frequently. You cannot set a value lower than what your platform administrator has configured.",
+    "arcanumFloor": "Platform minimum: {{minutes}} minute(s)",
+    "currentEffective": "Effective minimum: {{minutes}} minute(s)",
+    "minInterval": {
+      "label": "Minimum interval (minutes)",
+      "placeholder": "Leave empty to use platform default",
+      "helpText": "The shortest interval users can select when scheduling agents. Must be at least {{floor}} minutes."
+    },
+    "validation": {
+      "belowFloor": "Cannot be less than {{floor}} minutes (set by your platform administrator)",
+      "invalidNumber": "Must be a whole number >= {{floor}}"
+    },
+    "clearButton": "Reset to platform default",
+    "saveSuccess": "Scheduling settings saved successfully.",
+    "saveFailed": "Failed to save scheduling settings."
   },
   "mfaSettings": {
     "title": "Device Trust Duration",

@@ -211,6 +211,87 @@ export const DataSyncScheduleRecordSchema = z.object({
   updated_at: z.number().positive('Invalid update timestamp'),
 });
 
+/**
+ * Estimates the approximate interval in minutes between runs for a cron expression.
+ * NOTE: A frontend copy exists in CronExpressionBuilder.tsx — keep both in sync.
+ * Returns `null` for complex patterns that cannot be reliably estimated (conservatively allowed).
+ *
+ * Handles:
+ *   - Minute steps:  cron(0/N * * * ? *)  → N minutes
+ *   - Hour steps:    cron(M H/N * * ? *)  → N * 60 minutes
+ *   - Day steps:     cron(M H D/N * ? *)  → N * 1440 minutes
+ *   - Fixed daily / weekdays / weekly / monthly → large number (always valid)
+ *   - "once" (specific year)               → Infinity (always valid)
+ *   - Unrecognised patterns                → null (conservatively allow)
+ */
+export function estimateCronIntervalMinutes(expression: string): number | null {
+  const match = expression.match(/^cron\((.+)\)$/);
+  if (!match) return null;
+
+  const fields = match[1].trim().split(/\s+/);
+  if (fields.length !== 6) return null;
+
+  const [minute, hour, dom, month, dow, year] = fields;
+
+  // Once-off: specific year → effectively infinite interval
+  if (/^\d{4}$/.test(year)) return Infinity;
+
+  // Minute-level step:  N/step or */step in minute field, hour = *
+  const minuteStep = minute.match(/^(?:\d+|\*)\/(\d+)$/);
+  if (minuteStep && hour === '*') {
+    return parseInt(minuteStep[1], 10);
+  }
+
+  // Comma-separated minute list with hour = * (e.g. "0,15,30,45 * * * ? *")
+  // Estimate the minimum gap between listed minute values
+  if (hour === '*' && /^\d+(,\d+)+$/.test(minute)) {
+    const values = minute
+      .split(',')
+      .map((v) => parseInt(v, 10))
+      .sort((a, b) => a - b);
+    let minGap = 60 - values[values.length - 1] + values[0]; // wrap-around gap
+    for (let i = 1; i < values.length; i++) {
+      minGap = Math.min(minGap, values[i] - values[i - 1]);
+    }
+    return minGap;
+  }
+
+  // Hour-level step:  hour field has N/step or */step
+  const hourStep = hour.match(/^(?:\d+|\*)\/(\d+)$/);
+  if (hourStep) {
+    return parseInt(hourStep[1], 10) * 60;
+  }
+
+  // Day-level step:  dom field has N/step or */step
+  const domStep = dom.match(/^(?:\d+|\*)\/(\d+)$/);
+  if (domStep) {
+    return parseInt(domStep[1], 10) * 1440;
+  }
+
+  // Fixed minute + fixed hour + wildcard day → daily (1440 min)
+  if (/^\d+$/.test(minute) && /^\d+$/.test(hour) && (dom === '*' || dom === '?')) {
+    // Check for specific DOW patterns (weekly)
+    if (dow !== '*' && dow !== '?') {
+      // Weekly or weekday schedule — at least daily
+      return 1440;
+    }
+    return 1440;
+  }
+
+  // Fixed minute + fixed hour + fixed dom → monthly or less frequent
+  if (/^\d+$/.test(minute) && /^\d+$/.test(hour) && /^\d+$/.test(dom)) {
+    return 43200; // ~30 days
+  }
+
+  // Month-level step
+  const monthStep = month.match(/^(?:\d+|\*)\/(\d+)$/);
+  if (monthStep) {
+    return parseInt(monthStep[1], 10) * 43200;
+  }
+
+  return null;
+}
+
 // Export types
 export type ScheduleRecord = z.infer<typeof ScheduleRecordSchema>;
 export type CreateSchedulePayload = z.infer<typeof CreateSchedulePayloadSchema>;

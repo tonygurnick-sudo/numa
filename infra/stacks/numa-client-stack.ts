@@ -520,6 +520,9 @@ export class NumaClientStack extends TerraformStack {
       workspaceAgentsTableName: core.workspaceAgentsTable.name,
       userAgentsTableName: core.userAgentsTable.name,
       agentsSettingsTableName: core.agentsSettingsTable.name,
+      schedulingSettingsTableName: core.schedulingSettingsTable.name,
+      perClientSchedulingMinIntervalMinutes: clientConfig.schedulingMinIntervalMinutes,
+      globalSchedulingMinIntervalMinutes: props.globalSchedulingMinIntervalMinutes,
       mfaSettingsTableName: core.mfaSettingsTable.name,
       chatSettingsTableName: core.chatSettingsTable.name,
       dataConnectorsTableName: core.dataConnectorsTable.name,
@@ -769,6 +772,8 @@ export class NumaClientStack extends TerraformStack {
         AGENTS: clientConfig.agents ?? false,
         NUMA_WORKSPACE_CHAT: clientConfig.numaWorkspaceChat ?? true,
         SCHEDULING: clientConfig.scheduling ?? false,
+        SCHEDULING_MIN_INTERVAL_MINUTES: clientConfig.schedulingMinIntervalMinutes ?? null,
+        GLOBAL_SCHEDULING_MIN_INTERVAL_MINUTES: props.globalSchedulingMinIntervalMinutes ?? null,
         NUMA_FILES: clientConfig.numaFiles ?? false,
         KNOWLEDGE_BASES: true,
         DEVELOPER_MODE: clientConfig.developerMode ?? false,
@@ -1129,6 +1134,16 @@ export const clientConfigSchema = coreNumaInfraPropsSchema
         scheduling: z.boolean().optional().default(false),
 
         /**
+         * Per-client minimum scheduling interval override (minutes).
+         * When set, users in this client account cannot schedule agents more
+         * frequently than this value. Overrides the global default.
+         * Leave unset to inherit the global default (or platform fallback of 5 min).
+         *
+         * @minimum 5
+         */
+        schedulingMinIntervalMinutes: z.number().int().min(5).optional(),
+
+        /**
          * Whether to enable the Numa Files feature (file management page and backend).
          *
          * @default false
@@ -1220,6 +1235,8 @@ export interface NumaClientStackProps {
   hostedZone: string;
   arcanumNumaAccount: string;
   clientConfig: ClientConfig;
+  /** Global scheduling minimum interval (minutes), read from platform-settings record. */
+  globalSchedulingMinIntervalMinutes?: number;
 }
 
 export interface AppDefinition {

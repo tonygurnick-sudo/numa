@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { Form } from 'react-bootstrap';
+import { Alert, Form } from 'react-bootstrap';
 import { useTranslation } from 'react-i18next';
 import type { FrequencyType, WeekDay, WeekNumber, MonthlyMode } from './schedulingTypes';
 
@@ -34,9 +34,64 @@ type CronExpressionBuilderProps = {
   onMonthlyWeekDayChange: (day: WeekDay) => void;
   monthlyInterval: number;
   onMonthlyIntervalChange: (value: number) => void;
+  /** Effective minimum scheduling interval in minutes. Defaults to 5 (platform default). */
+  minIntervalMinutes?: number;
 };
 
 const dayOrder: WeekDay[] = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
+
+/**
+ * Lightweight cron interval estimator for frontend validation.
+ * KEEP IN SYNC with lib/scheduling-schemas.ts:estimateCronIntervalMinutes()
+ * (duplicated because that module depends on zod + Node APIs not available in the browser bundle)
+ */
+const estimateCronIntervalMinutes = (expression: string): number | null => {
+  const match = expression.match(/^cron\((.+)\)$/);
+  if (!match) return null;
+  const fields = match[1].trim().split(/\s+/);
+  if (fields.length !== 6) return null;
+  const [minute, hour, dom, month, , year] = fields;
+  if (/^\d{4}$/.test(year)) return Infinity;
+  const minuteStep = minute.match(/^(?:\d+|\*)\/(\d+)$/);
+  if (minuteStep && hour === '*') return parseInt(minuteStep[1], 10);
+  // Comma-separated minute list with hour = * (e.g. "0,15,30,45 * * * ? *")
+  if (hour === '*' && /^\d+(,\d+)+$/.test(minute)) {
+    const values = minute
+      .split(',')
+      .map((v) => parseInt(v, 10))
+      .sort((a, b) => a - b);
+    let minGap = 60 - values[values.length - 1] + values[0];
+    for (let i = 1; i < values.length; i++) minGap = Math.min(minGap, values[i] - values[i - 1]);
+    return minGap;
+  }
+  const hourStep = hour.match(/^(?:\d+|\*)\/(\d+)$/);
+  if (hourStep) return parseInt(hourStep[1], 10) * 60;
+  const domStep = dom.match(/^(?:\d+|\*)\/(\d+)$/);
+  if (domStep) return parseInt(domStep[1], 10) * 1440;
+  if (/^\d+$/.test(minute) && /^\d+$/.test(hour) && (dom === '*' || dom === '?')) return 1440;
+  if (/^\d+$/.test(minute) && /^\d+$/.test(hour) && /^\d+$/.test(dom)) return 43200;
+  const monthStep = month.match(/^(?:\d+|\*)\/(\d+)$/);
+  if (monthStep) return parseInt(monthStep[1], 10) * 43200;
+  return null;
+};
+
+/** Formats a minute-based interval into a human-readable string */
+const formatMinIntervalForDisplay = (
+  minutes: number,
+  t: (key: string, opts?: Record<string, unknown>) => string
+): string => {
+  if (minutes < 60) return t('scheduling.minInterval.displayMinutes', { count: minutes });
+  if (minutes === 60) return t('scheduling.minInterval.displayHour');
+  if (minutes < 1440) {
+    const hours = Math.floor(minutes / 60);
+    const remainingMinutes = minutes % 60;
+    return remainingMinutes > 0
+      ? t('scheduling.minInterval.displayHoursMinutes', { hours, minutes: remainingMinutes })
+      : t('scheduling.minInterval.displayHours', { hours });
+  }
+  const days = Math.floor(minutes / 1440);
+  return days === 1 ? t('scheduling.minInterval.displayDay') : t('scheduling.minInterval.displayDays', { count: days });
+};
 
 const formatTimeForDisplay = (time: string) => {
   try {
@@ -90,8 +145,11 @@ export const CronExpressionBuilder = ({
   onMonthlyWeekDayChange,
   monthlyInterval,
   onMonthlyIntervalChange,
+  minIntervalMinutes = 5,
 }: CronExpressionBuilderProps) => {
   const { t } = useTranslation('agents');
+  const effectiveMin = Math.max(minIntervalMinutes, 5);
+  const hourlyMinHours = Math.ceil(effectiveMin / 60);
   const frequencyOptions = useMemo(
     () => [
       {
@@ -102,8 +160,8 @@ export const CronExpressionBuilder = ({
       },
       {
         value: 'five_minute' as const,
-        label: t('scheduling.frequency.fiveMinute.label'),
-        description: t('scheduling.frequency.fiveMinute.description'),
+        label: t('scheduling.frequency.fiveMinute.label', { min: effectiveMin }),
+        description: t('scheduling.frequency.fiveMinute.description', { min: effectiveMin }),
         icon: 'bi-clock',
       },
       {
@@ -143,8 +201,18 @@ export const CronExpressionBuilder = ({
         icon: 'bi-code-slash',
       },
     ],
-    [t]
+    [t, effectiveMin]
   );
+
+  // Filter tiles based on effective minimum interval
+  const visibleFrequencyOptions = useMemo(() => {
+    return frequencyOptions.filter((opt) => {
+      if (opt.value === 'five_minute' && effectiveMin >= 60) return false;
+      if (opt.value === 'hourly' && effectiveMin >= 1440) return false;
+      return true;
+    });
+  }, [frequencyOptions, effectiveMin]);
+
   const dayLabels = useMemo(
     () => ({
       monday: { short: t('scheduling.days.monday.short'), full: t('scheduling.days.monday.full') },
@@ -298,18 +366,24 @@ export const CronExpressionBuilder = ({
             <div>
               <Form.Label>{t('scheduling.fields.every')}</Form.Label>
               <Form.Range
-                min={5}
+                min={effectiveMin}
                 max={60}
                 step={5}
-                value={minuteInterval}
-                onChange={(e) => onMinuteIntervalChange(Math.max(5, parseInt(e.target.value, 10) || 5))}
+                value={Math.max(minuteInterval, effectiveMin)}
+                onChange={(e) =>
+                  onMinuteIntervalChange(Math.max(effectiveMin, parseInt(e.target.value, 10) || effectiveMin))
+                }
                 disabled={submitting}
               />
               <div className="d-flex justify-content-between">
-                <span className="text-muted small">{t('scheduling.fields.minuteRange.min')}</span>
+                <span className="text-muted small">
+                  {t('scheduling.fields.minuteRange.min', { min: effectiveMin })}
+                </span>
                 <span className="text-muted small">{t('scheduling.fields.minuteRange.max')}</span>
               </div>
-              <div className="fw-semibold">{t('scheduling.fields.minuteInterval', { interval: minuteInterval })}</div>
+              <div className="fw-semibold">
+                {t('scheduling.fields.minuteInterval', { interval: Math.max(minuteInterval, effectiveMin) })}
+              </div>
             </div>
             {renderTimeInput(t('scheduling.fields.startAt'))}
           </div>
@@ -320,17 +394,23 @@ export const CronExpressionBuilder = ({
             <div>
               <Form.Label>{t('scheduling.fields.every')}</Form.Label>
               <Form.Range
-                min={1}
+                min={hourlyMinHours}
                 max={24}
-                value={hourInterval}
-                onChange={(e) => onHourIntervalChange(parseInt(e.target.value, 10) || 1)}
+                value={Math.max(hourInterval, hourlyMinHours)}
+                onChange={(e) =>
+                  onHourIntervalChange(Math.max(hourlyMinHours, parseInt(e.target.value, 10) || hourlyMinHours))
+                }
                 disabled={submitting}
               />
               <div className="d-flex justify-content-between">
-                <span className="text-muted small">{t('scheduling.fields.hourRange.min')}</span>
+                <span className="text-muted small">
+                  {t('scheduling.fields.hourRange.min', { min: hourlyMinHours })}
+                </span>
                 <span className="text-muted small">{t('scheduling.fields.hourRange.max')}</span>
               </div>
-              <div className="fw-semibold">{t('scheduling.fields.hourInterval', { interval: hourInterval })}</div>
+              <div className="fw-semibold">
+                {t('scheduling.fields.hourInterval', { interval: Math.max(hourInterval, hourlyMinHours) })}
+              </div>
             </div>
             {renderTimeInput(t('scheduling.fields.startAt'))}
           </div>
@@ -494,7 +574,9 @@ export const CronExpressionBuilder = ({
             )}
           </div>
         );
-      case 'custom':
+      case 'custom': {
+        const estimated = estimateCronIntervalMinutes(customCron);
+        const tooFrequent = estimated !== null && estimated < effectiveMin;
         return (
           <div>
             <Form.Label>{t('scheduling.fields.customCron.label')}</Form.Label>
@@ -507,8 +589,16 @@ export const CronExpressionBuilder = ({
               disabled={submitting}
             />
             <Form.Text muted>{t('scheduling.fields.customCron.help')}</Form.Text>
+            {tooFrequent && (
+              <Alert variant="warning" className="mt-2 mb-0 py-2">
+                {t('scheduling.minInterval.cronTooFrequent', {
+                  value: formatMinIntervalForDisplay(effectiveMin, t),
+                })}
+              </Alert>
+            )}
           </div>
         );
+      }
       default:
         return renderTimeInput();
     }
@@ -523,8 +613,15 @@ export const CronExpressionBuilder = ({
         </div>
       </div>
 
+      {effectiveMin > 5 && (
+        <div className="text-muted small mb-3 d-flex align-items-center">
+          <i className="bi bi-info-circle me-2"></i>
+          {t('scheduling.minInterval.info', { value: formatMinIntervalForDisplay(effectiveMin, t) })}
+        </div>
+      )}
+
       <div className="cron-builder__options mb-4">
-        {frequencyOptions.map((option) => (
+        {visibleFrequencyOptions.map((option) => (
           <button
             key={option.value}
             type="button"

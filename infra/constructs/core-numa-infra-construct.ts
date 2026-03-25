@@ -73,6 +73,7 @@ export class CoreNumaInfra extends Construct {
   readonly workspaceAgentsTable: DynamodbTable;
   readonly userAgentsTable: DynamodbTable;
   readonly agentsSettingsTable: DynamodbTable;
+  readonly schedulingSettingsTable: DynamodbTable;
   readonly agentSchedulesTable: DynamodbTable;
   readonly notificationsTable: DynamodbTable;
   readonly chatSettingsTable: DynamodbTable;
@@ -580,6 +581,19 @@ export class CoreNumaInfra extends Construct {
         Name: `${numaClient}-agents-settings`,
         Environment: props.environmentName,
         Purpose: 'agents-settings',
+      },
+    });
+
+    // Scheduling settings table (client-admin minimum interval override)
+    this.schedulingSettingsTable = new DynamodbTable(this, 'numa-scheduling-settings-table', {
+      name: `${numaClient}-scheduling-settings`,
+      billingMode: 'PAY_PER_REQUEST',
+      hashKey: 'setting',
+      attribute: [{ name: 'setting', type: 'S' }],
+      tags: {
+        Name: `${numaClient}-scheduling-settings`,
+        Environment: props.environmentName,
+        Purpose: 'scheduling-settings',
       },
     });
 

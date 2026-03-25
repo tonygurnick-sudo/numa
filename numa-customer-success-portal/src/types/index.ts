@@ -97,6 +97,7 @@ export const clientConfigSchema = z.object({
   numaWorkspaceChat: z.boolean().optional(), // default: true
   agentCoreRegion: z.string().optional(), // default: client region
   scheduling: z.boolean().optional(), // default: false
+  schedulingMinIntervalMinutes: z.number().int().min(5).optional(), // per-client min interval override
   workspaceChatModelSelection: z.boolean().optional(), // default: false
   numaOps: z.boolean().optional(), // default: false
   v2Apps: z.boolean().optional(), // default: false
@@ -212,6 +213,7 @@ export const getFieldDisplayName = (key: keyof ClientConfig): string => {
     numaChatAgents: 'Numa Chat Agents',
     agents: 'Agents',
     scheduling: 'Agent Scheduling',
+    schedulingMinIntervalMinutes: 'Scheduling Min Interval (minutes)',
     v2Apps: 'V2 Apps',
     mfa: 'Multi-Factor Authentication (MFA)',
   };

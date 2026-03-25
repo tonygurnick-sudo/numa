@@ -24,6 +24,7 @@ import SetupNonNextgenClient from './pages/tools/SetupNonNextgenClient';
 import GetSystemUserSecret from './pages/tools/GetSystemUserSecret';
 import BulkUpdateClientConfig from './pages/tools/BulkUpdateClientConfig';
 import SupportDocsManager from './pages/tools/SupportDocsManager';
+import PlatformSettings from './pages/tools/PlatformSettings';
 import DeploymentLogs from './pages/DeploymentLogs';
 import Activity from './pages/Activity';
 import Tools from './pages/Tools';
@@ -64,6 +65,7 @@ function App() {
                       <Route path="/tools/get-system-user-secret" element={<GetSystemUserSecret />} />
                       <Route path="/tools/bulk-update-client-config" element={<BulkUpdateClientConfig />} />
                       <Route path="/tools/support-docs-manager" element={<SupportDocsManager />} />
+                      <Route path="/tools/platform-settings" element={<PlatformSettings />} />
                       <Route path="/deployments" element={<Deployments />} />
                       <Route path="/deployments/:id/logs" element={<DeploymentLogs />} />
                       <Route path="/deployments/group/:groupRunId" element={<GroupDeploymentDetail />} />

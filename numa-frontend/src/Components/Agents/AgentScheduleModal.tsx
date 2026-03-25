@@ -7,6 +7,7 @@ import type { FrequencyType, WeekDay, WeekNumber, MonthlyMode } from './scheduli
 import { CronExpressionBuilder } from './CronExpressionBuilder';
 import { getDefaultTimezone, getAllTimezones } from '../../utils/timezoneUtils';
 import { parseCronExpression } from '../../utils/schedulingUtils';
+import { useSchedulingMinInterval } from '../../hooks/useSchedulingMinInterval';
 
 type ScheduleModalProps = {
   show: boolean;
@@ -88,7 +89,7 @@ const buildCronExpression = (frequency: FrequencyType, config: CronBuilderConfig
       return `cron(${minute} ${hour} ${day} ${month} ? ${year})`;
     }
     case 'five_minute': {
-      const interval = Math.max(5, Math.round(minuteInterval / 5) * 5);
+      const interval = Math.max(minuteInterval, Math.round(minuteInterval / 5) * 5);
       return `cron(${minute}/${interval} * * * ? *)`;
     }
     case 'hourly': {
@@ -144,6 +145,7 @@ export const AgentScheduleModal = ({
   onCreate,
 }: ScheduleModalProps) => {
   const { t } = useTranslation('agents');
+  const { effectiveMin, loading: minIntervalLoading } = useSchedulingMinInterval();
   // Form state
   const [taskName, setTaskName] = useState('');
   const [jobInstructions, setJobInstructions] = useState(defaultPrompt);
@@ -193,7 +195,11 @@ export const AgentScheduleModal = ({
 
         // Parse existing cron expression to user-friendly values
         const parsed = parseCronExpression(editingSchedule.cronExpression || 'cron(0 13 * * ? *)');
-        setFrequency(parsed.frequency);
+        // Auto-fallback if parsed frequency is no longer valid under current effectiveMin
+        let resolvedFrequency = parsed.frequency;
+        if (resolvedFrequency === 'five_minute' && effectiveMin >= 60) resolvedFrequency = 'hourly';
+        if (resolvedFrequency === 'hourly' && effectiveMin >= 1440) resolvedFrequency = 'daily';
+        setFrequency(resolvedFrequency);
         setWeekDays(parsed.weekDays.length ? parsed.weekDays : ['monday']);
         setWeeklyWeekNumbers(parsed.weeklyWeekNumbers ?? []);
         setStartTime(parsed.time);
@@ -292,6 +298,29 @@ export const AgentScheduleModal = ({
     }
   }, [frequency, weekDays]);
 
+  // AC8: Auto-fallback when effectiveMin changes and invalidates the current frequency.
+  // Intentionally omits `frequency` from deps — user tile clicks must never be overridden.
+  // The editing case is handled inline in the initialization effect above.
+  useEffect(() => {
+    if (minIntervalLoading) return;
+    if (frequency === 'five_minute' && effectiveMin >= 60) {
+      setFrequency('hourly');
+    } else if (frequency === 'hourly' && effectiveMin >= 1440) {
+      setFrequency('daily');
+    }
+  }, [effectiveMin, minIntervalLoading]);
+
+  // Clamp interval states when effectiveMin changes so stale defaults can't be submitted
+  useEffect(() => {
+    if (minuteInterval < effectiveMin) {
+      setMinuteInterval(effectiveMin);
+    }
+    const hourlyMinHours = Math.ceil(effectiveMin / 60);
+    if (hourInterval < hourlyMinHours) {
+      setHourInterval(hourlyMinHours);
+    }
+  }, [effectiveMin, minuteInterval, hourInterval]);
+
   const agentTitle = useMemo(() => agent?.title ?? t('scheduling.labels.agentFallback'), [agent, t]);
   const isEditing = Boolean(editingSchedule);
   const modalTitle = isEditing
@@ -361,32 +390,32 @@ export const AgentScheduleModal = ({
 
     // Validation
     if (!taskName.trim()) {
-      setError('Task name is required.');
+      setError(t('scheduling.validation.taskNameRequired'));
       return;
     }
     if (!timezone.trim()) {
-      setError('Timezone is required.');
+      setError(t('scheduling.validation.timezoneRequired'));
       return;
     }
 
     // Validate custom cron if selected
     if (frequency === 'custom' && !customCron.trim()) {
-      setError('Custom cron expression is required.');
+      setError(t('scheduling.validation.customCronRequired'));
       return;
     }
     if (frequency === 'weekly' && weekDays.length === 0) {
-      setError('Select at least one day for the weekly schedule.');
+      setError(t('scheduling.validation.weeklyDayRequired'));
       return;
     }
 
     if (frequency === 'once') {
       const runAt = getZonedTimestamp(startDate, startTime, timezone);
       if (!Number.isFinite(runAt)) {
-        setError('Run date/time is invalid.');
+        setError(t('scheduling.validation.runDateInvalid'));
         return;
       }
       if (runAt <= Date.now() + 60_000) {
-        setError('Run date/time must be in the future.');
+        setError(t('scheduling.validation.runDateFuture'));
         return;
       }
     }
@@ -498,6 +527,7 @@ export const AgentScheduleModal = ({
               onMonthlyWeekDayChange={setMonthlyWeekDay}
               monthlyInterval={monthlyInterval}
               onMonthlyIntervalChange={setMonthlyInterval}
+              minIntervalMinutes={effectiveMin}
             />
             <div className="visually-hidden">
               <Form.Label htmlFor="cronExpressionHidden">{t('scheduling.fields.cronExpression.label')}</Form.Label>
