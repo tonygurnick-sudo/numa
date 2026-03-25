@@ -63,7 +63,9 @@ lint-yaml:
 
 lint-trailing-whitespace:
 	@echo "=== Trailing whitespace ==="
-	@if git grep -nI ' $$' -- ':!node_modules' ':!*.lock' ':!*.min.*' ':!*.snap' ':!.gen' ':!cdktf.out' ':!*.whl' ':!*.tar' ':!*.zip' ':!*.pyc' | head -20; then \
+	@matches=$$(git grep -nI ' $$' -- ':!node_modules' ':!*.lock' ':!*.min.*' ':!*.snap' ':!.gen' ':!cdktf.out' ':!*.whl' ':!*.tar' ':!*.zip' ':!*.pyc' | head -20); \
+	if [ -n "$$matches" ]; then \
+		echo "$$matches"; \
 		echo "  Trailing whitespace found (showing first 20). Run 'make format' to fix."; \
 		exit 1; \
 	else \
