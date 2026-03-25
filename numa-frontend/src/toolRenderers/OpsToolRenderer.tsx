@@ -613,12 +613,10 @@ const OpsBody = ({ payload, conversationId, sub }: { payload: OpsPayload; conver
     return <WriteConfirmation payload={payload} />;
   }
 
-  // Config
-  if (operation === 'get_config') {
-    return <ConfigView config={(result as OpsConfig) || {}} />;
-  }
-
   // File-based result — fetch and render, or show loading/summary
+  // Must come before operation-specific checks so that file-backed responses
+  // (like get_config, which always exceeds the inline size limit) get fetched
+  // from S3 first, then re-routed with real data on the recursive call.
   if (payload.filePath) {
     if (loading) return <LoadingView />;
     if (fileData) {
@@ -626,6 +624,11 @@ const OpsBody = ({ payload, conversationId, sub }: { payload: OpsPayload; conver
       return <OpsBody payload={loaded} conversationId={conversationId} sub={sub} />;
     }
     return <FileSavedView payload={payload} />;
+  }
+
+  // Config
+  if (operation === 'get_config') {
+    return <ConfigView config={(result as OpsConfig) || {}} />;
   }
 
   const category = getOpsCategory(operation);

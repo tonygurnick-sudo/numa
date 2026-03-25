@@ -620,12 +620,23 @@ def handle_ops_operation(event: Dict[str, Any]) -> Dict[str, Any]:
     user_sub = event.get("user_sub", "")
     user_email = event.get("user_email", "")
     user_groups = event.get("user_groups", [])
-    auto_approved = event.get("auto_approved", True)
+    # Default to False (fail-closed) — matches integrations handler.
+    # If auto_approved is missing or unexpected, require approval.
+    auto_approved = event.get("auto_approved", False)
     request_id = event.get("request_id", "")
     description = event.get("description", "")
 
     # Make a copy of params to avoid mutating the original
     op_params = dict(op_params)
+
+    logger.info(
+        "Ops approval gate check",
+        operation=operation,
+        auto_approved=auto_approved,
+        auto_approved_type=type(auto_approved).__name__,
+        has_request_id=bool(request_id),
+        request_id_preview=request_id[:8] if request_id else "",
+    )
 
     # Approval gate: for write operations that are not auto-approved,
     # create a DynamoDB approval record and poll until the user approves,

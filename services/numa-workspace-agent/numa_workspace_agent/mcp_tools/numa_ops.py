@@ -242,7 +242,18 @@ async def numa_ops_tool(args: dict[str, Any]) -> dict[str, Any]:
     # Pop approval ID assigned by sdk_runner (must match its key format)
     approval_key = f"ops-{operation.replace('_', '-')}"
     request_id = _pop_approval_id(approval_key)
-    auto_approved = os.environ.get("NUMA_APPROVAL_MODE") == "auto"
+    approval_mode_raw = os.environ.get("NUMA_APPROVAL_MODE", "")
+    auto_approved = approval_mode_raw == "auto"
+
+    logger.info(
+        "Ops tool approval state",
+        _name="OPS_TOOL_APPROVAL",
+        operation=operation,
+        approval_key=approval_key,
+        approval_mode_raw=approval_mode_raw,
+        auto_approved=auto_approved,
+        has_request_id=bool(request_id),
+    )
 
     try:
         result = invoke_workspace_tool(

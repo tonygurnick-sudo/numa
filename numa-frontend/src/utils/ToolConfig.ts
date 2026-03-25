@@ -128,7 +128,7 @@ export function resolveToolVisual(toolName: string | null | undefined): ToolVisu
 
   // Numa MCP tool and sub-tools
   if (name === 'mcp__numa__numa_tool') return { kind: 'icon', className: 'bi bi-tools' };
-  if (name === 'mcp__numa__numa_ops_tool') return { kind: 'icon', className: 'bi bi-kanban' };
+  if (name === 'mcp__numa__numa_ops_tool') return { kind: 'icon', className: 'bi bi-card-checklist' };
   if (name === 'knowledge_base') return { kind: 'icon', className: 'bi bi-folder2-open' };
   if (name === 'extract_content') return { kind: 'icon', className: 'bi bi-file-earmark-text' };
   if (name === 'convert_document') return { kind: 'icon', className: 'bi bi-file-earmark-arrow-down' };

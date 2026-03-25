@@ -18,6 +18,7 @@ import { WorkspaceChatTodoCard } from './WorkspaceChatTodoCard';
 import { WorkspaceChatInlineThinking } from './WorkspaceChatInlineThinking';
 import { WorkspaceChatCompactionBlock } from './WorkspaceChatCompactionBlock';
 import { WorkspaceChatToolApproval } from './WorkspaceChatToolApproval';
+import { ClipboardList } from 'lucide-react';
 import { UnifiedToolCard } from '../UnifiedToolCard';
 import { OpsToolRenderer } from '../../toolRenderers/OpsToolRenderer';
 import type { ToolResultLike } from '../../toolRenderers/helpers';
@@ -135,7 +136,7 @@ export function WorkspaceChatSegmentRenderer({
                   <div className="workspace-chat-inline-tool-group">
                     <div className={`workspace-chat-inline-tool ${segment.isLoading ? '' : 'complete'}`}>
                       <span className={`inline-tool-icon ${segment.isLoading ? 'running' : 'complete'}`}>
-                        <i className="bi bi-kanban" />
+                        <ClipboardList size={14} />
                       </span>
                       <div className="inline-tool-content">
                         <span className="inline-tool-text">{displayText}</span>

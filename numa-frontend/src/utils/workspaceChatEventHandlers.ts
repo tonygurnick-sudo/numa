@@ -111,7 +111,7 @@ const IMPORTANT_TOOLS = new Map<string, { icon: string; name: string }>([
   // Script execution (MCP tool)
   ['mcp__scripts__execute_script', { icon: 'bi-terminal', name: 'Running script' }],
   // Numa Ops tool
-  ['mcp__numa__numa_ops_tool', { icon: 'bi-kanban', name: 'Numa Ops' }],
+  ['mcp__numa__numa_ops_tool', { icon: 'bi-card-checklist', name: 'Numa Ops' }],
 ]);
 
 /**
@@ -1169,6 +1169,21 @@ function completeToolCard(
         isLoading: false,
         isError,
       };
+
+      // Also mark any approvalOnly inline_tool segment with the same toolUseId
+      // as complete so the approval panel cleans up properly.
+      const approvalIdx = segments.findIndex(
+        (s) =>
+          s.kind === 'inline_tool' &&
+          (s as WorkspaceChatInlineToolSegment).approvalOnly &&
+          (s as WorkspaceChatInlineToolSegment).toolUseId === toolUseId
+      );
+      if (approvalIdx >= 0) {
+        const approvalSeg = { ...segments[approvalIdx] } as WorkspaceChatInlineToolSegment;
+        approvalSeg.isComplete = true;
+        segments[approvalIdx] = approvalSeg;
+      }
+
       lastMsg.segments = segments;
       updated[lastIdx] = lastMsg;
     }
@@ -1511,20 +1526,25 @@ function handleErrorEvent(event: SDKErrorEvent, _context: SDKEventContext, helpe
 /**
  * Handle a tool_approval event — attaches approval data to the matching inline_tool segment
  * so the approval panel renders inline below the tool indicator.
+ *
+ * For tool_card segments (e.g., Numa Ops), inserts an approvalOnly inline_tool segment
+ * right after the matching tool_card so the approval panel renders below it.
  */
 function handleToolApprovalEvent(event: SDKToolApprovalEvent, helpers: WorkspaceChatMessageHelpers): void {
   helpers.setMessages((prev) => {
     const updated = [...prev];
-    // Walk backwards to find the assistant message with the matching inline_tool segment
+    // Walk backwards to find the assistant message with the matching segment
     for (let i = updated.length - 1; i >= 0; i--) {
       const msg = updated[i];
       if (msg.role !== 'assistant' || !msg.segments) continue;
-      const segIdx = msg.segments.findIndex(
+
+      // First try: inline_tool segment (integration tools)
+      const inlineIdx = msg.segments.findIndex(
         (s) => s.kind === 'inline_tool' && (s as WorkspaceChatInlineToolSegment).toolUseId === event.tool_use_id
       );
-      if (segIdx >= 0) {
+      if (inlineIdx >= 0) {
         const newMsg = { ...msg, segments: [...msg.segments] };
-        const seg = { ...newMsg.segments[segIdx] } as WorkspaceChatInlineToolSegment;
+        const seg = { ...newMsg.segments[inlineIdx] } as WorkspaceChatInlineToolSegment;
         seg.approval = {
           actionKey: event.action_key,
           description: event.description,
@@ -1533,7 +1553,37 @@ function handleToolApprovalEvent(event: SDKToolApprovalEvent, helpers: Workspace
           autoApproved: event.auto_approved,
           createdAt: event.created_at,
         };
-        newMsg.segments[segIdx] = seg;
+        newMsg.segments[inlineIdx] = seg;
+        updated[i] = newMsg;
+        return updated;
+      }
+
+      // Fallback: tool_card segment (Numa Ops write operations) — insert an
+      // approvalOnly inline_tool segment right after the matching tool_card.
+      const cardIdx = msg.segments.findIndex(
+        (s) => s.kind === 'tool_card' && (s as WorkspaceChatToolCardSegment).toolUseId === event.tool_use_id
+      );
+      if (cardIdx >= 0) {
+        const newMsg = { ...msg, segments: [...msg.segments] };
+        const approvalSegment: WorkspaceChatInlineToolSegment = {
+          kind: 'inline_tool',
+          toolUseId: event.tool_use_id,
+          toolName: event.tool_name,
+          displayText: event.description || event.action_key,
+          isComplete: false,
+          category: 'important' as ToolCategory,
+          iconName: 'bi-card-checklist',
+          approvalOnly: true,
+          approval: {
+            actionKey: event.action_key,
+            description: event.description,
+            propsPreview: event.props_preview,
+            requestId: event.request_id,
+            autoApproved: event.auto_approved,
+            createdAt: event.created_at,
+          },
+        };
+        newMsg.segments.splice(cardIdx + 1, 0, approvalSegment);
         updated[i] = newMsg;
         return updated;
       }

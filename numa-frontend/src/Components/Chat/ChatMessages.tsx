@@ -7,6 +7,7 @@ import { WorkspaceChatMarkdown, type FileReference, type FolderReference } from 
 import { ChatReferencesDropdown } from './ChatReferencesDropdown';
 import { useAuth } from '../../Providers/AuthProvider';
 // Tool rendering is handled via unified tool cards; direct TOOL_CONFIG use removed
+import { ClipboardList } from 'lucide-react';
 import { UnifiedToolCard } from '../UnifiedToolCard';
 import { OpsToolRenderer } from '../../toolRenderers/OpsToolRenderer';
 import type { ToolResultLike } from '../../toolRenderers/helpers';
@@ -597,7 +598,7 @@ const ChatMessages = ({
                           <div className="workspace-chat-inline-tool-group">
                             <div className={`workspace-chat-inline-tool ${sc.isLoading ? '' : 'complete'}`}>
                               <span className={`inline-tool-icon ${sc.isLoading ? 'running' : 'complete'}`}>
-                                <i className="bi bi-kanban" />
+                                <ClipboardList size={14} />
                               </span>
                               <div className="inline-tool-content">
                                 <span className="inline-tool-text">{displayText}</span>
