@@ -813,7 +813,7 @@ export function useWorkspaceChatStreaming({
           onRetry: (attempt, maxAttempts) => {
             setIsReconnecting(true);
             setRetryAttempt(attempt);
-            console.log(`[WorkspaceChat] Retry attempt ${attempt}/${maxAttempts}`);
+            console.warn(`[WorkspaceChat] Retry attempt ${attempt}/${maxAttempts}`);
           },
         } satisfies StreamRetryConfig
       );

@@ -419,7 +419,7 @@ export async function streamWorkspaceChatAgent(
     if (cancelled) break;
 
     try {
-      const result = await new Promise<{ abort: () => void; success: boolean }>((resolve, reject) => {
+      await new Promise<{ abort: () => void; success: boolean }>((resolve, reject) => {
         streamWorkspaceChatAttempt(
           request,
           requestId,
