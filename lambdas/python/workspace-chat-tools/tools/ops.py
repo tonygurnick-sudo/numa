@@ -19,6 +19,10 @@ from typing import Any, Dict
 import structlog
 
 from prm import client as prm_client
+from tools.pipedream_integration import (
+    _create_approval_request,
+    _poll_approval,
+)
 
 logger = structlog.get_logger()
 
@@ -643,11 +647,6 @@ def handle_ops_operation(event: Dict[str, Any]) -> Dict[str, Any]:
     # denies, or the 90-second timeout expires.
     if not auto_approved and request_id:
         try:
-            from tools.pipedream_integration import (
-                _create_approval_request,
-                _poll_approval,
-            )
-
             action_key = f"ops-{operation.replace('_', '-')}"
             approval_id = _create_approval_request(
                 user_sub=user_sub,
