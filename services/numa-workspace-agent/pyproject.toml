@@ -17,7 +17,7 @@ watchtower = "^3.0.0"  # CloudWatch Logs handler for direct log delivery
 
 # Claude Agent SDK (replaces CLI subprocess invocation)
 # Pinned to specific version to avoid unexpected behavior changes
-claude-agent-sdk = "==0.1.47"
+claude-agent-sdk = "==0.1.50"
 
 # OpenTelemetry for AgentCore observability
 aws-opentelemetry-distro = ">=0.10.0"

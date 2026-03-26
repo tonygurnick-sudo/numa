@@ -1219,6 +1219,15 @@ function handleToolUseBlock(
   // Track tool for result matching
   context.toolUseMap.set(id, { name, input, parentToolUseId });
 
+  // When StreamEvents are active (skipTextFromAssistant=true), the StreamEvent
+  // handler creates UI segments in real-time via content_block_start events.
+  // The assistant SDK event can arrive BEFORE its corresponding StreamEvents,
+  // so we must skip segment creation here to avoid duplicates. The tool is
+  // already tracked in toolUseMap above for result matching.
+  if (context.skipTextFromAssistant) {
+    return;
+  }
+
   // Special card tools
   if (name === 'Task') {
     addSubagentSegment(helpers, id, input);
