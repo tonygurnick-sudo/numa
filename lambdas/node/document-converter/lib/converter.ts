@@ -29,9 +29,10 @@ function runPandoc(src: string, args: string): Promise<string | boolean> {
 }
 
 /**
- * Convert GitHub-flavored markdown to DOCX using Pandoc
+ * Convert GitHub-flavored markdown to DOCX using Pandoc.
+ * Optionally accepts a reference DOCX for custom styling (fonts, headers, footers).
  */
-export async function convertMdToDocx(markdown: string): Promise<Buffer> {
+export async function convertMdToDocx(markdown: string, referenceDoc?: string): Promise<Buffer> {
   const inputPath = '/tmp/input.md';
   const outputPath = '/tmp/output.docx';
 
@@ -41,7 +42,8 @@ export async function convertMdToDocx(markdown: string): Promise<Buffer> {
 
     // Convert using Pandoc with GitHub-flavored markdown
     // Pandoc binary is provided by Lambda layer at /opt/bin/pandoc
-    await runPandoc(inputPath, `-f gfm -t docx -o ${outputPath}`);
+    const refDocArg = referenceDoc ? ` --reference-doc=${referenceDoc}` : '';
+    await runPandoc(inputPath, `-f gfm -t docx -o ${outputPath}${refDocArg}`);
 
     // Read and return the result
     const result = readFileSync(outputPath);
@@ -53,17 +55,18 @@ export async function convertMdToDocx(markdown: string): Promise<Buffer> {
 }
 
 /**
- * Convert GitHub-flavored markdown to PDF using Pandoc + LibreOffice
- * Two-step process: MD -> DOCX -> PDF
+ * Convert GitHub-flavored markdown to PDF using Pandoc + LibreOffice.
+ * Two-step process: MD -> DOCX (with optional reference doc) -> PDF
  */
-export async function convertMdToPdf(markdown: string): Promise<Buffer> {
+export async function convertMdToPdf(markdown: string, referenceDoc?: string): Promise<Buffer> {
   const inputPath = '/tmp/input.md';
   const docxPath = '/tmp/intermediate.docx';
 
   try {
     // Step 1: Convert MD to DOCX
     writeFileSync(inputPath, markdown, 'utf-8');
-    await runPandoc(inputPath, `-f gfm -t docx -o ${docxPath}`);
+    const refDocArg = referenceDoc ? ` --reference-doc=${referenceDoc}` : '';
+    await runPandoc(inputPath, `-f gfm -t docx -o ${docxPath}${refDocArg}`);
 
     // Step 2: Convert DOCX to PDF using LibreOffice
     // Note: convertTo expects filename only, it prepends /tmp/ internally
