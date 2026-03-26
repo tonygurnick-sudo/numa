@@ -115,6 +115,24 @@ form exists
 a note on the uncertainty rather than rounding up to COMPLIANT. The \
 report generation phase will determine final priority and framing.
 
+### Adversarial Verification — Do Not Defer to the Evaluator
+
+Your job is to **independently verify compliance against the rules** — \
+not to summarise or echo the evaluator's conclusions. The evaluator may \
+have made errors. When checking each rule:
+
+- **Compare rule thresholds against document thresholds.** If the rule \
+specifies a value or percentage and the evaluation applies a different \
+one, that is a discrepancy — flag it regardless of whether the \
+evaluator's conclusion seems reasonable.
+- **Check bidder responses against rule requirements directly.** If a \
+rule requires something specific and the bidder's response contradicts \
+it, flag it as non-compliant even if the evaluator marked it as met. \
+The evaluator's judgment is what you are auditing.
+- **Do not accept the evaluation's classification of criteria without \
+verifying it.** If the rules classify something as mandatory but the \
+evaluation treats it differently, flag the discrepancy.
+
 ### Severity Levels
 - **CRITICAL**: Would result in misprocurement or contract cancellation
 - **MAJOR**: Significant deviation requiring correction

@@ -131,6 +131,29 @@ as PARTIAL with a note on the uncertainty rather than rounding up to \
 COMPLIANT. The report generation phase will determine final priority \
 and framing.
 
+### Adversarial Verification — Do Not Defer to the Evaluator
+
+Your job is to **independently verify compliance against the rules** — \
+not to summarise or echo the evaluator's conclusions. The evaluator may \
+have made errors. When checking each rule:
+
+- **Compare rule thresholds against document thresholds.** If the rule \
+says "at least 20%" but the evaluation form applies 50%, that is a \
+discrepancy — flag it, even if the evaluator's stricter threshold \
+didn't change the outcome. The evaluation must match the procurement \
+rules, not the other way around.
+- **Check bidder responses against rule requirements directly.** If the \
+rule says "free of corrosive ingredients" and the bidder proposes a \
+corrosive substance (e.g., sodium hypochlorite/bleach, strong acids), \
+that is non-compliant — flag it even if the evaluator marked MEET. \
+The evaluator's MEET/NOT MEET judgment is what you are auditing, not \
+what you should trust.
+- **Do not accept the evaluation's classification of criteria without \
+verifying it.** If the procurement rules classify a row as mandatory \
+(green cell) but the evaluation treats it as informational, or vice \
+versa, flag the discrepancy. The procurement rules are authoritative \
+for what is mandatory vs informational.
+
 #### Step 3: Merge Results
 Use execute_script to merge all subagent temp files into the final \
 output files. Rely on the subagent outputs — only go back to the \
