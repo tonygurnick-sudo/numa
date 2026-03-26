@@ -336,15 +336,24 @@ async def _handle_kb_upload(params: dict[str, Any]) -> dict[str, Any]:
     if kb_path and "." in Path(kb_path).name:
         kb_path = str(Path(kb_path).parent) if str(Path(kb_path).parent) != "." else ""
 
+    lambda_params: dict[str, Any] = {
+        "filename": file_path.name,
+        "kb_id": params.get("kb_id", "company"),
+        "kb_path": kb_path,
+        "content_base64": content_base64,
+        "size_bytes": file_size,
+    }
+
+    # Inject approval fields for KB upload
+    approval_key = "numa_knowledgeBases_upload"
+    request_id = pop_approval_id(approval_key)
+    if request_id:
+        lambda_params["request_id"] = request_id
+        lambda_params["auto_approved"] = is_auto_approved()
+
     result = invoke_workspace_tool(
         "add_to_kb",
-        {
-            "filename": file_path.name,
-            "kb_id": params.get("kb_id", "company"),
-            "kb_path": kb_path,
-            "content_base64": content_base64,
-            "size_bytes": file_size,
-        },
+        lambda_params,
         extra_event_fields={
             "user_sub": user_sub,
             "allowed_kbs": allowed_kb_ids,

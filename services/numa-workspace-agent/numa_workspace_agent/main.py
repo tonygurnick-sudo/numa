@@ -29,7 +29,7 @@ from fastapi.responses import JSONResponse, Response, StreamingResponse
 from .agent_config import (
     AgentConfig,
     fetch_agent_config,
-    fetch_numa_tool_approval_enabled,
+    fetch_numa_tool_approval_mode,
     fetch_user_email_signature,
     fetch_user_profile,
     resolve_approval_mode,
@@ -1731,7 +1731,7 @@ async def _handle_chat(
             # during long-running tool executions (CloudFront has 60s timeout)
             # Resolve integration approval mode (agent config > user setting > default)
             effective_approval_mode = resolve_approval_mode(user_sub, agent_config)
-            numa_tool_approval_enabled = fetch_numa_tool_approval_enabled(user_sub)
+            numa_tool_approval_mode = fetch_numa_tool_approval_mode(user_sub)
             email_signature = fetch_user_email_signature(user_sub)
             user_profile = fetch_user_profile(user_sub)
 
@@ -1758,7 +1758,7 @@ async def _handle_chat(
                 external_user_id=external_user_id,  # Pipedream integrations user ID
                 enabled_integrations=enabled_integrations,  # Connected integration app slugs
                 approval_mode=effective_approval_mode,  # Integration approval mode
-                numa_tool_approval_enabled=numa_tool_approval_enabled,  # Numa tool write approval
+                numa_tool_approval_mode=numa_tool_approval_mode,  # Per-category numa tool approval
                 email_signature=email_signature,  # Email signature settings
                 agent_type_config=agent_type_config,  # Agent type configuration
                 user_profile=user_profile,  # User profile for AI personalisation

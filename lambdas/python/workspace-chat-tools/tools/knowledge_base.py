@@ -33,6 +33,8 @@ import structlog
 from prm import client as prm_client
 from tools.kb_permissions import _get_dynamodb_client, verify_kb_access
 
+from .approval import create_approval_request, poll_approval
+
 logger = structlog.get_logger()
 
 # Environment variables
@@ -866,6 +868,27 @@ def handle_add_to_kb(params: Dict[str, Any]) -> Dict[str, Any]:
     Returns:
         Dict with message, s3_uri, kb_id, filename, size_bytes, and note
     """
+    # HITL approval gate
+    request_id = params.get("request_id")
+    if request_id and not params.get("auto_approved", False):
+        user_sub = params.get("__user_sub", "")
+        approval_id = create_approval_request(
+            user_sub=user_sub,
+            action_key="numa_knowledgeBases_upload",
+            description=f"Upload to KB: {params.get('filename', 'unknown')}",
+            props_preview={
+                "filename": params.get("filename", ""),
+                "kb_id": params.get("kb_id", "company"),
+            },
+            approval_id=request_id,
+        )
+        decision, deny_reason = poll_approval(approval_id)
+        if decision == "denied":
+            msg = deny_reason or "User denied this action"
+            return {"status": "denied", "message": msg, "deny_reason": deny_reason}
+        if decision == "timeout":
+            return {"status": "timeout", "message": "Approval timed out"}
+
     filename = _validate_filename(params.get("filename"), "filename")
     kb_id = _validate_kb_id(params.get("kb_id", "company"), "kb_id")
     kb_path = _validate_relative_path(params.get("kb_path", ""), "kb_path")

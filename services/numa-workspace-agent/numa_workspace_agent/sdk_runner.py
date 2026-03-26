@@ -366,7 +366,7 @@ async def stream_claude_sdk(
     external_user_id: Optional[str] = None,
     enabled_integrations: Optional[list[str]] = None,
     approval_mode: str = "always",
-    numa_tool_approval_enabled: bool = False,
+    numa_tool_approval_mode: Optional[dict[str, str]] = None,
     email_signature: Optional[dict] = None,
     agent_type_config: Optional["AgentTypeConfig"] = None,
     user_profile: Optional[dict] = None,
@@ -726,7 +726,14 @@ async def stream_claude_sdk(
                 _NUMA_TOOL_WRITE_OPS: dict[str, set[str]] = {
                     "agents": {"create", "update", "duplicate"},
                     "memories": {"add", "update"},
+                    "knowledgeBases": {"upload"},
                 }
+                _NUMA_TOOL_SAFE_OPS: dict[str, set[str]] = {
+                    "agents": {"list", "get"},
+                    "memories": {"list"},
+                    "knowledgeBases": {"query", "list", "download", "download_folder"},
+                }
+                _nt_modes = numa_tool_approval_mode or {}
                 if isinstance(message, AssistantMessage):
                     for block in message.content:
                         if isinstance(block, ToolUseBlock):
@@ -764,27 +771,47 @@ async def stream_claude_sdk(
                                 "numa_tool" in block.name
                                 and "numa_ops_tool" not in block.name
                             ):
-                                # ── Numa tool approval (agents/memories writes) ──
+                                # ── Numa tool approval (agents/memories/KB) ──
                                 _nt_name = tool_input.get("name", "")
                                 _nt_operation = tool_input.get("params", {}).get(
                                     "operation", ""
                                 )
-                                _write_ops = _NUMA_TOOL_WRITE_OPS.get(_nt_name, set())
-
-                                if _nt_operation not in _write_ops:
+                                # Map tool names to category keys
+                                _nt_category = {
+                                    "agents": "agents",
+                                    "memories": "memories",
+                                    "knowledge_base": "knowledgeBases",
+                                }.get(_nt_name, "")
+                                if not _nt_category:
                                     continue
 
-                                _approval_key = f"numa_{_nt_name}_{_nt_operation}"
+                                _write_ops = _NUMA_TOOL_WRITE_OPS.get(
+                                    _nt_category, set()
+                                )
+                                _safe_ops = _NUMA_TOOL_SAFE_OPS.get(_nt_category, set())
+                                _is_write = _nt_operation in _write_ops
+                                _is_safe = _nt_operation in _safe_ops
 
-                                if numa_tool_approval_enabled:
-                                    auto_approved = False
-                                else:
+                                # Look up per-category mode
+                                _cat_mode = _nt_modes.get(_nt_category, "never")
+
+                                if _cat_mode == "never":
                                     auto_approved = True
+                                elif _cat_mode == "non_destructive":
+                                    auto_approved = _is_safe
+                                else:  # "always"
+                                    auto_approved = False
+
+                                # Skip if this is a safe op and auto-approved
+                                if auto_approved and not _is_write:
+                                    continue
+
+                                _approval_key = f"numa_{_nt_category}_{_nt_operation}"
 
                                 # Build structured props preview
                                 _nt_params = tool_input.get("params", {})
                                 _props_preview_dict: dict[str, Any] = {}
-                                if _nt_name == "agents":
+                                if _nt_category == "agents":
                                     _props_preview_dict = {
                                         "title": _nt_params.get("title", ""),
                                         "operation": _nt_operation,
@@ -799,7 +826,7 @@ async def stream_claude_sdk(
                                         _props_preview_dict["agent_id"] = (
                                             _nt_params.get("agent_id", "")
                                         )
-                                elif _nt_name == "memories":
+                                elif _nt_category == "memories":
                                     _props_preview_dict = {
                                         "content": (
                                             _nt_params.get("content", "") or ""
@@ -811,6 +838,12 @@ async def stream_claude_sdk(
                                         _props_preview_dict["memory_id"] = (
                                             _nt_params.get("memory_id", "")
                                         )
+                                elif _nt_category == "knowledgeBases":
+                                    _props_preview_dict = {
+                                        "operation": _nt_operation,
+                                        "kb_id": _nt_params.get("kb_id", ""),
+                                        "file_path": _nt_params.get("file_path", ""),
+                                    }
                                 _props_preview_override = _props_preview_dict
 
                                 logger.info(
@@ -819,9 +852,10 @@ async def stream_claude_sdk(
                                     phase="numa_tool",
                                     tool_name=block.name,
                                     numa_tool_name=_nt_name,
+                                    category=_nt_category,
                                     operation=_nt_operation,
                                     action_key=_approval_key,
-                                    numa_tool_approval_enabled=numa_tool_approval_enabled,
+                                    category_mode=_cat_mode,
                                     auto_approved=auto_approved,
                                 )
 
@@ -1133,7 +1167,7 @@ async def run_claude_sdk(
     external_user_id: Optional[str] = None,
     enabled_integrations: Optional[list[str]] = None,
     approval_mode: str = "always",
-    numa_tool_approval_enabled: bool = False,
+    numa_tool_approval_mode: Optional[dict[str, str]] = None,
     email_signature: Optional[dict] = None,
     agent_type_config: Optional["AgentTypeConfig"] = None,
     user_profile: Optional[dict] = None,
@@ -1348,7 +1382,14 @@ async def run_claude_sdk(
                 _NUMA_TOOL_WRITE_OPS_SYNC: dict[str, set[str]] = {
                     "agents": {"create", "update", "duplicate"},
                     "memories": {"add", "update"},
+                    "knowledgeBases": {"upload"},
                 }
+                _NUMA_TOOL_SAFE_OPS_SYNC: dict[str, set[str]] = {
+                    "agents": {"list", "get"},
+                    "memories": {"list"},
+                    "knowledgeBases": {"query", "list", "download", "download_folder"},
+                }
+                _nt_modes_sync = numa_tool_approval_mode or {}
                 if isinstance(message, AssistantMessage):
                     for block in message.content:
                         if isinstance(block, ToolUseBlock) and any(
@@ -1365,18 +1406,32 @@ async def run_claude_sdk(
                                 "numa_tool" in block.name
                                 and "numa_ops_tool" not in block.name
                             ):
-                                # ── Numa tool approval (agents/memories writes) ──
                                 _nt_name = tool_input.get("name", "")
                                 _nt_operation = tool_input.get("params", {}).get(
                                     "operation", ""
                                 )
-                                _write_ops = _NUMA_TOOL_WRITE_OPS_SYNC.get(
-                                    _nt_name, set()
-                                )
-                                if _nt_operation not in _write_ops:
+                                _nt_category = {
+                                    "agents": "agents",
+                                    "memories": "memories",
+                                    "knowledge_base": "knowledgeBases",
+                                }.get(_nt_name, "")
+                                if not _nt_category:
                                     continue
-                                _approval_key = f"numa_{_nt_name}_{_nt_operation}"
-                                auto_approved = not numa_tool_approval_enabled
+                                _write_ops = _NUMA_TOOL_WRITE_OPS_SYNC.get(
+                                    _nt_category, set()
+                                )
+                                _safe_ops = _NUMA_TOOL_SAFE_OPS_SYNC.get(
+                                    _nt_category, set()
+                                )
+                                _is_safe = _nt_operation in _safe_ops
+                                _cat_mode = _nt_modes_sync.get(_nt_category, "never")
+                                if _cat_mode == "never":
+                                    auto_approved = True
+                                elif _cat_mode == "non_destructive":
+                                    auto_approved = _is_safe
+                                if auto_approved and _nt_operation not in _write_ops:
+                                    continue
+                                _approval_key = f"numa_{_nt_category}_{_nt_operation}"
 
                             elif "numa_ops_tool" in block.name:
                                 # ── Ops tool approval ──
