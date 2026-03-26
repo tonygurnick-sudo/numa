@@ -53,6 +53,7 @@ import { NumaLambda } from '../constructs/numa-lambda';
 import { OAuthIntegrationConstruct } from '../constructs/oauth-integration-construct';
 import { OpsConstruct } from '../constructs/ops-construct';
 import { TranscriptionServiceConstruct } from '../constructs/transcription-service-construct';
+import { RacetechDataFeedConstruct } from '../constructs/racetech-data-feed-construct';
 import { VaultSecretsConstruct } from '../constructs/vault-secrets-construct';
 import { V2AppsConstruct } from '../constructs/v2-apps-construct';
 import { WorkspaceChatAgentConstruct } from '../constructs/workspace-chat-agent-construct';
@@ -581,6 +582,22 @@ export class NumaClientStack extends TerraformStack {
         userPoolArn: `arn:aws:cognito-idp:${clientConfig.region}:${clientConfig.clientAccountId}:userpool/${core.userPoolId}`,
         chatSettingsTableName: core.chatSettingsTable.name,
         chatSettingsTableArn: core.chatSettingsTable.arn,
+        otelConfig: {
+          otelConfigPath: core.otelConfigPath,
+          honeycombIngestKey: honeycombBackendKey,
+          region: clientConfig.region,
+        },
+      });
+    }
+
+    // Racetech external data feed (Glenn's daily SQLite upload via presigned URL)
+    if (clientConfig.racetechDataFeed) {
+      new RacetechDataFeedConstruct(this, safeConstructId + '-racetech-data-feed', {
+        apiGatewayAuthorizerId: fe.authorizer.id,
+        apiGatewayId: fe.apiGateway.id,
+        clientName: props.clientName,
+        dataBucketName: core.dataBucket.bucket.bucket,
+        dataBucketArn: core.dataBucket.bucket.arn,
         otelConfig: {
           otelConfigPath: core.otelConfigPath,
           honeycombIngestKey: honeycombBackendKey,
@@ -1186,6 +1203,14 @@ export const clientConfigSchema = coreNumaInfraPropsSchema
          * @default false
          */
         numaOps: z.boolean().optional().default(false),
+
+        /**
+         * Whether to enable the Racetech external data feed upload endpoint.
+         * Provisions a presigned S3 PUT URL API for Glenn's daily SQLite upload.
+         *
+         * @default false
+         */
+        racetechDataFeed: z.boolean().optional().default(false),
 
         /**
          * Feature flags from other branches (not yet implemented in this branch)

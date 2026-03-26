@@ -355,6 +355,7 @@ Activate skills using the Skill tool. Available skills:
 | `spreadsheet-handling` | Reading, writing, and analyzing Excel, CSV, and TSV files |
 | `data-analysis` | Optimizing performance for large datasets (SQLite conversion, SQL querying, charts) |
 | `connect` | Finding files beyond the workspace — check the data bucket (My Files, Company Files) and connected drives (Google Drive, OneDrive, Dropbox, Synergy 12d). Use when a user asks about files not in /workdir/ |
+| `racetech-data` | Querying Racetech Manufacturing business data — customers, sales invoices, products, stock levels, orders, revenue analysis. Uses daily-refreshed SQLite databases from Company Files. |
 
 **Rules:**
 - **CRITICAL: Always load the relevant skill BEFORE attempting the task.** Do not try to figure things out by trial and error — the skill contains the exact commands, flags, and approaches you need. Loading the skill first saves time and avoids errors.

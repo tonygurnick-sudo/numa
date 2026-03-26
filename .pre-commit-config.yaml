@@ -24,9 +24,33 @@ repos:
       - id: isort
   - repo: local
     hooks:
+      - id: eslint-infra
+        name: ESLint --fix (Infra)
+        entry: bash -c 'command -v yarn >/dev/null 2>&1 && cd infra && yarn eslint --fix . || echo "Yarn not available, skipping ESLint infra (will be checked in CI)"'
+        language: system
+        files: ^infra/.*\.(ts|tsx)$
+        pass_filenames: false
+      - id: typescript-check-infra
+        name: TypeScript Check (Infra)
+        entry: bash -c 'command -v yarn >/dev/null 2>&1 && cd infra && yarn tsc --noEmit || echo "Yarn not available, skipping TypeScript check infra (will be checked in CI)"'
+        language: system
+        files: ^infra/.*\.(ts|tsx)$
+        pass_filenames: false
+      - id: lint-node-lambdas
+        name: ESLint --fix + TypeScript Check (Node Lambdas)
+        entry: scripts/lint-changed-packages.sh lambdas/node
+        language: system
+        files: ^lambdas/node/.*\.(ts|tsx)$
+        pass_filenames: false
+      - id: lint-lib
+        name: ESLint --fix + TypeScript Check (lib)
+        entry: scripts/lint-changed-packages.sh lib
+        language: system
+        files: ^lib/.*\.(ts|tsx)$
+        pass_filenames: false
       - id: eslint-frontend
-        name: ESLint (Frontend)
-        entry: bash -c 'command -v yarn >/dev/null 2>&1 && cd numa-frontend && yarn lint || echo "Yarn not available, skipping ESLint (will be checked in CI)"'
+        name: ESLint --fix (Frontend)
+        entry: bash -c 'command -v yarn >/dev/null 2>&1 && cd numa-frontend && yarn lint --fix || echo "Yarn not available, skipping ESLint (will be checked in CI)"'
         language: system
         files: ^numa-frontend/.*\.(js|jsx|ts|tsx)$
         pass_filenames: false
