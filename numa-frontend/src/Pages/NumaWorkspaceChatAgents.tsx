@@ -199,12 +199,9 @@ const NumaWorkspaceChatAgents = () => {
     };
   }, [inputMessage]);
 
-  // Clear first-message banner once the assistant starts streaming real content
+  // Clear first-message banner once the assistant starts streaming any content (text, thinking, tool calls, etc.)
   useEffect(() => {
-    if (
-      isFirstMessagePending &&
-      messages.some((m) => m.role === 'assistant' && m.segments?.some((s) => s.kind === 'text' && s.text))
-    ) {
+    if (isFirstMessagePending && messages.some((m) => m.role === 'assistant' && m.segments && m.segments.length > 0)) {
       setIsFirstMessagePending(false);
     }
   }, [messages, isFirstMessagePending]);
