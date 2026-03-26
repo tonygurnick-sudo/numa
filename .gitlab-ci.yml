@@ -64,8 +64,10 @@ deploy-dev-gate:
         - lambdas/node/admin-agents-settings
         - lambdas/node/admin-mfa-settings
         - lambdas/node/admin-integration-settings
+        - lambdas/node/admin-scheduling-settings
         - lambdas/node/agent-schedule-runner
         - lambdas/node/audit-logs-admin
+        - lambdas/node/audit-user-management-writer
         - lambdas/node/agent-schedules
         - lambdas/node/agents
         - lambdas/node/api-gateway-authorizer
