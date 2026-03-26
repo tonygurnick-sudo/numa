@@ -21,39 +21,11 @@ from claude_agent_sdk import tool
 from numa_workspace_agent.mcp_tools.lambda_client import (
     extract_status,
     invoke_workspace_tool,
+    pop_approval_id,
     save_result,
 )
 
 logger = structlog.get_logger()
-
-
-def _pop_approval_id(action_key: str) -> str:
-    """Pop the next approval ID for this action_key from NUMA_REQUEST_ID_MAP.
-
-    The SDK runner stores a JSON dict of action_key → [approval_id, ...] in
-    the env var. Each tool call pops the first entry (FIFO) so parallel calls
-    to the same action each get their own unique ID.
-
-    Falls back to the legacy single-value NUMA_REQUEST_ID env var.
-    """
-    raw = os.environ.get("NUMA_REQUEST_ID_MAP", "")
-    if raw:
-        try:
-            id_map = json.loads(raw)
-            ids = id_map.get(action_key, [])
-            if ids:
-                approval_id = ids.pop(0)
-                # Write back with consumed entry removed
-                if not ids:
-                    id_map.pop(action_key, None)
-                else:
-                    id_map[action_key] = ids
-                os.environ["NUMA_REQUEST_ID_MAP"] = json.dumps(id_map)
-                return approval_id
-        except (json.JSONDecodeError, TypeError):
-            pass
-    # Fallback: legacy single-value env var
-    return os.environ.get("NUMA_REQUEST_ID", "")
 
 
 @tool(
@@ -158,7 +130,7 @@ async def run_action(args: dict[str, Any]) -> dict[str, Any]:
                 "configured_props": configured_props,
                 "description": description,
                 "stash_id": stash_id,
-                "request_id": _pop_approval_id(action_key),
+                "request_id": pop_approval_id(action_key),
                 "auto_approved": os.environ.get("NUMA_APPROVAL_MODE") == "auto",
             },
         )
@@ -370,7 +342,7 @@ async def proxy_request(args: dict[str, Any]) -> dict[str, Any]:
                 "description": description,
                 "body": body,
                 "headers": headers,
-                "request_id": _pop_approval_id(f"{integration_slug}-{method}"),
+                "request_id": pop_approval_id(f"{integration_slug}-{method}"),
                 "auto_approved": os.environ.get("NUMA_APPROVAL_MODE") == "auto",
             },
         )

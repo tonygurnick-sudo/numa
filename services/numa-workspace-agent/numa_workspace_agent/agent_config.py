@@ -394,6 +394,42 @@ def fetch_user_approval_mode(user_sub: str) -> str:
         return DEFAULT_APPROVAL_MODE
 
 
+def fetch_numa_tool_approval_enabled(user_sub: str) -> bool:
+    """
+    Fetch whether the user has enabled HITL approval for numa_tool write operations.
+
+    When enabled, agent create/update/duplicate and memory add/update operations
+    require explicit user approval before executing.
+
+    Args:
+        user_sub: The user's Cognito sub (used as partition key in chat settings table)
+
+    Returns:
+        True if approval is required, False (default) otherwise.
+    """
+    table_name = os.environ.get("CHAT_SETTINGS_TABLE_NAME")
+    if not table_name:
+        return False
+
+    try:
+        dynamo = _get_dynamodb_client()
+        response = dynamo.get_item(
+            TableName=table_name,
+            Key={"user_id": {"S": user_sub}},
+            ProjectionExpression="numaToolApprovalEnabled",
+        )
+        item = response.get("Item", {})
+        val = item.get("numaToolApprovalEnabled", {}).get("BOOL", False)
+        return bool(val)
+    except Exception as e:
+        logger.warning(
+            "Failed to fetch numa tool approval setting, using default",
+            user_sub=user_sub[:8] + "...",
+            error=str(e),
+        )
+        return False
+
+
 DEFAULT_EMAIL_SIGNATURE_TEXT = "Sent by my AI assistant, Numa (https://www.arcanum.ai)"
 
 

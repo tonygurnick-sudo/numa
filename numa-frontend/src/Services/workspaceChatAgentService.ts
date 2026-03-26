@@ -511,20 +511,26 @@ export async function stopWorkspaceChatAgent(conversationId: string, requestId: 
 export async function approveToolAction(
   approvalId: string,
   decision: 'approved' | 'denied',
-  conversationId: string
+  conversationId: string,
+  reason?: string
 ): Promise<void> {
+  const body: Record<string, string> = {
+    action: 'approve',
+    approvalId,
+    decision,
+    conversationId,
+  };
+  if (reason) {
+    body.reason = reason;
+  }
+
   const res = await fetch(`${getApiUrl()}/invocations`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       ...getAuthHeaders(),
     },
-    body: JSON.stringify({
-      action: 'approve',
-      approvalId,
-      decision,
-      conversationId,
-    }),
+    body: JSON.stringify(body),
   });
 
   if (!res.ok) {

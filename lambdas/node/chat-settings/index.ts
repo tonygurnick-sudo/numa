@@ -24,6 +24,7 @@ export type ChatSettings = {
   defaultConnectionIds: string[];
   language: string | null;
   approvalMode: ApprovalMode;
+  numaToolApprovalEnabled: boolean;
   emailSignatureEnabled: boolean;
   emailSignatureText: string;
   chatScrollMode: ChatScrollMode;
@@ -163,6 +164,7 @@ const DEFAULT_SETTINGS: ChatSettings = {
   defaultConnectionIds: [],
   language: 'browser',
   approvalMode: 'non_destructive',
+  numaToolApprovalEnabled: false,
   emailSignatureEnabled: true,
   emailSignatureText: 'Sent by my AI assistant, Numa (https://www.arcanum.ai)',
   chatScrollMode: 'auto',
@@ -255,6 +257,7 @@ async function loadGlobalSettings(): Promise<GlobalChatSettings> {
       defaultConnectionIds: DEFAULT_SETTINGS.defaultConnectionIds,
       language: DEFAULT_SETTINGS.language,
       approvalMode: DEFAULT_SETTINGS.approvalMode,
+      numaToolApprovalEnabled: DEFAULT_SETTINGS.numaToolApprovalEnabled,
       emailSignatureEnabled: DEFAULT_SETTINGS.emailSignatureEnabled,
       emailSignatureText: DEFAULT_SETTINGS.emailSignatureText,
       chatScrollMode: DEFAULT_SETTINGS.chatScrollMode,
@@ -293,6 +296,10 @@ async function loadGlobalSettings(): Promise<GlobalChatSettings> {
       : DEFAULT_SETTINGS.defaultConnectionIds,
     language: DEFAULT_SETTINGS.language,
     approvalMode,
+    numaToolApprovalEnabled:
+      typeof item?.numaToolApprovalEnabled === 'boolean'
+        ? item!.numaToolApprovalEnabled
+        : DEFAULT_SETTINGS.numaToolApprovalEnabled,
     emailSignatureEnabled:
       typeof item?.emailSignatureEnabled === 'boolean'
         ? item!.emailSignatureEnabled
@@ -357,6 +364,10 @@ function mergeUserSettings(globalSettings: ChatSettings, userItem: Record<string
     typeof userItem?.approvalMode === 'string' && VALID_APPROVAL_MODES.includes(userItem.approvalMode as ApprovalMode)
       ? (userItem.approvalMode as ApprovalMode)
       : globalSettings.approvalMode;
+  const numaToolApprovalEnabled =
+    typeof userItem?.numaToolApprovalEnabled === 'boolean'
+      ? (userItem!.numaToolApprovalEnabled as boolean)
+      : globalSettings.numaToolApprovalEnabled;
   const emailSignatureEnabled =
     typeof userItem?.emailSignatureEnabled === 'boolean'
       ? (userItem!.emailSignatureEnabled as boolean)
@@ -383,6 +394,7 @@ function mergeUserSettings(globalSettings: ChatSettings, userItem: Record<string
     defaultConnectionIds,
     language,
     approvalMode,
+    numaToolApprovalEnabled,
     emailSignatureEnabled,
     emailSignatureText,
     chatScrollMode,
@@ -478,6 +490,7 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
           VALID_APPROVAL_MODES.includes(body.approvalMode as ApprovalMode)
             ? (body.approvalMode as ApprovalMode)
             : currentGlobal.approvalMode,
+        numaToolApprovalEnabled: currentGlobal.numaToolApprovalEnabled,
         emailSignatureEnabled: currentGlobal.emailSignatureEnabled,
         emailSignatureText: currentGlobal.emailSignatureText,
         chatScrollMode: currentGlobal.chatScrollMode,
@@ -508,6 +521,7 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
         defaultConnectionIds: updatedSettings.defaultConnectionIds,
         language: updatedSettings.language,
         approvalMode: updatedSettings.approvalMode,
+        numaToolApprovalEnabled: updatedSettings.numaToolApprovalEnabled,
         emailSignatureEnabled: updatedSettings.emailSignatureEnabled,
         emailSignatureText: updatedSettings.emailSignatureText,
         chatScrollMode: updatedSettings.chatScrollMode,
@@ -559,6 +573,7 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
         defaultConnectionIds: merged.defaultConnectionIds,
         language: merged.language,
         approvalMode: merged.approvalMode,
+        numaToolApprovalEnabled: merged.numaToolApprovalEnabled,
         emailSignatureEnabled: merged.emailSignatureEnabled,
         emailSignatureText: merged.emailSignatureText,
         chatScrollMode: merged.chatScrollMode,
@@ -585,6 +600,7 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
         defaultConnectionIds: useUserChatDefaults ? merged.defaultConnectionIds : globalSettings.defaultConnectionIds,
         language: merged.language,
         approvalMode: merged.approvalMode,
+        numaToolApprovalEnabled: merged.numaToolApprovalEnabled,
         emailSignatureEnabled: merged.emailSignatureEnabled,
         emailSignatureText: merged.emailSignatureText,
         chatScrollMode: merged.chatScrollMode,
@@ -739,6 +755,17 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
         next.approvalMode = current.approvalMode as ApprovalMode;
       }
 
+      // numaToolApprovalEnabled
+      if ('numaToolApprovalEnabled' in body) {
+        if (body.numaToolApprovalEnabled === null) {
+          // clear override
+        } else if (typeof body.numaToolApprovalEnabled === 'boolean') {
+          next.numaToolApprovalEnabled = body.numaToolApprovalEnabled;
+        }
+      } else if (typeof current.numaToolApprovalEnabled === 'boolean') {
+        next.numaToolApprovalEnabled = current.numaToolApprovalEnabled;
+      }
+
       // emailSignatureEnabled
       if ('emailSignatureEnabled' in body) {
         if (body.emailSignatureEnabled === null) {
@@ -807,6 +834,7 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
         'defaultConnectionIds' in next ||
         'language' in next ||
         'approvalMode' in next ||
+        'numaToolApprovalEnabled' in next ||
         'emailSignatureEnabled' in next ||
         'emailSignatureText' in next ||
         'chatScrollMode' in next ||

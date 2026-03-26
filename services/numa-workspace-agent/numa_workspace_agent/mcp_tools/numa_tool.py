@@ -29,7 +29,11 @@ from claude_agent_sdk import tool
 # _invoke_connect_tool is imported from connect module because the files/data-bucket
 # operations use the oauth-workspace-tools Lambda (not workspace-chat-tools).
 from numa_workspace_agent.mcp_tools.connect import _format_size, _invoke_connect_tool
-from numa_workspace_agent.mcp_tools.lambda_client import invoke_workspace_tool
+from numa_workspace_agent.mcp_tools.lambda_client import (
+    invoke_workspace_tool,
+    is_auto_approved,
+    pop_approval_id,
+)
 from numa_workspace_agent.mcp_tools.s3_helpers import (
     download_from_presigned_url,
     download_from_s3,
@@ -633,6 +637,9 @@ _AGENT_OP_TO_TOOL = {
 }
 
 
+_AGENT_WRITE_OPS = {"create", "update", "duplicate"}
+
+
 async def _handle_agents(params: dict[str, Any]) -> dict[str, Any]:
     """Agent management — list, get, create, update, duplicate.
 
@@ -658,6 +665,14 @@ async def _handle_agents(params: dict[str, Any]) -> dict[str, Any]:
         k: v for k, v in params.items() if k != "operation" and v is not None
     }
 
+    # Inject approval fields for write operations
+    if operation in _AGENT_WRITE_OPS:
+        approval_key = f"numa_agents_{operation}"
+        request_id = pop_approval_id(approval_key)
+        if request_id:
+            lambda_params["request_id"] = request_id
+            lambda_params["auto_approved"] = is_auto_approved()
+
     # Handle file attachments for create/update
     attach_files: list[str] = lambda_params.pop("attach_files", []) or []
     if attach_files:
@@ -679,6 +694,10 @@ async def _handle_agents(params: dict[str, Any]) -> dict[str, Any]:
         },
     )
 
+    # Handle approval denial/timeout from Lambda
+    if isinstance(result, dict) and result.get("status") in ("denied", "timeout"):
+        return _ok(json.dumps(result, indent=2))
+
     return _ok(json.dumps(result, indent=2))
 
 
@@ -691,6 +710,9 @@ _MEMORY_OP_TO_TOOL = {
     "add": "user_profile_add_memory",
     "update": "user_profile_update_memory",
 }
+
+
+_MEMORY_WRITE_OPS = {"add", "update"}
 
 
 async def _handle_memories(params: dict[str, Any]) -> dict[str, Any]:
@@ -718,6 +740,14 @@ async def _handle_memories(params: dict[str, Any]) -> dict[str, Any]:
         k: v for k, v in params.items() if k != "operation" and v is not None
     }
 
+    # Inject approval fields for write operations
+    if operation in _MEMORY_WRITE_OPS:
+        approval_key = f"numa_memories_{operation}"
+        request_id = pop_approval_id(approval_key)
+        if request_id:
+            lambda_params["request_id"] = request_id
+            lambda_params["auto_approved"] = is_auto_approved()
+
     result = invoke_workspace_tool(
         tool_name,
         lambda_params,
@@ -726,6 +756,10 @@ async def _handle_memories(params: dict[str, Any]) -> dict[str, Any]:
             "allowed_tools": _get_enabled_tools(),
         },
     )
+
+    # Handle approval denial/timeout from Lambda
+    if isinstance(result, dict) and result.get("status") in ("denied", "timeout"):
+        return _ok(json.dumps(result, indent=2))
 
     return _ok(json.dumps(result, indent=2))
 

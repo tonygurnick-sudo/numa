@@ -1663,6 +1663,22 @@ export default function UserProfilePage({
                 </div>
               </div>
 
+              <div className="profile-section mt-4">
+                <div className="profile-section__title">{t('userProfile.numaToolApproval.label')}</div>
+                <p className="text-muted small mb-2">{t('userProfile.numaToolApproval.description')}</p>
+                <Form.Check
+                  type="switch"
+                  id="numaToolApprovalEnabled"
+                  label={t('userProfile.numaToolApproval.toggle')}
+                  checked={userDefaults.numaToolApprovalEnabled ?? false}
+                  disabled={disableDefaultsForm}
+                  onChange={(e) => {
+                    setUserDefaults((prev) => ({ ...prev, numaToolApprovalEnabled: e.target.checked }));
+                    setDirty(true);
+                  }}
+                />
+              </div>
+
               {renderSaveActions(
                 'userProfile.actions.reset',
                 resetToCompanyDefaults,

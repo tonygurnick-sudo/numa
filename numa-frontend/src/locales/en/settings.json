@@ -659,6 +659,11 @@
         "textLabel": "Signature text"
       }
     },
+    "numaToolApproval": {
+      "label": "Platform action approval",
+      "description": "When enabled, actions that create or modify agents and memories will require your explicit approval before they execute.",
+      "toggle": "Require approval for agent and memory changes"
+    },
     "approval": {
       "description": "Control how integration tool calls are approved when using Numa. This setting applies to actions performed through connected integrations (e.g. Google Drive, Slack).",
       "label": "Approval mode",

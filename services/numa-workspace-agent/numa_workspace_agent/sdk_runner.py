@@ -366,6 +366,7 @@ async def stream_claude_sdk(
     external_user_id: Optional[str] = None,
     enabled_integrations: Optional[list[str]] = None,
     approval_mode: str = "always",
+    numa_tool_approval_enabled: bool = False,
     email_signature: Optional[dict] = None,
     agent_type_config: Optional["AgentTypeConfig"] = None,
     user_profile: Optional[dict] = None,
@@ -719,7 +720,13 @@ async def stream_claude_sdk(
                     "run_action",
                     "proxy_request",
                     "numa_ops_tool",
+                    "numa_tool",
                 )
+                # Numa tool write operations that require approval
+                _NUMA_TOOL_WRITE_OPS: dict[str, set[str]] = {
+                    "agents": {"create", "update", "duplicate"},
+                    "memories": {"add", "update"},
+                }
                 if isinstance(message, AssistantMessage):
                     for block in message.content:
                         if isinstance(block, ToolUseBlock):
@@ -747,12 +754,78 @@ async def stream_claude_sdk(
                                 block.input if isinstance(block.input, dict) else {}
                             )
 
-                            # ── Branch: Ops tool vs Integration tool ──
-                            # Both compute _approval_key and auto_approved,
+                            # ── Branch: Numa tool vs Ops tool vs Integration tool ──
+                            # All compute _approval_key and auto_approved,
                             # then share the common approval event emission below.
                             auto_approved = False
+                            _props_preview_override: dict[str, Any] | None = None
 
-                            if "numa_ops_tool" in block.name:
+                            if (
+                                "numa_tool" in block.name
+                                and "numa_ops_tool" not in block.name
+                            ):
+                                # ── Numa tool approval (agents/memories writes) ──
+                                _nt_name = tool_input.get("name", "")
+                                _nt_operation = tool_input.get("params", {}).get(
+                                    "operation", ""
+                                )
+                                _write_ops = _NUMA_TOOL_WRITE_OPS.get(_nt_name, set())
+
+                                if _nt_operation not in _write_ops:
+                                    continue
+
+                                _approval_key = f"numa_{_nt_name}_{_nt_operation}"
+
+                                if numa_tool_approval_enabled:
+                                    auto_approved = False
+                                else:
+                                    auto_approved = True
+
+                                # Build structured props preview
+                                _nt_params = tool_input.get("params", {})
+                                _props_preview_dict: dict[str, Any] = {}
+                                if _nt_name == "agents":
+                                    _props_preview_dict = {
+                                        "title": _nt_params.get("title", ""),
+                                        "operation": _nt_operation,
+                                        "visibility": _nt_params.get(
+                                            "visibility", "personal"
+                                        ),
+                                        "systemPrompt": (
+                                            _nt_params.get("systemPrompt", "") or ""
+                                        )[:200],
+                                    }
+                                    if _nt_operation in ("update", "duplicate"):
+                                        _props_preview_dict["agent_id"] = (
+                                            _nt_params.get("agent_id", "")
+                                        )
+                                elif _nt_name == "memories":
+                                    _props_preview_dict = {
+                                        "content": (
+                                            _nt_params.get("content", "") or ""
+                                        )[:200],
+                                        "operation": _nt_operation,
+                                        "scope": _nt_params.get("scope", "general"),
+                                    }
+                                    if _nt_operation == "update":
+                                        _props_preview_dict["memory_id"] = (
+                                            _nt_params.get("memory_id", "")
+                                        )
+                                _props_preview_override = _props_preview_dict
+
+                                logger.info(
+                                    "Numa tool approval decision",
+                                    _name="APPROVAL_DECISION",
+                                    phase="numa_tool",
+                                    tool_name=block.name,
+                                    numa_tool_name=_nt_name,
+                                    operation=_nt_operation,
+                                    action_key=_approval_key,
+                                    numa_tool_approval_enabled=numa_tool_approval_enabled,
+                                    auto_approved=auto_approved,
+                                )
+
+                            elif "numa_ops_tool" in block.name:
                                 # ── Ops tool approval ──
                                 operation = tool_input.get("operation", "")
                                 _approval_key = f"ops-{operation.replace('_', '-')}"
@@ -864,7 +937,7 @@ async def stream_claude_sdk(
                                     schema_found=schema_found,
                                 )
 
-                            # ── Common: emit approval event (ops + integrations) ──
+                            # ── Common: emit approval event (ops + integrations + numa_tool) ──
 
                             # Set NUMA_APPROVAL_MODE env var so the tools Lambda
                             # knows whether to skip DynamoDB polling.
@@ -873,7 +946,7 @@ async def stream_claude_sdk(
                             )
 
                             # Generate a per-tool-call approval ID and store in
-                            # NUMA_REQUEST_ID_MAP (JSON dict of action_key → list of IDs).
+                            # NUMA_REQUEST_ID_MAP (JSON dict of action_key -> list of IDs).
                             # Each parallel tool pops its ID from the list in FIFO order,
                             # avoiding the race where a single env var gets overwritten.
                             approval_id = str(uuid_mod.uuid4())
@@ -885,6 +958,23 @@ async def stream_claude_sdk(
                                 _id_map = {}
                             _id_map.setdefault(_approval_key, []).append(approval_id)
                             os.environ["NUMA_REQUEST_ID_MAP"] = json.dumps(_id_map)
+
+                            # Use structured props preview for numa_tool, else existing logic
+                            _event_props = (
+                                _props_preview_override
+                                if _props_preview_override is not None
+                                else tool_input.get(
+                                    "props", tool_input.get("upstream_url", "")
+                                )
+                            )
+
+                            # Determine approval category for frontend label rendering
+                            _approval_category = (
+                                "numa_tool"
+                                if _props_preview_override is not None
+                                else "integration"
+                            )
+
                             approval_event = {
                                 "type": "tool_approval",
                                 "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -893,11 +983,10 @@ async def stream_claude_sdk(
                                 "tool_name": block.name,
                                 "action_key": _approval_key,
                                 "description": tool_input.get("description", ""),
-                                "props_preview": tool_input.get(
-                                    "props", tool_input.get("upstream_url", "")
-                                ),
+                                "props_preview": _event_props,
                                 "request_id": approval_id,
                                 "auto_approved": auto_approved,
+                                "approval_category": _approval_category,
                                 "parent_tool_use_id": getattr(
                                     message, "parent_tool_use_id", None
                                 ),
@@ -1044,6 +1133,7 @@ async def run_claude_sdk(
     external_user_id: Optional[str] = None,
     enabled_integrations: Optional[list[str]] = None,
     approval_mode: str = "always",
+    numa_tool_approval_enabled: bool = False,
     email_signature: Optional[dict] = None,
     agent_type_config: Optional["AgentTypeConfig"] = None,
     user_profile: Optional[dict] = None,
@@ -1253,7 +1343,12 @@ async def run_claude_sdk(
                     "run_action",
                     "proxy_request",
                     "numa_ops_tool",
+                    "numa_tool",
                 )
+                _NUMA_TOOL_WRITE_OPS_SYNC: dict[str, set[str]] = {
+                    "agents": {"create", "update", "duplicate"},
+                    "memories": {"add", "update"},
+                }
                 if isinstance(message, AssistantMessage):
                     for block in message.content:
                         if isinstance(block, ToolUseBlock) and any(
@@ -1263,10 +1358,27 @@ async def run_claude_sdk(
                                 block.input if isinstance(block.input, dict) else {}
                             )
 
-                            # ── Branch: Ops tool vs Integration tool ──
+                            # ── Branch: Numa tool vs Ops tool vs Integration tool ──
                             auto_approved = False
 
-                            if "numa_ops_tool" in block.name:
+                            if (
+                                "numa_tool" in block.name
+                                and "numa_ops_tool" not in block.name
+                            ):
+                                # ── Numa tool approval (agents/memories writes) ──
+                                _nt_name = tool_input.get("name", "")
+                                _nt_operation = tool_input.get("params", {}).get(
+                                    "operation", ""
+                                )
+                                _write_ops = _NUMA_TOOL_WRITE_OPS_SYNC.get(
+                                    _nt_name, set()
+                                )
+                                if _nt_operation not in _write_ops:
+                                    continue
+                                _approval_key = f"numa_{_nt_name}_{_nt_operation}"
+                                auto_approved = not numa_tool_approval_enabled
+
+                            elif "numa_ops_tool" in block.name:
                                 # ── Ops tool approval ──
                                 operation = tool_input.get("operation", "")
                                 _approval_key = f"ops-{operation.replace('_', '-')}"

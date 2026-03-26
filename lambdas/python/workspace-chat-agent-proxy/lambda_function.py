@@ -674,6 +674,7 @@ async def _handle_approve(body: dict, user_sub: str) -> JSONResponse:
     """
     approval_id = body.get("approvalId")
     decision = body.get("decision")
+    reason = body.get("reason", "")
 
     if not approval_id:
         raise HTTPException(status_code=400, detail="Missing approvalId")
@@ -686,21 +687,35 @@ async def _handle_approve(body: dict, user_sub: str) -> JSONResponse:
     if not table_name:
         raise HTTPException(status_code=500, detail="Approval table not configured")
 
+    # Build update expression -- include deny_reason when provided
+    update_expr = "SET #s = :status, decided_at = :decided_at"
+    expr_names = {"#s": "status"}
+    expr_values = {
+        ":status": {"S": decision},
+        ":decided_at": {"N": str(int(time_mod.time()))},
+    }
+
+    if reason and isinstance(reason, str):
+        update_expr += ", deny_reason = :reason"
+        expr_values[":reason"] = {"S": reason.strip()[:500]}
+
     dynamodb = boto3.client("dynamodb")
     dynamodb.update_item(
         TableName=table_name,
         Key={"approval_id": {"S": approval_id}},
-        UpdateExpression="SET #s = :status, decided_at = :decided_at",
-        ExpressionAttributeNames={"#s": "status"},
-        ExpressionAttributeValues={
-            ":status": {"S": decision},
-            ":decided_at": {"N": str(int(time_mod.time()))},
-        },
+        UpdateExpression=update_expr,
+        ExpressionAttributeNames=expr_names,
+        ExpressionAttributeValues=expr_values,
     )
 
     logger.info(
         "Integration tool approval recorded in proxy",
-        extra={"approval_id": approval_id, "decision": decision, "user_sub": user_sub},
+        extra={
+            "approval_id": approval_id,
+            "decision": decision,
+            "has_reason": bool(reason),
+            "user_sub": user_sub,
+        },
     )
 
     return JSONResponse(content={"status": decision, "approvalId": approval_id})

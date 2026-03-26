@@ -20,6 +20,8 @@ from botocore.exceptions import ClientError
 from prm import client as prm_client
 from prm import resource
 
+from .approval import create_approval_request, poll_approval
+
 logger = structlog.get_logger()
 
 # Environment variables
@@ -744,6 +746,45 @@ def handle_get_agent(params: Dict[str, Any]) -> Dict[str, Any]:
     raise ValueError(f"Agent not found: {agent_id}")
 
 
+def _check_approval(
+    params: Dict[str, Any],
+    action_key: str,
+    description: str,
+    props_preview: Dict[str, Any],
+) -> Optional[Dict[str, Any]]:
+    """Check approval if request_id is present and not auto-approved.
+
+    Returns a denial/timeout dict if denied/timed out, or None to proceed.
+    """
+    request_id = params.get("request_id")
+    if not request_id:
+        return None
+
+    is_auto_approved = params.get("auto_approved", False)
+    if is_auto_approved:
+        return None
+
+    user_sub = params.get("__user_sub", "")
+    approval_id = create_approval_request(
+        user_sub=user_sub,
+        action_key=action_key,
+        description=description,
+        props_preview=props_preview,
+        approval_id=request_id,
+    )
+
+    decision, deny_reason = poll_approval(approval_id)
+
+    if decision == "denied":
+        msg = deny_reason or "User denied this action"
+        return {"status": "denied", "message": msg, "deny_reason": deny_reason}
+
+    if decision == "timeout":
+        return {"status": "timeout", "message": "Approval timed out"}
+
+    return None
+
+
 def handle_create_agent(params: Dict[str, Any]) -> Dict[str, Any]:
     """
     Create a new agent.
@@ -772,6 +813,20 @@ def handle_create_agent(params: Dict[str, Any]) -> Dict[str, Any]:
     user_sub = params.get("__user_sub")
     if not user_sub:
         raise ValueError("User authentication required")
+
+    # HITL approval gate
+    denial = _check_approval(
+        params,
+        action_key="numa_agents_create",
+        description=f"Create agent: {params.get('title', 'Untitled')}",
+        props_preview={
+            "title": params.get("title", ""),
+            "visibility": params.get("visibility", "personal"),
+            "systemPrompt": (params.get("systemPrompt", "") or "")[:200],
+        },
+    )
+    if denial:
+        return denial
 
     # Check admin policy
     mode = _get_agents_settings_mode()
@@ -887,6 +942,20 @@ def handle_update_agent(params: Dict[str, Any]) -> Dict[str, Any]:
         raise ValueError("User authentication required")
     if not agent_id:
         raise ValueError("agent_id is required")
+
+    # HITL approval gate
+    denial = _check_approval(
+        params,
+        action_key="numa_agents_update",
+        description=f"Update agent: {params.get('title', agent_id)}",
+        props_preview={
+            "agent_id": agent_id,
+            "title": params.get("title", ""),
+            "systemPrompt": (params.get("systemPrompt", "") or "")[:200],
+        },
+    )
+    if denial:
+        return denial
 
     # Check admin policy
     mode = _get_agents_settings_mode()
@@ -1027,6 +1096,16 @@ def handle_duplicate_agent(params: Dict[str, Any]) -> Dict[str, Any]:
         raise ValueError("User authentication required")
     if not agent_id:
         raise ValueError("agent_id is required")
+
+    # HITL approval gate
+    denial = _check_approval(
+        params,
+        action_key="numa_agents_duplicate",
+        description=f"Duplicate agent: {agent_id}",
+        props_preview={"agent_id": agent_id},
+    )
+    if denial:
+        return denial
 
     # Check admin policy
     mode = _get_agents_settings_mode()

@@ -24,6 +24,7 @@ export type ChatSettings = {
   defaultConnectionIds: string[];
   language: string | null;
   approvalMode: ApprovalMode;
+  numaToolApprovalEnabled: boolean;
   emailSignatureEnabled: boolean;
   emailSignatureText: string;
   chatScrollMode: ChatScrollMode;
@@ -96,6 +97,7 @@ export const DEFAULT_CHAT_SETTINGS: ChatSettings = {
   defaultConnectionIds: [],
   language: 'browser',
   approvalMode: 'non_destructive',
+  numaToolApprovalEnabled: false,
   emailSignatureEnabled: true,
   emailSignatureText: 'Sent by my AI assistant, Numa (https://www.arcanum.ai)',
   chatScrollMode: 'auto',
@@ -309,6 +311,10 @@ function validateSettings(data: unknown): ChatSettings {
       typeof obj.approvalMode === 'string' && VALID_APPROVAL_MODES.includes(obj.approvalMode as ApprovalMode)
         ? (obj.approvalMode as ApprovalMode)
         : DEFAULT_CHAT_SETTINGS.approvalMode,
+    numaToolApprovalEnabled:
+      typeof obj.numaToolApprovalEnabled === 'boolean'
+        ? obj.numaToolApprovalEnabled
+        : DEFAULT_CHAT_SETTINGS.numaToolApprovalEnabled,
     emailSignatureEnabled:
       typeof obj.emailSignatureEnabled === 'boolean'
         ? obj.emailSignatureEnabled
