@@ -27,6 +27,17 @@ services:
 variables:
   PYTHON_VER: 3.13
 
+# Override template-defined stages with our consolidated pipeline.
+# Old stages (lint, build, test) are replaced by a single "check" stage.
+stages:
+  - .pre
+  - setup
+  - check
+  - package
+  - image-build
+  - deploy
+  - deploy:customer
+
 # Global defaults — 10min timeout catches stuck runners fast (P90 for most jobs is under 6min).
 # Auto-retry on stuck/timeout/runner failures so a bad runner doesn't block the pipeline.
 default:
@@ -55,6 +66,13 @@ deploy-dev-gate:
       allow_failure: false
   script:
     - echo "Dev deploy to arcanum-demo approved. Pipeline proceeding..."
+
+# Disable template-defined pre-commit CI job — redundant with dedicated check jobs
+# and local pre-commit hooks that already cover formatting, eslint, and tsc.
+pre-commit:
+  stage: check
+  rules:
+    - when: never
 
 .node-matrix:
   matrix:
@@ -204,12 +222,6 @@ deploy-dev-gate:
     - yarn install --immutable
     - cd $BUILD_DIR
 
-.node-lint: {}
-
-.node-test: {}
-
-.node-build: {}
-
 install-common-dependencies:
   stage: setup
   image: node:lts
@@ -257,34 +269,14 @@ install-common-dependencies:
     BUILD_DIR: tools
   <<: *node-job-cdktf-get-before-script
 
-infra-lint:
-  extends: .node-lint
+infra-check:
+  stage: check
   <<: *node-job-infra-overrides
   interruptible: true
-  rules:
-    - changes:
-        paths:
-          - lib/client-config-node/**/*
-          - infra/**/*
-          - style/**/*
-          - .gitlab-ci.yml
-
-infra-test:
-  extends: .node-test
-  <<: *node-job-infra-overrides
-  interruptible: true
-  rules:
-    - changes:
-        paths:
-          - lib/client-config-node/**/*
-          - infra/**/*
-          - style/**/*
-          - .gitlab-ci.yml
-
-infra-build:
-  extends: .node-build
-  <<: *node-job-infra-overrides
-  interruptible: true
+  script:
+    - yarn lint
+    - yarn test
+    - yarn build
   rules:
     - if: $CI_COMMIT_BRANCH == "main"
     - changes:
@@ -294,8 +286,11 @@ infra-build:
           - style/**/*
           - .gitlab-ci.yml
 
-.python-lint-base:
+# Consolidated Python check: pyright (type-checking) + unittest in one job per module.
+# pylint and mypy removed — pyright catches real bugs, pre-commit handles formatting.
+.python-check-base:
   extends: .poetry-job
+  stage: check
   interruptible: true
   cache:
     - key:
@@ -305,10 +300,25 @@ infra-build:
         - poetry-cache-$CI_DEFAULT_BRANCH-$PYTHON_WORKING_DIRECTORY
       paths:
         - $PYTHON_WORKING_DIRECTORY/.venv/
+
+python-libraries-check:
+  extends: .python-check-base
   script:
-    - poetry run pylint . --verbose --recursive yes --ignore .venv,.poetry
-    - poetry run mypy .
     - poetry run pyright .
+    - if [ -d tests ]; then poetry run python -m unittest discover -s tests -v; else echo "No tests/ directory, skipping"; fi
+  parallel: !reference [.python-libraries-matrix]
+  rules:
+    - changes:
+        paths:
+          - $PYTHON_WORKING_DIRECTORY/**/*
+          - .gitlab-ci.yml
+
+python-lambdas-check:
+  extends: .python-check-base
+  script:
+    - poetry run pyright .
+    - if [ -d tests ]; then poetry run python -m unittest discover -s tests -v; else echo "No tests/ directory, skipping"; fi
+  parallel: !reference [.python-lambdas-matrix]
   rules:
     - changes:
         paths:
@@ -316,79 +326,31 @@ infra-build:
           - lib/**/*
           - .gitlab-ci.yml
 
-python-libraries-lint:
-  extends: .python-lint-base
-  parallel: !reference [.python-libraries-matrix]
-
-python-lambdas-lint:
-  extends: .python-lint-base
-  parallel: !reference [.python-lambdas-matrix]
-
-python-libraries-test:
-  extends: .python-unittest
+# Consolidated node check: lint + test + build in one job per lambda.
+# No --fix || true — pre-commit handles formatting, CI just validates.
+node-lambdas-check:
+  stage: check
+  image: registry.gitlab.com/arcanumai/ci/cdktf:latest
   interruptible: true
   cache:
     - key:
         files:
-          - $PYTHON_WORKING_DIRECTORY/poetry.lock
+          - yarn.lock
       fallback_keys:
-        - poetry-cache-$CI_DEFAULT_BRANCH-$PYTHON_WORKING_DIRECTORY
+        - yarn-cache-$CI_DEFAULT_BRANCH
       paths:
-        - $PYTHON_WORKING_DIRECTORY/.venv/
-  parallel: !reference [.python-libraries-matrix]
-  rules:
-    - changes:
-        - $PYTHON_WORKING_DIRECTORY/**/*
-        - .gitlab-ci.yml
-
-python-lambdas-test:
-  extends: .python-unittest
-  interruptible: true
-  cache:
-    - key:
-        files:
-          - $PYTHON_WORKING_DIRECTORY/poetry.lock
-      fallback_keys:
-        - poetry-cache-$CI_DEFAULT_BRANCH-$PYTHON_WORKING_DIRECTORY
-      paths:
-        - $PYTHON_WORKING_DIRECTORY/.venv/
-  parallel: !reference [.python-lambdas-matrix]
-  rules:
-    - changes:
-        - $PYTHON_WORKING_DIRECTORY/**/*
-        - lib/**/*
-        - .gitlab-ci.yml
-
-frontend-lint:
-  extends: .node-lint
-  image: registry.gitlab.com/arcanumai/ci/cdktf:latest
-  interruptible: true
-  before_script:
-    - !reference [.yarn, setup-private-auth]
-    - corepack enable
-    - yarn install --immutable
-  script:
-    - yarn workspace @arcanumai/numa-frontend run lint --fix || true
-    - yarn workspace @arcanumai/numa-frontend run lint
-  rules:
-    - changes:
-        paths:
-          - numa-frontend/**/*
-          - style/**/*
-          - .gitlab-ci.yml
-
-node-lambdas-lint:
-  extends: .node-lint
-  image: registry.gitlab.com/arcanumai/ci/cdktf:latest
-  interruptible: true
+        - .yarn/cache/
+        - node_modules/
+        - .pnp.*
   before_script:
     - !reference [.yarn, setup-private-auth]
     - corepack enable
     - yarn install --immutable
     - cd $BUILD_DIR
   script:
-    - yarn lint --fix || true
     - yarn lint
+    - yarn test
+    - yarn build
   parallel: !reference [.node-matrix]
   rules:
     - changes:
@@ -398,42 +360,43 @@ node-lambdas-lint:
           - style/**/*
           - .gitlab-ci.yml
 
-node-shared-lint:
-  extends: .node-lint
+node-shared-check:
+  stage: check
   image: registry.gitlab.com/arcanumai/ci/cdktf:latest
   interruptible: true
+  cache:
+    - key:
+        files:
+          - yarn.lock
+      fallback_keys:
+        - yarn-cache-$CI_DEFAULT_BRANCH
+      paths:
+        - .yarn/cache/
+        - node_modules/
+        - .pnp.*
   before_script:
     - !reference [.yarn, setup-private-auth]
     - corepack enable
     - yarn install --immutable
   script:
     - yarn workspace @arcanumai/q-apps-deployer-infra run get
-    - yarn workspaces foreach --all --parallel --include '@arcanumai/style' --include '@arcanumai/q-apps-deployer-tools' --include '@arcanumai/client-config' --include '@arcanumai/numa-customer-success-portal' run lint --fix || true
-    - yarn workspaces foreach --all --parallel --include '@arcanumai/style' --include '@arcanumai/q-apps-deployer-tools' --include '@arcanumai/client-config' --include '@arcanumai/numa-customer-success-portal' run lint
+    - yarn workspaces foreach --all --parallel --include '@arcanumai/style' --include '@arcanumai/client-config' --include '@arcanumai/numa-customer-success-portal' run lint
   rules:
     - changes:
         paths:
           - lib/**/*
-          - tools/**/*
           - style/**/*
           - numa-customer-success-portal/**/*
           - .gitlab-ci.yml
 
-tools-test:
-  extends: .node-test
+tools-check:
+  stage: check
   <<: *node-job-tools-overrides
   interruptible: true
-  rules:
-    - changes:
-        - lib/client-config-node/**/*
-        - tools/**/*
-        - style/**/*
-        - .gitlab-ci.yml
-
-tools-build:
-  extends: .node-build
-  <<: *node-job-tools-overrides
-  interruptible: true
+  script:
+    - yarn lint
+    - yarn test
+    - yarn build
   rules:
     - if: $CI_COMMIT_BRANCH == "main"
     - changes:
@@ -443,72 +406,26 @@ tools-build:
           - style/**/*
           - .gitlab-ci.yml
 
-node-test:
-  extends: .node-test
+frontend-check:
+  stage: check
+  image: registry.gitlab.com/arcanumai/ci/cdktf:latest
   interruptible: true
-  parallel: !reference [.node-matrix]
-  rules:
-    - changes:
-        - $BUILD_DIR/**/*
-        - style/**/*
-        - .gitlab-ci.yml
-
-node-build:
-  extends: .node-build
-  interruptible: true
-  parallel: !reference [.node-matrix]
-  rules:
-    - if: $CI_COMMIT_BRANCH == "main"
-    - changes:
-        paths:
-          - $BUILD_DIR/**/*
-          - lib/**/*
-          - style/**/*
-          - .gitlab-ci.yml
-
-frontend-test:
-  extends: node-test
-  interruptible: true
-  parallel:
-    matrix:
-      - BUILD_DIR: [numa-frontend]
   before_script:
-    - !reference [.yarn, setup-private-auth] # required for @arcanumai/* packages
+    - !reference [.yarn, setup-private-auth]
     - corepack enable
     - yarn install --immutable
-    - cd "$BUILD_DIR"
+    - cd numa-frontend
     - mkdir -p test-reports
   script:
-    - node -v && yarn -v
     - yarn test
+    - NODE_OPTIONS=--max-old-space-size=3072 yarn build
   artifacts:
     when: always
     paths:
       - numa-frontend/test-reports/*
+      - infra/build/numa-frontend
     reports:
       junit: numa-frontend/test-reports/test-report.xml
-  rules:
-    - changes:
-        - numa-frontend/**/*
-        - style/**/*
-        - .gitlab-ci.yml
-
-frontend-build:
-  extends: node-build
-  interruptible: true
-  parallel:
-    matrix:
-      - BUILD_DIR: [numa-frontend]
-  before_script:
-    - !reference [.yarn, setup-private-auth]
-    - corepack enable
-    - cd "$BUILD_DIR"
-    - yarn install --immutable
-  script:
-    - corepack enable
-    - NODE_OPTIONS=--max-old-space-size=3072 yarn build
-  artifacts:
-    paths: [infra/build/numa-frontend]
   rules:
     - if: $CI_COMMIT_BRANCH == "main"
     - if: $CI_COMMIT_BRANCH == "dev"
@@ -729,6 +646,8 @@ deploy-to-arcanum-demo:
   rules:
     - if: $CI_COMMIT_BRANCH == "main"
       when: on_success
+    - if: $CI_COMMIT_BRANCH == "dev"
+      when: manual
 
 deploy-to-median:
   extends: .deploy-infra

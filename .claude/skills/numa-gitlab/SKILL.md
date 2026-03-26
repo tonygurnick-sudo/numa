@@ -17,15 +17,17 @@ This skill helps interact with the Numa GitLab repository using the `glab` CLI t
 
 ## Pipeline Structure
 
-Numa's CI/CD pipeline has these stages in order:
+Consolidated pipeline with a single `check` stage for all validation. Lint + test + build merged into one job per module.
 
-| Stage       | Key Jobs                                                                                 | Description                                     |
-| ----------- | ---------------------------------------------------------------------------------------- | ----------------------------------------------- |
-| **setup**   | `install-common-dependencies`                                                            | Installs yarn dependencies, caches node_modules |
-| **lint**    | `node-lint`, `infra-lint`, `client-list-lint`, `pre-commit`                              | Linting for all workspaces                      |
-| **test**    | `frontend-test`, `node-test`, `python-lambdas-test`, `python-lambdas-lint`, `infra-test` | Tests and Python linting                        |
-| **build**   | `frontend-build`, `node-build`, `infra-build`, `tools-build`                             | Build artifacts                                 |
-| **package** | `claude-cli-artifact-build`                                                              | Package final artifacts                         |
+| Stage           | Key Jobs                                                                                                                                    | Description                                        |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------- |
+| **setup**       | `install-common-dependencies`                                                                                                               | Installs yarn deps, caches node_modules (dev/main) |
+| **check**       | `node-lambdas-check`, `python-lambdas-check`, `python-libraries-check`, `frontend-check`, `infra-check`, `tools-check`, `node-shared-check` | Lint + test + build per module (change-detected)   |
+| **package**     | `python-lambdas-package`, `node-package`, `claude-cli-artifact-build`, `workspace-agent-package`                                            | Package artifacts (dev/main only)                  |
+| **image-build** | `build-deployment-container`                                                                                                                | Docker build + ECR push (main only)                |
+| **deploy**      | `deploy-to-arcanum-demo`, `deploy-to-median`                                                                                                | Deploy to environments (main only)                 |
+
+MR pipelines only run the `check` stage. Dev pipelines are gated (manual approval before anything runs).
 
 ## Common glab Commands
 
@@ -52,8 +54,8 @@ glab ci status -b main
 glab ci trace
 
 # Specific job by name
-glab ci trace node-lint
-glab ci trace infra-lint
+glab ci trace node-lambdas-check
+glab ci trace infra-check
 
 # Specific job by ID
 glab ci trace 12345678
@@ -63,7 +65,7 @@ glab ci trace 12345678
 
 ```bash
 # Retry by job name
-glab ci retry node-lint
+glab ci retry python-lambdas-check
 
 # Retry by job ID
 glab ci retry 12345678
@@ -91,9 +93,9 @@ glab ci view
 
 ## Common Failure Patterns & Fixes
 
-### 1. node-lint / infra-lint: AWS SDK Type Errors
+### 1. AWS SDK Type Errors
 
-**Symptom:** `@smithy/types` has no exported member errors
+**Symptom:** `@smithy/types` has no exported member errors in `node-lambdas-check` or `infra-check`
 **Fix:** Get yarn.lock from main and reinstall:
 
 ```bash
@@ -104,23 +106,20 @@ yarn install
 ### 2. Prettier Formatting Errors
 
 **Symptom:** `Replace`, `Delete`, `Insert` errors from prettier/prettier
-**Fix:** Run prettier on affected files:
+**Fix:** Run prettier on affected files or `make format`:
 
 ```bash
 npx prettier --write <file-path>
 ```
 
-### 3. Python Lambda Lint: Score Below 10/10
+### 3. Python pyright Errors
 
-**Symptom:** pylint score like 9.69/10
-**Fix:**
+**Symptom:** Type errors in `python-lambdas-check` or `python-libraries-check`
+**Fix:** Fix the type issue locally, or add a `# type: ignore` comment if it's a false positive.
 
-- Add missing disables to `.pylintrc` in the lambda directory
-- Or fix the actual lint issues (unused imports, etc.)
+### 4. Cannot find module 'typescript'
 
-### 4. infra-lint: Cannot find module 'typescript'
-
-**Symptom:** `Cannot find module 'typescript/bin/tsc'`
+**Symptom:** `Cannot find module 'typescript/bin/tsc'` in `infra-check`
 **Fix:** Usually a CI cache issue. Try:
 
 ```bash
@@ -128,51 +127,38 @@ npx prettier --write <file-path>
 cd infra && yarn lint
 
 # If local works, retry the CI job
-glab ci retry infra-lint
+glab ci retry infra-check
 ```
-
-### 5. client-list-lint: Pre-existing Failure
-
-**Note:** This job often fails on main too - check if it's a pre-existing issue before debugging.
 
 ## Local Testing Before Push
 
-### Run All Lints
+### Run All Checks (matches CI)
 
 ```bash
-# Node workspaces (excluding infra)
-yarn workspaces foreach --parallel --all --exclude infra run lint
+# Full lint (parallel)
+make lint -j
 
-# Infra
-cd infra && yarn lint
-
-# Python lambda (from lambda directory)
-poetry run pylint . --verbose --recursive yes --ignore .venv,.poetry
-poetry run mypy .
-poetry run pyright .
-```
-
-### Run Tests
-
-```bash
-# Node workspaces
-yarn workspaces foreach --parallel --all --exclude infra run test
-
-# Infra
-cd infra && yarn test
-
-# Python lambda
-poetry run pytest
+# Or individual targets:
+make lint-frontend          # ESLint + TypeScript
+make lint-infra             # ESLint + TypeScript
+make lint-node-lambdas      # ESLint + TypeScript per lambda
+make lint-python-lambdas    # pyright per lambda
+make lint-python-libs       # pyright per library
 ```
 
 ### Test Specific Python Lambda
 
 ```bash
 cd lambdas/python/<lambda-name>
-poetry run pytest
-poetry run pylint . --verbose --recursive yes --ignore .venv,.poetry
-poetry run mypy .
 poetry run pyright .
+poetry run python -m unittest discover -s tests -v
+```
+
+### Test Specific Node Lambda
+
+```bash
+cd lambdas/node/<lambda-name>
+yarn lint && yarn test && yarn build
 ```
 
 ## Lambda Locations
@@ -180,7 +166,7 @@ poetry run pyright .
 - **Python lambdas:** `lambdas/python/<name>/`
 - **Node lambdas:** `lambdas/node/<name>/`
 - **CI config:** `.gitlab-ci.yml`
-- **Lambda matrices:** Search for `.python-lambdas-matrix` and `.node-lambdas-matrix` in `.gitlab-ci.yml`
+- **Lambda matrices:** Search for `.python-lambdas-matrix` and `.node-matrix` in `.gitlab-ci.yml`
 
 ## Adding New Lambdas to CI
 
@@ -209,10 +195,12 @@ comm -23 <(ls -d lambdas/python/*/ | xargs -n1 basename | sort) <(grep -E "^\s+-
 
 ## Troubleshooting
 
-1. **Pipeline stuck on "created"**: Lint stage probably failed. Check `glab ci status` for failed jobs.
+1. **Pipeline stuck on "created"**: Check stage probably failed. Check `glab ci status` for failed jobs.
 
-2. **Jobs skipped**: Jobs only run if their dependencies (previous stage) passed.
+2. **Jobs skipped**: On MR pipelines, jobs only run if relevant files changed (change detection). On dev, the manual gate must be clicked first.
 
 3. **Can't find job in trace**: Make sure you're on the right branch. Use `-b <branch>` flag.
 
 4. **glab auth issues**: Run `glab auth login` to re-authenticate.
+
+5. **Python test fails with "Start directory is not importable"**: The module has no `tests/` directory. This is handled gracefully in CI (skips tests), but check if tests should exist.
