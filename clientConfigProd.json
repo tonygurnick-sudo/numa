@@ -75,7 +75,7 @@
   "nolia-id-gov-moh": {
     "additionalCognitoClientIds": "415r270afvm16t6fd4veli03tt",
     "agentCoreRegion": "ap-southeast-2",
-    "agents": false,
+    "agents": true,
     "allowBedrockQuotaSharing": true,
     "apps": {
       "meeting-analyser": {}
