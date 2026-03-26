@@ -27,6 +27,7 @@ describe('chatSystemPromptUtils', () => {
     vi.clearAllMocks();
     // Mock console methods
     vi.spyOn(console, 'log').mockImplementation(() => {});
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
     vi.spyOn(console, 'error').mockImplementation(() => {});
     // Enable Agents feature for tests that expect agent tool guidance by default
     if (typeof window !== 'undefined' && window.sessionStorage) {
@@ -100,7 +101,7 @@ describe('chatSystemPromptUtils', () => {
       expect(await loadCompanyProfile(mockCompanyBucket, mockRegion, null)).toBe('');
 
       // Verify console.log was called
-      expect(console.log).toHaveBeenCalledWith('Missing required parameters for loading company profile');
+      expect(console.warn).toHaveBeenCalledWith('Missing required parameters for loading company profile');
     });
 
     it('should fetch company info and return profile text', async () => {

@@ -30,18 +30,67 @@ SYSTEM_USER_FUNCTION_RESOURCE := aws_lambda_function.numa_system-user_function_3
 SYSTEM_USER_FUNCTION_NAME := system-user-creator---TfToken-TOKEN-81--
 
 .PHONY: init get plan import deploy clean pipelinefix cli lint format \
-	lint-frontend lint-infra lint-node-shared lint-node-lambdas lint-python-lambdas lint-python-libs
+	lint-frontend lint-frontend-typecheck lint-infra lint-node-shared lint-node-lambdas \
+	lint-python-lambdas lint-python-libs lint-prettier lint-python-format lint-yaml \
+	lint-trailing-whitespace lint-end-of-file
 .DEFAULT_GOAL := deploy
 
-# ---- Lint entire repo (matches CI) ----
+# ---- Lint entire repo (matches CI + pre-commit) ----
 # Run `make lint -j` for maximum parallelism
-lint: lint-frontend lint-infra lint-node-shared lint-node-lambdas lint-python-lambdas lint-python-libs
+lint: lint-prettier lint-python-format lint-yaml lint-trailing-whitespace lint-end-of-file lint-frontend lint-frontend-typecheck lint-infra lint-node-shared lint-node-lambdas lint-python-lambdas lint-python-libs
 	@echo ""
 	@echo "✅ All lint checks passed"
 
+lint-prettier:
+	@echo "=== Prettier ==="
+	@npx prettier --check "**/*.{ts,tsx,js,jsx,json,css,scss,md}" --ignore-unknown
+
+lint-python-format:
+	@echo "=== Python formatting (black + isort) ==="
+	@for dir in lambdas/python/*/ lib/*/; do \
+		if [ -f "$$dir/pyproject.toml" ]; then \
+			(cd "$$dir" && poetry run black --check . 2>/dev/null && \
+				poetry run isort --check . 2>/dev/null) || exit 1; \
+		fi; \
+	done
+
+lint-yaml:
+	@echo "=== YAML ==="
+	@python3 -c "import yaml, glob, sys; \
+		errs = 0; \
+		[yaml.safe_load(open(f)) or 0 for f in glob.glob('**/*.yaml', recursive=True) + glob.glob('**/*.yml', recursive=True) if '/node_modules/' not in f and '/.venv/' not in f] \
+		; print('  All YAML valid')" 2>&1 || (echo '  YAML validation failed' && exit 1)
+
+lint-trailing-whitespace:
+	@echo "=== Trailing whitespace ==="
+	@matches=$$(git grep -nI ' $$' -- ':!node_modules' ':!*.lock' ':!*.min.*' ':!*.snap' ':!.gen' ':!cdktf.out' ':!*.whl' ':!*.tar' ':!*.zip' ':!*.pyc' | head -20); \
+	if [ -n "$$matches" ]; then \
+		echo "$$matches"; \
+		echo "  Trailing whitespace found (showing first 20). Run 'make format' to fix."; \
+		exit 1; \
+	else \
+		echo "  No trailing whitespace"; \
+	fi
+
+lint-end-of-file:
+	@echo "=== End of file newline ==="
+	@bad=0; \
+	for f in $$(git ls-files -- ':!node_modules' ':!*.lock' ':!*.min.*' ':!*.snap' ':!*.whl' ':!*.tar' ':!*.zip' ':!*.png' ':!*.jpg' ':!*.gif' ':!*.ico' ':!*.woff' ':!*.woff2' ':!*.ttf' ':!*.eot' ':!*.pdf' ':!.gen' ':!cdktf.out' | head -500); do \
+		if [ -s "$$f" ] && [ "$$(tail -c1 "$$f" | wc -l)" -eq 0 ]; then \
+			echo "  No newline at end: $$f"; \
+			bad=1; \
+		fi; \
+	done; \
+	if [ "$$bad" -eq 1 ]; then echo "  Run 'make format' to fix."; exit 1; fi; \
+	echo "  All files end with newline"
+
 lint-frontend:
-	@echo "=== Frontend ==="
+	@echo "=== Frontend ESLint ==="
 	@yarn workspace @arcanumai/numa-frontend run lint
+
+lint-frontend-typecheck:
+	@echo "=== Frontend TypeScript ==="
+	@yarn workspace @arcanumai/numa-frontend run typecheck
 
 lint-infra:
 	@echo "=== Infra ==="

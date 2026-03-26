@@ -455,7 +455,7 @@ AVAILABLE_AGENTS = [
 ### Infrastructure
 
 - `/infra/constructs/apps/base-numa-app-construct.ts` - Base class for all apps
-- `/infra/constructs/types.ts` - TypeScript types for manifests
+- `/infra/constructs/apps/base-numa-app-construct.ts` - Base construct + all TypeScript types for manifests, task types, enums
 - `/infra/stacks/numa-client-stack.ts` - App registration (search for `appLibrary`)
 - `/infra/constructs/apps/data-analysis-construct.ts` - Claude Code app example
 

@@ -1,0 +1,243 @@
+# Numa Frontend
+
+React 19 + Vite 6 + Bootstrap 5 + TypeScript 5.9. Styled with React Bootstrap 2 + Bootstrap Icons + Lucide React.
+
+---
+
+## Architecture
+
+### Routing
+
+Routes are defined in `src/utils/routeConfig.tsx` and rendered in `src/Routes.tsx`. All pages are lazy-loaded and auth-protected via `ProtectedRoute`.
+
+Key routes:
+
+| Route              | Page                      | Notes                             |
+| ------------------ | ------------------------- | --------------------------------- |
+| `/chat`            | `NumaWorkspaceChatAgents` | Primary chat (workspace agent)    |
+| `/dash`            | `Dash`                    | App marketplace/launcher          |
+| `/agents`          | `AgentsManagement`        | Agent builder & management        |
+| `/ops`             | `OpsPage`                 | Numa Ops (tickets/projects/teams) |
+| `/files`           | `Files`                   | File manager (remote + workspace) |
+| `/knowledge-bases` | `CompanyKnowledgeBase`    | KB admin                          |
+| `/data-connectors` | `DataConnectorsPage`      | OAuth data connectors             |
+| `/scheduling`      | `SchedulingPage`          | Agent scheduling                  |
+| `/integrations`    | `NumaIntegrations`        | Pipedream integrations            |
+| `/settings`        | `Settings`                | Admin settings                    |
+| `/shared/:uuid`    | Shared doc Q&A            | **No auth required**              |
+
+Routes are gated by feature flags (`featureFlag`) and required features (`requiredFeature`) from config.
+
+### Directory Structure
+
+```
+src/
+├── Pages/              # 32+ lazy-loaded pages
+├── Components/         # 67+ component folders (feature-grouped)
+├── Providers/          # 17 context providers
+├── Services/           # 34 API client services
+├── hooks/              # 25+ custom React hooks
+├── utils/              # 40+ utility modules
+├── types/              # 13 TypeScript domain type files
+├── Layouts/            # AppLayout, LayoutDashboard, LayoutForm
+├── Modules/            # 10 reusable input/output modules
+├── ToolRenderers/      # Chat tool output renderers
+├── Config/             # Integrations, quick actions, icons
+├── locales/            # i18n translations (en, he)
+├── Assets/             # CSS, SCSS, images
+└── __tests__/          # Vitest tests
+```
+
+Components are organized **by feature** (e.g., `Components/Ops/`, `Components/WorkspaceChat/`, `Components/Agents/`), not by type.
+
+### State Management (Providers)
+
+Provider hierarchy (from `AppProviders.tsx`):
+
+```
+AuthProvider
+  └─ NumaRequestProvider
+      └─ AdminCapabilityGateLoader
+          └─ KnowledgeBaseProvider
+              └─ NumaAppProvider
+                  └─ JobStatusProvider
+```
+
+| Provider                  | Purpose                                                       |
+| ------------------------- | ------------------------------------------------------------- |
+| **AuthProvider**          | Cognito auth, token refresh (10-min), AWS SDK clients         |
+| **NumaRequestProvider**   | HTTP helpers (numaGet/Post/Put/Delete) with auto auth headers |
+| **KnowledgeBaseProvider** | KB document cache, indexing status                            |
+| **NumaAppProvider**       | App catalog, favorites                                        |
+| **JobStatusProvider**     | App run status polling (DynamoDB)                             |
+| **BrandingProvider**      | Client branding (logo, colors, name)                          |
+| **ToastProvider**         | Toast notification queue                                      |
+
+### Path Aliases
+
+```
+@/*            → src/
+@/components/* → src/Components/
+@/pages/*      → src/Pages/
+@/utils/*      → src/utils/
+@/services/*   → src/Services/
+@/providers/*  → src/Providers/
+@/hooks/*      → src/hooks/
+@/modules/*    → src/Modules/
+@/layouts/*    → src/Layouts/
+```
+
+---
+
+## Critical Patterns & Gotchas
+
+These patterns exist because we've been burned by real bugs. Follow them exactly.
+
+### Token Access (AuthProvider)
+
+**Never read tokens directly from `user.tokens` or `user.decoded_tokens` for API calls or AWS credential creation.** User state is intentionally NOT updated on token refresh (to prevent cascading re-renders across all `useAuth()` consumers). Tokens in `user.tokens` may be stale/expired.
+
+**Correct:**
+
+- `await getAccessToken()` — for access tokens (API Authorization headers)
+- `await getIdToken()` — for ID tokens (STS `webIdentityToken`, chat agent requests)
+- `user.decoded_tokens.idToken.sub`, `.email`, `.cognito:groups` — identity claims are safe (don't change during a session)
+
+**Why:** `refreshTokens()` updates `tokensRef`, `decodedTokensRef`, and `localStorage` every 10 minutes, but only calls `setUser()` when groups/features actually change. `getAccessToken()`/`getIdToken()` read from refs (always fresh) and handle expiry checks automatically.
+
+**Key files:** `src/Providers/AuthProvider.tsx`, `src/Providers/RequestProvider.tsx`
+
+### API Requests (RequestProvider)
+
+**Always use `useNumaRequest()` hooks for API calls to protected `/api/` endpoints.** Never use raw `fetch()` or `axios` directly — they won't include the Authorization header and will 401.
+
+```tsx
+const { numaGet, numaPost, numaPut, numaDelete } = useNumaRequest();
+
+const data = await numaGet('/api/settings/agents');
+await numaPut('/api/settings/agents', { mode: 'full' });
+```
+
+**Service methods:** Many admin services (e.g., `AdminAgentsService`, `AdminMfaSettingsService`) accept optional `numaGet`/`numaPut` parameters. When not passed, they silently fall back to raw `fetch()` without auth. **Always pass the auth helper:**
+
+```tsx
+// Correct — authenticated
+const res = await AdminAgentsService.get(numaGet);
+
+// Wrong — silently unauthenticated, returns 401
+const res = await AdminAgentsService.get();
+```
+
+**Key file:** `src/Providers/RequestProvider.tsx`
+
+### AWS SDK Clients (AuthProvider)
+
+**Never create AWS SDK clients locally in page components.** All AWS SDK clients are centralized in AuthProvider and accessed via `useAuth()`.
+
+```tsx
+const { lambdaClient, dynamoDBClient, bedrockRuntimeClient } = useAuth();
+```
+
+**Why:** AuthProvider creates clients with a function-based credential provider that reads fresh tokens from `tokensRef` on every SDK call. Page-local clients capture the token once at init time, so after background refresh the credentials go stale (401/403 errors after ~15min).
+
+**Adding a new client:** Follow the existing pattern in AuthProvider: state + `useCallback` initializer + add to the central `useEffect` + `value` useMemo + logout cleanup. See `initializeLambdaClient` or `initializeQBusinessClient` as templates.
+
+**Key file:** `src/Providers/AuthProvider.tsx`
+
+---
+
+## Internationalization (i18n)
+
+**All user-facing text MUST use i18n translations.** Do not hardcode strings. ESLint rule `i18next/no-literal-string` will error on hardcoded UI strings.
+
+Uses `react-i18next`. Translation files: `src/locales/en/*.json`.
+
+**Namespaces:** common, chat, agents, apps, auth, settings, integrations, knowledgeBase, files, ops, userManagement, automations, vault, shared, errors, support.
+
+```tsx
+import { useTranslation } from 'react-i18next';
+
+const { t } = useTranslation('common');
+return <Button>{t('common.save')}</Button>;
+```
+
+For interpolation: `{{variable}}` in JSON, e.g. `"greeting": "Hello, {{name}}!"`.
+
+### Adding a New UI Language
+
+Update all of the following:
+
+1. **Picker options:** `src/Pages/UserProfile.tsx` — add `<option value="xx">`
+2. **Picker label (i18n):** `src/locales/en/settings.json` — add `userProfile.defaults.language.<key>`
+3. **Supported languages:** `src/i18n/index.ts` — add to `supportedLngs`
+4. **LLM language storage:** `src/utils/languagePreference.ts` — persisted under `numaLanguagePreference`, passed to chat/apps via `getEffectiveLanguage()`
+5. **LLM prompt wording:** `lib/bedrock/bedrock/language.py` — add to `LANGUAGE_NAMES` (single source of truth for system prompt wording)
+
+---
+
+## Configuration & Feature Flags
+
+`public/config.json` is **auto-generated during deployment** from the `numa-client-config` DynamoDB table. **Never edit it directly** — it will be overwritten on deploy.
+
+`clientConfigProd.json` is a **local dev override only**. If a client exists in this file, its config is used entirely and DynamoDB is skipped — missing flags default to `false`.
+
+Feature flags are accessed via `getFlag(flagName)` from `src/utils/featureFlags.ts`. Key flags:
+
+| Flag                      | Controls                                       |
+| ------------------------- | ---------------------------------------------- |
+| `PIPEDREAM_INTEGRATIONS`  | Pipedream SaaS integrations                    |
+| `NUMA_WORKSPACE_CHAT`     | Workspace chat agent                           |
+| `SCHEDULING`              | Agent scheduling + notifications               |
+| `DATA_CONNECTORS_ENABLED` | Data connectors (SharePoint, Teams, Box, etc.) |
+| `NUMA_FILES`              | Files section with virtual file system         |
+| `NUMA_OPS`                | Numa Ops (tickets/projects)                    |
+| `V2_APPS`                 | V2 Apps (experimental)                         |
+| `AGENTS`                  | Agent builder                                  |
+| `SECRETS_VAULT_ENABLED`   | Secrets vault                                  |
+
+---
+
+## Dev Commands
+
+```bash
+yarn install              # Install dependencies
+yarn dev                  # Start dev server
+yarn build                # Production build (8GB Node heap)
+yarn test                 # Vitest unit tests with coverage
+yarn test:e2e             # Playwright E2E tests
+yarn lint                 # ESLint check
+yarn format               # Prettier format
+yarn typecheck            # TypeScript check
+```
+
+Lint all workspaces (excluding infra): `yarn workspaces foreach --parallel --all --exclude infra run lint --fix`
+
+---
+
+## Testing
+
+**Framework:** Vitest + React Testing Library. E2E: Playwright.
+
+- Test files: `src/__tests__/` (mirrors src structure)
+- Setup: `src/__tests__/testSetup.ts` (localStorage mock, i18n init)
+- Environment: jsdom
+
+---
+
+## Chat Transport
+
+Workspace chat uses HTTP streaming to the workspace agent proxy with NDJSON frames. CloudFront injects `x-arcanum-cloudfront-secret`; frontend attaches Cognito bearer token.
+
+**Key files:**
+
+- Page: `src/Pages/NumaWorkspaceChatAgents.tsx`
+- Service: `src/Services/workspaceChatAgentService.ts`
+- Types: `src/types/workspaceChatTypes.ts`
+- Components: `src/Components/WorkspaceChat/`
+- Streaming hook: `src/hooks/useWorkspaceChatStreaming.ts`
+
+---
+
+## Partner Revenue Measurement (PRM)
+
+All AWS SDK calls must carry the Marketplace product code (`cl23v3vsno0k35czlg7e3ld9p`). Use `withPRM` from `src/utils/prmUtils.ts` when creating AWS SDK clients in the frontend.

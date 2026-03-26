@@ -7,30 +7,31 @@
 **Table Name:** `{client}-agents`
 **Purpose:** Stores public/workspace-shared agents
 
-| Attribute                      | Type   | Key | Description                                  |
-| ------------------------------ | ------ | --- | -------------------------------------------- |
-| `tenant_id`                    | String | PK  | Workspace/tenant identifier                  |
-| `agent_id`                     | String | SK  | Agent ID (`agt_<uuid>`)                      |
-| `title`                        | String |     | Display name                                 |
-| `description`                  | String |     | What the agent does                          |
-| `system_prompt`                | String |     | Core instructions for Claude                 |
-| `user_welcome_message`         | String |     | Greeting shown at session start              |
-| `visibility`                   | String |     | Always `'public'` for this table             |
-| `agent_type`                   | String |     | `'task'`, `'knowledge'`, `'scheduled'`, etc. |
-| `icon`                         | String |     | Bootstrap icon class                         |
-| `icon_image`                   | Map    |     | `{ s3_bucket, s3_key }` for custom image     |
-| `required_integrations`        | List   |     | Pipedream integration IDs                    |
-| `tools_config`                 | Map    |     | Tool permissions (see below)                 |
-| `reference_files`              | List   |     | Attached files (see below)                   |
-| `estimated_time_saved_minutes` | Number |     | Productivity metric                          |
-| `creator_id`                   | String |     | User ID who created the agent                |
-| `created_by_name`              | String |     | Display name of creator                      |
-| `created_at`                   | Number |     | Unix timestamp                               |
-| `updated_at`                   | Number |     | Unix timestamp                               |
-| `version`                      | Number |     | Optimistic locking                           |
-| `source_agent_id`              | String |     | Original agent if duplicated                 |
+| Attribute                      | Type   | Key | Description                                                             |
+| ------------------------------ | ------ | --- | ----------------------------------------------------------------------- |
+| `tenant_id`                    | String | PK  | Workspace/tenant identifier                                             |
+| `agent_id`                     | String | SK  | Agent ID (`agt_<uuid>`)                                                 |
+| `title`                        | String |     | Display name                                                            |
+| `description`                  | String |     | What the agent does                                                     |
+| `system_prompt`                | String |     | Core instructions for Claude                                            |
+| `user_instructions`            | String |     | Greeting shown at session start (mapped to `userWelcomeMessage` in API) |
+| `tags`                         | List   |     | Up to 20 tags (normalized: lowercase, deduped, trimmed)                 |
+| `visibility`                   | String |     | Always `'public'` for this table                                        |
+| `agent_type`                   | String |     | `'task'`, `'knowledge'`, `'scheduled'`, etc.                            |
+| `icon`                         | String |     | Bootstrap icon class                                                    |
+| `icon_image`                   | Map    |     | `{ s3_bucket, s3_key }` for custom image                                |
+| `required_integrations`        | List   |     | Pipedream integration IDs                                               |
+| `tools_config`                 | Map    |     | Tool permissions (see below)                                            |
+| `reference_files`              | List   |     | Attached files (see below)                                              |
+| `estimated_time_saved_minutes` | Number |     | Productivity metric                                                     |
+| `creator_id`                   | String |     | User ID who created the agent                                           |
+| `created_by_name`              | String |     | Display name of creator                                                 |
+| `created_at`                   | Number |     | Unix timestamp                                                          |
+| `updated_at`                   | Number |     | Unix timestamp                                                          |
+| `version`                      | Number |     | Optimistic locking                                                      |
+| `source_agent_id`              | String |     | Original agent if duplicated                                            |
 
-**GSI:** `tenant_id-updated_at-index` for listing agents sorted by recency
+**GSIs:** `agent-id-index` (hash: `agent_id`) + `agent-creator-index` (hash: `created_by_user_id`)
 
 ---
 
@@ -39,30 +40,31 @@
 **Table Name:** `{client}-user-agents`
 **Purpose:** Stores personal/private agents
 
-| Attribute                      | Type    | Key | Description                        |
-| ------------------------------ | ------- | --- | ---------------------------------- |
-| `user_id`                      | String  | PK  | Owner's user ID                    |
-| `agent_id`                     | String  | SK  | Agent ID (`agt_<uuid>`)            |
-| `tenant_id`                    | String  |     | Workspace for reference            |
-| `title`                        | String  |     | Display name                       |
-| `description`                  | String  |     | What the agent does                |
-| `system_prompt`                | String  |     | Core instructions                  |
-| `user_welcome_message`         | String  |     | Greeting message                   |
-| `visibility`                   | String  |     | Always `'personal'` for this table |
-| `agent_type`                   | String  |     | Agent category                     |
-| `icon`                         | String  |     | Bootstrap icon                     |
-| `icon_image`                   | Map     |     | Custom image reference             |
-| `required_integrations`        | List    |     | Required integrations              |
-| `tools_config`                 | Map     |     | Tool permissions                   |
-| `reference_files`              | List    |     | Attached files                     |
-| `estimated_time_saved_minutes` | Number  |     | Time saved estimate                |
-| `created_at`                   | Number  |     | Unix timestamp                     |
-| `updated_at`                   | Number  |     | Unix timestamp                     |
-| `version`                      | Number  |     | Optimistic locking                 |
-| `source_agent_id`              | String  |     | Original if duplicated             |
-| `is_favorite`                  | Boolean |     | User's favorite flag               |
+| Attribute                      | Type    | Key | Description                                              |
+| ------------------------------ | ------- | --- | -------------------------------------------------------- |
+| `user_id`                      | String  | PK  | Owner's user ID                                          |
+| `agent_id`                     | String  | SK  | Agent ID (`agt_<uuid>`)                                  |
+| `tenant_id`                    | String  |     | Workspace for reference                                  |
+| `title`                        | String  |     | Display name                                             |
+| `description`                  | String  |     | What the agent does                                      |
+| `system_prompt`                | String  |     | Core instructions                                        |
+| `user_instructions`            | String  |     | Greeting message (mapped to `userWelcomeMessage` in API) |
+| `tags`                         | List    |     | Up to 20 tags                                            |
+| `visibility`                   | String  |     | Always `'personal'` for this table                       |
+| `agent_type`                   | String  |     | Agent category                                           |
+| `icon`                         | String  |     | Bootstrap icon                                           |
+| `icon_image`                   | Map     |     | Custom image reference                                   |
+| `required_integrations`        | List    |     | Required integrations                                    |
+| `tools_config`                 | Map     |     | Tool permissions                                         |
+| `reference_files`              | List    |     | Attached files                                           |
+| `estimated_time_saved_minutes` | Number  |     | Time saved estimate                                      |
+| `created_at`                   | Number  |     | Unix timestamp                                           |
+| `updated_at`                   | Number  |     | Unix timestamp                                           |
+| `version`                      | Number  |     | Optimistic locking                                       |
+| `source_agent_id`              | String  |     | Original if duplicated                                   |
+| `is_favorite`                  | Boolean |     | User's favorite flag                                     |
 
-**GSI:** `user_id-updated_at-index` for listing user's agents
+**GSI:** `agent-id-index` (hash: `agent_id`)
 
 ---
 
@@ -101,14 +103,17 @@
 }
 ```
 
-| Field                   | Type                 | Description                             |
-| ----------------------- | -------------------- | --------------------------------------- |
-| `autoToolsEnabled`      | Boolean              | Agent auto-selects tools                |
-| `queryDataSources`      | Boolean              | Can access knowledge base               |
-| `webSearchEnabled`      | Boolean              | Can search the web                      |
-| `createAgentEnabled`    | Boolean              | Can create sub-agents                   |
-| `enabledConnections`    | List<String>         | Pipedream integration IDs               |
-| `allowedKnowledgeBases` | List<String> or null | `null`=all, `[]`=none, `['x']`=specific |
+| Field                   | Type                 | Description                                                                   |
+| ----------------------- | -------------------- | ----------------------------------------------------------------------------- |
+| `autoToolsEnabled`      | Boolean              | Agent auto-selects tools                                                      |
+| `queryDataSources`      | Boolean              | Can access knowledge base                                                     |
+| `webSearchEnabled`      | Boolean              | Can search the web                                                            |
+| `createAgentEnabled`    | Boolean              | Can create sub-agents                                                         |
+| `enabledConnections`    | List<String>         | Pipedream integration IDs                                                     |
+| `allowedKnowledgeBases` | List<String> or null | `null`=all, `[]`=none, `['x']`=specific                                       |
+| `memoriesEnabled`       | Boolean              | Enable user memories feature                                                  |
+| `numaOpsEnabled`        | Boolean              | Enable Numa Ops tools                                                         |
+| `approvalMode`          | String               | `'always'`, `'non_destructive'`, or `'never'` — integration approval override |
 
 ### reference_files List Item
 
@@ -230,7 +235,7 @@ IF agent in workspace-agents:
 
 ### CDKTF Definition
 
-**Location:** `/infra/constructs/numa-chat-agent-construct.ts`
+**Location:** `/infra/constructs/core-numa-infra-construct.ts`
 
 ```typescript
 // Tables created in construct

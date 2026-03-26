@@ -489,6 +489,14 @@
       "credentialsMissing": "AWS credentials are not available",
       "loadRunLog": "Failed to load run log"
     },
+    "validation": {
+      "taskNameRequired": "Task name is required.",
+      "timezoneRequired": "Timezone is required.",
+      "customCronRequired": "Custom cron expression is required.",
+      "weeklyDayRequired": "Select at least one day for the weekly schedule.",
+      "runDateInvalid": "Run date/time is invalid.",
+      "runDateFuture": "Run date/time must be in the future."
+    },
     "confirmDelete": "Delete schedule \"{{label}}\"?",
     "modal": {
       "title": {
@@ -530,11 +538,11 @@
       "runTime": "Run time",
       "every": "Every",
       "hourRange": {
-        "min": "1h",
+        "min": "{{min}}h",
         "max": "24h"
       },
       "minuteRange": {
-        "min": "5m",
+        "min": "{{min}}m",
         "max": "60m"
       },
       "hourInterval": "{{interval}} hour(s)",
@@ -567,7 +575,7 @@
       },
       "fiveMinute": {
         "label": "Every 5 minutes",
-        "description": "Run every 5 minutes"
+        "description": "Minimum of {{min}} minutes"
       },
       "hourly": {
         "label": "Hourly",
@@ -649,6 +657,16 @@
       "europeLondonShort": "London",
       "europeParisShort": "Paris",
       "asiaTokyoShort": "Tokyo"
+    },
+    "minInterval": {
+      "info": "Minimum scheduling interval: {{value}}",
+      "cronTooFrequent": "This cron expression would run more frequently than the minimum interval of {{value}}",
+      "displayMinutes": "{{count}} minutes",
+      "displayHour": "1 hour",
+      "displayHours": "{{hours}} hour(s)",
+      "displayHoursMinutes": "{{hours}} hour(s) {{minutes}} min",
+      "displayDay": "1 day",
+      "displayDays": "{{count}} day(s)"
     },
     "list": {
       "title": "Manage Schedules - {{agent}}",

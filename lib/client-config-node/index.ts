@@ -212,7 +212,7 @@ export async function putClientConfig<ClientConfig>(
   if (props.schema) {
     props.schema.parse(config);
   }
-  const ddbdc = await getDocument(credentials);
+  const ddbdc = await getDocument(props.credentials);
   const result = await ddbdc.put({
     TableName,
     Item: {

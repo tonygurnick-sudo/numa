@@ -77,12 +77,27 @@ if (override === undefined || override === 'none') {
       RoleSessionName: 'client-config',
     },
   });
-  for (const clientName of override ? [override] : await listClients({ credentials })) {
+  // Read platform-level settings (global defaults for all clients)
+  let globalSchedulingMinIntervalMinutes: number | undefined;
+  try {
+    const platformSettings = await getClientConfig<{ schedulingMinIntervalMinutes?: number }>({
+      clientName: 'platform-settings',
+      credentials,
+    });
+    globalSchedulingMinIntervalMinutes = platformSettings?.schedulingMinIntervalMinutes;
+  } catch {
+    // platform-settings record may not exist yet — fall back to platform default (5 min)
+  }
+
+  const allClients = override ? [override] : await listClients({ credentials });
+  // Filter out the platform-settings pseudo-record — it stores global defaults, not a real client
+  for (const clientName of allClients.filter((name) => name !== 'platform-settings')) {
     const clientConfig = await getClientConfig<ClientConfig>({ clientName, schema: clientConfigSchema, credentials });
     new NumaClientStack(app, `numa-${clientName}`, {
       clientName,
       ...environmentConfig,
       clientConfig,
+      globalSchedulingMinIntervalMinutes,
     });
   }
 }

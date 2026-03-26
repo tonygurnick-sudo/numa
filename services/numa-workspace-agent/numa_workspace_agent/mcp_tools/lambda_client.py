@@ -76,7 +76,9 @@ def invoke_workspace_tool(
 
     lambda_client = session.client(
         "lambda",
-        config=Config(read_timeout=120),  # Must exceed 90s approval timeout
+        config=Config(
+            read_timeout=300
+        ),  # Must match workspace-chat-tools Lambda timeout (300s)
     )
 
     # Diagnostic: log what env vars the MCP tool actually sees

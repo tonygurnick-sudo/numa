@@ -30,29 +30,44 @@ Phases 1 and 2 must be complete. You should have:
 
 ## Using Subagents for Parallel Analysis
 
-You MUST use subagents to parallelize your analysis. Use a **MAXIMUM of 7 subagents**. Launch ALL subagents in a single turn — do not run some, wait, then run more.
+You MUST use subagents to parallelize your analysis. Use **8-10 \
+subagents** — split ALL rules and analysis tasks across them for maximum \
+parallelism. Include ALL Agent tool calls in a SINGLE response message — \
+this is what makes them run in parallel. Multiple Agent calls in one \
+response = parallel execution. Do NOT launch them across separate responses.
+
+### Speed Guidance
+- **CRITICAL and HIGH priority rules**: Full compliance analysis with \
+evidence, severity, and detailed findings.
+- **MEDIUM and LOW priority rules**: Faster checks — determine \
+applicability and compliance status (COMPLIANT / NON-COMPLIANT) with brief \
+evidence. Don't spend excessive turns verifying low-impact rules.
 
 ### CRITICAL: Context Management
 - **Read only the manifest, summary, and rules file yourself.** Do NOT read the extracted document — let subagents do that.
-- **Launch all subagents in a SINGLE assistant turn** so they run in parallel.
+- **Include all Agent calls in ONE response** so they run concurrently.
 - **After subagents complete, trust their results.** Do NOT re-read the document or rules to verify. Use execute_script to merge their outputs into final files directly from disk.
 - **Have each subagent write its findings to a temp file** (e.g., `/workdir/tmp/procurement_chunk_1.json`) AND return a brief summary. Then merge from disk, not from context.
 - **Keep your synthesis scripts short.** Read subagent temp files from disk in Python, don't try to hold all findings in your context window.
 
 ### Subagent Strategy
 Plan your subagent groupings after reading the manifest — the number of \
-lots and procurement complexity should drive how you divide the work.
+lots, rules, and procurement complexity should drive how you divide the work. \
+Aim for roughly even workload across all subagents.
 
 **Technical scoring verification must be split across multiple subagents**, \
-divided by lot. For example, a 5-lot procurement might use 2-3 subagents \
-for scoring (e.g., Lots 1-2, Lots 3-4, Lot 5), each checking ALL scoring \
-decisions in their assigned lots. This is the most time-intensive analysis \
-and must be parallelised.
+divided by lot. For example, an 8-lot procurement might use 3-4 subagents \
+for scoring (e.g., Lots 1-2, Lots 3-4, Lots 5-6, Lots 7-8), each checking \
+ALL scoring decisions in their assigned lots. This is the most \
+time-intensive analysis and must be parallelised.
+
+**Rule-by-rule compliance checks should also be split across multiple \
+subagents** — divide the rules roughly evenly rather than giving them all \
+to a single subagent.
 
 Remaining subagents should cover:
 - Qualification criteria deep dive (Form 11 — criteria checks, anomalous rejections, cross-lot consistency)
 - Recurring issue detection + lot-specific compliance
-- Rule-by-rule compliance check
 - **Financial evaluation (CER only):** If `document_manifest.json` → \
 `metadata.evaluation_type` is "CER", dedicate a subagent to: price \
 comparison methodology, financial scoring consistency, combined \
@@ -98,6 +113,18 @@ price comparison methodology, financial scoring consistency, combined ranking ac
 stage 1 to stage 2 transition, and whether the recommended vendor selection is supported \
 by both technical and financial evidence
 - **Rule-by-Rule Check**: COMPLIANT / NON-COMPLIANT / PARTIAL / UNABLE TO VERIFY with severity
+
+### Rule Coverage
+
+Every rule in the rules file MUST receive a thorough check. The most \
+common source of inconsistency is subagents skimming rules or checking \
+them superficially. Each subagent must:
+- Read the actual document evidence for each of its assigned rules — \
+do not infer compliance from the manifest or summary alone
+- Check the rule against ALL relevant lots and bidders, not just a sample
+- Where a rule references specific forms, thresholds, or methodology, \
+verify against the actual data in the document, not just whether the \
+form exists
 
 **Do not dismiss borderline findings** — subagents should include them \
 as PARTIAL with a note on the uncertainty rather than rounding up to \

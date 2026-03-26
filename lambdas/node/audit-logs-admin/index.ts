@@ -13,6 +13,7 @@ const TABLE_MAP: Record<string, string> = {
   schedule: process.env.SCHEDULE_TABLE ?? '',
   sync: process.env.SYNC_TABLE ?? '',
   recovery: process.env.RECOVERY_TABLE ?? '',
+  'user-management': process.env.USER_MANAGEMENT_TABLE ?? '',
 };
 
 const ddbClient = new DynamoDBClient({ region: REGION });

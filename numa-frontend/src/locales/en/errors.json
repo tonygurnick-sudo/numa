@@ -16,6 +16,9 @@
   "adminMfa": {
     "updateFailed": "Failed to update MFA settings"
   },
+  "adminScheduling": {
+    "updateFailed": "Failed to update scheduling settings"
+  },
   "adminIntegrations": {
     "updateFailed": "Failed to update settings for {{integration}}"
   },

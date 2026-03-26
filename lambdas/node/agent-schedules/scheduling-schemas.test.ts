@@ -3,6 +3,7 @@ import {
   validateCreatePayload,
   validateScheduleRecord,
   CreateSchedulePayloadSchema,
+  estimateCronIntervalMinutes,
 } from '../../../lib/scheduling-schemas';
 
 describe('Scheduling Schemas', () => {
@@ -96,6 +97,45 @@ describe('Scheduling Schemas', () => {
       };
 
       expect(() => validateScheduleRecord(invalidRecord)).toThrow();
+    });
+  });
+
+  describe('estimateCronIntervalMinutes', () => {
+    it('should estimate minute-step intervals', () => {
+      expect(estimateCronIntervalMinutes('cron(0/5 * * * ? *)')).toBe(5);
+      expect(estimateCronIntervalMinutes('cron(*/10 * * * ? *)')).toBe(10);
+      expect(estimateCronIntervalMinutes('cron(0/30 * * * ? *)')).toBe(30);
+    });
+
+    it('should estimate hour-step intervals', () => {
+      expect(estimateCronIntervalMinutes('cron(0 */2 * * ? *)')).toBe(120);
+      expect(estimateCronIntervalMinutes('cron(0 0/4 * * ? *)')).toBe(240);
+      expect(estimateCronIntervalMinutes('cron(30 */1 * * ? *)')).toBe(60);
+    });
+
+    it('should estimate day-step intervals', () => {
+      expect(estimateCronIntervalMinutes('cron(0 9 1/3 * ? *)')).toBe(4320);
+    });
+
+    it('should return 1440 for daily schedules', () => {
+      expect(estimateCronIntervalMinutes('cron(0 9 * * ? *)')).toBe(1440);
+    });
+
+    it('should return 1440 for weekday schedules', () => {
+      expect(estimateCronIntervalMinutes('cron(0 9 ? * MON-FRI *)')).toBe(1440);
+    });
+
+    it('should return Infinity for once-off schedules (specific year)', () => {
+      expect(estimateCronIntervalMinutes('cron(30 14 15 6 ? 2025)')).toBe(Infinity);
+    });
+
+    it('should return large number for monthly schedules', () => {
+      expect(estimateCronIntervalMinutes('cron(0 9 15 * ? *)')).toBe(43200);
+    });
+
+    it('should return null for invalid input', () => {
+      expect(estimateCronIntervalMinutes('not-a-cron')).toBeNull();
+      expect(estimateCronIntervalMinutes('cron()')).toBeNull();
     });
   });
 

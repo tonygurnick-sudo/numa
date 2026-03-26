@@ -248,7 +248,7 @@ Aim for roughly 30-80 rows covering the full document, NOT one row per page.
 
 1. **First**, determine the total pages and divide into chunks of ~200-300 pages each
 2. **Do NOT extensively read the document yourself before launching subagents.** Only read enough to determine size, structure (first few pages/ToC), and plan your subagent strategy. The subagents will do the deep reading.
-3. **Launch all subagents in a SINGLE assistant turn** so they run in parallel
+3. **Call ALL Agent tools in a SINGLE response message** — this is what makes them run in parallel. Multiple Agent calls in one response = parallel. Separate responses = sequential.
 4. **After subagents complete, trust their results.** Do NOT re-read the document yourself to verify or supplement. Use execute_script to merge their JSON outputs into the final files directly.
 
 ### CRITICAL: Context Management
@@ -257,9 +257,11 @@ Aim for roughly 30-80 rows covering the full document, NOT one row per page.
 - **Keep synthesis scripts short.** If you need to merge subagent results, have each subagent write to a temp file and merge from disk, not from your context.
 
 ### Subagent Strategy
-Use a **MAXIMUM of 5 subagents**. Divide ALL pages across these 5 — do not run some, wait, then run more. Launch all 5 (or fewer) in a single turn.
-- For a 400-page doc: 3-4 subagents (~100-130 pages each)
-- For a 1000+ page doc: 5 subagents (~200-300 pages each)
+Launch **8-10 subagents** by including 8-10 Agent tool calls in a single \
+response. Always use at least 8 subagents regardless of document size — \
+the overhead is minimal and parallelism is always faster.
+- For a 300-page doc: 8 subagents (~40 pages each)
+- For a 1000+ page doc: 10 subagents (~100-150 pages each)
 - Each subagent should **write its results to a temp JSON file** (e.g., `/workdir/tmp/eda_chunk_1.json`) AND return a brief summary
 
 ### Subagent Prompts Should Include
@@ -270,23 +272,22 @@ Use a **MAXIMUM of 5 subagents**. Divide ALL pages across these 5 — do not run
 - Request for structured output (JSON preferred for merging)
 - **Explicit instruction: produce section-level page ranges, NOT per-page entries**
 
-### Example Task Call
+### Example
+Include ALL Agent calls in one response to run them in parallel:
 ```
-Task(subagent_type="general-purpose", prompt="
-Read /workdir/uploads/[filename].json
-Focus ONLY on pages 150-250 (use the page_number field).
-Extract and return as JSON:
-1. All bidder/company names with their status and lot numbers
-2. Any Form numbers (Form 10, Form 11, etc.) with their page ranges
-3. Evaluation scores or rankings if present
-4. Any dates mentioned
-5. Quality issues (garbled text, missing data, etc.)
-6. Section-level page ranges (group consecutive pages with similar content, NOT one entry per page)
+[Single response containing all these Agent calls:]
 
-Write your findings to /workdir/tmp/eda_chunk_N.json
-Keep output concise — use page ranges not per-page entries.
-Return a brief summary of what you found.
-")
+Agent(prompt="Read /workdir/uploads/[filename].json. Focus ONLY on pages 1-150.
+Extract as JSON: bidders, Form numbers with page ranges, scores, dates, quality issues.
+Produce section-level page ranges, NOT per-page entries.
+Write findings to /workdir/tmp/eda_chunk_1.json. Return a brief summary.")
+
+Agent(prompt="Read /workdir/uploads/[filename].json. Focus ONLY on pages 151-300.
+Extract as JSON: bidders, Form numbers with page ranges, scores, dates, quality issues.
+Produce section-level page ranges, NOT per-page entries.
+Write findings to /workdir/tmp/eda_chunk_2.json. Return a brief summary.")
+
+[...repeat for all page ranges...]
 ```
 
 **DO NOT try to read and analyze a large document sequentially.** Use parallel subagents.
