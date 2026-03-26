@@ -576,7 +576,29 @@ export function useWorkspaceChatStreaming({
                     const lastMsg = { ...updated[lastIdx] };
                     let segments = [...(lastMsg.segments || [])];
 
-                    // Find the inline tool with matching toolUseId
+                    // Find tool_card with matching toolUseId first (e.g. Numa Ops).
+                    // tool_card is checked before inline_tool because during streaming,
+                    // the assistant SDK event can arrive before its StreamEvents, causing
+                    // handleToolUseBlock to create a duplicate inline_tool segment with
+                    // the same toolUseId. The tool_card (from StreamEvent handler) is the
+                    // primary segment that needs the result data.
+                    const cardIdx = segments.findIndex(
+                      (seg) => seg.kind === 'tool_card' && seg.toolUseId === toolUseId
+                    );
+
+                    if (cardIdx >= 0) {
+                      segments[cardIdx] = {
+                        ...segments[cardIdx],
+                        result: resultContent,
+                        isLoading: false,
+                        isError,
+                      };
+                      lastMsg.segments = segments;
+                      updated[lastIdx] = lastMsg;
+                      return updated;
+                    }
+
+                    // Find inline_tool with matching toolUseId
                     const toolIdx = segments.findIndex(
                       (seg) => seg.kind === 'inline_tool' && seg.toolUseId === toolUseId && !seg.isComplete
                     );
@@ -599,23 +621,6 @@ export function useWorkspaceChatStreaming({
                         segments[toolIdx] = { ...tool, isComplete: true, isError };
                       }
 
-                      lastMsg.segments = segments;
-                      updated[lastIdx] = lastMsg;
-                      return updated;
-                    }
-
-                    // Find tool_card with matching toolUseId (e.g. Numa Ops)
-                    const cardIdx = segments.findIndex(
-                      (seg) => seg.kind === 'tool_card' && seg.toolUseId === toolUseId && seg.isLoading
-                    );
-
-                    if (cardIdx >= 0) {
-                      segments[cardIdx] = {
-                        ...segments[cardIdx],
-                        result: resultContent,
-                        isLoading: false,
-                        isError,
-                      };
                       lastMsg.segments = segments;
                       updated[lastIdx] = lastMsg;
                       return updated;
