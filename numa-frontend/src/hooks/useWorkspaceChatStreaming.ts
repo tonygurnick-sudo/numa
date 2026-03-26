@@ -5,6 +5,7 @@ import {
   streamWorkspaceChatAgent,
   saveInlineDocumentToS3,
   isRetryableError,
+  getWorkspaceChatRawTrace,
 } from '../Services/workspaceChatAgentService';
 import type { StreamRetryConfig } from '../Services/workspaceChatAgentService';
 import {
@@ -16,6 +17,7 @@ import {
   handleSDKStreamError,
   createInitialToolSegment,
   updateSegmentWithInput,
+  getToolSegmentKind,
 } from '../utils/workspaceChatEventHandlers';
 import { parseChunkWithoutDocComments, extractSingleDocBlock } from '../utils/streamingProcessors';
 import type { SDKEventContext, SDKEvent, SDKStreamEvent, WorkspaceChatModelId } from '../types/workspaceChatTypes';
@@ -276,6 +278,18 @@ export function useWorkspaceChatStreaming({
                 const inlineThinkingIdx = segments.findIndex((s) => s.kind === 'inline_thinking');
                 if (inlineThinkingIdx >= 0) {
                   segments.splice(inlineThinkingIdx, 1);
+                }
+
+                // Mark any pending tool_cards as complete when text starts streaming.
+                // The model can only generate text after tool results are available,
+                // so arriving text is a reliable signal that preceding tools have finished.
+                // The tool_result user event may not arrive during streaming, leaving
+                // tool_cards in isLoading state — this ensures the spinner stops.
+                for (let i = 0; i < segments.length; i++) {
+                  const seg = segments[i];
+                  if (seg.kind === 'tool_card' && seg.isLoading) {
+                    segments[i] = { ...seg, isLoading: false };
+                  }
                 }
 
                 const lastSeg = segments[segments.length - 1];
@@ -725,6 +739,82 @@ export function useWorkspaceChatStreaming({
                   numaPost
                 ).then(() => refreshSessionFiles?.());
               }
+            }
+          }
+
+          // Populate missing tool_card results from trace.
+          // During streaming, tool_result user events may not arrive, so tool_card
+          // segments end up with isLoading: false (fixed above) but no result data.
+          // Fetch the trace to extract results for any tool_cards that need them
+          // (e.g. Numa Ops board cards rendered by OpsToolRenderer).
+          if (conversationId) {
+            // Check if any tools in this turn would produce tool_card segments
+            // (toolUseMap is preserved after resetSDKEventContext)
+            let hasToolCards = false;
+            for (const [, info] of workspaceChatEventContextRef.current.toolUseMap) {
+              if (getToolSegmentKind(info.name) === 'tool_card') {
+                hasToolCards = true;
+                break;
+              }
+            }
+
+            if (hasToolCards) {
+              getWorkspaceChatRawTrace(conversationId)
+                .then((traceContent) => {
+                  // Extract tool results from user events in the trace
+                  const toolResults = new Map<string, { content: unknown; isError: boolean }>();
+                  for (const line of traceContent.split('\n')) {
+                    if (!line.trim()) continue;
+                    try {
+                      const evt = JSON.parse(line);
+                      if (evt.type === 'user') {
+                        const content = evt.message?.content ?? evt.content ?? [];
+                        if (!Array.isArray(content)) continue;
+                        for (const block of content) {
+                          if (block?.type === 'tool_result' && block.tool_use_id) {
+                            toolResults.set(block.tool_use_id, {
+                              content: block.content,
+                              isError: block.is_error || false,
+                            });
+                          }
+                        }
+                      }
+                    } catch {
+                      /* skip invalid lines */
+                    }
+                  }
+
+                  if (toolResults.size === 0) return;
+
+                  // Surgically update only tool_card segments with missing results
+                  setMessages((prev) => {
+                    let changed = false;
+                    const updated = prev.map((msg) => {
+                      if (msg.role !== 'assistant' || !msg.segments) return msg;
+                      let segChanged = false;
+                      const newSegments = msg.segments.map((seg) => {
+                        if (seg.kind === 'tool_card' && !seg.result && seg.toolUseId) {
+                          const result = toolResults.get(seg.toolUseId);
+                          if (result) {
+                            segChanged = true;
+                            return { ...seg, result: result.content, isLoading: false, isError: result.isError };
+                          }
+                        }
+                        return seg;
+                      });
+                      if (segChanged) {
+                        changed = true;
+                        return { ...msg, segments: newSegments };
+                      }
+                      return msg;
+                    });
+                    return changed ? updated : prev;
+                  });
+                })
+                .catch((err) => {
+                  // Non-critical: tool results just won't render until history reload
+                  console.warn('[WorkspaceChat] Failed to populate tool results from trace:', err);
+                });
             }
           }
 
