@@ -504,6 +504,7 @@ def handler(event: Dict[str, Any], context: LambdaContext) -> Dict[str, Any]:
 
         # Pass user context for permission checks
         params["__user_sub"] = user_sub
+        params["__user_email"] = event.get("user_email", "")
         # Parse user groups from event for admin checks (passed from proxy)
         user_groups = event.get("user_groups", [])
         params["__user_groups"] = user_groups

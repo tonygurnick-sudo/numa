@@ -568,8 +568,10 @@ def _build_user_item(
             existing.get("created_by_user_id") if existing else user_id
         ),
         "created_by_name": payload.get(
-            "createdByName", existing.get("created_by_name") if existing else None
-        ),
+            "createdByName",
+            existing.get("created_by_name") if existing else None,
+        )
+        or (payload.get("__user_email") if not existing else None),
         "created_at": existing.get("created_at") if existing else timestamp,
         "updated_at": timestamp,
         "version": timestamp,
@@ -609,7 +611,9 @@ def _build_workspace_item(
         "tools_config": _normalise_tools_config(payload.get("toolsConfig")),
         "reference_files": _normalise_reference_files(payload.get("referenceFiles")),
         "created_by_user_id": user_id,
-        "created_by_name": payload.get("createdByName"),
+        "created_by_name": payload.get("createdByName")
+        or payload.get("__user_email")
+        or None,
         "created_at": timestamp,
         "updated_at": timestamp,
         "version": timestamp,
@@ -665,8 +669,24 @@ def handle_list_agents(params: Dict[str, Any]) -> Dict[str, Any]:
 
     scope = (params.get("scope") or "owned").lower()
     agent_type_filter = (params.get("agent_type") or "").lower()
+    title_filter = (params.get("title") or "").lower()
+    search_filter = (params.get("search") or "").lower()
+    limit = min(int(params.get("limit", 0)), 200) or None  # 0 = no limit
+    offset = int(params.get("offset", 0))
     include_owned = scope in ("owned", "all", "")
     include_public = scope in ("public", "all")
+
+    def _matches_filter(agent: Dict) -> bool:
+        if title_filter and title_filter not in (agent.get("title") or "").lower():
+            return False
+        if search_filter:
+            searchable = (
+                f"{agent.get('title', '')} {agent.get('description', '')} "
+                f"{' '.join(agent.get('tags', []))}"
+            ).lower()
+            if search_filter not in searchable:
+                return False
+        return True
 
     results: Dict[str, Dict] = {}
 
@@ -678,7 +698,7 @@ def handle_list_agents(params: Dict[str, Any]) -> Dict[str, Any]:
             if (
                 not agent_type_filter
                 or mapped.get("agentType", "").lower() == agent_type_filter
-            ):
+            ) and _matches_filter(mapped):
                 results[f"user:{mapped['agentId']}"] = mapped
 
         # Get workspace agents created by user
@@ -688,7 +708,7 @@ def handle_list_agents(params: Dict[str, Any]) -> Dict[str, Any]:
             if (
                 not agent_type_filter
                 or mapped.get("agentType", "").lower() == agent_type_filter
-            ):
+            ) and _matches_filter(mapped):
                 results[f"workspace:{mapped['agentId']}"] = mapped
 
     if include_public and mode != "personal_only":
@@ -699,7 +719,7 @@ def handle_list_agents(params: Dict[str, Any]) -> Dict[str, Any]:
             if (
                 not agent_type_filter
                 or mapped.get("agentType", "").lower() == agent_type_filter
-            ):
+            ) and _matches_filter(mapped):
                 results[f"workspace:{mapped['agentId']}"] = mapped
 
     # Filter out workspace agents if mode is personal_only
@@ -709,15 +729,29 @@ def handle_list_agents(params: Dict[str, Any]) -> Dict[str, Any]:
     # Sort by updated_at descending
     agents = sorted(results.values(), key=lambda a: a.get("updatedAt", 0), reverse=True)
 
+    # Pagination
+    total = len(agents)
+    if limit:
+        agents = agents[offset : offset + limit]
+
     logger.info(
         "Listed agents",
         user_sub=user_sub[:8] + "...",
         scope=scope,
         count=len(agents),
+        total=total,
         mode=mode,
     )
 
-    return {"agents": agents}
+    result: Dict[str, Any] = {"agents": agents}
+    if limit:
+        result["pagination"] = {
+            "total": total,
+            "limit": limit,
+            "offset": offset,
+            "hasMore": offset + limit < total,
+        }
+    return result
 
 
 def handle_get_agent(params: Dict[str, Any]) -> Dict[str, Any]:
