@@ -806,6 +806,7 @@ export class NumaClientStack extends TerraformStack {
         OAUTH_INTEGRATIONS_ENABLED: clientConfig.oauthIntegrationsEnabled ?? false, // Controls UI access to OAuth setup
         // Per-provider flags removed — providers are now configured dynamically via COMPANY vault secrets.
         // OAUTH_GOOGLE_DRIVE, OAUTH_ONEDRIVE, OAUTH_DROPBOX are no longer needed in config.json.
+        RACETECH_DATA_FEED: clientConfig.racetechDataFeed ?? false,
         V2_APPS: clientConfig.v2Apps ?? false,
         NUMA_APPS: clientConfig.allApps ?? false,
         JOB_HISTORY: (clientConfig.allApps ?? false) ? (clientConfig.jobHistory ?? true) : false,
