@@ -682,6 +682,8 @@
         "memoriesHelp": "Add or update AI memories",
         "knowledgeBases": "Knowledge Bases",
         "knowledgeBasesHelp": "Upload files to knowledge bases",
+        "ops": "Ops",
+        "opsHelp": "Create, update, delete tickets and projects",
         "alwaysHelp": "Every action requires your explicit approval.",
         "safeHelp": "Read-only actions run automatically; writes need approval.",
         "neverHelp": "All actions run without approval prompts."

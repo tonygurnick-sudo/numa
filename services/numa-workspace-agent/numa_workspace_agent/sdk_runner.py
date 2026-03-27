@@ -869,9 +869,10 @@ async def stream_claude_sdk(
                                     ("list_", "get_", "search_")
                                 )
 
-                                if approval_mode == "never":
+                                _ops_mode = _nt_modes.get("ops", "never")
+                                if _ops_mode == "never":
                                     auto_approved = True
-                                elif approval_mode == "non_destructive":
+                                elif _ops_mode == "non_destructive":
                                     auto_approved = _ops_safe
                                 # else "always" → auto_approved stays False
 
@@ -882,7 +883,7 @@ async def stream_claude_sdk(
                                     tool_name=block.name,
                                     operation=operation,
                                     action_key=_approval_key,
-                                    approval_mode=approval_mode,
+                                    ops_mode=_ops_mode,
                                     auto_approved=auto_approved,
                                 )
                             else:
@@ -1440,10 +1441,10 @@ async def run_claude_sdk(
                                 _ops_safe = operation.startswith(
                                     ("list_", "get_", "search_")
                                 )
-
-                                if approval_mode == "never":
+                                _ops_mode = _nt_modes_sync.get("ops", "never")
+                                if _ops_mode == "never":
                                     auto_approved = True
-                                elif approval_mode == "non_destructive":
+                                elif _ops_mode == "non_destructive":
                                     auto_approved = _ops_safe
                             else:
                                 # ── Integration tool approval ──

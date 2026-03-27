@@ -394,11 +394,12 @@ def fetch_user_approval_mode(user_sub: str) -> str:
         return DEFAULT_APPROVAL_MODE
 
 
-VALID_NUMA_TOOL_CATEGORIES = ("agents", "memories", "knowledgeBases")
+VALID_NUMA_TOOL_CATEGORIES = ("agents", "memories", "knowledgeBases", "ops")
 DEFAULT_NUMA_TOOL_APPROVAL_MODE: dict[str, str] = {
     "agents": "never",
     "memories": "never",
     "knowledgeBases": "never",
+    "ops": "never",
 }
 
 

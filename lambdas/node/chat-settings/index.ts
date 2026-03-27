@@ -15,12 +15,14 @@ export type NumaToolApprovalMode = {
   agents: ApprovalMode;
   memories: ApprovalMode;
   knowledgeBases: ApprovalMode;
+  ops: ApprovalMode;
 };
 
 const DEFAULT_NUMA_TOOL_APPROVAL_MODE: NumaToolApprovalMode = {
   agents: 'never',
   memories: 'never',
   knowledgeBases: 'never',
+  ops: 'never',
 };
 
 export type ChatScrollMode = 'auto' | 'manual';
@@ -114,7 +116,7 @@ function validateNumaToolApprovalMode(data: unknown): NumaToolApprovalMode {
   const obj = data as Record<string, unknown>;
   const v = (val: unknown): ApprovalMode =>
     typeof val === 'string' && VALID_APPROVAL_MODES.includes(val as ApprovalMode) ? (val as ApprovalMode) : 'never';
-  return { agents: v(obj.agents), memories: v(obj.memories), knowledgeBases: v(obj.knowledgeBases) };
+  return { agents: v(obj.agents), memories: v(obj.memories), knowledgeBases: v(obj.knowledgeBases), ops: v(obj.ops) };
 }
 
 function truncate(value: unknown, maxLen: number): string {

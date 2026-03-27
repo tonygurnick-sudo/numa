@@ -102,6 +102,7 @@ export default function UserProfilePage({
   const savedProfileRef = useRef('');
   const hasWorkspaceChat = getFlag('NUMA_WORKSPACE_CHAT');
   const hasPipedreamFeature = getFlag('PIPEDREAM_INTEGRATIONS');
+  const hasOps = getFlag('NUMA_OPS');
   const hasMfa = window.sessionStorage.getItem('MFA_ENABLED') === 'true';
 
   type DeviceInfo = {
@@ -1757,6 +1758,37 @@ export default function UserProfilePage({
                         </td>
                       ))}
                     </tr>
+                    {/* Ops row — conditional on feature flag */}
+                    {hasOps && (
+                      <tr>
+                        <td>
+                          <div className="fw-semibold">{t('userProfile.approval.grid.ops')}</div>
+                          <div className="text-muted small">{t('userProfile.approval.grid.opsHelp')}</div>
+                        </td>
+                        {(['always', 'non_destructive', 'never'] as const).map((mode) => (
+                          <td key={mode} className="text-center align-middle">
+                            <Form.Check
+                              type="radio"
+                              id={`approval-ops-${mode}`}
+                              name="numaToolApprovalMode.ops"
+                              checked={(userDefaults.numaToolApprovalMode?.ops ?? 'never') === mode}
+                              disabled={disableDefaultsForm}
+                              onChange={() => {
+                                setUserDefaults((prev) => ({
+                                  ...prev,
+                                  numaToolApprovalMode: {
+                                    ...(prev.numaToolApprovalMode ?? DEFAULT_CHAT_SETTINGS.numaToolApprovalMode),
+                                    ops: mode,
+                                  },
+                                }));
+                                setDirty(true);
+                              }}
+                              className="d-inline-block"
+                            />
+                          </td>
+                        ))}
+                      </tr>
+                    )}
                   </tbody>
                 </table>
               </div>

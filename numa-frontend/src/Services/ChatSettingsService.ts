@@ -13,12 +13,14 @@ export type NumaToolApprovalMode = {
   agents: ApprovalMode;
   memories: ApprovalMode;
   knowledgeBases: ApprovalMode;
+  ops: ApprovalMode;
 };
 
 export const DEFAULT_NUMA_TOOL_APPROVAL_MODE: NumaToolApprovalMode = {
   agents: 'never',
   memories: 'never',
   knowledgeBases: 'never',
+  ops: 'never',
 };
 
 export type ChatScrollMode = 'auto' | 'manual';
@@ -295,6 +297,7 @@ function validateNumaToolApprovalMode(data: unknown): NumaToolApprovalMode {
     agents: validateField(obj.agents),
     memories: validateField(obj.memories),
     knowledgeBases: validateField(obj.knowledgeBases),
+    ops: validateField(obj.ops),
   };
 }
 
