@@ -1878,6 +1878,9 @@ const NumaWorkspaceChatAgents = () => {
         conversationId: cid,
         enabledTools,
         enabledConnections,
+        availableIntegrations: availableConnections
+          .filter((conn) => conn.isConnected)
+          .map((conn) => ({ id: conn.id, name: conn.name })),
         enabledKBIds,
         availableKBs,
         attachments,

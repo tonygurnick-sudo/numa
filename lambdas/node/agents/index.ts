@@ -42,6 +42,7 @@ type AgentToolsConfig = {
   // ['company', 'kb-123'] = specific KBs only
   allowedKnowledgeBases?: string[] | null;
   approvalMode?: 'always' | 'non_destructive' | 'never';
+  approvalModes?: Record<string, 'always' | 'non_destructive' | 'never' | undefined>;
 };
 
 type ReferenceFile = {
@@ -252,6 +253,7 @@ const normaliseToolsConfig = (config?: AgentToolsConfig | null): AgentToolsConfi
           ? config.allowedKnowledgeBases
           : undefined,
     approvalMode: config.approvalMode,
+    approvalModes: config.approvalModes,
   };
 };
 

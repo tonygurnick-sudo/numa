@@ -450,6 +450,7 @@ export interface WorkspaceChatRequest {
   availableKBs?: Array<{ id: string; name: string }>;
   enabledTools?: string[];
   enabledConnections?: string[];
+  availableIntegrations?: Array<{ id: string; name: string }>;
   // Model selection (global cross-region inference profile)
   modelId?: WorkspaceChatModelId;
   // Attachment handling - files and optional folder metadata

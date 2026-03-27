@@ -1365,6 +1365,7 @@ async def _handle_chat(
     # Pipedream integrations - construct external_user_id for the relay
     # Format: "{client_name}_{user_sub}" matching what the frontend uses
     enabled_integrations = body.get("enabledConnections", [])
+    available_integrations = body.get("availableIntegrations", [])
 
     # Apply agent type restrictions on integrations
     if agent_type_config.restrict_integrations:
@@ -1762,6 +1763,7 @@ async def _handle_chat(
                 agent_file_paths=agent_file_paths,  # Downloaded agent reference files
                 external_user_id=external_user_id,  # Pipedream integrations user ID
                 enabled_integrations=enabled_integrations,  # Connected integration app slugs
+                available_integrations=available_integrations,  # All connected integrations (for agent creation context)
                 approval_mode=effective_approval_mode,  # Integration approval mode
                 numa_tool_approval_mode=numa_tool_approval_mode,  # Per-category numa tool approval
                 email_signature=email_signature,  # Email signature settings
@@ -1878,6 +1880,7 @@ async def _handle_sync(
 
     # Integrations
     enabled_integrations = body.get("enabledConnections", [])
+    available_integrations = body.get("availableIntegrations", [])
     if agent_type_config.restrict_integrations:
         enabled_integrations = agent_type_config.default_integrations or []
     elif agent_type_config.default_integrations and not enabled_integrations:
@@ -2026,6 +2029,7 @@ async def _handle_sync(
             agent_config=agent_config,
             external_user_id=external_user_id,
             enabled_integrations=enabled_integrations,
+            available_integrations=available_integrations,
             approval_mode=effective_approval_mode,
             numa_tool_approval_mode=numa_tool_approval_mode_sync,
             agent_type_config=agent_type_config,
@@ -2325,6 +2329,7 @@ async def _handle_fire_and_forget(
                     agent_config=agent_config,
                     external_user_id=external_user_id,
                     enabled_integrations=enabled_integrations,
+                    available_integrations=available_integrations,
                     approval_mode=effective_approval_mode,
                     numa_tool_approval_mode=numa_tool_approval_mode_async,
                     agent_type_config=agent_type_config,

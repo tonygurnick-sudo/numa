@@ -221,6 +221,7 @@ async function streamWorkspaceChatAttempt(
     availableKBs: request.availableKBs,
     enabledTools: request.enabledTools,
     enabledConnections: request.enabledConnections,
+    availableIntegrations: request.availableIntegrations,
     // Feature flags for conditional tool registration in the workspace agent
     featureFlags: {
       NUMA_FILES: sessionStorage.getItem('NUMA_FILES') === 'true',
@@ -965,6 +966,7 @@ export async function invokeWorkspaceAgentSync(
     availableKBs: request.availableKBs,
     enabledTools: request.enabledTools,
     enabledConnections: request.enabledConnections,
+    availableIntegrations: request.availableIntegrations,
     featureFlags: {
       NUMA_FILES: sessionStorage.getItem('NUMA_FILES') === 'true',
       OAUTH_INTEGRATIONS_ENABLED: sessionStorage.getItem('OAUTH_AVAILABLE') === 'true',
