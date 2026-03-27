@@ -70,7 +70,8 @@
       "avatarAlt": "Agent avatar",
       "editTitle": "Edit agent",
       "createTitle": "Create agent",
-      "subtitle": "Configure what this agent knows, looks like, and can do."
+      "subtitle": "Configure what this agent knows, looks like, and can do.",
+      "copyId": "Copy agent ID"
     },
     "validation": {
       "title": "Agent name",

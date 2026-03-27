@@ -18,7 +18,7 @@ import structlog
 
 from prm import resource
 
-from .approval import create_approval_request, poll_approval
+from .approval import check_approval, create_approval_request, poll_approval
 
 logger = structlog.get_logger()
 
@@ -80,6 +80,15 @@ def _filter_memories(
 
 def handle_list_memories(params: Dict[str, Any]) -> Dict[str, Any]:
     """List the user's memories, optionally filtered by scope."""
+    # HITL approval gate
+    denial = check_approval(
+        params,
+        action_key="numa_memories_list",
+        description="List memories",
+    )
+    if denial:
+        return denial
+
     if not CHAT_SETTINGS_TABLE_NAME:
         raise ValueError("CHAT_SETTINGS_TABLE_NAME not configured")
 

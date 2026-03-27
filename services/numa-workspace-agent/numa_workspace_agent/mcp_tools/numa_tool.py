@@ -110,22 +110,35 @@ async def _handle_query_kb(params: dict[str, Any]) -> dict[str, Any]:
 
     max_results = min(max(int(params.get("max_results", 6)), 1), 15)
 
+    lambda_params: dict[str, Any] = {
+        "query": query,
+        "user_intent": user_intent,
+        "max_results": max_results,
+        "kb_id": params.get("kb_id", "company"),
+        "summarise_results": params.get("summarise_results", True),
+        "all_kbs": params.get("all_kbs", False),
+    }
+
+    # Inject approval fields if approval was requested for this operation
+    approval_key = "numa_knowledgeBases_query"
+    request_id = pop_approval_id(approval_key)
+    if request_id:
+        lambda_params["request_id"] = request_id
+        lambda_params["auto_approved"] = is_auto_approved()
+
     result = invoke_workspace_tool(
         "query_knowledgebase",
-        {
-            "query": query,
-            "user_intent": user_intent,
-            "max_results": max_results,
-            "kb_id": params.get("kb_id", "company"),
-            "summarise_results": params.get("summarise_results", True),
-            "all_kbs": params.get("all_kbs", False),
-        },
+        lambda_params,
         extra_event_fields={
             "user_sub": user_sub,
             "allowed_kbs": allowed_kb_ids,
             "allowed_kbs_with_names": allowed_kbs,
         },
     )
+
+    # Handle approval denial/timeout from Lambda
+    if isinstance(result, dict) and result.get("status") in ("denied", "timeout"):
+        return _ok(json.dumps(result, indent=2))
 
     # If output_file requested, write results to file
     output_file = params.get("output_file")
@@ -380,6 +393,13 @@ async def _handle_kb_download(params: dict[str, Any]) -> dict[str, Any]:
         dl_params["file"] = file_name
         dl_params["kb_id"] = params.get("kb_id", "company")
 
+    # Inject approval fields if approval was requested for this operation
+    approval_key = "numa_knowledgeBases_download"
+    request_id = pop_approval_id(approval_key)
+    if request_id:
+        dl_params["request_id"] = request_id
+        dl_params["auto_approved"] = is_auto_approved()
+
     result = invoke_workspace_tool(
         "retrieve_kb_file",
         dl_params,
@@ -388,6 +408,10 @@ async def _handle_kb_download(params: dict[str, Any]) -> dict[str, Any]:
             "allowed_kbs": allowed_kb_ids,
         },
     )
+
+    # Handle approval denial/timeout from Lambda
+    if isinstance(result, dict) and result.get("status") in ("denied", "timeout"):
+        return _ok(json.dumps(result, indent=2))
 
     # Save file to disk
     filename = result.get("filename", "downloaded_file")
@@ -440,18 +464,31 @@ async def _handle_kb_list(params: dict[str, Any]) -> dict[str, Any]:
     """List files in a KB — ports knowledge_base.py cmd_list."""
     allowed_kbs, allowed_kb_ids, user_sub = _get_kb_config()
 
+    lambda_params: dict[str, Any] = {
+        "mode": "list",
+        "kb_id": params.get("kb_id", "company"),
+        "pattern": params.get("pattern"),
+    }
+
+    # Inject approval fields if approval was requested for this operation
+    approval_key = "numa_knowledgeBases_list"
+    request_id = pop_approval_id(approval_key)
+    if request_id:
+        lambda_params["request_id"] = request_id
+        lambda_params["auto_approved"] = is_auto_approved()
+
     result = invoke_workspace_tool(
         "retrieve_kb_file",
-        {
-            "mode": "list",
-            "kb_id": params.get("kb_id", "company"),
-            "pattern": params.get("pattern"),
-        },
+        lambda_params,
         extra_event_fields={
             "user_sub": user_sub,
             "allowed_kbs": allowed_kb_ids,
         },
     )
+
+    # Handle approval denial/timeout from Lambda
+    if isinstance(result, dict) and result.get("status") in ("denied", "timeout"):
+        return _ok(json.dumps(result, indent=2))
 
     return _ok(json.dumps(result, indent=2))
 
@@ -460,18 +497,31 @@ async def _handle_kb_download_folder(params: dict[str, Any]) -> dict[str, Any]:
     """Download KB folder as zip — ports knowledge_base.py cmd_download_folder."""
     allowed_kbs, allowed_kb_ids, user_sub = _get_kb_config()
 
+    lambda_params: dict[str, Any] = {
+        "mode": "download_folder",
+        "kb_id": params.get("kb_id", "company"),
+        "folder_path": params.get("folder_path", ""),
+    }
+
+    # Inject approval fields if approval was requested for this operation
+    approval_key = "numa_knowledgeBases_download_folder"
+    request_id = pop_approval_id(approval_key)
+    if request_id:
+        lambda_params["request_id"] = request_id
+        lambda_params["auto_approved"] = is_auto_approved()
+
     result = invoke_workspace_tool(
         "retrieve_kb_file",
-        {
-            "mode": "download_folder",
-            "kb_id": params.get("kb_id", "company"),
-            "folder_path": params.get("folder_path", ""),
-        },
+        lambda_params,
         extra_event_fields={
             "user_sub": user_sub,
             "allowed_kbs": allowed_kb_ids,
         },
     )
+
+    # Handle approval denial/timeout from Lambda
+    if isinstance(result, dict) and result.get("status") in ("denied", "timeout"):
+        return _ok(json.dumps(result, indent=2))
 
     # Save zip file to disk
     filename = result.get("filename", "download.zip")
@@ -674,13 +724,12 @@ async def _handle_agents(params: dict[str, Any]) -> dict[str, Any]:
         k: v for k, v in params.items() if k != "operation" and v is not None
     }
 
-    # Inject approval fields for write operations
-    if operation in _AGENT_WRITE_OPS:
-        approval_key = f"numa_agents_{operation}"
-        request_id = pop_approval_id(approval_key)
-        if request_id:
-            lambda_params["request_id"] = request_id
-            lambda_params["auto_approved"] = is_auto_approved()
+    # Inject approval fields if approval was requested for this operation
+    approval_key = f"numa_agents_{operation}"
+    request_id = pop_approval_id(approval_key)
+    if request_id:
+        lambda_params["request_id"] = request_id
+        lambda_params["auto_approved"] = is_auto_approved()
 
     # Handle file attachments for create/update
     attach_files: list[str] = lambda_params.pop("attach_files", []) or []
@@ -749,13 +798,12 @@ async def _handle_memories(params: dict[str, Any]) -> dict[str, Any]:
         k: v for k, v in params.items() if k != "operation" and v is not None
     }
 
-    # Inject approval fields for write operations
-    if operation in _MEMORY_WRITE_OPS:
-        approval_key = f"numa_memories_{operation}"
-        request_id = pop_approval_id(approval_key)
-        if request_id:
-            lambda_params["request_id"] = request_id
-            lambda_params["auto_approved"] = is_auto_approved()
+    # Inject approval fields if approval was requested for this operation
+    approval_key = f"numa_memories_{operation}"
+    request_id = pop_approval_id(approval_key)
+    if request_id:
+        lambda_params["request_id"] = request_id
+        lambda_params["auto_approved"] = is_auto_approved()
 
     result = invoke_workspace_tool(
         tool_name,

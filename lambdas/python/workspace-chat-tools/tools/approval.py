@@ -140,3 +140,47 @@ def poll_approval(approval_id: str) -> Tuple[str, str]:
         timeout_seconds=APPROVAL_TIMEOUT_SECONDS,
     )
     return "timeout", ""
+
+
+def check_approval(
+    params: Dict[str, Any],
+    action_key: str,
+    description: str,
+    props_preview: Optional[Dict[str, Any]] = None,
+) -> Optional[Dict[str, Any]]:
+    """Check approval if request_id is present and not auto-approved.
+
+    This is a shared convenience wrapper around create_approval_request +
+    poll_approval. Any tool handler can call this -- if no request_id is
+    present in params the function is a no-op.
+
+    Returns a denial/timeout dict if denied/timed out, or None to proceed.
+    """
+    request_id = params.get("request_id")
+    if not request_id:
+        return None
+
+    if params.get("auto_approved", False):
+        return None
+
+    user_sub = params.get("__user_sub", params.get("user_sub", ""))
+    approval_id = create_approval_request(
+        user_sub=user_sub,
+        action_key=action_key,
+        description=description,
+        props_preview=props_preview or {},
+        approval_id=request_id,
+    )
+
+    decision, deny_reason = poll_approval(approval_id)
+
+    if decision == "denied":
+        msg = "The user denied this action."
+        if deny_reason:
+            msg += f' The user said: "{deny_reason}"'
+        return {"status": "denied", "message": msg, "deny_reason": deny_reason}
+
+    if decision == "timeout":
+        return {"status": "timeout", "message": "Approval timed out"}
+
+    return None

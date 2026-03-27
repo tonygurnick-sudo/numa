@@ -33,7 +33,7 @@ import structlog
 from prm import client as prm_client
 from tools.kb_permissions import _get_dynamodb_client, verify_kb_access
 
-from .approval import create_approval_request, poll_approval
+from .approval import check_approval, create_approval_request, poll_approval
 
 logger = structlog.get_logger()
 
@@ -84,6 +84,19 @@ def handle_query_knowledgebase(params: Dict[str, Any]) -> Dict[str, Any]:
     Raises:
         ValueError: If required parameters are missing or invalid
     """
+    # HITL approval gate
+    denial = check_approval(
+        params,
+        action_key="numa_knowledgeBases_query",
+        description=f"Query knowledge base: {params.get('query', '')[:100]}",
+        props_preview={
+            "query": params.get("query", ""),
+            "kb_id": params.get("kb_id", "company"),
+        },
+    )
+    if denial:
+        return denial
+
     # Extract and validate parameters
     query = params.get("query")
     user_intent = params.get("user_intent")
@@ -1443,6 +1456,17 @@ def handle_retrieve_kb_file(params: Dict[str, Any]) -> Dict[str, Any]:
     """
     mode_raw = params.get("mode", "download")
     mode = mode_raw.strip().lower() if isinstance(mode_raw, str) else "download"
+
+    # HITL approval gate (covers list, download, download_folder)
+    approval_key = f"numa_knowledgeBases_{mode}"
+    denial = check_approval(
+        params,
+        action_key=approval_key,
+        description=f"KB {mode}: {params.get('kb_id', params.get('uri', ''))}",
+    )
+    if denial:
+        return denial
+
     allowed_kbs = params.get("__allowed_kbs", [])
     user_sub = _require_user_sub(params, "retrieve_kb_file")
 

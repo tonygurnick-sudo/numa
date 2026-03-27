@@ -20,7 +20,7 @@ from botocore.exceptions import ClientError
 from prm import client as prm_client
 from prm import resource
 
-from .approval import create_approval_request, poll_approval
+from .approval import check_approval, create_approval_request, poll_approval
 
 logger = structlog.get_logger()
 
@@ -658,6 +658,15 @@ def handle_list_agents(params: Dict[str, Any]) -> Dict[str, Any]:
     Returns:
         agents: List of agent summaries
     """
+    # HITL approval gate
+    denial = check_approval(
+        params,
+        action_key="numa_agents_list",
+        description="List agents",
+    )
+    if denial:
+        return denial
+
     user_sub = params.get("__user_sub")
     if not user_sub:
         raise ValueError("User authentication required")
@@ -765,6 +774,15 @@ def handle_get_agent(params: Dict[str, Any]) -> Dict[str, Any]:
     Returns:
         agent: Agent details
     """
+    # HITL approval gate
+    denial = check_approval(
+        params,
+        action_key="numa_agents_get",
+        description=f"Get agent: {params.get('agent_id', '')}",
+    )
+    if denial:
+        return denial
+
     user_sub = params.get("__user_sub")
     agent_id = params.get("agent_id")
 

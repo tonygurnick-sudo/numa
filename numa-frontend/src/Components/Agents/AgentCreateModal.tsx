@@ -819,6 +819,20 @@ export const AgentCreateModal = ({
                 {editingAgent ? t('createModal.header.editTitle') : t('createModal.header.createTitle')}
               </Modal.Title>
               <small style={{ color: '#6c757d' }}>{t('createModal.header.subtitle')}</small>
+              {editingAgent && (
+                <div className="d-flex align-items-center gap-1 mt-1">
+                  <code style={{ fontSize: '0.75rem', color: '#6c757d' }}>{editingAgent.agentId}</code>
+                  <Button
+                    variant="link"
+                    size="sm"
+                    className="p-0"
+                    onClick={() => navigator.clipboard.writeText(editingAgent.agentId)}
+                    title={t('createModal.header.copyId')}
+                  >
+                    <i className="bi bi-clipboard" style={{ fontSize: '0.75rem' }} />
+                  </Button>
+                </div>
+              )}
             </div>
           </div>
         </Modal.Header>

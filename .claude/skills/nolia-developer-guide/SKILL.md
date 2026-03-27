@@ -347,9 +347,9 @@ documents/kb-{uuid}/
 
 ### Debugging a failed run
 
-1. Check container logs for `NOLIA_` events
-2. Look for `NOLIA_STEP_COMPLETE` with error details
-3. Check `_result.json` in S3 for the full error
+1. Check `_result.json` in S3 first (source of truth -- see "Querying Run Status" below)
+2. Check container logs for `NOLIA_` events
+3. Look for `NOLIA_STEP_COMPLETE` with error details
 4. For phase-specific issues, look at the step's conversation_id in logs
 
 ### KB issues
@@ -357,6 +357,95 @@ documents/kb-{uuid}/
 1. Check KB exists: `AWS_PROFILE=q-demo aws dynamodb scan --table-name numa-{client}-knowledge-bases --region {region}`
 2. Check S3 structure: `AWS_PROFILE=q-demo aws s3 ls s3://numa-{client}-data/documents/kb-{uuid}/`
 3. Verify rules file exists at KB root level
+
+---
+
+## Querying Run Status
+
+### CRITICAL: DynamoDB status is unreliable
+
+The V2 app runs table (`{clientName}-v2-app-runs`) status field is **wrong ~70% of the time**. The pipeline writes `_result.json` to S3 on completion but never updates DynamoDB. DynamoDB only gets updated lazily when the frontend polls `GET /api/v2-apps/runs/{runId}` (in `v2-apps-api`). If a user closes their browser before the run finishes, the DB status stays `PROCESSING` forever. Runs over 4 hours get incorrectly marked `FAILED` by a timeout in the polling endpoint, even if they eventually complete.
+
+**Always use S3 `_result.json` as the source of truth for run status.**
+
+### S3 result path
+
+```
+s3://numa-{clientName}-outputs/v2-apps/nolia/{userId}/{runId}/_result.json
+```
+
+The `_result.json` contains: `status`, `usage.total_cost_usd`, `usage.duration_ms`, `usage.num_turns`, `artifacts`, `text`.
+
+### Checking a single run
+
+```bash
+AWS_PROFILE=nolia-moh aws s3 cp \
+  "s3://numa-nolia-id-gov-moh-outputs/v2-apps/nolia/{userId}/{runId}/_result.json" - \
+  --region ap-southeast-3 | python3 -m json.tool
+```
+
+If no `_result.json` exists but other files do (uploads/, extracted_document.json), the run stalled mid-pipeline.
+
+### DynamoDB runs table schema
+
+The table key is `runId`. Metadata is nested deep:
+
+```
+item.inputs.M.options.M.metadata.M.assessment_type.S   → "evaluation-report" | "terms-of-reference"
+item.inputs.M.options.M.metadata.M.output_language.S    → "english" | "bahasa-indonesia"
+item.inputs.M.options.M.metadata.M.global_kb.S          → KB UUID
+item.inputs.M.options.M.metadata.M.procurement_kb.S     → KB UUID
+item.inputs.M.options.M.metadata.M.project_kb.S         → KB UUID
+item.inputs.M.options.M.metadata.M.kb_category.S        → "global" | "procurement" | "project" (rules gen only)
+item.inputs.M.files.L[0].S                              → uploaded filename
+item.userId.S                                            → Cognito sub (NOT email)
+item.userEmail.S                                         → often "unknown", don't rely on it
+```
+
+### Resolving user identity
+
+The `userId` in the runs table is a Cognito sub. To resolve to an email/name:
+
+```bash
+# Find the user pool
+AWS_PROFILE=nolia-moh aws cognito-idp list-user-pools --max-results 10 --region ap-southeast-3
+
+# Nolia prod user pool: ap-southeast-3_xoBQrxEQJ
+AWS_PROFILE=nolia-moh aws cognito-idp list-users \
+  --user-pool-id ap-southeast-3_xoBQrxEQJ \
+  --filter 'sub = "{userId}"' \
+  --region ap-southeast-3
+```
+
+### Bulk report script
+
+`tools/nolia-runs-report.py` scans all runs and checks S3 for real status. Outputs two TSV files (assessments + rules gen) to `tools/test-reports/`.
+
+```bash
+AWS_PROFILE=nolia-moh python3 tools/nolia-runs-report.py
+AWS_PROFILE=nolia-moh python3 tools/nolia-runs-report.py --output-dir /tmp
+```
+
+### CloudWatch log queries
+
+Use `filter-log-events` (not `start-query`) for quick searches. The `--filter-pattern` is a plain substring match, not regex.
+
+```bash
+# Recent pipeline activity (last 24h)
+AWS_PROFILE=nolia-moh aws logs filter-log-events \
+  --log-group-name "/numa/nolia-id-gov-moh/workspace-chat-agent" \
+  --region ap-southeast-3 \
+  --start-time $(python3 -c "from datetime import datetime, timezone, timedelta; print(int((datetime.now(timezone.utc) - timedelta(hours=24)).timestamp() * 1000))") \
+  --filter-pattern 'STREAM_COMPLETE' \
+  --limit 20
+
+# Per-step cost breakdown
+AWS_PROFILE=nolia-moh aws logs filter-log-events \
+  --log-group-name "/numa/nolia-id-gov-moh/workspace-chat-agent" \
+  --region ap-southeast-3 \
+  --start-time $(python3 -c "from datetime import datetime, timezone, timedelta; print(int((datetime.now(timezone.utc) - timedelta(hours=24)).timestamp() * 1000))") \
+  --filter-pattern '"_name": "COST"'
+```
 
 ---
 

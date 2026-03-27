@@ -51,15 +51,19 @@ mcp__numa__numa_tool(name="agents", description="Create policy expert agent", pa
 
 ## List Operation
 
-List agents with scope filtering.
+List agents with scope filtering, title/search filtering, and optional pagination.
 
 ### Parameters
 
-| Parameter    | Required | Default   | Description                 |
-| ------------ | -------- | --------- | --------------------------- |
-| `operation`  | Yes      | -         | `"list"`                    |
-| `scope`      | No       | `"owned"` | `owned`, `public`, or `all` |
-| `agent_type` | No       | -         | Filter by agent type        |
+| Parameter    | Required | Default   | Description                                       |
+| ------------ | -------- | --------- | ------------------------------------------------- |
+| `operation`  | Yes      | -         | `"list"`                                          |
+| `scope`      | No       | `"owned"` | `owned`, `public`, or `all`                       |
+| `agent_type` | No       | -         | Filter by agent type                              |
+| `title`      | No       | -         | Filter by title (case-insensitive contains match) |
+| `search`     | No       | -         | Search across title, description, and tags        |
+| `limit`      | No       | -         | Max results to return (1-200). Enables pagination |
+| `offset`     | No       | `0`       | Number of results to skip (use with `limit`)      |
 
 ### Examples
 
@@ -83,6 +87,21 @@ mcp__numa__numa_tool(name="agents", description="List all agents", params={
 mcp__numa__numa_tool(name="agents", description="List task agents", params={
     "operation": "list", "scope": "owned", "agent_type": "task"
 })
+
+# Find an agent by name
+mcp__numa__numa_tool(name="agents", description="Find sales agent", params={
+    "operation": "list", "search": "sales"
+})
+
+# Search with pagination (first page of 10 results)
+mcp__numa__numa_tool(name="agents", description="List agents page 1", params={
+    "operation": "list", "scope": "all", "limit": 10
+})
+
+# Get next page
+mcp__numa__numa_tool(name="agents", description="List agents page 2", params={
+    "operation": "list", "scope": "all", "limit": 10, "offset": 10
+})
 ```
 
 ### Output Format
@@ -98,6 +117,11 @@ JSON response with:
   - `agentType` - Agent type (e.g., "task")
   - `createdBy` - Creator info
   - `updatedAt` - Last update timestamp
+- `pagination` - Present when `limit` is used:
+  - `total` - Total number of matching agents
+  - `limit` - Page size used
+  - `offset` - Current offset
+  - `hasMore` - Whether more results exist beyond this page
 
 ---
 

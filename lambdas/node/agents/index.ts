@@ -587,6 +587,19 @@ const handleListAgents = async (
   const includeOwned = scope === 'owned' || scope === 'all' || scope === '';
   const includePublic = scope === 'public' || scope === 'all';
   const agentTypeFilter = event.queryStringParameters?.agentType?.toLowerCase();
+  const titleFilter = event.queryStringParameters?.title?.toLowerCase();
+  const searchFilter = event.queryStringParameters?.search?.toLowerCase();
+  const limit = Math.min(parseInt(event.queryStringParameters?.limit || '0', 10) || 0, 200) || undefined;
+  const offset = parseInt(event.queryStringParameters?.offset || '0', 10) || 0;
+
+  const matchesFilter = (agent: AgentResponse): boolean => {
+    if (titleFilter && !agent.title.toLowerCase().includes(titleFilter)) return false;
+    if (searchFilter) {
+      const searchable = `${agent.title} ${agent.description ?? ''} ${(agent.tags ?? []).join(' ')}`.toLowerCase();
+      if (!searchable.includes(searchFilter)) return false;
+    }
+    return true;
+  };
 
   const results = new Map<string, AgentResponse>();
 
@@ -598,14 +611,14 @@ const handleListAgents = async (
 
     userAgents.forEach((item) => {
       const mapped = mapUserAgent(item);
-      if (!agentTypeFilter || mapped.agentType.toLowerCase() === agentTypeFilter) {
+      if ((!agentTypeFilter || mapped.agentType.toLowerCase() === agentTypeFilter) && matchesFilter(mapped)) {
         results.set(`user:${mapped.agentId}`, mapped);
       }
     });
 
     ownedWorkspaceAgents.forEach((item) => {
       const mapped = mapWorkspaceAgent(item);
-      if (!agentTypeFilter || mapped.agentType.toLowerCase() === agentTypeFilter) {
+      if ((!agentTypeFilter || mapped.agentType.toLowerCase() === agentTypeFilter) && matchesFilter(mapped)) {
         results.set(`workspace:${mapped.agentId}`, mapped);
       }
     });
@@ -615,14 +628,21 @@ const handleListAgents = async (
     const workspaceAgents = await listWorkspaceAgentsForTenant();
     workspaceAgents.forEach((item) => {
       const mapped = mapWorkspaceAgent(item);
-      if (!agentTypeFilter || mapped.agentType.toLowerCase() === agentTypeFilter) {
+      if ((!agentTypeFilter || mapped.agentType.toLowerCase() === agentTypeFilter) && matchesFilter(mapped)) {
         results.set(`workspace:${mapped.agentId}`, mapped);
       }
     });
   }
 
-  const agents = Array.from(results.values()).sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0));
-  return jsonResponse(200, { agents });
+  const allAgents = Array.from(results.values()).sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0));
+  const total = allAgents.length;
+  const agents = limit ? allAgents.slice(offset, offset + limit) : allAgents;
+
+  const response: Record<string, unknown> = { agents };
+  if (limit) {
+    response.pagination = { total, limit, offset, hasMore: offset + limit < total };
+  }
+  return jsonResponse(200, response);
 };
 
 const handleGetAgent = async (agentId: string, auth: AuthContext): Promise<ReturnType<typeof jsonResponse>> => {

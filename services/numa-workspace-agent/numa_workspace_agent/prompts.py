@@ -673,6 +673,7 @@ def build_agent_context(
     lines = [
         "<agent-context>",
         f'You are operating as the specialized agent "{agent_config.title}".',
+        f"Your agent ID is: {agent_config.agent_id}",
         "",
     ]
 

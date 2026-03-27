@@ -128,14 +128,8 @@ export const AgentsManagement = () => {
         setWorkspaceAgents([]);
       } else {
         const myAgentsList = [...personal, ...createdPublic].sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0));
-        // Exclude agents already shown in "My Agents" to avoid duplicate cards
-        const myAgentIds = new Set(myAgentsList.map((a) => a.agentId));
         setMyAgents(myAgentsList);
-        setWorkspaceAgents(
-          companyAgents
-            .filter((agent) => !myAgentIds.has(agent.agentId))
-            .sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0))
-        );
+        setWorkspaceAgents(companyAgents.sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0)));
       }
 
       // Load schedules after agents are loaded
