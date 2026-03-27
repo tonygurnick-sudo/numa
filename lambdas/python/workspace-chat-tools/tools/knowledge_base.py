@@ -884,7 +884,9 @@ def handle_add_to_kb(params: Dict[str, Any]) -> Dict[str, Any]:
         )
         decision, deny_reason = poll_approval(approval_id)
         if decision == "denied":
-            msg = deny_reason or "User denied this action"
+            msg = "The user denied this action."
+            if deny_reason:
+                msg += f' The user said: "{deny_reason}"'
             return {"status": "denied", "message": msg, "deny_reason": deny_reason}
         if decision == "timeout":
             return {"status": "timeout", "message": "Approval timed out"}

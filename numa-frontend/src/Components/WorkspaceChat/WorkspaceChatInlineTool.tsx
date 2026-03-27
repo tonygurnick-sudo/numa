@@ -10,7 +10,7 @@
  * Integration tools with human-in-the-loop approval render an expandable
  * glass panel below the tool indicator when approval data is present.
  */
-import React, { memo, useState, useEffect, useCallback, useRef } from 'react';
+import React, { memo, useState, useEffect, useCallback } from 'react';
 import { Spinner, Form } from 'react-bootstrap';
 import { useTranslation } from 'react-i18next';
 import type { WorkspaceChatInlineToolSegment } from '@/types/workspaceChatTypes';
@@ -114,9 +114,7 @@ function WorkspaceChatInlineTool({ segment, conversationId }: Props) {
   const { displayText, isComplete, isError, iconName, iconImage, approval, approvalOnly } = segment;
   const [submitting, setSubmitting] = useState(false);
   const [localDecision, setLocalDecision] = useState<string | undefined>(undefined);
-  const [showDenyFeedback, setShowDenyFeedback] = useState(false);
   const [denyReason, setDenyReason] = useState('');
-  const denyInputRef = useRef<HTMLInputElement>(null);
   const [secondsLeft, setSecondsLeft] = useState(() => {
     // Sync with backend timer: if the approval event includes a created_at
     // timestamp, calculate how much time has already elapsed so the frontend
@@ -137,30 +135,21 @@ function WorkspaceChatInlineTool({ segment, conversationId }: Props) {
   const showApprovalPanel = approval && !decision && !approval.autoApproved;
 
   const handleDecision = useCallback(
-    async (choice: 'approved' | 'denied', reason?: string) => {
+    async (choice: 'approved' | 'denied') => {
       if (!approval || !conversationId) return;
       setSubmitting(true);
       try {
+        const reason = choice === 'denied' ? denyReason.trim() || undefined : undefined;
         await approveToolAction(approval.requestId, choice, conversationId, reason);
         setLocalDecision(choice);
-        setShowDenyFeedback(false);
       } catch (err) {
         console.error('Approval failed:', err);
       } finally {
         setSubmitting(false);
       }
     },
-    [approval, conversationId]
+    [approval, conversationId, denyReason]
   );
-
-  const handleDenyClick = useCallback(() => {
-    setShowDenyFeedback(true);
-    setTimeout(() => denyInputRef.current?.focus(), 50);
-  }, []);
-
-  const handleConfirmDeny = useCallback(() => {
-    handleDecision('denied', denyReason.trim() || undefined);
-  }, [handleDecision, denyReason]);
 
   // Countdown timer — ticks every second while approval panel is shown
   useEffect(() => {
@@ -251,58 +240,33 @@ function WorkspaceChatInlineTool({ segment, conversationId }: Props) {
               </div>
             )}
           </div>
-          {!showDenyFeedback ? (
-            <div className="approval-panel-actions">
-              <button className="approval-btn approve" onClick={() => handleDecision('approved')} disabled={submitting}>
-                {submitting ? (
-                  <Spinner animation="border" size="sm" className="me-1" />
-                ) : (
-                  <i className="bi bi-check-lg me-1" />
-                )}
-                {t('approval.approve')}
-              </button>
-              <button className="approval-btn deny" onClick={handleDenyClick} disabled={submitting}>
-                <i className="bi bi-x-lg me-1" />
-                {t('approval.deny')}
-              </button>
-              <ApprovalCountdown secondsLeft={secondsLeft} />
-            </div>
-          ) : (
-            <div className="approval-panel-deny-feedback">
-              <Form.Control
-                ref={denyInputRef}
-                type="text"
-                size="sm"
-                placeholder={t('approval.denyReasonPlaceholder')}
-                value={denyReason}
-                onChange={(e) => setDenyReason(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') handleConfirmDeny();
-                  if (e.key === 'Escape') setShowDenyFeedback(false);
-                }}
-                disabled={submitting}
-                className="mb-2"
-              />
-              <div className="approval-panel-actions">
-                <button className="approval-btn deny" onClick={handleConfirmDeny} disabled={submitting}>
-                  {submitting ? (
-                    <Spinner animation="border" size="sm" className="me-1" />
-                  ) : (
-                    <i className="bi bi-x-lg me-1" />
-                  )}
-                  {t('approval.confirmDeny')}
-                </button>
-                <button
-                  className="approval-btn cancel"
-                  onClick={() => setShowDenyFeedback(false)}
-                  disabled={submitting}
-                >
-                  {t('approval.cancel')}
-                </button>
-                <ApprovalCountdown secondsLeft={secondsLeft} />
-              </div>
-            </div>
-          )}
+          <div className="approval-panel-actions">
+            <button className="approval-btn approve" onClick={() => handleDecision('approved')} disabled={submitting}>
+              {submitting ? (
+                <Spinner animation="border" size="sm" className="me-1" />
+              ) : (
+                <i className="bi bi-check-lg me-1" />
+              )}
+              {t('approval.approve')}
+            </button>
+            <button className="approval-btn deny" onClick={() => handleDecision('denied')} disabled={submitting}>
+              <i className="bi bi-x-lg me-1" />
+              {t('approval.deny')}
+            </button>
+            <Form.Control
+              type="text"
+              size="sm"
+              placeholder={t('approval.denyReasonPlaceholder')}
+              value={denyReason}
+              onChange={(e) => setDenyReason(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') handleDecision('denied');
+              }}
+              disabled={submitting}
+              className="approval-deny-reason-input"
+            />
+            <ApprovalCountdown secondsLeft={secondsLeft} />
+          </div>
         </div>
       )}
     </div>

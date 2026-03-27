@@ -655,7 +655,9 @@ def handle_ops_operation(event: Dict[str, Any]) -> Dict[str, Any]:
             decision, deny_reason = poll_approval(approval_id)
 
             if decision == "denied":
-                msg = deny_reason or "User denied this operation"
+                msg = "The user denied this action."
+                if deny_reason:
+                    msg += f' The user said: "{deny_reason}"'
                 return {
                     "status": "denied",
                     "message": msg,
