@@ -23,6 +23,7 @@ interface FilePreviewActionsProps {
   onDownloadFolder?: () => void;
   onOpenInNewTab?: () => void; // For HTML files
   onOpenFullScreen?: () => void; // Open in full-screen new tab
+  onClose?: () => void; // For modal closing
 }
 
 /**
@@ -38,6 +39,7 @@ export const FilePreviewActions: React.FC<FilePreviewActionsProps> = ({
   onDownloadFolder,
   onOpenInNewTab,
   onOpenFullScreen,
+  onClose,
 }) => {
   const { t } = useTranslation('common');
   const { t: tChat } = useTranslation('chat');
@@ -276,7 +278,13 @@ export const FilePreviewActions: React.FC<FilePreviewActionsProps> = ({
   // Folder - Download as ZIP
   if (preview.type === 'folder') {
     return (
-      <div className="file-preview-actions p-3 border-top">
+      <div className="file-preview-actions p-3 border-top d-flex gap-2">
+        {onClose && (
+          <Button variant="outline-secondary" onClick={onClose}>
+            <i className="bi bi-x-lg me-2"></i>
+            {t('common.close')}
+          </Button>
+        )}
         <Button
           onClick={onDownloadFolder}
           style={{
@@ -296,6 +304,12 @@ export const FilePreviewActions: React.FC<FilePreviewActionsProps> = ({
   if (isMarkdown && content) {
     return (
       <div className="file-preview-actions p-3 border-top d-flex gap-2">
+        {onClose && (
+          <Button variant="outline-secondary" onClick={onClose}>
+            <i className="bi bi-x-lg me-1"></i>
+            {t('common.close')}
+          </Button>
+        )}
         {onOpenFullScreen && (
           <Button
             onClick={onOpenFullScreen}
@@ -354,7 +368,13 @@ export const FilePreviewActions: React.FC<FilePreviewActionsProps> = ({
   // Other files - Direct download, save, and share
   return (
     <>
-      <div className="file-preview-actions p-3 border-top d-flex gap-2">
+      <div className="file-preview-actions p-3 border-top d-flex gap-2 flex-wrap">
+        {onClose && (
+          <Button variant="outline-secondary" onClick={onClose} style={{ flex: '1 0 auto' }}>
+            <i className="bi bi-x-lg me-1"></i>
+            {t('common.close')}
+          </Button>
+        )}
         {onOpenFullScreen && (
           <Button
             onClick={onOpenFullScreen}
@@ -454,6 +474,7 @@ export const FilePreviewActions: React.FC<FilePreviewActionsProps> = ({
             // Modal closes when user clicks Done (onHide).
           }}
           preSelectedFile={{
+            // @ts-expect-error - prexisting type mismatch in older component
             path: sharedFilePath,
             name: preview.filename,
             scope: { type: 'my' },
