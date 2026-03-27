@@ -574,6 +574,7 @@ export default function UserProfilePage({
         defaultConnectionIds: userDefaults.defaultConnectionIds,
         language: userDefaults.language,
         approvalMode: userDefaults.approvalMode,
+        numaToolApprovalMode: userDefaults.numaToolApprovalMode,
       };
 
       await ChatSettingsService.updateForProfile(payload, numaPut);
