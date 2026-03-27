@@ -29,9 +29,9 @@ from fastapi.responses import JSONResponse, Response, StreamingResponse
 from .agent_config import (
     AgentConfig,
     fetch_agent_config,
-    fetch_numa_tool_approval_mode,
     fetch_user_email_signature,
     fetch_user_profile,
+    resolve_all_approval_modes,
     resolve_approval_mode,
 )
 from .agent_types import (
@@ -1729,9 +1729,14 @@ async def _handle_chat(
         try:
             # Wrap SDK stream with heartbeat to keep CloudFront connection alive
             # during long-running tool executions (CloudFront has 60s timeout)
-            # Resolve integration approval mode (agent config > user setting > default)
-            effective_approval_mode = resolve_approval_mode(user_sub, agent_config)
-            numa_tool_approval_mode = fetch_numa_tool_approval_mode(user_sub)
+            # Resolve all approval modes (agent overrides > user settings > defaults)
+            all_approval_modes = resolve_all_approval_modes(user_sub, agent_config)
+            effective_approval_mode = all_approval_modes.get(
+                "integrations", "non_destructive"
+            )
+            numa_tool_approval_mode = {
+                k: v for k, v in all_approval_modes.items() if k != "integrations"
+            }
             email_signature = fetch_user_email_signature(user_sub)
             user_profile = fetch_user_profile(user_sub)
 
@@ -1933,20 +1938,16 @@ async def _handle_sync(
                 error=str(e),
             )
 
-    # Resolve integration approval mode (agent config > user setting > default)
-    effective_approval_mode = resolve_approval_mode(user_sub, agent_config)
+    # Resolve all approval modes (agent overrides > user settings > defaults)
+    all_approval_modes_sync = resolve_all_approval_modes(user_sub, agent_config)
+    effective_approval_mode = all_approval_modes_sync.get(
+        "integrations", "non_destructive"
+    )
     logger.info(
-        "Resolved approval mode for sync request",
+        "Resolved approval modes for sync request",
         _name="SYNC_APPROVAL_MODE",
-        phase="integrations",
-        effective_mode=effective_approval_mode,
+        resolved_modes=all_approval_modes_sync,
         agent_id=agent_id,
-        has_agent_config=agent_config is not None,
-        agent_approval_mode=(
-            agent_config.tools_config.approval_mode
-            if agent_config and agent_config.tools_config
-            else None
-        ),
     )
 
     # KB listings
@@ -2003,6 +2004,9 @@ async def _handle_sync(
             enabled_integrations=enabled_integrations,
         )
     else:
+        numa_tool_approval_mode_sync = {
+            k: v for k, v in all_approval_modes_sync.items() if k != "integrations"
+        }
         result = await run_claude_sdk(
             conversation_id,
             prompt,
@@ -2023,6 +2027,7 @@ async def _handle_sync(
             external_user_id=external_user_id,
             enabled_integrations=enabled_integrations,
             approval_mode=effective_approval_mode,
+            numa_tool_approval_mode=numa_tool_approval_mode_sync,
             agent_type_config=agent_type_config,
             company_profile=company_profile,
             feature_flags=feature_flags,
@@ -2224,19 +2229,15 @@ async def _handle_fire_and_forget(
                 agent_id=agent_id,
                 error=str(e),
             )
-    effective_approval_mode = resolve_approval_mode(user_sub, agent_config)
+    all_approval_modes_async = resolve_all_approval_modes(user_sub, agent_config)
+    effective_approval_mode = all_approval_modes_async.get(
+        "integrations", "non_destructive"
+    )
     logger.info(
-        "Resolved approval mode for fire-and-forget request",
+        "Resolved approval modes for fire-and-forget request",
         _name="ASYNC_APPROVAL_MODE",
-        phase="integrations",
-        effective_mode=effective_approval_mode,
+        resolved_modes=all_approval_modes_async,
         agent_id=agent_id,
-        has_agent_config=agent_config is not None,
-        agent_approval_mode=(
-            agent_config.tools_config.approval_mode
-            if agent_config and agent_config.tools_config
-            else None
-        ),
     )
 
     kb_listings = None
@@ -2300,6 +2301,11 @@ async def _handle_fire_and_forget(
                     enabled_integrations=enabled_integrations,
                 )
             else:
+                numa_tool_approval_mode_async = {
+                    k: v
+                    for k, v in all_approval_modes_async.items()
+                    if k != "integrations"
+                }
                 result = await run_claude_sdk(
                     conversation_id,
                     prompt,
@@ -2320,6 +2326,7 @@ async def _handle_fire_and_forget(
                     external_user_id=external_user_id,
                     enabled_integrations=enabled_integrations,
                     approval_mode=effective_approval_mode,
+                    numa_tool_approval_mode=numa_tool_approval_mode_async,
                     agent_type_config=agent_type_config,
                     company_profile=company_profile,
                     feature_flags=feature_flags,

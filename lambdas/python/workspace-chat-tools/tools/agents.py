@@ -304,7 +304,7 @@ def _normalise_tools_config(config: Optional[Dict]) -> Dict:
     """Normalise agent tools configuration."""
     if not config:
         return {}
-    return {
+    result = {
         "autoToolsEnabled": config.get("autoToolsEnabled", True),
         "queryDataSources": config.get("queryDataSources", False),
         "webSearchEnabled": config.get("webSearchEnabled", False),
@@ -312,6 +312,12 @@ def _normalise_tools_config(config: Optional[Dict]) -> Dict:
         "enabledConnections": config.get("enabledConnections", []),
         "allowedKnowledgeBases": config.get("allowedKnowledgeBases"),
     }
+    # Preserve approval mode fields
+    if config.get("approvalMode"):
+        result["approvalMode"] = config["approvalMode"]
+    if config.get("approvalModes"):
+        result["approvalModes"] = config["approvalModes"]
+    return result
 
 
 def _normalise_reference_files(files: Optional[List]) -> List[Dict]:

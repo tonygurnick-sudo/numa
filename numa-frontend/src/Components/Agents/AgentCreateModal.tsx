@@ -316,6 +316,7 @@ export const AgentCreateModal = ({
           // Preserve KB access setting - null means "all KBs", [] means "none", array means "selected"
           allowedKnowledgeBases: editingAgent.toolsConfig?.allowedKnowledgeBases ?? null,
           approvalMode: editingAgent.toolsConfig?.approvalMode,
+          approvalModes: editingAgent.toolsConfig?.approvalModes,
         },
         referenceFiles: editingAgent.referenceFiles ?? [],
         requiredIntegrations: editingAgent.requiredIntegrations ?? [],
@@ -1457,38 +1458,67 @@ export const AgentCreateModal = ({
                   </Col>
                 </Row>
 
-                {/* Integration Approval Mode (only when workspace chat is enabled and integrations exist) */}
-                {getFlag('NUMA_WORKSPACE_CHAT') &&
-                  hasPipedreamIntegrations &&
-                  (formState.toolsConfig?.enabledConnections?.length ?? 0) > 0 && (
-                    <Row className="mt-3">
-                      <Col>
-                        <Form.Group>
-                          <Form.Label className="fw-semibold">{t('createModal.approvalMode.label')}</Form.Label>
-                          <Form.Select
-                            value={formState.toolsConfig?.approvalMode ?? ''}
-                            disabled={saving}
-                            onChange={(e) => {
-                              const value = e.target.value || undefined;
-                              setFormState((prev) => ({
-                                ...prev,
-                                toolsConfig: {
-                                  ...prev.toolsConfig,
-                                  approvalMode: value as 'always' | 'non_destructive' | 'never' | undefined,
-                                },
-                              }));
-                            }}
-                          >
-                            <option value="">{t('createModal.approvalMode.useDefault')}</option>
-                            <option value="always">{t('createModal.approvalMode.always')}</option>
-                            <option value="non_destructive">{t('createModal.approvalMode.nonDestructive')}</option>
-                            <option value="never">{t('createModal.approvalMode.never')}</option>
-                          </Form.Select>
-                          <div className="text-muted small mt-1">{t('createModal.approvalMode.help')}</div>
-                        </Form.Group>
-                      </Col>
-                    </Row>
-                  )}
+                {/* Tool Approval Mode Overrides */}
+                {getFlag('NUMA_WORKSPACE_CHAT') && (
+                  <Row className="mt-3">
+                    <Col>
+                      <Form.Label className="fw-semibold">{t('createModal.approvalModes.label')}</Form.Label>
+                      <div className="text-muted small mb-2">{t('createModal.approvalModes.help')}</div>
+                      <table className="table table-sm table-borderless approval-grid mb-0">
+                        <thead>
+                          <tr>
+                            <th style={{ width: '25%' }}></th>
+                            <th className="text-center small">{t('createModal.approvalModes.useDefault')}</th>
+                            <th className="text-center small">{t('createModal.approvalModes.always')}</th>
+                            <th className="text-center small">{t('createModal.approvalModes.nonDestructive')}</th>
+                            <th className="text-center small">{t('createModal.approvalModes.never')}</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {(
+                            [
+                              { key: 'integrations', labelKey: 'createModal.approvalModes.integrations' },
+                              { key: 'agents', labelKey: 'createModal.approvalModes.agents' },
+                              { key: 'memories', labelKey: 'createModal.approvalModes.memories' },
+                              { key: 'knowledgeBases', labelKey: 'createModal.approvalModes.knowledgeBases' },
+                              ...(getFlag('NUMA_OPS')
+                                ? [{ key: 'ops', labelKey: 'createModal.approvalModes.ops' }]
+                                : []),
+                            ] as { key: string; labelKey: string }[]
+                          ).map(({ key, labelKey }) => (
+                            <tr key={key}>
+                              <td className="small fw-medium">{t(labelKey)}</td>
+                              {(['', 'always', 'non_destructive', 'never'] as const).map((mode) => (
+                                <td key={mode} className="text-center">
+                                  <Form.Check
+                                    type="radio"
+                                    id={`agent-approval-${key}-${mode || 'default'}`}
+                                    name={`agentApproval-${key}`}
+                                    checked={(formState.toolsConfig?.approvalModes?.[key] ?? '') === mode}
+                                    disabled={saving}
+                                    onChange={() => {
+                                      setFormState((prev) => ({
+                                        ...prev,
+                                        toolsConfig: {
+                                          ...prev.toolsConfig,
+                                          approvalModes: {
+                                            ...(prev.toolsConfig?.approvalModes ?? {}),
+                                            [key]: mode || undefined,
+                                          },
+                                        },
+                                      }));
+                                    }}
+                                    className="d-inline-block"
+                                  />
+                                </td>
+                              ))}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </Col>
+                  </Row>
+                )}
               </Accordion.Body>
             </Accordion.Item>
 

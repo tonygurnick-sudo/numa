@@ -51,12 +51,13 @@ class AgentToolsConfig:
     # [] = no KB access
     # ['company', 'kb-123'] = specific KBs only
     allowed_knowledge_bases: Optional[list[str]] = None
-    # Integration approval mode:
+    # Legacy integration approval mode (backwards compat):
     # None = use user default (no agent override)
-    # 'always' = require approval for every integration tool call
-    # 'non_destructive' = auto-approve read-only actions, require approval for writes
-    # 'never' = auto-approve all integration tool calls
     approval_mode: Optional[str] = None
+    # Per-category approval mode overrides:
+    # None per-category = use user default for that category
+    # Maps category -> mode ('always'|'non_destructive'|'never')
+    approval_modes: Optional[dict[str, Optional[str]]] = None
 
 
 @dataclass
@@ -87,6 +88,24 @@ def _parse_tools_config(raw_config: Optional[dict]) -> AgentToolsConfig:
     if not raw_config:
         return AgentToolsConfig()
 
+    # Parse per-category approval modes, validating each value
+    raw_modes = raw_config.get("approvalModes")
+    parsed_modes: Optional[dict[str, Optional[str]]] = None
+    if isinstance(raw_modes, dict):
+        parsed_modes = {}
+        for cat in VALID_NUMA_TOOL_CATEGORIES:
+            val = raw_modes.get(cat)
+            if isinstance(val, str) and val in VALID_APPROVAL_MODES:
+                parsed_modes[cat] = val
+            else:
+                parsed_modes[cat] = None  # Use user default
+        # Also handle integrations category
+        int_val = raw_modes.get("integrations")
+        if isinstance(int_val, str) and int_val in VALID_APPROVAL_MODES:
+            parsed_modes["integrations"] = int_val
+        else:
+            parsed_modes["integrations"] = None
+
     return AgentToolsConfig(
         auto_tools_enabled=raw_config.get("autoToolsEnabled", True),
         query_data_sources=raw_config.get("queryDataSources", False),
@@ -95,6 +114,7 @@ def _parse_tools_config(raw_config: Optional[dict]) -> AgentToolsConfig:
         enabled_connections=raw_config.get("enabledConnections", []),
         allowed_knowledge_bases=raw_config.get("allowedKnowledgeBases"),
         approval_mode=raw_config.get("approvalMode"),
+        approval_modes=parsed_modes,
     )
 
 
@@ -588,3 +608,54 @@ def resolve_approval_mode(
 
     # Fall back to user setting
     return fetch_user_approval_mode(user_sub)
+
+
+def resolve_all_approval_modes(
+    user_sub: str,
+    agent_config: Optional[AgentConfig] = None,
+) -> dict[str, str]:
+    """
+    Resolve effective approval modes for all categories.
+
+    Merges agent-level overrides with user settings. Each category resolves
+    independently: agent override > user setting > default.
+
+    Backwards compat: if an agent has the legacy `approvalMode` field but no
+    `approvalModes`, it applies to the integrations category only.
+
+    Returns:
+        Dict mapping category -> resolved mode string.
+    """
+    # Start with user settings as base
+    user_modes = fetch_numa_tool_approval_mode(user_sub)
+    user_integration_mode = fetch_user_approval_mode(user_sub)
+
+    result = {
+        "integrations": user_integration_mode,
+        **user_modes,
+    }
+
+    if not agent_config:
+        return result
+
+    tc = agent_config.tools_config
+
+    # New per-category overrides take priority
+    if tc.approval_modes:
+        for cat, mode in tc.approval_modes.items():
+            if mode and mode in VALID_APPROVAL_MODES:
+                result[cat] = mode
+
+    # Legacy: single approvalMode applies to integrations only
+    # (only if approvalModes doesn't already override integrations)
+    elif tc.approval_mode and tc.approval_mode in VALID_APPROVAL_MODES:
+        result["integrations"] = tc.approval_mode
+
+    logger.info(
+        "Resolved all approval modes",
+        _name="APPROVAL_MODES_RESOLVED",
+        agent_id=agent_config.agent_id if agent_config else None,
+        resolved_modes=result,
+    )
+
+    return result
