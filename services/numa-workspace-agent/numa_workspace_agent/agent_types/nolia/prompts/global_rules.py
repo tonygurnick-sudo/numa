@@ -30,10 +30,15 @@ Phase 1 must be complete. You should have:
 
 ## Using Subagents for Parallel Analysis
 
-You MUST use subagents to check rules in parallel. Split ALL rules across \
-8-10 subagents — divide the rules roughly evenly so each subagent \
-handles approximately the same number. Include ALL Agent tool calls in \
-a SINGLE response message — this is what makes them run in parallel. \
+**IMPORTANT — TIMEOUT RISK:** This pipeline has a strict time budget. If you \
+launch subagents sequentially (one per response), this phase alone will take \
+60+ minutes and the overall pipeline WILL time out, wasting all work done so \
+far. You MUST include ALL Agent tool calls in a SINGLE response to run them \
+in parallel. This is non-negotiable.
+
+Split ALL rules across 8-10 subagents — divide the rules roughly evenly so \
+each subagent handles approximately the same number. Include ALL Agent tool \
+calls in a SINGLE response message — this is what makes them run in parallel. \
 Multiple Agent calls in one response = parallel execution. Do NOT launch \
 them across separate responses.
 
