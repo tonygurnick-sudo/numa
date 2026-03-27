@@ -237,4 +237,14 @@ export const CAPABILITIES_METADATA: CapabilityMetadata[] = [
     enabled: true,
     dependencies: ['NUMA_WORKSPACE_CHAT'],
   },
+  {
+    flag: 'RACETECH_DATA_FEED',
+    title: 'RaceTech Data Feed',
+    description: 'External data feed upload endpoint for daily database imports.',
+    icon: 'bi-speedometer2',
+    system_only: false,
+    dev_only: false,
+    enabled: false,
+    dependencies: [],
+  },
 ];

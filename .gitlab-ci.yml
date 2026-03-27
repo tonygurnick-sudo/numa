@@ -178,6 +178,8 @@ pre-commit:
         - lambdas/python/policy-drafter
         - lambdas/python/policy-reviewer
         - lambdas/python/procurement-rfp-assessment
+        - lambdas/python/racetech-unzip
+        - lambdas/python/racetech-upload-url
         - lambdas/python/recruitment-job-ad-creation
         - lambdas/python/restart-crawler
         - lambdas/python/rfp-response-comparison
