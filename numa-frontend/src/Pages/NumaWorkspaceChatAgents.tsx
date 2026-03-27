@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useMemo, useCallback, type ReactNode, type
 import { Button, Alert, Modal, Collapse } from 'react-bootstrap';
 import { Bot, Clock, Plus, Settings } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '../Providers/AuthProvider';
 import { LayoutDashboard } from '../Layouts/LayoutDashboard';
 import { getFlag } from '../utils/featureFlags';
@@ -137,6 +138,7 @@ const NumaWorkspaceChatAgents = () => {
   const [isAgentsPanelOpen, setIsAgentsPanelOpen] = useState(false);
   const [showDocumentModal, setShowDocumentModal] = useState(false);
   const [showFilePreviewModal, setShowFilePreviewModal] = useState(false);
+  const [searchParams, setSearchParams] = useSearchParams();
   // SWR: initialize from localStorage cache so chat settings are available instantly
   const [userChatSettings, setUserChatSettings] = useState<ChatSettings>(
     () => ChatSettingsService.getCached() ?? DEFAULT_CHAT_SETTINGS
@@ -688,8 +690,14 @@ const NumaWorkspaceChatAgents = () => {
       !isConversationLoading &&
       !pendingConversationChatConfig
     ) {
-      // Apply defaults only if user hasn't manually changed settings yet
       applyAgentConfiguration(null);
+
+      const forceKbId = searchParams.get('kb');
+      if (forceKbId && availableKBs.some((k) => k.kb_id === forceKbId)) {
+        setEnabledKBIds([forceKbId]);
+        searchParams.delete('kb');
+        setSearchParams(searchParams, { replace: true });
+      }
     }
   }, [
     chatSettingsLoaded,
@@ -699,6 +707,8 @@ const NumaWorkspaceChatAgents = () => {
     userSettingsModified,
     isConversationLoading,
     pendingConversationChatConfig,
+    searchParams,
+    setSearchParams,
   ]);
 
   // Load personal agents once on mount (only when feature enabled)
