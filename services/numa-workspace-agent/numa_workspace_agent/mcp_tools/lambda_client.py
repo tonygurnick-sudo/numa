@@ -23,6 +23,38 @@ RESULTS_DIR = "/workdir/outputs/integrations-results"
 PREVIEW_LENGTH = 500
 
 
+def pop_approval_id(action_key: str) -> str:
+    """Pop the next approval ID for this action_key from NUMA_REQUEST_ID_MAP.
+
+    The SDK runner stores a JSON dict of action_key -> [approval_id, ...] in
+    the env var. Each tool call pops the first entry (FIFO) so parallel calls
+    to the same action each get their own unique ID.
+
+    Falls back to the legacy single-value NUMA_REQUEST_ID env var.
+    """
+    raw = os.environ.get("NUMA_REQUEST_ID_MAP", "")
+    if raw:
+        try:
+            id_map = json.loads(raw)
+            ids = id_map.get(action_key, [])
+            if ids:
+                approval_id = ids.pop(0)
+                if not ids:
+                    id_map.pop(action_key, None)
+                else:
+                    id_map[action_key] = ids
+                os.environ["NUMA_REQUEST_ID_MAP"] = json.dumps(id_map)
+                return approval_id
+        except (json.JSONDecodeError, TypeError):
+            pass
+    return os.environ.get("NUMA_REQUEST_ID", "")
+
+
+def is_auto_approved() -> bool:
+    """Check if the current tool call was auto-approved by the SDK runner."""
+    return os.environ.get("NUMA_APPROVAL_MODE", "") == "auto"
+
+
 def extract_status(result: Any) -> str:
     """Safely extract status from result, handling list responses.
 

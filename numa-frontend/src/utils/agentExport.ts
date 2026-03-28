@@ -6,6 +6,7 @@ export type AgentExportV1 = {
     exportedAt: string;
   };
   agent: {
+    agentId?: string;
     visibility?: AgentPayload['visibility'];
     agentType?: AgentPayload['agentType'];
     title: string;
@@ -36,6 +37,7 @@ export function serializeAgentSummaryToExport(agent: AgentSummary): AgentExportV
   return {
     meta: { version: 1 as const, exportedAt: new Date().toISOString() },
     agent: {
+      agentId: agent.agentId,
       visibility: agent.visibility,
       agentType: agent.agentType,
       title: agent.title,

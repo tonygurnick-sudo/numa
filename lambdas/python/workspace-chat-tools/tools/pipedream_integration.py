@@ -22,9 +22,11 @@ import structlog
 
 from prm import client as prm_client
 
+from .approval import create_approval_request, poll_approval
+
 logger = structlog.get_logger()
 
-# Approval polling configuration
+# Approval polling configuration (kept for _execute_with_idempotency)
 APPROVAL_POLL_INTERVAL_SECONDS = 5
 APPROVAL_TIMEOUT_SECONDS = 90
 
@@ -255,120 +257,6 @@ def _invoke_relay(
     return data
 
 
-def _create_approval_request(
-    user_sub: str,
-    action_key: str,
-    description: str,
-    props_preview: Dict[str, Any],
-    annotations: Optional[Dict[str, Any]] = None,
-    approval_id: Optional[str] = None,
-) -> str:
-    """Create an approval request in DynamoDB and return the approval ID.
-
-    Args:
-        user_sub: The user's Cognito sub
-        action_key: The action being executed
-        description: Human-readable description of what the action does
-        props_preview: Preview of the configured props
-        annotations: Action annotations (readOnlyHint, destructiveHint, etc.)
-        approval_id: Deterministic approval ID (typically request_id).
-                     Falls back to UUID if not provided.
-
-    Returns:
-        The approval_id string
-    """
-    if not INTEGRATIONS_APPROVAL_TABLE:
-        raise ValueError("INTEGRATIONS_APPROVAL_TABLE_NAME is not configured")
-
-    approval_id = approval_id or str(uuid.uuid4())
-    now = int(time.time())
-    ttl = now + 86400  # 24 hours
-
-    dynamodb = prm_client("dynamodb")
-    try:
-        # Use conditional write: only create the record if it doesn't exist yet.
-        # The frontend may have already written an "approved"/"denied" decision
-        # before the tools Lambda starts (e.g. for the second tool in a parallel
-        # batch), so we must not overwrite an existing decision.
-        dynamodb.put_item(
-            TableName=INTEGRATIONS_APPROVAL_TABLE,
-            Item={
-                "approval_id": {"S": approval_id},
-                "user_sub": {"S": user_sub},
-                "action_key": {"S": action_key},
-                "description": {"S": description},
-                "props_preview": {"S": json.dumps(props_preview)},
-                "annotations": {"S": json.dumps(annotations or {})},
-                "status": {"S": "pending"},
-                "created_at": {"N": str(now)},
-                "ttl": {"N": str(ttl)},
-            },
-            ConditionExpression="attribute_not_exists(approval_id)",
-        )
-    except dynamodb.exceptions.ConditionalCheckFailedException:
-        # Record already exists (frontend pre-created it with the approval
-        # decision). This is expected for parallel tool calls — just proceed
-        # to poll for the existing decision.
-        logger.info(
-            "Approval record already exists (likely pre-approved)",
-            approval_id=approval_id,
-            action_key=action_key,
-        )
-
-    logger.info(
-        "Created approval request",
-        approval_id=approval_id,
-        action_key=action_key,
-        user_sub=user_sub[:8] + "...",
-    )
-
-    return approval_id
-
-
-def _poll_approval(approval_id: str) -> str:
-    """Poll DynamoDB for approval decision.
-
-    Blocks until approved, denied, or timeout.
-
-    Args:
-        approval_id: The approval request ID
-
-    Returns:
-        "approved", "denied", or "timeout"
-    """
-    if not INTEGRATIONS_APPROVAL_TABLE:
-        raise ValueError("INTEGRATIONS_APPROVAL_TABLE_NAME is not configured")
-
-    dynamodb = prm_client("dynamodb")
-    deadline = time.time() + APPROVAL_TIMEOUT_SECONDS
-
-    while time.time() < deadline:
-        response = dynamodb.get_item(
-            TableName=INTEGRATIONS_APPROVAL_TABLE,
-            Key={"approval_id": {"S": approval_id}},
-        )
-
-        item = response.get("Item", {})
-        status = item.get("status", {}).get("S", "pending")
-
-        if status in ("approved", "denied"):
-            logger.info(
-                "Approval decision received",
-                approval_id=approval_id,
-                status=status,
-            )
-            return status
-
-        time.sleep(APPROVAL_POLL_INTERVAL_SECONDS)
-
-    logger.warning(
-        "Approval timed out",
-        approval_id=approval_id,
-        timeout_seconds=APPROVAL_TIMEOUT_SECONDS,
-    )
-    return "timeout"
-
-
 def _execute_with_idempotency(
     approval_id: str,
     execute_fn: Callable[[], Dict[str, Any]],
@@ -511,7 +399,7 @@ def handle_run_action(params: Dict[str, Any]) -> Dict[str, Any]:
 
     if not is_auto_approved:
         # Create approval request (use request_id as deterministic approval_id)
-        approval_id = _create_approval_request(
+        approval_id = create_approval_request(
             user_sub=user_sub,
             action_key=action_key,
             description=description,
@@ -520,15 +408,17 @@ def handle_run_action(params: Dict[str, Any]) -> Dict[str, Any]:
             approval_id=request_id,
         )
 
-        # Return approval event for SSE delivery to frontend
-        # The caller (MCP tool) will emit this as an SSE event
-        # Then poll for the decision
-        decision = _poll_approval(approval_id)
+        # Poll for the decision
+        decision, deny_reason = poll_approval(approval_id)
 
         if decision == "denied":
+            msg = "The user denied this action."
+            if deny_reason:
+                msg += f' The user said: "{deny_reason}"'
             return {
                 "status": "denied",
-                "message": "User denied this action",
+                "message": msg,
+                "deny_reason": deny_reason,
                 "approval_id": approval_id,
             }
 
@@ -668,7 +558,7 @@ def handle_proxy_request(params: Dict[str, Any]) -> Dict[str, Any]:
 
     if not is_auto_approved:
         # Create approval request (use request_id as deterministic approval_id)
-        approval_id = _create_approval_request(
+        approval_id = create_approval_request(
             user_sub=user_sub,
             action_key=f"proxy_{method}",
             description=description,
@@ -676,12 +566,16 @@ def handle_proxy_request(params: Dict[str, Any]) -> Dict[str, Any]:
             approval_id=request_id,
         )
 
-        decision = _poll_approval(approval_id)
+        decision, deny_reason = poll_approval(approval_id)
 
         if decision == "denied":
+            msg = "The user denied this action."
+            if deny_reason:
+                msg += f' The user said: "{deny_reason}"'
             return {
                 "status": "denied",
-                "message": "User denied this action",
+                "message": msg,
+                "deny_reason": deny_reason,
                 "approval_id": approval_id,
             }
 

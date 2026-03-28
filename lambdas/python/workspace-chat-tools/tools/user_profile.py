@@ -18,6 +18,8 @@ import structlog
 
 from prm import resource
 
+from .approval import check_approval, create_approval_request, poll_approval
+
 logger = structlog.get_logger()
 
 # Environment variables
@@ -78,6 +80,15 @@ def _filter_memories(
 
 def handle_list_memories(params: Dict[str, Any]) -> Dict[str, Any]:
     """List the user's memories, optionally filtered by scope."""
+    # HITL approval gate
+    denial = check_approval(
+        params,
+        action_key="numa_memories_list",
+        description="List memories",
+    )
+    if denial:
+        return denial
+
     if not CHAT_SETTINGS_TABLE_NAME:
         raise ValueError("CHAT_SETTINGS_TABLE_NAME not configured")
 
@@ -107,6 +118,44 @@ def handle_list_memories(params: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+def _check_memory_approval(
+    params: Dict[str, Any],
+    action_key: str,
+    description: str,
+    props_preview: Dict[str, Any],
+) -> Optional[Dict[str, Any]]:
+    """Check approval for memory operations. Returns denial dict or None."""
+    request_id = params.get("request_id")
+    if not request_id:
+        return None
+
+    is_auto_approved = params.get("auto_approved", False)
+    if is_auto_approved:
+        return None
+
+    user_sub = params.get("__user_sub", "")
+    approval_id = create_approval_request(
+        user_sub=user_sub,
+        action_key=action_key,
+        description=description,
+        props_preview=props_preview,
+        approval_id=request_id,
+    )
+
+    decision, deny_reason = poll_approval(approval_id)
+
+    if decision == "denied":
+        msg = "The user denied this action."
+        if deny_reason:
+            msg += f' The user said: "{deny_reason}"'
+        return {"status": "denied", "message": msg, "deny_reason": deny_reason}
+
+    if decision == "timeout":
+        return {"status": "timeout", "message": "Approval timed out"}
+
+    return None
+
+
 def handle_add_memory(params: Dict[str, Any]) -> Dict[str, Any]:
     """Add a new memory for the user."""
     if not CHAT_SETTINGS_TABLE_NAME:
@@ -115,6 +164,16 @@ def handle_add_memory(params: Dict[str, Any]) -> Dict[str, Any]:
     user_sub = params.get("__user_sub", "")
     content = params.get("content", "").strip()
     scope = params.get("scope", "general").strip()
+
+    # HITL approval gate
+    denial = _check_memory_approval(
+        params,
+        action_key="numa_memories_add",
+        description=f"Add memory: {content[:80]}{'...' if len(content) > 80 else ''}",
+        props_preview={"content": content[:200], "scope": scope},
+    )
+    if denial:
+        return denial
 
     # Validate content
     if not content:
@@ -185,6 +244,16 @@ def handle_update_memory(params: Dict[str, Any]) -> Dict[str, Any]:
     user_sub = params.get("__user_sub", "")
     memory_id = params.get("memory_id", "").strip()
     content = params.get("content", "").strip()
+
+    # HITL approval gate
+    denial = _check_memory_approval(
+        params,
+        action_key="numa_memories_update",
+        description=f"Update memory: {content[:80]}{'...' if len(content) > 80 else ''}",
+        props_preview={"memory_id": memory_id, "content": content[:200]},
+    )
+    if denial:
+        return denial
 
     # Validate inputs
     if not memory_id:

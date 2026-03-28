@@ -4712,6 +4712,22 @@ $border-radius-pill: 1rem;
         cursor: not-allowed;
       }
     }
+
+    .approval-deny-reason-input {
+      flex: 1;
+      min-width: 120px;
+      max-width: 300px;
+      font-size: 0.8125rem;
+      padding: 0.25rem 0.5rem;
+      border-radius: 0.375rem;
+      border: 1px solid rgba(0, 0, 0, 0.12);
+      background: rgba(255, 255, 255, 0.6);
+
+      &::placeholder {
+        color: #a1a1aa;
+        font-size: 0.75rem;
+      }
+    }
   }
 }
 

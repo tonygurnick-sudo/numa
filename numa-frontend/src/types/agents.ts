@@ -20,6 +20,9 @@ export type AgentToolsConfig = {
   // undefined = use user's default setting
   // 'always' | 'non_destructive' | 'never'
   approvalMode?: 'always' | 'non_destructive' | 'never';
+  // Per-category approval mode overrides for this agent
+  // undefined/missing per category = use user's default setting
+  approvalModes?: Record<string, 'always' | 'non_destructive' | 'never' | undefined>;
 };
 
 export type AgentReferenceFile = {

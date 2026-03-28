@@ -191,6 +191,35 @@ playwright-cli tracing-start
 playwright-cli tracing-stop
 ```
 
+## Important: run-code vs eval
+
+`run-code` only supports **single expressions** -- no `const`, `let`, `var`, semicolons, or multi-statement scripts. If you need multi-statement JS or variable declarations, use `eval` instead:
+
+```bash
+# WRONG -- run-code will throw SyntaxError
+playwright-cli run-code "const el = page.locator('#btn'); await el.click();"
+
+# RIGHT -- use eval for inline JS execution
+playwright-cli eval 'document.querySelector("#my-btn").click()'
+
+# RIGHT -- single expression works with run-code
+playwright-cli run-code "await page.locator('#btn').click()"
+```
+
+For complex multi-step interactions, chain separate `eval` or `click`/`fill` commands rather than trying to put everything in one `run-code` call.
+
+## Important: file paths
+
+**Always use absolute paths** for `--filename` in `screenshot`, `pdf`, and `snapshot` commands. The working directory of the playwright-cli process may differ from your shell's cwd, causing `ENOENT` errors with relative paths:
+
+```bash
+# Safer -- absolute path
+playwright-cli screenshot --filename=/Users/me/project/playwright-runs/screenshot.png
+
+# Risky -- relative path depends on playwright-cli's cwd
+playwright-cli screenshot --filename=playwright-runs/screenshot.png
+```
+
 ## Open parameters
 
 ```bash

@@ -450,6 +450,7 @@ export interface WorkspaceChatRequest {
   availableKBs?: Array<{ id: string; name: string }>;
   enabledTools?: string[];
   enabledConnections?: string[];
+  availableIntegrations?: Array<{ id: string; name: string }>;
   // Model selection (global cross-region inference profile)
   modelId?: WorkspaceChatModelId;
   // Attachment handling - files and optional folder metadata
@@ -866,6 +867,8 @@ export interface SDKToolApprovalEvent {
   props_preview: string;
   request_id: string;
   auto_approved?: boolean;
+  /** Category of the approval: "integration", "numa_tool", etc. Used by frontend for label rendering. */
+  approval_category?: string;
   parent_tool_use_id?: string | null;
 }
 

@@ -69,10 +69,13 @@ const formatTimestamp = (timestamp: number, labels: { today: string; yesterday: 
 };
 
 const renderIntegrations = (agent: AgentSummary) => {
-  if (!agent.requiredIntegrations?.length) return null;
+  const integrations = agent.toolsConfig?.enabledConnections?.length
+    ? agent.toolsConfig.enabledConnections
+    : agent.requiredIntegrations;
+  if (!integrations?.length) return null;
   return (
     <div className="d-flex align-items-center flex-wrap gap-2">
-      {agent.requiredIntegrations.map((integration) => {
+      {integrations.map((integration) => {
         const config = getConnectionConfig(integration);
         if (config?.img_src) {
           return (
@@ -294,22 +297,27 @@ export const AgentCard = ({
               {hasMetadata && (
                 <div className="d-flex align-items-center gap-2" style={{ flexWrap: 'nowrap', overflow: 'hidden' }}>
                   {/* Integrations Icons */}
-                  {agent.requiredIntegrations?.length > 0 && (
+                  {(agent.toolsConfig?.enabledConnections?.length || agent.requiredIntegrations?.length) > 0 && (
                     <div className="d-flex align-items-center gap-1" style={{ flexShrink: 0 }}>
-                      {agent.requiredIntegrations.slice(0, 3).map((integration) => {
-                        const config = getConnectionConfig(integration);
-                        if (config?.img_src) {
-                          return (
-                            <img
-                              key={integration}
-                              src={config.img_src}
-                              alt={config.name}
-                              style={{ width: 16, height: 16, borderRadius: '3px' }}
-                            />
-                          );
-                        }
-                        return null;
-                      })}
+                      {(agent.toolsConfig?.enabledConnections?.length
+                        ? agent.toolsConfig.enabledConnections
+                        : agent.requiredIntegrations
+                      )
+                        .slice(0, 3)
+                        .map((integration) => {
+                          const config = getConnectionConfig(integration);
+                          if (config?.img_src) {
+                            return (
+                              <img
+                                key={integration}
+                                src={config.img_src}
+                                alt={config.name}
+                                style={{ width: 16, height: 16, borderRadius: '3px' }}
+                              />
+                            );
+                          }
+                          return null;
+                        })}
                       {agent.requiredIntegrations.length > 3 && (
                         <span className="text-muted" style={{ fontSize: '0.7rem' }}>
                           +{agent.requiredIntegrations.length - 3}
@@ -608,7 +616,7 @@ export const AgentCard = ({
               </div>
             )}
             {/* Integrations */}
-            {agent.requiredIntegrations?.length > 0 && (
+            {(agent.toolsConfig?.enabledConnections?.length || agent.requiredIntegrations?.length) > 0 && (
               <div className="d-flex align-items-start gap-2">
                 <span
                   className="text-muted small fw-semibold"

@@ -19,10 +19,7 @@ from typing import Any, Dict
 import structlog
 
 from prm import client as prm_client
-from tools.pipedream_integration import (
-    _create_approval_request,
-    _poll_approval,
-)
+from tools.approval import create_approval_request, poll_approval
 
 logger = structlog.get_logger()
 
@@ -648,19 +645,23 @@ def handle_ops_operation(event: Dict[str, Any]) -> Dict[str, Any]:
     if not auto_approved and request_id:
         try:
             action_key = f"ops-{operation.replace('_', '-')}"
-            approval_id = _create_approval_request(
+            approval_id = create_approval_request(
                 user_sub=user_sub,
                 action_key=action_key,
                 description=description,
                 props_preview=op_params,
                 approval_id=request_id,
             )
-            decision = _poll_approval(approval_id)
+            decision, deny_reason = poll_approval(approval_id)
 
             if decision == "denied":
+                msg = "The user denied this action."
+                if deny_reason:
+                    msg += f' The user said: "{deny_reason}"'
                 return {
                     "status": "denied",
-                    "message": "User denied this operation",
+                    "message": msg,
+                    "deny_reason": deny_reason,
                     "approval_id": approval_id,
                 }
             if decision == "timeout":
