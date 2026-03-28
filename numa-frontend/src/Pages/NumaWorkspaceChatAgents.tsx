@@ -199,12 +199,9 @@ const NumaWorkspaceChatAgents = () => {
     };
   }, [inputMessage]);
 
-  // Clear first-message banner once the assistant starts streaming real content
+  // Clear first-message banner once the assistant starts streaming any content (text, thinking, tool calls, etc.)
   useEffect(() => {
-    if (
-      isFirstMessagePending &&
-      messages.some((m) => m.role === 'assistant' && m.segments?.some((s) => s.kind === 'text' && s.text))
-    ) {
+    if (isFirstMessagePending && messages.some((m) => m.role === 'assistant' && m.segments && m.segments.length > 0)) {
       setIsFirstMessagePending(false);
     }
   }, [messages, isFirstMessagePending]);
@@ -246,6 +243,19 @@ const NumaWorkspaceChatAgents = () => {
     openFolderPreview,
     closeFilePreview,
   } = filePreviewProcessor;
+
+  // NUMA-1105: Intercept mobile back-button immediately when opening the preview modal
+  useEffect(() => {
+    if (!isMobile || !showFilePreviewModal) return;
+    window.history.pushState({ filePreviewOpen: true }, '');
+    const close = () => {
+      setShowFilePreviewModal(false);
+      closeFilePreview();
+    };
+    window.addEventListener('popstate', close);
+    return () => window.removeEventListener('popstate', close);
+  }, [isMobile, showFilePreviewModal, closeFilePreview]);
+
   const { setCurrentAbort, resetStreamingState } = streamingHandler;
 
   const { user, bedrockRuntimeClient, numaChatDynamoUtils, getAccessToken, getCredentials, lambdaClient } = useAuth();
@@ -2657,6 +2667,8 @@ const NumaWorkspaceChatAgents = () => {
                           setWebSearchEnabled={handleUserSetWebSearchEnabled}
                           createAgentEnabled={agentsFeatureEnabled ? createAgentEnabled : false}
                           setCreateAgentEnabled={handleUserSetCreateAgentEnabled}
+                          dataAnalysisEnabled={false}
+                          setDataAnalysisEnabled={() => {}}
                           autoToolsEnabled={autoToolsEnabled}
                           setAutoToolsEnabled={handleUserSetAutoToolsEnabled}
                           availableConnections={availableConnections}

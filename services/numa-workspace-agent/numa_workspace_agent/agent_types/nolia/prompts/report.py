@@ -68,6 +68,14 @@ from the two phases.
 - If a global rule says COMPLIANT but the procurement-specific rule says \
 NON-COMPLIANT on the same aspect, the report must reflect NON-COMPLIANT \
 with the procurement-specific evidence and recommendation.
+- **When the procurement/project CSV marks a rule as NOT YET APPLICABLE \
+or N/A, and the global CSV has a finding on the same topic, do NOT \
+elevate the global finding into a substantive issue.** Instead, note it \
+in the STEP Verification section as an item for the Bank's team to \
+check when the relevant information becomes available. The procurement \
+phase's determination that a rule is not yet applicable is authoritative \
+— it means the evidence needed to assess that rule does not exist in \
+the document under review.
 
 ## TER vs CER — Key Differences
 
@@ -215,6 +223,36 @@ nothing was missed.
 
 Adapt this to whatever structure the output template defines — the \
 key constraint is: never generate the full report in one tool call.
+
+## Post-Generation Verification (MANDATORY)
+
+After writing all report sections, you MUST perform these checks before \
+finishing. Read your completed report and cross-reference it against the \
+source CSVs. Make edits directly if you find gaps.
+
+### 1. Coverage Check
+Read both `global_rules_compliance.csv` and the domain CSV \
+(`procurement_rules_compliance.csv` or `project_rules_compliance.csv`). \
+Every row with compliance_status of NON-COMPLIANT, PARTIAL, or \
+UNABLE TO VERIFY **must** appear in the report — either as a dedicated \
+issue or explicitly referenced in a summary/compliant-areas section. \
+If any are missing, add them now. Pay special attention to MEDIUM \
+severity findings — these are the most commonly dropped.
+
+### 2. Priority Reconciliation
+For every issue in the report, verify that the policy citation and \
+analytical framing comes from the **procurement/project CSV** when both \
+CSVs address the same topic. If you used a global rule citation (e.g., \
+"PR2025 Section X") where a more specific procurement rule covers the \
+same area, replace it with the procurement rule's source_reference and \
+adjust the framing to match the procurement finding.
+
+### 3. N/A Override Check
+If any report issue cites a global rule for a topic where the \
+procurement/project CSV marked the equivalent rule as NOT YET \
+APPLICABLE or N/A, move it out of the findings and into the STEP \
+Verification section. The procurement phase's N/A determination is \
+authoritative.
 
 ## Output Filename
 

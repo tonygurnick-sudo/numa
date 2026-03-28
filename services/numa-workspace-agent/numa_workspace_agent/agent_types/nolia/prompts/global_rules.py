@@ -30,10 +30,15 @@ Phase 1 must be complete. You should have:
 
 ## Using Subagents for Parallel Analysis
 
-You MUST use subagents to check rules in parallel. Split ALL rules across \
-8-10 subagents — divide the rules roughly evenly so each subagent \
-handles approximately the same number. Include ALL Agent tool calls in \
-a SINGLE response message — this is what makes them run in parallel. \
+**IMPORTANT — TIMEOUT RISK:** This pipeline has a strict time budget. If you \
+launch subagents sequentially (one per response), this phase alone will take \
+60+ minutes and the overall pipeline WILL time out, wasting all work done so \
+far. You MUST include ALL Agent tool calls in a SINGLE response to run them \
+in parallel. This is non-negotiable.
+
+Split ALL rules across 8-10 subagents — divide the rules roughly evenly so \
+each subagent handles approximately the same number. Include ALL Agent tool \
+calls in a SINGLE response message — this is what makes them run in parallel. \
 Multiple Agent calls in one response = parallel execution. Do NOT launch \
 them across separate responses.
 
@@ -114,6 +119,24 @@ form exists
 **Do not dismiss borderline findings** — include them as PARTIAL with \
 a note on the uncertainty rather than rounding up to COMPLIANT. The \
 report generation phase will determine final priority and framing.
+
+### Adversarial Verification — Do Not Defer to the Evaluator
+
+Your job is to **independently verify compliance against the rules** — \
+not to summarise or echo the evaluator's conclusions. The evaluator may \
+have made errors. When checking each rule:
+
+- **Compare rule thresholds against document thresholds.** If the rule \
+specifies a value or percentage and the evaluation applies a different \
+one, that is a discrepancy — flag it regardless of whether the \
+evaluator's conclusion seems reasonable.
+- **Check bidder responses against rule requirements directly.** If a \
+rule requires something specific and the bidder's response contradicts \
+it, flag it as non-compliant even if the evaluator marked it as met. \
+The evaluator's judgment is what you are auditing.
+- **Do not accept the evaluation's classification of criteria without \
+verifying it.** If the rules classify something as mandatory but the \
+evaluation treats it differently, flag the discrepancy.
 
 ### Severity Levels
 - **CRITICAL**: Would result in misprocurement or contract cancellation

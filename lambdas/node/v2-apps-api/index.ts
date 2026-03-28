@@ -391,14 +391,14 @@ const handleGetRun = async (runId: string, auth: AuthContext) => {
 
   // If run is PROCESSING, check S3 for completion or timeout
   if (run.status === 'PROCESSING') {
-    // Timeout: if PROCESSING for over 2 hours, mark as FAILED
-    const PROCESSING_TIMEOUT_MS = 2 * 60 * 60 * 1000;
+    // Timeout: if PROCESSING for over 4 hours, mark as FAILED
+    const PROCESSING_TIMEOUT_MS = 4 * 60 * 60 * 1000;
     const startedAt = new Date(run.updatedAt).getTime();
     const elapsed = Date.now() - startedAt;
 
     if (elapsed > PROCESSING_TIMEOUT_MS) {
       const now = new Date().toISOString();
-      console.warn('v2-apps-api run timed out after 2 hours', runId, run.appId);
+      console.warn('v2-apps-api run timed out after 4 hours', runId, run.appId);
 
       await dynamo.send(
         new UpdateCommand({
@@ -408,14 +408,14 @@ const handleGetRun = async (runId: string, auth: AuthContext) => {
           ExpressionAttributeNames: { '#status': 'status', '#error': 'error' },
           ExpressionAttributeValues: {
             ':status': 'FAILED',
-            ':error': 'Run timed out after 2 hours without producing a result.',
+            ':error': 'Run timed out after 4 hours without producing a result.',
             ':now': now,
           },
         })
       );
 
       run.status = 'FAILED';
-      run.error = 'Run timed out after 2 hours without producing a result.';
+      run.error = 'Run timed out after 4 hours without producing a result.';
       run.updatedAt = now;
       run.completedAt = now;
     } else {

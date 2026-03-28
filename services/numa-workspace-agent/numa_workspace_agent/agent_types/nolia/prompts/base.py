@@ -94,8 +94,7 @@ Today's date: {today_date}
 # ─── Nolia identities ─────────────────────────────────────────────────────────
 
 NOLIA_EDA_IDENTITY = """\
-You are Numa, an AI assistant created by Arcanum AI in partnership with Nolia \
-who specialises in procurement and funding applications.
+You are Nolia, an AI procurement and funding specialist.
 
 You are a document analyst that prepares large World Bank procurement \
 documents (evaluation reports, terms of reference, and related documents) \
@@ -134,8 +133,7 @@ summary, and STOP.
 
 
 NOLIA_SPECIALIST_IDENTITY = """\
-You are Numa, an AI assistant created by Arcanum AI in partnership with Nolia \
-who specialises in procurement and funding applications.
+You are Nolia, an AI procurement and funding specialist.
 
 You are an AI agent that conducts peer reviews of World Bank procurement \
 documents. Your role is to systematically check these reports against \
@@ -267,7 +265,7 @@ Then merge their results from their temp files on disk.
 def build_nolia_system_prompt(
     working_dir: str = ".",
     user_timezone: Optional[str] = None,
-    platform: str = "Numa Workspace",
+    platform: str = "Nolia",
     identity_override: Optional[str] = None,
     today_string: Optional[str] = None,
     user_email: Optional[str] = None,

@@ -187,14 +187,18 @@ async def run_nolia_pipeline(
         "You are running Phase 2 (Global Rules). "
         "Phase 1 (EDA) has already completed — its outputs are in `/workdir/tmp/` "
         "(document_manifest.json, document_summary.md, page_index.csv). "
-        "Read those first, then check the document against global rules."
+        "Read those first, then check the document against global rules.\n\n"
+        "IMPORTANT: Launch ALL subagents in a SINGLE response for parallel "
+        "execution. Sequential launches will cause the pipeline to time out."
     )
 
     domain_prompt = (
         f"{user_context}\n\n"
         "You are running Phase 3 (Domain Rules). "
         "Phases 1 (EDA) and 2 (Global Rules) have already completed — their outputs are in `/workdir/tmp/`. "
-        "Check the document against your domain-specific rules."
+        "Check the document against your domain-specific rules.\n\n"
+        "IMPORTANT: Launch ALL subagents in a SINGLE response for parallel "
+        "execution. Sequential launches will cause the pipeline to time out."
     )
 
     report_gen_prompt = (

@@ -1,22 +1,22 @@
 """Racetech external data upload — returns a presigned S3 PUT URL.
 
 Security model:
-  1. Source IP validated against ALLOWED_IP env var (Glenn's static IP).
+  1. Source IP validated against ALLOWED_IPS env var (Glenn's static IPs).
      Checked first — costs nothing (no AWS calls).
   2. API key validated against SSM parameter (shared secret with Glenn).
   3. STS assume-role with an inline IP-condition session policy — the presigned
-     URL is cryptographically bound to the allowed IP and is useless from any
+     URL is cryptographically bound to the allowed IPs and is useless from any
      other address.
 
 Glenn calls:
   POST /api/racetech/upload
   X-Api-Key: <key>
-  {"filename": "server1_daily.sqlite"}
+  {"filename": "racetech-opencart-nz.sqlite.zip"}
 
-  → {"upload_url": "https://...", "s3_key": "documents/company/racetech-data/server1_daily.sqlite", "expires_in": 3600}
+  → {"upload_url": "https://...", "s3_key": "documents/company/racetech-data/racetech-opencart-nz.sqlite.zip", "expires_in": 3600}
 
 Then uploads:
-  curl -X PUT "$upload_url" --upload-file server1_daily.sqlite
+  curl -X PUT "$upload_url" --upload-file racetech-opencart-nz.sqlite.zip
 """
 
 from __future__ import annotations
@@ -35,7 +35,7 @@ logger = structlog.get_logger()
 
 # ── Environment ──────────────────────────────────────────────────────────────
 DATA_BUCKET_NAME: str = os.environ["DATA_BUCKET_NAME"]
-ALLOWED_IP: str = os.environ["ALLOWED_IP"]  # 101.100.128.241
+ALLOWED_IPS: set[str] = set(os.environ["ALLOWED_IPS"].split(","))
 UPLOAD_ROLE_ARN: str = os.environ["UPLOAD_ROLE_ARN"]
 API_KEY_PARAM: str = os.environ["API_KEY_PARAM"]  # SSM parameter name
 
@@ -50,7 +50,9 @@ def _get_api_key() -> str:
     global _cached_api_key
     if _cached_api_key is None:
         ssm = prm_client("ssm")
-        _cached_api_key = ssm.get_parameter(Name=API_KEY_PARAM)["Parameter"]["Value"]
+        _cached_api_key = str(
+            ssm.get_parameter(Name=API_KEY_PARAM)["Parameter"]["Value"]
+        )
     return _cached_api_key
 
 
@@ -70,7 +72,7 @@ def _valid_filename(name: str) -> bool:
 def lambda_handler(event: dict, _ctx: object) -> dict:
     # ── 1. IP check (cheapest — no AWS calls) ────────────────────────────────
     source_ip = event.get("requestContext", {}).get("http", {}).get("sourceIp", "")
-    if source_ip != ALLOWED_IP:
+    if source_ip not in ALLOWED_IPS:
         logger.warning("Rejected — IP not allowed", source_ip=source_ip)
         return _resp(403, {"error": "Forbidden"})
 
@@ -99,9 +101,6 @@ def lambda_handler(event: dict, _ctx: object) -> dict:
     s3_key = f"{UPLOAD_PREFIX}{filename}"
 
     # ── 4. STS assume-role with IP-bound session policy ───────────────────────
-    # The session policy is evaluated when S3 processes the presigned PUT request.
-    # aws:SourceIp in the session policy means the URL only works from ALLOWED_IP —
-    # any attempt from a different IP returns AccessDenied even with a valid URL.
     sts = prm_client("sts")
     session_policy = {
         "Version": "2012-10-17",
@@ -110,7 +109,11 @@ def lambda_handler(event: dict, _ctx: object) -> dict:
                 "Effect": "Allow",
                 "Action": "s3:PutObject",
                 "Resource": f"arn:aws:s3:::{DATA_BUCKET_NAME}/{UPLOAD_PREFIX}*",
-                "Condition": {"IpAddress": {"aws:SourceIp": f"{ALLOWED_IP}/32"}},
+                "Condition": {
+                    "IpAddress": {
+                        "aws:SourceIp": [f"{ip}/32" for ip in ALLOWED_IPS],
+                    }
+                },
             }
         ],
     }
@@ -126,8 +129,6 @@ def lambda_handler(event: dict, _ctx: object) -> dict:
         return _resp(500, {"error": "Internal error"})
 
     # ── 5. Generate presigned PUT URL ─────────────────────────────────────────
-    # Must use the STS-returned credentials directly — prm_client cannot wrap
-    # temporary credentials returned as a dict.
     s3 = boto3.client(
         "s3",
         aws_access_key_id=creds["AccessKeyId"],

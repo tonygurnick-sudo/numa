@@ -4,6 +4,7 @@ import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { v4 as uuidv4 } from 'uuid';
 import * as process from 'node:process';
 import { convertMdToDocx, convertMdToPdf, convertPdfToDocx, convertGenericToPdf } from './lib/converter.js';
+import { getNoliaReferenceDoc, preprocessNoliaMarkdown } from './lib/nolia.js';
 
 // Initialize S3 client
 const s3Client = new S3Client({});
@@ -27,6 +28,9 @@ interface ConvertRequest {
   // Optional metadata
   title?: string;
   filename?: string;
+
+  // Optional styling type (e.g. 'nolia' for Nolia-branded output)
+  type?: string;
 }
 
 interface ConvertResponse {
@@ -190,13 +194,21 @@ export async function handler(event: APIGatewayProxyEventV2): Promise<APIGateway
         return errorResponse(400, 'Markdown content is empty');
       }
 
+      // Apply Nolia styling if requested
+      let referenceDoc: string | undefined;
+      if (request.type === 'nolia') {
+        referenceDoc = getNoliaReferenceDoc();
+        markdown = preprocessNoliaMarkdown(markdown);
+        console.log(`Nolia styling applied, reference doc: ${referenceDoc}`);
+      }
+
       console.log(`Converting markdown (${markdown.length} chars) to ${request.format}`);
 
       // Convert based on format
       if (request.format === 'docx') {
-        outputBuffer = await convertMdToDocx(markdown);
+        outputBuffer = await convertMdToDocx(markdown, referenceDoc);
       } else {
-        outputBuffer = await convertMdToPdf(markdown);
+        outputBuffer = await convertMdToPdf(markdown, referenceDoc);
       }
     }
 

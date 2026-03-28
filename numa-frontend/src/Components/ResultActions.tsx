@@ -47,6 +47,60 @@ const convertMarkdownToPlainText = (markdown: string): string => {
   // Preserve code blocks indentation
   plainText = plainText.replace(/```(?:\w+)?\n([\s\S]*?)\n```/g, '\n$1\n');
 
+  // Format Tables cleanly for plaintext/email displays
+  const lines = plainText.split('\n');
+  let tableRows: string[][] = [];
+  let colWidths: number[] = [];
+  const processedLines: string[] = [];
+
+  const flushTable = () => {
+    if (tableRows.length === 0) return;
+    tableRows.forEach((row, rowIndex) => {
+      const formattedRow = row
+        .map((cell, i) => {
+          const padding = Math.max(0, (colWidths[i] || 0) - cell.length);
+          return cell + ' '.repeat(padding);
+        })
+        .join(' | ');
+      processedLines.push(`| ${formattedRow} |`);
+
+      // Add a clean divider row after the header
+      if (rowIndex === 0) {
+        const dividerRow = colWidths.map((w) => '-'.repeat(Math.max(3, w))).join('-|-');
+        processedLines.push(`|-${dividerRow}-|`);
+      }
+    });
+    processedLines.push(''); // Spacing after table
+    tableRows = [];
+    colWidths = [];
+  };
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (trimmed.startsWith('|') && trimmed.endsWith('|')) {
+      // Ignore raw markdown divider rows; we render our own clean dividers
+      if (/^\|[\s\-:|]+\|$/.test(trimmed)) {
+        continue;
+      }
+
+      const cells = trimmed
+        .substring(1, trimmed.length - 1)
+        .split('|')
+        .map((c) => c.trim());
+
+      tableRows.push(cells);
+      cells.forEach((c, idx) => {
+        colWidths[idx] = Math.max(colWidths[idx] || 0, c.length);
+      });
+    } else {
+      flushTable();
+      processedLines.push(line);
+    }
+  }
+  flushTable();
+
+  plainText = processedLines.join('\n');
+
   // Make sure paragraphs are separated
   plainText = plainText.replace(/\n{3,}/g, '\n\n');
 
@@ -374,12 +428,13 @@ const ResultActions: React.FC<ResultActionsProps> = ({ content, title, appType =
         const tableRows = section.content
           .split('\n')
           .filter((row) => row.trim() && !row.match(/^[\s\-|]+$/)) // Remove separator rows
-          .map((row) =>
-            row
-              .split('|')
-              .map((cell) => cell.trim())
-              .filter((cell) => cell)
-          );
+          .map((row) => {
+            const cells = row.split('|').map((c) => c.trim());
+            // Drop external border pipes, but keep empty content cells in the middle
+            if (cells.length > 0 && cells[0] === '') cells.shift();
+            if (cells.length > 0 && cells[cells.length - 1] === '') cells.pop();
+            return cells;
+          });
 
         if (tableRows.length > 0) {
           const colCount = Math.max(...tableRows.map((row) => row.length));

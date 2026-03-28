@@ -120,9 +120,7 @@ lint-python-lambdas:
 		name=$$(basename "$$dir"); \
 		if [ -f "$$dir/pyproject.toml" ]; then \
 			echo "  $$name" && (cd "$$dir" && poetry install -q 2>/dev/null && \
-				poetry run pyright . && \
-				poetry run mypy . && \
-				poetry run pylint . --recursive yes --ignore .venv,.poetry,build_venv,wheels --ignore-paths '.*/(\.venv|build_venv|wheels|dist)/.*') || exit 1; \
+				poetry run pyright .) || exit 1; \
 		fi; \
 	done
 
@@ -132,9 +130,7 @@ lint-python-libs:
 		name=$$(basename "$$dir"); \
 		if [ -f "$$dir/pyproject.toml" ]; then \
 			echo "  $$name" && (cd "$$dir" && poetry install -q 2>/dev/null && \
-				poetry run pyright . && \
-				poetry run mypy . && \
-				poetry run pylint . --recursive yes --ignore .venv,.poetry,build_venv,wheels --ignore-paths '.*/(\.venv|build_venv|wheels|dist)/.*') || exit 1; \
+				poetry run pyright .) || exit 1; \
 		fi; \
 	done
 

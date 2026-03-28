@@ -102,13 +102,6 @@ MESSAGE_HINTS: list[tuple[str, str]] = [
     (r"\b(memory|ram)\s+(error|issue|problem)\b", "data-analysis"),
     (r"\b(100k|million|millions)\s+(rows?|records?)\b", "data-analysis"),
     (r"\b(chart|graph|plot|visuali[sz]e|matplotlib)\b", "data-analysis"),
-    # Racetech business data patterns
-    (r"\bracetech\b", "racetech-data"),
-    (r"\bmoneyworks\b", "racetech-data"),
-    (
-        r"\b(customer|invoice|sales\s+order|stock|product)\b.*\b(racetech|moneyworks)\b",
-        "racetech-data",
-    ),
     # Integration patterns
     (r"\b(integrations?|connected\s+apps?|pipedream)\b", "integrations"),
     (r"\b(run[\s_]+action|proxy[\s_]+request|configure[\s_]+props)\b", "integrations"),
@@ -344,7 +337,6 @@ def build_assistant_prompt(context: AssistantContext) -> str:
 | web-search | "search online", "google", "latest news", "current" | Find recent/external info, look up things not in company docs |
 | agents | "agent", "agents", "numa agent", "saved agent", "my agent" | List, create, update, configure, or do ANYTHING with Numa agents |
 | integrations | "integration", "connected app", "slack", "google drive", "gmail", app names | Use connected integrations to run actions, search data, or make API calls to external apps |
-| racetech-data | "racetech", "moneyworks", "invoices", "customers", "stock", "sales orders", "products" | Query Racetech Manufacturing business data — customers, sales, invoices, stock levels, revenue analysis |
 
 Here are a list of current integrations in Numa a user may use:
 'gmail',
