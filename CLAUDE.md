@@ -275,7 +275,7 @@ Feature branches -> `dev` (default MR target) -> `main` (release). No pipeline o
 
 ## Numa Ops
 
-Lightweight work management module (tickets, kanban boards, projects, customers, suppliers) built into Numa. Designed by Ian (COO/PM) — his POC at `docs/tasks/numa-ops-feature/The actual Work Ops App/` is the gold standard for feature parity. Backend: Node Lambdas prefixed `numa-ops-*`. Frontend: `OpsPage` at `/ops`, components in `Components/Ops/`.
+Lightweight work management module (tickets, kanban boards, projects, customers, suppliers) built into Numa. Designed by Ian (COO/PM) — his POC at `documentation/numa-ops/ian-design/The actual Work Ops App/` is the gold standard for feature parity. Backend: Node Lambdas prefixed `numa-ops-*`. Frontend: `OpsPage` at `/ops`, components in `Components/Ops/`.
 
 Activate the `numa-ops` skill before doing any Ops work.
 

@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Numa Ops Management</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <style>
+    .loader-overlay {
+      position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(15, 23, 42, 0.9);
+      display: flex; align-items: center; justify-content: center;
+      z-index: 99999;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    }
+    .loader-popup {
+      background: white; border-radius: 12px;
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+      width: 480px; max-width: 90vw; overflow: hidden;
+    }
+    .loader-header {
+      background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+      color: white; padding: 20px 24px; text-align: center;
+    }
+    .loader-header h2 { margin: 0; font-size: 20px; font-weight: 600; }
+    .loader-body { padding: 24px; }
+    .preset-buttons { display: flex; gap: 8px; margin-bottom: 20px; }
+    .preset-btn {
+      flex: 1; padding: 12px 16px; border: 2px solid #e2e8f0;
+      border-radius: 8px; background: white; cursor: pointer;
+      font-weight: 600; transition: all 0.15s; text-decoration: none;
+      color: #334155; text-align: center;
+    }
+    .preset-btn:hover { border-color: #6366f1; background: #f5f3ff; }
+    .preset-info { margin-top: 16px; padding: 12px; background: #f8fafc; border-radius: 8px; font-size: 13px; color: #64748b; }
+    .preset-info strong { color: #334155; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script>
+    // Check URL params for data mode
+    const params = new URLSearchParams(window.location.search);
+    const dataMode = params.get('data') || null;
+
+    // Store for conditional loading
+    window.DATA_MODE = dataMode;
+
+    if (!dataMode) {
+      // Show selection popup
+      document.body.innerHTML = `
+        <div class="loader-overlay">
+          <div class="loader-popup">
+            <div class="loader-header">
+              <h2>🗂️ Numa Ops - Select Dataset</h2>
+            </div>
+            <div class="loader-body">
+              <p style="margin: 0 0 16px 0; color: #64748b; font-size: 14px;">
+                Choose which data to load:
+              </p>
+
+              <div class="preset-buttons">
+                <a class="preset-btn" href="?data=minimal">Minimal</a>
+                <a class="preset-btn" href="?data=dev">Dev</a>
+                <a class="preset-btn" href="?data=full">Full Demo</a>
+              </div>
+
+              <div class="preset-info">
+                <p style="margin: 0 0 8px 0;"><strong>Minimal:</strong> Empty app, just system config</p>
+                <p style="margin: 0 0 8px 0;"><strong>Dev:</strong> Arcanum Dev WC + 10 customers + tickets</p>
+                <p style="margin: 0;"><strong>Full Demo:</strong> All 9 WCs + 27 customers (original data)</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+  </script>
+
+  <!-- Only load app if data mode is selected -->
+  <script>
+    if (window.DATA_MODE) {
+      // Continue loading the app
+      document.write('<div id="app-loading" style="position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);font-family:system-ui;color:#64748b;">Loading...</div>');
+    }
+  </script>
+
+  <!-- 1. Data files (plain JS) - conditionally included based on DATA_MODE -->
+  <script src="domain/field-library.js"></script>
+  <script src="data/initial-data-core.js"></script>
+  <script>
+    // Load additional data based on mode
+    if (window.DATA_MODE === 'dev' || window.DATA_MODE === 'full') {
+      document.write('<script src="data/initial-data-arcanum-dev.js"><\/script>');
+    }
+    if (window.DATA_MODE === 'full') {
+      document.write('<script src="data/initial-data-bulk.js"><\/script>');
+    }
+  </script>
+
+  <!-- 2. Shim script (exposes const to window.*) -->
+  <script>
+    if (window.DATA_MODE) {
+      // Expose field library
+      if (typeof FIELD_LIBRARY !== 'undefined') window.FIELD_LIBRARY = FIELD_LIBRARY;
+      if (typeof FIELD_LIBRARY_CATEGORIES !== 'undefined') window.FIELD_LIBRARY_CATEGORIES = FIELD_LIBRARY_CATEGORIES;
+      if (typeof FIELD_LIBRARY_NORMALIZED !== 'undefined') window.FIELD_LIBRARY_NORMALIZED = FIELD_LIBRARY_NORMALIZED;
+      if (typeof BOARD_COLORS !== 'undefined') window.BOARD_COLORS = BOARD_COLORS;
+      if (typeof TYPE_COLORS !== 'undefined') window.TYPE_COLORS = TYPE_COLORS;
+      if (typeof TYPE_ICONS !== 'undefined') window.TYPE_ICONS = TYPE_ICONS;
+
+      // Expose data from modular files
+      if (window.INITIAL_DATA) {
+        window.INITIAL_COMPANY = window.INITIAL_DATA.company;
+        window.INITIAL_OP_CENTRES = window.INITIAL_DATA.workCentres;
+        window.INITIAL_TICKETS = window.INITIAL_DATA.tickets;
+        if (window.INITIAL_DATA.industries) window.INDUSTRIES = window.INITIAL_DATA.industries;
+        console.log('[shim] Data loaded - Mode:', window.DATA_MODE);
+        console.log('[shim] Work Centres:', window.INITIAL_OP_CENTRES?.length || 0);
+        console.log('[shim] Customers:', window.INITIAL_DATA.company?.globalCRM?.length || 0);
+        console.log('[shim] Tickets:', window.INITIAL_TICKETS?.length || 0);
+      }
+
+      // Remove loading indicator
+      const loadingEl = document.getElementById('app-loading');
+      if (loadingEl) loadingEl.remove();
+    }
+  </script>
+
+  <!-- 3. Domain logic (pure JS, no React) -->
+  <script src="domain/statuses.js"></script>
+
+  <!-- 4. Shared components (plain JS, React.createElement) -->
+  <script src="shared/icons.js"></script>
+  <script src="shared/color-utils.js"></script>
+
+  <!-- 5. React components (Babel transformed) - Order matters for dependencies! -->
+  <script type="text/babel" src="components/confirm-modals.jsx"></script>
+  <script type="text/babel" src="components/dynamic-field.jsx"></script>
+  <script type="text/babel" src="components/entity-modals.jsx"></script>
+  <script type="text/babel" src="components/ticket-modals.jsx"></script>
+  <script type="text/babel" src="components/workunit-modals.jsx"></script>
+  <script type="text/babel" src="components/board-settings-modals.jsx"></script>
+  <script type="text/babel" src="components/global-settings-modal.jsx"></script>
+  <script type="text/babel" src="components/ticket-type-modal.jsx"></script>
+  <script type="text/babel" src="components/opcentre-modals.jsx"></script>
+  <script type="text/babel" src="components/field-modals.jsx"></script>
+  <script type="text/babel" src="components/admin-components.jsx"></script>
+  <script type="text/babel" src="components/ui-cards.jsx"></script>
+  <script type="text/babel" src="components/all-tickets-view.jsx"></script>
+  <script type="text/babel" src="components/customer-detail-modal.jsx"></script>
+  <script type="text/babel" src="components/crm-mirror.jsx"></script>
+  <script type="text/babel" src="components/supplier-detail-modal.jsx"></script>
+  <script type="text/babel" src="components/supplier-mirror.jsx"></script>
+
+  <!-- 6. Main app (depends on all above) -->
+  <script type="text/babel" src="app.jsx"></script>
+</body>
+</html>
