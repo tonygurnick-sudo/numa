@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Spinner } from 'react-bootstrap';
 import { useTranslation } from 'react-i18next';
+import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '../Providers/AuthProvider';
 import { useNumaRequest } from '../Providers/NumaRequestContext';
 import { OpsProvider, useOps } from '../Components/Ops/OpsContext';
@@ -256,58 +257,54 @@ const OpsPageContent: React.FC = () => {
  */
 const DeepLinkHandler: React.FC = () => {
   const { numaGet } = useNumaRequest();
-  const { tickets, refreshTickets } = useOps();
+  const { tickets, refreshTickets, teamLoading } = useOps();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   const [ticketId, setTicketId] = useState<string | null>(null);
   const [show, setShow] = useState(false);
-  const displayIdRef = useRef<string | null>(null);
-  const resolved = useRef(false);
-
-  // Capture the display ID once on mount (before anything can strip it)
-  if (displayIdRef.current === null) {
-    displayIdRef.current = new URLSearchParams(window.location.search).get('ticket') ?? '';
-  }
-
-  const stripParam = () => {
-    const url = new URL(window.location.href);
-    if (url.searchParams.has('ticket')) {
-      url.searchParams.delete('ticket');
-      window.history.replaceState(null, '', url.pathname + url.search);
-    }
-  };
+  const processingRef = useRef<string | null>(null);
 
   // Try to resolve from locally loaded tickets first (works with cached data),
   // then fall back to the API call.
   useEffect(() => {
-    const displayId = displayIdRef.current;
-    if (!displayId || resolved.current) return;
+    const displayId = searchParams.get('ticket');
+    if (!displayId) {
+      processingRef.current = null;
+      return;
+    }
+
+    // Only resolve once per deep link
+    if (processingRef.current === displayId) return;
 
     // Check if the ticket is already in the local tickets array
     const local = tickets.find((t) => t.displayId === displayId);
     if (local) {
-      resolved.current = true;
+      processingRef.current = displayId;
       setTicketId(local.id);
       setShow(true);
-      stripParam();
+      searchParams.delete('ticket');
+      setSearchParams(searchParams, { replace: true });
       return;
     }
 
-    // Only try the API once tickets have had a chance to load (non-empty)
-    // or if we have no tickets at all, go straight to the API
-    if (tickets.length > 0) {
-      // Tickets loaded but this one isn't in them — try API (different team)
-      resolved.current = true;
-      stripParam();
-      OpsService.getTicketByDisplayId(numaGet, displayId)
-        .then((response) => {
-          setTicketId(response.ticket.id);
-          setShow(true);
-        })
-        .catch((err) => {
-          console.error('[OpsPage] Failed to resolve ticket deep link:', err);
-        });
-    }
-  }, [tickets, numaGet]);
+    // If local isn't found, we should fall back to the API.
+    // However, if the current board's tickets are still loading, wait before trying the API fallback.
+    if (teamLoading) return;
+
+    // Tickets have finished loading but this one isn't in them — try API (different team)
+    processingRef.current = displayId;
+    searchParams.delete('ticket');
+    setSearchParams(searchParams, { replace: true });
+
+    OpsService.getTicketByDisplayId(numaGet, displayId)
+      .then((response) => {
+        setTicketId(response.ticket.id);
+        setShow(true);
+      })
+      .catch((err) => {
+        console.error('[OpsPage] Failed to resolve ticket deep link:', err);
+      });
+  }, [tickets, numaGet, searchParams, setSearchParams, teamLoading]);
 
   return (
     <TicketDetailModal

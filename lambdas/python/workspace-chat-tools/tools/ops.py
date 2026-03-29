@@ -573,6 +573,8 @@ def _resolve_lambda_and_request(
             "teamId": params.get("team_id"),
             "displayId": params.get("display_id"),
         }
+        if "attachments" in params:
+            body["attachments"] = params["attachments"]
         return (OPS_API_LAMBDA, "POST", f"ops/tickets/{ticket_id}/comments", body, None)
 
     if operation == "list_comments":
