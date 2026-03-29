@@ -595,6 +595,7 @@ def handler(event: Dict[str, Any], context: LambdaContext) -> Dict[str, Any]:
                 "query_knowledge_base",  # Legacy V1 name
                 "data_analysis",
                 "create_agent_tool",
+                "memories_tool",
             }
             has_access = any(t not in standard_tools for t in allowed_tools)
 
@@ -608,7 +609,14 @@ def handler(event: Dict[str, Any], context: LambdaContext) -> Dict[str, Any]:
             return {
                 "status": "error",
                 "result": None,
-                "error": f"Integration '{target_slug or 'unknown'}' is not enabled for this conversation",
+                "error": (
+                    f"The '{target_slug}' integration is not enabled for this conversation. "
+                    "Ask the user to enable it in their chat settings."
+                    if target_slug
+                    else "No integrations are enabled for this chat session. "
+                    "Ask the user to enable the integration in their chat settings "
+                    "(integrations toggle in the chat sidebar) and try again."
+                ),
             }
         # Pass user context for approval flow
         params["__user_sub"] = user_sub

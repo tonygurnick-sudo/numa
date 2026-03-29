@@ -358,7 +358,11 @@ def handle_list_actions(params: Dict[str, Any]) -> Dict[str, Any]:
     if not app_slug:
         raise ValueError("app_slug is required")
     if not external_user_id:
-        raise ValueError("external_user_id is required")
+        raise ValueError(
+            "No integrations are enabled for this chat session. "
+            "Ask the user to enable the integration in their chat settings "
+            "(integrations toggle in the chat sidebar) and try again."
+        )
 
     result = _invoke_relay(
         operation="list_actions",
@@ -391,7 +395,11 @@ def handle_run_action(params: Dict[str, Any]) -> Dict[str, Any]:
     if not action_key:
         raise ValueError("action_key is required")
     if not external_user_id:
-        raise ValueError("external_user_id is required")
+        raise ValueError(
+            "No integrations are enabled for this chat session. "
+            "Ask the user to enable the integration in their chat settings "
+            "(integrations toggle in the chat sidebar) and try again."
+        )
 
     # Check if this tool call was auto-approved by the sdk_runner
     # based on the user's/agent's approval mode setting.
@@ -488,7 +496,11 @@ def handle_configure_props(params: Dict[str, Any]) -> Dict[str, Any]:
     if not prop_name:
         raise ValueError("prop_name is required")
     if not external_user_id:
-        raise ValueError("external_user_id is required")
+        raise ValueError(
+            "No integrations are enabled for this chat session. "
+            "Ask the user to enable the integration in their chat settings "
+            "(integrations toggle in the chat sidebar) and try again."
+        )
 
     result = _invoke_relay(
         operation="configure_props",
@@ -528,7 +540,11 @@ def handle_proxy_request(params: Dict[str, Any]) -> Dict[str, Any]:
     if not integration_slug:
         raise ValueError("integration_slug is required")
     if not external_user_id:
-        raise ValueError("external_user_id is required")
+        raise ValueError(
+            "No integrations are enabled for this chat session. "
+            "Ask the user to enable the integration in their chat settings "
+            "(integrations toggle in the chat sidebar) and try again."
+        )
 
     # Resolve Pipedream account ID from integration slug
     status_result = _invoke_relay(

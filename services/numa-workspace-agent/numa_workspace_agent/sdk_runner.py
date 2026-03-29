@@ -897,10 +897,9 @@ async def stream_claude_sdk(
                                 integration_slug = tool_input.get(
                                     "integration_slug"
                                 ) or (action_key.split("-")[0] if action_key else "")
-                                if (
-                                    enabled_integrations
-                                    and integration_slug
-                                    and integration_slug not in enabled_integrations
+                                if integration_slug and (
+                                    not enabled_integrations
+                                    or integration_slug not in enabled_integrations
                                 ):
                                     continue
 
@@ -1456,10 +1455,9 @@ async def run_claude_sdk(
                                 integration_slug = tool_input.get(
                                     "integration_slug"
                                 ) or (action_key.split("-")[0] if action_key else "")
-                                if (
-                                    enabled_integrations
-                                    and integration_slug
-                                    and integration_slug not in enabled_integrations
+                                if integration_slug and (
+                                    not enabled_integrations
+                                    or integration_slug not in enabled_integrations
                                 ):
                                     continue
 
