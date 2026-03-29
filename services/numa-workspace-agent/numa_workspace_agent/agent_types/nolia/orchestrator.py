@@ -18,6 +18,7 @@ The orchestrator reuses ``run_claude_sdk()`` and the per-step patterns from
 ``pipeline.py`` but adds conditional branching.
 """
 
+import asyncio
 import platform
 import resource
 import shutil
@@ -220,6 +221,18 @@ async def run_nolia_pipeline(
         "Reference files (CSVs, summaries) must stay in `/workdir/tmp/`."
     )
 
+    fidelity_audit_prompt = (
+        f"{user_context}\n\n"
+        "You are running Phase 4c (Fidelity Audit). "
+        "The report has been generated (4a) and reviewed (4b). "
+        "The report exists in `/workdir/outputs/` — edit it in-place. "
+        "The Phase 2/3 CSV files in `/workdir/tmp/` are the source of truth. "
+        "Your job is to verify every finding in the CSVs made it into the report "
+        "without being softened or dropped, and that procurement/project rules "
+        "took priority over global rules wherever they overlap. "
+        "Do NOT create new files — edit the existing report only."
+    )
+
     translate_prompt = (
         f"{user_context}\n\n"
         "You are running Phase 5 (Translation). "
@@ -308,46 +321,40 @@ async def run_nolia_pipeline(
         )
     _log_memory("after_eda")
 
-    # ── Phases 2 + 3: Sequential ─────────────────────────────────────────
-    # These used to run in parallel via asyncio.gather(), but each query()
-    # spawns a Node.js CLI subprocess and each phase's agent spawns up to 5
-    # subagents.  On AgentCore MicroVMs (2 vCPU / 8 GB) running both in
-    # parallel caused intermittent silent OOM kills.  Running sequentially
-    # adds ~10-15 min but prevents the container from being killed.
+    # ── Phases 2 + 3: Parallel ──────────────────────────────────────────
+    # EXPERIMENT: Running in parallel via asyncio.gather() to save ~10-15
+    # min. Previously sequential due to OOM on AgentCore MicroVMs (2 vCPU
+    # / 8 GB). With rules-only mode (no KB folders in context), memory
+    # footprint is lower. Revert to sequential if OOM resurfaces.
     phase3_type = (
         "nolia-procurement"
         if assessment_type == "evaluation-report"
         else "nolia-project"
     )
     logger.info(
-        "Phases 2+3 starting sequentially (global then domain)",
-        _name="NOLIA_SEQUENTIAL_START",
+        "Phases 2+3 starting in parallel (global + domain)",
+        _name="NOLIA_PARALLEL_START",
         phase="pipeline",
         phase3_type=phase3_type,
     )
 
-    # Phase 2: Global Rules
     emit("global", "Checking global knowledge base compliance...")
-    _log_memory("before_global")
-    global_result = await _run_step(
-        "nolia-global", "global", **{**step_kwargs, "prompt": global_prompt}
+    emit("domain", "Checking domain-specific compliance...")
+    _log_memory("before_global_domain")
+
+    global_result, domain_result = await asyncio.gather(
+        _run_step("nolia-global", "global", **{**step_kwargs, "prompt": global_prompt}),
+        _run_step(phase3_type, "domain", **{**step_kwargs, "prompt": domain_prompt}),
     )
+
     _accumulate(global_result, "nolia-global")
-    _log_memory("after_global")
+    _accumulate(domain_result, phase3_type)
+    _log_memory("after_global_domain")
 
     if _check_error(global_result, "nolia-global"):
         return _build_error_result(
             all_steps, all_artifacts, total_usage, "Phase 2 (Global Rules) failed"
         )
-    # Phase 3: Domain Rules (procurement or project)
-    emit("domain", "Checking domain-specific compliance...")
-    _log_memory("before_domain")
-    domain_result = await _run_step(
-        phase3_type, "domain", **{**step_kwargs, "prompt": domain_prompt}
-    )
-    _accumulate(domain_result, phase3_type)
-    _log_memory("after_domain")
-
     if _check_error(domain_result, phase3_type):
         return _build_error_result(
             all_steps, all_artifacts, total_usage, f"Phase 3 ({phase3_type}) failed"
@@ -405,6 +412,27 @@ async def run_nolia_pipeline(
     if _check_error(review_result, report_review_type):
         return _build_error_result(
             all_steps, all_artifacts, total_usage, "Phase 4b (Report Review) failed"
+        )
+
+    # Phase 4c: Fidelity Audit
+    emit("fidelity-audit", "Auditing report fidelity against phase findings...")
+    logger.info(
+        "Phase 4c: Fidelity Audit starting",
+        _name="NOLIA_PHASE_START",
+        phase="pipeline",
+        step="fidelity-audit",
+    )
+    fidelity_result = _accumulate(
+        await _run_step(
+            "nolia-report-fidelity-audit",
+            "fidelity-audit",
+            **{**step_kwargs, "prompt": fidelity_audit_prompt},
+        ),
+        "nolia-report-fidelity-audit",
+    )
+    if _check_error(fidelity_result, "nolia-report-fidelity-audit"):
+        return _build_error_result(
+            all_steps, all_artifacts, total_usage, "Phase 4c (Fidelity Audit) failed"
         )
     _log_memory("after_report")
 

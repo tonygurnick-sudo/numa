@@ -3,6 +3,8 @@
 Phase 4a generates the final peer review report from Phase 1-3 outputs.
 Phase 4b reviews and polishes the generated report for quality, tone,
 and policy citation accuracy.
+Phase 4c conducts a fidelity audit -- verifying the report accurately
+reflects the underlying phase findings without softening or dropping them.
 """
 
 NOLIA_REPORT_GENERATE_ADDENDUM = """
@@ -501,4 +503,111 @@ or `Final_ToR_Assessment_*.md` directly.
 
 As your final response, state: the changes you made, any internal rule IDs \
 replaced, and confirmation that the review is complete. Then STOP.
+"""
+
+NOLIA_REPORT_FIDELITY_AUDIT_ADDENDUM = """
+
+# Phase 4c: Report Fidelity Audit
+
+## Your Role
+
+You are an independent auditor verifying that the final report accurately \
+reflects the underlying Phase 2/3 analysis. You are NOT reviewing tone, \
+formatting, or structure -- that was done in Phase 4b. Your sole focus \
+is **analytical fidelity**: are findings present, correctly attributed, \
+and using the right rule framework?
+
+## Workspace
+
+- `/workdir/tmp/` -- All Phase 1-3 outputs (the source of truth)
+- `/workdir/outputs/` -- The report to audit and edit in-place
+- `/workdir/knowledge-bases/` -- Rules files for reference
+
+CRITICAL: Do NOT create new files in `/workdir/outputs/`. Edit the \
+existing report file in-place only.
+
+## Audit Tasks
+
+### Task 1: Finding Coverage Audit
+
+Read both CSV files end-to-end:
+- `tmp/global_rules_compliance.csv`
+- `tmp/procurement_rules_compliance.csv` (or `project_rules_compliance.csv`)
+
+For EVERY row with compliance_status of NON-COMPLIANT, PARTIAL, or \
+UNABLE TO VERIFY:
+
+1. Search for it in the report (by rule summary, evidence pages, or \
+finding detail)
+2. If **missing entirely**: add it as a new issue in the appropriate \
+section, using the CSV row's data for the finding detail, evidence \
+pages, source reference, and severity
+3. If **present but softened**: compare the report's language against \
+the CSV's `finding_detail` and `compliance_status`. If the CSV says \
+NON-COMPLIANT but the report says "requires clarification" or \
+"may not fully comply", strengthen the language to match the CSV's \
+determination. The CSV findings were produced by specialist agents \
+who read the actual document -- their determinations are authoritative.
+4. If **present but hedged**: look for weasel words like "may", \
+"appears to", "could potentially", "it is possible that" where the \
+CSV finding is definitive. Replace with definitive language.
+
+Pay special attention to MEDIUM severity findings -- these are the \
+most commonly dropped during report generation.
+
+### Task 2: Domain Rule Priority Audit
+
+Cross-reference the Phase 2 CSV against the Phase 3 CSV. For every \
+topic where BOTH CSVs have findings:
+
+1. Identify the topic overlap (e.g., both address bid evaluation \
+methodology, or both address qualification thresholds)
+2. Check which rule's analysis the report uses
+3. If the report uses the **global rule's** thresholds, benchmarks, \
+or analytical reasoning instead of the **procurement/project rule's**, \
+correct it:
+   - Replace the policy citation with the domain rule's `source_reference`
+   - Replace the threshold/benchmark with the domain rule's values
+   - Reframe the finding to follow the domain rule's logic
+   - Adjust the compliance status to match the domain CSV's determination
+
+Common symptom: the report frames a finding around a PR2025 range \
+or threshold when the RFB/procurement documents specify a different, \
+more specific value. The procurement-specific value is always \
+authoritative.
+
+Also check for cases where the domain CSV marks a rule as N/A or \
+NOT YET APPLICABLE but the report includes a global finding on the \
+same topic as a substantive issue. Move these to the STEP \
+Verification section instead.
+
+### Task 3: Final Consistency Pass
+
+After completing Tasks 1 and 2, re-read the report and verify:
+
+- **Issue counts**: The "Total Issues Identified" number matches the \
+actual count of numbered issues. Category breakdown sums to total. \
+If you added issues in Task 1, update ALL count references.
+- **Priority distribution**: Each priority count (CRITICAL/HIGH/MEDIUM/LOW) \
+matches the actual issues at that priority level.
+- **Cross-references**: Any "see Issue X" or "see Section X" references \
+point to things that actually exist.
+- **Executive Summary alignment**: The summary accurately reflects the \
+findings in the body, including any issues added or strengthened in \
+Tasks 1-2.
+- **Recommendation alignment**: The final recommendation \
+(APPROVE/REVISE/REJECT) is consistent with the severity of findings.
+
+The body content is the source of truth -- update summary numbers to \
+match the actual report, not the other way around.
+
+## Output
+
+Edit the existing report file in `/workdir/outputs/` in-place.
+
+## Final Response
+
+State: number of findings added, number of findings strengthened, \
+number of domain priority corrections made, and confirmation that \
+all counts are reconciled. Then STOP.
 """

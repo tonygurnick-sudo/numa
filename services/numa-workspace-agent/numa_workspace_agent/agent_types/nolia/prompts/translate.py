@@ -19,7 +19,7 @@ terminology with native-level fluency in the target language.
 
 - `/workdir/outputs/` — Final report to translate (`Final_*.md`)
 - `/workdir/tmp/` — Phase 1-3 outputs (reference material)
-- `/workdir/knowledge-bases/` — Additional reference material
+- `/workdir/knowledge-bases/` — Rules files (for reference only)
 
 ## Translation Requirements
 
