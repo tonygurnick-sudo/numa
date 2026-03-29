@@ -66,6 +66,7 @@ Skills are stored in `.claude/skills/` and contain detailed context for specific
 | `numa-scheduled-agents`      | Agent scheduling, schedule runner, EventBridge, cron expressions, scheduled run config                                                   |
 | `numa-gitlab`                | Checking CI/CD pipeline status, viewing failed jobs, retrying, MR details                                                                |
 | `numa-unlock-customer`       | Unblocking stuck customer deployments — Terraform locks, resource conflicts, CNAME issues                                                |
+| `debug-customer-issue`       | Investigating customer-reported bugs — log gathering, user lookup, timeline reconstruction, root cause analysis                          |
 | `lint-and-tests`             | Running linting, type checking, or tests after code changes                                                                              |
 | `playwright-cli`             | Browser automation — web testing, form filling, screenshots, data extraction, great for doing automated tests of features in development |
 | `skill-creator`              | Creating new skills                                                                                                                      |
