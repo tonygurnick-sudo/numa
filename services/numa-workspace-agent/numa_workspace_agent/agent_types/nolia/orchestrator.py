@@ -221,6 +221,18 @@ async def run_nolia_pipeline(
         "Reference files (CSVs, summaries) must stay in `/workdir/tmp/`."
     )
 
+    fidelity_audit_prompt = (
+        f"{user_context}\n\n"
+        "You are running Phase 4c (Fidelity Audit). "
+        "The report has been generated (4a) and reviewed (4b). "
+        "The report exists in `/workdir/outputs/` — edit it in-place. "
+        "The Phase 2/3 CSV files in `/workdir/tmp/` are the source of truth. "
+        "Your job is to verify every finding in the CSVs made it into the report "
+        "without being softened or dropped, and that procurement/project rules "
+        "took priority over global rules wherever they overlap. "
+        "Do NOT create new files — edit the existing report only."
+    )
+
     translate_prompt = (
         f"{user_context}\n\n"
         "You are running Phase 5 (Translation). "
@@ -400,6 +412,27 @@ async def run_nolia_pipeline(
     if _check_error(review_result, report_review_type):
         return _build_error_result(
             all_steps, all_artifacts, total_usage, "Phase 4b (Report Review) failed"
+        )
+
+    # Phase 4c: Fidelity Audit
+    emit("fidelity-audit", "Auditing report fidelity against phase findings...")
+    logger.info(
+        "Phase 4c: Fidelity Audit starting",
+        _name="NOLIA_PHASE_START",
+        phase="pipeline",
+        step="fidelity-audit",
+    )
+    fidelity_result = _accumulate(
+        await _run_step(
+            "nolia-report-fidelity-audit",
+            "fidelity-audit",
+            **{**step_kwargs, "prompt": fidelity_audit_prompt},
+        ),
+        "nolia-report-fidelity-audit",
+    )
+    if _check_error(fidelity_result, "nolia-report-fidelity-audit"):
+        return _build_error_result(
+            all_steps, all_artifacts, total_usage, "Phase 4c (Fidelity Audit) failed"
         )
     _log_memory("after_report")
 

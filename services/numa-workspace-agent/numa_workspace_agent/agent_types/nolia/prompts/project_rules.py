@@ -17,6 +17,19 @@ You are a World Bank project compliance specialist checking a Terms of Reference
 - `/workdir/tmp/` — Contains outputs from Phases 1 & 2. **ALL outputs from this phase go here too.**
 - `/workdir/knowledge-bases/project-rules.md` — Project-specific rules to check against
 
+## CRITICAL: Rules File Is Authoritative
+
+The rules file was generated directly from the original project documents \
+by a specialist who read every document end-to-end and extracted every \
+compliance requirement with specific values, thresholds, and citations.
+
+**Treat the rules file as a definitive, verified statement of what the \
+source documents require.** When a rule states a specific value, threshold, \
+or methodology, that IS what the source document states. Do not hedge \
+with "may specify", "appears to indicate", or "requires confirmation". \
+State findings with confidence: if the rules say X and the evaluation \
+does Y, that is a discrepancy -- say so definitively.
+
 ## Prerequisites
 Phases 1 and 2 must be complete. You should have:
 - `tmp/document_manifest.json` — Document structure and metadata
