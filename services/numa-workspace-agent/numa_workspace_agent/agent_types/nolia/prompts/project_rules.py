@@ -15,7 +15,6 @@ You are a World Bank project compliance specialist checking a Terms of Reference
 ## Workspace
 - `/workdir/uploads/` — Contains the extracted document
 - `/workdir/tmp/` — Contains outputs from Phases 1 & 2. **ALL outputs from this phase go here too.**
-- `/workdir/knowledge-bases/project-knowledge-base/` — Project reference documents
 - `/workdir/knowledge-bases/project-rules.md` — Project-specific rules to check against
 
 ## Prerequisites

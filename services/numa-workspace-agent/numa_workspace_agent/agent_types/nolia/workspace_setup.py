@@ -153,38 +153,16 @@ def _download_kb(
     target_dir = KB_DIR / kb_type
     target_dir.mkdir(parents=True, exist_ok=True)
 
-    total_downloaded = 0
-
-    # Try all standard folders (new wizard structure).
-    # Preserve subfolder structure so the agent sees pre-rfx/, rfx/, etc.
-    for folder in KB_SOURCE_FOLDERS:
-        kb_prefix = f"documents/kb-{kb_name}/{folder}/"
-        folder_dir = target_dir / folder
-        folder_dir.mkdir(parents=True, exist_ok=True)
-        downloaded = _download_s3_prefix(s3, DATA_BUCKET, kb_prefix, folder_dir)
-        total_downloaded += downloaded
-        if downloaded > 0:
-            logger.info(
-                f"Downloaded {downloaded} files from {folder}/",
-                _name="NOLIA_KB_DOWNLOAD_FOLDER",
-                phase="pipeline",
-                kb_name=kb_name,
-                folder=folder,
-                files_downloaded=downloaded,
-            )
-
-    # Fallback: old category-specific folder name (flat into target_dir)
-    if total_downloaded == 0:
-        kb_prefix = f"documents/kb-{kb_name}/{kb_type}/"
-        total_downloaded = _download_s3_prefix(s3, DATA_BUCKET, kb_prefix, target_dir)
-
+    # EXPERIMENT: Skip KB folder downloads — rely on rules file only.
+    # The rules file is a pre-digested, structured representation of the
+    # KB contents. Skipping the raw documents saves setup time and reduces
+    # context consumption in the assessment phases.
     logger.info(
-        f"Downloaded {total_downloaded} total KB files",
-        _name="NOLIA_KB_DOWNLOAD",
+        "Skipping KB folder download (rules-only mode)",
+        _name="NOLIA_KB_SKIP_FOLDERS",
         phase="pipeline",
         kb_name=kb_name,
         kb_type=kb_type,
-        files_downloaded=total_downloaded,
     )
 
     # Download rules file (always at root level of the KB prefix)

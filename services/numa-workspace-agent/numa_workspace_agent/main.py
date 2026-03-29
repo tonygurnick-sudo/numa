@@ -14,6 +14,7 @@ import base64
 import json
 import os
 import shutil
+import subprocess
 import time
 import unicodedata
 import uuid
@@ -2263,6 +2264,15 @@ async def _handle_fire_and_forget(
 
     async def _background_run() -> None:
         """Run the SDK (or pipeline/orchestrator) and write the result to S3."""
+        # Keep a dummy subprocess alive so AgentCore sees activity and
+        # doesn't SIGKILL us between pipeline phases.  AgentCore defers
+        # idle-timeout kills while subprocesses exist, so this prevents
+        # the container from being killed in the gaps between SDK calls.
+        heartbeat = subprocess.Popen(
+            ["sleep", "infinity"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
         try:
             if agent_type_config.pipeline_orchestrator:
                 result = await agent_type_config.pipeline_orchestrator(
@@ -2417,6 +2427,9 @@ async def _handle_fire_and_forget(
                 },
                 s3_prefix=s3_prefix,
             )
+        finally:
+            heartbeat.kill()
+            heartbeat.wait()
 
     # Launch the background task — FastAPI / asyncio will keep it running
     # even after we return the HTTP response

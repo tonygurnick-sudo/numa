@@ -587,20 +587,18 @@ echo "Successfully pushed image to ${this.ecrRepository.repositoryUrl}:${imageTa
         },
       ],
 
-      // Session lifecycle - 3 hour idle timeout, 8 hour max lifetime
+      // Session lifecycle - 5 min idle timeout, 4 hour max lifetime
       // In fire-and-forget mode, AgentCore considers the session idle once the
-      // 202 response is returned — even though the pipeline continues running as
-      // a background asyncio task. AgentCore defers the kill while subprocesses
-      // are active, but SIGKILLs immediately once the last subprocess exits if
-      // the idle timeout has already expired. Nolia CER pipelines can take 2.5h+
-      // (Global phase alone can be 67min with sequential sub-agents), so 3 hours
-      // gives comfortable headroom.
+      // 202 response is returned. The container keeps a `sleep infinity` heartbeat
+      // subprocess alive for the duration of the background run, so AgentCore
+      // always sees an active subprocess and defers the idle kill. 5 min idle
+      // timeout is aggressive — validates the heartbeat is working correctly.
       // Defaults: idleRuntimeSessionTimeout=900s (15 min), maxLifetime=28800s (8 hrs)
       // https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/runtime-lifecycle-settings.html
       lifecycleConfiguration: [
         {
-          idleRuntimeSessionTimeout: 10800, // 3 hours in seconds
-          maxLifetime: 28800, // 8 hours in seconds
+          idleRuntimeSessionTimeout: 300, // 5 minutes in seconds
+          maxLifetime: 14400, // 4 hours in seconds
         },
       ],
 

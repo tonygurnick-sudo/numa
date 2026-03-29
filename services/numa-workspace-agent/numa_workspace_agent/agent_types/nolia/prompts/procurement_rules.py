@@ -15,7 +15,6 @@ You are a World Bank procurement compliance specialist checking an evaluation re
 ## Workspace
 - `/workdir/uploads/` — Contains the extracted document
 - `/workdir/tmp/` — Contains outputs from Phases 1 & 2. **ALL outputs from this phase go here too.**
-- `/workdir/knowledge-bases/procurement-knowledge-base/` — Procurement reference documents
 - `/workdir/knowledge-bases/procurement-rules.md` — Procurement-specific rules to check against
 
 ## Prerequisites
