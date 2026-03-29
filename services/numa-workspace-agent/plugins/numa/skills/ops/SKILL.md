@@ -314,11 +314,12 @@ Supplier fields are similar to customer fields, with these differences:
 | ------------------- | ----------------------------------------------------------- | -------- |
 | `upload_attachment` | Get a presigned URL to upload a file attachment to a ticket | Yes      |
 
-| Parameter      | Type   | Required | Description                         |
-| -------------- | ------ | -------- | ----------------------------------- |
-| `file_name`    | string | Yes      | Name of the file to upload          |
-| `content_type` | string | Yes      | MIME type (e.g., "application/pdf") |
-| `ticket_id`    | string | No       | Associate with a specific ticket    |
+| Parameter             | Type   | Required | Description                                                         |
+| --------------------- | ------ | -------- | ------------------------------------------------------------------- |
+| `file_name`           | string | Yes      | Name of the file to upload                                          |
+| `content_type`        | string | Yes      | MIME type (e.g., "application/pdf")                                 |
+| `ticket_id`           | string | No       | Associate with a specific ticket                                    |
+| `workspace_file_path` | string | No       | Pass absolute workspace path (e.g., `/workdir/foo`) to auto-upload. |
 
 ---
 

@@ -279,6 +279,64 @@ async def numa_ops_tool(args: dict[str, Any]) -> dict[str, Any]:
                     "You can offer to try again if the user is ready."
                 )
 
+        if (
+            operation == "upload_attachment"
+            and isinstance(result, dict)
+            and "uploadUrl" in result
+        ):
+            workspace_file_path = params.get("workspace_file_path")
+            if workspace_file_path:
+                try:
+                    import urllib.request
+
+                    local_path = Path(workspace_file_path)
+                    if not local_path.is_file():
+                        return _err(
+                            f"Workspace file not found at {workspace_file_path}"
+                        )
+
+                    upload_url = result["uploadUrl"]
+                    content_type = params.get(
+                        "content_type", "application/octet-stream"
+                    )
+                    file_size = local_path.stat().st_size
+
+                    with open(local_path, "rb") as f:
+                        req = urllib.request.Request(upload_url, data=f, method="PUT")
+                        req.add_header("Content-Type", content_type)
+                        req.add_header("Content-Length", str(file_size))
+                        urllib.request.urlopen(req, timeout=60.0)
+
+                    ticket_id = params.get("ticket_id")
+                    if ticket_id and "s3Key" in result:
+                        invoke_workspace_tool(
+                            "ops_add_comment",
+                            {
+                                "operation": "add_comment",
+                                "params": {
+                                    "ticket_id": ticket_id,
+                                    "content": f"📎 Attached: {local_path.name}",
+                                    "attachments": [
+                                        {
+                                            "name": local_path.name,
+                                            "s3Key": result["s3Key"],
+                                            "size": file_size,
+                                            "mimeType": content_type,
+                                        }
+                                    ],
+                                },
+                                "description": f"Auto-attaching uploaded file {local_path.name} to ticket",
+                                "auto_approved": True,
+                                "request_id": None,
+                            },
+                        )
+
+                    return _ok(
+                        f"Successfully uploaded {workspace_file_path} as an attachment!"
+                    )
+                except Exception as e:
+                    return _err(f"Failed to upload file using presigned URL: {e}")
+
         # Compact JSON — no indent (saves tokens)
         result_text = json.dumps(result, default=str, separators=(",", ":"))
 
