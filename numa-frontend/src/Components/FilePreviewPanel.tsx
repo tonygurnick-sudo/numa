@@ -2,7 +2,12 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Button, Spinner } from 'react-bootstrap';
 import { useTranslation } from 'react-i18next';
 import { getFileIconClass } from '../utils/fileUtils';
-import { downloadFileFromS3, downloadFolderAsZip, listObjectsInFolder } from '../utils/s3Utils';
+import {
+  downloadFileFromS3,
+  downloadFolderAsZip,
+  listObjectsInFolder,
+  getSignedUrlForS3Object,
+} from '../utils/s3Utils';
 import { convertDocxPreview } from '../Services/workspaceChatAgentService';
 import { FilePreviewActions } from './FilePreviewActions';
 import {
@@ -508,12 +513,14 @@ export const FilePreviewPanel: React.FC<FilePreviewPanelProps> = ({
           onDownloadFile={handleDownloadFile}
           onDownloadFolder={handleDownloadFolder}
           onOpenInNewTab={
-            preview.type === 'file' && preview.extension.toLowerCase() === 'html' && textContent
-              ? () => {
-                  const blob = new Blob([textContent], { type: 'text/html' });
-                  const url = URL.createObjectURL(blob);
-                  window.open(url, '_blank');
-                  setTimeout(() => URL.revokeObjectURL(url), 1000);
+            preview.type === 'file' && preview.extension.toLowerCase() === 'html'
+              ? async () => {
+                  try {
+                    const url = await getSignedUrlForS3Object(preview.fullPath, bucket, region, getCredentials);
+                    window.open(url, '_blank');
+                  } catch (err) {
+                    console.error('Error opening in new tab:', err);
+                  }
                 }
               : undefined
           }
