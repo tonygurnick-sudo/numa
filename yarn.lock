@@ -17893,6 +17893,15 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@types/adm-zip@npm:^0.5.8":
+  version: 0.5.8
+  resolution: "@types/adm-zip@npm:0.5.8"
+  dependencies:
+    "@types/node": "npm:*"
+  checksum: 10c0/64d0f3a3e8c1546a7a6685726b3342100a4329e530e643b06107919668688b21db717aa35bf0df11454dce6f63968b6f412482de8a4dd2466664b19289f660f7
+  languageName: node
+  linkType: hard
+
 "@types/aria-query@npm:^5.0.1":
   version: 5.0.4
   resolution: "@types/aria-query@npm:5.0.4"
@@ -21746,11 +21755,13 @@ __metadata:
     "@aws-sdk/s3-request-presigner": "npm:^3.812.0"
     "@aws-sdk/types": "npm:^3.696.0"
     "@shelf/aws-lambda-libreoffice": "npm:^3.0.0"
+    "@types/adm-zip": "npm:^0.5.8"
     "@types/aws-lambda": "npm:^8.10.146"
     "@types/node": "npm:^22.10.1"
     "@types/uuid": "npm:^10.0.0"
     "@typescript-eslint/eslint-plugin": "npm:^8.17.0"
     "@typescript-eslint/parser": "npm:^8.17.0"
+    adm-zip: "npm:^0.5.16"
     esbuild: "npm:^0.25.0"
     eslint: "npm:^9.16.0"
     eslint-config-prettier: "npm:^10.0.0"

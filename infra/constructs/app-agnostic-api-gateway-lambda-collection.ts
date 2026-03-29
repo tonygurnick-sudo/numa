@@ -165,7 +165,7 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
       },
       timeout: 120,
       memorySize: 2048,
-      ephemeralStorageMb: 512,
+      ephemeralStorageMb: 1024,
       additionalLayers: [pandocLayerArn, libreOfficeLayerArn],
       additionalPolicyStatements: [
         {
