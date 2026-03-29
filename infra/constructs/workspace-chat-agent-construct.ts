@@ -587,16 +587,15 @@ echo "Successfully pushed image to ${this.ecrRepository.repositoryUrl}:${imageTa
         },
       ],
 
-      // Session lifecycle - 30 min idle timeout, 4 hour max lifetime
-      // In fire-and-forget mode, AgentCore considers the session idle once the
-      // 202 response is returned. The container keeps a `sleep infinity` heartbeat
-      // subprocess alive for the duration of the background run, so AgentCore
-      // always sees an active subprocess and defers the idle kill.
+      // Session lifecycle - 3 hour idle timeout, 4 hour max lifetime
+      // Fire-and-forget pipelines (Nolia, V2 Apps) can run 30-60+ min after the
+      // 202 response. The heartbeat subprocess isn't reliably deferring idle kills
+      // (see NUMA-1209), so we use a generous timeout as a workaround.
       // Defaults: idleRuntimeSessionTimeout=900s (15 min), maxLifetime=28800s (8 hrs)
       // https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/runtime-lifecycle-settings.html
       lifecycleConfiguration: [
         {
-          idleRuntimeSessionTimeout: 1800, // 30 minutes in seconds
+          idleRuntimeSessionTimeout: 10800, // 3 hours in seconds
           maxLifetime: 14400, // 4 hours in seconds
         },
       ],
