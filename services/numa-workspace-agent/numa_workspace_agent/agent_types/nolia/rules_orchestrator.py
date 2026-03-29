@@ -1,8 +1,9 @@
 """Custom pipeline orchestrator for Nolia rules generation.
 
-Two-phase pipeline:
+Three-phase pipeline:
 1. Extract: Read all KB documents, extract comprehensive rules list
 2. Review: Verify completeness, add citations, deduplicate, write final rules.md
+3. Second Review: Independent completeness and self-sufficiency audit
 
 The orchestrator downloads KB documents from S3 before running phases,
 then uploads the final rules.md back to the KB's S3 prefix in the data bucket.
@@ -252,6 +253,40 @@ async def run_nolia_rules_pipeline(
     if _check_error(review_result, "nolia-rules-review"):
         return _build_error_result(
             all_steps, all_artifacts, total_usage, "Phase 2 (Review) failed"
+        )
+
+    # ── Phase 3: Second Review — Completeness and Self-Sufficiency ────────
+    second_review_prompt = (
+        f"{user_context}\n\n"
+        "You are running Phase 3 (Second Review). Phases 1 and 2 have completed — "
+        "the rules file is at `/workdir/outputs/{rules_filename}`. "
+        "Conduct a second independent review focusing on completeness "
+        "(are there missed rules?) and self-sufficiency (can an assessor "
+        "make definitive compliance determinations using only the rules file "
+        "without needing the original source documents?).\n\n"
+        f"Edit the file in place: `/workdir/outputs/{rules_filename}`"
+    ).format(rules_filename=rules_filename)
+
+    emit("second-review", "Conducting second review for completeness...")
+
+    logger.info(
+        "Phase 3: Second Review starting",
+        _name="NOLIA_RULES_PHASE_START",
+        phase="pipeline",
+        step="second-review",
+    )
+
+    second_review_result = _accumulate(
+        await _run_step(
+            "nolia-rules-second-review",
+            "second-review",
+            **{**step_kwargs, "prompt": second_review_prompt},
+        ),
+        "nolia-rules-second-review",
+    )
+    if _check_error(second_review_result, "nolia-rules-second-review"):
+        return _build_error_result(
+            all_steps, all_artifacts, total_usage, "Phase 3 (Second Review) failed"
         )
 
     # ── Fallback: If Phase 2 didn't write the output, copy from Phase 1 ──
