@@ -2701,6 +2701,7 @@ const NumaWorkspaceChatAgents = () => {
                           onStop={stopStream}
                           isStopping={isStopping}
                           variant="v2"
+                          onPasteFiles={(files) => handleDroppedFiles(files.map((f) => ({ file: f })))}
                         />
                       </div>
                     )}

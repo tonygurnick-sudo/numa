@@ -65,6 +65,7 @@ const ChatInput = ({
   onSettingsClick = undefined as (() => void) | undefined,
   isSettingsPanelOpen = false,
   hasActiveSettings = false,
+  onPasteFiles = undefined as ((files: File[]) => void) | undefined,
 }) => {
   const { t } = useTranslation('chat');
   const internalRef = useRef(null);
@@ -243,6 +244,41 @@ const ChatInput = ({
     }
   };
 
+  const handlePaste = (e: React.ClipboardEvent) => {
+    if (!onPasteFiles || !e.clipboardData) return;
+
+    const items = e.clipboardData.items;
+    const files: File[] = [];
+
+    for (let i = 0; i < items.length; i++) {
+      if (items[i].kind === 'file') {
+        let file = items[i].getAsFile();
+        if (file) {
+          // Browsers typically assign a generic name like "image.png" to raw clipboard screenshots.
+          // If we don't make this unique, pasting two images sequentially will overwrite the first one in S3.
+          if (/^(image|clipboard)\.(png|jpg|jpeg|gif|webp)$/i.test(file.name)) {
+            const ext = file.name.split('.').pop() || 'png';
+            const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+            const uniqueName = `pasted-image-${timestamp}.${ext}`;
+            file = new File([file], uniqueName, { type: file.type });
+          }
+          files.push(file);
+        }
+      }
+    }
+
+    if (files.length > 0) {
+      onPasteFiles(files);
+
+      // Only prevent default if there's no actual text included in the clipboard,
+      // otherwise let the browser paste the text part into the textarea.
+      const plainText = e.clipboardData.getData('text/plain');
+      if (!plainText) {
+        e.preventDefault();
+      }
+    }
+  };
+
   // Custom submit handler to prevent submission of oversized messages
   const handleFormSubmit = (e) => {
     if (inputMessage.length > MAX_MESSAGE_LENGTH) {
@@ -390,6 +426,7 @@ const ChatInput = ({
                   value={inputMessage}
                   onInput={handleInputChange}
                   onKeyDown={handleKeyDown}
+                  onPaste={handlePaste}
                   placeholder={placeholderText}
                   disabled={isTextInputDisabled}
                   className="chat-textarea chat-textarea-v2"
@@ -409,6 +446,7 @@ const ChatInput = ({
               value={inputMessage}
               onInput={handleInputChange}
               onKeyDown={handleKeyDown}
+              onPaste={handlePaste}
               placeholder={placeholderText}
               disabled={isTextInputDisabled}
               className="chat-textarea"
