@@ -70,7 +70,8 @@
       "avatarAlt": "Agent avatar",
       "editTitle": "Edit agent",
       "createTitle": "Create agent",
-      "subtitle": "Configure what this agent knows, looks like, and can do."
+      "subtitle": "Configure what this agent knows, looks like, and can do.",
+      "copyId": "Copy agent ID"
     },
     "validation": {
       "title": "Agent name",
@@ -194,6 +195,19 @@
       "always": "Always require approval",
       "nonDestructive": "Auto-approve safe actions",
       "never": "Auto-approve all actions"
+    },
+    "approvalModes": {
+      "label": "Tool Approval Overrides",
+      "help": "Override the user's default approval settings for this agent. Leave as 'Use default' to inherit from user settings.",
+      "useDefault": "Use default",
+      "always": "Always",
+      "nonDestructive": "Writes only",
+      "never": "Auto-approve",
+      "integrations": "Integrations",
+      "agents": "Agents",
+      "memories": "Memories",
+      "knowledgeBases": "Knowledge Bases",
+      "ops": "Ops"
     },
     "scheduling": {
       "toggle": {

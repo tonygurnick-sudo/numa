@@ -53,6 +53,7 @@ type StreamConfig = {
   conversationId: string;
   enabledTools: string[];
   enabledConnections: string[];
+  availableIntegrations: Array<{ id: string; name: string }>;
   enabledKBIds: string[];
   availableKBs: Array<{ kb_id: string; kb_name: string }>;
   /** File and folder attachments */
@@ -175,6 +176,7 @@ export function useWorkspaceChatStreaming({
         conversationId,
         enabledTools,
         enabledConnections,
+        availableIntegrations,
         enabledKBIds,
         availableKBs,
         attachments,
@@ -220,6 +222,7 @@ export function useWorkspaceChatStreaming({
           availableKBs: workspaceChatKBs,
           enabledTools,
           enabledConnections,
+          availableIntegrations,
           modelId,
           attachments,
           hasUploads: !!attachments?.files && attachments.files.length > 0,

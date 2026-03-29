@@ -51,15 +51,19 @@ mcp__numa__numa_tool(name="agents", description="Create policy expert agent", pa
 
 ## List Operation
 
-List agents with scope filtering.
+List agents with scope filtering, title/search filtering, and optional pagination.
 
 ### Parameters
 
-| Parameter    | Required | Default   | Description                 |
-| ------------ | -------- | --------- | --------------------------- |
-| `operation`  | Yes      | -         | `"list"`                    |
-| `scope`      | No       | `"owned"` | `owned`, `public`, or `all` |
-| `agent_type` | No       | -         | Filter by agent type        |
+| Parameter    | Required | Default   | Description                                       |
+| ------------ | -------- | --------- | ------------------------------------------------- |
+| `operation`  | Yes      | -         | `"list"`                                          |
+| `scope`      | No       | `"owned"` | `owned`, `public`, or `all`                       |
+| `agent_type` | No       | -         | Filter by agent type                              |
+| `title`      | No       | -         | Filter by title (case-insensitive contains match) |
+| `search`     | No       | -         | Search across title, description, and tags        |
+| `limit`      | No       | -         | Max results to return (1-200). Enables pagination |
+| `offset`     | No       | `0`       | Number of results to skip (use with `limit`)      |
 
 ### Examples
 
@@ -83,6 +87,21 @@ mcp__numa__numa_tool(name="agents", description="List all agents", params={
 mcp__numa__numa_tool(name="agents", description="List task agents", params={
     "operation": "list", "scope": "owned", "agent_type": "task"
 })
+
+# Find an agent by name
+mcp__numa__numa_tool(name="agents", description="Find sales agent", params={
+    "operation": "list", "search": "sales"
+})
+
+# Search with pagination (first page of 10 results)
+mcp__numa__numa_tool(name="agents", description="List agents page 1", params={
+    "operation": "list", "scope": "all", "limit": 10
+})
+
+# Get next page
+mcp__numa__numa_tool(name="agents", description="List agents page 2", params={
+    "operation": "list", "scope": "all", "limit": 10, "offset": 10
+})
 ```
 
 ### Output Format
@@ -98,6 +117,11 @@ JSON response with:
   - `agentType` - Agent type (e.g., "task")
   - `createdBy` - Creator info
   - `updatedAt` - Last update timestamp
+- `pagination` - Present when `limit` is used:
+  - `total` - Total number of matching agents
+  - `limit` - Page size used
+  - `offset` - Current offset
+  - `hasMore` - Whether more results exist beyond this page
 
 ---
 
@@ -184,7 +208,18 @@ mcp__numa__numa_tool(name="agents", description="Create research agent", params=
     "operation": "create",
     "title": "Research Agent",
     "systemPrompt": "You help with research tasks using web search and company KB.",
-    "toolsConfig": {"webSearchEnabled": true, "allowedKnowledgeBases": ["company"]}
+    "toolsConfig": {
+        "webSearchEnabled": true,
+        "allowedKnowledgeBases": ["company"],
+        "enabledConnections": [],
+        "approvalModes": {
+            "integrations": "non_destructive",
+            "agents": "never",
+            "memories": "never",
+            "knowledgeBases": "never",
+            "ops": "never"
+        }
+    }
 })
 ```
 
@@ -194,13 +229,26 @@ mcp__numa__numa_tool(name="agents", description="Create research agent", params=
 {
   "autoToolsEnabled": true,
   "webSearchEnabled": true,
-  "allowedKnowledgeBases": ["company", "kb-uuid"]
+  "allowedKnowledgeBases": ["company", "kb-uuid"],
+  "enabledConnections": ["google_drive", "slack"],
+  "approvalModes": {
+    "integrations": "non_destructive",
+    "agents": "never",
+    "memories": "never",
+    "knowledgeBases": "never",
+    "ops": "never"
+  }
 }
 ```
 
 - `autoToolsEnabled` - Enable automatic tool selection (default: true)
 - `webSearchEnabled` - Allow web search (default: false)
 - `allowedKnowledgeBases` - Which KBs can be queried (null = all, [] = none, array = specific)
+- `enabledConnections` - Which integrations the agent can use ([] = none, array of slugs = specific)
+- `approvalModes` - Per-category approval mode overrides. Categories: `integrations`, `agents`, `memories`, `knowledgeBases`, `ops`. Values:
+  - `"always"` - Require user approval for every action in this category
+  - `"non_destructive"` - Auto-approve read-only actions, require approval for writes/mutations
+  - `"never"` - Auto-approve all actions in this category
 
 ### Visibility Rules
 
@@ -417,16 +465,41 @@ Based on the use case, ask about the tools and capabilities the agent needs:
 
 - **Web Search:** "Will this agent need to search the web for current information?"
 - **Knowledge Bases:** "Should it have access to your company's knowledge bases?"
-  - If yes: "All knowledge bases, or specific ones?"
+  - Check the **Available Knowledge Bases** section in your context. If KBs are listed, present them by name so the user can choose specific ones.
+  - If yes: "All knowledge bases, or specific ones?" (list the available KB names)
+  - If no KBs are available in your context, inform the user: "No knowledge bases are currently configured."
+- **Integrations:** "Should this agent be able to use any connected integrations?"
+  - Check the **Connected Integrations** section in your context. It shows all integrations the user has connected, with their status (Enabled for this conversation, or Available). Present ALL connected integrations by name so the user can choose which ones to enable on the agent -- not just the ones enabled for this conversation.
+  - If no integrations are listed in your context, inform the user: "No integrations are currently connected." and move on.
+- **Approval Modes (REQUIRED - do NOT skip this):** You MUST ask about approval modes before proceeding to the next step. Present the options clearly:
+  - "What level of approval should be required when this agent takes actions? Here are the recommended defaults:"
+  - **Integrations:** Writes only (auto-approve reads, require approval for writes)
+  - **Agents:** Auto-approve
+  - **Memories:** Auto-approve
+  - **Knowledge Bases:** Auto-approve
+  - **Ops:** Auto-approve
+  - "Would you like to use these defaults, or customise any category?"
+  - The three options per category are: **Always** (approve every action), **Writes only** (approve writes/mutations only), **Auto-approve** (no approval needed)
+  - If the user accepts defaults, use the recommended values. If they want to customise, walk through each category.
 
 Build the `toolsConfig` based on their answers:
 
 ```json
 {
   "webSearchEnabled": true/false,
-  "allowedKnowledgeBases": null  // null = all, [] = none, ["kb-id"] = specific
+  "allowedKnowledgeBases": null,
+  "enabledConnections": ["google_drive", "slack"],
+  "approvalModes": {
+    "integrations": "non_destructive",
+    "agents": "never",
+    "memories": "never",
+    "knowledgeBases": "never",
+    "ops": "never"
+  }
 }
 ```
+
+**Approval mode values:** `"always"` = Always, `"non_destructive"` = Writes only, `"never"` = Auto-approve.
 
 #### Step 4: Reference Documents
 
@@ -462,6 +535,14 @@ Before creating anything, present a complete draft for review:
 **Tools Configuration:**
 - Web Search: enabled / disabled
 - Knowledge Bases: all / specific list / none
+- Integrations: [list of enabled integrations] / none
+
+**Approval Modes:**
+- Integrations: Writes only
+- Agents: Auto-approve
+- Memories: Auto-approve
+- Knowledge Bases: Auto-approve
+- Ops: Auto-approve
 
 **Reference Files:** (if any)
 - file1.pdf
@@ -492,7 +573,18 @@ mcp__numa__numa_tool(name="agents", description="Create agent", params={
     "description": "One-line description",
     "visibility": "personal",
     "estimatedTimeSavedMinutes": 15,
-    "toolsConfig": {"webSearchEnabled": true, "allowedKnowledgeBases": null}
+    "toolsConfig": {
+        "webSearchEnabled": true,
+        "allowedKnowledgeBases": null,
+        "enabledConnections": ["google_drive"],
+        "approvalModes": {
+            "integrations": "non_destructive",
+            "agents": "never",
+            "memories": "never",
+            "knowledgeBases": "never",
+            "ops": "never"
+        }
+    }
 })
 ```
 
@@ -519,14 +611,39 @@ User: Just me
 
 Numa: Got it, personal visibility.
 
-      Will this agent need any special capabilities?
-      - Should it be able to search the web for current information?
-      - Should it access your company's knowledge bases?
+      Now let's set up the agent's capabilities:
 
-User: No web search, but it should be able to search our company KB
+      **Web Search:** Should it be able to search the web for current information?
 
-Numa: Perfect. Are there any documents you'd like to attach as reference
-      material for this agent? For example, a template or style guide?
+User: No web search needed
+
+Numa: **Knowledge Bases:** Should it access your company's knowledge bases?
+      You have these available: Company KB, Product Docs, HR Policies
+
+User: Yes, just the Company KB
+
+Numa: **Integrations:** Should this agent use any of your connected integrations?
+      You have: Google Drive, Slack, Jira
+
+User: No integrations needed
+
+Numa: **Approval Modes:** What level of approval should be required when this
+      agent takes actions? Here are the recommended defaults:
+
+      | Category        | Setting       |
+      |-----------------|---------------|
+      | Integrations    | Writes only   |
+      | Agents          | Auto-approve  |
+      | Memories        | Auto-approve  |
+      | Knowledge Bases | Auto-approve  |
+      | Ops             | Auto-approve  |
+
+      Would you like to use these defaults, or customise any category?
+
+User: Defaults are fine
+
+Numa: Are there any documents you'd like to attach as reference material
+      for this agent? For example, a template or style guide?
 
 User: No documents needed
 
@@ -555,7 +672,15 @@ Numa: Here's the draft:
 
       **Tools Configuration:**
       - Web Search: disabled
-      - Knowledge Bases: all (company KB access)
+      - Knowledge Bases: Company KB
+      - Integrations: none
+
+      **Approval Modes:**
+      - Integrations: Writes only
+      - Agents: Auto-approve
+      - Memories: Auto-approve
+      - Knowledge Bases: Auto-approve
+      - Ops: Auto-approve
 
       **Reference Files:** none
 
@@ -594,7 +719,19 @@ mcp__numa__numa_tool(name="agents", description="Create weekly report helper age
     "operation": "create",
     "title": "Weekly Report Helper",
     "systemPrompt": "Based on our conversation, here are the instructions...",
-    "description": "Helps create weekly status reports"
+    "description": "Helps create weekly status reports",
+    "toolsConfig": {
+        "webSearchEnabled": false,
+        "allowedKnowledgeBases": null,
+        "enabledConnections": [],
+        "approvalModes": {
+            "integrations": "non_destructive",
+            "agents": "never",
+            "memories": "never",
+            "knowledgeBases": "never",
+            "ops": "never"
+        }
+    }
 })
 ```
 

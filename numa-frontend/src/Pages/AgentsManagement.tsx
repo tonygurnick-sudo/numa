@@ -44,10 +44,14 @@ export const AgentsManagement = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingAgent, setEditingAgent] = useState<AgentSummary | null>(null);
   const [editModalAccordionKey, setEditModalAccordionKey] = useState<string | undefined>(undefined);
-  // SWR: initialize from localStorage cache so agents render instantly
+  // SWR: initialize from localStorage cache so agents render instantly.
+  // My Agents = personal copies only. Company = all workspace agents.
   const [loading, setLoading] = useState(() => !getCachedAgents('owned'));
   const [error, setError] = useState<string | null>(null);
-  const [myAgents, setMyAgents] = useState<AgentSummary[]>(() => getCachedAgents('owned') ?? []);
+  const [myAgents, setMyAgents] = useState<AgentSummary[]>(() => {
+    const owned = getCachedAgents('owned') ?? [];
+    return owned.filter((a) => a.scope === 'user');
+  });
   const [workspaceAgents, setWorkspaceAgents] = useState<AgentSummary[]>(() => getCachedAgents('public') ?? []);
   const [filter, setFilter] = useState<FilterOption>('all');
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
@@ -114,28 +118,15 @@ export const AgentsManagement = () => {
       ]);
 
       const personal = ownedAgents.filter((agent) => agent.scope === 'user');
-      const personalSourceIds = new Set(personal.map((p) => p.sourceAgentId).filter((v): v is string => Boolean(v)));
-
-      // Show workspace agents created by me, except those where I also have a personal copy
-      // referencing that same workspace agent. This avoids duplicate entries in "My Agents".
-      const createdPublic = ownedAgents
-        .filter((agent) => agent.scope === 'workspace')
-        .filter((agent) => !personalSourceIds.has(agent.agentId));
 
       if (agentsMode === 'personal_only') {
-        // Only personal agents in My Agents; no company marketplace
         setMyAgents([...personal].sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0)));
         setWorkspaceAgents([]);
       } else {
-        const myAgentsList = [...personal, ...createdPublic].sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0));
-        // Exclude agents already shown in "My Agents" to avoid duplicate cards
-        const myAgentIds = new Set(myAgentsList.map((a) => a.agentId));
-        setMyAgents(myAgentsList);
-        setWorkspaceAgents(
-          companyAgents
-            .filter((agent) => !myAgentIds.has(agent.agentId))
-            .sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0))
-        );
+        // My Agents = personal copies only. Workspace agents (including ones
+        // the user created/shared) stay in Company where they belong.
+        setMyAgents([...personal].sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0)));
+        setWorkspaceAgents(companyAgents.sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0)));
       }
 
       // Load schedules after agents are loaded

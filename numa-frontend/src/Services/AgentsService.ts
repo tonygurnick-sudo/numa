@@ -27,11 +27,13 @@ export const getCachedAgents = (scope: 'owned' | 'public' | 'all' = 'owned'): Ag
 
 export const listAgents = async (
   numaGet: NumaGet,
-  options?: { scope?: 'owned' | 'public' | 'all'; agentType?: string }
+  options?: { scope?: 'owned' | 'public' | 'all'; agentType?: string; title?: string; search?: string }
 ): Promise<AgentSummary[]> => {
   const params = cleanParams({
     scope: options?.scope,
     agentType: options?.agentType,
+    title: options?.title,
+    search: options?.search,
   });
   const response = (await numaGet(`${BASE_URL}`, params)) as AgentListResponse;
   const raw = response?.agents ?? [];

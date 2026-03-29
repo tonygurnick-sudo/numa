@@ -14,6 +14,7 @@ import base64
 import json
 import os
 import shutil
+import subprocess
 import time
 import unicodedata
 import uuid
@@ -31,6 +32,7 @@ from .agent_config import (
     fetch_agent_config,
     fetch_user_email_signature,
     fetch_user_profile,
+    resolve_all_approval_modes,
     resolve_approval_mode,
 )
 from .agent_types import (
@@ -1364,6 +1366,7 @@ async def _handle_chat(
     # Pipedream integrations - construct external_user_id for the relay
     # Format: "{client_name}_{user_sub}" matching what the frontend uses
     enabled_integrations = body.get("enabledConnections", [])
+    available_integrations = body.get("availableIntegrations", [])
 
     # Apply agent type restrictions on integrations
     if agent_type_config.restrict_integrations:
@@ -1728,8 +1731,14 @@ async def _handle_chat(
         try:
             # Wrap SDK stream with heartbeat to keep CloudFront connection alive
             # during long-running tool executions (CloudFront has 60s timeout)
-            # Resolve integration approval mode (agent config > user setting > default)
-            effective_approval_mode = resolve_approval_mode(user_sub, agent_config)
+            # Resolve all approval modes (agent overrides > user settings > defaults)
+            all_approval_modes = resolve_all_approval_modes(user_sub, agent_config)
+            effective_approval_mode = all_approval_modes.get(
+                "integrations", "non_destructive"
+            )
+            numa_tool_approval_mode = {
+                k: v for k, v in all_approval_modes.items() if k != "integrations"
+            }
             email_signature = fetch_user_email_signature(user_sub)
             user_profile = fetch_user_profile(user_sub)
 
@@ -1755,7 +1764,9 @@ async def _handle_chat(
                 agent_file_paths=agent_file_paths,  # Downloaded agent reference files
                 external_user_id=external_user_id,  # Pipedream integrations user ID
                 enabled_integrations=enabled_integrations,  # Connected integration app slugs
+                available_integrations=available_integrations,  # All connected integrations (for agent creation context)
                 approval_mode=effective_approval_mode,  # Integration approval mode
+                numa_tool_approval_mode=numa_tool_approval_mode,  # Per-category numa tool approval
                 email_signature=email_signature,  # Email signature settings
                 agent_type_config=agent_type_config,  # Agent type configuration
                 user_profile=user_profile,  # User profile for AI personalisation
@@ -1870,6 +1881,7 @@ async def _handle_sync(
 
     # Integrations
     enabled_integrations = body.get("enabledConnections", [])
+    available_integrations = body.get("availableIntegrations", [])
     if agent_type_config.restrict_integrations:
         enabled_integrations = agent_type_config.default_integrations or []
     elif agent_type_config.default_integrations and not enabled_integrations:
@@ -1930,20 +1942,16 @@ async def _handle_sync(
                 error=str(e),
             )
 
-    # Resolve integration approval mode (agent config > user setting > default)
-    effective_approval_mode = resolve_approval_mode(user_sub, agent_config)
+    # Resolve all approval modes (agent overrides > user settings > defaults)
+    all_approval_modes_sync = resolve_all_approval_modes(user_sub, agent_config)
+    effective_approval_mode = all_approval_modes_sync.get(
+        "integrations", "non_destructive"
+    )
     logger.info(
-        "Resolved approval mode for sync request",
+        "Resolved approval modes for sync request",
         _name="SYNC_APPROVAL_MODE",
-        phase="integrations",
-        effective_mode=effective_approval_mode,
+        resolved_modes=all_approval_modes_sync,
         agent_id=agent_id,
-        has_agent_config=agent_config is not None,
-        agent_approval_mode=(
-            agent_config.tools_config.approval_mode
-            if agent_config and agent_config.tools_config
-            else None
-        ),
     )
 
     # KB listings
@@ -2000,6 +2008,9 @@ async def _handle_sync(
             enabled_integrations=enabled_integrations,
         )
     else:
+        numa_tool_approval_mode_sync = {
+            k: v for k, v in all_approval_modes_sync.items() if k != "integrations"
+        }
         result = await run_claude_sdk(
             conversation_id,
             prompt,
@@ -2019,7 +2030,9 @@ async def _handle_sync(
             agent_config=agent_config,
             external_user_id=external_user_id,
             enabled_integrations=enabled_integrations,
+            available_integrations=available_integrations,
             approval_mode=effective_approval_mode,
+            numa_tool_approval_mode=numa_tool_approval_mode_sync,
             agent_type_config=agent_type_config,
             company_profile=company_profile,
             feature_flags=feature_flags,
@@ -2221,19 +2234,15 @@ async def _handle_fire_and_forget(
                 agent_id=agent_id,
                 error=str(e),
             )
-    effective_approval_mode = resolve_approval_mode(user_sub, agent_config)
+    all_approval_modes_async = resolve_all_approval_modes(user_sub, agent_config)
+    effective_approval_mode = all_approval_modes_async.get(
+        "integrations", "non_destructive"
+    )
     logger.info(
-        "Resolved approval mode for fire-and-forget request",
+        "Resolved approval modes for fire-and-forget request",
         _name="ASYNC_APPROVAL_MODE",
-        phase="integrations",
-        effective_mode=effective_approval_mode,
+        resolved_modes=all_approval_modes_async,
         agent_id=agent_id,
-        has_agent_config=agent_config is not None,
-        agent_approval_mode=(
-            agent_config.tools_config.approval_mode
-            if agent_config and agent_config.tools_config
-            else None
-        ),
     )
 
     kb_listings = None
@@ -2255,6 +2264,15 @@ async def _handle_fire_and_forget(
 
     async def _background_run() -> None:
         """Run the SDK (or pipeline/orchestrator) and write the result to S3."""
+        # Keep a dummy subprocess alive so AgentCore sees activity and
+        # doesn't SIGKILL us between pipeline phases.  AgentCore defers
+        # idle-timeout kills while subprocesses exist, so this prevents
+        # the container from being killed in the gaps between SDK calls.
+        heartbeat = subprocess.Popen(
+            ["sleep", "infinity"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
         try:
             if agent_type_config.pipeline_orchestrator:
                 result = await agent_type_config.pipeline_orchestrator(
@@ -2297,6 +2315,11 @@ async def _handle_fire_and_forget(
                     enabled_integrations=enabled_integrations,
                 )
             else:
+                numa_tool_approval_mode_async = {
+                    k: v
+                    for k, v in all_approval_modes_async.items()
+                    if k != "integrations"
+                }
                 result = await run_claude_sdk(
                     conversation_id,
                     prompt,
@@ -2316,7 +2339,9 @@ async def _handle_fire_and_forget(
                     agent_config=agent_config,
                     external_user_id=external_user_id,
                     enabled_integrations=enabled_integrations,
+                    available_integrations=available_integrations,
                     approval_mode=effective_approval_mode,
+                    numa_tool_approval_mode=numa_tool_approval_mode_async,
                     agent_type_config=agent_type_config,
                     company_profile=company_profile,
                     feature_flags=feature_flags,
@@ -2402,6 +2427,9 @@ async def _handle_fire_and_forget(
                 },
                 s3_prefix=s3_prefix,
             )
+        finally:
+            heartbeat.kill()
+            heartbeat.wait()
 
     # Launch the background task — FastAPI / asyncio will keep it running
     # even after we return the HTTP response

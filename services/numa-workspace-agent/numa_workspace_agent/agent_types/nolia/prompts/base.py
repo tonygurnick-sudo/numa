@@ -29,7 +29,7 @@ You are working in a workspace. Use absolute paths (starting with /workdir/).
 /workdir/uploads/         - Files uploaded for THIS conversation only.
 /workdir/outputs/         - Output files for THIS conversation only.
 /workdir/tmp/             - Intermediate outputs shared between pipeline phases.
-/workdir/knowledge-bases/ - Downloaded knowledge base rules and reference docs.
+/workdir/knowledge-bases/ - Downloaded knowledge base rules files.
 /workdir/                 - Root level files are per-conversation.
 
 **Filesystem Contract:**

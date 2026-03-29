@@ -102,6 +102,7 @@ export default function UserProfilePage({
   const savedProfileRef = useRef('');
   const hasWorkspaceChat = getFlag('NUMA_WORKSPACE_CHAT');
   const hasPipedreamFeature = getFlag('PIPEDREAM_INTEGRATIONS');
+  const hasOps = getFlag('NUMA_OPS');
   const hasMfa = window.sessionStorage.getItem('MFA_ENABLED') === 'true';
 
   type DeviceInfo = {
@@ -574,6 +575,7 @@ export default function UserProfilePage({
         defaultConnectionIds: userDefaults.defaultConnectionIds,
         language: userDefaults.language,
         approvalMode: userDefaults.approvalMode,
+        numaToolApprovalMode: userDefaults.numaToolApprovalMode,
       };
 
       await ChatSettingsService.updateForProfile(payload, numaPut);
@@ -1624,43 +1626,182 @@ export default function UserProfilePage({
               <p className="profile-page-intro">{t('userProfile.approval.description')}</p>
 
               <div className="profile-section">
-                <div className="profile-section__title">{t('userProfile.approval.label')}</div>
+                <table className="table table-borderless approval-grid mb-0">
+                  <thead>
+                    <tr>
+                      <th style={{ width: '28%' }}>{t('userProfile.approval.grid.toolType')}</th>
+                      <th className="text-center">{t('userProfile.approval.modes.always.label')}</th>
+                      <th className="text-center">{t('userProfile.approval.modes.non_destructive.label')}</th>
+                      <th className="text-center">{t('userProfile.approval.modes.never.label')}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {/* Integrations row */}
+                    <tr>
+                      <td>
+                        <div className="fw-semibold">{t('userProfile.approval.grid.integrations')}</div>
+                        <div className="text-muted small">{t('userProfile.approval.grid.integrationsHelp')}</div>
+                      </td>
+                      {(['always', 'non_destructive', 'never'] as const).map((mode) => (
+                        <td key={mode} className="text-center align-middle">
+                          <Form.Check
+                            type="radio"
+                            id={`approval-integrations-${mode}`}
+                            name="approvalMode"
+                            checked={userDefaults.approvalMode === mode}
+                            disabled={disableDefaultsForm}
+                            onChange={() => {
+                              setUserDefaults((prev) => ({ ...prev, approvalMode: mode }));
+                              setDirty(true);
+                            }}
+                            className="d-inline-block"
+                          />
+                        </td>
+                      ))}
+                    </tr>
+                    {/* Agents row */}
+                    <tr>
+                      <td>
+                        <div className="fw-semibold">{t('userProfile.approval.grid.agents')}</div>
+                        <div className="text-muted small">{t('userProfile.approval.grid.agentsHelp')}</div>
+                      </td>
+                      {(['always', 'non_destructive', 'never'] as const).map((mode) => (
+                        <td key={mode} className="text-center align-middle">
+                          <Form.Check
+                            type="radio"
+                            id={`approval-agents-${mode}`}
+                            name="numaToolApprovalMode.agents"
+                            checked={(userDefaults.numaToolApprovalMode?.agents ?? 'never') === mode}
+                            disabled={disableDefaultsForm}
+                            onChange={() => {
+                              setUserDefaults((prev) => ({
+                                ...prev,
+                                numaToolApprovalMode: {
+                                  ...(prev.numaToolApprovalMode ?? {
+                                    agents: 'never',
+                                    memories: 'never',
+                                    knowledgeBases: 'never',
+                                  }),
+                                  agents: mode,
+                                },
+                              }));
+                              setDirty(true);
+                            }}
+                            className="d-inline-block"
+                          />
+                        </td>
+                      ))}
+                    </tr>
+                    {/* Memories row */}
+                    <tr>
+                      <td>
+                        <div className="fw-semibold">{t('userProfile.approval.grid.memories')}</div>
+                        <div className="text-muted small">{t('userProfile.approval.grid.memoriesHelp')}</div>
+                      </td>
+                      {(['always', 'non_destructive', 'never'] as const).map((mode) => (
+                        <td key={mode} className="text-center align-middle">
+                          <Form.Check
+                            type="radio"
+                            id={`approval-memories-${mode}`}
+                            name="numaToolApprovalMode.memories"
+                            checked={(userDefaults.numaToolApprovalMode?.memories ?? 'never') === mode}
+                            disabled={disableDefaultsForm}
+                            onChange={() => {
+                              setUserDefaults((prev) => ({
+                                ...prev,
+                                numaToolApprovalMode: {
+                                  ...(prev.numaToolApprovalMode ?? {
+                                    agents: 'never',
+                                    memories: 'never',
+                                    knowledgeBases: 'never',
+                                  }),
+                                  memories: mode,
+                                },
+                              }));
+                              setDirty(true);
+                            }}
+                            className="d-inline-block"
+                          />
+                        </td>
+                      ))}
+                    </tr>
+                    {/* Knowledge Bases row */}
+                    <tr>
+                      <td>
+                        <div className="fw-semibold">{t('userProfile.approval.grid.knowledgeBases')}</div>
+                        <div className="text-muted small">{t('userProfile.approval.grid.knowledgeBasesHelp')}</div>
+                      </td>
+                      {(['always', 'non_destructive', 'never'] as const).map((mode) => (
+                        <td key={mode} className="text-center align-middle">
+                          <Form.Check
+                            type="radio"
+                            id={`approval-kb-${mode}`}
+                            name="numaToolApprovalMode.knowledgeBases"
+                            checked={(userDefaults.numaToolApprovalMode?.knowledgeBases ?? 'never') === mode}
+                            disabled={disableDefaultsForm}
+                            onChange={() => {
+                              setUserDefaults((prev) => ({
+                                ...prev,
+                                numaToolApprovalMode: {
+                                  ...(prev.numaToolApprovalMode ?? {
+                                    agents: 'never',
+                                    memories: 'never',
+                                    knowledgeBases: 'never',
+                                  }),
+                                  knowledgeBases: mode,
+                                },
+                              }));
+                              setDirty(true);
+                            }}
+                            className="d-inline-block"
+                          />
+                        </td>
+                      ))}
+                    </tr>
+                    {/* Ops row — conditional on feature flag */}
+                    {hasOps && (
+                      <tr>
+                        <td>
+                          <div className="fw-semibold">{t('userProfile.approval.grid.ops')}</div>
+                          <div className="text-muted small">{t('userProfile.approval.grid.opsHelp')}</div>
+                        </td>
+                        {(['always', 'non_destructive', 'never'] as const).map((mode) => (
+                          <td key={mode} className="text-center align-middle">
+                            <Form.Check
+                              type="radio"
+                              id={`approval-ops-${mode}`}
+                              name="numaToolApprovalMode.ops"
+                              checked={(userDefaults.numaToolApprovalMode?.ops ?? 'never') === mode}
+                              disabled={disableDefaultsForm}
+                              onChange={() => {
+                                setUserDefaults((prev) => ({
+                                  ...prev,
+                                  numaToolApprovalMode: {
+                                    ...(prev.numaToolApprovalMode ?? DEFAULT_CHAT_SETTINGS.numaToolApprovalMode),
+                                    ops: mode,
+                                  },
+                                }));
+                                setDirty(true);
+                              }}
+                              className="d-inline-block"
+                            />
+                          </td>
+                        ))}
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
 
-                <div className="profile-radio-group">
-                  {(['always', 'non_destructive', 'never'] as const).map((mode) => (
-                    <div
-                      key={mode}
-                      className={`profile-radio-option ${userDefaults.approvalMode === mode ? 'is-selected' : ''}`}
-                      onClick={() => {
-                        if (disableDefaultsForm) return;
-                        setUserDefaults((prev) => ({ ...prev, approvalMode: mode }));
-                        setDirty(true);
-                      }}
-                    >
-                      <div className="profile-radio-option__inner">
-                        <Form.Check
-                          type="radio"
-                          id={`approval-mode-${mode}`}
-                          name="approvalMode"
-                          checked={userDefaults.approvalMode === mode}
-                          disabled={disableDefaultsForm}
-                          onChange={() => {
-                            setUserDefaults((prev) => ({ ...prev, approvalMode: mode }));
-                            setDirty(true);
-                          }}
-                        />
-                        <div className="profile-radio-option__text">
-                          <div className="profile-radio-option__label">
-                            {t(`userProfile.approval.modes.${mode}.label`)}
-                          </div>
-                          <div className="profile-radio-option__help">
-                            {t(`userProfile.approval.modes.${mode}.help`)}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
+              <div className="text-muted small mt-3 mb-3">
+                <strong>{t('userProfile.approval.modes.always.label')}:</strong>{' '}
+                {t('userProfile.approval.grid.alwaysHelp')}
+                <br />
+                <strong>{t('userProfile.approval.modes.non_destructive.label')}:</strong>{' '}
+                {t('userProfile.approval.grid.safeHelp')}
+                <br />
+                <strong>{t('userProfile.approval.modes.never.label')}:</strong>{' '}
+                {t('userProfile.approval.grid.neverHelp')}
               </div>
 
               {renderSaveActions(

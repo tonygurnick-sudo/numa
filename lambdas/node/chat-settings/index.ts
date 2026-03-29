@@ -10,6 +10,21 @@ const ddb = DynamoDBDocumentClient.from(withPRM(DynamoDBClient, {}));
 
 // Type definitions for chat settings
 export type ApprovalMode = 'always' | 'non_destructive' | 'never';
+
+export type NumaToolApprovalMode = {
+  agents: ApprovalMode;
+  memories: ApprovalMode;
+  knowledgeBases: ApprovalMode;
+  ops: ApprovalMode;
+};
+
+const DEFAULT_NUMA_TOOL_APPROVAL_MODE: NumaToolApprovalMode = {
+  agents: 'never',
+  memories: 'never',
+  knowledgeBases: 'never',
+  ops: 'never',
+};
+
 export type ChatScrollMode = 'auto' | 'manual';
 
 const VALID_SCROLL_MODES: ChatScrollMode[] = ['auto', 'manual'];
@@ -24,6 +39,7 @@ export type ChatSettings = {
   defaultConnectionIds: string[];
   language: string | null;
   approvalMode: ApprovalMode;
+  numaToolApprovalMode: NumaToolApprovalMode;
   emailSignatureEnabled: boolean;
   emailSignatureText: string;
   chatScrollMode: ChatScrollMode;
@@ -95,6 +111,14 @@ const MAX_MEMORY_CONTENT = 300;
 const MAX_MEMORIES = 50;
 const VALID_SCOPE_PATTERN = /^(general|integration:.+|agent:.+)$/;
 
+function validateNumaToolApprovalMode(data: unknown): NumaToolApprovalMode {
+  if (typeof data !== 'object' || data === null) return { ...DEFAULT_NUMA_TOOL_APPROVAL_MODE };
+  const obj = data as Record<string, unknown>;
+  const v = (val: unknown): ApprovalMode =>
+    typeof val === 'string' && VALID_APPROVAL_MODES.includes(val as ApprovalMode) ? (val as ApprovalMode) : 'never';
+  return { agents: v(obj.agents), memories: v(obj.memories), knowledgeBases: v(obj.knowledgeBases), ops: v(obj.ops) };
+}
+
 function truncate(value: unknown, maxLen: number): string {
   if (typeof value !== 'string') return '';
   return value.slice(0, maxLen);
@@ -163,6 +187,7 @@ const DEFAULT_SETTINGS: ChatSettings = {
   defaultConnectionIds: [],
   language: 'browser',
   approvalMode: 'non_destructive',
+  numaToolApprovalMode: { ...DEFAULT_NUMA_TOOL_APPROVAL_MODE },
   emailSignatureEnabled: true,
   emailSignatureText: 'Sent by my AI assistant, Numa (https://www.arcanum.ai)',
   chatScrollMode: 'auto',
@@ -255,6 +280,7 @@ async function loadGlobalSettings(): Promise<GlobalChatSettings> {
       defaultConnectionIds: DEFAULT_SETTINGS.defaultConnectionIds,
       language: DEFAULT_SETTINGS.language,
       approvalMode: DEFAULT_SETTINGS.approvalMode,
+      numaToolApprovalMode: DEFAULT_SETTINGS.numaToolApprovalMode,
       emailSignatureEnabled: DEFAULT_SETTINGS.emailSignatureEnabled,
       emailSignatureText: DEFAULT_SETTINGS.emailSignatureText,
       chatScrollMode: DEFAULT_SETTINGS.chatScrollMode,
@@ -293,6 +319,7 @@ async function loadGlobalSettings(): Promise<GlobalChatSettings> {
       : DEFAULT_SETTINGS.defaultConnectionIds,
     language: DEFAULT_SETTINGS.language,
     approvalMode,
+    numaToolApprovalMode: validateNumaToolApprovalMode(item?.numaToolApprovalMode),
     emailSignatureEnabled:
       typeof item?.emailSignatureEnabled === 'boolean'
         ? item!.emailSignatureEnabled
@@ -357,6 +384,10 @@ function mergeUserSettings(globalSettings: ChatSettings, userItem: Record<string
     typeof userItem?.approvalMode === 'string' && VALID_APPROVAL_MODES.includes(userItem.approvalMode as ApprovalMode)
       ? (userItem.approvalMode as ApprovalMode)
       : globalSettings.approvalMode;
+  const numaToolApprovalMode =
+    userItem?.numaToolApprovalMode && typeof userItem.numaToolApprovalMode === 'object'
+      ? validateNumaToolApprovalMode(userItem.numaToolApprovalMode)
+      : globalSettings.numaToolApprovalMode;
   const emailSignatureEnabled =
     typeof userItem?.emailSignatureEnabled === 'boolean'
       ? (userItem!.emailSignatureEnabled as boolean)
@@ -383,6 +414,7 @@ function mergeUserSettings(globalSettings: ChatSettings, userItem: Record<string
     defaultConnectionIds,
     language,
     approvalMode,
+    numaToolApprovalMode,
     emailSignatureEnabled,
     emailSignatureText,
     chatScrollMode,
@@ -478,6 +510,7 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
           VALID_APPROVAL_MODES.includes(body.approvalMode as ApprovalMode)
             ? (body.approvalMode as ApprovalMode)
             : currentGlobal.approvalMode,
+        numaToolApprovalMode: currentGlobal.numaToolApprovalMode,
         emailSignatureEnabled: currentGlobal.emailSignatureEnabled,
         emailSignatureText: currentGlobal.emailSignatureText,
         chatScrollMode: currentGlobal.chatScrollMode,
@@ -508,6 +541,7 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
         defaultConnectionIds: updatedSettings.defaultConnectionIds,
         language: updatedSettings.language,
         approvalMode: updatedSettings.approvalMode,
+        numaToolApprovalMode: updatedSettings.numaToolApprovalMode,
         emailSignatureEnabled: updatedSettings.emailSignatureEnabled,
         emailSignatureText: updatedSettings.emailSignatureText,
         chatScrollMode: updatedSettings.chatScrollMode,
@@ -559,6 +593,7 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
         defaultConnectionIds: merged.defaultConnectionIds,
         language: merged.language,
         approvalMode: merged.approvalMode,
+        numaToolApprovalMode: merged.numaToolApprovalMode,
         emailSignatureEnabled: merged.emailSignatureEnabled,
         emailSignatureText: merged.emailSignatureText,
         chatScrollMode: merged.chatScrollMode,
@@ -585,6 +620,7 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
         defaultConnectionIds: useUserChatDefaults ? merged.defaultConnectionIds : globalSettings.defaultConnectionIds,
         language: merged.language,
         approvalMode: merged.approvalMode,
+        numaToolApprovalMode: merged.numaToolApprovalMode,
         emailSignatureEnabled: merged.emailSignatureEnabled,
         emailSignatureText: merged.emailSignatureText,
         chatScrollMode: merged.chatScrollMode,
@@ -739,6 +775,17 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
         next.approvalMode = current.approvalMode as ApprovalMode;
       }
 
+      // numaToolApprovalMode
+      if ('numaToolApprovalMode' in body) {
+        if (body.numaToolApprovalMode === null) {
+          // clear override
+        } else if (typeof body.numaToolApprovalMode === 'object' && body.numaToolApprovalMode !== null) {
+          next.numaToolApprovalMode = validateNumaToolApprovalMode(body.numaToolApprovalMode);
+        }
+      } else if (current.numaToolApprovalMode && typeof current.numaToolApprovalMode === 'object') {
+        next.numaToolApprovalMode = validateNumaToolApprovalMode(current.numaToolApprovalMode);
+      }
+
       // emailSignatureEnabled
       if ('emailSignatureEnabled' in body) {
         if (body.emailSignatureEnabled === null) {
@@ -807,6 +854,7 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
         'defaultConnectionIds' in next ||
         'language' in next ||
         'approvalMode' in next ||
+        'numaToolApprovalMode' in next ||
         'emailSignatureEnabled' in next ||
         'emailSignatureText' in next ||
         'chatScrollMode' in next ||

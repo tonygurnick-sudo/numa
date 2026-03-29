@@ -673,6 +673,7 @@ def build_agent_context(
     lines = [
         "<agent-context>",
         f'You are operating as the specialized agent "{agent_config.title}".',
+        f"Your agent ID is: {agent_config.agent_id}",
         "",
     ]
 
@@ -772,23 +773,60 @@ def _build_user_profile_context(user_profile: Optional[dict]) -> str:
 
 def _build_integrations_context(
     enabled_integrations: list[str],
+    available_integrations: Optional[list[dict]] = None,
     email_signature: Optional[dict] = None,
 ) -> str:
     """Build system prompt section for Pipedream Connect integrations.
 
     Args:
-        enabled_integrations: List of app slugs (e.g., ["google_drive", "slack"])
+        enabled_integrations: List of app slugs enabled for this conversation
+        available_integrations: All integrations the user has connected (id + name)
         email_signature: Optional user email signature settings
 
     Returns:
         Integrations context string for the system prompt
     """
-    apps_list = ", ".join(enabled_integrations)
+    enabled_set = set(enabled_integrations)
+
+    # Build the integrations status list showing enabled vs available
+    if available_integrations:
+        status_lines = []
+        for conn in available_integrations:
+            slug = conn.get("id", "")
+            name = conn.get("name", slug)
+            if slug in enabled_set:
+                status_lines.append(
+                    f"- {name} ({slug}): **Enabled for this conversation**"
+                )
+            else:
+                status_lines.append(
+                    f"- {name} ({slug}): Available (connected but not enabled for this conversation)"
+                )
+        # Include any enabled integrations not in availableIntegrations (edge case)
+        available_ids = {c.get("id") for c in available_integrations}
+        for slug in enabled_integrations:
+            if slug not in available_ids:
+                status_lines.append(f"- {slug}: **Enabled for this conversation**")
+        integrations_status = "\n".join(status_lines)
+    else:
+        integrations_status = "\n".join(
+            f"- {slug}: **Enabled for this conversation**"
+            for slug in enabled_integrations
+        )
 
     context = f"""## Connected Integrations
-You have access to external integrations via Pipedream Connect.
+The user has integrations connected via Pipedream Connect.
 
-Connected: {apps_list}
+**Integration Status:**
+{integrations_status}
+
+Only integrations marked as **Enabled** can be used with tools in this conversation. Integrations marked as Available are connected by the user but not toggled on for this session. When creating agents, you may offer any connected integration (enabled or available) as an option."""
+
+    # Only include tool usage instructions when integrations are actually enabled
+    if not enabled_integrations:
+        return context
+
+    context += f"""
 
 Action schemas are in /workdir/tools/integrations/{{app_slug}}/.
 
@@ -969,6 +1007,7 @@ def build_workspace_system_prompt(
     agent_config: Optional["AgentConfig"] = None,
     agent_file_paths: Optional[list[str]] = None,
     enabled_integrations: Optional[list[str]] = None,
+    available_integrations: Optional[list[dict]] = None,
     email_signature: Optional[dict] = None,
     identity_override: Optional[str] = None,
     user_profile: Optional[dict] = None,
@@ -1080,10 +1119,10 @@ def build_workspace_system_prompt(
                 agent_memory_lines.append(f"- {mem.get('content', '')}")
             base_prompt = f"{base_prompt}\n" + "\n".join(agent_memory_lines)
 
-    # Append integrations context if integrations are enabled
-    if enabled_integrations:
+    # Append integrations context if any integrations are enabled or available
+    if enabled_integrations or available_integrations:
         integrations_context = _build_integrations_context(
-            enabled_integrations, email_signature
+            enabled_integrations or [], available_integrations, email_signature
         )
         base_prompt = f"{base_prompt}\n\n{integrations_context}"
 

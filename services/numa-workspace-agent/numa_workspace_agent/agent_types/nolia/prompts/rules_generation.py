@@ -27,11 +27,19 @@ Background information, definitions, and general descriptions are NOT rules.
 """
 
 _RULE_DETAIL_GUIDANCE = """\
-## Rule Detail — Include Specific Values
+## Rule Detail — Rules Must Be Self-Contained
 
-Each rule description must include the actual thresholds, quantities, dates, \
-percentages, and other specific values stated in the source documents. This \
-enables compliance checking without needing to re-read the originals.
+These rules will be used by downstream assessment agents who will NOT have \
+access to the original source documents. Each rule must therefore be \
+completely self-contained — including enough detail, context, and specific \
+values that an assessor can make a **definitive** compliance determination \
+using only the rule description and the evaluation document being assessed.
+
+If a rule states a threshold, the assessor must be able to compare it \
+directly against what they find in the evaluation document. If a rule \
+defines a methodology, the assessor must be able to verify the methodology \
+was followed. There should be no ambiguity that would require going back \
+to the source documents.
 
 Good: "The Bidder must meet minimum AATO of USD 1,500,000 for Lot 1 and \
 USD 6,900,000 for Lot 4, demonstrated by audited financial statements for \
@@ -40,8 +48,23 @@ the last 3 years (2021, 2022, 2023)."
 Bad: "The Bidder must meet the minimum average annual turnover requirement."
 
 Include: dollar amounts, percentages, unit counts, day/hour limits, dates, \
-lot-specific values, scoring weights, and formula details where stated. \
-Keep it to 1-3 sentences — precise but concise.
+lot-specific values, scoring weights, and formula details where stated.
+
+**Completeness over brevity.** These rules are the definitive source of \
+truth for compliance assessments. If a rule has multiple conditions, \
+list all of them — do not summarise or truncate to save space. A rule \
+that omits a condition is a rule that will not be checked. There is no \
+length limit per rule — use as many sentences as needed to capture \
+every assessable requirement.
+
+### Source Citations — Location References Required
+
+Every rule's **Source** line MUST include the specific location in the \
+original document so the rule can be traced back to its source. For PDFs, \
+include page numbers (e.g., "Page 51"). For spreadsheets, include the \
+sheet/tab name and row number (e.g., "Oxygen Tank 6 sheet, Row 19"). \
+If a rule draws from multiple locations, cite all of them. If an \
+amendment modifies the rule, cite both the original and the amendment.
 
 ### Formulas and Definitions — Quote Verbatim
 
@@ -186,7 +209,8 @@ Key requirements:
 and page/paragraph reference
 - Group rules by category within each priority level
 - Use sequential numbering (1, 2, 3...) across the entire document
-- Keep descriptions concise but complete — 1-3 sentences with specific values
+- Be thorough — include every condition, threshold, and requirement. \
+No length limit per rule
 - Section headings MUST use the documents' own priority labels verbatim; \
 only use CRITICAL / HIGH / MEDIUM / LOW as a fallback when the source \
 documents define no scheme
@@ -617,5 +641,117 @@ citations added), and STOP.
 FINAL CHECK: Before stopping, verify that \
 `/workdir/outputs/{rules_filename}` exists by reading it. If it does \
 not exist, write it immediately.
+"""
+)
+
+# ── Phase 3: Second Review — Completeness and Self-Sufficiency ───────────
+
+RULES_SECOND_REVIEW_ADDENDUM = (
+    """
+
+# Phase 3: Second Review — Completeness and Self-Sufficiency
+
+## Your Role
+
+You are an independent senior reviewer conducting a second pass over a \
+rules file that has already been through extraction and initial review. \
+Your focus is on two things:
+
+1. **Completeness**: Are there rules that were missed entirely? Go back \
+to the source documents and look for anything not covered.
+2. **Self-sufficiency**: Could an assessor who has ONLY this rules file \
+(and the evaluation document being assessed) make definitive compliance \
+determinations? Or would they need to go back to the original source \
+documents to resolve ambiguity?
+
+You have FULL authority to add new rules, update existing rules with \
+more detail, split overly broad rules into specific ones, and improve \
+citations. The goal is to produce a rules file that is the single \
+source of truth for compliance assessment.
+
+"""
+    + _WHAT_IS_A_RULE
+    + """
+
+"""
+    + _RULE_DETAIL_GUIDANCE
+    + """
+
+"""
+    + _AMENDMENT_GUIDANCE
+    + """
+
+## Workspace
+
+- `/workdir/knowledge-bases/` — Original KB documents
+- `/workdir/outputs/{rules_filename}` — The current rules file (from Phase 2)
+- `/workdir/tmp/` — Phase 1 saved extracted text files here \
+(e.g., `pdf_full_text.txt`, `docx_full_text.txt`)
+
+## CRITICAL: Reuse Phase 1 Text Files
+
+Phase 1 has already extracted the full text from PDF and DOCX documents. \
+The extracted text files are in `/workdir/tmp/` (e.g., \
+`/workdir/tmp/pdf_full_text.txt` or similar `.txt` files).
+
+DO NOT re-extract PDF content using pdfplumber or any other PDF reader. \
+Instead, read the pre-extracted text files from `/workdir/tmp/` when \
+you need to verify rules against source documents.
+
+Only use the original files in `/workdir/knowledge-bases/` for \
+spreadsheets (where you need to examine specific tabs) or if a specific \
+text file is missing from `/workdir/tmp/`.
+
+## Approach
+
+### Pass 1: Completeness Audit
+
+1. Read the current rules file from `/workdir/outputs/{rules_filename}`.
+2. Read through each source document text file in `/workdir/tmp/`. \
+For each document, ask: "Are there requirements in this document that \
+are NOT captured in the rules file?" Focus especially on:
+   - Spreadsheet tabs that may have been skimmed (re-examine XLSX files directly)
+   - Appendices, annexes, and supplementary forms
+   - Conditions buried in contract clauses
+   - Requirements that span multiple documents (e.g., an addendum modifying \
+a requirement that was itself in a supporting document)
+3. Add any missing rules directly to the file using Edit.
+
+### Pass 2: Self-Sufficiency Audit
+
+For each rule, ask: "If an assessor reads ONLY this rule and the \
+evaluation document, can they make a definitive compliance determination?"
+
+Flag and fix rules that:
+- Use vague language where the source document has specific values
+- Reference thresholds without stating the actual numbers
+- Describe a methodology without including the formula
+- Say "as specified in the RFB" without stating what the RFB specifies
+- Lack lot-specific values where the source has per-lot data
+- Miss amended values (only citing the original, not the addendum)
+
+### Pass 3: Cross-Reference Integrity
+
+Verify that:
+- Rule numbering is sequential with no gaps or duplicates
+- Source citations include document name, section/clause, and page number
+- Priority labels match the source documents' own scheme
+- Amendment handling is correct (rules reflect final amended state)
+- Total rule count and priority breakdown in the header are accurate
+
+## Output
+
+Edit `/workdir/outputs/{rules_filename}` in place. Do NOT create a new \
+file — update the existing one. Update the header counts if you added \
+or removed rules.
+
+"""
+    + _INCREMENTAL_WRITING
+    + """
+
+## Completion
+
+Provide a summary of changes made (rules added, rules updated with more \
+detail, citation fixes) and STOP.
 """
 )

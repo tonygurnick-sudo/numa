@@ -9,6 +9,20 @@ import { getSwrCache, setSwrCache } from '../utils/swrCache';
 
 export type ApprovalMode = 'always' | 'non_destructive' | 'never';
 
+export type NumaToolApprovalMode = {
+  agents: ApprovalMode;
+  memories: ApprovalMode;
+  knowledgeBases: ApprovalMode;
+  ops: ApprovalMode;
+};
+
+export const DEFAULT_NUMA_TOOL_APPROVAL_MODE: NumaToolApprovalMode = {
+  agents: 'never',
+  memories: 'never',
+  knowledgeBases: 'never',
+  ops: 'never',
+};
+
 export type ChatScrollMode = 'auto' | 'manual';
 
 export const VALID_SCROLL_MODES: ChatScrollMode[] = ['auto', 'manual'];
@@ -24,6 +38,7 @@ export type ChatSettings = {
   defaultConnectionIds: string[];
   language: string | null;
   approvalMode: ApprovalMode;
+  numaToolApprovalMode: NumaToolApprovalMode;
   emailSignatureEnabled: boolean;
   emailSignatureText: string;
   chatScrollMode: ChatScrollMode;
@@ -96,6 +111,7 @@ export const DEFAULT_CHAT_SETTINGS: ChatSettings = {
   defaultConnectionIds: [],
   language: 'browser',
   approvalMode: 'non_destructive',
+  numaToolApprovalMode: { ...DEFAULT_NUMA_TOOL_APPROVAL_MODE },
   emailSignatureEnabled: true,
   emailSignatureText: 'Sent by my AI assistant, Numa (https://www.arcanum.ai)',
   chatScrollMode: 'auto',
@@ -270,6 +286,21 @@ export const ChatSettingsService = {
   },
 };
 
+function validateNumaToolApprovalMode(data: unknown): NumaToolApprovalMode {
+  if (typeof data !== 'object' || data === null) {
+    return { ...DEFAULT_NUMA_TOOL_APPROVAL_MODE };
+  }
+  const obj = data as Record<string, unknown>;
+  const validateField = (val: unknown): ApprovalMode =>
+    typeof val === 'string' && VALID_APPROVAL_MODES.includes(val as ApprovalMode) ? (val as ApprovalMode) : 'never';
+  return {
+    agents: validateField(obj.agents),
+    memories: validateField(obj.memories),
+    knowledgeBases: validateField(obj.knowledgeBases),
+    ops: validateField(obj.ops),
+  };
+}
+
 /**
  * Validate and sanitize settings from API response.
  * Ensures all fields have correct types, falling back to defaults if invalid.
@@ -309,6 +340,7 @@ function validateSettings(data: unknown): ChatSettings {
       typeof obj.approvalMode === 'string' && VALID_APPROVAL_MODES.includes(obj.approvalMode as ApprovalMode)
         ? (obj.approvalMode as ApprovalMode)
         : DEFAULT_CHAT_SETTINGS.approvalMode,
+    numaToolApprovalMode: validateNumaToolApprovalMode(obj.numaToolApprovalMode),
     emailSignatureEnabled:
       typeof obj.emailSignatureEnabled === 'boolean'
         ? obj.emailSignatureEnabled

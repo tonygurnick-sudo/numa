@@ -33,6 +33,8 @@ import structlog
 from prm import client as prm_client
 from tools.kb_permissions import _get_dynamodb_client, verify_kb_access
 
+from .approval import check_approval, create_approval_request, poll_approval
+
 logger = structlog.get_logger()
 
 # Environment variables
@@ -82,6 +84,19 @@ def handle_query_knowledgebase(params: Dict[str, Any]) -> Dict[str, Any]:
     Raises:
         ValueError: If required parameters are missing or invalid
     """
+    # HITL approval gate
+    denial = check_approval(
+        params,
+        action_key="numa_knowledgeBases_query",
+        description=f"Query knowledge base: {params.get('query', '')[:100]}",
+        props_preview={
+            "query": params.get("query", ""),
+            "kb_id": params.get("kb_id", "company"),
+        },
+    )
+    if denial:
+        return denial
+
     # Extract and validate parameters
     query = params.get("query")
     user_intent = params.get("user_intent")
@@ -866,6 +881,29 @@ def handle_add_to_kb(params: Dict[str, Any]) -> Dict[str, Any]:
     Returns:
         Dict with message, s3_uri, kb_id, filename, size_bytes, and note
     """
+    # HITL approval gate
+    request_id = params.get("request_id")
+    if request_id and not params.get("auto_approved", False):
+        user_sub = params.get("__user_sub", "")
+        approval_id = create_approval_request(
+            user_sub=user_sub,
+            action_key="numa_knowledgeBases_upload",
+            description=f"Upload to KB: {params.get('filename', 'unknown')}",
+            props_preview={
+                "filename": params.get("filename", ""),
+                "kb_id": params.get("kb_id", "company"),
+            },
+            approval_id=request_id,
+        )
+        decision, deny_reason = poll_approval(approval_id)
+        if decision == "denied":
+            msg = "The user denied this action."
+            if deny_reason:
+                msg += f' The user said: "{deny_reason}"'
+            return {"status": "denied", "message": msg, "deny_reason": deny_reason}
+        if decision == "timeout":
+            return {"status": "timeout", "message": "Approval timed out"}
+
     filename = _validate_filename(params.get("filename"), "filename")
     kb_id = _validate_kb_id(params.get("kb_id", "company"), "kb_id")
     kb_path = _validate_relative_path(params.get("kb_path", ""), "kb_path")
@@ -1418,6 +1456,17 @@ def handle_retrieve_kb_file(params: Dict[str, Any]) -> Dict[str, Any]:
     """
     mode_raw = params.get("mode", "download")
     mode = mode_raw.strip().lower() if isinstance(mode_raw, str) else "download"
+
+    # HITL approval gate (covers list, download, download_folder)
+    approval_key = f"numa_knowledgeBases_{mode}"
+    denial = check_approval(
+        params,
+        action_key=approval_key,
+        description=f"KB {mode}: {params.get('kb_id', params.get('uri', ''))}",
+    )
+    if denial:
+        return denial
+
     allowed_kbs = params.get("__allowed_kbs", [])
     user_sub = _require_user_sub(params, "retrieve_kb_file")
 

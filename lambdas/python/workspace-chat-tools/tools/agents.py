@@ -20,6 +20,8 @@ from botocore.exceptions import ClientError
 from prm import client as prm_client
 from prm import resource
 
+from .approval import check_approval, create_approval_request, poll_approval
+
 logger = structlog.get_logger()
 
 # Environment variables
@@ -302,7 +304,7 @@ def _normalise_tools_config(config: Optional[Dict]) -> Dict:
     """Normalise agent tools configuration."""
     if not config:
         return {}
-    return {
+    result = {
         "autoToolsEnabled": config.get("autoToolsEnabled", True),
         "queryDataSources": config.get("queryDataSources", False),
         "webSearchEnabled": config.get("webSearchEnabled", False),
@@ -310,6 +312,12 @@ def _normalise_tools_config(config: Optional[Dict]) -> Dict:
         "enabledConnections": config.get("enabledConnections", []),
         "allowedKnowledgeBases": config.get("allowedKnowledgeBases"),
     }
+    # Preserve approval mode fields
+    if config.get("approvalMode"):
+        result["approvalMode"] = config["approvalMode"]
+    if config.get("approvalModes"):
+        result["approvalModes"] = config["approvalModes"]
+    return result
 
 
 def _normalise_reference_files(files: Optional[List]) -> List[Dict]:
@@ -560,8 +568,10 @@ def _build_user_item(
             existing.get("created_by_user_id") if existing else user_id
         ),
         "created_by_name": payload.get(
-            "createdByName", existing.get("created_by_name") if existing else None
-        ),
+            "createdByName",
+            existing.get("created_by_name") if existing else None,
+        )
+        or (payload.get("__user_email") if not existing else None),
         "created_at": existing.get("created_at") if existing else timestamp,
         "updated_at": timestamp,
         "version": timestamp,
@@ -601,7 +611,9 @@ def _build_workspace_item(
         "tools_config": _normalise_tools_config(payload.get("toolsConfig")),
         "reference_files": _normalise_reference_files(payload.get("referenceFiles")),
         "created_by_user_id": user_id,
-        "created_by_name": payload.get("createdByName"),
+        "created_by_name": payload.get("createdByName")
+        or payload.get("__user_email")
+        or None,
         "created_at": timestamp,
         "updated_at": timestamp,
         "version": timestamp,
@@ -646,6 +658,15 @@ def handle_list_agents(params: Dict[str, Any]) -> Dict[str, Any]:
     Returns:
         agents: List of agent summaries
     """
+    # HITL approval gate
+    denial = check_approval(
+        params,
+        action_key="numa_agents_list",
+        description="List agents",
+    )
+    if denial:
+        return denial
+
     user_sub = params.get("__user_sub")
     if not user_sub:
         raise ValueError("User authentication required")
@@ -657,8 +678,24 @@ def handle_list_agents(params: Dict[str, Any]) -> Dict[str, Any]:
 
     scope = (params.get("scope") or "owned").lower()
     agent_type_filter = (params.get("agent_type") or "").lower()
+    title_filter = (params.get("title") or "").lower()
+    search_filter = (params.get("search") or "").lower()
+    limit = min(int(params.get("limit", 0)), 200) or None  # 0 = no limit
+    offset = int(params.get("offset", 0))
     include_owned = scope in ("owned", "all", "")
     include_public = scope in ("public", "all")
+
+    def _matches_filter(agent: Dict) -> bool:
+        if title_filter and title_filter not in (agent.get("title") or "").lower():
+            return False
+        if search_filter:
+            searchable = (
+                f"{agent.get('title', '')} {agent.get('description', '')} "
+                f"{' '.join(agent.get('tags', []))}"
+            ).lower()
+            if search_filter not in searchable:
+                return False
+        return True
 
     results: Dict[str, Dict] = {}
 
@@ -670,7 +707,7 @@ def handle_list_agents(params: Dict[str, Any]) -> Dict[str, Any]:
             if (
                 not agent_type_filter
                 or mapped.get("agentType", "").lower() == agent_type_filter
-            ):
+            ) and _matches_filter(mapped):
                 results[f"user:{mapped['agentId']}"] = mapped
 
         # Get workspace agents created by user
@@ -680,7 +717,7 @@ def handle_list_agents(params: Dict[str, Any]) -> Dict[str, Any]:
             if (
                 not agent_type_filter
                 or mapped.get("agentType", "").lower() == agent_type_filter
-            ):
+            ) and _matches_filter(mapped):
                 results[f"workspace:{mapped['agentId']}"] = mapped
 
     if include_public and mode != "personal_only":
@@ -691,7 +728,7 @@ def handle_list_agents(params: Dict[str, Any]) -> Dict[str, Any]:
             if (
                 not agent_type_filter
                 or mapped.get("agentType", "").lower() == agent_type_filter
-            ):
+            ) and _matches_filter(mapped):
                 results[f"workspace:{mapped['agentId']}"] = mapped
 
     # Filter out workspace agents if mode is personal_only
@@ -701,15 +738,29 @@ def handle_list_agents(params: Dict[str, Any]) -> Dict[str, Any]:
     # Sort by updated_at descending
     agents = sorted(results.values(), key=lambda a: a.get("updatedAt", 0), reverse=True)
 
+    # Pagination
+    total = len(agents)
+    if limit:
+        agents = agents[offset : offset + limit]
+
     logger.info(
         "Listed agents",
         user_sub=user_sub[:8] + "...",
         scope=scope,
         count=len(agents),
+        total=total,
         mode=mode,
     )
 
-    return {"agents": agents}
+    result: Dict[str, Any] = {"agents": agents}
+    if limit:
+        result["pagination"] = {
+            "total": total,
+            "limit": limit,
+            "offset": offset,
+            "hasMore": offset + limit < total,
+        }
+    return result
 
 
 def handle_get_agent(params: Dict[str, Any]) -> Dict[str, Any]:
@@ -723,6 +774,15 @@ def handle_get_agent(params: Dict[str, Any]) -> Dict[str, Any]:
     Returns:
         agent: Agent details
     """
+    # HITL approval gate
+    denial = check_approval(
+        params,
+        action_key="numa_agents_get",
+        description=f"Get agent: {params.get('agent_id', '')}",
+    )
+    if denial:
+        return denial
+
     user_sub = params.get("__user_sub")
     agent_id = params.get("agent_id")
 
@@ -742,6 +802,47 @@ def handle_get_agent(params: Dict[str, Any]) -> Dict[str, Any]:
         return {"agent": _map_workspace_agent(workspace)}
 
     raise ValueError(f"Agent not found: {agent_id}")
+
+
+def _check_approval(
+    params: Dict[str, Any],
+    action_key: str,
+    description: str,
+    props_preview: Dict[str, Any],
+) -> Optional[Dict[str, Any]]:
+    """Check approval if request_id is present and not auto-approved.
+
+    Returns a denial/timeout dict if denied/timed out, or None to proceed.
+    """
+    request_id = params.get("request_id")
+    if not request_id:
+        return None
+
+    is_auto_approved = params.get("auto_approved", False)
+    if is_auto_approved:
+        return None
+
+    user_sub = params.get("__user_sub", "")
+    approval_id = create_approval_request(
+        user_sub=user_sub,
+        action_key=action_key,
+        description=description,
+        props_preview=props_preview,
+        approval_id=request_id,
+    )
+
+    decision, deny_reason = poll_approval(approval_id)
+
+    if decision == "denied":
+        msg = "The user denied this action."
+        if deny_reason:
+            msg += f' The user said: "{deny_reason}"'
+        return {"status": "denied", "message": msg, "deny_reason": deny_reason}
+
+    if decision == "timeout":
+        return {"status": "timeout", "message": "Approval timed out"}
+
+    return None
 
 
 def handle_create_agent(params: Dict[str, Any]) -> Dict[str, Any]:
@@ -772,6 +873,20 @@ def handle_create_agent(params: Dict[str, Any]) -> Dict[str, Any]:
     user_sub = params.get("__user_sub")
     if not user_sub:
         raise ValueError("User authentication required")
+
+    # HITL approval gate
+    denial = _check_approval(
+        params,
+        action_key="numa_agents_create",
+        description=f"Create agent: {params.get('title', 'Untitled')}",
+        props_preview={
+            "title": params.get("title", ""),
+            "visibility": params.get("visibility", "personal"),
+            "systemPrompt": (params.get("systemPrompt", "") or "")[:200],
+        },
+    )
+    if denial:
+        return denial
 
     # Check admin policy
     mode = _get_agents_settings_mode()
@@ -887,6 +1002,20 @@ def handle_update_agent(params: Dict[str, Any]) -> Dict[str, Any]:
         raise ValueError("User authentication required")
     if not agent_id:
         raise ValueError("agent_id is required")
+
+    # HITL approval gate
+    denial = _check_approval(
+        params,
+        action_key="numa_agents_update",
+        description=f"Update agent: {params.get('title', agent_id)}",
+        props_preview={
+            "agent_id": agent_id,
+            "title": params.get("title", ""),
+            "systemPrompt": (params.get("systemPrompt", "") or "")[:200],
+        },
+    )
+    if denial:
+        return denial
 
     # Check admin policy
     mode = _get_agents_settings_mode()
@@ -1027,6 +1156,16 @@ def handle_duplicate_agent(params: Dict[str, Any]) -> Dict[str, Any]:
         raise ValueError("User authentication required")
     if not agent_id:
         raise ValueError("agent_id is required")
+
+    # HITL approval gate
+    denial = _check_approval(
+        params,
+        action_key="numa_agents_duplicate",
+        description=f"Duplicate agent: {agent_id}",
+        props_preview={"agent_id": agent_id},
+    )
+    if denial:
+        return denial
 
     # Check admin policy
     mode = _get_agents_settings_mode()
