@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next';
-import { Mail, MessageSquare, FileDown } from 'lucide-react';
+import { Mail, MessageSquare, FileDown, Bot } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { LayoutDashboard } from '../Layouts/LayoutDashboard';
 import { PageHeader } from '../Components/PageHeader';
@@ -71,6 +71,35 @@ const SupportPage = () => {
                 <Mail size={16} className="me-2" />
                 {t('email.button')}
               </a>
+            </div>
+
+            {/* AI Support Agent Card */}
+            <div style={cardStyle}>
+              <div className="d-flex align-items-center" style={{ gap: '0.75rem', marginBottom: '0.25rem' }}>
+                <div
+                  style={{
+                    ...iconWrapStyle,
+                    backgroundColor: 'color-mix(in srgb, var(--brand-primary, var(--color-primary)) 12%, transparent)',
+                  }}
+                >
+                  <Bot size={20} style={{ color: 'var(--brand-primary, var(--color-primary))' }} />
+                </div>
+                <h3 style={cardTitleStyle}>{t('agent.title', 'AI Support Agent')}</h3>
+              </div>
+              <p style={cardDescriptionStyle}>
+                {t(
+                  'agent.description',
+                  'Get immediate answers by chatting directly with our Numa Support Knowledge Base.'
+                )}
+              </p>
+              <button
+                type="button"
+                className="btn btn-primary align-self-start"
+                onClick={() => navigate('/chat?kb=numa-support')}
+              >
+                <MessageSquare size={16} className="me-2" />
+                {t('agent.button', 'Chat with Support')}
+              </button>
             </div>
 
             {/* Chat Export Tip Card */}
