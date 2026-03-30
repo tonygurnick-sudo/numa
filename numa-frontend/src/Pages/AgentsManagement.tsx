@@ -47,6 +47,7 @@ export const AgentsManagement = () => {
   // SWR: initialize from localStorage cache so agents render instantly.
   // My Agents = personal copies only. Company = all workspace agents.
   const [loading, setLoading] = useState(() => !getCachedAgents('owned'));
+  const [companyLoading, setCompanyLoading] = useState(() => !getCachedAgents('public'));
   const [error, setError] = useState<string | null>(null);
   const [myAgents, setMyAgents] = useState<AgentSummary[]>(() => {
     const owned = getCachedAgents('owned') ?? [];
@@ -111,6 +112,9 @@ export const AgentsManagement = () => {
       if (myAgents.length === 0 && workspaceAgents.length === 0) {
         setLoading(true);
       }
+      if (workspaceAgents.length === 0) {
+        setCompanyLoading(true);
+      }
       setError(null);
       const [ownedAgents, companyAgents] = await Promise.all([
         listAgents(numaGet, { scope: 'owned' }),
@@ -136,6 +140,7 @@ export const AgentsManagement = () => {
       setError((err as Error)?.message ?? t('management.errors.load'));
     } finally {
       setLoading(false);
+      setCompanyLoading(false);
     }
   };
 
@@ -146,6 +151,7 @@ export const AgentsManagement = () => {
         // When feature is off, present preview/disabled state, no API calls
         setAgentsMode('off');
         setLoading(false);
+        setCompanyLoading(false);
         setMyAgents([]);
         setWorkspaceAgents([]);
         return;
@@ -765,38 +771,48 @@ export const AgentsManagement = () => {
                   </section>
                 )}
 
-                {agentsMode !== 'personal_only' && filter !== 'personal' && filteredWorkspaceAgents.length > 0 && (
-                  <section className="agents-section agents-section--company">
-                    <div className="agents-section__header">
-                      <div className="d-flex align-items-center gap-3">
-                        <div
-                          className="agents-section__icon rounded-3 d-flex align-items-center justify-content-center"
-                          style={{
-                            backgroundColor: brandPrimaryColor,
-                          }}
-                        >
-                          <Store size={28} style={{ color: brandPrimaryContrast }} aria-hidden="true" />
-                        </div>
-                        <div className="flex-grow-1">
-                          <div className="d-flex justify-content-between align-items-center mb-1">
-                            <h2 className="agents-section__title">{t('management.sections.company.title')}</h2>
-                            <span
-                              className="badge rounded-pill px-3 py-2 agents-section__count"
-                              style={{
-                                backgroundColor: brandPrimaryColor,
-                                color: brandPrimaryContrast,
-                              }}
-                            >
-                              {filteredWorkspaceAgents.length}
-                            </span>
+                {agentsMode !== 'personal_only' &&
+                  filter !== 'personal' &&
+                  (filteredWorkspaceAgents.length > 0 || companyLoading) && (
+                    <section className="agents-section agents-section--company">
+                      <div className="agents-section__header">
+                        <div className="d-flex align-items-center gap-3">
+                          <div
+                            className="agents-section__icon rounded-3 d-flex align-items-center justify-content-center"
+                            style={{
+                              backgroundColor: brandPrimaryColor,
+                            }}
+                          >
+                            <Store size={28} style={{ color: brandPrimaryContrast }} aria-hidden="true" />
                           </div>
-                          <p className="agents-section__subtitle">{t('management.sections.company.subtitle')}</p>
+                          <div className="flex-grow-1">
+                            <div className="d-flex justify-content-between align-items-center mb-1">
+                              <h2 className="agents-section__title">{t('management.sections.company.title')}</h2>
+                              {!companyLoading && (
+                                <span
+                                  className="badge rounded-pill px-3 py-2 agents-section__count"
+                                  style={{
+                                    backgroundColor: brandPrimaryColor,
+                                    color: brandPrimaryContrast,
+                                  }}
+                                >
+                                  {filteredWorkspaceAgents.length}
+                                </span>
+                              )}
+                            </div>
+                            <p className="agents-section__subtitle">{t('management.sections.company.subtitle')}</p>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                    {renderAgentsGrid(filteredWorkspaceAgents, t('management.empty.company'))}
-                  </section>
-                )}
+                      {companyLoading && filteredWorkspaceAgents.length === 0 ? (
+                        <div className="d-flex justify-content-center py-4">
+                          <Spinner animation="border" size="sm" />
+                        </div>
+                      ) : (
+                        renderAgentsGrid(filteredWorkspaceAgents, t('management.empty.company'))
+                      )}
+                    </section>
+                  )}
 
                 {filteredMyAgents.length === 0 && filteredWorkspaceAgents.length === 0 && (
                   <div className="text-center py-5">

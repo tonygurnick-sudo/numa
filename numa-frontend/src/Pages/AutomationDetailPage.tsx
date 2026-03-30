@@ -18,6 +18,7 @@ import {
   XCircle,
   CircleDot,
   FileText,
+  Mail,
 } from 'lucide-react';
 import { PageHeader } from '../Components/PageHeader';
 import { LayoutDashboard } from '../Layouts/LayoutDashboard';
@@ -530,6 +531,30 @@ export const AutomationDetailPage: React.FC = () => {
                   <dt className="col-sm-4 text-muted small">{t('detail.overview.created')}</dt>
                   <dd className="col-sm-8">
                     {automation.createdAt ? formatTimestamp(automation.createdAt, automation.timezone) : '\u2014'}
+                  </dd>
+
+                  <dt className="col-sm-4 text-muted small">{t('detail.overview.emailNotifications')}</dt>
+                  <dd className="col-sm-8">
+                    {automation.emailNotifications ? (
+                      <div className="d-flex align-items-start gap-1">
+                        <Mail size={14} className="text-success mt-1 flex-shrink-0" />
+                        <div>
+                          <span className="text-success fw-medium">{t('detail.overview.emailEnabled')}</span>
+                          {(automation.notificationEmails?.length
+                            ? automation.notificationEmails
+                            : automation.notificationEmail
+                              ? [automation.notificationEmail]
+                              : []
+                          ).map((email) => (
+                            <div key={email} className="text-muted small">
+                              {email}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ) : (
+                      <span className="text-muted">{t('detail.overview.emailDisabled')}</span>
+                    )}
                   </dd>
                 </dl>
               </Card.Body>

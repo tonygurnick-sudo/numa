@@ -51,7 +51,7 @@
   }
 }
 
-// Table view
+// Table view (legacy)
 .automation-table {
   .automation-table-row {
     cursor: pointer;
@@ -60,6 +60,173 @@
     &:hover {
       background-color: rgba(0, 0, 0, 0.02);
     }
+  }
+}
+
+// List view (redesigned)
+.automation-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.automation-list-row {
+  background: #fff;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 10px;
+  cursor: pointer;
+  transition:
+    box-shadow 0.2s ease,
+    transform 0.12s ease;
+
+  &:hover {
+    box-shadow: 0 3px 12px rgba(0, 0, 0, 0.07);
+    transform: translateY(-1px);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--brand-primary, #6366f1);
+    outline-offset: 2px;
+  }
+
+  &__body {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 20px;
+    gap: 16px;
+    min-height: 68px;
+  }
+
+  &__left {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 0;
+    flex: 1;
+  }
+
+  &__name {
+    font-weight: 600;
+    font-size: 0.9rem;
+    color: #212529;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  &__chips {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+
+  &__chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 0.75rem;
+    color: #495057;
+    background: #f1f3f5;
+    border-radius: 20px;
+    padding: 2px 10px 2px 6px;
+    white-space: nowrap;
+    line-height: 1.5;
+
+    &--schedule {
+      background: rgba(25, 135, 84, 0.08);
+      color: #198754;
+    }
+  }
+
+  &__right {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    flex-shrink: 0;
+  }
+
+  &__status {
+    font-size: 0.7rem !important;
+    font-weight: 600;
+    padding: 4px 10px !important;
+    white-space: nowrap;
+    width: 90px;
+    text-align: center;
+  }
+
+  &__stats {
+    display: flex;
+    align-items: center;
+    gap: 0;
+  }
+
+  &__stat {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    font-size: 0.75rem;
+    color: #6c757d;
+    white-space: nowrap;
+    width: 80px;
+    text-align: center;
+  }
+
+  &__actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    width: 72px;
+    justify-content: center;
+  }
+
+  &__run-btn {
+    width: 28px;
+    height: 28px;
+    padding: 0 !important;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50% !important;
+  }
+
+  &__chevron {
+    color: #adb5bd;
+    flex-shrink: 0;
+  }
+}
+
+// Recent activity rows
+.automation-activity-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+
+  &:hover {
+    background-color: rgba(0, 0, 0, 0.02);
+  }
+}
+
+// Responsive: stack list row on small screens
+@media (max-width: 767px) {
+  .automation-list-row__body {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+
+  .automation-list-row__right {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .automation-list-row__chevron {
+    display: none;
   }
 }
 

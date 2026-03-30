@@ -39,6 +39,8 @@ type BackendScheduleResponse = {
   max_runs?: number;
   total_runs?: number;
   email_notifications?: boolean;
+  notification_email?: string;
+  notification_emails?: string[];
 };
 
 // Transform backend response to frontend format
@@ -64,6 +66,8 @@ const transformScheduleResponse = (backendSchedule: BackendScheduleResponse): Ag
   maxRuns: backendSchedule.max_runs,
   totalRuns: backendSchedule.total_runs,
   emailNotifications: backendSchedule.email_notifications,
+  notificationEmail: backendSchedule.notification_email,
+  notificationEmails: backendSchedule.notification_emails,
 });
 
 type RunScheduleResponse = {

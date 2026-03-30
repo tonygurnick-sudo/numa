@@ -31,6 +31,8 @@ export type AgentSchedule = {
   maxRuns?: number;
   totalRuns?: number;
   emailNotifications?: boolean;
+  notificationEmail?: string;
+  notificationEmails?: string[];
 };
 
 import type { AgentToolsConfig } from './agents';
@@ -60,6 +62,8 @@ export type CreateAgentSchedulePayload = {
   agentSnapshot?: AgentScheduleSnapshot;
   maxRuns?: number;
   emailNotifications?: boolean;
+  notificationEmail?: string;
+  notificationEmails?: string[];
 };
 
 export type UpdateAgentSchedulePayload = {
@@ -71,4 +75,5 @@ export type UpdateAgentSchedulePayload = {
   runConfig?: ScheduledRunConfig;
   maxRuns?: number;
   emailNotifications?: boolean;
+  notificationEmails?: string[];
 };

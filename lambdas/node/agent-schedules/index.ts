@@ -140,6 +140,14 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
     }
 
     const idMatch = path.match(/\/agent-schedules\/([^/]+)$/);
+
+    if (method === 'GET' && idMatch) {
+      const scheduleId = decodeURIComponent(idMatch[1]);
+      const schedule = await getSchedule(auth.sub, scheduleId);
+      if (!schedule) return respond(404, { error: 'Schedule not found' });
+      return respond(200, schedule);
+    }
+
     if (method === 'DELETE' && idMatch) {
       await deleteSchedule(auth, decodeURIComponent(idMatch[1]));
       return respond(200, { ok: true });
@@ -227,6 +235,16 @@ const listSchedules = async (userId: string): Promise<ScheduleRecord[]> => {
   return items.sort((a, b) => (b.updated_at ?? 0) - (a.updated_at ?? 0));
 };
 
+const getSchedule = async (userId: string, scheduleId: string): Promise<ScheduleRecord | null> => {
+  const result = await dynamo.send(
+    new GetCommand({
+      TableName: TABLE_NAME,
+      Key: { user_id: userId, schedule_id: scheduleId },
+    })
+  );
+  return (result.Item as ScheduleRecord) || null;
+};
+
 const getCalendarEvents = async (
   userId: string,
   startDate?: string,
@@ -294,6 +312,10 @@ const createSchedule = async (
     max_runs: validatedPayload.maxRuns,
     total_runs: 0,
     email_notifications: validatedPayload.emailNotifications ?? false,
+    // Persist user email(s) for email notifications (schedule runner has no JWT context)
+    notification_email:
+      validatedPayload.notificationEmail ?? (validatedPayload.emailNotifications ? auth.email : undefined),
+    notification_emails: validatedPayload.notificationEmails,
     created_at: now,
     updated_at: now,
     schedule_name: scheduleName(scheduleId),
@@ -440,6 +462,22 @@ const updateSchedule = async (
     expressionNames['#email_notifications'] = 'email_notifications';
     expressionValues[':email_notifications'] = validatedPayload.emailNotifications;
     setParts.push('#email_notifications = :email_notifications');
+  }
+  // Persist notification email when email notifications are enabled
+  if (validatedPayload.notificationEmail) {
+    expressionNames['#notification_email'] = 'notification_email';
+    expressionValues[':notification_email'] = validatedPayload.notificationEmail;
+    setParts.push('#notification_email = :notification_email');
+  } else if (validatedPayload.emailNotifications && auth.email) {
+    // Auto-populate from JWT when toggling on and no explicit email provided
+    expressionNames['#notification_email'] = 'notification_email';
+    expressionValues[':notification_email'] = auth.email;
+    setParts.push('#notification_email = if_not_exists(#notification_email, :notification_email)');
+  }
+  if (validatedPayload.notificationEmails !== undefined) {
+    expressionNames['#notification_emails'] = 'notification_emails';
+    expressionValues[':notification_emails'] = validatedPayload.notificationEmails;
+    setParts.push('#notification_emails = :notification_emails');
   }
 
   const updatedRecord = await dynamo.send(

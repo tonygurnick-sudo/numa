@@ -75,10 +75,11 @@ Skills are stored in `.claude/skills/` and contain detailed context for specific
 
 The `documentation/` folder contains detailed reference docs for specific domains. These are committed to the repo and complement the skills above. Read the relevant docs when working in these areas.
 
-| Folder                      | Contents                                                                                                        |
-| --------------------------- | --------------------------------------------------------------------------------------------------------------- |
-| `documentation/connectors/` | Data connector architecture, two-secret model, complete checklist, framework rules, workspace agent integration |
-| `documentation/nolia/`      | Nolia architecture, pipeline details, rules generation, project notes                                           |
+| Folder                         | Contents                                                                                                        |
+| ------------------------------ | --------------------------------------------------------------------------------------------------------------- |
+| `documentation/connectors/`    | Data connector architecture, two-secret model, complete checklist, framework rules, workspace agent integration |
+| `documentation/email-sending/` | Centralized email sender: architecture, security model, templates, code examples, infra wiring, deployment      |
+| `documentation/nolia/`         | Nolia architecture, pipeline details, rules generation, project notes                                           |
 
 ---
 
@@ -235,6 +236,16 @@ Each client deploys into its own isolated AWS account. The deployer account (Q D
 - **Secrets:** Integration OAuth credentials in Secrets Manager (proxy account).
 - **Workspace isolation:** Each conversation in its own AgentCore MicroVM. Security hooks block dangerous imports, directory traversal, system path access. Non-root container (UID 1000). Plugins outside workspace (read-only).
 - **PRM:** All AWS SDK calls must carry Marketplace product code `cl23v3vsno0k35czlg7e3ld9p`. Use: Python `from prm import client, resource`, Node `withPRM` from `lib/prm-node/prm`, frontend `withPRM` from `src/utils/prmUtils`.
+
+---
+
+## Email Sending
+
+Numa uses a centralized `numa-email-sender` Lambda in the deployer account for all transactional email. Emails are sent from `no-reply@notifications.numa.arcanum.ai` via SES with full DKIM/SPF/DMARC. Cross-account callers authenticate via STS presigned URL proof (same pattern as Pipedream).
+
+**Do not** create per-Lambda SES setups or send email directly from client accounts. All email goes through the centralized sender for consistent branding, deliverability, and security.
+
+See `documentation/email-sending/` for the full guide: architecture, security model, invocation payload, template reference, code examples (Python + Node), infra wiring instructions, and deployment steps.
 
 ---
 
