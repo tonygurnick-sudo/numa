@@ -13,6 +13,7 @@ import { SsmParameter } from '@cdktf/provider-aws/lib/ssm-parameter';
 import { CustomerSuccessPortalConstruct } from '../constructs/customer-success-portal-construct';
 import { PortalDeploymentsConstruct } from '../constructs/portal-deployments-construct';
 import { PortalNextgenBrokerConstruct } from '../constructs/portal-nextgen-broker-construct';
+import { EmailSenderConstruct } from '../constructs/email-sender-construct';
 
 export class QAppsDeployerStack extends ArcanumStack {
   constructor(scope: Construct, name: string, props: QAppsDeployerStackProps) {
@@ -123,6 +124,22 @@ export class QAppsDeployerStack extends ArcanumStack {
 
     new TerraformOutput(this, 'capabilities-metadata-table-arn', {
       value: capabilitiesMetadataTable.arn,
+    });
+
+    // Centralized email sender -- SES domain + Lambda for cross-account email delivery
+    const emailSender = new EmailSenderConstruct(this, 'email-sender', {
+      zoneId: zone.id,
+      domainSuffix: props.domainSuffix,
+      clientConfigTableArn: clientConfigTable.arn,
+      clientConfigTableName: clientConfigTable.name,
+    });
+
+    new TerraformOutput(this, 'email-sender-lambda-arn', {
+      value: emailSender.functionArn,
+    });
+
+    new TerraformOutput(this, 'email-sender-function-name', {
+      value: emailSender.functionName,
     });
 
     const honeycomb = new Honeycomb(this, 'honeycomb', {

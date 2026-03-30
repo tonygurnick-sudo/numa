@@ -1065,6 +1065,14 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
         // Agent tables for refreshing stale snapshots before each scheduled run
         WORKSPACE_AGENTS_TABLE_NAME: props.workspaceAgentsTableName,
         USER_AGENTS_TABLE_NAME: props.userAgentsTableName,
+        // Centralized email sender (deployer account, cross-account invocation)
+        ...(props.emailSenderLambdaArn && {
+          EMAIL_SENDER_LAMBDA_ARN: props.emailSenderLambdaArn,
+        }),
+        // Cognito User Pool ID for resolving user email when notification_email is missing
+        ...(props.cognitoUserPoolId && {
+          USER_POOL_ID: props.cognitoUserPoolId,
+        }),
       },
       additionalPolicyStatements: [
         {
@@ -1118,6 +1126,26 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
           actions: ['dynamodb:Query'],
           resources: [`arn:aws:dynamodb:*:*:table/numa-${props.clientName}-knowledge-bases`],
         },
+        // Cognito lookup for resolving user email when notification_email is missing on schedule record
+        ...(props.cognitoUserPoolArn
+          ? [
+              {
+                effect: 'Allow' as const,
+                actions: ['cognito-idp:AdminGetUser'],
+                resources: [props.cognitoUserPoolArn],
+              },
+            ]
+          : []),
+        // Branding config read for email template styling (logo, primary color)
+        ...(props.brandingTableName
+          ? [
+              {
+                effect: 'Allow' as const,
+                actions: ['dynamodb:GetItem'],
+                resources: [`arn:aws:dynamodb:*:*:table/${props.brandingTableName}`],
+              },
+            ]
+          : []),
       ],
     });
 
@@ -1355,6 +1383,28 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
         },
       ],
     });
+
+    // Users API - list workspace users (Cognito)
+    if (props.cognitoUserPoolId && props.cognitoUserPoolArn) {
+      this.addLambdaFunction(this, 'numa-users-api-get', {
+        addAuthorizer: true,
+        lambdaDirectory: 'node/numa-users-api',
+        runtime: 'nodejs22.x',
+        handler: 'index.handler',
+        route: { verb: 'GET', path: 'users' },
+        environment: {
+          REGION: props.region,
+          USER_POOL_ID: props.cognitoUserPoolId,
+        },
+        additionalPolicyStatements: [
+          {
+            effect: 'Allow',
+            actions: ['cognito-idp:ListUsers'],
+            resources: [props.cognitoUserPoolArn],
+          },
+        ],
+      });
+    }
 
     // Usage Analytics API - Ingest endpoint (no auth, API key only)
     this.addLambdaFunction(this, 'usage-analytics-ingest', {
@@ -1725,4 +1775,10 @@ export interface AppAgnosticApiGatewayLambdaCollectionProps extends Omit<
   auditUserManagementTableName: string;
   /** Audit log: user management table ARN. */
   auditUserManagementTableArn: string;
+  /** Email sender Lambda ARN in deployer account (for cross-account email notifications) */
+  emailSenderLambdaArn?: string;
+  /** Cognito User Pool ID for resolving user email in schedule runner */
+  cognitoUserPoolId?: string;
+  /** Cognito User Pool ARN for IAM policy */
+  cognitoUserPoolArn?: string;
 }
