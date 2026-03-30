@@ -11,7 +11,7 @@ import os
 import time
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Any, Optional
 from zoneinfo import ZoneInfo
 
 import boto3
@@ -879,7 +879,7 @@ Important notes:
     return context
 
 
-def _build_email_signature_context(email_signature: Optional[dict]) -> str:
+def _build_email_signature_context(email_signature: Optional[dict[str, Any]]) -> str:
     """
     Build the email signature system prompt section.
 
@@ -901,14 +901,14 @@ def _build_email_signature_context(email_signature: Optional[dict]) -> str:
 
     return f"""## Email Signature
 When sending emails on behalf of the user (via Gmail, Outlook, or any email integration),
-you MUST append the following signature as a PS line at the very end of the email body:
+you MUST append the following user signature at the very end of the email body:
 
-PS: {sig_text}
+{sig_text}
 
 Rules:
 - Always append to outgoing emails (send, reply, draft actions)
 - Place after the main content, separated by a blank line
-- For HTML emails, format as: <p>PS: {sig_text}</p> (make any URLs clickable with <a> tags)
+- The signature is provided as HTML. When sending emails, construct the email body using HTML formatting and append the signature block exactly as provided above.
 - Do NOT include in non-email contexts (chat responses, documents, etc.)"""
 
 
