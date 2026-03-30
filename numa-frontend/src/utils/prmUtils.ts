@@ -25,11 +25,7 @@ export const PRM_UA = `APN/1.1 (${PRODUCT_CODE})`;
 /**
  * Type constraint for AWS SDK v3 client constructors
  */
-type ClientConfig = {
-  customUserAgent?: string | string[];
-} & Record<string, unknown>;
-
-type AWSClientConstructor<TClient, TConfig extends ClientConfig> = new (config: TConfig) => TClient;
+type AWSClientConstructor<TClient, TConfig> = new (config: TConfig) => TClient;
 
 /**
  * Create an AWS SDK v3 client with PRM User-Agent tracking.
@@ -56,15 +52,18 @@ type AWSClientConstructor<TClient, TConfig extends ClientConfig> = new (config: 
  * });
  * ```
  */
-export function withPRM<TClient, TConfig extends ClientConfig = ClientConfig>(
+export function withPRM<TClient, TConfig = Record<string, unknown>>(
   ClientConstructor: AWSClientConstructor<TClient, TConfig>,
   config?: Partial<TConfig>
 ): TClient {
   // Merge PRM customUserAgent with any existing customUserAgent in config
+  // @ts-expect-error type override
   const existingUserAgent = config?.customUserAgent ?? [];
   const mergedConfig = {
     ...(config ?? {}),
-    customUserAgent: Array.isArray(existingUserAgent) ? [PRM_UA, ...existingUserAgent] : [PRM_UA, existingUserAgent],
+    customUserAgent: Array.isArray(existingUserAgent)
+      ? [[PRM_UA], ...existingUserAgent]
+      : [[PRM_UA], existingUserAgent],
   } as TConfig;
 
   return new ClientConstructor(mergedConfig);

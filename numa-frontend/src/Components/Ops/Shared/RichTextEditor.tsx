@@ -5,6 +5,7 @@ interface RichTextEditorProps {
   value: string;
   onSave: (html: string) => void;
   onChange?: (html: string) => void;
+  onImageUpload?: (file: File) => Promise<string>;
   placeholder?: string;
   minHeight?: number;
   disabled?: boolean;
@@ -23,7 +24,9 @@ type FormatCmd =
   | 'insertOrderedList'
   | 'createLink'
   | 'removeFormat'
-  | 'formatBlock';
+  | 'formatBlock'
+  | 'foreColor'
+  | 'fontName';
 
 /**
  * Minimal rich-text editor using contentEditable + execCommand.
@@ -34,11 +37,17 @@ type FormatCmd =
  * Content is stored as HTML.
  */
 export const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(function RichTextEditor(
-  { value, onSave, onChange, placeholder = 'Add a description…', minHeight = 120, disabled = false },
+  { value, onSave, onChange, onImageUpload, placeholder = 'Add a description…', minHeight = 120, disabled = false },
   ref
 ) {
   const { t } = useTranslation('ops');
   const editorRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [isUploadingImage, setIsUploadingImage] = React.useState(false);
+  // Internal state for HTML vs Rich text mode
+  const [isHtmlMode, setIsHtmlMode] = React.useState(false);
+  const [htmlValue, setHtmlValue] = React.useState(value || '');
+
   // Track the last value we set so we don't clobber the cursor on external re-renders
   const lastSavedRef = useRef<string>(value);
   // Saved selection range — used by the Style dropdown so it can re-apply the
@@ -50,18 +59,25 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorPro
   // Seed the editor on first mount or if value changes externally
   useEffect(() => {
     const el = editorRef.current;
-    if (!el) return;
-
     const incoming = value || '';
 
     if (!initializedRef.current) {
-      // First mount — always set content
-      el.innerHTML = incoming;
+      if (el) el.innerHTML = incoming;
+      setHtmlValue(incoming);
       lastSavedRef.current = incoming;
       initializedRef.current = true;
       return;
     }
 
+    if (isHtmlMode) {
+      if (incoming !== htmlValue) {
+        setHtmlValue(incoming);
+        lastSavedRef.current = incoming;
+      }
+      return;
+    }
+
+    if (!el) return;
     const currentHtml = el.innerHTML;
     const cleanCurrent =
       currentHtml === '<br>' || currentHtml === '<div><br></div>' || currentHtml === '<p><br></p>' ? '' : currentHtml;
@@ -78,14 +94,14 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorPro
       el.innerHTML = incoming;
       lastSavedRef.current = incoming;
     }
-  }, [value]);
+  }, [value, isHtmlMode]);
 
   const exec = useCallback(
-    (cmd: FormatCmd, val?: string) => {
-      if (disabled) return;
+    (cmd: FormatCmd | 'insertImage', val?: string) => {
+      if (disabled || isHtmlMode) return;
       document.execCommand(cmd, false, val);
     },
-    [disabled]
+    [disabled, isHtmlMode]
   );
 
   const handleLink = useCallback(() => {
@@ -108,13 +124,50 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorPro
     }
   }, []);
 
+  const handleInsertImage = useCallback(() => {
+    if (onImageUpload && fileInputRef.current) {
+      saveSelection(); // Save selection before file picker steals focus
+      fileInputRef.current.click();
+      return;
+    }
+    const url = window.prompt('Enter image URL (must be public):', 'https://');
+    if (url) exec('insertImage', url);
+  }, [exec, onImageUpload, saveSelection]);
+
+  const handleImageFileChange = useCallback(
+    async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (!file || !onImageUpload) return;
+
+      setIsUploadingImage(true);
+      try {
+        const url = await onImageUpload(file);
+        restoreSelection();
+        exec('insertImage', url);
+      } catch (err) {
+        console.error('Failed to upload image:', err);
+        window.alert('Failed to upload image.');
+      } finally {
+        setIsUploadingImage(false);
+        if (fileInputRef.current) fileInputRef.current.value = '';
+      }
+    },
+    [onImageUpload, exec, restoreSelection]
+  );
+
   /** Read current editor HTML, normalising empty content to ''. */
   const readClean = useCallback((): string | null => {
+    if (isHtmlMode) {
+      return htmlValue || '';
+    }
     const el = editorRef.current;
     if (!el) return null;
-    const html = el.innerHTML;
-    return html === '<br>' || html === '<div><br></div>' || html === '<p><br></p>' ? '' : html;
-  }, []);
+    let html = el.innerHTML;
+    if (html === '<br>' || html === '<div><br></div>' || html === '<p><br></p>') {
+      html = '';
+    }
+    return html;
+  }, [isHtmlMode, htmlValue]);
 
   /** Read current content and call onSave if it changed since last save. */
   const flush = useCallback(() => {
@@ -133,6 +186,37 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorPro
     }
   }, [readClean, onChange]);
 
+  const handleHtmlChange = useCallback(
+    (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+      const updatedHtml = e.target.value;
+      setHtmlValue(updatedHtml);
+      if (onChange) {
+        onChange(updatedHtml);
+      }
+    },
+    [onChange]
+  );
+
+  const toggleHtmlMode = useCallback(() => {
+    setIsHtmlMode((prev) => {
+      const nextMode = !prev;
+      if (nextMode) {
+        // Switching to HTML mode, sync textarea state from contentEditable
+        const clean = readClean();
+        if (clean !== null) {
+          setHtmlValue(clean);
+        }
+      } else {
+        // Switching from HTML mode to visual mode, render to contentEditable
+        const el = editorRef.current;
+        if (el) {
+          el.innerHTML = htmlValue;
+        }
+      }
+      return nextMode;
+    });
+  }, [readClean, htmlValue]);
+
   // Expose flush() to the parent via ref
   useImperativeHandle(ref, () => ({ flush }), [flush]);
 
@@ -144,6 +228,7 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorPro
         e.preventDefault(); // Don't steal focus from editor
         onClick();
       }}
+      disabled={disabled || isHtmlMode}
       style={{
         display: 'inline-flex',
         alignItems: 'center',
@@ -155,12 +240,12 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorPro
         background: 'transparent',
         color: '#374151',
         fontSize: '0.8rem',
-        cursor: disabled ? 'default' : 'pointer',
+        cursor: disabled || isHtmlMode ? 'default' : 'pointer',
         fontFamily: 'inherit',
-        opacity: disabled ? 0.4 : 1,
+        opacity: disabled || isHtmlMode ? 0.4 : 1,
       }}
       onMouseEnter={(e) => {
-        if (!disabled) (e.currentTarget as HTMLButtonElement).style.backgroundColor = '#e5e7eb';
+        if (!disabled && !isHtmlMode) (e.currentTarget as HTMLButtonElement).style.backgroundColor = '#e5e7eb';
       }}
       onMouseLeave={(e) => {
         (e.currentTarget as HTMLButtonElement).style.backgroundColor = 'transparent';
@@ -185,6 +270,7 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorPro
           padding: '4px 6px',
           borderBottom: '1px solid #e5e7eb',
           backgroundColor: '#f9fafb',
+          flexWrap: 'wrap',
         }}
       >
         {/* Block format / heading dropdown */}
@@ -206,12 +292,12 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorPro
             background: '#fff',
             color: '#374151',
             fontSize: '0.75rem',
-            cursor: disabled ? 'default' : 'pointer',
-            opacity: disabled ? 0.4 : 1,
+            cursor: disabled || isHtmlMode ? 'default' : 'pointer',
+            opacity: disabled || isHtmlMode ? 0.4 : 1,
             paddingLeft: 4,
             paddingRight: 2,
           }}
-          disabled={disabled}
+          disabled={disabled || isHtmlMode}
           defaultValue=""
         >
           <option value="" disabled>
@@ -222,6 +308,81 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorPro
           <option value="h2">{t('editor.heading2')}</option>
           <option value="h3">{t('editor.heading3')}</option>
         </select>
+        {/* Font dropdown */}
+        {/* eslint-disable i18next/no-literal-string */}
+        <select
+          title="Font"
+          onMouseDown={saveSelection}
+          onChange={(e) => {
+            const val = e.target.value;
+            if (val) {
+              restoreSelection();
+              exec('fontName', val);
+            }
+            e.target.value = '';
+          }}
+          style={{
+            height: 28,
+            border: '1px solid #e5e7eb',
+            borderRadius: 4,
+            background: '#fff',
+            color: '#374151',
+            fontSize: '0.75rem',
+            cursor: disabled || isHtmlMode ? 'default' : 'pointer',
+            opacity: disabled || isHtmlMode ? 0.4 : 1,
+            paddingLeft: 4,
+            paddingRight: 2,
+          }}
+          disabled={disabled || isHtmlMode}
+          defaultValue=""
+        >
+          <option value="" disabled>
+            Font
+          </option>
+          <option value="Arial">Arial</option>
+          <option value="Courier New">Courier New</option>
+          <option value="Georgia">Georgia</option>
+          <option value="Tahoma">Tahoma</option>
+          <option value="Times New Roman">Times New Roman</option>
+          <option value="Verdana">Verdana</option>
+        </select>
+        {/* Color dropdown */}
+        <select
+          title="Color"
+          onMouseDown={saveSelection}
+          onChange={(e) => {
+            const val = e.target.value;
+            if (val) {
+              restoreSelection();
+              exec('foreColor', val);
+            }
+            e.target.value = '';
+          }}
+          style={{
+            height: 28,
+            border: '1px solid #e5e7eb',
+            borderRadius: 4,
+            background: '#fff',
+            color: '#374151',
+            fontSize: '0.75rem',
+            cursor: disabled || isHtmlMode ? 'default' : 'pointer',
+            opacity: disabled || isHtmlMode ? 0.4 : 1,
+            paddingLeft: 4,
+            paddingRight: 2,
+          }}
+          disabled={disabled || isHtmlMode}
+          defaultValue=""
+        >
+          <option value="" disabled>
+            Color
+          </option>
+          <option value="#000000">Black</option>
+          <option value="#6b7280">Gray</option>
+          <option value="#ef4444">Red</option>
+          <option value="#3b82f6">Blue</option>
+          <option value="#10b981">Green</option>
+        </select>
+        {/* eslint-enable i18next/no-literal-string */}
         {divider}
         {toolbarBtn('Bold (Ctrl+B)', <strong style={{ fontSize: '0.85rem' }}>B</strong>, () => exec('bold'))}
         {toolbarBtn('Italic (Ctrl+I)', <em style={{ fontSize: '0.85rem', fontStyle: 'italic' }}>I</em>, () =>
@@ -237,28 +398,93 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorPro
         {toolbarBtn('Numbered list', <i className="bi bi-list-ol" />, () => exec('insertOrderedList'))}
         {divider}
         {toolbarBtn('Insert link', <i className="bi bi-link-45deg" />, handleLink)}
+        {toolbarBtn(
+          'Insert image',
+          isUploadingImage ? <div className="spinner-border spinner-border-sm" /> : <i className="bi bi-image" />,
+          handleInsertImage
+        )}
         {toolbarBtn('Clear formatting', <i className="bi bi-type" />, () => exec('removeFormat'))}
+
+        <div style={{ flexGrow: 1 }} />
+        <button
+          type="button"
+          title="Toggle HTML Source"
+          onClick={toggleHtmlMode}
+          disabled={disabled}
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            height: 28,
+            padding: '0 8px',
+            border: '1px solid #d1d5db',
+            borderRadius: 4,
+            background: isHtmlMode ? '#e0e7ff' : '#fff',
+            color: isHtmlMode ? '#4338ca' : '#374151',
+            fontSize: '0.75rem',
+            fontWeight: 500,
+            cursor: disabled ? 'default' : 'pointer',
+            fontFamily: 'inherit',
+            transition: 'background-color 0.2s',
+          }}
+        >
+          <i className="bi bi-code-slash me-1" /> HTML
+        </button>
       </div>
 
-      {/* Editable content area */}
-      <div
-        ref={editorRef}
-        contentEditable={!disabled}
-        suppressContentEditableWarning
-        data-placeholder={placeholder}
-        onInput={handleInput}
-        onBlur={flush}
-        style={{
-          minHeight,
-          padding: '10px 14px',
-          fontSize: '0.9rem',
-          lineHeight: 1.6,
-          color: '#111827',
-          outline: 'none',
-          backgroundColor: '#fff',
-        }}
-        className="rich-text-editor-content"
+      <input
+        type="file"
+        ref={fileInputRef}
+        onChange={handleImageFileChange}
+        accept="image/*"
+        style={{ display: 'none' }}
       />
+
+      {/* Editable content area */}
+      <div style={{ position: 'relative', minHeight }}>
+        {!isHtmlMode ? (
+          <div
+            ref={editorRef}
+            contentEditable={!disabled}
+            suppressContentEditableWarning
+            data-placeholder={placeholder}
+            onInput={handleInput}
+            onBlur={flush}
+            style={{
+              minHeight,
+              padding: '10px 14px',
+              fontSize: '0.9rem',
+              lineHeight: 1.6,
+              color: '#111827',
+              outline: 'none',
+              backgroundColor: '#fff',
+            }}
+            className="rich-text-editor-content"
+          />
+        ) : (
+          <textarea
+            value={htmlValue}
+            onChange={handleHtmlChange}
+            onBlur={flush}
+            disabled={disabled}
+            placeholder="<p>Enter HTML source here...</p>"
+            style={{
+              width: '100%',
+              minHeight,
+              padding: '10px 14px',
+              fontSize: '0.85rem',
+              lineHeight: 1.5,
+              fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+              color: '#1f2937',
+              backgroundColor: '#f8fafc',
+              border: 'none',
+              outline: 'none',
+              resize: 'vertical',
+              display: 'block',
+            }}
+          />
+        )}
+      </div>
 
       {/* Inline style for placeholder */}
       <style>{`
