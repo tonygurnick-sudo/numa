@@ -140,3 +140,44 @@ def download_from_presigned_url(
         if path.exists():
             path.unlink()
         raise ValueError(f"Failed to download file: {str(e)}") from e
+
+
+def upload_to_presigned_url(url: str, file_path: str) -> None:
+    """Upload a local file to a presigned S3 PUT URL using streaming.
+
+    Uses urllib.request (stdlib) to stream from disk directly to S3.
+
+    Args:
+        url: Presigned S3 PUT URL
+        file_path: Local file path to upload
+    """
+    path = Path(file_path)
+    if not path.exists():
+        raise ValueError(f"File not found: {file_path}")
+
+    file_size = path.stat().st_size
+
+    try:
+        with open(path, "rb") as f:
+            req = urllib.request.Request(url, data=f, method="PUT")
+            req.add_header("Content-Type", "application/octet-stream")
+            req.add_header("Content-Length", str(file_size))
+
+            with urllib.request.urlopen(req) as response:
+                if response.status not in (200, 201):
+                    raise ValueError(
+                        f"S3 Upload failed with HTTP status: {response.status}"
+                    )
+
+    except urllib.error.HTTPError as e:
+        raise ValueError(
+            f"Failed to upload to presigned URL: HTTP {e.code} {e.reason}. "
+            "The URL may have expired or the IAM permissions might be missing."
+        ) from e
+    except urllib.error.URLError as e:
+        raise ValueError(
+            f"Failed to upload to presigned URL: {e.reason}. "
+            "Check network connectivity."
+        ) from e
+    except Exception as e:
+        raise ValueError(f"Failed to upload file: {str(e)}") from e
