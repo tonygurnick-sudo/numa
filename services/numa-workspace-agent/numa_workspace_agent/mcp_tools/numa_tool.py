@@ -38,12 +38,13 @@ from numa_workspace_agent.mcp_tools.s3_helpers import (
     download_from_presigned_url,
     download_from_s3,
     ensure_file_in_s3,
+    upload_to_presigned_url,
 )
 
 logger = structlog.get_logger()
 
-# Upload size limit for KB uploads (matches knowledge_base.py)
-MAX_UPLOAD_SIZE = 4 * 1024 * 1024
+# Upload size limit for KB uploads (matches knowledge_base.py threshold for presigned URLs)
+PRESIGNED_URL_THRESHOLD = int(3.5 * 1024 * 1024)
 
 
 # ── Helper: build MCP response ──────────────────────────────────────────────
@@ -330,21 +331,11 @@ async def _handle_kb_upload(params: dict[str, Any]) -> dict[str, Any]:
         return _err(f"File not found: {file_param}")
 
     file_size = file_path.stat().st_size
-    if file_size > MAX_UPLOAD_SIZE:
-        size_mb = file_size / 1024 / 1024
-        return _err(
-            f"File too large ({size_mb:.1f} MB). Maximum is 4 MB. "
-            "Please upload large files via the Numa web interface."
-        )
+    is_large_file = file_size >= PRESIGNED_URL_THRESHOLD
 
     allowed_kbs, allowed_kb_ids, user_sub = _get_kb_config()
 
-    with open(file_path, "rb") as f:
-        content_base64 = base64.b64encode(f.read()).decode("utf-8")
-
     # kb_path is a folder prefix, not a destination filename.
-    # If the caller passed a filename-like path (has extension), strip it to avoid
-    # creating a spurious subdirectory (e.g. "file.md/file.md").
     kb_path = params.get("path", "")
     if kb_path and "." in Path(kb_path).name:
         kb_path = str(Path(kb_path).parent) if str(Path(kb_path).parent) != "." else ""
@@ -353,9 +344,14 @@ async def _handle_kb_upload(params: dict[str, Any]) -> dict[str, Any]:
         "filename": file_path.name,
         "kb_id": params.get("kb_id", "company"),
         "kb_path": kb_path,
-        "content_base64": content_base64,
         "size_bytes": file_size,
     }
+
+    if is_large_file:
+        lambda_params["get_presigned_url"] = True
+    else:
+        with open(file_path, "rb") as f:
+            lambda_params["content_base64"] = base64.b64encode(f.read()).decode("utf-8")
 
     # Inject approval fields for KB upload
     approval_key = "numa_knowledgeBases_upload"
@@ -372,6 +368,56 @@ async def _handle_kb_upload(params: dict[str, Any]) -> dict[str, Any]:
             "allowed_kbs": allowed_kb_ids,
         },
     )
+
+    # Handle approval denial/timeout from Lambda
+    if isinstance(result, dict) and result.get("status") in ("denied", "timeout"):
+        return _ok(json.dumps(result, indent=2))
+
+    # Perform streaming upload for large files
+    if is_large_file and isinstance(result, dict):
+        presigned_url = result.get("presigned_url")
+        if not presigned_url:
+            return _err(
+                "Backend failed to return a presigned URL for massive file streaming."
+            )
+
+        try:
+            upload_to_presigned_url(presigned_url, str(file_path))
+
+            # Finalize upload to trigger KB ingestion sidecars
+            finalize_params = {
+                "filename": lambda_params["filename"],
+                "kb_id": lambda_params["kb_id"],
+                "kb_path": lambda_params["kb_path"],
+                "size_bytes": lambda_params["size_bytes"],
+                "finalize_upload": True,
+            }
+            finalize_result = invoke_workspace_tool(
+                "add_to_kb",
+                finalize_params,
+                extra_event_fields={
+                    "user_sub": user_sub,
+                    "allowed_kbs": allowed_kb_ids,
+                },
+            )
+
+            if isinstance(finalize_result, dict) and finalize_result.get("status") in (
+                "denied",
+                "timeout",
+            ):
+                return _ok(json.dumps(finalize_result, indent=2))
+
+            if isinstance(finalize_result, dict):
+                result = finalize_result
+                size_mb = file_size / 1024 / 1024
+                # Prepend the stream success message
+                original_msg = result.get("message", "")
+                result["message"] = (
+                    f"File '{file_path.name}' uploaded successfully via S3 stream (size {size_mb:.1f} MB). {original_msg}"
+                )
+
+        except Exception as e:
+            return _err(f"Direct stream upload via S3 failed: {e}")
 
     return _ok(json.dumps(result, indent=2))
 

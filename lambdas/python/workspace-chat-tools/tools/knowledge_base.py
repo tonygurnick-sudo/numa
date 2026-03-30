@@ -907,14 +907,18 @@ def handle_add_to_kb(params: Dict[str, Any]) -> Dict[str, Any]:
     filename = _validate_filename(params.get("filename"), "filename")
     kb_id = _validate_kb_id(params.get("kb_id", "company"), "kb_id")
     kb_path = _validate_relative_path(params.get("kb_path", ""), "kb_path")
+    get_presigned_url = params.get("get_presigned_url", False)
+    finalize_upload = params.get("finalize_upload", False)
     content_base64 = params.get("content_base64")
     size_bytes = params.get("size_bytes", 0)
     allowed_kbs = params.get("__allowed_kbs", [])
     user_sub = _require_user_sub(params, "add_to_kb")
 
     # Validate required params
-    if not content_base64:
-        raise ValueError("Missing required parameter: content_base64")
+    if not content_base64 and not get_presigned_url and not finalize_upload:
+        raise ValueError(
+            "Missing required parameter: content_base64, get_presigned_url, or finalize_upload"
+        )
 
     if not DATA_BUCKET_NAME:
         raise ValueError("DATA_BUCKET_NAME not configured")
@@ -959,57 +963,95 @@ def handle_add_to_kb(params: Dict[str, Any]) -> Dict[str, Any]:
     else:
         s3_key = f"documents/{prefix_part}/{safe_filename}"
 
-    # Decode content
-    try:
-        content = base64.b64decode(content_base64)
-    except Exception as e:
-        raise ValueError(f"Invalid base64 content: {e}")
+    # Decode content if not using presigned URL streaming
+    if not get_presigned_url and not finalize_upload:
+        if not content_base64:
+            raise ValueError("content_base64 is required for synchronous uploads")
+        try:
+            content = base64.b64decode(str(content_base64))
+        except Exception as e:
+            raise ValueError(f"Invalid base64 content: {e}")
 
-    # Upload to S3
+    # Initialize S3 client
     s3_client = prm_client("s3", region=REGION)
     try:
         upload_time = datetime.utcnow().isoformat()
 
-        # Upload the file with metadata
-        s3_client.put_object(
-            Bucket=DATA_BUCKET_NAME,
-            Key=s3_key,
-            Body=content,
-            Metadata={
-                "kb_id": kb_id,
-                "uploaded_at": upload_time,
-                "tenant_id": CLIENT_NAME,
-                "uploader_id": user_sub,
-                "source": "workspace-agent",
-            },
-        )
+        # If writing directly, upload the file with metadata immediately
+        if not get_presigned_url and not finalize_upload:
+            s3_client.put_object(
+                Bucket=DATA_BUCKET_NAME,
+                Key=s3_key,
+                Body=content,
+                Metadata={
+                    "kb_id": kb_id,
+                    "uploaded_at": upload_time,
+                    "tenant_id": CLIENT_NAME,
+                    "uploader_id": user_sub,
+                    "source": "workspace-agent",
+                },
+            )
 
-        # Create metadata sidecar (for KB indexing)
-        metadata_key = f"{s3_key}.metadata.json"
-        metadata_content = {
-            "metadataAttributes": {
-                "kb_id": kb_id,
-                "uploaded_at": upload_time,
-                "tenant_id": CLIENT_NAME,
-                "uploader_id": user_sub,
-                "source": "workspace-agent",
+        if not get_presigned_url:
+            # Create metadata sidecar (for KB indexing)
+            metadata_key = f"{s3_key}.metadata.json"
+            metadata_content = {
+                "metadataAttributes": {
+                    "kb_id": kb_id,
+                    "uploaded_at": upload_time,
+                    "tenant_id": CLIENT_NAME,
+                    "uploader_id": user_sub,
+                    "source": "workspace-agent",
+                }
             }
-        }
-        s3_client.put_object(
-            Bucket=DATA_BUCKET_NAME,
-            Key=metadata_key,
-            Body=json.dumps(metadata_content).encode("utf-8"),
-            ContentType="application/json",
-        )
+            s3_client.put_object(
+                Bucket=DATA_BUCKET_NAME,
+                Key=metadata_key,
+                Body=json.dumps(metadata_content).encode("utf-8"),
+                ContentType="application/json",
+            )
 
-        logger.info(
-            "File uploaded to KB",
-            filename=filename,
-            kb_id=kb_id,
-            s3_key=s3_key,
-            size_bytes=size_bytes,
-            user_sub=user_sub[:8] + "...",
-        )
+            logger.info(
+                "File metadata uploaded to KB",
+                filename=filename,
+                kb_id=kb_id,
+                s3_key=s3_key,
+                size_bytes=size_bytes,
+                user_sub=user_sub[:8] + "...",
+                is_presigned=get_presigned_url,
+                is_finalized=finalize_upload,
+            )
+
+        if get_presigned_url:
+            presigned_url = s3_client.generate_presigned_url(
+                ClientMethod="put_object",
+                Params={
+                    "Bucket": DATA_BUCKET_NAME,
+                    "Key": s3_key,
+                    "ContentType": "application/octet-stream",
+                },
+                ExpiresIn=PRESIGNED_URL_EXPIRY,
+                HttpMethod="PUT",
+            )
+            return {
+                "message": f"Presigned URL generated for '{filename}'",
+                "presigned_url": presigned_url,
+                "s3_uri": f"s3://{DATA_BUCKET_NAME}/{s3_key}",
+                "kb_id": kb_id,
+                "filename": filename,
+                "size_bytes": size_bytes,
+                "note": "Awaiting streaming upload to presigned URL.",
+            }
+
+        if finalize_upload:
+            return {
+                "message": f"Upload finalized. File '{filename}' successfully recorded in KB '{kb_id}'",
+                "s3_uri": f"s3://{DATA_BUCKET_NAME}/{s3_key}",
+                "kb_id": kb_id,
+                "filename": filename,
+                "size_bytes": size_bytes,
+                "note": "The file will be indexed and searchable within ~30 minutes.",
+            }
 
         return {
             "message": f"File '{filename}' uploaded successfully to KB '{kb_id}'",
