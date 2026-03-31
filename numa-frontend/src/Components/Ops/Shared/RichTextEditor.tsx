@@ -9,6 +9,7 @@ interface RichTextEditorProps {
   placeholder?: string;
   minHeight?: number;
   disabled?: boolean;
+  onFileAttach?: (file: File) => void;
 }
 
 export interface RichTextEditorHandle {
@@ -37,12 +38,22 @@ type FormatCmd =
  * Content is stored as HTML.
  */
 export const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(function RichTextEditor(
-  { value, onSave, onChange, onImageUpload, placeholder = 'Add a description…', minHeight = 120, disabled = false },
+  {
+    value,
+    onSave,
+    onChange,
+    onImageUpload,
+    placeholder = 'Add a description…',
+    minHeight = 120,
+    disabled = false,
+    onFileAttach,
+  },
   ref
 ) {
   const { t } = useTranslation('ops');
   const editorRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const attachInputRef = useRef<HTMLInputElement>(null);
   const [isUploadingImage, setIsUploadingImage] = React.useState(false);
   // Internal state for HTML vs Rich text mode
   const [isHtmlMode, setIsHtmlMode] = React.useState(false);
@@ -108,6 +119,52 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorPro
     const url = window.prompt('Enter URL:', 'https://');
     if (url) exec('createLink', url);
   }, [exec]);
+
+  const handleTableInsert = useCallback(() => {
+    if (disabled) return;
+    const tableHtml =
+      '<table style="border-collapse: collapse; width: 100%;">' +
+      '<tr>' +
+      '<td style="border: 1px solid #d1d5db; padding: 8px;">&nbsp;</td>' +
+      '<td style="border: 1px solid #d1d5db; padding: 8px;">&nbsp;</td>' +
+      '<td style="border: 1px solid #d1d5db; padding: 8px;">&nbsp;</td>' +
+      '</tr>' +
+      '<tr>' +
+      '<td style="border: 1px solid #d1d5db; padding: 8px;">&nbsp;</td>' +
+      '<td style="border: 1px solid #d1d5db; padding: 8px;">&nbsp;</td>' +
+      '<td style="border: 1px solid #d1d5db; padding: 8px;">&nbsp;</td>' +
+      '</tr>' +
+      '</table><br>';
+    document.execCommand('insertHTML', false, tableHtml);
+  }, [disabled]);
+
+  const _handleImageInsert = useCallback(() => {
+    if (disabled) return;
+    const url = window.prompt('Enter image URL:', 'https://');
+    if (url) document.execCommand('insertImage', false, url);
+  }, [disabled]);
+
+  const handleFileAttach = useCallback(() => {
+    if (disabled) return;
+    attachInputRef.current?.click();
+  }, [disabled]);
+
+  const handleFileSelected = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      if (onFileAttach) {
+        onFileAttach(file);
+      } else {
+        const badgeHtml = `<span style="display: inline-block; background: #e5e7eb; color: #374151; padding: 2px 8px; border-radius: 4px; font-size: 0.8rem; margin: 0 2px;">📎 ${file.name}</span>&nbsp;`;
+        editorRef.current?.focus();
+        document.execCommand('insertHTML', false, badgeHtml);
+      }
+      // Reset so the same file can be re-selected
+      e.target.value = '';
+    },
+    [onFileAttach]
+  );
 
   const saveSelection = useCallback(() => {
     const sel = window.getSelection();
@@ -223,33 +280,14 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorPro
   const toolbarBtn = (title: string, content: React.ReactNode, onClick: () => void) => (
     <button
       type="button"
+      className="ops-editor-toolbar-btn"
       title={title}
+      disabled={disabled || isHtmlMode}
       onMouseDown={(e) => {
         e.preventDefault(); // Don't steal focus from editor
         onClick();
       }}
-      disabled={disabled || isHtmlMode}
-      style={{
-        display: 'inline-flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        width: 28,
-        height: 28,
-        border: 'none',
-        borderRadius: 4,
-        background: 'transparent',
-        color: '#374151',
-        fontSize: '0.8rem',
-        cursor: disabled || isHtmlMode ? 'default' : 'pointer',
-        fontFamily: 'inherit',
-        opacity: disabled || isHtmlMode ? 0.4 : 1,
-      }}
-      onMouseEnter={(e) => {
-        if (!disabled && !isHtmlMode) (e.currentTarget as HTMLButtonElement).style.backgroundColor = '#e5e7eb';
-      }}
-      onMouseLeave={(e) => {
-        (e.currentTarget as HTMLButtonElement).style.backgroundColor = 'transparent';
-      }}
+      style={{ fontSize: '0.8rem', fontFamily: 'inherit' }}
     >
       {content}
     </button>
@@ -404,6 +442,9 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorPro
           handleInsertImage
         )}
         {toolbarBtn('Clear formatting', <i className="bi bi-type" />, () => exec('removeFormat'))}
+        {divider}
+        {toolbarBtn('Insert table', <i className="bi bi-table" />, handleTableInsert)}
+        {onFileAttach && toolbarBtn('Attach file', <i className="bi bi-paperclip" />, handleFileAttach)}
 
         <div style={{ flexGrow: 1 }} />
         <button
@@ -439,6 +480,9 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorPro
         accept="image/*"
         style={{ display: 'none' }}
       />
+
+      {/* Hidden file input for file attach */}
+      <input ref={attachInputRef} type="file" style={{ display: 'none' }} onChange={handleFileSelected} />
 
       {/* Editable content area */}
       <div style={{ position: 'relative', minHeight }}>
@@ -502,6 +546,9 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorPro
         .rich-text-editor-content h1 { font-size: 1.4em; font-weight: 700; margin: 0.3em 0 0.2em; }
         .rich-text-editor-content h2 { font-size: 1.2em; font-weight: 600; margin: 0.3em 0 0.2em; }
         .rich-text-editor-content h3 { font-size: 1.05em; font-weight: 600; margin: 0.2em 0 0.15em; }
+        .rich-text-editor-content table { border-collapse: collapse; width: 100%; margin: 0.4em 0; }
+        .rich-text-editor-content td, .rich-text-editor-content th { border: 1px solid #d1d5db; padding: 8px; }
+        .rich-text-editor-content img { max-width: 100%; height: auto; }
       `}</style>
     </div>
   );
@@ -537,6 +584,9 @@ export function RichTextDisplay({ html, placeholder }: { html: string; placehold
           .rich-text-editor-content h1 { font-size: 1.4em; font-weight: 700; margin: 0.3em 0 0.2em; }
           .rich-text-editor-content h2 { font-size: 1.2em; font-weight: 600; margin: 0.3em 0 0.2em; }
           .rich-text-editor-content h3 { font-size: 1.05em; font-weight: 600; margin: 0.2em 0 0.15em; }
+          .rich-text-editor-content table { border-collapse: collapse; width: 100%; margin: 0.4em 0; }
+          .rich-text-editor-content td, .rich-text-editor-content th { border: 1px solid #d1d5db; padding: 8px; }
+          .rich-text-editor-content img { max-width: 100%; height: auto; }
         `}</style>
       </>
     );

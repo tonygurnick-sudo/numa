@@ -57,7 +57,7 @@ export function TicketSuccessModal({
         )}
       </Modal.Body>
 
-      <Modal.Footer className="d-flex justify-content-center gap-2 flex-wrap">
+      <Modal.Footer className="d-flex justify-content-center gap-2 flex-wrap" style={{ backgroundColor: '#f9fafb' }}>
         <Button variant="outline-primary" size="sm" onClick={onViewOnBoard}>
           {t('common.viewOnBoard')}
         </Button>

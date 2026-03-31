@@ -13,6 +13,7 @@ import {
   PointerSensor,
 } from '@dnd-kit/core';
 import { useNumaRequest } from '../../../Providers/NumaRequestContext';
+import { useAuth } from '../../../Providers/AuthProvider';
 import { useOps } from '../OpsContext';
 import * as OpsService from '../../../Services/OpsService';
 import { TicketDetailModal } from '../Modals/TicketDetailModal';
@@ -507,6 +508,7 @@ function FilterDropdown({ label, value, options, onChange, allLabel }: FilterDro
 const BacklogView = () => {
   const { t } = useTranslation('ops');
   const { numaPost, numaPut, numaDelete } = useNumaRequest();
+  const { user } = useAuth();
   const {
     teamData,
     workUnits,
@@ -517,6 +519,7 @@ const BacklogView = () => {
     refreshTeam,
     setActiveZone,
     setTickets,
+    myWorkFilter,
   } = useOps();
 
   // ── Staff lookup map for avatars ────────────────────────────────
@@ -624,11 +627,15 @@ const BacklogView = () => {
 
   const firstBacklogZoneId = useMemo(() => zones.find((z) => z.zoneType === 'backlog')?.id ?? '', [zones]);
 
-  // ── All tickets in backlog zones (exclude archived) ────────
-  const backlogTickets = useMemo(
-    () => tickets.filter((tk) => backlogZoneIds.has(tk.zoneId) && !tk.archived),
-    [tickets, backlogZoneIds]
-  );
+  // ── All tickets in backlog zones (exclude archived, apply my-work filter) ────────
+  const backlogTickets = useMemo(() => {
+    let result = tickets.filter((tk) => backlogZoneIds.has(tk.zoneId) && !tk.archived);
+    const userSub = user?.decoded_tokens?.idToken?.sub;
+    if (myWorkFilter && userSub) {
+      result = result.filter((tk) => tk.assigneeId && tk.assigneeId === userSub);
+    }
+    return result;
+  }, [tickets, backlogZoneIds, myWorkFilter, user?.decoded_tokens?.idToken?.sub]);
 
   // ── Filtered tickets (search + assignee + type + priority) ────
   const filteredTickets = useMemo(() => {

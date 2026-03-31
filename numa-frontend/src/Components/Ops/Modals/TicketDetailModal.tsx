@@ -16,6 +16,8 @@ import type {
   FieldDefinition,
   Customer,
   Supplier,
+  AuditEntry,
+  AuditAction,
 } from '../../../types/ops';
 import { CommentSection } from '../Shared/CommentSection';
 import { LinkedTicketsSection } from '../Shared/LinkedTicketsSection';
@@ -117,6 +119,23 @@ function formatCycleTime(startStr: string | null | undefined, endStr: string | n
   return `${String(minutes)}m`;
 }
 
+// ─── Audit Icon Map ─────────────────────────────────────────────────────────
+
+const AUDIT_ICON_MAP: Record<AuditAction | 'default', { icon: string; color: string }> = {
+  created: { icon: 'bi-plus-circle', color: '#198754' },
+  updated: { icon: 'bi-pencil', color: '#0d6efd' },
+  moved: { icon: 'bi-arrows-move', color: '#6f42c1' },
+  commented: { icon: 'bi-chat', color: '#6c757d' },
+  linked: { icon: 'bi-link-45deg', color: '#6610f2' },
+  deleted: { icon: 'bi-trash', color: '#dc3545' },
+  restored: { icon: 'bi-arrow-counterclockwise', color: '#198754' },
+  default: { icon: 'bi-clock-history', color: '#6c757d' },
+};
+
+function getAuditIcon(action: string): { icon: string; color: string } {
+  return AUDIT_ICON_MAP[action as AuditAction] ?? AUDIT_ICON_MAP.default;
+}
+
 // ─── Component ──────────────────────────────────────────────────────────────
 
 /**
@@ -165,6 +184,11 @@ export function TicketDetailModal({
 
   // ── Delete confirmation ─────────────────────────────────────────────────
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+
+  // ── History panel ────────────────────────────────────────────────────
+  const [showHistory, setShowHistory] = useState(false);
+  const [auditEntries, setAuditEntries] = useState<AuditEntry[]>([]);
+  const [loadingHistory, setLoadingHistory] = useState(false);
 
   // ── Share / copy link feedback ────────────────────────────────────────
   const [copied, setCopied] = useState(false);
@@ -223,6 +247,8 @@ export function TicketDetailModal({
       setError(null);
       setCustomers([]);
       setSuppliers([]);
+      setShowHistory(false);
+      setAuditEntries([]);
     }
   }, [show, ticketId, loadTicket, numaGet]);
 
@@ -377,6 +403,26 @@ export function TicketDetailModal({
   const reloadTicket = useCallback(() => {
     void loadTicket();
   }, [loadTicket]);
+
+  // ── Load audit history ───────────────────────────────────────────────
+
+  const loadHistory = useCallback(async () => {
+    if (!ticketId) return;
+    setLoadingHistory(true);
+    try {
+      const entries = await OpsService.listAuditEntries(numaGet, ticketId);
+      setAuditEntries(entries);
+    } catch (err) {
+      console.error('[TicketDetailModal] Failed to load audit history', err);
+    } finally {
+      setLoadingHistory(false);
+    }
+  }, [numaGet, ticketId]);
+
+  const handleOpenHistory = () => {
+    setShowHistory(true);
+    void loadHistory();
+  };
 
   // ── Custom field update handler ───────────────────────────────────────
 
@@ -539,6 +585,24 @@ export function TicketDetailModal({
             </optgroup>
           ))}
         </Form.Select>
+
+        {/* Title / Summary */}
+        <div style={{ marginTop: 16, marginBottom: 12 }}>
+          <div className="ticket-sidebar-field-label">{t('tickets.title')}</div>
+          <Form.Control
+            size="sm"
+            type="text"
+            value={titleDraft}
+            onChange={(e) => setTitleDraft(e.target.value)}
+            onBlur={() => {
+              if (titleDraft.trim() && titleDraft !== ticket.title) void saveTitle();
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') void saveTitle();
+            }}
+            style={{ fontSize: '0.85rem' }}
+          />
+        </div>
 
         {/* Priority */}
         <div style={{ marginTop: 16, marginBottom: 12 }}>
@@ -1035,6 +1099,15 @@ export function TicketDetailModal({
                   <i className="bi bi-trash me-1" />
                   {t('common.delete')}
                 </Button>
+                <Button
+                  variant="outline-secondary"
+                  size="sm"
+                  onClick={handleOpenHistory}
+                  style={{ fontSize: '0.8rem' }}
+                >
+                  <i className="bi bi-clock-history me-1" />
+                  {t('tickets.history')}
+                </Button>
               </div>
               <div className="d-flex align-items-center gap-2">
                 <Button variant="outline-secondary" size="sm" onClick={onHide} style={{ fontSize: '0.8rem' }}>
@@ -1070,6 +1143,106 @@ export function TicketDetailModal({
           typeToConfirm={ticket.displayId}
         />
       )}
+
+      {/* History overlay modal */}
+      <Modal show={showHistory} onHide={() => setShowHistory(false)} size="lg" centered>
+        <Modal.Header closeButton>
+          <Modal.Title style={{ fontSize: '1.1rem' }}>{t('tickets.ticketHistory')}</Modal.Title>
+        </Modal.Header>
+        <Modal.Body style={{ maxHeight: '60vh', overflowY: 'auto' }}>
+          {loadingHistory && (
+            <div className="d-flex justify-content-center py-4">
+              <Spinner animation="border" />
+            </div>
+          )}
+          {!loadingHistory && auditEntries.length === 0 && (
+            <div className="text-center py-5 text-muted">
+              <i className="bi bi-clock-history d-block mb-2" style={{ fontSize: '2rem' }} />
+              {t('tickets.noHistoryYet')}
+            </div>
+          )}
+          {!loadingHistory && auditEntries.length > 0 && (
+            <div className="d-flex flex-column gap-3">
+              {auditEntries.map((entry) => {
+                const { icon, color } = getAuditIcon(entry.action);
+                const actionKey = `tickets.historyAction.${entry.action}` as const;
+                const actionLabel = t(actionKey, entry.action);
+
+                // Build change descriptions
+                const changeDescriptions: string[] = [];
+                if (entry.changes && typeof entry.changes === 'object') {
+                  // changes can be Record<string, { from, to }> or AuditChange[]
+                  const changesObj = Array.isArray(entry.changes)
+                    ? entry.changes
+                    : Object.entries(entry.changes).map(([field, val]) => ({
+                        field,
+                        from: (val as { from?: unknown })?.from,
+                        to: (val as { to?: unknown })?.to,
+                      }));
+
+                  for (const change of changesObj) {
+                    const fieldName = String(change.field);
+                    const fromVal = change.from;
+                    const toVal = change.to;
+
+                    if (fromVal != null && toVal != null) {
+                      changeDescriptions.push(
+                        t('tickets.historyFieldChange', {
+                          field: fieldName,
+                          from: String(fromVal),
+                          to: String(toVal),
+                        })
+                      );
+                    } else if (toVal != null) {
+                      changeDescriptions.push(t('tickets.historyFieldSet', { field: fieldName, to: String(toVal) }));
+                    } else if (fromVal != null) {
+                      changeDescriptions.push(t('tickets.historyFieldCleared', { field: fieldName }));
+                    }
+                  }
+                }
+
+                return (
+                  <div key={entry.id} className="d-flex align-items-start gap-3">
+                    <div
+                      className="d-flex align-items-center justify-content-center flex-shrink-0"
+                      style={{
+                        width: 32,
+                        height: 32,
+                        borderRadius: '50%',
+                        backgroundColor: `${color}15`,
+                        color,
+                      }}
+                    >
+                      <i className={`bi ${icon}`} style={{ fontSize: '0.9rem' }} />
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div className="d-flex align-items-center gap-2" style={{ fontSize: '0.85rem' }}>
+                        <span className="fw-semibold">{actionLabel}</span>
+                        <span className="text-muted" style={{ fontSize: '0.75rem' }}>
+                          {relativeTimeShort(entry.timestamp)}
+                        </span>
+                      </div>
+                      {changeDescriptions.length > 0 && (
+                        <div style={{ fontSize: '0.8rem', color: '#6b7280', marginTop: 2 }}>
+                          {changeDescriptions.map((desc, i) => (
+                            <div key={i}>{desc}</div>
+                          ))}
+                        </div>
+                      )}
+                      {entry.userName && (
+                        <div className="text-muted" style={{ fontSize: '0.75rem', marginTop: 2 }}>
+                          <i className="bi bi-person me-1" />
+                          {entry.userName}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </Modal.Body>
+      </Modal>
     </>
   );
 }

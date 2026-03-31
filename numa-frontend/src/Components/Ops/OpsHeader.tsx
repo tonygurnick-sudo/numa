@@ -14,6 +14,8 @@ import { CreateBoardWizard } from './Modals/CreateBoardWizard';
 import BoardSelector from './BoardSelector';
 import ZoneSprintStrip from './ZoneSprintStrip';
 import AllBoardsStrip from './AllBoardsStrip';
+import { useActivityBadgeCount } from './useActivityBadgeCount';
+import { StaffAvatar } from './Shared/StaffAvatar';
 import type { Ticket } from '../../types/ops';
 import type { OpsTopView } from './useOpsData';
 import './BoardView/kanban.css';
@@ -30,9 +32,15 @@ const OPS_TOP_VIEWS: { key: OpsTopView; labelKey: string; icon: string }[] = [
 
 // ── Component ────────────────────────────────────────────────────────────────
 
-const OpsHeader = () => {
+type OpsHeaderProps = {
+  activityOpen?: boolean;
+  onToggleActivity?: () => void;
+};
+
+const OpsHeader = ({ activityOpen, onToggleActivity }: OpsHeaderProps = {}) => {
   const { t } = useTranslation('ops');
   const { user } = useAuth();
+  const activityBadgeCount = useActivityBadgeCount();
   const { branding } = useBranding();
   const rawNavLogo = branding.resolvedAssets?.logoNav || branding.assets?.logoNav || branding.logo || DefaultLogo;
   const navLogo = useBrandingAsset(rawNavLogo, DefaultLogo);
@@ -47,6 +55,9 @@ const OpsHeader = () => {
     refreshTeam,
     refreshTeams,
     refreshConfig,
+    config,
+    myWorkFilter,
+    setMyWorkFilter,
   } = useOps();
 
   // ── Modal state ──────────────────────────────────────────────────────────
@@ -63,135 +74,221 @@ const OpsHeader = () => {
 
   return (
     <>
-      {/* ── Row 1: Title + Team Selector | Nav Tabs + Actions ── */}
-      <div
-        className="d-flex align-items-center justify-content-between px-2 px-md-3 py-2 border-bottom bg-white flex-wrap"
-        style={{ minHeight: 64 }}
-      >
-        {/* Left: Page Title */}
-        <div className="d-flex align-items-center gap-2 gap-md-4">
-          <div
-            className="d-flex align-items-center gap-2"
-            style={{ cursor: canManage ? 'pointer' : 'default' }}
-            onClick={() => {
-              if (canManage) setTopView('home');
-            }}
-            role={canManage ? 'button' : undefined}
-            tabIndex={canManage ? 0 : undefined}
-            onKeyDown={
-              canManage
-                ? (e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                      e.preventDefault();
-                      setTopView('home');
-                    }
-                  }
-                : undefined
-            }
-          >
-            <img src={navLogo} alt={t('title')} style={{ height: 40, width: 40, objectFit: 'contain' }} />
-            <div className="d-flex flex-column lh-sm">
-              <span className="fw-bold text-dark" style={{ fontSize: '1.15rem' }}>
-                {t('title')}
-              </span>
-              <span className="text-muted d-none d-lg-inline" style={{ fontSize: '0.78rem' }}>
-                {t('subtitle')}
-              </span>
-            </div>
-          </div>
-        </div>
-
-        {/* Right: Nav tabs + actions grouped together */}
-        <div className="d-flex align-items-center gap-2 gap-md-3">
-          <div className="ops-nav-tabs d-flex flex-wrap" style={{ paddingBottom: 4 }}>
-            {OPS_TOP_VIEWS.map(({ key, labelKey, icon }) => (
-              <button
-                key={key}
-                type="button"
-                className={`ops-nav-tab ${topView === key ? 'active' : ''}`}
-                onClick={() => setTopView(key)}
-              >
-                <i className={`bi ${icon}`} />
-                {t(labelKey)}
-              </button>
-            ))}
-          </div>
-
-          {canManage && (
-            <button
-              type="button"
-              className="btn btn-link text-muted p-1"
-              onClick={() => setShowGlobalSettings(true)}
-              title={t('settings.title')}
-              style={{ fontSize: '1.1rem' }}
-            >
-              <i className="bi bi-gear" />
-            </button>
-          )}
-        </div>
-      </div>
-
-      {/* ── Row 2: Team selector + Zone/Sprint strip (Board view only) ── */}
-      {topView === 'board' && (
+      <div className="ops-header-sticky">
+        {/* ── Row 1: Title + Team Selector | Nav Tabs + Actions ── */}
         <div
-          className="d-flex align-items-center px-3 gap-3 border-bottom bg-white"
-          style={{ minHeight: 54, padding: '10px 0' }}
+          className="d-flex align-items-center justify-content-between px-2 px-md-3 py-2 border-bottom bg-white flex-wrap"
+          style={{ minHeight: 64 }}
         >
-          {/* Board / All Boards selector */}
-          {teams.length > 0 && (
-            <div className="d-flex align-items-center gap-3 flex-shrink-0">
-              <BoardSelector
-                currentBoard={teams.find((tm) => tm.id === selectedTeamId) ?? null}
-                boards={teams}
-                isAllBoards={boardViewMode === 'allTeams'}
-                onSelectBoard={(teamId) => {
-                  selectTeam(teamId);
-                  setBoardViewMode('singleTeam');
-                }}
-                onSelectAllBoards={() => setBoardViewMode('allTeams')}
-                onCreateBoard={() => setShowCreateTeam(true)}
-              />
-              {/* Board settings — next to board name in single-board mode */}
-              {boardViewMode === 'singleTeam' && selectedTeamId && canManage && (
-                <button
-                  type="button"
-                  className="btn btn-link text-muted p-0"
-                  onClick={() => setShowBoardSettings(true)}
-                  title={t('boards.settings')}
-                  style={{ fontSize: '0.95rem' }}
-                >
-                  <i className="bi bi-sliders" />
-                </button>
-              )}
-              <div className="vr align-self-stretch my-2" />
-            </div>
-          )}
-
-          {boardViewMode === 'singleTeam' ? (
-            <ZoneSprintStrip />
-          ) : (
-            <AllBoardsStrip
-              canManage={canManage}
-              onOpenTeamSettings={(teamId) => {
-                selectTeam(teamId);
-                setShowBoardSettings(true);
+          {/* Left: Page Title */}
+          <div className="d-flex align-items-center gap-2 gap-md-4">
+            <div
+              className="d-flex align-items-center gap-2"
+              style={{ cursor: canManage ? 'pointer' : 'default' }}
+              onClick={() => {
+                if (canManage) setTopView('home');
               }}
-            />
-          )}
+              role={canManage ? 'button' : undefined}
+              tabIndex={canManage ? 0 : undefined}
+              onKeyDown={
+                canManage
+                  ? (e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        setTopView('home');
+                      }
+                    }
+                  : undefined
+              }
+            >
+              <img src={navLogo} alt={t('title')} style={{ height: 40, width: 40, objectFit: 'contain' }} />
+              <div className="d-flex flex-column lh-sm">
+                <span className="fw-bold text-dark" style={{ fontSize: '1.15rem' }}>
+                  {t('title')}
+                </span>
+                <span className="text-muted d-none d-lg-inline" style={{ fontSize: '0.78rem' }}>
+                  {t('subtitle')}
+                </span>
+              </div>
+            </div>
+          </div>
 
-          {/* New Ticket button — right side of board bar */}
-          <button
-            type="button"
-            className="btn btn-primary rounded-pill d-flex align-items-center justify-content-center flex-shrink-0 ms-auto"
-            style={{ fontSize: '0.85rem', padding: '7px 16px' }}
-            onClick={() => setShowCreateTicket(true)}
-          >
-            <i className="bi bi-plus-lg me-0 me-md-1" />
-            <span className="d-none d-md-inline">{t('tickets.newTicket')}</span>
-          </button>
+          {/* Right: Nav tabs + actions grouped together */}
+          <div className="d-flex align-items-center gap-2 gap-md-3">
+            <div className="ops-nav-tabs d-flex flex-wrap" style={{ paddingBottom: 4 }}>
+              {OPS_TOP_VIEWS.map(({ key, labelKey, icon }) => (
+                <button
+                  key={key}
+                  type="button"
+                  className={`ops-nav-tab ${topView === key ? 'active' : ''}`}
+                  onClick={() => setTopView(key)}
+                >
+                  <i className={`bi ${icon}`} />
+                  {t(labelKey)}
+                </button>
+              ))}
+            </div>
+
+            {onToggleActivity && (
+              <button
+                type="button"
+                className="btn btn-link text-muted p-1 position-relative"
+                onClick={onToggleActivity}
+                title={t('activity.title')}
+                style={{ fontSize: '1.1rem' }}
+              >
+                <i className={`bi ${activityOpen ? 'bi-bell-fill' : 'bi-bell'}`} />
+                {activityBadgeCount > 0 && !activityOpen && (
+                  <span className="ops-activity-badge">{activityBadgeCount > 99 ? '99+' : activityBadgeCount}</span>
+                )}
+              </button>
+            )}
+
+            {canManage && (
+              <button
+                type="button"
+                className="btn btn-link text-muted p-1"
+                onClick={() => setShowGlobalSettings(true)}
+                title={t('settings.title')}
+                style={{ fontSize: '1.1rem' }}
+              >
+                <i className="bi bi-gear" />
+              </button>
+            )}
+          </div>
         </div>
-      )}
 
+        {/* ── Row 2: Team selector + Zone/Sprint strip (Board view only) ── */}
+        {topView === 'board' && (
+          <div
+            className="d-flex align-items-center px-3 gap-3 border-bottom bg-white"
+            style={{ minHeight: 54, padding: '10px 0' }}
+          >
+            {/* Board / All Boards selector */}
+            {teams.length > 0 && (
+              <div className="d-flex align-items-center gap-3 flex-shrink-0">
+                <BoardSelector
+                  currentBoard={teams.find((tm) => tm.id === selectedTeamId) ?? null}
+                  boards={teams}
+                  isAllBoards={boardViewMode === 'allTeams'}
+                  onSelectBoard={(teamId) => {
+                    selectTeam(teamId);
+                    setBoardViewMode('singleTeam');
+                  }}
+                  onSelectAllBoards={() => setBoardViewMode('allTeams')}
+                  onCreateBoard={() => setShowCreateTeam(true)}
+                />
+                {/* Board settings — next to board name in single-board mode */}
+                {boardViewMode === 'singleTeam' && selectedTeamId && canManage && (
+                  <button
+                    type="button"
+                    className="btn btn-link text-muted p-0"
+                    onClick={() => setShowBoardSettings(true)}
+                    title={t('boards.settings')}
+                    style={{ fontSize: '0.95rem' }}
+                  >
+                    <i className="bi bi-sliders" />
+                  </button>
+                )}
+
+                {/* Board member avatars */}
+                {boardViewMode === 'singleTeam' &&
+                  selectedTeamId &&
+                  config?.staff &&
+                  (() => {
+                    const team = teams.find((tm) => tm.id === selectedTeamId);
+                    if (!team) return null;
+                    const isAll = team.accessControl?.mode !== 'specific';
+                    const memberIdSet = new Set(
+                      isAll
+                        ? config.staff.filter((s) => s.isActive).map((s) => s.id)
+                        : (team.accessControl?.users ?? [])
+                    );
+                    if (team.createdBy) memberIdSet.add(team.createdBy);
+                    const members = [...memberIdSet].map((id) => config.staff.find((s) => s.id === id)).filter(Boolean);
+                    const MAX_SHOW = 4;
+                    const visible = members.slice(0, MAX_SHOW);
+                    const overflow = members.length - MAX_SHOW;
+                    if (members.length === 0) return null;
+                    return (
+                      <button
+                        type="button"
+                        className="d-flex align-items-center border-0 bg-transparent p-0"
+                        style={{ cursor: 'pointer' }}
+                        onClick={() => setShowBoardSettings(true)}
+                        title={isAll ? t('teams.allUsers') : `${members.length} ${t('teams.selectMembers')}`}
+                      >
+                        <div className="d-flex" style={{ marginLeft: 4 }}>
+                          {visible.map((staff, i) => (
+                            <div
+                              key={staff!.id}
+                              style={{ marginLeft: i > 0 ? -6 : 0, zIndex: MAX_SHOW - i, position: 'relative' }}
+                            >
+                              <StaffAvatar staff={staff!} size={26} />
+                            </div>
+                          ))}
+                          {overflow > 0 && (
+                            <div
+                              className="d-flex align-items-center justify-content-center rounded-circle text-muted"
+                              style={{
+                                width: 26,
+                                height: 26,
+                                fontSize: '0.65rem',
+                                fontWeight: 600,
+                                backgroundColor: '#e5e7eb',
+                                marginLeft: -6,
+                                zIndex: 0,
+                                position: 'relative',
+                              }}
+                            >
+                              +{overflow}
+                            </div>
+                          )}
+                        </div>
+                      </button>
+                    );
+                  })()}
+
+                <div className="vr align-self-stretch my-2" />
+              </div>
+            )}
+
+            {boardViewMode === 'singleTeam' ? (
+              <ZoneSprintStrip />
+            ) : (
+              <AllBoardsStrip
+                canManage={canManage}
+                onOpenTeamSettings={(teamId) => {
+                  selectTeam(teamId);
+                  setShowBoardSettings(true);
+                }}
+              />
+            )}
+
+            {/* My Work toggle + New Ticket button — right side of board bar */}
+            <div className="d-flex align-items-center gap-2 ms-auto flex-shrink-0">
+              <button
+                type="button"
+                className={`ops-my-work-toggle${myWorkFilter ? ' ops-my-work-toggle--active' : ''}`}
+                onClick={() => setMyWorkFilter(!myWorkFilter)}
+                title={t('common.myWork')}
+              >
+                <i className="bi bi-person-check" />
+                <span className="d-none d-sm-inline">{t('common.myWork')}</span>
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary rounded-pill d-flex align-items-center justify-content-center"
+                style={{ fontSize: '0.9rem', padding: '8px 18px' }}
+                onClick={() => setShowCreateTicket(true)}
+              >
+                <i className="bi bi-plus-lg me-0 me-md-1" />
+                <span className="d-none d-md-inline">{t('tickets.newTicket')}</span>
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
       {/* ── Modals ── */}
       <CreateTicketModal
         show={showCreateTicket}

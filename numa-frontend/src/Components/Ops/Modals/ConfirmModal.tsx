@@ -70,7 +70,7 @@ export function ConfirmModal({
         )}
       </Modal.Body>
 
-      <Modal.Footer>
+      <Modal.Footer style={{ backgroundColor: '#f9fafb' }}>
         <Button variant="secondary" onClick={onHide}>
           {t('confirm.cancel')}
         </Button>

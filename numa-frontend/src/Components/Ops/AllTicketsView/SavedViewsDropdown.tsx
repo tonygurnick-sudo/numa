@@ -1,127 +1,292 @@
-import React, { useState, useCallback } from 'react';
-import Dropdown from 'react-bootstrap/Dropdown';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
+import Modal from 'react-bootstrap/Modal';
 import Form from 'react-bootstrap/Form';
 import Button from 'react-bootstrap/Button';
-import Badge from 'react-bootstrap/Badge';
 import { useTranslation } from 'react-i18next';
 import type { SavedFilter } from '../../../types/ops';
 
-// ─── Types ──────────────────────────────────────────────────────────────────
+// ─── Save View Modal ───────────────────────────────────────────────────────
 
-interface SavedViewsDropdownProps {
-  currentViewName?: string;
-  isModified: boolean;
+interface SaveViewModalProps {
+  show: boolean;
+  onHide: () => void;
   onSave: (name: string) => void;
-  onLoad: (filter: SavedFilter) => void;
-  onUpdate: () => void;
-  onClear: () => void;
-  savedViews: SavedFilter[];
+  currentViewName?: string;
+  onUpdate?: () => void;
+  /** Summary of what's being saved */
+  viewSummary: {
+    scope: string;
+    columnCount: number;
+    sortColumn: string;
+    sortDirection: string;
+    filterCount: number;
+    filterDetails: { label: string; value: string }[];
+  };
 }
 
-// ─── Component ──────────────────────────────────────────────────────────────
-
-export function SavedViewsDropdown({
-  currentViewName,
-  isModified,
+export function SaveViewModal({
+  show,
+  onHide,
   onSave,
-  onLoad,
+  currentViewName,
   onUpdate,
-  onClear,
-  savedViews,
-}: SavedViewsDropdownProps): React.JSX.Element {
+  viewSummary,
+}: SaveViewModalProps): React.JSX.Element {
   const { t } = useTranslation('ops');
-  const [showSaveInput, setShowSaveInput] = useState(false);
-  const [newViewName, setNewViewName] = useState('');
+  const [mode, setMode] = useState<'create' | 'update'>(() => (currentViewName ? 'update' : 'create'));
+  const [newName, setNewName] = useState('');
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  // Reset state when modal opens
+  useEffect(() => {
+    if (show) {
+      setMode(currentViewName ? 'update' : 'create');
+      setNewName('');
+    }
+  }, [show, currentViewName]);
+
+  // Focus input when switching to create mode
+  useEffect(() => {
+    if (show && mode === 'create') {
+      setTimeout(() => inputRef.current?.focus(), 100);
+    }
+  }, [show, mode]);
 
   const handleSave = useCallback(() => {
-    const trimmed = newViewName.trim();
-    if (trimmed) {
-      onSave(trimmed);
-      setNewViewName('');
-      setShowSaveInput(false);
+    if (mode === 'update' && currentViewName && onUpdate) {
+      onUpdate();
+      onHide();
+    } else if (mode === 'create' && newName.trim()) {
+      onSave(newName.trim());
+      onHide();
     }
-  }, [newViewName, onSave]);
-
-  const handleKeyDown = useCallback(
-    (e: React.KeyboardEvent) => {
-      if (e.key === 'Enter') {
-        handleSave();
-      } else if (e.key === 'Escape') {
-        setShowSaveInput(false);
-        setNewViewName('');
-      }
-    },
-    [handleSave]
-  );
+  }, [mode, currentViewName, onUpdate, newName, onSave, onHide]);
 
   return (
-    <Dropdown>
-      <Dropdown.Toggle variant="outline-secondary" size="sm" id="saved-views-dropdown">
-        <i className="bi bi-bookmark me-1" />
+    <Modal show={show} onHide={onHide} centered size="sm">
+      <Modal.Header closeButton>
+        <Modal.Title style={{ fontSize: '1.05rem' }}>{t('filters.saveView')}</Modal.Title>
+      </Modal.Header>
+      <Modal.Body>
+        {/* Mode selection when there's an active view */}
+        {currentViewName && onUpdate && (
+          <div className="mb-3">
+            <Form.Check
+              type="radio"
+              id="save-mode-update"
+              name="saveMode"
+              label={
+                <span>
+                  {t('filters.updateView')} <strong>&quot;{currentViewName}&quot;</strong>
+                </span>
+              }
+              checked={mode === 'update'}
+              onChange={() => setMode('update')}
+              className="mb-2"
+            />
+            <Form.Check
+              type="radio"
+              id="save-mode-create"
+              name="saveMode"
+              label={t('filters.createNewView')}
+              checked={mode === 'create'}
+              onChange={() => setMode('create')}
+            />
+          </div>
+        )}
+
+        {/* Name input for create mode */}
+        {(mode === 'create' || !currentViewName) && (
+          <Form.Control
+            ref={inputRef}
+            size="sm"
+            type="text"
+            placeholder={t('filters.viewNamePlaceholder')}
+            value={newName}
+            onChange={(e) => setNewName(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') handleSave();
+            }}
+            className="mb-3"
+          />
+        )}
+
+        {/* Config summary */}
+        <div style={{ border: '1px solid #e5e7eb', borderRadius: 8, overflow: 'hidden' }}>
+          <div
+            className="px-3 py-2 small fw-medium"
+            style={{ backgroundColor: '#f9fafb', borderBottom: '1px solid #e5e7eb', color: '#374151' }}
+          >
+            {t('filters.viewConfigSummary')}
+          </div>
+          <div className="p-3">
+            <div className="d-flex justify-content-between mb-1">
+              <span className="small text-muted">{t('filters.scope')}</span>
+              <span className="small fw-medium">{viewSummary.scope}</span>
+            </div>
+            <div className="d-flex justify-content-between mb-1">
+              <span className="small text-muted">{t('columns.manage')}</span>
+              <span className="small fw-medium" style={{ color: '#4f46e5' }}>
+                {t('filters.columnsCount', { count: viewSummary.columnCount })}
+              </span>
+            </div>
+            <div className="d-flex justify-content-between mb-1">
+              <span className="small text-muted">{t('filters.sort')}</span>
+              <span className="small fw-medium">
+                {viewSummary.sortColumn} ({viewSummary.sortDirection === 'asc' ? '\u2191' : '\u2193'})
+              </span>
+            </div>
+            <div className="d-flex justify-content-between">
+              <span className="small text-muted">{t('filters.activeFilters')}</span>
+              <span className="small fw-medium" style={{ color: viewSummary.filterCount > 0 ? '#4f46e5' : '#9ca3af' }}>
+                {viewSummary.filterCount > 0
+                  ? t('filters.filtersCount', { count: viewSummary.filterCount })
+                  : t('filters.noFilters')}
+              </span>
+            </div>
+            {viewSummary.filterDetails.length > 0 && (
+              <div className="mt-2 pt-2" style={{ borderTop: '1px solid #f3f4f6' }}>
+                {viewSummary.filterDetails.map((f) => (
+                  <div key={f.label} className="small text-muted">
+                    <span className="fw-medium">{f.label}:</span> {f.value}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      </Modal.Body>
+      <Modal.Footer style={{ backgroundColor: '#f9fafb' }}>
+        <Button variant="outline-secondary" size="sm" onClick={onHide}>
+          {t('common.cancel')}
+        </Button>
+        <Button variant="primary" size="sm" onClick={handleSave} disabled={mode === 'create' && !newName.trim()}>
+          {mode === 'update' && currentViewName
+            ? `${t('filters.updateView')} "${currentViewName}"`
+            : t('filters.saveView')}
+        </Button>
+      </Modal.Footer>
+    </Modal>
+  );
+}
+
+// ─── Load View Dropdown ────────────────────────────────────────────────────
+
+interface LoadViewDropdownProps {
+  savedViews: SavedFilter[];
+  currentViewName?: string;
+  isModified: boolean;
+  onLoad: (filter: SavedFilter) => void;
+  onDelete: (name: string) => void;
+  onClear: () => void;
+}
+
+export function LoadViewDropdown({
+  savedViews,
+  currentViewName,
+  isModified,
+  onLoad,
+  onDelete,
+  onClear,
+}: LoadViewDropdownProps): React.JSX.Element | null {
+  const { t } = useTranslation('ops');
+  const [isOpen, setIsOpen] = useState(false);
+  const wrapperRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (wrapperRef.current && !wrapperRef.current.contains(e.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [isOpen]);
+
+  if (savedViews.length === 0 && !currentViewName) return null;
+
+  return (
+    <div ref={wrapperRef} className="position-relative d-inline-block">
+      <button
+        type="button"
+        className="btn btn-sm d-inline-flex align-items-center gap-1"
+        style={{
+          backgroundColor: currentViewName ? '#eef2ff' : '#f8f9fa',
+          border: `1px solid ${currentViewName ? '#818cf8' : '#dee2e6'}`,
+          color: currentViewName ? '#4f46e5' : '#495057',
+          borderRadius: 8,
+        }}
+        onClick={() => setIsOpen((prev) => !prev)}
+      >
+        <i className="bi bi-bookmark" />
         {currentViewName ? (
           <>
             {currentViewName}
             {isModified && (
-              <Badge bg="warning" text="dark" className="ms-1" pill>
+              <span className="opacity-75 fst-italic ms-1" style={{ fontSize: '0.7rem' }}>
                 {t('filters.modified')}
-              </Badge>
+              </span>
             )}
           </>
         ) : (
           t('filters.savedViews')
         )}
-      </Dropdown.Toggle>
+        <i className="bi bi-chevron-down" style={{ fontSize: '0.55rem' }} />
+      </button>
 
-      <Dropdown.Menu className="shadow-sm" style={{ minWidth: 240 }}>
-        {/* Save Current View */}
-        {showSaveInput ? (
-          <div className="px-3 py-2">
-            <div className="d-flex gap-1">
-              <Form.Control
-                size="sm"
-                value={newViewName}
-                onChange={(e) => setNewViewName(e.target.value)}
-                onKeyDown={handleKeyDown}
-                autoFocus
+      {isOpen && (
+        <div
+          className="position-absolute bg-white border rounded shadow-sm"
+          style={{ top: '100%', left: 0, zIndex: 1050, minWidth: 220, marginTop: 4 }}
+        >
+          {savedViews.map((view) => (
+            <div
+              key={view.name}
+              className={`d-flex align-items-center justify-content-between px-3 py-2 ${view.name === currentViewName ? 'bg-light' : ''}`}
+              style={{ cursor: 'pointer' }}
+              onClick={() => {
+                onLoad(view);
+                setIsOpen(false);
+              }}
+            >
+              <div className="d-flex align-items-center gap-2 small">
+                <i
+                  className={`bi ${view.name === currentViewName ? 'bi-bookmark-fill text-primary' : 'bi-bookmark'}`}
+                />
+                <span className={view.name === currentViewName ? 'fw-semibold' : ''}>{view.name}</span>
+              </div>
+              <i
+                className="bi bi-x text-muted"
+                role="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDelete(view.name);
+                }}
+                style={{ fontSize: '0.9rem' }}
               />
-              <Button size="sm" variant="primary" onClick={handleSave}>
-                {t('common.save')}
-              </Button>
             </div>
-          </div>
-        ) : (
-          <Dropdown.Item onClick={() => setShowSaveInput(true)}>
-            <i className="bi bi-plus-circle me-2" />
-            {t('filters.saveView')}
-          </Dropdown.Item>
-        )}
+          ))}
 
-        {/* Update View (only when a view is loaded and modified) */}
-        {currentViewName && isModified && (
-          <Dropdown.Item onClick={onUpdate}>
-            <i className="bi bi-arrow-repeat me-2" />
-            {t('filters.updateView')}
-          </Dropdown.Item>
-        )}
-
-        {savedViews.length > 0 && <Dropdown.Divider />}
-
-        {/* Saved view list */}
-        {savedViews.map((view) => (
-          <Dropdown.Item key={view.name} active={view.name === currentViewName} onClick={() => onLoad(view)}>
-            <i className="bi bi-bookmark-fill me-2" />
-            {view.name}
-          </Dropdown.Item>
-        ))}
-
-        <Dropdown.Divider />
-
-        {/* Clear / Reset */}
-        <Dropdown.Item onClick={onClear}>
-          <i className="bi bi-x-circle me-2" />
-          {t('filters.clearView')}
-        </Dropdown.Item>
-      </Dropdown.Menu>
-    </Dropdown>
+          {currentViewName && (
+            <>
+              <hr className="my-1" />
+              <div
+                className="px-3 py-2 small text-muted d-flex align-items-center gap-2"
+                role="button"
+                onClick={() => {
+                  onClear();
+                  setIsOpen(false);
+                }}
+                style={{ cursor: 'pointer' }}
+              >
+                <i className="bi bi-x-circle" />
+                {t('filters.clearView')}
+              </div>
+            </>
+          )}
+        </div>
+      )}
+    </div>
   );
 }

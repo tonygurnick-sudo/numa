@@ -68,12 +68,17 @@ export type StaffProfile = {
   isActive: boolean;
 };
 
+export type ProjectStatus = 'active' | 'planned' | 'on_hold' | 'complete';
+
 export type Project = {
   id: string;
   name: string;
   description?: string;
   color: string;
   isActive: boolean;
+  status?: ProjectStatus;
+  ownerId?: string | null;
+  ownerName?: string | null;
 };
 
 export type CrmLifecycleStage = {
@@ -154,6 +159,9 @@ export type AccessControl = {
 export type FieldOverride = {
   visible: boolean;
   required: boolean;
+  label?: string;
+  options?: string[];
+  order?: number;
 };
 
 export type WorkUnitSeriesConfig = {
@@ -172,10 +180,12 @@ export type Team = {
   color: string;
   allowedTicketTypes: string[];
   fieldOverrides: Record<string, FieldOverride>;
+  addedFields?: Record<string, string[]>;
   workUnitSeries: WorkUnitSeriesConfig;
   accessControl: AccessControl;
   defaultZoneId: string;
   defaultStageId?: string;
+  announcement?: string | null;
   preset?: string;
   createdBy?: string;
   createdAt: string;
@@ -245,6 +255,10 @@ export type Ticket = {
   sourceAppType?: string | null;
   commentCount: number;
   linkCount: number;
+  /** True when the ticket depends on at least one incomplete ticket. Set by backend enrichment. */
+  hasUnresolvedDependencies?: boolean;
+  /** True when the ticket blocks at least one incomplete ticket. Set by backend enrichment. */
+  isBlocking?: boolean;
   archived: boolean;
   version: number;
   order: number;
@@ -299,6 +313,8 @@ export type TicketLink = {
   linkedTicketDisplayId: string;
   linkedTicketTitle?: string;
   linkType: TicketLinkType;
+  /** Status of the linked ticket — present when the backend enriches link data. */
+  linkedTicketStatusType?: StatusType;
   createdBy: string;
   createdAt: string;
 };
@@ -515,10 +531,12 @@ export type CreateTeamPayload = {
   customStages?: { name: string; zoneType: ZoneType; stages: { name: string; statusType: StatusType }[] }[];
   allowedTicketTypes?: string[];
   fieldOverrides?: Record<string, FieldOverride>;
+  addedFields?: Record<string, string[]>;
   workUnitSeries?: WorkUnitSeriesConfig;
   accessControl?: AccessControl;
   defaultZoneId?: string;
   defaultStageId?: string;
+  announcement?: string | null;
 };
 
 export type CreateCommentPayload = {
@@ -748,4 +766,8 @@ export type DocumentResponse = {
 
 export type UserPreferenceResponse = {
   preferences: UserPreference;
+};
+
+export type AuditEntryListResponse = {
+  entries: AuditEntry[];
 };

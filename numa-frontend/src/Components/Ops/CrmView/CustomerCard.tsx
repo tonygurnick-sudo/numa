@@ -142,8 +142,8 @@ export function CustomerCard({ customer, crmConfig, onClick }: CustomerCardProps
           }
         }}
       >
-        <Card.Body className="p-3 d-flex flex-column h-100">
-          <div className="d-flex align-items-start gap-3 mb-3 flex-grow-1">
+        <Card.Body className="p-3 d-flex flex-column h-100" style={{ overflow: 'hidden' }}>
+          <div className="d-flex align-items-start gap-3 mb-3 flex-grow-1" style={{ minWidth: 0, overflow: 'hidden' }}>
             {/* Icon Box */}
             <div
               className="position-relative d-flex align-items-center justify-content-center flex-shrink-0 shadow-sm"
@@ -176,11 +176,21 @@ export function CustomerCard({ customer, crmConfig, onClick }: CustomerCardProps
 
             {/* Title & Subtitle */}
             <div className="flex-grow-1 min-w-0">
-              <div className="d-flex align-items-start justify-content-between gap-2">
+              <div
+                className="d-flex align-items-start justify-content-between gap-2"
+                style={{ minWidth: 0, overflow: 'hidden' }}
+              >
                 <div
                   className="fw-bolder text-truncate"
                   title={customer.companyName}
-                  style={{ color: '#0f172a', fontSize: '1rem', lineHeight: 1.2, letterSpacing: '-0.01em' }}
+                  style={{
+                    color: '#0f172a',
+                    fontSize: '1rem',
+                    lineHeight: 1.2,
+                    letterSpacing: '-0.01em',
+                    minWidth: 0,
+                    flex: '1 1 0%',
+                  }}
                 >
                   {customer.companyName}
                 </div>
