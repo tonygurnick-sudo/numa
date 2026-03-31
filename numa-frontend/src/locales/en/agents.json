@@ -356,12 +356,52 @@
     "actions": {
       "refresh": "Refresh",
       "create": "Create Agent",
-      "createFirst": "Create Your First Agent"
+      "createFirst": "Create Your First Agent",
+      "favorite": "Toggle favourite",
+      "share": "Share agent",
+      "hide": "Hide agent",
+      "unhide": "Show agent",
+      "delete": "Delete agent",
+      "chat": "Chat"
     },
     "stats": {
-      "total": "Total Agents",
+      "total": "All Agents",
       "personal": "Personal",
-      "company": "Company"
+      "team": "Team",
+      "company": "Company",
+      "favourites": "Favourites"
+    },
+    "search": {
+      "placeholder": "Search agents by name, tag, or capability..."
+    },
+    "view": {
+      "grid": "Grid view",
+      "list": "List view"
+    },
+    "viewOptions": {
+      "title": "View Options",
+      "sortBy": "Sort By",
+      "sort": {
+        "recent": "Most Recent",
+        "name": "Name A-Z",
+        "used": "Most Used",
+        "lastRun": "Last Run"
+      },
+      "sections": "Sections",
+      "showFavourites": "Show Favourites",
+      "visibility": "Visibility",
+      "showHidden": "Show Hidden Agents"
+    },
+    "hidden": "HIDDEN",
+    "createTeam": {
+      "button": "Create Team",
+      "title": "Create Team",
+      "nameLabel": "Team Name",
+      "namePlaceholder": "e.g., Operations Team",
+      "descLabel": "Description (optional)",
+      "descPlaceholder": "What does this team work on?",
+      "cancel": "Cancel",
+      "submit": "Create Team"
     },
     "filters": {
       "tags": "Filter by tag:",
@@ -383,13 +423,19 @@
       "emptyDescription": "Agents let you define reusable AI assistants with custom instructions, reference files, and tool access. When enabled, you can create personal agents or share company agents for common tasks."
     },
     "sections": {
+      "favourites": {
+        "title": "Favourites"
+      },
       "myAgents": {
-        "title": "My Agents",
+        "title": "Personal",
         "subtitle": "Your personal AI assistants"
       },
+      "team": {
+        "placeholder": "Team agents will appear here once agents are shared with this team."
+      },
       "company": {
-        "title": "Company Agent Marketplace",
-        "subtitle": "Discover and copy agents shared by other users in your organization"
+        "title": "Company",
+        "subtitle": "Agents shared across the organisation"
       }
     },
     "empty": {
@@ -400,7 +446,9 @@
       "modeOff": "Agents are disabled. Contact your admin to enable Agents.",
       "all": "Get started by creating your first AI agent",
       "personal": "You have not created any personal agents yet",
-      "noTagMatch": "No agents match all of the selected tags."
+      "noTagMatch": "No agents match all of the selected tags.",
+      "noSearchMatch": "No agents match your search.",
+      "favourites": "No favourite agents yet. Star any agent to add it here."
     },
     "errors": {
       "load": "Failed to load agents",
@@ -909,5 +957,59 @@
         "save": "Failed to save schedule"
       }
     }
+  },
+  "shareModal": {
+    "title": "Share Agent",
+    "shareWith": "Share with Users",
+    "shareWithTeam": "Share with Team",
+    "searchPlaceholder": "Search by name or email...",
+    "noShares": "This agent is not shared with anyone yet.",
+    "permissions": "Permissions",
+    "capability": "Capability",
+    "roles": {
+      "owner": "Owner",
+      "coOwner": "Co-Owner",
+      "editor": "Editor",
+      "viewer": "Viewer"
+    },
+    "close": "Close"
+  },
+  "teamModal": {
+    "title": "Manage Team",
+    "details": "Team Details",
+    "name": "Team Name",
+    "description": "Description",
+    "save": "Save Changes",
+    "members": "Team Members",
+    "addMember": "Add Member",
+    "userIdPlaceholder": "User ID",
+    "namePlaceholder": "Name (optional)",
+    "emailPlaceholder": "Email (optional)",
+    "searchUsers": "Search users by name or email...",
+    "close": "Close",
+    "deleteTeam": "Delete Team",
+    "confirmDelete": "Delete team \"{{name}}\"? This cannot be undone."
+  },
+  "adminPanel": {
+    "title": "Admin Agent Management",
+    "subtitle": "View and manage all agents across the tenant",
+    "expand": "Expand",
+    "collapse": "Collapse",
+    "filterPlaceholder": "Filter by name or owner...",
+    "allScopes": "All Scopes",
+    "personal": "Personal",
+    "company": "Company",
+    "agentsCount": "agents",
+    "columns": {
+      "agent": "Agent",
+      "owner": "Owner",
+      "scope": "Scope",
+      "updated": "Last Updated",
+      "actions": "Actions"
+    },
+    "copy": "Copy",
+    "delete": "Delete",
+    "noAgents": "No agents found",
+    "confirmDelete": "Delete agent \"{{title}}\"? This is permanent."
   }
 }

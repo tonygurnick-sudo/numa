@@ -100,3 +100,60 @@ export type AgentUpdatePayload = AgentPayload & {
   isFavorite?: boolean;
   sourceAgentId?: string;
 };
+
+// ─── Per-user preferences ────────────────────────────────────────────────────
+
+export type AgentUserPref = {
+  agentId: string;
+  isFavorite: boolean;
+  isHidden: boolean;
+};
+
+// ─── Teams ───────────────────────────────────────────────────────────────────
+
+export type TeamRole = 'owner' | 'editor' | 'viewer';
+
+export type Team = {
+  teamId: string;
+  teamName: string;
+  description?: string;
+  myRole: TeamRole;
+  createdBy: string;
+  createdAt: number;
+};
+
+export type TeamMember = {
+  userId: string;
+  role: TeamRole;
+  userName?: string;
+  userEmail?: string;
+  addedAt: number;
+};
+
+export type TeamDetail = Team & {
+  members: TeamMember[];
+};
+
+// ─── Sharing ─────────────────────────────────────────────────────────────────
+
+export type ShareRole = 'co-owner' | 'editor' | 'viewer';
+
+export type AgentShare = {
+  principalId: string;
+  principalType: 'user' | 'team';
+  role: ShareRole;
+  sharedBy: string;
+  sharedAt: number;
+};
+
+// ─── Admin ───────────────────────────────────────────────────────────────────
+
+export type AdminAgentEntry = {
+  agentId: string;
+  title: string;
+  scope: AgentScope;
+  visibility: AgentVisibility;
+  owner: { userId: string; name?: string };
+  updatedAt: number;
+  tags: string[];
+};

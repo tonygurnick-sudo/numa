@@ -933,7 +933,7 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
       route: { verb: 'GET', path: 'admin/google-cloud/status' },
     });
 
-    // Agents API (list/create/update/delete/copy)
+    // Agents API (list/create/update/delete/copy + prefs/teams/sharing)
     const agentsEnv = {
       CLIENT_NAME: props.clientName,
       REGION: props.region,
@@ -941,6 +941,10 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
       USER_AGENTS_TABLE: props.userAgentsTableName,
       OUTPUTS_BUCKET_NAME: props.outputsBucketName,
       AGENTS_SETTINGS_TABLE_NAME: props.agentsSettingsTableName,
+      AGENT_USER_PREFS_TABLE: props.agentUserPrefsTableName,
+      AGENT_TEAMS_TABLE: props.agentTeamsTableName,
+      AGENT_TEAM_MEMBERS_TABLE: props.agentTeamMembersTableName,
+      AGENT_SHARING_TABLE: props.agentSharingTableName,
     } as Record<string, string>;
 
     const agentsPolicy = [
@@ -959,6 +963,14 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
           `arn:aws:dynamodb:*:*:table/${props.workspaceAgentsTableName}/index/*`,
           `arn:aws:dynamodb:*:*:table/${props.userAgentsTableName}`,
           `arn:aws:dynamodb:*:*:table/${props.userAgentsTableName}/index/*`,
+          `arn:aws:dynamodb:*:*:table/${props.agentUserPrefsTableName}`,
+          `arn:aws:dynamodb:*:*:table/${props.agentUserPrefsTableName}/index/*`,
+          `arn:aws:dynamodb:*:*:table/${props.agentTeamsTableName}`,
+          `arn:aws:dynamodb:*:*:table/${props.agentTeamsTableName}/index/*`,
+          `arn:aws:dynamodb:*:*:table/${props.agentTeamMembersTableName}`,
+          `arn:aws:dynamodb:*:*:table/${props.agentTeamMembersTableName}/index/*`,
+          `arn:aws:dynamodb:*:*:table/${props.agentSharingTableName}`,
+          `arn:aws:dynamodb:*:*:table/${props.agentSharingTableName}/index/*`,
         ],
       },
       // Read agents settings policy table
@@ -1384,7 +1396,7 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
       ],
     });
 
-    // Users API - list workspace users (Cognito)
+    // Users API - list workspace users (Cognito + profile enrichment from chat-settings)
     if (props.cognitoUserPoolId && props.cognitoUserPoolArn) {
       this.addLambdaFunction(this, 'numa-users-api-get', {
         addAuthorizer: true,
@@ -1395,12 +1407,23 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
         environment: {
           REGION: props.region,
           USER_POOL_ID: props.cognitoUserPoolId,
+          CHAT_SETTINGS_TABLE_NAME: props.chatSettingsTableName,
         },
         additionalPolicyStatements: [
           {
             effect: 'Allow',
             actions: ['cognito-idp:ListUsers'],
             resources: [props.cognitoUserPoolArn],
+          },
+          {
+            effect: 'Allow',
+            actions: ['dynamodb:BatchGetItem'],
+            resources: [`arn:aws:dynamodb:*:*:table/${props.chatSettingsTableName}`],
+          },
+          {
+            effect: 'Allow',
+            actions: ['s3:GetObject'],
+            resources: [`${props.outputsBucketArn}/numa-chat/profile-images/*`],
           },
         ],
       });
@@ -1689,6 +1712,14 @@ export interface AppAgnosticApiGatewayLambdaCollectionProps extends Omit<
   userAgentsTableName: string;
   /** Exact agents settings table name, passed from Core to avoid name drift. */
   agentsSettingsTableName: string;
+  /** Agent user preferences table name (per-user favorites, hidden, usage). */
+  agentUserPrefsTableName: string;
+  /** Agent teams table name. */
+  agentTeamsTableName: string;
+  /** Agent team members table name. */
+  agentTeamMembersTableName: string;
+  /** Agent sharing table name. */
+  agentSharingTableName: string;
   /** Scheduling settings table name for client-admin minimum interval override. */
   schedulingSettingsTableName: string;
   /** Per-client scheduling minimum interval (minutes), from client config. */

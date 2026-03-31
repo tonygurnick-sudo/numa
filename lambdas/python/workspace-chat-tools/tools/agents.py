@@ -743,6 +743,19 @@ def handle_list_agents(params: Dict[str, Any]) -> Dict[str, Any]:
     if limit:
         agents = agents[offset : offset + limit]
 
+    # Trim heavy fields for list response -- full details available via "get"
+    for agent in agents:
+        prompt = agent.get("systemPrompt")
+        if prompt and len(prompt) > 200:
+            agent["systemPrompt"] = prompt[:200] + "..."
+        ref_files = agent.get("referenceFiles")
+        if ref_files:
+            agent["referenceFiles"] = [
+                {"fileName": f.get("fileName", "unknown")}
+                for f in ref_files
+                if isinstance(f, dict)
+            ]
+
     logger.info(
         "Listed agents",
         user_sub=user_sub[:8] + "...",

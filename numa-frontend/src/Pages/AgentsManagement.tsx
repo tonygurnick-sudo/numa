@@ -1,13 +1,26 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { getFlag } from '../utils/featureFlags';
-import { Badge, Button, Col, Container, Row, Spinner, Alert, Modal } from 'react-bootstrap';
+import { Badge, Button, Col, Container, Dropdown, Form, Row, Spinner, Alert, Modal } from 'react-bootstrap';
 import { useNavigate } from 'react-router-dom';
 import { useNumaRequest } from '../Providers/NumaRequestContext';
 import { useAuth } from '../Providers/AuthProvider';
-import { listAgents, getCachedAgents, deleteAgent, duplicateAgent, updateAgent } from '../Services/AgentsService';
+import {
+  listAgents,
+  getCachedAgents,
+  deleteAgent,
+  duplicateAgent,
+  updateAgent,
+  getAgentPrefs,
+  setAgentPref,
+  listTeams,
+} from '../Services/AgentsService';
 import { AdminAgentsService, type AgentsMode } from '../Services/AdminAgentsService';
-import type { AgentSummary } from '../types/agents';
+import type { AgentSummary, AgentUserPref, Team } from '../types/agents';
 import { AgentCard } from '../Components/Agents/AgentCard';
+import { AgentListRow } from '../Components/Agents/AgentListRow';
+import { AgentShareModal } from '../Components/Agents/AgentShareModal';
+import { AgentManageTeamModal } from '../Components/Agents/AgentManageTeamModal';
+import { AgentAdminPanel } from '../Components/Agents/AgentAdminPanel';
 import { AgentCreateModal } from '../Components/Agents/AgentCreateModal';
 import { AgentScheduleModal } from '../Components/Agents/AgentScheduleModal';
 import { AgentScheduleListModal } from '../Components/Agents/AgentScheduleListModal';
@@ -20,10 +33,38 @@ import { getConnectionConfig } from '../config/integrationsConfig';
 import { useBranding } from '../Providers/BrandingContext';
 import { isScheduleCompleted, calculateNextRun } from '../utils/cronUtils';
 import { useTranslation } from 'react-i18next';
-import { ArrowLeft, Bot, Clock, ExternalLink, Link2, PlusCircle, RefreshCw, Store, User, X } from 'lucide-react';
+import {
+  ArrowLeft,
+  Bot,
+  ChevronDown,
+  ChevronRight,
+  Clock,
+  ExternalLink,
+  Grid3X3,
+  Heart,
+  Link2,
+  List,
+  PlusCircle,
+  RefreshCw,
+  Search,
+  Settings,
+  Star,
+  Store,
+  User,
+  Users,
+  X,
+} from 'lucide-react';
 import { CollapsibleTagRow } from '../Components/Inputs/CollapsibleTagRow';
 
-type FilterOption = 'all' | 'personal' | 'public';
+type FilterOption = 'all' | 'personal' | 'public' | 'team' | 'favourites';
+type ViewMode = 'grid' | 'list';
+type SortMode = 'recent' | 'name' | 'used' | 'lastRun';
+
+const LS_VIEW_MODE = 'numa_agents_view_mode';
+const LS_SORT_MODE = 'numa_agents_sort_mode';
+const LS_COLLAPSED = 'numa_agents_collapsed';
+const LS_SHOW_FAVS = 'numa_agents_show_favourites';
+const LS_SHOW_HIDDEN = 'numa_agents_show_hidden';
 
 export const AgentsManagement = () => {
   const { t } = useTranslation('agents');
@@ -78,6 +119,32 @@ export const AgentsManagement = () => {
   }>({ show: false, agent: null });
 
   const [agentScheduleMap, setAgentScheduleMap] = useState<Map<string, number>>(new Map());
+
+  // ── New UX state ──
+  const [searchQuery, setSearchQuery] = useState('');
+  const [viewMode, setViewMode] = useState<ViewMode>(() => (localStorage.getItem(LS_VIEW_MODE) as ViewMode) || 'grid');
+  const [sortMode, setSortMode] = useState<SortMode>(
+    () => (localStorage.getItem(LS_SORT_MODE) as SortMode) || 'recent'
+  );
+  const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>(() => {
+    try {
+      return JSON.parse(localStorage.getItem(LS_COLLAPSED) || '{}');
+    } catch {
+      return {};
+    }
+  });
+  const [showFavourites, setShowFavourites] = useState(() => localStorage.getItem(LS_SHOW_FAVS) !== 'false');
+  const [showHidden, setShowHidden] = useState(() => localStorage.getItem(LS_SHOW_HIDDEN) === 'true');
+  const [prefs, setPrefs] = useState<AgentUserPref[]>([]);
+  const [teams, setTeams] = useState<Team[]>([]);
+  const [shareModal, setShareModal] = useState<{ show: boolean; agent: AgentSummary | null }>({
+    show: false,
+    agent: null,
+  });
+  const [teamModal, setTeamModal] = useState<{ show: boolean; team: Team | null }>({
+    show: false,
+    team: null,
+  });
   const [activeSchedules, setActiveSchedules] = useState<AgentSchedule[]>([]);
 
   const userId = user?.decoded_tokens?.idToken?.sub ?? '';
@@ -144,6 +211,57 @@ export const AgentsManagement = () => {
     }
   };
 
+  const loadPrefsAndTeams = useCallback(async () => {
+    try {
+      const [prefsData, teamsData] = await Promise.all([
+        getAgentPrefs(numaGet).catch(() => []),
+        listTeams(numaGet).catch(() => []),
+      ]);
+      setPrefs(prefsData);
+      setTeams(teamsData);
+    } catch {
+      // best-effort
+    }
+  }, [numaGet]);
+
+  // ── Persist new UX state to localStorage ──
+  useEffect(() => {
+    localStorage.setItem(LS_VIEW_MODE, viewMode);
+  }, [viewMode]);
+  useEffect(() => {
+    localStorage.setItem(LS_SORT_MODE, sortMode);
+  }, [sortMode]);
+  useEffect(() => {
+    localStorage.setItem(LS_COLLAPSED, JSON.stringify(collapsedSections));
+  }, [collapsedSections]);
+  useEffect(() => {
+    localStorage.setItem(LS_SHOW_FAVS, String(showFavourites));
+  }, [showFavourites]);
+  useEffect(() => {
+    localStorage.setItem(LS_SHOW_HIDDEN, String(showHidden));
+  }, [showHidden]);
+
+  // ── Prefs helpers ──
+  const prefsMap = useMemo(() => {
+    const map = new Map<string, AgentUserPref>();
+    prefs.forEach((p) => map.set(p.agentId, p));
+    return map;
+  }, [prefs]);
+
+  const isAgentFavorite = useCallback(
+    (agent: AgentSummary) => prefsMap.get(agent.agentId)?.isFavorite ?? agent.isFavorite ?? false,
+    [prefsMap]
+  );
+
+  const isAgentHidden = useCallback(
+    (agent: AgentSummary) => prefsMap.get(agent.agentId)?.isHidden ?? false,
+    [prefsMap]
+  );
+
+  const toggleSection = useCallback((key: string) => {
+    setCollapsedSections((prev) => ({ ...prev, [key]: !prev[key] }));
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -162,8 +280,9 @@ export const AgentsManagement = () => {
       } catch {
         if (!cancelled) setAgentsMode('full');
       } finally {
-        // then load agents
+        // then load agents + prefs/teams
         loadAgents();
+        loadPrefsAndTeams();
       }
     })();
     return () => {
@@ -188,26 +307,78 @@ export const AgentsManagement = () => {
     setSelectedTags((prev) => (prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag]));
   };
 
+  // ── Search + hidden + tag filtering ──
+  const matchesSearch = useCallback(
+    (agent: AgentSummary) => {
+      if (!searchQuery) return true;
+      const q = searchQuery.toLowerCase();
+      return (
+        agent.title?.toLowerCase().includes(q) ||
+        agent.description?.toLowerCase().includes(q) ||
+        agent.tags?.some((t) => t.toLowerCase().includes(q)) ||
+        agent.requiredIntegrations?.some((i) => i.toLowerCase().includes(q))
+      );
+    },
+    [searchQuery]
+  );
+
+  const applyFilters = useCallback(
+    (agents: AgentSummary[]) => {
+      let result = agents;
+      // Hide hidden agents unless searching or showHidden is on
+      if (!showHidden && !searchQuery) {
+        result = result.filter((a) => !isAgentHidden(a));
+      }
+      // Search
+      result = result.filter(matchesSearch);
+      // Tags
+      if (selectedTags.length > 0) {
+        result = result.filter((a) => selectedTags.every((tag) => a.tags?.includes(tag)));
+      }
+      return result;
+    },
+    [showHidden, searchQuery, isAgentHidden, matchesSearch, selectedTags]
+  );
+
+  const sortAgents = useCallback(
+    (agents: AgentSummary[]) => {
+      return [...agents].sort((a, b) => {
+        switch (sortMode) {
+          case 'name':
+            return (a.title || '').localeCompare(b.title || '');
+          case 'used':
+            // Fall through to recent for now (usage tracking needs ConversationMeta integration)
+            return (b.updatedAt ?? 0) - (a.updatedAt ?? 0);
+          case 'lastRun':
+            return (b.updatedAt ?? 0) - (a.updatedAt ?? 0);
+          case 'recent':
+          default:
+            return (b.updatedAt ?? 0) - (a.updatedAt ?? 0);
+        }
+      });
+    },
+    [sortMode]
+  );
+
   // Base agents visible given the scope filter (before tag filtering)
-  const baseMyAgents = useMemo(() => {
-    if (filter === 'public') return [];
-    return filter === 'personal' ? myAgents.filter((agent) => agent.visibility === 'personal') : myAgents;
-  }, [filter, myAgents]);
-
-  const baseWorkspaceAgents = useMemo(() => {
-    if (filter === 'personal') return [];
-    return workspaceAgents;
-  }, [filter, workspaceAgents]);
-
   const filteredMyAgents = useMemo(() => {
-    if (selectedTags.length === 0) return baseMyAgents;
-    return baseMyAgents.filter((agent) => selectedTags.every((tag) => agent.tags?.includes(tag)));
-  }, [baseMyAgents, selectedTags]);
+    if (filter === 'public' || filter === 'team') return [];
+    if (filter === 'favourites') return sortAgents(applyFilters(myAgents.filter((a) => isAgentFavorite(a))));
+    const base = filter === 'personal' ? myAgents.filter((a) => a.visibility === 'personal') : myAgents;
+    return sortAgents(applyFilters(base));
+  }, [filter, myAgents, applyFilters, sortAgents, isAgentFavorite]);
 
   const filteredWorkspaceAgents = useMemo(() => {
-    if (selectedTags.length === 0) return baseWorkspaceAgents;
-    return baseWorkspaceAgents.filter((agent) => selectedTags.every((tag) => agent.tags?.includes(tag)));
-  }, [baseWorkspaceAgents, selectedTags]);
+    if (filter === 'personal' || filter === 'team') return [];
+    if (filter === 'favourites') return sortAgents(applyFilters(workspaceAgents.filter((a) => isAgentFavorite(a))));
+    return sortAgents(applyFilters(workspaceAgents));
+  }, [filter, workspaceAgents, applyFilters, sortAgents, isAgentFavorite]);
+
+  // Favourite agents across all sections
+  const favouriteAgents = useMemo(() => {
+    const all = [...myAgents, ...workspaceAgents];
+    return sortAgents(applyFilters(all.filter((a) => isAgentFavorite(a))));
+  }, [myAgents, workspaceAgents, applyFilters, sortAgents, isAgentFavorite]);
 
   // Faceted tags: only show tags that still appear on at least one matching agent
   // (agents that already match ALL currently selected tags)
@@ -250,16 +421,48 @@ export const AgentsManagement = () => {
   const handleToggleFavorite = async (agent: AgentSummary, next: boolean) => {
     try {
       setError(null);
-      if (agent.scope === 'user') {
-        await updateAgent(numaPut, agent.agentId, { isFavorite: next });
-      } else if (agent.scope === 'workspace' && agent.createdBy.userId === userId) {
-        await updateAgent(numaPut, agent.agentId, { isFavorite: next });
-      }
-      await loadAgents();
+      await setAgentPref(numaPut, agent.agentId, { isFavorite: next });
+      // Optimistic update
+      setPrefs((prev) => {
+        const existing = prev.find((p) => p.agentId === agent.agentId);
+        if (existing) {
+          return prev.map((p) => (p.agentId === agent.agentId ? { ...p, isFavorite: next } : p));
+        }
+        return [...prev, { agentId: agent.agentId, isFavorite: next, isHidden: false }];
+      });
     } catch (err) {
       console.error('AgentsManagement: toggle favorite failed', err);
       setError((err as Error)?.message ?? t('management.errors.favorite'));
     }
+  };
+
+  const handleToggleHidden = async (agent: AgentSummary, next: boolean) => {
+    try {
+      setError(null);
+      await setAgentPref(numaPut, agent.agentId, { isHidden: next });
+      // Optimistic update
+      setPrefs((prev) => {
+        const existing = prev.find((p) => p.agentId === agent.agentId);
+        if (existing) {
+          return prev.map((p) => (p.agentId === agent.agentId ? { ...p, isHidden: next } : p));
+        }
+        return [...prev, { agentId: agent.agentId, isFavorite: false, isHidden: next }];
+      });
+    } catch (err) {
+      console.error('AgentsManagement: toggle hidden failed', err);
+    }
+  };
+
+  const handleShare = (agent: AgentSummary) => {
+    setShareModal({ show: true, agent });
+  };
+
+  const handleManageTeam = (team: Team) => {
+    setTeamModal({ show: true, team });
+  };
+
+  const handleCreateTeam = () => {
+    setTeamModal({ show: true, team: null });
   };
 
   const handleDelete = async (agent: AgentSummary) => {
@@ -438,9 +641,37 @@ export const AgentsManagement = () => {
     warmCache();
   }, [user, lambdaClient]);
 
-  const renderAgentsGrid = (agents: AgentSummary[], emptyMessage: string, isMyAgentsSection = false) => {
+  const renderAgentsSection = (
+    agents: AgentSummary[],
+    emptyMessage: string,
+    isMyAgentsSection = false,
+    roleBadgeMap?: Map<string, string>
+  ) => {
     if (!agents.length) {
-      return <p className="text-muted">{emptyMessage}</p>;
+      return <p className="text-muted small">{emptyMessage}</p>;
+    }
+
+    if (viewMode === 'list') {
+      return (
+        <div className="d-flex flex-column gap-2">
+          {agents.map((agent) => (
+            <AgentListRow
+              key={agent.agentId}
+              agent={agent}
+              isFavorite={isAgentFavorite(agent)}
+              isHidden={isAgentHidden(agent)}
+              roleBadge={roleBadgeMap?.get(agent.agentId)}
+              onChat={handleStartChat}
+              onEdit={agent.scope === 'user' || agent.createdBy.userId === userId ? handleEdit : undefined}
+              onDelete={agent.scope === 'user' || agent.createdBy.userId === userId ? handleDelete : undefined}
+              onToggleFavorite={handleToggleFavorite}
+              onToggleHidden={agent.scope !== 'user' ? handleToggleHidden : undefined}
+              onShare={handleShare}
+              searchHighlight={searchQuery}
+            />
+          ))}
+        </div>
+      );
     }
 
     return (
@@ -454,9 +685,7 @@ export const AgentsManagement = () => {
               onDuplicate={handleDuplicate}
               onDelete={agent.scope === 'user' || agent.createdBy.userId === userId ? handleDelete : undefined}
               onSchedule={schedulingEnabled ? handleScheduleAgent : undefined}
-              onToggleFavorite={
-                agent.scope === 'user' || agent.createdBy.userId === userId ? handleToggleFavorite : undefined
-              }
+              onToggleFavorite={handleToggleFavorite}
               hasSchedules={schedulingEnabled && (agentScheduleMap.get(agent.agentId) ?? 0) > 0}
               scheduleCount={agentScheduleMap.get(agent.agentId) ?? 0}
               isInMyAgentsSection={isMyAgentsSection}
@@ -470,8 +699,163 @@ export const AgentsManagement = () => {
   const totalAgents = myAgents.length + workspaceAgents.length;
   const personalCount = myAgents.filter((a) => a.scope === 'user').length;
   const publicCount = workspaceAgents.length;
+  const favouriteCount = favouriteAgents.length;
+  const teamCount = teams.length;
   const headerActions = (
-    <div className="agents-hero__actions">
+    <div className="agents-hero__actions d-flex align-items-center gap-2 flex-wrap">
+      {/* Search */}
+      <div className="position-relative">
+        <Search
+          size={14}
+          className="position-absolute text-muted"
+          style={{ left: 10, top: '50%', transform: 'translateY(-50%)' }}
+        />
+        <Form.Control
+          type="text"
+          placeholder={t('management.search.placeholder')}
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          size="sm"
+          style={{ paddingLeft: 32, width: 240 }}
+        />
+        {searchQuery && (
+          <button
+            className="btn btn-sm position-absolute border-0 text-muted"
+            style={{ right: 4, top: '50%', transform: 'translateY(-50%)', padding: '2px 4px' }}
+            onClick={() => setSearchQuery('')}
+          >
+            <X size={14} />
+          </button>
+        )}
+      </div>
+
+      {/* View toggle */}
+      <div className="btn-group btn-group-sm">
+        <button
+          className={`btn ${viewMode === 'grid' ? 'btn-primary' : 'btn-outline-secondary'}`}
+          onClick={() => setViewMode('grid')}
+          title={t('management.view.grid')}
+        >
+          <Grid3X3 size={14} />
+        </button>
+        <button
+          className={`btn ${viewMode === 'list' ? 'btn-primary' : 'btn-outline-secondary'}`}
+          onClick={() => setViewMode('list')}
+          title={t('management.view.list')}
+        >
+          <List size={14} />
+        </button>
+      </div>
+
+      {/* View Options dropdown */}
+      <Dropdown align="end">
+        <Dropdown.Toggle variant="outline-secondary" size="sm" className="d-flex align-items-center gap-1">
+          <Settings size={14} />
+          {t('management.viewOptions.title')}
+        </Dropdown.Toggle>
+        <Dropdown.Menu style={{ minWidth: 220, fontSize: '0.85rem' }}>
+          <Dropdown.Header
+            className="text-uppercase small fw-bold"
+            style={{ letterSpacing: '0.5px', fontSize: '0.7rem' }}
+          >
+            {t('management.viewOptions.sortBy')}
+          </Dropdown.Header>
+          {(['recent', 'name', 'used', 'lastRun'] as SortMode[]).map((mode) => (
+            <Dropdown.Item key={mode} active={sortMode === mode} onClick={() => setSortMode(mode)}>
+              {sortMode === mode && (
+                <span style={{ width: 14, display: 'inline-block', color: 'var(--brand-primary, #6366f1)' }}>
+                  &#10003;
+                </span>
+              )}
+              {sortMode !== mode && <span style={{ width: 14, display: 'inline-block' }} />}
+              {t(`management.viewOptions.sort.${mode}`)}
+            </Dropdown.Item>
+          ))}
+          <Dropdown.Divider />
+          <Dropdown.Header
+            className="text-uppercase small fw-bold"
+            style={{ letterSpacing: '0.5px', fontSize: '0.7rem' }}
+          >
+            {t('management.viewOptions.sections')}
+          </Dropdown.Header>
+          <Dropdown.Item
+            as="div"
+            className="d-flex justify-content-between align-items-center px-3 py-2"
+            style={{ cursor: 'pointer' }}
+            onClick={() => setShowFavourites(!showFavourites)}
+          >
+            <span>{t('management.viewOptions.showFavourites')}</span>
+            <div
+              style={{
+                width: 32,
+                height: 18,
+                borderRadius: 9,
+                position: 'relative',
+                background: showFavourites ? 'var(--brand-primary, #6366f1)' : '#d1d5db',
+                transition: 'background 0.2s',
+                flexShrink: 0,
+                cursor: 'pointer',
+              }}
+            >
+              <div
+                style={{
+                  width: 14,
+                  height: 14,
+                  borderRadius: '50%',
+                  background: '#fff',
+                  position: 'absolute',
+                  top: 2,
+                  left: showFavourites ? 16 : 2,
+                  transition: 'left 0.2s',
+                  boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
+                }}
+              />
+            </div>
+          </Dropdown.Item>
+          <Dropdown.Divider />
+          <Dropdown.Header
+            className="text-uppercase small fw-bold"
+            style={{ letterSpacing: '0.5px', fontSize: '0.7rem' }}
+          >
+            {t('management.viewOptions.visibility')}
+          </Dropdown.Header>
+          <Dropdown.Item
+            as="div"
+            className="d-flex justify-content-between align-items-center px-3 py-2"
+            style={{ cursor: 'pointer' }}
+            onClick={() => setShowHidden(!showHidden)}
+          >
+            <span>{t('management.viewOptions.showHidden')}</span>
+            <div
+              style={{
+                width: 32,
+                height: 18,
+                borderRadius: 9,
+                position: 'relative',
+                background: showHidden ? 'var(--brand-primary, #6366f1)' : '#d1d5db',
+                transition: 'background 0.2s',
+                flexShrink: 0,
+                cursor: 'pointer',
+              }}
+            >
+              <div
+                style={{
+                  width: 14,
+                  height: 14,
+                  borderRadius: '50%',
+                  background: '#fff',
+                  position: 'absolute',
+                  top: 2,
+                  left: showHidden ? 16 : 2,
+                  transition: 'left 0.2s',
+                  boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
+                }}
+              />
+            </div>
+          </Dropdown.Item>
+        </Dropdown.Menu>
+      </Dropdown>
+
       <button type="button" className="agents-hero__action-btn" onClick={loadAgents} disabled={loading}>
         <RefreshCw
           size={16}
@@ -481,14 +865,20 @@ export const AgentsManagement = () => {
         {t('management.actions.refresh')}
       </button>
       {agentsFeatureEnabled && agentsMode !== 'off' && (
-        <button
-          type="button"
-          className="agents-hero__action-btn agents-hero__action-btn--primary"
-          onClick={handleCreate}
-        >
-          <PlusCircle size={16} className="agents-hero__action-icon" aria-hidden="true" />
-          {t('management.actions.create')}
-        </button>
+        <>
+          <button type="button" className="agents-hero__action-btn" onClick={handleCreateTeam}>
+            <Users size={16} className="agents-hero__action-icon" aria-hidden="true" />
+            {t('management.createTeam.button')}
+          </button>
+          <button
+            type="button"
+            className="agents-hero__action-btn agents-hero__action-btn--primary"
+            onClick={handleCreate}
+          >
+            <PlusCircle size={16} className="agents-hero__action-icon" aria-hidden="true" />
+            {t('management.actions.create')}
+          </button>
+        </>
       )}
     </div>
   );
@@ -501,91 +891,69 @@ export const AgentsManagement = () => {
         {agentsFeatureEnabled && (
           <Container fluid className="px-0">
             <Row className="g-3 mb-4">
-              <Col xs={6} md={4}>
-                <div
-                  className="p-3 rounded-3 border bg-white"
-                  role="button"
-                  onClick={() => setFilter('all')}
-                  style={{
-                    boxShadow: 'none',
-                    cursor: 'pointer',
-                    transition: 'all 0.2s ease',
-                    borderColor: filter === 'all' ? brandPrimaryBorderColor : undefined,
-                    borderWidth: filter === 'all' ? '2px' : '1px',
-                    backgroundColor: filter === 'all' ? brandPrimarySoftBackground : '#ffffff',
-                  }}
-                >
-                  <div className="d-flex align-items-center justify-content-between">
-                    <div>
-                      <div className="text-muted small mb-1">{t('management.stats.total')}</div>
-                      <div className="fs-4 fw-bold">{totalAgents}</div>
-                    </div>
-                    <div
-                      className="rounded-circle d-flex align-items-center justify-content-center"
-                      style={{ width: 48, height: 48, backgroundColor: brandPrimarySoftBackground }}
-                    >
-                      <Bot size={20} style={{ color: brandPrimaryColor }} aria-hidden="true" />
-                    </div>
-                  </div>
-                </div>
-              </Col>
-              <Col xs={6} md={4}>
-                <div
-                  className="p-3 rounded-3 border bg-white"
-                  role="button"
-                  onClick={() => setFilter('personal')}
-                  style={{
-                    boxShadow: 'none',
-                    cursor: 'pointer',
-                    transition: 'all 0.2s ease',
-                    borderColor: filter === 'personal' ? brandPrimaryBorderColor : undefined,
-                    borderWidth: filter === 'personal' ? '2px' : '1px',
-                    backgroundColor: filter === 'personal' ? brandPrimarySoftBackground : '#ffffff',
-                  }}
-                >
-                  <div className="d-flex align-items-center justify-content-between">
-                    <div>
-                      <div className="text-muted small mb-1">{t('management.stats.personal')}</div>
-                      <div className="fs-4 fw-bold">{personalCount}</div>
-                    </div>
-                    <div
-                      className="rounded-circle bg-secondary bg-opacity-10 d-flex align-items-center justify-content-center"
-                      style={{ width: 48, height: 48 }}
-                    >
-                      <User size={20} style={{ color: brandPrimaryColor }} aria-hidden="true" />
-                    </div>
-                  </div>
-                </div>
-              </Col>
-              <Col xs={6} md={4}>
-                <div
-                  className="p-3 rounded-3 border bg-white"
-                  role="button"
-                  onClick={() => setFilter('public')}
-                  style={{
-                    boxShadow: 'none',
-                    cursor: 'pointer',
-                    transition: 'all 0.2s ease',
-                    borderColor: filter === 'public' ? brandPrimaryBorderColor : undefined,
-                    borderWidth: filter === 'public' ? '2px' : '1px',
-                    backgroundColor: filter === 'public' ? brandPrimarySoftBackground : '#ffffff',
-                  }}
-                >
-                  <div className="d-flex align-items-center justify-content-between">
-                    <div>
-                      <div className="text-muted small mb-1">{t('management.stats.company')}</div>
-                      <div className="fs-4 fw-bold">{publicCount}</div>
-                    </div>
-                    <div
-                      className="rounded-circle d-flex align-items-center justify-content-center"
-                      style={{ width: 48, height: 48, backgroundColor: brandPrimarySoftBackground }}
-                    >
-                      <Store size={20} style={{ color: brandPrimaryColor }} aria-hidden="true" />
+              {(
+                [
+                  { key: 'all' as FilterOption, label: t('management.stats.total'), count: totalAgents, Icon: Bot },
+                  {
+                    key: 'personal' as FilterOption,
+                    label: t('management.stats.personal'),
+                    count: personalCount,
+                    Icon: User,
+                  },
+                  { key: 'team' as FilterOption, label: t('management.stats.team'), count: teamCount, Icon: Users },
+                  {
+                    key: 'public' as FilterOption,
+                    label: t('management.stats.company'),
+                    count: publicCount,
+                    Icon: Store,
+                  },
+                  {
+                    key: 'favourites' as FilterOption,
+                    label: t('management.stats.favourites'),
+                    count: favouriteCount,
+                    Icon: Star,
+                  },
+                ] as const
+              ).map(({ key, label, count, Icon }) => (
+                <Col key={key}>
+                  <div
+                    className="p-3 rounded-3 border bg-white"
+                    role="button"
+                    onClick={() => setFilter(key)}
+                    style={{
+                      cursor: 'pointer',
+                      transition: 'all 0.2s ease',
+                      borderColor: filter === key ? brandPrimaryColor : '#e8ecf2',
+                      borderWidth: filter === key ? '2px' : '1px',
+                      backgroundColor: filter === key ? brandPrimarySoftBackground : '#ffffff',
+                      boxShadow: filter === key ? `0 0 0 1px ${brandPrimaryColor}20` : 'none',
+                    }}
+                  >
+                    <div className="d-flex align-items-center justify-content-between">
+                      <div>
+                        <div className="text-muted small mb-1">{label}</div>
+                        <div className="fs-4 fw-bold" style={{ color: filter === key ? brandPrimaryColor : undefined }}>
+                          {count}
+                        </div>
+                      </div>
+                      <div
+                        className="rounded-circle d-flex align-items-center justify-content-center"
+                        style={{ width: 48, height: 48, backgroundColor: brandPrimarySoftBackground }}
+                      >
+                        <Icon size={20} style={{ color: brandPrimaryColor }} aria-hidden="true" />
+                      </div>
                     </div>
                   </div>
-                </div>
-              </Col>
+                </Col>
+              ))}
             </Row>
+          </Container>
+        )}
+
+        {/* Admin Panel (admin users only) -- above tag filter */}
+        {agentsFeatureEnabled && user?.groups?.includes('admin') && (
+          <Container fluid className="px-0 mb-3">
+            <AgentAdminPanel onAgentDeleted={loadAgents} />
           </Container>
         )}
 
@@ -734,111 +1102,167 @@ export const AgentsManagement = () => {
               </div>
             ) : (
               <>
-                {filter !== 'public' && filteredMyAgents.length > 0 && (
-                  <section className="agents-section agents-section--my">
-                    <div className="agents-section__header">
-                      <div className="d-flex align-items-center gap-3">
-                        <div
-                          className="agents-section__icon rounded-3 d-flex align-items-center justify-content-center"
-                          style={{
-                            backgroundColor: brandPrimaryColor,
-                          }}
-                        >
-                          <User size={28} style={{ color: brandPrimaryContrast }} aria-hidden="true" />
-                        </div>
-                        <div className="flex-grow-1">
-                          <div className="d-flex justify-content-between align-items-center mb-1">
-                            <h2 className="agents-section__title">{t('management.sections.myAgents.title')}</h2>
-                            <span
-                              className="badge rounded-pill px-3 py-2 agents-section__count"
-                              style={{
-                                backgroundColor: brandPrimaryColor,
-                                color: brandPrimaryContrast,
-                              }}
-                            >
-                              {filteredMyAgents.length}
-                            </span>
-                          </div>
-                          <p className="agents-section__subtitle">{t('management.sections.myAgents.subtitle')}</p>
-                        </div>
-                      </div>
-                    </div>
-                    {renderAgentsGrid(
-                      filteredMyAgents,
-                      filter === 'personal' ? t('management.empty.personalOnly') : t('management.empty.none'),
-                      true
-                    )}
-                  </section>
-                )}
-
-                {agentsMode !== 'personal_only' &&
+                {/* ── Favourites Section ── */}
+                {showFavourites &&
+                  favouriteAgents.length > 0 &&
                   filter !== 'personal' &&
-                  (filteredWorkspaceAgents.length > 0 || companyLoading) && (
-                    <section className="agents-section agents-section--company">
-                      <div className="agents-section__header">
-                        <div className="d-flex align-items-center gap-3">
-                          <div
-                            className="agents-section__icon rounded-3 d-flex align-items-center justify-content-center"
-                            style={{
-                              backgroundColor: brandPrimaryColor,
-                            }}
-                          >
-                            <Store size={28} style={{ color: brandPrimaryContrast }} aria-hidden="true" />
-                          </div>
-                          <div className="flex-grow-1">
-                            <div className="d-flex justify-content-between align-items-center mb-1">
-                              <h2 className="agents-section__title">{t('management.sections.company.title')}</h2>
-                              {!companyLoading && (
-                                <span
-                                  className="badge rounded-pill px-3 py-2 agents-section__count"
-                                  style={{
-                                    backgroundColor: brandPrimaryColor,
-                                    color: brandPrimaryContrast,
-                                  }}
-                                >
-                                  {filteredWorkspaceAgents.length}
-                                </span>
-                              )}
-                            </div>
-                            <p className="agents-section__subtitle">{t('management.sections.company.subtitle')}</p>
-                          </div>
-                        </div>
+                  filter !== 'public' &&
+                  filter !== 'team' && (
+                    <section className="agents-section mb-4">
+                      <div
+                        className="agents-section__header d-flex align-items-center gap-2 p-3 rounded-3 border bg-white mb-3"
+                        role="button"
+                        onClick={() => toggleSection('favourites')}
+                        style={{ cursor: 'pointer' }}
+                      >
+                        <Star size={16} style={{ color: '#f59e0b' }} />
+                        <h2 className="agents-section__title mb-0 fs-6 fw-bold">
+                          {t('management.sections.favourites.title')}
+                        </h2>
+                        <span className="badge rounded-pill" style={{ backgroundColor: '#fce7f3', color: '#db2777' }}>
+                          {favouriteAgents.length}
+                        </span>
+                        <span className="ms-auto">
+                          {collapsedSections.favourites ? <ChevronRight size={16} /> : <ChevronDown size={16} />}
+                        </span>
                       </div>
-                      {companyLoading && filteredWorkspaceAgents.length === 0 ? (
-                        <div className="d-flex justify-content-center py-4">
-                          <Spinner animation="border" size="sm" />
-                        </div>
-                      ) : (
-                        renderAgentsGrid(filteredWorkspaceAgents, t('management.empty.company'))
-                      )}
+                      {!collapsedSections.favourites &&
+                        renderAgentsSection(favouriteAgents, t('management.empty.favourites'))}
                     </section>
                   )}
 
-                {filteredMyAgents.length === 0 && filteredWorkspaceAgents.length === 0 && (
-                  <div className="text-center py-5">
-                    <div className="mb-4">
-                      <Bot size={64} className="text-muted" aria-hidden="true" />
+                {/* ── Personal Section ── */}
+                {filter !== 'public' && filter !== 'team' && filteredMyAgents.length > 0 && (
+                  <section className="agents-section mb-4">
+                    <div
+                      className="agents-section__header d-flex align-items-center gap-2 p-3 rounded-3 border bg-white mb-3"
+                      role="button"
+                      onClick={() => toggleSection('personal')}
+                      style={{ cursor: 'pointer' }}
+                    >
+                      <User size={16} style={{ color: brandPrimaryColor }} />
+                      <h2 className="agents-section__title mb-0 fs-6 fw-bold">
+                        {t('management.sections.myAgents.title')}
+                      </h2>
+                      <span className="badge rounded-pill" style={{ backgroundColor: '#ede9fe', color: '#6366f1' }}>
+                        {filteredMyAgents.length}
+                      </span>
+                      <span className="ms-auto">
+                        {collapsedSections.personal ? <ChevronRight size={16} /> : <ChevronDown size={16} />}
+                      </span>
                     </div>
-                    <h3 className="h5 mb-2">{t('management.empty.title')}</h3>
-                    <p className="text-muted mb-4">
-                      {selectedTags.length > 0
-                        ? t('management.empty.noTagMatch')
-                        : agentsMode === 'off'
-                          ? t('management.empty.modeOff')
-                          : filter === 'all'
-                            ? t('management.empty.all')
-                            : filter === 'personal'
-                              ? t('management.empty.personal')
-                              : t('management.empty.company')}
-                    </p>
-                    {agentsMode !== 'off' && (
-                      <Button variant="primary" onClick={handleCreate}>
-                        <PlusCircle size={16} className="me-2" aria-hidden="true" />
-                        {t('management.actions.createFirst')}
-                      </Button>
-                    )}
-                  </div>
+                    {!collapsedSections.personal &&
+                      renderAgentsSection(
+                        filteredMyAgents,
+                        filter === 'personal' ? t('management.empty.personalOnly') : t('management.empty.none'),
+                        true
+                      )}
+                  </section>
                 )}
+
+                {/* ── Team Sections ── */}
+                {teams.map((team) => (
+                  <section key={team.teamId} className="agents-section mb-4">
+                    <div
+                      className="agents-section__header d-flex align-items-center gap-2 p-3 rounded-3 border bg-white mb-3"
+                      role="button"
+                      onClick={() => toggleSection(`team-${team.teamId}`)}
+                      style={{ cursor: 'pointer' }}
+                    >
+                      <Users size={16} style={{ color: '#16a34a' }} />
+                      <h2 className="agents-section__title mb-0 fs-6 fw-bold">{team.teamName}</h2>
+                      <span className="badge rounded-pill" style={{ backgroundColor: '#dcfce7', color: '#16a34a' }}>
+                        {team.myRole}
+                      </span>
+                      <span
+                        className="small text-muted"
+                        style={{ cursor: 'pointer', marginLeft: 8 }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleManageTeam(team);
+                        }}
+                      >
+                        {t('teamModal.title')} &rsaquo;
+                      </span>
+                      <span className="ms-auto">
+                        {collapsedSections[`team-${team.teamId}`] ? (
+                          <ChevronRight size={16} />
+                        ) : (
+                          <ChevronDown size={16} />
+                        )}
+                      </span>
+                    </div>
+                    {!collapsedSections[`team-${team.teamId}`] && (
+                      <p className="text-muted small">{t('management.sections.team.placeholder')}</p>
+                    )}
+                  </section>
+                ))}
+
+                {/* ── Company Section ── */}
+                {agentsMode !== 'personal_only' &&
+                  filter !== 'personal' &&
+                  filter !== 'team' &&
+                  (filteredWorkspaceAgents.length > 0 || companyLoading) && (
+                    <section className="agents-section mb-4">
+                      <div
+                        className="agents-section__header d-flex align-items-center gap-2 p-3 rounded-3 border bg-white mb-3"
+                        role="button"
+                        onClick={() => toggleSection('company')}
+                        style={{ cursor: 'pointer' }}
+                      >
+                        <Store size={16} style={{ color: '#d97706' }} />
+                        <h2 className="agents-section__title mb-0 fs-6 fw-bold">
+                          {t('management.sections.company.title')}
+                        </h2>
+                        {!companyLoading && (
+                          <span className="badge rounded-pill" style={{ backgroundColor: '#fef3c7', color: '#d97706' }}>
+                            {filteredWorkspaceAgents.length}
+                          </span>
+                        )}
+                        <span className="ms-auto">
+                          {collapsedSections.company ? <ChevronRight size={16} /> : <ChevronDown size={16} />}
+                        </span>
+                      </div>
+                      {!collapsedSections.company &&
+                        (companyLoading && filteredWorkspaceAgents.length === 0 ? (
+                          <div className="d-flex justify-content-center py-4">
+                            <Spinner animation="border" size="sm" />
+                          </div>
+                        ) : (
+                          renderAgentsSection(filteredWorkspaceAgents, t('management.empty.company'))
+                        ))}
+                    </section>
+                  )}
+
+                {filteredMyAgents.length === 0 &&
+                  filteredWorkspaceAgents.length === 0 &&
+                  favouriteAgents.length === 0 && (
+                    <div className="text-center py-5">
+                      <div className="mb-4">
+                        <Bot size={64} className="text-muted" aria-hidden="true" />
+                      </div>
+                      <h3 className="h5 mb-2">{t('management.empty.title')}</h3>
+                      <p className="text-muted mb-4">
+                        {searchQuery
+                          ? t('management.empty.noSearchMatch')
+                          : selectedTags.length > 0
+                            ? t('management.empty.noTagMatch')
+                            : agentsMode === 'off'
+                              ? t('management.empty.modeOff')
+                              : filter === 'all'
+                                ? t('management.empty.all')
+                                : filter === 'personal'
+                                  ? t('management.empty.personal')
+                                  : t('management.empty.company')}
+                      </p>
+                      {agentsMode !== 'off' && !searchQuery && (
+                        <Button variant="primary" onClick={handleCreate}>
+                          <PlusCircle size={16} className="me-2" aria-hidden="true" />
+                          {t('management.actions.createFirst')}
+                        </Button>
+                      )}
+                    </div>
+                  )}
               </>
             ))}
 
@@ -872,6 +1296,22 @@ export const AgentsManagement = () => {
             onEditSchedule={handleEditSchedule}
             onCreateSchedule={handleCreateScheduleFromList}
           />
+          <AgentShareModal
+            show={shareModal.show}
+            onHide={() => setShareModal({ show: false, agent: null })}
+            agent={shareModal.agent}
+            teams={teams}
+          />
+
+          <AgentManageTeamModal
+            show={teamModal.show}
+            onHide={() => setTeamModal({ show: false, team: null })}
+            team={teamModal.team}
+            onTeamCreated={loadPrefsAndTeams}
+            onTeamDeleted={loadPrefsAndTeams}
+            onTeamUpdated={loadPrefsAndTeams}
+          />
+
           {/* Missing integrations confirmation modal (pre-chat) */}
           <Modal show={missingModal.show} onHide={() => setMissingModal((m) => ({ ...m, show: false }))} centered>
             <Modal.Header closeButton>
