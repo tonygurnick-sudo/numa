@@ -161,6 +161,39 @@ async def run_action(args: dict[str, Any]) -> dict[str, Any]:
                     }
                 ],
             }
+        if status == "execution_timeout":
+            return {
+                "content": [
+                    {
+                        "type": "text",
+                        "text": json.dumps(
+                            {
+                                "status": "execution_timeout",
+                                "message": (
+                                    f"Execution failed or timed out for: {action_key}. "
+                                    "The action was approved but may not have completed. "
+                                    "Check the target system before retrying."
+                                ),
+                            }
+                        ),
+                    }
+                ],
+                "isError": True,
+            }
+        if status == "already_executed":
+            return {
+                "content": [
+                    {
+                        "type": "text",
+                        "text": (
+                            f"Action already executed: {action_key}. "
+                            "This was already run from a previous attempt. "
+                            "Check the target system for results."
+                        ),
+                    }
+                ],
+                "isError": True,
+            }
 
         # Save result to file
         file_path, preview = save_result(result, action_key, description)
@@ -378,6 +411,39 @@ async def proxy_request(args: dict[str, Any]) -> dict[str, Any]:
                         ),
                     }
                 ],
+            }
+        if status == "execution_timeout":
+            return {
+                "content": [
+                    {
+                        "type": "text",
+                        "text": json.dumps(
+                            {
+                                "status": "execution_timeout",
+                                "message": (
+                                    f"Execution failed or timed out for proxy request: {method} {upstream_url}. "
+                                    "The request was approved but may not have completed. "
+                                    "Check the target system before retrying."
+                                ),
+                            }
+                        ),
+                    }
+                ],
+                "isError": True,
+            }
+        if status == "already_executed":
+            return {
+                "content": [
+                    {
+                        "type": "text",
+                        "text": (
+                            f"Proxy request already executed: {method} {upstream_url}. "
+                            "This was already run from a previous attempt. "
+                            "Check the target system for results."
+                        ),
+                    }
+                ],
+                "isError": True,
             }
 
         # Save result to file

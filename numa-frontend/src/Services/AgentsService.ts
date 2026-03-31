@@ -20,6 +20,7 @@ type NumaDelete = (url: string, headers?: Record<string, string>) => Promise<unk
 
 const BASE_URL = '/api/agents';
 
+// Strips undefined, null, and empty-string values before sending query params
 const cleanParams = (params: Record<string, unknown>): Record<string, unknown> => {
   const cleaned: Record<string, unknown> = {};
   Object.entries(params).forEach(([key, value]) => {
