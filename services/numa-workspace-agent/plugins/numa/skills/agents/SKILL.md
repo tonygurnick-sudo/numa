@@ -112,6 +112,8 @@ JSON response with:
   - `agentId` - Unique agent ID
   - `title` - Agent display name
   - `description` - Brief description
+  - `systemPrompt` - **Truncated** to first ~200 characters (use `get` operation for full prompt)
+  - `referenceFiles` - **File names only** (use `get` operation for full file metadata)
   - `scope` - "user" (personal) or "workspace" (public)
   - `visibility` - "personal" or "public"
   - `agentType` - Agent type (e.g., "task")
@@ -122,6 +124,8 @@ JSON response with:
   - `limit` - Page size used
   - `offset` - Current offset
   - `hasMore` - Whether more results exist beyond this page
+
+**Note:** The list operation returns lightweight summaries. Use the `get` operation with a specific `agent_id` to retrieve full agent details including the complete system prompt and reference file metadata.
 
 ---
 
