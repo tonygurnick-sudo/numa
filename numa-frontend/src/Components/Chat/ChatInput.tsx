@@ -244,37 +244,66 @@ const ChatInput = ({
     }
   };
 
-  const handlePaste = (e: React.ClipboardEvent) => {
+  const handlePaste = async (e: React.ClipboardEvent) => {
     if (!onPasteFiles || !e.clipboardData) return;
 
     const items = e.clipboardData.items;
-    const files: File[] = [];
+    let hasFiles = false;
 
+    // Check if there are any files synchronously
     for (let i = 0; i < items.length; i++) {
       if (items[i].kind === 'file') {
-        let file = items[i].getAsFile();
-        if (file) {
-          // Browsers typically assign a generic name like "image.png" to raw clipboard screenshots.
-          // If we don't make this unique, pasting two images sequentially will overwrite the first one in S3.
-          if (/^(image|clipboard)\.(png|jpg|jpeg|gif|webp)$/i.test(file.name)) {
-            const ext = file.name.split('.').pop() || 'png';
-            const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-            const uniqueName = `pasted-image-${timestamp}.${ext}`;
-            file = new File([file], uniqueName, { type: file.type });
-          }
-          files.push(file);
-        }
+        hasFiles = true;
+        break;
       }
     }
 
-    if (files.length > 0) {
-      onPasteFiles(files);
-
-      // Only prevent default if there's no actual text included in the clipboard,
-      // otherwise let the browser paste the text part into the textarea.
+    if (hasFiles) {
+      // Only prevent default if there's no actual text included in the clipboard
       const plainText = e.clipboardData.getData('text/plain');
       if (!plainText) {
         e.preventDefault();
+      }
+
+      const filePromises: Promise<File | null>[] = [];
+
+      for (let i = 0; i < items.length; i++) {
+        if (items[i].kind === 'file') {
+          const originalFile = items[i].getAsFile();
+          if (originalFile) {
+            // Eagerly read the file into memory to detach it from the clipboard event
+            // lifecycle. If we don't do this, Async uploads (like S3 Presigned URLs)
+            // will fail as the browser revokes the clipboard blob memory!
+            const promise = originalFile
+              .arrayBuffer()
+              .then((buffer) => {
+                let uniqueName = originalFile.name;
+
+                // Browsers typically assign a generic name like "image.png" to raw clipboard screenshots.
+                // If we don't make this unique, pasting two images sequentially will overwrite in S3.
+                if (/^(image|clipboard)\.(png|jpg|jpeg|gif|webp)$/i.test(originalFile.name)) {
+                  const ext = originalFile.name.split('.').pop() || 'png';
+                  const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+                  uniqueName = `pasted-image-${timestamp}.${ext}`;
+                }
+
+                return new File([buffer], uniqueName, { type: originalFile.type });
+              })
+              .catch((err) => {
+                console.error('Failed to read pasted file from clipboard:', err);
+                return null;
+              });
+
+            filePromises.push(promise);
+          }
+        }
+      }
+
+      if (filePromises.length > 0) {
+        const resolvedFiles = (await Promise.all(filePromises)).filter((f): f is File => f !== null);
+        if (resolvedFiles.length > 0) {
+          onPasteFiles(resolvedFiles);
+        }
       }
     }
   };

@@ -177,7 +177,7 @@ export const WorkflowStepPrompt = ({
                       {email}
                       {email === currentUserEmail && (
                         <span className="text-muted" style={{ fontSize: '0.7rem' }}>
-                          (you)
+                          {t('labels.you', '(you)')}
                         </span>
                       )}
                       <X size={12} style={{ cursor: 'pointer', marginLeft: 2 }} onClick={() => removeEmail(email)} />
