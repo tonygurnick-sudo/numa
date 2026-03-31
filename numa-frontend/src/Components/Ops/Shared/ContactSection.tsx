@@ -115,7 +115,7 @@ export function ContactSection({ contacts, onChange }: ContactSectionProps): Rea
     return (
       <div>
         <div className="text-muted small mb-2">{t('crm.noContacts')}</div>
-        <Button variant="outline-primary" size="sm" onClick={addContact}>
+        <Button variant="outline-secondary" size="sm" onClick={addContact}>
           <i className="bi bi-plus me-1" />
           {t('contacts.addContact')}
         </Button>
@@ -306,7 +306,7 @@ export function ContactSection({ contacts, onChange }: ContactSectionProps): Rea
 
       {/* Add button - only visible when not currently editing */}
       {editingIndex === -1 && (
-        <Button variant="outline-primary" size="sm" className="mt-2" onClick={addContact}>
+        <Button variant="outline-secondary" size="sm" className="mt-2" onClick={addContact}>
           <i className="bi bi-plus me-1" />
           {t('contacts.addContact')}
         </Button>

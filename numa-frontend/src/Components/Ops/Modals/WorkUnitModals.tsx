@@ -64,7 +64,7 @@ export function CreateWorkUnitModal({
       </Modal.Header>
 
       <Modal.Body>
-        {error && <div className="alert alert-danger mb-3">{error}</div>}
+        {error && <div className="alert alert-danger mb-3" style={{ position: 'sticky', top: 0, zIndex: 5 }}>{error}</div>}
 
         <Form.Group className="mb-3">
           <Form.Label>{t('sprints.createName')}</Form.Label>
@@ -94,7 +94,7 @@ export function CreateWorkUnitModal({
         </div>
       </Modal.Body>
 
-      <Modal.Footer>
+      <Modal.Footer style={{ backgroundColor: '#f9fafb' }}>
         <Button variant="secondary" onClick={onHide}>
           {t('common.cancel')}
         </Button>
@@ -236,7 +236,7 @@ export function StartWorkUnitModal({
       </Modal.Header>
 
       <Modal.Body>
-        {error && <div className="alert alert-danger mb-3">{error}</div>}
+        {error && <div className="alert alert-danger mb-3" style={{ position: 'sticky', top: 0, zIndex: 5 }}>{error}</div>}
 
         {hasActiveUnit && <div className="alert alert-warning mb-3">{t('sprints.completeCurrentFirst')}</div>}
 
@@ -293,7 +293,7 @@ export function StartWorkUnitModal({
         )}
       </Modal.Body>
 
-      <Modal.Footer>
+      <Modal.Footer style={{ backgroundColor: '#f9fafb' }}>
         <Button variant="secondary" onClick={onHide}>
           {t('common.cancel')}
         </Button>
@@ -372,7 +372,7 @@ export function CompleteWorkUnitModal({
       </Modal.Header>
 
       <Modal.Body>
-        {error && <div className="alert alert-danger mb-3">{error}</div>}
+        {error && <div className="alert alert-danger mb-3" style={{ position: 'sticky', top: 0, zIndex: 5 }}>{error}</div>}
 
         <p className="fw-medium mb-2">{workUnit.name}</p>
 
@@ -426,7 +426,7 @@ export function CompleteWorkUnitModal({
         )}
       </Modal.Body>
 
-      <Modal.Footer>
+      <Modal.Footer style={{ backgroundColor: '#f9fafb' }}>
         <Button variant="secondary" onClick={onHide}>
           {t('common.cancel')}
         </Button>

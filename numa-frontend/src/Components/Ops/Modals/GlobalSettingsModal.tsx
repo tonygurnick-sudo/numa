@@ -1,6 +1,6 @@
 /* eslint-disable i18next/no-literal-string */
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { Modal, Button, Form, Nav, Tab, Table, Badge, Accordion } from 'react-bootstrap';
+import { Modal, Button, Form, Nav, Tab, Table, Badge, Accordion, Spinner } from 'react-bootstrap';
 import { useTranslation } from 'react-i18next';
 import { useNumaRequest } from '../../../Providers/NumaRequestContext';
 import { useOps } from '../OpsContext';
@@ -25,6 +25,7 @@ import type {
   FieldType,
   StaffProfile,
   Project,
+  ProjectStatus,
   CrmConfig,
   CrmLifecycleStage,
   SupplierConfig,
@@ -48,6 +49,8 @@ interface GlobalSettingsModalProps {
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 const generateId = () => `custom-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+const PROJECT_STATUSES: ProjectStatus[] = ['active', 'planned', 'on_hold', 'complete'];
 
 const STATUS_TYPES: StatusType[] = ['backlog', 'scoped', 'queued', 'active', 'completed', 'ended'];
 const FIELD_CATEGORIES: string[] = ['common', 'mining', 'vehicle', 'crm', 'support', 'development', 'operations'];
@@ -462,6 +465,32 @@ export function GlobalSettingsModal({
         }
       }
 
+      // 4. Projects Diff
+      const originalProjects = config?.projects ?? [];
+      const newProjectIds = new Set(projects.map((p) => p.id));
+
+      // Deleted
+      for (const orig of originalProjects) {
+        if (!newProjectIds.has(orig.id)) {
+          promises.push(OpsService.deleteProject(numaDelete, orig.id));
+        }
+      }
+
+      // Added / Updated
+      for (const project of projects) {
+        if (project.id.startsWith('custom-')) {
+          // New project
+          const { id: _id, ...payload } = project;
+          promises.push(OpsService.createProject(numaPost, payload));
+        } else {
+          // Existing - Check if changed
+          const orig = originalProjects.find((o) => o.id === project.id);
+          if (orig && JSON.stringify(orig) !== JSON.stringify(project)) {
+            promises.push(OpsService.updateProject(numaPut, project.id, project));
+          }
+        }
+      }
+
       // Await all mutations
       const results = await Promise.allSettled(promises);
       const errors = results.filter((r) => r.status === 'rejected');
@@ -480,9 +509,11 @@ export function GlobalSettingsModal({
   }, [
     ticketTypes,
     fields,
+    projects,
     crmConfig,
     config?.ticketTypes,
     config?.fields,
+    config?.projects,
     numaPut,
     numaDelete,
     numaPost,
@@ -633,6 +664,8 @@ export function GlobalSettingsModal({
             <th>{t('common.name')}</th>
             <th>{t('common.description')}</th>
             <th>{t('common.color')}</th>
+            <th>{t('common.status')}</th>
+            <th>{t('globalSettings.owner')}</th>
             <th>{t('globalSettings.active')}</th>
             <th />
           </tr>
@@ -693,6 +726,49 @@ export function GlobalSettingsModal({
                 </div>
               </td>
               <td>
+                <Form.Select
+                  size="sm"
+                  value={project.status ?? 'active'}
+                  onChange={(e) => {
+                    const updated = [...projects];
+                    updated[idx] = { ...updated[idx], status: e.target.value as ProjectStatus };
+                    setProjects(updated);
+                  }}
+                >
+                  {PROJECT_STATUSES.map((s) => (
+                    <option key={s} value={s}>
+                      {t(`globalSettings.projectStatus.${s}`)}
+                    </option>
+                  ))}
+                </Form.Select>
+              </td>
+              <td>
+                <Form.Select
+                  size="sm"
+                  value={project.ownerId ?? ''}
+                  onChange={(e) => {
+                    const selectedId = e.target.value || null;
+                    const selectedStaff = staff.find((s) => s.id === selectedId);
+                    const updated = [...projects];
+                    updated[idx] = {
+                      ...updated[idx],
+                      ownerId: selectedId,
+                      ownerName: selectedStaff?.name ?? selectedStaff?.email ?? null,
+                    };
+                    setProjects(updated);
+                  }}
+                >
+                  <option value="">{t('globalSettings.unassigned')}</option>
+                  {staff
+                    .filter((s) => s.isActive)
+                    .map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.name ?? s.email}
+                      </option>
+                    ))}
+                </Form.Select>
+              </td>
+              <td>
                 <Form.Check
                   type="switch"
                   checked={project.isActive}
@@ -728,6 +804,9 @@ export function GlobalSettingsModal({
               name: '',
               description: '',
               color: BOARD_COLORS[prev.length % BOARD_COLORS.length],
+              status: 'active' as ProjectStatus,
+              ownerId: null,
+              ownerName: null,
               isActive: true,
             },
           ])
@@ -1948,86 +2027,190 @@ export function GlobalSettingsModal({
     </div>
   );
 
+  const renderPrefixesTab = () => {
+    // Group ticket types by unique prefix
+    const prefixMap = new Map<string, TicketType[]>();
+    ticketTypes.forEach((tt) => {
+      const prefix = (tt.prefix || '').toUpperCase();
+      if (!prefix) return;
+      const existing = prefixMap.get(prefix) || [];
+      existing.push(tt);
+      prefixMap.set(prefix, existing);
+    });
+
+    const sortedPrefixes = Array.from(prefixMap.entries()).sort(([a], [b]) => a.localeCompare(b));
+
+    return (
+      <div>
+        <h6 className="fw-bold mb-1">{t('globalSettings.prefixRegistryTitle')}</h6>
+        <p className="text-muted small mb-3">{t('globalSettings.prefixRegistryDescription')}</p>
+
+        <Table size="sm" hover className="mb-3 ops-settings-table">
+          <thead>
+            <tr>
+              <th>{t('globalSettings.prefixColumn')}</th>
+              <th>{t('globalSettings.nextNumberColumn')}</th>
+              <th>{t('globalSettings.usedByColumn')}</th>
+              <th>{t('globalSettings.statusColumn')}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {sortedPrefixes.map(([prefix, types]) => (
+              <tr key={prefix}>
+                <td>
+                  <code className="fw-bold text-uppercase" style={{ fontSize: '0.9rem' }}>
+                    {prefix}
+                  </code>
+                </td>
+                <td className="text-muted">{prefix}-001</td>
+                <td>
+                  <div className="d-flex flex-wrap gap-1">
+                    {types.map((tt) => {
+                      const textColor = getContrastTextColor(tt.color || '#6c757d');
+                      return (
+                        <Badge
+                          key={tt.id}
+                          pill
+                          style={{ backgroundColor: tt.color || '#6c757d', color: textColor, fontSize: '0.75rem' }}
+                        >
+                          {tt.icon && <span className="me-1">{tt.icon}</span>}
+                          {tt.name}
+                        </Badge>
+                      );
+                    })}
+                  </div>
+                </td>
+                <td>
+                  {types.length > 0 ? (
+                    <Badge bg="success" pill>
+                      {t('globalSettings.prefixActive')}
+                    </Badge>
+                  ) : (
+                    <Badge bg="secondary" pill>
+                      {t('globalSettings.prefixUnused')}
+                    </Badge>
+                  )}
+                </td>
+              </tr>
+            ))}
+            {sortedPrefixes.length === 0 && (
+              <tr>
+                <td colSpan={4} className="text-center py-4 text-muted">
+                  {t('globalSettings.noPrefixes')}
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </Table>
+
+        <div className="alert alert-info small mb-0">
+          <i className="bi bi-info-circle me-2" />
+          {t('globalSettings.prefixInfoBox')}
+        </div>
+      </div>
+    );
+  };
+
   // ═══════════════════════════════════════════════════════════════════════════
   // RENDER
   // ═══════════════════════════════════════════════════════════════════════════
 
   return (
     <>
-      <Modal show={show} onHide={onHide} size="lg" fullscreen="lg-down" centered>
+      <Modal show={show} onHide={onHide} size="xl" fullscreen="lg-down" centered>
         <Modal.Header closeButton>
           <Modal.Title>{t('settings.title')}</Modal.Title>
         </Modal.Header>
 
-        <Modal.Body style={{ minHeight: 500, overflowX: 'hidden' }}>
-          {error && <div className="alert alert-danger mb-3">{error}</div>}
+        <Modal.Body style={{ minHeight: 500, maxHeight: '85vh', overflowX: 'hidden', overflowY: 'auto' }}>
+          {error && (
+            <div className="alert alert-danger mb-3" style={{ position: 'sticky', top: 0, zIndex: 5 }}>
+              {error}
+            </div>
+          )}
 
           <Tab.Container defaultActiveKey={defaultTab ?? 'projects'}>
-            <div className="d-flex flex-column flex-md-row" style={{ minHeight: 460 }}>
-              {/* Navigation */}
-              <Nav
-                variant="pills"
-                className="flex-nowrap flex-md-column overflow-auto flex-shrink-0 mb-3 mb-md-0 pb-2 pb-md-0 me-0 me-md-3 pe-0 pe-md-3 ops-settings-nav"
-                style={{ minWidth: 160, maxWidth: '100%', gap: '0.25rem' }}
-              >
-                <Nav.Item>
-                  <Nav.Link eventKey="projects">{t('settings.projects')}</Nav.Link>
-                </Nav.Item>
-                <Nav.Item>
-                  <Nav.Link eventKey="staff">{t('settings.staff')}</Nav.Link>
-                </Nav.Item>
-                <Nav.Item>
-                  <Nav.Link eventKey="ticketTypes">{t('settings.ticketTypes')}</Nav.Link>
-                </Nav.Item>
-                <Nav.Item>
-                  <Nav.Link eventKey="statuses">{t('settings.statuses')}</Nav.Link>
-                </Nav.Item>
-                <Nav.Item>
-                  <Nav.Link eventKey="fields">{t('settings.fields')}</Nav.Link>
-                </Nav.Item>
-                <Nav.Item>
-                  <Nav.Link eventKey="crmConfig">{t('settings.crmConfig')}</Nav.Link>
-                </Nav.Item>
-                <Nav.Item>
-                  <Nav.Link eventKey="supplierConfig">{t('settings.supplierConfig')}</Nav.Link>
-                </Nav.Item>
-                <Nav.Item>
-                  <Nav.Link eventKey="customers">{t('settings.customers')}</Nav.Link>
-                </Nav.Item>
-                <Nav.Item>
-                  <Nav.Link eventKey="suppliersList">{t('settings.suppliersList')}</Nav.Link>
-                </Nav.Item>
-                <Nav.Item>
-                  <Nav.Link eventKey="boards">{t('settings.boards')}</Nav.Link>
-                </Nav.Item>
-                <Nav.Item>
-                  <Nav.Link eventKey="linkConfig">{t('settings.linkConfig')}</Nav.Link>
-                </Nav.Item>
-              </Nav>
+            {/* Horizontal tab bar */}
+            <Nav variant="pills" className="d-flex flex-row flex-wrap gap-2 pb-3 mb-3 border-bottom ops-settings-nav">
+              <Nav.Item>
+                <Nav.Link eventKey="projects">
+                  {t('settings.projects')} ({projects.length})
+                </Nav.Link>
+              </Nav.Item>
+              <Nav.Item>
+                <Nav.Link eventKey="staff">
+                  {t('settings.staff')} ({staff.length})
+                </Nav.Link>
+              </Nav.Item>
+              <Nav.Item>
+                <Nav.Link eventKey="ticketTypes">
+                  {t('settings.ticketTypes')} ({ticketTypes.length})
+                </Nav.Link>
+              </Nav.Item>
+              <Nav.Item>
+                <Nav.Link eventKey="prefixes">
+                  <i className="bi bi-hash me-1" />
+                  {t('settings.prefixes')}
+                </Nav.Link>
+              </Nav.Item>
+              <Nav.Item>
+                <Nav.Link eventKey="statuses">{t('settings.statuses')}</Nav.Link>
+              </Nav.Item>
+              <Nav.Item>
+                <Nav.Link eventKey="fields">
+                  {t('settings.fields')} ({fields.length})
+                </Nav.Link>
+              </Nav.Item>
+              <Nav.Item>
+                <Nav.Link eventKey="crmConfig">{t('settings.crmConfig')}</Nav.Link>
+              </Nav.Item>
+              <Nav.Item>
+                <Nav.Link eventKey="supplierConfig">{t('settings.supplierConfig')}</Nav.Link>
+              </Nav.Item>
+              <Nav.Item>
+                <Nav.Link eventKey="customers">
+                  {t('settings.customers')} ({customers.length})
+                </Nav.Link>
+              </Nav.Item>
+              <Nav.Item>
+                <Nav.Link eventKey="suppliersList">
+                  {t('settings.suppliersList')} ({suppliers.length})
+                </Nav.Link>
+              </Nav.Item>
+              <Nav.Item>
+                <Nav.Link eventKey="boards">
+                  {t('settings.boards')} ({teams.length})
+                </Nav.Link>
+              </Nav.Item>
+              <Nav.Item>
+                <Nav.Link eventKey="linkConfig">{t('settings.linkConfig')}</Nav.Link>
+              </Nav.Item>
+            </Nav>
 
-              {/* Tab Content */}
-              <Tab.Content className="flex-grow-1 overflow-auto" style={{ maxHeight: 460 }}>
-                <Tab.Pane eventKey="projects">{renderProjectsTab()}</Tab.Pane>
-                <Tab.Pane eventKey="staff">{renderStaffTab()}</Tab.Pane>
-                <Tab.Pane eventKey="ticketTypes">{renderTicketTypesTab()}</Tab.Pane>
-                <Tab.Pane eventKey="statuses">{renderStatusesTab()}</Tab.Pane>
-                <Tab.Pane eventKey="fields">{renderFieldsTab()}</Tab.Pane>
-                <Tab.Pane eventKey="crmConfig">{renderCrmConfigTab()}</Tab.Pane>
-                <Tab.Pane eventKey="supplierConfig">{renderSupplierConfigTab()}</Tab.Pane>
-                <Tab.Pane eventKey="customers">{renderCustomersTab()}</Tab.Pane>
-                <Tab.Pane eventKey="suppliersList">{renderSuppliersTab()}</Tab.Pane>
-                <Tab.Pane eventKey="boards">{renderBoardsTab()}</Tab.Pane>
-                <Tab.Pane eventKey="linkConfig">{renderLinkConfigTab()}</Tab.Pane>
-              </Tab.Content>
-            </div>
+            {/* Tab Content */}
+            <Tab.Content className="overflow-auto" style={{ maxHeight: 'calc(85vh - 220px)' }}>
+              <Tab.Pane eventKey="projects">{renderProjectsTab()}</Tab.Pane>
+              <Tab.Pane eventKey="staff">{renderStaffTab()}</Tab.Pane>
+              <Tab.Pane eventKey="ticketTypes">{renderTicketTypesTab()}</Tab.Pane>
+              <Tab.Pane eventKey="prefixes">{renderPrefixesTab()}</Tab.Pane>
+              <Tab.Pane eventKey="statuses">{renderStatusesTab()}</Tab.Pane>
+              <Tab.Pane eventKey="fields">{renderFieldsTab()}</Tab.Pane>
+              <Tab.Pane eventKey="crmConfig">{renderCrmConfigTab()}</Tab.Pane>
+              <Tab.Pane eventKey="supplierConfig">{renderSupplierConfigTab()}</Tab.Pane>
+              <Tab.Pane eventKey="customers">{renderCustomersTab()}</Tab.Pane>
+              <Tab.Pane eventKey="suppliersList">{renderSuppliersTab()}</Tab.Pane>
+              <Tab.Pane eventKey="boards">{renderBoardsTab()}</Tab.Pane>
+              <Tab.Pane eventKey="linkConfig">{renderLinkConfigTab()}</Tab.Pane>
+            </Tab.Content>
           </Tab.Container>
         </Modal.Body>
 
-        <Modal.Footer>
+        <Modal.Footer style={{ backgroundColor: '#f9fafb' }}>
           <Button variant="secondary" onClick={onHide}>
             {t('common.cancel')}
           </Button>
           <Button variant="primary" disabled={saving} onClick={handleSave}>
+            {saving && <Spinner as="span" animation="border" size="sm" className="me-2" />}
             {saving ? t('common.loading') : t('common.save')}
           </Button>
         </Modal.Footer>
@@ -2119,7 +2302,7 @@ export function GlobalSettingsModal({
             </div>
           </Form.Group>
         </Modal.Body>
-        <Modal.Footer>
+        <Modal.Footer style={{ backgroundColor: '#f9fafb' }}>
           <Button variant="secondary" onClick={() => setShowLifecycleStageModal(false)}>
             Cancel
           </Button>
@@ -2205,7 +2388,7 @@ export function GlobalSettingsModal({
             </div>
           </Form.Group>
         </Modal.Body>
-        <Modal.Footer>
+        <Modal.Footer style={{ backgroundColor: '#f9fafb' }}>
           <Button variant="secondary" onClick={() => setShowFlagModal(false)}>
             Cancel
           </Button>
@@ -2254,7 +2437,7 @@ export function GlobalSettingsModal({
             />
           </Form.Group>
         </Modal.Body>
-        <Modal.Footer>
+        <Modal.Footer style={{ backgroundColor: '#f9fafb' }}>
           <Button variant="secondary" size="sm" onClick={() => setShowDocTypeModal(false)}>
             Cancel
           </Button>
@@ -2367,7 +2550,7 @@ export function GlobalSettingsModal({
             </div>
           </Form.Group>
         </Modal.Body>
-        <Modal.Footer>
+        <Modal.Footer style={{ backgroundColor: '#f9fafb' }}>
           <Button variant="secondary" onClick={() => setShowSupplierLifecycleStageModal(false)}>
             Cancel
           </Button>
@@ -2515,7 +2698,7 @@ export function GlobalSettingsModal({
             </div>
           </Form.Group>
         </Modal.Body>
-        <Modal.Footer>
+        <Modal.Footer style={{ backgroundColor: '#f9fafb' }}>
           <Button variant="secondary" onClick={() => setShowTicketTypeModal(false)}>
             Cancel
           </Button>
@@ -2622,7 +2805,7 @@ export function GlobalSettingsModal({
             })}
           </div>
         </Modal.Body>
-        <Modal.Footer className="bg-light border-top">
+        <Modal.Footer className="border-top" style={{ backgroundColor: '#f9fafb' }}>
           <div className="me-auto small text-muted">{ticketTypeForm.defaultFields.length} field(s) selected</div>
           <Button variant="primary" size="sm" onClick={() => setShowTicketTypeFieldModal(false)}>
             Done
@@ -2720,7 +2903,7 @@ export function GlobalSettingsModal({
             </div>
           </Form.Group>
         </Modal.Body>
-        <Modal.Footer>
+        <Modal.Footer style={{ backgroundColor: '#f9fafb' }}>
           <Button variant="secondary" onClick={() => setShowSupplierLifecycleStageModal(false)}>
             {t('common.cancel')}
           </Button>
@@ -2814,7 +2997,7 @@ export function GlobalSettingsModal({
             </div>
           </Form.Group>
         </Modal.Body>
-        <Modal.Footer>
+        <Modal.Footer style={{ backgroundColor: '#f9fafb' }}>
           <Button variant="secondary" onClick={() => setShowSupplierFlagModal(false)}>
             {t('common.cancel')}
           </Button>
@@ -2868,7 +3051,7 @@ export function GlobalSettingsModal({
             />
           </Form.Group>
         </Modal.Body>
-        <Modal.Footer>
+        <Modal.Footer style={{ backgroundColor: '#f9fafb' }}>
           <Button variant="secondary" size="sm" onClick={() => setShowSupplierDocTypeModal(false)}>
             Cancel
           </Button>
@@ -2957,7 +3140,7 @@ export function GlobalSettingsModal({
             </Form.Group>
           )}
         </Modal.Body>
-        <Modal.Footer>
+        <Modal.Footer style={{ backgroundColor: '#f9fafb' }}>
           <Button variant="secondary" onClick={() => setShowingNewField(false)}>
             {t('common.cancel')}
           </Button>

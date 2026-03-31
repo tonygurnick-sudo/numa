@@ -3,6 +3,7 @@ import Table from 'react-bootstrap/Table';
 import Form from 'react-bootstrap/Form';
 import Badge from 'react-bootstrap/Badge';
 import Button from 'react-bootstrap/Button';
+import ButtonGroup from 'react-bootstrap/ButtonGroup';
 import Spinner from 'react-bootstrap/Spinner';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../../../Providers/AuthProvider';
@@ -19,6 +20,7 @@ import { QuickFilterDropdown } from './QuickFilterDropdown';
 import { CustomerFiltersDropdown } from './CustomerFiltersDropdown';
 import { EMPTY_CUSTOMER_FILTERS, hasActiveCustomerFilters, type CustomerFilterState } from './customerFilterTypes';
 import { ColumnPicker, type ColumnDef as PickerColumnDef } from './ColumnPicker';
+import { SaveViewModal, LoadViewDropdown } from './SavedViewsDropdown';
 import { BulkEditPanel } from './BulkEditPanel';
 import { TicketDetailModal } from '../Modals/TicketDetailModal';
 import ContextMenu from '../ContextMenu';
@@ -28,6 +30,7 @@ import { getTicketTypeIconClass } from '../../../constants/opsConstants';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
+type ScopeMode = 'thisBoard' | 'allBoards';
 type SortDirection = 'asc' | 'desc';
 type FilterEntry = { operator: string; value: unknown };
 type ActiveFilters = Record<string, FilterEntry>;
@@ -67,6 +70,8 @@ const DEFAULT_VISIBLE_KEYS = [
 ];
 
 const MOBILE_KEEP_KEYS = ['displayId', 'title', 'stageId', 'dueDate'];
+
+const SCOPE_STORAGE_KEY = 'numa_ops_all_tickets_scope';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -115,6 +120,14 @@ function matchesTextFilter(value: unknown, filter: FilterEntry): boolean {
       return str === target;
     case 'notEquals':
       return str !== target;
+    case 'startsWith':
+      return str.startsWith(target);
+    case 'endsWith':
+      return str.endsWith(target);
+    case 'empty':
+      return !value || str.trim() === '';
+    case 'notEmpty':
+      return !!value && str.trim() !== '';
     default:
       return true;
   }
@@ -212,6 +225,7 @@ export function AllTicketsView(): React.JSX.Element {
     selectTeam,
     pendingSprintFilter,
     setPendingSprintFilter,
+    myWorkFilter,
   } = useOps();
 
   // ── State ───────────────────────────────────────────────────────────────
@@ -223,6 +237,44 @@ export function AllTicketsView(): React.JSX.Element {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [lastClickedIndex, setLastClickedIndex] = useState<number | null>(null);
   const [showArchived, setShowArchived] = useState(false);
+
+  // ── Scope: This Board vs All Boards ────────────────────────────────────
+  const [scope, setScope] = useState<ScopeMode>(
+    () => (localStorage.getItem(SCOPE_STORAGE_KEY) as ScopeMode) || 'thisBoard'
+  );
+  const [allBoardsTickets, setAllBoardsTickets] = useState<Ticket[]>([]);
+  const [allBoardsLoading, setAllBoardsLoading] = useState(false);
+
+  // Persist scope selection
+  useEffect(() => {
+    localStorage.setItem(SCOPE_STORAGE_KEY, scope);
+  }, [scope]);
+
+  // Load tickets across all teams when scope is "allBoards"
+  useEffect(() => {
+    if (scope !== 'allBoards' || teams.length === 0) return;
+    let cancelled = false;
+    setAllBoardsLoading(true);
+
+    Promise.all(teams.map((tm) => OpsService.listTickets(numaGet, { teamId: tm.id })))
+      .then((responses) => {
+        if (cancelled) return;
+        const combined = responses.flatMap((r) => r.tickets);
+        setAllBoardsTickets(combined);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        console.error('[AllTicketsView] Failed to load all-boards tickets:', err);
+        setAllBoardsTickets([]);
+      })
+      .finally(() => {
+        if (!cancelled) setAllBoardsLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [scope, teams, numaGet]);
 
   // ── Column visibility ──────────────────────────────────────────────────
   const [visibleColumnKeys, setVisibleColumnKeys] = useState<string[]>(DEFAULT_VISIBLE_KEYS);
@@ -259,6 +311,7 @@ export function AllTicketsView(): React.JSX.Element {
 
   // ── Modal / overlay state ─────────────────────────────────────────────────
   const [detailTicketId, setDetailTicketId] = useState<string | null>(null);
+  const [detailTeamId, setDetailTeamId] = useState<string | null>(null);
   const [showDetail, setShowDetail] = useState(false);
   const [showColumnPicker, setShowColumnPicker] = useState(false);
   const [ctxMenu, setCtxMenu] = useState<{
@@ -271,8 +324,7 @@ export function AllTicketsView(): React.JSX.Element {
   const [savedViews, setSavedViews] = useState<SavedFilter[]>([]);
   const [currentViewName, setCurrentViewName] = useState<string | undefined>();
   const [viewSnapshot, setViewSnapshot] = useState<string | null>(null);
-  const [showSaveViewInput, setShowSaveViewInput] = useState(false);
-  const [newViewName, setNewViewName] = useState('');
+  const [showSaveViewModal, setShowSaveViewModal] = useState(false);
 
   const buildCurrentViewConfig = useCallback(
     (): SavedViewConfig => ({
@@ -530,11 +582,38 @@ export function AllTicketsView(): React.JSX.Element {
     [t, ticketTypes, teamData?.stages, staff, workUnits, projects, selectedTeamName]
   );
 
-  // ── Visible columns (ordered) ─────────────────────────────────────────
-  const visibleColumns = useMemo(
-    () => visibleColumnKeys.map((key) => columns.find((c) => c.key === key)).filter(Boolean) as ColumnDef[],
-    [columns, visibleColumnKeys]
+  // ── Board name lookup (for "All Boards" scope) ─────────────────────
+  const teamNameMap = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const tm of teams) map.set(tm.id, tm.name);
+    return map;
+  }, [teams]);
+
+  // ── Board column (injected when scope is allBoards) ────────────────
+  const boardColumn: ColumnDef = useMemo(
+    () => ({
+      key: 'boardName',
+      label: t('allTicketsView.board'),
+      sortable: true,
+      filterType: 'enum' as const,
+      filterOptions: () => teams.map((tm) => ({ value: tm.id, label: tm.name })),
+      accessor: (tk) => teamNameMap.get(tk.teamId) ?? '',
+      render: (tk) => <span>{teamNameMap.get(tk.teamId) ?? '-'}</span>,
+    }),
+    [t, teams, teamNameMap]
   );
+
+  // ── Visible columns (ordered) — inject Board column when scope is allBoards
+  const visibleColumns = useMemo(() => {
+    const base = visibleColumnKeys.map((key) => columns.find((c) => c.key === key)).filter(Boolean) as ColumnDef[];
+    if (scope === 'allBoards') {
+      // Insert Board column after displayId (first column), or at the start
+      const idIdx = base.findIndex((c) => c.key === 'displayId');
+      const insertAt = idIdx >= 0 ? idIdx + 1 : 0;
+      return [...base.slice(0, insertAt), boardColumn, ...base.slice(insertAt)];
+    }
+    return base;
+  }, [columns, visibleColumnKeys, scope, boardColumn]);
 
   // ── Build column lookup for filter type ─────────────────────────────────
   const columnMap = useMemo(() => {
@@ -542,13 +621,21 @@ export function AllTicketsView(): React.JSX.Element {
     for (const col of columns) {
       map.set(col.key, col);
     }
+    // Include board column so filtering/sorting works in allBoards mode
+    map.set(boardColumn.key, boardColumn);
     return map;
-  }, [columns]);
+  }, [columns, boardColumn]);
 
-  // ── Source tickets (archived filter) ──────────────────────────────────
+  // ── Source tickets (archived filter + scope + my-work filter) ──────────────────────
   const sourceTickets: Ticket[] = useMemo(() => {
-    return showArchived ? tickets : tickets.filter((tk) => !tk.archived);
-  }, [tickets, showArchived]);
+    let base = scope === 'allBoards' ? allBoardsTickets : tickets;
+    if (!showArchived) base = base.filter((tk) => !tk.archived);
+    const userSub = user?.decoded_tokens?.idToken?.sub;
+    if (myWorkFilter && userSub) {
+      base = base.filter((tk) => tk.assigneeId && tk.assigneeId === userSub);
+    }
+    return base;
+  }, [tickets, allBoardsTickets, scope, showArchived, myWorkFilter, user?.decoded_tokens?.idToken?.sub]);
 
   // ── Search filter ───────────────────────────────────────────────────────
   const searchedTickets = useMemo(() => {
@@ -779,19 +866,34 @@ export function AllTicketsView(): React.JSX.Element {
     setViewSnapshot(null);
   }, []);
 
-  const handleSaveNewView = useCallback(() => {
-    const trimmed = newViewName.trim();
-    if (trimmed) {
-      void handleSaveView(trimmed);
-      setNewViewName('');
-      setShowSaveViewInput(false);
-    }
-  }, [newViewName, handleSaveView]);
+  // ── View summary for save modal ─────────────────────────────────────────
+  const viewSummary = useMemo(() => {
+    const filterKeys = Object.keys(activeFilters);
+    const sortCol = columns.find((c) => c.key === sortColumn);
+    return {
+      scope: scope === 'allBoards' ? t('allTicketsView.allBoards') : t('allTicketsView.thisBoard'),
+      columnCount: visibleColumnKeys.length,
+      sortColumn: sortCol?.label ?? sortColumn,
+      sortDirection,
+      filterCount: filterKeys.length,
+      filterDetails: filterKeys.map((key) => {
+        const col = columns.find((c) => c.key === key);
+        const filter = activeFilters[key];
+        const displayValue = Array.isArray(filter.value)
+          ? `in ${String((filter.value as string[]).length)}`
+          : typeof filter.value === 'object'
+            ? filter.operator
+            : String(filter.value);
+        return { label: col?.label ?? key, value: `${filter.operator} ${displayValue}` };
+      }),
+    };
+  }, [activeFilters, columns, sortColumn, sortDirection, visibleColumnKeys.length, scope, t]);
 
   // ── Row click / right-click ─────────────────────────────────────────────
 
   const handleRowClick = useCallback((ticket: Ticket) => {
     setDetailTicketId(ticket.id);
+    setDetailTeamId(ticket.teamId);
     setShowDetail(true);
   }, []);
 
@@ -809,10 +911,10 @@ export function AllTicketsView(): React.JSX.Element {
       try {
         switch (action) {
           case 'assignToMe':
-            if (user?.username) {
+            if (user?.decoded_tokens?.idToken?.sub) {
               await OpsService.updateTicket(numaPut, ticket.id, {
                 teamId: ticket.teamId,
-                assigneeId: user.username,
+                assigneeId: user.decoded_tokens.idToken.sub,
                 version: ticket.version,
               });
               await refreshTickets();
@@ -926,8 +1028,28 @@ export function AllTicketsView(): React.JSX.Element {
             />
           </div>
 
-          {/* Team selector */}
+          {/* Scope toggle: This Board / All Boards */}
           {teams.length > 1 && (
+            <ButtonGroup size="sm">
+              <Button
+                variant={scope === 'thisBoard' ? 'primary' : 'outline-secondary'}
+                onClick={() => setScope('thisBoard')}
+                style={{ borderRadius: '8px 0 0 8px', fontSize: '0.82rem' }}
+              >
+                {t('allTicketsView.thisBoard')}
+              </Button>
+              <Button
+                variant={scope === 'allBoards' ? 'primary' : 'outline-secondary'}
+                onClick={() => setScope('allBoards')}
+                style={{ borderRadius: '0 8px 8px 0', fontSize: '0.82rem' }}
+              >
+                {t('allTicketsView.allBoards')}
+              </Button>
+            </ButtonGroup>
+          )}
+
+          {/* Team selector — hidden when All Boards scope is active */}
+          {teams.length > 1 && scope === 'thisBoard' && (
             <div className="position-relative d-inline-block">
               <select
                 className="form-select form-select-sm"
@@ -996,8 +1118,34 @@ export function AllTicketsView(): React.JSX.Element {
             {t('columns.manage')}
           </button>
 
-          {/* Ticket count — sits right after Columns */}
-          <span className="text-muted">{t('tickets.count', { count: sortedTickets.length })}</span>
+          {/* Save View button */}
+          <button
+            type="button"
+            className="btn btn-sm d-inline-flex align-items-center gap-1"
+            style={{
+              backgroundColor: '#f8f9fa',
+              border: '1px solid #dee2e6',
+              color: '#495057',
+              borderRadius: 8,
+            }}
+            onClick={() => setShowSaveViewModal(true)}
+          >
+            <i className="bi bi-bookmark" />
+            {t('filters.saveView')}
+          </button>
+
+          {/* Load View dropdown (only when saved views exist or a view is active) */}
+          <LoadViewDropdown
+            savedViews={savedViews}
+            currentViewName={currentViewName}
+            isModified={isViewModified}
+            onLoad={handleLoadView}
+            onDelete={(name) => void handleDeleteView(name)}
+            onClear={handleClearView}
+          />
+
+          {/* Ticket count */}
+          <span className="text-muted small">{t('tickets.count', { count: sortedTickets.length })}</span>
 
           {/* Spacer */}
           <div className="flex-grow-1" />
@@ -1019,144 +1167,58 @@ export function AllTicketsView(): React.JSX.Element {
           )}
         </div>
 
-        {/* ── Saved Views Pills Row (Row 3 — always visible) ─────────────── */}
-        <div
-          className="d-flex align-items-center gap-2 px-3 py-1 border-bottom flex-wrap"
-          style={{ minHeight: 36, backgroundColor: '#f8f9fa' }}
-        >
-          <small className="text-muted fw-semibold">{t('filters.savedViews')}:</small>
-
-          {savedViews.map((view) => (
-            <div key={view.name} className="d-inline-flex align-items-center">
-              <Badge
-                bg={view.name === currentViewName ? 'primary' : 'light'}
-                text={view.name === currentViewName ? 'light' : 'dark'}
-                className={`border ${view.name === currentViewName ? '' : 'border-secondary-subtle'}`}
-                role="button"
-                onClick={() => handleLoadView(view)}
-                style={{ cursor: 'pointer' }}
-              >
-                {view.name}
-                {view.name === currentViewName && isViewModified && (
-                  <span className="ms-1 opacity-75 fst-italic">{t('filters.modified')}</span>
-                )}
-              </Badge>
-              {/* Delete button (small x) */}
-              <i
-                className="bi bi-x text-muted ms-0"
-                role="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  void handleDeleteView(view.name);
-                }}
-                style={{ cursor: 'pointer', fontSize: '0.85rem' }}
-              />
-            </div>
-          ))}
-
-          {/* Save View — inline input or button */}
-          {showSaveViewInput ? (
-            <div className="d-inline-flex align-items-center gap-1">
-              <Form.Control
-                size="sm"
-                type="text"
-                placeholder={t('allTicketsView.saveViewPrompt')}
-                value={newViewName}
-                onChange={(e) => setNewViewName(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') handleSaveNewView();
-                  if (e.key === 'Escape') {
-                    setShowSaveViewInput(false);
-                    setNewViewName('');
-                  }
-                }}
-                autoFocus
-                style={{ width: 140 }}
-              />
-              <Button size="sm" variant="primary" onClick={handleSaveNewView}>
-                {t('common.save')}
-              </Button>
-            </div>
-          ) : (
-            <Badge
-              bg="light"
-              text="dark"
-              className="border border-secondary-subtle"
-              role="button"
-              onClick={() => setShowSaveViewInput(true)}
-              style={{ cursor: 'pointer' }}
-            >
-              <i className="bi bi-plus me-1" />
-              {t('filters.saveView')}
-            </Badge>
-          )}
-
-          {/* Update View (when active + modified) */}
-          {currentViewName && isViewModified && (
-            <Badge
-              bg="warning"
-              text="dark"
-              className="border"
-              role="button"
-              onClick={() => void handleUpdateView()}
-              style={{ cursor: 'pointer' }}
-            >
-              <i className="bi bi-arrow-repeat me-1" />
-              {t('filters.updateView')}
-            </Badge>
-          )}
-
-          {/* Clear View */}
-          {currentViewName && (
-            <Badge
-              bg="light"
-              text="muted"
-              className="border border-secondary-subtle"
-              role="button"
-              onClick={handleClearView}
-              style={{ cursor: 'pointer' }}
-            >
-              <i className="bi bi-x me-1" />
-              {t('filters.clearView')}
-            </Badge>
-          )}
-        </div>
-
         {/* ── Active Filters Bar ───────────────────────────────────────────── */}
         {hasActiveFilters && (
-          <div className="d-flex align-items-center gap-2 px-3 py-2 border-bottom bg-light flex-wrap">
+          <div
+            className="d-flex align-items-center gap-2 px-3 py-2 border-bottom flex-wrap"
+            style={{ backgroundColor: '#f9fafb' }}
+          >
             <small className="text-muted fw-semibold me-1">{t('filters.activeFilters')}:</small>
             {activeFilterKeys.map((key) => {
               const col = columnMap.get(key);
               const filter = activeFilters[key];
               const displayValue = Array.isArray(filter.value)
-                ? `${String((filter.value as string[]).length)}`
-                : typeof filter.value === 'object'
-                  ? filter.operator
-                  : String(filter.value);
+                ? `in ${String((filter.value as string[]).length)}`
+                : filter.operator === 'empty' || filter.operator === 'notEmpty'
+                  ? ''
+                  : typeof filter.value === 'object'
+                    ? filter.operator
+                    : String(filter.value);
               return (
-                <Badge key={key} bg="secondary" className="d-inline-flex align-items-center gap-1">
-                  <span>
-                    {col?.label ?? key} {filter.operator} {displayValue}
+                <span
+                  key={key}
+                  className="d-inline-flex align-items-center gap-1 rounded-pill px-2 py-1"
+                  style={{
+                    backgroundColor: '#e0e7ff',
+                    color: '#3730a3',
+                    fontSize: '0.8rem',
+                    fontWeight: 500,
+                  }}
+                >
+                  <span className="fw-semibold">{col?.label ?? key}:</span>
+                  <span className="text-truncate" style={{ maxWidth: 180 }}>
+                    {filter.operator} {displayValue}
                   </span>
                   <i
-                    className="bi bi-x-circle-fill ms-1"
+                    className="bi bi-x ms-1"
                     role="button"
                     onClick={() => handleFilterClear(key)}
-                    style={{ cursor: 'pointer' }}
+                    style={{ cursor: 'pointer', fontSize: '0.85rem' }}
                   />
-                </Badge>
+                </span>
               );
             })}
-            <Button variant="link" size="sm" className="p-0" onClick={handleClearAllFilters}>
-              {t('filters.clearAll')}
-            </Button>
+            {activeFilterKeys.length > 1 && (
+              <Button variant="link" size="sm" className="p-0 text-muted" onClick={handleClearAllFilters}>
+                {t('filters.clearAll')}
+              </Button>
+            )}
           </div>
         )}
 
         {/* ── Table ────────────────────────────────────────────────────────── */}
         <div className="flex-grow-1 overflow-auto">
-          {ticketsLoading ? (
+          {ticketsLoading || (scope === 'allBoards' && allBoardsLoading) ? (
             <div className="d-flex justify-content-center align-items-center py-5">
               <Spinner animation="border" size="sm" className="me-2" />
               <span>{t('common.loading')}</span>
@@ -1190,19 +1252,34 @@ export function AllTicketsView(): React.JSX.Element {
                         borderBottom: '1px solid #e0e0e0',
                       }}
                     >
-                      <FilterDropdown
-                        column={col.key}
-                        columnLabel={col.label}
-                        columnType={col.filterType}
-                        options={col.filterOptions?.()}
-                        currentFilter={activeFilters[col.key]}
-                        onApply={(f) => handleFilterApply(col.key, f)}
-                        onClear={() => handleFilterClear(col.key)}
-                        sortable={col.sortable}
-                        currentSortColumn={sortColumn}
-                        currentSortDirection={sortDirection}
-                        onSort={handleSort}
-                      />
+                      <span className="d-inline-flex align-items-center">
+                        <FilterDropdown
+                          column={col.key}
+                          columnLabel={col.label}
+                          columnType={col.filterType}
+                          options={col.filterOptions?.()}
+                          currentFilter={activeFilters[col.key]}
+                          onApply={(f) => handleFilterApply(col.key, f)}
+                          onClear={() => handleFilterClear(col.key)}
+                          sortable={col.sortable}
+                          currentSortColumn={sortColumn}
+                          currentSortDirection={sortDirection}
+                          onSort={handleSort}
+                        />
+                        {sortColumn === col.key && (
+                          <i
+                            className={`bi ${sortDirection === 'asc' ? 'bi-caret-up-fill' : 'bi-caret-down-fill'}`}
+                            style={{ fontSize: '0.6rem', marginLeft: '4px', color: '#6366f1' }}
+                          />
+                        )}
+                        {activeFilters[col.key] && (
+                          <i
+                            className="bi bi-funnel-fill"
+                            style={{ color: '#6366f1', fontSize: '0.65rem', marginLeft: 4 }}
+                            title={t('allTicketsView.columnFiltered')}
+                          />
+                        )}
+                      </span>
                     </th>
                   ))}
                 </tr>
@@ -1270,13 +1347,16 @@ export function AllTicketsView(): React.JSX.Element {
       <TicketDetailModal
         show={showDetail}
         ticketId={detailTicketId}
+        teamIdOverride={detailTeamId}
         onHide={() => {
           setShowDetail(false);
           setDetailTicketId(null);
+          setDetailTeamId(null);
         }}
         onDeleted={() => {
           setShowDetail(false);
           setDetailTicketId(null);
+          setDetailTeamId(null);
           refreshTickets();
         }}
       />
@@ -1300,6 +1380,14 @@ export function AllTicketsView(): React.JSX.Element {
           setVisibleColumnKeys(newVisible.length > 0 ? newVisible : DEFAULT_VISIBLE_KEYS);
           setShowColumnPicker(false);
         }}
+      />
+      <SaveViewModal
+        show={showSaveViewModal}
+        onHide={() => setShowSaveViewModal(false)}
+        onSave={(name) => void handleSaveView(name)}
+        currentViewName={currentViewName}
+        onUpdate={() => void handleUpdateView()}
+        viewSummary={viewSummary}
       />
     </div>
   );

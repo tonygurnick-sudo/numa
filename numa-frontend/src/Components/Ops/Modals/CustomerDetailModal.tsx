@@ -4,7 +4,6 @@ import Button from 'react-bootstrap/Button';
 import Badge from 'react-bootstrap/Badge';
 import Form from 'react-bootstrap/Form';
 import Spinner from 'react-bootstrap/Spinner';
-import Accordion from 'react-bootstrap/Accordion';
 import Table from 'react-bootstrap/Table';
 import { useTranslation } from 'react-i18next';
 import { useNumaRequest } from '../../../Providers/NumaRequestContext';
@@ -99,6 +98,33 @@ function getRenewalUrgency(
   return { className: 'text-muted', label: t('crm.renewalInDays', { count: days }) };
 }
 
+// ─── Named color resolver (seed data uses names like 'amber', 'indigo') ────
+
+const NAMED_COLORS: Record<string, string> = {
+  amber: '#f59e0b',
+  indigo: '#6366f1',
+  blue: '#3b82f6',
+  red: '#ef4444',
+  green: '#22c55e',
+  violet: '#8b5cf6',
+  pink: '#ec4899',
+  cyan: '#06b6d4',
+  orange: '#f97316',
+  teal: '#14b8a6',
+  purple: '#a855f7',
+  lime: '#84cc16',
+  sky: '#0ea5e9',
+  rose: '#f43f5e',
+  emerald: '#10b981',
+  slate: '#64748b',
+  yellow: '#eab308',
+};
+
+function resolveColor(color: string): string {
+  if (color.startsWith('#')) return color;
+  return NAMED_COLORS[color.toLowerCase()] ?? color;
+}
+
 type LinkedWorkSortBy = 'updatedAt' | 'createdAt' | 'priority' | 'statusType';
 type LinkedWorkStatusFilter = 'all' | StatusType;
 
@@ -162,6 +188,21 @@ export function CustomerDetailModal({
 
   const [editingField, setEditingField] = useState<string | null>(null);
   const [fieldDraft, setFieldDraft] = useState<string>('');
+
+  // ── Collapsible section state (first 2 open by default) ──────────────
+  const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set(['company', 'contract']));
+
+  const toggleSection = (sectionKey: string) => {
+    setExpandedSections((prev) => {
+      const next = new Set(prev);
+      if (next.has(sectionKey)) {
+        next.delete(sectionKey);
+      } else {
+        next.add(sectionKey);
+      }
+      return next;
+    });
+  };
 
   const crmConfig: CrmConfig | null = config?.crmConfig ?? null;
   const staff = config?.staff ?? [];
@@ -476,6 +517,53 @@ export function CustomerDetailModal({
   );
   const renewalUrgency = useMemo(() => getRenewalUrgency(customer?.renewalDate, t), [customer?.renewalDate, t]);
 
+  // ── Collapsible section renderer ───────────────────────────────────
+
+  const renderSection = (
+    sectionKey: string,
+    title: React.ReactNode,
+    body: React.ReactNode,
+    headerExtra?: React.ReactNode
+  ) => {
+    const isExpanded = expandedSections.has(sectionKey);
+    return (
+      <div className="mb-0">
+        <div
+          className="d-flex align-items-center gap-2 py-2 px-3 user-select-none"
+          style={{
+            cursor: 'pointer',
+            backgroundColor: '#f8f9fa',
+            borderBottom: '1px solid #e5e7eb',
+            borderTop: '1px solid #e5e7eb',
+          }}
+          onClick={() => toggleSection(sectionKey)}
+          role="button"
+          tabIndex={0}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              toggleSection(sectionKey);
+            }
+          }}
+        >
+          <i
+            className={`bi bi-chevron-${isExpanded ? 'down' : 'right'}`}
+            style={{ fontSize: '0.7rem', color: '#6b7280' }}
+          />
+          <span className="fw-semibold" style={{ fontSize: '0.85rem', color: '#374151' }}>
+            {title}
+          </span>
+          {headerExtra && (
+            <span className="ms-auto" onClick={(e) => e.stopPropagation()}>
+              {headerExtra}
+            </span>
+          )}
+        </div>
+        {isExpanded && <div className="px-3 py-2">{body}</div>}
+      </div>
+    );
+  };
+
   // ── Render helpers ────────────────────────────────────────────────────
 
   /**
@@ -490,12 +578,27 @@ export function CustomerDetailModal({
     const displayValue =
       type === 'date' && currentValue ? new Date(currentValue).toLocaleDateString() : (currentValue ?? '');
 
+    const isEditing = editingField === field;
+
     return (
-      <div className="d-flex align-items-start py-2 border-bottom" style={{ fontSize: '0.875rem' }}>
-        <span className="text-muted fw-semibold me-2" style={{ minWidth: 120, flexShrink: 0 }}>
+      <div
+        className="d-flex align-items-start py-2"
+        style={{
+          fontSize: '0.875rem',
+          backgroundColor: isEditing ? '#eff6ff' : undefined,
+          borderRadius: isEditing ? 4 : undefined,
+          paddingLeft: isEditing ? 8 : undefined,
+          paddingRight: isEditing ? 8 : undefined,
+          borderBottom: '1px solid #f3f4f6',
+        }}
+      >
+        <span
+          className="fw-medium me-2"
+          style={{ minWidth: 120, flexShrink: 0, color: '#6b7280', fontSize: '0.82rem' }}
+        >
           {label}
         </span>
-        {editingField === field ? (
+        {isEditing ? (
           <div className="d-flex align-items-center gap-1 flex-grow-1">
             <Form.Control
               type={type}
@@ -515,7 +618,7 @@ export function CustomerDetailModal({
         ) : (
           <span
             className="flex-grow-1"
-            style={{ cursor: 'pointer', minWidth: 0 }}
+            style={{ cursor: 'pointer', minWidth: 0, color: displayValue ? '#111827' : undefined }}
             onClick={() => startEdit(field, type === 'date' ? toDateInputValue(currentValue) : (currentValue ?? ''))}
             role="button"
             tabIndex={0}
@@ -525,7 +628,21 @@ export function CustomerDetailModal({
               }
             }}
           >
-            {displayValue || <span className="text-muted">{t('common.none')}</span>}
+            {type === 'url' && displayValue ? (
+              <a
+                href={displayValue.startsWith('http') ? displayValue : `https://${displayValue}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={(e) => e.stopPropagation()}
+                style={{ fontSize: '0.85rem' }}
+              >
+                {displayValue} <i className="bi bi-box-arrow-up-right" style={{ fontSize: '0.7rem' }} />
+              </a>
+            ) : (
+              displayValue || (
+                <span style={{ color: '#d1d5db', fontStyle: 'italic', fontSize: '0.82rem' }}>{t('common.none')}</span>
+              )
+            )}
           </span>
         )}
       </div>
@@ -541,8 +658,8 @@ export function CustomerDetailModal({
     currentValue: string | null | undefined,
     options: { value: string; label: string; color?: string }[]
   ) => (
-    <div className="d-flex align-items-start py-2 border-bottom" style={{ fontSize: '0.875rem' }}>
-      <span className="text-muted fw-semibold me-2" style={{ minWidth: 120, flexShrink: 0 }}>
+    <div className="d-flex align-items-start py-2" style={{ fontSize: '0.875rem', borderBottom: '1px solid #f3f4f6' }}>
+      <span className="fw-medium me-2" style={{ minWidth: 120, flexShrink: 0, color: '#6b7280', fontSize: '0.82rem' }}>
         {label}
       </span>
       <Form.Select
@@ -565,46 +682,66 @@ export function CustomerDetailModal({
   /**
    * Renders an inline-editable currency field row.
    */
-  const renderCurrencyRow = (label: string, field: string, currentValue: number | null | undefined) => (
-    <div className="d-flex align-items-start py-2 border-bottom" style={{ fontSize: '0.875rem' }}>
-      <span className="text-muted fw-semibold me-2" style={{ minWidth: 120, flexShrink: 0 }}>
-        {label}
-      </span>
-      {editingField === field ? (
-        <div className="d-flex align-items-center gap-1 flex-grow-1">
-          <Form.Control
-            type="number"
-            size="sm"
-            value={fieldDraft}
-            onChange={(e) => setFieldDraft(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') void saveNumberField(field);
-              if (e.key === 'Escape') cancelEdit();
-            }}
-            onBlur={() => void saveNumberField(field)}
-            style={{ fontSize: '0.85rem' }}
-            autoFocus
-            disabled={saving}
-          />
-        </div>
-      ) : (
+  const renderCurrencyRow = (label: string, field: string, currentValue: number | null | undefined) => {
+    const isEditing = editingField === field;
+    return (
+      <div
+        className="d-flex align-items-start py-2"
+        style={{
+          fontSize: '0.875rem',
+          backgroundColor: isEditing ? '#eff6ff' : undefined,
+          borderRadius: isEditing ? 4 : undefined,
+          paddingLeft: isEditing ? 8 : undefined,
+          paddingRight: isEditing ? 8 : undefined,
+          borderBottom: '1px solid #f3f4f6',
+        }}
+      >
         <span
-          className="flex-grow-1"
-          style={{ cursor: 'pointer', minWidth: 0 }}
-          onClick={() => startEdit(field, currentValue != null ? String(currentValue) : '')}
-          role="button"
-          tabIndex={0}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' || e.key === ' ') {
-              startEdit(field, currentValue != null ? String(currentValue) : '');
-            }
-          }}
+          className="fw-medium me-2"
+          style={{ minWidth: 120, flexShrink: 0, color: '#6b7280', fontSize: '0.82rem' }}
         >
-          {currentValue != null ? formatCurrency(currentValue) : <span className="text-muted">{t('common.none')}</span>}
+          {label}
         </span>
-      )}
-    </div>
-  );
+        {isEditing ? (
+          <div className="d-flex align-items-center gap-1 flex-grow-1">
+            <Form.Control
+              type="number"
+              size="sm"
+              value={fieldDraft}
+              onChange={(e) => setFieldDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') void saveNumberField(field);
+                if (e.key === 'Escape') cancelEdit();
+              }}
+              onBlur={() => void saveNumberField(field)}
+              style={{ fontSize: '0.85rem' }}
+              autoFocus
+              disabled={saving}
+            />
+          </div>
+        ) : (
+          <span
+            className="flex-grow-1"
+            style={{ cursor: 'pointer', minWidth: 0 }}
+            onClick={() => startEdit(field, currentValue != null ? String(currentValue) : '')}
+            role="button"
+            tabIndex={0}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                startEdit(field, currentValue != null ? String(currentValue) : '');
+              }
+            }}
+          >
+            {currentValue != null ? (
+              <span style={{ color: '#111827' }}>{formatCurrency(currentValue)}</span>
+            ) : (
+              <span style={{ color: '#d1d5db', fontStyle: 'italic', fontSize: '0.82rem' }}>{t('common.none')}</span>
+            )}
+          </span>
+        )}
+      </div>
+    );
+  };
 
   // ── Render: loading / error states ────────────────────────────────────
 
@@ -639,7 +776,13 @@ export function CustomerDetailModal({
         <div className="d-flex flex-column flex-grow-1 me-2" style={{ minWidth: 0 }}>
           {/* Company name + stage badge */}
           <div className="d-flex align-items-center gap-2 flex-wrap">
-            <h5 className="mb-0 fw-bold">{customer.companyName}</h5>
+            <h5
+              className="mb-0 fw-bold text-truncate"
+              style={{ maxWidth: '100%', minWidth: 0 }}
+              title={customer.companyName}
+            >
+              {customer.companyName}
+            </h5>
             {stage && (
               <Badge
                 pill
@@ -663,6 +806,7 @@ export function CustomerDetailModal({
           <div className="d-flex flex-wrap gap-1 mt-2">
             {customerFlags.map((flag) => {
               const isActive = customer.flags.includes(flag.id);
+              const flagHex = resolveColor(flag.color);
               return (
                 <Badge
                   key={flag.id}
@@ -670,8 +814,8 @@ export function CustomerDetailModal({
                   role="button"
                   tabIndex={0}
                   style={{
-                    backgroundColor: isActive ? flag.color : '#e2e8f0',
-                    color: isActive ? getContrastTextColor(flag.color) : '#475569',
+                    backgroundColor: isActive ? flagHex : '#e2e8f0',
+                    color: isActive ? getContrastTextColor(flagHex) : '#475569',
                     border: 'none',
                     fontWeight: isActive ? 700 : 500,
                     cursor: 'pointer',
@@ -719,33 +863,62 @@ export function CustomerDetailModal({
     const territoryOptions = territories.map((ter) => ({ value: ter, label: ter }));
 
     return (
-      <Accordion defaultActiveKey={['0']} alwaysOpen flush>
+      <div>
         {/* ── Section 1: Company Details ───────────────────────────────── */}
-        <Accordion.Item eventKey="0">
-          <Accordion.Header>{t('crm.companyDetails')}</Accordion.Header>
-          <Accordion.Body className="p-3">
-            {renderEditableRow(t('common.name'), 'companyName', customer.companyName)}
-            {renderSelectRow(t('crm.industry'), 'industry', customer.industry, industryOptions)}
-            {renderEditableRow(t('crm.companySize'), 'companySize', customer.companySize)}
-            {renderEditableRow(t('crm.website'), 'website', customer.website, 'url')}
-            {renderSelectRow(t('crm.territory'), 'territory', customer.territory, territoryOptions)}
-            {renderEditableRow(t('crm.source'), 'source', customer.source)}
-            {renderSelectRow(t('crm.owner'), 'ownerId', customer.ownerId, staffOptions)}
-            {renderSelectRow(t('crm.lifecycleStage'), 'lifecycleStage', customer.lifecycleStage, stageOptions)}
-          </Accordion.Body>
-        </Accordion.Item>
+        {renderSection(
+          'company',
+          t('crm.companyDetails'),
+          <div className="row">
+            <div className="col-md-6">
+              {renderEditableRow(t('common.name'), 'companyName', customer.companyName)}
+              {renderSelectRow(t('crm.industry'), 'industry', customer.industry, industryOptions)}
+              {renderEditableRow(t('crm.companySize'), 'companySize', customer.companySize)}
+              {renderEditableRow(t('crm.website'), 'website', customer.website, 'url')}
+            </div>
+            <div className="col-md-6">
+              {renderSelectRow(t('crm.territory'), 'territory', customer.territory, territoryOptions)}
+              {renderEditableRow(t('crm.source'), 'source', customer.source)}
+              {renderSelectRow(t('crm.owner'), 'ownerId', customer.ownerId, staffOptions)}
+              {renderSelectRow(t('crm.lifecycleStage'), 'lifecycleStage', customer.lifecycleStage, stageOptions)}
+            </div>
+          </div>
+        )}
 
         {/* ── Section 2: Contract ──────────────────────────────────────── */}
-        <Accordion.Item eventKey="1">
-          <Accordion.Header>{t('crm.contract')}</Accordion.Header>
-          <Accordion.Body className="p-3">
-            {renderCurrencyRow(t('crm.contractValue'), 'contractValue', customer.contractValue)}
-            {renderEditableRow(t('crm.contractTerm'), 'contractTerm', customer.contractTerm)}
-            {renderEditableRow(t('crm.contractStart'), 'contractStartDate', customer.contractStartDate, 'date')}
-            {renderEditableRow(t('crm.renewalDate'), 'renewalDate', customer.renewalDate, 'date')}
+        {renderSection(
+          'contract',
+          t('crm.contract'),
+          <>
+            <div className="row">
+              <div className="col-md-6">
+                {renderCurrencyRow(t('crm.contractValue'), 'contractValue', customer.contractValue)}
+                {renderSelectRow(t('crm.contractTerm'), 'contractTerm', customer.contractTerm, [
+                  ...(customer.contractTerm &&
+                  !['Monthly', 'Quarterly', 'Annual', '2 Year', '3 Year', 'Custom'].includes(customer.contractTerm)
+                    ? [{ value: customer.contractTerm, label: customer.contractTerm }]
+                    : []),
+                  { value: 'Monthly', label: t('crm.contractTermOptions.monthly') },
+                  { value: 'Quarterly', label: t('crm.contractTermOptions.quarterly') },
+                  { value: 'Annual', label: t('crm.contractTermOptions.annual') },
+                  { value: '2 Year', label: t('crm.contractTermOptions.twoYear') },
+                  { value: '3 Year', label: t('crm.contractTermOptions.threeYear') },
+                  { value: 'Custom', label: t('crm.contractTermOptions.custom') },
+                ])}
+              </div>
+              <div className="col-md-6">
+                {renderEditableRow(t('crm.contractStart'), 'contractStartDate', customer.contractStartDate, 'date')}
+                {renderEditableRow(t('crm.renewalDate'), 'renewalDate', customer.renewalDate, 'date')}
+              </div>
+            </div>
             {renewalUrgency && (
-              <div className="d-flex align-items-start py-2 border-bottom" style={{ fontSize: '0.875rem' }}>
-                <span className="text-muted fw-semibold me-2" style={{ minWidth: 120, flexShrink: 0 }}>
+              <div
+                className="d-flex align-items-start py-2"
+                style={{ fontSize: '0.875rem', borderBottom: '1px solid #f3f4f6' }}
+              >
+                <span
+                  className="fw-medium me-2"
+                  style={{ minWidth: 120, flexShrink: 0, color: '#6b7280', fontSize: '0.82rem' }}
+                >
                   {t('crm.renewalStatus')}
                 </span>
                 <span className={renewalUrgency.className}>{renewalUrgency.label}</span>
@@ -753,8 +926,20 @@ export function CustomerDetailModal({
             )}
             {/* Products: comma-separated text */}
             {editingField === 'products' ? (
-              <div className="d-flex align-items-start py-2 border-bottom" style={{ fontSize: '0.875rem' }}>
-                <span className="text-muted fw-semibold me-2" style={{ minWidth: 120, flexShrink: 0 }}>
+              <div
+                className="d-flex align-items-start py-2 border-bottom"
+                style={{
+                  fontSize: '0.875rem',
+                  backgroundColor: '#eff6ff',
+                  borderRadius: 4,
+                  paddingLeft: 8,
+                  paddingRight: 8,
+                }}
+              >
+                <span
+                  className="fw-medium me-2"
+                  style={{ minWidth: 120, flexShrink: 0, color: '#6b7280', fontSize: '0.82rem' }}
+                >
                   {t('crm.products')}
                 </span>
                 <div className="flex-grow-1">
@@ -789,8 +974,14 @@ export function CustomerDetailModal({
                 </div>
               </div>
             ) : (
-              <div className="d-flex align-items-start py-2 border-bottom" style={{ fontSize: '0.875rem' }}>
-                <span className="text-muted fw-semibold me-2" style={{ minWidth: 120, flexShrink: 0 }}>
+              <div
+                className="d-flex align-items-start py-2"
+                style={{ fontSize: '0.875rem', borderBottom: '1px solid #f3f4f6' }}
+              >
+                <span
+                  className="fw-medium me-2"
+                  style={{ minWidth: 120, flexShrink: 0, color: '#6b7280', fontSize: '0.82rem' }}
+                >
                   {t('crm.products')}
                 </span>
                 <span
@@ -821,8 +1012,20 @@ export function CustomerDetailModal({
             )}
             {/* Product notes (textarea) */}
             {editingField === 'productNotes' ? (
-              <div className="d-flex align-items-start py-2 border-bottom" style={{ fontSize: '0.875rem' }}>
-                <span className="text-muted fw-semibold me-2" style={{ minWidth: 120, flexShrink: 0 }}>
+              <div
+                className="d-flex align-items-start py-2 border-bottom"
+                style={{
+                  fontSize: '0.875rem',
+                  backgroundColor: '#eff6ff',
+                  borderRadius: 4,
+                  paddingLeft: 8,
+                  paddingRight: 8,
+                }}
+              >
+                <span
+                  className="fw-medium me-2"
+                  style={{ minWidth: 120, flexShrink: 0, color: '#6b7280', fontSize: '0.82rem' }}
+                >
                   {t('crm.productNotes')}
                 </span>
                 <div className="flex-grow-1">
@@ -844,8 +1047,14 @@ export function CustomerDetailModal({
                 </div>
               </div>
             ) : (
-              <div className="d-flex align-items-start py-2 border-bottom" style={{ fontSize: '0.875rem' }}>
-                <span className="text-muted fw-semibold me-2" style={{ minWidth: 120, flexShrink: 0 }}>
+              <div
+                className="d-flex align-items-start py-2"
+                style={{ fontSize: '0.875rem', borderBottom: '1px solid #f3f4f6' }}
+              >
+                <span
+                  className="fw-medium me-2"
+                  style={{ minWidth: 120, flexShrink: 0, color: '#6b7280', fontSize: '0.82rem' }}
+                >
                   {t('crm.productNotes')}
                 </span>
                 <span
@@ -864,85 +1073,68 @@ export function CustomerDetailModal({
                 </span>
               </div>
             )}
-          </Accordion.Body>
-        </Accordion.Item>
+          </>
+        )}
 
         {/* ── Section 3: Contacts ──────────────────────────────────────── */}
-        <Accordion.Item eventKey="2">
-          <Accordion.Header>
+        {renderSection(
+          'contacts',
+          <>
             {t('crm.contacts')}
             {customer.contacts.length > 0 && (
               <Badge bg="secondary" className="ms-2" style={{ fontSize: '0.7rem' }}>
                 {customer.contacts.length}
               </Badge>
             )}
-          </Accordion.Header>
-          <Accordion.Body className="p-3">
-            <ContactSection contacts={customer.contacts} onChange={handleContactsChange} />
-          </Accordion.Body>
-        </Accordion.Item>
+          </>,
+          <ContactSection contacts={customer.contacts} onChange={handleContactsChange} />
+        )}
 
         {/* ── Section 4: Activities ────────────────────────────────────── */}
-        <Accordion.Item eventKey="3">
-          <Accordion.Header>
+        {renderSection(
+          'activities',
+          <>
             {t('crm.activities')}
             {activities.length > 0 && (
               <Badge bg="secondary" className="ms-2" style={{ fontSize: '0.7rem' }}>
                 {activities.length}
               </Badge>
             )}
-          </Accordion.Header>
-          <Accordion.Body className="p-3">
-            <ActivitySection entityType="customer" entityId={customer.id} activities={activities} />
-          </Accordion.Body>
-        </Accordion.Item>
+          </>,
+          <ActivitySection entityType="customer" entityId={customer.id} activities={activities} />
+        )}
 
         {/* ── Section 5: Documents ─────────────────────────────────────── */}
-        <Accordion.Item eventKey="4">
-          <Accordion.Header>
+        {renderSection(
+          'documents',
+          <>
             {t('crm.documents')}
             {documents.length > 0 && (
               <Badge bg="secondary" className="ms-2" style={{ fontSize: '0.7rem' }}>
                 {documents.length}
               </Badge>
             )}
-          </Accordion.Header>
-          <Accordion.Body className="p-3">
-            <DocumentSection
-              entityType="customer"
-              entityId={customer.id}
-              documents={documents}
-              documentTypes={documentTypes}
-            />
-          </Accordion.Body>
-        </Accordion.Item>
+          </>,
+          <DocumentSection
+            entityType="customer"
+            entityId={customer.id}
+            documents={documents}
+            documentTypes={documentTypes}
+          />
+        )}
 
         {/* ── Section 6: Linked Work ───────────────────────────────────── */}
-        <Accordion.Item eventKey="5">
-          <Accordion.Header>
-            <div className="d-flex align-items-center gap-2 w-100 pe-2">
-              {t('crm.linkedWork')}
-              {linkedTickets.length > 0 && (
-                <Badge bg="secondary" className="ms-1" style={{ fontSize: '0.7rem' }}>
-                  {linkedTickets.length}
-                </Badge>
-              )}
-              <Button
-                variant="outline-primary"
-                size="sm"
-                className="ms-auto"
-                style={{ fontSize: '0.72rem', padding: '1px 8px', flexShrink: 0 }}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setShowCreateTicket(true);
-                }}
-              >
-                <i className="bi bi-plus me-1" />
-                {t('tickets.newTicket')}
-              </Button>
-            </div>
-          </Accordion.Header>
-          <Accordion.Body className="p-3">
+        {renderSection(
+          'linkedWork',
+          <>
+            {t('crm.linkedWork')}
+            {linkedTickets.length > 0 && (
+              <Badge bg="secondary" className="ms-1" style={{ fontSize: '0.7rem' }}>
+                {linkedTickets.length}
+              </Badge>
+            )}
+          </>,
+          <>
             {loadingTickets ? (
               <div className="d-flex justify-content-center py-3">
                 <Spinner animation="border" size="sm" />
@@ -1103,13 +1295,26 @@ export function CustomerDetailModal({
                 ))}
               </div>
             )}
-          </Accordion.Body>
-        </Accordion.Item>
+          </>,
+          <Button
+            variant="outline-primary"
+            size="sm"
+            style={{ fontSize: '0.72rem', padding: '1px 8px', flexShrink: 0 }}
+            onClick={(e) => {
+              e.stopPropagation();
+              setShowCreateTicket(true);
+            }}
+          >
+            <i className="bi bi-plus me-1" />
+            {t('tickets.newTicket')}
+          </Button>
+        )}
 
         {/* ── Section 7: Notes ─────────────────────────────────────────── */}
-        <Accordion.Item eventKey="6">
-          <Accordion.Header>{t('crm.accountNotes')}</Accordion.Header>
-          <Accordion.Body className="p-3">
+        {renderSection(
+          'notes',
+          t('crm.accountNotes'),
+          <>
             {editingField === 'notes' ? (
               <div>
                 <Form.Control
@@ -1156,9 +1361,9 @@ export function CustomerDetailModal({
                 {customer.notes || <span className="text-muted">{t('common.description')}</span>}
               </div>
             )}
-          </Accordion.Body>
-        </Accordion.Item>
-      </Accordion>
+          </>
+        )}
+      </div>
     );
   };
 
@@ -1181,7 +1386,10 @@ export function CustomerDetailModal({
           <>
             {renderHeader()}
             <Modal.Body style={{ overflowY: 'auto' }}>{renderBody()}</Modal.Body>
-            <Modal.Footer className="d-flex justify-content-between small text-muted">
+            <Modal.Footer
+              className="d-flex justify-content-between small text-muted"
+              style={{ backgroundColor: '#f9fafb' }}
+            >
               <span>
                 {t('crm.lastContactFooter')}: {lastContactLabel}
               </span>

@@ -153,7 +153,9 @@ const AllTeamsView = () => {
             ticketCount={team.id === selectedTeamId ? selectedTeamTicketCount : null}
             activeWorkUnitName={team.id === selectedTeamId ? (activeWorkUnit?.name ?? null) : null}
             onSelect={() => selectTeam(team.id)}
-            isOwner={Boolean(team.createdBy && user?.username && team.createdBy === user.username)}
+            isOwner={Boolean(
+              team.createdBy && user?.decoded_tokens?.idToken?.sub && team.createdBy === user.decoded_tokens.idToken.sub
+            )}
             onDelete={() => setTeamToDelete(team)}
           />
         ))}

@@ -1,8 +1,38 @@
 import React, { useState, useMemo, useCallback } from 'react';
-import { Form, Button, Badge, Row, Col } from 'react-bootstrap';
+import { Form, Button, Badge, Row, Col, Alert } from 'react-bootstrap';
 import { useTranslation } from 'react-i18next';
 import type { WorkZone, WorkStage, ZoneType, StatusType, Ticket } from '../../../../types/ops';
 import { ZONE_STATUS_TYPES, ZONE_TYPE_BADGE_COLORS } from '../../../../constants/opsConstants';
+
+// ── Ambiguous keyword detection ──────────────────────────────────────────────
+// Keywords that could reasonably map to more than one status category.
+// Derived from Ian's POC design document.
+interface AmbiguousMatch {
+  isAmbiguous: true;
+  keyword: string;
+  suggestions: { label: string; statusType: StatusType }[];
+}
+
+const AMBIGUOUS_KEYWORDS: { pattern: RegExp; keyword: string; suggestions: { label: string; statusType: StatusType }[] }[] = [
+  { pattern: /\bclos(ed|e)\b/i, keyword: 'closed', suggestions: [{ label: 'Completed', statusType: 'completed' }, { label: 'Ended', statusType: 'ended' }] },
+  { pattern: /\b(on\s+)?hold\b/i, keyword: 'hold', suggestions: [{ label: 'Active (blocked)', statusType: 'active' }, { label: 'Ended', statusType: 'ended' }] },
+  { pattern: /\bdefer(red)?\b/i, keyword: 'deferred', suggestions: [{ label: 'Backlog', statusType: 'backlog' }, { label: 'Ended', statusType: 'ended' }] },
+  { pattern: /\barchiv(ed|e)\b/i, keyword: 'archived', suggestions: [{ label: 'Completed', statusType: 'completed' }, { label: 'Ended', statusType: 'ended' }] },
+  { pattern: /\bpending\b/i, keyword: 'pending', suggestions: [{ label: 'Queued', statusType: 'queued' }, { label: 'Scoped', statusType: 'scoped' }] },
+  { pattern: /\bschedul(ed|e)\b/i, keyword: 'scheduled', suggestions: [{ label: 'Scoped', statusType: 'scoped' }, { label: 'Queued', statusType: 'queued' }] },
+  { pattern: /\bshelv(ed|e)\b/i, keyword: 'shelved', suggestions: [{ label: 'Ended', statusType: 'ended' }, { label: 'Backlog', statusType: 'backlog' }] },
+];
+
+function checkAmbiguousKeyword(stageName: string): AmbiguousMatch | null {
+  const trimmed = stageName.trim();
+  if (!trimmed) return null;
+  for (const entry of AMBIGUOUS_KEYWORDS) {
+    if (entry.pattern.test(trimmed)) {
+      return { isAmbiguous: true, keyword: entry.keyword, suggestions: entry.suggestions };
+    }
+  }
+  return null;
+}
 
 interface WorkflowTabProps {
   zones: Partial<WorkZone>[];
@@ -35,6 +65,8 @@ export function WorkflowTab({
   const [newStageByZone, setNewStageByZone] = useState<Record<string, { name: string; statusType: string }>>({});
   const [newZoneType, setNewZoneType] = useState<ZoneType>('board');
   const [newZoneName, setNewZoneName] = useState('');
+  // Track ambiguous keyword warnings keyed by "zoneId:stageIndex" or "new:zoneId"
+  const [ambiguousWarnings, setAmbiguousWarnings] = useState<Record<string, AmbiguousMatch>>({});
 
   const sortedZones = useMemo(() => [...zones].sort((a, b) => (a.order ?? 0) - (b.order ?? 0)), [zones]);
 
@@ -166,6 +198,37 @@ export function WorkflowTab({
     }));
   };
 
+  // ── Ambiguous keyword handlers ──────────────────────────────────────
+  const handleStageNameBlur = (warningKey: string, stageName: string) => {
+    const match = checkAmbiguousKeyword(stageName);
+    if (match) {
+      setAmbiguousWarnings((prev) => ({ ...prev, [warningKey]: match }));
+    } else {
+      setAmbiguousWarnings((prev) => {
+        const next = { ...prev };
+        delete next[warningKey];
+        return next;
+      });
+    }
+  };
+
+  const dismissAmbiguousWarning = (warningKey: string) => {
+    setAmbiguousWarnings((prev) => {
+      const next = { ...prev };
+      delete next[warningKey];
+      return next;
+    });
+  };
+
+  const applyAmbiguousSuggestion = (warningKey: string, zoneId: string, stageIndex: number | 'new', statusType: StatusType) => {
+    if (stageIndex === 'new') {
+      handleNewStageChange(zoneId, 'statusType', statusType);
+    } else {
+      handleStageStatusTypeChange(zoneId, stageIndex, statusType);
+    }
+    dismissAmbiguousWarning(warningKey);
+  };
+
   // ── Editing zone detail ──────────────────────────────────────────────
   const editingZone = editingZoneId ? (zones.find((z) => z.id === editingZoneId) ?? null) : null;
   const editingZoneIdx = editingZone ? zones.indexOf(editingZone) : -1;
@@ -267,50 +330,87 @@ export function WorkflowTab({
             </div>
           )}
 
-          {editingZoneStages.map((stage, idx) => (
-            <div key={stage.id ?? `stage-${idx}`} className="d-flex align-items-center gap-2 mb-2">
-              <i className="bi bi-grip-vertical text-muted" />
-              <Form.Control
-                type="text"
-                size="sm"
-                value={stage.name ?? ''}
-                onChange={(e) => handleStageNameChange(editingZoneId, idx, e.target.value)}
-                style={{ flex: 1, maxWidth: 280 }}
-              />
-              <Form.Select
-                size="sm"
-                value={stage.statusType ?? ''}
-                onChange={(e) => handleStageStatusTypeChange(editingZoneId, idx, e.target.value as StatusType)}
-                style={{ maxWidth: 160 }}
-              >
-                <option value="">{t('common.selectOption')}</option>
-                {editingZoneAllowedTypes.map((st) => (
-                  <option key={st} value={st}>
-                    {t(`globalSettings.statusTypes.${st}`)}
-                  </option>
-                ))}
-              </Form.Select>
-              <Button
-                variant="outline-secondary"
-                size="sm"
-                disabled={idx === 0}
-                onClick={() => handleStageMoveInZone(editingZoneId, idx, 'up')}
-              >
-                <i className="bi bi-arrow-up" />
-              </Button>
-              <Button
-                variant="outline-secondary"
-                size="sm"
-                disabled={idx === editingZoneStages.length - 1}
-                onClick={() => handleStageMoveInZone(editingZoneId, idx, 'down')}
-              >
-                <i className="bi bi-arrow-down" />
-              </Button>
-              <Button variant="outline-danger" size="sm" onClick={() => handleRemoveStageFromZone(editingZoneId, idx)}>
-                <i className="bi bi-trash" />
-              </Button>
-            </div>
-          ))}
+          {editingZoneStages.map((stage, idx) => {
+            const warningKey = `${editingZoneId}:${idx}`;
+            const warning = ambiguousWarnings[warningKey];
+            return (
+              <React.Fragment key={stage.id ?? `stage-${idx}`}>
+                <div className="d-flex align-items-center gap-2 mb-2">
+                  <i className="bi bi-grip-vertical text-muted" />
+                  <Form.Control
+                    type="text"
+                    size="sm"
+                    value={stage.name ?? ''}
+                    onChange={(e) => handleStageNameChange(editingZoneId, idx, e.target.value)}
+                    onBlur={(e) => handleStageNameBlur(warningKey, e.target.value)}
+                    style={{ flex: 1, maxWidth: 280 }}
+                  />
+                  <Form.Select
+                    size="sm"
+                    value={stage.statusType ?? ''}
+                    onChange={(e) => handleStageStatusTypeChange(editingZoneId, idx, e.target.value as StatusType)}
+                    style={{ maxWidth: 160 }}
+                  >
+                    <option value="">{t('common.selectOption')}</option>
+                    {editingZoneAllowedTypes.map((st) => (
+                      <option key={st} value={st}>
+                        {t(`globalSettings.statusTypes.${st}`)}
+                      </option>
+                    ))}
+                  </Form.Select>
+                  <Button
+                    variant="outline-secondary"
+                    size="sm"
+                    disabled={idx === 0}
+                    onClick={() => handleStageMoveInZone(editingZoneId, idx, 'up')}
+                  >
+                    <i className="bi bi-arrow-up" />
+                  </Button>
+                  <Button
+                    variant="outline-secondary"
+                    size="sm"
+                    disabled={idx === editingZoneStages.length - 1}
+                    onClick={() => handleStageMoveInZone(editingZoneId, idx, 'down')}
+                  >
+                    <i className="bi bi-arrow-down" />
+                  </Button>
+                  <Button variant="outline-danger" size="sm" onClick={() => handleRemoveStageFromZone(editingZoneId, idx)}>
+                    <i className="bi bi-trash" />
+                  </Button>
+                </div>
+                {warning && (
+                  <Alert variant="warning" className="py-2 px-3 mb-2 ms-4 small d-flex flex-column gap-1">
+                    <div className="d-flex align-items-center gap-2">
+                      <i className="bi bi-exclamation-triangle" />
+                      <span>{t('ambiguousKeyword.warning', { keyword: warning.keyword })}</span>
+                    </div>
+                    <div className="text-muted">{t('ambiguousKeyword.explanation')}</div>
+                    <div className="d-flex align-items-center gap-2 mt-1">
+                      {warning.suggestions.map((s) => (
+                        <Button
+                          key={s.statusType}
+                          variant="outline-warning"
+                          size="sm"
+                          className="py-0 px-2"
+                          onClick={() => applyAmbiguousSuggestion(warningKey, editingZoneId, idx, s.statusType)}
+                        >
+                          {t('ambiguousKeyword.suggestStatus', { statusType: s.label })}
+                        </Button>
+                      ))}
+                      <Button
+                        variant="link"
+                        size="sm"
+                        className="py-0 px-1 text-muted"
+                        onClick={() => dismissAmbiguousWarning(warningKey)}
+                      >
+                        {t('ambiguousKeyword.dismiss')}
+                      </Button>
+                    </div>
+                  </Alert>
+                )}
+              </React.Fragment>
+            );
+          })}
 
           {editingZoneStages.length === 0 && (
             <span className="text-muted small fst-italic">{t('settings.noStages')}</span>
@@ -325,6 +425,7 @@ export function WorkflowTab({
               placeholder={t('settings.addStage')}
               value={editingNewStage.name}
               onChange={(e) => handleNewStageChange(editingZoneId, 'name', e.target.value)}
+              onBlur={(e) => handleStageNameBlur(`new:${editingZoneId}`, e.target.value)}
               style={{ flex: 1, maxWidth: 280 }}
             />
             <Form.Select
@@ -349,6 +450,36 @@ export function WorkflowTab({
               {t('common.add')}
             </Button>
           </div>
+          {ambiguousWarnings[`new:${editingZoneId}`] && (
+            <Alert variant="warning" className="py-2 px-3 mt-2 ms-4 small d-flex flex-column gap-1">
+              <div className="d-flex align-items-center gap-2">
+                <i className="bi bi-exclamation-triangle" />
+                <span>{t('ambiguousKeyword.warning', { keyword: ambiguousWarnings[`new:${editingZoneId}`].keyword })}</span>
+              </div>
+              <div className="text-muted">{t('ambiguousKeyword.explanation')}</div>
+              <div className="d-flex align-items-center gap-2 mt-1">
+                {ambiguousWarnings[`new:${editingZoneId}`].suggestions.map((s) => (
+                  <Button
+                    key={s.statusType}
+                    variant="outline-warning"
+                    size="sm"
+                    className="py-0 px-2"
+                    onClick={() => applyAmbiguousSuggestion(`new:${editingZoneId}`, editingZoneId, 'new', s.statusType)}
+                  >
+                    {t('ambiguousKeyword.suggestStatus', { statusType: s.label })}
+                  </Button>
+                ))}
+                <Button
+                  variant="link"
+                  size="sm"
+                  className="py-0 px-1 text-muted"
+                  onClick={() => dismissAmbiguousWarning(`new:${editingZoneId}`)}
+                >
+                  {t('ambiguousKeyword.dismiss')}
+                </Button>
+              </div>
+            </Alert>
+          )}
         </div>
         <p className="text-muted small mt-4 pt-3 border-top fst-italic">
           <i className="bi bi-lightbulb text-warning me-2" />

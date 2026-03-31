@@ -5,11 +5,38 @@
 :root {
   --ops-border: var(--nav-divider, #e4e4e7);
   --ops-text-muted: var(--nav-icon-default, #71717a);
-  --ops-text-secondary: var(--nav-section-text, #a1a1aa);
+  --ops-text-secondary: var(--nav-section-text, #71717a);
   --ops-hover-bg: var(--nav-hover-bg, #f4f4f5);
   --ops-text-default: var(--nav-text-default, #3f3f46);
   --ops-radius: 10px;
   --ops-transition: all 0.15s ease;
+  --ops-font-xs: 0.7rem; /* meta text, section titles */
+  --ops-font-sm: 0.75rem; /* field labels, badges */
+  --ops-font-md: 0.85rem; /* field values, body text */
+  --ops-font-base: 0.875rem; /* section headings, normal text */
+
+  /* Spacing tokens */
+  --ops-spacing-xs: 2px;
+  --ops-spacing-sm: 4px;
+  --ops-spacing-md: 8px;
+  --ops-spacing-lg: 12px;
+  --ops-spacing-xl: 16px;
+  --ops-spacing-2xl: 24px;
+
+  /* Shadow tokens */
+  --ops-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.04);
+  --ops-shadow-md: 0 4px 12px rgba(0, 0, 0, 0.08);
+  --ops-shadow-lg: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.04);
+  --ops-shadow-focus: 0 0 0 3px rgba(142, 80, 167, 0.15);
+
+  /* Transition tokens */
+  --ops-transition-fast: all 0.1s ease;
+  --ops-transition-smooth: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+
+  /* Border radius tokens */
+  --ops-radius-sm: 4px;
+  --ops-radius-lg: 12px;
+  --ops-radius-pill: 100px;
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -37,9 +64,8 @@
 }
 
 .kanban-column {
-  flex: 0 0 280px;
-  min-width: 280px;
-  width: 280px;
+  flex: 1 1 0%;
+  min-width: 220px;
   display: flex;
   flex-direction: column;
   background: transparent;
@@ -74,7 +100,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 4px 2px 12px;
+  padding: 6px 0 12px;
   user-select: none;
 }
 
@@ -99,9 +125,9 @@
   height: 18px;
   padding: 0 5px;
   font-size: 11px;
-  font-weight: 500;
+  font-weight: 600;
   color: var(--ops-text-muted);
-  background: none;
+  background: #f3f4f6;
   border-radius: 10px;
 }
 
@@ -140,6 +166,8 @@
   overflow-y: auto;
   min-height: 40px;
   padding: 2px 0;
+  scrollbar-width: thin;
+  scrollbar-color: #d1d5db transparent;
   transition:
     background-color 0.15s,
     box-shadow 0.15s;
@@ -148,7 +176,23 @@
 /* ── Drag-over highlight ──────────────────────────────────────────────────── */
 
 .kanban-column--drag-over {
-  background: #f8faff;
+  background: #f0f4ff;
+  border-color: var(--brand-primary, #8e50a7);
+}
+
+/* ── Positional drop indicator (blue line between cards) ─────────────────── */
+
+.kanban-drop-indicator {
+  height: 3px;
+  background-color: #6366f1;
+  border-radius: 2px;
+  margin: 2px 8px;
+  transition: opacity 0.15s ease;
+  opacity: 0;
+}
+
+.kanban-drop-indicator--active {
+  opacity: 1;
 }
 
 .kanban-column-body::-webkit-scrollbar {
@@ -231,9 +275,9 @@
   gap: 6px;
   background: #fff;
   border: 1px solid #d5d8dc;
-  border-radius: 8px;
+  border-radius: var(--ops-radius);
   padding: 3px;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  box-shadow: var(--ops-shadow-sm);
   transition:
     border-color 0.15s,
     box-shadow 0.15s;
@@ -241,7 +285,7 @@
 
 .kanban-quick-add-row:focus-within {
   border-color: var(--brand-primary, #8e50a7);
-  box-shadow: 0 0 0 2px rgba(142, 80, 167, 0.1);
+  box-shadow: var(--ops-shadow-focus);
 }
 
 /* Type selector button */
@@ -319,7 +363,6 @@
   border: none;
   background: transparent;
   font-size: 0.82rem;
-  outline: none;
   color: var(--ops-text-default);
 }
 
@@ -335,34 +378,74 @@
   background: rgba(255, 255, 255, 0.95);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
-  border-radius: 10px;
+  border-radius: var(--ops-radius);
   margin-bottom: 10px;
   cursor: grab;
   border: 1px solid var(--ops-border);
-  padding: 12px 14px;
+  padding: 14px 16px;
   transition:
-    box-shadow 0.2s cubic-bezier(0.4, 0, 0.2, 1),
-    border-color 0.2s ease,
-    transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow var(--ops-transition-smooth),
+    border-color var(--ops-transition-smooth),
+    transform var(--ops-transition-smooth);
   position: relative;
   user-select: none;
-  box-shadow:
-    0 1px 3px rgba(0, 0, 0, 0.04),
-    0 1px 2px rgba(0, 0, 0, 0.02);
+  box-shadow: var(--ops-shadow-sm);
 }
 
 .ticket-card:hover {
-  box-shadow:
-    0 10px 25px -5px rgba(0, 0, 0, 0.08),
-    0 8px 10px -6px rgba(0, 0, 0, 0.04);
+  box-shadow: var(--ops-shadow-lg);
   border-color: #d1d5db;
   transform: translateY(-3px);
+}
+
+.ticket-card:hover .ticket-card-actions {
+  opacity: 1;
 }
 
 .ticket-card:active {
   cursor: grabbing;
   transform: translateY(1px);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+}
+
+/* Hover action buttons (edit/delete) */
+.ticket-card-actions {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: flex;
+  gap: 4px;
+  opacity: 0;
+  transition: opacity var(--ops-transition-fast);
+  z-index: 2;
+}
+
+.ticket-card-action-btn {
+  width: 26px;
+  height: 26px;
+  border-radius: var(--ops-radius-sm);
+  border: 1px solid var(--ops-border);
+  background: white;
+  color: #6b7280;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.72rem;
+  padding: 0;
+  transition: all var(--ops-transition-fast);
+}
+
+.ticket-card-action-btn:hover {
+  background: #f3f4f6;
+  color: #374151;
+  border-color: #9ca3af;
+}
+
+.ticket-card-action-danger:hover {
+  background: #fef2f2;
+  color: #dc2626;
+  border-color: #fca5a5;
 }
 
 /* Top row: type badge + meta counts */
@@ -392,7 +475,11 @@
   font-size: 0.67rem;
   font-weight: 500;
   padding: 2px 6px;
-  border-radius: 4px;
+  border-radius: var(--ops-radius-pill);
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .ticket-badge-customer {
@@ -403,7 +490,7 @@
 
 .ticket-badge-supplier {
   background: #f3e8ff;
-  color: #7c3aed;
+  color: #6d28d9;
   border: 1px solid #e9d5ff;
 }
 
@@ -438,6 +525,13 @@
   background: #f3f4f6;
   color: #6b7280;
   border: 1px solid var(--ops-border);
+}
+
+.ticket-tag-overflow {
+  font-weight: 600;
+  color: #4b5563;
+  background: #e5e7eb;
+  border-color: #d1d5db;
 }
 
 /* Footer row */
@@ -501,8 +595,8 @@
 }
 
 .ticket-avatar-empty {
-  background: #e5e7eb;
-  color: var(--ops-text-secondary);
+  background: #d1d5db;
+  color: #4b5563;
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -595,7 +689,7 @@
   font-size: 0.85rem;
   font-weight: 500;
   cursor: pointer;
-  transition: all 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+  transition: var(--ops-transition-smooth);
   white-space: nowrap;
 }
 
@@ -625,11 +719,31 @@
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
+   Ops Modal Nav Pills — override Bootstrap default blue
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.ops-settings-nav .nav-link {
+  color: #374151;
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+
+.ops-settings-nav .nav-link:hover {
+  color: #111827;
+  background: #f3f4f6;
+}
+
+.ops-settings-nav .nav-link.active {
+  background: var(--ops-brand-primary, #6366f1);
+  color: #fff;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
    Ticket Detail Modal
    ═══════════════════════════════════════════════════════════════════════════ */
 
 .ticket-section-heading {
-  font-size: 0.875rem;
+  font-size: var(--ops-font-base);
   font-weight: 600;
   color: #1f2937;
   margin-bottom: 10px;
@@ -668,7 +782,7 @@
   align-items: flex-start;
   padding: 7px 0;
   border-bottom: 1px solid #f3f4f6;
-  font-size: 0.84rem;
+  font-size: var(--ops-font-md);
 }
 
 .ticket-sidebar-row:last-child {
@@ -676,7 +790,7 @@
 }
 
 .ticket-sidebar-label {
-  font-size: 0.78rem;
+  font-size: var(--ops-font-sm);
   font-weight: 500;
   color: #6b7280;
   min-width: 88px;
@@ -694,14 +808,14 @@
 }
 
 .ticket-sidebar-field-label {
-  font-size: 0.75rem;
+  font-size: var(--ops-font-sm);
   font-weight: 500;
   color: #6b7280;
   margin-bottom: 4px;
 }
 
 .ticket-sidebar-section-title {
-  font-size: 0.7rem;
+  font-size: var(--ops-font-xs);
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.05em;
@@ -717,7 +831,7 @@
 /* ── Header metadata line (created/updated dates) ──────────────────────── */
 
 .ticket-detail-header-meta {
-  font-size: 0.78rem;
+  font-size: var(--ops-font-sm);
   color: var(--ops-text-secondary);
   margin-top: 4px;
 }
@@ -725,7 +839,7 @@
 .ticket-detail-id {
   display: inline-flex;
   align-items: center;
-  font-size: 0.78rem;
+  font-size: var(--ops-font-sm);
   font-weight: 600;
   font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
   color: #6b7280;
@@ -1807,20 +1921,625 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  border: 1.5px dashed var(--ops-border);
-  border-radius: 8px;
-  min-height: 100px;
-  margin-top: 4px;
-  background-color: rgba(249, 250, 251, 0.4);
-  color: #9ca3af;
-  font-size: 0.82rem;
-  font-weight: 500;
-  pointer-events: none; /* Let the container handle drag events */
-  transition: all 0.2s;
+  padding: 32px 16px;
+  color: var(--ops-text-secondary);
+  font-size: var(--ops-font-md, 0.85rem);
+  text-align: center;
+  opacity: 0.5;
+  min-height: 120px;
 }
 
 .kanban-column--drag-over .kanban-empty-dropzone {
   border-color: var(--brand-primary, #8e50a7);
   background-color: rgba(142, 80, 167, 0.05);
   color: var(--brand-primary, #8e50a7);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Edit-mode utility classes
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.ops-edit-active {
+  background-color: #eff6ff;
+  border-radius: 4px;
+  transition: background-color 0.15s ease;
+}
+
+.ops-edit-active-teal {
+  background-color: #f0fdfa;
+  border-radius: 4px;
+  transition: background-color 0.15s ease;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Attachment Thumbnail Gallery
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.ops-attachment-thumb {
+  flex-shrink: 0;
+  width: 96px;
+  cursor: pointer;
+  position: relative;
+}
+
+.ops-attachment-thumb-preview {
+  width: 96px;
+  height: 80px;
+  border: 1px solid var(--ops-border);
+  border-radius: 8px;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #f9fafb;
+  transition: border-color 0.15s ease;
+}
+
+.ops-attachment-thumb:hover .ops-attachment-thumb-preview {
+  border-color: #6366f1;
+}
+
+.ops-attachment-thumb-delete {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #ef4444;
+  color: white;
+  font-size: 0.65rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+  border: none;
+  cursor: pointer;
+}
+
+.ops-attachment-thumb:hover .ops-attachment-thumb-delete {
+  opacity: 1;
+}
+
+.ops-attachment-thumb-name {
+  font-size: 0.7rem;
+  color: #6b7280;
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  margin-top: 4px;
+}
+
+.ops-attachment-thumb-size {
+  font-size: 0.65rem;
+  color: #9ca3af;
+  text-align: center;
+}
+
+.ops-attachment-empty-zone {
+  border: 2px dashed var(--ops-border);
+  border-radius: 8px;
+  padding: 16px 20px;
+  text-align: center;
+  cursor: pointer;
+  background: #f9fafb;
+  transition: all 0.15s ease;
+}
+
+.ops-attachment-empty-zone:hover {
+  border-color: #6366f1;
+  background: #eef2ff;
+}
+
+/* ── Sticky Header ───────────────────────────────────────────────────────── */
+
+.ops-header-sticky {
+  position: sticky;
+  top: 0;
+  z-index: 1020;
+  background: #fff;
+}
+
+/* ── Touch device fixes ─────────────────────────────────── */
+@media (hover: none) {
+  .ticket-card:hover {
+    transform: none;
+  }
+}
+
+/* ── Focus rings (accessibility) ────────────────────────── */
+.ops-focusable:focus-visible,
+.kanban-quick-add-input:focus-visible,
+.kanban-quick-add-type:focus-visible,
+.kanban-column-add-btn:focus-visible,
+.ticket-card:focus-visible,
+.ops-nav-tab:focus-visible,
+.ops-zone-tab:focus-visible,
+.ops-pill:focus-visible {
+  outline: 2px solid var(--brand-primary, #8e50a7);
+  outline-offset: 2px;
+}
+
+/* ── Rich text editor toolbar ───────────────────────────── */
+.ops-editor-toolbar-btn {
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: #374151;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: var(--ops-transition);
+}
+
+.ops-editor-toolbar-btn:hover:not(:disabled) {
+  background-color: #e5e7eb;
+}
+
+.ops-editor-toolbar-btn:focus-visible {
+  outline: 2px solid var(--brand-primary, #8e50a7);
+  outline-offset: 1px;
+}
+
+.ops-editor-toolbar-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Ticket Inline Preview — hover card with extra details
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.ops-ticket-preview {
+  position: fixed;
+  z-index: 1050;
+  width: 320px;
+  max-height: 300px;
+  background: #fff;
+  border: 1px solid var(--ops-border);
+  border-radius: var(--ops-radius-lg, 12px);
+  box-shadow: var(--ops-shadow-lg);
+  padding: 16px;
+  overflow-y: auto;
+  pointer-events: none;
+  animation: ops-preview-enter 0.15s ease;
+}
+
+@keyframes ops-preview-enter {
+  from {
+    opacity: 0;
+    transform: translateX(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.ops-ticket-preview-title {
+  font-size: var(--ops-font-base, 0.875rem);
+  font-weight: 600;
+  color: var(--ops-text-default);
+  margin-bottom: 8px;
+  line-height: 1.3;
+}
+
+.ops-ticket-preview-desc {
+  font-size: var(--ops-font-sm, 0.75rem);
+  color: var(--ops-text-muted, #71717a);
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  margin-bottom: 8px;
+}
+
+.ops-ticket-preview-separator {
+  border: none;
+  border-top: 1px solid var(--ops-border);
+  margin: 8px 0;
+}
+
+.ops-ticket-preview-meta {
+  font-size: var(--ops-font-xs, 0.7rem);
+  color: var(--ops-text-secondary);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.ops-ticket-preview-meta-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ops-ticket-preview-meta-row i {
+  width: 14px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.ops-ticket-preview-fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  margin-top: 6px;
+}
+
+.ops-ticket-preview-field {
+  font-size: var(--ops-font-xs, 0.7rem);
+  color: var(--ops-text-secondary);
+  background: var(--ops-hover-bg, #f4f4f5);
+  padding: 2px 6px;
+  border-radius: var(--ops-radius-sm, 4px);
+}
+
+/* Hide preview on touch devices */
+@media (hover: none) {
+  .ops-ticket-preview {
+    display: none;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Floating Action Button (FAB) — quick ticket creation
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.ops-fab {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  z-index: 1010;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: var(--brand-primary, #8e50a7);
+  color: #fff;
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.4rem;
+  cursor: pointer;
+  box-shadow: var(--ops-shadow-lg);
+  transition: var(--ops-transition-smooth);
+}
+
+.ops-fab:hover {
+  transform: scale(1.08);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.18);
+}
+
+.ops-fab:focus-visible {
+  outline: 2px solid var(--brand-primary, #8e50a7);
+  outline-offset: 2px;
+}
+
+.ops-fab-menu {
+  position: fixed;
+  bottom: 80px;
+  right: 24px;
+  z-index: 1011;
+  background: #fff;
+  border-radius: var(--ops-radius-lg);
+  box-shadow: var(--ops-shadow-lg);
+  padding: 8px;
+  min-width: 180px;
+  animation: ops-fab-menu-enter 0.15s ease;
+}
+
+@keyframes ops-fab-menu-enter {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.ops-fab-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-radius: var(--ops-radius);
+  border: none;
+  background: transparent;
+  width: 100%;
+  font-size: var(--ops-font-md);
+  color: var(--ops-text-default);
+  cursor: pointer;
+  transition: var(--ops-transition);
+}
+
+.ops-fab-menu-item:hover {
+  background: var(--ops-hover-bg);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Zone Progress Bar
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.ops-zone-progress-wrapper {
+  margin: 0 0 8px 0;
+}
+
+.ops-zone-progress {
+  height: 3px;
+  background: #e5e7eb;
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.ops-zone-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #6366f1 0%, #10b981 100%);
+  border-radius: 2px;
+  transition: width 0.5s ease;
+  min-width: 0;
+}
+
+.ops-zone-progress-label {
+  font-size: 0.7rem;
+  color: var(--ops-text-muted);
+  text-align: right;
+  margin-bottom: 2px;
+  line-height: 1;
+}
+
+/* Zone tab completion percentage */
+.ops-zone-tab-pct {
+  font-size: 0.68rem;
+  font-weight: 500;
+  color: var(--ops-text-muted);
+  opacity: 0.75;
+  margin-left: 2px;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Activity Feed Sidebar
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.ops-activity-sidebar {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 320px;
+  background: #fff;
+  border-left: 1px solid var(--ops-border);
+  box-shadow: -4px 0 16px rgba(0, 0, 0, 0.06);
+  z-index: 1045;
+  transform: translateX(100%);
+  transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  display: flex;
+  flex-direction: column;
+}
+
+.ops-activity-sidebar--open {
+  transform: translateX(0);
+}
+
+.ops-activity-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 1044;
+  background: rgba(0, 0, 0, 0.15);
+}
+
+.ops-activity-sidebar-header {
+  padding: 16px;
+  border-bottom: 1px solid var(--ops-border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+}
+
+.ops-activity-sidebar-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px 0;
+}
+
+.ops-activity-item {
+  display: flex;
+  gap: 12px;
+  padding: 10px 16px;
+  transition: background-color 0.1s ease;
+  cursor: pointer;
+}
+
+.ops-activity-item:hover {
+  background: var(--ops-hover-bg, #f4f4f5);
+}
+
+.ops-activity-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.75rem;
+  flex-shrink: 0;
+}
+
+.ops-activity-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.ops-activity-text {
+  font-size: var(--ops-font-md, 0.85rem);
+  color: var(--ops-text-default);
+  line-height: 1.3;
+}
+
+.ops-activity-title {
+  font-size: var(--ops-font-sm, 0.75rem);
+  color: var(--ops-text-secondary);
+  line-height: 1.3;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-top: 1px;
+}
+
+.ops-activity-time {
+  font-size: var(--ops-font-xs, 0.7rem);
+  color: var(--ops-text-secondary);
+  margin-top: 2px;
+}
+
+.ops-activity-empty {
+  text-align: center;
+  padding: 40px 20px;
+  color: var(--ops-text-secondary);
+}
+
+/* Activity badge on the toggle button */
+.ops-activity-badge {
+  position: absolute;
+  top: -2px;
+  right: -4px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 100px;
+  background: #6366f1;
+  color: #fff;
+  font-size: 0.6rem;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+
+/* ── Board Announcement Banner ─────────────────────────────────────────── */
+
+.ops-announcement {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 16px;
+  margin: 0 0 12px 0;
+  background: linear-gradient(135deg, #f0f4ff 0%, #faf5ff 100%);
+  border: 1px solid #e0e7ff;
+  border-radius: var(--ops-radius, 8px);
+  font-size: var(--ops-font-md, 0.85rem);
+  color: var(--ops-text-default);
+  line-height: 1.4;
+  animation: ops-announcement-enter 0.3s ease;
+}
+
+@keyframes ops-announcement-enter {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.ops-announcement-icon {
+  color: #6366f1;
+  font-size: 1rem;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.ops-announcement-text {
+  flex: 1;
+  word-break: break-word;
+}
+
+.ops-announcement-dismiss {
+  color: var(--ops-text-secondary);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 2px;
+  font-size: 0.85rem;
+  flex-shrink: 0;
+  transition: color 0.15s ease;
+}
+
+.ops-announcement-dismiss:hover {
+  color: var(--ops-text-default);
+}
+
+/* ── My Work Toggle ──────────────────────────────────────────────────────── */
+
+.ops-my-work-toggle {
+  font-size: var(--ops-font-md, 0.85rem);
+  padding: 4px 12px;
+  border-radius: var(--ops-radius-pill, 100px);
+  border: 1px solid var(--ops-border);
+  background: transparent;
+  color: var(--ops-text-default);
+  cursor: pointer;
+  transition: var(--ops-transition);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.ops-my-work-toggle:hover {
+  background: var(--ops-hover-bg);
+}
+
+.ops-my-work-toggle--active {
+  background: var(--brand-primary, #8e50a7);
+  color: #fff;
+  border-color: var(--brand-primary, #8e50a7);
+}
+
+.ops-my-work-toggle--active:hover {
+  opacity: 0.9;
+  background: var(--brand-primary, #8e50a7);
+}
+
+/* ── Override Bootstrap outline-primary within Ops ─────────────────────────
+   Default Bootstrap blue (#0d6efd) looks unstyled. Use a neutral dark gray
+   that matches our design tokens. ──────────────────────────────────────── */
+
+.ops-header-sticky ~ * .btn-outline-primary,
+.modal .btn-outline-primary {
+  --bs-btn-color: #4b5563;
+  --bs-btn-border-color: #d1d5db;
+  --bs-btn-hover-color: #1f2937;
+  --bs-btn-hover-bg: #f3f4f6;
+  --bs-btn-hover-border-color: #9ca3af;
+  --bs-btn-active-color: #1f2937;
+  --bs-btn-active-bg: #e5e7eb;
+  --bs-btn-active-border-color: #6b7280;
+  --bs-btn-focus-shadow-rgb: 107, 114, 128;
+}
+
+/* ── Form switch (toggle) color override within modals ─────────────────── */
+
+.modal .form-check-input:checked {
+  background-color: #6366f1;
+  border-color: #6366f1;
+}
+
+.modal .form-check-input:focus {
+  border-color: #a5b4fc;
+  box-shadow: 0 0 0 0.2rem rgba(99, 102, 241, 0.25);
 }

@@ -6,7 +6,7 @@ import Spinner from 'react-bootstrap/Spinner';
 import { useTranslation } from 'react-i18next';
 import { useNumaRequest } from '../../../Providers/NumaRequestContext';
 import * as OpsService from '../../../Services/OpsService';
-import type { TicketLink, TicketLinkType } from '../../../types/ops';
+import type { TicketLink, TicketLinkType, StatusType } from '../../../types/ops';
 
 interface LinkedTicketsSectionProps {
   ticketId: string;
@@ -44,6 +44,17 @@ const getInverseLinkType = (linkType: TicketLinkType): TicketLinkType => {
       return 'related_to';
   }
 };
+
+/** Status types that count as "completed" (resolved). */
+const COMPLETED_STATUSES: ReadonlySet<StatusType> = new Set<StatusType>(['completed', 'ended', 'deleted']);
+
+/**
+ * Returns true when a linked ticket is considered unresolved.
+ * If the backend provides `linkedTicketStatusType` we check it; otherwise we
+ * conservatively assume the linked ticket is unresolved (better to warn than miss).
+ */
+const isLinkUnresolved = (link: TicketLink): boolean =>
+  !link.linkedTicketStatusType || !COMPLETED_STATUSES.has(link.linkedTicketStatusType);
 
 /**
  * Displays grouped ticket links (blocks, depends on, related to) with the ability
@@ -137,13 +148,32 @@ export function LinkedTicketsSection({
     }
   };
 
+  // Semantic indicators: unresolved depends_on or blocks links
+  const hasUnresolvedDependencies = groupedLinks.depends_on.some(isLinkUnresolved);
+  const isBlocking = groupedLinks.blocks.some(isLinkUnresolved);
+
   const hasLinks = links.length > 0;
 
   return (
     <div>
       <div className="d-flex align-items-center justify-content-between mb-2">
-        <span className="fw-semibold small">{t('tickets.links')}</span>
-        <Button variant="outline-primary" size="sm" onClick={() => setShowAddForm(!showAddForm)}>
+        <div className="d-flex align-items-center gap-1">
+          <span className="fw-semibold small">{t('tickets.links')}</span>
+          {hasLinks && <span className="text-muted small ms-1">({links.length})</span>}
+          {hasUnresolvedDependencies && (
+            <Badge bg="warning" text="dark" pill style={{ fontSize: '0.7rem' }}>
+              <i className="bi bi-clock me-1" />
+              {t('linkedTickets.depends')}
+            </Badge>
+          )}
+          {isBlocking && (
+            <Badge bg="danger" pill style={{ fontSize: '0.7rem' }}>
+              <i className="bi bi-ban me-1" />
+              {t('linkedTickets.blocking')}
+            </Badge>
+          )}
+        </div>
+        <Button variant="outline-secondary" size="sm" onClick={() => setShowAddForm(!showAddForm)}>
           {showAddForm ? t('common.cancel') : t('linkedTickets.addLink')}
         </Button>
       </div>

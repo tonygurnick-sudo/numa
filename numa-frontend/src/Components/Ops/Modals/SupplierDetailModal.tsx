@@ -4,7 +4,6 @@ import Button from 'react-bootstrap/Button';
 import Badge from 'react-bootstrap/Badge';
 import Form from 'react-bootstrap/Form';
 import Spinner from 'react-bootstrap/Spinner';
-import Accordion from 'react-bootstrap/Accordion';
 import { useTranslation } from 'react-i18next';
 import { useNumaRequest } from '../../../Providers/NumaRequestContext';
 import { useOps } from '../OpsContext';
@@ -100,6 +99,21 @@ export function SupplierDetailModal({
   // Notes state (separate since it's a textarea section)
   const [notesDraft, setNotesDraft] = useState('');
   const [notesEditing, setNotesEditing] = useState(false);
+
+  // ── Collapsible section state (first 2 open by default) ──────────────
+  const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set(['details', 'commercial']));
+
+  const toggleSection = (sectionKey: string) => {
+    setExpandedSections((prev) => {
+      const next = new Set(prev);
+      if (next.has(sectionKey)) {
+        next.delete(sectionKey);
+      } else {
+        next.add(sectionKey);
+      }
+      return next;
+    });
+  };
 
   // ── Data Loading ────────────────────────────────────────────────────────
 
@@ -231,6 +245,45 @@ export function SupplierDetailModal({
   const stageColor = currentStage ? getColorForPosition(currentStage.colorPosition) : TEAL_ACCENT;
   const stageTextColor = getContrastTextColor(stageColor);
 
+  // ── Collapsible section renderer ───────────────────────────────────
+
+  const renderSection = (
+    sectionKey: string,
+    title: React.ReactNode,
+    body: React.ReactNode,
+    headerExtra?: React.ReactNode
+  ) => {
+    const isExpanded = expandedSections.has(sectionKey);
+    return (
+      <div className="mb-0">
+        <div
+          className="d-flex align-items-center gap-2 py-2 px-3 user-select-none border-bottom"
+          style={{ cursor: 'pointer' }}
+          onClick={() => toggleSection(sectionKey)}
+          role="button"
+          tabIndex={0}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              toggleSection(sectionKey);
+            }
+          }}
+        >
+          <i className={`bi bi-chevron-${isExpanded ? 'down' : 'right'}`} style={{ fontSize: '0.75rem' }} />
+          <span className="fw-semibold" style={{ fontSize: '0.9rem' }}>
+            {title}
+          </span>
+          {headerExtra && (
+            <span className="ms-auto" onClick={(e) => e.stopPropagation()}>
+              {headerExtra}
+            </span>
+          )}
+        </div>
+        {isExpanded && <div className="px-3 py-2">{body}</div>}
+      </div>
+    );
+  };
+
   // ── Inline Editable Field Renderer ──────────────────────────────────────
 
   const renderEditableField = (
@@ -243,7 +296,7 @@ export function SupplierDetailModal({
     const isEditing = editingField === field;
 
     return (
-      <div className="mb-2">
+      <div className="mb-2" style={isEditing ? { backgroundColor: '#f0fdfa' } : undefined}>
         <div className="small text-muted mb-0">{label}</div>
         {isEditing ? (
           <div className="d-flex gap-1 align-items-center">
@@ -284,7 +337,19 @@ export function SupplierDetailModal({
             }}
             style={{ cursor: 'pointer', minHeight: '1.4em' }}
           >
-            {displayValue || <span className="text-muted fst-italic">{t('common.edit')}</span>}
+            {type === 'url' && displayValue ? (
+              <a
+                href={displayValue.startsWith('http') ? displayValue : `https://${displayValue}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={(e) => e.stopPropagation()}
+                style={{ fontSize: '0.85rem' }}
+              >
+                {displayValue} <i className="bi bi-box-arrow-up-right" style={{ fontSize: '0.7rem' }} />
+              </a>
+            ) : (
+              displayValue || <span className="text-muted fst-italic">{t('common.edit')}</span>
+            )}
           </div>
         )}
       </div>
@@ -304,7 +369,13 @@ export function SupplierDetailModal({
             ) : supplier ? (
               <>
                 {/* Company name */}
-                <span className="fw-bold">{supplier.companyName}</span>
+                <span
+                  className="fw-bold text-truncate"
+                  style={{ maxWidth: '100%', minWidth: 0 }}
+                  title={supplier.companyName}
+                >
+                  {supplier.companyName}
+                </span>
 
                 {/* Lifecycle stage badge */}
                 {currentStage && (
@@ -362,354 +433,364 @@ export function SupplierDetailModal({
           )}
 
           {supplier && (
-            <Accordion defaultActiveKey={['0', '1']} alwaysOpen>
+            <div>
               {/* ── 1. Supplier Details ──────────────────────────────────────── */}
-              <Accordion.Item eventKey="0">
-                <Accordion.Header>
-                  <span className="fw-semibold" style={{ color: TEAL_ACCENT }}>
-                    <i className="bi bi-building me-2" />
-                    {t('suppliers.supplierDetails')}
-                  </span>
-                </Accordion.Header>
-                <Accordion.Body>
-                  <div className="row">
-                    <div className="col-md-6">
-                      {renderEditableField('companyName', t('common.name'), supplier.companyName)}
-                      {renderEditableField('industry', t('crm.industry'), supplier.industry)}
-                      {renderEditableField('companySize', t('crm.companySize'), supplier.companySize)}
-                      {renderEditableField('website', t('crm.website'), supplier.website, 'url')}
+              {renderSection(
+                'details',
+                <>
+                  <i className="bi bi-building me-2" />
+                  {t('suppliers.supplierDetails')}
+                </>,
+                <div className="row">
+                  <div className="col-md-6">
+                    {renderEditableField('companyName', t('common.name'), supplier.companyName)}
+                    {renderEditableField('industry', t('crm.industry'), supplier.industry)}
+                    {renderEditableField('companySize', t('crm.companySize'), supplier.companySize)}
+                    {renderEditableField('website', t('crm.website'), supplier.website, 'url')}
+                  </div>
+                  <div className="col-md-6">
+                    {renderEditableField('territory', t('crm.territory'), supplier.territory)}
+                    {renderEditableField('source', t('crm.source'), supplier.source)}
+
+                    {/* Owner (staff dropdown) */}
+                    <div className="mb-2">
+                      <div className="small text-muted mb-0">{t('crm.owner')}</div>
+                      <Form.Select
+                        size="sm"
+                        value={supplier.ownerId ?? ''}
+                        onChange={(e) => saveField('ownerId', e.target.value || null)}
+                        disabled={saving}
+                      >
+                        <option value="">{t('common.none')}</option>
+                        {staff.map((s) => (
+                          <option key={s.id} value={s.id}>
+                            {s.name}
+                          </option>
+                        ))}
+                      </Form.Select>
                     </div>
-                    <div className="col-md-6">
-                      {renderEditableField('territory', t('crm.territory'), supplier.territory)}
-                      {renderEditableField('source', t('crm.source'), supplier.source)}
 
-                      {/* Owner (staff dropdown) */}
-                      <div className="mb-2">
-                        <div className="small text-muted mb-0">{t('crm.owner')}</div>
-                        <Form.Select
-                          size="sm"
-                          value={supplier.ownerId ?? ''}
-                          onChange={(e) => saveField('ownerId', e.target.value || null)}
-                          disabled={saving}
-                        >
-                          <option value="">{t('common.none')}</option>
-                          {staff.map((s) => (
-                            <option key={s.id} value={s.id}>
-                              {s.name}
-                            </option>
-                          ))}
-                        </Form.Select>
-                      </div>
-
-                      {/* Lifecycle Stage (select) */}
-                      <div className="mb-2">
-                        <div className="small text-muted mb-0">{t('crm.lifecycleStage')}</div>
-                        <Form.Select
-                          size="sm"
-                          value={supplier.lifecycleStage}
-                          onChange={(e) => saveField('lifecycleStage', e.target.value)}
-                          disabled={saving}
-                        >
-                          {supplierConfig?.lifecycleStages.map((stage) => (
-                            <option key={stage.id} value={stage.id}>
-                              {stage.name}
-                            </option>
-                          ))}
-                        </Form.Select>
-                      </div>
+                    {/* Lifecycle Stage (select) */}
+                    <div className="mb-2">
+                      <div className="small text-muted mb-0">{t('crm.lifecycleStage')}</div>
+                      <Form.Select
+                        size="sm"
+                        value={supplier.lifecycleStage}
+                        onChange={(e) => saveField('lifecycleStage', e.target.value)}
+                        disabled={saving}
+                      >
+                        {supplierConfig?.lifecycleStages.map((stage) => (
+                          <option key={stage.id} value={stage.id}>
+                            {stage.name}
+                          </option>
+                        ))}
+                      </Form.Select>
                     </div>
                   </div>
-                </Accordion.Body>
-              </Accordion.Item>
+                </div>
+              )}
 
               {/* ── 2. Commercial ────────────────────────────────────────────── */}
-              <Accordion.Item eventKey="1">
-                <Accordion.Header>
-                  <span className="fw-semibold" style={{ color: TEAL_ACCENT }}>
-                    <i className="bi bi-cash-stack me-2" />
-                    {t('suppliers.commercial')}
-                  </span>
-                </Accordion.Header>
-                <Accordion.Body>
-                  <div className="row">
-                    <div className="col-md-6">
-                      {/* Annual Spend (currency input) */}
-                      <div className="mb-2">
-                        <div className="small text-muted mb-0">{t('suppliers.annualSpend')}</div>
-                        {editingField === 'annualSpend' ? (
-                          <div className="d-flex gap-1 align-items-center">
-                            <Form.Control
-                              size="sm"
-                              type="text"
-                              value={fieldDraft}
-                              onChange={(e) => setFieldDraft(e.target.value)}
-                              autoFocus
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter') saveField('annualSpend', parseCurrencyInput(fieldDraft));
-                                if (e.key === 'Escape') cancelEdit();
-                              }}
-                              disabled={saving}
-                              placeholder="$0"
-                            />
-                            <Button
-                              size="sm"
-                              variant="link"
-                              className="p-0"
-                              style={{ color: TEAL_ACCENT }}
-                              onClick={() => saveField('annualSpend', parseCurrencyInput(fieldDraft))}
-                              disabled={saving}
-                            >
-                              <i className="bi bi-check-lg" />
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="link"
-                              className="p-0 text-secondary"
-                              onClick={cancelEdit}
-                              disabled={saving}
-                            >
-                              <i className="bi bi-x-lg" />
-                            </Button>
-                          </div>
-                        ) : (
-                          <div
-                            className="small"
-                            role="button"
-                            tabIndex={0}
-                            onClick={() =>
-                              startEdit('annualSpend', supplier.annualSpend != null ? String(supplier.annualSpend) : '')
-                            }
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter')
-                                startEdit(
-                                  'annualSpend',
-                                  supplier.annualSpend != null ? String(supplier.annualSpend) : ''
-                                );
-                            }}
-                            style={{ cursor: 'pointer', minHeight: '1.4em' }}
-                          >
-                            {supplier.annualSpend != null ? (
-                              <span className="fw-semibold" style={{ color: TEAL_ACCENT }}>
-                                {formatCurrency(supplier.annualSpend)}
-                              </span>
-                            ) : (
-                              <span className="text-muted fst-italic">{t('common.edit')}</span>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                    <div className="col-md-6">
-                      {renderEditableField('paymentTerms', t('suppliers.paymentTerms'), supplier.paymentTerms)}
-                    </div>
-                  </div>
-                </Accordion.Body>
-              </Accordion.Item>
-
-              {/* ── 3. Contacts ──────────────────────────────────────────────── */}
-              <Accordion.Item eventKey="2">
-                <Accordion.Header>
-                  <span className="fw-semibold" style={{ color: TEAL_ACCENT }}>
-                    <i className="bi bi-people me-2" />
-                    {t('crm.contacts')}
-                    {supplier.contacts.length > 0 && (
-                      <Badge bg="" className="ms-2" style={{ backgroundColor: TEAL_ACCENT, fontSize: '0.7rem' }}>
-                        {supplier.contacts.length}
-                      </Badge>
-                    )}
-                  </span>
-                </Accordion.Header>
-                <Accordion.Body>
-                  <ContactSection contacts={supplier.contacts} onChange={handleContactsChange} />
-                </Accordion.Body>
-              </Accordion.Item>
-
-              {/* ── 4. Activities ────────────────────────────────────────────── */}
-              <Accordion.Item eventKey="3">
-                <Accordion.Header>
-                  <span className="fw-semibold" style={{ color: TEAL_ACCENT }}>
-                    <i className="bi bi-clock-history me-2" />
-                    {t('crm.activities')}
-                    {activities.length > 0 && (
-                      <Badge bg="" className="ms-2" style={{ backgroundColor: TEAL_ACCENT, fontSize: '0.7rem' }}>
-                        {activities.length}
-                      </Badge>
-                    )}
-                  </span>
-                </Accordion.Header>
-                <Accordion.Body>
-                  <ActivitySection entityType="supplier" entityId={supplier.id} activities={activities} />
-                </Accordion.Body>
-              </Accordion.Item>
-
-              {/* ── 5. Documents ─────────────────────────────────────────────── */}
-              <Accordion.Item eventKey="4">
-                <Accordion.Header>
-                  <span className="fw-semibold" style={{ color: TEAL_ACCENT }}>
-                    <i className="bi bi-folder me-2" />
-                    {t('crm.documents')}
-                    {documents.length > 0 && (
-                      <Badge bg="" className="ms-2" style={{ backgroundColor: TEAL_ACCENT, fontSize: '0.7rem' }}>
-                        {documents.length}
-                      </Badge>
-                    )}
-                  </span>
-                </Accordion.Header>
-                <Accordion.Body>
-                  <DocumentSection
-                    entityType="supplier"
-                    entityId={supplier.id}
-                    documents={documents}
-                    documentTypes={supplierConfig?.documentTypes}
-                  />
-                </Accordion.Body>
-              </Accordion.Item>
-
-              {/* ── 6. Linked Work ───────────────────────────────────────────── */}
-              <Accordion.Item eventKey="5">
-                <Accordion.Header>
-                  <div className="d-flex align-items-center gap-2 w-100 pe-2">
-                    <span className="fw-semibold d-flex align-items-center gap-1" style={{ color: TEAL_ACCENT }}>
-                      <i className="bi bi-link-45deg" />
-                      {t('crm.linkedWork')}
-                      {linkedTickets.length > 0 && (
-                        <Badge bg="" className="ms-1" style={{ backgroundColor: TEAL_ACCENT, fontSize: '0.7rem' }}>
-                          {linkedTickets.length}
-                        </Badge>
-                      )}
-                    </span>
-                    <Button
-                      variant="outline-secondary"
-                      size="sm"
-                      className="ms-auto"
-                      style={{
-                        fontSize: '0.72rem',
-                        padding: '1px 8px',
-                        flexShrink: 0,
-                        borderColor: TEAL_ACCENT,
-                        color: TEAL_ACCENT,
-                      }}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setShowCreateTicket(true);
-                      }}
+              {renderSection(
+                'commercial',
+                <>
+                  <i className="bi bi-cash-stack me-2" />
+                  {t('suppliers.commercial')}
+                </>,
+                <div className="row">
+                  <div className="col-md-6">
+                    {/* Annual Spend (currency input) */}
+                    <div
+                      className="mb-2"
+                      style={editingField === 'annualSpend' ? { backgroundColor: '#f0fdfa' } : undefined}
                     >
-                      <i className="bi bi-plus me-1" />
-                      {t('tickets.newTicket')}
-                    </Button>
-                  </div>
-                </Accordion.Header>
-                <Accordion.Body>
-                  {loadingTickets ? (
-                    <div className="d-flex justify-content-center py-3">
-                      <Spinner animation="border" size="sm" style={{ color: TEAL_ACCENT }} />
-                    </div>
-                  ) : linkedTickets.length === 0 ? (
-                    <div className="text-muted small">{t('empty.noTickets')}</div>
-                  ) : (
-                    <div>
-                      {linkedTickets.map((ticket) => (
+                      <div className="small text-muted mb-0">{t('suppliers.annualSpend')}</div>
+                      {editingField === 'annualSpend' ? (
+                        <div className="d-flex gap-1 align-items-center">
+                          <Form.Control
+                            size="sm"
+                            type="text"
+                            value={fieldDraft}
+                            onChange={(e) => setFieldDraft(e.target.value)}
+                            autoFocus
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') saveField('annualSpend', parseCurrencyInput(fieldDraft));
+                              if (e.key === 'Escape') cancelEdit();
+                            }}
+                            disabled={saving}
+                            placeholder="$0"
+                          />
+                          <Button
+                            size="sm"
+                            variant="link"
+                            className="p-0"
+                            style={{ color: TEAL_ACCENT }}
+                            onClick={() => saveField('annualSpend', parseCurrencyInput(fieldDraft))}
+                            disabled={saving}
+                          >
+                            <i className="bi bi-check-lg" />
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="link"
+                            className="p-0 text-secondary"
+                            onClick={cancelEdit}
+                            disabled={saving}
+                          >
+                            <i className="bi bi-x-lg" />
+                          </Button>
+                        </div>
+                      ) : (
                         <div
-                          key={ticket.id}
-                          className="d-flex align-items-center gap-2 py-2 border-bottom"
-                          style={{ cursor: 'pointer', fontSize: '0.85rem' }}
-                          onClick={() => setSelectedTicket(ticket)}
+                          className="small"
                           role="button"
                           tabIndex={0}
+                          onClick={() =>
+                            startEdit('annualSpend', supplier.annualSpend != null ? String(supplier.annualSpend) : '')
+                          }
                           onKeyDown={(e) => {
-                            if (e.key === 'Enter' || e.key === ' ') setSelectedTicket(ticket);
+                            if (e.key === 'Enter')
+                              startEdit(
+                                'annualSpend',
+                                supplier.annualSpend != null ? String(supplier.annualSpend) : ''
+                              );
                           }}
+                          style={{ cursor: 'pointer', minHeight: '1.4em' }}
                         >
-                          <Badge
-                            bg="light"
-                            text="dark"
-                            className="border"
-                            style={{ fontFamily: 'monospace', flexShrink: 0, fontSize: '0.72rem' }}
-                          >
-                            {ticket.displayId}
-                          </Badge>
-                          <span className="text-truncate flex-grow-1" title={ticket.title}>
-                            {ticket.title}
-                          </span>
-                          <PriorityIndicator priority={ticket.priority} />
-                          {ticket.assigneeName && (
-                            <span className="text-muted small flex-shrink-0" style={{ fontSize: '0.75rem' }}>
-                              {ticket.assigneeName}
+                          {supplier.annualSpend != null ? (
+                            <span className="fw-semibold" style={{ color: TEAL_ACCENT }}>
+                              {formatCurrency(supplier.annualSpend)}
                             </span>
+                          ) : (
+                            <span className="text-muted fst-italic">{t('common.edit')}</span>
                           )}
-                          <i
-                            className="bi bi-chevron-right text-muted"
-                            style={{ fontSize: '0.65rem', flexShrink: 0 }}
-                          />
                         </div>
-                      ))}
+                      )}
                     </div>
+                  </div>
+                  <div className="col-md-6">
+                    {/* Payment Terms (select) */}
+                    <div className="mb-2">
+                      <div className="small text-muted mb-0">{t('suppliers.paymentTerms')}</div>
+                      <Form.Select
+                        size="sm"
+                        value={supplier.paymentTerms ?? ''}
+                        onChange={(e) => saveField('paymentTerms', e.target.value || null)}
+                        disabled={saving}
+                      >
+                        <option value="">{t('common.selectOption')}</option>
+                        {supplier.paymentTerms &&
+                          ![
+                            'Net 7',
+                            'Net 14',
+                            'Net 20',
+                            'Net 30',
+                            'Net 45',
+                            'Net 60',
+                            'COD',
+                            'Prepaid',
+                            'Other',
+                          ].includes(supplier.paymentTerms) && (
+                            <option value={supplier.paymentTerms}>{supplier.paymentTerms}</option>
+                          )}
+                        <option value="Net 7">{t('suppliers.paymentTermOptions.net7')}</option>
+                        <option value="Net 14">{t('suppliers.paymentTermOptions.net14')}</option>
+                        <option value="Net 20">{t('suppliers.paymentTermOptions.net20')}</option>
+                        <option value="Net 30">{t('suppliers.paymentTermOptions.net30')}</option>
+                        <option value="Net 45">{t('suppliers.paymentTermOptions.net45')}</option>
+                        <option value="Net 60">{t('suppliers.paymentTermOptions.net60')}</option>
+                        <option value="COD">{t('suppliers.paymentTermOptions.cod')}</option>
+                        <option value="Prepaid">{t('suppliers.paymentTermOptions.prepaid')}</option>
+                        <option value="Other">{t('suppliers.paymentTermOptions.other')}</option>
+                      </Form.Select>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* ── 3. Contacts ──────────────────────────────────────────────── */}
+              {renderSection(
+                'contacts',
+                <>
+                  <i className="bi bi-people me-2" />
+                  {t('crm.contacts')}
+                  {supplier.contacts.length > 0 && (
+                    <Badge bg="" className="ms-2" style={{ backgroundColor: TEAL_ACCENT, fontSize: '0.7rem' }}>
+                      {supplier.contacts.length}
+                    </Badge>
                   )}
-                </Accordion.Body>
-              </Accordion.Item>
+                </>,
+                <ContactSection contacts={supplier.contacts} onChange={handleContactsChange} />
+              )}
+
+              {/* ── 4. Activities ────────────────────────────────────────────── */}
+              {renderSection(
+                'activities',
+                <>
+                  <i className="bi bi-clock-history me-2" />
+                  {t('crm.activities')}
+                  {activities.length > 0 && (
+                    <Badge bg="" className="ms-2" style={{ backgroundColor: TEAL_ACCENT, fontSize: '0.7rem' }}>
+                      {activities.length}
+                    </Badge>
+                  )}
+                </>,
+                <ActivitySection entityType="supplier" entityId={supplier.id} activities={activities} />
+              )}
+
+              {/* ── 5. Documents ─────────────────────────────────────────────── */}
+              {renderSection(
+                'documents',
+                <>
+                  <i className="bi bi-folder me-2" />
+                  {t('crm.documents')}
+                  {documents.length > 0 && (
+                    <Badge bg="" className="ms-2" style={{ backgroundColor: TEAL_ACCENT, fontSize: '0.7rem' }}>
+                      {documents.length}
+                    </Badge>
+                  )}
+                </>,
+                <DocumentSection
+                  entityType="supplier"
+                  entityId={supplier.id}
+                  documents={documents}
+                  documentTypes={supplierConfig?.documentTypes}
+                />
+              )}
+
+              {/* ── 6. Linked Work ───────────────────────────────────────────── */}
+              {renderSection(
+                'linkedWork',
+                <>
+                  <i className="bi bi-link-45deg me-2" />
+                  {t('crm.linkedWork')}
+                  {linkedTickets.length > 0 && (
+                    <Badge bg="" className="ms-2" style={{ backgroundColor: TEAL_ACCENT, fontSize: '0.7rem' }}>
+                      {linkedTickets.length}
+                    </Badge>
+                  )}
+                </>,
+                loadingTickets ? (
+                  <div className="d-flex justify-content-center py-3">
+                    <Spinner animation="border" size="sm" style={{ color: TEAL_ACCENT }} />
+                  </div>
+                ) : linkedTickets.length === 0 ? (
+                  <div className="text-muted small">{t('empty.noTickets')}</div>
+                ) : (
+                  <div>
+                    {linkedTickets.map((ticket) => (
+                      <div
+                        key={ticket.id}
+                        className="d-flex align-items-center gap-2 py-2 border-bottom"
+                        style={{ cursor: 'pointer', fontSize: '0.85rem' }}
+                        onClick={() => setSelectedTicket(ticket)}
+                        role="button"
+                        tabIndex={0}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') setSelectedTicket(ticket);
+                        }}
+                      >
+                        <Badge
+                          bg="light"
+                          text="dark"
+                          className="border"
+                          style={{ fontFamily: 'monospace', flexShrink: 0, fontSize: '0.72rem' }}
+                        >
+                          {ticket.displayId}
+                        </Badge>
+                        <span className="text-truncate flex-grow-1" title={ticket.title}>
+                          {ticket.title}
+                        </span>
+                        <PriorityIndicator priority={ticket.priority} />
+                        {ticket.assigneeName && (
+                          <span className="text-muted small flex-shrink-0" style={{ fontSize: '0.75rem' }}>
+                            {ticket.assigneeName}
+                          </span>
+                        )}
+                        <i className="bi bi-chevron-right text-muted" style={{ fontSize: '0.65rem', flexShrink: 0 }} />
+                      </div>
+                    ))}
+                  </div>
+                ),
+                <Button
+                  variant="outline-secondary"
+                  size="sm"
+                  style={{
+                    fontSize: '0.72rem',
+                    padding: '1px 8px',
+                    flexShrink: 0,
+                    borderColor: TEAL_ACCENT,
+                    color: TEAL_ACCENT,
+                  }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setShowCreateTicket(true);
+                  }}
+                >
+                  <i className="bi bi-plus me-1" />
+                  {t('tickets.newTicket')}
+                </Button>
+              )}
 
               {/* ── 7. Service Notes ─────────────────────────────────────────── */}
-              <Accordion.Item eventKey="6">
-                <Accordion.Header>
-                  <span className="fw-semibold" style={{ color: TEAL_ACCENT }}>
-                    <i className="bi bi-journal-text me-2" />
-                    {t('suppliers.serviceNotes')}
-                  </span>
-                </Accordion.Header>
-                <Accordion.Body>
-                  {notesEditing ? (
-                    <div>
-                      <Form.Control
-                        as="textarea"
-                        rows={5}
-                        value={notesDraft}
-                        onChange={(e) => setNotesDraft(e.target.value)}
+              {renderSection(
+                'notes',
+                <>
+                  <i className="bi bi-journal-text me-2" />
+                  {t('suppliers.serviceNotes')}
+                </>,
+                notesEditing ? (
+                  <div style={{ backgroundColor: '#f0fdfa' }}>
+                    <Form.Control
+                      as="textarea"
+                      rows={5}
+                      value={notesDraft}
+                      onChange={(e) => setNotesDraft(e.target.value)}
+                      disabled={saving}
+                    />
+                    <div className="d-flex gap-1 justify-content-end mt-2">
+                      <Button
+                        variant="outline-secondary"
+                        size="sm"
+                        onClick={() => {
+                          setNotesDraft(supplier.notes ?? '');
+                          setNotesEditing(false);
+                        }}
                         disabled={saving}
-                      />
-                      <div className="d-flex gap-1 justify-content-end mt-2">
-                        <Button
-                          variant="outline-secondary"
-                          size="sm"
-                          onClick={() => {
-                            setNotesDraft(supplier.notes ?? '');
-                            setNotesEditing(false);
-                          }}
-                          disabled={saving}
-                        >
-                          {t('common.cancel')}
-                        </Button>
-                        <Button
-                          size="sm"
-                          style={{ backgroundColor: TEAL_ACCENT, borderColor: TEAL_ACCENT, color: '#fff' }}
-                          onClick={saveNotes}
-                          disabled={saving}
-                        >
-                          {saving ? t('common.loading') : t('common.save')}
-                        </Button>
-                      </div>
+                      >
+                        {t('common.cancel')}
+                      </Button>
+                      <Button
+                        size="sm"
+                        style={{ backgroundColor: TEAL_ACCENT, borderColor: TEAL_ACCENT, color: '#fff' }}
+                        onClick={saveNotes}
+                        disabled={saving}
+                      >
+                        {saving ? t('common.loading') : t('common.save')}
+                      </Button>
                     </div>
-                  ) : (
-                    <div
-                      role="button"
-                      tabIndex={0}
-                      className="small"
-                      style={{ cursor: 'pointer', minHeight: '2em', whiteSpace: 'pre-wrap' }}
-                      onClick={() => setNotesEditing(true)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') setNotesEditing(true);
-                      }}
-                    >
-                      {supplier.notes || <span className="text-muted fst-italic">{t('common.edit')}</span>}
-                    </div>
-                  )}
-                </Accordion.Body>
-              </Accordion.Item>
-            </Accordion>
+                  </div>
+                ) : (
+                  <div
+                    role="button"
+                    tabIndex={0}
+                    className="small"
+                    style={{ cursor: 'pointer', minHeight: '2em', whiteSpace: 'pre-wrap' }}
+                    onClick={() => setNotesEditing(true)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') setNotesEditing(true);
+                    }}
+                  >
+                    {supplier.notes || <span className="text-muted fst-italic">{t('common.edit')}</span>}
+                  </div>
+                )
+              )}
+            </div>
           )}
         </Modal.Body>
 
         {/* ── Footer ─────────────────────────────────────────────────────────── */}
-        <Modal.Footer style={{ borderTop: `2px solid ${TEAL_ACCENT}20` }}>
+        <Modal.Footer style={{ borderTop: `2px solid ${TEAL_ACCENT}20`, backgroundColor: '#f9fafb' }}>
           <Button variant="outline-secondary" size="sm" onClick={onHide}>
             {t('common.close')}
           </Button>

@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useMemo } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useDroppable } from '@dnd-kit/core';
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
@@ -18,7 +18,11 @@ type KanbanColumnProps = {
   onTicketClick: (ticket: Ticket) => void;
   onTicketContextMenu: (e: React.MouseEvent, ticket: Ticket) => void;
   onTicketAssign?: (ticketId: string, assigneeId: string | null, version: number) => void;
-  onQuickAdd: (title: string, ticketTypeId?: string) => void;
+  onQuickAdd: (title: string, ticketTypeId?: string) => void | Promise<void>;
+  /** Index at which to show the drop indicator line, or null if not active for this column */
+  dropIndicator?: number | null;
+  /** ID of the ticket currently being dragged */
+  activeTicketId?: string | null;
 };
 
 const KanbanColumn: React.FC<KanbanColumnProps> = ({
@@ -29,10 +33,13 @@ const KanbanColumn: React.FC<KanbanColumnProps> = ({
   onTicketContextMenu,
   onTicketAssign,
   onQuickAdd,
+  dropIndicator,
+  activeTicketId,
 }) => {
   const { t } = useTranslation('ops');
   const [quickAddPos, setQuickAddPos] = useState<QuickAddPosition>(null);
   const [quickAddValue, setQuickAddValue] = useState('');
+  const [quickAddSubmitting, setQuickAddSubmitting] = useState(false);
   const [selectedTypeId, setSelectedTypeId] = useState<string | null>(null);
   const [showTypeDropdown, setShowTypeDropdown] = useState(false);
   const quickAddInputRef = useRef<HTMLInputElement>(null);
@@ -68,14 +75,24 @@ const KanbanColumn: React.FC<KanbanColumnProps> = ({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [showTypeDropdown]);
 
-  const handleQuickAddSubmit = () => {
+  const handleQuickAddSubmit = async () => {
     const trimmed = quickAddValue.trim();
-    if (trimmed) {
-      onQuickAdd(trimmed, selectedType?.id);
+    if (quickAddSubmitting) return;
+    if (!trimmed) {
+      setQuickAddValue('');
+      setQuickAddPos(null);
+      setShowTypeDropdown(false);
+      return;
     }
-    setQuickAddValue('');
-    setQuickAddPos(null);
-    setShowTypeDropdown(false);
+    setQuickAddSubmitting(true);
+    try {
+      await onQuickAdd(trimmed, selectedType?.id);
+    } finally {
+      setQuickAddSubmitting(false);
+      setQuickAddValue('');
+      setQuickAddPos(null);
+      setShowTypeDropdown(false);
+    }
   };
 
   const handleQuickAddKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -138,10 +155,14 @@ const KanbanColumn: React.FC<KanbanColumnProps> = ({
         className="kanban-quick-add-input"
         placeholder={t('board.quickAddPlaceholder')}
         value={quickAddValue}
+        disabled={quickAddSubmitting}
         onChange={(e) => setQuickAddValue(e.target.value)}
         onKeyDown={handleQuickAddKeyDown}
         onBlur={handleQuickAddBlur}
       />
+      {quickAddSubmitting && (
+        <span className="spinner-border spinner-border-sm text-muted ms-1" role="status" />
+      )}
     </div>
   );
 
@@ -170,20 +191,48 @@ const KanbanColumn: React.FC<KanbanColumnProps> = ({
       {/* Body: sortable ticket list */}
       <div className="kanban-column-body">
         <SortableContext items={ticketIds} strategy={verticalListSortingStrategy}>
-          {tickets.map((ticket) => (
-            <TicketCard
-              key={ticket.id}
-              ticket={ticket}
-              onClick={onTicketClick}
-              onContextMenu={onTicketContextMenu}
-              onAssign={onTicketAssign}
-            />
-          ))}
-          {tickets.length === 0 && (
-            <div className="kanban-empty-dropzone">
-              <i className="bi bi-inbox mb-1" style={{ fontSize: '1.4rem' }} />
-              <span>{t('board.emptyDropzone', 'Drop tickets here')}</span>
-            </div>
+          {tickets.length === 0 ? (
+            <>
+              {dropIndicator != null && (
+                <div className="kanban-drop-indicator kanban-drop-indicator--active" />
+              )}
+              <div className="kanban-empty-dropzone">
+                <i className="bi bi-inbox mb-1" style={{ fontSize: '1.4rem' }} />
+                <span>{t('board.emptyDropzone', 'Drop tickets here')}</span>
+              </div>
+            </>
+          ) : (
+            tickets.map((ticket, i) => {
+              // Map ticket index to position among visible (non-dragged) tickets
+              const isDraggedTicket = ticket.id === activeTicketId;
+              // Count visible tickets before this one (excluding the dragged ticket)
+              const visiblePos = isDraggedTicket
+                ? -1
+                : tickets.slice(0, i).filter((tk) => tk.id !== activeTicketId).length;
+              const visibleCount = tickets.filter((tk) => tk.id !== activeTicketId).length;
+
+              return (
+                <React.Fragment key={ticket.id}>
+                  {/* Drop indicator before this card */}
+                  {!isDraggedTicket && dropIndicator != null && dropIndicator === visiblePos && (
+                    <div className="kanban-drop-indicator kanban-drop-indicator--active" />
+                  )}
+                  <TicketCard
+                    ticket={ticket}
+                    onClick={onTicketClick}
+                    onContextMenu={onTicketContextMenu}
+                    onAssign={onTicketAssign}
+                  />
+                  {/* Drop indicator after the last visible card */}
+                  {!isDraggedTicket
+                    && visiblePos === visibleCount - 1
+                    && dropIndicator != null
+                    && dropIndicator === visibleCount && (
+                    <div className="kanban-drop-indicator kanban-drop-indicator--active" />
+                  )}
+                </React.Fragment>
+              );
+            })
           )}
         </SortableContext>
       </div>

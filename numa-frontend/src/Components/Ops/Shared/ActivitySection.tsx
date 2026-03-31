@@ -226,7 +226,7 @@ export function ActivitySection({
       <div className="d-flex justify-content-between align-items-center mb-2">
         <span className="fw-semibold small">{t('crm.activities')}</span>
         {!showForm && (
-          <Button variant="outline-primary" size="sm" onClick={handleStartCreate}>
+          <Button variant="outline-secondary" size="sm" onClick={handleStartCreate}>
             <i className="bi bi-plus me-1" />
             {t('activities.logActivity')}
           </Button>

@@ -5,6 +5,9 @@
     "sprintsLabel": "SPRINTS",
     "zonesLabel": "ZONES"
   },
+  "fab": {
+    "quickCreate": "Quick Create"
+  },
   "home": {
     "headline": "Ops Dashboard",
     "subtitle": "Manage your boards, customers, suppliers, and configuration from one place.",
@@ -52,7 +55,8 @@
     "quickAddPlaceholder": "What needs to be done?",
     "create": "Create",
     "noZones": "No zones configured",
-    "backlog": "Backlog"
+    "backlog": "Backlog",
+    "announcement": "Announcement"
   },
   "card": {
     "unassigned": "?",
@@ -61,6 +65,19 @@
     "dueDaysLeft": "{{days}}d",
     "links": "{{count}} links",
     "link": "{{count}} link"
+  },
+  "preview": {
+    "noDescription": "No description",
+    "comments": "{{count}} comments",
+    "comment": "{{count}} comment",
+    "lastComment": "Last by {{author}}",
+    "linked": "{{count}} linked",
+    "blocking": "{{count}} blocking",
+    "depends": "{{count}} depends",
+    "lastUpdated": "Updated {{date}}",
+    "created": "Created {{date}}",
+    "reporter": "Reporter: {{name}}",
+    "project": "Project: {{name}}"
   },
   "tickets": {
     "create": "Create Ticket",
@@ -112,7 +129,21 @@
     "selectCustomer": "Select customer...",
     "selectSupplier": "Select supplier...",
     "selectProject": "Select project...",
-    "selectWorkUnit": "Select sprint..."
+    "selectWorkUnit": "Select sprint...",
+    "ticketHistory": "Ticket History",
+    "noHistoryYet": "No history recorded yet",
+    "historyAction": {
+      "created": "Created ticket",
+      "updated": "Updated ticket",
+      "moved": "Moved ticket",
+      "commented": "Added a comment",
+      "linked": "Linked ticket",
+      "deleted": "Deleted ticket",
+      "restored": "Restored ticket"
+    },
+    "historyFieldChange": "{{field}} changed from \"{{from}}\" to \"{{to}}\"",
+    "historyFieldSet": "{{field}} set to \"{{to}}\"",
+    "historyFieldCleared": "{{field}} cleared"
   },
   "crm": {
     "newCustomer": "New Customer",
@@ -165,6 +196,14 @@
     "owner": "Account Owner",
     "contractValue": "Contract Value",
     "contractTerm": "Contract Term",
+    "contractTermOptions": {
+      "monthly": "Monthly",
+      "quarterly": "Quarterly",
+      "annual": "Annual",
+      "twoYear": "2 Year",
+      "threeYear": "3 Year",
+      "custom": "Custom"
+    },
     "contractStart": "Contract Start",
     "renewalDate": "Renewal Date",
     "renewalStatus": "Renewal Status",
@@ -199,7 +238,18 @@
     "commercial": "Commercial",
     "serviceNotes": "Service Notes",
     "annualSpend": "Annual Spend",
-    "paymentTerms": "Payment Terms"
+    "paymentTerms": "Payment Terms",
+    "paymentTermOptions": {
+      "net7": "Net 7",
+      "net14": "Net 14",
+      "net20": "Net 20",
+      "net30": "Net 30",
+      "net45": "Net 45",
+      "net60": "Net 60",
+      "cod": "COD",
+      "prepaid": "Prepaid",
+      "other": "Other"
+    }
   },
   "settings": {
     "title": "Global Settings",
@@ -214,12 +264,14 @@
     "suppliersList": "Suppliers",
     "boards": "Boards",
     "linkConfig": "Link Config",
+    "prefixes": "Prefixes",
     "general": "General",
     "types": "Types",
     "zones": "Zones",
     "stages": "Stages",
     "fieldOverrides": "Fields",
     "accessControl": "Access Control",
+    "workUnitsTab": "Work Units",
     "workflow": "Workflow",
     "workflowHelp": "Zones group your workflow stages. Stages are the columns on your board where tickets live.",
     "addStage": "Add stage...",
@@ -277,7 +329,12 @@
     "zoneName": "Zone Name",
     "zoneType": "Zone Type",
     "workStages": "Work Stages",
-    "workStagesHelp": "Each stage maps to a canonical status for filtering and reporting."
+    "workStagesHelp": "Each stage maps to a canonical status for filtering and reporting.",
+    "announcement": "Board Announcement",
+    "announcementHelp": "Optional message shown at the top of the board",
+    "announcementPlaceholder": "e.g., Sprint goal: Ship the CRM integration by Friday",
+    "announcementClear": "Clear",
+    "announcementCharCount": "{{count}}/280"
   },
   "sprints": {
     "new": "New Sprint",
@@ -326,6 +383,8 @@
     "unsortedTickets": "{{count}} ticket(s) in this zone are not assigned to a sprint.",
     "assignToSprint": "Assign to sprint...",
     "dismiss": "Dismiss",
+    "zoneProgress": "{{percent}}% complete",
+    "sprintProgress": "{{done}}/{{total}}",
     "noSprintsYet": "No sprints yet",
     "noSprintsYetHelp": "Create a sprint to start organising work into time-boxed iterations.",
     "createFirst": "Create your first sprint"
@@ -426,7 +485,12 @@
     "step1": "Name & Color",
     "step2": "Ticket Types",
     "step3": "Your Workflow",
-    "step4": "Access Control"
+    "step4": "Access Control",
+    "settings": "Board Settings",
+    "owner": "Board Owner",
+    "deleteTeam": "Delete Board",
+    "deleteTeamConfirm": "Are you sure you want to delete \"{{name}}\"? This action cannot be undone.",
+    "deleteTeamHasTickets": "Cannot delete a board that still has tickets. Move or delete all tickets first."
   },
   "page": {
     "headerPlaceholder": "OpsHeader placeholder",
@@ -466,6 +530,13 @@
     "confirm": "Confirm",
     "deleteWarning": "This action cannot be undone."
   },
+  "unsavedChanges": {
+    "title": "Unsaved Changes",
+    "message": "You have unsaved changes. What would you like to do?",
+    "save": "Save Changes",
+    "discard": "Discard Changes",
+    "stay": "Stay"
+  },
   "errors": {
     "loadFailed": "Failed to load: {{message}}",
     "saveFailed": "Failed to save: {{message}}",
@@ -492,7 +563,11 @@
     "contains": "Contains",
     "notContains": "Does not contain",
     "equals": "Equals",
-    "notEquals": "Not equals",
+    "notEquals": "Does not equal",
+    "startsWith": "Starts with",
+    "endsWith": "Ends with",
+    "isEmpty": "Is empty",
+    "isNotEmpty": "Is not empty",
     "before": "Before",
     "after": "After",
     "between": "Between",
@@ -509,12 +584,28 @@
     "updateView": "Update View",
     "modified": "(modified)",
     "clearView": "Clear View",
-    "resetDefaults": "Reset to Defaults"
+    "resetDefaults": "Reset to Defaults",
+    "loadView": "Load View",
+    "createNewView": "Create new view",
+    "viewNamePlaceholder": "e.g., My Active Work",
+    "viewConfigSummary": "View configuration to save",
+    "scope": "Scope",
+    "columnsCount": "{{count}} columns",
+    "sort": "Sort",
+    "filtersCount": "{{count}} filter",
+    "filtersCount_other": "{{count}} filters",
+    "noFilters": "None",
+    "deleteViewConfirm": "Delete this view?",
+    "manageViews": "Manage Views"
   },
   "allTicketsView": {
     "allStatus": "All Status",
     "allSprints": "All Sprints",
     "customerFilters": "Customer Filters",
+    "thisBoard": "This Board",
+    "allBoards": "All Boards",
+    "board": "Board",
+    "columnFiltered": "Column has active filter",
     "saveViewPrompt": "View name...",
     "deleteView": "Delete View",
     "noSavedViews": "Save a view to quickly restore your filters and columns."
@@ -598,6 +689,7 @@
     "other": "Other"
   },
   "common": {
+    "myWork": "My Work",
     "save": "Save",
     "cancel": "Cancel",
     "close": "Close",
@@ -628,7 +720,8 @@
     "no": "No",
     "none": "None",
     "boardView": "Board view",
-    "listView": "List view"
+    "listView": "List view",
+    "status": "Status"
   },
   "editor": {
     "styleLabel": "Style",
@@ -665,6 +758,12 @@
     "typeDesc_board": "Kanban board with columns for active work (To Do, In Progress, Done).",
     "typeDesc_backlog": "List view for triaging and scoping work before it enters a board."
   },
+  "ambiguousKeyword": {
+    "warning": "The name \"{{keyword}}\" could be interpreted as different status types.",
+    "explanation": "This may cause confusion when filtering or reporting. Consider picking a more specific name, or verify the status category is correct.",
+    "suggestStatus": "Set to {{statusType}}",
+    "dismiss": "Dismiss"
+  },
   "stagePicker": {
     "title": "Select Stage",
     "description": "This status change maps to multiple stages. Please select the target stage."
@@ -700,7 +799,29 @@
     "ticketDisplayId": "Ticket ID",
     "ticketDisplayIdPlaceholder": "e.g. BUG-001",
     "notFound": "Ticket not found",
-    "lookupFailed": "Failed to look up ticket"
+    "lookupFailed": "Failed to look up ticket",
+    "depends": "Depends",
+    "blocking": "Blocking"
+  },
+  "fieldsTab": {
+    "title": "Ticket Types & Fields",
+    "fieldName": "Field Name",
+    "actions": "Actions",
+    "addField": "Add Field",
+    "searchFields": "Search fields...",
+    "customise": "Customise",
+    "customLabel": "Custom Label",
+    "customLabelHelp": "Rename this field on this board. Leave blank to use the default.",
+    "customOptions": "Options",
+    "customOptionsPlaceholder": "Option 1, Option 2, Option 3",
+    "customOptionsHelp": "Comma-separated list of options for this select field.",
+    "applyChanges": "Apply",
+    "moveUp": "Move up",
+    "moveDown": "Move down",
+    "added": "Added",
+    "noFields": "No fields configured for this ticket type. Use the Add Field button below.",
+    "fieldCount": "{{count}} fields",
+    "fieldCount_one": "{{count}} field"
   },
   "teamSettings": {
     "visible": "Visible",
@@ -714,6 +835,14 @@
   "globalSettings": {
     "addProject": "Add Project",
     "active": "Active",
+    "owner": "Owner",
+    "unassigned": "Unassigned",
+    "projectStatus": {
+      "active": "Active",
+      "planned": "Planned",
+      "on_hold": "On Hold",
+      "complete": "Complete"
+    },
     "ticketTypesInfo": "A ticket type is a piece of work. Create ticket types for bugs, features, tasks, or anything else your boards need to track.",
     "staffManagedNote": "Staff members are managed via User Management.",
     "role": "Role",
@@ -790,6 +919,23 @@
     "statusCategoriesInfo": "Status categories are fixed lifecycle stages used for reporting and zone rules. Each stage in your board's workflow maps to one of these categories.",
     "statusCategoriesRefTitle": "Status Category Reference",
     "statusCategoryZones": "Zones",
-    "statusCategoryUsedBy": "Used by"
+    "statusCategoryUsedBy": "Used by",
+    "prefixRegistryTitle": "Prefix Registry",
+    "prefixRegistryDescription": "All ticket prefixes and their counters. Prefixes are shared across ticket types.",
+    "prefixColumn": "Prefix",
+    "nextNumberColumn": "Next #",
+    "usedByColumn": "Used By",
+    "statusColumn": "Status",
+    "prefixActive": "Active",
+    "prefixUnused": "Unused",
+    "prefixInfoBox": "Each prefix has a single counter shared by all ticket types using that prefix. Once a ticket is created with a prefix, that prefix becomes permanent.",
+    "noPrefixes": "No prefixes defined. Add ticket types to create prefixes."
+  },
+  "activity": {
+    "title": "Activity",
+    "empty": "No recent activity",
+    "ticketCreated": "{{user}} created {{ticket}}",
+    "ticketMoved": "{{user}} moved {{ticket}} to {{stage}}",
+    "ticketUpdated": "{{user}} updated {{ticket}}"
   }
 }

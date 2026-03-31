@@ -31,15 +31,24 @@ type ViewMode = 'board' | 'list';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-function formatLastContact(dateStr: string | null | undefined): string {
-  if (!dateStr) return 'No contact';
-  const diff = Date.now() - new Date(dateStr).getTime();
-  const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-  if (days === 0) return 'Today';
-  if (days === 1) return '1 day ago';
-  if (days < 30) return `${String(days)} days ago`;
-  const months = Math.floor(days / 30);
-  return months === 1 ? '1 month ago' : `${String(months)} months ago`;
+function formatLastContact(
+  dateStr: string | null | undefined,
+  t: (key: string, options?: Record<string, unknown>) => string
+): string {
+  if (!dateStr) return t('crm.noLastContact');
+
+  const timestamp = new Date(dateStr).getTime();
+  if (Number.isNaN(timestamp)) return t('crm.noLastContact');
+
+  const diffMs = Date.now() - timestamp;
+  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+
+  if (diffDays <= 0) return t('crm.lastContactToday');
+  if (diffDays === 1) return t('crm.lastContactYesterday');
+  if (diffDays < 7) return t('crm.lastContactDaysAgo', { count: diffDays });
+  if (diffDays < 30) return t('crm.lastContactWeeksAgo', { count: Math.floor(diffDays / 7) });
+  if (diffDays < 365) return t('crm.lastContactMonthsAgo', { count: Math.floor(diffDays / 30) });
+  return t('crm.lastContactYearsAgo', { count: Math.floor(diffDays / 365) });
 }
 
 function formatCurrency(value: number): string {
@@ -204,7 +213,7 @@ function CustomerListView({ customers, crmConfig, onCustomerClick }: CustomerLis
         const stageColor = stage ? getColorForPosition(stage.colorPosition) : '#6c757d';
         const stageTextColor = getContrastTextColor(stageColor);
         const primaryContact = customer.contacts.find((c) => c.isPrimary);
-        const lastContact = formatLastContact(customer.lastContactDate);
+        const lastContact = formatLastContact(customer.lastContactDate, t);
 
         return (
           <div
