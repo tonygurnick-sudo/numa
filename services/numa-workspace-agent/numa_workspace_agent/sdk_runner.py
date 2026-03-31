@@ -941,6 +941,17 @@ async def stream_claude_sdk(
                                             action_key=_approval_key,
                                             error=str(exc),
                                         )
+                                    # proxy_request with no schema file: infer
+                                    # safety from HTTP method. GET/HEAD are read-only.
+                                    if not schema_found and not action_key:
+                                        http_method = tool_input.get(
+                                            "method", ""
+                                        ).upper()
+                                        if http_method in ("GET", "HEAD"):
+                                            schema_annotations = {
+                                                "readOnlyHint": True,
+                                                "destructiveHint": False,
+                                            }
                                     # Auto-approve read-only actions and draft
                                     # actions that are explicitly non-destructive.
                                     # Drafts are saved locally and must be sent
@@ -1466,6 +1477,7 @@ async def run_claude_sdk(
                                     or f"{integration_slug}-{tool_input.get('method', 'request')}"
                                 )
 
+                                schema_found = False
                                 if approval_mode == "never":
                                     auto_approved = True
                                 elif approval_mode == "non_destructive":
@@ -1476,7 +1488,8 @@ async def run_claude_sdk(
                                             / integration_slug
                                             / f"{_approval_key}.json"
                                         )
-                                        if schema_path.exists():
+                                        schema_found = schema_path.exists()
+                                        if schema_found:
                                             schema_data = json.loads(
                                                 schema_path.read_text(encoding="utf-8")
                                             )
@@ -1489,6 +1502,17 @@ async def run_claude_sdk(
                                             action_key=_approval_key,
                                             error=str(exc),
                                         )
+                                    # proxy_request with no schema file: infer
+                                    # safety from HTTP method. GET/HEAD are read-only.
+                                    if not schema_found and not action_key:
+                                        http_method = tool_input.get(
+                                            "method", ""
+                                        ).upper()
+                                        if http_method in ("GET", "HEAD"):
+                                            schema_annotations = {
+                                                "readOnlyHint": True,
+                                                "destructiveHint": False,
+                                            }
                                     if isinstance(schema_annotations, dict):
                                         read_only = schema_annotations.get(
                                             "readOnlyHint", False
@@ -1526,6 +1550,7 @@ async def run_claude_sdk(
                                 auto_approved=auto_approved,
                                 approval_mode=approval_mode,
                                 request_id=approval_id,
+                                schema_found=schema_found,
                             )
 
                 # Serialize and write to trace
