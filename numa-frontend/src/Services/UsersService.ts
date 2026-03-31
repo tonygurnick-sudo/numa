@@ -1,6 +1,11 @@
 export type WorkspaceUser = {
+  sub?: string;
   email: string;
   name: string;
+  displayName?: string;
+  jobTitle?: string;
+  profileImage?: { s3Bucket: string; s3Key: string } | null;
+  avatarUrl?: string;
   enabled: boolean;
 };
 
