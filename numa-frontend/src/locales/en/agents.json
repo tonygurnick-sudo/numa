@@ -137,6 +137,10 @@
       "selectedAvatarAlt": "Selected agent avatar",
       "avatarLabel": "Avatar"
     },
+    "teamAssignment": {
+      "label": "Team assignment",
+      "help": "Assign this agent to one or more teams."
+    },
     "timeSaved": {
       "label": "Estimated time saved",
       "hoursShort": "hr",
@@ -435,7 +439,7 @@
         "subtitle": "Your personal AI assistants"
       },
       "team": {
-        "placeholder": "Team agents will appear here once agents are shared with this team."
+        "placeholder": "No agents assigned to this team yet."
       },
       "company": {
         "title": "Company",
