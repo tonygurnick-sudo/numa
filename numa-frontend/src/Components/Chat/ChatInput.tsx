@@ -2,7 +2,9 @@ import React, { useRef, useEffect, useState } from 'react';
 import { getFlag } from '../../utils/featureFlags';
 import { Button, Form, Spinner, Modal, Dropdown, Badge, OverlayTrigger, Tooltip } from 'react-bootstrap';
 import { Search, Robot, BarChart } from 'react-bootstrap-icons';
-import { Paperclip, Send } from 'lucide-react';
+import { Mic, Paperclip, Send } from 'lucide-react';
+import VoiceRecordButton, { isVoiceRecordingSupported } from './VoiceRecordButton';
+import type { VoiceRecordingState } from './VoiceRecordButton';
 import { useTranslation } from 'react-i18next';
 import { FeatureWrapper } from '../RequiredFeaturesWrapper';
 import {
@@ -66,6 +68,10 @@ const ChatInput = ({
   isSettingsPanelOpen = false,
   hasActiveSettings = false,
   onPasteFiles = undefined as ((files: File[]) => void) | undefined,
+  // Voice recording
+  onVoiceRecordingComplete = undefined as ((blob: Blob, filename: string) => void) | undefined,
+  voiceRecordingState = 'idle' as VoiceRecordingState,
+  voiceInputEnabled = false,
 }) => {
   const { t } = useTranslation('chat');
   const internalRef = useRef(null);
@@ -128,6 +134,16 @@ const ChatInput = ({
 
   // Keep other controls disabled during streaming/uploads to avoid mid-turn config changes
   const isControlsDisabled = buttonStatus === 'streaming' || uploadsInProgress || !!disabled;
+
+  // V2: show mic button in place of send when input is empty and voice is available
+  const showVoiceMicAsSend =
+    variant === 'v2' &&
+    voiceInputEnabled &&
+    isVoiceRecordingSupported() &&
+    !!onVoiceRecordingComplete &&
+    !inputMessage.trim() &&
+    !showStopButton &&
+    !showSendSpinner;
 
   // Placeholder: prefer explicit override, otherwise use variant-specific default
   const placeholderText = placeholderOverride ?? t(variant === 'v2' ? 'input.placeholderV2' : 'input.placeholder');
@@ -399,6 +415,21 @@ const ChatInput = ({
       );
     }
 
+    // V2: show mic button in place of send when input is empty
+    if (showVoiceMicAsSend) {
+      return (
+        <VoiceRecordButton
+          onRecordingComplete={onVoiceRecordingComplete!}
+          disabled={isControlsDisabled}
+          isV2Inline={false}
+          isMobile={isMobile}
+          externalState={voiceRecordingState}
+          asSendButton
+          sendButtonSize={isMobile ? '40px' : '52px'}
+        />
+      );
+    }
+
     return (
       <Button
         variant="primary"
@@ -462,9 +493,11 @@ const ChatInput = ({
                   rows={1}
                   style={v2TextareaStyle}
                 />
-                <FeatureWrapper requiredFeature="useCompanyData">
-                  {renderUploadButton('attachment-icon v2-inline')}
-                </FeatureWrapper>
+                <div className="chat-input-inline-tools">
+                  <FeatureWrapper requiredFeature="useCompanyData">
+                    {renderUploadButton('attachment-icon v2-inline')}
+                  </FeatureWrapper>
+                </div>
               </div>
               <div className="chat-input-inline-actions">{renderSendButton()}</div>
             </div>

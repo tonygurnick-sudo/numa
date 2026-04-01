@@ -353,6 +353,18 @@ export class NumaClientStack extends TerraformStack {
         lifecycle: { createBeforeDestroy: true, ignoreChanges: ['value'] },
       });
 
+      // ffmpeg Lambda layer for audio/video transcription (parallel pipeline).
+      // Custom layer built from static ffmpeg binaries (johnvansickle.com), published
+      // to q-demo (905418183804) with public access. Provides /opt/bin/ffmpeg and /opt/bin/ffprobe.
+      // To add a new region: run `AWS_PROFILE=q-demo ./tools/publish-ffmpeg-layer.sh <region>`
+      // and add the output ARN here.
+      const ffmpegLayerByRegion: Record<string, string> = {
+        'us-east-1': 'arn:aws:lambda:us-east-1:905418183804:layer:ffmpeg-static:1',
+        'ap-southeast-2': 'arn:aws:lambda:ap-southeast-2:905418183804:layer:ffmpeg-static:1',
+        'ap-southeast-3': 'arn:aws:lambda:ap-southeast-3:207567759910:layer:ffmpeg-static:1',
+      };
+      const ffmpegLayerArn = ffmpegLayerByRegion[clientConfig.region];
+
       // Create the workspace chat tools Lambda (provides KB queries etc. for workspace chat agent)
       workspaceChatTools = new WorkspaceChatToolsConstruct(this, 'workspace-chat-tools', {
         clientName: props.clientName,
@@ -391,6 +403,8 @@ export class NumaClientStack extends TerraformStack {
         opsApiLambdaArn,
         opsConfigApiLambdaArn,
         opsCrmApiLambdaArn,
+        // ffmpeg layer for parallel audio/video transcription
+        ffmpegLayerArn,
       });
 
       // Create the AgentCore runtime
@@ -894,6 +908,10 @@ export class NumaClientStack extends TerraformStack {
             'iam:CreateRole',
             'iam:GetPolicy',
             'iam:CreatePolicy',
+            'iam:GetPolicyVersion',
+            'iam:ListPolicyVersions',
+            'iam:DeletePolicyVersion',
+            'iam:CreatePolicyVersion',
             'iam:ListAttachedRolePolicies',
             'iam:AttachRolePolicy',
           ],

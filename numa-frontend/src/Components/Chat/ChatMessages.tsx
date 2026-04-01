@@ -488,12 +488,14 @@ const ChatMessages = ({
             }
           }
 
-          // Other statuses with text (initializing, processingFile, etc.)
+          // Other statuses with text (initializing, processingFile, transcribing, etc.)
           let statusText: string | undefined;
           if (message.status === 'initializing') {
             statusText = t('messages.status.initializing');
           } else if (message.status === 'processingFile') {
             statusText = t('messages.status.processingFile');
+          } else if (message.status === 'transcribing') {
+            statusText = t('messages.status.transcribing');
           }
           // Skip legacy statuses we don't handle
           if (statusText) {

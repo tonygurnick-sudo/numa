@@ -109,8 +109,8 @@ def invoke_workspace_tool(
     lambda_client = session.client(
         "lambda",
         config=Config(
-            read_timeout=300
-        ),  # Must match workspace-chat-tools Lambda timeout (300s)
+            read_timeout=900
+        ),  # Must match workspace-chat-tools Lambda timeout (900s)
     )
 
     # Diagnostic: log what env vars the MCP tool actually sees
@@ -155,6 +155,61 @@ def invoke_workspace_tool(
         raise Exception(f"Tool error: {error_msg}")
 
     return response_payload.get("result", {})
+
+
+def invoke_workspace_tool_async(
+    tool_name: str,
+    params: dict[str, Any],
+    extra_event_fields: dict[str, Any] | None = None,
+) -> None:
+    """Fire-and-forget invocation of the workspace-chat-tools Lambda.
+
+    Same as invoke_workspace_tool but uses InvocationType='Event' so it
+    returns immediately (HTTP 202) without waiting for the Lambda to finish.
+    Use this for long-running tools where you want to poll for results separately.
+    """
+    import boto3
+
+    lambda_name = os.environ.get("WORKSPACE_TOOLS_LAMBDA_NAME", "")
+    if not lambda_name:
+        raise ValueError("WORKSPACE_TOOLS_LAMBDA_NAME is not configured")
+
+    session = boto3.Session(
+        aws_access_key_id=os.environ.get("NUMA_LOCAL_AWS_ACCESS_KEY_ID"),
+        aws_secret_access_key=os.environ.get("NUMA_LOCAL_AWS_SECRET_ACCESS_KEY"),
+        aws_session_token=os.environ.get("NUMA_LOCAL_AWS_SESSION_TOKEN"),
+        region_name=os.environ.get("AWS_REGION", "us-east-1"),
+    )
+
+    lambda_client = session.client("lambda")
+
+    event: dict[str, Any] = {
+        "tool": tool_name,
+        "allowed_tools": json.loads(os.environ.get("NUMA_ENABLED_TOOLS", "[]")),
+        "user_sub": os.environ.get("NUMA_USER_SUB", ""),
+        "conversation_id": os.environ.get("NUMA_CONVERSATION_ID", ""),
+        "external_user_id": os.environ.get("NUMA_EXTERNAL_USER_ID", ""),
+        "params": params,
+    }
+
+    if extra_event_fields:
+        event.update(extra_event_fields)
+
+    logger.info(
+        "Invoking workspace tool async (fire-and-forget)",
+        _name="WORKSPACE_TOOL_INVOKE_ASYNC",
+        tool_name=tool_name,
+    )
+
+    response = lambda_client.invoke(
+        FunctionName=lambda_name,
+        Payload=json.dumps(event),
+        InvocationType="Event",
+    )
+
+    status_code = response.get("StatusCode", 0)
+    if status_code != 202:
+        raise Exception(f"Async Lambda invoke failed with status {status_code}")
 
 
 def save_result(

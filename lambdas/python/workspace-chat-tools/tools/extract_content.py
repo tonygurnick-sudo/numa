@@ -66,6 +66,22 @@ VISION_EXTENSIONS = {
     ".gif",
 }
 
+# Audio/video extensions routed to the transcription pipeline
+AUDIO_VIDEO_EXTENSIONS = {
+    ".mp3",
+    ".mp4",
+    ".wav",
+    ".flac",
+    ".ogg",
+    ".amr",
+    ".webm",
+    ".m4a",
+    ".aac",
+    ".mov",
+    ".mkv",
+    ".avi",
+}
+
 
 def _validate_workspace_path(file_path: str) -> tuple[bool, str | None]:
     """
@@ -325,6 +341,83 @@ def _handle_chunked_extraction(
     )
 
 
+# ── Audio/video routing ─────────────────────────────────────────────────────
+
+
+def _handle_audio_video_extraction(
+    file_path: str,
+    user_sub: str,
+    conversation_id: str,
+    output_s3_key: str,
+) -> Dict[str, Any]:
+    """
+    Route audio/video files to the transcription pipeline.
+
+    Delegates to handle_transcribe in meeting mode (speaker diarization),
+    then writes the transcript text to S3 in the same format as other
+    extract_content outputs.
+    """
+    from .transcribe import handle_transcribe
+
+    logger.info(
+        "Routing audio/video to transcription pipeline",
+        file_path=file_path,
+        user_sub=user_sub[:8] + "..." if user_sub else "",
+    )
+
+    transcribe_result = handle_transcribe(
+        {
+            "file_path": file_path,
+            "mode": "meeting",
+            "__user_sub": user_sub,
+            "__conversation_id": conversation_id,
+        }
+    )
+
+    text = transcribe_result.get("text", "")
+    duration = transcribe_result.get("duration_seconds", 0)
+    language = transcribe_result.get("language", "unknown")
+
+    # Add metadata header
+    header = (
+        f"--- Transcript ---\n"
+        f"Source: {Path(file_path).name}\n"
+        f"Duration: {duration:.0f}s | Language: {language}\n"
+        f"---\n\n"
+    )
+    full_text = header + text
+
+    # Write transcript to S3 (same pattern as vision extraction output)
+    s3_write_client = prm_client("s3", region=REGION)
+    s3_write_client.put_object(
+        Bucket=OUTPUTS_BUCKET_NAME,
+        Key=output_s3_key,
+        Body=full_text.encode("utf-8"),
+        ContentType="text/plain",
+    )
+
+    # Build workspace output path
+    output_rel_path = output_s3_key.replace(
+        f"{S3_PREFIX}/{user_sub}/conversations/{conversation_id}/", ""
+    )
+    output_workspace_path = f"{WORKSPACE_ROOT}/{output_rel_path}"
+
+    logger.info(
+        "Audio/video transcription complete",
+        output_path=output_workspace_path,
+        text_length=len(full_text),
+        duration_seconds=duration,
+    )
+
+    return {
+        "message": f"Audio transcribed successfully to {output_workspace_path}",
+        "output_path": output_workspace_path,
+        "s3_key": output_s3_key,
+        "original_file": file_path,
+        "text_length": len(full_text),
+    }
+
+
 # ── Main handler ─────────────────────────────────────────────────────────────
 
 
@@ -397,6 +490,12 @@ def handle_extract_content(params: Dict[str, Any]) -> Dict[str, Any]:
     # Get filename for the extract lambda
     filename = Path(file_path).name
     file_ext = Path(file_path).suffix.lower()
+
+    # Route audio/video files to the transcription pipeline
+    if file_ext in AUDIO_VIDEO_EXTENSIONS:
+        return _handle_audio_video_extraction(
+            file_path, user_sub, conversation_id, output_s3_key
+        )
 
     # Create Lambda client with long timeout for large file extraction
     lambda_client = prm_client(

@@ -58,6 +58,7 @@ from tools import (
     handle_query_knowledgebase,
     handle_retrieve_kb_file,
     handle_run_action,
+    handle_transcribe,
     handle_update_agent,
     handle_update_memory,
     handle_web_search,
@@ -128,6 +129,7 @@ TOOL_HANDLERS: Dict[str, Callable[[Dict[str, Any]], Dict[str, Any]]] = {
     "query_knowledgebase": handle_query_knowledgebase,
     "retrieve_kb_file": handle_retrieve_kb_file,
     "update_agent": handle_update_agent,
+    "transcribe": handle_transcribe,
     "web_search": handle_web_search,
     "pipedream_list_actions": handle_list_actions,
     "pipedream_batch_get_schemas": handle_batch_get_schemas,
@@ -450,6 +452,18 @@ def handler(event: Dict[str, Any], context: LambdaContext) -> Dict[str, Any]:
 
         logger.info(
             "Extract content tool invoked",
+            file_path=params.get("file_path"),
+            user_sub=user_sub[:8] + "..." if user_sub else "",
+            conversation_id=conversation_id[:8] + "..." if conversation_id else "",
+        )
+
+    # Handle transcribe tool - pass user context for S3 path construction
+    if tool_name == "transcribe":
+        params["__user_sub"] = user_sub
+        params["__conversation_id"] = conversation_id
+
+        logger.info(
+            "Transcribe tool invoked",
             file_path=params.get("file_path"),
             user_sub=user_sub[:8] + "..." if user_sub else "",
             conversation_id=conversation_id[:8] + "..." if conversation_id else "",
