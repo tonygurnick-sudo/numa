@@ -30,6 +30,7 @@ from .pipedream_integration import (
     handle_proxy_request,
     handle_run_action,
 )
+from .transcribe import handle_transcribe
 from .user_profile import (
     handle_add_memory,
     handle_list_memories,
@@ -62,4 +63,5 @@ __all__ = [
     "handle_list_memories",
     "handle_update_memory",
     "handle_ops_operation",
+    "handle_transcribe",
 ]

@@ -531,6 +531,20 @@ const getUserAgentById = async (agentId: string, userId: string): Promise<UserAg
   return result.Item as UserAgentItem | undefined;
 };
 
+const getUserAgentByAgentIdOnly = async (agentId: string): Promise<UserAgentItem | undefined> => {
+  if (!USER_TABLE) return undefined;
+  const result = await dynamo.send(
+    new QueryCommand({
+      TableName: USER_TABLE,
+      IndexName: 'agent-id-index',
+      KeyConditionExpression: 'agent_id = :aid',
+      ExpressionAttributeValues: { ':aid': agentId },
+      Limit: 1,
+    })
+  );
+  return result.Items?.[0] as UserAgentItem | undefined;
+};
+
 const listUserAgents = async (userId: string): Promise<UserAgentItem[]> => {
   const response = await dynamo.send(
     new QueryCommand({
@@ -1490,6 +1504,56 @@ const handleRemoveTeamMember = async (
   return jsonResponse(200, { ok: true });
 };
 
+// ─── Team Agents ────────────────────────────────────────────────────────────
+
+const handleListTeamAgents = async (teamId: string, auth: AuthContext): Promise<ReturnType<typeof jsonResponse>> => {
+  if (!SHARING_TABLE || !TEAM_MEMBERS_TABLE) {
+    return jsonResponse(200, { agents: [], teamId });
+  }
+
+  // Verify caller is a team member or admin
+  const memberRes = await dynamo.send(
+    new GetCommand({ TableName: TEAM_MEMBERS_TABLE, Key: { team_id: teamId, user_id: auth.sub } })
+  );
+  if (!memberRes.Item && !isAdmin(auth)) {
+    return errorResponse(403, 'Not a member of this team');
+  }
+
+  // Query sharing table for all agents shared with this team
+  const sharingRes = await dynamo.send(
+    new QueryCommand({
+      TableName: SHARING_TABLE,
+      IndexName: 'principal-agents-index',
+      KeyConditionExpression: 'principal_id = :pid',
+      ExpressionAttributeValues: { ':pid': `team:${teamId}` },
+    })
+  );
+
+  const sharingItems = (sharingRes.Items || []) as SharingItem[];
+  if (sharingItems.length === 0) {
+    return jsonResponse(200, { agents: [], teamId });
+  }
+
+  // Hydrate each agent -- try workspace table first, fall back to user table GSI
+  const agents: (AgentResponse & { shareRole?: string })[] = [];
+  await Promise.all(
+    sharingItems.map(async (item) => {
+      const workspaceAgent = await getWorkspaceAgentById(item.agent_id);
+      if (workspaceAgent) {
+        agents.push({ ...mapWorkspaceAgent(workspaceAgent), shareRole: item.role });
+        return;
+      }
+      const userAgent = await getUserAgentByAgentIdOnly(item.agent_id);
+      if (userAgent) {
+        agents.push({ ...mapUserAgent(userAgent), shareRole: item.role });
+      }
+    })
+  );
+
+  agents.sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0));
+  return jsonResponse(200, { agents, teamId });
+};
+
 // ─── Sharing ─────────────────────────────────────────────────────────────────
 
 type SharingItem = {
@@ -1709,6 +1773,10 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
           return await handleUpdateTeam(teamId, parseJsonBody(event.body), auth);
         }
         if (method === 'DELETE' && teamSegs.length === 1) return await handleDeleteTeam(teamId, auth);
+        // Agents sub-resource: GET /agents/teams/:id/agents
+        if (teamSegs[1] === 'agents' && method === 'GET' && teamSegs.length === 2) {
+          return await handleListTeamAgents(teamId, auth);
+        }
         // Members sub-resource
         if (teamSegs[1] === 'members') {
           if (method === 'POST' && teamSegs.length === 2) {

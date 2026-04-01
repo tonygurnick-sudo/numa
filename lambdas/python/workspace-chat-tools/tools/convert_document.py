@@ -56,8 +56,23 @@ BLOCKED_PATH_PATTERNS = [
 # Valid output formats
 VALID_FORMATS = ["pdf", "docx"]
 
-# Valid input formats for direct file conversion
-VALID_INPUT_FORMATS = ["pdf", "docx"]
+# Valid input formats for direct file conversion (matches document-converter Lambda)
+VALID_INPUT_FORMATS = [
+    "pdf",
+    "docx",
+    "doc",
+    "pptx",
+    "ppt",
+    "xlsx",
+    "xls",
+    "odp",
+    "ods",
+    "odt",
+    "rtf",
+    "key",
+    "numbers",
+    "pages",
+]
 
 # Valid conversion modes
 VALID_MODES = ["markdown", "file"]
@@ -220,9 +235,7 @@ def handle_convert_document(params: Dict[str, Any]) -> Dict[str, Any]:
     if mode == "file":
         file_ext = Path(file_path).suffix.lower().lstrip(".")
         if file_ext not in VALID_INPUT_FORMATS:
-            raise ValueError(
-                f"For mode='file', input must be .pdf or .docx (got .{file_ext})"
-            )
+            raise ValueError(f"For mode='file', unsupported input format: .{file_ext}")
         if file_ext == output_format:
             raise ValueError(
                 f"Input and output format are the same ({file_ext}). No conversion needed."

@@ -25,8 +25,21 @@ Images (OCR/Vision):
   .jpg     JPEG images
   .jpeg    JPEG images
 
-Audio/Video (Transcription):
-  .mp3, .mp4, .wav, .flac, .ogg, .amr, .webm, .m4a
+Audio/Video (Transcription via AWS Transcribe):
+  .mp3, .mp4, .wav, .flac, .ogg, .amr, .webm, .m4a, .mov, .mkv, .avi
+
+  Audio/video files are transcribed using parallel processing. Speaker
+  diarization is enabled (output format: [Speaker 1]: text).
+
+  IMPORTANT — Transcription time estimates (warn the user before calling):
+    < 5 MB file:   ~10-15 seconds
+    5-20 MB file:  ~1-2 minutes
+    20-50 MB file: ~3-5 minutes
+    50-100 MB:     ~5-8 minutes
+    100+ MB:       ~8-15 minutes
+  Always tell the user the expected wait time before starting transcription.
+  Example: "This is a 49 MB audio file — transcription will take approximately
+  5-7 minutes. I'll start now."
 
 Text Files (direct reading):
   .txt, .csv, .json, .xml, .yaml, .yml, .md, .html

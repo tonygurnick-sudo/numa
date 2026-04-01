@@ -65,6 +65,8 @@ export interface WorkspaceChatToolsConstructProps {
   opsCrmApiLambdaArn?: string;
   /** Email sender Lambda ARN in deployer account (for cross-account email sending) */
   emailSenderLambdaArn?: string;
+  /** Optional ffmpeg Lambda layer ARN for audio/video transcription (parallel pipeline) */
+  ffmpegLayerArn?: string;
 }
 
 /**
@@ -275,6 +277,14 @@ export class WorkspaceChatToolsConstruct extends Construct {
       ],
     });
 
+    // Amazon Transcribe permission for voice-to-text and audio transcription
+    policyStatements.push({
+      sid: 'TranscribeAccess',
+      effect: 'Allow',
+      actions: ['transcribe:StartTranscriptionJob', 'transcribe:GetTranscriptionJob'],
+      resources: ['*'],
+    });
+
     // Lambda invoke permission for Numa Ops Lambdas (ops tool)
     const opsLambdaArns = [props.opsApiLambdaArn, props.opsConfigApiLambdaArn, props.opsCrmApiLambdaArn].filter(
       Boolean
@@ -314,11 +324,13 @@ export class WorkspaceChatToolsConstruct extends Construct {
       lambdaDirectory: 'python/workspace-chat-tools/',
       handler: 'lambda_function.handler',
       runtime: 'python3.13',
-      memorySize: 1024,
-      timeout: 300,
+      memorySize: 2048,
+      timeout: 900,
+      ephemeralStorageMb: 4096,
       logGroup: props.logGroup,
       resourceNameSuffix: '_workspace_chat_tools',
       otelConfig: props.otelConfig,
+      additionalLayers: props.ffmpegLayerArn ? [props.ffmpegLayerArn] : [],
       environment: {
         CLIENT_NAME: props.clientName,
         // AWS_REGION is automatically provided by Lambda runtime

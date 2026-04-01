@@ -13,6 +13,7 @@ import {
   getAgentPrefs,
   setAgentPref,
   listTeams,
+  listTeamAgents,
 } from '../Services/AgentsService';
 import { AdminAgentsService, type AgentsMode } from '../Services/AdminAgentsService';
 import type { AgentSummary, AgentUserPref, Team } from '../types/agents';
@@ -137,6 +138,7 @@ export const AgentsManagement = () => {
   const [showHidden, setShowHidden] = useState(() => localStorage.getItem(LS_SHOW_HIDDEN) === 'true');
   const [prefs, setPrefs] = useState<AgentUserPref[]>([]);
   const [teams, setTeams] = useState<Team[]>([]);
+  const [teamAgents, setTeamAgents] = useState<Map<string, AgentSummary[]>>(new Map());
   const [shareModal, setShareModal] = useState<{ show: boolean; agent: AgentSummary | null }>({
     show: false,
     agent: null,
@@ -219,6 +221,18 @@ export const AgentsManagement = () => {
       ]);
       setPrefs(prefsData);
       setTeams(teamsData);
+
+      // Fetch agents for each team
+      if (teamsData.length > 0) {
+        const results = await Promise.all(
+          teamsData.map((team) => listTeamAgents(numaGet, team.teamId).catch(() => [] as AgentSummary[]))
+        );
+        const map = new Map<string, AgentSummary[]>();
+        teamsData.forEach((team, i) => map.set(team.teamId, results[i]));
+        setTeamAgents(map);
+      } else {
+        setTeamAgents(new Map());
+      }
     } catch {
       // best-effort
     }
@@ -360,13 +374,22 @@ export const AgentsManagement = () => {
     [sortMode]
   );
 
+  // Set of agent IDs that are assigned to at least one team -- excluded from personal section
+  const teamAgentIds = useMemo(() => {
+    const ids = new Set<string>();
+    teamAgents.forEach((agents) => agents.forEach((a) => ids.add(a.agentId)));
+    return ids;
+  }, [teamAgents]);
+
   // Base agents visible given the scope filter (before tag filtering)
   const filteredMyAgents = useMemo(() => {
     if (filter === 'public' || filter === 'team') return [];
-    if (filter === 'favourites') return sortAgents(applyFilters(myAgents.filter((a) => isAgentFavorite(a))));
+    if (filter === 'favourites')
+      return sortAgents(applyFilters(myAgents.filter((a) => isAgentFavorite(a) && !teamAgentIds.has(a.agentId))));
     const base = filter === 'personal' ? myAgents.filter((a) => a.visibility === 'personal') : myAgents;
-    return sortAgents(applyFilters(base));
-  }, [filter, myAgents, applyFilters, sortAgents, isAgentFavorite]);
+    const withoutTeamAgents = base.filter((a) => !teamAgentIds.has(a.agentId));
+    return sortAgents(applyFilters(withoutTeamAgents));
+  }, [filter, myAgents, applyFilters, sortAgents, isAgentFavorite, teamAgentIds]);
 
   const filteredWorkspaceAgents = useMemo(() => {
     if (filter === 'personal' || filter === 'team') return [];
@@ -522,7 +545,7 @@ export const AgentsManagement = () => {
   };
 
   const handleModalSaved = async () => {
-    await loadAgents();
+    await Promise.all([loadAgents(), loadPrefsAndTeams()]);
   };
 
   const handleScheduleAgent = (_agent: AgentSummary) => {
@@ -697,10 +720,16 @@ export const AgentsManagement = () => {
   };
 
   const totalAgents = myAgents.length + workspaceAgents.length;
-  const personalCount = myAgents.filter((a) => a.scope === 'user').length;
+  const personalCount = myAgents.filter((a) => a.scope === 'user' && !teamAgentIds.has(a.agentId)).length;
   const publicCount = workspaceAgents.length;
   const favouriteCount = favouriteAgents.length;
-  const teamCount = teams.length;
+  const teamCount = useMemo(() => {
+    let count = 0;
+    teamAgents.forEach((agents) => {
+      count += agents.length;
+    });
+    return count;
+  }, [teamAgents]);
   const headerActions = (
     <div className="agents-hero__actions d-flex align-items-center gap-2 flex-wrap">
       {/* Search */}
@@ -1161,42 +1190,47 @@ export const AgentsManagement = () => {
                 )}
 
                 {/* ── Team Sections ── */}
-                {teams.map((team) => (
-                  <section key={team.teamId} className="agents-section mb-4">
-                    <div
-                      className="agents-section__header d-flex align-items-center gap-2 p-3 rounded-3 border bg-white mb-3"
-                      role="button"
-                      onClick={() => toggleSection(`team-${team.teamId}`)}
-                      style={{ cursor: 'pointer' }}
-                    >
-                      <Users size={16} style={{ color: '#16a34a' }} />
-                      <h2 className="agents-section__title mb-0 fs-6 fw-bold">{team.teamName}</h2>
-                      <span className="badge rounded-pill" style={{ backgroundColor: '#dcfce7', color: '#16a34a' }}>
-                        {team.myRole}
-                      </span>
-                      <span
-                        className="small text-muted"
-                        style={{ cursor: 'pointer', marginLeft: 8 }}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleManageTeam(team);
-                        }}
-                      >
-                        {t('teamModal.title')} &rsaquo;
-                      </span>
-                      <span className="ms-auto">
-                        {collapsedSections[`team-${team.teamId}`] ? (
-                          <ChevronRight size={16} />
-                        ) : (
-                          <ChevronDown size={16} />
-                        )}
-                      </span>
-                    </div>
-                    {!collapsedSections[`team-${team.teamId}`] && (
-                      <p className="text-muted small">{t('management.sections.team.placeholder')}</p>
-                    )}
-                  </section>
-                ))}
+                {filter !== 'personal' &&
+                  filter !== 'public' &&
+                  teams.map((team) => {
+                    const agents = teamAgents.get(team.teamId) ?? [];
+                    const filteredTeamAgentsList = sortAgents(applyFilters(agents));
+                    return (
+                      <section key={team.teamId} className="agents-section mb-4">
+                        <div
+                          className="agents-section__header d-flex align-items-center gap-2 p-3 rounded-3 border bg-white mb-3"
+                          role="button"
+                          onClick={() => toggleSection(`team-${team.teamId}`)}
+                          style={{ cursor: 'pointer' }}
+                        >
+                          <Users size={16} style={{ color: '#16a34a' }} />
+                          <h2 className="agents-section__title mb-0 fs-6 fw-bold">{team.teamName}</h2>
+                          <span className="badge rounded-pill" style={{ backgroundColor: '#dcfce7', color: '#16a34a' }}>
+                            {filteredTeamAgentsList.length}
+                          </span>
+                          <span
+                            className="small text-muted"
+                            style={{ cursor: 'pointer', marginLeft: 8 }}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleManageTeam(team);
+                            }}
+                          >
+                            {t('teamModal.title')} &rsaquo;
+                          </span>
+                          <span className="ms-auto">
+                            {collapsedSections[`team-${team.teamId}`] ? (
+                              <ChevronRight size={16} />
+                            ) : (
+                              <ChevronDown size={16} />
+                            )}
+                          </span>
+                        </div>
+                        {!collapsedSections[`team-${team.teamId}`] &&
+                          renderAgentsSection(filteredTeamAgentsList, t('management.sections.team.placeholder'))}
+                      </section>
+                    );
+                  })}
 
                 {/* ── Company Section ── */}
                 {agentsMode !== 'personal_only' &&
@@ -1278,6 +1312,7 @@ export const AgentsManagement = () => {
             initialAccordionKey={editModalAccordionKey}
             onScheduleChange={loadSchedules}
             existingTags={allTagsByPopularity}
+            teams={teams}
           />
 
           <AgentScheduleModal

@@ -63,6 +63,7 @@ import { WorkspaceChatSettingsPanel } from '../Components/WorkspaceChat/Workspac
 import { WorkspaceChatAgentsPanel } from '../Components/WorkspaceChat/WorkspaceChatAgentsPanel';
 import { useWorkspaceChatSettingsPanel } from '../hooks/useWorkspaceChatSettingsPanel';
 import { PendingFilesBar } from '../Components/Chat/PendingFilesBar';
+import { getLastRecordingDuration } from '../Components/Chat/VoiceRecordButton';
 import { deleteWorkspaceChatUploads, uploadWorkspaceChatFileDirect } from '../Services/workspaceChatAgentService';
 import {
   loadStagedItems,
@@ -127,6 +128,10 @@ const NumaWorkspaceChatAgents = () => {
   const [dataConnectorsFeatureEnabled] = useState(() => getFlag('DATA_CONNECTORS_ENABLED'));
   const [autoToolsEnabled, setAutoToolsEnabled] = useState(true); // Default to auto mode
   const [buttonStatus, setButtonStatus] = useState('idle');
+  // Voice recording state
+  const [voiceRecordingState, setVoiceRecordingState] = useState<'idle' | 'recording' | 'uploading' | 'error'>('idle');
+  const pendingVoiceRecordingsRef = useRef<string[]>([]);
+  const voiceInputEnabled = true;
   const [isFileProcessing, _setIsFileProcessing] = useState(false);
   const [isManuallyLoading, setIsManuallyLoading] = useState(false);
   const [currentAgent, setCurrentAgent] = useState<AgentSummary | null>(null);
@@ -208,8 +213,14 @@ const NumaWorkspaceChatAgents = () => {
   }, [inputMessage]);
 
   // Clear first-message banner once the assistant starts streaming any content (text, thinking, tool calls, etc.)
+  // Also clear when transcribing -- the workspace is ready, transcription has its own indicator.
   useEffect(() => {
-    if (isFirstMessagePending && messages.some((m) => m.role === 'assistant' && m.segments && m.segments.length > 0)) {
+    if (
+      isFirstMessagePending &&
+      messages.some(
+        (m) => m.role === 'assistant' && ((m.segments && m.segments.length > 0) || m.status === 'transcribing')
+      )
+    ) {
       setIsFirstMessagePending(false);
     }
   }, [messages, isFirstMessagePending]);
@@ -1195,9 +1206,12 @@ const NumaWorkspaceChatAgents = () => {
   }, [personalAgents, recentConversations, agentsFeatureEnabled]);
 
   // Show new chat view if:
-  // 1. Normal new chat flow (showContinueSuggestions && no messages), OR
+  // 1. We're in a new-chat state with no messages (either suggestions loaded or handleNewChat was called), OR
   // 2. Conversation was pre-minted via upload but user hasn't sent a message yet
-  const shouldShowNewChatView = (showContinueSuggestions && messages.length === 0) || isPreMintedConversation;
+  // Note: hasUserStartedNewChat covers the gap where handleNewChat() fired but
+  // useChatInactivity hasn't yet activated suggestions (prevents blank screen).
+  const shouldShowNewChatView =
+    ((showContinueSuggestions || hasUserStartedNewChat) && messages.length === 0) || isPreMintedConversation;
   const showLegacyMigrationNotice = !shouldShowNewChatView && needsV1Migration && !dismissedLegacyMigrationNotice;
 
   // Reset notice dismissal on conversation/migration state changes.
@@ -1730,6 +1744,45 @@ const NumaWorkspaceChatAgents = () => {
 
   // Note: Streaming handlers moved to useWorkspaceStreaming hook
 
+  // Voice recording handler - uploads audio blob to S3, tracks as voice recording, triggers send
+  const handleVoiceRecordingComplete = useCallback(
+    async (blob: Blob, filename: string) => {
+      try {
+        setVoiceRecordingState('uploading');
+
+        // Ensure conversation exists
+        const cid = await ensureConversationReady('');
+        if (!cid) {
+          setVoiceRecordingState('error');
+          return;
+        }
+
+        // Upload the audio blob as a File to S3
+        const file = new File([blob], filename, { type: blob.type });
+        await uploadWorkspaceChatFileDirect(file, cid, undefined, () => {}, getCredentials);
+
+        // Track as a voice recording path (consumed by next handleSubmit)
+        const uploadPath = `uploads/${filename}`;
+        pendingVoiceRecordingsRef.current = [uploadPath];
+
+        // Auto-submit the voice message (empty prompt -- transcription will fill it)
+        setInputMessage('');
+        // Trigger submit by dispatching a form submit on the chat form
+        const form = document.querySelector('.chat-input-container form') as HTMLFormElement | null;
+        if (form) {
+          form.requestSubmit();
+        }
+        // Close modal after submit is triggered
+        setVoiceRecordingState('idle');
+      } catch (err) {
+        console.error('[Voice] Upload failed:', err);
+        setVoiceRecordingState('error');
+        setTimeout(() => setVoiceRecordingState('idle'), 3000);
+      }
+    },
+    [getCredentials, ensureConversationReady]
+  );
+
   // Submit user input
   // Optional overrideMessage parameter allows quick actions to pass message directly
   // without waiting for React state update
@@ -1745,8 +1798,13 @@ const NumaWorkspaceChatAgents = () => {
     // Use override message if provided, otherwise use state
     const messageToSend = overrideMessage ?? inputMessage;
 
-    // Validate input - allow submission if there's text OR staged files (V2) OR uploaded files (V1)
-    if (!messageToSend.trim() && uploadedFiles.length === 0 && stagedItems.length === 0) {
+    // Consume any pending voice recordings
+    const voiceRecordings =
+      pendingVoiceRecordingsRef.current.length > 0 ? [...pendingVoiceRecordingsRef.current] : undefined;
+    pendingVoiceRecordingsRef.current = [];
+
+    // Validate input - allow submission if there's text, staged files, uploaded files, or voice recordings
+    if (!messageToSend.trim() && uploadedFiles.length === 0 && stagedItems.length === 0 && !voiceRecordings) {
       isProcessingRef.current = false; // Reset flag on early return
       return;
     }
@@ -1815,7 +1873,15 @@ const NumaWorkspaceChatAgents = () => {
       // Add user message to local UI state
       // For attachments, we show attachment count in the UI
       // The actual file references are stored in trace as attachment events
-      const userMsgObject = { role: 'user', content: userMsg };
+      let displayContent = userMsg;
+      if (voiceRecordings && !userMsg.trim()) {
+        const duration = getLastRecordingDuration();
+        const mins = Math.floor(duration / 60);
+        const secs = duration % 60;
+        const timeStr = `${mins}:${secs.toString().padStart(2, '0')}`;
+        displayContent = t('input.voice.userMessageLabel', { duration: timeStr });
+      }
+      const userMsgObject = { role: 'user', content: displayContent, isVoiceMessage: !!voiceRecordings };
       setMessages((prev) => [...prev, userMsgObject]);
 
       // Clear staged items after attaching to message
@@ -1936,6 +2002,7 @@ const NumaWorkspaceChatAgents = () => {
         modelId: selectedModelId,
         migrateFromV1: needsV1Migration,
         agentId: activeAgent?.agentId,
+        voiceRecordings,
       });
       // Clear the V1 migration flag after first message (migration happens on first request)
       if (needsV1Migration) {
@@ -2619,6 +2686,9 @@ const NumaWorkspaceChatAgents = () => {
                           onFilesDropped={(files) => handleDroppedFiles(files.map((f) => ({ file: f })))}
                           uploadingFiles={uploadingFiles}
                           onCancelUpload={handleCancelUpload}
+                          voiceInputEnabled={voiceInputEnabled}
+                          voiceRecordingState={voiceRecordingState}
+                          onVoiceRecordingComplete={handleVoiceRecordingComplete}
                         />
                       ) : (
                         <>
@@ -2742,6 +2812,9 @@ const NumaWorkspaceChatAgents = () => {
                           isStopping={isStopping}
                           variant="v2"
                           onPasteFiles={(files) => handleDroppedFiles(files.map((f) => ({ file: f })))}
+                          voiceInputEnabled={voiceInputEnabled}
+                          voiceRecordingState={voiceRecordingState}
+                          onVoiceRecordingComplete={handleVoiceRecordingComplete}
                         />
                       </div>
                     )}

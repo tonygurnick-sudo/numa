@@ -160,7 +160,7 @@ clientConfigProd.json
 !.claude/skills/
 
 infra/assets/artifacts/numa-workspace-agent/image.tar
-infra/assets/artifacts/transcription-service/
+infra/assets/artifacts/transcription-service/image.tar
 # Pipeline retry Wed 18 Feb 2026 02:00:45 NZDT
 
 # Personal scripts

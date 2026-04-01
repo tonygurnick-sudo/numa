@@ -190,7 +190,7 @@ export const AgentManageTeamModal = ({ show, onHide, team, onTeamCreated, onTeam
     setAddingUser(user.email);
     try {
       await addTeamMember(numaPost, effectiveTeam.teamId, {
-        userId: user.email,
+        userId: user.sub || user.email,
         role,
         userName: user.name,
         userEmail: user.email,
