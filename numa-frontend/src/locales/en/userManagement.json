@@ -167,7 +167,17 @@
     },
     "currentUserNotice": "This is your account. You cannot modify your own permissions.",
     "systemUserNotice": "System users cannot be modified.",
-    "adminDeleteBlocked": "Administrator accounts cannot be deleted directly. Please demote the user to Standard first."
+    "adminDeleteBlocked": "Administrator accounts cannot be deleted directly. Please demote the user to Standard first.",
+    "mfa": {
+      "title": "MFA Management",
+      "resetButton": "Reset MFA",
+      "resetConfirmTitle": "Reset MFA",
+      "resetConfirmBody": "This will invalidate {{email}}'s current authenticator and revoke all their active sessions. They will have 24 hours to set up a new authenticator.",
+      "resetConfirmAction": "Reset MFA",
+      "resetting": "Resetting...",
+      "resetSuccess": "MFA reset initiated. The user has 24 hours to re-enrol.",
+      "resetError": "Failed to reset MFA"
+    }
   },
   "promote": {
     "title": "Grant Administrator Privileges",

@@ -29,6 +29,7 @@ import {
   UpdateDeviceStatusCommand,
   ListDevicesCommand,
   ForgetDeviceCommand,
+  SetUserMFAPreferenceCommand,
 } from '@aws-sdk/client-cognito-identity-provider';
 import { NumaChatDynamoUtils } from '../utils/DynamoDBUtils';
 import { NumaBedrockUtils } from '../utils/NumaBedrockUtils';
@@ -37,6 +38,7 @@ import { withPRM } from '../utils/prmUtils';
 import { useTranslation } from 'react-i18next';
 import { hasConfigInSession, fetchConfigAddtoSession } from '../Components/ConfigSetup';
 import { AdminMfaSettingsService } from '../Services/AdminMfaSettingsService';
+import { getFlag } from '../utils/featureFlags';
 
 const AuthContext = createContext(null);
 
@@ -47,6 +49,11 @@ export interface MfaSetupRequired {
   username: string;
   secretCode: string;
   otpauthUrl: string;
+  isReEnrollment?: boolean;
+  // When true, verification must use the AccessToken-based flow (completeReEnrollMfa +
+  // finalizeLogin) instead of the session-based flow (completeMfaSetup). This is set
+  // when Cognito returned tokens directly but the app detected MFA enrollment is needed.
+  pendingLogin?: boolean;
 }
 
 export interface MfaCodeRequired {
@@ -513,6 +520,19 @@ export const AuthProvider = ({ children, initialTokens }) => {
             // Decode the new tokens to update the decoded token references
             const newDecodedAccessToken = jwtDecode(AccessToken);
             const newDecodedIdToken = jwtDecode(IdToken);
+
+            // Check server-side MFA claims from the token-adjuster Lambda.
+            // If an admin reset MFA while the user was logged in, the refreshed
+            // token will have the claim — force re-login for MFA enrollment.
+            const refreshedIdPayload = newDecodedIdToken as Record<string, unknown>;
+            if (
+              refreshedIdPayload['custom:mfa_setup_required'] === 'true' ||
+              refreshedIdPayload['custom:mfa_reset_pending'] === 'true'
+            ) {
+              console.warn('⚠️ Refreshed token has MFA enforcement claim — forcing re-login');
+              logout();
+              return false;
+            }
 
             const { groups, features } = extractGroupsAndFeatures(newDecodedIdToken, setAuthError);
 
@@ -1477,6 +1497,26 @@ export const AuthProvider = ({ children, initialTokens }) => {
           return;
         }
 
+        // Check server-side MFA claims injected by the token-adjuster Lambda.
+        // These are in the Cognito-signed ID token and cannot be tampered with.
+        // If MFA enrollment/reset is required, do NOT restore the session —
+        // force the user back to login where MFA enforcement will run.
+        const idTokenPayload = decodedIdToken as Record<string, unknown>;
+        if (
+          idTokenPayload['custom:mfa_setup_required'] === 'true' ||
+          idTokenPayload['custom:mfa_reset_pending'] === 'true'
+        ) {
+          console.warn('⚠️ ID token has MFA enforcement claim — clearing session, user must re-login');
+          localStorage.removeItem('accessToken');
+          localStorage.removeItem('idToken');
+          localStorage.removeItem('refreshToken');
+          tokensRef.current = { accessToken: null, idToken: null, refreshToken: null };
+          setUser(null);
+          setLoading(false);
+          setTokenValidationComplete(true);
+          return;
+        }
+
         // Use the utility function to extract groups and features
         const { groups, features } = extractGroupsAndFeatures(decodedIdToken, setAuthError);
         setUser({
@@ -1537,29 +1577,36 @@ export const AuthProvider = ({ children, initialTokens }) => {
     // Step 2: Validate device trust server-side before including DEVICE_KEY.
     // The server holds the rememberedAt timestamp and checks it against the admin-configured
     // duration — the client has no control over the expiry window (tamper-proof).
-    let storedDeviceKey = getStoredDeviceKey();
+    //
+    // IMPORTANT: Only send DEVICE_KEY to Cognito during login when trust is valid.
+    // If we send DEVICE_KEY with invalid trust, Cognito issues DEVICE_SRP_AUTH which
+    // we can't complete, breaking the auth flow. Without DEVICE_KEY, Cognito falls
+    // back to SOFTWARE_TOKEN_MFA normally.
+    //
+    // Device credentials are KEPT in localStorage regardless — they are needed for
+    // REFRESH_TOKEN_AUTH (Cognito binds refresh tokens to confirmed devices) and for
+    // ListDevicesCommand to identify the current device.
+    const storedDeviceKey = getStoredDeviceKey();
+    let deviceTrustValid = false;
     if (storedDeviceKey) {
       try {
-        const valid = await AdminMfaSettingsService.validateDevice(storedDeviceKey);
-        if (!valid) {
-          clearDeviceTrust();
-          storedDeviceKey = null;
-        }
+        deviceTrustValid = await AdminMfaSettingsService.validateDevice(storedDeviceKey);
       } catch {
         // If we can't reach the server, fail closed (require MFA)
-        clearDeviceTrust();
-        storedDeviceKey = null;
+        deviceTrustValid = false;
       }
     }
 
-    // Initiate authentication (include DEVICE_KEY only if trust is still valid)
+    // Only include DEVICE_KEY when trust is valid — this tells Cognito to skip MFA
+    // via DEVICE_SRP_AUTH. When trust is invalid/expired, omit DEVICE_KEY so Cognito
+    // issues SOFTWARE_TOKEN_MFA instead.
     const authParameters: Record<string, string> = {
       USERNAME: lowercaseUsername,
       SRP_A: srpSession.largeA,
       SECRET_HASH: SECRET_HASH,
     };
 
-    if (storedDeviceKey) {
+    if (storedDeviceKey && deviceTrustValid) {
       authParameters.DEVICE_KEY = storedDeviceKey;
     }
 
@@ -1588,7 +1635,7 @@ export const AuthProvider = ({ children, initialTokens }) => {
       TIMESTAMP: signedSrpSession.timestamp,
     };
 
-    if (storedDeviceKey) {
+    if (storedDeviceKey && deviceTrustValid) {
       challengeResponses.DEVICE_KEY = storedDeviceKey;
     }
 
@@ -1602,17 +1649,18 @@ export const AuthProvider = ({ children, initialTokens }) => {
     let respondToAuthChallengeResponse = await cognitoClient.send(respondToAuthChallengeCommand);
 
     // Handle DEVICE_SRP_AUTH → DEVICE_PASSWORD_VERIFIER challenge chain.
-    // When a remembered device sends DEVICE_KEY with login, Cognito returns
-    // DEVICE_SRP_AUTH after PASSWORD_VERIFIER instead of MFA. We complete
-    // the device SRP handshake here so the caller gets AuthenticationResult
-    // (with MFA skipped) or falls through to MFA if device auth fails.
+    // Since we only send DEVICE_KEY when deviceTrustValid is true, if Cognito
+    // returns DEVICE_SRP_AUTH, we know trust is valid and should complete the
+    // device SRP handshake to skip MFA.
     if (respondToAuthChallengeResponse.ChallengeName === 'DEVICE_SRP_AUTH') {
       const deviceGroupKey = getStoredDeviceGroupKey();
       const deviceRandomPassword = getStoredDeviceRandomPassword();
 
       if (!storedDeviceKey || !deviceGroupKey || !deviceRandomPassword) {
-        // Device credentials are incomplete — clear stale trust and let Cognito
-        // fall back to MFA on the next attempt
+        // Device credentials are incomplete — this shouldn't happen since we only
+        // send DEVICE_KEY when we have it, but handle gracefully. Clear trust so
+        // next login omits DEVICE_KEY and Cognito falls back to MFA.
+        console.warn('DEVICE_SRP_AUTH received but device credentials are incomplete');
         clearDeviceTrust();
       } else {
         try {
@@ -1656,7 +1704,8 @@ export const AuthProvider = ({ children, initialTokens }) => {
             )
           );
         } catch (deviceErr) {
-          // Device SRP failed — clear stale trust so next login falls back to MFA
+          // Device SRP failed — clear device trust so next login omits DEVICE_KEY
+          // and Cognito falls back to MFA instead.
           console.warn('Device SRP authentication failed, clearing device trust:', deviceErr);
           clearDeviceTrust();
         }
@@ -1671,6 +1720,112 @@ export const AuthProvider = ({ children, initialTokens }) => {
       CLIENT_ID,
     };
   };
+
+  // Stores auth tokens in refs and sessionStorage WITHOUT setting user state.
+  // Used when MFA enrollment is required — tokens must be available for API calls
+  // (e.g. AssociateSoftwareToken) but user must NOT be set in React state
+  // (which would trigger route redirect away from /login).
+  //
+  // SECURITY: Tokens are stored in sessionStorage (not localStorage) so they are
+  // automatically cleared when the browser/tab is closed. If the user abandons MFA
+  // enrollment mid-flow, stale tokens won't persist across sessions. Once MFA
+  // enrollment succeeds, finalizeLogin() promotes tokens to localStorage.
+  const pendingAuthTokensRef = useRef<{
+    AccessToken: string;
+    IdToken: string;
+    RefreshToken: string;
+    NewDeviceMetadata?: { DeviceKey?: string; DeviceGroupKey?: string };
+  } | null>(null);
+  const pendingRememberDeviceRef = useRef(false);
+
+  const storeTokensWithoutLogin = (authResult: {
+    AccessToken: string;
+    IdToken: string;
+    RefreshToken: string;
+    NewDeviceMetadata?: { DeviceKey?: string; DeviceGroupKey?: string };
+  }) => {
+    // Store in refs so getAccessToken()/getIdToken() work for MFA setup API calls
+    tokensRef.current = {
+      accessToken: authResult.AccessToken,
+      idToken: authResult.IdToken,
+      refreshToken: authResult.RefreshToken,
+    };
+    decodedTokensRef.current = {
+      accessToken: jwtDecode(authResult.AccessToken),
+      idToken: jwtDecode(authResult.IdToken),
+    };
+    // Store in sessionStorage (tab-scoped, auto-cleared on close) — NOT localStorage.
+    // This prevents stale pre-MFA tokens from persisting if the user abandons enrollment.
+    sessionStorage.setItem('pendingMfaAccessToken', authResult.AccessToken);
+    sessionStorage.setItem('pendingMfaRefreshToken', authResult.RefreshToken);
+    sessionStorage.setItem('pendingMfaIdToken', authResult.IdToken);
+    // Save full auth result so finalizeLogin can complete the flow
+    pendingAuthTokensRef.current = authResult;
+  };
+
+  // Called when Cognito returned tokens but MFA enrollment is required.
+  // Stores tokens (for API calls) and initiates MFA setup without setting user state.
+  // isAdminReset: true when triggered by admin MFA reset (shows "reset by admin" message),
+  //              false for first-time enrollment (shows normal setup message).
+  const handleMfaEnrollmentRequired = async (
+    authResult: { AccessToken: string; IdToken: string; RefreshToken: string },
+    username: string,
+    isAdminReset = false
+  ): Promise<MfaSetupRequired> => {
+    storeTokensWithoutLogin(authResult);
+
+    // Initiate MFA enrollment using the stored access token
+    const REGION = window.sessionStorage.getItem('REGION');
+    const cognitoClient = withPRM(CognitoIdentityProviderClient, { region: REGION });
+    const associateResponse = await cognitoClient.send(
+      new AssociateSoftwareTokenCommand({ AccessToken: authResult.AccessToken })
+    );
+
+    if (!associateResponse.SecretCode) {
+      throw new Error('Failed to get MFA secret code from Cognito');
+    }
+
+    const decodedId = decodedTokensRef.current.idToken as Record<string, unknown>;
+    const email = (decodedId?.email as string) || username;
+    const issuer = 'Numa';
+    const otpauthUrl = `otpauth://totp/${encodeURIComponent(issuer)}:${encodeURIComponent(email)}?secret=${associateResponse.SecretCode}&issuer=${encodeURIComponent(issuer)}`;
+
+    const setupData: MfaSetupRequired = {
+      requiresMfaSetup: true,
+      session: associateResponse.Session || '',
+      username: email,
+      secretCode: associateResponse.SecretCode,
+      otpauthUrl,
+      isReEnrollment: isAdminReset,
+      pendingLogin: true,
+    };
+    setMfaSetupData(setupData);
+    setMfaCodeData(null);
+    return setupData;
+  };
+
+  // Completes login after MFA enrollment. Promotes pending tokens from
+  // sessionStorage to localStorage, then calls handleLoginSuccess to set
+  // user state and trigger route navigation.
+  const finalizeLogin = useCallback(async (): Promise<{ features: string[] }> => {
+    const pending = pendingAuthTokensRef.current;
+    if (!pending) {
+      throw new Error('No pending authentication to finalize');
+    }
+    // Clean up temporary sessionStorage keys used during MFA enrollment
+    sessionStorage.removeItem('pendingMfaAccessToken');
+    sessionStorage.removeItem('pendingMfaRefreshToken');
+    sessionStorage.removeItem('pendingMfaIdToken');
+    const result = await handleLoginSuccessRef.current(pending);
+    // Confirm and optionally remember device after login
+    const rememberDevice = pendingRememberDeviceRef.current;
+    pendingRememberDeviceRef.current = false;
+    const REGION = window.sessionStorage.getItem('REGION');
+    const cognitoClient = withPRM(CognitoIdentityProviderClient, { region: REGION });
+    await confirmAndRememberDevice(pending, cognitoClient, pending.AccessToken, rememberDevice);
+    pendingAuthTokensRef.current = null;
+    return result;
+  }, []);
 
   const login = useCallback(async (username, password): Promise<LoginResult> => {
     try {
@@ -1706,7 +1861,49 @@ export const AuthProvider = ({ children, initialTokens }) => {
         return mfaCodeResult;
       }
 
-      const { features } = await handleLoginSuccess(response.AuthenticationResult);
+      // Cognito returned tokens directly — no MFA challenge was issued.
+      // With OPTIONAL MFA, this happens when the user has no TOTP configured.
+      // We MUST check if MFA enrollment is required BEFORE setting user state,
+      // because setUser() triggers a route redirect away from /login which would
+      // prevent MFA enforcement from running.
+      const authResult = response.AuthenticationResult;
+      if (authResult?.IdToken) {
+        const idPayload = jwtDecode(authResult.IdToken) as Record<string, unknown>;
+        const needsMfa =
+          idPayload['custom:mfa_setup_required'] === 'true' || idPayload['custom:mfa_reset_pending'] === 'true';
+
+        if (!needsMfa) {
+          // DEFENSE-IN-DEPTH ONLY (Layer 2): Client-side fallback that checks Cognito
+          // directly for MFA status. This is NOT a primary security control — it depends
+          // on the client-side MFA_ENABLED flag which is read from config.json and could
+          // be tampered with. Layer 1 (token-adjuster server-side claims) is the
+          // authoritative enforcement. This layer exists solely to catch the case where
+          // token-adjuster hasn't been deployed yet to a client environment.
+          try {
+            const REGION = window.sessionStorage.getItem('REGION');
+            const cognitoClient = withPRM(CognitoIdentityProviderClient, { region: REGION });
+            const userInfo = await cognitoClient.send(new GetUserCommand({ AccessToken: authResult.AccessToken }));
+            const mfaMethods = userInfo.UserMFASettingList ?? [];
+            if (mfaMethods.length === 0 && getFlag('MFA_ENABLED')) {
+              console.warn('MFA enforcement (Layer 2): user has no MFA configured, requiring enrollment');
+              return await handleMfaEnrollmentRequired(authResult, lowercaseUsername, false);
+            }
+          } catch (err) {
+            console.error('MFA status check failed (non-fatal):', err);
+          }
+        }
+
+        if (needsMfa) {
+          const isAdminReset = idPayload['custom:mfa_reset_pending'] === 'true';
+          console.warn(
+            `MFA enforcement (Layer 1): token-adjuster flagged MFA required (${isAdminReset ? 'admin reset' : 'setup required'})`
+          );
+          return await handleMfaEnrollmentRequired(authResult, lowercaseUsername, isAdminReset);
+        }
+      }
+
+      // MFA is verified or not required — safe to set user state
+      const { features } = await handleLoginSuccess(authResult);
       return { success: true, features };
     } catch (error) {
       console.error('Error during authentication:', error);
@@ -1761,7 +1958,11 @@ export const AuthProvider = ({ children, initialTokens }) => {
     rememberDevice: boolean
   ): Promise<void> => {
     const newDeviceMetadata = authResult.NewDeviceMetadata;
-    if (!newDeviceMetadata?.DeviceKey || !newDeviceMetadata?.DeviceGroupKey) return;
+    if (!newDeviceMetadata?.DeviceKey || !newDeviceMetadata?.DeviceGroupKey) {
+      console.debug('confirmAndRememberDevice: no NewDeviceMetadata in auth result (device already known)');
+      return;
+    }
+    console.debug('confirmAndRememberDevice: confirming new device', newDeviceMetadata.DeviceKey);
 
     try {
       // Generate the SRP verifier for this device (salt + password verifier)
@@ -1787,6 +1988,7 @@ export const AuthProvider = ({ children, initialTokens }) => {
       // the device was not "remembered", validateDevice() will fail
       // server-side and clearDeviceTrust() will remove these credentials.
       storeDeviceTrust(newDeviceMetadata.DeviceKey, newDeviceMetadata.DeviceGroupKey, DeviceRandomPassword);
+      console.debug('confirmAndRememberDevice: device confirmed and credentials stored');
 
       if (rememberDevice) {
         // Tell Cognito to remember this device (suppresses future MFA on next login)
@@ -1859,14 +2061,30 @@ export const AuthProvider = ({ children, initialTokens }) => {
     setMfaCodeData(null);
 
     if (authResponse.AuthenticationResult) {
-      const { features } = await handleLoginSuccess(authResponse.AuthenticationResult);
-      // Confirm and optionally remember device after successful auth
-      await confirmAndRememberDevice(
-        authResponse.AuthenticationResult,
-        cognitoClient,
-        authResponse.AuthenticationResult.AccessToken,
-        rememberDevice ?? false
-      );
+      // Set TOTP as the preferred MFA method so Cognito challenges on future logins.
+      // Without this, MFA stays "verified but not preferred" and Cognito won't
+      // issue SOFTWARE_TOKEN_MFA challenges (pool is OPTIONAL), causing an
+      // infinite re-enrollment loop.
+      try {
+        await cognitoClient.send(
+          new SetUserMFAPreferenceCommand({
+            AccessToken: authResponse.AuthenticationResult.AccessToken,
+            SoftwareTokenMfaSettings: { Enabled: true, PreferredMfa: true },
+          })
+        );
+      } catch (err) {
+        console.error('Failed to set MFA preference after setup (non-fatal):', err);
+      }
+
+      // Stash auth result without setting user state — this allows the caller
+      // (Login.tsx) to show recovery codes before triggering the route guard
+      // redirect. Call finalizeLogin() when ready to complete the login.
+      storeTokensWithoutLogin(authResponse.AuthenticationResult);
+      pendingRememberDeviceRef.current = rememberDevice ?? false;
+
+      // Decode features from the token so the caller knows where to navigate
+      const idToken = jwtDecode<Record<string, unknown>>(authResponse.AuthenticationResult.IdToken);
+      const features = ((idToken['custom:features'] as string) || '').split(',').filter(Boolean);
       return { success: true, features };
     }
 
@@ -1960,6 +2178,10 @@ export const AuthProvider = ({ children, initialTokens }) => {
     [login]
   );
 
+  // Ref to handleLoginSuccess — allows useCallback hooks (e.g. finalizeLogin)
+  // to call the latest version without adding it to their dependency arrays.
+  const handleLoginSuccessRef = useRef<(tokens: Record<string, string>) => Promise<{ features: string[] }>>(null!);
+
   const handleLoginSuccess = async (tokens) => {
     // Update tokensRef directly
     tokensRef.current = {
@@ -2007,6 +2229,7 @@ export const AuthProvider = ({ children, initialTokens }) => {
 
     return { features: features || [] };
   };
+  handleLoginSuccessRef.current = handleLoginSuccess;
 
   // Initialize user state from testConfig if available
   useEffect(() => {
@@ -2149,24 +2372,41 @@ export const AuthProvider = ({ children, initialTokens }) => {
     }
   }, [user, refreshTokens]);
 
-  // List all remembered devices for the current user
+  // List trusted devices for the current user. Fetches all confirmed devices from
+  // Cognito, then filters to only those with a valid (non-expired) server-side trust
+  // record. Devices where the user never checked "remember" or whose trust has expired
+  // are excluded.
   const listDevices = useCallback(async () => {
     const accessToken = await getAccessToken();
-    if (!accessToken) return [];
+    if (!accessToken) {
+      console.debug('listDevices: no access token available');
+      return [];
+    }
     const REGION = window.sessionStorage.getItem('REGION');
     const cognitoClient = withPRM(CognitoIdentityProviderClient, { region: REGION });
     try {
-      const response = await cognitoClient.send(new ListDevicesCommand({ AccessToken: accessToken, Limit: 20 }));
+      const response = await cognitoClient.send(new ListDevicesCommand({ AccessToken: accessToken, Limit: 60 }));
+      const allDevices = response.Devices || [];
+      if (allDevices.length === 0) return [];
+
+      // Batch-validate which devices have valid trust records within admin timeframe
+      const deviceKeys = allDevices.map((d) => d.DeviceKey).filter((k): k is string => !!k);
+      const validSet = await AdminMfaSettingsService.validateDevices(deviceKeys, accessToken);
+
       const currentDeviceKey = getStoredDeviceKey();
-      return (response.Devices || []).map((d) => ({
-        deviceKey: d.DeviceKey || '',
-        deviceName: d.DeviceAttributes?.find((a) => a.Name === 'device_name')?.Value || '',
-        lastAuthDate: d.DeviceLastAuthenticatedDate ? new Date(d.DeviceLastAuthenticatedDate) : null,
-        remembered: d.DeviceAttributes?.find((a) => a.Name === 'device_status')?.Value === 'remembered',
-        isCurrent: d.DeviceKey === currentDeviceKey,
-      }));
+      const devices = allDevices
+        .filter((d) => d.DeviceKey && validSet.has(d.DeviceKey))
+        .map((d) => ({
+          deviceKey: d.DeviceKey || '',
+          deviceName: d.DeviceAttributes?.find((a) => a.Name === 'device_name')?.Value || '',
+          lastAuthDate: d.DeviceLastAuthenticatedDate ? new Date(d.DeviceLastAuthenticatedDate) : null,
+          remembered: true,
+          isCurrent: d.DeviceKey === currentDeviceKey,
+        }));
+      console.debug(`listDevices: ${allDevices.length} device(s) in Cognito, ${devices.length} with valid trust`);
+      return devices;
     } catch (err) {
-      console.warn('Failed to list devices:', err);
+      console.error('listDevices: failed:', err);
       return [];
     }
   }, [getAccessToken]);
@@ -2191,6 +2431,91 @@ export const AuthProvider = ({ children, initialTokens }) => {
       }
     },
     [getAccessToken]
+  );
+
+  // Initiate MFA re-enrollment for an already-authenticated user (e.g. during MFA reset grace period).
+  // Uses AccessToken instead of Session token since the user is already logged in.
+  const initiateReEnrollMfa = useCallback(async (): Promise<MfaSetupRequired> => {
+    const accessToken = await getAccessToken();
+    if (!accessToken) throw new Error('Not authenticated');
+
+    const REGION = window.sessionStorage.getItem('REGION');
+    const cognitoClient = withPRM(CognitoIdentityProviderClient, { region: REGION });
+
+    const associateResponse = await cognitoClient.send(new AssociateSoftwareTokenCommand({ AccessToken: accessToken }));
+
+    if (!associateResponse.SecretCode) {
+      throw new Error('Failed to get MFA secret code from Cognito');
+    }
+
+    const email = user?.decoded_tokens?.idToken?.email || 'user';
+    const issuer = 'Numa';
+    const otpauthUrl = `otpauth://totp/${encodeURIComponent(issuer)}:${encodeURIComponent(email)}?secret=${associateResponse.SecretCode}&issuer=${encodeURIComponent(issuer)}`;
+
+    return {
+      requiresMfaSetup: true,
+      session: associateResponse.Session || '',
+      username: email,
+      secretCode: associateResponse.SecretCode,
+      otpauthUrl,
+    };
+  }, [getAccessToken, user]);
+
+  // Complete MFA re-enrollment for an already-authenticated user.
+  // Verifies the TOTP code using AccessToken, then re-enables MFA preference.
+  const completeReEnrollMfa = useCallback(
+    async (code: string): Promise<void> => {
+      const accessToken = await getAccessToken();
+      if (!accessToken) throw new Error('Not authenticated');
+
+      const REGION = window.sessionStorage.getItem('REGION');
+      const cognitoClient = withPRM(CognitoIdentityProviderClient, { region: REGION });
+
+      const verifyResponse = await cognitoClient.send(
+        new VerifySoftwareTokenCommand({ AccessToken: accessToken, UserCode: code })
+      );
+
+      if (verifyResponse.Status !== 'SUCCESS') {
+        throw new Error('Invalid verification code');
+      }
+
+      // Re-enable TOTP MFA preference
+      await cognitoClient.send(
+        new SetUserMFAPreferenceCommand({
+          AccessToken: accessToken,
+          SoftwareTokenMfaSettings: { Enabled: true, PreferredMfa: true },
+        })
+      );
+
+      // Clear the grace period record in DynamoDB (best-effort)
+      try {
+        const API_ENDPOINT = sessionStorage.getItem('API_ENDPOINT') || '/api';
+        await fetch(`${API_ENDPOINT}/settings/mfa/complete-reset`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+        });
+      } catch (err) {
+        console.warn('Failed to clear MFA reset record (non-blocking):', err);
+      }
+    },
+    [getAccessToken]
+  );
+
+  // Verify the user's password without running the full login flow.
+  // Used to gate sensitive operations like MFA re-enrollment.
+  //
+  // NOTE: This runs a full SRP auth exchange with Cognito. The response is
+  // discarded (we only care that it didn't throw). Cognito may return an MFA
+  // challenge or tokens — neither is used. This does NOT create a new session
+  // because we don't call RespondToAuthChallenge or handleLoginSuccess with
+  // the result. The only side-effect is Cognito recording an auth attempt.
+  const verifyPassword = useCallback(
+    async (password: string): Promise<void> => {
+      const email = (user?.decoded_tokens?.idToken as Record<string, unknown>)?.email as string;
+      if (!email) throw new Error('Unable to determine current user email');
+      await performSrpAuthentication(email, password);
+    },
+    [user]
   );
 
   const value = useMemo(() => {
@@ -2227,6 +2552,10 @@ export const AuthProvider = ({ children, initialTokens }) => {
       getCredentials,
       listDevices,
       forgetDevice,
+      initiateReEnrollMfa,
+      completeReEnrollMfa,
+      finalizeLogin,
+      verifyPassword,
     };
   }, [
     loading,
@@ -2259,6 +2588,10 @@ export const AuthProvider = ({ children, initialTokens }) => {
     getCredentials,
     listDevices,
     forgetDevice,
+    initiateReEnrollMfa,
+    completeReEnrollMfa,
+    finalizeLogin,
+    verifyPassword,
   ]);
 
   // Token revocation notification component

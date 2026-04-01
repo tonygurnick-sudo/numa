@@ -154,10 +154,16 @@ export class CoreNumaInfra extends Construct {
     });
     const cognitoDomain = numaClient;
 
+    // MFA set to OPTIONAL — Cognito does NOT enforce MFA itself. Instead, the
+    // pre-token-generation Lambda (token-adjuster) enforces MFA at the application
+    // level by checking if the user has TOTP configured via AdminGetUser. This is
+    // required because with ON, you cannot reset a user's TOTP — there is no
+    // fallback auth method to obtain an access token for AssociateSoftwareToken.
+    // OPTIONAL + app-level enforcement is the industry best practice for this.
     const mfa =
       (props.mfa ?? false)
         ? {
-            mfaConfiguration: 'ON',
+            mfaConfiguration: 'OPTIONAL',
             softwareTokenMfaConfiguration: {
               enabled: true,
             },
@@ -266,6 +272,7 @@ export class CoreNumaInfra extends Construct {
       accessTokenValidity: 60,
       refreshTokenValidity: 60,
       idTokenValidity: 60,
+      authSessionValidity: 5,
       tokenValidityUnits: [{ accessToken: 'minutes', refreshToken: 'days', idToken: 'minutes' }],
       supportedIdentityProviders: ['COGNITO'],
       // DANGER: Conditional lifecycle management for Cognito OAuth callback URLs

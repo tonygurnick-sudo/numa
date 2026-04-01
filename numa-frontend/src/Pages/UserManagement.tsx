@@ -6,6 +6,7 @@ import { Preloader } from '../Components/Preloader';
 import { useAuth } from '../Providers/AuthProvider';
 import { useNumaRequest } from '../Providers/NumaRequestContext';
 import { UserManagementUtils } from '../utils/userManagementUtils';
+import { AdminMfaSettingsService } from '../Services/AdminMfaSettingsService';
 import { LayoutDashboard } from '../Layouts/LayoutDashboard';
 import { PageHeader } from '../Components/PageHeader';
 import {
@@ -23,9 +24,10 @@ import {
 
 type UserManagementProps = {
   embedded?: boolean;
+  mfaEnabled?: boolean;
 };
 
-const UserManagement = ({ embedded = false }: UserManagementProps) => {
+const UserManagement = ({ embedded = false, mfaEnabled = false }: UserManagementProps) => {
   const { t } = useTranslation('userManagement');
   // Auth and API state
   const { getCredentials, user, qBusinessClient, forceTokenValidation, requestPasswordReset } = useAuth();
@@ -400,6 +402,11 @@ const UserManagement = ({ embedded = false }: UserManagementProps) => {
     setShowDetailsModal(true);
   };
 
+  // Reset MFA handler (admin only)
+  const handleResetMfa = async (userToReset: User) => {
+    await AdminMfaSettingsService.resetUserMfa(userToReset.username, numaPost);
+  };
+
   // Filter and sort users
   const filteredAndSortedUsers = useMemo(() => {
     let result = [...users];
@@ -594,6 +601,7 @@ const UserManagement = ({ embedded = false }: UserManagementProps) => {
         show={showDetailsModal}
         user={selectedUser}
         currentUserSub={currentUserSub}
+        mfaEnabled={mfaEnabled}
         onHide={() => {
           setShowDetailsModal(false);
           setSelectedUser(null);
@@ -601,6 +609,7 @@ const UserManagement = ({ embedded = false }: UserManagementProps) => {
         onPromoteToAdmin={handlePromoteToAdmin}
         onDemoteFromAdmin={handleDemoteFromAdmin}
         onDeleteUser={handleDeleteUser}
+        onResetMfa={handleResetMfa}
       />
     </>
   );

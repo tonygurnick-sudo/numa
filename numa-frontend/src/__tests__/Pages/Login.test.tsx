@@ -31,6 +31,7 @@ describe('NumaLogin Component', () => {
   const mockSetNewPassword = vi.fn();
   const mockCompleteMfaSetup = vi.fn();
   const mockSubmitMfaCode = vi.fn();
+  const mockFinalizeLogin = vi.fn();
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -41,6 +42,7 @@ describe('NumaLogin Component', () => {
       setNewPassword: mockSetNewPassword,
       completeMfaSetup: mockCompleteMfaSetup,
       submitMfaCode: mockSubmitMfaCode,
+      finalizeLogin: mockFinalizeLogin,
     });
   });
 

@@ -28,8 +28,9 @@ logger = structlog.get_logger()
 #   - {clientName}_ws-agent or {clientName}_ws_agent
 #   - {clientName}_chat-agent or {clientName}_chat_agent
 #   - {clientName}_workspace-chat-tools or {clientName}_workspace_chat_tools
+#   - {clientName}_admin-mfa-* (MFA notifications and OTP delivery)
 ALLOWED_ROLE_REGEX = re.compile(
-    r"^[a-zA-Z0-9-]+_(?:agent[_-]schedule[_-]runner|schedule[_-]runner|ws[_-]agent|chat[_-]agent|workspace[_-]chat[_-]tools)$"
+    r"^[a-zA-Z0-9-]+_(?:agent[_-]schedule[_-]runner|schedule[_-]runner|ws[_-]agent|chat[_-]agent|workspace[_-]chat[_-]tools|admin[_-]mfa[\w-]*)$"
 )
 
 
