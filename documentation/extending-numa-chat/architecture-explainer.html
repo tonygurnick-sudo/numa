@@ -1,0 +1,1733 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Extending Numa Chat - Architecture Guide</title>
+<style>
+  :root {
+    --numa-purple: #8e50a7;
+    --numa-purple-light: #b07cc6;
+    --numa-purple-dark: #6a3b7d;
+    --numa-purple-bg: #f5eef8;
+    --bg: #0f1117;
+    --bg-card: #1a1d27;
+    --bg-card-hover: #222633;
+    --bg-code: #151820;
+    --border: #2d3248;
+    --border-active: #8e50a7;
+    --text: #e4e6ed;
+    --text-muted: #8b8fa3;
+    --text-dim: #5c6078;
+    --accent-blue: #4a9eff;
+    --accent-green: #4ade80;
+    --accent-yellow: #fbbf24;
+    --accent-red: #f87171;
+    --accent-cyan: #22d3ee;
+    --accent-orange: #fb923c;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.6;
+    overflow-x: hidden;
+  }
+
+  /* Header */
+  .header {
+    background: linear-gradient(135deg, var(--numa-purple-dark) 0%, var(--numa-purple) 50%, var(--numa-purple-light) 100%);
+    padding: 60px 40px 50px;
+    text-align: center;
+    position: relative;
+    overflow: hidden;
+  }
+  .header::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 4px;
+    background: linear-gradient(90deg, var(--accent-blue), var(--numa-purple), var(--accent-cyan));
+  }
+  .header h1 {
+    font-size: 2.8rem;
+    font-weight: 700;
+    margin-bottom: 12px;
+    letter-spacing: -0.02em;
+  }
+  .header p {
+    font-size: 1.15rem;
+    opacity: 0.9;
+    max-width: 700px;
+    margin: 0 auto;
+  }
+
+  /* Navigation */
+  .nav {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: var(--bg-card);
+    border-bottom: 1px solid var(--border);
+    padding: 0 20px;
+    display: flex;
+    gap: 4px;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+  }
+  .nav button {
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    padding: 14px 18px;
+    font-size: 0.88rem;
+    font-weight: 500;
+    cursor: pointer;
+    white-space: nowrap;
+    border-bottom: 2px solid transparent;
+    transition: all 0.2s;
+  }
+  .nav button:hover { color: var(--text); background: var(--bg-card-hover); }
+  .nav button.active {
+    color: var(--numa-purple-light);
+    border-bottom-color: var(--numa-purple);
+  }
+
+  /* Sections */
+  .section {
+    display: none;
+    padding: 40px;
+    max-width: 1200px;
+    margin: 0 auto;
+    animation: fadeIn 0.3s ease;
+  }
+  .section.active { display: block; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+
+  .section h2 {
+    font-size: 1.8rem;
+    margin-bottom: 8px;
+    color: var(--numa-purple-light);
+    letter-spacing: -0.01em;
+  }
+  .section h3 {
+    font-size: 1.25rem;
+    margin: 32px 0 12px;
+    color: var(--text);
+  }
+  .section h4 {
+    font-size: 1rem;
+    margin: 20px 0 8px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    font-weight: 600;
+  }
+  .section > .subtitle {
+    color: var(--text-muted);
+    margin-bottom: 30px;
+    font-size: 1.05rem;
+  }
+  .section p { margin-bottom: 16px; color: var(--text); }
+
+  /* Cards */
+  .card-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    gap: 16px;
+    margin: 20px 0;
+  }
+  .card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 24px;
+    transition: all 0.2s;
+  }
+  .card:hover {
+    border-color: var(--border-active);
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px rgba(142, 80, 167, 0.1);
+  }
+  .card .card-title {
+    font-size: 1.05rem;
+    font-weight: 600;
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .card .card-desc {
+    color: var(--text-muted);
+    font-size: 0.9rem;
+    line-height: 1.5;
+  }
+
+  /* Badges */
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 3px 10px;
+    border-radius: 20px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+  }
+  .badge-purple { background: rgba(142,80,167,0.2); color: var(--numa-purple-light); }
+  .badge-blue { background: rgba(74,158,255,0.15); color: var(--accent-blue); }
+  .badge-green { background: rgba(74,222,128,0.15); color: var(--accent-green); }
+  .badge-yellow { background: rgba(251,191,36,0.15); color: var(--accent-yellow); }
+  .badge-red { background: rgba(248,113,113,0.15); color: var(--accent-red); }
+  .badge-cyan { background: rgba(34,211,238,0.15); color: var(--accent-cyan); }
+  .badge-orange { background: rgba(251,146,60,0.15); color: var(--accent-orange); }
+
+  /* Diagram containers */
+  .diagram-container {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 32px;
+    margin: 24px 0;
+    overflow-x: auto;
+  }
+
+  /* SVG diagrams */
+  .arch-diagram { width: 100%; min-height: 300px; }
+  .arch-diagram text { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', monospace; }
+
+  /* Flow arrows */
+  .flow-step {
+    display: flex;
+    align-items: flex-start;
+    gap: 16px;
+    margin: 12px 0;
+    padding: 16px;
+    background: var(--bg-card);
+    border-radius: 8px;
+    border-left: 3px solid var(--numa-purple);
+  }
+  .flow-step .step-num {
+    min-width: 32px;
+    height: 32px;
+    background: var(--numa-purple);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 0.85rem;
+    flex-shrink: 0;
+  }
+  .flow-step .step-content { flex: 1; }
+  .flow-step .step-content strong { color: var(--numa-purple-light); }
+
+  /* Code blocks */
+  .code-block {
+    background: var(--bg-code);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px 20px;
+    margin: 12px 0;
+    font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+    font-size: 0.82rem;
+    line-height: 1.65;
+    overflow-x: auto;
+    color: var(--text-muted);
+    white-space: pre;
+  }
+  .code-block .keyword { color: var(--numa-purple-light); }
+  .code-block .string { color: var(--accent-green); }
+  .code-block .comment { color: var(--text-dim); font-style: italic; }
+  .code-block .func { color: var(--accent-blue); }
+  .code-block .param { color: var(--accent-orange); }
+  .code-block .type { color: var(--accent-cyan); }
+
+  /* Tables */
+  .data-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 16px 0;
+    font-size: 0.88rem;
+  }
+  .data-table th {
+    text-align: left;
+    padding: 12px 16px;
+    background: var(--bg-card);
+    color: var(--text-muted);
+    font-weight: 600;
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    border-bottom: 2px solid var(--border);
+  }
+  .data-table td {
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+  }
+  .data-table tr:hover td { background: var(--bg-card-hover); }
+
+  /* Interactive layer diagram */
+  .layer-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin: 20px 0;
+  }
+  .layer {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 20px 24px;
+    cursor: pointer;
+    transition: all 0.25s;
+    position: relative;
+    overflow: hidden;
+  }
+  .layer::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 4px;
+    transition: background 0.25s;
+  }
+  .layer:hover { border-color: var(--border-active); }
+  .layer.expanded { border-color: var(--border-active); }
+  .layer .layer-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+  .layer .layer-header .layer-title {
+    font-weight: 600;
+    font-size: 1.05rem;
+  }
+  .layer .layer-header .layer-arrow {
+    transition: transform 0.25s;
+    color: var(--text-muted);
+    font-size: 1.2rem;
+  }
+  .layer.expanded .layer-header .layer-arrow { transform: rotate(90deg); }
+  .layer .layer-detail {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.35s ease, padding 0.25s;
+    padding-top: 0;
+  }
+  .layer.expanded .layer-detail {
+    max-height: 800px;
+    padding-top: 16px;
+  }
+
+  .layer-1::before { background: var(--accent-blue); }
+  .layer-2::before { background: var(--numa-purple); }
+  .layer-3::before { background: var(--accent-green); }
+
+  /* Connector lines between layers */
+  .layer-connector {
+    display: flex;
+    justify-content: center;
+    padding: 4px 0;
+  }
+  .layer-connector svg { width: 24px; height: 20px; }
+
+  /* Interactive approval flow */
+  .approval-demo {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 24px;
+    margin: 20px 0;
+  }
+  .approval-card {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px;
+    margin: 12px 0;
+  }
+  .approval-card .approval-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+    font-weight: 600;
+  }
+  .approval-card .approval-desc {
+    color: var(--text-muted);
+    font-size: 0.9rem;
+    margin-bottom: 12px;
+    padding: 8px 12px;
+    background: var(--bg-card);
+    border-radius: 6px;
+  }
+  .approval-actions {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+  .btn {
+    padding: 8px 20px;
+    border-radius: 6px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    border: none;
+    transition: all 0.15s;
+  }
+  .btn-approve { background: var(--accent-green); color: #000; }
+  .btn-approve:hover { filter: brightness(1.1); }
+  .btn-deny { background: var(--accent-red); color: #fff; }
+  .btn-deny:hover { filter: brightness(1.1); }
+  .btn-reset { background: var(--bg-card); color: var(--text-muted); border: 1px solid var(--border); }
+  .btn-reset:hover { border-color: var(--text-muted); }
+  .countdown {
+    color: var(--text-dim);
+    font-size: 0.82rem;
+    margin-left: auto;
+    font-variant-numeric: tabular-nums;
+  }
+  .approval-result {
+    margin-top: 12px;
+    padding: 12px;
+    border-radius: 6px;
+    font-weight: 600;
+    font-size: 0.9rem;
+    display: none;
+  }
+  .approval-result.approved {
+    display: block;
+    background: rgba(74,222,128,0.1);
+    color: var(--accent-green);
+    border: 1px solid rgba(74,222,128,0.3);
+  }
+  .approval-result.denied {
+    display: block;
+    background: rgba(248,113,113,0.1);
+    color: var(--accent-red);
+    border: 1px solid rgba(248,113,113,0.3);
+  }
+
+  /* Checklist */
+  .checklist {
+    list-style: none;
+    margin: 16px 0;
+    padding: 0;
+  }
+  .checklist li {
+    padding: 10px 16px;
+    border-left: 3px solid var(--border);
+    margin-bottom: 4px;
+    font-size: 0.9rem;
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+  }
+  .checklist li .check-icon {
+    width: 20px;
+    height: 20px;
+    border: 2px solid var(--border);
+    border-radius: 4px;
+    flex-shrink: 0;
+    margin-top: 1px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.7rem;
+  }
+  .checklist li.done { border-left-color: var(--accent-green); }
+  .checklist li.done .check-icon {
+    background: var(--accent-green);
+    border-color: var(--accent-green);
+    color: #000;
+  }
+
+  /* Tooltip */
+  .tooltip-trigger {
+    position: relative;
+    cursor: help;
+    border-bottom: 1px dashed var(--text-muted);
+  }
+  .tooltip-trigger .tooltip-content {
+    display: none;
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 16px;
+    font-size: 0.82rem;
+    color: var(--text-muted);
+    white-space: normal;
+    width: 280px;
+    z-index: 10;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+    margin-bottom: 8px;
+  }
+  .tooltip-trigger:hover .tooltip-content { display: block; }
+
+  /* Interactive file tree */
+  .file-tree {
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    font-size: 0.82rem;
+    line-height: 1.8;
+    padding: 16px;
+    background: var(--bg-code);
+    border-radius: 8px;
+    border: 1px solid var(--border);
+  }
+  .file-tree .dir { color: var(--accent-blue); cursor: pointer; }
+  .file-tree .dir:hover { text-decoration: underline; }
+  .file-tree .file { color: var(--text-muted); }
+  .file-tree .file.highlight { color: var(--accent-green); font-weight: 600; }
+  .file-tree .indent { display: inline-block; }
+
+  /* Responsive */
+  @media (max-width: 768px) {
+    .header { padding: 40px 20px 30px; }
+    .header h1 { font-size: 1.8rem; }
+    .section { padding: 24px 16px; }
+    .card-grid { grid-template-columns: 1fr; }
+  }
+
+  /* Animated flow */
+  .flow-animated {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin: 16px 0;
+  }
+  .flow-box {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 16px;
+    font-size: 0.85rem;
+    font-weight: 500;
+    white-space: nowrap;
+    transition: all 0.3s;
+  }
+  .flow-box:hover {
+    border-color: var(--numa-purple);
+    transform: scale(1.05);
+  }
+  .flow-arrow {
+    color: var(--text-dim);
+    font-size: 1.2rem;
+  }
+
+  /* Highlight callout */
+  .callout {
+    border-radius: 8px;
+    padding: 16px 20px;
+    margin: 16px 0;
+    font-size: 0.9rem;
+    line-height: 1.6;
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+  }
+  .callout-icon { font-size: 1.2rem; flex-shrink: 0; margin-top: 1px; }
+  .callout-info { background: rgba(74,158,255,0.08); border: 1px solid rgba(74,158,255,0.2); }
+  .callout-warn { background: rgba(251,191,36,0.08); border: 1px solid rgba(251,191,36,0.2); }
+  .callout-tip { background: rgba(74,222,128,0.08); border: 1px solid rgba(74,222,128,0.2); }
+
+  /* Security boundary visual */
+  .security-boundary {
+    border: 2px dashed var(--accent-red);
+    border-radius: 12px;
+    padding: 20px;
+    margin: 16px 0;
+    position: relative;
+  }
+  .security-boundary::before {
+    content: attr(data-label);
+    position: absolute;
+    top: -10px;
+    left: 20px;
+    background: var(--bg);
+    padding: 0 8px;
+    color: var(--accent-red);
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  /* Tab panels within sections */
+  .tab-panel { margin: 20px 0; }
+  .tab-buttons {
+    display: flex;
+    gap: 2px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 16px;
+  }
+  .tab-btn {
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    padding: 10px 16px;
+    font-size: 0.85rem;
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    transition: all 0.2s;
+  }
+  .tab-btn:hover { color: var(--text); }
+  .tab-btn.active { color: var(--numa-purple-light); border-bottom-color: var(--numa-purple); }
+  .tab-content { display: none; }
+  .tab-content.active { display: block; animation: fadeIn 0.2s ease; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>Extending Numa Chat</h1>
+  <p>A comprehensive guide to adding new tools and capabilities to the Numa workspace agent</p>
+</div>
+
+<nav class="nav" id="mainNav">
+  <button class="active" data-section="overview">Overview</button>
+  <button data-section="mcp-tools">MCP Tool Groups</button>
+  <button data-section="prompting">Prompting & Skills</button>
+  <button data-section="lambda">Lambda Delegation</button>
+  <button data-section="hitl">HITL Approvals</button>
+  <button data-section="frontend">Frontend Rendering</button>
+  <button data-section="agents">Agent Types</button>
+  <button data-section="checklist">Adding a New Tool</button>
+  <button data-section="future">Future Direction</button>
+</nav>
+
+<!-- ==================== OVERVIEW ==================== -->
+<div class="section active" id="overview">
+  <h2>Architecture Overview</h2>
+  <p class="subtitle">Six systems work together to give Numa its tool capabilities. Each is independently extensible.</p>
+
+  <h3>The Three-Layer Tool Architecture</h3>
+  <p>Click each layer to expand and see what it contains.</p>
+
+  <div class="layer-stack">
+    <div class="layer layer-1" onclick="toggleLayer(this)">
+      <div class="layer-header">
+        <div>
+          <span class="layer-title">Layer 1: Claude SDK Tools</span>
+          <span class="badge badge-blue" style="margin-left:8px;">Built-in</span>
+        </div>
+        <span class="layer-arrow">&#9654;</span>
+      </div>
+      <div class="layer-detail">
+        <p>Standard Claude tools provided by the SDK: <strong>Read, Write, Edit, Bash, Glob, Grep, WebSearch, Task, Skill</strong>, etc.</p>
+        <p>Controlled per agent type via <code>tools</code>, <code>allowed_tools</code>, and <code>disallowed_tools</code> in AgentTypeConfig. These are the foundation all agents share.</p>
+        <div class="callout callout-info">
+          <span class="callout-icon">&#x1f4a1;</span>
+          <span>You rarely need to modify this layer. It's the baseline capability set that Claude brings out of the box.</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="layer-connector"><svg viewBox="0 0 24 20"><path d="M12 0 L12 20" stroke="#2d3248" stroke-width="2" fill="none" stroke-dasharray="4,3"/></svg></div>
+
+    <div class="layer layer-2" onclick="toggleLayer(this)">
+      <div class="layer-header">
+        <div>
+          <span class="layer-title">Layer 2: MCP Tool Groups</span>
+          <span class="badge badge-purple" style="margin-left:8px;">Custom</span>
+        </div>
+        <span class="layer-arrow">&#9654;</span>
+      </div>
+      <div class="layer-detail">
+        <p>Custom tool groups registered as MCP servers. Each group can be independently enabled/disabled per agent type and feature flag.</p>
+        <div class="card-grid">
+          <div class="card">
+            <div class="card-title"><span class="badge badge-purple">numa</span> Platform Tools</div>
+            <div class="card-desc">KB queries, web search, agents, memories, files. The main Swiss Army knife. Uses single-dispatcher pattern with 7+ operations.</div>
+          </div>
+          <div class="card">
+            <div class="card-title"><span class="badge badge-orange">integrations</span> Pipedream</div>
+            <div class="card-desc">SaaS integrations (Gmail, Slack, Jira, etc.) via cross-account proxy model. Three tools: run_action, configure_props, proxy_request.</div>
+          </div>
+          <div class="card">
+            <div class="card-title"><span class="badge badge-cyan">connectors</span> OAuth Storage</div>
+            <div class="card-desc">Google Drive, OneDrive, Dropbox, Synergy. Single dispatcher with status, list, search, download operations.</div>
+          </div>
+          <div class="card">
+            <div class="card-title"><span class="badge badge-red">vault</span> Secrets</div>
+            <div class="card-desc">Secrets management with mandatory approval flow. list_secrets and request_secret operations.</div>
+          </div>
+          <div class="card">
+            <div class="card-title"><span class="badge badge-green">scripts</span> Code Execution</div>
+            <div class="card-desc">Sandboxed Python/Bash/Node execution. Runs directly in the MicroVM, no Lambda delegation needed.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="layer-connector"><svg viewBox="0 0 24 20"><path d="M12 0 L12 20" stroke="#2d3248" stroke-width="2" fill="none" stroke-dasharray="4,3"/></svg></div>
+
+    <div class="layer layer-3" onclick="toggleLayer(this)">
+      <div class="layer-header">
+        <div>
+          <span class="layer-title">Layer 3: Skill Documentation</span>
+          <span class="badge badge-green" style="margin-left:8px;">Reference</span>
+        </div>
+        <span class="layer-arrow">&#9654;</span>
+      </div>
+      <div class="layer-detail">
+        <p>Markdown files that teach Claude <em>how</em> to use the tools. Not executable -- just context loaded on demand. Includes parameter tables, examples, and best practices.</p>
+        <p>Skills are stored in <code>plugins/numa/skills/</code> and selectively copied to <code>/workdir/tools/</code> based on the agent type's <code>enabled_numa_tools</code> list.</p>
+        <div class="callout callout-tip">
+          <span class="callout-icon">&#x2714;</span>
+          <span>This is the most token-efficient way to teach Claude about complex tools. Load the right context at the right time rather than stuffing everything into the system prompt.</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <h3>Why This Architecture?</h3>
+  <div class="card-grid">
+    <div class="card">
+      <div class="card-title">&#x1f3f7; Feature Flagging</div>
+      <div class="card-desc">Enable/disable entire tool groups without code changes. Ops not ready for a client? Don't register the MCP server. Simple.</div>
+    </div>
+    <div class="card">
+      <div class="card-title">&#x1f916; Agent Specialization</div>
+      <div class="card-desc">A research agent gets KB + web search but no integrations. A data analysis agent gets code execution but no CRM operations. Same engine, different tools.</div>
+    </div>
+    <div class="card">
+      <div class="card-title">&#x1f512; Security Isolation</div>
+      <div class="card-desc">Tools delegate to Lambdas that hold credentials. The agent never sees OAuth tokens, API keys, or user secrets. Permission boundaries enforced server-side.</div>
+    </div>
+    <div class="card">
+      <div class="card-title">&#x26a1; Token Efficiency</div>
+      <div class="card-desc">One tool with 7 operations (single schema) is cheaper than 7 separate tools (7 schemas). Skills load on demand instead of bloating the system prompt.</div>
+    </div>
+  </div>
+
+  <h3>The Six Systems</h3>
+  <p>Each tab in the navigation above covers one of these systems in detail:</p>
+  <table class="data-table">
+    <thead>
+      <tr><th>System</th><th>What It Does</th><th>Key Files</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>MCP Tool Groups</strong></td>
+        <td>Gives Claude executable capabilities via grouped MCP servers</td>
+        <td><code>mcp_tools/*.py</code>, <code>sdk_config.py</code></td>
+      </tr>
+      <tr>
+        <td><strong>Prompting & Skills</strong></td>
+        <td>Teaches Claude when and how to use each tool</td>
+        <td><code>prompts.py</code>, <code>plugins/numa/skills/</code></td>
+      </tr>
+      <tr>
+        <td><strong>Lambda Delegation</strong></td>
+        <td>Isolates permissions and credentials behind Lambda boundaries</td>
+        <td><code>lambda_client.py</code>, <code>workspace-chat-tools/</code></td>
+      </tr>
+      <tr>
+        <td><strong>HITL Approvals</strong></td>
+        <td>Human approval for sensitive operations (write, send, delete)</td>
+        <td><code>sdk_runner.py</code>, <code>approval.py</code>, <code>WorkspaceChatToolApproval.tsx</code></td>
+      </tr>
+      <tr>
+        <td><strong>Frontend Rendering</strong></td>
+        <td>How tool calls and results appear in the chat UI</td>
+        <td><code>WorkspaceChatInlineTool.tsx</code>, <code>UnifiedToolCard.tsx</code>, <code>ToolConfig.ts</code></td>
+      </tr>
+      <tr>
+        <td><strong>Agent Types</strong></td>
+        <td>Different tool combinations for different agent purposes</td>
+        <td><code>agent_types/*.py</code>, <code>AgentCreateModal.tsx</code></td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ==================== MCP TOOLS ==================== -->
+<div class="section" id="mcp-tools">
+  <h2>MCP Tool Groups</h2>
+  <p class="subtitle">The core mechanism for giving Claude executable capabilities. Each group is a collection of Python functions registered as an MCP server.</p>
+
+  <h3>The Single-Dispatcher Pattern</h3>
+  <p>All major tools use a single dispatcher function with an operation enum. This is more token-efficient than many separate tools because Claude only needs one tool schema.</p>
+
+  <div class="diagram-container">
+    <svg viewBox="0 0 900 360" class="arch-diagram">
+      <!-- Tool schema box -->
+      <rect x="20" y="20" width="260" height="320" rx="10" fill="#1a1d27" stroke="#8e50a7" stroke-width="2"/>
+      <text x="150" y="50" text-anchor="middle" fill="#b07cc6" font-size="14" font-weight="bold">Tool Schema (1 tool)</text>
+
+      <text x="40" y="80" fill="#8b8fa3" font-size="11">name:</text>
+      <text x="90" y="80" fill="#4ade80" font-size="11">"knowledge_base"</text>
+      <text x="90" y="98" fill="#4ade80" font-size="11">"web_search"</text>
+      <text x="90" y="116" fill="#4ade80" font-size="11">"agents"</text>
+      <text x="90" y="134" fill="#4ade80" font-size="11">"memories"</text>
+      <text x="90" y="152" fill="#4ade80" font-size="11">"files"</text>
+      <text x="90" y="170" fill="#4ade80" font-size="11">"extract_content"</text>
+      <text x="90" y="188" fill="#4ade80" font-size="11">"convert_document"</text>
+
+      <text x="40" y="220" fill="#8b8fa3" font-size="11">params:</text>
+      <text x="90" y="220" fill="#22d3ee" font-size="11">{ operation-specific }</text>
+
+      <text x="40" y="252" fill="#8b8fa3" font-size="11">description:</text>
+      <text x="120" y="252" fill="#fbbf24" font-size="11">"Human-readable text"</text>
+      <text x="120" y="270" fill="#5c6078" font-size="10">(shown to user in UI)</text>
+
+      <rect x="40" y="290" width="220" height="36" rx="6" fill="rgba(142,80,167,0.15)" stroke="none"/>
+      <text x="150" y="312" text-anchor="middle" fill="#b07cc6" font-size="11">vs 7 separate tool schemas</text>
+
+      <!-- Arrow -->
+      <path d="M290 180 L360 180" stroke="#8e50a7" stroke-width="2" fill="none" marker-end="url(#arrowPurple)"/>
+      <defs><marker id="arrowPurple" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M 0 0 L 10 5 L 0 10 z" fill="#8e50a7"/></marker></defs>
+
+      <!-- Dispatcher box -->
+      <rect x="370" y="100" width="200" height="160" rx="10" fill="#1a1d27" stroke="#4a9eff" stroke-width="2"/>
+      <text x="470" y="130" text-anchor="middle" fill="#4a9eff" font-size="14" font-weight="bold">Dispatcher</text>
+      <text x="470" y="160" text-anchor="middle" fill="#8b8fa3" font-size="11">TOOL_HANDLERS = {</text>
+      <text x="470" y="178" text-anchor="middle" fill="#8b8fa3" font-size="11">"name": handler_fn,</text>
+      <text x="470" y="196" text-anchor="middle" fill="#8b8fa3" font-size="11">...</text>
+      <text x="470" y="214" text-anchor="middle" fill="#8b8fa3" font-size="11">}</text>
+      <text x="470" y="245" text-anchor="middle" fill="#5c6078" font-size="10">Routes by name param</text>
+
+      <!-- Arrow to handlers -->
+      <path d="M580 140 L660 80" stroke="#4a9eff" stroke-width="1.5" fill="none" marker-end="url(#arrowBlue)"/>
+      <path d="M580 170 L660 170" stroke="#4a9eff" stroke-width="1.5" fill="none" marker-end="url(#arrowBlue)"/>
+      <path d="M580 200 L660 260" stroke="#4a9eff" stroke-width="1.5" fill="none" marker-end="url(#arrowBlue)"/>
+      <defs><marker id="arrowBlue" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M 0 0 L 10 5 L 0 10 z" fill="#4a9eff"/></marker></defs>
+
+      <!-- Handler boxes -->
+      <rect x="670" y="50" width="210" height="50" rx="8" fill="#1a1d27" stroke="#4ade80" stroke-width="1.5"/>
+      <text x="775" y="72" text-anchor="middle" fill="#4ade80" font-size="11" font-weight="600">_handle_knowledge_base</text>
+      <text x="775" y="88" text-anchor="middle" fill="#5c6078" font-size="10">Sub-dispatches: query, upload...</text>
+
+      <rect x="670" y="145" width="210" height="50" rx="8" fill="#1a1d27" stroke="#4ade80" stroke-width="1.5"/>
+      <text x="775" y="167" text-anchor="middle" fill="#4ade80" font-size="11" font-weight="600">_handle_web_search</text>
+      <text x="775" y="183" text-anchor="middle" fill="#5c6078" font-size="10">Direct handler</text>
+
+      <rect x="670" y="235" width="210" height="50" rx="8" fill="#1a1d27" stroke="#4ade80" stroke-width="1.5"/>
+      <text x="775" y="257" text-anchor="middle" fill="#4ade80" font-size="11" font-weight="600">_handle_agents</text>
+      <text x="775" y="273" text-anchor="middle" fill="#5c6078" font-size="10">Sub-dispatches: list, create...</text>
+
+      <text x="775" y="320" text-anchor="middle" fill="#5c6078" font-size="10">... more handlers</text>
+    </svg>
+  </div>
+
+  <h3>Registration Flow</h3>
+  <p>MCP servers are conditionally created in <code>sdk_config.py</code> based on agent type config + feature flags:</p>
+
+  <div class="code-block"><span class="comment"># sdk_config.py, lines 516-562</span>
+<span class="keyword">mcp_servers</span>: dict[str, Any] = {}
+
+<span class="keyword">if</span> type_config.<span class="param">enable_scripts_mcp</span>:
+    mcp_servers[<span class="string">"scripts"</span>] = <span class="func">create_sdk_mcp_server</span>(tools=[execute_script])
+
+<span class="keyword">if</span> type_config.<span class="param">enable_integrations_mcp</span>:
+    mcp_servers[<span class="string">"integrations"</span>] = <span class="func">create_sdk_mcp_server</span>(tools=[run_action, configure_props, proxy_request])
+
+<span class="keyword">if</span> type_config.<span class="param">enable_numa_mcp</span>:
+    numa_tools = [numa_tool]
+    <span class="keyword">if</span> os.environ.get(<span class="string">"NUMA_OPS_ENABLED"</span>):
+        numa_tools.append(numa_ops_tool)   <span class="comment"># Feature-flagged!</span>
+    mcp_servers[<span class="string">"numa"</span>] = <span class="func">create_sdk_mcp_server</span>(tools=numa_tools)</div>
+
+  <h3>Three-Layer Access Control</h3>
+  <div class="flow-step">
+    <div class="step-num">1</div>
+    <div class="step-content"><strong>Agent Type Config</strong> (developer hard limit) -- <code>allowed_numa_operations</code> restricts which operations this agent type can use. A data analysis agent might only get <code>["knowledge_base", "web_search"]</code>.</div>
+  </div>
+  <div class="flow-step">
+    <div class="step-num">2</div>
+    <div class="step-content"><strong>Feature Flags</strong> (deployment-level) -- Environment variables like <code>NUMA_OPS_ENABLED</code>, <code>OAUTH_INTEGRATIONS_ENABLED</code>. Controls per-client availability.</div>
+  </div>
+  <div class="flow-step">
+    <div class="step-num">3</div>
+    <div class="step-content"><strong>Frontend Toggles</strong> (user-level) -- <code>NUMA_ENABLED_TOOLS</code> allowlist from chat settings. Users can disable tools they don't want.</div>
+  </div>
+
+  <h3>Current Operations Map</h3>
+  <table class="data-table">
+    <thead><tr><th>Tool</th><th>Operations</th><th>Sub-Operations</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><span class="badge badge-purple">numa_tool</span></td>
+        <td>knowledge_base</td>
+        <td>query, upload, download, list, download_folder</td>
+      </tr>
+      <tr><td></td><td>web_search</td><td>--</td></tr>
+      <tr><td></td><td>agents</td><td>list, get, create, update, duplicate</td></tr>
+      <tr><td></td><td>memories</td><td>list, add, update, delete</td></tr>
+      <tr><td></td><td>files</td><td>list, search, download</td></tr>
+      <tr><td></td><td>extract_content</td><td>--</td></tr>
+      <tr><td></td><td>convert_document</td><td>--</td></tr>
+      <tr>
+        <td><span class="badge badge-purple">numa_ops_tool</span></td>
+        <td colspan="2">26 operations: get_config, list_teams, list_tickets, create_ticket, update_ticket, delete_ticket, search_tickets, add_comment, list_customers, create_customer, list_suppliers, create_project, upload_attachment, etc.</td>
+      </tr>
+      <tr>
+        <td><span class="badge badge-orange">run_action</span></td>
+        <td colspan="2">Execute any Pipedream integration action (Gmail, Slack, Jira, etc.)</td>
+      </tr>
+      <tr>
+        <td><span class="badge badge-orange">configure_props</span></td>
+        <td colspan="2">Load dynamic options for integration action properties</td>
+      </tr>
+      <tr>
+        <td><span class="badge badge-orange">proxy_request</span></td>
+        <td colspan="2">Raw API call through integration proxy</td>
+      </tr>
+      <tr>
+        <td><span class="badge badge-cyan">connectors</span></td>
+        <td colspan="2">status, list_files, search_files, download_file, get_file_info, request</td>
+      </tr>
+      <tr>
+        <td><span class="badge badge-red">vault</span></td>
+        <td colspan="2">list_secrets, request_secret</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ==================== PROMPTING ==================== -->
+<div class="section" id="prompting">
+  <h2>Prompting & Skills</h2>
+  <p class="subtitle">MCP tools give Claude the ability. Prompting teaches Claude when and how to use it effectively.</p>
+
+  <h3>System Prompt Assembly</h3>
+  <p>The base system prompt is built from modular sections in <code>prompts.py</code>, then layered with dynamic context:</p>
+
+  <div class="diagram-container">
+    <svg viewBox="0 0 900 400" class="arch-diagram">
+      <!-- Base prompt blocks -->
+      <text x="20" y="25" fill="#b07cc6" font-size="13" font-weight="bold">Base Prompt Sections (static)</text>
+
+      <rect x="20" y="40" width="170" height="36" rx="6" fill="rgba(74,158,255,0.12)" stroke="#4a9eff" stroke-width="1"/>
+      <text x="105" y="62" text-anchor="middle" fill="#4a9eff" font-size="11">IDENTITY_AND_ROLE</text>
+
+      <rect x="200" y="40" width="190" height="36" rx="6" fill="rgba(74,158,255,0.12)" stroke="#4a9eff" stroke-width="1"/>
+      <text x="295" y="62" text-anchor="middle" fill="#4a9eff" font-size="11">WORKSPACE_ENVIRONMENT</text>
+
+      <rect x="400" y="40" width="200" height="36" rx="6" fill="rgba(74,158,255,0.12)" stroke="#4a9eff" stroke-width="1"/>
+      <text x="500" y="62" text-anchor="middle" fill="#4a9eff" font-size="11">STYLE_AND_COMMUNICATION</text>
+
+      <rect x="610" y="40" width="140" height="36" rx="6" fill="rgba(74,158,255,0.12)" stroke="#4a9eff" stroke-width="1"/>
+      <text x="680" y="62" text-anchor="middle" fill="#4a9eff" font-size="11">TOOL_USAGE</text>
+
+      <rect x="760" y="40" width="120" height="36" rx="6" fill="rgba(74,158,255,0.12)" stroke="#4a9eff" stroke-width="1"/>
+      <text x="820" y="62" text-anchor="middle" fill="#4a9eff" font-size="11">CAPABILITIES</text>
+
+      <!-- Dynamic layers -->
+      <text x="20" y="115" fill="#b07cc6" font-size="13" font-weight="bold">Dynamic Context (per-request)</text>
+
+      <rect x="20" y="130" width="180" height="50" rx="8" fill="rgba(142,80,167,0.12)" stroke="#8e50a7" stroke-width="1.5"/>
+      <text x="110" y="152" text-anchor="middle" fill="#b07cc6" font-size="11" font-weight="600">Company Profile</text>
+      <text x="110" y="168" text-anchor="middle" fill="#5c6078" font-size="10">Truncated to 3000 chars</text>
+
+      <rect x="220" y="130" width="180" height="50" rx="8" fill="rgba(142,80,167,0.12)" stroke="#8e50a7" stroke-width="1.5"/>
+      <text x="310" y="152" text-anchor="middle" fill="#b07cc6" font-size="11" font-weight="600">User Profile</text>
+      <text x="310" y="168" text-anchor="middle" fill="#5c6078" font-size="10">Name, title, memories</text>
+
+      <rect x="420" y="130" width="180" height="50" rx="8" fill="rgba(142,80,167,0.12)" stroke="#8e50a7" stroke-width="1.5"/>
+      <text x="510" y="152" text-anchor="middle" fill="#b07cc6" font-size="11" font-weight="600">Agent Context</text>
+      <text x="510" y="168" text-anchor="middle" fill="#5c6078" font-size="10">Custom agent instructions</text>
+
+      <rect x="620" y="130" width="260" height="50" rx="8" fill="rgba(142,80,167,0.12)" stroke="#8e50a7" stroke-width="1.5"/>
+      <text x="750" y="152" text-anchor="middle" fill="#b07cc6" font-size="11" font-weight="600">Integration Context</text>
+      <text x="750" y="168" text-anchor="middle" fill="#5c6078" font-size="10">Per-integration prompt files (gmail.md, etc.)</text>
+
+      <!-- Skills layer -->
+      <text x="20" y="225" fill="#b07cc6" font-size="13" font-weight="bold">On-Demand Skills (loaded by Claude)</text>
+
+      <rect x="20" y="240" width="130" height="44" rx="8" fill="rgba(74,222,128,0.1)" stroke="#4ade80" stroke-width="1.5"/>
+      <text x="85" y="266" text-anchor="middle" fill="#4ade80" font-size="11">knowledge-search</text>
+
+      <rect x="165" y="240" width="100" height="44" rx="8" fill="rgba(74,222,128,0.1)" stroke="#4ade80" stroke-width="1.5"/>
+      <text x="215" y="266" text-anchor="middle" fill="#4ade80" font-size="11">agents</text>
+
+      <rect x="280" y="240" width="100" height="44" rx="8" fill="rgba(74,222,128,0.1)" stroke="#4ade80" stroke-width="1.5"/>
+      <text x="330" y="266" text-anchor="middle" fill="#4ade80" font-size="11">memories</text>
+
+      <rect x="395" y="240" width="110" height="44" rx="8" fill="rgba(74,222,128,0.1)" stroke="#4ade80" stroke-width="1.5"/>
+      <text x="450" y="266" text-anchor="middle" fill="#4ade80" font-size="11">integrations</text>
+
+      <rect x="520" y="240" width="75" height="44" rx="8" fill="rgba(74,222,128,0.1)" stroke="#4ade80" stroke-width="1.5"/>
+      <text x="558" y="266" text-anchor="middle" fill="#4ade80" font-size="11">ops</text>
+
+      <rect x="610" y="240" width="110" height="44" rx="8" fill="rgba(74,222,128,0.1)" stroke="#4ade80" stroke-width="1.5"/>
+      <text x="665" y="266" text-anchor="middle" fill="#4ade80" font-size="11">pdf-handling</text>
+
+      <rect x="735" y="240" width="145" height="44" rx="8" fill="rgba(74,222,128,0.1)" stroke="#4ade80" stroke-width="1.5"/>
+      <text x="808" y="266" text-anchor="middle" fill="#4ade80" font-size="11">spreadsheet-handling</text>
+
+      <!-- Docs on disk -->
+      <text x="20" y="330" fill="#b07cc6" font-size="13" font-weight="bold">Documentation on Disk (/workdir/tools/)</text>
+
+      <rect x="20" y="345" width="160" height="40" rx="8" fill="rgba(251,191,36,0.1)" stroke="#fbbf24" stroke-width="1.5"/>
+      <text x="100" y="369" text-anchor="middle" fill="#fbbf24" font-size="11">Pipedream actions.json</text>
+
+      <rect x="195" y="345" width="140" height="40" rx="8" fill="rgba(251,191,36,0.1)" stroke="#fbbf24" stroke-width="1.5"/>
+      <text x="265" y="369" text-anchor="middle" fill="#fbbf24" font-size="11">agents.py reference</text>
+
+      <rect x="350" y="345" width="150" height="40" rx="8" fill="rgba(251,191,36,0.1)" stroke="#fbbf24" stroke-width="1.5"/>
+      <text x="425" y="369" text-anchor="middle" fill="#fbbf24" font-size="11">memories.py reference</text>
+
+      <rect x="515" y="345" width="160" height="40" rx="8" fill="rgba(251,191,36,0.1)" stroke="#fbbf24" stroke-width="1.5"/>
+      <text x="595" y="369" text-anchor="middle" fill="#fbbf24" font-size="11">numa-ops.py reference</text>
+    </svg>
+  </div>
+
+  <h3>Skill File Format</h3>
+  <p>Each skill is a directory with a <code>SKILL.md</code> file. The frontmatter helps Claude decide when to auto-load it:</p>
+
+  <div class="code-block"><span class="comment">---</span>
+<span class="param">name</span>: <span class="string">knowledge-search</span>
+<span class="param">description</span>: <span class="string">Search, retrieve, and upload to company knowledge bases</span>
+<span class="comment">---</span>
+
+<span class="keyword"># Knowledge Search Skill</span>
+
+<span class="comment">## Operations</span>
+
+| Operation | Description          | Required Params        |
+|-----------|----------------------|------------------------|
+| query     | Search knowledge bases | query, user_intent    |
+| upload    | Add document to KB   | file_path, kb_id       |
+| list      | List KB contents     | kb_id                  |
+
+<span class="comment">## Examples</span>
+
+<span class="func">mcp__numa__numa_tool</span>(
+  <span class="param">name</span>=<span class="string">"knowledge_base"</span>,
+  <span class="param">description</span>=<span class="string">"Searching KB for leave policy"</span>,
+  <span class="param">params</span>={<span class="string">"operation"</span>: <span class="string">"query"</span>, <span class="string">"query"</span>: <span class="string">"annual leave policy"</span>}
+)</div>
+
+  <h3>Integration Prompt Files</h3>
+  <p>Per-integration markdown files in <code>integration-prompts/</code> are injected when that integration is enabled. They teach Claude the specifics of each SaaS platform:</p>
+  <div class="card-grid">
+    <div class="card">
+      <div class="card-title">gmail.md</div>
+      <div class="card-desc">Gmail search operators, attachment handling, threading/reply patterns, pagination notes, label management</div>
+    </div>
+    <div class="card">
+      <div class="card-title">jira.md</div>
+      <div class="card-desc">JQL syntax, field formats, issue type patterns, transition workflows</div>
+    </div>
+    <div class="card">
+      <div class="card-title">slack.md</div>
+      <div class="card-desc">Channel/thread conventions, rich formatting, user mention patterns</div>
+    </div>
+    <div class="card">
+      <div class="card-title">google_drive.md</div>
+      <div class="card-desc">Drive search syntax, MIME type handling, permission patterns</div>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== LAMBDA ==================== -->
+<div class="section" id="lambda">
+  <h2>Lambda Delegation</h2>
+  <p class="subtitle">Most tools delegate their actual work to Lambda functions, isolating permissions and credentials from the agent.</p>
+
+  <h3>Architecture</h3>
+  <div class="diagram-container">
+    <svg viewBox="0 0 900 500" class="arch-diagram">
+      <!-- Agent Container -->
+      <rect x="20" y="20" width="860" height="100" rx="12" fill="none" stroke="#8e50a7" stroke-width="2" stroke-dasharray="6,4"/>
+      <text x="40" y="45" fill="#b07cc6" font-size="12" font-weight="bold">AgentCore MicroVM</text>
+
+      <rect x="40" y="55" width="160" height="50" rx="8" fill="rgba(74,158,255,0.12)" stroke="#4a9eff" stroke-width="1.5"/>
+      <text x="120" y="84" text-anchor="middle" fill="#4a9eff" font-size="11">Claude SDK Process</text>
+
+      <path d="M210 80 L280 80" stroke="#4a9eff" stroke-width="1.5" fill="none" marker-end="url(#arrowBlue2)"/>
+      <defs><marker id="arrowBlue2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M 0 0 L 10 5 L 0 10 z" fill="#4a9eff"/></marker></defs>
+
+      <rect x="290" y="55" width="180" height="50" rx="8" fill="rgba(142,80,167,0.12)" stroke="#8e50a7" stroke-width="1.5"/>
+      <text x="380" y="77" text-anchor="middle" fill="#b07cc6" font-size="11" font-weight="600">MCP Tools (in-process)</text>
+      <text x="380" y="93" text-anchor="middle" fill="#5c6078" font-size="10">Uses NUMA_LOCAL_AWS_*</text>
+
+      <rect x="520" y="55" width="160" height="50" rx="8" fill="rgba(74,222,128,0.1)" stroke="#4ade80" stroke-width="1.5"/>
+      <text x="600" y="77" text-anchor="middle" fill="#4ade80" font-size="11" font-weight="600">execute_script</text>
+      <text x="600" y="93" text-anchor="middle" fill="#5c6078" font-size="10">Direct (no Lambda)</text>
+
+      <rect x="710" y="55" width="150" height="50" rx="8" fill="rgba(251,191,36,0.1)" stroke="#fbbf24" stroke-width="1.5"/>
+      <text x="785" y="77" text-anchor="middle" fill="#fbbf24" font-size="11" font-weight="600">Skills / Reference</text>
+      <text x="785" y="93" text-anchor="middle" fill="#5c6078" font-size="10">Read-only docs</text>
+
+      <!-- invoke_workspace_tool -->
+      <path d="M380 110 L380 160" stroke="#8e50a7" stroke-width="2" fill="none" marker-end="url(#arrowPurple2)"/>
+      <defs><marker id="arrowPurple2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M 0 0 L 10 5 L 0 10 z" fill="#8e50a7"/></marker></defs>
+      <text x="390" y="145" fill="#5c6078" font-size="10">invoke_workspace_tool()</text>
+
+      <!-- Security boundary -->
+      <rect x="20" y="170" width="860" height="310" rx="12" fill="none" stroke="#f87171" stroke-width="2" stroke-dasharray="6,4"/>
+      <rect x="30" y="162" width="160" height="18" rx="4" fill="var(--bg)"/>
+      <text x="40" y="175" fill="#f87171" font-size="10" font-weight="bold">LAMBDA SECURITY BOUNDARY</text>
+
+      <!-- workspace-chat-tools -->
+      <rect x="50" y="200" width="240" height="260" rx="10" fill="#1a1d27" stroke="#4a9eff" stroke-width="1.5"/>
+      <text x="170" y="225" text-anchor="middle" fill="#4a9eff" font-size="12" font-weight="bold">workspace-chat-tools</text>
+      <text x="170" y="242" text-anchor="middle" fill="#5c6078" font-size="10">(Primary Lambda)</text>
+
+      <text x="70" y="270" fill="#4ade80" font-size="10">KB queries</text>
+      <text x="70" y="288" fill="#4ade80" font-size="10">Web search</text>
+      <text x="70" y="306" fill="#4ade80" font-size="10">Agents CRUD</text>
+      <text x="70" y="324" fill="#4ade80" font-size="10">Memories CRUD</text>
+      <text x="70" y="342" fill="#4ade80" font-size="10">Pipedream actions</text>
+      <text x="70" y="360" fill="#4ade80" font-size="10">Vault secrets</text>
+
+      <rect x="60" y="380" width="220" height="60" rx="6" fill="rgba(248,113,113,0.08)" stroke="#f87171" stroke-width="1"/>
+      <text x="170" y="400" text-anchor="middle" fill="#f87171" font-size="10" font-weight="600">Security Gates</text>
+      <text x="170" y="416" text-anchor="middle" fill="#5c6078" font-size="9">Fail-closed KB allowlist</text>
+      <text x="170" y="430" text-anchor="middle" fill="#5c6078" font-size="9">Tool enablement validation</text>
+
+      <!-- oauth-workspace-tools -->
+      <rect x="330" y="200" width="220" height="170" rx="10" fill="#1a1d27" stroke="#22d3ee" stroke-width="1.5"/>
+      <text x="440" y="225" text-anchor="middle" fill="#22d3ee" font-size="12" font-weight="bold">oauth-workspace-tools</text>
+      <text x="440" y="242" text-anchor="middle" fill="#5c6078" font-size="10">(OAuth Lambda)</text>
+
+      <text x="350" y="270" fill="#22d3ee" font-size="10">Google Drive</text>
+      <text x="350" y="288" fill="#22d3ee" font-size="10">OneDrive</text>
+      <text x="350" y="306" fill="#22d3ee" font-size="10">Dropbox</text>
+      <text x="350" y="324" fill="#22d3ee" font-size="10">Synergy 12d</text>
+      <text x="350" y="342" fill="#22d3ee" font-size="10">S3 Data Bucket</text>
+
+      <!-- Cross-account -->
+      <rect x="590" y="200" width="270" height="260" rx="10" fill="#1a1d27" stroke="#fb923c" stroke-width="1.5"/>
+      <text x="725" y="225" text-anchor="middle" fill="#fb923c" font-size="12" font-weight="bold">Cross-Account (Pipedream)</text>
+
+      <rect x="610" y="245" width="230" height="50" rx="6" fill="rgba(251,146,60,0.08)" stroke="#fb923c" stroke-width="1"/>
+      <text x="725" y="267" text-anchor="middle" fill="#fb923c" font-size="11">pipedream-relay</text>
+      <text x="725" y="283" text-anchor="middle" fill="#5c6078" font-size="9">Generates STS proof URL</text>
+
+      <path d="M725 300 L725 330" stroke="#fb923c" stroke-width="1.5" fill="none" marker-end="url(#arrowOrange)"/>
+      <defs><marker id="arrowOrange" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M 0 0 L 10 5 L 0 10 z" fill="#fb923c"/></marker></defs>
+
+      <rect x="610" y="335" width="230" height="50" rx="6" fill="rgba(251,146,60,0.08)" stroke="#fb923c" stroke-width="1"/>
+      <text x="725" y="357" text-anchor="middle" fill="#fb923c" font-size="11">pipedream-proxy</text>
+      <text x="725" y="373" text-anchor="middle" fill="#5c6078" font-size="9">Validates STS + executes</text>
+
+      <rect x="610" y="400" width="230" height="50" rx="6" fill="rgba(248,113,113,0.08)" stroke="#f87171" stroke-width="1"/>
+      <text x="725" y="420" text-anchor="middle" fill="#f87171" font-size="10" font-weight="600">STS Identity Verification</text>
+      <text x="725" y="436" text-anchor="middle" fill="#5c6078" font-size="9">Caller account + role allowlist</text>
+
+      <!-- Connection arrows from MCP to Lambdas -->
+      <path d="M340 110 L170 195" stroke="#4a9eff" stroke-width="1.5" fill="none" marker-end="url(#arrowBlue2)"/>
+      <path d="M400 110 L440 195" stroke="#22d3ee" stroke-width="1.5" fill="none" marker-end="url(#arrowCyan)"/>
+      <path d="M420 110 L725 195" stroke="#fb923c" stroke-width="1.5" fill="none" marker-end="url(#arrowOrange)"/>
+      <defs><marker id="arrowCyan" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M 0 0 L 10 5 L 0 10 z" fill="#22d3ee"/></marker></defs>
+    </svg>
+  </div>
+
+  <h3>Credential Isolation</h3>
+  <p>The agent <strong>never sees</strong> raw credentials. Two credential sets are managed independently:</p>
+
+  <div class="card-grid">
+    <div class="card" style="border-left: 3px solid var(--accent-blue);">
+      <div class="card-title">NUMA_LOCAL_AWS_*</div>
+      <div class="card-desc">Local account session credentials, captured <strong>before</strong> cross-account assume. Used by MCP tools (in-process) for Lambda invocation. Ephemeral session tokens only.</div>
+    </div>
+    <div class="card" style="border-left: 3px solid var(--accent-cyan);">
+      <div class="card-title">AWS_ACCESS_KEY_ID / SECRET / TOKEN</div>
+      <div class="card-desc">Cross-account Bedrock credentials. Set in the SDK subprocess environment for Claude's reasoning. MCP tools never read these.</div>
+    </div>
+  </div>
+
+  <div class="callout callout-info">
+    <span class="callout-icon">&#x1f512;</span>
+    <span>For user OAuth tokens and API keys (like Pipedream, connectors), the Lambda handles auth directly. The MCP tool passes identifiers (user_sub, external_user_id), not credentials. The Lambda looks up tokens from Secrets Manager or DynamoDB.</span>
+  </div>
+
+  <h3>When to Use a Lambda vs. Running Directly</h3>
+  <table class="data-table">
+    <thead><tr><th>Scenario</th><th>Approach</th><th>Example</th></tr></thead>
+    <tbody>
+      <tr><td>Needs IAM permissions the agent shouldn't have</td><td><span class="badge badge-blue">Lambda</span></td><td>KB queries, DynamoDB</td></tr>
+      <tr><td>Needs user credentials the agent shouldn't see</td><td><span class="badge badge-blue">Lambda</span></td><td>OAuth tokens, API keys</td></tr>
+      <tr><td>Pure computation in workspace</td><td><span class="badge badge-green">Direct</span></td><td>Data analysis scripts</td></tr>
+      <tr><td>Cross-account access</td><td><span class="badge badge-orange">Lambda chain</span></td><td>Pipedream relay -> proxy</td></tr>
+      <tr><td>Read-only workspace files</td><td><span class="badge badge-green">Direct</span></td><td>File listing, search</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ==================== HITL ==================== -->
+<div class="section" id="hitl">
+  <h2>Human-in-the-Loop (HITL) Approvals</h2>
+  <p class="subtitle">Users approve or deny tool calls before they execute. Critical for write operations like sending emails, creating tickets, or accessing secrets.</p>
+
+  <h3>Approval Modes</h3>
+  <div class="card-grid" style="grid-template-columns: repeat(3, 1fr);">
+    <div class="card" style="border-top: 3px solid var(--accent-red);">
+      <div class="card-title"><span class="badge badge-red">always</span></div>
+      <div class="card-desc">Every tool call requires manual approval. Most restrictive. Good for high-security environments.</div>
+    </div>
+    <div class="card" style="border-top: 3px solid var(--accent-yellow);">
+      <div class="card-title"><span class="badge badge-yellow">non_destructive</span></div>
+      <div class="card-desc">Read-only operations auto-approve. Writes require approval. <strong>Default for integrations.</strong></div>
+    </div>
+    <div class="card" style="border-top: 3px solid var(--accent-green);">
+      <div class="card-title"><span class="badge badge-green">never</span></div>
+      <div class="card-desc">All operations auto-approve. No approval UI shown. Default for Numa-native tools.</div>
+    </div>
+  </div>
+
+  <h3>Approval Categories</h3>
+  <table class="data-table">
+    <thead><tr><th>Category</th><th>Write Operations</th><th>Safe (Auto-Approve)</th></tr></thead>
+    <tbody>
+      <tr><td><span class="badge badge-orange">integrations</span></td><td>All API calls via run_action, proxy_request</td><td>configure_props</td></tr>
+      <tr><td><span class="badge badge-purple">agents</span></td><td>create, update, duplicate</td><td>list, get</td></tr>
+      <tr><td><span class="badge badge-purple">memories</span></td><td>add, update</td><td>list</td></tr>
+      <tr><td><span class="badge badge-purple">knowledgeBases</span></td><td>upload</td><td>query, list, download</td></tr>
+      <tr><td><span class="badge badge-purple">ops</span></td><td>create_*, update_*, delete_*, add_comment</td><td>get_*, list_*, search_*</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Approval Flow</h3>
+  <div class="flow-step"><div class="step-num">1</div><div class="step-content"><strong>SDK Runner</strong> identifies tool call requiring approval based on mode + category</div></div>
+  <div class="flow-step"><div class="step-num">2</div><div class="step-content"><strong>Generates approval ID</strong> (UUID), stores in <code>NUMA_REQUEST_ID_MAP</code> env var</div></div>
+  <div class="flow-step"><div class="step-num">3</div><div class="step-content"><strong>Emits SSE event</strong> <code>type="tool_approval"</code> with description, props, request_id to frontend</div></div>
+  <div class="flow-step"><div class="step-num">4</div><div class="step-content"><strong>Frontend shows approval card</strong> with 90-second countdown timer</div></div>
+  <div class="flow-step"><div class="step-num">5</div><div class="step-content"><strong>User clicks Approve/Deny</strong> -- decision POSTed to API, written to DynamoDB</div></div>
+  <div class="flow-step"><div class="step-num">6</div><div class="step-content"><strong>Lambda polls DynamoDB</strong> every 5 seconds for decision</div></div>
+  <div class="flow-step"><div class="step-num">7</div><div class="step-content"><strong>Result returned</strong>: approved (execute), denied (skip), timeout (report)</div></div>
+
+  <h3>Interactive Demo</h3>
+  <p>Try the approval flow:</p>
+  <div class="approval-demo" id="approvalDemo">
+    <div class="approval-card">
+      <div class="approval-header">
+        <span class="badge badge-orange">Gmail</span>
+        <span>Send Email</span>
+      </div>
+      <div class="approval-desc">
+        Send email to alice@example.com<br>
+        <strong>Subject:</strong> Q4 Financial Report<br>
+        <strong>Body:</strong> Hi Alice, please find the quarterly report attached. Let me know if you have questions.
+      </div>
+      <div class="approval-actions" id="approvalActions">
+        <button class="btn btn-approve" onclick="handleApproval('approved')">Approve</button>
+        <button class="btn btn-deny" onclick="handleApproval('denied')">Deny</button>
+        <span class="countdown" id="approvalCountdown">1:30</span>
+      </div>
+    </div>
+    <div class="approval-result" id="approvalResult"></div>
+    <div style="margin-top:12px; text-align:right;">
+      <button class="btn btn-reset" onclick="resetApproval()">Reset Demo</button>
+    </div>
+  </div>
+
+  <h3>Resolution Priority</h3>
+  <div class="flow-animated">
+    <div class="flow-box" style="border-color: var(--accent-red);">Agent Override</div>
+    <span class="flow-arrow">&#x25B6;</span>
+    <div class="flow-box" style="border-color: var(--accent-yellow);">User Setting</div>
+    <span class="flow-arrow">&#x25B6;</span>
+    <div class="flow-box" style="border-color: var(--accent-green);">Default</div>
+  </div>
+  <p style="color: var(--text-muted); font-size: 0.88rem;">Highest priority wins. Agent-level overrides beat user settings, which beat platform defaults.</p>
+</div>
+
+<!-- ==================== FRONTEND ==================== -->
+<div class="section" id="frontend">
+  <h2>Frontend Tool Rendering</h2>
+  <p class="subtitle">How tool calls and results appear in the chat UI. Segment-based architecture with specialized components for each tool type.</p>
+
+  <h3>Segment Types</h3>
+  <div class="card-grid" style="grid-template-columns: repeat(3, 1fr);">
+    <div class="card" style="border-left: 3px solid var(--accent-blue);">
+      <div class="card-title">inline_tool</div>
+      <div class="card-desc">Single-line indicator with icon, description text, and optional approval panel. Used for file reads, searches, integrations.</div>
+    </div>
+    <div class="card" style="border-left: 3px solid var(--numa-purple);">
+      <div class="card-title">tool_card</div>
+      <div class="card-desc">Card-based result display. Used for KB results, web search results, data analysis output. Supports specialized renderers.</div>
+    </div>
+    <div class="card" style="border-left: 3px solid var(--accent-green);">
+      <div class="card-title">subagent</div>
+      <div class="card-desc">Container for Task tool results. Shows sub-agent execution with expandable details.</div>
+    </div>
+  </div>
+
+  <h3>Rendering Pipeline</h3>
+  <div class="diagram-container">
+    <svg viewBox="0 0 900 220" class="arch-diagram">
+      <!-- Step 1 -->
+      <rect x="20" y="20" width="170" height="70" rx="8" fill="rgba(74,158,255,0.12)" stroke="#4a9eff" stroke-width="1.5"/>
+      <text x="105" y="48" text-anchor="middle" fill="#4a9eff" font-size="11" font-weight="600">SDK Stream Event</text>
+      <text x="105" y="68" text-anchor="middle" fill="#5c6078" font-size="10">tool_use block arrives</text>
+
+      <path d="M195 55 L230 55" stroke="#4a9eff" stroke-width="1.5" fill="none" marker-end="url(#arrowBlue2)"/>
+
+      <!-- Step 2 -->
+      <rect x="235" y="20" width="180" height="70" rx="8" fill="rgba(142,80,167,0.12)" stroke="#8e50a7" stroke-width="1.5"/>
+      <text x="325" y="42" text-anchor="middle" fill="#b07cc6" font-size="11" font-weight="600">getToolSegmentKind()</text>
+      <text x="325" y="60" text-anchor="middle" fill="#5c6078" font-size="10">Routes tool name to</text>
+      <text x="325" y="76" text-anchor="middle" fill="#5c6078" font-size="10">segment type</text>
+
+      <path d="M420 55 L455 55" stroke="#8e50a7" stroke-width="1.5" fill="none" marker-end="url(#arrowPurple2)"/>
+
+      <!-- Step 3 -->
+      <rect x="460" y="20" width="200" height="70" rx="8" fill="rgba(251,191,36,0.12)" stroke="#fbbf24" stroke-width="1.5"/>
+      <text x="560" y="42" text-anchor="middle" fill="#fbbf24" font-size="11" font-weight="600">getInlineToolDisplay()</text>
+      <text x="560" y="60" text-anchor="middle" fill="#5c6078" font-size="10">Generates human-friendly</text>
+      <text x="560" y="76" text-anchor="middle" fill="#5c6078" font-size="10">display text + icon</text>
+
+      <path d="M665 55 L700 55" stroke="#fbbf24" stroke-width="1.5" fill="none" marker-end="url(#arrowYellow)"/>
+      <defs><marker id="arrowYellow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M 0 0 L 10 5 L 0 10 z" fill="#fbbf24"/></marker></defs>
+
+      <!-- Step 4 -->
+      <rect x="705" y="20" width="175" height="70" rx="8" fill="rgba(74,222,128,0.12)" stroke="#4ade80" stroke-width="1.5"/>
+      <text x="793" y="42" text-anchor="middle" fill="#4ade80" font-size="11" font-weight="600">Segment Renderer</text>
+      <text x="793" y="60" text-anchor="middle" fill="#5c6078" font-size="10">Component renders</text>
+      <text x="793" y="76" text-anchor="middle" fill="#5c6078" font-size="10">based on segment kind</text>
+
+      <!-- Routing examples -->
+      <text x="20" y="125" fill="#b07cc6" font-size="12" font-weight="bold">Routing Examples</text>
+
+      <text x="40" y="150" fill="#8b8fa3" font-size="11">Read, Write, Bash, Glob, Grep</text>
+      <text x="360" y="150" fill="#4a9eff" font-size="11">&#x2192; inline_tool (transient)</text>
+
+      <text x="40" y="172" fill="#8b8fa3" font-size="11">mcp__integrations__run_action</text>
+      <text x="360" y="172" fill="#fb923c" font-size="11">&#x2192; inline_tool (important, branded logo)</text>
+
+      <text x="40" y="194" fill="#8b8fa3" font-size="11">mcp__numa__numa_tool (KB query)</text>
+      <text x="360" y="194" fill="#8e50a7" font-size="11">&#x2192; tool_card (KnowledgeBaseRenderer)</text>
+
+      <text x="40" y="216" fill="#8b8fa3" font-size="11">Task (sub-agents)</text>
+      <text x="360" y="216" fill="#4ade80" font-size="11">&#x2192; subagent (expandable card)</text>
+    </svg>
+  </div>
+
+  <h3>Tool Category Behavior</h3>
+  <table class="data-table">
+    <thead><tr><th>Category</th><th>Behavior</th><th>Examples</th></tr></thead>
+    <tbody>
+      <tr><td><span class="badge badge-blue">transient</span></td><td>Fades out when text starts streaming. Briefly shows progress then disappears.</td><td>Glob, Grep, Read, TaskOutput</td></tr>
+      <tr><td><span class="badge badge-purple">important</span></td><td>Always visible with icon. Persists in the message even after completion.</td><td>WebSearch, Write, Edit, Ops, Skill</td></tr>
+      <tr><td><span class="badge badge-yellow">default</span></td><td>Standard display. Visible during execution, fades on completion.</td><td>Most other tools</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Adding Custom Rendering</h3>
+  <ul class="checklist">
+    <li><span class="check-icon"></span>Route tool name in <code>getToolSegmentKind()</code> to <code>inline_tool</code> or <code>tool_card</code></li>
+    <li><span class="check-icon"></span>Set display text in <code>getInlineToolDisplay()</code> -- extract meaningful info from input</li>
+    <li><span class="check-icon"></span>Set icon in <code>getToolCategoryAndIcon()</code> -- Bootstrap icon or custom image URL</li>
+    <li><span class="check-icon"></span>For tool_card results: add renderer in <code>toolRenderers/</code> and register in <code>UnifiedToolCard.tsx</code></li>
+    <li><span class="check-icon"></span>For approval: automatic when approval data is attached to segment</li>
+  </ul>
+
+  <h3>The Description Parameter in Action</h3>
+  <p>The <code>description</code> field from the tool's input schema is displayed directly in the UI:</p>
+  <div class="card-grid" style="grid-template-columns: 1fr 1fr;">
+    <div class="card">
+      <div class="card-title">Inline Display</div>
+      <div class="card-desc" style="font-family: monospace; padding: 8px; background: var(--bg); border-radius: 4px; margin-top: 8px;">
+        <span style="color: var(--accent-green);">&#x2714;</span> Searching KB for annual leave policy
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">Approval Card</div>
+      <div class="card-desc" style="font-family: monospace; padding: 8px; background: var(--bg); border-radius: 4px; margin-top: 8px;">
+        <span style="color: var(--accent-yellow);">&#x1f50d;</span> Send email to alice@example.com: Q4 Report
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== AGENTS ==================== -->
+<div class="section" id="agents">
+  <h2>Agent Type Configurations</h2>
+  <p class="subtitle">Different agent types get different tool sets from the same engine. This is what makes tool group splitting valuable.</p>
+
+  <h3>How Tool Groups Enable Agent Specialization</h3>
+  <div class="diagram-container">
+    <svg viewBox="0 0 900 340" class="arch-diagram">
+      <!-- Headers -->
+      <text x="180" y="25" text-anchor="middle" fill="#b07cc6" font-size="13" font-weight="bold">Numa Chat (default)</text>
+      <text x="470" y="25" text-anchor="middle" fill="#4a9eff" font-size="13" font-weight="bold">Research Agent</text>
+      <text x="750" y="25" text-anchor="middle" fill="#fb923c" font-size="13" font-weight="bold">Data Analysis</text>
+
+      <!-- Tool group rows -->
+      <text x="10" y="70" fill="#8b8fa3" font-size="11" font-weight="600">SDK Tools</text>
+      <text x="10" y="120" fill="#8b8fa3" font-size="11" font-weight="600">Scripts</text>
+      <text x="10" y="170" fill="#8b8fa3" font-size="11" font-weight="600">Numa</text>
+      <text x="10" y="220" fill="#8b8fa3" font-size="11" font-weight="600">Integrations</text>
+      <text x="10" y="270" fill="#8b8fa3" font-size="11" font-weight="600">Connectors</text>
+      <text x="10" y="320" fill="#8b8fa3" font-size="11" font-weight="600">Vault</text>
+
+      <!-- Numa Chat column -->
+      <rect x="100" y="50" width="160" height="30" rx="6" fill="rgba(74,222,128,0.12)" stroke="#4ade80" stroke-width="1"/>
+      <text x="180" y="70" text-anchor="middle" fill="#4ade80" font-size="11">All tools</text>
+
+      <rect x="100" y="100" width="160" height="30" rx="6" fill="rgba(74,222,128,0.12)" stroke="#4ade80" stroke-width="1"/>
+      <text x="180" y="120" text-anchor="middle" fill="#4ade80" font-size="11">Enabled</text>
+
+      <rect x="100" y="150" width="160" height="30" rx="6" fill="rgba(74,222,128,0.12)" stroke="#4ade80" stroke-width="1"/>
+      <text x="180" y="170" text-anchor="middle" fill="#4ade80" font-size="11">All operations</text>
+
+      <rect x="100" y="200" width="160" height="30" rx="6" fill="rgba(74,222,128,0.12)" stroke="#4ade80" stroke-width="1"/>
+      <text x="180" y="220" text-anchor="middle" fill="#4ade80" font-size="11">Enabled</text>
+
+      <rect x="100" y="250" width="160" height="30" rx="6" fill="rgba(74,222,128,0.12)" stroke="#4ade80" stroke-width="1"/>
+      <text x="180" y="270" text-anchor="middle" fill="#4ade80" font-size="11">If feature flag on</text>
+
+      <rect x="100" y="300" width="160" height="30" rx="6" fill="rgba(74,222,128,0.12)" stroke="#4ade80" stroke-width="1"/>
+      <text x="180" y="320" text-anchor="middle" fill="#4ade80" font-size="11">If feature flag on</text>
+
+      <!-- Research Agent column -->
+      <rect x="390" y="50" width="160" height="30" rx="6" fill="rgba(74,222,128,0.12)" stroke="#4ade80" stroke-width="1"/>
+      <text x="470" y="70" text-anchor="middle" fill="#4ade80" font-size="11">All tools</text>
+
+      <rect x="390" y="100" width="160" height="30" rx="6" fill="rgba(74,222,128,0.12)" stroke="#4ade80" stroke-width="1"/>
+      <text x="470" y="120" text-anchor="middle" fill="#4ade80" font-size="11">Enabled</text>
+
+      <rect x="390" y="150" width="160" height="30" rx="6" fill="rgba(251,191,36,0.12)" stroke="#fbbf24" stroke-width="1"/>
+      <text x="470" y="170" text-anchor="middle" fill="#fbbf24" font-size="11">KB + Web only</text>
+
+      <rect x="390" y="200" width="160" height="30" rx="6" fill="rgba(248,113,113,0.12)" stroke="#f87171" stroke-width="1"/>
+      <text x="470" y="220" text-anchor="middle" fill="#f87171" font-size="11">Disabled</text>
+
+      <rect x="390" y="250" width="160" height="30" rx="6" fill="rgba(248,113,113,0.12)" stroke="#f87171" stroke-width="1"/>
+      <text x="470" y="270" text-anchor="middle" fill="#f87171" font-size="11">Disabled</text>
+
+      <rect x="390" y="300" width="160" height="30" rx="6" fill="rgba(248,113,113,0.12)" stroke="#f87171" stroke-width="1"/>
+      <text x="470" y="320" text-anchor="middle" fill="#f87171" font-size="11">Disabled</text>
+
+      <!-- Data Analysis column -->
+      <rect x="670" y="50" width="160" height="30" rx="6" fill="rgba(251,191,36,0.12)" stroke="#fbbf24" stroke-width="1"/>
+      <text x="750" y="70" text-anchor="middle" fill="#fbbf24" font-size="11">Restricted (python only)</text>
+
+      <rect x="670" y="100" width="160" height="30" rx="6" fill="rgba(74,222,128,0.12)" stroke="#4ade80" stroke-width="1"/>
+      <text x="750" y="120" text-anchor="middle" fill="#4ade80" font-size="11">Enabled</text>
+
+      <rect x="670" y="150" width="160" height="30" rx="6" fill="rgba(251,191,36,0.12)" stroke="#fbbf24" stroke-width="1"/>
+      <text x="750" y="170" text-anchor="middle" fill="#fbbf24" font-size="11">KB + extract + convert</text>
+
+      <rect x="670" y="200" width="160" height="30" rx="6" fill="rgba(248,113,113,0.12)" stroke="#f87171" stroke-width="1"/>
+      <text x="750" y="220" text-anchor="middle" fill="#f87171" font-size="11">Disabled</text>
+
+      <rect x="670" y="250" width="160" height="30" rx="6" fill="rgba(248,113,113,0.12)" stroke="#f87171" stroke-width="1"/>
+      <text x="750" y="270" text-anchor="middle" fill="#f87171" font-size="11">Disabled</text>
+
+      <rect x="670" y="300" width="160" height="30" rx="6" fill="rgba(248,113,113,0.12)" stroke="#f87171" stroke-width="1"/>
+      <text x="750" y="320" text-anchor="middle" fill="#f87171" font-size="11">Disabled</text>
+    </svg>
+  </div>
+
+  <h3>Resolution Chain</h3>
+  <p>When a chat request arrives, tools are resolved through a layered chain:</p>
+
+  <div class="flow-step"><div class="step-num">1</div><div class="step-content"><strong>Agent Type Config</strong> -- Loaded from registry by <code>type_id</code>. Sets baseline: which MCP groups enabled, which operations allowed.</div></div>
+  <div class="flow-step"><div class="step-num">2</div><div class="step-content"><strong>Agent Instance Config</strong> -- Fetched from DynamoDB if <code>agentId</code> provided. Further restricts: specific KBs, specific integrations, approval overrides.</div></div>
+  <div class="flow-step"><div class="step-num">3</div><div class="step-content"><strong>Request-Level</strong> -- <code>enabledConnections</code>, <code>availableKBs</code>, <code>enabledTools</code> from the chat request itself. Runtime toggles.</div></div>
+  <div class="flow-step"><div class="step-num">4</div><div class="step-content"><strong>SDK Config Build</strong> -- All layers merged. MCP servers registered, env vars set, skill docs copied, prompt assembled.</div></div>
+
+  <h3>Agent Builder UI</h3>
+  <p>The Agent Builder (<code>AgentCreateModal.tsx</code>) exposes tool configuration to users:</p>
+  <div class="card-grid">
+    <div class="card">
+      <div class="card-title">Tool Toggles</div>
+      <div class="card-desc"><code>autoToolsEnabled</code>, <code>webSearchEnabled</code>, <code>createAgentEnabled</code> -- Simple on/off switches for major capabilities.</div>
+    </div>
+    <div class="card">
+      <div class="card-title">KB Selection</div>
+      <div class="card-desc"><code>allowedKnowledgeBases</code> -- Multi-select picker. <code>null</code> = all, empty array = none, array of IDs = specific.</div>
+    </div>
+    <div class="card">
+      <div class="card-title">Integration Selection</div>
+      <div class="card-desc"><code>enabledConnections</code> -- Which SaaS integrations this agent can use. Empty = none.</div>
+    </div>
+    <div class="card">
+      <div class="card-title">Approval Modes</div>
+      <div class="card-desc"><code>approvalModes</code> -- Per-category grid: use default / always / non_destructive / never.</div>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== CHECKLIST ==================== -->
+<div class="section" id="checklist">
+  <h2>Adding a New Tool: Complete Checklist</h2>
+  <p class="subtitle">Not all steps apply to every tool. Use judgment based on your tool's needs.</p>
+
+  <div class="tab-panel">
+    <div class="tab-buttons">
+      <button class="tab-btn active" data-tab="step1">1. MCP Tool</button>
+      <button class="tab-btn" data-tab="step2">2. Lambda</button>
+      <button class="tab-btn" data-tab="step3">3. Skill</button>
+      <button class="tab-btn" data-tab="step4">4. HITL</button>
+      <button class="tab-btn" data-tab="step5">5. Frontend</button>
+      <button class="tab-btn" data-tab="step6">6. Agent Types</button>
+      <button class="tab-btn" data-tab="step7">7. Infrastructure</button>
+    </div>
+
+    <div class="tab-content active" id="tab-step1">
+      <h4>Define the MCP Tool</h4>
+      <p><strong>Decision:</strong> Add to an existing group (preferred for related ops) or create a new group (for independently feature-flaggable capabilities).</p>
+
+      <h4>Option A: Add to Existing Group</h4>
+      <div class="code-block"><span class="comment"># In numa_tool.py</span>
+
+<span class="keyword">async def</span> <span class="func">_handle_my_operation</span>(params: <span class="type">dict</span>[str, Any]) -> <span class="type">dict</span>[str, Any]:
+    result = <span class="func">invoke_workspace_tool</span>(<span class="string">"my_operation"</span>, params)
+    <span class="keyword">return</span> <span class="func">_ok</span>(json.dumps(result))
+
+<span class="comment"># Register handler</span>
+TOOL_HANDLERS[<span class="string">"my_operation"</span>] = _handle_my_operation
+
+<span class="comment"># Add to enum in input_schema</span>
+<span class="string">"enum"</span>: [..., <span class="string">"my_operation"</span>]</div>
+
+      <h4>Option B: New Tool Group</h4>
+      <div class="code-block"><span class="comment"># my_tool.py</span>
+<span class="keyword">from</span> claude_agent_sdk <span class="keyword">import</span> tool
+
+@<span class="func">tool</span>(
+    name=<span class="string">"my_tool"</span>,
+    description=<span class="string">"Description shown in tool schema"</span>,
+    input_schema={...}  <span class="comment"># name + params + description pattern</span>
+)
+<span class="keyword">async def</span> <span class="func">my_tool</span>(args):
+    ...
+
+<span class="comment"># Register in sdk_config.py</span>
+<span class="keyword">if</span> type_config.<span class="param">enable_my_tool_mcp</span>:
+    mcp_servers[<span class="string">"my_tool"</span>] = <span class="func">create_sdk_mcp_server</span>(tools=[my_tool])</div>
+    </div>
+
+    <div class="tab-content" id="tab-step2">
+      <h4>Create the Lambda Handler</h4>
+      <p>Only needed if your tool requires permissions or credentials the agent shouldn't have.</p>
+      <div class="code-block"><span class="comment"># workspace-chat-tools/lambda_function.py</span>
+
+<span class="keyword">def</span> <span class="func">handle_my_operation</span>(params):
+    <span class="comment"># Validate params</span>
+    <span class="comment"># Do the work (DynamoDB, S3, external API)</span>
+    <span class="comment"># Return result</span>
+    <span class="keyword">return</span> {<span class="string">"status"</span>: <span class="string">"success"</span>, <span class="string">"data"</span>: {...}}
+
+<span class="comment"># Register in TOOL_HANDLERS dict</span>
+TOOL_HANDLERS[<span class="string">"my_operation"</span>] = handle_my_operation</div>
+      <div class="callout callout-warn">
+        <span class="callout-icon">&#x26a0;</span>
+        <span>Add security gates: validate <code>allowed_tools</code>, check <code>user_sub</code>, apply fail-closed allowlists.</span>
+      </div>
+    </div>
+
+    <div class="tab-content" id="tab-step3">
+      <h4>Write the Skill</h4>
+      <div class="code-block"><span class="comment"># plugins/numa/skills/my-tool/SKILL.md</span>
+
+---
+<span class="param">name</span>: <span class="string">my-tool</span>
+<span class="param">description</span>: <span class="string">When to use this tool</span>
+---
+
+# My Tool Skill
+
+## Operations
+| Operation | Description | Params |
+|-----------|-------------|--------|
+| op1       | Does X      | a, b   |
+
+## Examples
+<span class="func">mcp__my_tool__my_tool</span>(
+  <span class="param">name</span>=<span class="string">"op1"</span>,
+  <span class="param">description</span>=<span class="string">"Doing X"</span>,
+  <span class="param">params</span>={<span class="string">"a"</span>: <span class="string">"value"</span>}
+)</div>
+      <p>Then register in the TOOL_USAGE prompt section in <code>prompts.py</code>.</p>
+    </div>
+
+    <div class="tab-content" id="tab-step4">
+      <h4>Wire Up HITL Approvals</h4>
+      <ul class="checklist">
+        <li><span class="check-icon"></span>Classify operations as <strong>safe</strong> (read-only) or <strong>write</strong> (side effects)</li>
+        <li><span class="check-icon"></span>Add category to <code>numaToolApprovalMode</code> in Settings.tsx</li>
+        <li><span class="check-icon"></span>Add category to Agent Builder in AgentCreateModal.tsx</li>
+        <li><span class="check-icon"></span>Use <code>pop_approval_id(action_key)</code> in your MCP tool</li>
+        <li><span class="check-icon"></span>Pass <code>request_id</code> and <code>auto_approved</code> in Lambda event</li>
+        <li><span class="check-icon"></span>Use <code>poll_approval()</code> from <code>tools/approval.py</code></li>
+        <li><span class="check-icon"></span>Handle: approved, denied, timeout</li>
+      </ul>
+    </div>
+
+    <div class="tab-content" id="tab-step5">
+      <h4>Frontend Rendering</h4>
+      <ul class="checklist">
+        <li><span class="check-icon"></span>Route tool name in <code>getToolSegmentKind()</code></li>
+        <li><span class="check-icon"></span>Set display text in <code>getInlineToolDisplay()</code></li>
+        <li><span class="check-icon"></span>Set icon in <code>getToolCategoryAndIcon()</code></li>
+        <li><span class="check-icon"></span>Optionally: custom result renderer in <code>toolRenderers/</code></li>
+        <li><span class="check-icon"></span>Approval panel renders automatically when approval data attached</li>
+      </ul>
+    </div>
+
+    <div class="tab-content" id="tab-step6">
+      <h4>Agent Type Configuration</h4>
+      <ul class="checklist">
+        <li><span class="check-icon"></span>Add <code>enable_my_tool_mcp</code> flag to AgentTypeConfig (if new group)</li>
+        <li><span class="check-icon"></span>Update existing agent types: enable for numa-chat, disable for restricted types</li>
+        <li><span class="check-icon"></span>Add to <code>enabled_numa_tools</code> for types that should get skill docs</li>
+        <li><span class="check-icon"></span>Update <code>allowed_numa_operations</code> for types that should get the operation</li>
+      </ul>
+    </div>
+
+    <div class="tab-content" id="tab-step7">
+      <h4>Infrastructure</h4>
+      <ul class="checklist">
+        <li><span class="check-icon"></span>Add Lambda to infra constructs if new</li>
+        <li><span class="check-icon"></span>Wire environment variables (Lambda name, table names)</li>
+        <li><span class="check-icon"></span>Add IAM permissions for the Lambda</li>
+        <li><span class="check-icon"></span>Add DynamoDB tables if needed</li>
+        <li><span class="check-icon"></span>Add feature flag if the tool should be toggleable per client</li>
+        <li><span class="check-icon"></span>Package Lambda: <code>cd lambdas && bash package-python-lambda.sh python/my-lambda</code></li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== FUTURE ==================== -->
+<div class="section" id="future">
+  <h2>Future Direction: Unified CLI</h2>
+  <p class="subtitle">A longer-term consideration for simplifying the tool architecture.</p>
+
+  <h3>The Idea</h3>
+  <p>Consolidate all tools into a single Numa CLI binary that Claude executes via Bash, with API documentation provided as reference:</p>
+
+  <div class="code-block"><span class="comment"># Instead of MCP tools, Claude runs:</span>
+$ numa kb query --query "leave policy" --intent "find entitlements"
+$ numa ops create-ticket --project PROJ --title "Fix bug" --type task
+$ numa integrations run --action gmail-send-email --props '{"to": "alice@..."}'
+$ numa vault get --secret "api-key" --purpose "needed for API call"</div>
+
+  <h3>Trade-offs</h3>
+  <div class="card-grid">
+    <div class="card" style="border-top: 3px solid var(--accent-green);">
+      <div class="card-title">Advantages</div>
+      <div class="card-desc">
+        <ul style="margin: 8px 0; padding-left: 16px; color: var(--text-muted);">
+          <li>Single entry point -- simpler to maintain</li>
+          <li>New operations = new CLI subcommand</li>
+          <li>Reduced prompt tokens (one tool schema)</li>
+          <li>Claude is naturally good at CLI tools</li>
+          <li>Easier testing (run CLI directly)</li>
+        </ul>
+      </div>
+    </div>
+    <div class="card" style="border-top: 3px solid var(--accent-red);">
+      <div class="card-title">Challenges</div>
+      <div class="card-desc">
+        <ul style="margin: 8px 0; padding-left: 16px; color: var(--text-muted);">
+          <li>Loses granular MCP grouping for agent types</li>
+          <li>Approval flows need different wiring</li>
+          <li>CLI binary distribution adds complexity</li>
+          <li>Loses structured JSON input/output</li>
+          <li>Security hooks harder to enforce</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <div class="callout callout-info">
+    <span class="callout-icon">&#x1f4a1;</span>
+    <span>The current MCP approach works well and provides the flexibility needed for agent specialization. The CLI idea is worth exploring as a simplification pass, but would be a significant architectural change. Consider it a "Phase 2" optimization rather than an immediate priority.</span>
+  </div>
+</div>
+
+<script>
+  // Navigation
+  document.querySelectorAll('.nav button').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.nav button').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+      btn.classList.add('active');
+      document.getElementById(btn.dataset.section).classList.add('active');
+    });
+  });
+
+  // Layer expand/collapse
+  function toggleLayer(el) {
+    el.classList.toggle('expanded');
+  }
+
+  // Tab panels
+  document.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const panel = btn.closest('.tab-panel');
+      panel.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+      panel.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+      btn.classList.add('active');
+      document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
+    });
+  });
+
+  // Approval demo
+  let countdownInterval;
+  let countdownSeconds = 90;
+
+  function startCountdown() {
+    clearInterval(countdownInterval);
+    countdownSeconds = 90;
+    countdownInterval = setInterval(() => {
+      countdownSeconds--;
+      const mins = Math.floor(countdownSeconds / 60);
+      const secs = countdownSeconds % 60;
+      document.getElementById('approvalCountdown').textContent =
+        `${mins}:${secs.toString().padStart(2, '0')}`;
+      if (countdownSeconds <= 0) {
+        clearInterval(countdownInterval);
+        handleApproval('timeout');
+      }
+    }, 1000);
+  }
+
+  function handleApproval(decision) {
+    clearInterval(countdownInterval);
+    const result = document.getElementById('approvalResult');
+    const actions = document.getElementById('approvalActions');
+    actions.querySelectorAll('.btn-approve, .btn-deny').forEach(b => b.disabled = true);
+
+    if (decision === 'approved') {
+      result.className = 'approval-result approved';
+      result.textContent = 'Approved -- executing Gmail Send Email action...';
+    } else if (decision === 'denied') {
+      result.className = 'approval-result denied';
+      result.textContent = 'Denied -- action skipped. Numa will continue without sending the email.';
+    } else {
+      result.className = 'approval-result denied';
+      result.textContent = 'Timed out -- 90 second approval window expired.';
+    }
+  }
+
+  function resetApproval() {
+    clearInterval(countdownInterval);
+    const result = document.getElementById('approvalResult');
+    result.className = 'approval-result';
+    result.textContent = '';
+    document.querySelectorAll('#approvalActions .btn-approve, #approvalActions .btn-deny')
+      .forEach(b => b.disabled = false);
+    document.getElementById('approvalCountdown').textContent = '1:30';
+    startCountdown();
+  }
+
+  // Start countdown on load
+  startCountdown();
+</script>
+
+</body>
+</html>
