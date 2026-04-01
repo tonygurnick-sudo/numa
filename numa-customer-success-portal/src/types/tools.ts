@@ -241,6 +241,53 @@ export interface AgentIntegrationUsageRecord extends ClientMetadataFields {
   toolName?: string;
 }
 
+// Cost Analytics specific interfaces
+export interface CostAnalyticsParameters {
+  clientNames: string[];
+  timePeriod: string; // 'last-1-month', 'last-3-months', 'last-6-months', 'current-year', 'custom'
+  customStartDate?: string;
+  customEndDate?: string;
+  granularity: 'DAILY' | 'MONTHLY';
+  includeForecast: boolean;
+  outputFormat: 'csv' | 'json';
+}
+
+export interface CostRecord extends ClientMetadataFields {
+  clientName: string;
+  period: string;
+  service: string;
+  unblendedCost: number;
+  currency: string;
+}
+
+export interface CostSummaryRecord extends ClientMetadataFields {
+  clientName: string;
+  period: string;
+  totalCost: number;
+  forecastedCost?: number;
+  costChange?: number;
+  costChangePercent?: number;
+  currency: string;
+  topServices: { service: string; cost: number }[];
+}
+
+export interface CostAnalyticsResult {
+  metadata: {
+    clientNames: string[];
+    startDate: string;
+    endDate: string;
+    granularity: 'DAILY' | 'MONTHLY';
+    exportDate: string;
+    clientsProcessed: number;
+    clientsFailed: number;
+    totalCost: number;
+    currency: string;
+  };
+  summary: CostSummaryRecord[];
+  serviceBreakdown: CostRecord[];
+  failedClients?: { clientName: string; error: string }[];
+}
+
 export interface DateRange {
   startDate: Date;
   endDate: Date;
