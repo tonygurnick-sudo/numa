@@ -641,6 +641,8 @@
       "kbLoading": "Loading knowledge bases...",
       "kbEmpty": "No knowledge bases available.",
       "kbHelp": "Select one or more knowledge bases to enable by default.",
+      "selectAll": "Select All",
+      "clear": "Clear",
       "language": {
         "label": "Default language",
         "help": "Choose the language to use throughout the app.",

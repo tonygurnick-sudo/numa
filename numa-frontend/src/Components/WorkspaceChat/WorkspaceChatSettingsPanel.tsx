@@ -265,31 +265,55 @@ export const WorkspaceChatSettingsPanel: React.FC<WorkspaceChatSettingsPanelProp
               ) : availableKBs.length === 0 ? (
                 <div className="text-muted small fst-italic">{t('workspaceSettings.noKBs')}</div>
               ) : (
-                <div className="workspace-settings-list">
-                  {availableKBs.map((kb) => (
-                    <Form.Check
-                      type="checkbox"
-                      key={kb.kb_id}
-                      id={`panel-kb-${kb.kb_id}`}
-                      className="workspace-settings-list-item workspace-settings-kb-list-item"
-                      label={
-                        <span className="workspace-settings-kb-label">
-                          {kb.kb_id === 'company' ? (
-                            <Building2 size={14} />
-                          ) : kb.kb_id === 'numa-support' ? (
-                            <LifeBuoy size={14} />
-                          ) : (
-                            <UserIcon size={14} />
-                          )}
-                          <span className="workspace-settings-kb-name">{kb.kb_name}</span>
-                        </span>
-                      }
-                      checked={enabledKBIds.includes(kb.kb_id)}
-                      onChange={(e) => handleKBToggle(kb.kb_id, e.target.checked)}
-                      disabled={isDisabled}
-                    />
-                  ))}
-                </div>
+                <>
+                  {availableKBs.length > 1 && (
+                    <div className="workspace-settings-kb-actions">
+                      <button
+                        type="button"
+                        className="workspace-settings-kb-action-link"
+                        onClick={() => setEnabledKBIds(availableKBs.map((kb) => kb.kb_id))}
+                        disabled={isDisabled || availableKBs.every((kb) => enabledKBIds.includes(kb.kb_id))}
+                      >
+                        {t('workspaceSettings.selectAll')}
+                      </button>
+                      {enabledKBIds.length > 0 && (
+                        <button
+                          type="button"
+                          className="workspace-settings-kb-action-link"
+                          onClick={() => setEnabledKBIds([])}
+                          disabled={isDisabled}
+                        >
+                          {t('workspaceSettings.clear')}
+                        </button>
+                      )}
+                    </div>
+                  )}
+                  <div className="workspace-settings-list">
+                    {availableKBs.map((kb) => (
+                      <Form.Check
+                        type="checkbox"
+                        key={kb.kb_id}
+                        id={`panel-kb-${kb.kb_id}`}
+                        className="workspace-settings-list-item workspace-settings-kb-list-item"
+                        label={
+                          <span className="workspace-settings-kb-label">
+                            {kb.kb_id === 'company' ? (
+                              <Building2 size={14} />
+                            ) : kb.kb_id === 'numa-support' ? (
+                              <LifeBuoy size={14} />
+                            ) : (
+                              <UserIcon size={14} />
+                            )}
+                            <span className="workspace-settings-kb-name">{kb.kb_name}</span>
+                          </span>
+                        }
+                        checked={enabledKBIds.includes(kb.kb_id)}
+                        onChange={(e) => handleKBToggle(kb.kb_id, e.target.checked)}
+                        disabled={isDisabled}
+                      />
+                    ))}
+                  </div>
+                </>
               )}
             </div>
           )}
