@@ -80,7 +80,6 @@ RESEARCH_AGENT = AgentTypeConfig(
         "Bash(xargs:*)",  # Build command lines from input
         # Document handling binaries (pre-installed in container)
         "Bash(node:*)",  # Node.js (PptxGenJS, sharp)
-        "Bash(soffice:*)",  # LibreOffice headless (DOCX/PPTX → PDF)
         "Bash(pdftoppm:*)",  # PDF → images (visual QA)
         "Bash(pdftotext:*)",  # PDF text extraction
         "Bash(pdfimages:*)",  # PDF image extraction

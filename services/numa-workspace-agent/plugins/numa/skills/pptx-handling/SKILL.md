@@ -33,12 +33,15 @@ description: "Use this skill any time a .pptx file is involved — as input, out
 python -m markitdown presentation.pptx
 ```
 
-For visual overview, convert to images using `execute_script`:
+For visual overview, convert to PDF then render as images:
 
 ```
-execute_script(interpreter="bash", description="Converting PPTX to images for visual QA", code="""
-soffice --headless --convert-to pdf --outdir /workdir/outputs/ /workdir/uploads/presentation.pptx
-pdftoppm -jpeg -r 150 /workdir/outputs/presentation.pdf /workdir/outputs/slide
+# Step 1: Convert PPTX to PDF
+numa_tool(name="convert_document", params={"file_path": "/workdir/uploads/presentation.pptx", "format": "pdf", "mode": "file"})
+
+# Step 2: Render PDF pages as images
+execute_script(interpreter="bash", description="Rendering slides as images for QA", code="""
+pdftoppm -jpeg -r 150 /workdir/outputs/converted_presentation.pdf /workdir/outputs/slide
 """)
 ```
 
@@ -171,9 +174,12 @@ Your first render is almost never correct. Always verify output visually.
 ### Convert to Images
 
 ```
-execute_script(interpreter="bash", description="Converting slides to images for QA", code="""
-soffice --headless --convert-to pdf --outdir /workdir/outputs/ /workdir/outputs/presentation.pptx
-pdftoppm -jpeg -r 150 /workdir/outputs/presentation.pdf /workdir/outputs/slide
+# Step 1: Convert PPTX to PDF
+numa_tool(name="convert_document", params={"file_path": "/workdir/outputs/presentation.pptx", "format": "pdf", "mode": "file"})
+
+# Step 2: Render PDF pages as images
+execute_script(interpreter="bash", description="Rendering slides as images for QA", code="""
+pdftoppm -jpeg -r 150 /workdir/outputs/converted_presentation.pdf /workdir/outputs/slide
 """)
 ```
 
@@ -251,7 +257,7 @@ All pre-installed in the workspace:
 - `python-pptx` — editing existing PPTX
 - `pptxgenjs` (Node.js) — creating from scratch
 - `sharp` (Node.js) — SVG-to-PNG rasterisation for icons
-- `soffice` (LibreOffice) — PPTX-to-PDF conversion for QA
+- `convert_document` tool — PPTX-to-PDF conversion (via Lambda)
 - `pdftoppm` (Poppler) — PDF-to-image conversion for QA
 
 ## File Paths

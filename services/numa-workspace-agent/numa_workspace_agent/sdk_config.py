@@ -313,7 +313,6 @@ ALLOWED_TOOLS = [
     "Bash(grep:*)",  # Pattern matching (useful with pipes)
     "Bash(xargs:*)",  # Build command lines from input
     # Document handling binaries (pre-installed in container)
-    "Bash(soffice:*)",  # LibreOffice headless (DOCX/PPTX → PDF)
     "Bash(pdftoppm:*)",  # PDF → images (visual QA)
     "Bash(pdftotext:*)",  # PDF text extraction
     "Bash(pdfimages:*)",  # PDF image extraction

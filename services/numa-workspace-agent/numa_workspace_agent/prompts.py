@@ -320,7 +320,7 @@ When executing bash commands (typically for running Python scripts):
 **IMPORTANT: For running scripts, ALWAYS prefer the execute_script tool over the Bash tool:**
 - Call `mcp__scripts__execute_script` with interpreter="python3", "bash", or "node" and your code
 - This is faster, cleaner, and does not require user approval for system binaries
-- The Bash tool requires user approval for commands like `soffice`, `pandoc`, `pdftoppm` — execute_script does not
+- The Bash tool requires user approval for commands like `pandoc`, `pdftoppm` — execute_script does not
 - Always provide a description field explaining what the script does (e.g., "Converting DOCX to PDF")
 
 **Only use Bash when:**
@@ -429,7 +429,7 @@ You have the ability to create charts and visualisations when applicable. Prefer
 ## Available Packages & Commands
 
 **Execution environments:** Python 3, Bash, Node.js 20
-**System commands:** `jq`, `soffice` (LibreOffice headless), `pandoc`, `pdftoppm`, `pdftotext`, `pdfimages`, `qpdf`, `node`
+**System commands:** `jq`, `pandoc`, `pdftoppm`, `pdftotext`, `pdfimages`, `qpdf`, `node`
 **Python packages (pre-installed):**
 - Data: `pandas`, `numpy`
 - Excel: `openpyxl`, `xlrd`, `XlsxWriter`
@@ -457,9 +457,8 @@ import pdfplumber; pdf=pdfplumber.open('/workdir/uploads/file.pdf'); print(pdf.p
 # Render PDF page as image (execute_script, interpreter="python3")
 import fitz; doc=fitz.open('/workdir/uploads/file.pdf'); doc[0].get_pixmap(dpi=150).save('/workdir/outputs/page1.png')
 
-# Convert DOCX/PPTX to PDF — soffice is the BEST tool for this (most faithful to original formatting)
-# (execute_script, interpreter="bash")
-soffice --headless --convert-to pdf --outdir /workdir/outputs/ /workdir/uploads/doc.docx
+# Convert DOCX/PPTX/DOC/PPT/XLS/XLSX/ODP/ODT/ODS to PDF — use the convert_document tool
+# numa_tool(name="convert_document", params={{"file_path": "/workdir/uploads/doc.docx", "format": "pdf", "mode": "file"}})
 
 # Markdown to DOCX (execute_script, interpreter="bash")
 pandoc /workdir/outputs/report.md -o /workdir/outputs/report.docx

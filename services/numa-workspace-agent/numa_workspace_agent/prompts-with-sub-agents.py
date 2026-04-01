@@ -461,7 +461,7 @@ You have the ability to create charts and visualisations when applicable. Prefer
 ## Available Packages & Commands
 
 **Execution environments:** Python 3, Bash, Node.js 20
-**System commands:** `jq`, `soffice` (LibreOffice headless), `pandoc`, `pdftoppm`, `pdftotext`, `pdfimages`, `qpdf`, `node`
+**System commands:** `jq`, `pandoc`, `pdftoppm`, `pdftotext`, `pdfimages`, `qpdf`, `node`
 **Python packages (pre-installed):**
 - Data: `pandas`, `numpy`
 - Excel: `openpyxl`, `xlrd`, `XlsxWriter`
@@ -487,8 +487,8 @@ python3 -c "import pdfplumber; pdf=pdfplumber.open('/workdir/uploads/file.pdf');
 # Render PDF page as image (PyMuPDF)
 python3 -c "import fitz; doc=fitz.open('/workdir/uploads/file.pdf'); doc[0].get_pixmap(dpi=150).save('/workdir/outputs/page1.png')"
 
-# Convert DOCX to PDF (LibreOffice)
-soffice --headless --convert-to pdf --outdir /workdir/outputs/ /workdir/uploads/doc.docx
+# Convert DOCX/PPTX/DOC/PPT/XLS/XLSX to PDF — use the convert_document tool
+# numa_tool(name="convert_document", params={{"file_path": "/workdir/uploads/doc.docx", "format": "pdf", "mode": "file"}})
 
 # Markdown to DOCX (Pandoc)
 pandoc /workdir/outputs/report.md -o /workdir/outputs/report.docx

@@ -251,12 +251,29 @@ async def _handle_convert_document(params: dict[str, Any]) -> dict[str, Any]:
     if mode not in ("markdown", "file"):
         return _err(f"Invalid mode '{mode}'. Must be 'markdown' or 'file'.")
 
-    # For file mode, validate input format
+    # For file mode, validate input format (matches document-converter Lambda)
+    _SUPPORTED_INPUT_FORMATS = {
+        "pdf",
+        "docx",
+        "doc",
+        "pptx",
+        "ppt",
+        "xlsx",
+        "xls",
+        "odp",
+        "ods",
+        "odt",
+        "rtf",
+        "key",
+        "numbers",
+        "pages",
+    }
     if mode == "file":
         file_ext = Path(file_path).suffix.lower().lstrip(".")
-        if file_ext not in ("pdf", "docx"):
+        if file_ext not in _SUPPORTED_INPUT_FORMATS:
             return _err(
-                f"For mode 'file', input must be .pdf or .docx (got .{file_ext})."
+                f"For mode 'file', input must be a supported format (got .{file_ext}). "
+                f"Supported: {', '.join(sorted(_SUPPORTED_INPUT_FORMATS))}"
             )
         if file_ext == fmt:
             return _err(

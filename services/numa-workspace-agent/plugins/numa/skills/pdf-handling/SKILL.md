@@ -31,7 +31,7 @@ Create, read, manipulate, and convert PDF files.
 | Extract images from PDFs           | **PyMuPDF (fitz)**                           | Access embedded images directly     |
 | Render pages as images             | **pdf2image** or **PyMuPDF**                 | Page-to-image conversion            |
 | Scanned/complex documents          | `extract_content` tool (via `numa_tool` MCP) | Vision AI — better than local OCR   |
-| Convert DOCX/PPTX → PDF            | `soffice --headless`                         | Local LibreOffice conversion        |
+| Convert DOCX/PPTX → PDF            | `convert_document` tool (mode="file")        | Lambda-based LibreOffice conversion |
 
 ---
 
@@ -645,25 +645,19 @@ with open("/workdir/outputs/filled.pdf", "wb") as f:
 
 ---
 
-## Local Conversion via LibreOffice
+## Document Conversion to PDF
 
-Convert DOCX, PPTX, XLSX to PDF locally. Both `execute_script` and the Bash tool work for `soffice` and `pandoc`. Prefer `execute_script` for inline code per system prompt convention.
+Convert DOCX, PPTX, XLSX, and other Office formats to PDF using the `convert_document` tool:
 
-```python
-# DOCX → PDF (via execute_script with interpreter="bash")
-import subprocess
-subprocess.run(["soffice", "--headless", "--convert-to", "pdf", "--outdir", "/workdir/outputs/", "/workdir/uploads/document.docx"], check=True)
 ```
-
-Or as bash commands (via execute_script with interpreter="bash"):
-
-```bash
 # DOCX → PDF
-soffice --headless --convert-to pdf --outdir /workdir/outputs/ /workdir/uploads/document.docx
+numa_tool(name="convert_document", params={"file_path": "/workdir/uploads/document.docx", "format": "pdf", "mode": "file"})
 
 # PPTX → PDF (useful for visual QA of presentations)
-soffice --headless --convert-to pdf --outdir /workdir/outputs/ /workdir/uploads/presentation.pptx
+numa_tool(name="convert_document", params={"file_path": "/workdir/uploads/presentation.pptx", "format": "pdf", "mode": "file"})
 ```
+
+Supported input formats: `.doc`, `.docx`, `.pptx`, `.ppt`, `.xlsx`, `.xls`, `.odp`, `.ods`, `.odt`, `.rtf`, `.key`, `.numbers`, `.pages`
 
 ---
 
@@ -702,24 +696,14 @@ In these cases, switch to the `extract_content` tool (via `numa_tool` MCP) which
 
 ## Document Conversion (PDF ↔ DOCX)
 
-### Local Conversion (preferred)
-
-```bash
-# DOCX → PDF (local, fast)
-soffice --headless --convert-to pdf --outdir /workdir/outputs/ /workdir/uploads/document.docx
-
-# PDF → DOCX (local, variable quality)
-soffice --headless --convert-to docx --outdir /workdir/outputs/ /workdir/uploads/document.pdf
-```
-
-### MCP Tool Fallback
+Use the `convert_document` tool for all document format conversions:
 
 ```
-# PDF → DOCX
-mcp__numa__numa_tool(name="convert_document", description="Converting PDF to DOCX", params={"file_path": "/workdir/uploads/document.pdf", "format": "docx", "mode": "file"})
-
 # DOCX → PDF
-mcp__numa__numa_tool(name="convert_document", description="Converting DOCX to PDF", params={"file_path": "/workdir/uploads/document.docx", "format": "pdf", "mode": "file"})
+numa_tool(name="convert_document", params={"file_path": "/workdir/uploads/document.docx", "format": "pdf", "mode": "file"})
+
+# PDF → DOCX
+numa_tool(name="convert_document", params={"file_path": "/workdir/uploads/document.pdf", "format": "docx", "mode": "file"})
 ```
 
 ---

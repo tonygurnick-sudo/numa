@@ -28,8 +28,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl ca-certificates jq \
     # PDF-to-image, text extraction (pdftoppm, pdftotext, pdfimages)
     poppler-utils \
-    # Document conversion (DOCX/PPTX/XLSX → PDF, formula recalc)
-    libreoffice-writer-nogui libreoffice-calc-nogui libreoffice-impress-nogui \
     # WeasyPrint system dependencies (HTML→PDF)
     libpango-1.0-0 libpangocairo-1.0-0 libcairo2 \
     libgdk-pixbuf-2.0-0 libffi-dev libxml2 libxslt1.1 \

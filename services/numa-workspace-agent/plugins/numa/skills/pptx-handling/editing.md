@@ -29,9 +29,10 @@ Use python-pptx to edit existing PPTX files or fill templates with data.
 
 3. **Visual overview** (convert to images):
 
-   ```bash
-   soffice --headless --convert-to pdf --outdir /workdir/outputs/ /workdir/uploads/template.pptx
-   pdftoppm -jpeg -r 150 /workdir/outputs/template.pdf /workdir/outputs/slide
+   ```
+   # Convert PPTX to PDF using convert_document tool, then render pages:
+   numa_tool(name="convert_document", params={"file_path": "/workdir/uploads/template.pptx", "format": "pdf", "mode": "file"})
+   # Then: pdftoppm -jpeg -r 150 /workdir/outputs/converted_template.pdf /workdir/outputs/slide
    ```
 
 4. **Plan slide mapping**: For each content section, choose a template slide. Use varied layouts — don't default to title + bullets for every slide.
