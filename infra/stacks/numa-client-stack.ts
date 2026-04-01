@@ -546,6 +546,7 @@ export class NumaClientStack extends TerraformStack {
       perClientSchedulingMinIntervalMinutes: clientConfig.schedulingMinIntervalMinutes,
       globalSchedulingMinIntervalMinutes: props.globalSchedulingMinIntervalMinutes,
       mfaSettingsTableName: core.mfaSettingsTable.name,
+      userPoolId: core.userPoolId,
       chatSettingsTableName: core.chatSettingsTable.name,
       dataConnectorsTableName: core.dataConnectorsTable.name,
       dataConnectorsSettingsTableName: core.dataConnectorsSettingsTable.name,

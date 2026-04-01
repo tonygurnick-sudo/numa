@@ -4,10 +4,35 @@ export type MfaSettings = {
   rememberDurationHours: number;
   sessionIdleTimeoutMinutes: number;
   maxSessionDurationHours: number;
+  recoveryCodesEnabled?: boolean;
+};
+
+export type RecoveryCodesStatus = {
+  hasRecoveryCodes: boolean;
+  remainingCodes: number;
+  totalCodes: number;
+  enabled: boolean;
+};
+
+export type RecoveryCodeVerifyResult = {
+  success: boolean;
+  error?: string;
+};
+
+export type MfaResetStatus = {
+  status: 'none' | 'pending' | 'expired' | 'completed';
+  expiresAt?: string | null;
+  resetAt?: string;
+};
+
+export type MfaResetResult = {
+  status: 'reset_initiated';
+  graceExpiresAt: string;
 };
 
 type NumaGet = (url: string, params?: unknown, headers?: Record<string, string>) => Promise<unknown>;
 type NumaPut = (url: string, data?: unknown, headers?: Record<string, string>) => Promise<unknown>;
+type NumaPost = (url: string, data?: unknown, headers?: Record<string, string>) => Promise<unknown>;
 
 const DEFAULT_SETTINGS: MfaSettings = {
   rememberDurationHours: 0,
@@ -21,6 +46,7 @@ const parseSettings = (data: unknown): MfaSettings => {
     rememberDurationHours: typeof obj?.rememberDurationHours === 'number' ? obj.rememberDurationHours : 0,
     sessionIdleTimeoutMinutes: typeof obj?.sessionIdleTimeoutMinutes === 'number' ? obj.sessionIdleTimeoutMinutes : 0,
     maxSessionDurationHours: typeof obj?.maxSessionDurationHours === 'number' ? obj.maxSessionDurationHours : 0,
+    recoveryCodesEnabled: obj?.recoveryCodesEnabled === true,
   };
 };
 
@@ -45,6 +71,7 @@ export const AdminMfaSettingsService = {
       rememberDurationHours: number;
       sessionIdleTimeoutMinutes?: number;
       maxSessionDurationHours?: number;
+      recoveryCodesEnabled?: boolean;
     },
     numaPut?: NumaPut
   ): Promise<void> {
@@ -76,6 +103,22 @@ export const AdminMfaSettingsService = {
     }
   },
 
+  async validateDevices(deviceKeys: string[], accessToken: string): Promise<Set<string>> {
+    try {
+      const API_ENDPOINT = sessionStorage.getItem('API_ENDPOINT') || '/api';
+      const resp = await fetch(`${API_ENDPOINT}/settings/mfa/validate-devices`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+        body: JSON.stringify({ deviceKeys }),
+      });
+      if (!resp.ok) return new Set();
+      const json = (await resp.json()) as { validDevices?: string[] };
+      return new Set(json.validDevices ?? []);
+    } catch {
+      return new Set();
+    }
+  },
+
   async validateDevice(deviceKey: string): Promise<boolean> {
     try {
       const API_ENDPOINT = sessionStorage.getItem('API_ENDPOINT') || '/api';
@@ -101,6 +144,85 @@ export const AdminMfaSettingsService = {
     });
     if (!resp.ok) {
       throw new Error(`revokeDeviceTrust failed: ${resp.status}`);
+    }
+  },
+
+  async resetUserMfa(targetUserId: string, numaPost: NumaPost): Promise<MfaResetResult> {
+    const res = (await numaPost('/api/settings/mfa/reset-user', { targetUserId })) as MfaResetResult;
+    return res;
+  },
+
+  async getResetStatus(userId: string, numaGet: NumaGet): Promise<MfaResetStatus> {
+    try {
+      const res = (await numaGet(
+        `/api/settings/mfa/reset-status?userId=${encodeURIComponent(userId)}`
+      )) as MfaResetStatus;
+      return res;
+    } catch {
+      return { status: 'none' };
+    }
+  },
+
+  async generateRecoveryCodes(numaPost: NumaPost): Promise<string[]> {
+    const res = (await numaPost('/api/settings/mfa/recovery-codes/generate')) as { codes: string[] };
+    return res.codes;
+  },
+
+  async verifyRecoveryCode(code: string, username: string): Promise<RecoveryCodeVerifyResult> {
+    try {
+      const API_ENDPOINT = sessionStorage.getItem('API_ENDPOINT') || '/api';
+      const resp = await fetch(`${API_ENDPOINT}/settings/mfa/recovery-codes/verify`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code, username }),
+      });
+      if (resp.status === 429) {
+        const json = (await resp.json()) as { error?: string };
+        return { success: false, error: json.error || i18n.t('auth:recoveryCodes.rateLimited') };
+      }
+      if (!resp.ok) {
+        return { success: false, error: i18n.t('auth:recoveryCodes.verifyFailed') };
+      }
+      return (await resp.json()) as RecoveryCodeVerifyResult;
+    } catch {
+      return { success: false, error: i18n.t('auth:recoveryCodes.verifyFailed') };
+    }
+  },
+
+  async getRecoveryCodesStatus(numaGet: NumaGet): Promise<RecoveryCodesStatus> {
+    try {
+      const res = (await numaGet('/api/settings/mfa/recovery-codes/status')) as RecoveryCodesStatus;
+      return res;
+    } catch {
+      return { hasRecoveryCodes: false, remainingCodes: 0, totalCodes: 0, enabled: false };
+    }
+  },
+
+  /** Send email OTP for admin MFA reset verification. Called mid-login with pending tokens. */
+  async sendResetOtp(numaPost: NumaPost): Promise<{ sent: boolean; maskedEmail?: string; error?: string }> {
+    try {
+      const res = (await numaPost('/api/settings/mfa/send-reset-otp')) as {
+        sent: boolean;
+        maskedEmail?: string;
+      };
+      return res;
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to send verification code';
+      return { sent: false, error: msg };
+    }
+  },
+
+  /** Verify email OTP for admin MFA reset. Called mid-login with pending tokens. */
+  async verifyResetOtp(code: string, numaPost: NumaPost): Promise<{ success: boolean; error?: string }> {
+    try {
+      const res = (await numaPost('/api/settings/mfa/verify-reset-otp', { code })) as {
+        success: boolean;
+        error?: string;
+      };
+      return res;
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Verification failed';
+      return { success: false, error: msg };
     }
   },
 };

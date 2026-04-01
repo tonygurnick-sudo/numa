@@ -514,17 +514,46 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
       route: { verb: 'PUT', path: 'settings/scheduling' },
     });
 
-    // Admin MFA Settings API (GET/PUT device remember duration)
+    // Admin MFA Settings API (GET/PUT device remember duration + admin MFA reset)
     const adminMfaEnv = {
       CLIENT_NAME: props.clientName,
       MFA_SETTINGS_TABLE_NAME: props.mfaSettingsTableName,
+      USER_POOL_ID: props.userPoolId,
+      ...(props.emailSenderLambdaArn && {
+        EMAIL_SENDER_LAMBDA_ARN: props.emailSenderLambdaArn,
+      }),
     } as Record<string, string>;
     const adminMfaPolicy = [
       {
         effect: 'Allow',
-        actions: ['dynamodb:GetItem', 'dynamodb:PutItem', 'dynamodb:DeleteItem'],
+        actions: [
+          'dynamodb:GetItem',
+          'dynamodb:PutItem',
+          'dynamodb:DeleteItem',
+          'dynamodb:UpdateItem',
+          'dynamodb:Query',
+        ],
         resources: [`arn:aws:dynamodb:*:*:table/${props.mfaSettingsTableName}`],
       },
+      {
+        effect: 'Allow',
+        actions: [
+          'cognito-idp:AdminSetUserMFAPreference',
+          'cognito-idp:AdminUserGlobalSignOut',
+          'cognito-idp:AdminGetUser',
+        ],
+        resources: [`arn:aws:cognito-idp:*:*:userpool/${props.userPoolId}`],
+      },
+      // Centralized email sender for MFA notifications and OTP delivery
+      ...(props.emailSenderLambdaArn
+        ? [
+            {
+              effect: 'Allow' as const,
+              actions: ['lambda:InvokeFunction'],
+              resources: [props.emailSenderLambdaArn],
+            },
+          ]
+        : []),
     ];
     this.addLambdaFunction(this, 'admin-mfa-settings-get', {
       addAuthorizer: false, // Public: Login page fetches this mid-auth before tokens are available
@@ -564,6 +593,16 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
       additionalPolicyStatements: adminMfaPolicy,
       route: { verb: 'POST', path: 'settings/mfa/validate-device' },
     });
+    // Device trust: batch validate (authenticated — called from Security tab to filter device list)
+    this.addLambdaFunction(this, 'admin-mfa-validate-devices', {
+      addAuthorizer: true,
+      lambdaDirectory: 'node/admin-mfa-settings',
+      runtime: 'nodejs22.x',
+      handler: 'index.handler',
+      environment: adminMfaEnv,
+      additionalPolicyStatements: adminMfaPolicy,
+      route: { verb: 'POST', path: 'settings/mfa/validate-devices' },
+    });
     // Device trust: revoke (authenticated — called when user forgets a device)
     this.addLambdaFunction(this, 'admin-mfa-device-trust-revoke', {
       addAuthorizer: true,
@@ -573,6 +612,90 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
       environment: adminMfaEnv,
       additionalPolicyStatements: adminMfaPolicy,
       route: { verb: 'DELETE', path: 'settings/mfa/device-trust' },
+    });
+    // Admin MFA reset: resets a user's MFA and creates a grace period (admin-only)
+    this.addLambdaFunction(this, 'admin-mfa-reset-user', {
+      addAuthorizer: true,
+      lambdaDirectory: 'node/admin-mfa-settings',
+      runtime: 'nodejs22.x',
+      handler: 'index.handler',
+      environment: adminMfaEnv,
+      additionalPolicyStatements: adminMfaPolicy,
+      route: { verb: 'POST', path: 'settings/mfa/reset-user' },
+    });
+    // Complete MFA reset: called by user after successful re-enrollment to clear grace period
+    this.addLambdaFunction(this, 'admin-mfa-complete-reset', {
+      addAuthorizer: true,
+      lambdaDirectory: 'node/admin-mfa-settings',
+      runtime: 'nodejs22.x',
+      handler: 'index.handler',
+      environment: adminMfaEnv,
+      additionalPolicyStatements: adminMfaPolicy,
+      route: { verb: 'POST', path: 'settings/mfa/complete-reset' },
+    });
+    // Admin MFA reset status: check if a user has a pending/expired MFA reset (admin-only)
+    this.addLambdaFunction(this, 'admin-mfa-reset-status', {
+      addAuthorizer: true,
+      lambdaDirectory: 'node/admin-mfa-settings',
+      runtime: 'nodejs22.x',
+      handler: 'index.handler',
+      environment: adminMfaEnv,
+      additionalPolicyStatements: adminMfaPolicy,
+      route: { verb: 'GET', path: 'settings/mfa/reset-status' },
+    });
+    // Recovery codes: generate (authenticated — generates and stores hashed recovery codes)
+    this.addLambdaFunction(this, 'admin-mfa-recovery-generate', {
+      addAuthorizer: true,
+      lambdaDirectory: 'node/admin-mfa-settings',
+      runtime: 'nodejs22.x',
+      handler: 'index.handler',
+      environment: adminMfaEnv,
+      additionalPolicyStatements: adminMfaPolicy,
+      route: { verb: 'POST', path: 'settings/mfa/recovery-codes/generate' },
+    });
+    // Recovery codes: verify (public — called mid-login to validate a recovery code).
+    // TODO(SECURITY): Add AWS WAF IP-based rate limiting on this path before production.
+    // The application-level rate limit (5 attempts / 15 min per username) prevents brute
+    // force, but without IP-based limiting an attacker can try 5 codes for every known
+    // username in parallel. WAF rule: ~10 requests/min per IP on this route.
+    this.addLambdaFunction(this, 'admin-mfa-recovery-verify', {
+      addAuthorizer: false,
+      lambdaDirectory: 'node/admin-mfa-settings',
+      runtime: 'nodejs22.x',
+      handler: 'index.handler',
+      environment: adminMfaEnv,
+      additionalPolicyStatements: adminMfaPolicy,
+      route: { verb: 'POST', path: 'settings/mfa/recovery-codes/verify' },
+    });
+    // Recovery codes: status (authenticated — returns remaining code count)
+    this.addLambdaFunction(this, 'admin-mfa-recovery-status', {
+      addAuthorizer: true,
+      lambdaDirectory: 'node/admin-mfa-settings',
+      runtime: 'nodejs22.x',
+      handler: 'index.handler',
+      environment: adminMfaEnv,
+      additionalPolicyStatements: adminMfaPolicy,
+      route: { verb: 'GET', path: 'settings/mfa/recovery-codes/status' },
+    });
+    // Email OTP: send verification code during admin MFA reset (authorized — user has tokens from password login)
+    this.addLambdaFunction(this, 'admin-mfa-send-reset-otp', {
+      addAuthorizer: true,
+      lambdaDirectory: 'node/admin-mfa-settings',
+      runtime: 'nodejs22.x',
+      handler: 'index.handler',
+      environment: adminMfaEnv,
+      additionalPolicyStatements: adminMfaPolicy,
+      route: { verb: 'POST', path: 'settings/mfa/send-reset-otp' },
+    });
+    // Email OTP: verify code during admin MFA reset (authorized)
+    this.addLambdaFunction(this, 'admin-mfa-verify-reset-otp', {
+      addAuthorizer: true,
+      lambdaDirectory: 'node/admin-mfa-settings',
+      runtime: 'nodejs22.x',
+      handler: 'index.handler',
+      environment: adminMfaEnv,
+      additionalPolicyStatements: adminMfaPolicy,
+      route: { verb: 'POST', path: 'settings/mfa/verify-reset-otp' },
     });
 
     // User Chat Settings API (per-user defaults for tools, KBs, integrations)
@@ -1728,6 +1851,8 @@ export interface AppAgnosticApiGatewayLambdaCollectionProps extends Omit<
   globalSchedulingMinIntervalMinutes?: number;
   /** MFA settings table name for device remember duration. */
   mfaSettingsTableName: string;
+  /** Cognito User Pool ID — needed for admin MFA reset operations. */
+  userPoolId: string;
   /** User chat settings table name for per-user defaults (tools, KBs, integrations). */
   chatSettingsTableName: string;
   /** Data connectors table name for per-user connector configs. */

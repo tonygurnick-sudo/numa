@@ -17,26 +17,32 @@ interface UserDetailsModalProps {
   show: boolean;
   user: User | null;
   currentUserSub: string | undefined;
+  mfaEnabled?: boolean;
   onHide: () => void;
   onPromoteToAdmin: (user: User) => Promise<void>;
   onDemoteFromAdmin: (username: string) => Promise<void>;
   onDeleteUser: (user: User) => Promise<void>;
+  onResetMfa?: (user: User) => Promise<void>;
 }
 
-type ModalView = 'details' | 'promote' | 'delete';
+type ModalView = 'details' | 'promote' | 'delete' | 'mfa-reset';
 
 export function UserDetailsModal({
   show,
   user,
   currentUserSub,
+  mfaEnabled = false,
   onHide,
   onPromoteToAdmin,
   onDemoteFromAdmin,
   onDeleteUser,
+  onResetMfa,
 }: UserDetailsModalProps): React.JSX.Element {
   const { t } = useTranslation('userManagement');
   const [view, setView] = useState<ModalView>('details');
   const [isProcessing, setIsProcessing] = useState(false);
+  const [mfaResetSuccess, setMfaResetSuccess] = useState(false);
+  const [mfaResetError, setMfaResetError] = useState<string | null>(null);
 
   if (!user) return <></>;
 
@@ -48,6 +54,8 @@ export function UserDetailsModal({
   const handleClose = () => {
     if (isProcessing) return;
     setView('details');
+    setMfaResetSuccess(false);
+    setMfaResetError(null);
     onHide();
   };
 
@@ -87,12 +95,39 @@ export function UserDetailsModal({
     }
   };
 
+  const confirmMfaReset = async () => {
+    if (!onResetMfa) return;
+    setIsProcessing(true);
+    setMfaResetError(null);
+    try {
+      await onResetMfa(user);
+      setMfaResetSuccess(true);
+      setView('details');
+    } catch (err) {
+      setMfaResetError(err instanceof Error ? err.message : t('details.mfa.resetError'));
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
   const renderDetailsView = () => (
     <>
       <Modal.Header closeButton={!isProcessing}>
         <Modal.Title>{t('details.title')}</Modal.Title>
       </Modal.Header>
       <Modal.Body>
+        {mfaResetSuccess && (
+          <Alert variant="success" dismissible onClose={() => setMfaResetSuccess(false)}>
+            {t('details.mfa.resetSuccess')}
+          </Alert>
+        )}
+
+        {mfaResetError && (
+          <Alert variant="danger" dismissible onClose={() => setMfaResetError(null)}>
+            {mfaResetError}
+          </Alert>
+        )}
+
         <div className="mb-4">
           <Row className="mb-3">
             <Col sm={4} className="text-muted">
@@ -153,6 +188,21 @@ export function UserDetailsModal({
                 {isAdmin ? t('details.permissions.descriptions.admin') : t('details.permissions.descriptions.standard')}
               </Form.Text>
             </Form.Group>
+
+            {mfaEnabled && onResetMfa && (
+              <>
+                <hr />
+                <h6 className="mb-3">{t('details.mfa.title')}</h6>
+                <Button
+                  variant="outline-warning"
+                  size="sm"
+                  onClick={() => setView('mfa-reset')}
+                  disabled={isProcessing}
+                >
+                  {t('details.mfa.resetButton')}
+                </Button>
+              </>
+            )}
           </>
         )}
 
@@ -311,11 +361,33 @@ export function UserDetailsModal({
     </>
   );
 
+  const renderMfaResetView = () => (
+    <>
+      <Modal.Header closeButton={!isProcessing}>
+        <Modal.Title>{t('details.mfa.resetConfirmTitle')}</Modal.Title>
+      </Modal.Header>
+      <Modal.Body>
+        <Alert variant="warning" className="mb-3">
+          {t('details.mfa.resetConfirmBody', { email: user.email })}
+        </Alert>
+      </Modal.Body>
+      <Modal.Footer>
+        <Button variant="secondary" onClick={() => setView('details')} disabled={isProcessing}>
+          {t('actions.cancel')}
+        </Button>
+        <Button variant="warning" onClick={confirmMfaReset} disabled={isProcessing}>
+          {isProcessing ? t('details.mfa.resetting') : t('details.mfa.resetConfirmAction')}
+        </Button>
+      </Modal.Footer>
+    </>
+  );
+
   return (
     <Modal show={show} onHide={handleClose} backdrop={isProcessing ? 'static' : true} size="lg">
       {view === 'details' && renderDetailsView()}
       {view === 'promote' && renderPromoteView()}
       {view === 'delete' && renderDeleteView()}
+      {view === 'mfa-reset' && renderMfaResetView()}
     </Modal>
   );
 }
