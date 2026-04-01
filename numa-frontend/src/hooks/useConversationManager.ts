@@ -237,12 +237,10 @@ export const useConversationManager = (options: UseConversationManagerOptions = 
           // Update sessionStorage with workspace status from metadata
           sessionStorage.setItem(workspaceStorageKey, savedConvo.isWorkspaceConversation === false ? 'false' : 'true');
         } else {
-          setConversationId(metaItems[0].conversation_id);
-          // Update sessionStorage with workspace status from first conversation
-          sessionStorage.setItem(
-            workspaceStorageKey,
-            metaItems[0].isWorkspaceConversation === false ? 'false' : 'true'
-          );
+          // No saved conversation in this tab session — start fresh rather than
+          // loading the most recent conversation from history.
+          handleNewChat();
+          return;
         }
       } catch (err) {
         if (!cancelled) {

@@ -120,6 +120,13 @@ type NewChatProps = {
   uploadingFiles?: UploadingFile[];
   /** Cancel an in-progress upload (V2 only) */
   onCancelUpload?: (id: string) => void;
+  // Voice recording props
+  /** Whether voice input feature is enabled */
+  voiceInputEnabled?: boolean;
+  /** Current voice recording state */
+  voiceRecordingState?: 'idle' | 'recording' | 'uploading' | 'error';
+  /** Callback when voice recording is complete */
+  onVoiceRecordingComplete?: (blob: Blob, filename: string) => void;
 };
 
 // Avatar for recent conversations
@@ -230,6 +237,9 @@ const NewChat = ({
   onOpenAgents,
   uploadingFiles = [],
   onCancelUpload,
+  voiceInputEnabled = false,
+  voiceRecordingState = 'idle',
+  onVoiceRecordingComplete,
 }: NewChatProps) => {
   const { t } = useTranslation('chat');
   // ------- Mobile detection and tab state -------
@@ -490,6 +500,9 @@ const NewChat = ({
         setSelectedModelId={setSelectedModelId}
         showModelSelector={showModelSelector}
         onPasteFiles={onFilesDropped}
+        voiceInputEnabled={voiceInputEnabled}
+        voiceRecordingState={voiceRecordingState}
+        onVoiceRecordingComplete={onVoiceRecordingComplete}
       />
     </div>
   );

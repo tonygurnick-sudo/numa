@@ -69,6 +69,8 @@ type StreamConfig = {
   migrateFromV1?: boolean;
   /** Agent ID for custom agent prompts and restrictions */
   agentId?: string;
+  /** Paths to voice recordings that should be auto-transcribed into the user message */
+  voiceRecordings?: string[];
 };
 
 type UseWorkspaceChatStreamingOptions = {
@@ -187,6 +189,7 @@ export function useWorkspaceChatStreaming({
         modelId,
         migrateFromV1,
         agentId,
+        voiceRecordings,
       } = config;
 
       // Store config for retry capability
@@ -233,6 +236,7 @@ export function useWorkspaceChatStreaming({
           attachments,
           hasUploads: !!attachments?.files && attachments.files.length > 0,
           expectedUploadPaths: attachments?.files?.map((a) => a.path),
+          voiceRecordings,
           migrateFromV1: migrateFromV1 || false,
           agentId,
           requestId, // Pass pre-generated requestId so stop works during streaming
@@ -276,8 +280,12 @@ export function useWorkspaceChatStreaming({
                   updated[updated.length - 1] = lastMsg;
                 }
 
-                // Clear processing/thinking status when text starts arriving
-                if (lastMsg.status === 'thinking' || lastMsg.status === 'processing') {
+                // Clear processing/thinking/transcribing status when text starts arriving
+                if (
+                  lastMsg.status === 'thinking' ||
+                  lastMsg.status === 'processing' ||
+                  lastMsg.status === 'transcribing'
+                ) {
                   lastMsg.status = 'streaming';
                 }
 
@@ -333,7 +341,7 @@ export function useWorkspaceChatStreaming({
                   updated[updated.length - 1] = lastMsg;
                 }
 
-                if (lastMsg.status === 'processing') {
+                if (lastMsg.status === 'processing' || lastMsg.status === 'transcribing') {
                   lastMsg.status = 'thinking';
                 }
 
@@ -428,8 +436,12 @@ export function useWorkspaceChatStreaming({
                       updated[updated.length - 1] = lastMsg;
                     }
 
-                    // Clear processing/thinking status when tool starts
-                    if (lastMsg.status === 'processing' || lastMsg.status === 'thinking') {
+                    // Clear processing/thinking/transcribing status when tool starts
+                    if (
+                      lastMsg.status === 'processing' ||
+                      lastMsg.status === 'thinking' ||
+                      lastMsg.status === 'transcribing'
+                    ) {
                       lastMsg.status = 'streaming';
                     }
 
@@ -688,6 +700,19 @@ export function useWorkspaceChatStreaming({
             }
           }
 
+          // Handle transcribing events (voice input pre-processing)
+          if (event.type === 'transcribing') {
+            setMessages((prev) => {
+              const updated = [...prev];
+              const lastIdx = updated.length - 1;
+              if (lastIdx >= 0 && updated[lastIdx].role === 'assistant') {
+                updated[lastIdx] = { ...updated[lastIdx], status: 'transcribing' };
+              }
+              return updated;
+            });
+            return;
+          }
+
           // Process non-StreamEvent events
           processSDKEvent(event, workspaceChatEventContextRef.current, workspaceChatHelpers);
         },
@@ -860,8 +885,10 @@ export function useWorkspaceChatStreaming({
 
           setMessages((prev) => {
             const updated = [...prev];
-            // Remove any processing/thinking status messages
-            const statusIndex = updated.findIndex((m) => m.status === 'thinking' || m.status === 'processing');
+            // Remove any processing/thinking/transcribing status messages
+            const statusIndex = updated.findIndex(
+              (m) => m.status === 'thinking' || m.status === 'processing' || m.status === 'transcribing'
+            );
             if (statusIndex >= 0) {
               updated.splice(statusIndex, 1);
             }

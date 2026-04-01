@@ -393,6 +393,13 @@ export const AuthProvider = ({ children, initialTokens }) => {
     localStorage.removeItem('lastTokenValidation');
     sessionStorage.removeItem('numaSessionStart');
     sessionStartRef.current = 0;
+
+    // Clear chat state so re-login starts a fresh conversation
+    localStorage.removeItem('numa_chat_lastInteraction-v2');
+    sessionStorage.removeItem('currentConversationId-v2');
+    sessionStorage.removeItem('isWorkspaceConversation-v2');
+    sessionStorage.removeItem('numa-chat-draft');
+
     clearAllSwrCaches();
     tokensRef.current = { accessToken: null, idToken: null, refreshToken: null };
     decodedTokensRef.current = { accessToken: null, idToken: null };

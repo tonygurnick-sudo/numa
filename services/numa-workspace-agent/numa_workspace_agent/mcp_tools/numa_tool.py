@@ -31,6 +31,7 @@ from claude_agent_sdk import tool
 from numa_workspace_agent.mcp_tools.connect import _format_size, _invoke_connect_tool
 from numa_workspace_agent.mcp_tools.lambda_client import (
     invoke_workspace_tool,
+    invoke_workspace_tool_async,
     is_auto_approved,
     pop_approval_id,
 )
@@ -186,6 +187,26 @@ async def _handle_web_search(params: dict[str, Any]) -> dict[str, Any]:
     return _ok(json.dumps(result, indent=2))
 
 
+AUDIO_VIDEO_EXTENSIONS = {
+    ".mp3",
+    ".mp4",
+    ".wav",
+    ".flac",
+    ".ogg",
+    ".amr",
+    ".webm",
+    ".m4a",
+    ".aac",
+    ".mov",
+    ".mkv",
+    ".avi",
+}
+
+# S3 prefix and workspace root (must match workspace-chat-tools Lambda)
+_S3_PREFIX = "numa-chat/workspace"
+_WORKSPACE_ROOT = "/workdir"
+
+
 async def _handle_extract_content(params: dict[str, Any]) -> dict[str, Any]:
     """Extract text from files — ports extract_content.py main."""
     file_path = params.get("file_path")
@@ -200,6 +221,12 @@ async def _handle_extract_content(params: dict[str, Any]) -> dict[str, Any]:
 
     # Ensure file is in S3 before Lambda invocation
     ensure_file_in_s3(file_path, user_sub, conversation_id)
+
+    # Audio/video files use async invoke + S3 polling to avoid blocking
+    # the stream connection during long transcriptions
+    ext = Path(file_path).suffix.lower()
+    if ext in AUDIO_VIDEO_EXTENSIONS:
+        return await _handle_extract_content_async(file_path, user_sub, conversation_id)
 
     result = invoke_workspace_tool(
         "extract_content",
@@ -231,6 +258,130 @@ async def _handle_extract_content(params: dict[str, Any]) -> dict[str, Any]:
                 "output_path": output_path,
                 "original_file": result.get("original_file", file_path),
                 "text_length": result.get("text_length", 0),
+            },
+            indent=2,
+        )
+    )
+
+
+async def _handle_extract_content_async(
+    file_path: str, user_sub: str, conversation_id: str
+) -> dict[str, Any]:
+    """Async extract_content for audio/video: fire Lambda, poll S3 for result.
+
+    Avoids blocking the agent stream for minutes during long transcriptions.
+    The Lambda writes the transcript to a predictable S3 key; we poll for it.
+    """
+    import asyncio
+    import time
+
+    import boto3
+    from botocore.exceptions import ClientError
+
+    outputs_bucket = os.environ.get("OUTPUTS_BUCKET_NAME", "")
+    if not outputs_bucket:
+        return _err("OUTPUTS_BUCKET_NAME not configured.")
+
+    # Compute the expected output S3 key (must match extract_content.py logic)
+    filename_stem = Path(file_path).stem
+    safe_filename = re.sub(r"[^a-zA-Z0-9_-]", "_", filename_stem)
+    output_s3_key = (
+        f"{_S3_PREFIX}/{user_sub}/conversations/{conversation_id}"
+        f"/outputs/extracted_{safe_filename}.txt"
+    )
+    output_workspace_path = f"{_WORKSPACE_ROOT}/outputs/extracted_{safe_filename}.txt"
+
+    # Create S3 client for polling
+    session = boto3.Session(
+        aws_access_key_id=os.environ.get("NUMA_LOCAL_AWS_ACCESS_KEY_ID"),
+        aws_secret_access_key=os.environ.get("NUMA_LOCAL_AWS_SECRET_ACCESS_KEY"),
+        aws_session_token=os.environ.get("NUMA_LOCAL_AWS_SESSION_TOKEN"),
+        region_name=os.environ.get("AWS_REGION", "us-east-1"),
+    )
+    s3_client = session.client("s3")
+
+    # Delete any stale output from a previous run of the same file,
+    # so we don't immediately poll and find old results
+    try:
+        s3_client.delete_object(Bucket=outputs_bucket, Key=output_s3_key)
+        logger.info(
+            "Deleted stale output before async transcription", key=output_s3_key
+        )
+    except ClientError:
+        pass  # Didn't exist, that's fine
+
+    logger.info(
+        "Starting async audio transcription",
+        file_path=file_path,
+        expected_s3_key=output_s3_key,
+    )
+
+    # Fire Lambda asynchronously (returns immediately with 202)
+    invoke_workspace_tool_async(
+        "extract_content",
+        {"file_path": file_path},
+        extra_event_fields={
+            "user_sub": user_sub,
+            "conversation_id": conversation_id,
+        },
+    )
+
+    # Poll S3 for the output file
+    poll_interval = 5  # seconds
+    max_wait = 900  # 15 minutes
+    start = time.monotonic()
+
+    while time.monotonic() - start < max_wait:
+        try:
+            head = s3_client.head_object(Bucket=outputs_bucket, Key=output_s3_key)
+            # File exists -- transcription complete
+            file_size = head.get("ContentLength", 0)
+            elapsed = round(time.monotonic() - start, 1)
+            logger.info(
+                "Async transcription complete (S3 poll)",
+                s3_key=output_s3_key,
+                poll_seconds=elapsed,
+                file_size=file_size,
+            )
+            break
+        except ClientError as e:
+            error_code = e.response.get("Error", {}).get("Code", "")
+            if error_code in ("404", "NoSuchKey"):
+                # Not ready yet -- expected during processing
+                await asyncio.sleep(poll_interval)
+            else:
+                # Unexpected error (permissions, throttle, etc.)
+                logger.error(
+                    "S3 poll error during async transcription",
+                    error_code=error_code,
+                    error=str(e),
+                )
+                return _err(f"Failed to check transcription status: {e}")
+    else:
+        return _err(
+            f"Transcription timed out after {max_wait // 60} minutes. "
+            f"The file may still be processing -- try again or check "
+            f"{output_workspace_path} later."
+        )
+
+    # Download to workspace
+    download_from_s3(outputs_bucket, output_s3_key, output_workspace_path)
+
+    # Get file size for response
+    try:
+        stat = Path(output_workspace_path).stat()
+        text_length = stat.st_size
+    except OSError:
+        text_length = 0
+
+    return _ok(
+        json.dumps(
+            {
+                "status": "success",
+                "message": f"Audio transcribed to {output_workspace_path}",
+                "output_path": output_workspace_path,
+                "original_file": file_path,
+                "text_length": text_length,
             },
             indent=2,
         )

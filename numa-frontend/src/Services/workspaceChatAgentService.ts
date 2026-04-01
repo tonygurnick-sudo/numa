@@ -237,6 +237,7 @@ async function streamWorkspaceChatAttempt(
     attachments: request.attachments,
     hasUploads: request.hasUploads,
     expectedUploadPaths: request.expectedUploadPaths,
+    voiceRecordings: request.voiceRecordings,
     requestId,
     // V1 to V2 migration flag
     migrateFromV1: request.migrateFromV1 || false,
@@ -982,6 +983,7 @@ export async function invokeWorkspaceAgentSync(
     attachments: request.attachments,
     hasUploads: request.hasUploads,
     expectedUploadPaths: request.expectedUploadPaths,
+    voiceRecordings: request.voiceRecordings,
     requestId,
     migrateFromV1: false,
     agentId: request.agentId,

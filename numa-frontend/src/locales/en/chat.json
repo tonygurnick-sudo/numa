@@ -22,6 +22,26 @@
       "toolsSettings": "Tools Settings",
       "close": "Close"
     },
+    "voice": {
+      "record": "Record voice message",
+      "recording": "Recording",
+      "stop": "Stop recording",
+      "cancel": "Cancel recording",
+      "uploading": "Uploading recording...",
+      "sending": "Sending voice message...",
+      "recordingLength": "Voice recording ({{duration}})",
+      "userMessageLabel": "\ud83c\udfa4 Voice message ({{duration}})",
+      "transcribing": "Transcribing your voice message...",
+      "maxDuration": "Maximum recording length reached",
+      "maxDurationCountdown": "Recording ends in {{remaining}}",
+      "error": {
+        "micDenied": "Microphone access denied. Please allow microphone access in your browser settings.",
+        "noMicrophone": "No microphone found. Please connect a microphone and try again.",
+        "recordingFailed": "Voice recording failed. Please try again.",
+        "transcribeFailed": "Voice transcription failed. Please try again.",
+        "notSupported": "Voice input is not supported in this browser."
+      }
+    },
     "kb": {
       "title": "Knowledge Bases",
       "available": "Available Knowledge Bases",
@@ -69,7 +89,8 @@
     "status": {
       "initializing": "Initializing chat...",
       "processingFile": "Processing Upload...",
-      "thinking": "Thinking..."
+      "thinking": "Thinking...",
+      "transcribing": "Transcribing audio..."
     },
     "roles": {
       "assistant": "Assistant",
