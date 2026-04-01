@@ -360,6 +360,55 @@ def clear_agent_cache():
     get_cached_agent_config.cache_clear()
 
 
+# --- Consolidated Chat Settings ---
+# All user chat settings (approval modes, email signature, user profile) live in the
+# same DynamoDB table with the same key. We fetch once per request via a single
+# GetItem instead of 4 separate calls. No cross-request caching -- user settings
+# must reflect changes immediately on the next message.
+#
+# Call clear_user_settings_cache() at the start of each request to ensure fresh data.
+_user_settings_cache: dict[str, dict] = {}
+
+
+def clear_user_settings_cache() -> None:
+    """Clear the per-request user settings cache. Call at the start of each request."""
+    _user_settings_cache.clear()
+
+
+def _get_cached_user_settings(user_sub: str) -> dict:
+    """Fetch all user chat settings in a single DynamoDB GetItem.
+
+    Within a request, the first caller fetches from DynamoDB and subsequent callers
+    get the cached result. Call clear_user_settings_cache() at request start to
+    ensure fresh data.
+
+    Returns the raw DynamoDB item dict, or empty dict if unavailable.
+    """
+    if user_sub in _user_settings_cache:
+        return _user_settings_cache[user_sub]
+
+    table_name = os.environ.get("CHAT_SETTINGS_TABLE_NAME")
+    if not table_name:
+        return {}
+
+    try:
+        dynamo = _get_dynamodb_client()
+        response = dynamo.get_item(
+            TableName=table_name,
+            Key={"user_id": {"S": user_sub}},
+        )
+        item = response.get("Item", {})
+        _user_settings_cache[user_sub] = item
+        return item
+    except Exception as e:
+        logger.warning(
+            "Failed to fetch user chat settings",
+            user_sub=user_sub[:8] + "...",
+            error=str(e),
+        )
+        return {}
+
+
 # Valid approval modes
 VALID_APPROVAL_MODES = ("always", "non_destructive", "never")
 DEFAULT_APPROVAL_MODE = "non_destructive"
@@ -369,49 +418,16 @@ def fetch_user_approval_mode(user_sub: str) -> str:
     """
     Fetch the user's integration approval mode from the chat settings table.
 
-    The chat settings table stores per-user defaults (tools, KBs, integrations, etc.).
-    The approvalMode field controls how integration tool calls are approved:
-    - 'always': require manual approval for every integration tool call
-    - 'non_destructive': auto-approve read-only actions, require approval for writes
-    - 'never': auto-approve all integration tool calls
-
-    Args:
-        user_sub: The user's Cognito sub (used as partition key in chat settings table)
+    Uses the consolidated settings cache to avoid redundant DynamoDB calls.
 
     Returns:
-        The approval mode string, defaulting to 'always' if not set or table unavailable.
+        The approval mode string, defaulting to 'non_destructive' if not set.
     """
-    table_name = os.environ.get("CHAT_SETTINGS_TABLE_NAME")
-    if not table_name:
-        logger.debug(
-            "CHAT_SETTINGS_TABLE_NAME not configured, using default approval mode"
-        )
+    item = _get_cached_user_settings(user_sub)
+    mode = item.get("approvalMode", {}).get("S", DEFAULT_APPROVAL_MODE)
+    if mode not in VALID_APPROVAL_MODES:
         return DEFAULT_APPROVAL_MODE
-
-    try:
-        dynamo = _get_dynamodb_client()
-        response = dynamo.get_item(
-            TableName=table_name,
-            Key={"user_id": {"S": user_sub}},
-            ProjectionExpression="approvalMode",
-        )
-        item = response.get("Item", {})
-        mode = item.get("approvalMode", {}).get("S", DEFAULT_APPROVAL_MODE)
-        if mode not in VALID_APPROVAL_MODES:
-            logger.warning(
-                "Invalid approval mode in user settings, using default",
-                user_sub=user_sub[:8] + "...",
-                invalid_mode=mode,
-            )
-            return DEFAULT_APPROVAL_MODE
-        return mode
-    except Exception as e:
-        logger.warning(
-            "Failed to fetch user approval mode, using default",
-            user_sub=user_sub[:8] + "...",
-            error=str(e),
-        )
-        return DEFAULT_APPROVAL_MODE
+    return mode
 
 
 VALID_NUMA_TOOL_CATEGORIES = ("agents", "memories", "knowledgeBases", "ops")
@@ -427,43 +443,19 @@ def fetch_numa_tool_approval_mode(user_sub: str) -> dict[str, str]:
     """
     Fetch the user's per-category numa tool approval modes from the chat settings table.
 
-    Each category (agents, memories, knowledgeBases) has its own approval mode:
-    - 'always': require approval for every operation
-    - 'non_destructive': auto-approve read-only ops, require approval for writes
-    - 'never': auto-approve all operations (default)
-
-    Args:
-        user_sub: The user's Cognito sub (used as partition key in chat settings table)
+    Uses the consolidated settings cache to avoid redundant DynamoDB calls.
 
     Returns:
         Dict mapping category to approval mode string.
     """
-    table_name = os.environ.get("CHAT_SETTINGS_TABLE_NAME")
-    if not table_name:
-        return dict(DEFAULT_NUMA_TOOL_APPROVAL_MODE)
-
-    try:
-        dynamo = _get_dynamodb_client()
-        response = dynamo.get_item(
-            TableName=table_name,
-            Key={"user_id": {"S": user_sub}},
-            ProjectionExpression="numaToolApprovalMode",
-        )
-        item = response.get("Item", {})
-        raw = item.get("numaToolApprovalMode", {}).get("M", {})
-        result = dict(DEFAULT_NUMA_TOOL_APPROVAL_MODE)
-        for cat in VALID_NUMA_TOOL_CATEGORIES:
-            val = raw.get(cat, {}).get("S", "")
-            if val in VALID_APPROVAL_MODES:
-                result[cat] = val
-        return result
-    except Exception as e:
-        logger.warning(
-            "Failed to fetch numa tool approval modes, using defaults",
-            user_sub=user_sub[:8] + "...",
-            error=str(e),
-        )
-        return dict(DEFAULT_NUMA_TOOL_APPROVAL_MODE)
+    item = _get_cached_user_settings(user_sub)
+    raw = item.get("numaToolApprovalMode", {}).get("M", {})
+    result = dict(DEFAULT_NUMA_TOOL_APPROVAL_MODE)
+    for cat in VALID_NUMA_TOOL_CATEGORIES:
+        val = raw.get(cat, {}).get("S", "")
+        if val in VALID_APPROVAL_MODES:
+            result[cat] = val
+    return result
 
 
 DEFAULT_EMAIL_SIGNATURE_TEXT = "Sent by my AI assistant, Numa (https://www.arcanum.ai)"
@@ -473,105 +465,57 @@ def fetch_user_email_signature(user_sub: str) -> dict:
     """
     Fetch the user's email signature settings from the chat settings table.
 
-    Returns a dict with 'enabled' (bool) and 'text' (str), defaulting to
-    enabled with the standard Numa signature if not set or table unavailable.
-
-    Args:
-        user_sub: The user's Cognito sub (partition key in chat settings table)
+    Uses the consolidated settings cache to avoid redundant DynamoDB calls.
 
     Returns:
         {"enabled": bool, "text": str}
     """
     defaults = {"enabled": True, "text": DEFAULT_EMAIL_SIGNATURE_TEXT}
-    table_name = os.environ.get("CHAT_SETTINGS_TABLE_NAME")
-    if not table_name:
-        logger.debug(
-            "CHAT_SETTINGS_TABLE_NAME not configured, using default email signature"
-        )
+    item = _get_cached_user_settings(user_sub)
+    if not item:
         return defaults
-
-    try:
-        dynamo = _get_dynamodb_client()
-        response = dynamo.get_item(
-            TableName=table_name,
-            Key={"user_id": {"S": user_sub}},
-            ProjectionExpression="emailSignatureEnabled, emailSignatureText",
-        )
-        item = response.get("Item", {})
-        enabled = item.get("emailSignatureEnabled", {}).get("BOOL", True)
-        text = item.get("emailSignatureText", {}).get("S", DEFAULT_EMAIL_SIGNATURE_TEXT)
-        return {"enabled": enabled, "text": text}
-    except Exception as e:
-        logger.warning(
-            "Failed to fetch user email signature, using default",
-            user_sub=user_sub[:8] + "...",
-            error=str(e),
-        )
-        return defaults
+    enabled = item.get("emailSignatureEnabled", {}).get("BOOL", True)
+    text = item.get("emailSignatureText", {}).get("S", DEFAULT_EMAIL_SIGNATURE_TEXT)
+    return {"enabled": enabled, "text": text}
 
 
 def fetch_user_profile(user_sub: str) -> Optional[dict]:
     """
     Fetch the user's profile from the chat settings table.
 
-    Returns the user profile dict if available and enabled, or None if the
-    profile is disabled, empty, or the table is unavailable.
-
-    Args:
-        user_sub: The user's Cognito sub (partition key in chat settings table)
+    Uses the consolidated settings cache to avoid redundant DynamoDB calls.
 
     Returns:
-        User profile dict or None
+        User profile dict or None if disabled/empty/unavailable.
     """
-    table_name = os.environ.get("CHAT_SETTINGS_TABLE_NAME")
-    if not table_name:
-        logger.debug(
-            "CHAT_SETTINGS_TABLE_NAME not configured, skipping user profile fetch"
-        )
+    item = _get_cached_user_settings(user_sub)
+    raw_profile = item.get("userProfile", {}).get("M")
+    if not raw_profile:
         return None
 
-    try:
-        dynamo = _get_dynamodb_client()
-        response = dynamo.get_item(
-            TableName=table_name,
-            Key={"user_id": {"S": user_sub}},
-            ProjectionExpression="userProfile",
-        )
-        item = response.get("Item", {})
-        raw_profile = item.get("userProfile", {}).get("M")
-        if not raw_profile:
-            return None
+    # Parse DynamoDB Map to Python dict
+    profile = _dynamodb_item_to_dict(raw_profile)
 
-        # Parse DynamoDB Map to Python dict
-        profile = _dynamodb_item_to_dict(raw_profile)
-
-        # Check if profile is disabled
-        if not profile.get("useProfile", True):
-            return None
-
-        # Check if profile has any actual content
-        content_fields = [
-            "name",
-            "jobTitle",
-            "jobDescription",
-            "linkedInUrl",
-            "goalsAndObjectives",
-            "otherInformation",
-            "customInstructions",
-        ]
-        has_content = any(profile.get(f) for f in content_fields)
-        has_memories = bool(profile.get("memories"))
-        if not has_content and not has_memories:
-            return None
-
-        return profile
-    except Exception as e:
-        logger.warning(
-            "Failed to fetch user profile, continuing without profile",
-            user_sub=user_sub[:8] + "...",
-            error=str(e),
-        )
+    # Check if profile is disabled
+    if not profile.get("useProfile", True):
         return None
+
+    # Check if profile has any actual content
+    content_fields = [
+        "name",
+        "jobTitle",
+        "jobDescription",
+        "linkedInUrl",
+        "goalsAndObjectives",
+        "otherInformation",
+        "customInstructions",
+    ]
+    has_content = any(profile.get(f) for f in content_fields)
+    has_memories = bool(profile.get("memories"))
+    if not has_content and not has_memories:
+        return None
+
+    return profile
 
 
 def resolve_approval_mode(

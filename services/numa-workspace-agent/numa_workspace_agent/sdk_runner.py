@@ -425,17 +425,34 @@ async def stream_claude_sdk(
         prompt=prompt,
     )
 
-    # 1. Determine session_id for resumption
-    # With per-conversation sessions, each container serves one conversation.
-    # Cold start always restores from S3. Warm container uses local session_id.
+    # 1. Determine session_id and download files
+    # Parallelize S3 operations where possible to reduce cold-start latency.
     if is_cold_start:
         logger.info(
             "Restoring session from S3 (cold start)",
             conversation_id=conversation_id,
         )
-        restore_result = restore_claude_session(
-            user_sub, conversation_id, paths["system_dir"]
+
+        async def _restore_session():
+            return await asyncio.to_thread(
+                restore_claude_session, user_sub, conversation_id, paths["system_dir"]
+            )
+
+        async def _restore_trace():
+            await asyncio.to_thread(restore_trace_from_s3, user_sub, conversation_id)
+
+        async def _download_files():
+            if attached_files:
+                await asyncio.to_thread(
+                    _download_attached_data_bucket_files,
+                    attached_files,
+                    paths["uploads"],
+                )
+
+        restore_result, _, _ = await asyncio.gather(
+            _restore_session(), _restore_trace(), _download_files()
         )
+
         if restore_result and restore_result.get("session_id"):
             session_id = restore_result["session_id"]
             logger.debug(
@@ -443,9 +460,6 @@ async def stream_claude_sdk(
                 phase="init",
                 session_id=session_id,
             )
-
-        # Restore the trace file to preserve conversation history.
-        restore_trace_from_s3(user_sub, conversation_id)
     else:
         # Warm container: use locally stored session_id
         session_id = get_active_session_id()
@@ -458,9 +472,6 @@ async def stream_claude_sdk(
             )
         else:
             # Local files missing despite warm container - fallback to S3 restore
-            # This can happen when:
-            # - Container was warmed by a read-only request (GET /trace, /files)
-            # - AgentCore cleared ephemeral storage between invocations
             logger.debug(
                 "No local session_id, restoring from S3",
                 phase="init",
@@ -472,15 +483,11 @@ async def stream_claude_sdk(
             if restore_result and restore_result.get("session_id"):
                 session_id = restore_result["session_id"]
 
-            # Also restore the trace file to preserve conversation history.
             restore_trace_from_s3(user_sub, conversation_id)
 
-    # 1b. Download attached data-bucket files to /workdir/uploads/
-    #     When the frontend sends file metadata from "My Files" or "Company Files"
-    #     (e.g., for summarization or share description), the actual files live in
-    #     the S3 data bucket. Download them so Claude can read them like uploads.
-    if attached_files:
-        _download_attached_data_bucket_files(attached_files, paths["uploads"])
+        # Download attached files on warm start (sequential -- typically fast)
+        if attached_files:
+            _download_attached_data_bucket_files(attached_files, paths["uploads"])
 
     # 2. List uploaded files for context
     uploaded_files: list[str] = []

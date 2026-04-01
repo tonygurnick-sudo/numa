@@ -23,6 +23,7 @@ from .list_kb_files import handle_list_kb_files
 from .ops import handle_ops_operation
 from .pipedream_integration import (
     handle_approve_action,
+    handle_batch_get_schemas,
     handle_configure_props,
     handle_list_actions,
     handle_proxy_request,
@@ -50,6 +51,7 @@ __all__ = [
     "handle_update_agent",
     "handle_web_search",
     "handle_approve_action",
+    "handle_batch_get_schemas",
     "handle_configure_props",
     "handle_list_actions",
     "handle_proxy_request",
