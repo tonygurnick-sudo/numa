@@ -164,6 +164,13 @@ export const removeTeamMember = async (numaDelete: NumaDelete, teamId: string, u
   await numaDelete(`${BASE_URL}/teams/${encodeURIComponent(teamId)}/members/${encodeURIComponent(userId)}`);
 };
 
+export const listTeamAgents = async (numaGet: NumaGet, teamId: string): Promise<AgentSummary[]> => {
+  const response = (await numaGet(`${BASE_URL}/teams/${encodeURIComponent(teamId)}/agents`)) as {
+    agents: AgentSummary[];
+  };
+  return response?.agents ?? [];
+};
+
 // ─── Sharing ─────────────────────────────────────────────────────────────────
 
 export const getAgentSharing = async (numaGet: NumaGet, agentId: string): Promise<AgentShare[]> => {

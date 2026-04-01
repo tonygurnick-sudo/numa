@@ -12,9 +12,16 @@ import { AgentFileUpload } from './AgentFileUpload';
 import { AgentAvatarSelector } from './AgentAvatarSelector';
 import AgentAvatar from './AgentAvatar';
 import type { FrequencyType, WeekDay, WeekNumber, MonthlyMode } from './schedulingTypes';
-import type { AgentPayload, AgentSummary, AgentUpdatePayload, AgentReferenceFile } from '../../types/agents';
+import type { AgentPayload, AgentSummary, AgentUpdatePayload, AgentReferenceFile, Team } from '../../types/agents';
 import type { AgentSchedule } from '../../types/agentSchedules';
-import { createAgent, updateAgent } from '../../Services/AgentsService';
+import {
+  createAgent,
+  updateAgent,
+  getAgentSharing,
+  shareAgent,
+  revokeAgentSharing,
+} from '../../Services/AgentsService';
+import { Users } from 'lucide-react';
 import { ScheduleService } from '../../Services/ScheduleService';
 import { AdminAgentsService, type AgentsMode } from '../../Services/AdminAgentsService';
 import { PipedreamProxyService } from '../../Services/PipedreamProxyService';
@@ -31,6 +38,8 @@ type AgentCreateModalProps = {
   onScheduleChange?: () => void;
   /** All tags used across agents, shown as typeahead suggestions */
   existingTags?: string[];
+  /** Teams the current user belongs to, for team assignment */
+  teams?: Team[];
 };
 
 type ConnectionInfo = {
@@ -79,10 +88,11 @@ export const AgentCreateModal = ({
   initialAccordionKey,
   onScheduleChange: _onScheduleChange,
   existingTags = [],
+  teams = [],
 }: AgentCreateModalProps) => {
   const { t } = useTranslation('agents');
   const { user, lambdaClient } = useAuth();
-  const { numaGet, numaPost, numaPut } = useNumaRequest();
+  const { numaGet, numaPost, numaPut, numaDelete } = useNumaRequest();
   const schedulingEnabled = getFlag('SCHEDULING');
   const { branding } = useBranding();
   const { availableKBs } = useKnowledgeBase();
@@ -101,6 +111,10 @@ export const AgentCreateModal = ({
   const [agentsMode, setAgentsMode] = useState<AgentsMode>('full');
   // Local string inputs for time saved (to allow clearing and free typing)
   const [timeInputs, setTimeInputs] = useState<{ hours: string; minutes: string }>({ hours: '', minutes: '' });
+
+  // Team assignment state
+  const [selectedTeamIds, setSelectedTeamIds] = useState<Set<string>>(new Set());
+  const [initialTeamIds, setInitialTeamIds] = useState<Set<string>>(new Set());
 
   // Scheduling state
   const [scheduleEnabled, setScheduleEnabled] = useState(false);
@@ -344,6 +358,19 @@ export const AgentCreateModal = ({
         .catch(() => {
           setScheduleEnabled(false);
         });
+      // Load existing team assignments
+      getAgentSharing(numaGet, editingAgent.agentId)
+        .then((shares) => {
+          const teamIds = new Set(
+            shares.filter((s) => s.principalType === 'team').map((s) => s.principalId.replace(/^team:/, ''))
+          );
+          setSelectedTeamIds(teamIds);
+          setInitialTeamIds(teamIds);
+        })
+        .catch(() => {
+          setSelectedTeamIds(new Set());
+          setInitialTeamIds(new Set());
+        });
       // Use initialAccordionKey if provided (e.g. from card schedule button)
       setActiveAccordionKey(initialAccordionKey ?? '0');
     } else if (show) {
@@ -363,6 +390,8 @@ export const AgentCreateModal = ({
       setScheduleMaxRuns('');
       setScheduleEmailNotifications(false);
       setEditingScheduleData(null);
+      setSelectedTeamIds(new Set());
+      setInitialTeamIds(new Set());
       setActiveAccordionKey(initialAccordionKey ?? '0');
     }
   }, [editingAgent, show, authorName, initialAccordionKey]);
@@ -725,6 +754,26 @@ export const AgentCreateModal = ({
         }
       }
 
+      // Sync team assignments
+      if (teams.length > 0) {
+        const toAdd = [...selectedTeamIds].filter((id) => !initialTeamIds.has(id));
+        const toRemove = [...initialTeamIds].filter((id) => !selectedTeamIds.has(id));
+        await Promise.all([
+          ...toAdd.map((teamId) =>
+            shareAgent(numaPost, saved.agentId, {
+              principalId: `team:${teamId}`,
+              principalType: 'team',
+              role: 'viewer',
+            }).catch((err) => console.error('Failed to share with team', teamId, err))
+          ),
+          ...toRemove.map((teamId) =>
+            revokeAgentSharing(numaDelete, saved.agentId, `team:${teamId}`).catch((err) =>
+              console.error('Failed to revoke team share', teamId, err)
+            )
+          ),
+        ]);
+      }
+
       onAgentSaved?.(saved);
       onHide();
     } catch (err) {
@@ -1085,6 +1134,43 @@ export const AgentCreateModal = ({
                         </Form.Text>
                       )}
                     </Form.Group>
+                    {/* Team assignment */}
+                    {teams.length > 0 && (
+                      <Form.Group className="mb-3">
+                        <Form.Label className="fw-semibold">{t('createModal.teamAssignment.label')}</Form.Label>
+                        <div className="d-flex gap-2 flex-wrap">
+                          {teams.map((team) => {
+                            const isSelected = selectedTeamIds.has(team.teamId);
+                            return (
+                              <Button
+                                key={team.teamId}
+                                size="sm"
+                                variant={isSelected ? 'primary' : 'outline-secondary'}
+                                className="d-flex align-items-center gap-1"
+                                style={{ fontSize: '0.8rem' }}
+                                disabled={saving}
+                                onClick={() => {
+                                  setSelectedTeamIds((prev) => {
+                                    const next = new Set(prev);
+                                    if (next.has(team.teamId)) {
+                                      next.delete(team.teamId);
+                                    } else {
+                                      next.add(team.teamId);
+                                    }
+                                    return next;
+                                  });
+                                }}
+                              >
+                                <Users size={13} />
+                                {team.teamName}
+                                {isSelected && ' \u2713'}
+                              </Button>
+                            );
+                          })}
+                        </div>
+                        <Form.Text className="text-muted">{t('createModal.teamAssignment.help')}</Form.Text>
+                      </Form.Group>
+                    )}
                     <Form.Group controlId="agentTimeSaved">
                       <Form.Label className="fw-semibold">{t('createModal.timeSaved.label')}</Form.Label>
                       <div className="d-flex gap-2 align-items-center">
