@@ -67,6 +67,14 @@ export interface UseRemoteBrowseReturn {
   oauthRevalidating: boolean;
   selectedOauthProvider: OAuthProviderType | null;
 
+  // OAuth pagination
+  oauthPageToken: string | null;
+  oauthHasPrevPage: boolean;
+  oauthCurrentPage: number;
+  oauthTotalCount: number | null;
+  handleOAuthNextPage: () => void;
+  handleOAuthPrevPage: () => void;
+
   // Synergy state
   synergyJobs: SynergyJob[];
   synergyFolders: SynergyFolder[];
@@ -128,6 +136,14 @@ export function useRemoteBrowse({
   const [synergyBreadcrumbs, setSynergyBreadcrumbs] = useState<SynergyBreadcrumb[]>([
     { label: t('remote.rootLabel'), type: 'root' },
   ]);
+
+  // --- OAuth pagination state ----------------------------------------------
+  const [oauthPageToken, setOauthPageToken] = useState<string | null>(null);
+  const [oauthPageHistory, setOauthPageHistory] = useState<string[]>([]);
+  const [oauthCurrentPage, setOauthCurrentPage] = useState(1);
+  const [oauthTotalCount, setOauthTotalCount] = useState<number | null>(null);
+  /** The folder ID for the current OAuth listing (undefined = root). */
+  const oauthCurrentFolderRef = useRef<string | undefined>(undefined);
 
   // --- Generation counter to discard stale fetches ------------------------
   const generationRef = useRef(0);
@@ -208,6 +224,13 @@ export function useRemoteBrowse({
       const displayName = enabledOAuthProviders.find((p) => p.id === provider)?.display_name ?? provider;
       setOauthBreadcrumbs([{ label: displayName, type: 'root', provider }]);
 
+      // Reset pagination on new provider navigation
+      setOauthPageToken(null);
+      setOauthPageHistory([]);
+      setOauthCurrentPage(1);
+      setOauthTotalCount(null);
+      oauthCurrentFolderRef.current = undefined;
+
       // Cache-first: check for cached root listing (TTL from connector's caching policy)
       const cacheKey = oauthCacheKey(provider);
       const ttlMs = getProviderTtlMs(provider);
@@ -228,6 +251,8 @@ export function useRemoteBrowse({
               setRemoteFolder(cacheKey, { folders: contents.folders ?? [], files: contents.files ?? [] });
               if (dataChanged(oauthFolders, contents.folders ?? [])) setOauthFolders(contents.folders ?? []);
               if (dataChanged(oauthFiles, contents.files ?? [])) setOauthFiles(contents.files ?? []);
+              setOauthPageToken(contents.next_page_token ?? null);
+              setOauthTotalCount(contents.total_count ?? null);
               oauthPrefetch.triggerPrefetch(contents.folders ?? [], cacheKey);
             }
           } catch {
@@ -247,12 +272,13 @@ export function useRemoteBrowse({
             setRemoteFolder(cacheKey, { folders: contents.folders ?? [], files: contents.files ?? [] });
             setOauthFolders(contents.folders ?? []);
             setOauthFiles(contents.files ?? []);
+            setOauthPageToken(contents.next_page_token ?? null);
             oauthPrefetch.triggerPrefetch(contents.folders ?? [], cacheKey);
           }
         } catch (error) {
           console.error(`Failed to load ${provider} contents:`, error);
           if (generationRef.current === gen) {
-            showToast({ message: `Failed to load ${provider} files`, variant: 'error' });
+            showToast({ message: t('remote.errors.loadProviderFiles', { provider }), variant: 'error' });
             setOauthFolders([]);
             setOauthFiles([]);
           }
@@ -276,6 +302,13 @@ export function useRemoteBrowse({
         { label: folder.name, type: 'folder', id: folder.folder_id, provider: selectedOauthProvider },
       ]);
 
+      // Reset pagination on folder navigation
+      setOauthPageToken(null);
+      setOauthPageHistory([]);
+      setOauthCurrentPage(1);
+      setOauthTotalCount(null);
+      oauthCurrentFolderRef.current = folder.folder_id;
+
       const cacheKey = oauthCacheKey(selectedOauthProvider, folder.folder_id);
       const ttlMs = getProviderTtlMs(selectedOauthProvider);
       const cached = getRemoteFolder<RemoteFolderData>(cacheKey, ttlMs);
@@ -293,6 +326,8 @@ export function useRemoteBrowse({
               setRemoteFolder(cacheKey, { folders: contents.folders ?? [], files: contents.files ?? [] });
               if (dataChanged(oauthFolders, contents.folders ?? [])) setOauthFolders(contents.folders ?? []);
               if (dataChanged(oauthFiles, contents.files ?? [])) setOauthFiles(contents.files ?? []);
+              setOauthPageToken(contents.next_page_token ?? null);
+              setOauthTotalCount(contents.total_count ?? null);
               oauthPrefetch.triggerPrefetch(contents.folders ?? [], cacheKey);
             }
           } catch {
@@ -311,12 +346,13 @@ export function useRemoteBrowse({
             setRemoteFolder(cacheKey, { folders: contents.folders ?? [], files: contents.files ?? [] });
             setOauthFolders(contents.folders ?? []);
             setOauthFiles(contents.files ?? []);
+            setOauthPageToken(contents.next_page_token ?? null);
             oauthPrefetch.triggerPrefetch(contents.folders ?? [], cacheKey);
           }
         } catch (error) {
           console.error('Failed to load folder contents:', error);
           if (generationRef.current === gen) {
-            showToast({ message: 'Failed to load folder contents', variant: 'error' });
+            showToast({ message: t('remote.errors.loadFolderContents'), variant: 'error' });
           }
         } finally {
           if (generationRef.current === gen) setOauthContentLoading(false);
@@ -333,11 +369,18 @@ export function useRemoteBrowse({
       const gen = ++generationRef.current;
       oauthPrefetch.cancelAll();
 
+      // Reset pagination on breadcrumb navigation
+      setOauthPageToken(null);
+      setOauthPageHistory([]);
+      setOauthCurrentPage(1);
+      setOauthTotalCount(null);
+
       const newBreadcrumbs = oauthBreadcrumbs.slice(0, index + 1);
       setOauthBreadcrumbs(newBreadcrumbs);
 
       const targetCrumb = newBreadcrumbs[index];
       const folderId = targetCrumb.type === 'root' ? undefined : targetCrumb.id;
+      oauthCurrentFolderRef.current = folderId;
 
       const cacheKey = oauthCacheKey(selectedOauthProvider, folderId);
       const ttlMs = getProviderTtlMs(selectedOauthProvider);
@@ -375,7 +418,7 @@ export function useRemoteBrowse({
         } catch (error) {
           console.error('Failed to navigate to breadcrumb:', error);
           if (generationRef.current === gen) {
-            showToast({ message: 'Failed to navigate', variant: 'error' });
+            showToast({ message: t('remote.errors.navigateFailed'), variant: 'error' });
           }
         } finally {
           if (generationRef.current === gen) setOauthContentLoading(false);
@@ -654,6 +697,80 @@ export function useRemoteBrowse({
     [synergyBreadcrumbs, numaGet, loadSynergyJobs, synergyPrefetch]
   );
 
+  // =======================================================================
+  // OAuth pagination handlers
+  // =======================================================================
+
+  const handleOAuthNextPage = useCallback(async () => {
+    if (!selectedOauthProvider || !oauthPageToken) return;
+
+    const gen = ++generationRef.current;
+    setOauthContentLoading(true);
+
+    // Push current page token to history so we can go back
+    setOauthPageHistory((prev) => [...prev, oauthPageToken]);
+
+    try {
+      const contents = await OAuthProvidersService.listContents(
+        selectedOauthProvider,
+        oauthCurrentFolderRef.current,
+        undefined,
+        oauthPageToken
+      );
+      if (generationRef.current === gen) {
+        setOauthFolders(contents.folders ?? []);
+        setOauthFiles(contents.files ?? []);
+        setOauthPageToken(contents.next_page_token ?? null);
+        setOauthTotalCount(contents.total_count ?? null);
+        setOauthCurrentPage((prev) => prev + 1);
+      }
+    } catch (error) {
+      console.error('Failed to load next page:', error);
+      if (generationRef.current === gen) {
+        showToast({ message: t('remote.errors.loadNextPage'), variant: 'error' });
+      }
+    } finally {
+      if (generationRef.current === gen) setOauthContentLoading(false);
+    }
+  }, [selectedOauthProvider, oauthPageToken, showToast]);
+
+  const handleOAuthPrevPage = useCallback(async () => {
+    if (!selectedOauthProvider || oauthPageHistory.length === 0) return;
+
+    const gen = ++generationRef.current;
+    setOauthContentLoading(true);
+
+    const newHistory = [...oauthPageHistory];
+    // The last entry in history is the token we used to get to the current page.
+    // Pop it off. The entry before it (or undefined for page 1) is what we pass.
+    newHistory.pop();
+    const prevToken = newHistory.length > 0 ? newHistory[newHistory.length - 1] : undefined;
+    setOauthPageHistory(newHistory);
+
+    try {
+      const contents = await OAuthProvidersService.listContents(
+        selectedOauthProvider,
+        oauthCurrentFolderRef.current,
+        undefined,
+        prevToken
+      );
+      if (generationRef.current === gen) {
+        setOauthFolders(contents.folders ?? []);
+        setOauthFiles(contents.files ?? []);
+        setOauthPageToken(contents.next_page_token ?? null);
+        setOauthTotalCount(contents.total_count ?? null);
+        setOauthCurrentPage((prev) => Math.max(1, prev - 1));
+      }
+    } catch (error) {
+      console.error('Failed to load previous page:', error);
+      if (generationRef.current === gen) {
+        showToast({ message: t('remote.errors.loadPreviousPage'), variant: 'error' });
+      }
+    } finally {
+      if (generationRef.current === gen) setOauthContentLoading(false);
+    }
+  }, [selectedOauthProvider, oauthPageHistory, showToast]);
+
   // --- Convenience: reset to root level -----------------------------------
 
   const resetToRoot = useCallback(() => {
@@ -672,6 +789,11 @@ export function useRemoteBrowse({
     setOauthContentLoading(false);
     setOauthRevalidating(false);
     setSynergyRevalidating(false);
+    setOauthPageToken(null);
+    setOauthPageHistory([]);
+    setOauthCurrentPage(1);
+    setOauthTotalCount(null);
+    oauthCurrentFolderRef.current = undefined;
   }, [t, oauthPrefetch, synergyPrefetch]);
 
   const navigateToSynergyJobs = useCallback(() => {
@@ -691,6 +813,14 @@ export function useRemoteBrowse({
     oauthContentLoading,
     oauthRevalidating,
     selectedOauthProvider,
+
+    // OAuth pagination
+    oauthPageToken,
+    oauthHasPrevPage: oauthPageHistory.length > 0,
+    oauthCurrentPage,
+    oauthTotalCount,
+    handleOAuthNextPage,
+    handleOAuthPrevPage,
 
     // Synergy
     synergyJobs,

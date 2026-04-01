@@ -78,6 +78,8 @@
     "agentCreationHelp": "Allow me to create saved agents when you explicitly ask.",
     "memoryManagement": "Update Memory",
     "memoryManagementHelp": "Allow Numa to save and update memories about you and your integrations.",
+    "dataConnectors": "Data Connectors",
+    "dataConnectorsHelp": "Access external data sources like Google Drive, OneDrive, and Dropbox from chat.",
     "defaultIntegrations": "Default integrations",
     "integrationsDisabled": "Integrations are not enabled in this environment.",
     "noIntegrations": "No integrations are enabled for this environment.",
@@ -644,6 +646,10 @@
       "memoryManagement": {
         "title": "Update Memory",
         "help": "Allow Numa to save and update memories about you and your integrations."
+      },
+      "dataConnectors": {
+        "title": "Data Connectors",
+        "help": "Access external data sources like Google Drive, OneDrive, and Dropbox from chat."
       },
       "integrations": {
         "label": "Default integrations",

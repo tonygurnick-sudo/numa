@@ -10,6 +10,10 @@ operation in numa_tool — it's a core Numa capability, not an external connecto
 
 Architecture:
     Claude → connectors MCP (name="status|list_files|...") → _invoke_connect_tool() → Lambda
+
+Approval model:
+- Safe (auto-approved): status, list_files, search_files, download_file, get_file_info
+- Unsafe (requires approval): request (arbitrary HTTP calls incl. sending email)
 """
 
 import json
@@ -24,6 +28,102 @@ logger = structlog.get_logger()
 
 # Connector type sets for routing
 SYNERGY_CONNECTORS = {"synergy"}
+
+# Operations that are read-only and safe to auto-approve
+SAFE_CONNECTOR_OPERATIONS = frozenset(
+    {"status", "list_files", "search_files", "download_file", "get_file_info"}
+)
+
+# Operations that mutate external state and require approval
+UNSAFE_CONNECTOR_OPERATIONS = frozenset({"request"})
+
+
+def is_safe_connector_operation(operation: str) -> bool:
+    """Check if a connector operation is read-only (safe to auto-approve)."""
+    return operation in SAFE_CONNECTOR_OPERATIONS
+
+
+# ---------------------------------------------------------------------------
+# Approval gate for unsafe connector operations
+# ---------------------------------------------------------------------------
+
+
+def _pop_approval_id(action_key: str) -> str:
+    """Pop the next approval ID for this action_key from NUMA_REQUEST_ID_MAP.
+
+    Same pattern as integrations.py — the SDK runner stores a JSON dict of
+    action_key → [approval_id, ...] in the env var.
+    """
+    raw = os.environ.get("NUMA_REQUEST_ID_MAP", "")
+    if raw:
+        try:
+            id_map = json.loads(raw)
+            ids = id_map.get(action_key, [])
+            if ids:
+                approval_id = ids.pop(0)
+                if not ids:
+                    id_map.pop(action_key, None)
+                else:
+                    id_map[action_key] = ids
+                os.environ["NUMA_REQUEST_ID_MAP"] = json.dumps(id_map)
+                return approval_id
+        except (json.JSONDecodeError, TypeError):
+            pass
+    return os.environ.get("NUMA_REQUEST_ID", "")
+
+
+def _await_approval(approval_key: str, description: str = "") -> str:
+    """Block until the user approves or denies via workspace-chat-tools Lambda.
+
+    Routes through the same Lambda that handles integration approvals so we
+    reuse existing DynamoDB permissions and polling logic.
+
+    Returns 'approved', 'denied', or 'timeout'.  Never fails open — if
+    anything goes wrong the operation is blocked (fail-closed).
+    """
+    is_auto = os.environ.get("NUMA_APPROVAL_MODE") == "auto"
+    request_id = _pop_approval_id(approval_key)
+
+    if is_auto:
+        logger.info("Connector operation auto-approved", action_key=approval_key)
+        return "approved"
+
+    if not request_id:
+        logger.warning(
+            "No approval ID for connector operation — blocking (fail-closed)",
+            action_key=approval_key,
+        )
+        return "denied"
+
+    try:
+        from numa_workspace_agent.mcp_tools.lambda_client import (
+            invoke_workspace_tool,
+        )
+
+        result = invoke_workspace_tool(
+            "poll_connector_approval",
+            {
+                "action_key": approval_key,
+                "description": description or f"Connector: {approval_key}",
+                "request_id": request_id,
+                "auto_approved": False,
+            },
+        )
+
+        status = (
+            result.get("status", "timeout") if isinstance(result, dict) else "timeout"
+        )
+        logger.info(
+            "Connector approval decision",
+            action_key=approval_key,
+            status=status,
+        )
+        return status
+
+    except Exception as e:
+        logger.error(f"Connector approval failed: {e}", exc_info=True)
+        # Fail closed — do not execute without confirmed approval
+        return "denied"
 
 
 def _invoke_connect_tool(tool_name: str, params: dict[str, Any]) -> dict[str, Any]:
@@ -514,9 +614,11 @@ async def connectors(args: dict[str, Any]) -> dict[str, Any]:
     """Unified connectors tool dispatcher.
 
     Routes to the appropriate handler based on the `name` parameter.
+    Unsafe operations (e.g. request) are gated by the approval system.
     """
     name = args.get("name", "")
     params = args.get("params", {})
+    description = args.get("description", "")
 
     handler = CONNECTOR_HANDLERS.get(name)
     if not handler:
@@ -532,6 +634,33 @@ async def connectors(args: dict[str, Any]) -> dict[str, Any]:
             ],
             "isError": True,
         }
+
+    # Gate unsafe operations behind approval (fail-closed)
+    if not is_safe_connector_operation(name):
+        connector = params.get("connector", "")
+        approval_key = (
+            f"connector-{connector}-{name}" if connector else f"connector-{name}"
+        )
+        decision = _await_approval(approval_key, description)
+        if decision != "approved":
+            if decision == "timeout":
+                return {
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": (
+                                "Approval timed out. This workspace requires approval "
+                                "for connector write operations. Please try again when "
+                                "ready to approve."
+                            ),
+                        }
+                    ],
+                }
+            return {
+                "content": [
+                    {"type": "text", "text": f"Action not approved ({decision})."}
+                ],
+            }
 
     try:
         return await handler(params)

@@ -26,8 +26,10 @@ class GoogleDriveProvider(OAuthProvider):
     def provider_name(self) -> str:
         return "googledrive"
 
-    # Prefix used to distinguish shared drive IDs from regular folder IDs
+    # Prefixes for virtual folder IDs
     SHARED_DRIVE_PREFIX = "shared-drive:"
+    MY_DRIVE_ID = "virtual:my-drive"
+    SHARED_WITH_ME_ID = "virtual:shared-with-me"
 
     async def _list_shared_drives(self, access_token: str) -> List[OAuthFolder]:
         """Return all shared drives the user has access to as OAuthFolder objects."""
@@ -60,16 +62,51 @@ class GoogleDriveProvider(OAuthProvider):
         page_size: int = 100,
         page_token: Optional[str] = None,
     ) -> OAuthFolderContents:
-        """List files and folders in Google Drive including shared drives."""
+        """List files and folders in Google Drive.
+
+        Root level shows virtual folders: My Drive, Shared with me, plus shared drives.
+        """
+        # Root level — return virtual navigation folders
+        if not folder_id and not page_token:
+            folders: List[OAuthFolder] = [
+                OAuthFolder(
+                    folder_id=self.MY_DRIVE_ID,
+                    name="My Drive",
+                    parent_id=None,
+                    path=normalize_file_path("/My Drive"),
+                    has_subfolders=True,
+                    no_of_subfolders=0,
+                ),
+                OAuthFolder(
+                    folder_id=self.SHARED_WITH_ME_ID,
+                    name="Shared with me",
+                    parent_id=None,
+                    path=normalize_file_path("/Shared with me"),
+                    has_subfolders=True,
+                    no_of_subfolders=0,
+                ),
+            ]
+            shared_drives = await self._list_shared_drives(access_token)
+            folders.extend(shared_drives)
+            return OAuthFolderContents(
+                folders=folders, files=[], total_count=len(folders)
+            )
+
         # Shared drives support params (required for cross-drive listing)
-        shared_drive_params = {
+        shared_drive_params: Dict[str, str] = {
             "supportsAllDrives": "true",
             "includeItemsFromAllDrives": "true",
         }
 
-        # Detect shared drive root navigation
+        # Resolve virtual folder IDs and shared drives to real queries
         drive_id: Optional[str] = None
-        if folder_id and folder_id.startswith(self.SHARED_DRIVE_PREFIX):
+        if folder_id == self.MY_DRIVE_ID:
+            query = "'root' in parents and trashed=false"
+            shared_drive_params["corpora"] = "user"
+        elif folder_id == self.SHARED_WITH_ME_ID:
+            query = "sharedWithMe=true and trashed=false"
+            shared_drive_params["corpora"] = "user"
+        elif folder_id and folder_id.startswith(self.SHARED_DRIVE_PREFIX):
             drive_id = folder_id[len(self.SHARED_DRIVE_PREFIX) :]
             safe_id = drive_id.replace("\\", "\\\\").replace("'", "\\'")
             query = f"'{safe_id}' in parents and trashed=false"
@@ -87,7 +124,7 @@ class GoogleDriveProvider(OAuthProvider):
             "q": query,
             "pageSize": min(page_size, 1000),
             "fields": "nextPageToken,files(id,name,mimeType,size,modifiedTime,createdTime,parents,webViewLink)",
-            "orderBy": "folder,name",
+            "orderBy": "folder,modifiedTime desc",
             **shared_drive_params,
         }
 
@@ -103,11 +140,6 @@ class GoogleDriveProvider(OAuthProvider):
 
         folders = []
         files = []
-
-        # At root level (no folder_id), prepend shared drives as folders
-        if not folder_id and not page_token:
-            shared_drives = await self._list_shared_drives(access_token)
-            folders.extend(shared_drives)
 
         for item in files_data:
             is_folder = item.get("mimeType") == "application/vnd.google-apps.folder"
@@ -301,7 +333,7 @@ class GoogleDriveProvider(OAuthProvider):
             "q": search_query,
             "pageSize": min(page_size, 1000),
             "fields": "nextPageToken,files(id,name,mimeType,size,modifiedTime,createdTime,parents,webViewLink)",
-            "orderBy": "folder,name",
+            "orderBy": "folder,modifiedTime desc",
         }
 
         if page_token:

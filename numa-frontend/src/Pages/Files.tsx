@@ -385,6 +385,12 @@ export const FilesPage = () => {
     resetToRoot: resetRemoteToRoot,
     navigateToSynergyJobs: _navigateToSynergyJobs,
     observeFolder,
+    oauthPageToken,
+    oauthHasPrevPage,
+    oauthCurrentPage,
+    oauthTotalCount,
+    handleOAuthNextPage,
+    handleOAuthPrevPage,
   } = remote;
 
   const dragCounter = useRef(0);
@@ -699,22 +705,9 @@ export const FilesPage = () => {
         const targetScope = { type: destination } as const;
 
         if (isFile) {
-          // Download file content — OAuth providers use the oauth-files-api, Synergy uses its own endpoint
-          let blob: Blob;
-          if (selectedOauthProvider) {
-            blob = await OAuthProvidersService.downloadFile(selectedOauthProvider, item.file_id);
-          } else {
-            const downloadResponse = await fetch(`/api/data-connectors/synergy/${item.file_id}/download`, {
-              headers: {
-                Authorization: `Bearer ${user?.tokens?.idToken || ''}`,
-                'Content-Type': 'application/json',
-              },
-            });
-            if (!downloadResponse.ok) {
-              throw new Error('Failed to download remote file');
-            }
-            blob = await downloadResponse.blob();
-          }
+          // Download file content — all providers (OAuth + token) use the oauth-files-api
+          const provider = selectedOauthProvider || 'synergy';
+          const blob = await OAuthProvidersService.downloadFile(provider, item.file_id);
 
           // Sanitize filename — replace slashes with dashes so they don't create fake S3 folder hierarchy
           const safeName = item.name.replace(/\//g, '-');
@@ -1063,19 +1056,8 @@ export const FilesPage = () => {
   const downloadRemoteFile = useCallback(
     async (remoteItem: RemoteFileItem) => {
       try {
-        let blob: Blob;
-        if (remoteItem.provider === 'oauth' && remoteItem.oauthProvider) {
-          blob = await OAuthProvidersService.downloadFile(remoteItem.oauthProvider, remoteItem.file_id);
-        } else {
-          const resp = await fetch(`/api/data-connectors/synergy/${remoteItem.file_id}/download`, {
-            headers: {
-              Authorization: `Bearer ${user?.tokens?.idToken || ''}`,
-              'Content-Type': 'application/json',
-            },
-          });
-          if (!resp.ok) throw new Error('Download failed');
-          blob = await resp.blob();
-        }
+        const provider = remoteItem.oauthProvider || 'synergy';
+        const blob = await OAuthProvidersService.downloadFile(provider, remoteItem.file_id);
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
@@ -1086,7 +1068,7 @@ export const FilesPage = () => {
         showToast({ message: String(err), variant: 'error' });
       }
     },
-    [user?.tokens?.idToken, showToast]
+    [showToast]
   );
 
   /** Bulk download all selected remote files. */
@@ -1331,11 +1313,16 @@ export const FilesPage = () => {
     }
   }, [oauthEnabled]);
 
-  // OAuth providers status loading
+  // OAuth providers status loading — uses a ref to avoid re-creating the
+  // callback (and re-triggering effects) every time enabledOAuthProviders changes.
+  const enabledOAuthProvidersRef = useRef(enabledOAuthProviders);
+  enabledOAuthProvidersRef.current = enabledOAuthProviders;
+
   const loadOAuthProviderStatuses = useCallback(async () => {
     if (!oauthEnabled) return;
 
-    const providers = enabledOAuthProviders.map((p) => p.id);
+    const providers = enabledOAuthProvidersRef.current.map((p) => p.id);
+    if (providers.length === 0) return;
 
     // Load all provider statuses in parallel - service handles caching internally
     const loadPromises = providers.map(async (provider) => {
@@ -1355,17 +1342,17 @@ export const FilesPage = () => {
     });
 
     await Promise.all(loadPromises);
-  }, [oauthEnabled, enabledOAuthProviders]);
+  }, [oauthEnabled]);
 
+  // Load remote tab data when switching to the Remote tab
   useEffect(() => {
     if (activeTab === 'remote') {
       loadSynergyStatus();
       if (oauthEnabled) {
         loadDynamicOAuthProviders();
-        loadOAuthProviderStatuses();
       }
     }
-  }, [activeTab, loadSynergyStatus, loadDynamicOAuthProviders, loadOAuthProviderStatuses, oauthEnabled]);
+  }, [activeTab, loadSynergyStatus, loadDynamicOAuthProviders, oauthEnabled]);
 
   // Re-check statuses once the provider list arrives (loaded async)
   useEffect(() => {
@@ -3108,6 +3095,35 @@ export const FilesPage = () => {
                 </div>
               )}
             </>
+          )}
+
+          {/* Pagination controls for paginated providers (e.g. Synergy jobs) */}
+          {isInOAuthProvider && (oauthHasPrevPage || oauthPageToken) && !oauthContentLoading && (
+            <div className="d-flex justify-content-center align-items-center gap-3 mt-3 mb-2">
+              <button
+                className="btn btn-sm btn-outline-secondary"
+                disabled={!oauthHasPrevPage}
+                onClick={handleOAuthPrevPage}
+              >
+                <i className="bi bi-chevron-left me-1" />
+                {t('common:pagination.previous', 'Previous')}
+              </button>
+              <span className="text-muted small">
+                {t('common:pagination.pageInfo', {
+                  page: oauthCurrentPage,
+                  total: oauthTotalCount ?? '?',
+                  defaultValue: `Page {{page}}` + (oauthTotalCount != null ? ` — {{total}} items` : ''),
+                })}
+              </span>
+              <button
+                className="btn btn-sm btn-outline-secondary"
+                disabled={!oauthPageToken}
+                onClick={handleOAuthNextPage}
+              >
+                {t('common:pagination.next', 'Next')}
+                <i className="bi bi-chevron-right ms-1" />
+              </button>
+            </div>
           )}
         </div>
 

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { getFlag } from '../../utils/featureFlags';
 import { Modal, Form, Button, Row, Col, Alert, Spinner, Accordion } from 'react-bootstrap';
-import { Database, Lightbulb, Search, Robot } from 'react-bootstrap-icons';
+import { Database, Lightbulb, Link45deg, Search, Robot } from 'react-bootstrap-icons';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../../Providers/AuthProvider';
 import { useNumaRequest } from '../../Providers/NumaRequestContext';
@@ -57,6 +57,7 @@ const DEFAULT_PAYLOAD: AgentPayload = {
     webSearchEnabled: false,
     createAgentEnabled: false,
     memoriesEnabled: true,
+    dataConnectorsEnabled: true,
     enabledConnections: [],
     allowedKnowledgeBases: null, // null = all KBs
   },
@@ -312,6 +313,7 @@ export const AgentCreateModal = ({
           webSearchEnabled: editingAgent.toolsConfig?.webSearchEnabled ?? false,
           createAgentEnabled: editingAgent.toolsConfig?.createAgentEnabled ?? false,
           memoriesEnabled: editingAgent.toolsConfig?.memoriesEnabled ?? true,
+          dataConnectorsEnabled: editingAgent.toolsConfig?.dataConnectorsEnabled ?? true,
           enabledConnections: editingAgent.toolsConfig?.enabledConnections ?? [],
           // Preserve KB access setting - null means "all KBs", [] means "none", array means "selected"
           allowedKnowledgeBases: editingAgent.toolsConfig?.allowedKnowledgeBases ?? null,
@@ -1387,6 +1389,39 @@ export const AgentCreateModal = ({
                           className="fs-5"
                         />
                       </div>
+                      {getFlag('DATA_CONNECTORS_ENABLED') && (
+                        <div
+                          className="d-flex align-items-center justify-content-between p-3 bg-white border rounded-2"
+                          style={{
+                            opacity: formState.toolsConfig?.autoToolsEnabled ? 0.6 : 1,
+                          }}
+                        >
+                          <div className="d-flex align-items-center gap-3">
+                            <div
+                              className="rounded-2 d-flex align-items-center justify-content-center"
+                              style={{ width: 40, height: 40, backgroundColor: '#6c757d' }}
+                            >
+                              <Link45deg size={20} color="white" />
+                            </div>
+                            <div>
+                              <div className="fw-semibold">{t('createModal.tools.dataConnectors.title')}</div>
+                              <small className="text-muted">{t('createModal.tools.dataConnectors.description')}</small>
+                            </div>
+                          </div>
+                          <Form.Check
+                            type="switch"
+                            id="data-connectors-enabled"
+                            checked={
+                              formState.toolsConfig?.autoToolsEnabled ||
+                              formState.toolsConfig?.dataConnectorsEnabled ||
+                              false
+                            }
+                            disabled={saving || formState.toolsConfig?.autoToolsEnabled}
+                            onChange={(e) => handleToolsChange('dataConnectorsEnabled', e.target.checked)}
+                            className="fs-5"
+                          />
+                        </div>
+                      )}
                     </div>
                   </Col>
                   <Col md={12}>

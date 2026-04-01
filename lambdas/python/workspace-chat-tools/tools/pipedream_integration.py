@@ -373,6 +373,35 @@ def handle_list_actions(params: Dict[str, Any]) -> Dict[str, Any]:
     return result
 
 
+def handle_batch_get_schemas(params: Dict[str, Any]) -> Dict[str, Any]:
+    """Batch-fetch cached integration schemas from the proxy account.
+
+    Returns all schemas in a single call instead of per-slug list_actions calls.
+    Falls back gracefully if the schema cache is not populated.
+
+    Args:
+        params: Must contain 'app_slugs' (list of str) and 'external_user_id'
+
+    Returns:
+        Dict with 'schemas' mapping slug -> {actions: [...], index: [...]}
+    """
+    app_slugs = params.get("app_slugs", [])
+    external_user_id = params.get("external_user_id")
+
+    if not app_slugs:
+        raise ValueError("app_slugs is required")
+    if not external_user_id:
+        raise ValueError("external_user_id is required")
+
+    result = _invoke_relay(
+        operation="batch_get_schemas",
+        external_user_id=external_user_id,
+        parameters={"app_slugs": app_slugs},
+    )
+
+    return result
+
+
 def handle_run_action(params: Dict[str, Any]) -> Dict[str, Any]:
     """Execute a Pipedream integration action with human-in-the-loop approval.
 
@@ -678,4 +707,43 @@ def handle_approve_action(params: Dict[str, Any]) -> Dict[str, Any]:
     return {
         "approval_id": approval_id,
         "status": decision,
+    }
+
+
+def handle_poll_connector_approval(params: Dict[str, Any]) -> Dict[str, Any]:
+    """Create an approval request and poll for the user's decision.
+
+    Generic approval gate used by the connectors MCP tool for unsafe
+    operations (e.g. sending email, arbitrary HTTP requests). Reuses
+    the same DynamoDB table and polling logic as integration approvals.
+
+    Args:
+        params: Must contain 'action_key', 'description', 'request_id'.
+                Optional: 'auto_approved' (bool).
+
+    Returns:
+        Dict with 'status': 'approved' | 'denied' | 'timeout'
+    """
+    action_key = params.get("action_key", "")
+    description = params.get("description", "")
+    request_id = params.get("request_id")
+    user_sub = params.get("__user_sub", "")
+    is_auto_approved = params.get("auto_approved", False)
+
+    if is_auto_approved:
+        return {"status": "approved", "approval_id": request_id or "auto"}
+
+    approval_id = create_approval_request(
+        user_sub=user_sub,
+        action_key=action_key,
+        description=description,
+        props_preview={},
+        approval_id=request_id,
+    )
+
+    decision, _ = poll_approval(approval_id)
+
+    return {
+        "status": decision,
+        "approval_id": approval_id,
     }

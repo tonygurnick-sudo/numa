@@ -66,7 +66,14 @@
     "loadingProviderFiles": "Loading {{provider}} files...",
     "noFilesFound": "No files found",
     "folderEmpty": "This folder is empty.",
-    "refreshing": "Refreshing..."
+    "refreshing": "Refreshing...",
+    "errors": {
+      "loadProviderFiles": "Failed to load {{provider}} files",
+      "loadFolderContents": "Failed to load folder contents",
+      "navigateFailed": "Failed to navigate",
+      "loadNextPage": "Failed to load next page",
+      "loadPreviousPage": "Failed to load previous page"
+    }
   },
   "toolbar": {
     "up": "Up",

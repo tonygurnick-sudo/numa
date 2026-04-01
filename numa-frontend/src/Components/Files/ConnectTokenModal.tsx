@@ -7,7 +7,7 @@ interface ConnectTokenModalProps {
   onHide: () => void;
   providerId: string;
   providerName: string;
-  onConnected: () => void;
+  onConnected: () => void | Promise<void>;
 }
 
 /** Save PAT to the user's consolidated vault via the backend connect-token endpoint. */
@@ -40,8 +40,10 @@ export const ConnectTokenModal = ({ show, onHide, providerId, providerName, onCo
     setError(null);
     try {
       await saveToken(providerId, token.trim());
-      onConnected();
-      handleClose();
+      await onConnected();
+      setToken('');
+      setError(null);
+      onHide();
     } catch (err) {
       setError(err instanceof Error ? err.message : t('remote.connectFailed', 'Failed to connect'));
     } finally {

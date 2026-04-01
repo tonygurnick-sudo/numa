@@ -451,6 +451,10 @@ export interface WorkspaceChatRequest {
   enabledTools?: string[];
   enabledConnections?: string[];
   availableIntegrations?: Array<{ id: string; name: string }>;
+  /** Connected data connectors (OAuth/token connectors from Data Connectors page) */
+  connectedDataConnectors?: Array<{ id: string; name: string }>;
+  /** Whether the data connectors tool is enabled for this chat session */
+  dataConnectorsEnabled?: boolean;
   // Model selection (global cross-region inference profile)
   modelId?: WorkspaceChatModelId;
   // Attachment handling - files and optional folder metadata

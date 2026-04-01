@@ -7,6 +7,7 @@ import { LambdaPermission } from '@cdktf/provider-aws/lib/lambda-permission';
 import { CloudwatchLogGroup } from '@cdktf/provider-aws/lib/cloudwatch-log-group';
 import { CloudwatchEventRule } from '@cdktf/provider-aws/lib/cloudwatch-event-rule';
 import { CloudwatchEventTarget } from '@cdktf/provider-aws/lib/cloudwatch-event-target';
+import { LambdaInvocation } from '@cdktf/provider-aws/lib/lambda-invocation';
 import { SecretsmanagerSecret } from '@cdktf/provider-aws/lib/secretsmanager-secret';
 import { S3Backend, TerraformStack, Fn } from 'cdktf';
 import { Construct } from 'constructs';
@@ -32,7 +33,9 @@ export class PipedreamProxyStack extends TerraformStack {
   readonly proxyLambda: LambdaFunction;
   readonly securityMappingTable: DynamodbTable;
   readonly allowedAccountsTable: DynamodbTable;
+  readonly schemaCacheTable: DynamodbTable;
   readonly accountSyncLambda: LambdaFunction;
+  readonly schemaRefreshLambda: LambdaFunction;
   readonly pipedreamSecret: SecretsmanagerSecret;
 
   constructor(scope: Construct, name: string, props: PipedreamProxyStackProps) {
@@ -139,6 +142,31 @@ export class PipedreamProxyStack extends TerraformStack {
       },
     });
 
+    // DynamoDB table for cached integration schemas (populated by weekly refresh Lambda)
+    // Stores pre-fetched action schemas so workspace agents can load them in a single
+    // BatchGetItem instead of calling Pipedream API per-integration on cold start.
+    this.schemaCacheTable = new DynamodbTable(this, 'schema-cache-table', {
+      name: 'pipedream-integration-schemas',
+      billingMode: 'PAY_PER_REQUEST',
+      hashKey: 'app_slug',
+      attribute: [
+        {
+          name: 'app_slug',
+          type: 'S',
+        },
+      ],
+      ttl: {
+        attributeName: 'ttl',
+        enabled: true,
+      },
+
+      tags: {
+        Name: 'pipedream-integration-schemas',
+        Environment: props.environmentName,
+        Purpose: 'schema-cache',
+      },
+    });
+
     // Create Pipedream credentials secret with placeholder values
     // This secret will be created empty and must be populated manually via AWS console
     this.pipedreamSecret = new SecretsmanagerSecret(this, 'pipedream-credentials', {
@@ -203,6 +231,12 @@ export class PipedreamProxyStack extends TerraformStack {
             Effect: 'Allow',
             Action: ['secretsmanager:GetSecretValue'],
             Resource: this.pipedreamSecret.arn,
+          },
+          // DynamoDB permissions for schema cache table (read for batch_get_schemas)
+          {
+            Effect: 'Allow',
+            Action: ['dynamodb:BatchGetItem', 'dynamodb:GetItem'],
+            Resource: this.schemaCacheTable.arn,
           },
         ],
       }),
@@ -288,6 +322,7 @@ export class PipedreamProxyStack extends TerraformStack {
         variables: {
           SECURITY_MAPPING_TABLE: this.securityMappingTable.name,
           ALLOWED_ACCOUNTS_TABLE: this.allowedAccountsTable.name,
+          SCHEMA_CACHE_TABLE: this.schemaCacheTable.name,
           PIPEDREAM_SECRET_ARN: this.pipedreamSecret.arn,
           LOG_LEVEL: 'INFO',
           ENVIRONMENT: props.environmentName,
@@ -340,6 +375,136 @@ export class PipedreamProxyStack extends TerraformStack {
         Environment: props.environmentName,
         Purpose: 'account-sync',
       },
+    });
+
+    // --- Schema Refresh Lambda ---
+    // Fetches action schemas from Pipedream API for all supported integrations
+    // and writes them to the schema cache DynamoDB table. Runs weekly.
+    const schemaRefreshLogGroup = new CloudwatchLogGroup(this, 'schema-refresh-log-group', {
+      retentionInDays: 30,
+      name: '/aws/lambda/pipedream-schema-refresh',
+      tags: {
+        Name: 'pipedream-schema-refresh-logs',
+        Environment: props.environmentName,
+      },
+    });
+
+    const schemaRefreshRole = new IamRole(this, 'schema-refresh-lambda-role', {
+      name: 'pipedream-schema-refresh-lambda-role',
+      assumeRolePolicy: JSON.stringify({
+        Version: '2012-10-17',
+        Statement: [
+          {
+            Effect: 'Allow',
+            Principal: { Service: 'lambda.amazonaws.com' },
+            Action: 'sts:AssumeRole',
+          },
+        ],
+      }),
+      tags: {
+        Name: 'pipedream-schema-refresh-lambda-role',
+        Environment: props.environmentName,
+      },
+    });
+
+    new IamRolePolicy(this, 'schema-refresh-lambda-policy', {
+      name: 'pipedream-schema-refresh-lambda-policy',
+      role: schemaRefreshRole.id,
+      policy: JSON.stringify({
+        Version: '2012-10-17',
+        Statement: [
+          {
+            Effect: 'Allow',
+            Action: ['logs:CreateLogStream', 'logs:PutLogEvents'],
+            Resource: `${schemaRefreshLogGroup.arn}:*`,
+          },
+          // Write schemas to cache table
+          {
+            Effect: 'Allow',
+            Action: ['dynamodb:PutItem', 'dynamodb:BatchWriteItem'],
+            Resource: this.schemaCacheTable.arn,
+          },
+          // Read Pipedream credentials
+          {
+            Effect: 'Allow',
+            Action: ['secretsmanager:GetSecretValue'],
+            Resource: this.pipedreamSecret.arn,
+          },
+        ],
+      }),
+    });
+
+    const schemaRefreshFilename = path.resolve(
+      import.meta.dirname,
+      '..',
+      '..',
+      'lambdas',
+      'python',
+      'pipedream-schema-refresh',
+      'lambda_function.zip'
+    );
+    this.schemaRefreshLambda = new LambdaFunction(this, 'pipedream-schema-refresh-lambda', {
+      functionName: 'pipedream-schema-refresh',
+      role: schemaRefreshRole.arn,
+      handler: 'lambda_function.handler',
+      runtime: 'python3.13',
+      timeout: 600, // 10 minutes - iterates all integrations with pagination
+      memorySize: 256,
+      filename: schemaRefreshFilename,
+      sourceCodeHash: Fn.filebase64sha256(schemaRefreshFilename),
+
+      environment: {
+        variables: {
+          SCHEMA_CACHE_TABLE: this.schemaCacheTable.name,
+          PIPEDREAM_SECRET_ARN: this.pipedreamSecret.arn,
+          SUPPORTED_INTEGRATIONS: JSON.stringify(SUPPORTED_INTEGRATIONS),
+          LOG_LEVEL: 'INFO',
+        },
+      },
+
+      dependsOn: [schemaRefreshLogGroup],
+
+      tags: {
+        Name: 'pipedream-schema-refresh',
+        Environment: props.environmentName,
+        Purpose: 'schema-cache-refresh',
+      },
+    });
+
+    // EventBridge rule for weekly schema refresh
+    const schemaRefreshRule = new CloudwatchEventRule(this, 'schema-refresh-schedule-rule', {
+      name: 'pipedream-schema-refresh-schedule',
+      description: 'Refresh integration schemas from Pipedream API daily',
+      scheduleExpression: 'rate(1 day)',
+      tags: {
+        Name: 'pipedream-schema-refresh-schedule',
+        Environment: props.environmentName,
+      },
+    });
+
+    new CloudwatchEventTarget(this, 'schema-refresh-schedule-target', {
+      rule: schemaRefreshRule.name,
+      arn: this.schemaRefreshLambda.arn,
+    });
+
+    new LambdaPermission(this, 'schema-refresh-invoke-permission', {
+      statementId: 'AllowEventBridgeSchemaRefresh',
+      action: 'lambda:InvokeFunction',
+      functionName: this.schemaRefreshLambda.functionName,
+      principal: 'events.amazonaws.com',
+      sourceArn: schemaRefreshRule.arn,
+    });
+
+    // Invoke schema refresh on every deploy so the cache is always current.
+    // Triggers when the Lambda code or supported integrations list changes.
+    new LambdaInvocation(this, 'schema-refresh-on-deploy', {
+      functionName: this.schemaRefreshLambda.functionName,
+      input: JSON.stringify({ source: 'deploy' }),
+      triggers: {
+        sourceCodeHash: Fn.filebase64sha256(schemaRefreshFilename),
+        integrations: JSON.stringify(SUPPORTED_INTEGRATIONS),
+      },
+      dependsOn: [this.schemaRefreshLambda, this.schemaCacheTable],
     });
 
     // EventBridge rule for hourly account sync

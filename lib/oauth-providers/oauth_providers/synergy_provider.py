@@ -38,22 +38,22 @@ def _build_base_url(server: str) -> str:
     return f"{scheme}://{netloc}{path}".rstrip("/")
 
 
-def _normalize_token(token: str) -> str:
-    """Normalize a PAT into a Bearer header value."""
-    cleaned = token.strip()
-    if cleaned.lower().startswith("authorization:"):
-        cleaned = cleaned.split(":", 1)[1].strip()
-    if cleaned.lower().startswith("bearer "):
-        cleaned = cleaned[7:].strip()
-    for q in ("'", '"'):
-        if cleaned.startswith(q) and cleaned.endswith(q) and len(cleaned) > 1:
-            cleaned = cleaned[1:-1]
-    return f"Bearer {cleaned}"
-
-
 def _extract_id(item: Dict[str, Any]) -> str:
     """Extract ID string from Synergy's nested ID format."""
     return (item.get("ID") or {}).get("IDString") or item.get("IDString") or ""
+
+
+def _strip_bearer(token: str) -> str:
+    """Strip 'Bearer ' prefix from a token if present.
+
+    The base provider's _make_request_with_retry always prepends 'Bearer ',
+    so we must ensure the raw token doesn't already have it to avoid
+    'Bearer Bearer ...' double-prefix.
+    """
+    cleaned = token.strip()
+    if cleaned.lower().startswith("bearer "):
+        cleaned = cleaned[7:].strip()
+    return cleaned
 
 
 class SynergyProvider(OAuthProvider):
@@ -71,6 +71,12 @@ class SynergyProvider(OAuthProvider):
     @property
     def provider_name(self) -> str:
         return "synergy"
+
+    async def _make_request_with_retry(self, method, url, access_token, **kwargs):
+        """Override to normalize Synergy PAT tokens before the base adds 'Bearer '."""
+        return await super()._make_request_with_retry(
+            method, url, _strip_bearer(access_token), **kwargs
+        )
 
     async def list_files(
         self,
@@ -122,7 +128,6 @@ class SynergyProvider(OAuthProvider):
             f"{base_url}/api/v1/jobs/search",
             access_token,
             json=payload,
-            headers={"Authorization": _normalize_token(access_token)},
         )
         data = response.json()
         items = data.get("Result") or data.get("Items") or data.get("items") or []
@@ -163,7 +168,6 @@ class SynergyProvider(OAuthProvider):
             "GET",
             f"{base_url}/api/v1/jobs/{job_id}/items",
             access_token,
-            headers={"Authorization": _normalize_token(access_token)},
         )
         data = response.json()
         items = (
@@ -202,7 +206,6 @@ class SynergyProvider(OAuthProvider):
             "GET",
             f"{base_url}/api/v1/folders/{folder_id}/items",
             access_token,
-            headers={"Authorization": _normalize_token(access_token)},
         )
         data = response.json()
 
@@ -261,13 +264,39 @@ class SynergyProvider(OAuthProvider):
         file_id: str,
         max_download_size: Optional[int] = None,
     ) -> bytes:
-        """Download a file from Synergy."""
+        """Download a file from Synergy.
+
+        Per the 12d Synergy REST API docs, file download is a POST to
+        /api/v1/files/{id}/download?version={n}&with_references=false
+        with Content-Type: application/octet-stream and an empty body.
+
+        We first try to resolve the latest version via GET /api/v1/files/{id}.
+        If that fails, we use the folder-files endpoint to look up the version,
+        and ultimately fall back to version=1.
+        """
         base_url = _build_base_url(self.instance_url)
+
+        # Try to get the latest version number for the file
+        version = 1
+        try:
+            meta_response = await self._make_request_with_retry(
+                "GET",
+                f"{base_url}/api/v1/files/{file_id}",
+                access_token,
+            )
+            meta = meta_response.json()
+            version = meta.get("LatestVersion") or meta.get("latestVersion") or 1
+        except Exception:
+            # File-by-ID endpoint may not be available; fall back to version=1
+            pass
+
+        # Synergy download is POST with empty body (per API docs)
         response = await self._make_request_with_retry(
-            "GET",
-            f"{base_url}/api/v1/files/{file_id}/download",
+            "POST",
+            f"{base_url}/api/v1/files/{file_id}/download?version={version}&with_references=false",
             access_token,
-            headers={"Authorization": _normalize_token(access_token)},
+            headers={"Content-Type": "application/octet-stream"},
+            content=b"",
         )
         return response.content
 
@@ -294,7 +323,6 @@ class SynergyProvider(OAuthProvider):
             f"{base_url}/api/v1/auth/generate-pat",
             access_token,
             json={"ClientId": "numa", "Name": "numa-user", "ExpireInDays": 180},
-            headers={"Authorization": _normalize_token(access_token)},
         )
         data = response.json()
         return data.get("Token") or data.get("token") or None
@@ -322,7 +350,6 @@ class SynergyProvider(OAuthProvider):
             f"{base_url}/api/v1/jobs/search",
             access_token,
             json=payload,
-            headers={"Authorization": _normalize_token(access_token)},
         )
         data = response.json()
         items = data.get("Result") or data.get("Items") or data.get("items") or []

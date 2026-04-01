@@ -230,13 +230,42 @@ def get_folder_items(server: str, token: str, folder_id: str) -> Dict[str, Any]:
 
 
 def download_file(server: str, token: str, file_id: str) -> tuple[bytes, str]:
-    """Download a file from Synergy. Returns (content_bytes, filename)."""
+    """Download a file from Synergy. Returns (content_bytes, filename).
+
+    Per the 12d Synergy REST API docs, file download is a POST to
+    /api/v1/files/{id}/download?version={n}&with_references=false
+    with Content-Type: application/octet-stream and an empty body.
+    """
     base_url = _build_base_url(server)
-    url = f"{base_url}/api/v1/files/{file_id}/download"
-    headers = {
-        "Authorization": _normalize_token(token),
-    }
-    response = httpx.get(url, headers=headers, timeout=120)
+    auth_header = _normalize_token(token)
+
+    # Try to get the latest version number for the file
+    version = 1
+    try:
+        meta_response = httpx.get(
+            f"{base_url}/api/v1/files/{file_id}",
+            headers={"Authorization": auth_header, "Content-Type": "application/json"},
+            timeout=60,
+        )
+        meta_response.raise_for_status()
+        meta = meta_response.json()
+        version = meta.get("LatestVersion") or meta.get("latestVersion") or 1
+    except Exception:
+        logger.warning(
+            "Could not fetch file metadata for version, using version=1",
+            file_id=file_id,
+        )
+
+    # Synergy download is POST with empty body (per API docs)
+    response = httpx.post(
+        f"{base_url}/api/v1/files/{file_id}/download?version={version}&with_references=false",
+        headers={
+            "Authorization": auth_header,
+            "Content-Type": "application/octet-stream",
+        },
+        content=b"",
+        timeout=120,
+    )
     response.raise_for_status()
 
     # Try to extract filename from Content-Disposition header

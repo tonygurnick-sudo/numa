@@ -536,6 +536,7 @@ export default function UserProfilePage({
         webSearchEnabled: companyDefaults.webSearchEnabled,
         createAgentEnabled: companyDefaults.createAgentEnabled,
         memoriesEnabled: companyDefaults.memoriesEnabled,
+        dataConnectorsEnabled: companyDefaults.dataConnectorsEnabled,
         dataAnalysisEnabled: companyDefaults.dataAnalysisEnabled,
         defaultConnectionIds: companyDefaults.defaultConnectionIds,
       };
@@ -641,6 +642,7 @@ export default function UserProfilePage({
         webSearchEnabled: userDefaults.webSearchEnabled,
         createAgentEnabled: userDefaults.createAgentEnabled,
         memoriesEnabled: userDefaults.memoriesEnabled,
+        dataConnectorsEnabled: userDefaults.dataConnectorsEnabled,
         dataAnalysisEnabled: userDefaults.dataAnalysisEnabled,
         defaultConnectionIds: userDefaults.defaultConnectionIds,
         language: userDefaults.language,
@@ -1513,12 +1515,14 @@ export default function UserProfilePage({
                                 dataAnalysisEnabled: true,
                                 createAgentEnabled: true,
                                 memoriesEnabled: true,
+                                dataConnectorsEnabled: true,
                               }
                             : {
                                 webSearchEnabled: false,
                                 dataAnalysisEnabled: false,
                                 createAgentEnabled: false,
                                 memoriesEnabled: false,
+                                dataConnectorsEnabled: false,
                               }),
                         }));
                         setDirty(true);
@@ -1606,6 +1610,28 @@ export default function UserProfilePage({
                         <div className="profile-tool-row__help">{t('userProfile.defaults.memoryManagement.help')}</div>
                       </div>
                     </div>
+
+                    {getFlag('DATA_CONNECTORS_ENABLED') && (
+                      <div className="profile-tool-row">
+                        <Form.Check
+                          type="switch"
+                          id="profile-defaults-data-connectors"
+                          label=""
+                          checked={displayedSettings.autoToolsEnabled || displayedSettings.dataConnectorsEnabled}
+                          disabled={disableDefaultsForm || displayedSettings.autoToolsEnabled}
+                          onChange={(e) => {
+                            setUserDefaults((prev) => ({ ...prev, dataConnectorsEnabled: e.target.checked }));
+                            setDirty(true);
+                          }}
+                        />
+                        <div className="profile-tool-row__text">
+                          <div className="profile-tool-row__label">
+                            {t('userProfile.defaults.dataConnectors.title')}
+                          </div>
+                          <div className="profile-tool-row__help">{t('userProfile.defaults.dataConnectors.help')}</div>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
 
