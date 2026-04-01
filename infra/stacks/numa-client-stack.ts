@@ -956,6 +956,11 @@ export class NumaClientStack extends TerraformStack {
               'arn:aws:bedrock:*:*:inference-profile/apac.amazon.nova-*',
             ],
           },
+          {
+            Effect: 'Allow',
+            Action: ['aws-marketplace:ViewSubscriptions', 'aws-marketplace:Subscribe'],
+            Resource: ['*'],
+          },
         ],
       };
 
