@@ -151,8 +151,6 @@ mcp__numa__numa_tool(
 - **Company KB**: Only admins can upload
 - **User KBs**: Only editors/owners can upload
 
-**Size limit**: 4 MB max. Larger files should be uploaded via the Numa web interface.
-
 **Indexing**: Files are indexed within ~30 minutes and become searchable via KB queries.
 
 ---

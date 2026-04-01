@@ -18,9 +18,7 @@ const ZoneProgressBar: React.FC<ZoneProgressBarProps> = ({ tickets, activeWorkUn
 
   const { done, total, percent } = useMemo(() => {
     const total = tickets.length;
-    const done = tickets.filter(
-      (tk) => tk.statusType === 'completed' || tk.statusType === 'ended'
-    ).length;
+    const done = tickets.filter((tk) => tk.statusType === 'completed' || tk.statusType === 'ended').length;
     const percent = total > 0 ? Math.round((done / total) * 100) : 0;
     return { done, total, percent };
   }, [tickets]);
@@ -34,11 +32,14 @@ const ZoneProgressBar: React.FC<ZoneProgressBarProps> = ({ tickets, activeWorkUn
   return (
     <div className="ops-zone-progress-label" title={label}>
       <span>{label}</span>
-      <div className="ops-zone-progress" role="progressbar" aria-valuenow={percent} aria-valuemin={0} aria-valuemax={100}>
-        <div
-          className="ops-zone-progress-fill"
-          style={{ width: `${percent}%` }}
-        />
+      <div
+        className="ops-zone-progress"
+        role="progressbar"
+        aria-valuenow={percent}
+        aria-valuemin={0}
+        aria-valuemax={100}
+      >
+        <div className="ops-zone-progress-fill" style={{ width: `${percent}%` }} />
       </div>
     </div>
   );

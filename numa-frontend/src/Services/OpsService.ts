@@ -667,10 +667,7 @@ export const createSupplierDocument = async (
 
 // ─── Projects ─────────────────────────────────────────────────────────────
 
-export const createProject = async (
-  numaPost: NumaPost,
-  payload: Omit<Project, 'id'>
-): Promise<Project> => {
+export const createProject = async (numaPost: NumaPost, payload: Omit<Project, 'id'>): Promise<Project> => {
   const response = (await numaPost(`${BASE_URL}/config/projects`, payload)) as Project;
   return response;
 };
@@ -680,10 +677,7 @@ export const updateProject = async (
   projectId: string,
   payload: Partial<Project>
 ): Promise<Project> => {
-  const response = (await numaPut(
-    `${BASE_URL}/config/projects/${encodeURIComponent(projectId)}`,
-    payload
-  )) as Project;
+  const response = (await numaPut(`${BASE_URL}/config/projects/${encodeURIComponent(projectId)}`, payload)) as Project;
   return response;
 };
 

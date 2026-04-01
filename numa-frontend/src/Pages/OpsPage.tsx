@@ -374,13 +374,21 @@ const ActivitySidebarWrapper: React.FC<{
 export const OpsPage: React.FC = () => {
   // ── Activity sidebar state (lifted here so sidebar renders once) ──────
   const [activityOpen, setActivityOpen] = useState(() => {
-    try { return localStorage.getItem(ACTIVITY_LS_KEY) === 'true'; } catch { return false; }
+    try {
+      return localStorage.getItem(ACTIVITY_LS_KEY) === 'true';
+    } catch {
+      return false;
+    }
   });
 
   const toggleActivity = () => {
     setActivityOpen((prev) => {
       const next = !prev;
-      try { localStorage.setItem(ACTIVITY_LS_KEY, String(next)); } catch { /* noop */ }
+      try {
+        localStorage.setItem(ACTIVITY_LS_KEY, String(next));
+      } catch {
+        /* noop */
+      }
       return next;
     });
   };
@@ -390,7 +398,17 @@ export const OpsPage: React.FC = () => {
       <div className="d-flex flex-column h-100">
         <OpsPageContent activityOpen={activityOpen} onToggleActivity={toggleActivity} />
       </div>
-      <ActivitySidebarWrapper open={activityOpen} onClose={() => { setActivityOpen(false); try { localStorage.setItem(ACTIVITY_LS_KEY, 'false'); } catch { /* noop */ } }} />
+      <ActivitySidebarWrapper
+        open={activityOpen}
+        onClose={() => {
+          setActivityOpen(false);
+          try {
+            localStorage.setItem(ACTIVITY_LS_KEY, 'false');
+          } catch {
+            /* noop */
+          }
+        }}
+      />
       <DeepLinkHandler />
       <OpsFab />
     </OpsProvider>

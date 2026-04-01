@@ -158,8 +158,26 @@ def upload_to_presigned_url(url: str, file_path: str) -> None:
     file_size = path.stat().st_size
 
     try:
+
+        class IterableFile:
+            def __init__(self, f_obj, size):
+                self.f_obj = f_obj
+                self.size = size
+
+            def __len__(self):
+                return self.size
+
+            def __iter__(self):
+                while True:
+                    chunk = self.f_obj.read(8192)
+                    if not chunk:
+                        break
+                    yield chunk
+
         with open(path, "rb") as f:
-            req = urllib.request.Request(url, data=f, method="PUT")
+            req = urllib.request.Request(
+                url, data=IterableFile(f, file_size), method="PUT"
+            )
             req.add_header("Content-Type", "application/octet-stream")
             req.add_header("Content-Length", str(file_size))
 

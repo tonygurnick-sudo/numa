@@ -41,9 +41,7 @@ const KanbanZone: React.FC<KanbanZoneProps> = ({
   // ── Zone progress: completed + ended tickets vs total ──────────────
   const { totalCount, percent } = useMemo(() => {
     const total = tickets.length;
-    const done = tickets.filter(
-      (tk) => tk.statusType === 'completed' || tk.statusType === 'ended'
-    ).length;
+    const done = tickets.filter((tk) => tk.statusType === 'completed' || tk.statusType === 'ended').length;
     const pct = total > 0 ? Math.round((done / total) * 100) : 0;
     return { totalCount: total, percent: pct };
   }, [tickets]);
@@ -52,14 +50,9 @@ const KanbanZone: React.FC<KanbanZoneProps> = ({
     if (totalCount === 0) return null;
     return (
       <div className="ops-zone-progress-wrapper">
-        {sprintLabel && (
-          <div className="ops-zone-progress-label">{sprintLabel}</div>
-        )}
+        {sprintLabel && <div className="ops-zone-progress-label">{sprintLabel}</div>}
         <div className="ops-zone-progress" title={t('sprints.zoneProgress', { percent })}>
-          <div
-            className="ops-zone-progress-fill"
-            style={{ width: `${percent}%` }}
-          />
+          <div className="ops-zone-progress-fill" style={{ width: `${percent}%` }} />
         </div>
       </div>
     );

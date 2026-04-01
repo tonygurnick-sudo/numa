@@ -13,14 +13,67 @@ interface AmbiguousMatch {
   suggestions: { label: string; statusType: StatusType }[];
 }
 
-const AMBIGUOUS_KEYWORDS: { pattern: RegExp; keyword: string; suggestions: { label: string; statusType: StatusType }[] }[] = [
-  { pattern: /\bclos(ed|e)\b/i, keyword: 'closed', suggestions: [{ label: 'Completed', statusType: 'completed' }, { label: 'Ended', statusType: 'ended' }] },
-  { pattern: /\b(on\s+)?hold\b/i, keyword: 'hold', suggestions: [{ label: 'Active (blocked)', statusType: 'active' }, { label: 'Ended', statusType: 'ended' }] },
-  { pattern: /\bdefer(red)?\b/i, keyword: 'deferred', suggestions: [{ label: 'Backlog', statusType: 'backlog' }, { label: 'Ended', statusType: 'ended' }] },
-  { pattern: /\barchiv(ed|e)\b/i, keyword: 'archived', suggestions: [{ label: 'Completed', statusType: 'completed' }, { label: 'Ended', statusType: 'ended' }] },
-  { pattern: /\bpending\b/i, keyword: 'pending', suggestions: [{ label: 'Queued', statusType: 'queued' }, { label: 'Scoped', statusType: 'scoped' }] },
-  { pattern: /\bschedul(ed|e)\b/i, keyword: 'scheduled', suggestions: [{ label: 'Scoped', statusType: 'scoped' }, { label: 'Queued', statusType: 'queued' }] },
-  { pattern: /\bshelv(ed|e)\b/i, keyword: 'shelved', suggestions: [{ label: 'Ended', statusType: 'ended' }, { label: 'Backlog', statusType: 'backlog' }] },
+const AMBIGUOUS_KEYWORDS: {
+  pattern: RegExp;
+  keyword: string;
+  suggestions: { label: string; statusType: StatusType }[];
+}[] = [
+  {
+    pattern: /\bclos(ed|e)\b/i,
+    keyword: 'closed',
+    suggestions: [
+      { label: 'Completed', statusType: 'completed' },
+      { label: 'Ended', statusType: 'ended' },
+    ],
+  },
+  {
+    pattern: /\b(on\s+)?hold\b/i,
+    keyword: 'hold',
+    suggestions: [
+      { label: 'Active (blocked)', statusType: 'active' },
+      { label: 'Ended', statusType: 'ended' },
+    ],
+  },
+  {
+    pattern: /\bdefer(red)?\b/i,
+    keyword: 'deferred',
+    suggestions: [
+      { label: 'Backlog', statusType: 'backlog' },
+      { label: 'Ended', statusType: 'ended' },
+    ],
+  },
+  {
+    pattern: /\barchiv(ed|e)\b/i,
+    keyword: 'archived',
+    suggestions: [
+      { label: 'Completed', statusType: 'completed' },
+      { label: 'Ended', statusType: 'ended' },
+    ],
+  },
+  {
+    pattern: /\bpending\b/i,
+    keyword: 'pending',
+    suggestions: [
+      { label: 'Queued', statusType: 'queued' },
+      { label: 'Scoped', statusType: 'scoped' },
+    ],
+  },
+  {
+    pattern: /\bschedul(ed|e)\b/i,
+    keyword: 'scheduled',
+    suggestions: [
+      { label: 'Scoped', statusType: 'scoped' },
+      { label: 'Queued', statusType: 'queued' },
+    ],
+  },
+  {
+    pattern: /\bshelv(ed|e)\b/i,
+    keyword: 'shelved',
+    suggestions: [
+      { label: 'Ended', statusType: 'ended' },
+      { label: 'Backlog', statusType: 'backlog' },
+    ],
+  },
 ];
 
 function checkAmbiguousKeyword(stageName: string): AmbiguousMatch | null {
@@ -220,7 +273,12 @@ export function WorkflowTab({
     });
   };
 
-  const applyAmbiguousSuggestion = (warningKey: string, zoneId: string, stageIndex: number | 'new', statusType: StatusType) => {
+  const applyAmbiguousSuggestion = (
+    warningKey: string,
+    zoneId: string,
+    stageIndex: number | 'new',
+    statusType: StatusType
+  ) => {
     if (stageIndex === 'new') {
       handleNewStageChange(zoneId, 'statusType', statusType);
     } else {
@@ -374,7 +432,11 @@ export function WorkflowTab({
                   >
                     <i className="bi bi-arrow-down" />
                   </Button>
-                  <Button variant="outline-danger" size="sm" onClick={() => handleRemoveStageFromZone(editingZoneId, idx)}>
+                  <Button
+                    variant="outline-danger"
+                    size="sm"
+                    onClick={() => handleRemoveStageFromZone(editingZoneId, idx)}
+                  >
                     <i className="bi bi-trash" />
                   </Button>
                 </div>
@@ -454,7 +516,9 @@ export function WorkflowTab({
             <Alert variant="warning" className="py-2 px-3 mt-2 ms-4 small d-flex flex-column gap-1">
               <div className="d-flex align-items-center gap-2">
                 <i className="bi bi-exclamation-triangle" />
-                <span>{t('ambiguousKeyword.warning', { keyword: ambiguousWarnings[`new:${editingZoneId}`].keyword })}</span>
+                <span>
+                  {t('ambiguousKeyword.warning', { keyword: ambiguousWarnings[`new:${editingZoneId}`].keyword })}
+                </span>
               </div>
               <div className="text-muted">{t('ambiguousKeyword.explanation')}</div>
               <div className="d-flex align-items-center gap-2 mt-1">
