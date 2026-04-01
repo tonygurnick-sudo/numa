@@ -160,9 +160,7 @@ const KanbanColumn: React.FC<KanbanColumnProps> = ({
         onKeyDown={handleQuickAddKeyDown}
         onBlur={handleQuickAddBlur}
       />
-      {quickAddSubmitting && (
-        <span className="spinner-border spinner-border-sm text-muted ms-1" role="status" />
-      )}
+      {quickAddSubmitting && <span className="spinner-border spinner-border-sm text-muted ms-1" role="status" />}
     </div>
   );
 
@@ -193,9 +191,7 @@ const KanbanColumn: React.FC<KanbanColumnProps> = ({
         <SortableContext items={ticketIds} strategy={verticalListSortingStrategy}>
           {tickets.length === 0 ? (
             <>
-              {dropIndicator != null && (
-                <div className="kanban-drop-indicator kanban-drop-indicator--active" />
-              )}
+              {dropIndicator != null && <div className="kanban-drop-indicator kanban-drop-indicator--active" />}
               <div className="kanban-empty-dropzone">
                 <i className="bi bi-inbox mb-1" style={{ fontSize: '1.4rem' }} />
                 <span>{t('board.emptyDropzone', 'Drop tickets here')}</span>
@@ -224,12 +220,12 @@ const KanbanColumn: React.FC<KanbanColumnProps> = ({
                     onAssign={onTicketAssign}
                   />
                   {/* Drop indicator after the last visible card */}
-                  {!isDraggedTicket
-                    && visiblePos === visibleCount - 1
-                    && dropIndicator != null
-                    && dropIndicator === visibleCount && (
-                    <div className="kanban-drop-indicator kanban-drop-indicator--active" />
-                  )}
+                  {!isDraggedTicket &&
+                    visiblePos === visibleCount - 1 &&
+                    dropIndicator != null &&
+                    dropIndicator === visibleCount && (
+                      <div className="kanban-drop-indicator kanban-drop-indicator--active" />
+                    )}
                 </React.Fragment>
               );
             })

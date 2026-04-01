@@ -274,7 +274,11 @@ export function CreateBoardWizard({ show, onHide, onCreated }: CreateBoardWizard
       </Modal.Header>
 
       <Modal.Body style={{ minHeight: 360 }}>
-        {error && <div className="alert alert-danger mb-3" style={{ position: 'sticky', top: 0, zIndex: 5 }}>{error}</div>}
+        {error && (
+          <div className="alert alert-danger mb-3" style={{ position: 'sticky', top: 0, zIndex: 5 }}>
+            {error}
+          </div>
+        )}
 
         {/* Step indicator */}
         <div className="d-flex justify-content-center mb-3 gap-2">

@@ -856,7 +856,11 @@ export function CreateTicketModal({
             </Col>
           </Row>
 
-          {error && <div className="alert alert-danger mt-3 mb-0" style={{ position: 'sticky', top: 0, zIndex: 5 }}>{error}</div>}
+          {error && (
+            <div className="alert alert-danger mt-3 mb-0" style={{ position: 'sticky', top: 0, zIndex: 5 }}>
+              {error}
+            </div>
+          )}
         </Modal.Body>
 
         {/* ── Footer ──────────────────────────────────────────────────── */}

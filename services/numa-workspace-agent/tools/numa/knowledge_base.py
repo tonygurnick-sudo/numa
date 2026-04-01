@@ -95,7 +95,6 @@ Examples:
 Permissions:
   Company KB — only admins can upload
   User KBs — only editors/owners can upload
-Size limit: 4 MB max. Larger files via web UI.
 Indexing: Files searchable within ~30 minutes.
 
 

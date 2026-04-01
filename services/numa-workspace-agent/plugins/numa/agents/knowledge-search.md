@@ -67,7 +67,6 @@ mcp__numa__numa_tool(name="kb_upload", description="Uploading analysis to user K
 ```
 
 **Permissions**: Company KB requires admin; user KBs require editor/owner access.
-**Size limit**: 4 MB max. Files are indexed within ~30 minutes.
 
 ### 4. Analyzing Downloaded Folders
 
