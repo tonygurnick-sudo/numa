@@ -161,6 +161,50 @@ export class UserManagementUtils {
   }
 
   /**
+   * Fetches ALL users from the Cognito User Pool by paginating through all pages.
+   * Results include group membership (admin). Suitable for client-side sorting/filtering/pagination.
+   * @param {string} userPoolId - Cognito User Pool ID
+   * @returns {Promise<Array>} - Complete array of formatted user objects
+   */
+  async listAllUsers(userPoolId) {
+    try {
+      // Fetch admin group membership once (shared across all pages)
+      const adminUsers = await this.getUsersInGroup(userPoolId, 'admin');
+      const adminUserSet = new Set(adminUsers);
+
+      const allUsers = [];
+      let paginationToken = null;
+
+      do {
+        const command = new ListUsersCommand({
+          UserPoolId: userPoolId,
+          Limit: 60, // Max per Cognito request
+          ...(paginationToken && { PaginationToken: paginationToken }),
+        });
+
+        const response = await this.cognitoClient.send(command);
+
+        const users = response.Users.map((user) => ({
+          username: user.Username,
+          email: user.Attributes.find((attr) => attr.Name === 'email')?.Value,
+          enabled: user.Enabled,
+          status: user.UserStatus,
+          created: user.UserCreateDate,
+          groups: adminUserSet.has(user.Username) ? ['admin'] : [],
+        }));
+
+        allUsers.push(...users);
+        paginationToken = response.PaginationToken || null;
+      } while (paginationToken);
+
+      return allUsers;
+    } catch (error) {
+      console.error('Error fetching all users:', error);
+      throw error;
+    }
+  }
+
+  /**
    * Adds a user to a Cognito group
    * @param {string} username - Username/email of the user
    * @param {string} groupName - Name of the group to add user to

@@ -35,19 +35,14 @@ const UserManagement = ({ embedded = false, mfaEnabled = false }: UserManagement
   const currentUserSub = user?.decoded_tokens?.idToken?.sub;
   const currentUserEmail = user?.decoded_tokens?.idToken?.email as string | undefined;
 
-  // Users data state
-  const [users, setUsers] = useState<User[]>([]);
+  // Users data state — all users fetched upfront for correct sorting/grouping
+  const [allUsers, setAllUsers] = useState<User[]>([]);
   const [loadingUsers, setLoadingUsers] = useState(true);
   const [usersError, setUsersError] = useState<string | null>(null);
 
-  // Pagination state
+  // Pagination state (client-side)
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize] = useState(20);
-  const [paginationToken, setPaginationToken] = useState<string | null>(null);
-  const [tokenHistory, setTokenHistory] = useState<string[]>([]);
-  const [hasNextPage, setHasNextPage] = useState(false);
-  const [totalUsers, setTotalUsers] = useState(0);
-  const [totalPages, setTotalPages] = useState(0);
 
   // View and filter state
   const [viewMode, setViewMode] = useState<ViewMode>('row');
@@ -75,27 +70,7 @@ const UserManagement = ({ embedded = false, mfaEnabled = false }: UserManagement
   const [, setPromotingUser] = useState<string | null>(null);
   const [, setDemotingUser] = useState<string | null>(null);
 
-  const fetchTotalUsers = async () => {
-    try {
-      const REGION = window.sessionStorage.getItem('REGION');
-      const USER_POOL_ID = window.sessionStorage.getItem('USER_POOL_ID');
-
-      const credentials = await getCredentials();
-      if (!credentials) {
-        throw new Error(t('errors.credentials'));
-      }
-
-      const userManagementUtils = new UserManagementUtils(REGION, credentials);
-      const poolInfo = await userManagementUtils.describeUserPool(USER_POOL_ID);
-
-      setTotalUsers(poolInfo.estimatedNumberOfUsers);
-      setTotalPages(Math.ceil(poolInfo.estimatedNumberOfUsers / pageSize));
-    } catch (err) {
-      console.error('Error fetching total user count:', err);
-    }
-  };
-
-  const fetchUsers = async (page = 1, token: string | null = null) => {
+  const fetchAllUsers = async () => {
     setLoadingUsers(true);
     setUsersError(null);
     try {
@@ -121,98 +96,16 @@ const UserManagement = ({ embedded = false, mfaEnabled = false }: UserManagement
       }
 
       const userManagementUtils = new UserManagementUtils(REGION, credentials);
-      const result = await userManagementUtils.listUsers(USER_POOL_ID, pageSize, token);
+      const users = await userManagementUtils.listAllUsers(USER_POOL_ID);
 
-      setUsers(result.users);
-      setHasNextPage(result.hasMore);
-      setPaginationToken(result.nextToken);
-
-      if (page > currentPage && result.nextToken) {
-        setTokenHistory((prev) => [...prev, token as string]);
-      } else if (page < currentPage) {
-        setTokenHistory((prev) => prev.slice(0, -1));
-      }
-
-      setCurrentPage(page);
-
-      if (page === 1 && totalUsers === 0) {
-        fetchTotalUsers();
-      }
+      setAllUsers(users);
+      setCurrentPage(1);
     } catch (err) {
       console.error('Error fetching users:', err);
       setUsersError(err instanceof Error ? err.message : t('errors.fetchUsers'));
     } finally {
       setLoadingUsers(false);
     }
-  };
-
-  const handleNextPage = () => {
-    if (hasNextPage && paginationToken) {
-      fetchUsers(currentPage + 1, paginationToken);
-    }
-  };
-
-  const handlePrevPage = () => {
-    if (currentPage > 1) {
-      const prevToken = tokenHistory[tokenHistory.length - 1] || null;
-      fetchUsers(currentPage - 1, prevToken);
-    }
-  };
-
-  const handleFirstPage = () => {
-    setTokenHistory([]);
-    fetchUsers(1, null);
-  };
-
-  const handleGoToPage = async (page: number) => {
-    if (page === currentPage || page < 1 || page > totalPages) {
-      return;
-    }
-
-    if (page === 1) {
-      handleFirstPage();
-    } else if (page === currentPage + 1 && hasNextPage) {
-      handleNextPage();
-    } else if (page === currentPage - 1 && currentPage > 1) {
-      handlePrevPage();
-    }
-  };
-
-  const renderPaginationItems = () => {
-    const items = [];
-
-    if (totalPages <= 1) {
-      return [
-        <Pagination.Item key={1} active={true} onClick={() => handleGoToPage(1)}>
-          1
-        </Pagination.Item>,
-      ];
-    }
-
-    const startPage = Math.max(1, currentPage - 1);
-    const endPage = Math.min(totalPages, currentPage + 1);
-
-    for (let page = startPage; page <= endPage; page++) {
-      const isClickable =
-        page === currentPage ||
-        page === 1 ||
-        (page === currentPage + 1 && hasNextPage) ||
-        (page === currentPage - 1 && currentPage > 1);
-
-      items.push(
-        <Pagination.Item
-          key={page}
-          active={currentPage === page}
-          onClick={isClickable ? () => handleGoToPage(page) : undefined}
-          disabled={!isClickable}
-          style={!isClickable ? { cursor: 'not-allowed', opacity: 0.6 } : {}}
-        >
-          {page}
-        </Pagination.Item>
-      );
-    }
-
-    return items;
   };
 
   // Create user handler — returns whether the activation email was sent successfully
@@ -257,7 +150,7 @@ const UserManagement = ({ embedded = false, mfaEnabled = false }: UserManagement
 
     // Refresh user list after creation
     setTimeout(() => {
-      fetchUsers(1);
+      fetchAllUsers();
     }, 1000);
 
     return { emailSent };
@@ -297,7 +190,7 @@ const UserManagement = ({ embedded = false, mfaEnabled = false }: UserManagement
         console.error('Failed to write user promotion audit log:', err);
       }
 
-      await fetchUsers(1);
+      await fetchAllUsers();
     } catch (err) {
       console.error('Error promoting user to admin:', err);
       setUsersError(err instanceof Error ? err.message : t('errors.promote'));
@@ -334,7 +227,7 @@ const UserManagement = ({ embedded = false, mfaEnabled = false }: UserManagement
 
       // Audit log: record who demoted this user (best-effort)
       try {
-        const demotedUser = users.find((u) => u.username === username);
+        const demotedUser = allUsers.find((u) => u.username === username);
         await numaPost('/api/audit-user-management', {
           action: 'user_demote_admin',
           adminEmail: currentUserEmail,
@@ -345,7 +238,7 @@ const UserManagement = ({ embedded = false, mfaEnabled = false }: UserManagement
         console.error('Failed to write user demotion audit log:', err);
       }
 
-      await fetchUsers(1);
+      await fetchAllUsers();
     } catch (err) {
       console.error('Error demoting user from admin:', err);
       setUsersError(err instanceof Error ? err.message : t('errors.demote'));
@@ -372,7 +265,7 @@ const UserManagement = ({ embedded = false, mfaEnabled = false }: UserManagement
       const userManagementUtils = new UserManagementUtils(REGION, await getCredentials());
       await userManagementUtils.deleteUser(
         userToDelete.email,
-        fetchUsers,
+        fetchAllUsers,
         setUsersError,
         setDeletingUser,
         qBusinessClient
@@ -407,9 +300,9 @@ const UserManagement = ({ embedded = false, mfaEnabled = false }: UserManagement
     await AdminMfaSettingsService.resetUserMfa(userToReset.username, numaPost);
   };
 
-  // Filter and sort users
+  // Filter and sort ALL users, then paginate client-side
   const filteredAndSortedUsers = useMemo(() => {
-    let result = [...users];
+    let result = [...allUsers];
 
     // Apply search filter
     if (searchTerm) {
@@ -427,8 +320,8 @@ const UserManagement = ({ embedded = false, mfaEnabled = false }: UserManagement
       });
     }
 
-    // Apply sorting
-    result.sort((a, b) => {
+    // Sort within each role group, then place admins first
+    const sortFn = (a: User, b: User) => {
       let comparison = 0;
 
       switch (sortField) {
@@ -441,17 +334,32 @@ const UserManagement = ({ embedded = false, mfaEnabled = false }: UserManagement
       }
 
       return sortDirection === 'asc' ? comparison : -comparison;
-    });
+    };
 
-    return result;
-  }, [users, searchTerm, filters, sortField, sortDirection]);
+    const admins = result.filter((u) => u.groups?.includes('admin')).sort(sortFn);
+    const standard = result.filter((u) => !u.groups?.includes('admin')).sort(sortFn);
 
-  // Split users by role
+    return [...admins, ...standard];
+  }, [allUsers, searchTerm, filters, sortField, sortDirection]);
+
+  // Client-side pagination
+  const totalPages = Math.ceil(filteredAndSortedUsers.length / pageSize);
+  const pagedUsers = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return filteredAndSortedUsers.slice(start, start + pageSize);
+  }, [filteredAndSortedUsers, currentPage, pageSize]);
+
+  // Reset to page 1 when filters/search/sort change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, filters, sortField, sortDirection]);
+
+  // Split current page's users by role for section rendering
   const { adminUsers, standardUsers } = useMemo(() => {
     const admin: User[] = [];
     const standard: User[] = [];
 
-    filteredAndSortedUsers.forEach((user) => {
+    pagedUsers.forEach((user) => {
       if (user.groups?.includes('admin')) {
         admin.push(user);
       } else {
@@ -460,10 +368,10 @@ const UserManagement = ({ embedded = false, mfaEnabled = false }: UserManagement
     });
 
     return { adminUsers: admin, standardUsers: standard };
-  }, [filteredAndSortedUsers]);
+  }, [pagedUsers]);
 
   useEffect(() => {
-    fetchUsers(1);
+    fetchAllUsers();
   }, []);
 
   const headerActions = (
@@ -498,9 +406,7 @@ const UserManagement = ({ embedded = false, mfaEnabled = false }: UserManagement
               sortDirection={sortDirection}
               onSortDirectionChange={setSortDirection}
               userCount={
-                users.length > 0
-                  ? { filtered: filteredAndSortedUsers.length, total: totalUsers || users.length }
-                  : undefined
+                allUsers.length > 0 ? { filtered: filteredAndSortedUsers.length, total: allUsers.length } : undefined
               }
             />
           </div>
@@ -519,7 +425,7 @@ const UserManagement = ({ embedded = false, mfaEnabled = false }: UserManagement
                 />
               ) : (
                 <>
-                  {(selectedRole === null || selectedRole === 'admin') && (
+                  {(selectedRole === null || selectedRole === 'admin') && adminUsers.length > 0 && (
                     <UserRoleSection
                       title={t('sections.admins')}
                       users={adminUsers}
@@ -532,7 +438,7 @@ const UserManagement = ({ embedded = false, mfaEnabled = false }: UserManagement
                     />
                   )}
 
-                  {(selectedRole === null || selectedRole === 'standard') && (
+                  {(selectedRole === null || selectedRole === 'standard') && standardUsers.length > 0 && (
                     <UserRoleSection
                       title={t('sections.standardUsers')}
                       users={standardUsers}
@@ -547,18 +453,40 @@ const UserManagement = ({ embedded = false, mfaEnabled = false }: UserManagement
                 </>
               )}
 
-              {filteredAndSortedUsers.length === 0 && (
+              {pagedUsers.length === 0 && (
                 <p className="text-muted text-center py-4">
-                  {users.length === 0 ? t('empty.noUsers') : t('empty.noMatches')}
+                  {allUsers.length === 0 ? t('empty.noUsers') : t('empty.noMatches')}
                 </p>
               )}
 
-              {users.length > 0 && (currentPage > 1 || hasNextPage || totalPages > 1) && (
+              {totalPages > 1 && (
                 <div className="d-flex justify-content-center mt-3">
                   <Pagination size="sm" className="mb-0">
-                    <Pagination.Prev onClick={handlePrevPage} disabled={currentPage === 1} />
-                    {renderPaginationItems()}
-                    <Pagination.Next onClick={handleNextPage} disabled={!hasNextPage} />
+                    <Pagination.Prev onClick={() => setCurrentPage((p) => p - 1)} disabled={currentPage === 1} />
+                    {Array.from({ length: totalPages }, (_, i) => i + 1)
+                      .filter((page) => page === 1 || page === totalPages || Math.abs(page - currentPage) <= 1)
+                      .reduce<(number | 'ellipsis')[]>((acc, page, idx, arr) => {
+                        if (idx > 0 && page - (arr[idx - 1] as number) > 1) acc.push('ellipsis');
+                        acc.push(page);
+                        return acc;
+                      }, [])
+                      .map((item, idx) =>
+                        item === 'ellipsis' ? (
+                          <Pagination.Ellipsis key={`ellipsis-${idx}`} disabled />
+                        ) : (
+                          <Pagination.Item
+                            key={item}
+                            active={currentPage === item}
+                            onClick={() => setCurrentPage(item)}
+                          >
+                            {item}
+                          </Pagination.Item>
+                        )
+                      )}
+                    <Pagination.Next
+                      onClick={() => setCurrentPage((p) => p + 1)}
+                      disabled={currentPage === totalPages}
+                    />
                   </Pagination>
                 </div>
               )}

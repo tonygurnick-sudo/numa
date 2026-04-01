@@ -459,4 +459,101 @@ describe('UserManagementUtils', () => {
       await expect(userManagementUtils.getUsersInGroup(userPoolId, groupName)).rejects.toThrow('Access denied');
     });
   });
+
+  describe('listAllUsers', () => {
+    it('should fetch all users across multiple Cognito pages', async () => {
+      const userPoolId = 'us-east-1_testpool';
+      const mockDate = new Date('2023-01-01');
+
+      // Page 1 — has a pagination token
+      const page1Response = {
+        Users: [
+          {
+            Username: 'user1',
+            Attributes: [{ Name: 'email', Value: 'user1@example.com' }],
+            Enabled: true,
+            UserStatus: 'CONFIRMED',
+            UserCreateDate: mockDate,
+          },
+        ],
+        PaginationToken: 'token-page-2',
+      };
+
+      // Page 2 — no more pages
+      const page2Response = {
+        Users: [
+          {
+            Username: 'user2',
+            Attributes: [{ Name: 'email', Value: 'user2@example.com' }],
+            Enabled: true,
+            UserStatus: 'CONFIRMED',
+            UserCreateDate: mockDate,
+          },
+        ],
+        PaginationToken: undefined,
+      };
+
+      // Admin group response
+      const adminGroupResponse = {
+        Users: [{ Username: 'user1' }],
+      };
+
+      mockCognitoClient.send
+        .mockResolvedValueOnce(adminGroupResponse) // getUsersInGroup
+        .mockResolvedValueOnce(page1Response) // listAllUsers page 1
+        .mockResolvedValueOnce(page2Response); // listAllUsers page 2
+
+      const result = await userManagementUtils.listAllUsers(userPoolId);
+
+      expect(result).toEqual([
+        {
+          username: 'user1',
+          email: 'user1@example.com',
+          enabled: true,
+          groups: ['admin'],
+          status: 'CONFIRMED',
+          created: mockDate,
+        },
+        {
+          username: 'user2',
+          email: 'user2@example.com',
+          enabled: true,
+          groups: [],
+          status: 'CONFIRMED',
+          created: mockDate,
+        },
+      ]);
+
+      // 1 call for admin group + 2 calls for user pages
+      expect(mockCognitoClient.send).toHaveBeenCalledTimes(3);
+    });
+
+    it('should handle a single page of users', async () => {
+      const userPoolId = 'us-east-1_testpool';
+
+      const usersResponse = {
+        Users: [
+          {
+            Username: 'solo-user',
+            Attributes: [{ Name: 'email', Value: 'solo@example.com' }],
+            Enabled: true,
+            UserStatus: 'CONFIRMED',
+            UserCreateDate: new Date(),
+          },
+        ],
+        PaginationToken: undefined,
+      };
+
+      mockCognitoClient.send
+        .mockResolvedValueOnce({ Users: [] }) // admin group (empty)
+        .mockResolvedValueOnce(usersResponse); // single page
+
+      const result = await userManagementUtils.listAllUsers(userPoolId);
+
+      expect(result).toHaveLength(1);
+      expect(result[0].username).toBe('solo-user');
+      expect(result[0].groups).toEqual([]);
+      expect(mockCognitoClient.send).toHaveBeenCalledTimes(2);
+    });
+  });
 });
