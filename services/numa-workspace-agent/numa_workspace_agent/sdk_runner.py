@@ -343,6 +343,55 @@ def _download_attached_data_bucket_files(
     return downloads
 
 
+def _transcribe_audio_file(file_path: str) -> dict[str, Any]:
+    """Invoke the workspace-chat-tools Lambda to transcribe an audio file.
+
+    Uses the default boto3 credentials (local account) since this runs
+    in the main process before cross-account assume.
+
+    Args:
+        file_path: Workspace path (e.g., /workdir/uploads/recording.ogg)
+
+    Returns:
+        Dict with text, language, duration_seconds
+    """
+    from botocore.config import Config
+
+    lambda_name = os.environ.get("WORKSPACE_TOOLS_LAMBDA_NAME", "")
+    if not lambda_name:
+        raise ValueError("WORKSPACE_TOOLS_LAMBDA_NAME not configured")
+
+    region = os.environ.get("AWS_REGION", "us-east-1")
+    lambda_client = boto3.client(
+        "lambda",
+        region_name=region,
+        config=Config(read_timeout=120),
+    )
+
+    event = {
+        "tool": "transcribe",
+        "user_sub": os.environ.get("NUMA_USER_SUB", ""),
+        "conversation_id": os.environ.get("NUMA_CONVERSATION_ID", ""),
+        "params": {"file_path": file_path},
+    }
+
+    response = lambda_client.invoke(
+        FunctionName=lambda_name,
+        Payload=json.dumps(event),
+        InvocationType="RequestResponse",
+    )
+
+    payload = json.loads(response["Payload"].read())
+
+    if response.get("FunctionError"):
+        raise Exception(f"Transcribe Lambda failed: {payload}")
+
+    if payload.get("status") == "error":
+        raise Exception(f"Transcription error: {payload.get('error', 'Unknown')}")
+
+    return payload.get("result", {})
+
+
 async def stream_claude_sdk(
     conversation_id: str,
     prompt: str,
@@ -374,6 +423,7 @@ async def stream_claude_sdk(
     user_profile: Optional[dict] = None,
     company_profile: Optional[str] = None,
     feature_flags: Optional[dict[str, bool]] = None,
+    voice_recordings: Optional[list[str]] = None,
 ) -> AsyncIterator[bytes]:
     """
     Stream Claude SDK output for a conversation.
@@ -381,11 +431,12 @@ async def stream_claude_sdk(
     This:
     1. Restores Claude session if conversation changed
     2. Creates SDK options with hooks
-    3. Augments prompt with context
-    4. Streams SDK message events
-    5. Writes events to trace.jsonl
-    6. Captures session_id from result
-    7. Archives Claude session to S3
+    3. Transcribes voice recordings (if any)
+    4. Augments prompt with context
+    5. Streams SDK message events
+    6. Writes events to trace.jsonl
+    7. Captures session_id from result
+    8. Archives Claude session to S3
 
     Args:
         conversation_id: Conversation ID
@@ -490,12 +541,71 @@ async def stream_claude_sdk(
         if attached_files:
             _download_attached_data_bucket_files(attached_files, paths["uploads"])
 
-    # 2. List uploaded files for context
+    # 2. Transcribe voice recordings (voice input pre-processing)
+    # Only transcribes files explicitly marked as voice recordings by the frontend.
+    # Regular audio file uploads (e.g., user uploading an mp3) are left as-is.
+    if voice_recordings:
+        # Emit transcribing event so frontend shows indicator
+        yield format_sse_event(
+            {
+                "type": "transcribing",
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "files": voice_recordings,
+                "request_id": request_id or "",
+            }
+        )
+
+        transcriptions: list[str] = []
+        for voice_file in voice_recordings:
+            # Resolve to full workspace path
+            file_path = (
+                f"/workdir/{voice_file}"
+                if not voice_file.startswith("/")
+                else voice_file
+            )
+            try:
+                result = await asyncio.to_thread(
+                    _transcribe_audio_file,
+                    file_path,
+                )
+                text = result.get("text", "").strip()
+                if text:
+                    transcriptions.append(text)
+                logger.info(
+                    "Voice recording transcribed",
+                    file=voice_file,
+                    text_length=len(text),
+                    language=result.get("language"),
+                    duration=result.get("duration_seconds"),
+                )
+            except Exception as e:
+                logger.error(
+                    "Failed to transcribe voice recording",
+                    file=voice_file,
+                    error=str(e),
+                )
+            finally:
+                # Remove voice recording (ephemeral -- don't sync back to S3)
+                try:
+                    Path(file_path).unlink()
+                except OSError:
+                    pass
+
+        if transcriptions:
+            transcribed_text = " ".join(transcriptions)
+            if not prompt.strip():
+                prompt = transcribed_text
+            else:
+                prompt = f"{transcribed_text}\n\n{prompt}"
+            # Update original_prompt too so the trace shows the transcribed text
+            original_prompt = prompt
+
+    # 3. List uploaded files for context (after audio files removed)
     uploaded_files: list[str] = []
     if paths["uploads"].exists():
         uploaded_files = [f.name for f in paths["uploads"].iterdir() if f.is_file()]
 
-    # 3. Augment user prompt with upload context, folder info, KB info, and V1 migration context
+    # 4. Augment user prompt with upload context, folder info, KB info, and V1 migration context
     augmented_prompt = augment_prompt_with_context(
         prompt,
         uploaded_files,

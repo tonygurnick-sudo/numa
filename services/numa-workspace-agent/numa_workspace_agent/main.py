@@ -1417,7 +1417,10 @@ async def _handle_chat(
         agent_type_config = get_agent_type_config("numa-chat")
 
     prompt = (body.get("prompt") or "").strip()
-    if not prompt:
+    voice_recordings = body.get(
+        "voiceRecordings", []
+    )  # Paths to voice recordings for auto-transcription
+    if not prompt and not voice_recordings:
         raise HTTPException(status_code=400, detail="Missing prompt")
 
     feature_flags = body.get("featureFlags", {})
@@ -1760,6 +1763,7 @@ async def _handle_chat(
                 user_profile=user_profile,  # User profile for AI personalisation
                 company_profile=company_profile,  # Company profile for system prompt
                 feature_flags=feature_flags,  # Feature flags for conditional tools
+                voice_recordings=voice_recordings,  # Voice recordings to auto-transcribe
             )
             async for chunk in sdk_stream:
                 # Stream chunk directly to frontend via HTTP SSE

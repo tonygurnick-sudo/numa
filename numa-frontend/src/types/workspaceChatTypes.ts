@@ -464,6 +464,8 @@ export interface WorkspaceChatRequest {
   };
   hasUploads?: boolean;
   expectedUploadPaths?: string[];
+  /** Paths to voice recordings that should be auto-transcribed into the user message */
+  voiceRecordings?: string[];
   // V1 to V2 migration flag - set when continuing a V1 conversation in V2
   migrateFromV1?: boolean;
   // Agent support - ID of the agent to use for this chat session
