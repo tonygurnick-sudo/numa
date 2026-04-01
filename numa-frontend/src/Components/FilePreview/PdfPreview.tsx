@@ -191,11 +191,13 @@ export const PdfPreview: React.FC<PdfPreviewProps> = ({ data }) => {
           {/* Main page area */}
           <div className="pdf-page-main">
             {/* Absolute Overlay Navigation Header */}
-            <div className="pdf-page-nav-overlay">
-              <span className="pdf-page-nav-label">
-                {t('filePreview.pdf.pageOf', { current: currentPage, total: numPages })}
-              </span>
-            </div>
+            {numPages > 1 && (
+              <div className="pdf-page-nav-overlay">
+                <span className="pdf-page-nav-label">
+                  {t('filePreview.pdf.pageOf', { current: currentPage, total: numPages })}
+                </span>
+              </div>
+            )}
 
             <div className="pdf-page-viewport" ref={viewportRef}>
               <div className="pdf-pages-stack">
