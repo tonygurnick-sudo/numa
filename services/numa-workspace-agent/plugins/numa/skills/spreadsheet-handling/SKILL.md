@@ -30,16 +30,20 @@ This outputs the spreadsheet content as markdown tables — useful for quick rev
 
 ---
 
-## Formula Recalculation via LibreOffice
+## Formula Recalculation
 
-If an Excel file has formulas that need recalculating (e.g., after modifying data), use LibreOffice:
+If an Excel file has formulas that need recalculating (e.g., after modifying data), use openpyxl:
 
-```bash
-# Recalculate formulas and save as XLSX
-soffice --headless --calc --convert-to xlsx --outdir /workdir/outputs/ /workdir/uploads/data.xlsx
+```python
+from openpyxl import load_workbook
+wb = load_workbook('/workdir/uploads/data.xlsx')
+# openpyxl does not evaluate formulas directly, but you can:
+# 1. Read formula cells and compute results with Python
+# 2. Use pandas to read cached values (data_only=True equivalent)
+# For complex formula dependencies, consider reimplementing the logic in pandas.
 ```
 
-This opens the file in LibreOffice Calc (headless), recalculates all formulas, and saves the result.
+Alternatively, for simple recalculation needs, read the data with pandas and recompute derived values in Python.
 
 ---
 

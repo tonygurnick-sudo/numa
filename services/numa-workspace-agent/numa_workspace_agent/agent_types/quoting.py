@@ -297,7 +297,6 @@ QUOTING_V2 = AgentTypeConfig(
         "Bash(xargs:*)",
         # Document handling binaries
         "Bash(node:*)",
-        "Bash(soffice:*)",
         "Bash(pandoc:*)",
     ],
     # Layer 2 MCP tools

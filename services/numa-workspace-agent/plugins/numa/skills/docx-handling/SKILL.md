@@ -603,32 +603,27 @@ mcp__numa__numa_tool(name="convert_document", description="Converting markdown r
 
 ## Document Conversion (PDF ↔ DOCX)
 
-### Local Conversion (preferred — fast, no Lambda call)
-
-```bash
-# DOCX → PDF (local, excellent quality)
-soffice --headless --convert-to pdf --outdir /workdir/outputs/ /workdir/uploads/document.docx
-
-# PDF → DOCX (local, variable quality)
-soffice --headless --convert-to docx --outdir /workdir/outputs/ /workdir/uploads/document.pdf
-
-# Markdown → DOCX (local, instant)
-pandoc /workdir/outputs/report.md -o /workdir/outputs/report.docx
-```
-
-### MCP Tool Fallback
-
-Use the `convert_document` tool (via `numa_tool` MCP) when local tools aren't sufficient:
+Use the `convert_document` tool (via `numa_tool` MCP) for all document conversions. This delegates to a Lambda with LibreOffice for high-quality conversion.
 
 ```
 # DOCX → PDF
-mcp__numa__numa_tool(name="convert_document", description="Converting DOCX to PDF", params={"file_path": "/workdir/uploads/document.docx", "format": "pdf", "mode": "file"})
+numa_tool(name="convert_document", params={"file_path": "/workdir/uploads/document.docx", "format": "pdf", "mode": "file"})
 
 # PDF → DOCX
-mcp__numa__numa_tool(name="convert_document", description="Converting PDF to DOCX", params={"file_path": "/workdir/uploads/document.pdf", "format": "docx", "mode": "file"})
+numa_tool(name="convert_document", params={"file_path": "/workdir/uploads/document.pdf", "format": "docx", "mode": "file"})
 
 # Markdown → DOCX
-mcp__numa__numa_tool(name="convert_document", description="Converting markdown to DOCX", params={"file_path": "/workdir/outputs/report.md", "format": "docx", "mode": "markdown"})
+numa_tool(name="convert_document", params={"file_path": "/workdir/outputs/report.md", "format": "docx", "mode": "markdown"})
+
+# Markdown → PDF
+numa_tool(name="convert_document", params={"file_path": "/workdir/outputs/report.md", "format": "pdf", "mode": "markdown"})
+```
+
+Local markdown conversion is also available:
+
+```bash
+# Markdown → DOCX (local, instant)
+pandoc /workdir/outputs/report.md -o /workdir/outputs/report.docx
 ```
 
 ### Conversion Quality
@@ -641,14 +636,14 @@ mcp__numa__numa_tool(name="convert_document", description="Converting markdown t
 
 ### When to Use python-docx vs. Conversion Tools
 
-| Scenario                       | Recommended Approach                                    |
-| ------------------------------ | ------------------------------------------------------- |
-| Creating new DOCX from scratch | python-docx (this skill)                                |
-| Filling DOCX templates         | python-docx (this skill)                                |
-| Modifying existing DOCX        | python-docx (this skill)                                |
-| Converting DOCX → PDF          | `soffice --headless` (local)                            |
-| Converting Markdown → DOCX     | `pandoc` (local)                                        |
-| Complex/scanned PDFs           | `extract_content` tool (via `numa_tool` MCP) + `pandoc` |
+| Scenario                       | Recommended Approach                                     |
+| ------------------------------ | -------------------------------------------------------- |
+| Creating new DOCX from scratch | python-docx (this skill)                                 |
+| Filling DOCX templates         | python-docx (this skill)                                 |
+| Modifying existing DOCX        | python-docx (this skill)                                 |
+| Converting DOCX → PDF          | `convert_document` tool (mode="file")                    |
+| Converting Markdown → DOCX     | `pandoc` (local) or `convert_document` (mode="markdown") |
+| Complex/scanned PDFs           | `extract_content` tool (via `numa_tool` MCP) + `pandoc`  |
 
 ### Alternative: Extract + Convert (for complex PDFs)
 
