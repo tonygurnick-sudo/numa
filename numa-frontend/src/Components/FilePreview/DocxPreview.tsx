@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Button, Spinner } from 'react-bootstrap';
+import { Spinner } from 'react-bootstrap';
 import { useTranslation } from 'react-i18next';
 
 interface DocxPreviewProps {
@@ -28,6 +28,7 @@ export const DocxPreview: React.FC<DocxPreviewProps> = ({ data, filename: _filen
   const renderContainerRef = useRef<HTMLDivElement>(null);
   const thumbnailStripRef = useRef<HTMLDivElement>(null);
   const viewportRef = useRef<HTMLDivElement>(null);
+  const pageRefs = useRef<(HTMLDivElement | null)[]>([]);
   const [scale, setScale] = useState(1);
 
   // Phase 1: Render into the visible container so the browser computes layout/page breaks
@@ -111,13 +112,10 @@ export const DocxPreview: React.FC<DocxPreviewProps> = ({ data, filename: _filen
     const measure = () => {
       const padding = 32;
       const availW = el.clientWidth - padding;
-      const availH = el.clientHeight - padding;
       // US Letter: 8.5in x 11in = 816px x 1056px at 96dpi
       const pageW = 816;
-      const pageH = 1056;
       const scaleW = availW / pageW;
-      const scaleH = availH / pageH;
-      setScale(Math.min(scaleW, scaleH, 1));
+      setScale(Math.min(scaleW, 1));
     };
 
     measure();
@@ -130,28 +128,40 @@ export const DocxPreview: React.FC<DocxPreviewProps> = ({ data, filename: _filen
     (page: number) => {
       if (page >= 0 && page < pages.length) {
         setCurrentPage(page);
+        const targetElement = pageRefs.current[page];
+        if (targetElement) {
+          targetElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
       }
     },
     [pages.length]
   );
 
-  const goPrev = useCallback(() => goToPage(currentPage - 1), [currentPage, goToPage]);
-  const goNext = useCallback(() => goToPage(currentPage + 1), [currentPage, goToPage]);
-
-  // Keyboard navigation
+  // Track scroll position to update current page
   useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
-        e.preventDefault();
-        goPrev();
-      } else if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
-        e.preventDefault();
-        goNext();
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [goPrev, goNext]);
+    if (pages.length === 0 || !viewportRef.current) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            const index = Number((entry.target as HTMLElement).dataset.pageIndex);
+            if (!isNaN(index)) {
+              setCurrentPage(index);
+            }
+          }
+        });
+      },
+      // Target a horizontal band in the center of the viewport (10% height)
+      { root: viewportRef.current, rootMargin: '-45% 0px -45% 0px', threshold: 0 }
+    );
+
+    pageRefs.current.forEach((ref) => {
+      if (ref) observer.observe(ref);
+    });
+
+    return () => observer.disconnect();
+  }, [pages.length]);
 
   // Scroll active thumbnail into view
   useEffect(() => {
@@ -236,43 +246,57 @@ export const DocxPreview: React.FC<DocxPreviewProps> = ({ data, filename: _filen
 
       {/* Main page area */}
       <div className="docx-page-main">
-        <div className="docx-page-viewport" ref={viewportRef}>
-          <div
-            className="docx-wrapper"
-            style={{
-              width: '816px',
-              transform: `scale(${scale})`,
-              transformOrigin: 'top center',
-            }}
-          >
-            <section
-              className="docx"
-              style={{
-                width: pages[currentPage].width,
-                minHeight: pages[currentPage].minHeight,
-                padding: '1in',
-                background: 'white',
-                boxShadow: '0 1px 4px rgba(0,0,0,0.08)',
-              }}
-              dangerouslySetInnerHTML={{ __html: pages[currentPage].html }}
-            />
-          </div>
-        </div>
-
-        {/* Navigation bar */}
+        {/* Absolute Overlay Navigation Header */}
         {pages.length > 1 && (
-          <div className="docx-page-nav">
-            <Button variant="outline-secondary" size="sm" onClick={goPrev} disabled={currentPage === 0}>
-              <i className="bi bi-chevron-left" />
-            </Button>
+          <div className="docx-page-nav-overlay">
             <span className="docx-page-nav-label">
               {t('filePreview.docx.pageOf', { current: currentPage + 1, total: pages.length })}
             </span>
-            <Button variant="outline-secondary" size="sm" onClick={goNext} disabled={currentPage === pages.length - 1}>
-              <i className="bi bi-chevron-right" />
-            </Button>
           </div>
         )}
+
+        <div className="docx-page-viewport" ref={viewportRef}>
+          <div className="docx-pages-stack">
+            {pages.map((page, i) => (
+              <div
+                key={i}
+                data-page-index={i}
+                ref={(el) => {
+                  pageRefs.current[i] = el;
+                }}
+                className="docx-page-container"
+                style={{
+                  width: `calc(${page.width || '8.5in'} * ${scale})`,
+                  height: `calc(${page.minHeight || '11in'} * ${scale})`,
+                  overflow: 'hidden',
+                  margin: '0 auto',
+                  background: 'white',
+                  boxShadow: '0 1px 4px rgba(0,0,0,0.08)',
+                }}
+              >
+                <div
+                  className="docx-wrapper"
+                  style={{
+                    width: page.width || '8.5in',
+                    transform: `scale(${scale})`,
+                    transformOrigin: 'top left',
+                  }}
+                >
+                  <section
+                    className="docx"
+                    style={{
+                      width: page.width,
+                      minHeight: page.minHeight,
+                      padding: '1in',
+                      background: 'white',
+                    }}
+                    dangerouslySetInnerHTML={{ __html: page.html }}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
     </div>
   );

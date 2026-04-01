@@ -667,16 +667,14 @@
   display: flex;
   flex-direction: column;
   min-height: 0;
+  position: relative;
 }
 
 .pdf-page-viewport {
   flex: 1;
   min-height: 0;
-  display: flex;
-  align-items: flex-start;
-  justify-content: center;
-  padding: 16px;
   overflow: auto;
+  position: relative; // For better sticky context
 
   // react-pdf wraps the canvas in a .react-pdf__Page div
   .react-pdf__Page {
@@ -690,15 +688,31 @@
   }
 }
 
-.pdf-page-nav {
+.pdf-pages-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  padding: 16px;
+  width: 100%;
+}
+
+.pdf-page-nav-overlay {
+  position: absolute;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 12px;
-  padding: 8px 16px;
-  border-top: 1px solid #e4e4e7;
-  background: #fafafa;
-  flex-shrink: 0;
+  padding: 6px 16px;
+  border-radius: 20px;
+  border: 1px solid #e4e4e7;
+  background: rgba(255, 255, 255, 0.9);
+  backdrop-filter: blur(4px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  pointer-events: none;
 }
 
 .pdf-page-nav-label {
@@ -783,28 +797,42 @@
   display: flex;
   flex-direction: column;
   min-height: 0;
+  position: relative;
 }
 
 .docx-page-viewport {
   flex: 1;
   min-height: 0;
-  display: flex;
-  align-items: flex-start;
-  justify-content: center;
-  padding: 16px;
   overflow: auto;
+  position: relative;
   background: #f4f4f6;
 }
 
-.docx-page-nav {
+.docx-pages-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  padding: 16px;
+  width: 100%;
+}
+
+.docx-page-nav-overlay {
+  position: absolute;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 12px;
-  padding: 8px 16px;
-  border-top: 1px solid #e4e4e7;
-  background: #fafafa;
-  flex-shrink: 0;
+  padding: 6px 16px;
+  border-radius: 20px;
+  border: 1px solid #e4e4e7;
+  background: rgba(255, 255, 255, 0.9);
+  backdrop-filter: blur(4px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  pointer-events: none;
 }
 
 .docx-page-nav-label {
