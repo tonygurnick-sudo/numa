@@ -45,6 +45,7 @@ class AgentToolsConfig:
     query_data_sources: bool = False
     web_search_enabled: bool = True
     create_agent_enabled: bool = False
+    data_connectors_enabled: bool = True
     enabled_connections: list[str] = field(default_factory=list)
     # Multi-KB support:
     # None = all KBs (backwards compat)
@@ -111,6 +112,7 @@ def _parse_tools_config(raw_config: Optional[dict]) -> AgentToolsConfig:
         query_data_sources=raw_config.get("queryDataSources", False),
         web_search_enabled=raw_config.get("webSearchEnabled", True),
         create_agent_enabled=raw_config.get("createAgentEnabled", False),
+        data_connectors_enabled=raw_config.get("dataConnectorsEnabled", True),
         enabled_connections=raw_config.get("enabledConnections", []),
         allowed_knowledge_bases=raw_config.get("allowedKnowledgeBases"),
         approval_mode=raw_config.get("approvalMode"),
@@ -414,12 +416,19 @@ def fetch_user_approval_mode(user_sub: str) -> str:
         return DEFAULT_APPROVAL_MODE
 
 
-VALID_NUMA_TOOL_CATEGORIES = ("agents", "memories", "knowledgeBases", "ops")
+VALID_NUMA_TOOL_CATEGORIES = (
+    "agents",
+    "memories",
+    "knowledgeBases",
+    "ops",
+    "connectors",
+)
 DEFAULT_NUMA_TOOL_APPROVAL_MODE: dict[str, str] = {
     "agents": "never",
     "memories": "never",
     "knowledgeBases": "never",
     "ops": "never",
+    "connectors": "non_destructive",
 }
 
 

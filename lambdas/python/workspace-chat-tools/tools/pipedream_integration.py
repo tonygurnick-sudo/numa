@@ -679,3 +679,42 @@ def handle_approve_action(params: Dict[str, Any]) -> Dict[str, Any]:
         "approval_id": approval_id,
         "status": decision,
     }
+
+
+def handle_poll_connector_approval(params: Dict[str, Any]) -> Dict[str, Any]:
+    """Create an approval request and poll for the user's decision.
+
+    Generic approval gate used by the connectors MCP tool for unsafe
+    operations (e.g. sending email, arbitrary HTTP requests). Reuses
+    the same DynamoDB table and polling logic as integration approvals.
+
+    Args:
+        params: Must contain 'action_key', 'description', 'request_id'.
+                Optional: 'auto_approved' (bool).
+
+    Returns:
+        Dict with 'status': 'approved' | 'denied' | 'timeout'
+    """
+    action_key = params.get("action_key", "")
+    description = params.get("description", "")
+    request_id = params.get("request_id")
+    user_sub = params.get("__user_sub", "")
+    is_auto_approved = params.get("auto_approved", False)
+
+    if is_auto_approved:
+        return {"status": "approved", "approval_id": request_id or "auto"}
+
+    approval_id = create_approval_request(
+        user_sub=user_sub,
+        action_key=action_key,
+        description=description,
+        props_preview={},
+        approval_id=request_id,
+    )
+
+    decision, _ = poll_approval(approval_id)
+
+    return {
+        "status": decision,
+        "approval_id": approval_id,
+    }

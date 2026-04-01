@@ -141,8 +141,8 @@ export const CAPABILITIES_METADATA: CapabilityMetadata[] = [
     description: 'Secure credential storage for integrations and connections.',
     icon: 'bi-key',
     system_only: false,
-    dev_only: false,
-    enabled: true,
+    dev_only: true,
+    enabled: false,
     dependencies: [],
   },
   {

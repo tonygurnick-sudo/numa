@@ -453,6 +453,7 @@
     "agentCreation": "Agent Creation",
     "memoryManagement": "Update Memory",
     "numaOps": "Numa Ops",
+    "dataConnectors": "Data Connectors",
     "model": "Model",
     "integrations": "Integrations",
     "integrationsHelper": "Connect external services",

@@ -18,6 +18,7 @@ import {
   Kanban,
   LifeBuoy,
   Lightbulb,
+  Link,
   Plug,
   RefreshCw,
   Upload,
@@ -79,6 +80,9 @@ export interface WorkspaceChatSettingsPanelProps {
   numaOpsEnabled: boolean;
   setNumaOpsEnabled: Dispatch<SetStateAction<boolean>>;
   numaOpsFeatureEnabled: boolean;
+  dataConnectorsEnabled: boolean;
+  setDataConnectorsEnabled: Dispatch<SetStateAction<boolean>>;
+  dataConnectorsFeatureEnabled: boolean;
   agentsFeatureEnabled: boolean;
 
   // Knowledge Bases
@@ -132,6 +136,9 @@ export const WorkspaceChatSettingsPanel: React.FC<WorkspaceChatSettingsPanelProp
   numaOpsEnabled,
   setNumaOpsEnabled,
   numaOpsFeatureEnabled,
+  dataConnectorsEnabled,
+  setDataConnectorsEnabled,
+  dataConnectorsFeatureEnabled,
   agentsFeatureEnabled,
   enabledKBIds,
   setEnabledKBIds,
@@ -211,6 +218,9 @@ export const WorkspaceChatSettingsPanel: React.FC<WorkspaceChatSettingsPanelProp
       }
       if (numaOpsFeatureEnabled) {
         setNumaOpsEnabled(true);
+      }
+      if (dataConnectorsFeatureEnabled) {
+        setDataConnectorsEnabled(true);
       }
     }
   };
@@ -301,10 +311,21 @@ export const WorkspaceChatSettingsPanel: React.FC<WorkspaceChatSettingsPanelProp
                 <span className="workspace-settings-collapsed-summary">
                   {autoToolsEnabled
                     ? t('workspaceSettings.allToolsEnabledSummary')
-                    : [webSearchEnabled, createAgentEnabled, memoriesEnabled, numaOpsEnabled].filter(Boolean).length > 0
+                    : [
+                          webSearchEnabled,
+                          createAgentEnabled,
+                          memoriesEnabled,
+                          numaOpsEnabled,
+                          dataConnectorsEnabled,
+                        ].filter(Boolean).length > 0
                       ? t('workspaceSettings.toolsPartialSummary', {
-                          count: [webSearchEnabled, createAgentEnabled, memoriesEnabled, numaOpsEnabled].filter(Boolean)
-                            .length,
+                          count: [
+                            webSearchEnabled,
+                            createAgentEnabled,
+                            memoriesEnabled,
+                            numaOpsEnabled,
+                            dataConnectorsEnabled,
+                          ].filter(Boolean).length,
                         })
                       : t('workspaceSettings.noneEnabled')}
                 </span>
@@ -386,6 +407,23 @@ export const WorkspaceChatSettingsPanel: React.FC<WorkspaceChatSettingsPanelProp
                       <span className={`d-flex align-items-center gap-2 ${autoToolsEnabled ? 'text-muted' : ''}`}>
                         <Kanban size={14} />
                         {t('workspaceSettings.numaOps')}
+                      </span>
+                    }
+                  />
+                )}
+
+                {dataConnectorsFeatureEnabled && (
+                  <Form.Check
+                    type="checkbox"
+                    id="panel-data-connectors"
+                    className="workspace-settings-list-item"
+                    checked={dataConnectorsEnabled}
+                    onChange={(e) => setDataConnectorsEnabled(e.target.checked)}
+                    disabled={isDisabled || autoToolsEnabled}
+                    label={
+                      <span className={`d-flex align-items-center gap-2 ${autoToolsEnabled ? 'text-muted' : ''}`}>
+                        <Link size={14} />
+                        {t('workspaceSettings.dataConnectors')}
                       </span>
                     }
                   />

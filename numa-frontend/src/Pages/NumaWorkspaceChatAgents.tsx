@@ -19,6 +19,8 @@ import { ResultActions } from '../Components/ResultActions';
 import ResizableSplitView from '../Components/ResizableSplitView';
 import { generateSystemPrompt, getEnabledTools } from '../utils/chatSystemPromptUtils';
 import { PipedreamProxyService } from '../Services/PipedreamProxyService';
+import { DataConnectorsService } from '../Services/DataConnectorsService';
+import { getConnectorById } from '../Components/DataConnectors/connectorRegistry';
 import { getModelId, MODEL_TYPES, isInFallbackMode } from '../utils/bedrockModelConfig';
 // Note: streamingProcessors imports moved to useWorkspaceStreaming hook
 import { loadConversation } from '../utils/conversationLoader';
@@ -87,6 +89,7 @@ type ConversationChatConfig = {
   createAgentEnabled?: boolean;
   memoriesEnabled?: boolean;
   numaOpsEnabled?: boolean;
+  dataConnectorsEnabled?: boolean;
   enabledKBIds?: string[];
   enabledConnectionIds?: string[];
 };
@@ -119,6 +122,9 @@ const NumaWorkspaceChatAgents = () => {
   >([]);
   const [enabledConnections, setEnabledConnections] = useState<string[]>([]);
   const [connectionsLoading, setConnectionsLoading] = useState<boolean>(false);
+  const [connectedDataConnectors, setConnectedDataConnectors] = useState<Array<{ id: string; name: string }>>([]);
+  const [dataConnectorsEnabled, setDataConnectorsEnabled] = useState(true);
+  const [dataConnectorsFeatureEnabled] = useState(() => getFlag('DATA_CONNECTORS_ENABLED'));
   const [autoToolsEnabled, setAutoToolsEnabled] = useState(true); // Default to auto mode
   const [buttonStatus, setButtonStatus] = useState('idle');
   const [isFileProcessing, _setIsFileProcessing] = useState(false);
@@ -394,6 +400,9 @@ const NumaWorkspaceChatAgents = () => {
       if (typeof parsed.numaOpsEnabled === 'boolean') {
         setNumaOpsEnabled(numaOpsFeatureEnabled ? parsed.numaOpsEnabled : false);
       }
+      if (typeof parsed.dataConnectorsEnabled === 'boolean') {
+        setDataConnectorsEnabled(dataConnectorsFeatureEnabled ? parsed.dataConnectorsEnabled : false);
+      }
 
       if (Array.isArray(parsed.enabledKBIds)) {
         if (availableKBs.length > 0) {
@@ -498,6 +507,7 @@ const NumaWorkspaceChatAgents = () => {
         createAgentEnabled: agentsFeatureEnabled ? createAgentEnabled : false,
         memoriesEnabled,
         numaOpsEnabled: numaOpsFeatureEnabled ? numaOpsEnabled : false,
+        dataConnectorsEnabled: dataConnectorsFeatureEnabled ? dataConnectorsEnabled : false,
         enabledKBIds,
         enabledConnectionIds: enabledConnections,
       };
@@ -519,10 +529,12 @@ const NumaWorkspaceChatAgents = () => {
     createAgentEnabled,
     memoriesEnabled,
     numaOpsEnabled,
+    dataConnectorsEnabled,
     enabledConnections,
     enabledKBIds,
     agentsFeatureEnabled,
     numaOpsFeatureEnabled,
+    dataConnectorsFeatureEnabled,
     isConversationLoading,
     numaChatDynamoUtils,
     sub,
@@ -556,6 +568,7 @@ const NumaWorkspaceChatAgents = () => {
         setCreateAgentEnabled(autoTools || userChatSettings.createAgentEnabled);
         setMemoriesEnabled(autoTools || userChatSettings.memoriesEnabled);
         setNumaOpsEnabled(autoTools || (userChatSettings.numaOpsEnabled ?? false));
+        setDataConnectorsEnabled(autoTools || (userChatSettings.dataConnectorsEnabled ?? true));
         setEnabledConnections(defaultConnectionIdsFromSettings);
         // Apply user's default KB selection, filtered by what's available
         setEnabledKBIds(defaultKBIdsFromSettings);
@@ -570,6 +583,7 @@ const NumaWorkspaceChatAgents = () => {
       setCreateAgentEnabled(autoTools || (config.createAgentEnabled ?? false));
       setMemoriesEnabled(autoTools || (config.memoriesEnabled ?? true));
       setNumaOpsEnabled(autoTools || (config.numaOpsEnabled ?? false));
+      setDataConnectorsEnabled(autoTools || (config.dataConnectorsEnabled ?? true));
       setEnabledConnections(config.enabledConnections ?? []);
 
       // Apply KB constraints from agent
@@ -988,6 +1002,29 @@ const NumaWorkspaceChatAgents = () => {
   useEffect(() => {
     if (lambdaClient && hasPipedreamFeature && relayLambdaArn) loadConnectionStatus();
   }, [lambdaClient]);
+
+  // Fetch data connector status (OAuth/token connectors, separate from Pipedream integrations)
+  const loadDataConnectorStatus = useCallback(async () => {
+    try {
+      const items = await DataConnectorsService.listStatus(numaGet);
+      const connected = items
+        .filter((item) => item.status === 'connected')
+        .map((item) => {
+          const reg = getConnectorById(item.connector_id);
+          return { id: item.connector_id, name: reg?.displayName ?? item.connector_id };
+        });
+      setConnectedDataConnectors(connected);
+    } catch (e) {
+      console.error('Failed to load data connector status:', e);
+      setConnectedDataConnectors([]);
+    }
+  }, [numaGet]);
+
+  useEffect(() => {
+    if (sessionStorage.getItem('OAUTH_AVAILABLE') === 'true') {
+      loadDataConnectorStatus();
+    }
+  }, [loadDataConnectorStatus]);
 
   // Ref for input textarea
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
@@ -1891,6 +1928,8 @@ const NumaWorkspaceChatAgents = () => {
         availableIntegrations: availableConnections
           .filter((conn) => conn.isConnected)
           .map((conn) => ({ id: conn.id, name: conn.name })),
+        connectedDataConnectors: dataConnectorsEnabled ? connectedDataConnectors : [],
+        dataConnectorsEnabled,
         enabledKBIds,
         availableKBs,
         attachments,
@@ -2123,7 +2162,8 @@ const NumaWorkspaceChatAgents = () => {
     !webSearchEnabled &&
     !createAgentEnabled &&
     !memoriesEnabled &&
-    !numaOpsEnabled;
+    !numaOpsEnabled &&
+    !dataConnectorsEnabled;
 
   // Derived active agent for header display (pending takes priority during transitions)
   const activeAgent = pendingAgent || currentAgent;
@@ -2806,6 +2846,9 @@ const NumaWorkspaceChatAgents = () => {
             numaOpsEnabled={numaOpsFeatureEnabled ? numaOpsEnabled : false}
             setNumaOpsEnabled={handleUserSetNumaOpsEnabled}
             numaOpsFeatureEnabled={numaOpsFeatureEnabled}
+            dataConnectorsEnabled={dataConnectorsFeatureEnabled ? dataConnectorsEnabled : false}
+            setDataConnectorsEnabled={setDataConnectorsEnabled}
+            dataConnectorsFeatureEnabled={dataConnectorsFeatureEnabled}
             agentsFeatureEnabled={agentsFeatureEnabled}
             enabledKBIds={enabledKBIds}
             setEnabledKBIds={handleUserSetEnabledKBIds}

@@ -54,6 +54,8 @@ type StreamConfig = {
   enabledTools: string[];
   enabledConnections: string[];
   availableIntegrations: Array<{ id: string; name: string }>;
+  connectedDataConnectors?: Array<{ id: string; name: string }>;
+  dataConnectorsEnabled?: boolean;
   enabledKBIds: string[];
   availableKBs: Array<{ kb_id: string; kb_name: string }>;
   /** File and folder attachments */
@@ -177,6 +179,8 @@ export function useWorkspaceChatStreaming({
         enabledTools,
         enabledConnections,
         availableIntegrations,
+        connectedDataConnectors,
+        dataConnectorsEnabled,
         enabledKBIds,
         availableKBs,
         attachments,
@@ -223,6 +227,8 @@ export function useWorkspaceChatStreaming({
           enabledTools,
           enabledConnections,
           availableIntegrations,
+          connectedDataConnectors,
+          dataConnectorsEnabled,
           modelId,
           attachments,
           hasUploads: !!attachments?.files && attachments.files.length > 0,

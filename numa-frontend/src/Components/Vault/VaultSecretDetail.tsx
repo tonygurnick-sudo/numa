@@ -132,7 +132,7 @@ export function VaultSecretDetail({ show, onHide, secret, onEdit }: Props) {
             )}
 
             <div className="list-group">
-              {Object.entries(fullSecret.fields).map(([key, value]) => {
+              {Object.entries(fullSecret.fields ?? {}).map(([key, value]) => {
                 const sensitive = isSensitive(key);
                 const revealed = revealedFields.has(key);
                 const displayValue = sensitive && !revealed ? t('vault.detail.hidden') : value;
