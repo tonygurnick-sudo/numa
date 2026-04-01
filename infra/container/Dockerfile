@@ -111,6 +111,19 @@ RUN bash -c 'set -euo pipefail \
        echo "Workspace agent artifact not present (optional for now)"; \
        mkdir -p "$ART_DIR"; \
      fi'
+
+# Copy the transcription-service container image tar (if present from CI packaging)
+COPY --chown=node:node --exclude=.gitkeep infra/assets/artifacts/transcription-service/ infra/assets/artifacts/transcription-service/
+RUN bash -c 'set -euo pipefail \
+  && ART_DIR=/workspace/infra/assets/artifacts/transcription-service \
+  && ART_TAR="$ART_DIR/image.tar" \
+  && if [ -f "$ART_TAR" ]; then \
+       echo "Transcription service artifact present: $ART_TAR"; \
+       ls -lh "$ART_TAR"; \
+     else \
+       echo "Transcription service artifact not present (optional)"; \
+       mkdir -p "$ART_DIR"; \
+     fi'
 USER node
 
 ENV GIT_HASH=${GIT_HASH:-unknown}
