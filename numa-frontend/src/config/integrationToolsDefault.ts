@@ -162,6 +162,27 @@ export const DEFAULT_DENY_TOOLS: DefaultToolDenyList = {
 
   // Webflow
   webflow: [],
+
+  // Dropbox
+  dropbox: [],
+
+  // SurveyMonkey
+  survey_monkey: [],
+
+  // Monday.com
+  monday: [],
+
+  // Procore
+  procore: [],
+
+  // QuickBooks
+  quickbooks: [],
+
+  // Harvest
+  harvest: [],
+
+  // Alchemer
+  alchemer: [],
 };
 
 export const getDefaultDenyTools = (appName: string): string[] => {
