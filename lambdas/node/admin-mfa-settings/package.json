@@ -7,6 +7,7 @@
   "devDependencies": {
     "@arcanumai/style": "workspace:*",
     "@types/aws-lambda": "^8.10.146",
+    "@types/bcryptjs": "^3.0.0",
     "@types/node": "^22.10.1",
     "@typescript-eslint/eslint-plugin": "^8.17.0",
     "@typescript-eslint/parser": "^8.17.0",
@@ -24,7 +25,14 @@
     "test": "echo 'no tests'"
   },
   "dependencies": {
+    "@aws-crypto/sha256-js": "^5.2.0",
+    "@aws-sdk/client-cognito-identity-provider": "^3.699.0",
     "@aws-sdk/client-dynamodb": "^3.699.0",
-    "@aws-sdk/lib-dynamodb": "^3.699.0"
+    "@aws-sdk/client-lambda": "^3.699.0",
+    "@aws-sdk/credential-provider-node": "^3.699.0",
+    "@aws-sdk/lib-dynamodb": "^3.699.0",
+    "@smithy/protocol-http": "^4.0.0",
+    "@smithy/signature-v4": "^4.0.0",
+    "bcryptjs": "^3.0.3"
   }
 }

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { getFlag } from '../utils/featureFlags';
-import { Alert, Button, Dropdown, Form, Spinner, Tab } from 'react-bootstrap';
+import { Alert, Button, Dropdown, Form, InputGroup, Modal, Spinner, Tab } from 'react-bootstrap';
 import { PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import axios from 'axios';
@@ -8,11 +8,14 @@ import { useAuth } from '../Providers/AuthProvider';
 import { useKnowledgeBase } from '../Providers/KnowledgeBaseProvider';
 import { useNumaRequest } from '../Providers/NumaRequestContext';
 import { useTranslation } from 'react-i18next';
+import { QRCodeSVG } from 'qrcode.react';
 import {
   AdminChatSettingsService,
   DEFAULT_GLOBAL_CHAT_SETTINGS,
   type GlobalChatSettings,
 } from '../Services/AdminChatSettingsService';
+import { AdminMfaSettingsService, type RecoveryCodesStatus } from '../Services/AdminMfaSettingsService';
+import { RecoveryCodesModal } from '../Components/RecoveryCodesModal';
 import {
   ChatSettingsService,
   DEFAULT_CHAT_SETTINGS,
@@ -71,8 +74,17 @@ export default function UserProfilePage({
   settingsScope = 'user',
 }: UserProfilePageProps) {
   const { t } = useTranslation('settings');
-  const { user, getCredentials, listDevices, forgetDevice, lambdaClient } = useAuth();
-  const { numaGet, numaPut } = useNumaRequest();
+  const {
+    user,
+    getCredentials,
+    listDevices,
+    forgetDevice,
+    lambdaClient,
+    initiateReEnrollMfa,
+    completeReEnrollMfa,
+    verifyPassword,
+  } = useAuth();
+  const { numaGet, numaPut, numaPost } = useNumaRequest();
   const { availableKBs, isLoadingKBs, kbError } = useKnowledgeBase();
 
   const [localActiveKey, setLocalActiveKey] = useState<string>('my-profile');
@@ -117,14 +129,36 @@ export default function UserProfilePage({
   const [devicesLoading, setDevicesLoading] = useState(false);
   const [deviceRevoking, setDeviceRevoking] = useState<string | null>(null);
 
+  // MFA re-enrollment modal state
+  const [reEnrollModalOpen, setReEnrollModalOpen] = useState(false);
+  const [reEnrollStep, setReEnrollStep] = useState<'password' | 'setup' | 'done'>('password');
+  const [reEnrollPassword, setReEnrollPassword] = useState('');
+  const [reEnrollShowPassword, setReEnrollShowPassword] = useState(false);
+  const [reEnrollMfaSetup, setReEnrollMfaSetup] = useState<{
+    otpauthUrl: string;
+    secretCode: string;
+  } | null>(null);
+  const [reEnrollCode, setReEnrollCode] = useState('');
+  const [reEnrollLoading, setReEnrollLoading] = useState(false);
+  const [reEnrollError, setReEnrollError] = useState<string | null>(null);
+  const [reEnrollSuccess, setReEnrollSuccess] = useState(false);
+  const [reEnrollSecretCopied, setReEnrollSecretCopied] = useState(false);
+
+  // Recovery codes state
+  const [recoveryCodesStatus, setRecoveryCodesStatus] = useState<RecoveryCodesStatus | null>(null);
+  const [recoveryCodesGenerating, setRecoveryCodesGenerating] = useState(false);
+  const [recoveryCodesError, setRecoveryCodesError] = useState<string | null>(null);
+  const [showRecoveryCodesModal, setShowRecoveryCodesModal] = useState(false);
+  const [generatedRecoveryCodes, setGeneratedRecoveryCodes] = useState<string[]>([]);
+
   const loadDevices = useCallback(async () => {
     if (!hasMfa || !listDevices) return;
     setDevicesLoading(true);
     try {
       const result = await listDevices();
       setDevices(result);
-    } catch {
-      // silently fail
+    } catch (err) {
+      console.error('loadDevices failed:', err);
     } finally {
       setDevicesLoading(false);
     }
@@ -149,6 +183,124 @@ export default function UserProfilePage({
     },
     [forgetDevice]
   );
+
+  const handleOpenReEnrollModal = useCallback(() => {
+    setReEnrollModalOpen(true);
+    setReEnrollStep('password');
+    setReEnrollPassword('');
+    setReEnrollShowPassword(false);
+    setReEnrollMfaSetup(null);
+    setReEnrollCode('');
+    setReEnrollError(null);
+    setReEnrollSecretCopied(false);
+  }, []);
+
+  const handleCloseReEnrollModal = useCallback(() => {
+    setReEnrollModalOpen(false);
+    setReEnrollPassword('');
+    setReEnrollMfaSetup(null);
+    setReEnrollCode('');
+    setReEnrollError(null);
+  }, []);
+
+  const handleReEnrollPasswordSubmit = useCallback(
+    async (e: React.FormEvent) => {
+      e.preventDefault();
+      if (!reEnrollPassword) return;
+      setReEnrollError(null);
+      setReEnrollLoading(true);
+      try {
+        await verifyPassword(reEnrollPassword);
+        // Password verified — now initiate MFA re-enrollment
+        const setupData = await initiateReEnrollMfa();
+        setReEnrollMfaSetup({ otpauthUrl: setupData.otpauthUrl, secretCode: setupData.secretCode });
+        setReEnrollCode('');
+        setReEnrollStep('setup');
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : '';
+        if (msg.includes('Incorrect') || msg.includes('NotAuthorizedException')) {
+          setReEnrollError(t('userProfile.mfaSecurity.incorrectPassword'));
+        } else {
+          setReEnrollError(msg || t('userProfile.mfaSecurity.reenrolError'));
+        }
+      } finally {
+        setReEnrollLoading(false);
+      }
+    },
+    [reEnrollPassword, verifyPassword, initiateReEnrollMfa, t]
+  );
+
+  const handleCompleteReEnroll = useCallback(
+    async (e: React.FormEvent) => {
+      e.preventDefault();
+      if (!reEnrollCode || reEnrollCode.length !== 6) {
+        setReEnrollError(t('userProfile.mfaSecurity.invalidCode'));
+        return;
+      }
+      setReEnrollError(null);
+      setReEnrollLoading(true);
+      try {
+        await completeReEnrollMfa(reEnrollCode);
+        setReEnrollStep('done');
+        setReEnrollMfaSetup(null);
+        setReEnrollCode('');
+        setReEnrollSuccess(true);
+        // Close modal after brief delay so user sees success
+        setTimeout(() => {
+          setReEnrollModalOpen(false);
+        }, 1500);
+      } catch (err) {
+        setReEnrollError(err instanceof Error ? err.message : t('userProfile.mfaSecurity.verifyError'));
+      } finally {
+        setReEnrollLoading(false);
+      }
+    },
+    [completeReEnrollMfa, reEnrollCode, t]
+  );
+
+  const handleCopyReEnrollSecret = useCallback(() => {
+    if (reEnrollMfaSetup?.secretCode) {
+      navigator.clipboard.writeText(reEnrollMfaSetup.secretCode);
+      setReEnrollSecretCopied(true);
+      setTimeout(() => setReEnrollSecretCopied(false), 2000);
+    }
+  }, [reEnrollMfaSetup]);
+
+  // Load recovery codes status on mount
+  const loadRecoveryCodesStatus = useCallback(async () => {
+    if (!hasMfa) return;
+    try {
+      const status = await AdminMfaSettingsService.getRecoveryCodesStatus(numaGet);
+      setRecoveryCodesStatus(status);
+    } catch {
+      // Non-critical — silently fail
+    }
+  }, [hasMfa, numaGet]);
+
+  useEffect(() => {
+    loadRecoveryCodesStatus();
+  }, [loadRecoveryCodesStatus]);
+
+  const handleGenerateRecoveryCodes = useCallback(async () => {
+    // Confirm before regenerating — existing codes will be invalidated
+    if (recoveryCodesStatus?.hasRecoveryCodes && !window.confirm(t('userProfile.recoveryCodes.regenerateConfirm'))) {
+      return;
+    }
+    setRecoveryCodesGenerating(true);
+    setRecoveryCodesError(null);
+    try {
+      const codes = await AdminMfaSettingsService.generateRecoveryCodes(numaPost);
+      setGeneratedRecoveryCodes(codes);
+      setShowRecoveryCodesModal(true);
+      // Refresh status after generation
+      const status = await AdminMfaSettingsService.getRecoveryCodesStatus(numaGet);
+      setRecoveryCodesStatus(status);
+    } catch {
+      setRecoveryCodesError(t('userProfile.recoveryCodes.generateError'));
+    } finally {
+      setRecoveryCodesGenerating(false);
+    }
+  }, [numaPost, numaGet, t, recoveryCodesStatus?.hasRecoveryCodes]);
 
   const relayLambdaArn = window.sessionStorage.getItem('PIPEDREAM_RELAY_LAMBDA_ARN');
   const previewMode = !hasPipedreamFeature || !relayLambdaArn;
@@ -1923,6 +2075,242 @@ export default function UserProfilePage({
               </span>
             }
           >
+            {/* MFA Re-enrolment Section */}
+            <div className="mb-4 p-3 border rounded-3 bg-light">
+              <h6 className="mb-2">{t('userProfile.mfaSecurity.title')}</h6>
+              <p className="text-muted small mb-2">{t('userProfile.mfaSecurity.currentMethod')}</p>
+
+              {reEnrollSuccess && (
+                <Alert variant="success" dismissible onClose={() => setReEnrollSuccess(false)} className="mb-2">
+                  {t('userProfile.mfaSecurity.reenrolSuccess')}
+                </Alert>
+              )}
+
+              <Button variant="outline-warning" size="sm" onClick={handleOpenReEnrollModal}>
+                {t('userProfile.mfaSecurity.reenrolButton')}
+              </Button>
+            </div>
+
+            {/* Recovery Codes Section */}
+            {recoveryCodesStatus?.enabled && (
+              <div className="mb-4 p-3 border rounded-3 bg-light">
+                <h6 className="mb-2">
+                  <i className="bi bi-key me-2" />
+                  {t('userProfile.recoveryCodes.title')}
+                </h6>
+                <p className="text-muted small mb-2">{t('userProfile.recoveryCodes.description')}</p>
+
+                {recoveryCodesError && (
+                  <Alert variant="danger" dismissible onClose={() => setRecoveryCodesError(null)} className="mb-2">
+                    {recoveryCodesError}
+                  </Alert>
+                )}
+
+                {recoveryCodesStatus.hasRecoveryCodes ? (
+                  <>
+                    <p className="small mb-2">
+                      <i className="bi bi-shield-check text-success me-1" />
+                      {t('userProfile.recoveryCodes.remaining', {
+                        count: recoveryCodesStatus.remainingCodes,
+                      })}
+                    </p>
+                    {recoveryCodesStatus.remainingCodes <= 2 && recoveryCodesStatus.remainingCodes > 0 && (
+                      <Alert variant="warning" className="py-2 px-3 mb-2">
+                        <i className="bi bi-exclamation-triangle me-1" />
+                        {t('userProfile.recoveryCodes.lowCodesWarning')}
+                      </Alert>
+                    )}
+                    <Button
+                      variant="outline-primary"
+                      size="sm"
+                      onClick={handleGenerateRecoveryCodes}
+                      disabled={recoveryCodesGenerating}
+                    >
+                      {recoveryCodesGenerating ? (
+                        <>
+                          <Spinner as="span" animation="border" size="sm" className="me-1" />
+                          {t('userProfile.recoveryCodes.generating')}
+                        </>
+                      ) : (
+                        t('userProfile.recoveryCodes.regenerateButton')
+                      )}
+                    </Button>
+                  </>
+                ) : (
+                  <>
+                    <p className="small text-muted mb-2">{t('userProfile.recoveryCodes.noCodes')}</p>
+                    <Button
+                      variant="outline-primary"
+                      size="sm"
+                      onClick={handleGenerateRecoveryCodes}
+                      disabled={recoveryCodesGenerating}
+                    >
+                      {recoveryCodesGenerating ? (
+                        <>
+                          <Spinner as="span" animation="border" size="sm" className="me-1" />
+                          {t('userProfile.recoveryCodes.generating')}
+                        </>
+                      ) : (
+                        t('userProfile.recoveryCodes.generateButton')
+                      )}
+                    </Button>
+                  </>
+                )}
+              </div>
+            )}
+
+            {/* Recovery Codes Modal */}
+            <RecoveryCodesModal
+              show={showRecoveryCodesModal}
+              codes={generatedRecoveryCodes}
+              onClose={() => {
+                setShowRecoveryCodesModal(false);
+                setGeneratedRecoveryCodes([]);
+              }}
+              isRegeneration={recoveryCodesStatus?.hasRecoveryCodes}
+            />
+
+            {/* MFA Re-enrolment Modal */}
+            <Modal show={reEnrollModalOpen} onHide={handleCloseReEnrollModal} centered backdrop="static">
+              <Modal.Header closeButton>
+                <Modal.Title className="h5">
+                  {reEnrollStep === 'done'
+                    ? t('userProfile.mfaSecurity.reenrolSuccess')
+                    : t('userProfile.mfaSecurity.reenrolModalTitle')}
+                </Modal.Title>
+              </Modal.Header>
+              <Modal.Body>
+                {reEnrollError && (
+                  <Alert variant="danger" dismissible onClose={() => setReEnrollError(null)} className="mb-3">
+                    {reEnrollError}
+                  </Alert>
+                )}
+
+                {/* Step 1: Password verification */}
+                {reEnrollStep === 'password' && (
+                  <Form onSubmit={handleReEnrollPasswordSubmit}>
+                    <p className="text-muted small mb-3">{t('userProfile.mfaSecurity.passwordPrompt')}</p>
+                    <Form.Group className="mb-3">
+                      <Form.Label>{t('userProfile.mfaSecurity.passwordLabel')}</Form.Label>
+                      <InputGroup>
+                        <Form.Control
+                          type={reEnrollShowPassword ? 'text' : 'password'}
+                          value={reEnrollPassword}
+                          onChange={(e) => setReEnrollPassword(e.target.value)}
+                          placeholder={t('userProfile.mfaSecurity.passwordPlaceholder')}
+                          autoFocus
+                          autoComplete="current-password"
+                        />
+                        <Button
+                          variant="outline-secondary"
+                          onClick={() => setReEnrollShowPassword(!reEnrollShowPassword)}
+                          tabIndex={-1}
+                        >
+                          <i className={`bi bi-eye${reEnrollShowPassword ? '-slash' : ''}`} />
+                        </Button>
+                      </InputGroup>
+                    </Form.Group>
+                    <Button
+                      variant="primary"
+                      type="submit"
+                      className="w-100"
+                      disabled={reEnrollLoading || !reEnrollPassword}
+                    >
+                      {reEnrollLoading ? (
+                        <>
+                          <Spinner as="span" animation="border" size="sm" className="me-2" />
+                          {t('userProfile.mfaSecurity.verifying')}
+                        </>
+                      ) : (
+                        t('userProfile.mfaSecurity.continueButton')
+                      )}
+                    </Button>
+                  </Form>
+                )}
+
+                {/* Step 2: QR code + TOTP verification (matches login MFA setup UI) */}
+                {reEnrollStep === 'setup' && reEnrollMfaSetup && (
+                  <Form onSubmit={handleCompleteReEnroll}>
+                    <Alert variant="warning" className="mb-3">
+                      <p className="mb-0 small">{t('userProfile.mfaSecurity.reenrolWarning')}</p>
+                    </Alert>
+
+                    {/* QR Code */}
+                    <div className="text-center mb-3">
+                      <div className="d-inline-block p-3 bg-white rounded border" style={{ lineHeight: 0 }}>
+                        <QRCodeSVG value={reEnrollMfaSetup.otpauthUrl} size={180} level="M" />
+                      </div>
+                      <Form.Text className="d-block mt-2 text-muted">
+                        {t('userProfile.mfaSecurity.scanQrCode')}
+                      </Form.Text>
+                    </div>
+
+                    {/* Manual entry fallback */}
+                    <details className="mb-3">
+                      <summary className="text-muted small" style={{ cursor: 'pointer' }}>
+                        {t('userProfile.mfaSecurity.cantScanQr')}
+                      </summary>
+                      <div className="mt-2">
+                        <Form.Label className="small">{t('userProfile.mfaSecurity.secretKeyLabel')}</Form.Label>
+                        <InputGroup size="sm">
+                          <Form.Control
+                            type="text"
+                            value={reEnrollMfaSetup.secretCode}
+                            readOnly
+                            className="font-monospace"
+                          />
+                          <Button variant="outline-secondary" onClick={handleCopyReEnrollSecret}>
+                            {reEnrollSecretCopied ? t('common:copied') : t('common:copy')}
+                          </Button>
+                        </InputGroup>
+                        <Form.Text className="text-muted small">{t('userProfile.mfaSecurity.secretKeyHint')}</Form.Text>
+                      </div>
+                    </details>
+
+                    <Form.Group className="mb-3">
+                      <Form.Label>{t('userProfile.mfaSecurity.codeLabel')}</Form.Label>
+                      <Form.Control
+                        type="text"
+                        inputMode="numeric"
+                        pattern="[0-9]*"
+                        maxLength={6}
+                        value={reEnrollCode}
+                        onChange={(e) => setReEnrollCode(e.target.value.replace(/\D/g, ''))}
+                        placeholder="000000"
+                        autoFocus
+                        autoComplete="one-time-code"
+                      />
+                    </Form.Group>
+
+                    <Button
+                      variant="primary"
+                      type="submit"
+                      className="w-100"
+                      disabled={reEnrollLoading || reEnrollCode.length !== 6}
+                    >
+                      {reEnrollLoading ? (
+                        <>
+                          <Spinner as="span" animation="border" size="sm" className="me-2" />
+                          {t('userProfile.mfaSecurity.verifying')}
+                        </>
+                      ) : (
+                        t('userProfile.mfaSecurity.verifyButton')
+                      )}
+                    </Button>
+                  </Form>
+                )}
+
+                {/* Step 3: Success */}
+                {reEnrollStep === 'done' && (
+                  <Alert variant="success" className="mb-0">
+                    <i className="bi bi-check-circle me-2" />
+                    {t('userProfile.mfaSecurity.reenrolSuccess')}
+                  </Alert>
+                )}
+              </Modal.Body>
+            </Modal>
+
+            <h6 className="mb-2">{t('userProfile.trustedDevices.title')}</h6>
             <p className="text-muted mb-3">{t('userProfile.trustedDevices.description')}</p>
             {devicesLoading ? (
               <div className="text-center py-4">

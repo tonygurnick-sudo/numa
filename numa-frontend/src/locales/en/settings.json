@@ -148,6 +148,12 @@
     "saveSuccess": "Scheduling settings saved successfully.",
     "saveFailed": "Failed to save scheduling settings."
   },
+  "recoveryCodes": {
+    "title": "Recovery Codes",
+    "description": "Allow users to generate backup recovery codes for MFA login. If a user loses their authenticator, they can use a recovery code to sign in.",
+    "enableLabel": "Enable recovery codes",
+    "disabledInfo": "Recovery codes are disabled. Users who lose their authenticator must contact an admin for an MFA reset."
+  },
   "mfaSettings": {
     "title": "Device Trust Duration",
     "description": "Configure how long users can skip two-factor authentication on trusted devices. Set to 0 to require MFA on every login. Reducing the duration takes effect on the next login — existing device trust that exceeds the new window will require MFA again.",
@@ -157,6 +163,24 @@
     "durationHelp": "Users who check 'Remember this device' will skip MFA for the selected duration (max {{maxHours}}h / {{maxDays}} days).",
     "zeroMeansAlways": "MFA will be required on every login. No 'Remember this device' option will be shown to users.",
     "saveSuccess": "MFA device trust settings saved successfully."
+  },
+  "mfaReset": {
+    "resetButton": "Reset MFA",
+    "resetConfirmTitle": "Reset MFA for {{email}}",
+    "resetConfirmBody": "This will invalidate their current authenticator and revoke all active sessions. They will have 24 hours to set up a new authenticator. Please notify the user directly — email notifications are not yet automated.",
+    "resetConfirmButton": "Reset MFA",
+    "resetting": "Resetting...",
+    "resetSuccess": "MFA reset initiated. Grace period expires at {{expiresAt}}.",
+    "resetError": "Failed to reset MFA: {{message}}",
+    "noMfaConfigured": "This user does not have MFA configured.",
+    "rateLimited": "Too many resets. Contact security if this is intentional.",
+    "status": {
+      "active": "MFA Active",
+      "resetPending": "MFA Reset Pending",
+      "resetExpired": "Reset Expired",
+      "notConfigured": "MFA Not Configured"
+    },
+    "graceExpiresIn": "Grace period expires in {{time}}"
   },
   "integrations": {
     "companySettingsTitle": "Company-wide settings",
@@ -695,8 +719,45 @@
         "neverHelp": "All actions run without approval prompts."
       }
     },
+    "mfaSecurity": {
+      "title": "MFA / Security",
+      "currentMethod": "Your account is protected with software token (TOTP) two-factor authentication.",
+      "reenrolButton": "Re-enrol MFA",
+      "reenrolModalTitle": "Re-enrol Multi-Factor Authentication",
+      "reenrolWarning": "This will invalidate your current authenticator app. Scan the new QR code with your authenticator to continue.",
+      "reenrolSuccess": "MFA re-enrolled successfully. Your new authenticator is now active.",
+      "reenrolError": "Failed to initiate MFA re-enrolment.",
+      "passwordPrompt": "For security, please confirm your password before changing your MFA settings.",
+      "passwordLabel": "Password",
+      "passwordPlaceholder": "Enter your password",
+      "incorrectPassword": "Incorrect password. Please try again.",
+      "continueButton": "Continue",
+      "verifying": "Verifying...",
+      "scanQrCode": "Scan this QR code with your authenticator app",
+      "cantScanQr": "Can't scan the QR code?",
+      "secretKeyLabel": "Manual entry key",
+      "secretKeyHint": "Enter this key manually in your authenticator app.",
+      "codeLabel": "Verification Code",
+      "verifyButton": "Verify & Activate",
+      "cancelButton": "Cancel",
+      "invalidCode": "Please enter a valid 6-digit code.",
+      "verifyError": "Verification failed. Please try again."
+    },
+    "recoveryCodes": {
+      "title": "Recovery Codes",
+      "description": "Backup codes for signing in when you don't have your authenticator app.",
+      "remaining_one": "{{count}} code remaining",
+      "remaining_other": "{{count}} codes remaining",
+      "noCodes": "No recovery codes generated yet.",
+      "generateButton": "Generate Recovery Codes",
+      "regenerateButton": "Regenerate Recovery Codes",
+      "generating": "Generating...",
+      "generateError": "Failed to generate recovery codes.",
+      "lowCodesWarning": "You are running low on recovery codes. Consider regenerating.",
+      "regenerateConfirm": "This will invalidate your existing recovery codes. Are you sure you want to generate new ones?"
+    },
     "trustedDevices": {
-      "title": "Trusted Devices",
+      "title": "Security",
       "description": "Devices you have chosen to remember for two-factor authentication. Revoking trust means MFA will be required on the next login from that device.",
       "noDevices": "No trusted devices found. When you log in with MFA and select 'Remember this device', it will appear here.",
       "unknownDevice": "Unknown device",

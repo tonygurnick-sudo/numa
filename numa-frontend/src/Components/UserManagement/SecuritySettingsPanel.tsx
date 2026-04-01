@@ -63,6 +63,9 @@ export const SecuritySettingsPanel = ({ mfaEnabled, numaGet, numaPut }: Security
 
   const hasErrors = !idleValid || !maxSessionValid || !mfaValid;
 
+  // Recovery codes toggle
+  const [recoveryCodesEnabled, setRecoveryCodesEnabled] = useState(false);
+
   const loadSettings = useCallback(async () => {
     setLoading(true);
     try {
@@ -74,6 +77,7 @@ export const SecuritySettingsPanel = ({ mfaEnabled, numaGet, numaPut }: Security
 
       setIdleTimeoutInput(String(settings.sessionIdleTimeoutMinutes));
       setMaxSessionInput(String(settings.maxSessionDurationHours));
+      setRecoveryCodesEnabled(settings.recoveryCodesEnabled === true);
     } catch {
       // Defaults are fine
     } finally {
@@ -102,6 +106,7 @@ export const SecuritySettingsPanel = ({ mfaEnabled, numaGet, numaPut }: Security
           rememberDurationHours: rememberHours,
           sessionIdleTimeoutMinutes: idleTimeout,
           maxSessionDurationHours: maxSession,
+          recoveryCodesEnabled,
         },
         numaPut
       );
@@ -227,72 +232,98 @@ export const SecuritySettingsPanel = ({ mfaEnabled, numaGet, numaPut }: Security
 
         {/* MFA Device Trust Duration (only when MFA is enabled) */}
         {mfaEnabled && (
-          <div className="mb-4 p-3 border rounded-3 bg-light">
-            <h6 className="fw-semibold mb-3">
-              <i className="bi bi-phone me-2"></i>
-              {t('mfaSettings.title')}
-            </h6>
-            <p className="small text-muted mb-3">{t('mfaSettings.description')}</p>
+          <>
+            <div className="mb-4 p-3 border rounded-3 bg-light">
+              <h6 className="fw-semibold mb-3">
+                <i className="bi bi-phone me-2"></i>
+                {t('mfaSettings.title')}
+              </h6>
+              <p className="small text-muted mb-3">{t('mfaSettings.description')}</p>
 
-            <Form.Group className="mb-0">
-              <Form.Label className="fw-semibold">{t('mfaSettings.durationLabel')}</Form.Label>
-              <div className="d-flex align-items-center gap-2" style={{ maxWidth: 340 }}>
-                <Form.Control
-                  type="number"
-                  min={0}
-                  max={mfaMaxForUnit}
-                  value={mfaInputValue}
-                  isInvalid={!mfaValid}
-                  onChange={(e) => setMfaInputValue(e.target.value)}
-                  onBlur={() => {
-                    if (mfaInputValue === '') setMfaInputValue('0');
-                  }}
-                  style={{ maxWidth: 100 }}
-                />
-                <Form.Select
-                  value={mfaUnit}
-                  onChange={(e) => {
-                    const newUnit = e.target.value as 'hours' | 'days';
-                    const newMax = newUnit === 'days' ? MFA_MAX_DAYS : MFA_MAX_HOURS;
-                    const currentParsed = parseInt(mfaInputValue, 10) || 0;
-                    // Convert between units: hours→days divide by 24, days→hours multiply by 24
-                    const converted = newUnit === 'days' ? Math.floor(currentParsed / 24) : currentParsed * 24;
-                    const clamped = Math.min(converted, newMax);
-                    setMfaUnit(newUnit);
-                    setMfaInputValue(String(clamped));
-                  }}
-                  style={{ maxWidth: 100 }}
-                >
-                  <option value="hours">{t('mfaSettings.unitHours')}</option>
-                  <option value="days">{t('mfaSettings.unitDays')}</option>
-                </Form.Select>
-                <MaxTooltip
-                  max={mfaMaxForUnit}
-                  unit={mfaUnit === 'days' ? t('mfaSettings.unitDays') : t('mfaSettings.unitHours')}
-                />
-              </div>
-              {!mfaValid && (
-                <Form.Text className="text-danger">
-                  {t('securitySettings.validation.mfaDuration', {
-                    max: mfaMaxForUnit,
-                    unit: mfaUnit === 'days' ? t('mfaSettings.unitDays') : t('mfaSettings.unitHours'),
-                  })}
-                </Form.Text>
-              )}
-              {mfaValid && (
-                <Form.Text className="text-muted">
-                  {t('mfaSettings.durationHelp', { maxHours: MFA_MAX_HOURS, maxDays: MFA_MAX_DAYS })}
-                </Form.Text>
-              )}
-            </Form.Group>
+              <Form.Group className="mb-0">
+                <Form.Label className="fw-semibold">{t('mfaSettings.durationLabel')}</Form.Label>
+                <div className="d-flex align-items-center gap-2" style={{ maxWidth: 340 }}>
+                  <Form.Control
+                    type="number"
+                    min={0}
+                    max={mfaMaxForUnit}
+                    value={mfaInputValue}
+                    isInvalid={!mfaValid}
+                    onChange={(e) => setMfaInputValue(e.target.value)}
+                    onBlur={() => {
+                      if (mfaInputValue === '') setMfaInputValue('0');
+                    }}
+                    style={{ maxWidth: 100 }}
+                  />
+                  <Form.Select
+                    value={mfaUnit}
+                    onChange={(e) => {
+                      const newUnit = e.target.value as 'hours' | 'days';
+                      const newMax = newUnit === 'days' ? MFA_MAX_DAYS : MFA_MAX_HOURS;
+                      const currentParsed = parseInt(mfaInputValue, 10) || 0;
+                      // Convert between units: hours→days divide by 24, days→hours multiply by 24
+                      const converted = newUnit === 'days' ? Math.floor(currentParsed / 24) : currentParsed * 24;
+                      const clamped = Math.min(converted, newMax);
+                      setMfaUnit(newUnit);
+                      setMfaInputValue(String(clamped));
+                    }}
+                    style={{ maxWidth: 100 }}
+                  >
+                    <option value="hours">{t('mfaSettings.unitHours')}</option>
+                    <option value="days">{t('mfaSettings.unitDays')}</option>
+                  </Form.Select>
+                  <MaxTooltip
+                    max={mfaMaxForUnit}
+                    unit={mfaUnit === 'days' ? t('mfaSettings.unitDays') : t('mfaSettings.unitHours')}
+                  />
+                </div>
+                {!mfaValid && (
+                  <Form.Text className="text-danger">
+                    {t('securitySettings.validation.mfaDuration', {
+                      max: mfaMaxForUnit,
+                      unit: mfaUnit === 'days' ? t('mfaSettings.unitDays') : t('mfaSettings.unitHours'),
+                    })}
+                  </Form.Text>
+                )}
+                {mfaValid && (
+                  <Form.Text className="text-muted">
+                    {t('mfaSettings.durationHelp', { maxHours: MFA_MAX_HOURS, maxDays: MFA_MAX_DAYS })}
+                  </Form.Text>
+                )}
+              </Form.Group>
 
-            {mfaValid && (isNaN(mfaParsed) || mfaParsed === 0) && (
-              <Alert variant="info" className="mt-2 mb-0 py-2 px-3">
-                <i className="bi bi-info-circle me-2"></i>
-                {t('mfaSettings.zeroMeansAlways')}
-              </Alert>
-            )}
-          </div>
+              {mfaValid && (isNaN(mfaParsed) || mfaParsed === 0) && (
+                <Alert variant="info" className="mt-2 mb-0 py-2 px-3">
+                  <i className="bi bi-info-circle me-2"></i>
+                  {t('mfaSettings.zeroMeansAlways')}
+                </Alert>
+              )}
+            </div>
+
+            {/* Recovery Codes Toggle */}
+            <div className="mb-4 p-3 border rounded-3 bg-light">
+              <h6 className="fw-semibold mb-3">
+                <i className="bi bi-key me-2"></i>
+                {t('recoveryCodes.title')}
+              </h6>
+              <p className="small text-muted mb-3">{t('recoveryCodes.description')}</p>
+
+              <Form.Check
+                type="switch"
+                id="recoveryCodesEnabled"
+                label={t('recoveryCodes.enableLabel')}
+                checked={recoveryCodesEnabled}
+                onChange={(e) => setRecoveryCodesEnabled(e.target.checked)}
+              />
+
+              {!recoveryCodesEnabled && (
+                <Alert variant="info" className="mt-2 mb-0 py-2 px-3">
+                  <i className="bi bi-info-circle me-2"></i>
+                  {t('recoveryCodes.disabledInfo')}
+                </Alert>
+              )}
+            </div>
+          </>
         )}
 
         {saveStatus && (
