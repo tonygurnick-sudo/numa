@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import { Button, Alert, Card } from 'react-bootstrap';
 import { useTranslation } from 'react-i18next';
 import { ArrowLeft, ArrowRight, Save } from 'lucide-react';
+import { useAuth } from '../../Providers/AuthProvider';
 import { useBranding } from '../../Providers/BrandingContext';
 import { WorkflowConnector } from './WorkflowConnector';
 import { WorkflowStepTrigger } from './WorkflowStepTrigger';
@@ -31,6 +32,7 @@ type AutomationWorkflowBuilderProps = {
     label: string;
     maxRuns: number;
     emailNotifications: boolean;
+    notificationEmails: string[];
     agentSnapshot?: {
       agentId: string;
       title: string;
@@ -163,6 +165,8 @@ export const AutomationWorkflowBuilder = ({
   onCancel,
 }: AutomationWorkflowBuilderProps) => {
   const { t } = useTranslation('automations');
+  const { user } = useAuth();
+  const currentUserEmail = user?.decoded_tokens?.idToken?.email as string | undefined;
   const isEditing = !!editingAutomation;
 
   // Step state
@@ -207,7 +211,8 @@ export const AutomationWorkflowBuilder = ({
   const [name, setName] = useState('');
   const [prompt, setPrompt] = useState('');
   const [maxRuns, setMaxRuns] = useState(100);
-  const [emailNotifications, setEmailNotifications] = useState(false);
+  const [emailNotifications, setEmailNotifications] = useState(true);
+  const [notificationEmails, setNotificationEmails] = useState<string[]>([]);
   const [timezone, setTimezone] = useState(getDefaultTimezone());
 
   // UI state
@@ -221,7 +226,16 @@ export const AutomationWorkflowBuilder = ({
       setName(editingAutomation.label || '');
       setPrompt(editingAutomation.promptText || '');
       setMaxRuns(editingAutomation.maxRuns || 0);
-      setEmailNotifications(editingAutomation.emailNotifications || false);
+      setEmailNotifications(editingAutomation.emailNotifications !== false);
+      setNotificationEmails(
+        editingAutomation.notificationEmails?.length
+          ? editingAutomation.notificationEmails
+          : editingAutomation.notificationEmail
+            ? [editingAutomation.notificationEmail]
+            : currentUserEmail
+              ? [currentUserEmail]
+              : []
+      );
       setTimezone(editingAutomation.timezone || getDefaultTimezone());
       setSelectedAgentId(editingAutomation.agentId);
 
@@ -243,6 +257,13 @@ export const AutomationWorkflowBuilder = ({
       if (parsed.customCron) setCustomCron(parsed.customCron);
     }
   }, [editingAutomation]);
+
+  // Pre-populate notification emails with current user for new automations
+  useEffect(() => {
+    if (!editingAutomation && currentUserEmail && notificationEmails.length === 0) {
+      setNotificationEmails([currentUserEmail]);
+    }
+  }, [currentUserEmail, editingAutomation]);
 
   // Initialize preselected agent
   useEffect(() => {
@@ -371,6 +392,7 @@ export const AutomationWorkflowBuilder = ({
         label: name.trim(),
         maxRuns,
         emailNotifications,
+        notificationEmails: emailNotifications ? notificationEmails : [],
         agentSnapshot: selectedAgent
           ? {
               agentId: selectedAgent.agentId,
@@ -396,6 +418,7 @@ export const AutomationWorkflowBuilder = ({
     timezone,
     maxRuns,
     emailNotifications,
+    notificationEmails,
     onSave,
     isEditing,
     t,
@@ -463,6 +486,9 @@ export const AutomationWorkflowBuilder = ({
             onMaxRunsChange={setMaxRuns}
             emailNotifications={emailNotifications}
             onEmailNotificationsChange={setEmailNotifications}
+            notificationEmails={notificationEmails}
+            onNotificationEmailsChange={setNotificationEmails}
+            currentUserEmail={currentUserEmail}
             timezone={timezone}
             onTimezoneChange={setTimezone}
             submitting={submitting}
@@ -517,9 +543,7 @@ export const AutomationWorkflowBuilder = ({
 
       {/* Step content wrapped in a card with scrollable body */}
       <Card className="border-0 shadow-sm" style={{ borderRadius: 12 }}>
-        <Card.Body className="p-4" style={{ maxHeight: 'calc(100vh - 340px)', overflowY: 'auto' }}>
-          {renderStep()}
-        </Card.Body>
+        <Card.Body className="p-4">{renderStep()}</Card.Body>
       </Card>
 
       {/* Navigation */}

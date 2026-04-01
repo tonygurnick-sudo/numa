@@ -40,11 +40,13 @@ function TextFilter({
   const [operator, setOperator] = useState<string>((currentFilter?.operator as string) || 'contains');
   const [value, setValue] = useState<string>((currentFilter?.value as string) || '');
 
+  const needsValue = operator !== 'empty' && operator !== 'notEmpty';
+
   const handleApply = useCallback(() => {
-    if (value.trim()) {
-      onApply({ operator, value: value.trim() });
+    if (!needsValue || value.trim()) {
+      onApply({ operator, value: needsValue ? value.trim() : '' });
     }
-  }, [operator, value, onApply]);
+  }, [operator, value, onApply, needsValue]);
 
   return (
     <div className="p-2" style={{ minWidth: 240 }}>
@@ -53,16 +55,22 @@ function TextFilter({
         <option value="notContains">{t('filters.notContains')}</option>
         <option value="equals">{t('filters.equals')}</option>
         <option value="notEquals">{t('filters.notEquals')}</option>
+        <option value="startsWith">{t('filters.startsWith')}</option>
+        <option value="endsWith">{t('filters.endsWith')}</option>
+        <option value="empty">{t('filters.isEmpty')}</option>
+        <option value="notEmpty">{t('filters.isNotEmpty')}</option>
       </Form.Select>
-      <Form.Control
-        size="sm"
-        className="mb-2"
-        value={value}
-        onChange={(e) => setValue(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter') handleApply();
-        }}
-      />
+      {needsValue && (
+        <Form.Control
+          size="sm"
+          className="mb-2"
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') handleApply();
+          }}
+        />
+      )}
       <Button size="sm" variant="primary" className="w-100" onClick={handleApply}>
         {t('filters.apply')}
       </Button>

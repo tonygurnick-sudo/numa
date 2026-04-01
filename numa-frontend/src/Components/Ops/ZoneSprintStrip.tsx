@@ -1,4 +1,5 @@
 import { useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useOps } from './OpsContext';
 
 /**
@@ -8,19 +9,25 @@ import { useOps } from './OpsContext';
  * zones. Sprint controls have moved into the board area (SprintBoardBar).
  */
 const ZoneSprintStrip = () => {
+  const { t } = useTranslation('ops');
   const { teamData, tickets, activeZoneId, setActiveZone } = useOps();
 
   const zones = teamData?.zones ?? [];
 
-  // ── Zone ticket counts ──────────────────────────────────────────────
-  const zoneTicketCounts = useMemo(() => {
-    const map = new Map<string, number>();
+  // ── Zone ticket counts + completion stats ───────────────────────────
+  const zoneStats = useMemo(() => {
+    const map = new Map<string, { count: number; done: number }>();
     for (const zone of zones) {
-      map.set(zone.id, 0);
+      map.set(zone.id, { count: 0, done: 0 });
     }
     for (const tk of tickets) {
-      if (map.has(tk.zoneId)) {
-        map.set(tk.zoneId, (map.get(tk.zoneId) ?? 0) + 1);
+      if (tk.archived) continue;
+      const entry = map.get(tk.zoneId);
+      if (entry) {
+        entry.count += 1;
+        if (tk.statusType === 'completed' || tk.statusType === 'ended') {
+          entry.done += 1;
+        }
       }
     }
     return map;
@@ -31,7 +38,8 @@ const ZoneSprintStrip = () => {
       <div className="d-flex align-items-center gap-2" style={{ overflowX: 'auto' }}>
         <div className="ops-zone-tabs">
           {zones.map((zone) => {
-            const count = zoneTicketCounts.get(zone.id) ?? 0;
+            const stats = zoneStats.get(zone.id) ?? { count: 0, done: 0 };
+            const pct = stats.count > 0 ? Math.round((stats.done / stats.count) * 100) : 0;
             return (
               <button
                 key={zone.id}
@@ -43,7 +51,12 @@ const ZoneSprintStrip = () => {
               >
                 <i className={`bi ${zone.zoneType === 'board' ? 'bi-kanban' : 'bi-list-task'}`} />
                 {zone.name}
-                <span className="ops-zone-tab-count">({count})</span>
+                <span className="ops-zone-tab-count">({stats.count})</span>
+                {stats.count > 0 && (
+                  <span className="ops-zone-tab-pct" title={t('sprints.zoneProgress', { percent: pct })}>
+                    {pct}%
+                  </span>
+                )}
               </button>
             );
           })}

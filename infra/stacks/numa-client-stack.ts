@@ -100,6 +100,8 @@ export class NumaClientStack extends TerraformStack {
 
     const deployerRole = `arn:aws:iam::${props.arcanumNumaAccount}:role/admin-delegated-access`;
     const clientRole = `arn:aws:iam::${clientConfig.clientAccountId}:role/ArcanumAIAccess`;
+    // Centralized email sender Lambda in the deployer account (fixed name)
+    const emailSenderLambdaArn = `arn:aws:lambda:us-east-1:${props.arcanumNumaAccount}:function:numa-email-sender`;
     super(scope, name);
 
     const keyName = [name, 'numa'].join('/') + '.tfstate';
@@ -377,6 +379,7 @@ export class NumaClientStack extends TerraformStack {
         integrationsApprovalTableName: core.integrationsApprovalTable?.name,
         integrationsApprovalTableArn: core.integrationsApprovalTable?.arn,
         pipedreamRelayLambdaArn: core.pipedreamRelayLambdaArn,
+        emailSenderLambdaArn,
         // Chat settings table (for user profile memory management)
         chatSettingsTableName: core.chatSettingsTable.name,
         chatSettingsTableArn: core.chatSettingsTable.arn,
@@ -521,6 +524,10 @@ export class NumaClientStack extends TerraformStack {
       workspaceAgentsTableName: core.workspaceAgentsTable.name,
       userAgentsTableName: core.userAgentsTable.name,
       agentsSettingsTableName: core.agentsSettingsTable.name,
+      agentUserPrefsTableName: core.agentUserPrefsTable.name,
+      agentTeamsTableName: core.agentTeamsTable.name,
+      agentTeamMembersTableName: core.agentTeamMembersTable.name,
+      agentSharingTableName: core.agentSharingTable.name,
       schedulingSettingsTableName: core.schedulingSettingsTable.name,
       perClientSchedulingMinIntervalMinutes: clientConfig.schedulingMinIntervalMinutes,
       globalSchedulingMinIntervalMinutes: props.globalSchedulingMinIntervalMinutes,
@@ -566,6 +573,9 @@ export class NumaClientStack extends TerraformStack {
       auditRecoveryTableArn: core.auditRecoveryTable.arn,
       auditUserManagementTableName: core.auditUserManagementTable.name,
       auditUserManagementTableArn: core.auditUserManagementTable.arn,
+      emailSenderLambdaArn,
+      cognitoUserPoolId: core.userPoolId,
+      cognitoUserPoolArn: `arn:aws:cognito-idp:${clientConfig.region}:${clientConfig.clientAccountId}:userpool/${core.userPoolId}`,
     });
 
     // Numa Ops (work management, kanban boards, CRM, supplier management)
@@ -945,6 +955,11 @@ export class NumaClientStack extends TerraformStack {
               'arn:aws:bedrock:*:*:inference-profile/us.amazon.nova-*',
               'arn:aws:bedrock:*:*:inference-profile/apac.amazon.nova-*',
             ],
+          },
+          {
+            Effect: 'Allow',
+            Action: ['aws-marketplace:ViewSubscriptions', 'aws-marketplace:Subscribe'],
+            Resource: ['*'],
           },
         ],
       };

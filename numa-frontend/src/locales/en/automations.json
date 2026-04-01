@@ -62,9 +62,13 @@
     "backToList": "Back to Automations"
   },
   "tabs": {
-    "automations": "Automations",
+    "dashboard": "Dashboard",
     "create": "Create",
     "runs": "Runs"
+  },
+  "dashboard": {
+    "recentActivity": "Recent Activity",
+    "viewAllRuns": "View all runs"
   },
   "sections": {
     "active": "Active",
@@ -164,8 +168,12 @@
       "unlimited": "Unlimited"
     },
     "emailNotifications": {
-      "label": "Email me when this automation runs",
-      "comingSoon": "Coming soon"
+      "label": "Send email notifications when this automation runs",
+      "comingSoon": "Coming soon",
+      "recipientsLabel": "Notify these people",
+      "searchPlaceholder": "Search users...",
+      "noUsers": "No users found",
+      "loadingUsers": "Loading users..."
     },
     "timezone": {
       "label": "Timezone"
@@ -210,7 +218,10 @@
       "status": "Status",
       "noInstructions": "No additional instructions",
       "frequency": "Frequency",
-      "scheduleDetails": "Schedule Details"
+      "scheduleDetails": "Schedule Details",
+      "emailNotifications": "Email notifications",
+      "emailEnabled": "Enabled",
+      "emailDisabled": "Disabled"
     },
     "history": {
       "title": "Run History",

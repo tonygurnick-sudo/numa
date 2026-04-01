@@ -11,6 +11,7 @@ import os
 import re
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Optional
+from urllib.parse import unquote
 
 import structlog
 from aws_lambda_powertools.utilities.typing import LambdaContext
@@ -237,6 +238,7 @@ async def _handle_download_file(
     provider_name: str, user_id: str, event: Dict[str, Any]
 ) -> Dict[str, Any]:
     """Download file content from OAuth provider."""
+    file_id: str | None = None
     try:
         # Extract file ID from path: /[api/]oauth-files/{provider}/download/{file_id}
         raw_path = event.get("requestContext", {}).get("http", {}).get("path", "")
@@ -245,9 +247,19 @@ async def _handle_download_file(
             idx = path_parts.index("download")
             file_id = path_parts[idx + 1] if len(path_parts) > idx + 1 else None
         except ValueError:
-            file_id = None
+            pass
         if not file_id:
             return _response(400, {"error": "File ID required"})
+
+        # URL-decode file_id in case it contains encoded characters
+        file_id = unquote(file_id)
+
+        logger.info(
+            "Downloading file",
+            provider=provider_name,
+            file_id=file_id,
+            user_id=user_id[:8] if user_id else "unknown",
+        )
 
         provider, access_token = await _get_provider_with_token(provider_name, user_id)
 
@@ -255,6 +267,13 @@ async def _handle_download_file(
         file_content = await provider.download_file(access_token, file_id)
 
         await provider.close()
+
+        logger.info(
+            "Download complete",
+            provider=provider_name,
+            file_id=file_id,
+            content_length=len(file_content),
+        )
 
         # Return file content as base64
         return {
@@ -270,16 +289,30 @@ async def _handle_download_file(
         }
 
     except OAuthAuthenticationError as e:
+        logger.warning(
+            "Auth error downloading file", provider=provider_name, error=str(e)
+        )
         return _response(401, {"error": str(e)})
     except OAuthRateLimitError as e:
         return _response(429, {"error": str(e), "retry_after": e.retry_after})
     except OAuthError as e:
-        logger.error(f"OAuth error downloading file: {e}")
+        logger.error(
+            "OAuth error downloading file",
+            provider=provider_name,
+            file_id=file_id if file_id is not None else "unknown",
+            error=str(e),
+            status_code=getattr(e, "status_code", None),
+        )
         return _response(500, {"error": str(e)})
     except ValueError as e:
         return _response(400, {"error": str(e)})
     except Exception as e:
-        logger.error(f"Unexpected error downloading file: {e}")
+        logger.error(
+            "Unexpected error downloading file",
+            provider=provider_name,
+            error=str(e),
+            error_type=type(e).__name__,
+        )
         return _response(500, {"error": "Internal server error"})
 
 

@@ -19,7 +19,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from numa_workspace_agent.mcp_tools.numa_tool import (
     _OPERATION_TO_ENABLED_TOOL_KEYS,
-    MAX_UPLOAD_SIZE,
+    PRESIGNED_URL_THRESHOLD,
     TOOL_HANDLERS,
     TOOL_NAMES,
     _check_operation_allowed,
@@ -1179,17 +1179,48 @@ class TestHandleKbUpload:
         assert result["isError"] is True
         assert "not found" in result["content"][0]["text"].lower()
 
-    async def test_file_too_large_returns_error(self, tmp_path):
-        """File exceeding MAX_UPLOAD_SIZE returns an error."""
+    async def test_large_file_uses_presigned_url(self, tmp_path):
+        """File exceeding PRESIGNED_URL_THRESHOLD uses streaming upload."""
         big_file = tmp_path / "big.bin"
-        # Write just over 4 MB
-        big_file.write_bytes(b"x" * (MAX_UPLOAD_SIZE + 1))
+        big_file.write_bytes(b"x" * (PRESIGNED_URL_THRESHOLD + 1))
 
-        result = await _handle_kb_upload({"file": str(big_file)})
+        mock_result = {
+            "status": "success",
+            "presigned_url": "https://s3.example.com/upload",
+            "message": "Presigned URL generated",
+        }
+        mock_finalize_result = {"status": "success", "message": "Finalized"}
 
-        assert result["isError"] is True
-        assert "too large" in result["content"][0]["text"].lower()
-        assert "4 MB" in result["content"][0]["text"]
+        with (
+            patch(
+                "numa_workspace_agent.mcp_tools.numa_tool.invoke_workspace_tool",
+                side_effect=[mock_result, mock_finalize_result],
+            ) as mock_invoke,
+            patch(
+                "numa_workspace_agent.mcp_tools.numa_tool.upload_to_presigned_url",
+            ) as mock_upload,
+        ):
+            result = await _handle_kb_upload({"file": str(big_file)})
+
+            assert "isError" not in result
+
+            # Verify upload was called
+            mock_upload.assert_called_once_with(
+                "https://s3.example.com/upload", str(big_file)
+            )
+
+            # Verify invoke_workspace_tool was called twice: once for URL, once for Finalize
+            assert mock_invoke.call_count == 2
+
+            first_call_params = mock_invoke.call_args_list[0][0][1]
+            assert first_call_params["get_presigned_url"] is True
+            assert "content_base64" not in first_call_params
+
+            second_call_params = mock_invoke.call_args_list[1][0][1]
+            assert second_call_params.get("finalize_upload") is True
+
+            parsed = json.loads(result["content"][0]["text"])
+            assert "successfully via S3 stream" in parsed["message"]
 
     async def test_custom_kb_id_forwarded(self, tmp_path):
         """Custom kb_id should be forwarded in Lambda params."""

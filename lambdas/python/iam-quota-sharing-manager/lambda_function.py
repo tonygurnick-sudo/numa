@@ -92,12 +92,13 @@ def _ensure_role(iam, role_name: str, assume_role_policy: dict) -> tuple[str, bo
 def _ensure_policy(
     iam, policy_name: str, policy_doc: dict, account_id: str
 ) -> tuple[str, bool]:
-    """Create policy if it doesn't exist. Returns (arn, was_created)."""
+    """Create or update policy. Returns (arn, was_created)."""
     policy_arn = f"arn:aws:iam::{account_id}:policy/{policy_name}"
 
     try:
         iam.get_policy(PolicyArn=policy_arn)
-        logger.info(f"Policy {policy_name} already exists")
+        logger.info(f"Policy {policy_name} already exists, checking for updates")
+        _update_policy_if_changed(iam, policy_arn, policy_doc)
         return policy_arn, False
     except ClientError as e:
         error_code = e.response.get("Error", {}).get("Code")
@@ -112,6 +113,40 @@ def _ensure_policy(
         Description="Bedrock quota sharing permissions",
     )
     return response["Policy"]["Arn"], True
+
+
+def _update_policy_if_changed(iam, policy_arn: str, desired_doc: dict) -> None:
+    """Compare current policy version to desired and create a new version if changed."""
+    # Get the current default version's document
+    policy = iam.get_policy(PolicyArn=policy_arn)
+    default_version_id = policy["Policy"]["DefaultVersionId"]
+    current_version = iam.get_policy_version(
+        PolicyArn=policy_arn, VersionId=default_version_id
+    )
+    current_doc = current_version["PolicyVersion"]["Document"]
+
+    desired_sorted = json.dumps(desired_doc, sort_keys=True)
+    current_sorted = json.dumps(current_doc, sort_keys=True)
+
+    if current_sorted == desired_sorted:
+        logger.info("Policy document unchanged, no update needed")
+        return
+
+    logger.info("Policy document changed, creating new version")
+
+    # IAM allows max 5 policy versions -- delete non-default versions to make room
+    versions = iam.list_policy_versions(PolicyArn=policy_arn)
+    non_default = [v for v in versions["Versions"] if not v["IsDefaultVersion"]]
+    for v in non_default:
+        logger.info(f"Deleting old policy version {v['VersionId']}")
+        iam.delete_policy_version(PolicyArn=policy_arn, VersionId=v["VersionId"])
+
+    iam.create_policy_version(
+        PolicyArn=policy_arn,
+        PolicyDocument=json.dumps(desired_doc),
+        SetAsDefault=True,
+    )
+    logger.info("Policy updated with new default version")
 
 
 def _ensure_policy_attached(iam, role_name: str, policy_arn: str) -> None:

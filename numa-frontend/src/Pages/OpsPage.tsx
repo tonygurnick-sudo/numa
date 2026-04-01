@@ -1,11 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Spinner } from 'react-bootstrap';
 import { useTranslation } from 'react-i18next';
+import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '../Providers/AuthProvider';
 import { useNumaRequest } from '../Providers/NumaRequestContext';
 import { OpsProvider, useOps } from '../Components/Ops/OpsContext';
 import * as OpsService from '../Services/OpsService';
 import OpsHeader from '../Components/Ops/OpsHeader';
+import OpsFab from '../Components/Ops/OpsFab';
 import BoardView from '../Components/Ops/BoardView/BoardView';
 import BacklogView from '../Components/Ops/BacklogView/BacklogView';
 import { AllTicketsView } from '../Components/Ops/AllTicketsView/AllTicketsView';
@@ -17,6 +19,9 @@ import { CreateBoardWizard } from '../Components/Ops/Modals/CreateBoardWizard';
 import { GlobalSettingsModal } from '../Components/Ops/Modals/GlobalSettingsModal';
 import { BoardSettingsModal } from '../Components/Ops/Modals/BoardSettingsModal';
 import { TicketDetailModal } from '../Components/Ops/Modals/TicketDetailModal';
+import { ActivityFeedSidebar } from '../Components/Ops/ActivityFeedSidebar';
+
+const ACTIVITY_LS_KEY = 'numa_ops_activity_sidebar';
 
 // ─── Inner Content ──────────────────────────────────────────────────────────
 
@@ -25,7 +30,12 @@ import { TicketDetailModal } from '../Components/Ops/Modals/TicketDetailModal';
  * context via useOps(). It renders the top nav and routes to the active
  * top-level view.
  */
-const OpsPageContent: React.FC = () => {
+type OpsPageContentProps = {
+  activityOpen: boolean;
+  onToggleActivity: () => void;
+};
+
+const OpsPageContent: React.FC<OpsPageContentProps> = ({ activityOpen, onToggleActivity }) => {
   const { t } = useTranslation('ops');
   const { user } = useAuth();
   const {
@@ -67,7 +77,7 @@ const OpsPageContent: React.FC = () => {
   if (topView === 'home' && canManage) {
     return (
       <>
-        <OpsHeader />
+        <OpsHeader activityOpen={activityOpen} onToggleActivity={onToggleActivity} />
         <div className="flex-grow-1 overflow-auto">
           <OpsHomeView
             onCreateBoard={() => setShowCreateBoard(true)}
@@ -122,7 +132,7 @@ const OpsPageContent: React.FC = () => {
   if (topView === 'allTickets') {
     return (
       <>
-        <OpsHeader />
+        <OpsHeader activityOpen={activityOpen} onToggleActivity={onToggleActivity} />
         <div className="flex-grow-1 overflow-auto">
           <AllTicketsView />
         </div>
@@ -133,7 +143,7 @@ const OpsPageContent: React.FC = () => {
   if (topView === 'customers') {
     return (
       <>
-        <OpsHeader />
+        <OpsHeader activityOpen={activityOpen} onToggleActivity={onToggleActivity} />
         <div className="flex-grow-1 overflow-auto">
           <CrmMirrorView />
         </div>
@@ -144,7 +154,7 @@ const OpsPageContent: React.FC = () => {
   if (topView === 'suppliers') {
     return (
       <>
-        <OpsHeader />
+        <OpsHeader activityOpen={activityOpen} onToggleActivity={onToggleActivity} />
         <div className="flex-grow-1 overflow-auto">
           <SupplierMirrorView />
         </div>
@@ -155,7 +165,7 @@ const OpsPageContent: React.FC = () => {
   if (topView === 'roadmap') {
     return (
       <>
-        <OpsHeader />
+        <OpsHeader activityOpen={activityOpen} onToggleActivity={onToggleActivity} />
         <div className="flex-grow-1 overflow-auto">
           <RoadmapPlaceholder />
         </div>
@@ -169,7 +179,7 @@ const OpsPageContent: React.FC = () => {
   if (teams.length === 0) {
     return (
       <>
-        <OpsHeader />
+        <OpsHeader activityOpen={activityOpen} onToggleActivity={onToggleActivity} />
         <div className="d-flex justify-content-center align-items-start py-5 px-3">
           <div style={{ maxWidth: 520, width: '100%' }}>
             <div className="text-center mb-4">
@@ -227,7 +237,7 @@ const OpsPageContent: React.FC = () => {
   if (teamLoading && !teamData) {
     return (
       <>
-        <OpsHeader />
+        <OpsHeader activityOpen={activityOpen} onToggleActivity={onToggleActivity} />
         <div className="d-flex flex-column align-items-center justify-content-center flex-grow-1">
           <Spinner animation="border" />
           <p className="mt-3 text-muted">{t('common.loading')}</p>
@@ -242,7 +252,7 @@ const OpsPageContent: React.FC = () => {
 
   return (
     <>
-      <OpsHeader />
+      <OpsHeader activityOpen={activityOpen} onToggleActivity={onToggleActivity} />
       <div className="flex-grow-1 overflow-auto">{zoneType === 'board' ? <BoardView /> : <BacklogView />}</div>
     </>
   );
@@ -256,58 +266,54 @@ const OpsPageContent: React.FC = () => {
  */
 const DeepLinkHandler: React.FC = () => {
   const { numaGet } = useNumaRequest();
-  const { tickets, refreshTickets } = useOps();
+  const { tickets, refreshTickets, teamLoading } = useOps();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   const [ticketId, setTicketId] = useState<string | null>(null);
   const [show, setShow] = useState(false);
-  const displayIdRef = useRef<string | null>(null);
-  const resolved = useRef(false);
-
-  // Capture the display ID once on mount (before anything can strip it)
-  if (displayIdRef.current === null) {
-    displayIdRef.current = new URLSearchParams(window.location.search).get('ticket') ?? '';
-  }
-
-  const stripParam = () => {
-    const url = new URL(window.location.href);
-    if (url.searchParams.has('ticket')) {
-      url.searchParams.delete('ticket');
-      window.history.replaceState(null, '', url.pathname + url.search);
-    }
-  };
+  const processingRef = useRef<string | null>(null);
 
   // Try to resolve from locally loaded tickets first (works with cached data),
   // then fall back to the API call.
   useEffect(() => {
-    const displayId = displayIdRef.current;
-    if (!displayId || resolved.current) return;
+    const displayId = searchParams.get('ticket');
+    if (!displayId) {
+      processingRef.current = null;
+      return;
+    }
+
+    // Only resolve once per deep link
+    if (processingRef.current === displayId) return;
 
     // Check if the ticket is already in the local tickets array
     const local = tickets.find((t) => t.displayId === displayId);
     if (local) {
-      resolved.current = true;
+      processingRef.current = displayId;
       setTicketId(local.id);
       setShow(true);
-      stripParam();
+      searchParams.delete('ticket');
+      setSearchParams(searchParams, { replace: true });
       return;
     }
 
-    // Only try the API once tickets have had a chance to load (non-empty)
-    // or if we have no tickets at all, go straight to the API
-    if (tickets.length > 0) {
-      // Tickets loaded but this one isn't in them — try API (different team)
-      resolved.current = true;
-      stripParam();
-      OpsService.getTicketByDisplayId(numaGet, displayId)
-        .then((response) => {
-          setTicketId(response.ticket.id);
-          setShow(true);
-        })
-        .catch((err) => {
-          console.error('[OpsPage] Failed to resolve ticket deep link:', err);
-        });
-    }
-  }, [tickets, numaGet]);
+    // If local isn't found, we should fall back to the API.
+    // However, if the current board's tickets are still loading, wait before trying the API fallback.
+    if (teamLoading) return;
+
+    // Tickets have finished loading but this one isn't in them — try API (different team)
+    processingRef.current = displayId;
+    searchParams.delete('ticket');
+    setSearchParams(searchParams, { replace: true });
+
+    OpsService.getTicketByDisplayId(numaGet, displayId)
+      .then((response) => {
+        setTicketId(response.ticket.id);
+        setShow(true);
+      })
+      .catch((err) => {
+        console.error('[OpsPage] Failed to resolve ticket deep link:', err);
+      });
+  }, [tickets, numaGet, searchParams, setSearchParams, teamLoading]);
 
   return (
     <TicketDetailModal
@@ -327,17 +333,84 @@ const DeepLinkHandler: React.FC = () => {
 };
 
 /**
- * OpsPage is the top-level page component for the Numa Ops module.
- * It wraps everything in the <OpsProvider> so all children can access the
- * Ops context, and delegates rendering to OpsPageContent.
+ * ActivitySidebarWrapper renders the sidebar and its associated ticket detail
+ * modal. Lives inside OpsProvider so it has access to useOps().
  */
+const ActivitySidebarWrapper: React.FC<{
+  open: boolean;
+  onClose: () => void;
+}> = ({ open, onClose }) => {
+  const { refreshTickets } = useOps();
+  const [ticketId, setTicketId] = useState<string | null>(null);
+  const [showDetail, setShowDetail] = useState(false);
+
+  return (
+    <>
+      <ActivityFeedSidebar
+        open={open}
+        onClose={onClose}
+        onOpenTicket={(id) => {
+          setTicketId(id);
+          setShowDetail(true);
+        }}
+      />
+      <TicketDetailModal
+        show={showDetail}
+        ticketId={ticketId}
+        onHide={() => {
+          setShowDetail(false);
+          setTicketId(null);
+        }}
+        onDeleted={() => {
+          setShowDetail(false);
+          setTicketId(null);
+          refreshTickets();
+        }}
+      />
+    </>
+  );
+};
+
 export const OpsPage: React.FC = () => {
+  // ── Activity sidebar state (lifted here so sidebar renders once) ──────
+  const [activityOpen, setActivityOpen] = useState(() => {
+    try {
+      return localStorage.getItem(ACTIVITY_LS_KEY) === 'true';
+    } catch {
+      return false;
+    }
+  });
+
+  const toggleActivity = () => {
+    setActivityOpen((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem(ACTIVITY_LS_KEY, String(next));
+      } catch {
+        /* noop */
+      }
+      return next;
+    });
+  };
+
   return (
     <OpsProvider>
       <div className="d-flex flex-column h-100">
-        <OpsPageContent />
+        <OpsPageContent activityOpen={activityOpen} onToggleActivity={toggleActivity} />
       </div>
+      <ActivitySidebarWrapper
+        open={activityOpen}
+        onClose={() => {
+          setActivityOpen(false);
+          try {
+            localStorage.setItem(ACTIVITY_LS_KEY, 'false');
+          } catch {
+            /* noop */
+          }
+        }}
+      />
       <DeepLinkHandler />
+      <OpsFab />
     </OpsProvider>
   );
 };

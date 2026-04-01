@@ -270,22 +270,26 @@ export const DataConnectorsTab = ({ adminSettings }: DataConnectorsTabProps) => 
       if (connector?.oauthPlatform) {
         // Platform connector: remove from enabled_connectors, only delete secret if none remain
         const secretName = `oauth-client-${getOAuthSecretId(providerId)}`;
-        const full = await getCompanySecret(secretName);
-        const enabledStr = full?.fields?.enabled_connectors || '';
-        const enabled = new Set(enabledStr.split(',').filter(Boolean));
-        enabled.delete(providerId);
-        if (enabled.size === 0) {
-          await deleteCompanySecret(secretName);
-        } else {
-          await updateCompanySecret(secretName, {
-            fields: { enabled_connectors: Array.from(enabled).join(',') },
-          });
+        try {
+          const full = await getCompanySecret(secretName);
+          const enabledStr = full?.fields?.enabled_connectors || '';
+          const enabled = new Set(enabledStr.split(',').filter(Boolean));
+          enabled.delete(providerId);
+          if (enabled.size === 0) {
+            await deleteCompanySecret(secretName);
+          } else {
+            await updateCompanySecret(secretName, {
+              fields: { enabled_connectors: Array.from(enabled).join(',') },
+            });
+          }
+        } catch {
+          // Secret already deleted — nothing to clean up
         }
       } else if (isOAuth) {
-        await deleteCompanySecret(`oauth-client-${providerId}`);
+        await deleteCompanySecret(`oauth-client-${providerId}`).catch(() => {});
       } else {
         // Token/API-key connector: secret is connector-{id}
-        await deleteCompanySecret(`connector-${providerId}`);
+        await deleteCompanySecret(`connector-${providerId}`).catch(() => {});
       }
     } catch (err) {
       const msg =
@@ -293,7 +297,12 @@ export const DataConnectorsTab = ({ adminSettings }: DataConnectorsTabProps) => 
       setLoadError(msg);
     } finally {
       OAuthProvidersService.clearProvidersCache();
-      await Promise.all([loadCompanySecrets(), loadOAuthProviders()]);
+      setRecentlySavedIds((prev) => {
+        const next = new Set(prev);
+        next.delete(providerId);
+        return next;
+      });
+      await Promise.all([loadCompanySecrets(), loadOAuthProviders(true)]);
       setDisconnectingId(null);
     }
   };
@@ -303,13 +312,19 @@ export const DataConnectorsTab = ({ adminSettings }: DataConnectorsTabProps) => 
     if (!confirmed) return;
     setDisconnectingId(connectorId);
     try {
-      await deleteCompanySecret(`connector-${connectorId}`);
+      await deleteCompanySecret(`connector-${connectorId}`).catch(() => {});
     } catch (err) {
       const msg =
         err instanceof Error ? err.message : t('dataConnectors.errors.disconnectFailed', { name: displayName });
       setLoadError(msg);
     } finally {
-      await loadCompanySecrets();
+      OAuthProvidersService.clearProvidersCache();
+      setRecentlySavedIds((prev) => {
+        const next = new Set(prev);
+        next.delete(connectorId);
+        return next;
+      });
+      await Promise.all([loadCompanySecrets(), loadOAuthProviders(true)]);
       setDisconnectingId(null);
     }
   };

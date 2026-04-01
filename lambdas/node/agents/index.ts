@@ -1,6 +1,13 @@
 import type { APIGatewayProxyEventV2, APIGatewayProxyHandlerV2 } from 'aws-lambda';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
-import { DeleteCommand, DynamoDBDocumentClient, GetCommand, PutCommand, QueryCommand } from '@aws-sdk/lib-dynamodb';
+import {
+  DeleteCommand,
+  DynamoDBDocumentClient,
+  GetCommand,
+  PutCommand,
+  QueryCommand,
+  ScanCommand,
+} from '@aws-sdk/lib-dynamodb';
 import { randomUUID } from 'crypto';
 import { S3Client, CopyObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
 import { GetCommand as DdbGetCommand } from '@aws-sdk/lib-dynamodb';
@@ -26,6 +33,10 @@ const WORKSPACE_TABLE = process.env.WORKSPACE_AGENTS_TABLE;
 const USER_TABLE = process.env.USER_AGENTS_TABLE;
 const OUTPUTS_BUCKET_NAME = process.env.OUTPUTS_BUCKET_NAME;
 const AGENTS_SETTINGS_TABLE_NAME = process.env.AGENTS_SETTINGS_TABLE_NAME;
+const PREFS_TABLE = process.env.AGENT_USER_PREFS_TABLE;
+const TEAMS_TABLE = process.env.AGENT_TEAMS_TABLE;
+const TEAM_MEMBERS_TABLE = process.env.AGENT_TEAM_MEMBERS_TABLE;
+const SHARING_TABLE = process.env.AGENT_SHARING_TABLE;
 
 type AgentVisibility = 'personal' | 'public';
 type AgentScope = 'workspace' | 'user';
@@ -1094,6 +1105,535 @@ const handleDuplicateAgent = async (agentId: string, auth: AuthContext): Promise
   return duplicateWorkspaceAgent(agentId, workspaceAgent, auth);
 };
 
+// ─── Prefs ───────────────────────────────────────────────────────────────────
+
+type AgentUserPrefs = {
+  user_id: string;
+  agent_id: string;
+  is_favorite?: boolean;
+  is_hidden?: boolean;
+  updated_at: number;
+};
+
+const handleGetPrefs = async (auth: AuthContext): Promise<ReturnType<typeof jsonResponse>> => {
+  if (!PREFS_TABLE) return jsonResponse(200, { prefs: [] });
+  const res = await dynamo.send(
+    new QueryCommand({
+      TableName: PREFS_TABLE,
+      KeyConditionExpression: 'user_id = :uid',
+      ExpressionAttributeValues: { ':uid': auth.sub },
+    })
+  );
+  const prefs = (res.Items || []).map((item) => ({
+    agentId: (item as AgentUserPrefs).agent_id,
+    isFavorite: (item as AgentUserPrefs).is_favorite ?? false,
+    isHidden: (item as AgentUserPrefs).is_hidden ?? false,
+  }));
+  return jsonResponse(200, { prefs });
+};
+
+const handleSetPref = async (
+  agentId: string,
+  body: { isFavorite?: boolean; isHidden?: boolean } | null,
+  auth: AuthContext
+): Promise<ReturnType<typeof jsonResponse>> => {
+  if (!PREFS_TABLE || !body) return errorResponse(400, 'Invalid request');
+
+  const updates: string[] = [];
+  const names: Record<string, string> = {};
+  const values: Record<string, unknown> = {};
+
+  if (body.isFavorite !== undefined) {
+    updates.push('#fav = :fav');
+    names['#fav'] = 'is_favorite';
+    values[':fav'] = body.isFavorite;
+  }
+  if (body.isHidden !== undefined) {
+    updates.push('#hid = :hid');
+    names['#hid'] = 'is_hidden';
+    values[':hid'] = body.isHidden;
+  }
+  if (updates.length === 0) return errorResponse(400, 'No fields to update');
+
+  updates.push('#upd = :upd');
+  names['#upd'] = 'updated_at';
+  values[':upd'] = Date.now();
+
+  await dynamo.send(
+    new PutCommand({
+      TableName: PREFS_TABLE,
+      Item: {
+        user_id: auth.sub,
+        agent_id: agentId,
+        ...(body.isFavorite !== undefined && { is_favorite: body.isFavorite }),
+        ...(body.isHidden !== undefined && { is_hidden: body.isHidden }),
+        updated_at: Date.now(),
+      },
+    })
+  );
+  return jsonResponse(200, { ok: true });
+};
+
+// ─── Teams ───────────────────────────────────────────────────────────────────
+
+type TeamItem = {
+  team_id: string;
+  sk: string;
+  team_name: string;
+  description?: string;
+  created_by: string;
+  created_by_name?: string;
+  created_at: number;
+  updated_at: number;
+  tenant_id: string;
+};
+
+type TeamMemberItem = {
+  team_id: string;
+  user_id: string;
+  role: 'owner' | 'editor' | 'viewer';
+  user_name?: string;
+  user_email?: string;
+  added_by: string;
+  added_at: number;
+};
+
+const generateTeamId = (): string => `team_${randomUUID().replace(/-/g, '')}`;
+
+const handleListTeams = async (auth: AuthContext): Promise<ReturnType<typeof jsonResponse>> => {
+  if (!TEAM_MEMBERS_TABLE || !TEAMS_TABLE) return jsonResponse(200, { teams: [] });
+
+  // Get all teams this user belongs to
+  const memberRes = await dynamo.send(
+    new QueryCommand({
+      TableName: TEAM_MEMBERS_TABLE,
+      IndexName: 'user-teams-index',
+      KeyConditionExpression: 'user_id = :uid',
+      ExpressionAttributeValues: { ':uid': auth.sub },
+    })
+  );
+  const memberships = (memberRes.Items || []) as TeamMemberItem[];
+  if (memberships.length === 0) return jsonResponse(200, { teams: [] });
+
+  // Fetch team metadata for each
+  const teams = await Promise.all(
+    memberships.map(async (m) => {
+      const res = await dynamo.send(
+        new GetCommand({ TableName: TEAMS_TABLE, Key: { team_id: m.team_id, sk: 'META' } })
+      );
+      const team = res.Item as TeamItem | undefined;
+      if (!team) return null;
+      return {
+        teamId: team.team_id,
+        teamName: team.team_name,
+        description: team.description,
+        myRole: m.role,
+        createdBy: team.created_by,
+        createdAt: team.created_at,
+      };
+    })
+  );
+  return jsonResponse(200, { teams: teams.filter(Boolean) });
+};
+
+const handleCreateTeam = async (
+  body: { teamName?: string; description?: string; creatorName?: string; creatorEmail?: string } | null,
+  auth: AuthContext
+): Promise<ReturnType<typeof jsonResponse>> => {
+  if (!TEAMS_TABLE || !TEAM_MEMBERS_TABLE) return errorResponse(500, 'Teams not configured');
+  if (!body?.teamName) return errorResponse(400, 'teamName is required');
+
+  const teamId = generateTeamId();
+  const now = Date.now();
+  // Prefer body-provided name/email (from ID token on frontend) over access token claims
+  const creatorName = body.creatorName || auth.name;
+  const creatorEmail = body.creatorEmail || auth.email;
+
+  // Create team metadata
+  await dynamo.send(
+    new PutCommand({
+      TableName: TEAMS_TABLE,
+      Item: {
+        team_id: teamId,
+        sk: 'META',
+        team_name: body.teamName,
+        description: body.description || '',
+        created_by: auth.sub,
+        created_by_name: creatorName,
+        created_at: now,
+        updated_at: now,
+        tenant_id: CLIENT_NAME,
+      },
+    })
+  );
+
+  // Add creator as owner
+  await dynamo.send(
+    new PutCommand({
+      TableName: TEAM_MEMBERS_TABLE,
+      Item: {
+        team_id: teamId,
+        user_id: auth.sub,
+        role: 'owner',
+        user_name: creatorName,
+        user_email: creatorEmail,
+        added_by: auth.sub,
+        added_at: now,
+      },
+    })
+  );
+
+  return jsonResponse(201, { teamId, teamName: body.teamName });
+};
+
+const handleGetTeam = async (teamId: string, auth: AuthContext): Promise<ReturnType<typeof jsonResponse>> => {
+  if (!TEAMS_TABLE || !TEAM_MEMBERS_TABLE) return errorResponse(500, 'Teams not configured');
+
+  const [teamRes, membersRes] = await Promise.all([
+    dynamo.send(new GetCommand({ TableName: TEAMS_TABLE, Key: { team_id: teamId, sk: 'META' } })),
+    dynamo.send(
+      new QueryCommand({
+        TableName: TEAM_MEMBERS_TABLE,
+        KeyConditionExpression: 'team_id = :tid',
+        ExpressionAttributeValues: { ':tid': teamId },
+      })
+    ),
+  ]);
+
+  const team = teamRes.Item as TeamItem | undefined;
+  if (!team) return errorResponse(404, 'Team not found');
+
+  const members = (membersRes.Items || []) as TeamMemberItem[];
+  const isMember = members.some((m) => m.user_id === auth.sub);
+  if (!isMember && !isAdmin(auth)) return errorResponse(403, 'Not a member of this team');
+
+  return jsonResponse(200, {
+    teamId: team.team_id,
+    teamName: team.team_name,
+    description: team.description,
+    createdBy: team.created_by,
+    createdAt: team.created_at,
+    members: members.map((m) => ({
+      userId: m.user_id,
+      role: m.role,
+      userName: m.user_name,
+      userEmail: m.user_email,
+      addedAt: m.added_at,
+    })),
+  });
+};
+
+const handleUpdateTeam = async (
+  teamId: string,
+  body: { teamName?: string; description?: string } | null,
+  auth: AuthContext
+): Promise<ReturnType<typeof jsonResponse>> => {
+  if (!TEAMS_TABLE || !TEAM_MEMBERS_TABLE) return errorResponse(500, 'Teams not configured');
+  if (!body) return errorResponse(400, 'Invalid request');
+
+  // Check caller is owner or editor
+  const memberRes = await dynamo.send(
+    new GetCommand({ TableName: TEAM_MEMBERS_TABLE, Key: { team_id: teamId, user_id: auth.sub } })
+  );
+  const membership = memberRes.Item as TeamMemberItem | undefined;
+  if (!membership && !isAdmin(auth)) return errorResponse(403, 'Not a member of this team');
+  if (membership && membership.role === 'viewer') return errorResponse(403, 'Viewers cannot update teams');
+
+  const teamRes = await dynamo.send(new GetCommand({ TableName: TEAMS_TABLE, Key: { team_id: teamId, sk: 'META' } }));
+  const team = teamRes.Item as TeamItem | undefined;
+  if (!team) return errorResponse(404, 'Team not found');
+
+  await dynamo.send(
+    new PutCommand({
+      TableName: TEAMS_TABLE,
+      Item: {
+        ...team,
+        ...(body.teamName && { team_name: body.teamName }),
+        ...(body.description !== undefined && { description: body.description }),
+        updated_at: Date.now(),
+      },
+    })
+  );
+  return jsonResponse(200, { ok: true });
+};
+
+const handleDeleteTeam = async (teamId: string, auth: AuthContext): Promise<ReturnType<typeof jsonResponse>> => {
+  if (!TEAMS_TABLE || !TEAM_MEMBERS_TABLE) return errorResponse(500, 'Teams not configured');
+
+  // Only owner or admin can delete
+  const memberRes = await dynamo.send(
+    new GetCommand({ TableName: TEAM_MEMBERS_TABLE, Key: { team_id: teamId, user_id: auth.sub } })
+  );
+  const membership = memberRes.Item as TeamMemberItem | undefined;
+  if (!isAdmin(auth) && (!membership || membership.role !== 'owner')) {
+    return errorResponse(403, 'Only the team owner can delete a team');
+  }
+
+  // Delete all members
+  const membersRes = await dynamo.send(
+    new QueryCommand({
+      TableName: TEAM_MEMBERS_TABLE,
+      KeyConditionExpression: 'team_id = :tid',
+      ExpressionAttributeValues: { ':tid': teamId },
+    })
+  );
+  await Promise.all(
+    (membersRes.Items || []).map((m) =>
+      dynamo.send(
+        new DeleteCommand({
+          TableName: TEAM_MEMBERS_TABLE,
+          Key: { team_id: teamId, user_id: (m as TeamMemberItem).user_id },
+        })
+      )
+    )
+  );
+
+  // Delete team metadata
+  await dynamo.send(new DeleteCommand({ TableName: TEAMS_TABLE, Key: { team_id: teamId, sk: 'META' } }));
+
+  return jsonResponse(200, { ok: true });
+};
+
+const handleAddTeamMember = async (
+  teamId: string,
+  body: { userId?: string; role?: string; userName?: string; userEmail?: string } | null,
+  auth: AuthContext
+): Promise<ReturnType<typeof jsonResponse>> => {
+  if (!TEAM_MEMBERS_TABLE) return errorResponse(500, 'Teams not configured');
+  if (!body?.userId || !body?.role) return errorResponse(400, 'userId and role are required');
+  if (!['owner', 'editor', 'viewer'].includes(body.role)) return errorResponse(400, 'Invalid role');
+
+  // Check caller has permission (owner or editor can add members)
+  const callerRes = await dynamo.send(
+    new GetCommand({ TableName: TEAM_MEMBERS_TABLE, Key: { team_id: teamId, user_id: auth.sub } })
+  );
+  const caller = callerRes.Item as TeamMemberItem | undefined;
+  if (!isAdmin(auth) && (!caller || caller.role === 'viewer')) {
+    return errorResponse(403, 'Insufficient permissions');
+  }
+  // Only owners can add other owners
+  if (body.role === 'owner' && caller?.role !== 'owner' && !isAdmin(auth)) {
+    return errorResponse(403, 'Only owners can add other owners');
+  }
+
+  await dynamo.send(
+    new PutCommand({
+      TableName: TEAM_MEMBERS_TABLE,
+      Item: {
+        team_id: teamId,
+        user_id: body.userId,
+        role: body.role as TeamMemberItem['role'],
+        user_name: body.userName,
+        user_email: body.userEmail,
+        added_by: auth.sub,
+        added_at: Date.now(),
+      },
+    })
+  );
+  return jsonResponse(201, { ok: true });
+};
+
+const handleUpdateTeamMember = async (
+  teamId: string,
+  userId: string,
+  body: { role?: string } | null,
+  auth: AuthContext
+): Promise<ReturnType<typeof jsonResponse>> => {
+  if (!TEAM_MEMBERS_TABLE) return errorResponse(500, 'Teams not configured');
+  if (!body?.role || !['owner', 'editor', 'viewer'].includes(body.role)) {
+    return errorResponse(400, 'Valid role is required');
+  }
+
+  // Check caller is owner
+  const callerRes = await dynamo.send(
+    new GetCommand({ TableName: TEAM_MEMBERS_TABLE, Key: { team_id: teamId, user_id: auth.sub } })
+  );
+  const caller = callerRes.Item as TeamMemberItem | undefined;
+  if (!isAdmin(auth) && (!caller || caller.role !== 'owner')) {
+    return errorResponse(403, 'Only owners can change roles');
+  }
+
+  const memberRes = await dynamo.send(
+    new GetCommand({ TableName: TEAM_MEMBERS_TABLE, Key: { team_id: teamId, user_id: userId } })
+  );
+  const member = memberRes.Item as TeamMemberItem | undefined;
+  if (!member) return errorResponse(404, 'Member not found');
+
+  await dynamo.send(
+    new PutCommand({
+      TableName: TEAM_MEMBERS_TABLE,
+      Item: { ...member, role: body.role as TeamMemberItem['role'] },
+    })
+  );
+  return jsonResponse(200, { ok: true });
+};
+
+const handleRemoveTeamMember = async (
+  teamId: string,
+  userId: string,
+  auth: AuthContext
+): Promise<ReturnType<typeof jsonResponse>> => {
+  if (!TEAM_MEMBERS_TABLE) return errorResponse(500, 'Teams not configured');
+
+  // Check caller is owner (or removing themselves)
+  if (userId !== auth.sub) {
+    const callerRes = await dynamo.send(
+      new GetCommand({ TableName: TEAM_MEMBERS_TABLE, Key: { team_id: teamId, user_id: auth.sub } })
+    );
+    const caller = callerRes.Item as TeamMemberItem | undefined;
+    if (!isAdmin(auth) && (!caller || caller.role !== 'owner')) {
+      return errorResponse(403, 'Only owners can remove members');
+    }
+  }
+
+  await dynamo.send(new DeleteCommand({ TableName: TEAM_MEMBERS_TABLE, Key: { team_id: teamId, user_id: userId } }));
+  return jsonResponse(200, { ok: true });
+};
+
+// ─── Sharing ─────────────────────────────────────────────────────────────────
+
+type SharingItem = {
+  agent_id: string;
+  principal_id: string;
+  principal_type: 'user' | 'team';
+  role: 'co-owner' | 'editor' | 'viewer';
+  shared_by: string;
+  shared_at: number;
+};
+
+const handleGetSharing = async (agentId: string): Promise<ReturnType<typeof jsonResponse>> => {
+  if (!SHARING_TABLE) return jsonResponse(200, { shares: [] });
+
+  const res = await dynamo.send(
+    new QueryCommand({
+      TableName: SHARING_TABLE,
+      KeyConditionExpression: 'agent_id = :aid',
+      ExpressionAttributeValues: { ':aid': agentId },
+    })
+  );
+  const shares = (res.Items || []).map((item) => {
+    const s = item as SharingItem;
+    return {
+      principalId: s.principal_id,
+      principalType: s.principal_type,
+      role: s.role,
+      sharedBy: s.shared_by,
+      sharedAt: s.shared_at,
+    };
+  });
+  return jsonResponse(200, { shares });
+};
+
+const handleShareAgent = async (
+  agentId: string,
+  body: { principalId?: string; principalType?: string; role?: string } | null,
+  auth: AuthContext
+): Promise<ReturnType<typeof jsonResponse>> => {
+  if (!SHARING_TABLE) return errorResponse(500, 'Sharing not configured');
+  if (!body?.principalId || !body?.principalType || !body?.role) {
+    return errorResponse(400, 'principalId, principalType, and role are required');
+  }
+  if (!['user', 'team'].includes(body.principalType)) return errorResponse(400, 'Invalid principalType');
+  if (!['co-owner', 'editor', 'viewer'].includes(body.role)) return errorResponse(400, 'Invalid role');
+
+  await dynamo.send(
+    new PutCommand({
+      TableName: SHARING_TABLE,
+      Item: {
+        agent_id: agentId,
+        principal_id: body.principalId,
+        principal_type: body.principalType,
+        role: body.role,
+        shared_by: auth.sub,
+        shared_at: Date.now(),
+      },
+    })
+  );
+  return jsonResponse(201, { ok: true });
+};
+
+const handleUpdateSharing = async (
+  agentId: string,
+  principalId: string,
+  body: { role?: string } | null
+): Promise<ReturnType<typeof jsonResponse>> => {
+  if (!SHARING_TABLE) return errorResponse(500, 'Sharing not configured');
+  if (!body?.role || !['co-owner', 'editor', 'viewer'].includes(body.role)) {
+    return errorResponse(400, 'Valid role is required');
+  }
+
+  const res = await dynamo.send(
+    new GetCommand({ TableName: SHARING_TABLE, Key: { agent_id: agentId, principal_id: principalId } })
+  );
+  const existing = res.Item as SharingItem | undefined;
+  if (!existing) return errorResponse(404, 'Share not found');
+
+  await dynamo.send(
+    new PutCommand({
+      TableName: SHARING_TABLE,
+      Item: { ...existing, role: body.role as SharingItem['role'] },
+    })
+  );
+  return jsonResponse(200, { ok: true });
+};
+
+const handleRevokeSharing = async (agentId: string, principalId: string): Promise<ReturnType<typeof jsonResponse>> => {
+  if (!SHARING_TABLE) return errorResponse(500, 'Sharing not configured');
+
+  await dynamo.send(
+    new DeleteCommand({ TableName: SHARING_TABLE, Key: { agent_id: agentId, principal_id: principalId } })
+  );
+  return jsonResponse(200, { ok: true });
+};
+
+// ─── Admin ───────────────────────────────────────────────────────────────────
+
+const handleAdminListAgents = async (auth: AuthContext): Promise<ReturnType<typeof jsonResponse>> => {
+  if (!isAdmin(auth)) return errorResponse(403, 'Admin access required');
+
+  // Scan both tables for all agents
+  const [workspaceRes, userScanRes] = await Promise.all([
+    dynamo.send(
+      new QueryCommand({
+        TableName: WORKSPACE_TABLE!,
+        KeyConditionExpression: 'tenant_id = :tid',
+        ExpressionAttributeValues: { ':tid': CLIENT_NAME },
+      })
+    ),
+    dynamo.send(new ScanCommand({ TableName: USER_TABLE! })),
+  ]);
+
+  const agents: Array<Record<string, unknown>> = [];
+
+  for (const item of (workspaceRes.Items || []) as WorkspaceAgentItem[]) {
+    agents.push({
+      agentId: item.agent_id,
+      title: item.title,
+      scope: 'workspace',
+      visibility: item.visibility,
+      owner: { userId: item.created_by_user_id, name: item.created_by_name },
+      updatedAt: item.updated_at,
+      tags: item.tags || [],
+    });
+  }
+
+  for (const item of (userScanRes.Items || []) as UserAgentItem[]) {
+    agents.push({
+      agentId: item.agent_id,
+      title: item.title,
+      scope: 'user',
+      visibility: item.visibility,
+      owner: { userId: item.created_by_user_id || item.user_id, name: item.created_by_name },
+      updatedAt: item.updated_at,
+      tags: item.tags || [],
+    });
+  }
+
+  agents.sort((a, b) => ((b.updatedAt as number) || 0) - ((a.updatedAt as number) || 0));
+
+  return jsonResponse(200, { agents, total: agents.length });
+};
+
 export const __testExports = {
   normaliseDuplicateBaseTitle,
   buildPersonalDuplicatePayload,
@@ -1142,6 +1682,75 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
     }
     const actionSegments = segments.slice(1);
 
+    // ── Sub-resource routing (prefs, teams, sharing, admin) ──
+    // These routes are checked before the main CRUD switch so they don't
+    // collide with the :agentId wildcard patterns.
+
+    // GET /agents/prefs -- all prefs for current user
+    if (method === 'GET' && actionSegments.length === 1 && actionSegments[0] === 'prefs') {
+      return await handleGetPrefs(auth);
+    }
+    // PUT /agents/:id/prefs -- set pref for one agent
+    if (method === 'PUT' && actionSegments.length === 2 && actionSegments[1] === 'prefs') {
+      return await handleSetPref(decodeURIComponent(actionSegments[0]), parseJsonBody(event.body), auth);
+    }
+
+    // Teams: /agents/teams, /agents/teams/:id, /agents/teams/:id/members[/:userId]
+    if (actionSegments[0] === 'teams') {
+      const teamSegs = actionSegments.slice(1);
+      if (method === 'GET' && teamSegs.length === 0) return await handleListTeams(auth);
+      if (method === 'POST' && teamSegs.length === 0) {
+        return await handleCreateTeam(parseJsonBody(event.body), auth);
+      }
+      if (teamSegs.length >= 1) {
+        const teamId = decodeURIComponent(teamSegs[0]);
+        if (method === 'GET' && teamSegs.length === 1) return await handleGetTeam(teamId, auth);
+        if (method === 'PUT' && teamSegs.length === 1) {
+          return await handleUpdateTeam(teamId, parseJsonBody(event.body), auth);
+        }
+        if (method === 'DELETE' && teamSegs.length === 1) return await handleDeleteTeam(teamId, auth);
+        // Members sub-resource
+        if (teamSegs[1] === 'members') {
+          if (method === 'POST' && teamSegs.length === 2) {
+            return await handleAddTeamMember(teamId, parseJsonBody(event.body), auth);
+          }
+          if (teamSegs.length === 3) {
+            const userId = decodeURIComponent(teamSegs[2]);
+            if (method === 'PUT') {
+              return await handleUpdateTeamMember(teamId, userId, parseJsonBody(event.body), auth);
+            }
+            if (method === 'DELETE') return await handleRemoveTeamMember(teamId, userId, auth);
+          }
+        }
+      }
+      return errorResponse(404, 'Team route not found');
+    }
+
+    // Sharing: /agents/:id/sharing[/:principalId]
+    if (actionSegments.length >= 2 && actionSegments[1] === 'sharing') {
+      const agentId = decodeURIComponent(actionSegments[0]);
+      if (method === 'GET' && actionSegments.length === 2) {
+        return await handleGetSharing(agentId);
+      }
+      if (method === 'POST' && actionSegments.length === 2) {
+        return await handleShareAgent(agentId, parseJsonBody(event.body), auth);
+      }
+      if (actionSegments.length === 3) {
+        const principalId = decodeURIComponent(actionSegments[2]);
+        if (method === 'PUT') {
+          return await handleUpdateSharing(agentId, principalId, parseJsonBody(event.body));
+        }
+        if (method === 'DELETE') return await handleRevokeSharing(agentId, principalId);
+      }
+      return errorResponse(404, 'Sharing route not found');
+    }
+
+    // Admin: GET /agents/admin
+    if (method === 'GET' && actionSegments.length === 1 && actionSegments[0] === 'admin') {
+      return await handleAdminListAgents(auth);
+    }
+
+    // ── Main agent CRUD ──
     switch (method.toUpperCase()) {
       case 'GET': {
         if (actionSegments.length === 0) {

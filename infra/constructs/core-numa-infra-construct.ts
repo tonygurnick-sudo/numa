@@ -73,6 +73,10 @@ export class CoreNumaInfra extends Construct {
   readonly workspaceAgentsTable: DynamodbTable;
   readonly userAgentsTable: DynamodbTable;
   readonly agentsSettingsTable: DynamodbTable;
+  readonly agentUserPrefsTable: DynamodbTable;
+  readonly agentTeamsTable: DynamodbTable;
+  readonly agentTeamMembersTable: DynamodbTable;
+  readonly agentSharingTable: DynamodbTable;
   readonly schedulingSettingsTable: DynamodbTable;
   readonly agentSchedulesTable: DynamodbTable;
   readonly notificationsTable: DynamodbTable;
@@ -582,6 +586,83 @@ export class CoreNumaInfra extends Construct {
         Environment: props.environmentName,
         Purpose: 'agents-settings',
       },
+    });
+
+    // Agent user preferences table (per-user favorites, hidden, usage tracking)
+    this.agentUserPrefsTable = new DynamodbTable(this, 'numa-agent-user-prefs-table', {
+      name: `${numaClient}-agent-user-prefs`,
+      billingMode: 'PAY_PER_REQUEST',
+      hashKey: 'user_id',
+      rangeKey: 'agent_id',
+      attribute: [
+        { name: 'user_id', type: 'S' },
+        { name: 'agent_id', type: 'S' },
+      ],
+      globalSecondaryIndex: [
+        {
+          name: 'agent-prefs-index',
+          hashKey: 'agent_id',
+          projectionType: 'ALL',
+        },
+      ],
+    });
+
+    // Agent teams table (team metadata)
+    this.agentTeamsTable = new DynamodbTable(this, 'numa-agent-teams-table', {
+      name: `${numaClient}-agent-teams`,
+      billingMode: 'PAY_PER_REQUEST',
+      hashKey: 'team_id',
+      rangeKey: 'sk',
+      attribute: [
+        { name: 'team_id', type: 'S' },
+        { name: 'sk', type: 'S' },
+        { name: 'tenant_id', type: 'S' },
+      ],
+      globalSecondaryIndex: [
+        {
+          name: 'tenant-index',
+          hashKey: 'tenant_id',
+          projectionType: 'ALL',
+        },
+      ],
+    });
+
+    // Agent team members table (team membership + roles)
+    this.agentTeamMembersTable = new DynamodbTable(this, 'numa-agent-team-members-table', {
+      name: `${numaClient}-agent-team-members`,
+      billingMode: 'PAY_PER_REQUEST',
+      hashKey: 'team_id',
+      rangeKey: 'user_id',
+      attribute: [
+        { name: 'team_id', type: 'S' },
+        { name: 'user_id', type: 'S' },
+      ],
+      globalSecondaryIndex: [
+        {
+          name: 'user-teams-index',
+          hashKey: 'user_id',
+          projectionType: 'ALL',
+        },
+      ],
+    });
+
+    // Agent sharing table (per-agent access control)
+    this.agentSharingTable = new DynamodbTable(this, 'numa-agent-sharing-table', {
+      name: `${numaClient}-agent-sharing`,
+      billingMode: 'PAY_PER_REQUEST',
+      hashKey: 'agent_id',
+      rangeKey: 'principal_id',
+      attribute: [
+        { name: 'agent_id', type: 'S' },
+        { name: 'principal_id', type: 'S' },
+      ],
+      globalSecondaryIndex: [
+        {
+          name: 'principal-agents-index',
+          hashKey: 'principal_id',
+          projectionType: 'ALL',
+        },
+      ],
     });
 
     // Scheduling settings table (client-admin minimum interval override)

@@ -989,6 +989,26 @@ const handleTickets = async (
 ): Promise<ReturnType<typeof jsonResponse>> => {
   const qp = event.queryStringParameters ?? {};
 
+  // ── Audit sub-routes ─────────────────────────────────────────────────────────
+  // GET /ops/tickets/{ticketId}/audit
+  if (method === 'GET' && segments.length === 2 && segments[1] === 'audit') {
+    const ticketId = segments[0];
+    const items = await queryByPK(`TICKET#${ticketId}`, 'AUDIT#');
+    // Sort reverse chronological (newest first) — SK is AUDIT#{timestamp}#{id}
+    items.sort((a, b) => String(b.SK).localeCompare(String(a.SK)));
+    const entries = items.map((item) => ({
+      id: item.auditId,
+      ticketId: item.ticketId,
+      teamId: item.teamId ?? '',
+      userId: item.performedBy,
+      userName: item.performedByName ?? item.performedByEmail ?? '',
+      action: item.action,
+      changes: item.changes ?? {},
+      timestamp: item.createdAt,
+    }));
+    return jsonResponse(200, { entries });
+  }
+
   // ── Comments sub-routes ─────────────────────────────────────────────────────
   // GET /ops/tickets/{ticketId}/comments
   if (method === 'GET' && segments.length === 2 && segments[1] === 'comments') {

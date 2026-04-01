@@ -108,6 +108,7 @@ pre-commit:
         - lambdas/node/numa-ops-api
         - lambdas/node/numa-ops-config-api
         - lambdas/node/numa-ops-crm-api
+        - lambdas/node/numa-users-api
         - lambdas/node/openapi-docs-server
         - lambdas/node/portal-deploy-assume-role
         - lambdas/node/portal-nextgen-broker

@@ -81,6 +81,7 @@ export const AutomationBuilderPage = () => {
       label: string;
       maxRuns: number;
       emailNotifications: boolean;
+      notificationEmails: string[];
       agentSnapshot?: {
         agentId: string;
         title: string;
@@ -98,6 +99,7 @@ export const AutomationBuilderPage = () => {
           label: payload.label,
           maxRuns: payload.maxRuns,
           emailNotifications: payload.emailNotifications,
+          notificationEmails: payload.notificationEmails,
         });
         navigate(`/automations/${automationId}`);
       } else {
@@ -113,6 +115,7 @@ export const AutomationBuilderPage = () => {
           label: payload.label,
           maxRuns: payload.maxRuns,
           emailNotifications: payload.emailNotifications,
+          notificationEmails: payload.notificationEmails,
           agentSnapshot: payload.agentSnapshot,
         });
         navigate(`/automations/${result.scheduleId}`);
@@ -155,7 +158,7 @@ export const AutomationBuilderPage = () => {
           }}
         />
 
-        <div className="mt-3" style={{ maxWidth: 800 }}>
+        <div className="mt-3">
           <AutomationWorkflowBuilder
             agents={agents}
             agentsLoading={agentsLoading}

@@ -489,6 +489,7 @@ const NewChat = ({
         selectedModelId={selectedModelId}
         setSelectedModelId={setSelectedModelId}
         showModelSelector={showModelSelector}
+        onPasteFiles={onFilesDropped}
       />
     </div>
   );

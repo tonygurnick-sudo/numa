@@ -29,6 +29,7 @@ from fastapi.responses import JSONResponse, Response, StreamingResponse
 
 from .agent_config import (
     AgentConfig,
+    clear_user_settings_cache,
     fetch_agent_config,
     fetch_user_email_signature,
     fetch_user_profile,
@@ -40,12 +41,6 @@ from .agent_types import (
     TOOL_FILE_MAP,
     AgentTypeConfig,
     get_agent_type_config,
-)
-from .assistant import (
-    AssistantContext,
-    build_workspace_tree,
-    format_assistant_advice,
-    invoke_assistant,
 )
 from .dynamo import (
     is_v1_conversation,
@@ -79,7 +74,7 @@ from .sdk_runner import (
     run_claude_sdk,
     stream_claude_sdk,
 )
-from .trace_parser import parse_trace_content_to_messages, parse_trace_to_messages
+from .trace_parser import parse_trace_content_to_messages
 from .workspace import (
     cleanup_session_files,
     ensure_directories,
@@ -150,9 +145,10 @@ def _resolve_s3_prefix(
     return template.format(user_sub=user_sub, conversation_id=conversation_id)
 
 
-# Cache KB file listings for the current conversation
+# Cache KB file listings with TTL
 _kb_listings_cache: dict[str, dict] = {}
-_kb_listings_conversation_id: str | None = None
+_kb_listings_loaded_at: float = 0.0
+_KB_LISTINGS_TTL_SECONDS = 300  # 5 minutes
 
 
 def _fetch_kb_listings(
@@ -172,8 +168,6 @@ def _fetch_kb_listings(
         Dict mapping kb_id -> {files, folders, total_count, truncated}
         or None if fetch failed
     """
-    global _kb_listings_cache, _kb_listings_conversation_id
-
     if not available_kbs:
         return None
 
@@ -264,6 +258,8 @@ def _get_cached_kb_listings(
     """
     Get KB listings from cache or fetch fresh if needed.
 
+    Uses a 5-minute TTL cache. Force refresh bypasses the cache (used on cold start).
+
     Args:
         conversation_id: Current conversation ID
         available_kbs: List of {id, name} for enabled KBs
@@ -273,18 +269,17 @@ def _get_cached_kb_listings(
     Returns:
         Dict mapping kb_id -> listing data, or None
     """
-    global _kb_listings_cache, _kb_listings_conversation_id
+    global _kb_listings_cache, _kb_listings_loaded_at
 
     if not available_kbs:
         return None
 
-    # Clear cache if conversation changed
-    if _kb_listings_conversation_id != conversation_id:
-        _kb_listings_cache = {}
-        _kb_listings_conversation_id = conversation_id
-
-    # Return cached if available and not forcing refresh
-    if _kb_listings_cache and not force_refresh:
+    # Return cached if within TTL and not forcing refresh
+    if (
+        _kb_listings_cache
+        and not force_refresh
+        and (time.time() - _kb_listings_loaded_at) < _KB_LISTINGS_TTL_SECONDS
+    ):
         logger.debug(
             "Using cached KB listings",
             conversation_id=conversation_id[:8] + "..." if conversation_id else "",
@@ -296,6 +291,7 @@ def _get_cached_kb_listings(
     listings = _fetch_kb_listings(available_kbs, user_sub)
     if listings:
         _kb_listings_cache = listings
+        _kb_listings_loaded_at = time.time()
 
     return listings
 
@@ -1160,6 +1156,48 @@ async def invocations(request: Request):
             )
 
 
+def _write_schemas_to_disk(
+    app_slug: str,
+    actions: list[dict],
+    index: list[dict],
+    tools_dir: Path,
+) -> None:
+    """Write action schemas and index to disk in the expected format.
+
+    Creates /workdir/tools/integrations/{app_slug}/ with:
+    - _index.json: compact action summaries
+    - {key}.json: full action schema per action
+    """
+    app_dir = tools_dir / app_slug
+    app_dir.mkdir(parents=True, exist_ok=True)
+
+    # Write individual action files
+    for action in actions:
+        key = action.get("key", action.get("name_slug", "unknown"))
+        action_filename = key.replace("/", "_") + ".json"
+        (app_dir / action_filename).write_text(
+            json.dumps(action, indent=2, default=str)
+        )
+
+    # Write index (use pre-built index if available, otherwise build from actions)
+    if not index:
+        index = []
+        for action in actions:
+            key = action.get("key", "")
+            index.append(
+                {
+                    "key": key,
+                    "name": action.get("name", key),
+                    "description": (action.get("description") or "")[:200],
+                    "annotations": action.get("annotations", {}),
+                    "prop_count": len(action.get("configurable_props", [])),
+                    "file": key.replace("/", "_") + ".json",
+                }
+            )
+
+    (app_dir / "_index.json").write_text(json.dumps(index, indent=2))
+
+
 def _download_single_integration(
     app_slug: str,
     external_user_id: str,
@@ -1283,7 +1321,7 @@ def _sync_integration_schemas(
     for slug in to_remove:
         shutil.rmtree(tools_dir / slug, ignore_errors=True)
 
-    # Download new integrations
+    # Download new integrations -- try batch endpoint first, fall back to per-slug
     added = []
     if to_download:
         lambda_name = os.environ.get("WORKSPACE_TOOLS_LAMBDA_NAME", "")
@@ -1295,7 +1333,51 @@ def _sync_integration_schemas(
             "lambda", region_name=os.environ.get("AWS_REGION", "us-east-1")
         )
 
-        for slug in to_download:
+        batch_remaining = set(to_download)
+
+        # Try batch endpoint (single call for all slugs via DynamoDB cache)
+        try:
+            batch_event = {
+                "tool": "pipedream_batch_get_schemas",
+                "allowed_tools": list(to_download),
+                "params": {
+                    "app_slugs": list(to_download),
+                    "external_user_id": external_user_id,
+                },
+            }
+            batch_response = lambda_client.invoke(
+                FunctionName=lambda_name,
+                Payload=json.dumps(batch_event),
+                InvocationType="RequestResponse",
+            )
+            batch_payload = json.loads(batch_response["Payload"].read())
+
+            if batch_payload.get("status") == "success":
+                schemas = batch_payload.get("result", {}).get("schemas", {})
+                for slug, schema_data in schemas.items():
+                    actions = schema_data.get("actions", [])
+                    index = schema_data.get("index", [])
+                    if actions:
+                        _write_schemas_to_disk(slug, actions, index, tools_dir)
+                        added.append(slug)
+                        batch_remaining.discard(slug)
+
+                if schemas:
+                    logger.info(
+                        "Batch schema load from cache",
+                        _name="BATCH_SCHEMA_LOAD",
+                        phase="integrations",
+                        loaded=list(schemas.keys()),
+                        remaining=list(batch_remaining),
+                    )
+        except Exception as e:
+            logger.warning(
+                "Batch schema load failed, falling back to per-slug",
+                error=str(e),
+            )
+
+        # Fall back to per-slug download for any missing from batch
+        for slug in batch_remaining:
             if _download_single_integration(
                 slug, external_user_id, tools_dir, lambda_client, lambda_name
             ):
@@ -1327,6 +1409,9 @@ async def _handle_chat(
     """Handle chat action - stream Claude CLI response."""
     global _checksums_cache
 
+    # Clear per-request caches so user settings changes take effect immediately
+    clear_user_settings_cache()
+
     # Resolve agent type config (default to numa-chat if not provided)
     if agent_type_config is None:
         agent_type_config = get_agent_type_config("numa-chat")
@@ -1339,7 +1424,6 @@ async def _handle_chat(
     timezone = body.get("timezone")
     user_email = body.get("userEmail")
     today_string = body.get("todayString")
-    company_profile = load_company_profile_from_s3()
     available_kbs = body.get("availableKBs")  # List of {id, name} for KB tool
     enabled_tools = body.get(
         "enabledTools", []
@@ -1367,6 +1451,7 @@ async def _handle_chat(
     # Format: "{client_name}_{user_sub}" matching what the frontend uses
     enabled_integrations = body.get("enabledConnections", [])
     available_integrations = body.get("availableIntegrations", [])
+    connected_data_connectors = body.get("connectedDataConnectors", [])
 
     # Apply agent type restrictions on integrations
     if agent_type_config.restrict_integrations:
@@ -1392,75 +1477,144 @@ async def _handle_chat(
         enabled_tools=enabled_tools,
         enabled_integrations=enabled_integrations,
         external_user_id=external_user_id,
+        connected_data_connectors=[
+            c.get("id") for c in connected_data_connectors if isinstance(c, dict)
+        ],
     )
 
     # V1 to V2 migration flag - frontend sets this when loading a V1 conversation
     migrate_from_v1 = body.get("migrateFromV1", False)
 
-    # Agent support - fetch agent config if agentId is provided
     agent_id = body.get("agentId")
-    agent_config: Optional[AgentConfig] = None
-    agent_file_paths: list[str] = []
 
-    if agent_id:
+    # --- Parallel Data Loads ---
+    # All pre-SDK data loads are independent and can run concurrently.
+    # This eliminates the sequential waterfall that added seconds to every request.
+    load_start = time.monotonic()
+
+    async def _load_company_profile():
+        return await asyncio.to_thread(load_company_profile_from_s3)
+
+    async def _load_agent_config():
+        if not agent_id:
+            return None
         try:
-            agent_config = fetch_agent_config(agent_id, user_sub)
-            if agent_config:
-                # Apply agent tool restrictions
-                tools_config = agent_config.tools_config
-
-                # Filter web_search if disabled by agent
-                # auto_tools_enabled implies all tools are enabled
-                if (
-                    not tools_config.auto_tools_enabled
-                    and not tools_config.web_search_enabled
-                ):
-                    enabled_tools = [t for t in enabled_tools if t != "web_search"]
-
-                # Filter create_agent_tool if disabled by agent
-                if (
-                    not tools_config.auto_tools_enabled
-                    and not tools_config.create_agent_enabled
-                ):
-                    enabled_tools = [
-                        t for t in enabled_tools if t != "create_agent_tool"
-                    ]
-
-                # Apply KB restrictions
-                allowed_kbs = tools_config.allowed_knowledge_bases
-                if allowed_kbs is not None:
-                    if len(allowed_kbs) == 0:
-                        # No KBs allowed
-                        available_kbs = []
-                    elif available_kbs:
-                        # Filter to only allowed KBs
-                        available_kbs = [
-                            kb for kb in available_kbs if kb.get("id") in allowed_kbs
-                        ]
-
-                # Download agent reference files
-                if agent_config.reference_files:
-                    agent_file_paths = sync_agent_reference_files(
-                        agent_config, conversation_id, user_sub
-                    )
-
-                logger.info(
-                    "Agent config applied",
-                    _name="AGENT_CONFIG_APPLIED",
-                    phase="request",
-                    agent_id=agent_id,
-                    agent_title=agent_config.title,
-                    web_search_enabled=tools_config.web_search_enabled,
-                    allowed_kbs=allowed_kbs,
-                    reference_files_count=len(agent_file_paths),
-                )
+            return await asyncio.to_thread(fetch_agent_config, agent_id, user_sub)
         except Exception as e:
             logger.warning(
                 "Failed to fetch agent config, continuing without agent",
                 agent_id=agent_id,
                 error=str(e),
             )
-            agent_config = None
+            return None
+
+    async def _load_integration_schemas():
+        if not enabled_integrations or not external_user_id:
+            return {"added": [], "removed": [], "cached": []}
+        return await asyncio.to_thread(
+            _sync_integration_schemas, enabled_integrations, external_user_id
+        )
+
+    async def _load_kb_listings():
+        if not available_kbs:
+            return None
+        return await asyncio.to_thread(
+            _get_cached_kb_listings,
+            conversation_id,
+            available_kbs,
+            user_sub,
+            force_refresh=is_cold_start,
+        )
+
+    async def _load_user_data():
+        # Prime the consolidated user settings cache (single DynamoDB GetItem).
+        # Both functions share the cache -- first call fetches, second is instant.
+        sig = await asyncio.to_thread(fetch_user_email_signature, user_sub)
+        prof = await asyncio.to_thread(fetch_user_profile, user_sub)
+        return sig, prof
+
+    (
+        company_profile,
+        agent_config,
+        integration_sync_result,
+        kb_listings,
+        (email_signature, user_profile),
+    ) = await asyncio.gather(
+        _load_company_profile(),
+        _load_agent_config(),
+        _load_integration_schemas(),
+        _load_kb_listings(),
+        _load_user_data(),
+    )
+
+    load_elapsed_ms = (time.monotonic() - load_start) * 1000
+    logger.info(
+        "Parallel data loads complete",
+        _name="PARALLEL_LOADS",
+        phase="request",
+        elapsed_ms=round(load_elapsed_ms, 1),
+        has_company_profile=bool(company_profile and company_profile.strip()),
+        has_agent_config=agent_config is not None,
+        integration_added=len(integration_sync_result.get("added", [])),
+        integration_cached=len(integration_sync_result.get("cached", [])),
+        has_kb_listings=kb_listings is not None,
+    )
+
+    # --- Post-gather: Apply agent config restrictions ---
+    agent_file_paths: list[str] = []
+    if agent_config:
+        tools_config = agent_config.tools_config
+
+        # Filter web_search if disabled by agent
+        if not tools_config.auto_tools_enabled and not tools_config.web_search_enabled:
+            enabled_tools = [t for t in enabled_tools if t != "web_search"]
+
+        # Filter create_agent_tool if disabled by agent
+        if (
+            not tools_config.auto_tools_enabled
+            and not tools_config.create_agent_enabled
+        ):
+            enabled_tools = [t for t in enabled_tools if t != "create_agent_tool"]
+
+        # Apply KB restrictions
+        allowed_kbs = tools_config.allowed_knowledge_bases
+        if allowed_kbs is not None:
+            if len(allowed_kbs) == 0:
+                available_kbs = []
+            elif available_kbs:
+                available_kbs = [
+                    kb for kb in available_kbs if kb.get("id") in allowed_kbs
+                ]
+
+        # Download agent reference files
+        if agent_config.reference_files:
+            agent_file_paths = sync_agent_reference_files(
+                agent_config, conversation_id, user_sub
+            )
+
+        logger.info(
+            "Agent config applied",
+            _name="AGENT_CONFIG_APPLIED",
+            phase="request",
+            agent_id=agent_id,
+            agent_title=agent_config.title,
+            web_search_enabled=tools_config.web_search_enabled,
+            allowed_kbs=allowed_kbs,
+            reference_files_count=len(agent_file_paths),
+        )
+
+    # Clean up stale integration schemas if no integrations enabled
+    if not enabled_integrations:
+        tools_dir = Path("/workdir/tools/integrations")
+        if tools_dir.exists() and any(tools_dir.iterdir()):
+            shutil.rmtree(tools_dir, ignore_errors=True)
+
+    # Resolve approval modes (uses cached user settings -- instant)
+    all_approval_modes = resolve_all_approval_modes(user_sub, agent_config)
+    effective_approval_mode = all_approval_modes.get("integrations", "non_destructive")
+    numa_tool_approval_mode = {
+        k: v for k, v in all_approval_modes.items() if k != "integrations"
+    }
 
     logger.info(
         "Chat request",
@@ -1560,191 +1714,24 @@ async def _handle_chat(
                     ),
                 )
 
-        # --- Sync Integration Schemas ---
-        # Diff-based sync on every request: download new, remove disabled
-        if enabled_integrations and external_user_id:
-            try:
-                sync_result = _sync_integration_schemas(
-                    enabled_integrations, external_user_id
-                )
-                if sync_result["added"] or sync_result["removed"]:
-                    yield emit_event(
-                        {
-                            "type": "integrations_ready",
-                            "integrations": enabled_integrations,
-                            "added": sync_result["added"],
-                            "removed": sync_result["removed"],
-                        }
-                    )
-            except Exception as e:
-                logger.warning(
-                    "Failed to sync integration schemas",
-                    error=str(e),
-                    integrations=enabled_integrations,
-                )
-        elif not enabled_integrations:
-            # No integrations enabled — clean up any stale schemas on disk
-            tools_dir = Path("/workdir/tools/integrations")
-            if tools_dir.exists() and any(tools_dir.iterdir()):
-                shutil.rmtree(tools_dir, ignore_errors=True)
-
-        # --- Fetch KB File Listings ---
-        # Fetch top-level file listings for KBs on cold start
-        kb_listings = None
-        if available_kbs and is_cold_start:
-            try:
-                kb_listings = _get_cached_kb_listings(
-                    conversation_id, available_kbs, user_sub, force_refresh=True
-                )
-            except Exception as e:
-                logger.warning("Failed to fetch KB listings", error=str(e))
-        elif available_kbs:
-            # Subsequent messages: use cached listings if available
-            kb_listings = _get_cached_kb_listings(
-                conversation_id, available_kbs, user_sub, force_refresh=False
-            )
-
-        # --- Pre-Request Assistant ---
-        # Run fast assistant to provide recommendations to Numa
-        augmented_prompt = prompt
-        try:
-            paths = get_workspace_paths()
-            workspace_tree = build_workspace_tree(str(paths["root"]))
-
-            # Get recent messages and activated skills from trace
-            recent_messages = None
-            activated_skills = []
-            try:
-                trace_file = paths["trace_file"]
-                if trace_file.exists():
-                    all_messages = parse_trace_to_messages(trace_file)
-                    # Get last 5 messages for context (user/assistant turns)
-                    recent_messages = [
-                        {"role": msg.get("role"), "content": msg.get("content", "")}
-                        for msg in all_messages[-5:]
-                    ]
-                    # Extract skills already activated in this conversation
-                    # by scanning raw trace for Skill tool_use entries
-                    with trace_file.open("r", encoding="utf-8") as f:
-                        for line in f:
-                            line = line.strip()
-                            if not line:
-                                continue
-                            try:
-                                event = json.loads(line)
-                                if event.get("type") != "assistant":
-                                    continue
-                                contents = event.get("message", {}).get("content", [])
-                                for c in contents:
-                                    if (
-                                        c.get("type") == "tool_use"
-                                        and c.get("name") == "Skill"
-                                    ):
-                                        skill_name = c.get("input", {}).get("skill")
-                                        if (
-                                            skill_name
-                                            and skill_name not in activated_skills
-                                        ):
-                                            activated_skills.append(skill_name)
-                            except (json.JSONDecodeError, KeyError):
-                                continue
-            except Exception as e:
-                logger.debug("Failed to read trace for recent messages", error=str(e))
-
-            # Load integration index files for pre-assistant context
-            integration_indexes = None
-            if enabled_integrations:
-                integration_indexes = {}
-                for slug in enabled_integrations:
-                    index_path = Path(f"/workdir/tools/integrations/{slug}/_index.json")
-                    if index_path.exists():
-                        try:
-                            integration_indexes[slug] = json.loads(
-                                index_path.read_text(encoding="utf-8")
-                            )
-                        except (json.JSONDecodeError, OSError):
-                            pass
-
-            assistant_context = AssistantContext(
-                user_email=user_email,
-                user_timezone=timezone,
-                available_kbs=available_kbs,
-                enabled_tools=enabled_tools,
-                workspace_tree=workspace_tree,
-                today_string=today_string,
-                recent_messages=recent_messages,
-                kb_listings=kb_listings,
-                attached_folders=attached_folders,
-                attached_files=attached_files,
-                enabled_integrations=(
-                    enabled_integrations if enabled_integrations else None
-                ),
-                activated_skills=activated_skills if activated_skills else None,
-                integration_indexes=integration_indexes,
-            )
-
-            assistant_advice = invoke_assistant(prompt, assistant_context)
-
-            if assistant_advice:
-                # Emit event to frontend for visibility AND write to trace for history
-                from datetime import datetime
-                from datetime import timezone as tz
-
-                advice_event = {
-                    "type": "assistant_advice",
-                    "content": assistant_advice,
-                    "timestamp": datetime.now(tz.utc).isoformat(),
+        # Emit integration sync results (computed in parallel gather above)
+        if integration_sync_result.get("added") or integration_sync_result.get(
+            "removed"
+        ):
+            yield emit_event(
+                {
+                    "type": "integrations_ready",
+                    "integrations": enabled_integrations,
+                    "added": integration_sync_result["added"],
+                    "removed": integration_sync_result["removed"],
                 }
-
-                # Write to trace file for persistence
-                trace_path = paths["trace_file"]
-                with trace_path.open("a", encoding="utf-8") as f:
-                    f.write(json.dumps(advice_event) + "\n")
-
-                # Yield to frontend for live display
-                yield emit_event(advice_event)
-
-                # Prepend advice to prompt for Numa to see
-                augmented_prompt = format_assistant_advice(assistant_advice) + prompt
-
-                logger.info(
-                    "Pre-Numa assistant advice generated",
-                    _name="ASSISTANT_ADVICE",
-                    phase="assistant",
-                    conversation_id=conversation_id,
-                    user_sub=user_sub,
-                    advice_content=assistant_advice,
-                    advice_length=len(assistant_advice),
-                    original_prompt_length=len(prompt),
-                )
-        except Exception as e:
-            # Don't let assistant failures break the main flow
-            logger.warning(
-                "Assistant invocation failed, continuing without advice",
-                _name="ASSISTANT_ERROR",
-                phase="assistant",
-                conversation_id=conversation_id,
-                error=str(e),
             )
 
         stream_error: Exception | None = None
         try:
-            # Wrap SDK stream with heartbeat to keep CloudFront connection alive
-            # during long-running tool executions (CloudFront has 60s timeout)
-            # Resolve all approval modes (agent overrides > user settings > defaults)
-            all_approval_modes = resolve_all_approval_modes(user_sub, agent_config)
-            effective_approval_mode = all_approval_modes.get(
-                "integrations", "non_destructive"
-            )
-            numa_tool_approval_mode = {
-                k: v for k, v in all_approval_modes.items() if k != "integrations"
-            }
-            email_signature = fetch_user_email_signature(user_sub)
-            user_profile = fetch_user_profile(user_sub)
-
             sdk_stream = stream_claude_sdk(
                 conversation_id,
-                augmented_prompt,  # May include <numa-assistant> tags for Claude
+                prompt,
                 user_sub,
                 timezone,
                 user_email,
@@ -1765,6 +1752,7 @@ async def _handle_chat(
                 external_user_id=external_user_id,  # Pipedream integrations user ID
                 enabled_integrations=enabled_integrations,  # Connected integration app slugs
                 available_integrations=available_integrations,  # All connected integrations (for agent creation context)
+                connected_data_connectors=connected_data_connectors,  # Connected data connectors (OAuth/token)
                 approval_mode=effective_approval_mode,  # Integration approval mode
                 numa_tool_approval_mode=numa_tool_approval_mode,  # Per-category numa tool approval
                 email_signature=email_signature,  # Email signature settings
@@ -1882,6 +1870,7 @@ async def _handle_sync(
     # Integrations
     enabled_integrations = body.get("enabledConnections", [])
     available_integrations = body.get("availableIntegrations", [])
+    connected_data_connectors = body.get("connectedDataConnectors", [])
     if agent_type_config.restrict_integrations:
         enabled_integrations = agent_type_config.default_integrations or []
     elif agent_type_config.default_integrations and not enabled_integrations:
@@ -2031,6 +2020,7 @@ async def _handle_sync(
             external_user_id=external_user_id,
             enabled_integrations=enabled_integrations,
             available_integrations=available_integrations,
+            connected_data_connectors=connected_data_connectors,
             approval_mode=effective_approval_mode,
             numa_tool_approval_mode=numa_tool_approval_mode_sync,
             agent_type_config=agent_type_config,
@@ -2180,6 +2170,7 @@ async def _handle_fire_and_forget(
         available_kbs = agent_type_config.default_kbs
 
     enabled_integrations = body.get("enabledConnections", [])
+    connected_data_connectors = body.get("connectedDataConnectors", [])
     if agent_type_config.restrict_integrations:
         enabled_integrations = agent_type_config.default_integrations or []
     elif agent_type_config.default_integrations and not enabled_integrations:
@@ -2340,6 +2331,7 @@ async def _handle_fire_and_forget(
                     external_user_id=external_user_id,
                     enabled_integrations=enabled_integrations,
                     available_integrations=available_integrations,
+                    connected_data_connectors=connected_data_connectors,
                     approval_mode=effective_approval_mode,
                     numa_tool_approval_mode=numa_tool_approval_mode_async,
                     agent_type_config=agent_type_config,

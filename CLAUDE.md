@@ -53,31 +53,35 @@ Skills are stored in `.claude/skills/` and contain detailed context for specific
 - **Claude Code / Anthropic models:** Activate the skill by name (e.g., `/numa-connectors`).
 - **Other AI tools:** Read the skill's `SKILL.md` file directly from `.claude/skills/<skill-name>/SKILL.md` (and any supporting `.md` files in the same folder). The content is the same — just markdown on disk.
 
-| Skill                        | When to activate                                                                                                                         |
-| ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| `numa-workspace-agent-skill` | Working on the workspace agent service — code, debugging, features, streaming, tools, agent type configuration                           |
-| `workspace-agent-local-test` | Testing workspace agent Docker container locally, SDK integration testing                                                                |
-| `numa-agents`                | Agent builder, agent APIs, agent database schema, agent tools config, visibility settings                                                |
-| `numa-apps`                  | Creating/modifying apps, app constructs, Step Functions, state machines, jobs, manifests                                                 |
-| `numa-ops`                   | Numa Ops work — tickets, kanban boards, teams, projects, customers, suppliers, CRM, backlog                                              |
-| `numa-connectors`            | Creating or modifying data connectors (OAuth, token, API-key), connectorRegistry, Files Remote, connector wizards, backend providers     |
-| `numa-integrations`          | Pipedream integrations — proxy model, adding integrations, admin policies, workspace agent integration prompts                           |
-| `nolia-developer-guide`      | Any Nolia work — agent types, prompts, orchestrator, workspace setup, KB integration, rules generation                                   |
-| `numa-scheduled-agents`      | Agent scheduling, schedule runner, EventBridge, cron expressions, scheduled run config                                                   |
-| `numa-gitlab`                | Checking CI/CD pipeline status, viewing failed jobs, retrying, MR details                                                                |
-| `numa-unlock-customer`       | Unblocking stuck customer deployments — Terraform locks, resource conflicts, CNAME issues                                                |
-| `lint-and-tests`             | Running linting, type checking, or tests after code changes                                                                              |
-| `playwright-cli`             | Browser automation — web testing, form filling, screenshots, data extraction, great for doing automated tests of features in development |
-| `skill-creator`              | Creating new skills                                                                                                                      |
+| Skill                        | When to activate                                                                                                                                         |
+| ---------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `numa-workspace-agent-skill` | Working on the workspace agent service — code, debugging, features, streaming, tools, agent type configuration                                           |
+| `workspace-agent-local-test` | Testing workspace agent Docker container locally, SDK integration testing                                                                                |
+| `numa-agents`                | Agent builder, agent APIs, agent database schema, agent tools config, visibility settings                                                                |
+| `numa-apps`                  | Creating/modifying apps, app constructs, Step Functions, state machines, jobs, manifests                                                                 |
+| `numa-ops`                   | Numa Ops work — tickets, kanban boards, teams, projects, customers, suppliers, CRM, backlog                                                              |
+| `numa-connectors`            | Creating or modifying data connectors (OAuth, token, API-key), connectorRegistry, Files Remote, connector wizards, backend providers                     |
+| `numa-integrations`          | Pipedream integrations — proxy model, adding integrations, admin policies, workspace agent integration prompts                                           |
+| `nolia-developer-guide`      | Any Nolia work — agent types, prompts, orchestrator, workspace setup, KB integration, rules generation                                                   |
+| `numa-scheduled-agents`      | Agent scheduling, schedule runner, EventBridge, cron expressions, scheduled run config                                                                   |
+| `numa-gitlab`                | Checking CI/CD pipeline status, viewing failed jobs, retrying, MR details                                                                                |
+| `numa-unlock-customer`       | Unblocking stuck customer deployments — Terraform locks, resource conflicts, CNAME issues                                                                |
+| `debug-customer-issue`       | Investigating customer-reported bugs — log gathering, user lookup, timeline reconstruction, root cause analysis                                          |
+| `lint-and-tests`             | Running linting, type checking, or tests after code changes                                                                                              |
+| `playwright-cli`             | Browser automation — web testing, form filling, screenshots, data extraction, great for doing automated tests of features in development                 |
+| `extending-numa-chat`        | Adding new tools/capabilities to Numa chat -- MCP tool groups, skills/prompts, Lambda delegation, HITL approvals, frontend rendering, agent type configs |
+| `skill-creator`              | Creating new skills                                                                                                                                      |
 
 # Documentation
 
 The `documentation/` folder contains detailed reference docs for specific domains. These are committed to the repo and complement the skills above. Read the relevant docs when working in these areas.
 
-| Folder                      | Contents                                                                                                        |
-| --------------------------- | --------------------------------------------------------------------------------------------------------------- |
-| `documentation/connectors/` | Data connector architecture, two-secret model, complete checklist, framework rules, workspace agent integration |
-| `documentation/nolia/`      | Nolia architecture, pipeline details, rules generation, project notes                                           |
+| Folder                               | Contents                                                                                                             |
+| ------------------------------------ | -------------------------------------------------------------------------------------------------------------------- |
+| `documentation/connectors/`          | Data connector architecture, two-secret model, complete checklist, framework rules, workspace agent integration      |
+| `documentation/email-sending/`       | Centralized email sender: architecture, security model, templates, code examples, infra wiring, deployment           |
+| `documentation/extending-numa-chat/` | How to extend Numa chat with new tools: MCP groups, skills, Lambda delegation, HITL, frontend rendering, agent types |
+| `documentation/nolia/`               | Nolia architecture, pipeline details, rules generation, project notes                                                |
 
 ---
 
@@ -234,6 +238,16 @@ Each client deploys into its own isolated AWS account. The deployer account (Q D
 - **Secrets:** Integration OAuth credentials in Secrets Manager (proxy account).
 - **Workspace isolation:** Each conversation in its own AgentCore MicroVM. Security hooks block dangerous imports, directory traversal, system path access. Non-root container (UID 1000). Plugins outside workspace (read-only).
 - **PRM:** All AWS SDK calls must carry Marketplace product code `cl23v3vsno0k35czlg7e3ld9p`. Use: Python `from prm import client, resource`, Node `withPRM` from `lib/prm-node/prm`, frontend `withPRM` from `src/utils/prmUtils`.
+
+---
+
+## Email Sending
+
+Numa uses a centralized `numa-email-sender` Lambda in the deployer account for all transactional email. Emails are sent from `no-reply@notifications.numa.arcanum.ai` via SES with full DKIM/SPF/DMARC. Cross-account callers authenticate via STS presigned URL proof (same pattern as Pipedream).
+
+**Do not** create per-Lambda SES setups or send email directly from client accounts. All email goes through the centralized sender for consistent branding, deliverability, and security.
+
+See `documentation/email-sending/` for the full guide: architecture, security model, invocation payload, template reference, code examples (Python + Node), infra wiring instructions, and deployment steps.
 
 ---
 

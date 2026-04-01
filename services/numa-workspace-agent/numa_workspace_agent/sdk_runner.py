@@ -366,6 +366,7 @@ async def stream_claude_sdk(
     external_user_id: Optional[str] = None,
     enabled_integrations: Optional[list[str]] = None,
     available_integrations: Optional[list[dict]] = None,
+    connected_data_connectors: Optional[list[dict]] = None,
     approval_mode: str = "always",
     numa_tool_approval_mode: Optional[dict[str, str]] = None,
     email_signature: Optional[dict] = None,
@@ -425,17 +426,34 @@ async def stream_claude_sdk(
         prompt=prompt,
     )
 
-    # 1. Determine session_id for resumption
-    # With per-conversation sessions, each container serves one conversation.
-    # Cold start always restores from S3. Warm container uses local session_id.
+    # 1. Determine session_id and download files
+    # Parallelize S3 operations where possible to reduce cold-start latency.
     if is_cold_start:
         logger.info(
             "Restoring session from S3 (cold start)",
             conversation_id=conversation_id,
         )
-        restore_result = restore_claude_session(
-            user_sub, conversation_id, paths["system_dir"]
+
+        async def _restore_session():
+            return await asyncio.to_thread(
+                restore_claude_session, user_sub, conversation_id, paths["system_dir"]
+            )
+
+        async def _restore_trace():
+            await asyncio.to_thread(restore_trace_from_s3, user_sub, conversation_id)
+
+        async def _download_files():
+            if attached_files:
+                await asyncio.to_thread(
+                    _download_attached_data_bucket_files,
+                    attached_files,
+                    paths["uploads"],
+                )
+
+        restore_result, _, _ = await asyncio.gather(
+            _restore_session(), _restore_trace(), _download_files()
         )
+
         if restore_result and restore_result.get("session_id"):
             session_id = restore_result["session_id"]
             logger.debug(
@@ -443,9 +461,6 @@ async def stream_claude_sdk(
                 phase="init",
                 session_id=session_id,
             )
-
-        # Restore the trace file to preserve conversation history.
-        restore_trace_from_s3(user_sub, conversation_id)
     else:
         # Warm container: use locally stored session_id
         session_id = get_active_session_id()
@@ -458,9 +473,6 @@ async def stream_claude_sdk(
             )
         else:
             # Local files missing despite warm container - fallback to S3 restore
-            # This can happen when:
-            # - Container was warmed by a read-only request (GET /trace, /files)
-            # - AgentCore cleared ephemeral storage between invocations
             logger.debug(
                 "No local session_id, restoring from S3",
                 phase="init",
@@ -472,15 +484,11 @@ async def stream_claude_sdk(
             if restore_result and restore_result.get("session_id"):
                 session_id = restore_result["session_id"]
 
-            # Also restore the trace file to preserve conversation history.
             restore_trace_from_s3(user_sub, conversation_id)
 
-    # 1b. Download attached data-bucket files to /workdir/uploads/
-    #     When the frontend sends file metadata from "My Files" or "Company Files"
-    #     (e.g., for summarization or share description), the actual files live in
-    #     the S3 data bucket. Download them so Claude can read them like uploads.
-    if attached_files:
-        _download_attached_data_bucket_files(attached_files, paths["uploads"])
+        # Download attached files on warm start (sequential -- typically fast)
+        if attached_files:
+            _download_attached_data_bucket_files(attached_files, paths["uploads"])
 
     # 2. List uploaded files for context
     uploaded_files: list[str] = []
@@ -515,6 +523,7 @@ async def stream_claude_sdk(
         external_user_id=external_user_id,
         enabled_integrations=enabled_integrations,
         available_integrations=available_integrations,
+        connected_data_connectors=connected_data_connectors,
         request_id=request_id,
         email_signature=email_signature,
         agent_type_config=agent_type_config,
@@ -723,6 +732,7 @@ async def stream_claude_sdk(
                     "proxy_request",
                     "numa_ops_tool",
                     "numa_tool",
+                    "connectors",
                 )
                 # Numa tool write operations that require approval
                 _NUMA_TOOL_WRITE_OPS: dict[str, set[str]] = {
@@ -763,7 +773,7 @@ async def stream_claude_sdk(
                                 block.input if isinstance(block.input, dict) else {}
                             )
 
-                            # ── Branch: Numa tool vs Ops tool vs Integration tool ──
+                            # ── Branch: Numa tool vs Ops / Connectors / Integration tool ──
                             # All compute _approval_key and auto_approved,
                             # then share the common approval event emission below.
                             auto_approved = False
@@ -888,6 +898,46 @@ async def stream_claude_sdk(
                                     ops_mode=_ops_mode,
                                     auto_approved=auto_approved,
                                 )
+                            elif "connectors" in block.name:
+                                # ── Connectors tool approval ──
+                                from numa_workspace_agent.mcp_tools.connect import (
+                                    is_safe_connector_operation,
+                                )
+
+                                operation = tool_input.get("name", "")
+                                connector = (
+                                    tool_input.get("params", {}).get("connector", "")
+                                    if isinstance(tool_input.get("params"), dict)
+                                    else ""
+                                )
+                                _approval_key = (
+                                    f"connector-{connector}-{operation}"
+                                    if connector
+                                    else f"connector-{operation}"
+                                )
+
+                                _connector_safe = is_safe_connector_operation(operation)
+                                _conn_mode = _nt_modes.get(
+                                    "connectors", "non_destructive"
+                                )
+
+                                if _conn_mode == "never":
+                                    auto_approved = True
+                                elif _conn_mode == "non_destructive":
+                                    auto_approved = _connector_safe
+                                # else "always" → auto_approved stays False
+
+                                logger.info(
+                                    "Connectors tool approval decision",
+                                    _name="APPROVAL_DECISION",
+                                    phase="connectors",
+                                    tool_name=block.name,
+                                    operation=operation,
+                                    connector=connector,
+                                    action_key=_approval_key,
+                                    connector_mode=_conn_mode,
+                                    auto_approved=auto_approved,
+                                )
                             else:
                                 # ── Integration tool approval ──
                                 # Only show approval if the integration is actually enabled.
@@ -897,10 +947,9 @@ async def stream_claude_sdk(
                                 integration_slug = tool_input.get(
                                     "integration_slug"
                                 ) or (action_key.split("-")[0] if action_key else "")
-                                if (
-                                    enabled_integrations
-                                    and integration_slug
-                                    and integration_slug not in enabled_integrations
+                                if integration_slug and (
+                                    not enabled_integrations
+                                    or integration_slug not in enabled_integrations
                                 ):
                                     continue
 
@@ -942,6 +991,17 @@ async def stream_claude_sdk(
                                             action_key=_approval_key,
                                             error=str(exc),
                                         )
+                                    # proxy_request with no schema file: infer
+                                    # safety from HTTP method. GET/HEAD are read-only.
+                                    if not schema_found and not action_key:
+                                        http_method = tool_input.get(
+                                            "method", ""
+                                        ).upper()
+                                        if http_method in ("GET", "HEAD"):
+                                            schema_annotations = {
+                                                "readOnlyHint": True,
+                                                "destructiveHint": False,
+                                            }
                                     # Auto-approve read-only actions and draft
                                     # actions that are explicitly non-destructive.
                                     # Drafts are saved locally and must be sent
@@ -1170,6 +1230,7 @@ async def run_claude_sdk(
     external_user_id: Optional[str] = None,
     enabled_integrations: Optional[list[str]] = None,
     available_integrations: Optional[list[dict]] = None,
+    connected_data_connectors: Optional[list[dict]] = None,
     approval_mode: str = "always",
     numa_tool_approval_mode: Optional[dict[str, str]] = None,
     email_signature: Optional[dict] = None,
@@ -1281,6 +1342,7 @@ async def run_claude_sdk(
         external_user_id=external_user_id,
         enabled_integrations=enabled_integrations,
         available_integrations=available_integrations,
+        connected_data_connectors=connected_data_connectors,
         request_id=request_id,
         email_signature=email_signature,
         agent_type_config=agent_type_config,
@@ -1374,7 +1436,7 @@ async def run_claude_sdk(
                                     block.is_error,
                                 )
 
-                # Per-tool-call approval mode for integration and ops tools.
+                # Per-tool-call approval mode for integration, ops, and connector tools.
                 # Identical to stream_claude_sdk: checks approval_mode,
                 # sets NUMA_APPROVAL_MODE env var, and generates
                 # NUMA_REQUEST_ID_MAP entries. No SSE events in non-streaming mode.
@@ -1383,6 +1445,7 @@ async def run_claude_sdk(
                     "proxy_request",
                     "numa_ops_tool",
                     "numa_tool",
+                    "connectors",
                 )
                 _NUMA_TOOL_WRITE_OPS_SYNC: dict[str, set[str]] = {
                     "agents": {"create", "update", "duplicate"},
@@ -1404,7 +1467,7 @@ async def run_claude_sdk(
                                 block.input if isinstance(block.input, dict) else {}
                             )
 
-                            # ── Branch: Numa tool vs Ops tool vs Integration tool ──
+                            # ── Branch: Numa tool vs Ops / Connectors / Integration tool ──
                             auto_approved = False
 
                             if (
@@ -1450,16 +1513,42 @@ async def run_claude_sdk(
                                     auto_approved = True
                                 elif _ops_mode == "non_destructive":
                                     auto_approved = _ops_safe
+                            elif "connectors" in block.name:
+                                # ── Connectors tool approval ──
+                                from numa_workspace_agent.mcp_tools.connect import (
+                                    is_safe_connector_operation,
+                                )
+
+                                operation = tool_input.get("name", "")
+                                connector = (
+                                    tool_input.get("params", {}).get("connector", "")
+                                    if isinstance(tool_input.get("params"), dict)
+                                    else ""
+                                )
+                                _approval_key = (
+                                    f"connector-{connector}-{operation}"
+                                    if connector
+                                    else f"connector-{operation}"
+                                )
+
+                                _connector_safe = is_safe_connector_operation(operation)
+                                _conn_mode_sync = _nt_modes_sync.get(
+                                    "connectors", "non_destructive"
+                                )
+
+                                if _conn_mode_sync == "never":
+                                    auto_approved = True
+                                elif _conn_mode_sync == "non_destructive":
+                                    auto_approved = _connector_safe
                             else:
                                 # ── Integration tool approval ──
                                 action_key = tool_input.get("action_key", "")
                                 integration_slug = tool_input.get(
                                     "integration_slug"
                                 ) or (action_key.split("-")[0] if action_key else "")
-                                if (
-                                    enabled_integrations
-                                    and integration_slug
-                                    and integration_slug not in enabled_integrations
+                                if integration_slug and (
+                                    not enabled_integrations
+                                    or integration_slug not in enabled_integrations
                                 ):
                                     continue
 
@@ -1468,6 +1557,7 @@ async def run_claude_sdk(
                                     or f"{integration_slug}-{tool_input.get('method', 'request')}"
                                 )
 
+                                schema_found = False
                                 if approval_mode == "never":
                                     auto_approved = True
                                 elif approval_mode == "non_destructive":
@@ -1478,7 +1568,8 @@ async def run_claude_sdk(
                                             / integration_slug
                                             / f"{_approval_key}.json"
                                         )
-                                        if schema_path.exists():
+                                        schema_found = schema_path.exists()
+                                        if schema_found:
                                             schema_data = json.loads(
                                                 schema_path.read_text(encoding="utf-8")
                                             )
@@ -1491,6 +1582,17 @@ async def run_claude_sdk(
                                             action_key=_approval_key,
                                             error=str(exc),
                                         )
+                                    # proxy_request with no schema file: infer
+                                    # safety from HTTP method. GET/HEAD are read-only.
+                                    if not schema_found and not action_key:
+                                        http_method = tool_input.get(
+                                            "method", ""
+                                        ).upper()
+                                        if http_method in ("GET", "HEAD"):
+                                            schema_annotations = {
+                                                "readOnlyHint": True,
+                                                "destructiveHint": False,
+                                            }
                                     if isinstance(schema_annotations, dict):
                                         read_only = schema_annotations.get(
                                             "readOnlyHint", False
@@ -1528,6 +1630,7 @@ async def run_claude_sdk(
                                 auto_approved=auto_approved,
                                 approval_mode=approval_mode,
                                 request_id=approval_id,
+                                schema_found=schema_found,
                             )
 
                 # Serialize and write to trace

@@ -125,6 +125,12 @@ const createFeatureSets = (props: {
         actions: ['bedrock:InvokeModel', 'bedrock:InvokeModelWithResponseStream'],
         resources: ['*'], // TODO: Update to specific models and agents when implemented
       },
+      // Marketplace permissions required for Bedrock model access
+      {
+        effect: 'Allow',
+        actions: ['aws-marketplace:ViewSubscriptions', 'aws-marketplace:Subscribe'],
+        resources: ['*'],
+      },
       // Bedrock knowledge base retrieval for chat
       ...(props.knowledgeBase
         ? [

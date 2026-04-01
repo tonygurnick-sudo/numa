@@ -136,7 +136,11 @@ export function CreateZoneWizard({ show, onHide, onCreated }: CreateZoneWizardPr
       </Modal.Header>
 
       <Modal.Body>
-        {error && <div className="alert alert-danger mb-3">{error}</div>}
+        {error && (
+          <div className="alert alert-danger mb-3" style={{ position: 'sticky', top: 0, zIndex: 5 }}>
+            {error}
+          </div>
+        )}
 
         <Form.Group className="mb-3">
           <Form.Label>{t('zones.zoneName')}</Form.Label>
@@ -215,7 +219,7 @@ export function CreateZoneWizard({ show, onHide, onCreated }: CreateZoneWizardPr
         </div>
       </Modal.Body>
 
-      <Modal.Footer>
+      <Modal.Footer style={{ backgroundColor: '#f9fafb' }}>
         <Button variant="secondary" onClick={onHide}>
           {t('common.cancel')}
         </Button>

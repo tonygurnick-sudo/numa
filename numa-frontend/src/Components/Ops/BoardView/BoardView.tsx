@@ -6,6 +6,7 @@ import {
   DragOverlay,
   type DragEndEvent,
   type DragStartEvent,
+  type DragOverEvent,
   useSensor,
   useSensors,
   PointerSensor,
@@ -70,9 +71,16 @@ const BoardView = () => {
     activeZoneId,
     refreshTickets,
     config,
+    myWorkFilter,
   } = useOps();
 
   const [activeTicket, setActiveTicket] = useState<Ticket | null>(null);
+
+  // ── Drop indicator state: tracks where the dragged card would be inserted ──
+  const [dropIndicator, setDropIndicator] = useState<{
+    stageId: string;
+    index: number;
+  } | null>(null);
 
   // ── TicketDetailModal state ──────────────────────────────────────
   const [detailTicketId, setDetailTicketId] = useState<string | null>(null);
@@ -100,7 +108,7 @@ const BoardView = () => {
     [zones, activeZoneId]
   );
 
-  /** Filter tickets: only active zone, exclude archived, apply opt-in sprint filter */
+  /** Filter tickets: only active zone, exclude archived, apply opt-in sprint filter, apply my-work filter */
   const filteredTickets = useMemo(() => {
     let result = tickets.filter((tk) => !tk.archived);
     // Scope to active zone
@@ -111,8 +119,13 @@ const BoardView = () => {
     if (selectedWorkUnitId !== null) {
       result = result.filter((tk) => tk.workUnitId === selectedWorkUnitId);
     }
+    // My Work filter: only show tickets assigned to the current user
+    const userSub = user?.decoded_tokens?.idToken?.sub;
+    if (myWorkFilter && userSub) {
+      result = result.filter((tk) => tk.assigneeId && tk.assigneeId === userSub);
+    }
     return result;
-  }, [tickets, activeZone, selectedWorkUnitId]);
+  }, [tickets, activeZone, selectedWorkUnitId, myWorkFilter, user?.decoded_tokens?.idToken?.sub]);
 
   // ── Unsorted tickets: board zone tickets with no sprint assignment ──
   const unsortedCount = useMemo(() => {
@@ -125,6 +138,18 @@ const BoardView = () => {
     [workUnits]
   );
 
+  // ── Sprint progress label for the zone progress bar ──────────────────
+  const sprintLabel = useMemo(() => {
+    if (!hasWorkUnitSeries || !selectedWorkUnitId) return null;
+    const wu = workUnits.find((w) => w.id === selectedWorkUnitId);
+    if (!wu) return null;
+    const done = filteredTickets.filter((tk) => tk.statusType === 'completed' || tk.statusType === 'ended').length;
+    const total = filteredTickets.length;
+    if (total === 0) return null;
+    const pct = Math.round((done / total) * 100);
+    return `${wu.name}: ${t('sprints.sprintProgress', { done, total })} (${pct}%)`;
+  }, [hasWorkUnitSeries, selectedWorkUnitId, workUnits, filteredTickets, t]);
+
   const [showAssignDropdown, setShowAssignDropdown] = useState(false);
   const [assigningToSprint, setAssigningToSprint] = useState(false);
   const assignRef = useRef<HTMLDivElement>(null);
@@ -132,6 +157,13 @@ const BoardView = () => {
   const [unsortedDismissed, setUnsortedDismissed] = useState(() => {
     if (!dismissKey) return false;
     return localStorage.getItem(dismissKey) === '1';
+  });
+
+  // ── Announcement dismiss state (per-session via sessionStorage) ──
+  const announcementDismissKey = team ? `ops-announcement-dismissed-${team.id}` : '';
+  const [announcementDismissed, setAnnouncementDismissed] = useState(() => {
+    if (!announcementDismissKey) return false;
+    return sessionStorage.getItem(announcementDismissKey) === '1';
   });
 
   // Close dropdown on outside click
@@ -212,9 +244,66 @@ const BoardView = () => {
     [filteredTickets]
   );
 
+  const handleDragOver = useCallback(
+    (event: DragOverEvent) => {
+      const { active, over } = event;
+      if (!over) {
+        setDropIndicator(null);
+        return;
+      }
+
+      const overId = over.id as string;
+      const activeId = active.id as string;
+
+      // Determine which stage is being hovered over
+      if (overId.startsWith('stage-')) {
+        // Hovering over empty column droppable — show indicator at end
+        const stageId = overId.replace('stage-', '');
+        const stageTickets = filteredTickets
+          .filter((tk) => tk.stageId === stageId && tk.id !== activeId)
+          .sort((a, b) => a.order - b.order);
+        setDropIndicator({ stageId, index: stageTickets.length });
+      } else {
+        // Hovering over a ticket — find which stage it belongs to and the insertion index
+        const overTicket = filteredTickets.find((tk) => tk.id === overId);
+        if (!overTicket) {
+          setDropIndicator(null);
+          return;
+        }
+        const stageId = overTicket.stageId;
+        const dragTicket = filteredTickets.find((tk) => tk.id === activeId);
+        const isSameColumn = dragTicket?.stageId === stageId;
+
+        // Visible tickets = stage tickets excluding the dragged one
+        const visibleTickets = filteredTickets
+          .filter((tk) => tk.stageId === stageId && tk.id !== activeId)
+          .sort((a, b) => a.order - b.order);
+        const overIndex = visibleTickets.findIndex((tk) => tk.id === overId);
+
+        if (isSameColumn) {
+          // For same-column drags, find original position of the dragged ticket
+          // relative to all stage tickets to determine if dragging down or up
+          const allStageTickets = filteredTickets
+            .filter((tk) => tk.stageId === stageId)
+            .sort((a, b) => a.order - b.order);
+          const origDragIdx = allStageTickets.findIndex((tk) => tk.id === activeId);
+          const origOverIdx = allStageTickets.findIndex((tk) => tk.id === overId);
+          // Dragging downward: place after the hovered card
+          const insertIndex = origDragIdx < origOverIdx ? overIndex + 1 : overIndex;
+          setDropIndicator({ stageId, index: insertIndex });
+        } else {
+          // Cross-column: insert before the hovered card
+          setDropIndicator({ stageId, index: overIndex >= 0 ? overIndex : visibleTickets.length });
+        }
+      }
+    },
+    [filteredTickets]
+  );
+
   const handleDragEnd = useCallback(
     async (event: DragEndEvent) => {
       setActiveTicket(null);
+      setDropIndicator(null);
 
       const { active, over } = event;
       if (!over) return;
@@ -222,26 +311,63 @@ const BoardView = () => {
       const ticketId = active.id as string;
       const overId = over.id as string;
 
-      // Droppable IDs are formatted as "stage-{stageId}"
-      if (!overId.startsWith('stage-')) return;
-
-      const newStageId = overId.replace('stage-', '');
-      const newZoneId = stageZoneMap.get(newStageId);
-      if (!newZoneId) return;
-
       const ticket = filteredTickets.find((tk) => tk.id === ticketId);
       if (!ticket) return;
 
-      // No-op if already in the same stage
-      if (ticket.stageId === newStageId) return;
+      let newStageId: string;
+      let insertIndex: number;
 
-      // Get the tickets currently in the destination stage (sorted by order)
+      if (overId.startsWith('stage-')) {
+        // Dropped on a column droppable
+        newStageId = overId.replace('stage-', '');
+        const destStageTickets = filteredTickets
+          .filter((tk) => tk.stageId === newStageId && tk.id !== ticketId)
+          .sort((a, b) => a.order - b.order);
+        insertIndex = destStageTickets.length; // append to end
+      } else {
+        // Dropped on another ticket — find which column and position
+        const overTicket = filteredTickets.find((tk) => tk.id === overId);
+        if (!overTicket) return;
+        newStageId = overTicket.stageId;
+        const isSameColumn = ticket.stageId === newStageId;
+
+        // Visible tickets in destination (excluding dragged ticket)
+        const visibleDestTickets = filteredTickets
+          .filter((tk) => tk.stageId === newStageId && tk.id !== ticketId)
+          .sort((a, b) => a.order - b.order);
+        const overIndex = visibleDestTickets.findIndex((tk) => tk.id === overId);
+
+        if (isSameColumn) {
+          // Use full stage list to determine drag direction
+          const allStageTickets = filteredTickets
+            .filter((tk) => tk.stageId === newStageId)
+            .sort((a, b) => a.order - b.order);
+          const origDragIdx = allStageTickets.findIndex((tk) => tk.id === ticketId);
+          const origOverIdx = allStageTickets.findIndex((tk) => tk.id === overId);
+          insertIndex = origDragIdx < origOverIdx ? overIndex + 1 : overIndex;
+        } else {
+          insertIndex = overIndex >= 0 ? overIndex : visibleDestTickets.length;
+        }
+      }
+
+      const newZoneId = stageZoneMap.get(newStageId);
+      if (!newZoneId) return;
+
+      // Get destination tickets excluding the dragged ticket
       const destStageTickets = filteredTickets
-        .filter((tk) => tk.stageId === newStageId)
+        .filter((tk) => tk.stageId === newStageId && tk.id !== ticketId)
         .sort((a, b) => a.order - b.order);
 
-      // Insert at the end of the destination column
-      const newOrder = calculateNewOrder(destStageTickets, destStageTickets.length);
+      // No-op if same column, same position
+      if (ticket.stageId === newStageId) {
+        const currentTickets = filteredTickets
+          .filter((tk) => tk.stageId === newStageId)
+          .sort((a, b) => a.order - b.order);
+        const currentIdx = currentTickets.findIndex((tk) => tk.id === ticketId);
+        if (currentIdx === insertIndex || currentIdx === insertIndex - 1) return;
+      }
+
+      const newOrder = calculateNewOrder(destStageTickets, insertIndex);
 
       // Resolve the destination stage's statusType for optimistic sprint stats
       const destStage = stages.find((s) => s.id === newStageId);
@@ -273,7 +399,7 @@ const BoardView = () => {
         await refreshTickets();
       }
     },
-    [filteredTickets, stageZoneMap, numaPut, refreshTickets, setTickets]
+    [filteredTickets, stageZoneMap, stages, numaPut, refreshTickets, setTickets]
   );
 
   // ── Ticket interaction callbacks ──────────────────────────────────
@@ -326,10 +452,10 @@ const BoardView = () => {
       try {
         switch (action) {
           case 'assignToMe':
-            if (user?.username) {
+            if (user?.decoded_tokens?.idToken?.sub) {
               await OpsService.updateTicket(numaPut, ticket.id, {
                 teamId: ticket.teamId,
-                assigneeId: user.username,
+                assigneeId: user.decoded_tokens.idToken.sub,
                 version: ticket.version,
               });
               await refreshTickets();
@@ -534,6 +660,7 @@ const BoardView = () => {
         sensors={sensors}
         collisionDetection={closestCenter}
         onDragStart={handleDragStart}
+        onDragOver={handleDragOver}
         onDragEnd={handleDragEnd}
       >
         <div className="p-3">
@@ -594,6 +721,24 @@ const BoardView = () => {
             </div>
           )}
           {hasWorkUnitSeries && <SprintBoardBar />}
+          {/* Board announcement banner */}
+          {team.announcement && !announcementDismissed && (
+            <div className="ops-announcement">
+              <i className="bi bi-megaphone-fill ops-announcement-icon" />
+              <span className="ops-announcement-text">{team.announcement}</span>
+              <button
+                type="button"
+                className="ops-announcement-dismiss"
+                onClick={() => {
+                  setAnnouncementDismissed(true);
+                  if (announcementDismissKey) sessionStorage.setItem(announcementDismissKey, '1');
+                }}
+                aria-label={t('sprints.dismiss')}
+              >
+                <i className="bi bi-x-lg" />
+              </button>
+            </div>
+          )}
           <KanbanZone
             zone={activeZone}
             stages={zoneStagesMap.get(activeZone.id) ?? []}
@@ -603,6 +748,9 @@ const BoardView = () => {
             onTicketContextMenu={handleTicketContextMenu}
             onTicketAssign={handleTicketAssign}
             onQuickAdd={handleQuickAdd}
+            dropIndicator={dropIndicator}
+            activeTicketId={activeTicket?.id ?? null}
+            sprintLabel={sprintLabel}
           />
         </div>
         {dragOverlay}

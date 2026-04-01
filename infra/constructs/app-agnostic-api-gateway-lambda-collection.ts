@@ -933,7 +933,7 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
       route: { verb: 'GET', path: 'admin/google-cloud/status' },
     });
 
-    // Agents API (list/create/update/delete/copy)
+    // Agents API (list/create/update/delete/copy + prefs/teams/sharing)
     const agentsEnv = {
       CLIENT_NAME: props.clientName,
       REGION: props.region,
@@ -941,6 +941,10 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
       USER_AGENTS_TABLE: props.userAgentsTableName,
       OUTPUTS_BUCKET_NAME: props.outputsBucketName,
       AGENTS_SETTINGS_TABLE_NAME: props.agentsSettingsTableName,
+      AGENT_USER_PREFS_TABLE: props.agentUserPrefsTableName,
+      AGENT_TEAMS_TABLE: props.agentTeamsTableName,
+      AGENT_TEAM_MEMBERS_TABLE: props.agentTeamMembersTableName,
+      AGENT_SHARING_TABLE: props.agentSharingTableName,
     } as Record<string, string>;
 
     const agentsPolicy = [
@@ -959,6 +963,14 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
           `arn:aws:dynamodb:*:*:table/${props.workspaceAgentsTableName}/index/*`,
           `arn:aws:dynamodb:*:*:table/${props.userAgentsTableName}`,
           `arn:aws:dynamodb:*:*:table/${props.userAgentsTableName}/index/*`,
+          `arn:aws:dynamodb:*:*:table/${props.agentUserPrefsTableName}`,
+          `arn:aws:dynamodb:*:*:table/${props.agentUserPrefsTableName}/index/*`,
+          `arn:aws:dynamodb:*:*:table/${props.agentTeamsTableName}`,
+          `arn:aws:dynamodb:*:*:table/${props.agentTeamsTableName}/index/*`,
+          `arn:aws:dynamodb:*:*:table/${props.agentTeamMembersTableName}`,
+          `arn:aws:dynamodb:*:*:table/${props.agentTeamMembersTableName}/index/*`,
+          `arn:aws:dynamodb:*:*:table/${props.agentSharingTableName}`,
+          `arn:aws:dynamodb:*:*:table/${props.agentSharingTableName}/index/*`,
         ],
       },
       // Read agents settings policy table
@@ -1065,6 +1077,14 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
         // Agent tables for refreshing stale snapshots before each scheduled run
         WORKSPACE_AGENTS_TABLE_NAME: props.workspaceAgentsTableName,
         USER_AGENTS_TABLE_NAME: props.userAgentsTableName,
+        // Centralized email sender (deployer account, cross-account invocation)
+        ...(props.emailSenderLambdaArn && {
+          EMAIL_SENDER_LAMBDA_ARN: props.emailSenderLambdaArn,
+        }),
+        // Cognito User Pool ID for resolving user email when notification_email is missing
+        ...(props.cognitoUserPoolId && {
+          USER_POOL_ID: props.cognitoUserPoolId,
+        }),
       },
       additionalPolicyStatements: [
         {
@@ -1118,6 +1138,26 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
           actions: ['dynamodb:Query'],
           resources: [`arn:aws:dynamodb:*:*:table/numa-${props.clientName}-knowledge-bases`],
         },
+        // Cognito lookup for resolving user email when notification_email is missing on schedule record
+        ...(props.cognitoUserPoolArn
+          ? [
+              {
+                effect: 'Allow' as const,
+                actions: ['cognito-idp:AdminGetUser'],
+                resources: [props.cognitoUserPoolArn],
+              },
+            ]
+          : []),
+        // Branding config read for email template styling (logo, primary color)
+        ...(props.brandingTableName
+          ? [
+              {
+                effect: 'Allow' as const,
+                actions: ['dynamodb:GetItem'],
+                resources: [`arn:aws:dynamodb:*:*:table/${props.brandingTableName}`],
+              },
+            ]
+          : []),
       ],
     });
 
@@ -1355,6 +1395,39 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
         },
       ],
     });
+
+    // Users API - list workspace users (Cognito + profile enrichment from chat-settings)
+    if (props.cognitoUserPoolId && props.cognitoUserPoolArn) {
+      this.addLambdaFunction(this, 'numa-users-api-get', {
+        addAuthorizer: true,
+        lambdaDirectory: 'node/numa-users-api',
+        runtime: 'nodejs22.x',
+        handler: 'index.handler',
+        route: { verb: 'GET', path: 'users' },
+        environment: {
+          REGION: props.region,
+          USER_POOL_ID: props.cognitoUserPoolId,
+          CHAT_SETTINGS_TABLE_NAME: props.chatSettingsTableName,
+        },
+        additionalPolicyStatements: [
+          {
+            effect: 'Allow',
+            actions: ['cognito-idp:ListUsers'],
+            resources: [props.cognitoUserPoolArn],
+          },
+          {
+            effect: 'Allow',
+            actions: ['dynamodb:BatchGetItem'],
+            resources: [`arn:aws:dynamodb:*:*:table/${props.chatSettingsTableName}`],
+          },
+          {
+            effect: 'Allow',
+            actions: ['s3:GetObject'],
+            resources: [`${props.outputsBucketArn}/numa-chat/profile-images/*`],
+          },
+        ],
+      });
+    }
 
     // Usage Analytics API - Ingest endpoint (no auth, API key only)
     this.addLambdaFunction(this, 'usage-analytics-ingest', {
@@ -1639,6 +1712,14 @@ export interface AppAgnosticApiGatewayLambdaCollectionProps extends Omit<
   userAgentsTableName: string;
   /** Exact agents settings table name, passed from Core to avoid name drift. */
   agentsSettingsTableName: string;
+  /** Agent user preferences table name (per-user favorites, hidden, usage). */
+  agentUserPrefsTableName: string;
+  /** Agent teams table name. */
+  agentTeamsTableName: string;
+  /** Agent team members table name. */
+  agentTeamMembersTableName: string;
+  /** Agent sharing table name. */
+  agentSharingTableName: string;
   /** Scheduling settings table name for client-admin minimum interval override. */
   schedulingSettingsTableName: string;
   /** Per-client scheduling minimum interval (minutes), from client config. */
@@ -1725,4 +1806,10 @@ export interface AppAgnosticApiGatewayLambdaCollectionProps extends Omit<
   auditUserManagementTableName: string;
   /** Audit log: user management table ARN. */
   auditUserManagementTableArn: string;
+  /** Email sender Lambda ARN in deployer account (for cross-account email notifications) */
+  emailSenderLambdaArn?: string;
+  /** Cognito User Pool ID for resolving user email in schedule runner */
+  cognitoUserPoolId?: string;
+  /** Cognito User Pool ARN for IAM policy */
+  cognitoUserPoolArn?: string;
 }

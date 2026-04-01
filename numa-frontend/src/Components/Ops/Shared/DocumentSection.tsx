@@ -213,7 +213,7 @@ export function DocumentSection({
       <div className="d-flex justify-content-between align-items-center mb-2">
         <span className="fw-semibold small">{t('crm.documents')}</span>
         {!showUploadForm && (
-          <Button variant="outline-primary" size="sm" onClick={() => setShowUploadForm(true)}>
+          <Button variant="outline-secondary" size="sm" onClick={() => setShowUploadForm(true)}>
             <i className="bi bi-upload me-1" />
             {t('documents.upload')}
           </Button>

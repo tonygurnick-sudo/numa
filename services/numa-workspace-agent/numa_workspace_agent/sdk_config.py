@@ -343,6 +343,7 @@ def create_agent_options(
     external_user_id: Optional[str] = None,
     enabled_integrations: Optional[list[str]] = None,
     available_integrations: Optional[list[dict]] = None,
+    connected_data_connectors: Optional[list[dict]] = None,
     request_id: Optional[str] = None,
     email_signature: Optional[dict] = None,
     agent_type_config: Optional[AgentTypeConfig] = None,
@@ -391,6 +392,7 @@ def create_agent_options(
         agent_file_paths=agent_file_paths,
         enabled_integrations=enabled_integrations,
         available_integrations=available_integrations,
+        connected_data_connectors=connected_data_connectors,
         email_signature=email_signature,
         identity_override=type_config.identity_override,
         user_profile=user_profile,
@@ -543,9 +545,19 @@ def create_agent_options(
             tools=numa_tools,
         )
 
-    # Connectors: only register if OAuth integrations feature is enabled
-    if type_config.enable_connect_mcp and flags.get(
-        "OAUTH_INTEGRATIONS_ENABLED", False
+    # Connectors: only register if the per-chat toggle is ON (DATA_CONNECTORS_CHAT_ENABLED),
+    # OAuth integrations feature is enabled, and agent config allows connectors.
+    # When DATA_CONNECTORS_CHAT_ENABLED is False the MCP server is NOT registered,
+    # which is the ONLY reliable way to prevent the agent from calling the tool.
+    _connectors_allowed_by_agent = True
+    if agent_config and not agent_config.tools_config.auto_tools_enabled:
+        _connectors_allowed_by_agent = agent_config.tools_config.data_connectors_enabled
+
+    if (
+        type_config.enable_connect_mcp
+        and flags.get("OAUTH_INTEGRATIONS_ENABLED", False)
+        and flags.get("DATA_CONNECTORS_CHAT_ENABLED", False)
+        and _connectors_allowed_by_agent
     ):
         mcp_servers["connectors"] = create_sdk_mcp_server(
             name="connectors",

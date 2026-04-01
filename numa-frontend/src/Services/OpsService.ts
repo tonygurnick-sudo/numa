@@ -44,12 +44,15 @@ import type {
   Document,
   DocumentResponse,
   CreateDocumentPayload,
+  AuditEntry,
+  AuditEntryListResponse,
   WorkZone,
   WorkStage,
   TicketLinkType,
   CrmConfig,
   StaffSyncResponse,
   FieldDefinition,
+  Project,
 } from '../types/ops';
 
 type NumaGet = (url: string, params?: Record<string, unknown>) => Promise<unknown>;
@@ -569,6 +572,15 @@ export const deleteCustomerDocument = async (
   );
 };
 
+// ─── Audit ────────────────────────────────────────────────────────────
+
+export const listAuditEntries = async (numaGet: NumaGet, ticketId: string): Promise<AuditEntry[]> => {
+  const response = (await numaGet(
+    `${BASE_URL}/tickets/${encodeURIComponent(ticketId)}/audit`
+  )) as AuditEntryListResponse;
+  return response?.entries ?? [];
+};
+
 // ─── Suppliers ─────────────────────────────────────────────────────────────
 
 export const listSuppliers = async (
@@ -651,4 +663,24 @@ export const createSupplierDocument = async (
     payload
   )) as DocumentResponse;
   return response.document;
+};
+
+// ─── Projects ─────────────────────────────────────────────────────────────
+
+export const createProject = async (numaPost: NumaPost, payload: Omit<Project, 'id'>): Promise<Project> => {
+  const response = (await numaPost(`${BASE_URL}/config/projects`, payload)) as Project;
+  return response;
+};
+
+export const updateProject = async (
+  numaPut: NumaPut,
+  projectId: string,
+  payload: Partial<Project>
+): Promise<Project> => {
+  const response = (await numaPut(`${BASE_URL}/config/projects/${encodeURIComponent(projectId)}`, payload)) as Project;
+  return response;
+};
+
+export const deleteProject = async (numaDelete: NumaDelete, projectId: string): Promise<void> => {
+  await numaDelete(`${BASE_URL}/config/projects/${encodeURIComponent(projectId)}`);
 };

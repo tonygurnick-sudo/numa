@@ -25,20 +25,26 @@ function formatBytes(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-function fileIcon(mimeType: string | undefined): string {
-  if (!mimeType) return 'bi-file-earmark';
-  if (mimeType.startsWith('image/')) return 'bi-file-image';
-  if (mimeType === 'application/pdf') return 'bi-file-pdf';
-  if (mimeType.includes('word') || mimeType.includes('document')) return 'bi-file-word';
-  if (mimeType.includes('sheet') || mimeType.includes('excel') || mimeType.includes('csv'))
-    return 'bi-file-spreadsheet';
-  if (mimeType.includes('zip') || mimeType.includes('tar') || mimeType.includes('gz')) return 'bi-file-zip';
-  if (mimeType.startsWith('text/')) return 'bi-file-text';
-  return 'bi-file-earmark';
-}
-
 function getExtension(filename: string): string {
   return filename.split('.').pop()?.toLowerCase() ?? '';
+}
+
+const IMAGE_EXTENSIONS = new Set(['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg']);
+
+function isImageFile(filename: string): boolean {
+  return IMAGE_EXTENSIONS.has(getExtension(filename));
+}
+
+function thumbIcon(mimeType: string | undefined, _filename: string): { icon: string; color: string } {
+  if (!mimeType) return { icon: 'bi-file-earmark', color: '#6b7280' };
+  if (mimeType === 'application/pdf') return { icon: 'bi-file-pdf', color: '#ef4444' };
+  if (mimeType.includes('word') || mimeType.includes('document')) return { icon: 'bi-file-word', color: '#2563eb' };
+  if (mimeType.includes('sheet') || mimeType.includes('excel') || mimeType.includes('csv'))
+    return { icon: 'bi-file-spreadsheet', color: '#16a34a' };
+  if (mimeType.includes('zip') || mimeType.includes('tar') || mimeType.includes('gz'))
+    return { icon: 'bi-file-zip', color: '#d97706' };
+  if (mimeType.startsWith('text/')) return { icon: 'bi-file-text', color: '#6b7280' };
+  return { icon: 'bi-file-earmark', color: '#6b7280' };
 }
 
 function isPreviewable(filename: string): boolean {
@@ -218,49 +224,24 @@ export function AttachmentsSection({ ticketId }: AttachmentsSectionProps): React
 
   // ── Render ────────────────────────────────────────────────────────────────
 
-  return (
-    <>
-      {/* Drop zone */}
-      <div
-        onDragOver={(e) => {
-          e.preventDefault();
-          setDragOver(true);
-        }}
-        onDragLeave={() => setDragOver(false)}
-        onDrop={handleDrop}
-        onClick={() => !uploading && fileInputRef.current?.click()}
-        style={{
-          border: `2px dashed ${dragOver ? '#6366f1' : '#e5e7eb'}`,
-          borderRadius: 8,
-          padding: '24px 20px',
-          textAlign: 'center',
-          cursor: uploading ? 'default' : 'pointer',
-          backgroundColor: dragOver ? '#eef2ff' : '#f9fafb',
-          transition: 'all 0.15s',
-          marginBottom: 16,
-        }}
-      >
-        {uploading ? (
-          <div className="d-flex align-items-center justify-content-center gap-2 text-muted">
-            <Spinner animation="border" size="sm" />
-            <span style={{ fontSize: '0.875rem' }}>{t('tickets.uploading', 'Uploading…')}</span>
-          </div>
-        ) : (
-          <>
-            <i
-              className="bi bi-cloud-upload"
-              style={{ fontSize: '1.5rem', color: '#9ca3af', display: 'block', marginBottom: 6 }}
-            />
-            <p className="mb-1" style={{ fontSize: '0.875rem', color: '#374151', fontWeight: 500 }}>
-              {t('tickets.dropFilesHere', 'Drop files here')}
-            </p>
-            <p className="mb-0" style={{ fontSize: '0.78rem', color: '#9ca3af' }}>
-              {t('tickets.orBrowse', 'or click to browse')}
-            </p>
-          </>
+  const renderThumbPreview = (f: DisplayAttachment) => {
+    if (isImageFile(f.name) && f.downloadUrl) {
+      return <img src={f.downloadUrl} alt={f.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />;
+    }
+    const { icon, color } = thumbIcon(f.mimeType, f.name);
+    const ext = getExtension(f.name);
+    return (
+      <div className="d-flex flex-column align-items-center justify-content-center">
+        <i className={`bi ${icon}`} style={{ fontSize: '1.5rem', color }} />
+        {ext && (
+          <span style={{ fontSize: '0.6rem', color: '#9ca3af', marginTop: 2, textTransform: 'uppercase' }}>{ext}</span>
         )}
       </div>
+    );
+  };
 
+  return (
+    <>
       <input
         ref={fileInputRef}
         type="file"
@@ -269,8 +250,15 @@ export function AttachmentsSection({ ticketId }: AttachmentsSectionProps): React
         onChange={(e) => handleFiles(e.target.files)}
       />
 
+      {uploading && (
+        <div className="d-flex align-items-center justify-content-center gap-2 text-muted mb-2">
+          <Spinner animation="border" size="sm" />
+          <span style={{ fontSize: '0.875rem' }}>{t('tickets.uploading', 'Uploading…')}</span>
+        </div>
+      )}
+
       {error && (
-        <div className="alert alert-danger py-2 px-3 mb-3" style={{ fontSize: '0.875rem' }}>
+        <div className="alert alert-danger py-2 px-3 mb-2" style={{ fontSize: '0.875rem' }}>
           {error}
           <Button variant="link" size="sm" className="p-0 ms-2" onClick={() => setError(null)}>
             {t('common.dismiss', 'Dismiss')}
@@ -278,71 +266,85 @@ export function AttachmentsSection({ ticketId }: AttachmentsSectionProps): React
         </div>
       )}
 
-      {/* File list */}
+      {/* Thumbnail gallery */}
       {loadingFiles ? (
         <div className="d-flex align-items-center gap-2 text-muted" style={{ fontSize: '0.875rem' }}>
           <Spinner animation="border" size="sm" />
           <span>{t('common.loading')}</span>
         </div>
       ) : files.length === 0 ? (
-        <p className="text-muted small mb-0">
-          <i className="bi bi-paperclip me-1" />
-          {t('tickets.noAttachments', 'No files attached yet')}
-        </p>
+        <div
+          className="ops-attachment-empty-zone"
+          onDragOver={(e) => {
+            e.preventDefault();
+            setDragOver(true);
+          }}
+          onDragLeave={() => setDragOver(false)}
+          onDrop={handleDrop}
+          onClick={() => !uploading && fileInputRef.current?.click()}
+          style={dragOver ? { borderColor: '#6366f1', background: '#eef2ff' } : undefined}
+        >
+          <i
+            className="bi bi-paperclip"
+            style={{ fontSize: '1.25rem', color: '#9ca3af', display: 'block', marginBottom: 4 }}
+          />
+          <span style={{ fontSize: '0.8rem', color: '#6b7280' }}>
+            {t('tickets.dropOrAttach', 'Drop files here or click to attach')}
+          </span>
+        </div>
       ) : (
-        <div className="d-flex flex-column gap-1">
+        <div
+          className="d-flex flex-row gap-2 overflow-x-auto pb-2"
+          onDragOver={(e) => {
+            e.preventDefault();
+            setDragOver(true);
+          }}
+          onDragLeave={() => setDragOver(false)}
+          onDrop={handleDrop}
+          style={dragOver ? { outline: '2px dashed #6366f1', borderRadius: 8, outlineOffset: 2 } : undefined}
+        >
           {files.map((f, i) => (
             <div
               key={`${f.s3Key}-${i}`}
-              className="d-flex align-items-center gap-2 p-2 rounded"
-              style={{ backgroundColor: '#f3f4f6', fontSize: '0.85rem' }}
+              className="ops-attachment-thumb"
+              onClick={() => {
+                if (isPreviewable(f.name)) {
+                  openPreview(f);
+                } else if (f.downloadUrl) {
+                  window.open(f.downloadUrl, '_blank');
+                }
+              }}
+              title={f.name}
             >
-              <i
-                className={`bi ${fileIcon(f.mimeType)}`}
-                style={{ color: '#6b7280', fontSize: '1rem', flexShrink: 0 }}
-              />
-              <span className="text-truncate flex-grow-1" title={f.name}>
-                {f.name}
-              </span>
-              <span className="text-muted flex-shrink-0" style={{ fontSize: '0.75rem' }}>
-                {formatBytes(f.size)}
-              </span>
-
-              {/* View button — uses FilePreviewPanel (requires infra IAM grant on ops/*) */}
-              {isPreviewable(f.name) && (
-                <Button
-                  variant="outline-secondary"
-                  size="sm"
-                  className="py-0 px-2 flex-shrink-0"
-                  style={{ fontSize: '0.75rem' }}
-                  title={t('common.view', 'View')}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    openPreview(f);
-                  }}
-                >
-                  <i className="bi bi-eye me-1" />
-                  {t('common.view', 'View')}
-                </Button>
-              )}
-
-              {/* Download button */}
+              <div className="ops-attachment-thumb-preview">{renderThumbPreview(f)}</div>
               {f.downloadUrl && (
                 <a
                   href={f.downloadUrl}
                   target="_blank"
                   rel="noopener noreferrer"
                   download={f.name}
-                  className="btn btn-sm btn-outline-secondary py-0 px-2 flex-shrink-0"
-                  style={{ fontSize: '0.75rem' }}
+                  className="ops-attachment-thumb-delete"
+                  style={{ background: '#6366f1' }}
                   title={t('common.download', 'Download')}
                   onClick={(e) => e.stopPropagation()}
                 >
                   <i className="bi bi-download" />
                 </a>
               )}
+              <div className="ops-attachment-thumb-name">{f.name}</div>
+              <div className="ops-attachment-thumb-size">{formatBytes(f.size)}</div>
             </div>
           ))}
+          {/* Add-more button at the end of the gallery */}
+          <div
+            className="ops-attachment-thumb"
+            onClick={() => !uploading && fileInputRef.current?.click()}
+            title={t('tickets.addAttachment', 'Add attachment')}
+          >
+            <div className="ops-attachment-thumb-preview" style={{ border: '2px dashed var(--ops-border)' }}>
+              <i className="bi bi-plus-lg" style={{ fontSize: '1.25rem', color: '#9ca3af' }} />
+            </div>
+          </div>
         </div>
       )}
 

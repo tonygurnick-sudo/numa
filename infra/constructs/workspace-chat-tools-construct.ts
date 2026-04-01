@@ -63,6 +63,8 @@ export interface WorkspaceChatToolsConstructProps {
   opsConfigApiLambdaArn?: string;
   /** Numa Ops CRM API Lambda ARN (for invoking CRM operations) */
   opsCrmApiLambdaArn?: string;
+  /** Email sender Lambda ARN in deployer account (for cross-account email sending) */
+  emailSenderLambdaArn?: string;
 }
 
 /**
@@ -296,6 +298,16 @@ export class WorkspaceChatToolsConstruct extends Construct {
       });
     }
 
+    // Lambda invoke permission for centralized email sender (deployer account)
+    if (props.emailSenderLambdaArn) {
+      policyStatements.push({
+        sid: 'InvokeEmailSender',
+        effect: 'Allow',
+        actions: ['lambda:InvokeFunction'],
+        resources: [props.emailSenderLambdaArn],
+      });
+    }
+
     // Create the Lambda using NumaLambda construct
     this.numaLambda = new NumaLambda(this, 'lambda', {
       clientName: props.clientName,
@@ -347,6 +359,8 @@ export class WorkspaceChatToolsConstruct extends Construct {
         // Pipedream integrations (optional)
         INTEGRATIONS_APPROVAL_TABLE_NAME: props.integrationsApprovalTableName ?? '',
         PIPEDREAM_RELAY_LAMBDA_ARN: props.pipedreamRelayLambdaArn ?? '',
+        // Centralized email sender (deployer account, cross-account invocation)
+        EMAIL_SENDER_LAMBDA_ARN: props.emailSenderLambdaArn ?? '',
         // File redirect for integration uploads (clean URLs to avoid Slack filename length issues)
         ...(props.fileRedirectSecret && {
           FILE_REDIRECT_SECRET: props.fileRedirectSecret,

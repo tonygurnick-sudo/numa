@@ -125,6 +125,8 @@ export const ScheduleRecordSchema = z.object({
   max_runs: z.number().int().positive().optional(),
   total_runs: z.number().int().min(0).optional().default(0),
   email_notifications: z.boolean().optional().default(false),
+  notification_email: z.string().email().optional(),
+  notification_emails: z.array(z.string().email()).max(10).optional(),
   last_run_epoch: z.number().optional(),
   last_status: z.string().optional(),
   last_error: z.string().optional(),
@@ -152,6 +154,8 @@ export const CreateSchedulePayloadSchema = z.object({
   eventType: z.enum(['agent', 'application', 'data_sync']).optional().default('agent'),
   maxRuns: z.number().int().positive().optional(),
   emailNotifications: z.boolean().optional().default(false),
+  notificationEmail: z.string().email().optional(),
+  notificationEmails: z.array(z.string().email()).max(10).optional(),
 });
 
 // Update payload schema
@@ -176,6 +180,8 @@ export const UpdateSchedulePayloadSchema = z.object({
   agentSnapshot: AgentSnapshotSchema.optional(),
   maxRuns: z.number().int().positive().nullable().optional(),
   emailNotifications: z.boolean().optional().default(false),
+  notificationEmail: z.string().email().optional(),
+  notificationEmails: z.array(z.string().email()).max(10).optional(),
 });
 
 // Application schedule schema

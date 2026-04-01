@@ -75,21 +75,25 @@ async def run_action(args: dict[str, Any]) -> dict[str, Any]:
     # Early check: reject if integration is not enabled
     integration_slug = action_key.split("-")[0] if action_key else ""
     enabled_raw = os.environ.get("NUMA_ENABLED_INTEGRATIONS", "")
-    if enabled_raw and integration_slug:
+    if integration_slug:
         try:
-            enabled = json.loads(enabled_raw)
-            if integration_slug not in enabled:
-                return {
-                    "content": [
-                        {
-                            "type": "text",
-                            "text": f"Integration not enabled: {integration_slug}. The user has not enabled this integration.",
-                        }
-                    ],
-                    "isError": True,
-                }
+            enabled = json.loads(enabled_raw) if enabled_raw else []
         except json.JSONDecodeError:
-            pass
+            enabled = []
+        if not enabled or integration_slug not in enabled:
+            return {
+                "content": [
+                    {
+                        "type": "text",
+                        "text": (
+                            f"Integration '{integration_slug}' is not enabled for this chat session. "
+                            "The user needs to enable it in their chat settings "
+                            "(integrations toggle in the chat sidebar) before it can be used."
+                        ),
+                    }
+                ],
+                "isError": True,
+            }
 
     # Parse props JSON
     try:
@@ -156,6 +160,39 @@ async def run_action(args: dict[str, Any]) -> dict[str, Any]:
                         ),
                     }
                 ],
+            }
+        if status == "execution_timeout":
+            return {
+                "content": [
+                    {
+                        "type": "text",
+                        "text": json.dumps(
+                            {
+                                "status": "execution_timeout",
+                                "message": (
+                                    f"Execution failed or timed out for: {action_key}. "
+                                    "The action was approved but may not have completed. "
+                                    "Check the target system before retrying."
+                                ),
+                            }
+                        ),
+                    }
+                ],
+                "isError": True,
+            }
+        if status == "already_executed":
+            return {
+                "content": [
+                    {
+                        "type": "text",
+                        "text": (
+                            f"Action already executed: {action_key}. "
+                            "This was already run from a previous attempt. "
+                            "Check the target system for results."
+                        ),
+                    }
+                ],
+                "isError": True,
             }
 
         # Save result to file
@@ -316,21 +353,25 @@ async def proxy_request(args: dict[str, Any]) -> dict[str, Any]:
 
     # Early check: reject if integration is not enabled
     enabled_raw = os.environ.get("NUMA_ENABLED_INTEGRATIONS", "")
-    if enabled_raw and integration_slug:
+    if integration_slug:
         try:
-            enabled = json.loads(enabled_raw)
-            if integration_slug not in enabled:
-                return {
-                    "content": [
-                        {
-                            "type": "text",
-                            "text": f"Integration not enabled: {integration_slug}. The user has not enabled this integration.",
-                        }
-                    ],
-                    "isError": True,
-                }
+            enabled = json.loads(enabled_raw) if enabled_raw else []
         except json.JSONDecodeError:
-            pass
+            enabled = []
+        if not enabled or integration_slug not in enabled:
+            return {
+                "content": [
+                    {
+                        "type": "text",
+                        "text": (
+                            f"Integration '{integration_slug}' is not enabled for this chat session. "
+                            "The user needs to enable it in their chat settings "
+                            "(integrations toggle in the chat sidebar) before it can be used."
+                        ),
+                    }
+                ],
+                "isError": True,
+            }
 
     try:
         result = invoke_workspace_tool(
@@ -370,6 +411,39 @@ async def proxy_request(args: dict[str, Any]) -> dict[str, Any]:
                         ),
                     }
                 ],
+            }
+        if status == "execution_timeout":
+            return {
+                "content": [
+                    {
+                        "type": "text",
+                        "text": json.dumps(
+                            {
+                                "status": "execution_timeout",
+                                "message": (
+                                    f"Execution failed or timed out for proxy request: {method} {upstream_url}. "
+                                    "The request was approved but may not have completed. "
+                                    "Check the target system before retrying."
+                                ),
+                            }
+                        ),
+                    }
+                ],
+                "isError": True,
+            }
+        if status == "already_executed":
+            return {
+                "content": [
+                    {
+                        "type": "text",
+                        "text": (
+                            f"Proxy request already executed: {method} {upstream_url}. "
+                            "This was already run from a previous attempt. "
+                            "Check the target system for results."
+                        ),
+                    }
+                ],
+                "isError": True,
             }
 
         # Save result to file

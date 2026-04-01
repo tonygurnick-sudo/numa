@@ -9,7 +9,20 @@ import { useOps } from '../OpsContext';
 import { getTicketTypeIconClass } from '../../../constants/opsConstants';
 import { PriorityIndicator } from '../Shared/PriorityIndicator';
 import { StaffAvatar } from '../Shared/StaffAvatar';
-import { formatDueDate } from '../Shared/ticketUtils';
+import { formatDueDate, formatRelativeDate } from '../Shared/ticketUtils';
+
+// ─── Helpers ────────────────────────────────────────────────────────────────
+
+/** Strip HTML tags and return plain text (safe — uses DOMParser, no script execution). */
+function stripHtml(html: string): string {
+  if (!html) return '';
+  try {
+    const doc = new DOMParser().parseFromString(html, 'text/html');
+    return doc.body.textContent?.trim() ?? '';
+  } catch {
+    return html.replace(/<[^>]*>/g, '').trim();
+  }
+}
 
 // ─── Props ───────────────────────────────────────────────────────────────────
 
@@ -46,6 +59,109 @@ export function TicketCard({ ticket, onClick, onContextMenu, onAssign }: TicketC
   const assigneeStaff = useMemo(
     () => (ticket.assigneeId ? config?.staff?.find((s) => s.id === ticket.assigneeId) : undefined),
     [ticket.assigneeId, config?.staff]
+  );
+
+  // ── Inline hover preview state ──────────────────────────────────────────
+  const [showPreview, setShowPreview] = useState(false);
+  const [previewPos, setPreviewPos] = useState<{ top: number; left: number }>({ top: 0, left: 0 });
+  const hoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const cardRef = useRef<HTMLDivElement | null>(null);
+
+  const computePreviewPosition = useCallback(() => {
+    const rect = cardRef.current?.getBoundingClientRect();
+    if (!rect) return { top: 0, left: 0 };
+
+    const PREVIEW_WIDTH = 320;
+    const PREVIEW_MAX_HEIGHT = 300;
+    const GAP = 8;
+
+    // Prefer right side; fall back to left if not enough space
+    const spaceRight = window.innerWidth - rect.right;
+    let left: number;
+    if (spaceRight >= PREVIEW_WIDTH + GAP) {
+      left = rect.right + GAP;
+    } else {
+      left = rect.left - PREVIEW_WIDTH - GAP;
+    }
+    // Clamp left to viewport
+    left = Math.max(8, Math.min(left, window.innerWidth - PREVIEW_WIDTH - 8));
+
+    // Vertically align to card top; clamp to viewport
+    let top = rect.top;
+    if (top + PREVIEW_MAX_HEIGHT > window.innerHeight - 8) {
+      top = window.innerHeight - PREVIEW_MAX_HEIGHT - 8;
+    }
+    top = Math.max(8, top);
+
+    return { top, left };
+  }, []);
+
+  const handleMouseEnter = useCallback(() => {
+    if (isDragging) return;
+    hoverTimerRef.current = setTimeout(() => {
+      setPreviewPos(computePreviewPosition());
+      setShowPreview(true);
+    }, 500);
+  }, [isDragging, computePreviewPosition]);
+
+  const handleMouseLeave = useCallback(() => {
+    if (hoverTimerRef.current) {
+      clearTimeout(hoverTimerRef.current);
+      hoverTimerRef.current = null;
+    }
+    setShowPreview(false);
+  }, []);
+
+  // Clean up timer on unmount or when dragging starts
+  useEffect(() => {
+    if (isDragging) {
+      if (hoverTimerRef.current) {
+        clearTimeout(hoverTimerRef.current);
+        hoverTimerRef.current = null;
+      }
+      setShowPreview(false);
+    }
+  }, [isDragging]);
+
+  useEffect(() => {
+    return () => {
+      if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
+    };
+  }, []);
+
+  // Derive preview data
+  const descriptionPlain = useMemo(() => stripHtml(ticket.description), [ticket.description]);
+
+  const projectName = useMemo(() => {
+    if (!ticket.projectId || !config?.projects) return null;
+    return config.projects.find((p) => p.id === ticket.projectId)?.name ?? null;
+  }, [ticket.projectId, config?.projects]);
+
+  const customFieldEntries = useMemo(() => {
+    if (!ticket.fields || !config?.fields) return [];
+    return Object.entries(ticket.fields)
+      .filter(([, v]) => v != null && v !== '' && !(Array.isArray(v) && v.length === 0))
+      .map(([fieldId, value]) => {
+        const def = config.fields.find((f) => f.id === fieldId);
+        return { label: def?.name ?? fieldId, value: String(value) };
+      })
+      .slice(0, 4);
+  }, [ticket.fields, config?.fields]);
+
+  const linkedSummaryParts = useMemo(() => {
+    const parts: string[] = [];
+    if (ticket.linkCount > 0) parts.push(t('preview.linked', { count: ticket.linkCount }));
+    if (ticket.isBlocking) parts.push(t('preview.blocking', { count: 1 }));
+    if (ticket.hasUnresolvedDependencies) parts.push(t('preview.depends', { count: 1 }));
+    return parts.join(', ');
+  }, [ticket.linkCount, ticket.isBlocking, ticket.hasUnresolvedDependencies, t]);
+
+  const setCardRef = useCallback(
+    (node: HTMLElement | null) => {
+      setNodeRef(node);
+      cardRef.current = node as HTMLDivElement | null;
+    },
+    [setNodeRef]
   );
 
   const handleClick = useCallback(() => {
@@ -108,14 +224,40 @@ export function TicketCard({ ticket, onClick, onContextMenu, onAssign }: TicketC
 
   return (
     <div
-      ref={setNodeRef}
+      ref={setCardRef}
       style={style}
       className="ticket-card"
       onClick={handleClick}
       onContextMenu={handleContextMenu}
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
       {...attributes}
       {...listeners}
     >
+      {/* ── Hover action buttons ─────────────────────────────────── */}
+      <div className="ticket-card-actions">
+        <button
+          className="ticket-card-action-btn"
+          title={t('common.edit')}
+          onClick={(e) => {
+            e.stopPropagation();
+            onClick(ticket);
+          }}
+        >
+          <i className="bi bi-pencil" />
+        </button>
+        <button
+          className="ticket-card-action-btn ticket-card-action-danger"
+          title={t('common.delete')}
+          onClick={(e) => {
+            e.stopPropagation();
+            onContextMenu(e, ticket);
+          }}
+        >
+          <i className="bi bi-trash" />
+        </button>
+      </div>
+
       {/* ── Top: type badge + meta counts ──────────────────────────── */}
       <div className="ticket-card-top">
         <span
@@ -132,7 +274,7 @@ export function TicketCard({ ticket, onClick, onContextMenu, onAssign }: TicketC
           {ticketType?.name ?? '—'}
         </span>
 
-        {(ticket.linkCount > 0 || ticket.commentCount > 0) && (
+        {(ticket.linkCount > 0 || ticket.commentCount > 0 || ticket.hasUnresolvedDependencies || ticket.isBlocking) && (
           <div className="d-flex align-items-center gap-2 ms-auto">
             {ticket.linkCount > 0 && (
               <OverlayTrigger
@@ -141,6 +283,42 @@ export function TicketCard({ ticket, onClick, onContextMenu, onAssign }: TicketC
               >
                 <span className="ticket-meta-chip">
                   <i className="bi bi-link-45deg" /> {ticket.linkCount}
+                </span>
+              </OverlayTrigger>
+            )}
+            {ticket.hasUnresolvedDependencies && (
+              <OverlayTrigger placement="top" overlay={<Tooltip>{t('linkedTickets.depends')}</Tooltip>}>
+                <span
+                  style={{
+                    backgroundColor: '#fef3c7',
+                    color: '#92400e',
+                    fontSize: '0.65rem',
+                    fontWeight: 600,
+                    padding: '1px 5px',
+                    borderRadius: '4px',
+                    lineHeight: 1.4,
+                  }}
+                >
+                  <i className="bi bi-clock me-1" style={{ fontSize: '0.55rem' }} />
+                  {t('linkedTickets.depends')}
+                </span>
+              </OverlayTrigger>
+            )}
+            {ticket.isBlocking && (
+              <OverlayTrigger placement="top" overlay={<Tooltip>{t('linkedTickets.blocking')}</Tooltip>}>
+                <span
+                  style={{
+                    backgroundColor: '#fee2e2',
+                    color: '#991b1b',
+                    fontSize: '0.65rem',
+                    fontWeight: 600,
+                    padding: '1px 5px',
+                    borderRadius: '4px',
+                    lineHeight: 1.4,
+                  }}
+                >
+                  <i className="bi bi-ban me-1" style={{ fontSize: '0.55rem' }} />
+                  {t('linkedTickets.blocking')}
                 </span>
               </OverlayTrigger>
             )}
@@ -183,9 +361,7 @@ export function TicketCard({ ticket, onClick, onContextMenu, onAssign }: TicketC
       )}
 
       {/* ── Title ──────────────────────────────────────────────────── */}
-      <p className="ticket-title" title={ticket.title}>
-        {ticket.title}
-      </p>
+      <p className="ticket-title">{ticket.title}</p>
 
       {/* ── Tags (max 2 + overflow count) ──────────────────────────── */}
       {ticket.tags && ticket.tags.length > 0 && (
@@ -195,7 +371,7 @@ export function TicketCard({ ticket, onClick, onContextMenu, onAssign }: TicketC
               {tag}
             </span>
           ))}
-          {ticket.tags.length > 2 && <span className="ticket-tag">+{ticket.tags.length - 2}</span>}
+          {ticket.tags.length > 2 && <span className="ticket-tag ticket-tag-overflow">+{ticket.tags.length - 2}</span>}
         </div>
       )}
 
@@ -333,6 +509,115 @@ export function TicketCard({ ticket, onClick, onContextMenu, onAssign }: TicketC
             document.body
           )}
       </div>
+
+      {/* ── Inline hover preview (portal) ─────────────────────────── */}
+      {showPreview &&
+        !isDragging &&
+        createPortal(
+          <div className="ops-ticket-preview" style={{ top: previewPos.top, left: previewPos.left }}>
+            <div className="ops-ticket-preview-title">{ticket.title}</div>
+
+            {descriptionPlain ? (
+              <div className="ops-ticket-preview-desc">{descriptionPlain}</div>
+            ) : (
+              <div className="ops-ticket-preview-desc" style={{ fontStyle: 'italic' }}>
+                {t('preview.noDescription')}
+              </div>
+            )}
+
+            <hr className="ops-ticket-preview-separator" />
+
+            <div className="ops-ticket-preview-meta">
+              {/* Priority + Assignee row */}
+              <div className="ops-ticket-preview-meta-row">
+                <i className="bi bi-flag" />
+                <span>
+                  {ticket.priority ? ticket.priority.charAt(0).toUpperCase() + ticket.priority.slice(1) : 'None'}
+                </span>
+                <span className="text-muted mx-1">|</span>
+                <i className="bi bi-person" />
+                <span>{assigneeStaff?.name || ticket.assigneeName || t('card.unassigned')}</span>
+              </div>
+
+              {/* Customer */}
+              {ticket.customerName && (
+                <div className="ops-ticket-preview-meta-row">
+                  <i className="bi bi-building" />
+                  <span>{ticket.customerName}</span>
+                </div>
+              )}
+
+              {/* Effort points */}
+              {ticket.effortPoints != null && (
+                <div className="ops-ticket-preview-meta-row">
+                  <i className="bi bi-bar-chart-fill" />
+                  <span>
+                    {ticket.effortPoints} {t('preview.effortPoints', { defaultValue: 'points' })}
+                  </span>
+                </div>
+              )}
+
+              {/* Tags */}
+              {ticket.tags && ticket.tags.length > 0 && (
+                <div className="ops-ticket-preview-meta-row">
+                  <i className="bi bi-tags" />
+                  <span>
+                    {ticket.tags.slice(0, 4).join(', ')}
+                    {ticket.tags.length > 4 ? ` +${ticket.tags.length - 4}` : ''}
+                  </span>
+                </div>
+              )}
+
+              {/* Comments */}
+              {ticket.commentCount > 0 && (
+                <div className="ops-ticket-preview-meta-row">
+                  <i className="bi bi-chat" />
+                  <span>
+                    {ticket.commentCount === 1
+                      ? t('preview.comment', { count: 1 })
+                      : t('preview.comments', { count: ticket.commentCount })}
+                  </span>
+                </div>
+              )}
+
+              {/* Linked tickets */}
+              {linkedSummaryParts && (
+                <div className="ops-ticket-preview-meta-row">
+                  <i className="bi bi-link-45deg" />
+                  <span>{linkedSummaryParts}</span>
+                </div>
+              )}
+
+              {/* Project */}
+              {projectName && (
+                <div className="ops-ticket-preview-meta-row">
+                  <i className="bi bi-folder" />
+                  <span>{t('preview.project', { name: projectName })}</span>
+                </div>
+              )}
+
+              {/* Last updated */}
+              {ticket.updatedAt && (
+                <div className="ops-ticket-preview-meta-row">
+                  <i className="bi bi-clock-history" />
+                  <span>{t('preview.lastUpdated', { date: formatRelativeDate(ticket.updatedAt) })}</span>
+                </div>
+              )}
+            </div>
+
+            {/* Custom fields */}
+            {customFieldEntries.length > 0 && (
+              <div className="ops-ticket-preview-fields">
+                {customFieldEntries.map((f) => (
+                  <span key={f.label} className="ops-ticket-preview-field">
+                    {f.label}: {f.value}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>,
+          document.body
+        )}
     </div>
   );
 }

@@ -11,6 +11,7 @@ const LS_ACTIVE_ZONE = 'numa_ops_active_zone';
 const LS_BOARD_VIEW_MODE = 'numa_ops_board_view_mode';
 const LS_TOP_VIEW = 'numa_ops_top_view';
 const LS_SELECTED_WORK_UNIT = 'numa_ops_selected_work_unit';
+const LS_MY_WORK_FILTER = 'numa_ops_my_work_filter';
 
 // ─── View Types ─────────────────────────────────────────────────────────────
 
@@ -47,11 +48,13 @@ export type OpsDataState = {
   activeZoneId: string | null;
   crmRefreshVersion: number;
   pendingSprintFilter: string[] | null;
+  myWorkFilter: boolean;
 
   // Actions
   selectTeam: (teamId: string) => void;
   setTopView: (view: OpsTopView) => void;
   setPendingSprintFilter: (filter: string[] | null) => void;
+  setMyWorkFilter: (enabled: boolean) => void;
   setBoardViewMode: (mode: BoardViewMode) => void;
   setActiveZone: (zoneId: string | null) => void;
   selectWorkUnit: (wuId: string | null) => void;
@@ -163,6 +166,13 @@ export const useOpsData = (): OpsDataState => {
   });
   const [crmRefreshVersion, setCrmRefreshVersion] = useState(0);
   const [pendingSprintFilter, setPendingSprintFilter] = useState<string[] | null>(null);
+  const [myWorkFilter, setMyWorkFilterState] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem(LS_MY_WORK_FILTER) === '1';
+    } catch {
+      return false;
+    }
+  });
 
   // ── Refs ─────────────────────────────────────────────────────────────────
   const initialLoadDone = useRef(false);
@@ -462,6 +472,16 @@ export const useOpsData = (): OpsDataState => {
     setCrmRefreshVersion((prev) => prev + 1);
   }, []);
 
+  const setMyWorkFilter = useCallback((enabled: boolean) => {
+    setMyWorkFilterState(enabled);
+    try {
+      if (enabled) localStorage.setItem(LS_MY_WORK_FILTER, '1');
+      else localStorage.removeItem(LS_MY_WORK_FILTER);
+    } catch {
+      /* quota or private mode */
+    }
+  }, []);
+
   // ── Return ────────────────────────────────────────────────────────────
 
   return {
@@ -486,10 +506,12 @@ export const useOpsData = (): OpsDataState => {
     activeZoneId,
     crmRefreshVersion,
     pendingSprintFilter,
+    myWorkFilter,
 
     selectTeam,
     setTopView,
     setPendingSprintFilter,
+    setMyWorkFilter,
     setBoardViewMode,
     setActiveZone,
     selectWorkUnit,

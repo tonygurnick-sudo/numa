@@ -464,7 +464,7 @@ export function CreateTicketModal({
           )}
         </Modal.Body>
 
-        <Modal.Footer className="border-top-0">
+        <Modal.Footer className="border-top-0" style={{ backgroundColor: '#f9fafb' }}>
           <Button variant="outline-secondary" onClick={onHide}>
             {t('common.cancel')}
           </Button>
@@ -856,7 +856,11 @@ export function CreateTicketModal({
             </Col>
           </Row>
 
-          {error && <div className="alert alert-danger mt-3 mb-0">{error}</div>}
+          {error && (
+            <div className="alert alert-danger mt-3 mb-0" style={{ position: 'sticky', top: 0, zIndex: 5 }}>
+              {error}
+            </div>
+          )}
         </Modal.Body>
 
         {/* ── Footer ──────────────────────────────────────────────────── */}

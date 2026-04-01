@@ -31,6 +31,7 @@ import { applyLanguagePreference, LANGUAGE_BROWSER_DEFAULT } from '../utils/lang
 import { getConnectionDisplayName, getConnectionIcon, getConnectionFallbackIcon } from '../config/integrationsConfig';
 import ProfileAvatar from '../Components/ProfileAvatar';
 import { invalidateProfileBlob } from '../utils/profileImageCache';
+import { RichTextEditor } from '../Components/Ops/Shared/RichTextEditor';
 
 type Connection = { id: string; isConnected: boolean; mcpServerUrl?: string };
 
@@ -254,6 +255,75 @@ export default function UserProfilePage({
     [getCredentials, resizeToCanvas, t, user, userProfile.profileImage]
   );
 
+  const handleSignatureImageUpload = useCallback(
+    async (file: File): Promise<string> => {
+      if (!/^image\/(png|jpe?g|gif|webp)$/i.test(file.type)) {
+        throw new Error(t('userProfile.profile.fields.profileImage.errors.invalidType'));
+      }
+      if (file.size > IMAGE_MAX_BYTES) {
+        throw new Error(t('userProfile.profile.fields.profileImage.errors.tooLarge'));
+      }
+
+      const url = URL.createObjectURL(file);
+      try {
+        const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+          const image = new Image();
+          image.onload = () => resolve(image);
+          image.onerror = () => reject(new Error('Failed to load image for signature'));
+          image.src = url;
+        });
+
+        // Signatures usually need smaller logos/headshots (max width ~400px)
+        const MAX_WIDTH = 400;
+        let w = img.width;
+        let h = img.height;
+        if (w > MAX_WIDTH) {
+          const scale = MAX_WIDTH / w;
+          w = MAX_WIDTH;
+          h = img.height * scale;
+        }
+
+        const canvas = document.createElement('canvas');
+        canvas.width = w;
+        canvas.height = h;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) throw new Error('Failed to get canvas context');
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, w, h);
+        ctx.drawImage(img, 0, 0, w, h);
+
+        const blob = await new Promise<Blob>((resolve) => canvas.toBlob((b) => resolve(b || new Blob()), 'image/png'));
+
+        const userId =
+          (user?.decoded_tokens?.idToken?.sub as string | undefined) ||
+          window.sessionStorage.getItem('USER_ID') ||
+          'anonymous';
+        const randomId = Math.random().toString(36).slice(2, 10);
+        const s3Key = `numa-chat/signature-images/${userId}/${Date.now()}_${randomId}.png`;
+        const clientName = window.sessionStorage.getItem('CLIENT_NAME');
+        const bucketName = `numa-${clientName}-outputs`;
+        const uploadRegion = window.sessionStorage.getItem('REGION') || 'us-east-1';
+
+        const credentials = await getCredentials();
+        if (!credentials) throw new Error(t('userProfile.profile.fields.profileImage.errors.credentials'));
+        const s3 = withPRM(S3Client, { region: uploadRegion, credentials });
+        const put = new PutObjectCommand({
+          Bucket: bucketName,
+          Key: s3Key,
+          ContentType: 'image/png',
+          CacheControl: 'public, max-age=31536000, immutable',
+        });
+        const signedUrl = await getSignedUrl(s3, put, { expiresIn: 60 * 10 });
+        await axios.put(signedUrl, blob, { headers: { 'Content-Type': 'image/png' } });
+
+        return `https://${bucketName}.s3.${uploadRegion}.amazonaws.com/${s3Key}`;
+      } finally {
+        URL.revokeObjectURL(url);
+      }
+    },
+    [getCredentials, t, user]
+  );
+
   const handleRemoveImage = useCallback(() => {
     if (userProfile.profileImage) {
       invalidateProfileBlob(userProfile.profileImage.s3Bucket, userProfile.profileImage.s3Key);
@@ -466,6 +536,7 @@ export default function UserProfilePage({
         webSearchEnabled: companyDefaults.webSearchEnabled,
         createAgentEnabled: companyDefaults.createAgentEnabled,
         memoriesEnabled: companyDefaults.memoriesEnabled,
+        dataConnectorsEnabled: companyDefaults.dataConnectorsEnabled,
         dataAnalysisEnabled: companyDefaults.dataAnalysisEnabled,
         defaultConnectionIds: companyDefaults.defaultConnectionIds,
       };
@@ -571,6 +642,7 @@ export default function UserProfilePage({
         webSearchEnabled: userDefaults.webSearchEnabled,
         createAgentEnabled: userDefaults.createAgentEnabled,
         memoriesEnabled: userDefaults.memoriesEnabled,
+        dataConnectorsEnabled: userDefaults.dataConnectorsEnabled,
         dataAnalysisEnabled: userDefaults.dataAnalysisEnabled,
         defaultConnectionIds: userDefaults.defaultConnectionIds,
         language: userDefaults.language,
@@ -1279,14 +1351,14 @@ export default function UserProfilePage({
                   <Form.Label className="profile-field-label">
                     {t('userProfile.defaults.emailSignature.textLabel')}
                   </Form.Label>
-                  <Form.Control
-                    as="textarea"
-                    rows={2}
+                  <RichTextEditor
                     value={userDefaults.emailSignatureText}
                     disabled={disableProfileForm}
                     placeholder={DEFAULT_CHAT_SETTINGS.emailSignatureText}
-                    onChange={(e) => {
-                      setUserDefaults((prev) => ({ ...prev, emailSignatureText: e.target.value }));
+                    onSave={() => {}}
+                    onImageUpload={handleSignatureImageUpload}
+                    onChange={(val) => {
+                      setUserDefaults((prev) => ({ ...prev, emailSignatureText: val }));
                       setDirty(true);
                     }}
                   />
@@ -1443,12 +1515,14 @@ export default function UserProfilePage({
                                 dataAnalysisEnabled: true,
                                 createAgentEnabled: true,
                                 memoriesEnabled: true,
+                                dataConnectorsEnabled: true,
                               }
                             : {
                                 webSearchEnabled: false,
                                 dataAnalysisEnabled: false,
                                 createAgentEnabled: false,
                                 memoriesEnabled: false,
+                                dataConnectorsEnabled: false,
                               }),
                         }));
                         setDirty(true);
@@ -1536,6 +1610,28 @@ export default function UserProfilePage({
                         <div className="profile-tool-row__help">{t('userProfile.defaults.memoryManagement.help')}</div>
                       </div>
                     </div>
+
+                    {getFlag('DATA_CONNECTORS_ENABLED') && (
+                      <div className="profile-tool-row">
+                        <Form.Check
+                          type="switch"
+                          id="profile-defaults-data-connectors"
+                          label=""
+                          checked={displayedSettings.autoToolsEnabled || displayedSettings.dataConnectorsEnabled}
+                          disabled={disableDefaultsForm || displayedSettings.autoToolsEnabled}
+                          onChange={(e) => {
+                            setUserDefaults((prev) => ({ ...prev, dataConnectorsEnabled: e.target.checked }));
+                            setDirty(true);
+                          }}
+                        />
+                        <div className="profile-tool-row__text">
+                          <div className="profile-tool-row__label">
+                            {t('userProfile.defaults.dataConnectors.title')}
+                          </div>
+                          <div className="profile-tool-row__help">{t('userProfile.defaults.dataConnectors.help')}</div>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -1681,6 +1777,7 @@ export default function UserProfilePage({
                                     agents: 'never',
                                     memories: 'never',
                                     knowledgeBases: 'never',
+                                    ops: 'never',
                                   }),
                                   agents: mode,
                                 },
@@ -1714,6 +1811,7 @@ export default function UserProfilePage({
                                     agents: 'never',
                                     memories: 'never',
                                     knowledgeBases: 'never',
+                                    ops: 'never',
                                   }),
                                   memories: mode,
                                 },
@@ -1747,6 +1845,7 @@ export default function UserProfilePage({
                                     agents: 'never',
                                     memories: 'never',
                                     knowledgeBases: 'never',
+                                    ops: 'never',
                                   }),
                                   knowledgeBases: mode,
                                 },

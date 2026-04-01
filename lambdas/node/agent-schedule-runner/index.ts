@@ -1,5 +1,6 @@
 import type { APIGatewayProxyEventV2, APIGatewayProxyResultV2 } from 'aws-lambda';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
+import { CognitoIdentityProviderClient, AdminGetUserCommand } from '@aws-sdk/client-cognito-identity-provider';
 import { InvokeCommand, LambdaClient } from '@aws-sdk/client-lambda';
 import { GetObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { DynamoDBDocumentClient, GetCommand, PutCommand, QueryCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
@@ -17,6 +18,8 @@ const OUTPUTS_BUCKET = process.env.OUTPUTS_BUCKET_NAME ?? '';
 const WORKSPACE_AGENTS_TABLE = process.env.WORKSPACE_AGENTS_TABLE_NAME ?? '';
 const USER_AGENTS_TABLE = process.env.USER_AGENTS_TABLE_NAME ?? '';
 const CLIENT_NAME = process.env.CLIENT_NAME ?? '';
+const EMAIL_SENDER_LAMBDA_ARN = process.env.EMAIL_SENDER_LAMBDA_ARN ?? '';
+const USER_POOL_ID = process.env.USER_POOL_ID ?? '';
 const SCHEDULED_RUNS_PREFIX = 'numa-chat/scheduled-runs';
 
 const dynamo = DynamoDBDocumentClient.from(withPRM(DynamoDBClient, { region: REGION }), {
@@ -26,6 +29,159 @@ const dynamo = DynamoDBDocumentClient.from(withPRM(DynamoDBClient, { region: REG
 });
 const s3 = withPRM(S3Client, { region: REGION });
 const lambdaClient = withPRM(LambdaClient, { region: REGION });
+
+// Email sender cross-account Lambda client (us-east-1, where the deployer account Lambda lives)
+const emailLambdaClient = withPRM(LambdaClient, { region: 'us-east-1' });
+const cognitoClient = withPRM(CognitoIdentityProviderClient, { region: REGION });
+
+/**
+ * Resolve client branding (logo URL, primary color) for email templates.
+ */
+async function resolveClientBranding(): Promise<{ logoUrl?: string; primaryColor?: string }> {
+  const brandingTable = `numa-${CLIENT_NAME}-branding-config`;
+  try {
+    const result = await dynamo.send(
+      new GetCommand({
+        TableName: brandingTable,
+        Key: { client_id: CLIENT_NAME, config_id: 'branding#current' },
+      })
+    );
+    const config = result.Item?.config;
+    if (!config?.branding) {
+      console.log('[EMAIL_BRANDING] No branding config found', { table: brandingTable, hasConfig: !!config });
+      return {};
+    }
+
+    const branding = config.branding;
+    const assets = branding.assets || {};
+    const colors = branding.colors || {};
+
+    // Resolve logo: prefer assets.logoNav (S3 URI), fall back to branding.logo (relative path)
+    let logoUrl: string | undefined;
+    const logoNav = (assets.logoNav as string | undefined) || undefined;
+    const logoFallback = (branding.logo as string | undefined) || undefined;
+    const rawLogo = logoNav || logoFallback;
+
+    if (rawLogo?.startsWith('s3://')) {
+      const [bucket, ...keyParts] = rawLogo.slice(5).split('/');
+      const key = keyParts.join('/');
+      logoUrl = `https://${bucket}.s3.${REGION}.amazonaws.com/${key}`;
+    } else if (rawLogo?.startsWith('http')) {
+      logoUrl = rawLogo;
+    } else if (rawLogo?.startsWith('/')) {
+      // Relative path (e.g., /numa-logo.svg) -- resolve via client's CloudFront domain
+      logoUrl = `https://${CLIENT_NAME}.numa.arcanum.ai${rawLogo}`;
+    }
+
+    console.log('[EMAIL_BRANDING] Resolved branding', {
+      table: brandingTable,
+      logoNav: assets.logoNav,
+      logoFallback,
+      resolvedLogoUrl: logoUrl,
+      primaryColor: colors.primary,
+    });
+
+    return { logoUrl, primaryColor: colors.primary };
+  } catch (err) {
+    console.warn('[EMAIL_BRANDING] Failed to resolve branding', { table: brandingTable, error: err });
+    return {};
+  }
+}
+
+/**
+ * Resolve a user's email from Cognito by sub. Used when notification_email is missing on the schedule record.
+ */
+async function resolveUserEmail(userSub: string): Promise<string | undefined> {
+  if (!USER_POOL_ID) return undefined;
+  try {
+    const resp = await cognitoClient.send(new AdminGetUserCommand({ UserPoolId: USER_POOL_ID, Username: userSub }));
+    return resp.UserAttributes?.find((a) => a.Name === 'email')?.Value;
+  } catch (err) {
+    console.warn('Failed to resolve user email from Cognito', { userSub, error: err });
+    return undefined;
+  }
+}
+
+/**
+ * Generate an STS presigned GetCallerIdentity URL for cross-account identity proof.
+ * This is the Node equivalent of the Python botocore generate_presigned_url approach.
+ */
+async function generateStsProofUrl(expiresIn = 60): Promise<string> {
+  const { SignatureV4 } = await import('@smithy/signature-v4');
+  const { Sha256 } = await import('@aws-crypto/sha256-js');
+  const { defaultProvider } = await import('@aws-sdk/credential-provider-node');
+  const { HttpRequest } = await import('@smithy/protocol-http');
+
+  const signer = new SignatureV4({
+    service: 'sts',
+    region: 'us-east-1',
+    credentials: defaultProvider(),
+    sha256: Sha256,
+  });
+
+  const request = new HttpRequest({
+    method: 'GET',
+    protocol: 'https:',
+    hostname: 'sts.us-east-1.amazonaws.com',
+    path: '/',
+    query: {
+      Action: 'GetCallerIdentity',
+      Version: '2011-06-15',
+    },
+    headers: {
+      host: 'sts.us-east-1.amazonaws.com',
+    },
+  });
+
+  const signed = await signer.presign(request, { expiresIn });
+  const queryString = Object.entries(signed.query ?? {})
+    .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(String(v))}`)
+    .join('&');
+
+  return `https://${signed.hostname}${signed.path}?${queryString}`;
+}
+
+/**
+ * Send an email notification via the centralized email sender Lambda.
+ * Fire-and-forget (async invocation). Failures are logged but never block.
+ */
+async function sendEmailNotification(params: {
+  to: string;
+  template: 'schedule_completed' | 'schedule_failed' | 'schedule_partial';
+  clientName: string;
+  templateData: Record<string, string>;
+}): Promise<void> {
+  if (!EMAIL_SENDER_LAMBDA_ARN) return;
+
+  try {
+    const stsProofUrl = await generateStsProofUrl();
+
+    await emailLambdaClient.send(
+      new InvokeCommand({
+        FunctionName: EMAIL_SENDER_LAMBDA_ARN,
+        InvocationType: 'Event', // Async -- never block the schedule runner
+        Payload: new TextEncoder().encode(
+          JSON.stringify({
+            sts_proof_url: stsProofUrl,
+            client_name: params.clientName,
+            to: [params.to],
+            template: params.template,
+            template_data: params.templateData,
+          })
+        ),
+      })
+    );
+
+    console.info('[EMAIL_DISPATCH] Email notification dispatched', {
+      template: params.template,
+      to: params.to,
+      templateData: params.templateData,
+    });
+  } catch (err) {
+    // Non-blocking -- email failure must never break schedule execution
+    console.error('Email notification failed (non-blocking):', err);
+  }
+}
 
 const HEADERS = {
   'Access-Control-Allow-Origin': '*',
@@ -79,6 +235,7 @@ type ScheduleRecord = {
   schedule_id: string;
   conversation_id: string;
   prompt_text: string;
+  timezone?: string;
   status: 'active' | 'paused' | 'deleted';
   agent_id: string;
   agent_title?: string;
@@ -88,6 +245,8 @@ type ScheduleRecord = {
   max_runs?: number;
   total_runs?: number;
   email_notifications?: boolean;
+  notification_email?: string;
+  notification_emails?: string[];
   last_status?: string;
   last_error?: string;
   last_run_epoch?: number;
@@ -690,6 +849,77 @@ const executeRun = async ({
           'COMPLETED',
           notificationMessage
         );
+      }
+
+      // Email notification (non-blocking, default ON unless explicitly opted out)
+      const emailEnabled = schedule.email_notifications !== false;
+      if (emailEnabled) {
+        // Resolve recipients: notification_emails list > single notification_email > Cognito lookup
+        let recipientEmails: string[] = [];
+        if (schedule.notification_emails?.length) {
+          recipientEmails = schedule.notification_emails;
+        } else {
+          const fallbackEmail = schedule.notification_email || (await resolveUserEmail(schedule.user_id));
+          if (fallbackEmail) recipientEmails = [fallbackEmail];
+        }
+
+        if (recipientEmails.length > 0) {
+          const emailTemplate =
+            agentReportedStatus === 'failed'
+              ? ('schedule_failed' as const)
+              : agentReportedStatus === 'partial'
+                ? ('schedule_partial' as const)
+                : ('schedule_completed' as const);
+
+          // Resolve branding for email styling (non-blocking)
+          const branding = await resolveClientBranding();
+
+          const durationMs = Date.now() - now;
+          const durationSec = Math.round(durationMs / 1000);
+          const durationStr =
+            durationSec >= 60 ? `${Math.floor(durationSec / 60)}m ${durationSec % 60}s` : `${durationSec}s`;
+
+          const totalRuns = (schedule.total_runs ?? 0) + 1;
+          const runCountStr = schedule.max_runs ? `${totalRuns} of ${schedule.max_runs}` : `${totalRuns}`;
+
+          // Format run timestamp in the user's timezone
+          const userTimezone = schedule.timezone || 'UTC';
+          const ranAtStr = new Date().toLocaleString('en-US', {
+            timeZone: userTimezone,
+            weekday: 'short',
+            month: 'short',
+            day: 'numeric',
+            hour: 'numeric',
+            minute: '2-digit',
+            hour12: true,
+          });
+          const tzAbbr = new Date()
+            .toLocaleString('en-US', { timeZone: userTimezone, timeZoneName: 'short' })
+            .split(' ')
+            .pop();
+
+          const templateData = {
+            schedule_name: scheduleName,
+            agent_name: schedule.agent_title || scheduleName,
+            summary: notificationMessage || '',
+            run_url: `https://${CLIENT_NAME}.numa.arcanum.ai/automations/${schedule.schedule_id}`,
+            duration: durationStr,
+            run_count: runCountStr,
+            ran_at: `${ranAtStr} ${tzAbbr}`,
+            ...(branding.logoUrl && { logo_url: branding.logoUrl }),
+            ...(branding.primaryColor && { primary_color: branding.primaryColor }),
+          };
+
+          // Send to all recipients (SES supports up to 50 per call)
+          for (const email of recipientEmails) {
+            await sendEmailNotification({
+              to: email,
+              template: emailTemplate,
+              clientName: CLIENT_NAME,
+              templateData,
+            });
+          }
+        }
       }
     }
   } catch (err) {
