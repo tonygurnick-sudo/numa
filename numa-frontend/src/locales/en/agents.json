@@ -177,6 +177,10 @@
       "updateMemory": {
         "title": "Update memory",
         "description": "Allow this agent to save and update memories."
+      },
+      "dataConnectors": {
+        "title": "Data Connectors",
+        "description": "Allow this agent to access connected data sources (Google Drive, OneDrive, Gmail, etc.)."
       }
     },
     "integrations": {

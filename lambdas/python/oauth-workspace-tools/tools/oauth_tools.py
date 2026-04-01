@@ -47,6 +47,21 @@ FRIENDLY_NAMES = {
     "dropbox": "Dropbox",
 }
 
+# Fallback token URLs for token refresh
+FALLBACK_TOKEN_URLS = {
+    "googledrive": "https://oauth2.googleapis.com/token",
+    "gmail": "https://oauth2.googleapis.com/token",
+    "onedrive": "https://login.microsoftonline.com/common/oauth2/v2.0/token",
+    "dropbox": "https://api.dropboxapi.com/oauth2/token",
+}
+
+# Platform connectors sharing a single OAuth client
+_OAUTH_PLATFORM_MAP: dict[str, str] = {
+    "gmail": "google",
+    "googledrive": "google",
+    "onedrive": "microsoft",
+}
+
 
 # ---------------------------------------------------------------------------
 # Consolidated vault helpers
@@ -98,6 +113,36 @@ def _get_user_consolidated_vault(user_id: str) -> dict | None:
     return _read_sm_secret(f"{CLIENT_NAME}/vault/users/{user_id}")
 
 
+def _put_user_consolidated_vault(user_id: str, vault_data: dict) -> bool:
+    """Write a user's consolidated vault back to Secrets Manager."""
+    vault_secret_name = f"{CLIENT_NAME}/vault/users/{user_id}"
+    json_str = json.dumps(vault_data)
+
+    try:
+        try:
+            secrets_manager.put_secret_value(
+                SecretId=vault_secret_name,
+                SecretString=json_str,
+            )
+        except Exception as e:
+            if "ResourceNotFoundException" in str(
+                type(e).__name__
+            ) or "ResourceNotFoundException" in str(e):
+                secrets_manager.create_secret(
+                    Name=vault_secret_name,
+                    SecretString=json_str,
+                    Description=f"Consolidated vault for user {user_id}",
+                )
+            else:
+                raise
+        return True
+    except Exception as e:
+        logger.error(
+            f"Failed to write user vault for {user_id}", extra={"error": str(e)}
+        )
+        return False
+
+
 # ---------------------------------------------------------------------------
 # Provider discovery and credentials
 # ---------------------------------------------------------------------------
@@ -106,7 +151,10 @@ def _get_user_consolidated_vault(user_id: str) -> dict | None:
 def get_available_providers() -> list[str]:
     """Query consolidated COMPANY vault for all configured OAuth providers.
 
-    Returns list of provider IDs (e.g. ['googledrive', 'onedrive', 'dropbox']).
+    Returns list of individual connector IDs (e.g. ['googledrive', 'gmail', 'onedrive']).
+    Platform secrets like 'oauth-client-google' are expanded into individual connectors
+    using the 'enabled_connectors' field (e.g. 'googledrive,gmail').
+    Also includes 'connector-*' secrets (token/API-key connectors like Synergy).
     Uses an in-memory cache with 5-min TTL.
     """
     global _available_providers_cache
@@ -121,9 +169,24 @@ def get_available_providers() -> list[str]:
             return []
 
         provider_ids = []
-        for secret_name in secrets.keys():
+        for secret_name, entry in secrets.items():
             if secret_name.startswith("oauth-client-"):
-                provider_ids.append(secret_name.replace("oauth-client-", ""))
+                # Check for enabled_connectors to expand platform secrets
+                # e.g. oauth-client-google has enabled_connectors="googledrive,gmail"
+                fields = (
+                    (entry.get("fields") or entry) if isinstance(entry, dict) else {}
+                )
+                enabled = fields.get("enabled_connectors", "")
+                if enabled:
+                    for connector_id in enabled.split(","):
+                        connector_id = connector_id.strip()
+                        if connector_id:
+                            provider_ids.append(connector_id)
+                else:
+                    # No enabled_connectors — use the secret name directly
+                    provider_ids.append(secret_name.replace("oauth-client-", ""))
+            elif secret_name.startswith("connector-"):
+                provider_ids.append(secret_name.replace("connector-", ""))
 
         _available_providers_cache = (provider_ids, time.time())
         return provider_ids
@@ -136,20 +199,40 @@ def get_available_providers() -> list[str]:
 def _get_provider_credentials(provider: str) -> Optional[Dict[str, str]]:
     """Get OAuth client credentials from consolidated COMPANY vault.
 
+    Handles platform mapping: connector IDs like 'googledrive' or 'gmail'
+    map to platform secret 'oauth-client-google'. Also checks 'connector-*'
+    for token/API-key connectors.
+
     Returns dict with client_id (and optionally client_secret) or None.
     """
+    # Platform mapping: connector ID → platform secret name
+    _platform_map: dict[str, str] = {
+        "gmail": "google",
+        "googledrive": "google",
+        "onedrive": "microsoft",
+    }
+
     try:
         secrets = _get_consolidated_company_vault()
         if secrets:
-            secret_name = f"oauth-client-{provider}"
-            entry = secrets.get(secret_name)
-            if entry:
+            # Try direct match first, then platform mapping
+            platform = _platform_map.get(provider, provider)
+            for candidate in [
+                f"oauth-client-{provider}",
+                f"oauth-client-{platform}",
+                f"connector-{provider}",
+            ]:
+                entry = secrets.get(candidate)
+                if not entry:
+                    continue
                 fields = entry.get("fields") or entry
                 client_id = fields.get("client_id")
-                if client_id:
+                instance_url = fields.get("instance_url")
+                if client_id or instance_url:
                     return {
-                        "client_id": client_id,
+                        "client_id": client_id or "",
                         "client_secret": fields.get("client_secret", ""),
+                        "instance_url": instance_url or "",
                     }
     except Exception as e:
         logger.warning(f"Failed to get COMPANY credentials for {provider}: {e}")
@@ -171,6 +254,86 @@ def _get_friendly_secret_name(provider: str) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Token refresh
+# ---------------------------------------------------------------------------
+
+
+async def _refresh_access_token(provider: str, refresh_token: str) -> Optional[dict]:
+    """Refresh an OAuth access token using the refresh token.
+
+    Reads client credentials from COMPANY vault (via _get_provider_credentials).
+    Falls back to FALLBACK_TOKEN_URLS for the token endpoint.
+    Returns the new token data dict or None.
+    """
+    import httpx
+
+    creds = _get_provider_credentials(provider)
+    if not creds or not creds.get("client_id"):
+        logger.error(f"No client credentials found for token refresh: {provider}")
+        return None
+
+    # Resolve token URL: prefer vault config, fall back to hardcoded
+    platform = _OAUTH_PLATFORM_MAP.get(provider, provider)
+    token_url = FALLBACK_TOKEN_URLS.get(provider)
+
+    # Also check company vault for a token_url field
+    secrets = _get_consolidated_company_vault()
+    if secrets:
+        for candidate in [
+            f"oauth-client-{provider}",
+            f"oauth-client-{platform}",
+        ]:
+            entry = secrets.get(candidate)
+            if entry:
+                fields = entry.get("fields") or entry
+                if fields.get("token_url"):
+                    token_url = fields["token_url"]
+                    break
+
+    if not token_url:
+        logger.error(f"No token URL available for refresh: {provider}")
+        return None
+
+    params = {
+        "grant_type": "refresh_token",
+        "client_id": creds["client_id"],
+        "refresh_token": refresh_token,
+    }
+    if creds.get("client_secret"):
+        params["client_secret"] = creds["client_secret"]
+
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as http_client:
+            response = await http_client.post(
+                token_url,
+                data=params,
+                headers={
+                    "Content-Type": "application/x-www-form-urlencoded",
+                    "Accept": "application/json",
+                },
+            )
+
+            if response.status_code == 200:
+                logger.info(f"Token refresh succeeded for {provider}")
+                return response.json()
+            else:
+                logger.warning(
+                    f"Token refresh failed for {provider}",
+                    extra={
+                        "status_code": response.status_code,
+                        "response": response.text[:500],
+                    },
+                )
+                return None
+
+    except Exception as e:
+        logger.error(
+            f"Token refresh request failed for {provider}", extra={"error": str(e)}
+        )
+        return None
+
+
+# ---------------------------------------------------------------------------
 # Token retrieval from consolidated user vault
 # ---------------------------------------------------------------------------
 
@@ -180,7 +343,11 @@ async def get_oauth_token(provider: str, user_sub: str) -> Optional[str]:
 
     Reads from {CLIENT_NAME}/vault/users/{user_sub},
     looking up secrets["oauth-{provider}"].fields for token data.
+    Automatically refreshes expired tokens using the refresh token.
     """
+    from datetime import datetime
+    from datetime import timezone as tz
+
     secret_key = f"oauth-{provider}"
 
     try:
@@ -200,34 +367,78 @@ async def get_oauth_token(provider: str, user_sub: str) -> Optional[str]:
 
         fields = entry.get("fields") or entry
         access_token = fields.get("access_token", "")
+        refresh_token = fields.get("refresh_token", "")
         expires_at = fields.get("expires_at", "")
 
         if not access_token:
             return None
 
         # Check expiry
+        token_expired = False
         if expires_at:
-            from datetime import datetime
-            from datetime import timezone as tz
-
             try:
                 expires_dt = datetime.fromisoformat(expires_at.replace("Z", "+00:00"))
                 now_dt = datetime.now(tz.utc)
                 buffer_seconds = 5 * 60  # 5 minutes
-
-                if (expires_dt - now_dt).total_seconds() <= buffer_seconds:
-                    logger.warning(
-                        f"OAuth token expired for {provider} user {user_sub}"
-                    )
-                    # TODO: implement token refresh via consolidated vault
-                    return None
+                token_expired = (expires_dt - now_dt).total_seconds() <= buffer_seconds
             except (ValueError, TypeError):
                 logger.warning(
                     f"Invalid expires_at format for {provider} user {user_sub}"
                 )
-                return None
+                token_expired = True
 
-        return access_token
+        # Return immediately if token is still valid
+        if not token_expired:
+            return access_token
+
+        # Token expired — attempt refresh
+        if not refresh_token:
+            logger.warning(
+                f"OAuth token expired for {provider} user {user_sub} "
+                "and no refresh_token available"
+            )
+            return None
+
+        logger.info(f"Refreshing expired OAuth token for {provider} user {user_sub}")
+        new_token_data = await _refresh_access_token(provider, refresh_token)
+
+        if not new_token_data:
+            logger.warning(f"Token refresh failed for {provider} user {user_sub}")
+            return None
+
+        # Update fields with new token data
+        new_access_token = new_token_data.get("access_token", "")
+        new_refresh_token = new_token_data.get("refresh_token", refresh_token)
+        expires_in = new_token_data.get("expires_in", 3600)
+        new_expires_at = datetime.fromtimestamp(
+            datetime.now(tz.utc).timestamp() + expires_in, tz.utc
+        ).isoformat()
+
+        fields["access_token"] = new_access_token
+        fields["refresh_token"] = new_refresh_token
+        fields["expires_at"] = new_expires_at
+
+        # Write updated token back to vault
+        now = datetime.now(tz.utc).isoformat()
+        entry["fields"] = fields
+        if "metadata" in entry:
+            entry["metadata"]["updated_at"] = now
+        secrets[secret_key] = entry
+        vault_data["secrets"] = secrets
+        if "metadata" in vault_data:
+            vault_data["metadata"]["updated_at"] = now
+
+        if _put_user_consolidated_vault(user_sub, vault_data):
+            logger.info(
+                f"Successfully refreshed OAuth token for {provider} user {user_sub}"
+            )
+            return new_access_token
+        else:
+            logger.error(
+                f"Failed to persist refreshed token for {provider} user {user_sub}"
+            )
+            # Still return the token — it's valid even if persistence failed
+            return new_access_token
 
     except Exception as e:
         logger.warning(f"Failed to get OAuth token for {provider} user {user_sub}: {e}")

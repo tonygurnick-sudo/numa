@@ -1367,6 +1367,7 @@ async def _handle_chat(
     # Format: "{client_name}_{user_sub}" matching what the frontend uses
     enabled_integrations = body.get("enabledConnections", [])
     available_integrations = body.get("availableIntegrations", [])
+    connected_data_connectors = body.get("connectedDataConnectors", [])
 
     # Apply agent type restrictions on integrations
     if agent_type_config.restrict_integrations:
@@ -1392,6 +1393,9 @@ async def _handle_chat(
         enabled_tools=enabled_tools,
         enabled_integrations=enabled_integrations,
         external_user_id=external_user_id,
+        connected_data_connectors=[
+            c.get("id") for c in connected_data_connectors if isinstance(c, dict)
+        ],
     )
 
     # V1 to V2 migration flag - frontend sets this when loading a V1 conversation
@@ -1765,6 +1769,7 @@ async def _handle_chat(
                 external_user_id=external_user_id,  # Pipedream integrations user ID
                 enabled_integrations=enabled_integrations,  # Connected integration app slugs
                 available_integrations=available_integrations,  # All connected integrations (for agent creation context)
+                connected_data_connectors=connected_data_connectors,  # Connected data connectors (OAuth/token)
                 approval_mode=effective_approval_mode,  # Integration approval mode
                 numa_tool_approval_mode=numa_tool_approval_mode,  # Per-category numa tool approval
                 email_signature=email_signature,  # Email signature settings
@@ -1882,6 +1887,7 @@ async def _handle_sync(
     # Integrations
     enabled_integrations = body.get("enabledConnections", [])
     available_integrations = body.get("availableIntegrations", [])
+    connected_data_connectors = body.get("connectedDataConnectors", [])
     if agent_type_config.restrict_integrations:
         enabled_integrations = agent_type_config.default_integrations or []
     elif agent_type_config.default_integrations and not enabled_integrations:
@@ -2031,6 +2037,7 @@ async def _handle_sync(
             external_user_id=external_user_id,
             enabled_integrations=enabled_integrations,
             available_integrations=available_integrations,
+            connected_data_connectors=connected_data_connectors,
             approval_mode=effective_approval_mode,
             numa_tool_approval_mode=numa_tool_approval_mode_sync,
             agent_type_config=agent_type_config,
@@ -2180,6 +2187,7 @@ async def _handle_fire_and_forget(
         available_kbs = agent_type_config.default_kbs
 
     enabled_integrations = body.get("enabledConnections", [])
+    connected_data_connectors = body.get("connectedDataConnectors", [])
     if agent_type_config.restrict_integrations:
         enabled_integrations = agent_type_config.default_integrations or []
     elif agent_type_config.default_integrations and not enabled_integrations:
@@ -2340,6 +2348,7 @@ async def _handle_fire_and_forget(
                     external_user_id=external_user_id,
                     enabled_integrations=enabled_integrations,
                     available_integrations=available_integrations,
+                    connected_data_connectors=connected_data_connectors,
                     approval_mode=effective_approval_mode,
                     numa_tool_approval_mode=numa_tool_approval_mode_async,
                     agent_type_config=agent_type_config,

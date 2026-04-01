@@ -1214,12 +1214,14 @@ export default function SettingsPage() {
                                         dataAnalysisEnabled: true,
                                         createAgentEnabled: true,
                                         memoriesEnabled: true,
+                                        dataConnectorsEnabled: true,
                                       }
                                     : {
                                         webSearchEnabled: false,
                                         dataAnalysisEnabled: false,
                                         createAgentEnabled: false,
                                         memoriesEnabled: false,
+                                        dataConnectorsEnabled: false,
                                       }),
                                 }));
                                 setChatDefaultsDirty(true);
@@ -1316,6 +1318,31 @@ export default function SettingsPage() {
                             </div>
                             <div className="text-muted small ms-5">{t('chatDefaults.memoryManagementHelp')}</div>
                           </div>
+
+                          {dataConnectorsEnabled && (
+                            <div className="mt-3 ms-4">
+                              <div className="d-flex align-items-center gap-2">
+                                <Form.Check
+                                  type="switch"
+                                  id="chat-defaults-data-connectors"
+                                  label=""
+                                  checked={
+                                    globalChatSettings.autoToolsEnabled || globalChatSettings.dataConnectorsEnabled
+                                  }
+                                  disabled={globalChatSettings.autoToolsEnabled}
+                                  onChange={(e) => {
+                                    setGlobalChatSettings((prev) => ({
+                                      ...prev,
+                                      dataConnectorsEnabled: e.target.checked,
+                                    }));
+                                    setChatDefaultsDirty(true);
+                                  }}
+                                />
+                                <div className="settings-secondary-label">{t('chatDefaults.dataConnectors')}</div>
+                              </div>
+                              <div className="text-muted small ms-5">{t('chatDefaults.dataConnectorsHelp')}</div>
+                            </div>
+                          )}
                         </div>
 
                         <Form.Group className="mb-3">
@@ -1382,6 +1409,7 @@ export default function SettingsPage() {
                                     webSearchEnabled: globalChatSettings.webSearchEnabled,
                                     createAgentEnabled: globalChatSettings.createAgentEnabled,
                                     memoriesEnabled: globalChatSettings.memoriesEnabled,
+                                    dataConnectorsEnabled: globalChatSettings.dataConnectorsEnabled,
                                     dataAnalysisEnabled: globalChatSettings.dataAnalysisEnabled,
                                     defaultConnectionIds: globalChatSettings.defaultConnectionIds,
                                     allowUserDefaults: globalChatSettings.allowUserDefaults,

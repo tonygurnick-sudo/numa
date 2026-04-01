@@ -75,14 +75,20 @@ The "Workspace" is this entire collaborative environment — the active working 
 Files the user needs are often NOT in /workdir/ — they may live elsewhere:
 
 1. **Data Bucket (always available)** — The company's shared file storage. Contains "My Files" (per-user) and "Company Files" (shared). Check here first when looking for documents, templates, or data the user refers to.
-2. **Connected drives** — Google Drive, OneDrive, Dropbox, Synergy 12d, or other OAuth-connected services. Only check drives that are actually connected — use connect_status to find out. Do not attempt to use a disconnected drive.
+2. **Connected Integrations** — If integrations are enabled for this conversation (see Connected Integrations section below), use those first. They are the primary way to interact with external services like Google Drive, Gmail, Slack, etc.
+3. **Data Connectors** — If the connectors tool is available, it provides access to OAuth-connected services (Google Drive, OneDrive, Dropbox, Gmail, Synergy 12d, etc.) via the `connectors` tool. Use `connectors` with `name="status"` to check which are connected.
 
-**When a user asks about a file that isn't in /workdir/:**
-- Load the `connect` skill, then check the data bucket first (it's always connected and fast)
-- If not found there, check any connected drives
-- If no drives are connected, tell the user what's available and where to connect more
+**IMPORTANT — Data Connectors vs Integrations are separate systems.** The "Connected Integrations" list (Pipedream) and data connectors are independent. A service may be available as a data connector even if it's not in the integrations list, and vice versa.
 
-**Do NOT waste tool calls on disconnected connectors.** If connect_status shows a connector as "disconnected", skip it entirely.
+**When a user asks about files, documents, or external services:**
+- Check the data bucket first (always connected and fast)
+- Use connected integrations if available for the requested service
+- If the connectors tool is available, check connector status: `connectors(name="status", params={{}}, description="Check connected services")`
+- Only say something is "not connected" after checking all available sources
+
+**Do NOT waste tool calls on disconnected connectors.** If connector status shows a connector as "disconnected", skip it entirely.
+
+**Connector `request` operation** — makes authenticated HTTP calls to ANY API the connector's OAuth token covers. This is not limited to the connector's default endpoints. For example, a Google Drive connector token also works with the Google Docs API (`docs.googleapis.com`), Google Sheets API, etc. When creating Google Docs with content, use the Docs API `batchUpdate` endpoint after creation to insert text. Do not assume an API "isn't enabled" — try the request first.
 
 ## Security Restrictions
 
@@ -354,7 +360,7 @@ Activate skills using the Skill tool. Available skills:
 | `docx-handling` | Creating, reading, manipulating, converting to/from Word documents/templates, and adding images/logos |
 | `spreadsheet-handling` | Reading, writing, and analyzing Excel, CSV, and TSV files |
 | `data-analysis` | Optimizing performance for large datasets (SQLite conversion, SQL querying, charts) |
-| `connect` | Finding files beyond the workspace — check the data bucket (My Files, Company Files) and connected drives (Google Drive, OneDrive, Dropbox, Synergy 12d). Use when a user asks about files not in /workdir/ |
+| `connect` | Finding files beyond the workspace — check the data bucket (My Files, Company Files) and data connectors (Google Drive, OneDrive, Dropbox, Gmail, Synergy 12d). Use when a user asks about files not in /workdir/, needs to send email via a connector, or needs to make authenticated HTTP requests to connected services |
 
 **Rules:**
 - **CRITICAL: Always load the relevant skill BEFORE attempting the task.** Do not try to figure things out by trial and error — the skill contains the exact commands, flags, and approaches you need. Loading the skill first saves time and avoids errors.
@@ -879,7 +885,48 @@ Important notes:
     return context
 
 
-def _build_email_signature_context(email_signature: Optional[dict[str, Any]]) -> str:
+def _build_connectors_context(
+    connected_data_connectors: list[dict],
+) -> str:
+    """Build system prompt section for connected data connectors.
+
+    Mirrors _build_integrations_context but for OAuth/token data connectors
+    (Google Drive, OneDrive, Dropbox, Gmail, Synergy 12d, etc.).
+
+    Args:
+        connected_data_connectors: List of dicts with 'id' and 'name' keys
+            for each connected data connector.
+
+    Returns:
+        Connectors context string for the system prompt.
+    """
+    connector_lines = []
+    for conn in connected_data_connectors:
+        cid = conn.get("id", "")
+        name = conn.get("name", cid)
+        connector_lines.append(f"- {name} (`{cid}`): **Connected**")
+
+    connectors_list = "\n".join(connector_lines)
+
+    return f"""## Connected Data Connectors
+The user has data connectors configured via the Data Connectors page. These are separate from Pipedream integrations.
+
+**Connector Status:**
+{connectors_list}
+
+Access these via the `connectors` tool (NOT the integrations tool). Operations:
+- `connectors(name="status", params={{}}, description="...")` — check detailed status
+- `connectors(name="list_files", params={{"connector": "<id>"}}, description="...")` — list files
+- `connectors(name="search_files", params={{"connector": "<id>", "query": "..."}}, description="...")` — search
+- `connectors(name="download_file", params={{"connector": "<id>", "file_id": "..."}}, description="...")` — download
+- `connectors(name="request", params={{"connector": "<id>", "method": "GET", "url": "..."}}, description="...")` — authenticated HTTP request (requires approval)
+
+The `request` operation makes authenticated HTTP calls to ANY API the connector's OAuth token covers. For example, a Google Drive connector token also works with Google Docs API, Sheets API, etc.
+
+**Do NOT waste tool calls on disconnected connectors.** Only the connectors listed above are connected."""
+
+
+def _build_email_signature_context(email_signature: Optional[dict]) -> str:
     """
     Build the email signature system prompt section.
 
@@ -1008,6 +1055,7 @@ def build_workspace_system_prompt(
     agent_file_paths: Optional[list[str]] = None,
     enabled_integrations: Optional[list[str]] = None,
     available_integrations: Optional[list[dict]] = None,
+    connected_data_connectors: Optional[list[dict]] = None,
     email_signature: Optional[dict] = None,
     identity_override: Optional[str] = None,
     user_profile: Optional[dict] = None,
@@ -1126,13 +1174,50 @@ def build_workspace_system_prompt(
         )
         base_prompt = f"{base_prompt}\n\n{integrations_context}"
 
+    # Append data connectors context if any are connected
+    if connected_data_connectors:
+        connectors_context = _build_connectors_context(connected_data_connectors)
+        base_prompt = f"{base_prompt}\n\n{connectors_context}"
+
     # Append disabled feature hints based on feature flags
     _flags = feature_flags or {}
+
+    # Append email signature context for connectors (Gmail via data connectors)
+    # when integrations didn't already include it
+    if (
+        _flags.get("OAUTH_INTEGRATIONS_ENABLED", False)
+        and email_signature
+        and email_signature.get("enabled")
+    ):
+        # Only add if integrations context didn't already include it
+        # (i.e. no Pipedream email integration like gmail or outlook was enabled)
+        _email_slugs = {"gmail", "google_mail", "microsoft_outlook", "outlook"}
+        _has_pipedream_email = enabled_integrations and any(
+            slug in _email_slugs for slug in enabled_integrations
+        )
+        if not _has_pipedream_email:
+            sig_context = _build_email_signature_context(email_signature)
+            if sig_context:
+                base_prompt = f"{base_prompt}\n\n{sig_context}"
+
     disabled_hints: list[str] = []
     if not _flags.get("NUMA_FILES", False):
         disabled_hints.append(
             "The files operation (My Files / Company Files browsing) in numa_tool "
             "is disabled for this account. Do not attempt to use it."
+        )
+    # Only mention disabled connectors when the account HAS the feature
+    # (OAUTH_INTEGRATIONS_ENABLED) but the per-chat toggle is off.
+    # When the feature flag itself is off, the agent has no concept of
+    # connectors — no MCP server, no prompt context — so stay silent.
+    if _flags.get("OAUTH_INTEGRATIONS_ENABLED", False) and not _flags.get(
+        "DATA_CONNECTORS_CHAT_ENABLED", False
+    ):
+        disabled_hints.append(
+            "Data Connectors are disabled for this conversation. The user has "
+            "turned off the Data Connectors toggle in their chat settings. "
+            "Do not attempt to use the connectors tool. If the user asks about "
+            "data connectors, let them know they can enable it in chat settings."
         )
     if disabled_hints:
         base_prompt += "\n\n## Disabled Features\n" + "\n".join(

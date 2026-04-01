@@ -52,6 +52,7 @@ from tools import (
     handle_list_kb_files,
     handle_list_memories,
     handle_ops_operation,
+    handle_poll_connector_approval,
     handle_proxy_request,
     handle_query_knowledgebase,
     handle_retrieve_kb_file,
@@ -132,6 +133,7 @@ TOOL_HANDLERS: Dict[str, Callable[[Dict[str, Any]], Dict[str, Any]]] = {
     "pipedream_configure_props": handle_configure_props,
     "pipedream_proxy_request": handle_proxy_request,
     "pipedream_approve_action": handle_approve_action,
+    "poll_connector_approval": handle_poll_connector_approval,
     "user_profile_list_memories": handle_list_memories,
     "user_profile_add_memory": handle_add_memory,
     "user_profile_update_memory": handle_update_memory,
@@ -636,6 +638,10 @@ def handler(event: Dict[str, Any], context: LambdaContext) -> Dict[str, Any]:
         # This is called by the frontend API, not by the agent
         # Access control is handled at the API Gateway level
         pass
+
+    # Connector approval polling — needs user_sub for DynamoDB approval records
+    if tool_name == "poll_connector_approval":
+        params["__user_sub"] = user_sub
 
     # Security: Validate consolidated vault tool access (require authentication)
     vault_tools = {

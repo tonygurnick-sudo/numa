@@ -366,6 +366,7 @@ async def stream_claude_sdk(
     external_user_id: Optional[str] = None,
     enabled_integrations: Optional[list[str]] = None,
     available_integrations: Optional[list[dict]] = None,
+    connected_data_connectors: Optional[list[dict]] = None,
     approval_mode: str = "always",
     numa_tool_approval_mode: Optional[dict[str, str]] = None,
     email_signature: Optional[dict] = None,
@@ -515,6 +516,7 @@ async def stream_claude_sdk(
         external_user_id=external_user_id,
         enabled_integrations=enabled_integrations,
         available_integrations=available_integrations,
+        connected_data_connectors=connected_data_connectors,
         request_id=request_id,
         email_signature=email_signature,
         agent_type_config=agent_type_config,
@@ -723,6 +725,7 @@ async def stream_claude_sdk(
                     "proxy_request",
                     "numa_ops_tool",
                     "numa_tool",
+                    "connectors",
                 )
                 # Numa tool write operations that require approval
                 _NUMA_TOOL_WRITE_OPS: dict[str, set[str]] = {
@@ -763,7 +766,7 @@ async def stream_claude_sdk(
                                 block.input if isinstance(block.input, dict) else {}
                             )
 
-                            # ── Branch: Numa tool vs Ops tool vs Integration tool ──
+                            # ── Branch: Numa tool vs Ops / Connectors / Integration tool ──
                             # All compute _approval_key and auto_approved,
                             # then share the common approval event emission below.
                             auto_approved = False
@@ -886,6 +889,46 @@ async def stream_claude_sdk(
                                     operation=operation,
                                     action_key=_approval_key,
                                     ops_mode=_ops_mode,
+                                    auto_approved=auto_approved,
+                                )
+                            elif "connectors" in block.name:
+                                # ── Connectors tool approval ──
+                                from numa_workspace_agent.mcp_tools.connect import (
+                                    is_safe_connector_operation,
+                                )
+
+                                operation = tool_input.get("name", "")
+                                connector = (
+                                    tool_input.get("params", {}).get("connector", "")
+                                    if isinstance(tool_input.get("params"), dict)
+                                    else ""
+                                )
+                                _approval_key = (
+                                    f"connector-{connector}-{operation}"
+                                    if connector
+                                    else f"connector-{operation}"
+                                )
+
+                                _connector_safe = is_safe_connector_operation(operation)
+                                _conn_mode = _nt_modes.get(
+                                    "connectors", "non_destructive"
+                                )
+
+                                if _conn_mode == "never":
+                                    auto_approved = True
+                                elif _conn_mode == "non_destructive":
+                                    auto_approved = _connector_safe
+                                # else "always" → auto_approved stays False
+
+                                logger.info(
+                                    "Connectors tool approval decision",
+                                    _name="APPROVAL_DECISION",
+                                    phase="connectors",
+                                    tool_name=block.name,
+                                    operation=operation,
+                                    connector=connector,
+                                    action_key=_approval_key,
+                                    connector_mode=_conn_mode,
                                     auto_approved=auto_approved,
                                 )
                             else:
@@ -1169,6 +1212,7 @@ async def run_claude_sdk(
     external_user_id: Optional[str] = None,
     enabled_integrations: Optional[list[str]] = None,
     available_integrations: Optional[list[dict]] = None,
+    connected_data_connectors: Optional[list[dict]] = None,
     approval_mode: str = "always",
     numa_tool_approval_mode: Optional[dict[str, str]] = None,
     email_signature: Optional[dict] = None,
@@ -1280,6 +1324,7 @@ async def run_claude_sdk(
         external_user_id=external_user_id,
         enabled_integrations=enabled_integrations,
         available_integrations=available_integrations,
+        connected_data_connectors=connected_data_connectors,
         request_id=request_id,
         email_signature=email_signature,
         agent_type_config=agent_type_config,
@@ -1373,7 +1418,7 @@ async def run_claude_sdk(
                                     block.is_error,
                                 )
 
-                # Per-tool-call approval mode for integration and ops tools.
+                # Per-tool-call approval mode for integration, ops, and connector tools.
                 # Identical to stream_claude_sdk: checks approval_mode,
                 # sets NUMA_APPROVAL_MODE env var, and generates
                 # NUMA_REQUEST_ID_MAP entries. No SSE events in non-streaming mode.
@@ -1382,6 +1427,7 @@ async def run_claude_sdk(
                     "proxy_request",
                     "numa_ops_tool",
                     "numa_tool",
+                    "connectors",
                 )
                 _NUMA_TOOL_WRITE_OPS_SYNC: dict[str, set[str]] = {
                     "agents": {"create", "update", "duplicate"},
@@ -1403,7 +1449,7 @@ async def run_claude_sdk(
                                 block.input if isinstance(block.input, dict) else {}
                             )
 
-                            # ── Branch: Numa tool vs Ops tool vs Integration tool ──
+                            # ── Branch: Numa tool vs Ops / Connectors / Integration tool ──
                             auto_approved = False
 
                             if (
@@ -1449,6 +1495,33 @@ async def run_claude_sdk(
                                     auto_approved = True
                                 elif _ops_mode == "non_destructive":
                                     auto_approved = _ops_safe
+                            elif "connectors" in block.name:
+                                # ── Connectors tool approval ──
+                                from numa_workspace_agent.mcp_tools.connect import (
+                                    is_safe_connector_operation,
+                                )
+
+                                operation = tool_input.get("name", "")
+                                connector = (
+                                    tool_input.get("params", {}).get("connector", "")
+                                    if isinstance(tool_input.get("params"), dict)
+                                    else ""
+                                )
+                                _approval_key = (
+                                    f"connector-{connector}-{operation}"
+                                    if connector
+                                    else f"connector-{operation}"
+                                )
+
+                                _connector_safe = is_safe_connector_operation(operation)
+                                _conn_mode_sync = _nt_modes_sync.get(
+                                    "connectors", "non_destructive"
+                                )
+
+                                if _conn_mode_sync == "never":
+                                    auto_approved = True
+                                elif _conn_mode_sync == "non_destructive":
+                                    auto_approved = _connector_safe
                             else:
                                 # ── Integration tool approval ──
                                 action_key = tool_input.get("action_key", "")
