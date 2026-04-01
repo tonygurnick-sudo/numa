@@ -41,6 +41,13 @@ export const SUPPORTED_INTEGRATIONS = [
   'canva',
   'google_tag_manager',
   'webflow',
+  'dropbox',
+  'survey_monkey',
+  'monday',
+  'procore',
+  'quickbooks',
+  'harvest',
+  'alchemer',
 ] as const;
 
 export type SupportedIntegration = (typeof SUPPORTED_INTEGRATIONS)[number];

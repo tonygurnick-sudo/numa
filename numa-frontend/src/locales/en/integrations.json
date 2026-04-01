@@ -218,6 +218,41 @@
       "name": "Webflow",
       "description": "Design, build, and launch responsive websites visually.",
       "example_query": "Get a list of collections for my Webflow site."
+    },
+    "dropbox": {
+      "name": "Dropbox",
+      "description": "Store, share, and manage files and folders.",
+      "example_query": "Find the latest report in my Dropbox."
+    },
+    "survey_monkey": {
+      "name": "SurveyMonkey",
+      "description": "Create, send, and analyze surveys.",
+      "example_query": "Get the latest responses from the customer feedback survey."
+    },
+    "monday": {
+      "name": "Monday.com",
+      "description": "Project management and work OS.",
+      "example_query": "List my tasks from the main project board."
+    },
+    "procore": {
+      "name": "Procore",
+      "description": "Construction management software.",
+      "example_query": "List the RFIs for my current project."
+    },
+    "quickbooks": {
+      "name": "QuickBooks",
+      "description": "Accounting software for invoices and expenses.",
+      "example_query": "Show me the unpaid invoices."
+    },
+    "harvest": {
+      "name": "Harvest",
+      "description": "Time tracking and reporting tool.",
+      "example_query": "How many hours did I log this week?"
+    },
+    "alchemer": {
+      "name": "Alchemer",
+      "description": "Survey and feedback management platform.",
+      "example_query": "Show me the results of the employee engagement survey."
     }
   },
   "tabs": {
