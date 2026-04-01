@@ -252,6 +252,7 @@ export default function LoginForm() {
                             inputMode="numeric"
                             required
                             disabled={loading}
+                            autoFocus
                           />
                         </div>
                       </Form.Group>
@@ -293,6 +294,7 @@ export default function LoginForm() {
                             inputMode="numeric"
                             required
                             disabled={loading}
+                            autoFocus
                           />
                         </div>
                       </Form.Group>
