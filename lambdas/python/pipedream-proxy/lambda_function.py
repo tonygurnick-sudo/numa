@@ -16,6 +16,7 @@ import structlog
 from aws_lambda_powertools.utilities.typing import LambdaContext
 
 from pipedream_operations import PipedreamOperations
+from prm import client as prm_client
 from security_validator import SecurityValidationError, SecurityValidator
 
 # Set up structured logging
@@ -32,6 +33,7 @@ SUPPORTED_OPERATIONS = [
     "run_action",
     "configure_props",
     "proxy_request",
+    "batch_get_schemas",
 ]
 
 
@@ -222,6 +224,14 @@ def handler(event: Dict[str, Any], context: LambdaContext) -> Dict[str, Any]:
                 external_user_id, account_id, method, upstream_url, body, headers
             )
 
+        elif operation == "batch_get_schemas":
+            app_slugs = parameters.get("app_slugs", [])
+            if not app_slugs:
+                return _error_response(
+                    400, "batch_get_schemas requires app_slugs parameter"
+                )
+            result = _batch_get_schemas(app_slugs)
+
         else:
             return _error_response(
                 500, f"Operation handler not implemented: {operation}"
@@ -262,6 +272,43 @@ def handler(event: Dict[str, Any], context: LambdaContext) -> Dict[str, Any]:
             external_user_id=event.get("external_user_id"),
         )
         return _error_response(500, "Internal server error")
+
+
+def _batch_get_schemas(app_slugs: list) -> Dict[str, Any]:
+    """Read cached integration schemas from DynamoDB in a single batch.
+
+    Returns a dict mapping app_slug to {actions: [...], index: [...]}.
+    Slugs not found in the cache are omitted from the result.
+    """
+    table_name = os.environ.get("SCHEMA_CACHE_TABLE", "")
+    if not table_name:
+        raise ValueError("SCHEMA_CACHE_TABLE not configured")
+
+    dynamo = prm_client("dynamodb")
+
+    # BatchGetItem supports max 100 keys per call
+    keys = [{"app_slug": {"S": slug}} for slug in app_slugs[:100]]
+
+    response = dynamo.batch_get_item(
+        RequestItems={table_name: {"Keys": keys}},
+    )
+
+    result: Dict[str, Any] = {}
+    for item in response.get("Responses", {}).get(table_name, []):
+        slug = item["app_slug"]["S"]
+        schemas_json = item.get("schemas", {}).get("S", "{}")
+        try:
+            result[slug] = json.loads(schemas_json)
+        except (json.JSONDecodeError, TypeError):
+            logger.warning("Invalid schema JSON for slug", app_slug=slug)
+
+    logger.info(
+        "Batch schema lookup",
+        requested=len(app_slugs),
+        found=len(result),
+    )
+
+    return {"schemas": result}
 
 
 def _error_response(status_code: int, message: str) -> Dict[str, Any]:

@@ -170,6 +170,7 @@ def handler(event: Dict[str, Any], _: LambdaContext) -> Dict[str, Any]:
             "run_action",
             "configure_props",
             "proxy_request",
+            "batch_get_schemas",
         ):
             if not proxy_lambda_arn:
                 logger.error("PIPEDREAM_PROXY_LAMBDA_ARN environment variable not set")
