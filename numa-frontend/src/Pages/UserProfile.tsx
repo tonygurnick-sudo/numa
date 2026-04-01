@@ -1457,6 +1457,40 @@ export default function UserProfilePage({
                   <div className="profile-section__title">{t('userProfile.defaults.kbLabel')}</div>
                   {kbError && <div className="text-danger small mb-2">{kbError}</div>}
 
+                  {!isLoadingKBs && kbIdsSorted.length > 1 && (
+                    <div className="workspace-settings-kb-actions">
+                      <button
+                        type="button"
+                        className="workspace-settings-kb-action-link"
+                        onClick={() => {
+                          setUserDefaults((prev) => ({
+                            ...prev,
+                            defaultKBIds: [...kbIdsSorted],
+                          }));
+                          setDirty(true);
+                        }}
+                        disabled={disableDefaultsForm || kbIdsSorted.every((id) => enabledKBSet.has(id))}
+                      >
+                        {t('userProfile.defaults.selectAll')}
+                      </button>
+                      {enabledKBSet.size > 0 && (
+                        <button
+                          type="button"
+                          className="workspace-settings-kb-action-link"
+                          onClick={() => {
+                            setUserDefaults((prev) => ({
+                              ...prev,
+                              defaultKBIds: [],
+                            }));
+                            setDirty(true);
+                          }}
+                          disabled={disableDefaultsForm}
+                        >
+                          {t('userProfile.defaults.clear')}
+                        </button>
+                      )}
+                    </div>
+                  )}
                   <ExpandableOverflowBox className="profile-checkbox-list" maxHeight={240}>
                     {isLoadingKBs ? (
                       <div className="profile-empty-state">{t('userProfile.defaults.kbLoading')}</div>

@@ -444,6 +444,8 @@
     "selectKBs": "Select knowledge bases to search",
     "loading": "Loading...",
     "noKBs": "No knowledge bases available",
+    "selectAll": "Select All",
+    "clear": "Clear",
     "tools": "Tools",
     "toolsHelper": "Enable capabilities for this chat",
     "all": "All",
