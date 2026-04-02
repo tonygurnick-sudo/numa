@@ -40,8 +40,9 @@ export function postProcessDocxTables(docxBuffer: Buffer): Buffer {
     (match, open: string, inner: string, close: string) => {
       if (inner.includes('w:tblLayout')) return match;
 
-      // Set table width to 100% page width (pct/5000) instead of auto/0
-      let modifiedInner = inner.replace(/<w:tblW[^/]*w:type="auto"[^/]*\/>/, '<w:tblW w:w="5000" w:type="pct" />');
+      // Set table width to 100% page width (pct/5000).
+      // Pandoc emits w:type="auto" without a reference doc, or w:type="pct" w:w="0.0" with one.
+      let modifiedInner = inner.replace(/<w:tblW[^/]*\/>/, '<w:tblW w:w="5000" w:type="pct" />');
 
       return `${open}${modifiedInner}<w:tblLayout w:type="autofit" />${close}`;
     }
